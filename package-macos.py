@@ -24,8 +24,17 @@ args = parser.parse_args()
 bundle = args.output.resolve()
 sign = ['codesign', '--force', '--sign', args.sign_identity]
 if args.sign_identity != '-':
-    # Rust/GPUI uses no JIT or unsigned plug-ins. No hardened-runtime exceptions needed.
-    sign += ['--options', 'runtime', '--timestamp']
+    # The WASM plug-in host (wasmtime/Cranelift) compiles plug-ins to machine code at run
+    # time and flips those pages to executable with mprotect. Under the hardened runtime
+    # that page has no code signature, so macOS kills the app (SIGKILL, Code Signature
+    # Invalid) the moment a plug-in starts. Grant JIT and unsigned executable memory.
+    entitlements = root / 'target/Mooring.entitlements'
+    entitlements.parent.mkdir(parents=True, exist_ok=True)
+    entitlements.write_bytes(plistlib.dumps({
+        'com.apple.security.cs.allow-jit': True,
+        'com.apple.security.cs.allow-unsigned-executable-memory': True,
+    }))
+    sign += ['--options', 'runtime', '--timestamp', '--entitlements', str(entitlements)]
 # Build and sign beside the target, then swap directories by rename. Writing into a
 # running bundle invalidates its signature and macOS kills the live app and daemon.
 stage = bundle.with_name(bundle.name + '.staging')
