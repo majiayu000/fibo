@@ -1,5 +1,5 @@
 // Pairing: scan the QR code the computer shows, or paste its link. Scanning it with the
-// phone's own camera opens this screen too, since the app owns the `keepline://` scheme.
+// phone's own camera opens this screen too, since the app owns the `mooring://` scheme.
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -23,7 +23,7 @@ export default function Pair() {
     try {
       link = parseLink(linkText);
     } catch (e) {
-      setError(`这不是 Keepline 的配对链接（${(e as Error).message}）`);
+      setError(`这不是 Mooring 的配对链接（${(e as Error).message}）`);
       return;
     }
     done.current = true;
@@ -39,13 +39,13 @@ export default function Pair() {
     }
   }
 
-  // Opened from keepline://pair?…: the link arrives as this route's params.
+  // Opened from mooring://pair?…: the link arrives as this route's params.
   useEffect(() => {
     if (params.code && params.key) {
       const query = Object.entries(params)
         .map(([k, v]) => `${k}=${escape(String(v))}`)
         .join('&');
-      use(`keepline://pair?${query}`);
+      use(`mooring://pair?${query}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.code, params.key]);
@@ -53,7 +53,7 @@ export default function Pair() {
   return (
     <View style={[s.page, { backgroundColor: t.bg }]}>
       <Text style={[s.hint, { color: t.dim }]}>
-        在电脑的 Keepline 里点标题栏的手机按钮，选「配对新手机…」，把二维码对准下面的框。
+        在电脑的 Mooring 里点标题栏的手机按钮，选「配对新手机…」，把二维码对准下面的框。
       </Text>
       <View style={[s.camera, { borderColor: t.line }]}>
         {permission?.granted ? (
@@ -76,7 +76,7 @@ export default function Pair() {
           setText(v);
           setError('');
         }}
-        placeholder="keepline://pair?…"
+        placeholder="mooring://pair?…"
         placeholderTextColor={t.dim}
         autoCapitalize="none"
         autoCorrect={false}

@@ -41,7 +41,7 @@ fi
 status=0
 for case in $(printf '%s\n' "$failures" | cut -f2); do
 	echo "ci-test: retrying managed_session::$case"
-	if cargo test -p keeplined --test managed_session -- --exact "$case"; then
+	if cargo test -p mooring-host --test managed_session -- --exact "$case"; then
 		echo "::warning::managed_session::$case failed once and passed on retry"
 	else
 		echo "::error::managed_session::$case failed twice"

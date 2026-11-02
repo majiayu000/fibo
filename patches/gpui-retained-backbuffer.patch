@@ -4,7 +4,7 @@ index 0000000..9c26430
 --- /dev/null
 +++ b/crates/gpui_apple/src/damage.rs
 @@ -0,0 +1,326 @@
-+//! keepline patch: frame-to-frame damage for a retained back buffer.
++//! mooring patch: frame-to-frame damage for a retained back buffer.
 +//!
 +//! Each primitive is reduced to a content hash (its draw order excluded, so primitives
 +//! that did not move keep their identity when others are inserted) and its visible
@@ -350,7 +350,7 @@ index a2a78ed..0a49bf8 100644
      path_intermediate_texture: Option<metal::Texture>,
      path_intermediate_msaa_texture: Option<metal::Texture>,
      path_sample_count: u32,
-+    /// keepline patch: with GPUI_RETAINED_BACKBUFFER, frames render into this persistent
++    /// mooring patch: with GPUI_RETAINED_BACKBUFFER, frames render into this persistent
 +    /// texture only where the scene changed, then the whole texture is copied to the drawable.
 +    retained: bool,
 +    back_buffer: Option<metal::Texture>,
@@ -731,7 +731,7 @@ index a2a78ed..0a49bf8 100644
      }
  }
 +
-+/// keepline-eval patch: KEEPLINE_FRAME_STATS=1 prints frames, GPU time per frame and
++/// mooring-eval patch: MOORING_FRAME_STATS=1 prints frames, GPU time per frame and
 +/// scene composition every two seconds to stderr.
 +mod frame_stats {
 +    use gpui::Scene;
@@ -755,7 +755,7 @@ index a2a78ed..0a49bf8 100644
 +    }
 +    fn enabled() -> bool {
 +        static ON: OnceLock<bool> = OnceLock::new();
-+        *ON.get_or_init(|| std::env::var_os("KEEPLINE_FRAME_STATS").is_some())
++        *ON.get_or_init(|| std::env::var_os("MOORING_FRAME_STATS").is_some())
 +    }
 +    static STATS: Mutex<Option<Stats>> = Mutex::new(None);
 +    pub fn scene(scene: &Scene) {

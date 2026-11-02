@@ -1,4 +1,4 @@
-// The pairing link the machine shows as a QR code, as `keepline-remote/src/link.rs` reads
+// The pairing link the machine shows as a QR code, as `mooring-remote/src/link.rs` reads
 // and writes it, and the relay URL it leads to.
 import { sha256 } from '@noble/hashes/sha2.js';
 import { b64url, hex, unb64url, utf8 } from './bytes';
@@ -47,8 +47,8 @@ function code(field: string | undefined, name: string): Uint8Array {
 
 export function parseLink(text: string): Link {
   text = text.trim();
-  const prefix = 'keepline://pair?';
-  if (!text.startsWith(prefix)) throw new Error('not a keepline://pair link');
+  const prefix = 'mooring://pair?';
+  if (!text.startsWith(prefix)) throw new Error('not a mooring://pair link');
   const fields: Record<string, string> = {};
   for (const kv of text.slice(prefix.length).split('&')) {
     const at = kv.indexOf('=');
@@ -68,7 +68,7 @@ export function parseLink(text: string): Link {
 }
 
 export function linkText(l: Link): string {
-  return `keepline://pair?v=${LINK_VERSION}&relay=${escape(l.relay)}&code=${b64url(l.code)}&device=${escape(l.device)}&key=${b64url(l.key)}&machine=${escape(l.machine)}&name=${escape(l.name)}`;
+  return `mooring://pair?v=${LINK_VERSION}&relay=${escape(l.relay)}&code=${b64url(l.code)}&device=${escape(l.device)}&key=${b64url(l.key)}&machine=${escape(l.machine)}&name=${escape(l.name)}`;
 }
 
 /** The route token the relay knows this machine by. */

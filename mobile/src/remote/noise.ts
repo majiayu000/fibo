@@ -1,5 +1,5 @@
-// The encrypted channel between this phone and a Keepline machine, byte for byte what
-// `next/crates/keepline-remote/src/secure.rs` does: Noise_NNpsk0_25519_ChaChaPoly_BLAKE2s
+// The encrypted channel between this phone and a Mooring machine, byte for byte what
+// `next/crates/mooring-remote/src/secure.rs` does: Noise_NNpsk0_25519_ChaChaPoly_BLAKE2s
 // keyed by this device's key, then DATA / ACK messages. Pure JS, no native module, so
 // the same code runs in the app, in Bun tests and in Node. `vectors/v1.json` checks it.
 import { chacha20poly1305 } from '@noble/ciphers/chacha.js';

@@ -1,6 +1,6 @@
-// A client of one Keepline machine through a relay: the WebSocket, the Noise handshake,
+// A client of one Mooring machine through a relay: the WebSocket, the Noise handshake,
 // JSON lines both ways, ACKs, requests by id and streams. What
-// `next/crates/keepline-relay/examples/phone.rs` does, for the app. Protocol shapes:
+// `next/crates/mooring-relay/examples/phone.rs` does, for the app. Protocol shapes:
 // `specs/extensions/remote-protocol.md`.
 import { concat, text, utf8 } from './bytes';
 import { type Link, linkUrl } from './link';
@@ -22,7 +22,7 @@ export function closeText(code: number): string {
     case 4401:
       return '这台手机没有配对，或者已经被取消';
     case 1012:
-      return '电脑上的 Keepline 不在线';
+      return '电脑上的 Mooring 不在线';
     case 1013:
       return '网络太慢，中继断开了连接';
     default:

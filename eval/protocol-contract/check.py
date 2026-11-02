@@ -1,10 +1,10 @@
-"""Checks the CLI interfaces Keepline's status rules read, after a Codex or Claude Code upgrade.
+"""Checks the CLI interfaces Mooring's status rules read, after a Codex or Claude Code upgrade.
 
     python3 -I check.py            # schema and command shape only, read-only
     python3 -I check.py --live     # also one read-only thread/read on the running Codex daemon
 
-Exit 1 when a field Keepline depends on changed; unknown extra values are reported, since
-Keepline skips them rather than guessing. See README.md for what each check protects.
+Exit 1 when a field Mooring depends on changed; unknown extra values are reported, since
+Mooring skips them rather than guessing. See README.md for what each check protects.
 """
 import base64
 import json
@@ -68,7 +68,7 @@ def codex_schema():
         )
         extra = set(variants) - {"notLoaded", "idle", "systemError", "active"}
         if extra:
-            warn(f"new ThreadStatus variants Keepline ignores: {sorted(extra)}")
+            warn(f"new ThreadStatus variants Mooring ignores: {sorted(extra)}")
         flags = set(status["ThreadActiveFlag"]["enum"])
         check(
             {"waitingOnApproval", "waitingOnUserInput"} <= flags,
@@ -134,7 +134,7 @@ def codex_live():
             if m.get("id") == i:
                 return m
 
-    check("result" in call(1, "initialize", {"clientInfo": {"name": "keepline-contract", "version": "0"}}), "initialize answers")
+    check("result" in call(1, "initialize", {"clientInfo": {"name": "mooring-contract", "version": "0"}}), "initialize answers")
     send({"method": "initialized"})
     loaded = call(2, "thread/loaded/list", {}).get("result", {}).get("data", [])
     if not loaded:
@@ -182,9 +182,9 @@ def claude():
     states = {r.get("state") for r in rows if "state" in r}
     waits = {r.get("waitingFor") for r in rows if "waitingFor" in r}
     if statuses - {"busy", "waiting", "idle"}:
-        warn(f"unknown status values Keepline skips: {sorted(statuses)}")
+        warn(f"unknown status values Mooring skips: {sorted(statuses)}")
     if states - {"working", "blocked", "done", "failed", "stopped"}:
-        warn(f"unknown state values Keepline skips: {sorted(states)}")
+        warn(f"unknown state values Mooring skips: {sorted(states)}")
     documented = {"permission prompt", "input needed", "sandbox request", "worker request", "dialog open"}
     if waits - documented:
         warn(f"waitingFor shown untranslated: {sorted(waits - documented)}")

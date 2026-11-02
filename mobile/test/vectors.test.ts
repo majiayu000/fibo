@@ -1,4 +1,4 @@
-// The bytes `next/crates/keepline-remote/vectors/v1.json` fixes, which the machine's Rust
+// The bytes `next/crates/mooring-remote/vectors/v1.json` fixes, which the machine's Rust
 // side also checks itself against: if these pass, this client and the machine agree.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { frame, linkText, linkUrl, parseLink, token, tokenHash } from '../src/re
 import { Handshake, PATTERN, psk, respond } from '../src/remote/noise';
 
 const v = JSON.parse(
-  readFileSync(join(import.meta.dir, '../../crates/keepline-remote/vectors/v1.json'), 'utf8'),
+  readFileSync(join(import.meta.dir, '../../crates/mooring-remote/vectors/v1.json'), 'utf8'),
 );
 const code = unhex(v.machine_code.bytes);
 const key = unhex(v.device_key.bytes);

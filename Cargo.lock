@@ -2946,14 +2946,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "keepline-app"
+name = "mooring-app"
 version = "0.1.0"
 dependencies = [
  "futures",
  "gpui",
  "gpui_platform",
- "keepline-core",
- "keepline-plugin-host",
+ "mooring-core",
+ "mooring-plugin-host",
  "libc",
  "qrcode",
  "serde",
@@ -2961,7 +2961,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "keepline-core"
+name = "mooring-core"
 version = "0.1.0"
 dependencies = [
  "libghostty-vt",
@@ -2973,7 +2973,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "keepline-plugin-host"
+name = "mooring-plugin-host"
 version = "0.1.0"
 dependencies = [
  "serde_json",
@@ -2981,20 +2981,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "keepline-relay"
+name = "mooring-relay"
 version = "0.1.0"
 dependencies = [
  "axum",
  "base64",
  "futures-util",
- "keepline-remote",
+ "mooring-remote",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
 ]
 
 [[package]]
-name = "keepline-remote"
+name = "mooring-remote"
 version = "0.1.0"
 dependencies = [
  "base64",
@@ -3006,15 +3006,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "keeplined"
+name = "mooring-host"
 version = "0.0.0"
 dependencies = [
  "base64",
  "chrono",
  "futures-util",
- "keepline-core",
- "keepline-relay",
- "keepline-remote",
+ "mooring-core",
+ "mooring-relay",
+ "mooring-remote",
  "libc",
  "qrcode",
  "regex",

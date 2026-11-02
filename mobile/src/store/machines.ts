@@ -6,8 +6,8 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { type Link, linkText, parseLink } from '../remote/link';
 
-const INDEX = 'keepline.machines';
-const entry = (id: string) => `keepline.machine.${id.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+const INDEX = 'mooring.machines';
+const entry = (id: string) => `mooring.machine.${id.replace(/[^A-Za-z0-9._-]/g, '_')}`;
 
 const store =
   Platform.OS === 'web'

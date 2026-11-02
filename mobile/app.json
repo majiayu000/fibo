@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Keepline",
-    "slug": "keepline-mobile",
+    "name": "Mooring",
+    "slug": "mooring-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "dev.keepline.mobile"
+      "bundleIdentifier": "dev.mooring.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +18,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "dev.keepline.mobile"
+      "package": "dev.mooring.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,13 +29,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "扫描电脑上 Keepline 显示的配对二维码",
+          "cameraPermission": "扫描电脑上 Mooring 显示的配对二维码",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
       ]
     ],
-    "scheme": "keepline",
+    "scheme": "mooring",
     "experiments": {
       "typedRoutes": true
     }

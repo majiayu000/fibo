@@ -66,7 +66,7 @@ enum Row {
     },
 }
 
-/// What a row ends with; Keepline draws it, so a running clock ticks on its own.
+/// What a row ends with; Mooring draws it, so a running clock ticks on its own.
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
 enum Trailing {

@@ -126,7 +126,7 @@ export default function Sessions() {
           <View style={s.empty}>
             <Text style={[s.emptyTitle, { color: t.text }]}>还没有配对电脑</Text>
             <Text style={[s.meta, { color: t.dim, textAlign: 'center' }]}>
-              在电脑的 Keepline 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。
+              在电脑的 Mooring 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。
             </Text>
             <Pressable
               onPress={() => router.push('/pair')}

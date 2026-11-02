@@ -6,7 +6,7 @@ index 55b69b09b0..f6938dec2b 100644
      cursor_style: CursorStyle,
      cursor_visible: Arc<AtomicBool>,
      frame_source: Option<WindowFrameSource>,
-+    // keepline-eval patch: stop the display link while the window has nothing to draw.
++    // mooring-eval patch: stop the display link while the window has nothing to draw.
 +    pause_idle: bool,
 +    frame_demand: bool,
 +    idle_frames: u32,
@@ -35,7 +35,7 @@ index 55b69b09b0..f6938dec2b 100644
  }
  
  impl PlatformWindow for MacWindow {
-+    /// keepline-eval patch: GPUI calls this when the window becomes dirty. While the display link
++    /// mooring-eval patch: GPUI calls this when the window becomes dirty. While the display link
 +    /// is paused for idleness, restart it so the pending frame is drawn on the next vsync.
 +    fn frame_waker(&self) -> Option<std::rc::Rc<dyn Fn()>> {
 +        if !self.0.lock().pause_idle {
@@ -72,7 +72,7 @@ index 55b69b09b0..f6938dec2b 100644
 -        window_state.lock().request_frame_callback = Some(callback);
 +        let mut lock = window_state.lock();
 +        lock.request_frame_callback = Some(callback);
-+        // keepline-eval patch: after a few vsyncs without new demand, pause the display link.
++        // mooring-eval patch: after a few vsyncs without new demand, pause the display link.
 +        if lock.pause_idle {
 +            if lock.frame_demand {
 +                lock.idle_frames = 0;

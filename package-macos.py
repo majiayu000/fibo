@@ -11,10 +11,10 @@ import subprocess
 root = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--release-dir', type=pathlib.Path, default=root / 'target/release')
-parser.add_argument('--output', type=pathlib.Path, default=root / 'target/bundle/Keepline.app',
+parser.add_argument('--output', type=pathlib.Path, default=root / 'target/bundle/Mooring.app',
                     help='Bundle path; use a separate path when an installed build is running')
 parser.add_argument('--icon', type=pathlib.Path,
-                    default=root.parent / 'docs/assets/keepline-icon-final/Keepline.icns',
+                    default=root.parent / 'docs/assets/mooring-icon-final/Mooring.icns',
                     help='App icon (.icns); defaults to the ink-ring icon')
 # A stable identity keeps macOS privacy grants (e.g. Desktop access) across rebuilds;
 # ad-hoc ('-') signatures change with every build, so macOS asks again each time.
@@ -34,29 +34,29 @@ mac = stage / 'Contents/MacOS'
 resources = stage / 'Contents/Resources'
 mac.mkdir(parents=True, exist_ok=True)
 resources.mkdir(parents=True, exist_ok=True)
-for binary in ('keepline-app', 'keepline'):
+for binary in ('mooring-app', 'mooring'):
     shutil.copy2(args.release_dir / binary, mac / binary)
     subprocess.run([*sign, str(mac / binary)], check=True)
-# The CLI's old name, for Agents that learned `keeplined` and for terminals started before
-# the rename: their KEEPLINE_HOOK still points at .../MacOS/keeplined.
-(mac / 'keeplined').symlink_to('keepline')
-shutil.copy2(root / 'crates/keepline-app/assets/NERD-FONTS-LICENSE', resources / 'NERD-FONTS-LICENSE')
-shutil.copy2(args.icon, resources / 'Keepline.icns')
+# The CLI's old name, for Agents that learned `mooring` and for terminals started before
+# the rename: their MOORING_HOOK still points at .../MacOS/mooring.
+(mac / 'mooring').symlink_to('mooring')
+shutil.copy2(root / 'crates/mooring-app/assets/NERD-FONTS-LICENSE', resources / 'NERD-FONTS-LICENSE')
+shutil.copy2(args.icon, resources / 'Mooring.icns')
 # The plugin catalog 设置 › 插件 installs from: index.json and exactly the files it lists.
 catalog = root / 'plugins'
 for plugin in json.loads((catalog / 'index.json').read_text())['plugins']:
     for f in plugin['files']:
         src = catalog / plugin['id'] / f['path']
         if hashlib.sha256(src.read_bytes()).hexdigest() != f['sha256']:
-            raise SystemExit(f'{src} 和 plugins/index.json 不一致：运行 keepline plugins index plugins')
+            raise SystemExit(f'{src} 和 plugins/index.json 不一致：运行 mooring plugins index plugins')
         dst = resources / 'plugins' / plugin['id'] / f['path']
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 shutil.copy2(catalog / 'index.json', resources / 'plugins/index.json')
 (stage / 'Contents/Info.plist').write_bytes(plistlib.dumps({
-    'CFBundleName': 'Keepline', 'CFBundleDisplayName': 'Keepline',
-    'CFBundleIdentifier': 'local.keepline.workbench', 'CFBundleExecutable': 'keepline-app',
-    'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'Keepline', 'CFBundleVersion': '1', 'CFBundleShortVersionString': '0.1.0',
+    'CFBundleName': 'Mooring', 'CFBundleDisplayName': 'Mooring',
+    'CFBundleIdentifier': 'local.mooring.workbench', 'CFBundleExecutable': 'mooring-app',
+    'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'Mooring', 'CFBundleVersion': '1', 'CFBundleShortVersionString': '0.1.0',
     'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '14.0',
 }))
 subprocess.run([*sign, str(stage)], check=True)

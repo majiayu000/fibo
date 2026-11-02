@@ -1,4 +1,4 @@
-"""GPU / CPU cost of the Keepline client under fixed terminal workloads, beside Ghostty.
+"""GPU / CPU cost of the Mooring client under fixed terminal workloads, beside Ghostty.
 
 Isolated fixture daemon, /bin/sh workloads only (no Agents, no real runtime). Per-process GPU
 time is read from the AGX user clients' accumulatedGPUTime in ioreg; CPU from proc_pid_rusage.
@@ -10,7 +10,7 @@ import argparse, ctypes, glob, json, os, pathlib, re, shutil, socket, struct, su
 HERE = pathlib.Path(__file__).resolve().parent
 NEXT = HERE.parents[1]
 ap = argparse.ArgumentParser()
-ap.add_argument('--app', default=str(NEXT / 'target/release/keepline-app'))
+ap.add_argument('--app', default=str(NEXT / 'target/release/mooring-app'))
 ap.add_argument('--scenes', default='idle,hidden4,vis1,vis4,flood')
 ap.add_argument('--ghostty', action='store_true')
 ap.add_argument('--secs', type=float, default=15)
@@ -69,7 +69,7 @@ class Fixture:
     def __init__(self):
         self.root = pathlib.Path(tempfile.mkdtemp(prefix='kl-gpu-', dir='/tmp'))
         exe = max((pathlib.Path(p) for p in glob.glob(str(NEXT / 'target/debug/deps/managed_session-*')) if os.access(p, os.X_OK) and not p.endswith('.d')), key=lambda p: p.stat().st_mtime)
-        self.host = subprocess.Popen([str(exe), '--ignored', '--exact', 'daemon_fixture', '--nocapture'], env={**os.environ, 'KEEPLINE_FIXTURE_RUNTIME': str(self.root)}, stdout=subprocess.DEVNULL, stderr=open(self.root / 'host.log', 'w'))
+        self.host = subprocess.Popen([str(exe), '--ignored', '--exact', 'daemon_fixture', '--nocapture'], env={**os.environ, 'MOORING_FIXTURE_RUNTIME': str(self.root)}, stdout=subprocess.DEVNULL, stderr=open(self.root / 'host.log', 'w'))
         deadline = time.time() + 10
         while not (self.root / 'workbench.sock').exists():
             assert time.time() < deadline; time.sleep(.05)
@@ -90,7 +90,7 @@ class Fixture:
         self.host.terminate(); self.host.wait(5)
         # The app takes the terminals over into its own detached host, which outlives both
         # the app and the fixture and keeps every workload loop running.
-        pattern = f'keepline serve --runtime {self.root}( |$)'
+        pattern = f'mooring serve --runtime {self.root}( |$)'
         for sig, wait in ((15, 50), (9, 20)):
             pids = [int(p) for p in subprocess.run(['pgrep', '-f', pattern], capture_output=True, text=True).stdout.split()]
             if not pids: return
@@ -116,7 +116,7 @@ SCENES = {
     'mixed':   (lambda: split(split(leaf('v0'), leaf('v1'), 'Down'), split(leaf('v2'), leaf('v3'), 'Down')), None, {'v0': IDLE, 'v1': SPIN, 'v2': SPIN, 'v3': SPIN}),
 }
 
-def run_keepline(scene):
+def run_mooring(scene):
     shown, hidden, scripts = SCENES[scene]
     fx = Fixture()
     home = fx.root / 'home'; home.mkdir()
@@ -125,7 +125,7 @@ def run_keepline(scene):
         for id, script in scripts.items(): fx.launch(id, script)
         fx.tab('shown', shown())
         if hidden: fx.tab('hidden', hidden)
-        app = subprocess.Popen([args.app, '--runtime', str(fx.root)], env={**os.environ, 'HOME': str(home), 'SHELL': '/bin/sh', 'KEEPLINE_FRAME_STATS': '1'}, stdout=subprocess.DEVNULL, stderr=open(fx.root / 'app.log', 'w'))
+        app = subprocess.Popen([args.app, '--runtime', str(fx.root)], env={**os.environ, 'HOME': str(home), 'SHELL': '/bin/sh', 'MOORING_FRAME_STATS': '1'}, stdout=subprocess.DEVNULL, stderr=open(fx.root / 'app.log', 'w'))
         time.sleep(3); front(app.pid)
         if args.size:
             w, h = args.size.split('x')
@@ -173,8 +173,8 @@ def run_ghostty(scene):
 (HERE / 'out').mkdir(exist_ok=True)
 results = {}
 for scene in args.scenes.split(','):
-    results[f'keepline/{scene}'] = run_keepline(scene)
-    print(f'keepline {scene:8} {results[f"keepline/{scene}"]}', flush=True)
+    results[f'mooring/{scene}'] = run_mooring(scene)
+    print(f'mooring {scene:8} {results[f"mooring/{scene}"]}', flush=True)
     if args.ghostty:
         g = run_ghostty(scene)
         if g:

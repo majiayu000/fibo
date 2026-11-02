@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Collect the texts behind 「等你回答」/「出错了」 for the reasons rules (keepline-core/assets/reasons.json).
+"""Collect the texts behind 「等你回答」/「出错了」 for the reasons rules (mooring-core/assets/reasons.json).
 
-Reads, the way keepline does:
+Reads, the way mooring does:
   - Claude Code transcripts (~/.claude/projects): AskUserQuestion questions, permission
     denials ("requires approval", "haven't granted"), API error messages;
   - Codex rollouts (~/.codex/sessions): request_user_input questions, approval outputs;
   - <config_dir>/reasons-misses.jsonl: texts the app saw and no rule took.
 
 Writes one JSON line per distinct text: {"kind", "text", "count", "from"}, sanitized for the
-repo: a question keeps only its short title (as keepline writes it, 【title】), paths under
+repo: a question keeps only its short title (as mooring writes it, 【title】), paths under
 $HOME become ~, ids and request ids are dropped, and text is cut to 200 characters.
 
   scripts/mine-reasons.py > /tmp/reasons.jsonl              # everything
   scripts/mine-reasons.py --misses                          # only what the app missed
-  scripts/mine-reasons.py --check crates/keepline-core/tests/reasons-corpus.jsonl
+  scripts/mine-reasons.py --check crates/mooring-core/tests/reasons-corpus.jsonl
       # prints rows not yet in the corpus, to review and append
 """
 import argparse, collections, glob, json, os, re, sys
@@ -25,7 +25,7 @@ HOME = os.path.expanduser("~")
 
 def config_dir():
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
-    return os.path.join(base, "keepline")
+    return os.path.join(base, "mooring")
 
 
 def text_of(v):
@@ -111,7 +111,7 @@ def codex(path):
                 out = p.get("output")
                 out = out if isinstance(out, str) else json.dumps(out, ensure_ascii=False)
                 # A long output that only mentions approval (a grep hit, a log) is not a
-                # dialog; keepline also needs a failing exit code, which outputs rarely carry.
+                # dialog; mooring also needs a failing exit code, which outputs rarely carry.
                 if len(out) < 500 and any(a in out for a in APPROVAL):
                     add("waiting", out, "codex")
 

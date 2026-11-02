@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/keepline-core", "crates/keeplined", "crates/keepline-remote", "crates/keepline-relay", "crates/keepline-app", "crates/keepline-plugin-host"]
-default-members = ["crates/keepline-core", "crates/keeplined", "crates/keepline-remote", "crates/keepline-relay"]
+members = ["crates/mooring-core", "crates/mooring-host", "crates/mooring-remote", "crates/mooring-relay", "crates/mooring-app", "crates/mooring-plugin-host"]
+default-members = ["crates/mooring-core", "crates/mooring-host", "crates/mooring-remote", "crates/mooring-relay"]
 exclude = [".deps/zed", ".deps/libghostty-rs", "plugins"]
 
 [workspace.dependencies]

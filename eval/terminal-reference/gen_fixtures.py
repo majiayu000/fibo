@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate deterministic terminal fixtures (raw VT byte streams) for the Ghostty comparison.
 
-Each fixture fits in COLS x ROWS and is replayed unchanged into Ghostty and Keepline.
+Each fixture fits in COLS x ROWS and is replayed unchanged into Ghostty and Mooring.
 Usage: python3 gen_fixtures.py [out_dir]
 """
 

@@ -3,7 +3,7 @@
   "decorations": [
     {
       "id": "last-failed",
-      "command": "[ -n \"$KEEPLINE_LAST_EXIT\" ] && [ \"$KEEPLINE_LAST_EXIT\" != 0 ] && echo \"✗ 退出 $KEEPLINE_LAST_EXIT\"",
+      "command": "[ -n \"$MOORING_LAST_EXIT\" ] && [ \"$MOORING_LAST_EXIT\" != 0 ] && echo \"✗ 退出 $MOORING_LAST_EXIT\"",
       "place": "title",
       "when": "shell",
       "refresh_s": 300,
@@ -23,7 +23,7 @@
     },
     {
       "id": "last-command",
-      "command": "[ -n \"$KEEPLINE_LAST_DURATION_MS\" ] && echo \"上一条命令用时 $((KEEPLINE_LAST_DURATION_MS / 1000)) 秒，退出码 ${KEEPLINE_LAST_EXIT:-未知}\"",
+      "command": "[ -n \"$MOORING_LAST_DURATION_MS\" ] && echo \"上一条命令用时 $((MOORING_LAST_DURATION_MS / 1000)) 秒，退出码 ${MOORING_LAST_EXIT:-未知}\"",
       "place": "tip",
       "when": "shell",
       "refresh_s": 300

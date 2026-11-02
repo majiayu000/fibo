@@ -9,7 +9,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 fixture=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 out=$2
 GHOSTTY=${GHOSTTY:-/Applications/Ghostty.app/Contents/MacOS/ghostty}
-work=${TMPDIR:-/tmp}/keepline-terminal-reference
+work=${TMPDIR:-/tmp}/mooring-terminal-reference
 mkdir -p "$work" "$(dirname "$out")"
 winid=$work/window_id
 [ -x "$winid" ] && [ "$winid" -nt "$here/window_id.swift" ] || swiftc -O "$here/window_id.swift" -o "$winid"
@@ -22,7 +22,7 @@ cat '$fixture'
 exec sleep 600
 EOF
 chmod +x "$work/show.sh"
-# Colors mirror Keepline's pane defaults (theme.rs PANE / BODY) so diffs show rendering, not theme.
+# Colors mirror Mooring's pane defaults (theme.rs PANE / BODY) so diffs show rendering, not theme.
 cat >"$work/ghostty.conf" <<EOF
 ${REF_FONT:+font-family = $REF_FONT}
 font-size = ${REF_SIZE:-13}
@@ -72,6 +72,6 @@ osascript -e "tell application \"System Events\" to set frontmost of (first proc
 sleep 1.5
 id=${geom%% *}
 screencapture -x -o -l "$id" "$out"
-# screencapture tags pixels with the display profile; Keepline's render_to_image is raw sRGB.
+# screencapture tags pixels with the display profile; Mooring's render_to_image is raw sRGB.
 sips -m "/System/Library/ColorSync/Profiles/sRGB Profile.icc" "$out" >/dev/null
 echo "ghostty $(basename "$fixture" .vt): window=$geom -> $out"

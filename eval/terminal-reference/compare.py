@@ -2,11 +2,11 @@
 # requires-python = ">=3.10"
 # dependencies = ["pillow>=10"]
 # ///
-"""Compare Ghostty and Keepline captures of the same fixture.
+"""Compare Ghostty and Mooring captures of the same fixture.
 
-For each name present in both out/ghostty and out/keepline:
+For each name present in both out/ghostty and out/mooring:
   - derive the cell size from image size / grid (both captures are exactly the grid),
-  - write out/compare/<name>.png: Ghostty | Keepline | diff (Keepline resampled onto
+  - write out/compare/<name>.png: Ghostty | Mooring | diff (Mooring resampled onto
     Ghostty's grid so glyph-level differences line up; the cell-ratio gap is reported
     separately and is not hidden by the resample),
   - write out/report.json and out/report.md with numbers.
@@ -34,7 +34,7 @@ def main() -> int:
     ap.add_argument("--rows", type=int, default=30)
     ap.add_argument("--out", type=Path, default=HERE / "out")
     a = ap.parse_args()
-    gdir, kdir, cdir = a.out / "ghostty", a.out / "keepline", a.out / "compare"
+    gdir, kdir, cdir = a.out / "ghostty", a.out / "mooring", a.out / "compare"
     cdir.mkdir(parents=True, exist_ok=True)
     report = []
     for gpath in sorted(gdir.glob("*.png")):
@@ -69,7 +69,7 @@ def main() -> int:
         sheet = Image.new("RGB", (g.width + k.width + heat.width + 4 * pad, max(g.height, k.height) + title + pad), "#202020")
         d = ImageDraw.Draw(sheet)
         x = pad
-        for label, im in (("Ghostty 1.3.1", g), ("Keepline (screen.rs)", k), ("diff (Keepline resampled to Ghostty grid)", heat)):
+        for label, im in (("Ghostty 1.3.1", g), ("Mooring (screen.rs)", k), ("diff (Mooring resampled to Ghostty grid)", heat)):
             d.text((x, 8), f"{label}  {im.width}x{im.height}", fill="#e0e0e0")
             sheet.paste(im, (x, title))
             x += im.width + pad
@@ -77,14 +77,14 @@ def main() -> int:
         entry = {
             "fixture": gpath.stem,
             "ghostty_cell_px": [round(gw, 3), round(gh, 3)],
-            "keepline_cell_px": [round(kw, 3), round(kh, 3)],
+            "mooring_cell_px": [round(kw, 3), round(kh, 3)],
             "ghostty_ratio_h_w": round(gh / gw, 4),
-            "keepline_ratio_h_w": round(kh / kw, 4),
+            "mooring_ratio_h_w": round(kh / kw, 4),
             "ratio_delta": round((kh / kw) / (gh / gw) - 1, 4),
             "changed_pixels": round(changed, 4),
             "mean_abs_diff": round(mean, 4),
             "ghostty_bg": g.getpixel((g.width - 2, g.height - 2)),
-            "keepline_bg": k.getpixel((k.width - 2, k.height - 2)),
+            "mooring_bg": k.getpixel((k.width - 2, k.height - 2)),
             "worst_rows": sorted(range(a.rows), key=lambda r: -rows[r])[:5],
             "row_changed": rows,
         }
@@ -92,10 +92,10 @@ def main() -> int:
         print(f"{entry['fixture']:<18} cell G {gw:.2f}x{gh:.2f} K {kw:.2f}x{kh:.2f} "
               f"ratio Δ {entry['ratio_delta']:+.1%}  changed {changed:.1%}  worst rows {entry['worst_rows']}")
     (a.out / "report.json").write_text(json.dumps(report, indent=1))
-    lines = ["| fixture | Ghostty cell (px@2x) | Keepline cell | h/w Δ | changed px | worst rows |", "|---|---|---|---|---|---|"]
+    lines = ["| fixture | Ghostty cell (px@2x) | Mooring cell | h/w Δ | changed px | worst rows |", "|---|---|---|---|---|---|"]
     for e in report:
         lines.append(f"| {e['fixture']} | {e['ghostty_cell_px'][0]}×{e['ghostty_cell_px'][1]} | "
-                     f"{e['keepline_cell_px'][0]}×{e['keepline_cell_px'][1]} | {e['ratio_delta']:+.1%} | "
+                     f"{e['mooring_cell_px'][0]}×{e['mooring_cell_px'][1]} | {e['ratio_delta']:+.1%} | "
                      f"{e['changed_pixels']:.1%} | {e['worst_rows']} |")
     (a.out / "report.md").write_text("\n".join(lines) + "\n")
     return 0
