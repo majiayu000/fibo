@@ -154,7 +154,6 @@ impl Workbench {
         });
         let completing = self.completing(id);
         let line = T::color(if focused { T::focus() } else { T::border() });
-        let marks = self.agent_marks();
         // Who and where, never the conversation's title again: that is the tab's and the
         // sidebar's. `Codex ~/…/tools/mooring`; a plain shell names its program.
         let who = match session {
@@ -185,7 +184,8 @@ impl Workbench {
                     )
                 })
             })
-            .when_some(session.filter(|_| marks), |d, s| {
+            // Whose pane: its CLI's mark always, even when every session is the same CLI.
+            .when_some(session, |d, s| {
                 d.child(super::board::agent_mark(
                     s.runtime,
                     T::color(T::secondary()),

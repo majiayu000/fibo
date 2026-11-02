@@ -227,7 +227,8 @@ impl Workbench {
         }
         let open = session.clone();
         let seen = crate::ui::status_colors::StatusColors::get();
-        let marks = self.agent_marks();
+        // Every row and tab shows its CLI's mark, in its own color (v3 mock).
+        let marks = true;
         let title = match self
             .layout
             .renaming_session
@@ -389,7 +390,8 @@ impl Workbench {
         let seen = crate::ui::status_colors::StatusColors::get();
         let selected = current == Some(session.id.as_str());
         let mono = T::mono(cx).family;
-        let marks = self.agent_marks();
+        // Every row and tab shows its CLI's mark, in its own color (v3 mock).
+        let marks = true;
         // 会话优先 lists every space's sessions, so each row says whose it is first.
         let space = (self.sidebar.preset().group == Grouping::Recent)
             .then(|| session_space(&self.workspace, session))
@@ -477,13 +479,8 @@ impl Workbench {
                             .child(time),
                     )
                     .child(
-                        // A finished turn you have seen keeps 等你验收's ◇, in the seen ink.
+                        // A finished turn you have seen keeps 等你验收's ◇ and its green.
                         glyph(g)
-                            .when(g == Status::Review && !attention, |d| {
-                                d.text_color(T::color(
-                                    crate::ui::status_colors::StatusColors::get().seen_status(),
-                                ))
-                            })
                             .w(px(T::S12))
                             .flex()
                             .justify_center()
@@ -494,14 +491,23 @@ impl Workbench {
                     .children(pin),
             )
             .when_some(detail, |d, text| {
+                // A second line that opens with the state word shows that word in its ink.
+                let (state, rest) = match text.strip_prefix(g.label()) {
+                    Some(rest) => (Some(g.label()), rest.to_owned()),
+                    None => (None, text),
+                };
                 d.child(
                     div()
                         .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
-                        .truncate()
+                        .flex()
+                        .min_w_0()
                         .font_family(T::UI_FONT)
                         .text_size(px(T::CHIP_SIZE))
                         .text_color(T::color(T::secondary()))
-                        .child(text),
+                        .when_some(state, |d, word| {
+                            d.child(div().flex_shrink_0().text_color(g.colors().1).child(word))
+                        })
+                        .child(div().min_w_0().truncate().child(rest)),
                 )
             })
             .tooltip(super::diagnostics::tip(self.session_tip(session)))
@@ -522,6 +528,15 @@ impl Workbench {
         count: Option<usize>,
         cx: &Context<Self>,
     ) -> gpui::Div {
+        Self::tinted_title(title, count, T::color(T::secondary()), cx)
+    }
+    /// A group's heading whose name is in `ink`: 要你处理 and 在跑 in their states' ink.
+    pub(super) fn tinted_title(
+        title: String,
+        count: Option<usize>,
+        ink: gpui::Hsla,
+        cx: &Context<Self>,
+    ) -> gpui::Div {
         div()
             .flex()
             .items_baseline()
@@ -534,7 +549,7 @@ impl Workbench {
                 div()
                     .font_family(T::UI_FONT)
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(T::color(T::secondary()))
+                    .text_color(ink)
                     .child(title),
             )
             .when_some(count, |d, n| {
@@ -778,24 +793,24 @@ impl Workbench {
                         return detail;
                     }
                     let files = self.turn_files(l.0);
-                    let parts: Vec<String> = (files > 0)
-                        .then(|| format!("改了 {files} 个文件"))
+                    let parts: Vec<String> = [l.1.label().to_owned()]
                         .into_iter()
-                        .chain([l.1.label().to_owned()])
+                        .chain((files > 0).then(|| format!("改了 {files} 个文件")))
                         .chain(detail)
                         .collect();
                     Some(parts.join(" · "))
                 };
-                for (title, rows, lines) in [
-                    ("要你处理", need, true),
-                    ("在跑", running, true),
-                    ("停着", stopped, false),
+                for (title, rows, lines, ink) in [
+                    ("要你处理", need, true, Some(Status::Waiting)),
+                    ("在跑", running, true, Some(Status::Running)),
+                    ("停着", stopped, false, None),
                 ] {
                     if rows.is_empty() {
                         continue;
                     }
+                    let ink = ink.map_or(T::color(T::secondary()), |g| g.colors().1);
                     out.push(
-                        self.heading(title.into(), rows.len(), cx)
+                        Self::tinted_title(title.into(), Some(rows.len()), ink, cx)
                             .into_any_element(),
                     );
                     for l in rows {

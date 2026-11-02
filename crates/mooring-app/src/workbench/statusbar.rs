@@ -148,7 +148,7 @@ impl Workbench {
                 .child(caret());
         }
         // The marks tell the cells apart once there are two; alone, the usual rule.
-        let marks = readings.len() > 1 || self.agent_marks();
+        let marks = true;
         let mut said = Vec::new();
         for (agent, quota, _) in readings.iter().take(BAR_CELLS) {
             let stale = now.saturating_sub(quota.at) > STALE_AFTER;

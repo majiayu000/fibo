@@ -91,15 +91,6 @@ impl Workbench {
             .iter()
             .filter(|s| self.session_hidden(s).is_none() && self.session_open(s))
     }
-    /// Whether tabs, sidebar rows, pane titles and the bar's quota cells show each CLI's
-    /// mark. With one CLI across every listed session the marks are all the same picture
-    /// and only add noise, so they show only once the CLIs are mixed. The one place this
-    /// is decided.
-    pub(super) fn agent_marks(&self) -> bool {
-        let mut first = None;
-        self.listed_sessions()
-            .any(|s| *first.get_or_insert(s.runtime) != s.runtime)
-    }
     /// What hovering a conversation's row shows: where its name comes from, what it
     /// was first and last asked, and where it runs.
     pub(super) fn session_tip(&self, s: &AgentSession) -> Vec<String> {

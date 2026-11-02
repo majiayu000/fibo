@@ -357,10 +357,14 @@ impl Theme {
     /// The space tiles' gradients, first color to second, picked in sidebar order so
     /// the first six never share one. Deep enough for a white letter; no pure red or
     /// orange, which belong to 出错 and 等你回答.
+    /// A CLI's mark in its own color, as in the v3 mock (docs/ui-v3/v3-4.png): Claude
+    /// Code's clay, Codex's blue. Others keep the ink they are drawn with.
+    pub const AGENT_CLAUDE: u32 = 0xd97757;
+    pub const AGENT_CODEX: u32 = 0x3d4fd8;
     pub const SPACE_TILES: [[u32; 2]; 6] = [
-        [0x6d5ce8, 0xb06ee0],
-        [0x2f80d0, 0x34a8c8],
-        [0x1f9a72, 0x5aae3c],
+        [0xf59e6b, 0xd9467a],
+        [0x5ab0f0, 0x4b4fd6],
+        [0x7bd389, 0x2f9e66],
         [0xc04f9c, 0x8a5ad8],
         [0x3d62c9, 0x7b8cf0],
         [0x8a6a2a, 0xb38a3a],

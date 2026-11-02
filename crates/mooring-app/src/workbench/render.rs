@@ -238,7 +238,8 @@ impl Render for Workbench {
             .track_scroll(&self.layout.tab_scroll);
         // What each tab needs from you, in strip order, so a hidden one can be called out.
         let mut wants = Vec::new();
-        let marks = self.agent_marks();
+        // Every row and tab shows its CLI's mark, in its own color (v3 mock).
+        let marks = true;
         for (n, tab) in self
             .workspace
             .tabs

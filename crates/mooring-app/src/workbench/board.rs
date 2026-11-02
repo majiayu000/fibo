@@ -202,8 +202,14 @@ const AVATAR: f32 = T::BOARD_AVATAR;
 const MARK: f32 = T::BOARD_MARK;
 const HEAD_ICON: f32 = T::BOARD_HEAD_ICON;
 
-/// The CLI's mark in the muted text color, or its initial when it has none.
+/// The CLI's mark: in its own color when it has one (`T::AGENT_*`), else in `color`;
+/// its initial when it has no mark.
 pub(super) fn agent_mark(agent: Agent, color: Hsla) -> gpui::AnyElement {
+    let color = match agent {
+        Agent::Claude => T::color(T::AGENT_CLAUDE),
+        Agent::Codex => T::color(T::AGENT_CODEX),
+        _ => color,
+    };
     match agent_icon(agent) {
         Some(path) => svg()
             .path(path)
