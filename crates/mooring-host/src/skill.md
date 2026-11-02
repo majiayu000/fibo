@@ -76,10 +76,11 @@ printf '\033]7501;state=done\033\\'                          # 做完了，等�
 printf '\033]7501;state=clear\033\\'                         # 不再报告
 ```
 
-- `state`：`working` `blocked`（等用户）`error` `done` `idle` `clear`；没有这个字段或词不认识的整条忽略。
-- 可选：`kind`（`permission` `question` `auth`）、`progress`（0–100）、`app`（名字）、`title` 和 `msg`（base64，一行显示，最多 200 字）。字段用 `:` 分隔，以 `ESC \` 或 BEL 结尾。
-- 带 `id` 的子记录目前不显示。
-- 报告一直有效，直到程序说 `clear`、shell 标记这条命令结束（OSC 133），或终端退出。所以要在程序运行期间报告：在 shell 提示符下单独敲一条 `printf`，命令一结束就清掉了。
+- `state`：`working` `blocked`（等用户）`error` `done` `idle` `clear`；没有这个字段或词不认识的整条忽略。每次报告整条替换上一次的，`app` 这类字段每次都要带上。
+- 可选：`kind`（只对 blocked：`permission` `question` `auth`）、`progress`（0–100，只对 working / blocked）、`app`（≤32 字节）、`title`（base64，≤192 字节）和 `msg`（base64，≤2048 字节，一行）。字段用 `:` 分隔，值只能用 `A-Za-z0-9_.,+/=-`，以 `ESC \` 或 BEL 结尾。格式不对的单个字段会被跳过；超长、base64 无效或含换行等控制字符的整条丢弃。
+- `id=build/test` 是子记录，`/` 表示父子；没写 `app` 的从最近的祖先继承；`clear` 带 id 只清这一支。界面显示根记录，没有根记录时显示子记录里最要紧的那条。
+- 报告什么时候消失：出现新的 shell 提示符时，working / blocked / idle 清掉，done / error 留到下一条命令开始。所以要在程序运行期间报告；在提示符下单独敲一条 working，下一个提示符一出来就没了。
+- 发 `printf '\033]7501;?\033\\'` 可以探测终端支不支持：支持的会把 `?` 和状态、类型列表作为输入回给你。
 - 终端里有 Mooring 认得的 Agent 对话时，程序的报告优先于日志和画面判断。
 
 ## 例子

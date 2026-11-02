@@ -347,8 +347,14 @@ pub(super) fn pump(
         }
         live.broadcast(OUTPUT, bytes[..n].to_vec());
         let finished = live.marks.scan(&bytes[..n], Instant::now());
-        let said = live.reports.scan(&bytes[..n]);
-        if let Some(said) = said {
+        let scan = live.reports.scan(&bytes[..n]);
+        // A program asking whether we speak the status protocol gets its answer.
+        if !scan.reply.is_empty() {
+            if let Err(e) = pty::write(&mut live.master, &scan.reply) {
+                eprintln!("terminal {id}: program status probe: {e}");
+            }
+        }
+        if let Some(said) = scan.change {
             // Host before Live is the lock order; release this terminal first.
             drop(live);
             if let Err(e) = lock(shared).and_then(|mut host| host.program_said(id, said)) {

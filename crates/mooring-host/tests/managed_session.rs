@@ -1326,21 +1326,45 @@ fn a_program_reports_its_status_until_it_ends() {
     until("gone with its terminal", &|r| {
         !r.terminal_reports.contains_key("script")
     });
-    // A command that reports done and ends: nothing is left once its shell is back.
+    // A script that reports working, then done, and exits: working ends at the next
+    // prompt, done stays past it and goes when the next command starts.
     h.call(h.launch(
         "command",
-        "printf '\\033]133;C\\007\\033]7501;state=done\\007'; sleep 0.2; printf '\\033]133;D;0\\007\\033]0;back\\007'; read -r line",
+        "printf '\\033]133;C\\007\\033]7501;state=done\\007'; sleep 0.2; printf '\\033]133;D;0\\007\\033]133;A\\007\\033]0;back\\007'; sleep 0.5; printf '\\033]133;C\\007\\033]0;next\\007'; read -r line",
     ))
     .unwrap();
-    until("done reported", &|r| {
-        r.terminal_reports
-            .get("command")
-            .is_some_and(|p| p.state == "done")
-    });
-    until("cleared when the command ended", &|r| {
+    until("done kept past the prompt", &|r| {
         r.terminal_titles.get("command").map(String::as_str) == Some("back")
+            && r.terminal_reports
+                .get("command")
+                .is_some_and(|p| p.state == "done")
+    });
+    until("cleared when the next command started", &|r| {
+        r.terminal_titles.get("command").map(String::as_str) == Some("next")
             && !r.terminal_reports.contains_key("command")
     });
+    // A program asking whether the protocol is spoken gets the answer as its input; the
+    // line discipline echoes it, so it shows on screen.
+    h.call(h.launch("probe", "printf '\\033]7501;?\\033\\\\'; read -r line"))
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let screen = match h
+            .call(Request::ReadScreen {
+                id: "probe".into(),
+                rows: 40,
+            })
+            .unwrap()
+        {
+            Reply::Text(t) => t,
+            other => panic!("{other:?}"),
+        };
+        if screen.contains("7501;?:states=idle,working,done,blocked,error") {
+            break;
+        }
+        assert!(Instant::now() < deadline, "no probe answer: {screen:?}");
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 /// `mooring run`'s report back: a child Agent's finished turn goes into its starter's
