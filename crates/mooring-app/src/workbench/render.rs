@@ -712,7 +712,7 @@ impl Render for Workbench {
                     .children(sidebar)
                     .child(main),
             )
-            .child(self.statusbar_view(cx));
+            .child(self.statusbar_view(f32::from(window.viewport_size().width), cx));
         // 标记完成 runs leave their panes for the sidebar, so they draw over everything
         // but the menus.
         if let Some(overlay) = self.completing_overlay(window) {

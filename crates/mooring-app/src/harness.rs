@@ -2920,14 +2920,18 @@ pub fn start(
             });
             for name in pages.split(',').map(str::to_owned).collect::<Vec<_>>() {
                 let name = name.as_str();
+                // `Page@640` renders the page in a window that wide; the file keeps the name.
+                let (page, width) = match name.split_once('@') {
+                    Some((page, width)) => {
+                        (page, width.parse().unwrap_or(theme::Theme::WINDOW_WIDTH))
+                    }
+                    None => (name, theme::Theme::WINDOW_WIDTH),
+                };
                 handle
                     .update(cx, |view, window, cx| {
-                        window.resize(size(
-                            px(theme::Theme::WINDOW_WIDTH),
-                            px(theme::Theme::WINDOW_HEIGHT),
-                        ));
+                        window.resize(size(px(width), px(theme::Theme::WINDOW_HEIGHT)));
                         window.bounds_changed(cx);
-                        view.visual_page(name, window, cx);
+                        view.visual_page(page, window, cx);
                     })
                     .unwrap();
                 if name == "HereTyped" {
@@ -3083,10 +3087,7 @@ pub fn start(
                 cx.update_window(handle.into(), |_, window, app| {
                     assert_eq!(
                         window.viewport_size(),
-                        size(
-                            px(theme::Theme::WINDOW_WIDTH),
-                            px(theme::Theme::WINDOW_HEIGHT)
-                        )
+                        size(px(width), px(theme::Theme::WINDOW_HEIGHT))
                     );
                     window.refresh();
                     window.draw(app).clear(app);

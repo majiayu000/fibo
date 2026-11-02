@@ -16,7 +16,12 @@ pub(super) enum StatusPop {
 }
 
 impl Workbench {
-    pub(super) fn statusbar_view(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
+    pub(super) fn statusbar_view(
+        &self,
+        width: f32,
+        cx: &Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let fit = Fit::of(width);
         let open = self.statusbar;
         let cut = self.store.cut_off();
         let detail = self.store.recognition().detail.clone();
@@ -26,19 +31,22 @@ impl Workbench {
             } else {
                 Tone::Ok.dot()
             }))
-            .child(
-                div()
-                    .text_color(if cut {
-                        Tone::Danger.ink()
-                    } else {
-                        T::color(T::secondary())
-                    })
-                    .child(if cut {
-                        "后台断开，正在重连"
-                    } else {
-                        "后台"
-                    }),
-            )
+            // A cut connection always says so; a healthy one can go down to its dot.
+            .when(cut || fit.host_label, |d| {
+                d.child(
+                    div()
+                        .text_color(if cut {
+                            Tone::Danger.ink()
+                        } else {
+                            T::color(T::secondary())
+                        })
+                        .child(if cut {
+                            "后台断开，正在重连"
+                        } else {
+                            "后台"
+                        }),
+                )
+            })
             .tooltip(super::diagnostics::tip(vec![
                 if cut {
                     "和后台 mooring 的连接断了，侧栏和看板停在断开那一刻".into()
@@ -51,7 +59,8 @@ impl Workbench {
         let mut sessions = item("status-sessions", open == Some(StatusPop::Sessions))
             .aria_label(format!("{working} 个工作中，{needs} 个等你"))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Sessions, cx)));
-        if working == 0 && needs == 0 {
+        let working = if fit.working { working } else { 0 };
+        if working == 0 && needs == 0 && fit.working {
             sessions = sessions.child(
                 div()
                     .text_color(T::color(T::muted()))
@@ -94,19 +103,27 @@ impl Workbench {
             .child(sessions)
             .child(div().flex_1())
             .child(self.quota_button(cx))
-            .child(divider())
-            .child(
-                item("diagnose-host", false)
-                    .aria_label("本机诊断")
-                    .child("本机诊断")
-                    .on_click(cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx))),
-            )
-            .child(
-                item("open-settings", false)
-                    .aria_label("设置")
-                    .child("设置")
-                    .on_click(cx.listener(|this, _, window, cx| this.show_settings(window, cx))),
-            )
+            .when(fit.diagnose || fit.settings, |d| d.child(divider()))
+            .when(fit.diagnose, |d| {
+                d.child(
+                    item("diagnose-host", false)
+                        .aria_label("本机诊断")
+                        .child("本机诊断")
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx)),
+                        ),
+                )
+            })
+            .when(fit.settings, |d| {
+                d.child(
+                    item("open-settings", false)
+                        .aria_label("设置")
+                        .child("设置")
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.show_settings(window, cx)),
+                        ),
+                )
+            })
     }
 
     pub(super) fn toggle_status(&mut self, pop: StatusPop, cx: &mut Context<Self>) {
@@ -591,6 +608,32 @@ pub(super) fn left(at: u64, now: u64) -> String {
 }
 
 /// One clickable spot on the bar, filled while its popover is open.
+/// What fits in the status bar at a window width. Things give way from the right: 本机诊断
+/// first, then 设置, the word 后台 and the running count; the dot, 等你 and the quota button
+/// stay at every width (quota-meter/statusbar.html).
+#[derive(Debug, PartialEq, Eq)]
+struct Fit {
+    diagnose: bool,
+    settings: bool,
+    host_label: bool,
+    working: bool,
+}
+/// Below this, 本机诊断 goes (it is also in ⌘P and the app menu).
+const FIT_DIAGNOSE: f32 = 820.;
+/// Below this, only the dot, 等你 and the quota button stay (设置 is ⌘, and the app menu).
+const FIT_MINIMAL: f32 = 640.;
+impl Fit {
+    fn of(width: f32) -> Self {
+        let roomy = width >= FIT_MINIMAL;
+        Fit {
+            diagnose: width >= FIT_DIAGNOSE,
+            settings: roomy,
+            host_label: roomy,
+            working: roomy,
+        }
+    }
+}
+
 fn item(id: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
@@ -662,5 +705,38 @@ mod tests {
         assert_eq!(left(1000 + 4 * 3600 + 20 * 60, 1000), "4h20m");
         assert_eq!(left(1000 + 30, 1000), "1m");
         assert_eq!(left(500, 1000), "1m");
+    }
+}
+
+#[cfg(test)]
+mod fit_tests {
+    use super::*;
+
+    #[test]
+    fn things_give_way_from_the_right_as_the_window_narrows() {
+        let all = Fit {
+            diagnose: true,
+            settings: true,
+            host_label: true,
+            working: true,
+        };
+        assert_eq!(Fit::of(1440.), all);
+        assert_eq!(Fit::of(820.), all);
+        assert_eq!(
+            Fit::of(819.),
+            Fit {
+                diagnose: false,
+                ..all
+            }
+        );
+        assert_eq!(
+            Fit::of(639.),
+            Fit {
+                diagnose: false,
+                settings: false,
+                host_label: false,
+                working: false
+            }
+        );
     }
 }
