@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keepline 主界面对比</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{--bg:#f2f2f1;--ink:#1d1d1f;--sub:#6e6e73}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;padding:28px 16px 60px}
+.page{max-width:1480px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{margin:0;font-size:24px}
+h2{margin:8px 0 0;font-size:16px}
+.sub{color:var(--sub);margin-top:4px}
+.switch{display:flex;gap:6px}
+.switch button{height:30px;padding:0 14px;border:1px solid #d6d6da;background:#fff;border-radius:8px;font:inherit;font-size:13px;cursor:pointer}
+.switch button[aria-pressed=true]{background:#1d1d1f;color:#fff;border-color:#1d1d1f}
+figure{margin:0;min-width:0;display:flex;flex-direction:column;gap:8px}
+figcaption{font-weight:600}
+figcaption span{font-weight:400;color:var(--sub);margin-left:6px}
+.frame{width:1440px;height:788px;border:1px solid #dcdcdf;border-radius:10px;overflow:hidden;background:#fff;transform-origin:top left}
+.fit{overflow:hidden;min-width:0;width:100%}
+.stack{display:flex;flex-direction:column;gap:28px}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px 16px}
+.notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.note{background:#fff;border:1px solid #e0e0e3;border-radius:10px;padding:14px 16px}
+.note b{display:block;margin-bottom:4px}
+.note .fix{color:#1f6b45;margin-top:6px}
+.note .keep{color:#6e6e73;margin-top:6px;font-size:13px}
+/* redesign shared */
+.r{display:flex;font-size:13px;line-height:1.4;color:#1d1d1f}
+.r button{font-family:inherit}
+.r a{text-decoration:none;color:inherit}
+.r aside{width:236px;flex-shrink:0;display:flex;flex-direction:column;background:#f4f4f3;border-right:1px solid #e4e4e6}
+.r .tl{width:12px;height:12px;border-radius:50%}
+.r .sec{display:flex;justify-content:space-between;padding:0 8px 4px;font-size:11.5px;font-weight:600;color:#6e6e73}
+.r .row{height:28px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:7px;color:#3a3a3c}
+.r .row .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r .time{font-size:11.5px;color:#6e6e73}
+.r .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin:0 1.5px}
+.r .tab{height:30px;max-width:190px;display:flex;align-items:center;gap:7px;padding:0 12px;border-radius:7px;font-size:12.5px;white-space:nowrap;border:1px solid transparent;background:transparent;color:#3a3a3c}
+.r .tab.on{border-color:#e0e0e3;background:#fff;color:#1d1d1f;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.r .ghost{height:28px;padding:0 10px;border:0;background:transparent;border-radius:7px;color:#3a3a3c;font-size:12.5px}
+.r .term{flex:1;min-height:0;overflow:hidden;padding:18px 28px;font-family:"JetBrains Mono","SF Mono",Menlo,monospace;font-size:13px;line-height:1.65;color:#2a2a2c;display:flex;flex-direction:column;gap:12px}
+/* v2 */
+.v2 .ico{width:15px;height:15px;flex-shrink:0;display:block}
+.v2 .av{width:20px;height:20px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700}
+.v2 .srow{height:30px;display:flex;align-items:center;gap:9px;padding:0 8px;border-radius:7px;color:#1d1d1f}
+.v2 .srow .meta{margin-left:auto;font-size:11.5px;color:#6e6e73;white-space:nowrap}
+.v2 .arow{height:30px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:7px;color:#1d1d1f}
+.v2 .arow .sp{color:#6e6e73}
+.v2 .arow .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2 .arow .time{width:28px;text-align:right}
+.v2 .st{width:14px;display:flex;justify-content:center;flex-shrink:0}
+.v2 .grp{display:flex;align-items:center;gap:6px;padding:8px 8px 3px;font-size:11.5px;font-weight:600}
+.v2 .grp i{font-style:normal;font-weight:400;color:#6e6e73}
+.v2 .tab{gap:6px;padding:0 10px}
+.v2 .phead{height:36px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid #ececee;font-size:12.5px}
+.v2 .phead .path{color:#6e6e73;font-family:"JetBrains Mono","SF Mono",Menlo,monospace;font-size:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.v2 .spin{width:10px;height:10px;border-radius:50%;border:1.6px solid #e8c547;border-right-color:transparent;animation:spin 1.2s linear infinite}
+/* v3 */
+.v3 .up{color:#1f7a4d}.v3 .dn{color:#b42318}
+.v3 .add{color:#1f7a4d;font-size:11.5px}.v3 .del{color:#b42318;font-size:11.5px}
+.v3 .row2{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:7px;color:#1d1d1f;position:relative}
+.v3 .row2 .ico{margin-top:2px}
+.v3 .row2 .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.v3 .row2 .l1{display:flex;align-items:center;gap:8px}
+.v3 .row2 .l1 .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v3 .row2 .l1 .time{width:28px;text-align:right}
+.v3 .row2 .l2{font-size:11.5px;color:#6e6e73;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:22px}
+.v3 .badge{position:absolute;right:8px;bottom:6px;min-width:16px;height:16px;border-radius:8px;background:#e8823a;color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.v3 .chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:600}
+.v3 .chip.ok{background:#e7f6ee;color:#1f6b45}.v3 .chip.ask{background:#ffeedd;color:#9a4310}
+.v3 .btn{height:26px;padding:0 12px;border:1px solid #d6d6da;background:#fff;border-radius:7px;color:#3a3a3c;font-size:12.5px}
+.v3 .btn.dark{border-color:#1d1d1f;background:#1d1d1f;color:#fff;font-weight:600}
+.v3 .q{display:flex;align-items:center;gap:5px}
+.v3 .bar{display:inline-block;width:28px;height:5px;border-radius:3px;background:#e4e4e6;overflow:hidden}
+.v3 .bar i{display:block;height:100%;background:#3a3a3c}.v3 .bar.warn i{background:#d9a441}
+.v3 .seg{display:inline-flex;border:1px solid #e0e0e3;border-radius:7px;overflow:hidden;font-size:12.5px}
+.v3 .seg>*{padding:3px 10px;color:#3a3a3c}.v3 .seg b{background:#1d1d1f;color:#fff;font-weight:600}
+.v3 .frow{display:flex;align-items:center;gap:7px;height:28px;padding:0 6px;border-radius:6px;color:#1d1d1f}
+.v3 .frow.on{background:#ececee}.v3 .frow .m{width:12px;color:#1f7a4d;font-weight:700;font-size:11.5px}
+.v3 .frow .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v3 .nb{min-width:16px;height:16px;border-radius:8px;background:#3b5bdb;color:#fff;font-size:10.5px;display:flex;align-items:center;justify-content:center}
+.v3 .dl{padding:0 14px 0 0;display:flex;white-space:pre;position:relative}
+.v3 .dl i{font-style:normal;width:44px;text-align:right;padding-right:12px;color:#8e8e93;flex-shrink:0}
+.v3 .dl.add{background:#eefaf2}.v3 .dl.note{background:#e3f4ea}
+.v3 .dl b{position:absolute;right:14px;top:3px;width:16px;height:16px;border-radius:8px;background:#3b5bdb;color:#fff;font-size:10.5px;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif}
+.v3 .ck{display:flex;align-items:center;gap:8px;font-size:12.5px;height:24px}
+.v3 .nt{display:flex;gap:10px;margin:0 14px 10px;padding:10px 12px;background:#fff;border:1px solid #e4e4e6;border-radius:8px;font-size:12.5px}
+.v3 .nt .n{width:18px;height:18px;flex-shrink:0;border-radius:9px;background:#3b5bdb;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}
+.v3 .nt .f{color:#6e6e73;font-size:11.5px;font-family:"JetBrains Mono",Menlo,monospace}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-claude" viewBox="0 0 16 13"><g fill="#d97757"><rect x="3" y="1" width="10" height="7" rx="0.5"/><rect x="0.5" y="3.5" width="2.5" height="2.5"/><rect x="13" y="3.5" width="2.5" height="2.5"/><rect x="4" y="8" width="1.4" height="3.5"/><rect x="6.2" y="8" width="1.4" height="3.5"/><rect x="8.4" y="8" width="1.4" height="3.5"/><rect x="10.6" y="8" width="1.4" height="3.5"/></g><g fill="#2b1810"><rect x="5" y="3.3" width="1.4" height="2"/><rect x="9.6" y="3.3" width="1.4" height="2"/></g></symbol>
+  <symbol id="i-codex" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.3" fill="#3d4fd8"/><path d="M4.8 5.8l2.3 2.2-2.3 2.2M8.6 10.6h3" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-shell" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="#8e8e93"/><path d="M4.5 6l2 2-2 2M8 10.5h3.5" stroke="#fff" stroke-width="1.4" fill="none" stroke-linecap="round"/></symbol>
+</svg>
+<div class="page">
+  <div>
+    <h1>Keepline 主界面：现在 · 参照 · 重做 v1–v3</h1>
+    <div class="sub">2026-11-02 · 六张同为 1440×788：Keepline 实拍、Herdr 实拍（同是 GPUI 原生 App）、重做 v1、参照 Herdr 的 v2，以及参照五家同类产品的 v3（主界面和看改动两张）</div>
+  </div>
+  <div class="switch" role="group" aria-label="排列方式">
+    <button id="bSide" aria-pressed="true">两列</button>
+    <button id="bStack" aria-pressed="false">一列（原大）</button>
+  </div>
+
+  <div id="boards" class="side">
+    <figure><figcaption>Keepline 现在<span>实拍</span></figcaption><div class="fit"><div class="frame"><img src="now.png" alt="Keepline 主界面实拍" style="width:1440px;height:788px;display:block;object-fit:cover"></div></div></figure>
+    <figure><figcaption>Herdr<span>实拍 · 参照</span></figcaption><div class="fit"><div class="frame"><img src="herdr-s.png" alt="Herdr 主界面实拍" style="width:1440px;height:788px;display:block;object-fit:cover"></div></div></figure>
+
+    <!-- v1 -->
+    <figure><figcaption>重做 v1<span>上一版</span></figcaption><div class="fit"><div class="frame">
+      <div class="r" style="width:1440px;height:788px">
+        <aside>
+          <div style="height:44px;display:flex;align-items:center;gap:8px;padding:0 12px">
+            <span class="tl" style="background:#ff5f57"></span><span class="tl" style="background:#febc2e"></span><span class="tl" style="background:#28c840"></span>
+          </div>
+          <div style="padding:0 10px 10px;display:flex;flex-direction:column;gap:8px">
+            <button style="height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:7px;background:transparent;text-align:left;font-size:13.5px;font-weight:600;color:#1d1d1f">
+              <span style="width:16px;height:16px;border-radius:5px;background:linear-gradient(135deg,#f59e6b,#d9467a)"></span>
+              <span style="flex:1">工作空间</span><span style="font-size:11.5px;font-weight:400;color:#b4530f">目录不在了</span>
+            </button>
+            <label style="height:30px;display:flex;align-items:center;gap:6px;padding:0 8px;background:#fff;border:1px solid #e0e0e3;border-radius:7px;color:#6e6e73;font-size:12.5px"><input placeholder="搜索或跳转" style="flex:1;min-width:0;border:0;outline:none;background:transparent;font:inherit"><span style="font-size:11px">⌘P</span></label>
+          </div>
+          <nav style="flex:1;overflow:hidden;padding:4px 10px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div class="sec" style="color:#b4530f"><span>要你处理</span><span>2</span></div>
+              <a href="#" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px"><span class="dot" style="width:8px;height:8px;background:#e8823a;margin:0"></span><span style="display:flex;flex-direction:column;min-width:0;flex:1"><span>网站可借鉴之处</span><span style="font-size:11.5px;color:#9a4310">等你回答 · 问你选哪个方向</span></span><span class="time">2 分</span></a>
+              <a href="#" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;background:#e6e6e8"><span class="dot" style="width:8px;height:8px;border:1.5px solid #2f9e66;box-sizing:border-box;margin:0"></span><span style="display:flex;flex-direction:column;min-width:0;flex:1"><span>Skill 在收录里的情况</span><span style="font-size:11.5px;color:#1f6b45">等你验收</span></span><span class="time">34 分</span></a>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div class="sec"><span>在跑</span><span>1</span></div>
+              <a href="#" class="row"><span class="dot" style="background:#e8c547"></span><span class="t">插件系统设置与插件市场</span><span class="time">12 分</span></a>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div class="sec"><span>最近</span></div>
+              <a href="#" class="row"><span class="dot" style="background:#8a9bb0"></span><span class="t">库中 UI 组件现状</span><span class="time">4 时</span></a>
+              <a href="#" class="row"><span class="dot" style="background:#8a9bb0"></span><span class="t">任务完成判断机制</span><span class="time">5 时</span></a>
+              <a href="#" class="row"><span style="width:10px;font-size:11px;color:#6e6e73;text-align:center">✓</span><span class="t">聊天记录与多终端移动</span><span class="time">7 时</span></a>
+              <a href="#" style="padding:6px 8px;font-size:12px;color:#6e6e73">全部 24 个 · 在鸟瞰里看</a>
+            </div>
+          </nav>
+        </aside>
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <header style="height:44px;display:flex;align-items:center;gap:4px;padding:0 12px 0 8px;border-bottom:1px solid #ececee">
+            <button class="tab on"><span class="dot" style="background:#2f9e66;margin:0"></span>Skill 收录</button>
+            <button class="tab"><span class="dot" style="background:#e8823a;margin:0"></span>借鉴之处</button>
+            <button class="tab"><span class="dot" style="background:#e8c547;margin:0"></span>插件市场</button>
+            <button class="ghost" style="color:#6e6e73">+4 ▾</button>
+            <span style="flex:1"></span>
+            <button style="height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid #f3c9a6;background:#fff4eb;border-radius:14px;color:#9a4310;font-size:12.5px;font-weight:600">要你处理 2</button>
+            <button class="ghost">鸟瞰</button>
+          </header>
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid #ececee;background:#fbfbfa">
+            <span style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;background:#e7f6ee;color:#1f6b45;font-size:12px;font-weight:600">等你验收</span>
+            <span style="color:#3a3a3c">这一轮停在：建议把出片流程做成独立的 skill，等你点头</span>
+            <span style="flex:1"></span>
+            <span style="font-size:12px;color:#6e6e73">Claude Code · 本轮 34 分钟</span>
+            <button style="height:28px;padding:0 12px;border:1px solid #d6d6da;background:#fff;border-radius:7px;font-size:12.5px">退回</button>
+            <button style="height:28px;padding:0 14px;border:0;background:#1d1d1f;border-radius:7px;color:#fff;font-size:12.5px;font-weight:600">标记完成</button>
+          </div>
+          <section class="term">
+            <div style="color:#6e6e73">✻ Sautéed for 5m 9s · done 10:20 PM</div>
+            <div style="background:#f2f2f4;padding:4px 10px;border-radius:6px">› 就是之前做的那个视频，能做成一个 skill 吗？</div>
+            <div>● 可以做成 skill，建议做成<b>独立的 skill</b>，先别塞进现有地图工具里。</div>
+            <span style="flex:1"></span>
+            <div style="border-top:1px solid #e4e4e6;padding-top:8px">› ▍</div>
+          </section>
+          <footer style="height:30px;display:flex;align-items:center;justify-content:flex-end;gap:4px;padding:0 12px;border-top:1px solid #ececee;font-size:12px">Claude 周 31% · 另 2 家　本机诊断　设置</footer>
+        </main>
+      </div>
+    </div></div></figure>
+
+    <!-- v2 -->
+    <figure><figcaption>重做 v2<span>参照 Herdr</span></figcaption><div class="fit"><div class="frame">
+      <div class="r v2" style="width:1440px;height:788px">
+        <aside>
+          <div style="height:44px;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px">
+            <span class="tl" style="background:#ff5f57"></span><span class="tl" style="background:#febc2e"></span><span class="tl" style="background:#28c840"></span>
+            <span style="margin-left:10px;font-weight:600">Keepline</span>
+            <span style="flex:1"></span>
+            <button class="ghost" aria-label="搜索 ⌘P" style="width:26px;padding:0;color:#6e6e73"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="6" cy="6" r="4.2"/><path d="M9.2 9.2L12.5 12.5"/></svg></button>
+            <button class="ghost" aria-label="收起左栏" style="width:26px;padding:0;color:#6e6e73"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><line x1="6" y1="3" x2="6" y2="13"/></svg></button>
+          </div>
+
+          <div style="padding:2px 10px 0">
+            <div class="sec" style="padding-top:6px"><span>空间</span><span style="font-weight:400">+</span></div>
+            <a href="#" class="srow" style="background:#e6e6e8"><span class="av" style="background:linear-gradient(135deg,#f59e6b,#d9467a)">工</span><span>工作空间</span><span class="meta" style="color:#b4530f">目录不在了</span></a>
+            <a href="#" class="srow"><span class="av" style="background:linear-gradient(135deg,#5ab0f0,#4b4fd6)">C</span><span>code</span><span class="meta">main <span style="color:#1f7a4d">↑2</span></span></a>
+            <a href="#" class="srow"><span class="av" style="background:linear-gradient(135deg,#7bd389,#2f9e66)">K</span><span>keepline</span><span class="meta">main <span style="color:#1f7a4d">↑1</span> <span style="color:#b42318">↓3</span></span></a>
+          </div>
+
+          <div style="flex:1"></div>
+
+          <nav style="padding:0 10px 6px;display:flex;flex-direction:column;border-top:1px solid #e4e4e6">
+            <div class="sec" style="padding-top:10px"><span>会话</span><span style="font-weight:400">按状态 ▾</span></div>
+            <div class="grp" style="color:#9a4310">要你处理 <i>2</i></div>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg><span class="t"><span class="sp">code · </span>网站可借鉴之处</span><span class="time">2分</span><span class="st"><span class="dot" style="width:8px;height:8px;background:#e8823a;margin:0"></span></span></a>
+            <a href="#" class="arow" style="background:#e6e6e8"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">工作空间 · </span>Skill 收录情况</span><span class="time">34分</span><span class="st"><span class="dot" style="width:9px;height:9px;border:1.6px solid #2f9e66;box-sizing:border-box;margin:0"></span></span></a>
+            <div class="grp" style="color:#7a5c00">在跑 <i>1</i></div>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">keepline · </span>插件系统与插件市场</span><span class="time">12分</span><span class="st"><span class="spin"></span></span></a>
+            <div class="grp" style="color:#6e6e73">停着 <i>8</i></div>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">keepline · </span>库中 UI 组件现状</span><span class="time">4时</span><span class="st"><span class="dot" style="width:8px;height:8px;border:1.3px solid #8a9bb0;box-sizing:border-box;margin:0"></span></span></a>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg><span class="t"><span class="sp">keepline · </span>任务完成判断机制</span><span class="time">5时</span><span class="st"><span class="dot" style="width:8px;height:8px;border:1.3px solid #8a9bb0;box-sizing:border-box;margin:0"></span></span></a>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">keepline · </span>左上角按钮样式</span><span class="time">6时</span><span class="st"><span class="dot" style="width:8px;height:8px;border:1.3px solid #8a9bb0;box-sizing:border-box;margin:0"></span></span></a>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">code · </span>聊天记录与多终端</span><span class="time">7时</span><span class="st" style="font-size:11px;color:#6e6e73">✓</span></a>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-shell"/></svg><span class="t"><span class="sp">code · </span>zsh</span><span class="time">8时</span><span class="st"><span class="dot" style="width:8px;height:8px;border:1.3px solid #8a9bb0;box-sizing:border-box;margin:0"></span></span></a>
+            <a href="#" style="padding:6px 8px;font-size:12px;color:#6e6e73">另 5 个 · 在鸟瞰里看</a>
+          </nav>
+          <div style="border-top:1px solid #e4e4e6;padding:6px 10px;display:flex;flex-direction:column">
+            <a href="#" class="srow" style="color:#3a3a3c;height:28px">⚙︎ 设置</a>
+            <a href="#" class="srow" style="color:#3a3a3c;height:28px">＋ 连接手机或其他电脑</a>
+          </div>
+        </aside>
+
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <header style="height:44px;display:flex;align-items:center;gap:2px;padding:0 12px 0 8px;border-bottom:1px solid #ececee">
+            <button class="tab on"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>Skill 收录<span style="color:#6e6e73;font-weight:400;margin-left:4px">×</span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg>借鉴之处<span class="dot" style="background:#e8823a;margin-left:2px"></span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>插件市场<span class="spin" style="margin-left:2px"></span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>UI 组件现状</button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-shell"/></svg>zsh</button>
+            <button class="ghost" style="color:#6e6e73">+3 ▾</button>
+            <span style="flex:1"></span>
+            <button style="height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid #f3c9a6;background:#fff4eb;border-radius:14px;color:#9a4310;font-size:12.5px;font-weight:600"><span class="dot" style="background:#e8823a;margin:0"></span>要你处理 2<span style="font-weight:400;color:#b4530f">⌘J</span></button>
+            <button class="ghost" style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="1.5" y="2" width="3" height="10" rx="1"/><rect x="5.5" y="2" width="3" height="7" rx="1"/><rect x="9.5" y="2" width="3" height="8.5" rx="1"/></svg>鸟瞰</button>
+          </header>
+
+          <div class="phead">
+            <svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>
+            <b style="font-weight:600">Claude Code</b>
+            <span class="path">~/Desktop/code/AI/tools/keepline</span>
+            <span style="flex:1"></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;background:#e7f6ee;color:#1f6b45;font-size:12px;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;border:1.5px solid #2f9e66"></span>等你验收 · 34 分</span>
+            <button style="height:26px;padding:0 12px;border:1px solid #d6d6da;background:#fff;border-radius:7px;color:#3a3a3c;font-size:12.5px">退回</button>
+            <button style="height:26px;padding:0 14px;border:0;background:#1d1d1f;border-radius:7px;color:#fff;font-size:12.5px;font-weight:600">标记完成</button>
+            <button class="ghost" aria-label="更多" style="width:26px;height:26px;padding:0;color:#6e6e73">⋯</button>
+          </div>
+
+          <section class="term">
+            <div style="color:#6e6e73">✻ Sautéed for 5m 9s · done 10:20 PM</div>
+            <div style="background:#f2f2f4;padding:4px 10px;border-radius:6px">› 就是之前做的那个视频，能做成一个 skill 吗？还是做成什么呢？</div>
+            <div style="display:flex;flex-direction:column;gap:6px;max-width:920px">
+              <div>● 可以做成 skill，建议做成<b>独立的 skill</b>，先别塞进现有地图工具里。</div>
+              <div style="font-weight:600;margin-top:6px">它能做什么</div>
+              <div>给它一个仓库和一个时间段，它自动出一条 20 多秒的视频：</div>
+              <div>1. 按真实 git 记录画多条分支的流程图，越长越快，再拉远看全景。</div>
+              <div>2. 有项目地图就接着讲地图；没有就直接接结尾卡片。</div>
+              <div>3. 结尾卡片的标题、标语、链接都可以换。</div>
+              <div style="font-weight:600;margin-top:6px">怎么判断做成了</div>
+              <div>写完之后拿第二个仓库跑一次。不改场景代码就能出一条能看的片子，就算成了。</div>
+            </div>
+            <div style="color:#6e6e73">✻ Cogitated for 28s · done 10:28 PM</div>
+            <span style="flex:1"></span>
+            <div style="border-top:1px solid #e4e4e6;padding-top:8px">› <span style="display:inline-block;width:8px;height:15px;background:#3b5bdb;vertical-align:middle"></span></div>
+          </section>
+
+          <footer style="height:30px;display:flex;align-items:center;gap:14px;padding:0 14px;border-top:1px solid #ececee;font-size:12px;color:#3a3a3c">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#4cc38a"></span>本机 · 11 个会话</span>
+            <span style="flex:1"></span>
+            <button class="ghost" style="height:24px;font-size:12px;display:flex;align-items:center;gap:6px"><svg class="ico" style="width:13px;height:13px" aria-hidden="true"><use href="#i-claude"/></svg>周 31%<span style="color:#6e6e73">· 另 2 家</span></button>
+            <button class="ghost" style="height:24px;font-size:12px">本机诊断</button>
+            <span style="color:#6e6e73">⌘P 命令</span>
+          </footer>
+        </main>
+      </div>
+    </div></div></figure>
+
+    <!-- v3-A -->
+    <figure><figcaption>重做 v3 · 主界面<span>分屏，右边那块在等你</span></figcaption><div class="fit"><div class="frame">
+      <div class="r v2 v3" style="width:1440px;height:788px">
+        <aside id="v3side" style="width:264px">
+          <div style="height:44px;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px">
+            <span class="tl" style="background:#ff5f57"></span><span class="tl" style="background:#febc2e"></span><span class="tl" style="background:#28c840"></span>
+            <span style="margin-left:10px;font-weight:600">Keepline</span>
+            <span style="flex:1"></span>
+            <button class="ghost" aria-label="搜索 ⌘P" style="width:26px;padding:0;color:#6e6e73"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="6" cy="6" r="4.2"/><path d="M9.2 9.2L12.5 12.5"/></svg></button>
+            <button class="ghost" aria-label="收起左栏" style="width:26px;padding:0;color:#6e6e73"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><line x1="6" y1="3" x2="6" y2="13"/></svg></button>
+          </div>
+          <div style="padding:2px 10px 6px">
+            <div class="sec" style="padding-top:6px"><span>空间</span><span style="font-weight:400">+</span></div>
+            <a href="#" class="srow" style="background:#e6e6e8"><span class="av" style="background:linear-gradient(135deg,#f59e6b,#d9467a)">工</span><span>工作空间</span><span class="meta" style="color:#b4530f">目录不在了</span></a>
+            <a href="#" class="srow"><span class="av" style="background:linear-gradient(135deg,#5ab0f0,#4b4fd6)">C</span><span>code</span><span class="meta">main <span class="up">↑2</span></span></a>
+            <a href="#" class="srow"><span class="av" style="background:linear-gradient(135deg,#7bd389,#2f9e66)">K</span><span>keepline</span><span class="meta">main <span class="up">↑1</span> <span class="dn">↓3</span></span></a>
+          </div>
+          <nav style="flex:1;overflow:hidden;padding:0 10px 6px;display:flex;flex-direction:column;border-top:1px solid #e4e4e6">
+            <div class="sec" style="padding-top:10px"><span>会话</span><span style="font-weight:400">按状态 ▾</span></div>
+            <div class="grp" style="color:#9a4310">要你处理 <i>2</i></div>
+            <a href="#" class="row2"><svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg><span class="body"><span class="l1"><span class="t"><span class="sp">code · </span>网站可借鉴之处</span><span class="time">2分</span><span class="st"><span class="dot" style="width:8px;height:8px;background:#e8823a;margin:0"></span></span></span><span class="l2" style="color:#9a4310">问你：侧栏参考哪两家？</span></span><span class="badge">1</span></a>
+            <a href="#" class="row2" style="background:#e6e6e8"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="body"><span class="l1"><span class="t"><span class="sp">工作空间 · </span>Skill 收录情况</span><span class="time">34分</span><span class="st"><span class="dot" style="width:9px;height:9px;border:1.6px solid #2f9e66;box-sizing:border-box;margin:0"></span></span></span><span class="l2"><span class="add">+128</span> <span class="del">−14</span> · <span style="color:#1f6b45">等你验收</span> · 建议做成独立 skill</span></span></a>
+            <div class="grp" style="color:#7a5c00">在跑 <i>1</i></div>
+            <a href="#" class="row2"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="body"><span class="l1"><span class="t"><span class="sp">keepline · </span>插件系统与插件市场</span><span class="time">12分</span><span class="st"><span class="spin"></span></span></span><span class="l2"><span class="add">+412</span> <span class="del">−37</span> · 在跑 cargo test</span></span></a>
+            <div class="grp" style="color:#6e6e73">停着 <i>8</i></div>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">keepline · </span>库中 UI 组件现状</span><span class="time">4时</span><span class="st"><span class="dot" style="width:8px;height:8px;border:1.3px solid #8a9bb0;box-sizing:border-box;margin:0"></span></span></a>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg><span class="t"><span class="sp">keepline · </span>任务完成判断机制</span><span class="time">5时</span><span class="st"><span class="dot" style="width:8px;height:8px;border:1.3px solid #8a9bb0;box-sizing:border-box;margin:0"></span></span></a>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">keepline · </span>左上角按钮样式</span><span class="time">6时</span><span class="st"><span class="dot" style="width:8px;height:8px;border:1.3px solid #8a9bb0;box-sizing:border-box;margin:0"></span></span></a>
+            <a href="#" class="arow"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><span class="t"><span class="sp">code · </span>聊天记录与多终端</span><span class="time">7时</span><span class="st" style="font-size:11px;color:#6e6e73">✓</span></a>
+            <a href="#" style="padding:6px 8px;font-size:12px;color:#6e6e73">另 4 个 · 在鸟瞰里看</a>
+          </nav>
+          <div style="border-top:1px solid #e4e4e6;padding:6px 10px;display:flex;flex-direction:column">
+            <a href="#" class="srow" style="color:#3a3a3c;height:28px">⚙︎ 设置</a>
+            <a href="#" class="srow" style="color:#3a3a3c;height:28px">＋ 连接手机或其他电脑</a>
+          </div>
+        </aside>
+
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <header style="height:44px;display:flex;align-items:center;gap:2px;padding:0 12px 0 8px;border-bottom:1px solid #ececee">
+            <button class="tab on"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>Skill 收录<span style="color:#6e6e73;font-weight:400;margin-left:4px">×</span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg>借鉴之处<span class="dot" style="background:#e8823a;margin-left:2px"></span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>插件市场<span class="spin" style="margin-left:2px"></span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>UI 组件现状</button>
+            <button class="ghost" style="color:#6e6e73">+4 ▾</button>
+            <span style="flex:1"></span>
+            <button style="height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid #f3c9a6;background:#fff4eb;border-radius:14px;color:#9a4310;font-size:12.5px;font-weight:600"><span class="dot" style="background:#e8823a;margin:0"></span>要你处理 2<span style="font-weight:400;color:#b4530f">⌘J</span></button>
+            <button class="ghost" style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="1.5" y="2" width="3" height="10" rx="1"/><rect x="5.5" y="2" width="3" height="7" rx="1"/><rect x="9.5" y="2" width="3" height="8.5" rx="1"/></svg>鸟瞰</button>
+          </header>
+
+          <div style="flex:1;min-height:0;display:flex">
+            <!-- left pane: focused, waiting review -->
+            <div style="flex:1.15;min-width:0;display:flex;flex-direction:column;border-right:1px solid #e4e4e6;box-shadow:inset 0 2px 0 #1d1d1f">
+              <div class="phead">
+                <svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg><b style="font-weight:600">Claude Code</b><span class="path">~/…/AI/tools/keepline</span>
+                <span style="flex:1"></span>
+                <span class="chip ok"><span style="width:7px;height:7px;border-radius:50%;border:1.5px solid #2f9e66"></span>等你验收 · 34分</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #ececee;background:#f7faf8;font-size:12.5px">
+                <span style="color:#1f6b45;font-weight:600">这一轮改了 3 个文件</span><span class="add">+128</span><span class="del">−14</span>
+                <span style="color:#6e6e73">· 验收标准 1/2</span>
+                <span style="flex:1"></span>
+                <button class="btn">看改动</button><button class="btn">退回</button><button class="btn dark">标记完成</button>
+              </div>
+              <section class="term" style="padding:14px 20px;font-size:12.5px">
+                <div style="color:#6e6e73">✻ Sautéed for 5m 9s · done 10:20 PM</div>
+                <div style="background:#f2f2f4;padding:4px 10px;border-radius:6px">› 之前做的那个视频，能做成一个 skill 吗？</div>
+                <div>● 可以做成 skill，建议做成<b>独立的 skill</b>。</div>
+                <div style="font-weight:600">它能做什么</div>
+                <div>给它一个仓库和一个时间段，自动出一条 20 多秒的视频：</div>
+                <div>1. 按真实 git 记录画多条分支的流程图。</div>
+                <div>2. 有项目地图就接着讲地图。</div>
+                <div>3. 结尾卡片的标题、标语、链接都可以换。</div>
+                <div style="color:#6e6e73">✻ Cogitated for 28s · done 10:28 PM</div>
+                <span style="flex:1"></span>
+                <div style="border-top:1px solid #e4e4e6;padding-top:8px">› <span style="display:inline-block;width:8px;height:15px;background:#3b5bdb;vertical-align:middle"></span></div>
+              </section>
+            </div>
+            <!-- right pane: waiting answer, ring -->
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;outline:2px solid #e8823a;outline-offset:-2px">
+              <div class="phead" style="background:#fff7f0">
+                <svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg><b style="font-weight:600">Codex</b><span class="path">~/…/code</span>
+                <span style="flex:1"></span>
+                <span class="chip ask"><span class="dot" style="background:#e8823a;margin:0"></span>等你回答 · 2分</span>
+              </div>
+              <section class="term" style="padding:14px 20px;font-size:12.5px">
+                <div style="background:#f2f2f4;padding:4px 10px;border-radius:6px">› 看看网站有哪些地方可以借鉴</div>
+                <div>• 读了 6 个页面，整理出两类可借的：侧栏的分组方式、窗格标题的写法。</div>
+                <div>• 侧栏有两家做法不同，需要你选一个方向：</div>
+                <span style="flex:1"></span>
+                <div style="border:1px solid #f3c9a6;border-radius:8px;padding:10px 12px;background:#fffaf5;display:flex;flex-direction:column;gap:6px">
+                  <div style="font-family:-apple-system,'PingFang SC',sans-serif;font-weight:600;color:#9a4310">侧栏参考哪两家？</div>
+                  <div>› 1. 按状态分组（要你处理 / 在跑 / 停着）</div>
+                  <div style="color:#6e6e73">  2. 按空间分组，空间下挂会话</div>
+                  <div style="color:#6e6e73">  3. 自己写</div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <footer style="height:30px;display:flex;align-items:center;gap:14px;padding:0 14px;border-top:1px solid #ececee;font-size:12px;color:#3a3a3c">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#4cc38a"></span>本机 · 11 个会话</span>
+            <span style="flex:1"></span>
+            <span class="q"><svg class="ico" style="width:13px;height:13px" aria-hidden="true"><use href="#i-claude"/></svg>5h <span class="bar"><i style="width:42%"></i></span>42% · 周 <span class="bar"><i style="width:31%"></i></span>31%</span>
+            <span class="q"><svg class="ico" style="width:13px;height:13px" aria-hidden="true"><use href="#i-codex"/></svg>5h <span class="bar"><i style="width:12%"></i></span>12% · 周 <span class="bar warn"><i style="width:64%"></i></span>64%</span>
+            <span style="color:#6e6e73">+1 ▴</span>
+            <button class="ghost" style="height:24px;font-size:12px">本机诊断</button>
+            <span style="color:#6e6e73">⌘P 命令</span>
+          </footer>
+        </main>
+      </div>
+    </div></div></figure>
+
+    <!-- v3-B -->
+    <figure><figcaption>重做 v3 · 看改动<span>点「看改动」后，验收在这一页做完</span></figcaption><div class="fit"><div class="frame">
+      <div class="r v2 v3" style="width:1440px;height:788px">
+        <aside data-clone="v3side" style="width:264px"></aside>
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <header style="height:44px;display:flex;align-items:center;gap:2px;padding:0 12px 0 8px;border-bottom:1px solid #ececee">
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>Skill 收录</button>
+            <button class="tab on"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#3a3a3c" stroke-width="1.3" aria-hidden="true"><path d="M4 2v10M10 2v10M2 5h4M8 9h4"/></svg>改动 · Skill 收录<span style="color:#6e6e73;font-weight:400;margin-left:4px">×</span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-codex"/></svg>借鉴之处<span class="dot" style="background:#e8823a;margin-left:2px"></span></button>
+            <button class="tab"><svg class="ico" aria-hidden="true"><use href="#i-claude"/></svg>插件市场<span class="spin" style="margin-left:2px"></span></button>
+            <span style="flex:1"></span>
+            <button style="height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid #f3c9a6;background:#fff4eb;border-radius:14px;color:#9a4310;font-size:12.5px;font-weight:600"><span class="dot" style="background:#e8823a;margin:0"></span>要你处理 2<span style="font-weight:400;color:#b4530f">⌘J</span></button>
+            <button class="ghost">鸟瞰</button>
+          </header>
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #ececee">
+            <button class="ghost" style="color:#6e6e73">← 回到终端</button>
+            <span class="seg"><b>这一轮</b><span>未提交</span><span>整个分支</span></span>
+            <span style="font-size:12.5px;color:#6e6e73">3 个文件 <span class="add">+128</span> <span class="del">−14</span></span>
+            <span style="flex:1"></span>
+            <span class="chip ok"><span style="width:7px;height:7px;border-radius:50%;border:1.5px solid #2f9e66"></span>等你验收</span>
+            <button class="btn">退回</button><button class="btn dark">标记完成</button>
+          </div>
+          <div style="flex:1;min-height:0;display:flex">
+            <div style="width:230px;flex-shrink:0;border-right:1px solid #ececee;padding:10px 8px;display:flex;flex-direction:column;gap:2px;font-size:12.5px">
+              <div class="sec" style="padding:2px 6px 6px"><span>skills/repo-film</span></div>
+              <a href="#" class="frow on"><span class="m">A</span><span class="t">SKILL.md</span><span class="add">+96</span><span class="nb">2</span></a>
+              <a href="#" class="frow"><span class="m" style="color:#b58a00">M</span><span class="t">scripts/film.py</span><span class="add">+30</span><span class="del">−12</span></a>
+              <a href="#" class="frow"><span class="m" style="color:#b58a00">M</span><span class="t">README.md</span><span class="add">+2</span><span class="del">−2</span></a>
+            </div>
+            <div style="flex:1;min-width:0;overflow:hidden;font-family:'JetBrains Mono','SF Mono',Menlo,monospace;font-size:12px;line-height:22px">
+              <div style="padding:8px 14px;font-family:-apple-system,'PingFang SC',sans-serif;font-weight:600;font-size:13px;border-bottom:1px solid #ececee">skills/repo-film/SKILL.md</div>
+              <div class="dl add"><i>1</i>+ ---</div>
+              <div class="dl add"><i>2</i>+ name: repo-film</div>
+              <div class="dl add"><i>3</i>+ description: 把一个仓库一段时间的真实提交做成 15–25 秒短片</div>
+              <div class="dl add"><i>4</i>+ ---</div>
+              <div class="dl add"><i>5</i>+</div>
+              <div class="dl add"><i>6</i>+ ## 用法</div>
+              <div class="dl add note"><i>7</i>+ python3 film.py --repo &lt;路径&gt; --since "昨晚 8 点"<b>1</b></div>
+              <div class="dl add"><i>8</i>+</div>
+              <div class="dl add"><i>9</i>+ ## 输出</div>
+              <div class="dl add"><i>10</i>+ - 1080p MP4，音量自动调到 -14 LUFS</div>
+              <div class="dl add"><i>11</i>+ - 有项目地图时接地图段落，没有就跳过</div>
+              <div class="dl add note"><i>12</i>+ - 结尾卡片标题默认取仓库名<b>2</b></div>
+              <div class="dl add"><i>13</i>+</div>
+              <div class="dl add"><i>14</i>+ ## 判断做成了</div>
+              <div class="dl add"><i>15</i>+ 拿第二个仓库跑一次，不改场景代码就能出片</div>
+              <div style="padding:10px 14px;color:#6e6e73;font-family:-apple-system,'PingFang SC',sans-serif;font-size:12px;border-top:1px solid #ececee;margin-top:8px">scripts/film.py · +30 −12 · 往下滚动</div>
+            </div>
+            <div style="width:300px;flex-shrink:0;border-left:1px solid #ececee;display:flex;flex-direction:column;background:#fbfbfa">
+              <div style="padding:12px 14px;border-bottom:1px solid #ececee">
+                <div style="font-weight:600;font-size:12.5px;margin-bottom:6px">验收标准 1/2</div>
+                <label class="ck"><input type="checkbox" checked> 拿第二个仓库能直接出片</label>
+                <label class="ck"><input type="checkbox"> 音量自动调到 -14 LUFS</label>
+              </div>
+              <div style="padding:12px 14px 6px;display:flex;justify-content:space-between;font-size:12.5px"><b>批注 2 条</b><span style="color:#6e6e73">发给 Claude Code</span></div>
+              <div class="nt"><span class="n">1</span><div><div class="f">SKILL.md:7</div>「昨晚 8 点」这种说法要能解析，不然写成 ISO 时间的例子。</div></div>
+              <div class="nt"><span class="n">2</span><div><div class="f">SKILL.md:12</div>标题默认取仓库名太平，改成取最近一个里程碑。</div></div>
+              <div style="padding:0 14px"><input placeholder="在 diff 里点一行写批注，或在这里写总评…" style="width:100%;height:32px;border:1px solid #e0e0e3;border-radius:7px;padding:0 10px;font:inherit;font-size:12.5px;background:#fff"></div>
+              <span style="flex:1"></span>
+              <div style="padding:12px 14px;display:flex;gap:8px;border-top:1px solid #ececee">
+                <button class="btn dark" style="flex:1;height:32px">发回 Claude Code</button><button class="btn" style="height:32px">复制</button>
+              </div>
+            </div>
+          </div>
+          <footer style="height:30px;display:flex;align-items:center;gap:14px;padding:0 14px;border-top:1px solid #ececee;font-size:12px;color:#3a3a3c">
+            <span style="display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#4cc38a"></span>本机 · 11 个会话</span>
+            <span style="flex:1"></span>
+            <span class="q"><svg class="ico" style="width:13px;height:13px" aria-hidden="true"><use href="#i-claude"/></svg>5h <span class="bar"><i style="width:42%"></i></span>42% · 周 <span class="bar"><i style="width:31%"></i></span>31%</span>
+            <span class="q"><svg class="ico" style="width:13px;height:13px" aria-hidden="true"><use href="#i-codex"/></svg>5h <span class="bar"><i style="width:12%"></i></span>12% · 周 <span class="bar warn"><i style="width:64%"></i></span>64%</span>
+            <span style="color:#6e6e73">+1 ▴</span>
+            <span style="color:#6e6e73">⌘P 命令</span>
+          </footer>
+        </main>
+      </div>
+    </div></div></figure>
+  </div>
+
+  <h2>v3 加了什么（对应同类产品对照里的 1–6）</h2>
+  <div class="notes">
+    <div class="note"><b>① Agent 图标</b>标签、左栏行、窗格标题、底栏额度都用 Agent 图标，不再写「claude」两个字。</div>
+    <div class="note"><b>② 第二行写它在干什么</b>「要你处理」和「在跑」的行多一行：问你什么、停在哪、正在跑什么命令。停着的仍是一行，省地方。左栏放宽到 264。</div>
+    <div class="note"><b>③ git 信息</b>空间行写分支和 ↑↓；会话第二行写这一轮的 +增 −删。</div>
+    <div class="note"><b>④ 看改动页</b>「等你验收」时窗格里多一条「这一轮改了 3 个文件 · 验收标准 1/2 · 看改动」。点开是单独一个标签：文件、diff、右边是验收标准勾选和批注，底部「发回 Claude Code」。退回和标记完成都能在这页点。</div>
+    <div class="note"><b>⑤ 额度按家分开</b>底栏直接写 Claude 和 Codex 两家的 5h 和周，带小条；第三家收进「+1 ▴」。</div>
+    <div class="note"><b>⑥ 等你的窗格亮一圈</b>分屏时等你回答的窗格描一圈橙色、标题栏浅橙；当前聚焦的窗格顶边一条深线（沿用 79cb070d 的做法）。左栏对应行有未读数字。</div>
+  </div>
+
+  <h2>从 Herdr 借的六处</h2>
+  <div class="notes">
+    <div class="note"><b>① 每个会话带 Agent 自己的图标</b>Herdr 在标签、左栏行、窗格标题上都放 Agent 的小图标（Claude Code 是橙色像素小怪，Codex 是蓝色圆标）。一眼分清是谁在干活，比写「claude」两个字快。<div class="fix">→ v2 标签、左栏、窗格标题、额度按钮都换成 Agent 图标；普通终端用灰色终端图标。</div></div>
+    <div class="note"><b>② 窗格标题 = 谁 + 在哪</b>Herdr 的窗格标题只有「图标 Claude Code ~/路径」，不重复会话标题。<div class="fix">→ v2 窗格标题写 Agent 名和目录，状态和「标记完成」放右边；会话标题只留在标签和左栏。</div></div>
+    <div class="note"><b>③ 左栏上下两块：空间在上，会话在下</b>空间是彩色字母方块，右边跟分支和 ↑↓；会话按 Done / Working / Idle 分组带计数，钉在左栏下半。<div class="fix">→ v2 空间行加分支和领先落后数；会话按「要你处理 / 在跑 / 停着」分组。空间方块保留 Keepline 的渐变色。</div></div>
+    <div class="note"><b>④ 会话行写「空间 · 标题」，状态是最右一个符号</b>Herdr 不写「等你回答」「在跑」这些字，最右一列只放一个符号：蓝点、转圈、空心圈。<div class="fix">→ v2 用 Keepline 自己的状态色：橙点＝等你回答，绿空心圈＝等你验收，黄转圈＝在跑，灰 ✓＝做完了，灰空心＝停着。分组标题已经说了是什么状态，所以行里不再写字。</div></div>
+    <div class="note"><b>⑤ 标签只在当前那个显示 ×，别的显示状态</b>Herdr 的未读标签带一个小蓝点，正在干活的标签转圈。<div class="fix">→ v2 当前标签显示 ×，其他标签在名字后面放状态符号，不再给每个标签都加圆点。</div></div>
+    <div class="note"><b>⑥ 底栏只有两件事</b>Herdr 底栏左边是「This computer · 12 agents」，右边是「⌘⇧P commands」。<div class="fix">→ v2 底栏左边是「本机 · 11 个会话」，右边是额度、诊断、⌘P；设置和「连接手机或其他电脑」挪到左栏底部，和 Herdr 的 Settings / Add machine 一样。</div></div>
+  </div>
+  <h2>没照搬的</h2>
+  <div class="notes">
+    <div class="note"><b>窗格做成圆角卡片、底色发灰</b>Herdr 的窗格是灰底上的白卡片，聚焦时描蓝边。Keepline 11-02 刚定了「正文一整块白、窗格不做卡片」（79cb070d），所以 v2 没跟。</div>
+    <div class="note"><b>只用蓝一种状态色</b>Herdr 的状态只有蓝点和灰圈。Keepline 已经定了黄 / 绿 / 灰三档，再加上「等你回答」的橙，信息更多，所以保留了。</div>
+    <div class="note"><b>Keepline 独有的「要你处理」和「标记完成」</b>Herdr 没有验收这一步，这是 Keepline 的核心，v2 里保留成右上角按钮和窗格里唯一的实心按钮。</div>
+  </div>
+</div>
+<script>
+const boards=document.getElementById('boards'),bS=document.getElementById('bSide'),bT=document.getElementById('bStack');
+function fit(){
+  document.querySelectorAll('.fit').forEach(f=>{
+    const frame=f.firstElementChild;
+    const s=Math.min(1,f.clientWidth/1440);
+    frame.style.transform='scale('+s+')';
+    f.style.height=(788*s)+'px';
+  });
+}
+function mode(side){boards.className=side?'side':'stack';bS.setAttribute('aria-pressed',side);bT.setAttribute('aria-pressed',!side);fit();}
+bS.onclick=()=>mode(true);bT.onclick=()=>mode(false);
+document.querySelectorAll('[data-clone]').forEach(a=>{const src=document.getElementById(a.dataset.clone);a.innerHTML=src.innerHTML;});
+addEventListener('resize',fit);addEventListener('load',fit);fit();
+</script>
+</body>
+</html>
