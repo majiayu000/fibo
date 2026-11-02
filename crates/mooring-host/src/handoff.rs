@@ -42,12 +42,27 @@ pub fn send_fds(stream: &UnixStream, fds: &[RawFd]) -> io::Result<()> {
             );
         }
     }
-    // SAFETY: msg points at live buffers for the duration of the call.
-    if unsafe { libc::sendmsg(stream.as_raw_fd(), &msg, 0) } < 0 {
-        return Err(io::Error::last_os_error());
+    // macOS fails a send carrying descriptors with EMSGSIZE, instead of blocking, while
+    // the peer's buffer holds exactly a full buffer of unread bytes; here those are the
+    // snapshots just sent, which the new host is reading. Wait for it to make room.
+    let deadline = std::time::Instant::now() + SEND_PATIENCE;
+    loop {
+        // SAFETY: msg points at live buffers for the duration of the call.
+        if unsafe { libc::sendmsg(stream.as_raw_fd(), &msg, 0) } >= 0 {
+            return Ok(());
+        }
+        let err = io::Error::last_os_error();
+        let full = matches!(err.raw_os_error(), Some(libc::EMSGSIZE | libc::ENOBUFS))
+            || err.kind() == io::ErrorKind::WouldBlock;
+        if !full || std::time::Instant::now() >= deadline {
+            return Err(err);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    Ok(())
 }
+
+/// How long the descriptors wait for room behind unread snapshots.
+const SEND_PATIENCE: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Receives the message `send_fds` sent; exactly `count` descriptors or an error.
 pub fn recv_fds(stream: &UnixStream, count: usize) -> io::Result<Vec<OwnedFd>> {
@@ -112,5 +127,25 @@ mod tests {
         let mut buf = [0; 2];
         received.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"ok");
+    }
+
+    /// The snapshots go out just before the descriptors: while the new host is still
+    /// reading them, the descriptors must wait for room, not fail (macOS answers a send
+    /// with descriptors that does not fit right now with EMSGSIZE instead of blocking).
+    #[test]
+    fn descriptors_wait_behind_unread_snapshots() {
+        let (mut a, b) = UnixStream::pair().unwrap();
+        let (_left, right) = UnixStream::pair().unwrap();
+        // Exactly one socket buffer unread: macOS then has no room left at all.
+        const UNREAD: usize = 8192;
+        let reader = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            let mut sink = vec![0u8; UNREAD];
+            (&b).read_exact(&mut sink).unwrap();
+            recv_fds(&b, 1).unwrap().len()
+        });
+        a.write_all(&[7u8; UNREAD]).unwrap();
+        send_fds(&a, &[right.as_raw_fd()]).unwrap();
+        assert_eq!(reader.join().unwrap(), 1);
     }
 }
