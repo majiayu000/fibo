@@ -9,9 +9,12 @@ use std::{fs, io, path::Path};
 /// The settings entry, recognised again by `HOOK_ENV` alone. It reads the payload, hands it
 /// to the host in the background and returns at once: the CLI waits on some hooks (a prompt
 /// is not sent until UserPromptSubmit returns), and the host's reply is never needed.
+/// Terminals opened before the rename to Mooring carry only the old variable, so it is the
+/// fallback: an Agent started there later still reports.
 pub fn command(agent: Agent) -> String {
+    let old = mooring_core::legacy::old_name(HOOK_ENV).unwrap_or_default();
     format!(
-        "[ -n \"${HOOK_ENV}\" ] || exit 0; p=$(cat); (printf '%s' \"$p\" | \"${HOOK_ENV}\" hook --agent {} >/dev/null 2>&1 &); exit 0",
+        "h=\"${{{HOOK_ENV}:-${old}}}\"; [ -n \"$h\" ] || exit 0; p=$(cat); (printf '%s' \"$p\" | \"$h\" hook --agent {} >/dev/null 2>&1 &); exit 0",
         agent.executable()
     )
 }
@@ -21,7 +24,7 @@ fn ours(entry: &Value) -> bool {
     entry["command"].as_str().is_some_and(|c| {
         // Entries written before the rename test the old name; they are replaced.
         let old = mooring_core::legacy::old_name(HOOK_ENV).unwrap_or_default();
-        c.contains(&format!("${HOOK_ENV}")) || c.contains(&format!("${old}"))
+        c.contains(HOOK_ENV) || c.contains(&old)
     })
 }
 pub fn target(agent: Agent, home: &Path) -> io::Result<Hooks> {
@@ -349,10 +352,7 @@ mod tests {
         assert!(install(Agent::Claude, &hooks).unwrap());
         assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
         let now = fs::read_to_string(&hooks.settings).unwrap();
-        assert!(
-            !now.contains("KEEPLINE_HOOK"),
-            "replaced, not kept beside: {now}"
-        );
+        assert_eq!(now, ours, "replaced, not kept beside");
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -380,9 +380,44 @@ mod tests {
         let out = std::process::Command::new("/bin/sh")
             .args(["-c", &command(Agent::Claude)])
             .env_remove(HOOK_ENV)
+            .env_remove("KEEPLINE_HOOK")
             .output()
             .unwrap();
         assert!(out.status.success());
         assert!(out.stdout.is_empty() && out.stderr.is_empty());
+    }
+
+    #[test]
+    fn a_terminal_from_before_the_rename_still_reports() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("kl-hookcall-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let (fake, got) = (dir.join("fake-host"), dir.join("got"));
+        fs::write(
+            &fake,
+            format!("#!/bin/sh\necho \"$@\" > '{}'\n", got.display()),
+        )
+        .unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+        // Only the old variable, as in a terminal the Keepline host opened.
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", &command(Agent::Claude)])
+            .env_remove(HOOK_ENV)
+            .env("KEEPLINE_HOOK", &fake)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        for _ in 0..100 {
+            if got.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert_eq!(
+            fs::read_to_string(&got).unwrap().trim(),
+            "hook --agent claude"
+        );
+        fs::remove_dir_all(dir).unwrap();
     }
 }
