@@ -151,11 +151,7 @@ fn daemon_fixture() {
         &root
     ));
     let fake = Agent::from_key("fake");
-    assert!(
-        fake.spec().is_some(),
-        "{:?}",
-        mooring_core::agent::report()
-    );
+    assert!(fake.spec().is_some(), "{:?}", mooring_core::agent::report());
     let mut roots = vec![(fake, root.join("logs/fake"))];
     // The built-ins keep roots of their own here, so nothing of the user's is read.
     for agent in Agent::all().into_iter().filter(|a| *a != fake) {

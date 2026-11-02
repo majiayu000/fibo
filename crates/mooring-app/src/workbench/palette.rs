@@ -368,10 +368,9 @@ impl Workbench {
             Hit::View(id) => self.choose_sidebar_preset(&id, cx),
             Hit::Diagnostics => self.show_diagnostics(window, cx),
             Hit::Action(i) => {
-                if let (Some(action), Some(pane)) = (
-                    mooring_core::action::all().get(i),
-                    self.nav.focused.clone(),
-                ) {
+                if let (Some(action), Some(pane)) =
+                    (mooring_core::action::all().get(i), self.nav.focused.clone())
+                {
                     self.run_action(&pane, action, cx);
                 }
             }

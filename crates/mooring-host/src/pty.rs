@@ -31,7 +31,7 @@ const SYSTEM_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 /// profiles add to `PATH` rather than replace it.
 fn host_env(terminal: &str, host: Option<&(PathBuf, PathBuf)>) -> Vec<(OsString, OsString)> {
     use mooring_core::protocol::{HOOK_ENV, MARKER_ENV, RUNTIME_ENV, TERMINAL_ENV};
-    let mut env = vec![
+    let mut env: Vec<(OsString, OsString)> = vec![
         (MARKER_ENV.into(), "1".into()),
         (TERMINAL_ENV.into(), terminal.into()),
     ];
@@ -45,6 +45,14 @@ fn host_env(terminal: &str, host: Option<&(PathBuf, PathBuf)>) -> Vec<(OsString,
             env.push(("PATH".into(), path));
         }
     }
+    // Agents and hooks set up under the old name (Keepline) read these too.
+    let old: Vec<_> = env
+        .iter()
+        .filter_map(|(k, v)| {
+            mooring_core::legacy::old_name(k.to_str()?).map(|o| (OsString::from(o), v.clone()))
+        })
+        .collect();
+    env.extend(old);
     env
 }
 
@@ -119,19 +127,14 @@ fn integration(argv: &[String], dir: Option<&Path>) -> (Vec<String>, Vec<(OsStri
                 vec![
                     argv[0].clone(),
                     "--init-file".into(),
-                    dir.join("bash/mooring.bash")
-                        .to_string_lossy()
-                        .into_owned(),
+                    dir.join("bash/mooring.bash").to_string_lossy().into_owned(),
                     "-i".into(),
                 ],
                 env,
             )
         }
         "fish" if interactive => {
-            let script = dir
-                .join("fish/mooring.fish")
-                .to_string_lossy()
-                .into_owned();
+            let script = dir.join("fish/mooring.fish").to_string_lossy().into_owned();
             let mut argv = argv.to_vec();
             argv.push("--init-command".into());
             // fish's single quotes only treat \\ and \' specially.
@@ -561,7 +564,13 @@ mod host_env_tests {
         };
         assert_eq!(
             names(super::host_env("t1", None)),
-            ["MOORING_ENV=1", "MOORING_TERMINAL=t1"]
+            [
+                "MOORING_ENV=1",
+                "MOORING_TERMINAL=t1",
+                // Under the old name too, for Agents and hooks set up under Keepline.
+                "KEEPLINE_ENV=1",
+                "KEEPLINE_TERMINAL=t1"
+            ]
         );
         let host = ("/run/k".into(), "/app/mooring".into());
         assert_eq!(
@@ -571,7 +580,11 @@ mod host_env_tests {
                 "MOORING_TERMINAL=t2",
                 "MOORING_RUNTIME=/run/k",
                 "MOORING_HOOK=/app/mooring",
-                "PATH=/usr/bin:/bin:/usr/sbin:/sbin:/app"
+                "PATH=/usr/bin:/bin:/usr/sbin:/sbin:/app",
+                "KEEPLINE_ENV=1",
+                "KEEPLINE_TERMINAL=t2",
+                "KEEPLINE_RUNTIME=/run/k",
+                "KEEPLINE_HOOK=/app/mooring"
             ]
         );
     }

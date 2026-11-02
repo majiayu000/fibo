@@ -365,8 +365,7 @@ mod tests {
 
     #[test]
     fn the_logged_credits_are_the_account_reading() {
-        let dir =
-            std::env::temp_dir().join(format!("mooring-grok-credits-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("mooring-grok-credits-{}", std::process::id()));
         let session = dir.join("sessions/%2Frepo/01a1");
         std::fs::create_dir_all(&session).unwrap();
         std::fs::create_dir_all(dir.join("logs")).unwrap();

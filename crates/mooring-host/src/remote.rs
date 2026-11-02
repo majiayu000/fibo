@@ -7,8 +7,8 @@
 use crate::control::{self, Args, Phase};
 use base64::Engine;
 use mooring_core::{model::*, protocol::*, terminal::Vt};
-use mooring_remote::protocol as rp;
 use mooring_host::devices::{self, Role};
+use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Read, Write};

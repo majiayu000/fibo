@@ -10,6 +10,8 @@
 [ "$MOORING_ENV" = 1 ] || echo "不在 Mooring 终端里"
 ```
 
+Mooring 以前叫 Keepline：旧的 `keepline` / `keeplined` 命令和 `KEEPLINE_*` 变量还能用，新写的一律用 `mooring` 和 `MOORING_*`。
+
 `MOORING_ENV` 不是 `1` 就停下，告诉用户这些命令只在 Mooring 打开的终端里能用，不要猜运行目录、不要自己启动 `mooring serve`。`MOORING_TERMINAL` 是你自己所在终端的编号，别把话发给自己。
 
 ## 只动用户点名的终端

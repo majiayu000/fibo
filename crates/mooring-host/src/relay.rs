@@ -17,12 +17,12 @@ use futures_util::{SinkExt, StreamExt};
 use mooring_core::protocol::{
     rpc, RemoteAct, RemoteChange, RemoteLive, RemotePhone, RemoteState, Reply, Request,
 };
+use mooring_host::devices::{self, Device, Role};
 use mooring_remote::{
     link::Link,
     secure::{self, Channel, Code, Message as Secure},
     wire::{self, bin, Frame},
 };
-use mooring_host::devices::{self, Device, Role};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
 use std::io::{self, BufReader, Read, Write};
@@ -519,11 +519,7 @@ async fn connect(
                             if out.send(to_phone(proto, &id, &answer)).await.is_err() {
                                 break Ended::Lost("写不进中继".into());
                             }
-                            eprintln!(
-                                "mooring remote: 「{}」已连上（{}）",
-                                d.name,
-                                d.role.label()
-                            );
+                            eprintln!("mooring remote: 「{}」已连上（{}）", d.name, d.role.label());
                             devices::log(
                                 &log,
                                 json!({ "event": "connected", "device": d.id, "name": d.name, "role": d.role }),
@@ -629,9 +625,9 @@ async fn connect(
             Message::Close(f) => {
                 let code = f.as_ref().map_or(1005, |f| u16::from(f.code));
                 break match code {
-                    4000 => Ended::Refused(
-                        "另一个 mooring 用同一个配对码连上了中继，这一个退出".into(),
-                    ),
+                    4000 => {
+                        Ended::Refused("另一个 mooring 用同一个配对码连上了中继，这一个退出".into())
+                    }
                     _ => Ended::Lost(format!("中继关闭了连接（{code}）")),
                 };
             }

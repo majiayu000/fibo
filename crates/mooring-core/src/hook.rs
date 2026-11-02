@@ -152,8 +152,8 @@ impl Notice {
 }
 impl Payload {
     /// The same facts as environment variables, for one-line shell hooks.
-    pub fn env(&self) -> Vec<(&'static str, String)> {
-        vec![
+    pub fn env(&self) -> Vec<(String, String)> {
+        let vars: Vec<(&str, String)> = vec![
             ("MOORING_EVENT", self.event.name().into()),
             ("MOORING_SESSION", self.session.clone()),
             ("MOORING_AGENT", self.agent.clone()),
@@ -173,7 +173,9 @@ impl Payload {
                 "MOORING_DURATION_MS",
                 self.duration_ms.map(|d| d.to_string()).unwrap_or_default(),
             ),
-        ]
+        ];
+        // Plugins written for Keepline read the old names.
+        crate::legacy::with_old_names(vars.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
     }
 }
 

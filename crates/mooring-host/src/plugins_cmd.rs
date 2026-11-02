@@ -88,10 +88,9 @@ struct File {
 }
 
 fn plugins_dir() -> io::Result<PathBuf> {
-    Ok(plugin::dir(
-        &mooring_core::agent::config_dir()
-            .ok_or_else(|| io::Error::other("找不到配置目录：HOME 没有设置"))?,
-    ))
+    Ok(plugin::dir(&mooring_core::agent::config_dir().ok_or_else(
+        || io::Error::other("找不到配置目录：HOME 没有设置"),
+    )?))
 }
 
 fn offers(remote: bool) -> io::Result<Vec<market::Offer>> {

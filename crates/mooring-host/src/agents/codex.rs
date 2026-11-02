@@ -666,8 +666,7 @@ mod tests {
 
     #[test]
     fn thread_names_follow_appended_renames_and_wait_for_whole_lines() {
-        let home =
-            std::env::temp_dir().join(format!("mooring-codex-names-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("mooring-codex-names-{}", std::process::id()));
         std::fs::create_dir_all(home.join("sessions")).unwrap();
         let index = home.join("session_index.jsonl");
         let id = "01a18aad-c882-79a2-9d72-3ee5359f0add";

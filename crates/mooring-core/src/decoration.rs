@@ -118,20 +118,29 @@ impl Decoration {
             .arg("-c")
             .arg(&self.command)
             .current_dir(&pane.cwd)
-            .env("MOORING_CWD", &pane.cwd)
-            .env("MOORING_AGENT", pane.agent.as_deref().unwrap_or(""))
-            .env("MOORING_SESSION", pane.session.as_deref().unwrap_or(""))
-            .env(
-                "MOORING_LAST_EXIT",
-                pane.last
-                    .and_then(|l| l.exit)
-                    .map(|e| e.to_string())
-                    .unwrap_or_default(),
-            )
-            .env(
-                "MOORING_LAST_DURATION_MS",
-                pane.last.map(|l| l.took_ms.to_string()).unwrap_or_default(),
-            )
+            // Plugins written for Keepline read the old names too.
+            .envs(crate::legacy::with_old_names(vec![
+                ("MOORING_CWD".to_owned(), pane.cwd.clone()),
+                (
+                    "MOORING_AGENT".to_owned(),
+                    pane.agent.clone().unwrap_or_default(),
+                ),
+                (
+                    "MOORING_SESSION".to_owned(),
+                    pane.session.clone().unwrap_or_default(),
+                ),
+                (
+                    "MOORING_LAST_EXIT".to_owned(),
+                    pane.last
+                        .and_then(|l| l.exit)
+                        .map(|e| e.to_string())
+                        .unwrap_or_default(),
+                ),
+                (
+                    "MOORING_LAST_DURATION_MS".to_owned(),
+                    pane.last.map(|l| l.took_ms.to_string()).unwrap_or_default(),
+                ),
+            ]))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

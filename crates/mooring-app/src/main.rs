@@ -282,6 +282,9 @@ fn local_time() -> String {
 }
 fn run() -> io::Result<()> {
     // Declared CLIs first: menus, settings and commands all read the registry.
+    // An install from before the rename to Mooring: its variables and config first.
+    mooring_core::legacy::adopt_old_env();
+    mooring_core::legacy::move_old_config();
     mooring_core::agent::install();
     mooring_core::action::install();
     mooring_core::rule::install();
@@ -296,8 +299,9 @@ fn run() -> io::Result<()> {
                 .ok_or_else(|| io::Error::other("--runtime needs a directory"))?,
         )
     } else {
-        PathBuf::from(std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?)
-            .join(".local/share/mooring-workbench")
+        mooring_core::legacy::runtime_dir(&PathBuf::from(
+            std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
+        ))
     };
     let instance_dir = PathBuf::from(
         std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,

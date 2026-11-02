@@ -293,15 +293,13 @@ impl SettingsView {
                 false,
                 "重新读取",
                 "手动改了插件目录，或在终端里用 mooring plugins install 装了插件后，点这里马上生效",
-                secondary("plugins-reload", "重新读取").on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.market = Market {
-                            remote: this.market.remote.take(),
-                            ..Market::read()
-                        };
-                        this.plugins_changed(cx);
-                    },
-                )),
+                secondary("plugins-reload", "重新读取").on_click(cx.listener(|this, _, _, cx| {
+                    this.market = Market {
+                        remote: this.market.remote.take(),
+                        ..Market::read()
+                    };
+                    this.plugins_changed(cx);
+                })),
             )
             .into_any_element(),
         );

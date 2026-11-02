@@ -6,10 +6,7 @@ fn main() -> std::io::Result<()> {
         &root,
         vec![
             (mooring_core::model::Agent::Codex, root.join("logs")),
-            (
-                mooring_core::model::Agent::Claude,
-                root.join("claude-logs"),
-            ),
+            (mooring_core::model::Agent::Claude, root.join("claude-logs")),
         ],
     )
 }

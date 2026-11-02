@@ -3,12 +3,12 @@ use crate::{
     terminal::screen::{self, Screen},
     ui::{theme::Theme as T, tone::Tone},
 };
-use mooring_core::terminal::{agent_input_ready, command_missing};
 use futures::{StreamExt, channel::mpsc::unbounded};
 use gpui::{
     App, Bounds, Context, ElementInputHandler, EntityInputHandler, FocusHandle, Focusable,
     KeyDownEvent, Pixels, Point, UTF16Selection, Window, canvas, div, prelude::*, px,
 };
+use mooring_core::terminal::{agent_input_ready, command_missing};
 use mooring_core::{
     protocol::{Reply, Request, rpc},
     terminal::{

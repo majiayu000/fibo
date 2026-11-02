@@ -18,9 +18,11 @@ pub fn command(agent: Agent) -> String {
 /// Seconds the CLI may wait on our entry; it returns at once, so this only bounds a stuck shell.
 const TIMEOUT: u64 = 5;
 fn ours(entry: &Value) -> bool {
-    entry["command"]
-        .as_str()
-        .is_some_and(|c| c.contains(&format!("${HOOK_ENV}")))
+    entry["command"].as_str().is_some_and(|c| {
+        // Entries written before the rename test the old name; they are replaced.
+        let old = mooring_core::legacy::old_name(HOOK_ENV).unwrap_or_default();
+        c.contains(&format!("${HOOK_ENV}")) || c.contains(&format!("${old}"))
+    })
 }
 pub fn target(agent: Agent, home: &Path) -> io::Result<Hooks> {
     adapter(agent).hooks(home).ok_or_else(|| {
@@ -325,6 +327,32 @@ mod tests {
         let v: Value = serde_json::from_str(&fs::read_to_string(&hooks.settings).unwrap()).unwrap();
         assert_eq!(v["hooks"]["SessionEnd"], drifted["hooks"]["SessionEnd"]);
         assert!(v["hooks"].get("PreToolUse").is_none());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn entries_written_under_the_old_name_are_ours_and_replaced() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        let hooks = target(&dir);
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        // As Keepline wrote them: the same entries, testing KEEPLINE_HOOK.
+        let ours = fs::read_to_string(&hooks.settings).unwrap();
+        fs::write(
+            &hooks.settings,
+            ours.replace("MOORING_HOOK", "KEEPLINE_HOOK"),
+        )
+        .unwrap();
+        assert!(matches!(
+            status(Agent::Claude, &hooks).unwrap(),
+            Status::Outdated(_)
+        ));
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        let now = fs::read_to_string(&hooks.settings).unwrap();
+        assert!(
+            !now.contains("KEEPLINE_HOOK"),
+            "replaced, not kept beside: {now}"
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

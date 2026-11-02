@@ -44,6 +44,9 @@ fn raise_open_file_limit() {
 }
 
 fn run() -> std::io::Result<()> {
+    // An install from before the rename to Mooring: its variables and config first.
+    mooring_core::legacy::adopt_old_env();
+    mooring_core::legacy::move_old_config();
     // Declared CLIs first: every later lookup of an Agent reads the registry.
     mooring_core::agent::install();
     mooring_core::rule::install();

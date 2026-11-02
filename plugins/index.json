@@ -117,8 +117,8 @@
       "files": [
         {
           "path": "hooks.json",
-          "sha256": "8299f6b290470c7714beb2e97281488094307a33778c54821268ce9472760e92",
-          "size": 350
+          "sha256": "8feeffaaeb6ddcd31e17b909b63f488dc7035122b38ec24c47c5bdf50b1f4e83",
+          "size": 346
         },
         {
           "path": "plugin.json",
@@ -159,8 +159,8 @@
       "files": [
         {
           "path": "decorations.json",
-          "sha256": "f2a4f8896cd33af8456356bf1f83730e3f8c2933af1fc138aacd664ea2f1d0ba",
-          "size": 948
+          "sha256": "b48f5215e2b5978f78fe1d5ff44de68fdd5fd096a38a1037825d73d11b78c72c",
+          "size": 942
         },
         {
           "path": "plugin.json",

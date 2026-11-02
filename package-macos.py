@@ -14,7 +14,7 @@ parser.add_argument('--release-dir', type=pathlib.Path, default=root / 'target/r
 parser.add_argument('--output', type=pathlib.Path, default=root / 'target/bundle/Mooring.app',
                     help='Bundle path; use a separate path when an installed build is running')
 parser.add_argument('--icon', type=pathlib.Path,
-                    default=root.parent / 'docs/assets/mooring-icon-final/Mooring.icns',
+                    default=root / 'assets/Mooring.icns',
                     help='App icon (.icns); defaults to the ink-ring icon')
 # A stable identity keeps macOS privacy grants (e.g. Desktop access) across rebuilds;
 # ad-hoc ('-') signatures change with every build, so macOS asks again each time.
@@ -37,9 +37,10 @@ resources.mkdir(parents=True, exist_ok=True)
 for binary in ('mooring-app', 'mooring'):
     shutil.copy2(args.release_dir / binary, mac / binary)
     subprocess.run([*sign, str(mac / binary)], check=True)
-# The CLI's old name, for Agents that learned `mooring` and for terminals started before
-# the rename: their MOORING_HOOK still points at .../MacOS/mooring.
-(mac / 'mooring').symlink_to('mooring')
+# The command's old names, Keepline's `keepline` and before it `keeplined`: Agents learned
+# them, and terminals started before the rename keep KEEPLINE_HOOK=.../MacOS/<old name>.
+for old in ('keepline', 'keeplined'):
+    (mac / old).symlink_to('mooring')
 shutil.copy2(root / 'crates/mooring-app/assets/NERD-FONTS-LICENSE', resources / 'NERD-FONTS-LICENSE')
 shutil.copy2(args.icon, resources / 'Mooring.icns')
 # The plugin catalog 设置 › 插件 installs from: index.json and exactly the files it lists.
