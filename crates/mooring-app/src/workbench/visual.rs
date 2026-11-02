@@ -970,8 +970,8 @@ impl Workbench {
                 self.visual_dense_fixture();
                 self.sidebar.preset = match parts[1] {
                     "wasm" => "wasm-status",
-                    // `plugins/session-first`, also installed into the scratch config.
-                    "first" => "session-first",
+                    // 会话优先, the built-in default.
+                    "first" => "recent",
                     other => other,
                 }
                 .into();

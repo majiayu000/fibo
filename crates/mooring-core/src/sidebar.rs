@@ -3,7 +3,7 @@
 //! row shows its second line and how many rows come before 鸟瞰. Every preset reads the
 //! same status judgement, so "needs you" means the same thing in all of them.
 //!
-//! The three built-in presets (经典 / 状态 / 目录) are written in this format too; plugins
+//! The four built-in presets (会话优先 / 经典 / 状态 / 目录) are written in this format too; plugins
 //! add presets beside them and never replace one.
 use crate::agent::Loaded;
 use serde::Deserialize;
@@ -17,6 +17,10 @@ pub const API: u32 = 1;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Grouping {
+    /// 会话优先, the default: what needs you on top, then every other session newest
+    /// first; gone quiet folds into one line. Each row's second line leads with the
+    /// session's short id, so sessions with the same title can be told apart.
+    Recent,
     /// One list, what needs you first.
     Flat,
     /// A section per bucket: 需要你, 在跑, 等你验收, 停下了, 新开的, 很久没动.
@@ -130,6 +134,13 @@ pub fn builtin() -> Vec<Preset> {
         file: PathBuf::new(),
     };
     vec![
+        p(
+            "recent",
+            "会话优先",
+            Grouping::Recent,
+            &[Bucket::Stale],
+            Detail::Always,
+        ),
         p("classic", "经典", Grouping::Flat, &[], Detail::Never),
         p(
             "status",
@@ -295,10 +306,10 @@ mod tests {
         let (presets, report) = load(vec![good, dup, attention, unknown]);
         assert_eq!(
             presets.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
-            ["classic", "status", "directory", "quiet"]
+            ["recent", "classic", "status", "directory", "quiet"]
         );
-        assert_eq!(presets[3].limit, 8);
-        assert!(presets[3].folds(Bucket::Running));
+        assert_eq!(presets[4].limit, 8);
+        assert!(presets[4].folds(Bucket::Running));
         assert_eq!(report[0].result, Ok("安静".into()));
         assert!(report[1].result.as_ref().unwrap_err().contains("重名"));
         assert!(report[2].result.as_ref().unwrap_err().contains("需要你"));
@@ -357,8 +368,9 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_choice_falls_back_to_classic() {
-        assert_eq!(find("gone").id, "classic");
+    fn a_missing_choice_falls_back_to_session_first() {
+        assert_eq!(find("gone").id, "recent");
+        assert_eq!(find("gone").group, Grouping::Recent);
         assert_eq!(find("directory").group, Grouping::Directory);
     }
 }

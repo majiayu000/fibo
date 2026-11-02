@@ -482,56 +482,6 @@ mod tests {
     }
 
     #[test]
-    fn session_first_puts_the_newest_on_top_and_names_each_row() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/session-first");
-        let (presets, report) = mooring_core::sidebar::load(vec![dir.join("sidebar.json")]);
-        assert!(report[0].result.is_ok(), "{report:?}");
-        let mut plugin = load(presets.last().unwrap()).unwrap();
-        let at = |id, group, updated| {
-            let mut s = session(id, group);
-            s.updated = updated;
-            s
-        };
-        // A running turn keys on when it began, not on its latest output.
-        let mut running = at("run", "running", 99);
-        running.running_since = Some(20);
-        let state = State {
-            sessions: vec![
-                at("ask", "waiting", 10),
-                at("old", "review", 30),
-                running,
-                at("new", "paused", 50),
-                at("quiet", "stale", 60),
-            ],
-            closed_total: 0,
-            now: 100,
-        };
-        let bytes = plugin.render(&serde_json::to_vec(&state).unwrap()).unwrap();
-        let reply: Reply = serde_json::from_slice(&bytes).unwrap();
-        let rows = |id: &str| -> Vec<(String, Option<String>)> {
-            reply
-                .sections
-                .iter()
-                .find(|s| s.id == id)
-                .unwrap()
-                .rows
-                .iter()
-                .filter_map(|r| match r {
-                    Row::Session { id, detail, .. } => Some((id.clone(), detail.clone())),
-                    _ => None,
-                })
-                .collect()
-        };
-        let ids = |id: &str| rows(id).into_iter().map(|r| r.0).collect::<Vec<_>>();
-        assert_eq!(ids("need"), ["ask"]);
-        assert_eq!(ids("rest"), ["new", "old", "run"]);
-        assert_eq!(ids("stale"), ["quiet"]);
-        // The second line leads with the short id, then where it stopped.
-        assert_eq!(rows("need")[0].1.as_deref(), Some("AB12 · 要不要推送"));
-        assert_eq!(rows("rest")[1].1.as_deref(), Some("AB12 · 改好了"));
-    }
-
-    #[test]
     fn the_shipped_wasm_preset_sorts_sessions_into_sections() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/sidebar-status");
         let (presets, report) = mooring_core::sidebar::load(vec![dir.join("sidebar.json")]);
@@ -648,7 +598,7 @@ mod tests {
         let space = w.spaces[0].id.clone();
         let unseen = HashSet::new();
         let wasm = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../plugins/session-first/session_first.wasm");
+            .join("../../plugins/sidebar-status/sidebar_status.wasm");
         let engine = engine().unwrap();
         let mut plugin = host::Plugin::new(
             engine,

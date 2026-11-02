@@ -13,6 +13,26 @@ pub(super) enum End {
     Nothing,
 }
 
+/// 会话优先's order: what needs you, everything else, and what has gone quiet, each newest
+/// first. `when` is the turn's start for a running row, so two running rows never trade
+/// places while they print, and its last update otherwise.
+pub(super) fn recent_order<R: Copy>(rows: &[(R, Bucket, u64)]) -> (Vec<R>, Vec<R>, Vec<R>) {
+    let pick = |keep: &dyn Fn(Bucket) -> bool| {
+        let mut picked: Vec<(R, u64)> = rows
+            .iter()
+            .filter(|(_, b, _)| keep(*b))
+            .map(|(r, _, when)| (*r, *when))
+            .collect();
+        picked.sort_by_key(|(_, when)| std::cmp::Reverse(*when));
+        picked.into_iter().map(|(r, _)| r).collect::<Vec<_>>()
+    };
+    (
+        pick(&|b| b == Bucket::Attention),
+        pick(&|b| !matches!(b, Bucket::Attention | Bucket::Stale)),
+        pick(&|b| b == Bucket::Stale),
+    )
+}
+
 pub(super) fn bucket(g: Status) -> Bucket {
     match g {
         Status::Waiting | Status::Error => Bucket::Attention,
@@ -696,6 +716,73 @@ impl Workbench {
                     }
                 }
             }
+            Grouping::Recent => {
+                let when = |l: &Listed| match bucket(l.1) {
+                    Bucket::Running => self
+                        .turn_started(l.0)
+                        .unwrap_or_else(|| self.session_updated(l.0)),
+                    _ => self.session_updated(l.0),
+                };
+                let rows: Vec<(Listed, Bucket, u64)> = sessions
+                    .iter()
+                    .map(|l| (*l, bucket(l.1), when(l)))
+                    .collect();
+                let (need, rest, quiet) = recent_order(&rows);
+                // The short id first: sessions with the same title still read apart.
+                let named = |l: &Listed| {
+                    let short = super::sidebar_wasm::short_id(&l.0.cli_session_id);
+                    // With no reason or reply to show, what the session is at now.
+                    let headline = || {
+                        self.workspace
+                            .content
+                            .get(&l.0.id)
+                            .map(|c| mooring_core::content::short(&c.headline(), 100))
+                            .filter(|h| !h.trim().is_empty())
+                    };
+                    Some(match self.row_detail(l.0, l.1).or_else(headline) {
+                        Some(d) => format!("{short} · {d}"),
+                        None => short,
+                    })
+                };
+                if !need.is_empty() {
+                    out.push(
+                        self.heading("需要你".into(), need.len(), cx)
+                            .into_any_element(),
+                    );
+                    for l in need {
+                        push(&mut out, l, named(&l), End::State);
+                    }
+                }
+                if !rest.is_empty() {
+                    out.push(
+                        self.heading("最新在上".into(), rest.len(), cx)
+                            .into_any_element(),
+                    );
+                    for l in rest {
+                        push(&mut out, l, named(&l), End::State);
+                    }
+                }
+                if !quiet.is_empty() {
+                    let open = self.sidebar.open("recent:quiet", false);
+                    out.push(
+                        div()
+                            .mt(px(T::S12))
+                            .child(self.fold_row(
+                                "recent:quiet".into(),
+                                &[(Bucket::Stale, quiet.len())],
+                                open,
+                                "",
+                                cx,
+                            ))
+                            .into_any_element(),
+                    );
+                    for l in quiet {
+                        if open || current == Some(l.0.id.as_str()) {
+                            push(&mut out, l, None, End::State);
+                        }
+                    }
+                }
+            }
             Grouping::Wasm => {
                 owns_closed =
                     self.wasm_rows(preset, sessions, closed, current, &mut push, &mut out, cx);
@@ -969,5 +1056,26 @@ impl Workbench {
         self.popup(position, entries, window, cx, |this| {
             this.sidebar.view_menu = None
         })
+    }
+}
+
+#[cfg(test)]
+mod recent_tests {
+    use super::*;
+
+    #[test]
+    fn what_needs_you_leads_then_the_rest_newest_first_and_quiet_last() {
+        let rows = [
+            ("old-review", Bucket::Done, 10),
+            ("asking", Bucket::Attention, 5),
+            ("running", Bucket::Running, 30),
+            ("quiet", Bucket::Stale, 1),
+            ("failed", Bucket::Attention, 40),
+            ("new-review", Bucket::Done, 50),
+        ];
+        let (need, rest, quiet) = recent_order(&rows);
+        assert_eq!(need, ["failed", "asking"]);
+        assert_eq!(rest, ["new-review", "running", "old-review"]);
+        assert_eq!(quiet, ["quiet"]);
     }
 }
