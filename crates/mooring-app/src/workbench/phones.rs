@@ -151,16 +151,20 @@ impl Workbench {
                             .child(online.to_string()),
                     )
                 })
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.phones.open = !this.phones.open;
-                    this.phones.more = None;
-                    this.phones.note = None;
-                    if !this.phones.open {
-                        this.phones.pairing = None;
-                    }
-                    cx.notify();
-                })),
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_phones(cx))),
         )
+    }
+
+    /// Opens or closes the phones panel, from the title row's button or the sidebar's
+    /// 连接手机.
+    pub(super) fn toggle_phones(&mut self, cx: &mut Context<Self>) {
+        self.phones.open = !self.phones.open;
+        self.phones.more = None;
+        self.phones.note = None;
+        if !self.phones.open {
+            self.phones.pairing = None;
+        }
+        cx.notify();
     }
 
     fn close_phones(&mut self, cx: &mut Context<Self>) {

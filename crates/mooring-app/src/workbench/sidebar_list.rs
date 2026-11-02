@@ -13,10 +13,17 @@ pub(super) enum End {
     Nothing,
 }
 
-/// 会话优先's order: what needs you, everything else, and what has gone quiet, each newest
+/// 会话优先's sections: 要你处理 (asking, failed, or a finished turn to check), 在跑,
+/// 停着 (stopped short, put off or just opened), and what has gone quiet, each newest
 /// first. `when` is the turn's start for a running row, so two running rows never trade
 /// places while they print, and its last update otherwise.
-pub(super) fn recent_order<R: Copy>(rows: &[(R, Bucket, u64)]) -> (Vec<R>, Vec<R>, Vec<R>) {
+pub(super) struct RecentOrder<R> {
+    pub need: Vec<R>,
+    pub running: Vec<R>,
+    pub stopped: Vec<R>,
+    pub quiet: Vec<R>,
+}
+pub(super) fn recent_order<R: Copy>(rows: &[(R, Bucket, u64)]) -> RecentOrder<R> {
     let pick = |keep: &dyn Fn(Bucket) -> bool| {
         let mut picked: Vec<(R, u64)> = rows
             .iter()
@@ -26,11 +33,17 @@ pub(super) fn recent_order<R: Copy>(rows: &[(R, Bucket, u64)]) -> (Vec<R>, Vec<R
         picked.sort_by_key(|(_, when)| std::cmp::Reverse(*when));
         picked.into_iter().map(|(r, _)| r).collect::<Vec<_>>()
     };
-    (
-        pick(&|b| b == Bucket::Attention),
-        pick(&|b| !matches!(b, Bucket::Attention | Bucket::Stale)),
-        pick(&|b| b == Bucket::Stale),
-    )
+    RecentOrder {
+        // What asks you or failed before the finished turns waiting for your check.
+        need: [
+            pick(&|b| b == Bucket::Attention),
+            pick(&|b| b == Bucket::Done),
+        ]
+        .concat(),
+        running: pick(&|b| b == Bucket::Running),
+        stopped: pick(&|b| matches!(b, Bucket::Stopped | Bucket::Fresh)),
+        quiet: pick(&|b| b == Bucket::Stale),
+    }
 }
 
 pub(super) fn bucket(g: Status) -> Bucket {
@@ -214,6 +227,7 @@ impl Workbench {
         }
         let open = session.clone();
         let seen = crate::ui::status_colors::StatusColors::get();
+        let marks = self.agent_marks();
         let title = match self
             .layout
             .renaming_session
@@ -285,10 +299,12 @@ impl Workbench {
                     .flex()
                     .items_center()
                     .gap(px(T::S8))
-                    .child(super::board::agent_mark(
-                        session.runtime,
-                        T::color(T::muted()),
-                    ))
+                    .when(marks, |d| {
+                        d.child(super::board::agent_mark(
+                            session.runtime,
+                            T::color(T::muted()),
+                        ))
+                    })
                     .child(title)
                     .child(if attention { dot(g) } else { seen_dot(g) })
                     .child(trailing)
@@ -303,7 +319,7 @@ impl Workbench {
                     div()
                         .mt(-px(T::S4))
                         .mb(px(T::S4))
-                        .pl(px(T::BOARD_MARK + T::S8))
+                        .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
                         .truncate()
                         .text_size(px(T::CHIP_SIZE))
                         .text_color(T::color(T::muted()))
@@ -373,6 +389,13 @@ impl Workbench {
         let seen = crate::ui::status_colors::StatusColors::get();
         let selected = current == Some(session.id.as_str());
         let mono = T::mono(cx).family;
+        let marks = self.agent_marks();
+        // 会话优先 lists every space's sessions, so each row says whose it is first.
+        let space = (self.sidebar.preset().group == Grouping::Recent)
+            .then(|| session_space(&self.workspace, session))
+            .flatten()
+            .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
+            .map(|s| format!("{} · ", s.name));
         let title = match self
             .layout
             .renaming_session
@@ -391,7 +414,11 @@ impl Workbench {
                 } else {
                     T::color(seen.seen_title())
                 })
-                .child(self.session_title(session)),
+                .child(format!(
+                    "{}{}",
+                    space.unwrap_or_default(),
+                    self.session_title(session)
+                )),
         };
         let time = match end {
             End::Text(text) => text,
@@ -433,10 +460,12 @@ impl Workbench {
                     .flex()
                     .items_center()
                     .gap(px(T::S8))
-                    .child(super::board::agent_mark(
-                        session.runtime,
-                        T::color(T::muted()),
-                    ))
+                    .when(marks, |d| {
+                        d.child(super::board::agent_mark(
+                            session.runtime,
+                            T::color(T::muted()),
+                        ))
+                    })
                     .child(title)
                     .child(
                         div()
@@ -467,7 +496,7 @@ impl Workbench {
             .when_some(detail, |d, text| {
                 d.child(
                     div()
-                        .pl(px(T::BOARD_MARK + T::S8))
+                        .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
                         .truncate()
                         .font_family(T::UI_FONT)
                         .text_size(px(T::CHIP_SIZE))
@@ -727,10 +756,15 @@ impl Workbench {
                     .iter()
                     .map(|l| (*l, bucket(l.1), when(l)))
                     .collect();
-                let (need, rest, quiet) = recent_order(&rows);
-                // The short id first: sessions with the same title still read apart.
-                let named = |l: &Listed| {
-                    let short = super::sidebar_wasm::short_id(&l.0.cli_session_id);
+                let RecentOrder {
+                    need,
+                    running,
+                    stopped,
+                    quiet,
+                } = recent_order(&rows);
+                // A second line only where it says what to do or what is happening: what
+                // it asks or why it failed, what a finished turn changed, what it runs now.
+                let second = |l: &Listed| {
                     // With no reason or reply to show, what the session is at now.
                     let headline = || {
                         self.workspace
@@ -739,27 +773,34 @@ impl Workbench {
                             .map(|c| mooring_core::content::short(&c.headline(), 100))
                             .filter(|h| !h.trim().is_empty())
                     };
-                    Some(match self.row_detail(l.0, l.1).or_else(headline) {
-                        Some(d) => format!("{short} · {d}"),
-                        None => short,
-                    })
-                };
-                if !need.is_empty() {
-                    out.push(
-                        self.heading("需要你".into(), need.len(), cx)
-                            .into_any_element(),
-                    );
-                    for l in need {
-                        push(&mut out, l, named(&l), End::State);
+                    let detail = self.row_detail(l.0, l.1).or_else(headline);
+                    if bucket(l.1) != Bucket::Done {
+                        return detail;
                     }
-                }
-                if !rest.is_empty() {
+                    let files = self.turn_files(l.0);
+                    let parts: Vec<String> = (files > 0)
+                        .then(|| format!("改了 {files} 个文件"))
+                        .into_iter()
+                        .chain([l.1.label().to_owned()])
+                        .chain(detail)
+                        .collect();
+                    Some(parts.join(" · "))
+                };
+                for (title, rows, lines) in [
+                    ("要你处理", need, true),
+                    ("在跑", running, true),
+                    ("停着", stopped, false),
+                ] {
+                    if rows.is_empty() {
+                        continue;
+                    }
                     out.push(
-                        self.heading("最新在上".into(), rest.len(), cx)
+                        self.heading(title.into(), rows.len(), cx)
                             .into_any_element(),
                     );
-                    for l in rest {
-                        push(&mut out, l, named(&l), End::State);
+                    for l in rows {
+                        let d = if lines { second(&l) } else { None };
+                        push(&mut out, l, d, End::State);
                     }
                 }
                 if !quiet.is_empty() {
@@ -997,7 +1038,42 @@ impl Workbench {
                     cx.notify();
                 }),
             );
-        let head = if self.sidebar.dense() {
+        let head = if self.sidebar.preset().group == Grouping::Recent {
+            // 会话 on the left, the view by name on the right as the menu's handle:
+            // `会话优先 ▾`. The sections below carry their own counts.
+            let name = self.sidebar.preset().name.clone();
+            Self::group_title("会话".into(), None, cx)
+                .child(div().flex_1())
+                .child(
+                    div()
+                        .id("sidebar-view")
+                        .role(gpui::accesskit::Role::Button)
+                        .aria_label("选择视图")
+                        .flex_shrink_0()
+                        .px(px(T::S4))
+                        .rounded(px(T::CONTROL_RADIUS))
+                        .cursor_pointer()
+                        .font_family(T::UI_FONT)
+                        .text_color(T::color(T::muted()))
+                        .when(open, |d| d.bg(T::color(T::button_hover())))
+                        .hover(|s| s.bg(T::color(T::button_hover())))
+                        .child(format!("{name} ▾"))
+                        .on_mouse_down(
+                            gpui::MouseButton::Left,
+                            cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
+                                this.sidebar.view_menu = match this.sidebar.view_menu {
+                                    Some(_) => None,
+                                    None => Some(gpui::point(
+                                        event.position.x,
+                                        event.position.y + px(T::S12),
+                                    )),
+                                };
+                                cx.stop_propagation();
+                                cx.notify();
+                            }),
+                        ),
+                )
+        } else if self.sidebar.dense() {
             // 会话 3 on the left as the dense presets write it; the ≑ at the right end.
             Self::group_title("会话".into(), Some(count), cx)
                 .child(div().flex_1())
@@ -1064,7 +1140,7 @@ mod recent_tests {
     use super::*;
 
     #[test]
-    fn what_needs_you_leads_then_the_rest_newest_first_and_quiet_last() {
+    fn what_needs_you_leads_then_running_then_stopped_and_quiet_last() {
         let rows = [
             ("old-review", Bucket::Done, 10),
             ("asking", Bucket::Attention, 5),
@@ -1073,9 +1149,10 @@ mod recent_tests {
             ("failed", Bucket::Attention, 40),
             ("new-review", Bucket::Done, 50),
         ];
-        let (need, rest, quiet) = recent_order(&rows);
-        assert_eq!(need, ["failed", "asking"]);
-        assert_eq!(rest, ["new-review", "running", "old-review"]);
-        assert_eq!(quiet, ["quiet"]);
+        let order = recent_order(&rows);
+        assert_eq!(order.need, ["failed", "asking", "new-review", "old-review"]);
+        assert_eq!(order.running, ["running"]);
+        assert!(order.stopped.is_empty());
+        assert_eq!(order.quiet, ["quiet"]);
     }
 }

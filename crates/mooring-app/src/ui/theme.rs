@@ -144,7 +144,6 @@ pub struct Palette {
     pub control: u32,
     /// Text field outlines: 3:1 against the pane so an empty field is still findable.
     pub field_edge: u32,
-    pub todo_border: u32,
     /// A quiet fill for ordinary buttons; they carry no outline.
     pub button: u32,
     pub button_hover: u32,
@@ -212,7 +211,6 @@ impl Palette {
             card_border: mix(bg, fg, by(light, 260, 100)),
             control,
             field_edge: mix(bg, fg, by(light, 490, 150)),
-            todo_border: border,
             button: mix(bg, fg, by(light, 90, 60)),
             button_hover: mix(bg, fg, by(light, 180, 120)),
             primary,
@@ -269,7 +267,6 @@ tokens!(
     card_border,
     control,
     field_edge,
-    todo_border,
     button,
     button_hover,
     primary,
@@ -351,6 +348,23 @@ impl Theme {
     pub const TAB_TIP_REASON_CHARS: usize = 160;
     pub const TODO_HEIGHT: f32 = 36.;
     pub const PANE_HEADER: f32 = 32.;
+    /// The bar under a pane's title while its turn waits for you to check it.
+    pub const TURN_BAR: f32 = 38.;
+    /// A tab's widest: short names, the rest elided.
+    pub const TAB_SHORT: f32 = 160.;
+    /// A space's letter tile in the sidebar.
+    pub const SPACE_TILE: f32 = 18.;
+    /// The space tiles' gradients, first color to second, picked in sidebar order so
+    /// the first six never share one. Deep enough for a white letter; no pure red or
+    /// orange, which belong to 出错 and 等你回答.
+    pub const SPACE_TILES: [[u32; 2]; 6] = [
+        [0x6d5ce8, 0xb06ee0],
+        [0x2f80d0, 0x34a8c8],
+        [0x1f9a72, 0x5aae3c],
+        [0xc04f9c, 0x8a5ad8],
+        [0x3d62c9, 0x7b8cf0],
+        [0x8a6a2a, 0xb38a3a],
+    ];
     pub const FOOTER: f32 = 26.;
     /// The window's bottom bar, its popovers and the bar's quota gauges.
     pub const STATUSBAR: f32 = 28.;

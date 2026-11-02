@@ -100,6 +100,9 @@ impl Render for Workbench {
         } else {
             None
         };
+        // Standard style names the space in the sidebar only; the row starts with the tabs
+        // unless a page no tab stands for is open.
+        let show_crumb = terminal_style || here.is_some();
         let crumb = div()
             .min_w_0()
             .flex_shrink_0()
@@ -205,7 +208,17 @@ impl Render for Workbench {
             }));
             self.record_toggle(toggle, cx).into_any_element()
         });
-        tail.extend(self.phones_button(cx).map(|b| b.into_any_element()));
+        // Phones are reached from the sidebar's foot (连接手机); once one is paired its
+        // button stays up here too, showing who is online.
+        if !self.sidebar.collapsed {
+            tail.extend(
+                self.phones_button(cx)
+                    .filter(|_| !self.store.recognition().remote.devices.is_empty())
+                    .map(|b| b.into_any_element()),
+            );
+        } else {
+            tail.extend(self.phones_button(cx).map(|b| b.into_any_element()));
+        }
         let sidebar = self.sidebar_view(space_name, cx);
         let current = self
             .workspace
@@ -225,6 +238,7 @@ impl Render for Workbench {
             .track_scroll(&self.layout.tab_scroll);
         // What each tab needs from you, in strip order, so a hidden one can be called out.
         let mut wants = Vec::new();
+        let marks = self.agent_marks();
         for (n, tab) in self
             .workspace
             .tabs
@@ -287,7 +301,6 @@ impl Render for Workbench {
                         .border_color(T::color(T::focus()))
                         .text_size(px(T::MONO_SIZE))
                         .text_color(T::color(T::primary()))
-                        .when(tab.default_task.is_some(), |d| d.child(task_icon()))
                         .child(div().flex_1().min_w_0().h_full().child(field.clone())),
                 );
                 continue;
@@ -319,22 +332,39 @@ impl Render for Workbench {
                         this.close_tab(&id, cx);
                     })
                 });
+            // Standard: after the name, the state of a pane that needs you or is working,
+            // as the sidebar's rows end with it; the current tab shows × there instead.
+            let after = ids
+                .iter()
+                .filter_map(|id| self.pane_status(id))
+                .filter(|(g, attention)| *attention || g.working())
+                .min_by_key(|(g, _)| super::layout::urgency(*g))
+                .map(|(g, _)| g)
+                .filter(|_| !active && !terminal_style);
             strip = strip.child(
                 button(gpui::SharedString::from(format!("tab-{id}")), "")
                     .group(group_name)
                     .aria_label(title.clone())
                     .relative()
                     .flex_shrink_0()
-                    .max_w(px(T::TAB_MAX_WIDTH))
+                    .max_w(px(if terminal_style {
+                        T::TAB_MAX_WIDTH
+                    } else {
+                        T::TAB_SHORT
+                    }))
                     .h(px(if terminal_style { T::FOOTER } else { T::ROW }))
                     .gap(px(T::S6))
                     .border_0()
                     .when(terminal_style, |d| d.rounded_none())
-                    .when(!terminal_style, |d| d.pl(px(T::S10)).pr(px(T::S4)))
+                    .when(!terminal_style, |d| {
+                        d.pl(px(T::S10 - T::BORDER_WIDTH))
+                            .pr(px(T::S4 - T::BORDER_WIDTH))
+                            .border(px(T::BORDER_WIDTH))
+                            .border_color(gpui::transparent_black())
+                    })
                     .text_size(px(T::MONO_SIZE))
                     .text_color(T::color(if active { T::primary() } else { T::secondary() }))
-                    .when(tab.default_task.is_some(), |d| d.child(task_icon()))
-                    .when_some(agent.filter(|_| !terminal_style), |d, a| {
+                    .when_some(agent.filter(|_| !terminal_style && marks), |d, a| {
                         d.child(super::board::agent_mark(
                             a,
                             T::color(if active { T::secondary() } else { T::muted() }),
@@ -356,14 +386,14 @@ impl Render for Workbench {
                                 title
                             }),
                     )
-                    // Standard: a tab only calls out when a pane in it needs you.
-                    .when_some(group.filter(|_| !terminal_style), |d, g| {
-                        d.child(badge(g, needs.len()).font_features(T::tabular()))
+                    .when_some(after, |d, g| {
+                        d.child(glyph(g).text_size(px(T::CHIP_SIZE)).pr(px(T::S4)))
                     })
-                    .child(close)
-                    // The current tab is a quiet filled block, like the sidebar's row.
+                    .when(active || terminal_style, |d| d.child(close))
+                    // The current tab: white with a hairline, the others bare.
                     .when(active && !terminal_style, |d| {
-                        d.bg(T::color(T::selection()))
+                        d.bg(T::color(T::pane()))
+                            .border_color(T::color(T::border()))
                             .font_weight(gpui::FontWeight::MEDIUM)
                     })
                     // The hover card would cover the right-click menu; dropping the
@@ -510,15 +540,17 @@ impl Render for Workbench {
             .border_b(px(T::BORDER_WIDTH))
             .border_color(T::color(T::border()))
             .when(collapsed, |d| d.child(self.sidebar_toggle(cx)))
-            .child(crumb)
+            .when(show_crumb, |d| d.child(crumb))
             .when_some(row_tabs, |d, tabs| {
-                d.child(
-                    div()
-                        .flex_shrink_0()
-                        .w(px(T::BORDER_WIDTH))
-                        .h(px(T::S16))
-                        .bg(T::color(T::border())),
-                )
+                d.when(show_crumb, |d| {
+                    d.child(
+                        div()
+                            .flex_shrink_0()
+                            .w(px(T::BORDER_WIDTH))
+                            .h(px(T::S16))
+                            .bg(T::color(T::border())),
+                    )
+                })
                 .child(tabs)
                 .child(self.title_drag_area(cx).min_w(px(T::S20 * 2.)))
             })
@@ -625,65 +657,8 @@ impl Render for Workbench {
         {
             main = main.child(self.task_detail_view(task, cx));
         } else {
-            if let Some(task) = current
-                .and_then(|t| t.default_task.as_ref())
-                .and_then(|id| self.workspace.tasks.iter().find(|t| &t.id == id))
-            {
-                let evidence = task.proven();
-                main = main.child(
-                    div()
-                        .h(px(T::TODO_HEIGHT))
-                        .flex_shrink_0()
-                        .px(px(T::S14))
-                        .flex()
-                        .items_center()
-                        .gap(px(T::S14))
-                        .bg(T::color(T::todo()))
-                        .border_b(px(T::BORDER_WIDTH))
-                        .border_color(T::color(T::todo_border()))
-                        .child(
-                            div()
-                                .px(px(T::S6))
-                                .rounded(px(T::CHIP_RADIUS))
-                                .text_size(px(T::CHIP_SIZE))
-                                .bg(T::color(T::chip()))
-                                .text_color(T::color(T::link()))
-                                .child("待办"),
-                        )
-                        .child(
-                            div()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child(task.title.clone()),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(T::S6))
-                                .font_features(T::tabular())
-                                .when(!task.acceptance.is_empty(), |d| {
-                                    d.child(evidence_cells(evidence, task.acceptance.len()))
-                                })
-                                .child(label(format!(
-                                    "验收 {evidence} / {} 有证据",
-                                    task.acceptance.len()
-                                ))),
-                        )
-                        .child(div().flex_1())
-                        .child(
-                            button("prefill", "待办详情")
-                                .h(px(T::FOOTER))
-                                .text_color(T::color(T::link()))
-                                .on_click({
-                                    let tid = task.id.clone();
-                                    cx.listener(move |this, _, _, cx| {
-                                        this.nav.task_detail = Some(tid.clone());
-                                        cx.notify();
-                                    })
-                                }),
-                        ),
-                );
-            }
+            // No strip for the tab's todo above the panes: its acceptance progress is in the
+            // turn bar of the pane that waits for you, and 待办详情 in each pane's ⋯ menu.
             let ids = current
                 .map(|t| self.workspace.tab_terminals(&t.id))
                 .unwrap_or_default();
@@ -818,7 +793,7 @@ impl Workbench {
         let text = match (right, terminal_style) {
             (true, true) => format!("还有 {} 个 ›", edge.count),
             (false, true) => format!("‹ {} 个", edge.count),
-            (true, false) => format!("+{}", edge.count),
+            (true, false) => format!("+{} ▾", edge.count),
             (false, false) => format!("‹ {}", edge.count),
         };
         let reveal = edge.reveal;
@@ -847,17 +822,24 @@ impl Workbench {
                 .when(!right, |d| d.border_r(px(T::BORDER_WIDTH)))
                 .border_color(T::color(T::border()))
         })
-        .when(!terminal_style, |d| d.font_features(T::tabular()))
-        .bg(match edge.group {
-            Some(g) => g.colors().2,
-            None if terminal_style => T::color(T::raised()),
-            None => T::color(T::pane()),
+        // Standard: a gray `+4 ▾` on the strip's white, with the state's dot when a hidden
+        // tab needs you.
+        .when(!terminal_style, |d| {
+            d.font_features(T::tabular())
+                .bg(T::color(T::pane()))
+                .text_color(T::color(T::muted()))
+        })
+        .when(terminal_style, |d| {
+            d.bg(match edge.group {
+                Some(g) => g.colors().2,
+                None => T::color(T::raised()),
+            })
+            .text_color(match edge.group {
+                Some(g) => g.colors().1,
+                None => T::color(T::primary()),
+            })
         })
         .text_size(px(T::MONO_SIZE))
-        .text_color(match edge.group {
-            Some(g) => g.colors().1,
-            None => T::color(T::primary()),
-        })
         .when_some(edge.group, |d, g| d.child(dot(g)))
         .child(text)
         .on_click(cx.listener(move |this, _, _, cx| {
@@ -1127,7 +1109,7 @@ impl Workbench {
         } else {
             Status::Error
         };
-        let text = "需要你";
+        let text = "要你处理";
         let (dot_color, ink, wash) = group.colors();
         let key = crate::keymap::current(cx)
             .chords(crate::keymap::Action::NextWaiting)
@@ -1207,25 +1189,6 @@ impl Workbench {
     }
 }
 
-/// `total` small cells for the acceptance criteria, `filled` of them with evidence;
-/// neutral tones, since color is kept for session status.
-pub(super) fn evidence_cells(filled: usize, total: usize) -> gpui::Div {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(T::S2))
-        .children((0..total).map(|i| {
-            div()
-                .w(px(T::EVIDENCE_CELL_WIDTH))
-                .h(px(T::EVIDENCE_CELL_HEIGHT))
-                .rounded(px(T::EVIDENCE_CELL_RADIUS))
-                .bg(T::color(if i < filled {
-                    T::secondary()
-                } else {
-                    T::control()
-                }))
-        }))
-}
 /// A plain hover note.
 pub(super) struct TextTip(pub(super) gpui::SharedString);
 impl Render for TextTip {

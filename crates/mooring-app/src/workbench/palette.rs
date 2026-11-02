@@ -1145,33 +1145,6 @@ impl Workbench {
             .find(|s| s.id == id)
             .map(|s| s.name.clone())
     }
-    /// The sidebar only shows where search lives; the palette opens on click or ⌘P.
-    pub(super) fn search_button(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
-        div()
-            .id("global-search")
-            .role(gpui::accesskit::Role::Button)
-            .aria_label("搜索")
-            .w(px(T::SEARCH_WIDTH))
-            .min_w(px(T::SEARCH_MIN))
-            .h(px(T::ROW))
-            .px(px(T::S8))
-            .flex()
-            .items_center()
-            .gap(px(T::S8))
-            .cursor_pointer()
-            .rounded(px(T::CONTROL_RADIUS))
-            .text_color(T::color(T::secondary()))
-            .hover(|d| d.bg(T::color(T::button_hover())))
-            .child(
-                gpui::svg()
-                    .path("icons/search.svg")
-                    .size(px(T::ICON_GLYPH))
-                    .text_color(T::color(T::secondary())),
-            )
-            .child(div().flex_1().truncate().child("搜索"))
-            .child(kbd("⌘P"))
-            .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx)))
-    }
     pub(super) fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.search.open = true;
         self.search.group = None;

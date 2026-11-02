@@ -121,7 +121,6 @@ impl Workbench {
         let focus = pane.focus_handle(cx);
         let focus_id = id.to_owned();
         let menu_id = id.to_owned();
-        let close_id = id.to_owned();
         let other_owner = pane.read(cx).has_other_owner();
         let card_id = session.map(|s| s.id.clone());
         let terminal_style = crate::ui::style::current(cx) == crate::ui::style::Style::Terminal;
@@ -155,45 +154,68 @@ impl Workbench {
         });
         let completing = self.completing(id);
         let line = T::color(if focused { T::focus() } else { T::border() });
-        // The status and title, then the meta and the actions: two groups so the terminal
-        // style can set them into its frame line with the line showing between them.
+        let marks = self.agent_marks();
+        // Who and where, never the conversation's title again: that is the tab's and the
+        // sidebar's. `Codex ~/…/tools/mooring`; a plain shell names its program.
+        let who = match session {
+            Some(s) => s.runtime.name().to_owned(),
+            None => pane
+                .read(cx)
+                .program_title()
+                .unwrap_or_else(|| "终端".into()),
+        };
+        let place = self.pane_cwd(id, session, cx).map(|c| short_place(&c));
         let left = div()
+            .id(gpui::SharedString::from(format!("pane-title-{id}")))
             .min_w_0()
             .flex()
             .items_center()
             .gap(px(T::S8))
-            .when_some(status, |d, g| {
-                d.child(if terminal_style {
-                    div()
-                        .flex_shrink_0()
-                        .flex()
-                        .gap(px(T::S4))
-                        .text_size(px(T::MONO_SIZE))
-                        .text_color(g.colors().1)
-                        .child(glyph(g))
-                        .child(g.label())
-                        .when_some(reason.clone(), |d, r| d.child("·").child(r))
-                } else {
-                    state_chip(g, reason.clone())
+            .when(terminal_style, |d| {
+                d.when_some(status, |d, g| {
+                    d.child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .gap(px(T::S4))
+                            .text_size(px(T::MONO_SIZE))
+                            .text_color(g.colors().1)
+                            .child(glyph(g))
+                            .child(g.label()),
+                    )
                 })
             })
-            .when(rang, |d| d.child(label("🔔")))
+            .when_some(session.filter(|_| marks), |d, s| {
+                d.child(super::board::agent_mark(
+                    s.runtime,
+                    T::color(T::secondary()),
+                ))
+            })
             .child(
                 div()
-                    .id(gpui::SharedString::from(format!("pane-title-{id}")))
-                    .when(!terminal_style, |d| d.flex_1())
-                    .min_w_0()
-                    .truncate()
-                    .text_size(px(T::MONO_SIZE))
+                    .flex_shrink_0()
+                    .text_size(px(T::SMALL))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(T::primary()))
-                    .child(title.clone())
-                    .when(!tip.is_empty(), |d| {
-                        let line = gpui::SharedString::from(tip.join("\n"));
-                        d.tooltip(move |_, cx| {
-                            cx.new(|_| super::render::TextTip(line.clone())).into()
-                        })
-                    }),
-            );
+                    .child(who),
+            )
+            .when_some(place, |d, place| {
+                d.child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .font_family(T::mono(cx).family)
+                        .text_size(px(T::META))
+                        .text_color(T::color(T::muted()))
+                        .child(place),
+                )
+            })
+            .when(rang, |d| d.child(label("🔔")))
+            .when(!tip.is_empty(), |d| {
+                let line = gpui::SharedString::from(tip.join("\n"));
+                d.tooltip(move |_, cx| cx.new(|_| super::render::TextTip(line.clone())).into())
+            });
+        let menu_at = id.to_owned();
         let right = div()
             .flex_shrink_0()
             .flex()
@@ -230,7 +252,7 @@ impl Workbench {
                         }),
                 )
             })
-            // What the plugins put here, before the Agent and its time.
+            // What the plugins put here, before the state.
             .children(decorated.title.into_iter().map(|(line, tone)| {
                 use mooring_core::decoration::Tone;
                 let color = match tone {
@@ -258,76 +280,57 @@ impl Workbench {
                         .child(alert),
                 )
             })
-            .when(unread.is_none(), |d| d.child(self.pane_meta(session, cx)))
-            .when_some(
-                session
-                    .filter(|_| pane.read(cx).handoff_state().is_none())
-                    .and_then(|_| self.workspace.terminal_tab(id))
-                    .and_then(|t| t.default_task.as_ref())
-                    .and_then(|tid| self.workspace.tasks.iter().find(|t| &t.id == tid))
-                    .map(|t| t.prompt()),
-                |d, text| {
-                    let target = id.to_owned();
-                    d.child(
-                        button(
-                            gpui::SharedString::from(format!("place-task-{id}")),
-                            "放入待办",
-                        )
-                        .pane_action()
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if let Some(p) = this.layout.panes.get(&target) {
-                                p.update(cx, |p, cx| p.place_text(text.clone(), cx));
-                            }
-                        })),
-                    )
-                },
-            )
             .when_some(completing, |d, (style, t)| {
                 d.child(self.completing_button(id, style, t))
             })
-            .when_some(review.filter(|_| completing.is_none()), |d, s| {
-                let accept = s.id.clone();
-                let terminal = id.to_owned();
+            // One state on the right: its word and how long it has been so. Why it needs
+            // you is in the chip's hover card.
+            .when_some(status.filter(|_| !terminal_style), |d, g| {
+                let when = self.pane_when(session, cx);
                 d.child(
-                    button(
-                        gpui::SharedString::from(format!("accept-pane-{id}")),
-                        "标记完成",
-                    )
-                    .pane_action()
-                    // The step this pane waits on you for; the rest stay text.
-                    .bg(T::color(T::button()))
-                    .text_color(T::color(T::primary()))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.complete_pane(terminal.clone(), accept.clone(), cx)
-                    })),
+                    div()
+                        .id(gpui::SharedString::from(format!("pane-state-{id}")))
+                        .child(state_chip(g, when))
+                        .when_some(reason.clone(), |d, r| {
+                            d.tooltip(move |_, cx| {
+                                cx.new(|_| super::render::TextTip(r.clone().into())).into()
+                            })
+                        }),
                 )
             })
-            // One step per pane: 标记完成 when it is due, else 看进度.
-            .when_some(
-                session.filter(|_| review.is_none() && completing.is_none()),
-                |d, s| {
-                    let show = s.id.clone();
-                    d.child(
-                        button(
-                            gpui::SharedString::from(format!("here-pane-{id}")),
-                            "看进度",
-                        )
-                        .pane_action()
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.overview.here = Some(show.clone());
-                            cx.notify();
-                        })),
-                    )
-                },
-            )
+            .when(terminal_style && unread.is_none(), |d| {
+                d.child(self.pane_meta(session, cx))
+            })
+            // Everything else the pane offers is one click away in its menu: 看进度,
+            // 放入待办, 标记完成, 待办详情 and 关闭画面 among the rest.
             .child(
-                button(gpui::SharedString::from(format!("close-pane-{id}")), "×")
-                    .aria_label("关闭画面")
+                button(gpui::SharedString::from(format!("pane-more-{id}")), "⋯")
+                    .aria_label("更多操作")
                     .pane_action()
                     .text_color(T::color(T::muted()))
-                    .on_click(cx.listener(move |this, _, _, cx| this.close_pane(&close_id, cx))),
+                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
+                        let path = this
+                            .layout
+                            .panes
+                            .get(&menu_at)
+                            .and_then(|p| p.read(cx).path_target());
+                        this.layout.menu = Some(PaneMenu {
+                            terminal: menu_at.clone(),
+                            position: event.position(),
+                            page: MenuPage::Main,
+                            path,
+                        });
+                        cx.notify();
+                    })),
             );
+        // The turn bar: what this turn changed and how far its todo's criteria are, with
+        // 退回 and the window's one solid button, 标记完成. Only while it waits for you
+        // to check it.
+        let turn = review
+            .zip(status)
+            .filter(|(_, g)| *g == Status::Review && completing.is_none())
+            .map(|(s, g)| self.turn_bar(id, s, g, cx));
         let body = div()
             .flex_1()
             .min_h_0()
@@ -463,6 +466,7 @@ impl Workbench {
                                 .border_b(px(T::BORDER_WIDTH))
                                 .border_color(line)
                         })
+                        .children(turn)
                         .child(body)
                         .children(footer),
                 );
@@ -480,10 +484,13 @@ impl Workbench {
                         .flex()
                         .items_center()
                         .gap(px(T::S8))
-                        .bg(T::color(T::header()))
+                        // A pane that asks you something tints its title in its state's
+                        // wash, so the ring around it reads as that pane's, not as focus.
+                        .bg(asking.map_or(T::color(T::header()), |g| g.colors().2))
                         .child(left.flex_1())
                         .child(right),
                 )
+                .children(turn)
                 .child(body)
                 .children(footer)
                 // Among several panes the focused one carries a line along its top edge,
@@ -969,6 +976,87 @@ impl Workbench {
         );
         entries
     }
+    /// The steps a pane's title once showed as buttons, now at the top of its menu:
+    /// 标记完成 when it is due, 看进度, 放入待办 while the tab has a todo to hand over,
+    /// and 待办详情.
+    fn pane_entries(&self, terminal: &str, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
+        let session = self.pane_session(terminal);
+        let status = self.pane_status(terminal).map(|(g, _)| g);
+        let mut out = Vec::new();
+        let entry = |key: &str, title: &'static str| {
+            button(gpui::SharedString::from(format!("menu-{key}")), title)
+                .w_full()
+                .justify_start()
+                .border_0()
+        };
+        if let Some(s) = session.filter(|s| {
+            s.outcome == Outcome::Open
+                && self.completing(terminal).is_none()
+                && matches!(
+                    status,
+                    Some(Status::Review | Status::Background | Status::Paused)
+                )
+        }) {
+            let (t, sid) = (terminal.to_owned(), s.id.clone());
+            out.push(
+                entry("accept", "标记完成")
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.layout.menu = None;
+                        this.complete_pane(t.clone(), sid.clone(), cx)
+                    }))
+                    .into_any_element(),
+            );
+        }
+        if let Some(s) = session {
+            let sid = s.id.clone();
+            out.push(
+                entry("here", "看进度")
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.layout.menu = None;
+                        this.overview.here = Some(sid.clone());
+                        cx.notify();
+                    }))
+                    .into_any_element(),
+            );
+        }
+        let pane = self.layout.panes.get(terminal);
+        let tab_task = self
+            .workspace
+            .terminal_tab(terminal)
+            .and_then(|t| t.default_task.as_ref())
+            .and_then(|tid| self.workspace.tasks.iter().find(|t| &t.id == tid));
+        if let Some(text) = tab_task
+            .filter(|_| session.is_some())
+            .filter(|_| pane.is_some_and(|p| p.read(cx).handoff_state().is_none()))
+            .map(|t| t.prompt())
+        {
+            let target = terminal.to_owned();
+            out.push(
+                entry("place-task", "放入待办")
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.layout.menu = None;
+                        if let Some(p) = this.layout.panes.get(&target) {
+                            p.update(cx, |p, cx| p.place_text(text.clone(), cx));
+                        }
+                        cx.notify();
+                    }))
+                    .into_any_element(),
+            );
+        }
+        if let Some(task) = self.pane_task(terminal, session) {
+            let tid = task.id.clone();
+            out.push(
+                entry("task-detail", "待办详情")
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.layout.menu = None;
+                        this.nav.task_detail = Some(tid.clone());
+                        cx.notify();
+                    }))
+                    .into_any_element(),
+            );
+        }
+        out
+    }
     pub(super) fn menu_view(
         &self,
         menu: &PaneMenu,
@@ -985,6 +1073,11 @@ impl Workbench {
             MenuPage::Main => {
                 if let Some(target) = &menu.path {
                     entries.extend(self.path_entries(&menu.terminal, target, cx));
+                }
+                let own = self.pane_entries(&menu.terminal, cx);
+                if !own.is_empty() {
+                    entries.extend(own);
+                    entries.push(menu_rule(usize::MAX));
                 }
                 let keys = crate::keymap::current(cx);
                 let zoomed = self.nav.zoomed.as_deref() == Some(&menu.terminal);
@@ -1667,15 +1760,15 @@ impl Workbench {
         .detach();
         old
     }
-    /// `~/code/app · main`: where the pane's program is and on which branch.
-    fn pane_place(
+    /// The directory the pane's program is in: as the terminal reports it, else where its
+    /// conversation or its terminal started.
+    fn pane_cwd(
         &self,
         id: &str,
         session: Option<&AgentSession>,
         cx: &Context<Self>,
     ) -> Option<String> {
-        let cwd = self
-            .layout
+        self.layout
             .panes
             .get(id)
             .and_then(|p| p.read(cx).cwd().map(|c| c.to_string_lossy().into_owned()))
@@ -1687,7 +1780,144 @@ impl Workbench {
                     .find(|t| t.id == id)
                     .map(|t| t.cwd.clone())
             })
-            .filter(|c| !c.is_empty())?;
+            .filter(|c| !c.is_empty())
+    }
+    /// How long the pane's state has held, for its title: `本轮 3:12` while a turn runs in
+    /// a live terminal, else the time since its last change (`34 分钟`).
+    fn pane_when(&self, session: Option<&AgentSession>, cx: &Context<Self>) -> Option<String> {
+        let s = session?;
+        let content = self.workspace.content.get(&s.id);
+        let started = content
+            .filter(|_| live_terminal(&self.workspace, s).is_some())
+            .and_then(mooring_core::content::Content::running_since);
+        Some(match started {
+            Some(at) => {
+                self.tick_turn(cx);
+                format!("本轮 {}", turn_clock(now().saturating_sub(at)))
+            }
+            None => age(content.map_or(s.updated, |c| c.updated)),
+        })
+    }
+    /// The files this turn changed, from the session's own record of its edits.
+    pub(super) fn turn_files(&self, s: &AgentSession) -> usize {
+        let Some(c) = self.workspace.content.get(&s.id) else {
+            return 0;
+        };
+        c.files.iter().filter(|t| t.at >= c.turn_started).count()
+    }
+    /// The todo a pane's work counts toward: its conversation's own, else its tab's.
+    pub(super) fn pane_task(&self, id: &str, s: Option<&AgentSession>) -> Option<&Task> {
+        s.and_then(|s| s.task.as_ref())
+            .or_else(|| {
+                self.workspace
+                    .terminal_tab(id)
+                    .and_then(|t| t.default_task.as_ref())
+            })
+            .and_then(|tid| self.workspace.tasks.iter().find(|t| &t.id == tid))
+    }
+    /// Under a pane's title while its turn waits for you to check it: `这一轮改了 3 个文件 ·
+    /// 验收标准 1/3`, then 退回 (back to the terminal, to say what is wrong) and 标记完成,
+    /// the only solid button in the window. A part with nothing to say is left out.
+    fn turn_bar(&self, id: &str, s: &AgentSession, g: Status, cx: &Context<Self>) -> gpui::Div {
+        // The session's own state ink, as its title's chip has it.
+        let ink = g.colors().1;
+        let files = self.turn_files(s);
+        let task = self.pane_task(id, Some(s));
+        let mut facts = div()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(T::S6))
+            .overflow_hidden()
+            .font_features(T::tabular());
+        facts = facts.child(
+            div()
+                .flex_shrink_0()
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(ink)
+                .child(if files > 0 {
+                    format!("这一轮改了 {files} 个文件")
+                } else {
+                    "这一轮做完了".to_owned()
+                }),
+        );
+        if let Some(task) = task.filter(|t| !t.acceptance.is_empty()) {
+            let tid = task.id.clone();
+            facts = facts
+                .child(div().text_color(T::color(T::muted())).child("·"))
+                .child(
+                    div()
+                        .id(gpui::SharedString::from(format!("turn-criteria-{id}")))
+                        .flex_shrink_0()
+                        .cursor_pointer()
+                        .text_color(T::color(T::secondary()))
+                        .hover(|d| d.text_color(T::color(T::primary())))
+                        .child(format!(
+                            "验收标准 {}/{}",
+                            task.proven(),
+                            task.acceptance.len()
+                        ))
+                        .tooltip(|_, cx| {
+                            cx.new(|_| super::render::TextTip("打开待办详情".into()))
+                                .into()
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.nav.task_detail = Some(tid.clone());
+                            cx.notify();
+                        })),
+                );
+        }
+        let back = id.to_owned();
+        let terminal = id.to_owned();
+        let accept = s.id.clone();
+        div()
+            .h(px(T::TURN_BAR))
+            .flex_shrink_0()
+            .pl(px(T::S14))
+            .pr(px(T::S10))
+            .flex()
+            .items_center()
+            .gap(px(T::S8))
+            .border_b(px(T::BORDER_WIDTH))
+            .border_color(T::color(T::border()))
+            .text_size(px(T::SMALL))
+            .child(facts)
+            .child(
+                button(gpui::SharedString::from(format!("turn-back-{id}")), "退回")
+                    .h(px(T::PANE_ACTION))
+                    .px(px(T::S10))
+                    .border(px(T::BORDER_WIDTH))
+                    .border_color(T::color(T::control()))
+                    .text_color(T::color(T::primary()))
+                    .tooltip(|_, cx| {
+                        cx.new(|_| super::render::TextTip("回到终端，告诉它哪里不对".into()))
+                            .into()
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.focus_terminal(&back, window, cx);
+                    })),
+            )
+            .child(super::forms::solid(
+                button(
+                    gpui::SharedString::from(format!("accept-pane-{id}")),
+                    "标记完成",
+                )
+                .h(px(T::PANE_ACTION))
+                .px(px(T::S10))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.complete_pane(terminal.clone(), accept.clone(), cx)
+                })),
+            ))
+    }
+    /// `~/code/app · main`: where the pane's program is and on which branch.
+    fn pane_place(
+        &self,
+        id: &str,
+        session: Option<&AgentSession>,
+        cx: &Context<Self>,
+    ) -> Option<String> {
+        let cwd = self.pane_cwd(id, session, cx)?;
         Some(match self.git_branch(&cwd, cx) {
             Some(b) => format!("{} · {b}", home_relative(&cwd)),
             None => home_relative(&cwd),

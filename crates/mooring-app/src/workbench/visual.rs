@@ -655,7 +655,9 @@ impl Workbench {
         match name {
             // The status bar's 工作中 popover beside the sidebar: one session, one color.
             "StatusSessions" => self.statusbar = Some(super::statusbar::StatusPop::Sessions),
-            "Main" | "HereClickOut" => {
+            // Main is the window as it opens (docs/ui-v3/v3-4.png); 看进度's card has its own.
+            "Main" => {}
+            "HereClickOut" => {
                 self.overview.here = self.workspace.current_agent("p0").map(|s| s.id.clone())
             }
             // The sidebar with the space's todos unfolded above its sessions.

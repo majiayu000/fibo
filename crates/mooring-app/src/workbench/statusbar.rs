@@ -1,6 +1,8 @@
-//! The window's bottom edge: the host's link and the sessions on the left, the usage
-//! limits, diagnostics, reminders and settings on the right. One fixed-width quota button
-//! however many CLIs there are; its popover lists them all.
+//! The window's bottom edge: this machine and how many sessions it lists on the left, the
+//! usage limits, diagnostics and settings on the right. The limits get one cell per CLI,
+//! each with its 5h and week windows and a thin bar (decided 11-03, replacing the single
+//! fixed-width quota button); past `BAR_CELLS` the rest fold into `+N ▴`, and the popover
+//! lists them all.
 use super::*;
 use crate::ui::widgets::gauge;
 use mooring_core::quota::{NEAR, OVER, Quota, Window as QuotaWindow};
@@ -25,7 +27,12 @@ impl Workbench {
         let open = self.statusbar;
         let cut = self.store.cut_off();
         let detail = self.store.recognition().detail.clone();
-        let host = item("status-host", false)
+        // 「本机 · 11 个会话」: this machine and how many sessions it lists. What needs you
+        // is the title row's 要你处理 alone; a click here still lists what works or waits.
+        let listed = self.listed_sessions().count();
+        let host = item("status-host", open == Some(StatusPop::Sessions))
+            .aria_label(format!("本机，{listed} 个会话"))
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Sessions, cx)))
             .child(div().size(px(T::DOT)).rounded_full().bg(if cut {
                 Tone::Danger.dot()
             } else {
@@ -41,9 +48,11 @@ impl Workbench {
                             T::color(T::secondary())
                         })
                         .child(if cut {
-                            "后台断开，正在重连"
+                            "后台断开，正在重连".to_owned()
+                        } else if fit.working {
+                            format!("本机 · {listed} 个会话")
                         } else {
-                            "后台"
+                            "本机".to_owned()
                         }),
                 )
             })
@@ -55,36 +64,6 @@ impl Workbench {
                 },
                 detail,
             ]));
-        let (working, needs) = self.bar_counts();
-        let mut sessions = item("status-sessions", open == Some(StatusPop::Sessions))
-            .aria_label(format!("{working} 个工作中，{needs} 个等你"))
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Sessions, cx)));
-        let working = if fit.working { working } else { 0 };
-        if working == 0 && needs == 0 && fit.working {
-            sessions = sessions.child(
-                div()
-                    .text_color(T::color(T::muted()))
-                    .child("没有进行中的会话"),
-            );
-        }
-        if working > 0 {
-            sessions = sessions.child(
-                div()
-                    .text_color(Status::Running.colors().1)
-                    .child(format!("{working} 工作中")),
-            );
-        }
-        if working > 0 && needs > 0 {
-            sessions = sessions.child(div().text_color(T::color(T::muted())).child("·"));
-        }
-        if needs > 0 {
-            sessions = sessions.child(
-                div()
-                    .text_color(Status::Waiting.colors().1)
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(format!("{needs} 等你")),
-            );
-        }
         div()
             .id("statusbar")
             .h(px(T::STATUSBAR))
@@ -100,9 +79,8 @@ impl Workbench {
             .font_features(T::tabular())
             .whitespace_nowrap()
             .child(host)
-            .child(sessions)
             .child(div().flex_1())
-            .child(self.quota_button(cx))
+            .child(self.quota_cells(cx))
             .when(fit.diagnose || fit.settings, |d| d.child(divider()))
             .when(fit.diagnose, |d| {
                 d.child(
@@ -153,77 +131,70 @@ impl Workbench {
         (working, needs)
     }
 
-    fn bar_counts(&self) -> (usize, usize) {
-        let (working, needs) = self.status_sessions();
-        (working.len(), needs.len())
-    }
-
-    /// The pinned CLI, or else the tightest, with its tightest window, then `+N` for the
-    /// others.
-    fn quota_button(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
+    /// One cell per CLI, the pinned one first and then the tightest: its mark, then each
+    /// window as `5h ▬ 42%`, joined by `·`; past `BAR_CELLS` a `+N ▴`. One click target
+    /// for the popover, which lists them all.
+    fn quota_cells(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
         let now = now();
-        let readings = tightest_first(&self.workspace, now);
+        let readings = bar_order(&tightest_first(&self.workspace, now), self.quota_pin);
         let on = self.statusbar == Some(StatusPop::Quota);
         let mut b = item("status-quota", on)
-            .border(px(T::BORDER_WIDTH))
-            .border_color(T::color(T::control()))
-            .when(!on, |d| d.bg(T::color(T::pane())))
+            .gap(px(T::S10))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Quota, cx)));
-        let Some((agent, quota, window)) = shown(&readings, self.quota_pin) else {
+        if readings.is_empty() {
             return b
                 .aria_label("额度：还没有读数")
                 .child(div().text_color(T::color(T::muted())).child("额度"))
                 .child(caret());
-        };
-        let stale = now.saturating_sub(quota.at) > STALE_AFTER;
-        b = b.aria_label(format!(
-            "额度：{} {} 已用 {}%",
-            agent.name(),
-            window.map_or(String::new(), |w| w.label()),
-            window.map_or(0, |w| w.used)
-        ));
-        // The CLI by its mark, as its rows, tabs and panes show it.
-        b = b
-            .child(super::board::agent_mark(agent, T::color(T::secondary())))
-            .when(stale, |d| {
-                d.child(div().text_color(T::color(T::muted())).child("*"))
-            });
-        if let Some(w) = window {
-            let (fill, ink) = colors(w, stale);
-            b = b
-                .child(div().text_color(T::color(T::muted())).child(w.label()))
-                .child(
-                    div()
-                        .w(px(T::STATUS_GAUGE))
-                        .child(gauge(share(w), fill, T::METER + 2.)),
-                )
-                .child(
-                    div()
-                        .text_color(ink)
-                        .when(w.used >= NEAR && !stale, |d| {
-                            d.font_weight(gpui::FontWeight::SEMIBOLD)
-                        })
-                        .child(format!("{}%", w.used)),
-                );
-            if w.used >= NEAR && w.resets_at > now {
-                b = b.child(
-                    div()
-                        .text_color(T::color(T::muted()))
-                        .child(left(w.resets_at, now)),
-                );
-            }
         }
-        if readings.len() > 1 {
+        // The marks tell the cells apart once there are two; alone, the usual rule.
+        let marks = readings.len() > 1 || self.agent_marks();
+        let mut said = Vec::new();
+        for (agent, quota, _) in readings.iter().take(BAR_CELLS) {
+            let stale = now.saturating_sub(quota.at) > STALE_AFTER;
+            let mut cell = div()
+                .flex()
+                .items_center()
+                .gap(px(T::S4))
+                .when(marks, |d| {
+                    d.child(super::board::agent_mark(*agent, T::color(T::secondary())))
+                })
+                .when(stale, |d| {
+                    d.child(div().text_color(T::color(T::muted())).child("*"))
+                });
+            let windows: Vec<_> = quota.windows.iter().filter(|w| !w.reset(now)).collect();
+            if windows.is_empty() {
+                cell = cell.child(div().text_color(T::color(T::muted())).child("已重置"));
+            }
+            for (i, w) in windows.iter().enumerate() {
+                let (fill, ink) = colors(w, stale);
+                said.push(format!("{} {} {}%", agent.name(), w.label(), w.used));
+                cell = cell
+                    .when(i > 0, |d| {
+                        d.child(div().text_color(T::color(T::muted())).child("·"))
+                    })
+                    .child(div().text_color(T::color(T::muted())).child(w.label()))
+                    .child(thin_bar(share(w), fill))
+                    .child(
+                        div()
+                            .text_color(ink)
+                            .when(w.used >= NEAR && !stale, |d| {
+                                d.font_weight(gpui::FontWeight::SEMIBOLD)
+                            })
+                            .child(format!("{}%", w.used)),
+                    );
+            }
+            b = b.child(cell);
+        }
+        b = b.aria_label(format!("额度：{}", said.join("，")));
+        if readings.len() > BAR_CELLS {
             b = b.child(
                 div()
-                    .px(px(T::S4))
-                    .rounded_full()
-                    .bg(T::color(T::chip()))
                     .text_color(T::color(T::secondary()))
-                    .child(format!("+{}", readings.len() - 1)),
+                    .child(format!("+{} ▴", readings.len() - BAR_CELLS)),
             );
         }
-        b.child(caret())
+        b
     }
 
     /// The open popover over the bar; a click outside closes it.
@@ -281,11 +252,15 @@ impl Workbench {
         panel = panel.child(heading(
             "额度",
             match self.quota_pin {
-                Some(_) => "按用得最多排序 · 状态栏固定显示一家",
-                None => "按用得最多排序 · 状态栏显示用得最多的",
+                Some(_) => "按用得最多排序 · 状态栏每家一格，固定的在最前",
+                None => "按用得最多排序 · 状态栏每家一格",
             },
         ));
-        let on_bar = shown(&readings, self.quota_pin).map(|(a, ..)| a);
+        let on_bar: Vec<_> = bar_order(&readings, self.quota_pin)
+            .into_iter()
+            .take(BAR_CELLS)
+            .map(|(a, ..)| a)
+            .collect();
         if readings.is_empty() {
             panel = panel.child(label("这一周用过的 Agent 都还没留下额度记录"));
         }
@@ -304,7 +279,7 @@ impl Workbench {
             head = head
                 .child(div().flex_1())
                 .child(label(format!("读数 {}", ago(quota.at, now))))
-                .child(self.pin_chip(*agent, on_bar == Some(*agent), cx));
+                .child(self.pin_chip(*agent, on_bar.contains(agent), cx));
             let mut block = div()
                 .flex()
                 .flex_col()
@@ -546,14 +521,21 @@ type Reading<'a> = (
     Option<&'a QuotaWindow>,
 );
 
-/// What the bar shows: the pinned CLI while it has a reading, else the tightest.
-fn shown<'a>(
+/// The bar's cells before the rest fold into `+N ▴`.
+const BAR_CELLS: usize = 2;
+
+/// The bar's order: the pinned CLI first while it has a reading, then the others as
+/// given (tightest first).
+fn bar_order<'a>(
     readings: &[Reading<'a>],
     pin: Option<mooring_core::agent::Agent>,
-) -> Option<Reading<'a>> {
-    pin.and_then(|p| readings.iter().find(|(a, ..)| *a == p))
-        .or(readings.first())
-        .copied()
+) -> Vec<Reading<'a>> {
+    let mut out = readings.to_vec();
+    if let Some(i) = pin.and_then(|p| out.iter().position(|(a, ..)| *a == p)) {
+        let pinned = out.remove(i);
+        out.insert(0, pinned);
+    }
+    out
 }
 
 fn quota_pin_path() -> Option<std::path::PathBuf> {
@@ -578,6 +560,24 @@ fn save_quota_pin(pin: Option<mooring_core::agent::Agent>) {
             let _ = std::fs::remove_file(path);
         }
     }
+}
+
+/// A quota cell's bar: a thin track, filled to the share used.
+fn thin_bar(share: f64, fill: gpui::Hsla) -> gpui::Div {
+    div()
+        .w(px(T::STATUS_GAUGE))
+        .h(px(T::METER))
+        .flex_shrink_0()
+        .rounded_full()
+        .overflow_hidden()
+        .bg(T::color(T::control()))
+        .child(
+            div()
+                .h_full()
+                .w(gpui::relative(share as f32))
+                .rounded_full()
+                .bg(fill),
+        )
 }
 
 fn share(w: &QuotaWindow) -> f64 {
@@ -679,24 +679,33 @@ fn heading(title: &'static str, note: &'static str) -> gpui::Div {
 
 #[cfg(test)]
 mod tests {
-    use super::{left, shown};
+    use super::{bar_order, left};
     use mooring_core::agent::Agent;
     use mooring_core::quota::Quota;
 
     #[test]
-    fn the_bar_shows_the_pinned_cli_or_else_the_tightest() {
+    fn the_bar_puts_the_pinned_cli_first_then_the_tightest() {
         let q = Quota {
             at: 0,
             plan: String::new(),
             windows: Vec::new(),
         };
-        let readings = [(Agent::Codex, &q, None), (Agent::Claude, &q, None)];
-        let key = |pin| shown(&readings, pin).map(|(a, ..)| a.key());
-        assert_eq!(key(None), Some("Codex"));
-        assert_eq!(key(Some(Agent::Claude)), Some("Claude"));
-        // Pinned but no reading this week: fall back to the tightest.
-        assert_eq!(key(Some(Agent::Grok)), Some("Codex"));
-        assert_eq!(shown(&[], Some(Agent::Claude)).map(|(a, ..)| a.key()), None);
+        let readings = [
+            (Agent::Codex, &q, None),
+            (Agent::Claude, &q, None),
+            (Agent::Grok, &q, None),
+        ];
+        let keys = |pin| {
+            bar_order(&readings, pin)
+                .into_iter()
+                .map(|(a, ..)| a.key())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(keys(None), ["Codex", "Claude", "Grok"]);
+        assert_eq!(keys(Some(Agent::Grok)), ["Grok", "Codex", "Claude"]);
+        // Pinned but no reading this week: the tightest order stands.
+        assert_eq!(bar_order(&readings[..2], Some(Agent::Grok)).len(), 2);
+        assert!(bar_order(&[], Some(Agent::Claude)).is_empty());
     }
 
     #[test]

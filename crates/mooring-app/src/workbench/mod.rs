@@ -155,6 +155,20 @@ fn home_relative(path: &str) -> String {
         _ => path.to_owned(),
     }
 }
+/// Where a pane runs, short enough for its title: home as `~`, and past two folders only
+/// the last two, `~/…/tools/mooring`.
+fn short_place(path: &str) -> String {
+    let full = home_relative(path);
+    let (root, rest) = match full.strip_prefix("~/") {
+        Some(rest) => ("~/", rest),
+        None => ("/", full.trim_start_matches('/')),
+    };
+    let parts: Vec<&str> = rest.split('/').filter(|p| !p.is_empty()).collect();
+    if parts.len() <= 2 {
+        return full;
+    }
+    format!("{root}…/{}", parts[parts.len() - 2..].join("/"))
+}
 /// The first shown pane whose terminal the host lost and that has not been tried yet.
 pub(super) fn reopen_candidate(
     w: &Workspace,

@@ -88,6 +88,10 @@ if sys.argv[1] == 'prepare':
             records += call(cid, 1, None, patch('crates/mooring-app/src/workbench/tabs.rs'), stamp - 1500)
             records += call(cid, 2, 'cargo test -p mooring-app tab_title', 'Process exited with code 0\ntest result: ok. 4 passed; 0 failed', stamp - 1260)
             records += call(cid, 3, 'cargo test -p mooring-app', 'Process exited with code 101\ntest result: FAILED. 211 passed; 2 failed', stamp - 720)
+            # The account's usage windows, so the status bar has a quota cell to draw.
+            records.append((stamp - 700, 'event_msg', {'type': 'token_count', 'rate_limits': {
+                'primary': {'used_percent': 42.0, 'window_minutes': 300, 'resets_at': now + 7200},
+                'secondary': {'used_percent': 31.0, 'window_minutes': 10080, 'resets_at': now + 4 * 86400}}}))
         if n == 1:
             records += call(cid, 1, None, patch('crates/mooring-core/src/model.rs'), stamp - 400)
             records += call(cid, 2, 'cargo test -p mooring-app tab_title_survives_exit', 'Process exited with code 0\ntest result: ok. 1 passed; 0 failed', stamp - 300)

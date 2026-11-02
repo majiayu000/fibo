@@ -51,6 +51,9 @@ impl Workbench {
             return None;
         }
         let dense = self.sidebar.dense();
+        // 会话优先, the default: the spaces as lettered tiles on top, then every space's
+        // sessions in one list, each row naming its space.
+        let recent = self.sidebar.preset().group == mooring_core::sidebar::Grouping::Recent;
         let mut sidebar = div()
             .id("sidebar-content")
             .flex_1()
@@ -62,7 +65,9 @@ impl Workbench {
             .flex_col()
             .gap(px(T::S2))
             .font_features(super::diagnostics::tabular());
-        if dense {
+        if recent {
+            sidebar = sidebar.children(self.space_tiles(cx));
+        } else if dense {
             sidebar = sidebar.child(self.space_line(cx));
         } else {
             sidebar = sidebar.child(
@@ -224,7 +229,8 @@ impl Workbench {
             .enumerate()
             .filter(|(_, s)| {
                 self.session_hidden(s).is_none()
-                    && session_space(&self.workspace, s) == Some(self.nav.space.as_str())
+                    && (recent
+                        || session_space(&self.workspace, s) == Some(self.nav.space.as_str()))
             })
             .collect();
         let closed = in_space
@@ -406,8 +412,8 @@ impl Workbench {
                 .bg(T::color(T::panel()))
                 .border_r(px(T::BORDER_WIDTH))
                 .border_color(T::color(T::border()))
-                // The window's top edge, as T3 Code has it: the traffic lights, the
-                // sidebar button and the name, then search and a new todo.
+                // The window's top edge: the traffic lights and the name, then search
+                // (⌘P) and the button that folds the column away.
                 .child(
                     div()
                         .h(px(T::TOP))
@@ -416,37 +422,251 @@ impl Workbench {
                         .pr(px(T::S8))
                         .flex()
                         .items_center()
-                        .gap(px(T::S6))
-                        .child(self.sidebar_toggle(cx))
+                        .gap(px(T::S4))
                         .child(
                             div()
                                 .flex_shrink_0()
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .child("Mooring"),
                         )
-                        .child(self.title_drag_area(cx)),
+                        .child(self.title_drag_area(cx))
+                        .child(
+                            icon_button("global-search", "icons/search.svg", "搜索")
+                                .tooltip(|_, cx| {
+                                    cx.new(|_| super::render::TextTip("搜索 ⌘P".into())).into()
+                                })
+                                .on_click(
+                                    cx.listener(|this, _, window, cx| this.open_search(window, cx)),
+                                ),
+                        )
+                        .child(self.sidebar_toggle(cx)),
+                )
+                .child(sidebar)
+                .child(self.sidebar_foot(cx)),
+        )
+    }
+    /// The column's foot: settings, and pairing a phone or another computer.
+    fn sidebar_foot(&self, cx: &Context<Self>) -> gpui::Div {
+        let row = |id: &'static str, text: &'static str| {
+            button(id, text)
+                .w_full()
+                .h(px(T::PANE_ACTION))
+                .px(px(T::S8))
+                .justify_start()
+                .border_0()
+                .text_size(px(T::SMALL))
+                .text_color(T::color(T::secondary()))
+        };
+        div()
+            .flex_shrink_0()
+            .px(px(T::S8))
+            .py(px(T::S8))
+            .flex()
+            .flex_col()
+            .gap(px(T::S2))
+            .border_t(px(T::BORDER_WIDTH))
+            .border_color(T::color(T::border()))
+            .child(
+                row("sidebar-settings", "设置")
+                    .on_click(cx.listener(|this, _, window, cx| this.show_settings(window, cx))),
+            )
+            .child(
+                row("sidebar-phones", "＋ 连接手机或其他电脑")
+                    .on_click(cx.listener(|this, _, _, cx| this.toggle_phones(cx))),
+            )
+    }
+    /// 会话优先's spaces: a lettered tile in the space's colors, its name, and on the right
+    /// what its folder says (目录不在了, else the branch and ↑↓ when known). The header
+    /// carries the space's todos (待办 N, unfolding them below) and ＋ for a new space.
+    fn space_tiles(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
+        let todos = self
+            .workspace
+            .tasks
+            .iter()
+            .filter(|t| t.space == self.nav.space)
+            .count();
+        let open = self.tasks.todos_open;
+        let mut out = vec![
+            Self::group_title("空间".into(), None, cx)
+                .mt(px(T::S4))
+                .child(div().flex_1())
+                .child(
+                    button("todos-toggle", format!("待办 {todos}"))
+                        .aria_label(if open { "收起待办" } else { "展开待办" })
+                        .flex_shrink_0()
+                        .h(px(T::ICON_HEIGHT))
+                        .px(px(T::S6))
+                        .border_0()
+                        .text_size(px(T::CHIP_SIZE))
+                        .text_color(T::color(if open { T::primary() } else { T::muted() }))
+                        .when(open, |d| d.bg(T::color(T::raised())))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.tasks.todos_open = !this.tasks.todos_open;
+                            cx.notify();
+                        })),
                 )
                 .child(
-                    div()
+                    button("add-space", "＋")
+                        .aria_label("新建空间")
                         .flex_shrink_0()
-                        .px(px(T::S8))
-                        .pb(px(T::S4))
+                        .h(px(T::ICON_HEIGHT))
+                        .px(px(T::S6))
+                        .border_0()
+                        .text_size(px(T::CHIP_SIZE))
+                        .text_color(T::color(T::muted()))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.choose_space_dir(None, window, cx)
+                        })),
+                )
+                .into_any_element(),
+        ];
+        for space in &self.workspace.spaces {
+            let id = space.id.clone();
+            if let Some((_, field, _)) = self
+                .layout
+                .renaming_space
+                .as_ref()
+                .filter(|(s, ..)| s.id == id)
+            {
+                out.push(
+                    div()
+                        .h(px(T::ROW))
+                        .px(px(T::S8 - T::BORDER_WIDTH))
                         .flex()
                         .items_center()
-                        .gap(px(T::S4))
-                        .child(self.search_button(cx).flex_1().w_auto().min_w_0())
-                        .child(
-                            icon_button("add-task", "icons/compose.svg", "新待办")
-                                .tooltip(|_, cx| {
-                                    cx.new(|_| super::render::TextTip("新待办".into())).into()
+                        .gap(px(T::S8))
+                        .rounded(px(T::CONTROL_RADIUS))
+                        .bg(T::color(T::raised()))
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(T::color(T::focus()))
+                        .text_size(px(T::SMALL))
+                        .child(self.space_tile(&space.id, &space.name))
+                        .child(div().flex_1().min_w_0().h_full().child(field.clone()))
+                        .into_any_element(),
+                );
+                continue;
+            }
+            let active = self.space_active(&id);
+            let missing = !Path::new(&space.cwd).is_dir();
+            let branch = (!missing)
+                .then(|| self.git_branch(&space.cwd, cx))
+                .flatten();
+            let counts = (!missing)
+                .then(|| {
+                    self.git_divergence(&space.cwd, cx)
+                        .and_then(super::divergence::divergence_label)
+                })
+                .flatten();
+            let fix = id.clone();
+            out.push(
+                button(gpui::SharedString::from(format!("space-{id}")), "")
+                    .aria_label(space.name.clone())
+                    .h(px(T::ROW))
+                    .px(px(T::S8))
+                    .gap(px(T::S8))
+                    .justify_start()
+                    .border_0()
+                    .when(active, |s| s.bg(T::color(T::raised())))
+                    .child(self.space_tile(&space.id, &space.name))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(T::SMALL))
+                            .text_color(T::color(T::primary()))
+                            .child(space.name.clone()),
+                    )
+                    // A deleted worktree leaves the space pointing nowhere; a click here
+                    // picks the folder again.
+                    .when(missing, |d| {
+                        d.child(
+                            div()
+                                .id(gpui::SharedString::from(format!("space-missing-{id}")))
+                                .role(gpui::accesskit::Role::Button)
+                                .aria_label(format!("重新选择 {} 的目录", space.name))
+                                .flex_shrink_0()
+                                .cursor_pointer()
+                                .text_size(px(T::CHIP_SIZE))
+                                .text_color(Tone::Danger.ink())
+                                .child("目录不在了")
+                                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                                    cx.stop_propagation()
                                 })
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.show_quick_task(window, cx)
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.choose_space_dir(Some(fix.clone()), window, cx);
                                 })),
-                        ),
-                )
-                .child(sidebar),
-        )
+                        )
+                    })
+                    .when_some(branch, |d, branch| {
+                        d.child(
+                            label(branch)
+                                .flex_shrink_1()
+                                .min_w_0()
+                                .max_w(px(T::SIDEBAR * 0.4))
+                                .truncate()
+                                .text_size(px(T::CHIP_SIZE))
+                                .text_color(T::color(T::muted())),
+                        )
+                    })
+                    .when_some(counts, |d, counts| {
+                        d.child(
+                            label(counts)
+                                .flex_shrink_0()
+                                .text_size(px(T::CHIP_SIZE))
+                                .text_color(T::color(T::muted()))
+                                .font_features(T::tabular()),
+                        )
+                    })
+                    .on_mouse_down(gpui::MouseButton::Right, {
+                        let id = id.clone();
+                        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                            this.layout.space_menu = Some((id.clone(), event.position));
+                            this.layout.space_switch = false;
+                            this.layout.space_removing = false;
+                            cx.stop_propagation();
+                            cx.notify();
+                        })
+                    })
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            if event.click_count() == 2 {
+                                this.rename_space(&id, window, cx);
+                                return;
+                            }
+                            this.pick_space(&id, cx);
+                        }),
+                    )
+                    .into_any_element(),
+            );
+        }
+        out
+    }
+    /// A space's letter on a small rounded tile in its two colors.
+    fn space_tile(&self, id: &str, name: &str) -> gpui::Div {
+        let [from, to] = T::SPACE_TILES[self.space_mesh(id) % T::SPACE_TILES.len()];
+        let letter: String = name
+            .chars()
+            .find(|c| !c.is_whitespace())
+            .map(|c| c.to_uppercase().collect())
+            .unwrap_or_default();
+        div()
+            .size(px(T::SPACE_TILE))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(T::CHIP_RADIUS))
+            .bg(gpui::linear_gradient(
+                135.,
+                gpui::linear_color_stop(T::color(from), 0.),
+                gpui::linear_color_stop(T::color(to), 1.),
+            ))
+            .text_size(px(T::CHIP_SIZE))
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(T::color(T::WHITE))
+            .child(letter)
     }
     /// Whether a space is the one shown; over the overview the spaces are its filter.
     fn space_active(&self, id: &str) -> bool {
