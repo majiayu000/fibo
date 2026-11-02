@@ -652,6 +652,12 @@ impl Theme {
             .copied()
             .unwrap_or(Self::palette().series_other)
     }
+    /// The font preview's sample path, as a terminal's ANSI blue would draw it.
+    pub const PREVIEW_ANSI_BLUE: u32 = 0x8f93ff;
+    /// The opposite color, for a cursor drawn over a cell with no color of its own.
+    pub fn inverse(rgb: u32) -> u32 {
+        rgb ^ 0xffffff
+    }
     pub fn color(value: u32) -> Hsla {
         hsla(value)
     }

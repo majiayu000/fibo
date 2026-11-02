@@ -592,7 +592,7 @@ impl Pane {
                 let fg = runs
                     .iter()
                     .find(|r| col >= r.col && col < r.col + r.cols)
-                    .map_or(self.screen.background ^ 0xffffff, |r| r.fg);
+                    .map_or(T::inverse(self.screen.background), |r| r.fg);
                 let x = bounds.left() + m.width * (col as f32 + width.max(1) as f32 / 2.);
                 let y = bounds.top() + m.height * (row as f32 + 0.5);
                 cells.push((gpui::point(x, y), fg, width.max(1)));
