@@ -1,0 +1,906 @@
+//! Small, sourced projections. The transcript and mechanical receipts remain distinct.
+use crate::model::AgentSession;
+#[cfg(test)]
+use crate::model::Workspace;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Source {
+    pub path: String,
+    pub inode: u64,
+    pub offset: u64,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Quote {
+    pub text: String,
+    pub at: u64,
+    pub source: Source,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Evidence {
+    pub kind: String,
+    pub summary: String,
+    pub exit_code: Option<i32>,
+    pub at: u64,
+    pub source: Source,
+}
+impl Evidence {
+    /// A record a criterion can hold: a test run, a commit or a file change. Plain commands,
+    /// errors and an Agent's own words are never evidence.
+    pub fn attachable(&self) -> bool {
+        matches!(self.kind.as_str(), "file" | "test" | "commit")
+    }
+    /// It proves something: attachable and it succeeded. A failed test is kept as an attempt.
+    pub fn proves(&self) -> bool {
+        self.attachable() && self.exit_code == Some(0)
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Turn {
+    #[default]
+    Unknown,
+    Running,
+    Waiting,
+    Completed,
+    Interrupted,
+    Error,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Content {
+    #[serde(default)]
+    pub interactive: bool,
+    #[serde(default)]
+    pub hidden_reason: String,
+    #[serde(default)]
+    pub first_ask_known: bool,
+    pub title: String,
+    /// The name the CLI itself keeps for the conversation: Claude's `/rename` title,
+    /// Codex's generated thread name. Empty when it has none.
+    #[serde(default)]
+    pub name: String,
+    pub asks: Vec<Quote>,
+    pub evidence: Vec<Evidence>,
+    pub last_reply: String,
+    pub turn: Turn,
+    pub turn_started: u64,
+    pub turn_key: String,
+    pub updated: u64,
+    pub completed_claim: bool,
+    pub waiting: String,
+    pub error: String,
+    pub partial_history: bool,
+    pub from_offset: u64,
+    pub unknown_records: u64,
+    /// Work still in flight when the turn last stopped, from the Stop hook payload.
+    /// `None` means no payload reported it, which is unknown rather than "nothing runs".
+    #[serde(default)]
+    pub background: Option<Background>,
+    /// Counts entries into Waiting, so one dialog reported by several signals is one event.
+    #[serde(default)]
+    pub waiting_episode: u32,
+    /// Which signal set the current turn: 日志, Hook, 画面 or 官方状态.
+    #[serde(default)]
+    pub signal: String,
+    #[serde(default)]
+    pub signal_at: u64,
+    /// What that signal carried, one "label：text" line each: the log record, the hook
+    /// event, or the screen rule and the lines it saw.
+    #[serde(default)]
+    pub signal_detail: String,
+    /// The last quiet-screen check that found no prompt and why. Live only, never stored.
+    #[serde(default)]
+    pub screen_check: String,
+    /// The approval question on screen now, when the screen rule `approval` takes it;
+    /// what 允许一次 / 拒绝 answer. Live only, never stored.
+    #[serde(default)]
+    pub approval: String,
+    /// A Codex subagent's parent thread id and its name, from its own session header.
+    #[serde(default)]
+    pub parent: String,
+    #[serde(default)]
+    pub agent_name: String,
+    /// The account's usage limits as this conversation's log last recorded them.
+    #[serde(default)]
+    pub quota: Option<crate::quota::Quota>,
+    /// Files this session changed, each with when it last did, newest last. Paths are as the
+    /// tool call named them: absolute, or relative to the session's cwd.
+    #[serde(default)]
+    pub files: Vec<Touch>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Touch {
+    pub path: String,
+    pub at: u64,
+}
+/// Changed files a card keeps; the oldest goes first, so a long session keeps its latest.
+const TOUCHES: usize = 64;
+impl Content {
+    /// Records that `path` changed at `at`; a path already listed only moves to the end.
+    pub fn touch(&mut self, path: &str, at: u64) {
+        let at = match self.files.iter().position(|t| t.path == path) {
+            Some(i) => self.files.remove(i).at.max(at),
+            None => at,
+        };
+        self.files.push(Touch {
+            path: path.into(),
+            at,
+        });
+        if self.files.len() > TOUCHES {
+            self.files.remove(0);
+        }
+    }
+}
+/// In-flight work by kind. Agents (subagents, workflows, teammates, cloud sessions, MCP
+/// tasks) keep a stopped turn working. A monitor or a scheduled wakeup will wake the session
+/// again, so it is not done either: it is waiting to wake, as Claude Code's agent view shows
+/// it. Shells alone are a mark on a finished turn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Background {
+    pub agents: u32,
+    pub shells: u32,
+    pub monitors: u32,
+    pub crons: u32,
+}
+impl Background {
+    pub fn keeps_working(&self) -> bool {
+        self.agents > 0
+    }
+    pub fn wakes(&self) -> bool {
+        self.monitors > 0 || self.crons > 0
+    }
+    /// "后台仍有子 Agent 1 个、shell 2 个", or `None` when nothing is in flight.
+    pub fn describe(&self) -> Option<String> {
+        let parts: Vec<String> = [
+            (self.agents, "子 Agent"),
+            (self.shells, "shell"),
+            (self.monitors, "监视任务"),
+            (self.crons, "已排定唤醒"),
+        ]
+        .into_iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, kind)| format!("{kind} {n} 个"))
+        .collect();
+        (!parts.is_empty()).then(|| format!("后台仍有{}", parts.join("、")))
+    }
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Here {
+    pub ask: String,
+    pub done: String,
+    pub stopped: String,
+    pub next: String,
+}
+pub fn short(text: &str, limit: usize) -> String {
+    let mut s: String = text.chars().take(limit).collect();
+    if text.chars().count() > limit {
+        s.push('…');
+    }
+    s
+}
+/// Agent prose as one readable line: Markdown emphasis, headings, quotes, list
+/// bullets and table rules go; table cells read as `a · b`.
+pub fn plain_line(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.chars().all(|c| "|-: ".contains(c)))
+        .map(|l| {
+            let l = l
+                .trim_start_matches('#')
+                .trim_start_matches('>')
+                .trim_start();
+            let l = ["- ", "* ", "+ "]
+                .iter()
+                .find_map(|b| l.strip_prefix(b))
+                .unwrap_or(l);
+            let l = l.replace("**", "").replace("__", "").replace('`', "");
+            l.trim_matches('|')
+                .split('|')
+                .map(str::trim)
+                .filter(|c| !c.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+/// A first ask as a name: the polite lead-in most asks share ("你帮我看看") goes,
+/// so tabs and rows start with what differs. Runs of spaces, as in a pasted table
+/// row, become one so the name is not mostly blank. Pasted page chrome, table rules
+/// and bare ids name nothing and go while words remain; a link reads as its site and
+/// last path segment, and a leading slash command gives way to its argument.
+pub fn topic(title: &str) -> String {
+    let lines: Vec<&str> = title.lines().filter(|l| !l.trim().is_empty()).collect();
+    let kept: Vec<&str> = lines.iter().copied().filter(|l| !noise(l)).collect();
+    let title = if kept.is_empty() { lines } else { kept }
+        .iter()
+        .flat_map(|l| l.split_whitespace())
+        .map(link)
+        .collect::<Vec<_>>()
+        .join(" ");
+    const LEAD: [&str; 20] = [
+        "你",
+        "请",
+        "帮我",
+        "帮忙",
+        "麻烦",
+        "能不能",
+        "可以",
+        "看看",
+        "看下",
+        "看一下",
+        "查查",
+        "查一下",
+        "一下",
+        "我想要",
+        "我想",
+        "我准备",
+        "我要",
+        "，",
+        ",",
+        " ",
+    ];
+    // A pasted image leaves "[Image #1]" where it was; it names nothing.
+    fn image(s: &str) -> Option<(usize, usize)> {
+        let at = s.find("[Image #")?;
+        let n = &s[at + "[Image #".len()..];
+        let digits = n.len() - n.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+        n[digits..].starts_with(']').then_some(())?;
+        (digits > 0).then_some((at, at + "[Image #".len() + digits + 1))
+    }
+    let mut rest = title.trim();
+    // "/goal 只要一张立绘" names what follows the command.
+    if let Some((command, argument)) = rest.split_once(' ')
+        && command.len() > 1
+        && command.starts_with('/')
+        && !command[1..].contains('/')
+        && argument.trim().chars().count() >= 4
+    {
+        rest = argument.trim_start();
+    }
+    loop {
+        // An image placeholder goes whenever words follow it, however few.
+        if let Some((0, to)) = image(rest)
+            && !rest[to..].trim().is_empty()
+        {
+            rest = rest[to..].trim_start();
+            continue;
+        }
+        match LEAD.iter().find_map(|p| rest.strip_prefix(p)) {
+            Some(next) if next.trim().chars().count() >= 4 => rest = next,
+            _ => break,
+        }
+    }
+    // Placeholders further in go too, as long as words remain.
+    let mut bare = rest.to_owned();
+    while let Some((from, to)) = image(&bare) {
+        bare.replace_range(from..to, " ");
+    }
+    if bare.trim().is_empty() {
+        return rest.trim().to_owned();
+    }
+    bare.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+/// A pasted line that names nothing: a web page's skip link, a box-drawn table row,
+/// a lone markup tag, or one that starts with a bare hex id.
+fn noise(line: &str) -> bool {
+    let l = line.trim();
+    let first = l.split_whitespace().next().unwrap_or("");
+    matches!(
+        l,
+        "跳至主要内容" | "跳到主要内容" | "Skip to main content" | "Skip to content"
+    ) || l
+        .chars()
+        .filter(|c| ('\u{2500}'..='\u{257f}').contains(c))
+        .count()
+        >= 2
+        || (l.starts_with('<') && l.ends_with('>'))
+        || (first.len() >= 16 && first.chars().all(|c| c.is_ascii_hexdigit()))
+}
+/// `https://www.github.com/a/claude-skills?x=1` reads as `github.com/claude-skills`,
+/// also when words run straight into it ("报错了https://…").
+fn link(word: &str) -> String {
+    let Some(at) = word.find("https://").or_else(|| word.find("http://")) else {
+        return word.to_owned();
+    };
+    let (lead, url) = word.split_at(at);
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    let rest = rest.split(['?', '#']).next().unwrap_or(rest);
+    let mut parts = rest.split('/').filter(|p| !p.is_empty());
+    let Some(host) = parts.next() else {
+        return word.to_owned();
+    };
+    let host = host.strip_prefix("www.").unwrap_or(host);
+    let parts: Vec<&str> = parts.collect();
+    // A trailing id names nothing: `x.com/a/status/2116…` reads as `x.com/a`. A short
+    // number is kept, as an issue or pull request number: `github.com/codex#425`.
+    let number = parts
+        .last()
+        .filter(|p| p.chars().all(|c| c.is_ascii_digit()));
+    let name = parts.iter().rev().find(|p| {
+        !p.chars().all(|c| c.is_ascii_digit())
+            && !matches!(
+                **p,
+                "status"
+                    | "issues"
+                    | "pull"
+                    | "pulls"
+                    | "discussions"
+                    | "commit"
+                    | "post"
+                    | "posts"
+            )
+    });
+    let mut short = match name {
+        Some(name) => format!("{host}/{name}"),
+        None => host.to_owned(),
+    };
+    if let Some(n) = number.filter(|n| n.len() <= 6) {
+        short.push('#');
+        short.push_str(n);
+    }
+    format!("{lead} {short}").trim_start().to_owned()
+}
+/// `Here::done` when nothing confirmed has happened yet.
+pub const NO_DONE: &str = "尚无已确认的修改、提交或测试成功证据";
+/// Hidden reason for a session whose working directory is temporary.
+pub const TEMPORARY_DIRECTORY: &str = "临时目录会话";
+impl Content {
+    /// One readable line on where the session stands, without the labels its state chip
+    /// already says ("回合结束；Agent 自述：", "等待输入："): the question it waits on,
+    /// the error, what it was asked while it runs, or its last reply.
+    pub fn headline(&self) -> String {
+        let text = match self.turn {
+            Turn::Waiting if !self.waiting.is_empty() => self.waiting.as_str(),
+            Turn::Error if !self.error.is_empty() => self.error.as_str(),
+            Turn::Running => self.asks.last().map_or("", |q| q.text.as_str()),
+            _ => self.last_reply.as_str(),
+        };
+        let line = plain_line(text);
+        if line.is_empty() {
+            plain_line(&self.here().stopped)
+        } else {
+            line
+        }
+    }
+    /// `hidden_reason` for this session: one Keepline started in its own terminal was
+    /// started by the user, so a temporary working directory alone does not hide it.
+    /// Sub-agents, SDK and print-mode runs stay hidden wherever they run.
+    /// When the unfinished turn began: one still running, or one that stopped while its
+    /// sub-agents, a monitor or a scheduled wakeup keep it open. `None` once it settled.
+    pub fn running_since(&self) -> Option<u64> {
+        let open = self.turn == Turn::Running
+            || self.turn == Turn::Completed
+                && self
+                    .background
+                    .is_some_and(|b| b.keeps_working() || b.wakes());
+        (open && self.turn_started > 0).then_some(self.turn_started)
+    }
+    /// The turn ended and only a monitor or a scheduled wakeup will resume it.
+    pub fn waking(&self) -> bool {
+        self.turn == Turn::Completed
+            && self
+                .background
+                .is_some_and(|b| !b.keeps_working() && b.wakes())
+    }
+    pub fn hidden_for(&self, session: &AgentSession) -> Option<&str> {
+        if session.managed() && self.hidden_reason == TEMPORARY_DIRECTORY {
+            return None;
+        }
+        self.hidden_reason()
+    }
+    pub fn hidden_reason(&self) -> Option<&str> {
+        if !self.hidden_reason.is_empty() {
+            Some(&self.hidden_reason)
+        } else if !self.interactive {
+            Some("缺少交互入口证据")
+        } else {
+            None
+        }
+    }
+    pub fn here(&self) -> Here {
+        let ask = if self.asks.is_empty() {
+            "历史尾段未覆盖用户原话，要求未知".into()
+        } else {
+            let quotes = if self.asks.len() <= 3 {
+                self.asks.iter().collect::<Vec<_>>()
+            } else {
+                std::iter::once(&self.asks[0])
+                    .chain(self.asks.iter().skip(self.asks.len() - 2))
+                    .collect()
+            };
+            quotes
+                .into_iter()
+                .map(|q| short(&q.text, 240))
+                .collect::<Vec<_>>()
+                .join("\n追加：")
+        };
+        let ask = if !self.first_ask_known && !self.asks.is_empty() {
+            format!("最初要求未覆盖；已读取追加：\n{ask}")
+        } else {
+            ask
+        };
+        let facts: Vec<_> = self
+            .evidence
+            .iter()
+            .filter(|f| f.proves())
+            .rev()
+            .take(4)
+            .map(|f| short(&f.summary, 180))
+            .collect();
+        let done = if facts.is_empty() {
+            NO_DONE.into()
+        } else {
+            facts.join("\n")
+        };
+        let stopped = match self.turn {
+            Turn::Waiting => format!("等待输入：{}", short(&self.waiting, 240)),
+            Turn::Error => format!("最后回合出错：{}", short(&self.error, 240)),
+            Turn::Running => "日志最后记录：回合进行中；不代表此刻进程仍在线".into(),
+            Turn::Interrupted => "回合已中断，尚未验收".into(),
+            Turn::Completed => match self.background.and_then(|b| b.describe()) {
+                Some(work) if self.waking() => format!(
+                    "等待唤醒，{work}；Agent 自述：{}",
+                    short(&self.last_reply, 220)
+                ),
+                Some(work) => format!(
+                    "回合结束，{work}；Agent 自述：{}",
+                    short(&self.last_reply, 220)
+                ),
+                None => format!("回合结束；Agent 自述：{}", short(&self.last_reply, 260)),
+            },
+            Turn::Unknown => {
+                if self.last_reply.is_empty() {
+                    "尾段没有明确回合结束事件，当前状态未知".into()
+                } else {
+                    format!(
+                        "最近 Agent 自述（状态未知）：{}",
+                        short(&self.last_reply, 240)
+                    )
+                }
+            }
+        };
+        let next = match self.turn {
+            Turn::Completed if self.background.is_some_and(|b| b.keeps_working()) => {
+                "等后台子 Agent 结束后再核对结果"
+            }
+            Turn::Completed if self.waking() => "等它被监视任务或定时唤醒，回合结束后再核对",
+            Turn::Waiting => "回应上面的审批或问题",
+            Turn::Error => "检查失败证据后决定是否继续",
+            Turn::Running => "等回合结束后核对结果",
+            Turn::Completed if self.completed_claim => "按用户原话逐项核对机械证据，再决定是否验收",
+            _ => "先核对原话与日志，再决定是否继续",
+        }
+        .into();
+        Here {
+            ask,
+            done,
+            stopped,
+            next,
+        }
+    }
+    /// What a running turn is doing, as a phrase to follow 正在: its latest record this
+    /// turn read as words (`改 tabs.rs`, `运行 cargo build -p app`), else what it was
+    /// asked (`做 修复登录`). `None` when neither says anything.
+    pub fn doing(&self) -> Option<String> {
+        let this_turn = |e: &&Evidence| self.turn_started == 0 || e.at >= self.turn_started;
+        let from_record =
+            self.evidence
+                .iter()
+                .rev()
+                .filter(this_turn)
+                .find_map(|e| match e.kind.as_str() {
+                    "file" => {
+                        let path = e.summary.split_once('：').map_or(&*e.summary, |(_, p)| p);
+                        let name = path.trim().rsplit('/').next().unwrap_or(path).trim();
+                        (!name.is_empty()).then(|| format!("改 {name}"))
+                    }
+                    "test" => {
+                        let command = e.summary.split(['：', '（']).next().unwrap_or_default();
+                        command_gist(command).map(|c| format!("跑测试 {c}"))
+                    }
+                    "commit" => Some(format!("提交 {}", short(e.summary.trim(), 12))),
+                    "command" => command_gist(&e.summary).map(|c| format!("运行 {c}")),
+                    _ => None,
+                });
+        from_record.or_else(|| {
+            let ask = plain_line(&self.asks.last()?.text);
+            (!ask.is_empty()).then(|| format!("做 {}", short(&ask, DOING_CHARS)))
+        })
+    }
+}
+/// How long a `doing` phrase's command or ask may run before it is cut.
+const DOING_CHARS: usize = 40;
+/// A shell command as a short readable phrase: its program and first few words, with
+/// the noise around it gone. `S=/tmp/x; cd "$S" && FOO=1 cargo build -p app 2>&1 | tail`
+/// reads `cargo build -p app`. Variable assignments, `cd`, `export`, `echo` and wrappers
+/// such as `env` or `time` name nothing; long paths read as their last segment.
+pub fn command_gist(command: &str) -> Option<String> {
+    const WRAPPERS: [&str; 7] = [
+        "env",
+        "time",
+        "nice",
+        "caffeinate",
+        "sudo",
+        "command",
+        "exec",
+    ];
+    const NOISE: [&str; 12] = [
+        "cd", "export", "set", "unset", "source", ".", "echo", "printf", "true", ":", "sleep",
+        "pushd",
+    ];
+    let assignment = |w: &str| {
+        w.split_once('=').is_some_and(|(name, _)| {
+            !name.is_empty()
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                && !name.starts_with(|c: char| c.is_ascii_digit())
+        })
+    };
+    let clean = |w: &str| {
+        w.trim_matches(|c| matches!(c, '"' | '\'' | '(' | ')' | '{' | '}'))
+            .trim_end_matches('…')
+            .to_owned()
+    };
+    let segments = command
+        .split(['\n', ';', '|', '&'])
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    for segment in segments {
+        let mut words = segment
+            .split_whitespace()
+            .map(clean)
+            .filter(|w| !w.is_empty())
+            .skip_while(|w| assignment(w) || WRAPPERS.contains(&w.rsplit('/').next().unwrap_or(w)))
+            .peekable();
+        let Some(program) = words.next() else {
+            continue;
+        };
+        let program = program.rsplit('/').next().unwrap_or(&program).to_owned();
+        if program.is_empty()
+            || NOISE.contains(&program.as_str())
+            || program.starts_with('$')
+            || program.chars().all(|c| c.is_ascii_digit())
+        {
+            continue;
+        }
+        let mut gist = vec![program];
+        // Redirections and heredoc markers end what the command says.
+        for w in words
+            .take_while(|w| !w.starts_with(['>', '<']) && !w.starts_with("2>"))
+            .take(3)
+        {
+            gist.push(match w.rsplit_once('/') {
+                Some((_, last)) if w.chars().count() > 24 && !last.is_empty() => last.to_owned(),
+                _ => w,
+            });
+        }
+        return Some(short(&gist.join(" "), DOING_CHARS));
+    }
+    None
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn a_turn_its_sub_agents_keep_open_still_counts_from_its_start() {
+        let mut c = Content {
+            turn: Turn::Running,
+            turn_started: 100,
+            ..Default::default()
+        };
+        assert_eq!(c.running_since(), Some(100));
+        c.turn = Turn::Completed;
+        assert_eq!(c.running_since(), None);
+        c.background = Some(Background {
+            agents: 2,
+            ..Default::default()
+        });
+        assert_eq!(c.running_since(), Some(100));
+        c.turn_started = 0;
+        assert_eq!(c.running_since(), None);
+    }
+    #[test]
+    fn a_running_turn_reads_as_words_not_a_raw_command() {
+        assert_eq!(
+            command_gist("S=/private/tmp/claude-502/abc/x; cd \"$S\" && FOO=1 cargo build -p keepline-app 2>&1 | tail -20").as_deref(),
+            Some("cargo build -p keepline-app")
+        );
+        // Only assignments, and the cut a long command got when it was recorded.
+        assert_eq!(
+            command_gist("S=/private/tmp/claude-502/-Users-lifcc…"),
+            None
+        );
+        assert_eq!(
+            command_gist(
+                "/usr/bin/env python3 /Users/me/Library/Caches/scripts/render_all.py --out x"
+            ),
+            Some("python3 render_all.py --out x".into())
+        );
+        assert_eq!(
+            command_gist("echo ---; git status --short").as_deref(),
+            Some("git status --short")
+        );
+        let record = |kind: &str, summary: &str, at| Evidence {
+            kind: kind.into(),
+            summary: summary.into(),
+            exit_code: None,
+            at,
+            source: Source::default(),
+        };
+        let mut c = Content {
+            turn: Turn::Running,
+            turn_started: 100,
+            asks: vec![Quote {
+                text: "**写**主界面 A / C 两种样式".into(),
+                ..Default::default()
+            }],
+            evidence: vec![record("command", "cargo test -p keepline-core", 50)],
+            ..Default::default()
+        };
+        // A record from an earlier turn says nothing about this one: the ask does.
+        assert_eq!(c.doing().as_deref(), Some("做 写主界面 A / C 两种样式"));
+        c.evidence
+            .push(record("file", "文件修改：next/crates/app/src/tabs.rs", 120));
+        assert_eq!(c.doing().as_deref(), Some("改 tabs.rs"));
+        c.evidence.push(record("command", "S=/private/tmp/x", 130));
+        assert_eq!(c.doing().as_deref(), Some("改 tabs.rs"));
+        c.evidence.push(record(
+            "test",
+            "cargo test -p app：test result: ok. 4 passed",
+            140,
+        ));
+        assert_eq!(c.doing().as_deref(), Some("跑测试 cargo test -p app"));
+        c.asks.clear();
+        c.evidence.clear();
+        assert_eq!(c.doing(), None);
+    }
+    #[test]
+    fn self_report_never_becomes_done() {
+        let c = Content {
+            last_reply: "全部测试通过，已提交 abc1234".into(),
+            turn: Turn::Completed,
+            completed_claim: true,
+            ..Default::default()
+        };
+        assert!(c.here().done.contains("尚无"));
+        assert!(c.here().stopped.contains("自述"));
+    }
+    #[test]
+    fn topic_drops_shared_lead_in() {
+        assert_eq!(topic("你帮我看看 mirror 为什么挂了"), "mirror 为什么挂了");
+        assert_eq!(topic("你帮我看看我最近有什么…"), "我最近有什么…");
+        assert_eq!(topic("帮我看看"), "帮我看看");
+        assert_eq!(topic("修复登录"), "修复登录");
+        assert_eq!(
+            topic("你帮我看看[Image #1] 这是哪个模型啊？"),
+            "这是哪个模型啊？"
+        );
+        assert_eq!(topic("[Image #1][Image #2] 对比一下"), "对比一下");
+        assert_eq!(topic("[Image #1]"), "[Image #1]");
+        assert_eq!(topic("你帮我看看[Image #1]这是啥"), "这是啥");
+        assert_eq!(topic("这是哪个模型啊？[Image #1]"), "这是哪个模型啊？");
+        assert_eq!(topic("我准备 重启一下 mac"), "重启一下 mac");
+        assert_eq!(topic("/goal 只要一张立绘"), "只要一张立绘");
+        assert_eq!(topic("/loop"), "/loop");
+        assert_eq!(
+            topic("https://www.github.com/majiayu000/claude-skills?tab=1 看看这个"),
+            "github.com/claude-skills 看看这个"
+        );
+        assert_eq!(topic("https://x.com"), "x.com");
+        assert_eq!(
+            topic("这是什么啊 https://x.com/someone/status/2116090187122192847"),
+            "这是什么啊 x.com/someone"
+        );
+        assert_eq!(
+            topic("https://github.com/openai/codex/issues/425 讲了什么"),
+            "github.com/codex#425 讲了什么"
+        );
+        assert_eq!(
+            topic("这里为什么报错了啊https://ultrastudio.dev/app/jobs/42"),
+            "这里为什么报错了啊 ultrastudio.dev/jobs#42"
+        );
+        assert_eq!(
+            topic("跳至主要内容\n⌘J 京东AI数字员工\n这是什么"),
+            "⌘J 京东AI数字员工 这是什么"
+        );
+        assert_eq!(
+            topic("0502c5f0b2a2480592451db00c9d4a86     480p\n帮我用dms排查一下"),
+            "用dms排查一下"
+        );
+        assert_eq!(
+            topic("PR │ dsh-desk │ 106\n这些 PR 还开着吗"),
+            "这些 PR 还开着吗"
+        );
+        assert_eq!(topic("🔥 线上 502 了快看看"), "🔥 线上 502 了快看看");
+        assert_eq!(
+            topic("你帮我看看 🤔 为什么构建这么慢"),
+            "🤔 为什么构建这么慢"
+        );
+        assert_eq!(topic("[Image #] 原样"), "[Image #] 原样");
+        assert_eq!(topic("PR        | 106 |  2026…"), "PR | 106 | 2026…");
+    }
+    #[test]
+    fn headline_drops_the_labels_the_state_already_says() {
+        let c = Content {
+            last_reply: "**建议都接收**".into(),
+            turn: Turn::Completed,
+            ..Default::default()
+        };
+        assert_eq!(c.headline(), "建议都接收");
+        let c = Content {
+            waiting: "是否允许推送分支？".into(),
+            turn: Turn::Waiting,
+            ..Default::default()
+        };
+        assert_eq!(c.headline(), "是否允许推送分支？");
+        let c = Content {
+            asks: vec![Quote {
+                text: "修复登录跳转".into(),
+                ..Default::default()
+            }],
+            turn: Turn::Running,
+            ..Default::default()
+        };
+        assert_eq!(c.headline(), "修复登录跳转");
+    }
+    #[test]
+    fn plain_line_drops_markdown() {
+        assert_eq!(
+            plain_line(
+                "## 结论\n**建议都接收**，见 `a.rs`\n\n| 投稿 | 建议处理 |\n|---|:-:|\n- 第一条"
+            ),
+            "结论 建议都接收，见 a.rs 投稿 · 建议处理 第一条"
+        );
+    }
+}
+
+pub fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+#[cfg(test)]
+mod grouping_tests {
+    use super::*;
+    use crate::model::{Agent, Outcome};
+    use crate::status::{Status, of};
+    fn status(c: &Content, s: &AgentSession, now: u64) -> Status {
+        let mut w = Workspace::default();
+        w.content.insert(s.id.clone(), c.clone());
+        of(&w, s, now)
+    }
+    #[test]
+    fn grouping_priority_and_deferred_expiry() {
+        let now = 10 * 86400;
+        let mut s = AgentSession {
+            id: "s".into(),
+            runtime: Agent::Codex,
+            cli_session_id: "c".into(),
+            terminal: None,
+            current: false,
+            task: None,
+            outcome: Outcome::Open,
+            updated: now,
+            cwd: "/tmp".into(),
+            transcript: "f".into(),
+            binding: None,
+            name: String::new(),
+        };
+        let mut c = Content {
+            updated: now,
+            turn: Turn::Waiting,
+            ..Default::default()
+        };
+        assert_eq!(status(&c, &s, now), Status::Waiting);
+        c.turn = Turn::Error;
+        assert_eq!(status(&c, &s, now), Status::Error);
+        c.turn = Turn::Completed;
+        c.completed_claim = true;
+        assert_eq!(status(&c, &s, now), Status::Review);
+        // A finished turn waits for you either way: done is yours to say.
+        c.completed_claim = false;
+        assert_eq!(status(&c, &s, now), Status::Review);
+        c.turn = Turn::Unknown;
+        assert_eq!(status(&c, &s, now), Status::Paused);
+        c.turn = Turn::Running;
+        assert_eq!(status(&c, &s, now), Status::Running);
+        c.updated = 1;
+        assert_eq!(status(&c, &s, now), Status::Stale);
+        s.outcome = Outcome::Deferred {
+            until: now + 1,
+            reason: "later".into(),
+        };
+        assert_eq!(status(&c, &s, now), Status::Deferred);
+        s.outcome = Outcome::Deferred {
+            until: now - 1,
+            reason: "later".into(),
+        };
+        assert_eq!(status(&c, &s, now), Status::Paused);
+        s.outcome = Outcome::Completed;
+        assert_eq!(status(&c, &s, now), Status::Closed);
+    }
+    #[test]
+    fn running_subagents_keep_a_stopped_turn_working_and_the_rest_wait_on_background() {
+        let now = 10 * 86400;
+        let s = AgentSession {
+            id: "s".into(),
+            runtime: Agent::Claude,
+            cli_session_id: "c".into(),
+            terminal: Some("t".into()),
+            current: true,
+            task: None,
+            outcome: Outcome::Open,
+            updated: now,
+            cwd: "/tmp".into(),
+            transcript: "f".into(),
+            binding: None,
+            name: String::new(),
+        };
+        let mut c = Content {
+            updated: now,
+            turn: Turn::Completed,
+            completed_claim: true,
+            background: Some(Background {
+                agents: 1,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(status(&c, &s, now), Status::Running);
+        c.background = Some(Background {
+            monitors: 1,
+            ..Default::default()
+        });
+        assert_eq!(
+            status(&c, &s, now),
+            Status::Background,
+            "a monitor will wake it"
+        );
+        assert!(c.waking());
+        assert!(
+            c.here()
+                .stopped
+                .starts_with("等待唤醒，后台仍有监视任务 1 个")
+        );
+        c.background = Some(Background {
+            crons: 1,
+            ..Default::default()
+        });
+        assert_eq!(
+            status(&c, &s, now),
+            Status::Background,
+            "so will a scheduled wakeup"
+        );
+        c.background = Some(Background {
+            shells: 2,
+            ..Default::default()
+        });
+        assert!(!c.waking());
+        assert_eq!(
+            status(&c, &s, now),
+            Status::Background,
+            "a shell it started still runs"
+        );
+        c.background = None;
+        assert_eq!(
+            status(&c, &s, now),
+            Status::Review,
+            "unknown is not working"
+        );
+        let mut gone = s.clone();
+        gone.current = false;
+        c.background = Some(Background {
+            agents: 1,
+            ..Default::default()
+        });
+        assert_eq!(
+            status(&c, &gone, now),
+            Status::Review,
+            "no live process, nothing runs"
+        );
+    }
+}

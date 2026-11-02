@@ -1,0 +1,3392 @@
+//! Native visual evidence: scripted layouts, pages and clicks that save what the real
+//! renderer drew. Built only with the `visual-test` feature.
+use super::*;
+use crate::terminal::screen;
+use gpui::WindowHandle;
+use std::time::Duration;
+#[path = "phones_evidence.rs"]
+mod phones_evidence;
+#[path = "settings_evidence.rs"]
+mod settings_evidence;
+
+/// Runs the evidence script the environment asks for against the opened workbench.
+pub fn start(
+    handle: Option<WindowHandle<workbench::Workbench>>,
+    evidence: Option<PathBuf>,
+    cx: &mut App,
+) {
+    if settings_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    if phones_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    // 标记完成: a finished session's pane plays the fill, seal and countdown, then closes;
+    // 「留着这个画面」 mid-run keeps another pane open.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_COMPLETE_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |ms| executor.timer(Duration::from_millis(ms));
+            wait(1500).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let socket = handle.update(cx, |v, _, _| v.visual_socket()).unwrap();
+            let root = socket.parent().unwrap().to_owned();
+            let call = |r: Request| rpc(&socket, &r).unwrap();
+            let workspace = || match call(Request::Workspace) { Reply::Workspace(w) => w, x => panic!("{x:?}") };
+            let w = workspace();
+            let space = match w.spaces.first() {
+                Some(s) => s.id.clone(),
+                None => {
+                    call(Request::Edit { revision: w.revision, edit: Edit::AddSpace(Space { id: "s".into(), name: "Tests".into(), cwd: "/tmp".into() }) });
+                    "s".into()
+                }
+            };
+            // Claude stand-ins whose transcripts end with a finished turn.
+            let logs = PathBuf::from(std::env::var_os("CLAUDE_CONFIG_DIR").expect("scratch CLAUDE_CONFIG_DIR")).join("projects/-tmp");
+            std::fs::create_dir_all(&logs).unwrap();
+            let claude = root.join("claude");
+            let _ = std::os::unix::fs::symlink("/bin/sh", &claude);
+            let launch = |tid: &str, n: u32, ask: &str| {
+                let id = format!("{:08x}-0000-4000-8000-00000000000{n}", std::process::id());
+                let at = keepline_core::content::now();
+                let user = serde_json::json!({"type":"user","sessionId":id,"uuid":"u0","cwd":"/tmp","entrypoint":"cli","userType":"external","timestamp":at,"message":{"content":ask}});
+                let reply = serde_json::json!({"type":"assistant","sessionId":id,"uuid":"a0","parentUuid":"u0","cwd":"/tmp","timestamp":at,"message":{"role":"assistant","model":"claude-test","stop_reason":"end_turn","content":[{"type":"text","text":"已完成，测试全过。"}]}});
+                let end = serde_json::json!({"type":"system","subtype":"turn_duration","sessionId":id,"uuid":"s0","parentUuid":"a0","cwd":"/tmp","timestamp":at});
+                let seed = root.join(format!("seed-{tid}"));
+                std::fs::write(&seed, format!("{user}\n{reply}\n{end}\n")).unwrap();
+                // A full screen of text when measuring, so the dissolve sends its most specks.
+                let fill = if std::env::var_os("KEEPLINE_COMPLETE_FRAMES").is_some() { "i=0; while [ $i -lt 40 ]; do printf '%s\\n' \"  test auth::timeout::retries_after_expiry ... ok   刷新 token 后重新计时 $i 行 0123456789 abcdefghij\"; i=$((i+1)); done; " } else { "" };
+                let script = format!("cat '{}' > '{}'; {fill}printf '%s\\n' '⏺ 已完成，测试全过。'; sleep 600", seed.display(), logs.join(format!("{id}.jsonl")).display());
+                let argv = vec!["/bin/sh".into(), "-c".into(), format!("exec '{}' -c \"$0\" fixture --session-id {id}", claude.display()), script];
+                call(Request::Launch { id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+                let w = workspace();
+                call(Request::Edit { revision: w.revision, edit: Edit::PutTab { tab: Tab { id: format!("tab-{tid}"), space: space.clone(), default_task: None, title: tid.into(), layout: Some(Layout::Leaf(tid.into())) } } });
+            };
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh(); w.draw(a).clear(a);
+                    w.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                }).unwrap();
+            };
+            for (tid, n, ask) in [("done", 1, "修好登录页的报错"), ("keep", 2, "补上导出按钮")] {
+                launch(tid, n, ask);
+                wait(300).await;
+                handle.update(cx, |v, _, a| v.visual_peek_show_tab(tid, a)).unwrap();
+                let mut ready = false;
+                for _ in 0..120 {
+                    wait(500).await;
+                    let (session, review, _) = handle.update(cx, |v, _, _| v.visual_completable(tid)).unwrap();
+                    if session.is_some() && review { ready = true; break; }
+                }
+                if !ready {
+                    let w = workspace();
+                    for s in &w.agent_sessions {
+                        eprintln!("session {} terminal={:?} current={} content={:?}", s.id, s.terminal, s.current, w.content.get(&s.id).map(|c| (c.turn, c.updated)));
+                    }
+                    eprintln!("pane: {:?}", handle.update(cx, |v, _, _| v.visual_completable(tid)).unwrap());
+                }
+                assert!(ready, "{tid}: the finished session never offered 标记完成");
+                wait(300).await;
+                let style = std::env::var("KEEPLINE_COMPLETE_STYLE").ok();
+                if tid == "done" && let Some(style) = &style {
+                    // A plugin's animation, held at points of the run for comparison with
+                    // specs/complete-animation/directions.html, then played for real.
+                    let style: keepline_core::effect::Style = serde_json::from_value(serde_json::json!(style)).expect("style");
+                    let effect = keepline_core::effect::Complete::of(style);
+                    shot("0-review.png", cx);
+                    for t in [0.1f32, 0.32, 0.45, 0.6, 0.8, 0.9, 0.95] {
+                        handle.update(cx, |v, _, a| {
+                            if v.visual_completable(tid).2 && t == 0.1 {
+                                v.visual_complete_with(tid, effect, Some(t), a);
+                            } else {
+                                v.visual_pin_completing(tid, Some(t), a);
+                            }
+                        }).unwrap();
+                        wait(150).await;
+                        shot(&format!("{style:?}-t{:03}.png", (t * 100.) as u32), cx);
+                    }
+                    handle.update(cx, |v, _, a| v.visual_keep_completed(tid, a)).unwrap();
+                    let _ = handle.update(cx, |v, _, _| v.visual_take_paints());
+                    handle.update(cx, |v, _, a| v.visual_complete_with(tid, effect, None, a)).unwrap();
+                    let mut closed = false;
+                    for _ in 0..60 {
+                        wait(100).await;
+                        if !handle.update(cx, |v, _, _| v.visual_completable(tid)).unwrap().2 { closed = true; break; }
+                    }
+                    assert!(closed, "the completed pane never closed after {style:?}");
+                    let (gaps, paints) = handle.update(cx, |v, _, _| v.visual_take_paints()).unwrap();
+                    let stat = |mut v: Vec<f32>| {
+                        v.sort_by(f32::total_cmp);
+                        let at = |q: f32| v.get(((v.len() as f32 - 1.) * q).round() as usize).copied().unwrap_or(0.);
+                        format!("n={} p50={:.2} p95={:.2} max={:.2}", v.len(), at(0.5), at(0.95), at(1.))
+                    };
+                    let specks = handle.update(cx, |v, _, _| v.visual_specks()).unwrap();
+                    eprintln!("FRAMES {style:?}: specks={specks} gap_ms {} | overlay_paint_ms {}", stat(gaps), stat(paints));
+                    wait(300).await;
+                    shot(&format!("{style:?}-closed.png"), cx);
+                } else if tid == "done" {
+                    shot("0-review.png", cx);
+                    handle.update(cx, |v, _, a| v.visual_complete(tid, a)).unwrap();
+                    // Timed from the click: a shot itself takes a while in a debug build.
+                    let started = std::time::Instant::now();
+                    for (ms, name) in [(120, "1-fill"), (400, "2-seal"), (900, "3-countdown"), (1450, "4-fading")] {
+                        let due = Duration::from_millis(ms);
+                        wait(due.saturating_sub(started.elapsed()).as_millis() as u64).await;
+                        let at = started.elapsed().as_millis();
+                        shot(&format!("{name}-{at}ms.png"), cx);
+                    }
+                    let mut closed = false;
+                    for _ in 0..40 {
+                        wait(100).await;
+                        if !handle.update(cx, |v, _, _| v.visual_completable(tid)).unwrap().2 { closed = true; break; }
+                    }
+                    assert!(closed, "the completed pane never closed");
+                    let w = workspace();
+                    assert!(w.agent_sessions.iter().any(|s| s.outcome == Outcome::Completed), "outcome not saved");
+                    wait(300).await;
+                    shot("5-closed.png", cx);
+                } else {
+                    handle.update(cx, |v, _, a| v.visual_complete(tid, a)).unwrap();
+                    wait(600).await;
+                    handle.update(cx, |v, _, a| v.visual_keep_completed(tid, a)).unwrap();
+                    wait(2000).await;
+                    assert!(handle.update(cx, |v, _, _| v.visual_completable(tid)).unwrap().2, "a kept pane closed");
+                    shot("6-kept.png", cx);
+                }
+            }
+            eprintln!("complete native PASS: review offers 标记完成, fill/seal/countdown/fade frames, pane closes with outcome saved, a kept pane stays");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // `keepline split` / `close` from outside the app, as another Agent runs them: the
+    // shown tab gains the pane without the keyboard leaving the user's pane, the command
+    // runs in it, and closing it takes the pane away again.
+    // The status chip with why the session needs you (reasons rules), in four real panes:
+    // an approval, an error, a question's short title, and a text no rule knows.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_REASON_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |ms| executor.timer(Duration::from_millis(ms));
+            wait(1500).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let socket = handle.update(cx, |v, _, _| v.visual_socket()).unwrap();
+            let call = |r: Request| rpc(&socket, &r).unwrap();
+            let w = match call(Request::Workspace) {
+                Reply::Workspace(w) => w,
+                x => panic!("{x:?}"),
+            };
+            let space = match w.spaces.first() {
+                Some(s) => s.id.clone(),
+                None => {
+                    call(Request::Edit {
+                        revision: w.revision,
+                        edit: Edit::AddSpace(Space {
+                            id: "s".into(),
+                            name: "Tests".into(),
+                            cwd: "/tmp".into(),
+                        }),
+                    });
+                    "s".into()
+                }
+            };
+            for (id, line) in [
+                ("rw", "WebSearch"),
+                ("re", "OAuth"),
+                ("rq", "合并授权"),
+                ("rr", "grok"),
+            ] {
+                let argv = vec![
+                    "/bin/sh".into(),
+                    "-c".into(),
+                    format!("printf '  … {line}\\n'; exec /bin/sh -i"),
+                ];
+                call(Request::Launch {
+                    id: id.into(),
+                    space: space.clone(),
+                    argv,
+                    cwd: "/tmp".into(),
+                    cols: 80,
+                    rows: 20,
+                    scheme: Default::default(),
+                });
+            }
+            let leaf = |id: &str| Layout::Leaf(id.into());
+            let split = |axis, a, b| Layout::Split {
+                axis,
+                ratio: 5000,
+                first: Box::new(a),
+                second: Box::new(b),
+            };
+            let layout = split(
+                keepline_core::layout::Axis::Right,
+                split(keepline_core::layout::Axis::Down, leaf("rw"), leaf("re")),
+                split(keepline_core::layout::Axis::Down, leaf("rq"), leaf("rr")),
+            );
+            call(Request::Edit {
+                revision: 0,
+                edit: Edit::PutTab {
+                    tab: Tab {
+                        id: "tab-reason".into(),
+                        space,
+                        default_task: None,
+                        title: "reason".into(),
+                        layout: Some(layout),
+                    },
+                },
+            });
+            wait(800).await;
+            handle
+                .update(cx, |v, _, a| v.visual_peek_show_tab("reason", a))
+                .unwrap();
+            wait(800).await;
+            handle
+                .update(cx, |v, _, a| v.visual_reason_fixture(a))
+                .unwrap();
+            for (name, style) in [
+                ("reason-standard.png", crate::ui::style::Style::Standard),
+                ("reason-terminal.png", crate::ui::style::Style::Terminal),
+            ] {
+                cx.update(|a| a.set_global(style));
+                wait(600).await;
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                    w.render_to_image()
+                        .unwrap()
+                        .save(directory.join(name))
+                        .unwrap();
+                })
+                .unwrap();
+            }
+            eprintln!("reason evidence written");
+            cx.update(|a| a.quit());
+        })
+        .detach();
+    }
+    // The turn's ask pinned while its answer runs past the top: a Claude-drawn pane
+    // gets the bar and a Codex one (which pins its own) none; a click goes back to the
+    // ask; reading the older turn floats its ask; the header button when chosen instead.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_PINNED_ASK_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use crate::ui::pinned_ask::PinnedAsk;
+            let executor = cx.background_executor().clone();
+            let wait = move |ms| executor.timer(Duration::from_millis(ms));
+            wait(1500).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let socket = handle.update(cx, |v, _, _| v.visual_socket()).unwrap();
+            let call = |r: Request| rpc(&socket, &r).unwrap();
+            let w = match call(Request::Workspace) {
+                Reply::Workspace(w) => w,
+                x => panic!("{x:?}"),
+            };
+            let space = match w.spaces.first() {
+                Some(s) => s.id.clone(),
+                None => {
+                    call(Request::Edit {
+                        revision: w.revision,
+                        edit: Edit::AddSpace(Space {
+                            id: "s".into(),
+                            name: "Tests".into(),
+                            cwd: "/tmp".into(),
+                        }),
+                    });
+                    "s".into()
+                }
+            };
+            let asks = ["先看看架构页还漏了什么", "你帮我看看代码再说啊"];
+            for (id, mark) in [("pc", "❯"), ("px", "›")] {
+                let mut text = String::new();
+                for (turn, ask) in asks.iter().enumerate() {
+                    text.push_str(&format!("{mark} {ask}\n\n"));
+                    for n in 1..=40 {
+                        text.push_str(&format!(
+                            "  {}.{n} 第 {} 轮的回答，这一行说明一处遗漏和它对应的代码位置\n",
+                            turn + 1,
+                            turn + 1
+                        ));
+                    }
+                    text.push('\n');
+                }
+                let file = directory.join(format!("{id}.txt"));
+                std::fs::write(&file, text).unwrap();
+                call(Request::Launch {
+                    id: id.into(),
+                    space: space.clone(),
+                    argv: vec![
+                        "/bin/sh".into(),
+                        "-c".into(),
+                        format!("cat '{}'; exec /bin/sh -i", file.display()),
+                    ],
+                    cwd: "/tmp".into(),
+                    cols: 90,
+                    rows: 24,
+                    scheme: Default::default(),
+                });
+            }
+            let layout = Layout::Split {
+                axis: keepline_core::layout::Axis::Right,
+                ratio: 5000,
+                first: Box::new(Layout::Leaf("pc".into())),
+                second: Box::new(Layout::Leaf("px".into())),
+            };
+            call(Request::Edit {
+                revision: 0,
+                edit: Edit::PutTab {
+                    tab: Tab {
+                        id: "tab-pinned".into(),
+                        space,
+                        default_task: None,
+                        title: "pinned".into(),
+                        layout: Some(layout),
+                    },
+                },
+            });
+            wait(800).await;
+            handle
+                .update(cx, |v, _, a| v.visual_peek_show_tab("pinned", a))
+                .unwrap();
+            wait(800).await;
+            handle
+                .update(cx, |v, _, a| v.visual_pinned_ask_fixture(&asks, a))
+                .unwrap();
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                    w.render_to_image()
+                        .unwrap()
+                        .save(directory.join(name))
+                        .unwrap();
+                })
+                .unwrap();
+            };
+            let state = |id: &'static str, cx: &mut gpui::AsyncApp| {
+                handle
+                    .update(cx, |v, _, a| v.visual_pinned_ask(id, a))
+                    .unwrap()
+            };
+            let choose = |c: PinnedAsk, cx: &mut gpui::AsyncApp| {
+                cx.update(|a| {
+                    a.set_global(c);
+                    a.refresh_windows();
+                });
+            };
+            let settle = |cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                })
+                .unwrap();
+            };
+            // A: the bar on the Claude pane, none on the Codex one.
+            choose(
+                PinnedAsk {
+                    bar: true,
+                    float: false,
+                    button: false,
+                },
+                cx,
+            );
+            let mut claude = state("pc", cx);
+            for _ in 0..30 {
+                settle(cx);
+                wait(200).await;
+                claude = state("pc", cx);
+                if claude.1.is_some() {
+                    break;
+                }
+            }
+            eprintln!("claude pane: {claude:?}");
+            assert_eq!(claude.0.len(), 2, "both asks looked for");
+            assert!(
+                claude.0.iter().all(Option::is_some),
+                "both asks found: {claude:?}"
+            );
+            assert_eq!(
+                claude.1,
+                Some((asks[1].to_owned(), true)),
+                "the newest ask pinned with a way back"
+            );
+            let codex = state("px", cx);
+            assert_eq!(codex.1, None, "Codex pins its own ask: {codex:?}");
+            shot("a-bar.png", cx);
+            // The bar's way back puts the ask on screen, so the bar goes.
+            handle
+                .update(cx, |v, _, a| v.visual_back_to_ask("pc", a))
+                .unwrap();
+            wait(300).await;
+            settle(cx);
+            wait(300).await;
+            settle(cx);
+            let back = state("pc", cx);
+            assert_eq!(back.1, None, "the ask on screen is not pinned: {back:?}");
+            shot("a-back.png", cx);
+            // B: reading the older turn floats its ask.
+            choose(
+                PinnedAsk {
+                    bar: false,
+                    float: true,
+                    button: false,
+                },
+                cx,
+            );
+            let older = claude.0[0].unwrap();
+            handle
+                .update(cx, |v, _, a| v.visual_scroll_row("pc", older + 12, a))
+                .unwrap();
+            wait(100).await;
+            settle(cx);
+            wait(100).await;
+            settle(cx);
+            let reading = state("pc", cx);
+            assert_eq!(
+                reading.2.as_deref(),
+                Some(asks[0]),
+                "the older turn's ask floats: {reading:?}"
+            );
+            shot("b-float.png", cx);
+            // C: the header button instead, back at the live bottom.
+            choose(
+                PinnedAsk {
+                    bar: false,
+                    float: false,
+                    button: true,
+                },
+                cx,
+            );
+            handle
+                .update(cx, |v, _, a| v.visual_scroll_row("pc", usize::MAX / 2, a))
+                .unwrap();
+            wait(300).await;
+            settle(cx);
+            wait(300).await;
+            settle(cx);
+            assert!(
+                state("pc", cx).1.is_some(),
+                "the newest ask is out of sight again"
+            );
+            shot("c-button.png", cx);
+            eprintln!(
+                "pinned ask evidence PASS: bar on Claude, none on Codex, back, float, button"
+            );
+            cx.update(|a| a.quit());
+        })
+        .detach();
+    }
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SPLIT_CLI_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |ms| executor.timer(Duration::from_millis(ms));
+            wait(1500).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let socket = handle.update(cx, |v, _, _| v.visual_socket()).unwrap();
+            let root = socket.parent().unwrap().to_owned();
+            let call = |r: Request| rpc(&socket, &r).unwrap();
+            let workspace = || match call(Request::Workspace) { Reply::Workspace(w) => w, x => panic!("{x:?}") };
+            let w = workspace();
+            let space = match w.spaces.first() {
+                Some(s) => s.id.clone(),
+                None => {
+                    call(Request::Edit { revision: w.revision, edit: Edit::AddSpace(Space { id: "s".into(), name: "Tests".into(), cwd: "/tmp".into() }) });
+                    "s".into()
+                }
+            };
+            call(Request::Launch { id: "base".into(), space: space.clone(), argv: vec!["/bin/sh".into(), "-c".into(), "printf '~/keepline $ 我在这块打字\\n'; exec /bin/sh -i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+            call(Request::Edit { revision: 0, edit: Edit::PutTab { tab: Tab { id: "tab-base".into(), space, default_task: None, title: "base".into(), layout: Some(Layout::Leaf("base".into())) } } });
+            wait(500).await;
+            handle.update(cx, |v, _, a| v.visual_peek_show_tab("base", a)).unwrap();
+            wait(1000).await;
+            let (order, focused) = handle.update(cx, |v, w, a| v.visual_pane_focus(w, a)).unwrap();
+            assert_eq!((order, focused.as_deref()), (vec!["base".to_owned()], Some("base")));
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh(); w.draw(a).clear(a);
+                    w.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                }).unwrap();
+            };
+            shot("0-before.png", cx);
+            let cli = std::env::current_exe().unwrap().with_file_name("keepline");
+            let background = cx.background_executor().clone();
+            let run = |args: Vec<String>| {
+                let cli = cli.clone();
+                let root = root.clone();
+                background.spawn(async move {
+                    let out = std::process::Command::new(cli).arg(&args[0]).arg("--runtime").arg(root).args(&args[1..]).env("SHELL", "/bin/sh").output().unwrap();
+                    (out.status.success(), String::from_utf8_lossy(&out.stdout).trim().to_owned(), String::from_utf8_lossy(&out.stderr).into_owned())
+                })
+            };
+            let ok = |r: (bool, String, String)| { assert!(r.0, "{}", r.2); r.1 };
+            let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+            let id = ok(run(args(&["split", "base", "--down", "--size", "0.35", "--", "echo split-from-cli-$((6*7))"])).await);
+            let mut shown = (vec![], None);
+            for _ in 0..50 {
+                wait(100).await;
+                shown = handle.update(cx, |v, w, a| v.visual_pane_focus(w, a)).unwrap();
+                if shown.0.len() == 2 { break; }
+            }
+            assert_eq!(shown.0, vec!["base".to_owned(), id.clone()], "the split never showed");
+            assert_eq!(shown.1.as_deref(), Some("base"), "the split took the keyboard");
+            let screen = || match call(Request::ReadScreen { id: id.clone(), rows: 30 }) { Reply::Text(t) => t, x => panic!("{x:?}") };
+            let mut ran = false;
+            for _ in 0..50 {
+                wait(100).await;
+                if screen().contains("split-from-cli-42") { ran = true; break; }
+            }
+            assert!(ran, "the command never ran: {}", screen());
+            wait(500).await;
+            shot("1-split.png", cx);
+            ok(run(args(&["close", &id])).await);
+            for _ in 0..50 {
+                wait(100).await;
+                shown = handle.update(cx, |v, w, a| v.visual_pane_focus(w, a)).unwrap();
+                if shown.0.len() == 1 { break; }
+            }
+            assert_eq!(shown, (vec!["base".to_owned()], Some("base".to_owned())), "close left the pane");
+            wait(300).await;
+            shot("2-closed.png", cx);
+            // Splits of panes that are splits already, in both directions and on both sides.
+            let shown_after = async |cx: &mut gpui::AsyncApp, count: usize| {
+                let mut shown = (vec![], None);
+                for _ in 0..50 {
+                    wait(100).await;
+                    shown = handle.update(cx, |v, w, a| v.visual_pane_focus(w, a)).unwrap();
+                    if shown.0.len() == count { break; }
+                }
+                // Let the panes report their new sizes before the next split is judged.
+                wait(400).await;
+                shown
+            };
+            let a = ok(run(args(&["split", "base", "--", "echo pane-a"])).await);
+            shown_after(cx, 2).await;
+            let b = ok(run(args(&["split", &a, "--down", "--", "echo pane-b"])).await);
+            shown_after(cx, 3).await;
+            let c = ok(run(args(&["split", "base", "--down", "--", "echo pane-c"])).await);
+            let shown = shown_after(cx, 4).await;
+            assert_eq!(shown.0, vec!["base".to_owned(), c.clone(), a.clone(), b.clone()], "four panes out of order");
+            assert_eq!(shown.1.as_deref(), Some("base"), "a split took the keyboard");
+            shot("3-four-panes.png", cx);
+            // A fifth and sixth go to the side tab: the shown tab, its four panes and the
+            // keyboard stay as they are, and the user's pane keeps the top-left corner.
+            let (done, fifth, why) = run(args(&["split", &b, "--", "echo pane-side-1"])).await;
+            assert!(done && why.contains("已经有 4 块") && why.contains("终端的旁屏"), "{why}");
+            let (done, sixth, _) = run(args(&["split", "base", "--", "echo pane-side-2"])).await;
+            assert!(done);
+            wait(800).await;
+            let still = handle.update(cx, |v, w, a| v.visual_pane_focus(w, a)).unwrap();
+            assert_eq!(still.0.len(), 4, "the shown tab changed");
+            assert_eq!(still.0[0], "base", "the user's pane left the top left");
+            assert_eq!(still.1.as_deref(), Some("base"), "a side pane took the keyboard");
+            let titles = handle.update(cx, |v, _, _| v.visual_tab_titles()).unwrap();
+            assert!(titles.iter().any(|t| t == "终端的旁屏"), "no side tab: {titles:?}");
+            shot("4-side-tab-made.png", cx);
+            handle.update(cx, |v, _, a| v.visual_peek_show_tab("终端的旁屏", a)).unwrap();
+            let side = shown_after(cx, 2).await;
+            assert_eq!(side.0, vec![fifth.clone(), sixth.clone()], "the side tab's panes");
+            shot("4b-side-tab.png", cx);
+            handle.update(cx, |v, _, a| v.visual_peek_show_tab("base", a)).unwrap();
+            shown_after(cx, 4).await;
+            let full = (vec!["base".to_owned(), c, a, b], ());
+            // A tab that is not shown gets its pane without the shown tab changing.
+            call(Request::Launch { id: "hidden".into(), space: workspace().spaces[0].id.clone(), argv: vec!["/bin/sh".into(), "-i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+            call(Request::Edit { revision: 0, edit: Edit::PutTab { tab: Tab { id: "tab-other".into(), space: workspace().spaces[0].id.clone(), default_task: None, title: "other".into(), layout: Some(Layout::Leaf("hidden".into())) } } });
+            wait(500).await;
+            ok(run(args(&["split", "hidden", "--", "echo pane-hidden"])).await);
+            wait(800).await;
+            let row = handle.update(cx, |v, _, _| v.visual_tab_row()).unwrap();
+            assert_eq!((row.1.as_deref(), row.2), (Some("tab-base"), full.0.len()), "the shown tab changed");
+            handle.update(cx, |v, _, a| v.visual_peek_show_tab("other", a)).unwrap();
+            let other = shown_after(cx, 2).await;
+            assert_eq!(other.0.len(), 2, "the hidden tab's split is missing");
+            shot("5-other-tab.png", cx);
+            eprintln!("split cli native PASS: an outside split shows in the open tab without taking focus, runs its command, and closes");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // A notification clicked before its session loaded: opened once it loads, unless the
+    // user went to another page first.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_ROUTE_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |ms: u64| executor.timer(Duration::from_millis(ms));
+            let frame = |cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, window, app| window.draw(app).clear(app))
+                    .unwrap();
+            };
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, window, app| {
+                    window.refresh();
+                    window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                })
+                .unwrap();
+            };
+            std::fs::create_dir_all(&directory).unwrap();
+            let mut ids = vec![];
+            for _ in 0..80 {
+                wait(250).await;
+                ids = handle.update(cx, |v, _, _| v.visual_session_ids()).unwrap();
+                if !ids.is_empty() {
+                    break;
+                }
+            }
+            let id = ids.first().cloned().expect("the fixture's session loaded");
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            wait(1500).await;
+            let said = handle
+                .update(cx, |v, window, cx| v.visual_route_before_load(&id, false, window, cx))
+                .unwrap();
+            eprintln!("clicked before load: {said:?}");
+            assert_eq!(said.as_deref(), Some("会话还没载入，载入后自动打开"));
+            shot("waiting.png", cx);
+            let mut state = (false, None, None);
+            for _ in 0..20 {
+                wait(250).await;
+                frame(cx);
+                state = handle.update(cx, |v, _, _| v.visual_route_state()).unwrap();
+                if state.1.as_deref() == Some(id.as_str()) {
+                    break;
+                }
+            }
+            eprintln!("once loaded: {state:?}");
+            assert_eq!(state, (true, Some(id.clone()), None), "opened once loaded");
+            shot("opened.png", cx);
+            handle
+                .update(cx, |v, window, cx| v.visual_route_before_load(&id, true, window, cx))
+                .unwrap();
+            for _ in 0..12 {
+                wait(250).await;
+                frame(cx);
+            }
+            let state = handle.update(cx, |v, _, _| v.visual_route_state()).unwrap();
+            eprintln!("user moved first: {state:?}");
+            assert_eq!(state, (true, None, None), "the user's own page wins");
+            shot("moved.png", cx);
+            eprintln!(
+                "route native PASS: a session clicked before it loaded opens once loaded; a page the user picked meanwhile wins"
+            );
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // Reconnect: a host killed outright shows the strip after its grace period, and
+    // 「重新连接」 starts a host the status link then resubscribes to.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_RECONNECT_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, window, app| {
+                    window.refresh(); window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                }).unwrap();
+            };
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            assert!(!handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap());
+            shot("connected.png", cx);
+            let socket = handle.update(cx, |view, _, _| view.visual_socket()).unwrap();
+            let runtime = socket.parent().unwrap().display().to_string();
+            let killed = std::process::Command::new("/usr/bin/pkill")
+                .args(["-9", "-f", &format!("keepline serve --runtime {runtime}")])
+                .status().unwrap();
+            assert!(killed.success(), "no host to kill");
+            cx.background_executor().timer(Duration::from_secs(1)).await;
+            assert!(!handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap(), "strip before the grace period");
+            cx.background_executor().timer(Duration::from_secs(3)).await;
+            assert!(handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap(), "no strip after the host died");
+            shot("cut-off.png", cx);
+            handle.update(cx, |view, _, cx| view.visual_reconnect(cx)).unwrap();
+            cx.background_executor().timer(Duration::from_millis(200)).await;
+            shot("reconnecting.png", cx);
+            let mut back = false;
+            for _ in 0..40 {
+                cx.background_executor().timer(Duration::from_millis(500)).await;
+                if !handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap() { back = true; break; }
+            }
+            assert!(back, "strip still shown after 重新连接");
+            cx.background_executor().timer(Duration::from_millis(500)).await;
+            shot("reconnected.png", cx);
+            eprintln!("reconnect native PASS: no strip within grace, strip after host kill, 重新连接 restarts host, strip clears");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // Scrollback: the thumb shows when scrolled up, a drag held past the top edge scrolls
+    // and copies across screens, search highlights and steps, the thumb drags the view.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SCROLLBACK_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, cx| p.visual_type("clear; seq 1 300\r", cx));
+            for _ in 0..50 {
+                cx.background_executor().timer(Duration::from_millis(200)).await;
+                if pane.update(cx, |p, _| p.visual_text()).lines().any(|l| l.trim() == "300") { break; }
+            }
+            cx.background_executor().timer(Duration::from_millis(300)).await;
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                let path = directory.join(name);
+                cx.update_window(handle.into(), |_, window, app| {
+                    window.refresh(); window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(path).unwrap();
+                }).unwrap();
+            };
+            let b = pane.read_with(cx, |p, _| p.visual_bounds()).expect("laid out");
+            let mv = |window: &mut gpui::Window, app: &mut App, at: gpui::Point<gpui::Pixels>, pressed: bool| {
+                window.dispatch_event(gpui::MouseMoveEvent { position: at, pressed_button: pressed.then_some(gpui::MouseButton::Left), modifiers: Default::default() }.to_platform_input(), app);
+            };
+            // Up the history: the thumb appears.
+            cx.update_window(handle.into(), |_, window, app| {
+                window.dispatch_event(gpui::ScrollWheelEvent { position: b.center(), delta: gpui::ScrollDelta::Lines(gpui::point(0., 40.)), modifiers: Default::default(), touch_phase: gpui::TouchPhase::Moved }.to_platform_input(), app);
+            }).unwrap();
+            shot("1-scrolled.png", cx);
+            let (top, total, len) = pane.read_with(cx, |p, _| p.visual_viewport());
+            eprintln!("scrolled viewport {top}/{total}/{len}");
+            assert!(top + len < total, "scrolled into history");
+            // Press in the middle, hold the drag past the top edge a while, release.
+            let start = gpui::point(b.left() + px(60.), b.center().y);
+            let outside = gpui::point(start.x, b.top() - px(30.));
+            cx.update_window(handle.into(), |_, window, app| {
+                window.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: start, modifiers: Default::default(), click_count: 1, first_mouse: false }.to_platform_input(), app);
+                mv(window, app, start - gpui::point(px(0.), px(40.)), true);
+                mv(window, app, outside, true);
+            }).unwrap();
+            cx.background_executor().timer(Duration::from_millis(1500)).await;
+            cx.update_window(handle.into(), |_, window, app| {
+                window.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: outside, modifiers: Default::default(), click_count: 1 }.to_platform_input(), app);
+            }).unwrap();
+            shot("2-dragged-past-top.png", cx);
+            let after = pane.read_with(cx, |p, _| p.visual_viewport()).0;
+            assert!(after < top, "holding the drag past the top scrolled up: {after} vs {top}");
+            pane.update(cx, |p, cx| p.copy(cx));
+            let copied = cx.update(|cx| cx.read_from_clipboard().and_then(|c| c.text())).unwrap_or_default();
+            let lines: Vec<&str> = copied.lines().collect();
+            eprintln!("copied {} lines: {:?} .. {:?}", lines.len(), lines.first(), lines.last());
+            assert!(lines.len() > len, "copy reaches past one screen: {} lines, screen {len}", lines.len());
+            // Consecutive numbers: nothing skipped or doubled across the screens it crossed.
+            let nums: Vec<u32> = lines.iter().filter_map(|l| l.trim().parse().ok()).collect();
+            assert!(nums.windows(2).all(|w| w[1] == w[0] + 1), "copied text runs on: {nums:?}");
+            // Search: newest match first, then step back.
+            handle.update(cx, |_, window, cx| pane.update(cx, |p, cx| p.visual_search("25", window, cx))).unwrap();
+            cx.background_executor().timer(Duration::from_millis(500)).await;
+            shot("3-search.png", cx);
+            let (current, rows) = pane.read_with(cx, |p, _| p.visual_matches());
+            eprintln!("search: current {current:?} of {} matches", rows.len());
+            assert!(rows.len() >= 10 && current == Some(rows.len() - 1));
+            pane.update(cx, |p, cx| p.visual_step_match(-1, cx));
+            cx.background_executor().timer(Duration::from_millis(200)).await;
+            let (current2, _) = pane.read_with(cx, |p, _| p.visual_matches());
+            assert_eq!(current2, Some(rows.len() - 2));
+            shot("4-previous-match.png", cx);
+            let (vtop, _, vlen) = pane.read_with(cx, |p, _| p.visual_viewport());
+            assert!((vtop..vtop + vlen).contains(&rows[rows.len() - 2]), "the current match is in view");
+            // Step forward wraps past the newest back to the oldest.
+            pane.update(cx, |p, cx| { p.visual_step_match(1, cx); p.visual_step_match(1, cx); });
+            assert_eq!(pane.read_with(cx, |p, _| p.visual_matches()).0, Some(0), "wraps to the first");
+            // Thumb drag to the very top.
+            let (_, total, _) = pane.read_with(cx, |p, _| p.visual_viewport());
+            let grab = gpui::point(b.right() - px(4.), b.bottom() - px(10.));
+            cx.update_window(handle.into(), |_, window, app| {
+                window.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: grab, modifiers: Default::default(), click_count: 1, first_mouse: false }.to_platform_input(), app);
+                mv(window, app, gpui::point(grab.x, b.top() + px(1.)), true);
+                window.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: gpui::point(grab.x, b.top() + px(1.)), modifiers: Default::default(), click_count: 1 }.to_platform_input(), app);
+            }).unwrap();
+            shot("5-thumb-top.png", cx);
+            let top_now = pane.read_with(cx, |p, _| p.visual_viewport()).0;
+            assert!(top_now < total / 10, "thumb dragged to the top: {top_now} of {total}");
+            eprintln!("scrollback native PASS: thumb shows and drags, a drag past the edge scrolls and copies {} lines, search highlights and steps", lines.len());
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // ⌘Home / ⌘End and the 「回到底部」 chip move through scrollback; a program's OSC 52
+    // copy lands on the clipboard.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SCROLL_KEYS_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
+            cx.update(|cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into())));
+            // "osc52 复制" in base64, written by the program as OSC 52.
+            pane.update(cx, |p, cx| p.visual_type("clear; seq 1 300; printf '\\033]52;c;b3NjNTIg5aSN5Yi2\\a'\r", cx));
+            for _ in 0..50 {
+                cx.background_executor().timer(Duration::from_millis(200)).await;
+                if pane.update(cx, |p, _| p.visual_text()).lines().any(|l| l.trim() == "300") { break; }
+            }
+            cx.background_executor().timer(Duration::from_millis(500)).await;
+            let shot = |name: &str, window: &mut gpui::Window, app: &mut App| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join(format!("{name}.png"))).unwrap();
+            };
+            cx.update_window(handle.into(), |_, window, app| shot("0-osc52", window, app)).unwrap();
+            let clip = cx.update(|cx| cx.read_from_clipboard().and_then(|c| c.text()));
+            assert_eq!(clip.as_deref(), Some("osc52 复制"), "OSC 52 reached the clipboard");
+            let key = |k: &str, window: &mut gpui::Window, app: &mut App| {
+                window.dispatch_event(gpui::KeyDownEvent { keystroke: gpui::Keystroke::parse(k).unwrap(), is_held: false, prefer_character_input: false }.to_platform_input(), app);
+            };
+            cx.update_window(handle.into(), |_, window, app| { key("cmd-home", window, app); shot("1-cmd-home", window, app); }).unwrap();
+            assert!(!pane.read_with(cx, |p, _| p.visual_at_bottom()), "⌘Home left the bottom");
+            assert!(pane.read_with(cx, |p, _| p.visual_text_shown()).lines().next().is_some_and(|l| l.trim() == "1"), "⌘Home shows the top");
+            cx.update_window(handle.into(), |_, window, app| key("cmd-end", window, app)).unwrap();
+            assert!(pane.read_with(cx, |p, _| p.visual_at_bottom()), "⌘End returned to the bottom");
+            cx.update_window(handle.into(), |_, window, app| key("cmd-pageup", window, app)).unwrap();
+            assert!(!pane.read_with(cx, |p, _| p.visual_at_bottom()), "⌘PageUp left the bottom");
+            // The chip floats at the pane's bottom right; clicking it goes back down.
+            let chip = pane.read_with(cx, |p, _| p.visual_bounds()).map(|b| b.bottom_right() - gpui::point(px(50.), px(16.))).expect("laid out");
+            cx.update_window(handle.into(), |_, window, app| {
+                shot("2-chip", window, app);
+                window.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: chip, modifiers: Default::default(), click_count: 1, first_mouse: false }.to_platform_input(), app);
+                window.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: chip, modifiers: Default::default(), click_count: 1 }.to_platform_input(), app);
+                shot("3-chip-clicked", window, app);
+            }).unwrap();
+            assert!(pane.read_with(cx, |p, _| p.visual_at_bottom()), "the chip returned to the bottom");
+            eprintln!("scroll keys native PASS: OSC 52 copies; ⌘Home/⌘End/⌘PageUp move the view; the chip returns to the bottom");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // Selection against the pixels: each row holds `ab`, a middle group and `cd`, apart
+    // by four blanks. The middle group's ink is found in the screenshot, the drag runs
+    // from its first to its last visible ink, and the highlight that appears must cover
+    // that ink and none of the outer groups'. Repeated after the sidebar folds and the
+    // text zooms, so stale pane bounds or cell metrics show as a miss.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SELECTION_PIXEL_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
+            const ROWS: [&str; 6] = ["中文选区测试", "⏺ ⎿ ──── ✻", "🙂🚀✅", "hello_world", "中a文b⏺c", "▐▛███▜▌"];
+            let script: String = ROWS.iter().map(|m| format!(" 'ab    {m}    cd'")).collect();
+            pane.update(cx, |p, cx| p.visual_type(&format!("clear; printf '%s\\n'{script}\r"), cx));
+            for _ in 0..150 {
+                cx.background_executor().timer(Duration::from_millis(200)).await;
+                if pane.update(cx, |p, _| p.visual_text_shown()).lines().next().is_some_and(|l| l.starts_with("ab")) { break; }
+            }
+            cx.background_executor().timer(Duration::from_millis(500)).await;
+            let frame = |name: &str, window: &mut gpui::Window, app: &mut App| {
+                window.refresh(); window.draw(app).clear(app);
+                let image = window.render_to_image().unwrap();
+                image.save(directory.join(format!("{name}.png"))).unwrap();
+                image
+            };
+            // Cell size and grid origin, as the pane maps them (logical px).
+            let grid = |p: &crate::terminal::pane::Pane| {
+                let (a, b, c) = (p.visual_cell(0, 0).unwrap(), p.visual_cell(0, 1).unwrap(), p.visual_cell(1, 0).unwrap());
+                let (w, h) = (f32::from(b.x - a.x), f32::from(c.y - a.y));
+                (f32::from(a.x) - w / 2., f32::from(a.y) - h / 2., w, h, p.visual_bounds().unwrap())
+            };
+            let drag = |window: &mut gpui::Window, app: &mut App, from: gpui::Point<gpui::Pixels>, to: gpui::Point<gpui::Pixels>, clicks: usize| {
+                window.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: from, modifiers: Default::default(), click_count: clicks, first_mouse: false }.to_platform_input(), app);
+                if from != to {
+                    window.dispatch_event(gpui::MouseMoveEvent { position: to, pressed_button: Some(gpui::MouseButton::Left), modifiers: Default::default() }.to_platform_input(), app);
+                }
+                window.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: to, modifiers: Default::default(), click_count: clicks }.to_platform_input(), app);
+            };
+            let differs = |a: &[u8; 4], b: &[u8; 4], by: i32| (0..3).any(|i| (a[i] as i32 - b[i] as i32).abs() > by);
+            let mut failures: Vec<String> = Vec::new();
+            type Change = fn(&mut crate::workbench::Workbench, &gpui::Entity<crate::terminal::pane::Pane>, &mut gpui::Context<crate::workbench::Workbench>);
+            let states: [(&str, Change); 4] = [
+                ("initial", |_, _, _| {}),
+                ("sidebar-folded", |w, _, cx| w.visual_toggle_sidebar(cx)),
+                ("zoomed-in", |_, p, cx| { p.update(cx, |p, cx| { p.visual_zoom(Some(1), cx); p.visual_zoom(Some(1), cx); p.visual_zoom(Some(1), cx); }); }),
+                ("restored", |w, p, cx| { w.visual_toggle_sidebar(cx); p.update(cx, |p, cx| p.visual_zoom(None, cx)); }),
+            ];
+            for (state, change) in states {
+                // Where a click lands in the frame the change happens in, before it redraws.
+                let before_frame = pane.read_with(cx, |p, _| p.visual_bounds());
+                handle.update(cx, |w, _, cx| change(w, &pane, cx)).unwrap();
+                let stale = pane.read_with(cx, |p, _| p.visual_bounds());
+                cx.background_executor().timer(Duration::from_millis(800)).await;
+                // Clear any selection with a click on a blank row, then the clean frame.
+                let blank = pane.read_with(cx, |p, _| p.visual_cell(ROWS.len() as u16 + 3, 2).unwrap());
+                let (s, clean, (ox, oy, w, h, bounds)) = cx.update_window(handle.into(), |_, window, app| {
+                    drag(window, app, blank, blank, 1);
+                    (window.scale_factor(), frame(&format!("{state}-0-clean"), window, app), grid(pane.read(app)))
+                }).unwrap();
+                eprintln!("[{state}] scale {s} cell {w:.3}x{h:.3} origin ({ox:.2},{oy:.2}); bounds before change {:?} -> right after (no frame) {:?} -> after frame {:?}",
+                    before_frame.map(|b| b.origin), stale.map(|b| b.origin), bounds.origin);
+                let bg = clean.get_pixel(((f32::from(bounds.right()) - 4. * w) * s) as u32, ((oy + h * (ROWS.len() as f32 + 1.5)) * s) as u32).0;
+                for (row, middle) in ROWS.iter().enumerate() {
+                    let (y0, y1) = (((oy + h * row as f32) * s).round() as u32, ((oy + h * (row + 1) as f32) * s).round() as u32);
+                    let x_end = ((f32::from(bounds.right()) - 2. * w) * s) as u32;
+                    let ink_col = |x: u32| (y0..y1).any(|y| differs(&clean.get_pixel(x, y).0, &bg, 60));
+                    // Ink clusters split by gaps of 2.5 cells or more.
+                    let mut clusters: Vec<(u32, u32)> = Vec::new();
+                    for x in ((ox * s) as u32)..x_end {
+                        if !ink_col(x) { continue; }
+                        match clusters.last_mut() {
+                            Some(c) if (x - c.1) as f32 <= 2.5 * w * s => c.1 = x,
+                            _ => clusters.push((x, x)),
+                        }
+                    }
+                    if clusters.len() != 3 {
+                        failures.push(format!("[{state}] row {row} {middle:?}: {} ink groups, expected 3: {clusters:?}", clusters.len()));
+                        continue;
+                    }
+                    let mid = clusters[1];
+                    let ink_rows: Vec<u32> = (y0..y1).filter(|&y| (mid.0..=mid.1).any(|x| differs(&clean.get_pixel(x, y).0, &bg, 60))).collect();
+                    let (iy0, iy1) = (ink_rows[0], *ink_rows.last().unwrap());
+                    let at = |x: u32| gpui::point(px(x as f32 / s), px((iy0 + iy1) as f32 / 2. / s));
+                    let (shot, cols, text) = cx.update_window(handle.into(), |_, window, app| {
+                        // A third of a cell outside the ink on each side: Ghostty takes a cell once the
+                        // pointer passes 60% of it, so this takes exactly the cells the ink sits in.
+                        let third = (w * s * 0.3) as u32;
+                        drag(window, app, at(mid.0.saturating_sub(third)), at(mid.1 + third), 1);
+                        let shot = frame(&format!("{state}-{}-{row}", 1), window, app);
+                        let p = pane.read(app);
+                        (shot, p.visual_selection_cols(), p.visual_selection().1)
+                    }).unwrap();
+                    // Highlighted = changed from the clean frame, within this row's band.
+                    let lit_col = |x: u32| (y0..y1).any(|y| differs(&shot.get_pixel(x, y).0, &clean.get_pixel(x, y).0, 6));
+                    let lit: Vec<u32> = ((ox * s) as u32..x_end).filter(|&x| lit_col(x)).collect();
+                    let Some((&hx0, &hx1)) = lit.first().zip(lit.last()) else {
+                        failures.push(format!("[{state}] row {row} {middle:?}: nothing highlighted; cols {cols:?}"));
+                        continue;
+                    };
+                    let lit_rows: Vec<u32> = (y0.saturating_sub(4)..y1 + 4).filter(|&y| (hx0..=hx1).any(|x| differs(&shot.get_pixel(x, y).0, &clean.get_pixel(x, y).0, 6))).collect();
+                    let (hy0, hy1) = (lit_rows[0], *lit_rows.last().unwrap());
+                    let line = format!(
+                        "[{state}] row {row} {middle:?}: ink x {}..{} y {iy0}..{iy1} | highlight x {hx0}..{hx1} y {hy0}..{hy1} | cells {:?} | copied {text:?}",
+                        mid.0, mid.1, cols.get(row).copied().flatten());
+                    eprintln!("{line}");
+                    let mut wrong = Vec::new();
+                    if hx0 > mid.0 || hx1 < mid.1 { wrong.push(format!("ink sticks out left {} / right {} px", mid.0 as i64 - hx0 as i64, mid.1 as i64 - hx1 as i64)); }
+                    if hx0 <= clusters[0].1 || hx1 >= clusters[2].0 { wrong.push("highlight reaches ab or cd".into()); }
+                    if hy0 > iy0 || hy1 < iy1 { wrong.push(format!("ink sticks out top {} / bottom {} px", iy0 as i64 - hy0 as i64, iy1 as i64 - hy1 as i64)); }
+                    if lit_rows.iter().any(|&y| y < y0.saturating_sub(1) || y > y1) { wrong.push(format!("highlight leaves the row band {y0}..{y1}")); }
+                    if text.as_deref() != Some(*middle) { wrong.push(format!("copied {text:?}")); }
+                    if !wrong.is_empty() { failures.push(format!("{line} => {}", wrong.join("; "))); }
+                }
+            }
+            if failures.is_empty() {
+                eprintln!("selection pixels PASS: every middle group's ink sits inside its highlight, in all layouts");
+            } else {
+                eprintln!("selection pixels FAIL ({}):", failures.len());
+                for f in &failures { eprintln!("  {f}"); }
+            }
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // Drags a selection over shell output, lets new output push it up, scrolls the view
+    // back, then lets the text leave the screen for history: the highlight stays on the
+    // same text throughout and copies it, not the rows it left.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SELECTION_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, cx| p.visual_type("clear; seq 1 400; sleep 4; seq 401 405; sleep 3; seq 406 460\r", cx));
+            // A fresh zsh can take seconds to start; the echoed command line is not output.
+            for _ in 0..150 {
+                cx.background_executor().timer(Duration::from_millis(200)).await;
+                if pane.update(cx, |p, _| p.visual_text()).lines().any(|l| l.trim() == "400") { break; }
+            }
+            cx.background_executor().timer(Duration::from_millis(300)).await;
+            let shot = |name: &str, window: &mut gpui::Window, app: &mut App| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join(format!("{name}.png"))).unwrap();
+            };
+            let (from, to) = pane.read_with(cx, |p, _| (p.visual_cell(5, 0), p.visual_cell(7, 1)));
+            let (from, to) = (from.expect("pane laid out"), to.expect("pane laid out"));
+            cx.update_window(handle.into(), |_, window, app| {
+                window.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: from, modifiers: Default::default(), click_count: 1, first_mouse: false }.to_platform_input(), app);
+                window.dispatch_event(gpui::MouseMoveEvent { position: to, pressed_button: Some(gpui::MouseButton::Left), modifiers: Default::default() }.to_platform_input(), app);
+                window.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: to, modifiers: Default::default(), click_count: 1 }.to_platform_input(), app);
+                shot("1-selected", window, app);
+            }).unwrap();
+            let (rows, text) = pane.read_with(cx, |p, _| p.visual_selection());
+            let text = text.expect("drag selected nothing");
+            assert_eq!(rows, [5, 6, 7], "selection drawn on the dragged rows");
+            assert_eq!(text.lines().count(), 3, "{text:?}");
+            // Copy on select put it on the clipboard already.
+            let clip = cx.update(|cx| cx.read_from_clipboard().and_then(|c| c.text()));
+            assert_eq!(clip.as_deref(), Some(text.as_str()), "copy on select");
+            // New output pushes the selected text up, partly into history.
+            for _ in 0..40 {
+                cx.background_executor().timer(Duration::from_millis(200)).await;
+                if pane.update(cx, |p, _| p.visual_text()).lines().any(|l| l.trim() == "405") { break; }
+            }
+            cx.background_executor().timer(Duration::from_millis(300)).await;
+            cx.update_window(handle.into(), |_, window, app| shot("2-output-pushed", window, app)).unwrap();
+            // The highlight sits on the rows that show the selected text, wherever they are now.
+            let on_text = |((rows, copied), drawn): ((Vec<u16>, Option<String>), Vec<String>), step: &str| {
+                assert_eq!(copied.as_deref(), Some(text.as_str()), "{step}: copied text changed");
+                let lines: Vec<&str> = text.lines().collect();
+                assert!(!drawn.is_empty() && drawn.len() <= lines.len(), "{step}: {rows:?} {drawn:?}");
+                // Rows scrolled out of view drop from the top; the end stays in view.
+                let shown = &lines[lines.len() - drawn.len()..];
+                for (i, (row, line)) in drawn.iter().zip(shown).enumerate() {
+                    let ok = if i + 1 == drawn.len() { row.starts_with(line) } else { row == line };
+                    assert!(ok, "{step}: highlight on {drawn:?}, selected {lines:?}");
+                }
+                rows
+            };
+            let pushed = on_text(pane.read_with(cx, |p, _| p.visual_selection_drawn()), "output");
+            assert!(*pushed.last().unwrap() < 7, "output moved the text but not the selection: {pushed:?}");
+            // The wheel scrolls the view back; the highlight comes down with its text.
+            cx.update_window(handle.into(), |_, window, app| {
+                window.dispatch_event(gpui::ScrollWheelEvent { position: from, delta: gpui::ScrollDelta::Lines(gpui::point(0., 3.)), modifiers: Default::default(), touch_phase: gpui::TouchPhase::Moved }.to_platform_input(), app);
+                shot("3-scrolled", window, app);
+            }).unwrap();
+            let scrolled = on_text(pane.read_with(cx, |p, _| p.visual_selection_drawn()), "wheel");
+            assert!(scrolled.last() > pushed.last(), "the wheel moved the text but not the selection: {pushed:?} -> {scrolled:?}");
+            pane.update(cx, |p, cx| p.copy(cx));
+            let copied = cx.update(|cx| cx.read_from_clipboard().and_then(|c| c.text()));
+            assert_eq!(copied.as_deref(), Some(text.as_str()), "copy after scrolling");
+            // Back to the bottom; more output carries the text off screen into history.
+            cx.update_window(handle.into(), |_, window, app| {
+                window.dispatch_event(gpui::ScrollWheelEvent { position: from, delta: gpui::ScrollDelta::Lines(gpui::point(0., -200.)), modifiers: Default::default(), touch_phase: gpui::TouchPhase::Moved }.to_platform_input(), app);
+            }).unwrap();
+            for _ in 0..40 {
+                cx.background_executor().timer(Duration::from_millis(200)).await;
+                if pane.update(cx, |p, _| p.visual_text()).lines().any(|l| l.trim() == "460") { break; }
+            }
+            cx.background_executor().timer(Duration::from_millis(300)).await;
+            cx.update_window(handle.into(), |_, window, app| shot("4-in-history", window, app)).unwrap();
+            let ((gone, kept), _) = pane.read_with(cx, |p, _| p.visual_selection_drawn());
+            assert!(gone.is_empty(), "the selected text left the screen, its highlight too: {gone:?}");
+            assert_eq!(kept.as_deref(), Some(text.as_str()), "selection kept in history");
+            cx.update(|cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(String::new())));
+            pane.update(cx, |p, cx| p.copy(cx));
+            let copied = cx.update(|cx| cx.read_from_clipboard().and_then(|c| c.text()));
+            assert_eq!(copied.as_deref(), Some(text.as_str()), "copy from history");
+            eprintln!("selection native PASS: {text:?} stays highlighted on its text after output and wheel scrolling, and copies the same from history");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_DIAGNOSTIC_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
+            pane.update(cx, |pane, cx| pane.visual_type("/bin/sh -c 'while :; do :; done'\r", cx));
+            cx.background_executor().timer(Duration::from_secs(1)).await;
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join("entry.png")).unwrap();
+                let at = gpui::point(px(theme::Theme::SIDEBAR / 2.), window.viewport_size().height - px(theme::Theme::S8 + theme::Theme::ROW / 2.));
+                native_click(window, app, at, gpui::MouseButton::Left);
+            }).unwrap();
+            cx.background_executor().timer(Duration::from_millis(500)).await;
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join("loading.png")).unwrap();
+                window.dispatch_event(gpui::KeyDownEvent { keystroke: gpui::Keystroke::parse("escape").unwrap(), is_held: false, prefer_character_input: false }.to_platform_input(), app);
+            }).unwrap();
+            assert!(handle.update(cx, |view, _, _| view.visual_diagnostic_closed()).unwrap());
+            cx.background_executor().timer(Duration::from_millis(300)).await;
+            handle.update(cx, |view, window, cx| view.visual_open_diagnostics(window, cx)).unwrap();
+            // Mid-wait: the terminal lines, the spinner and the countdown.
+            cx.background_executor().timer(Duration::from_secs(3)).await;
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join("waiting.png")).unwrap();
+            }).unwrap();
+            cx.background_executor().timer(Duration::from_secs(15)).await;
+            let report = handle.update(cx, |view, _, cx| {
+                let report = view.visual_diagnostic_report(cx).expect("missing native diagnostic report");
+                assert!(report.complete && report.process_count > 0, "{report:?}");
+                assert!(report.memory.is_some_and(|m| m.used_bytes > 0), "memory unread");
+                assert!(report.apps.iter().any(|app| app.cpu_percent > 0.));
+                assert!(report.apps.iter().any(|app| !app.terminals.is_empty() && app.cpu_percent > 5.));
+                view.visual_copy_diagnostics(cx);
+                report
+            }).unwrap();
+            std::fs::write(directory.join("report.json"), serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join("complete.png")).unwrap();
+                // The bottom of the body: the ranking and the right column should end together.
+                let center = gpui::point(window.viewport_size().width / 2., window.viewport_size().height / 2.);
+                window.dispatch_event(gpui::ScrollWheelEvent { position: center, delta: gpui::ScrollDelta::Lines(gpui::point(0., -200.)), modifiers: Default::default(), touch_phase: gpui::TouchPhase::Moved }.to_platform_input(), app);
+            }).unwrap();
+            cx.background_executor().timer(Duration::from_millis(300)).await;
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join("complete-bottom.png")).unwrap();
+            }).unwrap();
+            handle.update(cx, |view, _, cx| view.visual_open_diagnostic_terminal(cx)).unwrap();
+            assert!(handle.update(cx, |view, _, _| view.visual_diagnostic_closed()).unwrap());
+            pane.update(cx, |pane, cx| pane.visual_type("\x03", cx));
+            eprintln!("diagnostic native PASS: loading, Escape cancellation, restart, real complete report, clipboard readback, managed terminal navigation");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SPLIT_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            for name in ["single","nested","menu","eight"] {
+                handle.update(cx,|view,window,cx|{
+                    if window.viewport_size().height < px(theme::Theme::WINDOW_HEIGHT) {window.toggle_simple_fullscreen();}
+                    window.resize(size(px(theme::Theme::WINDOW_WIDTH),px(theme::Theme::WINDOW_HEIGHT)));window.bounds_changed(cx);
+                    view.visual_layout(name,window,cx);
+                }).unwrap();
+                cx.background_executor().timer(Duration::from_secs(2)).await;
+                let root=if name=="menu"{Some(handle.update(cx,|v,_,_|v.visual_bounds()).unwrap())}else{None};
+                cx.update_window(handle.into(),|_,window,app|{
+                    window.refresh();window.draw(app).clear(app);
+                    if let Some(bounds)=root {native_click(window,app,bounds.origin+gpui::point(px(40.),px(80.)),gpui::MouseButton::Right);}
+                    assert_eq!(window.viewport_size(),size(px(theme::Theme::WINDOW_WIDTH),px(theme::Theme::WINDOW_HEIGHT)));
+                    screen::verify_native_geometry(window,app);
+                    std::fs::create_dir_all(&directory).unwrap();
+                    window.render_to_image().unwrap().save(directory.join(format!("{name}-native.png"))).unwrap();
+                }).unwrap();
+                if let Some(bounds)=root {
+                    // Native event dispatch tests; simulated mouse, not human/CUA acceptance.
+                    for expected in [1,4] {
+                        let at=handle.update(cx,|v,_,_|v.visual_menu_point(if expected==1 {"放大"} else {"还原"})).unwrap();
+                        cx.update_window(handle.into(),|_,window,app|native_click(window,app,at,gpui::MouseButton::Left)).unwrap();
+                        handle.update(cx,|v,_,_|v.visual_check_panes(expected)).unwrap();
+                        if expected==1 {cx.update_window(handle.into(),|_,window,app|native_click(window,app,bounds.origin+gpui::point(px(40.),px(80.)),gpui::MouseButton::Right)).unwrap();}
+                    }
+                    cx.update_window(handle.into(),|_,window,app|{
+                        use gpui::InputEvent;
+                        let from=gpui::point(bounds.left()+(bounds.size.width-px(theme::Theme::S6))*0.58+px(theme::Theme::S6/2.),bounds.top()+px(30.));
+                        let to=gpui::point(bounds.left()+bounds.size.width*0.67,from.y);
+                        window.dispatch_event(gpui::MouseDownEvent{button:gpui::MouseButton::Left,position:from,modifiers:Default::default(),click_count:1,first_mouse:false}.to_platform_input(),app);
+                        window.dispatch_event(gpui::MouseMoveEvent{position:to,pressed_button:Some(gpui::MouseButton::Left),modifiers:Default::default()}.to_platform_input(),app);
+                        window.dispatch_event(gpui::MouseUpEvent{button:gpui::MouseButton::Left,position:to,modifiers:Default::default(),click_count:1}.to_platform_input(),app);
+                        window.refresh();window.draw(app).clear(app);
+                    }).unwrap();
+                    cx.background_executor().timer(Duration::from_secs(1)).await;
+                    handle.update(cx,|v,_,_|v.visual_check_saved_ratio()).unwrap();
+                    eprintln!("native events PASS: right menu, zoom 4->1->4, divider drag ratio persisted");
+                }
+            }
+            if std::env::var_os("KL_NATIVE_ONLY").is_some() {
+                let bounds=handle.update(cx,|v,_,_|v.visual_bounds()).unwrap();
+                cx.update_window(handle.into(),|_,w,a|native_click(w,a,bounds.origin+gpui::point(px(40.),px(80.)),gpui::MouseButton::Right)).unwrap();
+                let at=handle.update(cx,|v,_,_|v.visual_menu_point("向右分屏")).unwrap();
+                cx.update_window(handle.into(),|_,w,a|native_click(w,a,at,gpui::MouseButton::Left)).unwrap();
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                handle.update(cx,|v,w,a|{v.visual_assert_new_shell(9,w,a);v.visual_split_down(w,a);}).unwrap();
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                handle.update(cx,|v,w,a|{v.visual_assert_new_shell(10,w,a);v.visual_close_focused(a);}).unwrap();
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                handle.update(cx,|v,_,a|{v.visual_check_panes(9);v.visual_check_closed_processes(1);v.visual_close_focused(a);}).unwrap();
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                handle.update(cx,|v,_,_|{v.visual_check_panes(8);v.visual_check_closed_processes(2);}).unwrap();
+                eprintln!("native actions PASS: right/down launch 8->9->10, shell cwd and focus, close 10->9->8 stops the closed PTYs");
+            }
+            cx.update(|cx|cx.quit());
+        }).detach();
+    }
+    // KEEPLINE_OSC7_EVIDENCE names a directory reached through a symlink: only the
+    // shell's OSC 7 report keeps that spelling, the process directory resolves it.
+    if let (Some(handle), Some(_), Some(dir)) = (
+        &handle,
+        evidence.clone(),
+        std::env::var("KEEPLINE_OSC7_EVIDENCE").ok(),
+    ) {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            wait(2000).await;
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            wait(4000).await;
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |pane, cx| {
+                pane.visual_type(&format!("cd '{dir}'\r"), cx)
+            });
+            wait(1500).await;
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            wait(2000).await;
+            let cwd = handle.update(cx, |v, _, _| v.visual_shown_cwd()).unwrap();
+            eprintln!("osc7: new tab cwd={cwd}, typed cd {dir}");
+            assert_eq!(cwd, dir, "a new tab opens where the shell says it is");
+            eprintln!(
+                "osc7 native PASS: new tab took the shell's OSC 7 directory, symlink spelling kept"
+            );
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // Pane decorations: a shell in a repo with one uncommitted file shows the example
+    // plugin's 改动 1 in its title bar and the last commit in the hover card; after `cd`
+    // out of the repo both go; back in, a second file shows as 改动 2 once it is due.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && let Ok(repo) = std::env::var("KEEPLINE_DECORATION_EVIDENCE")
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, window, app| {
+                    window.refresh();
+                    window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                })
+                .unwrap();
+            };
+            // Each look draws a frame of what changed, as a shown window does on output; a
+            // background window with the idle display link paused draws none on its own.
+            let lines = |cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, window, app| window.draw(app).clear(app))
+                    .unwrap();
+                handle.update(cx, |v, _, cx| v.visual_decorations(cx)).unwrap()
+            };
+            // Asks until the lines settle on `want`: the first look starts the run.
+            async fn until<F: std::future::Future>(
+                want: impl Fn(&(Vec<String>, Vec<String>)) -> bool,
+                lines: impl Fn(&mut gpui::AsyncApp) -> (Vec<String>, Vec<String>),
+                wait: impl Fn(u64) -> F,
+                secs: u64,
+                cx: &mut gpui::AsyncApp,
+            ) -> (Vec<String>, Vec<String>) {
+                let mut seen = lines(cx);
+                for _ in 0..secs * 4 {
+                    if want(&seen) {
+                        break;
+                    }
+                    wait(250).await;
+                    seen = lines(cx);
+                }
+                seen
+            }
+            std::fs::create_dir_all(&directory).unwrap();
+            wait(2000).await;
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            wait(1500).await;
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |pane, cx| pane.visual_type(&format!("cd '{repo}'\r"), cx));
+            let seen = until(|l| !l.0.is_empty() && l.1.len() == 2, lines, &wait, 5, cx).await;
+            eprintln!("in the repo: {seen:?}");
+            assert_eq!(seen.0, ["改动 1"], "the cd succeeded: no failure shown");
+            assert!(seen.1[0].starts_with("最近提交 ") && seen.1[0].ends_with("：初始提交"));
+            assert!(seen.1[1].starts_with("上一条命令用时 ") && seen.1[1].ends_with("退出码 0"));
+            shot("decorated.png", cx);
+            pane.update(cx, |pane, cx| pane.visual_type("cd /tmp\r", cx));
+            let seen = until(|l| l.0.is_empty() && l.1.len() == 1, lines, &wait, 10, cx).await;
+            let cwd = pane.update(cx, |p, _| p.cwd().map(|c| c.display().to_string()));
+            eprintln!("in /tmp ({cwd:?}): {seen:?}");
+            assert!(seen.0.is_empty(), "outside a repo no git line shows");
+            assert!(seen.1.len() == 1 && seen.1[0].starts_with("上一条命令用时 "));
+            shot("outside.png", cx);
+            std::fs::write(std::path::Path::new(&repo).join("second.txt"), "").unwrap();
+            pane.update(cx, |pane, cx| pane.visual_type(&format!("cd '{repo}'\r"), cx));
+            // The cached 改动 1 shows at once and stays until the run due after 10 s.
+            let seen = until(|l| l.0 == ["改动 2"], lines, &wait, 15, cx).await;
+            let cwd = pane.update(cx, |p, _| p.cwd().map(|c| c.display().to_string()));
+            eprintln!("back, a file later ({cwd:?}): {seen:?}");
+            assert_eq!(seen.0, ["改动 2"]);
+            shot("refreshed.png", cx);
+            // The last command's line is due only every 300 s: a new command runs it at once.
+            pane.update(cx, |pane, cx| pane.visual_type("sh -c 'exit 3'\r", cx));
+            let seen = until(|l| l.0.len() == 2, lines, &wait, 5, cx).await;
+            eprintln!("a failed command: {seen:?}");
+            assert_eq!(seen.0, ["✗ 退出 3", "改动 2"]);
+            assert!(seen.1[1].ends_with("退出码 3"));
+            shot("failed.png", cx);
+            pane.update(cx, |pane, cx| pane.visual_type("true\r", cx));
+            let seen = until(|l| l.0.len() == 1, lines, &wait, 5, cx).await;
+            eprintln!("then one that worked: {seen:?}");
+            assert_eq!(seen.0, ["改动 2"]);
+            shot("recovered.png", cx);
+            // Two cds a second apart: the second lands inside the directory ask's throttle,
+            // and the shell then prints nothing more that would ask again.
+            pane.update(cx, |pane, cx| pane.visual_type("cd /tmp\r", cx));
+            wait(1000).await;
+            pane.update(cx, |pane, cx| pane.visual_type(&format!("cd '{repo}'\r"), cx));
+            let seen = until(|l| l.0 == ["改动 2"], lines, &wait, 10, cx).await;
+            let cwd = pane.update(cx, |p, _| p.cwd().map(|c| c.display().to_string()));
+            eprintln!("then a quick hop out and back ({cwd:?}): {seen:?}");
+            assert_eq!(seen.0, ["改动 2"], "the pane follows a cd made inside the throttle");
+            eprintln!(
+                "decoration native PASS: title and hover lines from the plugin, gone outside a repo, refreshed when due, the last command's failure shown and cleared"
+            );
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // A shell command that reports its own status (OSC 7501): the sidebar row and the
+    // pane show 在跑 30%, then 等你回答 with the program's question.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_PROGRAM_STATUS_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            wait(2000).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            // "部署中" and "要部署到生产吗？" in base64.
+            pane.update(cx, |p, cx| {
+                p.visual_type(
+                    "clear; printf '\\033]7501;state=working:app=deploy:progress=30:msg=6YOo572y5Lit\\033\\\\'; sleep 3; printf '\\033]7501;state=blocked:kind=question:app=deploy:msg=6KaB6YOo572y5Yiw55Sf5Lqn5ZCX77yf\\033\\\\'; sleep 30\r",
+                    cx,
+                )
+            });
+            let shot = |name: &str, window: &mut gpui::Window, app: &mut App| {
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join(format!("{name}.png")))
+                    .unwrap();
+            };
+            wait(1500).await;
+            cx.update_window(handle.into(), |_, window, app| shot("0-working", window, app))
+                .unwrap();
+            wait(3000).await;
+            cx.update_window(handle.into(), |_, window, app| shot("1-blocked", window, app))
+                .unwrap();
+            eprintln!("program status native: screenshots in {}", directory.display());
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    if let (Some(handle), Some(_)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_TAB_CWD_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            wait(2000).await;
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            wait(1500).await;
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |pane, cx| pane.visual_type("cd /tmp\r", cx));
+            wait(800).await;
+            let (before, _) = handle.update(cx, |v, _, _| v.visual_tabs()).unwrap();
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            wait(1500).await;
+            let (after, _) = handle.update(cx, |v, _, _| v.visual_tabs()).unwrap();
+            let cwd = handle.update(cx, |v, _, _| v.visual_shown_cwd()).unwrap();
+            eprintln!("tab cwd: tabs {before}->{after}, new tab cwd={cwd}");
+            assert_eq!(after, before + 1, "a new tab opened");
+            assert_eq!(
+                std::fs::canonicalize(&cwd).unwrap(),
+                std::fs::canonicalize("/tmp").unwrap(),
+                "a new tab follows the focused shell's live directory"
+            );
+            eprintln!(
+                "tab cwd native PASS: new tab opens in the directory the focused shell cd'd into"
+            );
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // Two runs over one config directory: 1 rebinds 新建标签 in the settings panel,
+    // 2 is the restart that must still have it, then restores the defaults.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && let Ok(phase) = std::env::var("KEEPLINE_KEYMAP_EVIDENCE")
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            std::fs::create_dir_all(&directory).unwrap();
+            let file = crate::keymap::path().unwrap();
+            assert!(
+                std::env::var_os("XDG_CONFIG_HOME").is_some(),
+                "runs against a scratch config, never ~/.config"
+            );
+            let ready = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, w, a| v.visual_pane_focused(w, a)).unwrap();
+            wait(2000).await;
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            // A launch under load can outlast any fixed wait: poll for the shell's focus.
+            for _ in 0..100 {
+                if ready(cx) {
+                    break;
+                }
+                wait(100).await;
+            }
+            let press = |keys: &str, cx: &mut gpui::AsyncApp| {
+                let keystroke = gpui::Keystroke::parse(keys).unwrap();
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.dispatch_event(gpui::KeyDownEvent { keystroke, is_held: false, prefer_character_input: false }.to_platform_input(), a);
+                })
+                .unwrap();
+            };
+            let in_pane = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, w, a| v.visual_pane_focused(w, a)).unwrap();
+            let tabs = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_tab_row().0.len()).unwrap();
+            let settings = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, w, a| v.visual_settings(w, a)).unwrap();
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                let path = directory.join(format!("{name}.png"));
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                    w.render_to_image().unwrap().save(path).unwrap();
+                })
+                .unwrap();
+            };
+            // A ⌘ chord typed into the terminal opens a tab, or provably does not.
+            let opens_tab = async |keys: &str, cx: &mut gpui::AsyncApp| {
+                assert!(in_pane(cx), "{keys} is pressed while typing in a terminal");
+                let before = tabs(cx);
+                press(keys, cx);
+                // Opened means the new tab's shell holds input; a chord that opens
+                // nothing is given the same 6s to prove it.
+                for _ in 0..60 {
+                    wait(100).await;
+                    if tabs(cx) == before + 1 && in_pane(cx) {
+                        return true;
+                    }
+                }
+                false
+            };
+            let open_settings = async |cx: &mut gpui::AsyncApp| {
+                press("cmd-,", cx);
+                wait(400).await;
+                let (recording, taken, focused) = settings(cx).expect("⌘, opens 设置");
+                assert!(!recording && !taken && focused, "the panel takes the keys");
+            };
+            let close_settings = async |cx: &mut gpui::AsyncApp| {
+                press("escape", cx);
+                wait(500).await;
+                assert!(settings(cx).is_none(), "Esc closes 设置");
+                assert!(in_pane(cx), "input goes back to the terminal");
+            };
+            if phase == "1" {
+                assert!(!file.exists(), "a fresh config starts on the defaults");
+                assert!(opens_tab("cmd-t", cx).await, "default ⌘T opens a tab");
+                open_settings(cx).await;
+                cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Dark, a).unwrap());
+                wait(300).await;
+                shot("settings-dark", cx);
+                cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Light, a).unwrap());
+                wait(300).await;
+                shot("settings-light", cx);
+                // A taken chord waits for 仍然使用 instead of moving silently.
+                handle.update(cx, |v, _, cx| v.visual_settings_record("split_down", cx)).unwrap();
+                press("cmd-d", cx);
+                wait(300).await;
+                assert_eq!(settings(cx), Some((false, true, true)), "⌘D is 向右分屏's");
+                shot("settings-conflict-light", cx);
+                handle.update(cx, |v, _, cx| v.visual_settings_press("取消", cx)).unwrap();
+                // A chord without ⌘ belongs to the program and is refused.
+                handle.update(cx, |v, _, cx| v.visual_settings_record("new_tab", cx)).unwrap();
+                press("ctrl-t", cx);
+                wait(300).await;
+                assert!(!file.exists(), "a refused chord changes nothing");
+                handle.update(cx, |v, _, cx| v.visual_settings_record("new_tab", cx)).unwrap();
+                wait(200).await;
+                shot("settings-recording-light", cx);
+                // A modifier alone does not end the recording; the full chord does.
+                press("cmd-shift", cx);
+                assert_eq!(settings(cx).map(|s| s.0), Some(true));
+                press("cmd-shift-t", cx);
+                wait(300).await;
+                let saved = std::fs::read_to_string(&file).expect("keys.json written");
+                eprintln!("keys.json after rebind: {}", saved.replace('\n', " "));
+                assert!(saved.contains("new_tab") && saved.contains("cmd-shift-t"));
+                cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Dark, a).unwrap());
+                wait(300).await;
+                shot("settings-rebound-dark", cx);
+                close_settings(cx).await;
+                assert!(!opens_tab("cmd-t", cx).await, "the old ⌘T no longer opens a tab");
+                assert!(opens_tab("cmd-shift-t", cx).await, "the new ⌘⇧T does");
+                eprintln!("keymap native PASS phase 1: default ⌘T, conflict held, ctrl refused, rebound to ⌘⇧T in 设置, old key off");
+            } else {
+                assert!(file.exists(), "phase 1 left keys.json");
+                assert!(opens_tab("cmd-shift-t", cx).await, "after a restart ⌘⇧T still opens a tab");
+                assert!(!opens_tab("cmd-t", cx).await, "and ⌘T still does not");
+                open_settings(cx).await;
+                handle.update(cx, |v, _, cx| v.visual_settings_press("全部恢复默认", cx)).unwrap();
+                wait(300).await;
+                assert!(!file.exists(), "全部恢复默认 removes keys.json");
+                close_settings(cx).await;
+                assert!(opens_tab("cmd-t", cx).await, "⌘T is back");
+                assert!(!opens_tab("cmd-shift-t", cx).await, "⌘⇧T is free again");
+                eprintln!("keymap native PASS phase 2: ⌘⇧T kept across restart, 全部恢复默认 restores ⌘T");
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    if let (Some(handle), Some(_)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SHORTCUT_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            // A launch under load can outlast any fixed wait: poll for the state instead.
+            macro_rules! until {
+                ($cond:expr, $why:expr) => {{
+                    let mut met = false;
+                    for _ in 0..100 {
+                        if $cond {
+                            met = true;
+                            break;
+                        }
+                        wait(100).await;
+                    }
+                    assert!(met, "{} within 10s", $why);
+                }};
+            }
+            let focused = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, w, a| v.visual_pane_focused(w, a)).unwrap();
+            wait(2000).await;
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            until!(focused(cx), "the first tab's shell takes focus");
+            let press = |keys: &str, cx: &mut gpui::AsyncApp| {
+                let keystroke = gpui::Keystroke::parse(keys).unwrap();
+                let focused = handle.update(cx, |v, w, a| v.visual_pane_focused(w, a)).unwrap();
+                assert!(focused, "{keys} is pressed while typing in a terminal");
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.dispatch_event(gpui::KeyDownEvent { keystroke, is_held: false, prefer_character_input: false }.to_platform_input(), a);
+                })
+                .unwrap();
+            };
+            let row = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_tab_row()).unwrap();
+            let (start, _, _) = row(cx);
+            press("cmd-t", cx);
+            until!(row(cx).0.len() == start.len() + 1 && focused(cx), "⌘T's tab takes focus");
+            let (tabs, shown, panes) = row(cx);
+            assert_eq!(tabs.len(), start.len() + 1, "⌘T opens a tab");
+            assert_eq!(shown.as_ref(), tabs.last(), "the new tab shows");
+            assert_eq!(panes, 1);
+            press("cmd-d", cx);
+            until!(row(cx).2 == 2 && focused(cx), "⌘D's pane takes focus");
+            assert_eq!(row(cx).2, 2, "⌘D splits right");
+            press("cmd-shift-d", cx);
+            until!(row(cx).2 == 3 && focused(cx), "⌘⇧D's pane takes focus");
+            assert_eq!(row(cx).2, 3, "⌘⇧D splits down");
+            press("cmd-1", cx);
+            wait(300).await;
+            let (tabs, shown, _) = row(cx);
+            assert_eq!(shown.as_ref(), tabs.first(), "⌘1 shows the first tab");
+            press("cmd-shift-[", cx);
+            wait(300).await;
+            assert_eq!(row(cx).1.as_ref(), tabs.last(), "⌘⇧[ wraps to the last tab");
+            press("cmd-shift-]", cx);
+            wait(300).await;
+            assert_eq!(row(cx).1.as_ref(), tabs.first(), "⌘⇧] wraps to the first tab");
+            press("cmd-9", cx);
+            wait(300).await;
+            assert_eq!(row(cx).1.as_ref(), tabs.last(), "⌘9 shows the last tab");
+            // ⌘] / ⌘[ walk the three panes in layout order, wrapping, with real focus.
+            let focus = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, w, a| v.visual_pane_focus(w, a)).unwrap();
+            let (order, first) = focus(cx);
+            assert_eq!(order.len(), 3);
+            let at = order.iter().position(|id| Some(id) == first.as_ref()).expect("a pane has focus");
+            for step in 1..=3 {
+                press("cmd-]", cx);
+                wait(300).await;
+                assert_eq!(focus(cx).1.as_ref(), Some(&order[(at + step) % 3]), "⌘] step {step}");
+            }
+            press("cmd-[", cx);
+            wait(300).await;
+            assert_eq!(focus(cx).1.as_ref(), Some(&order[(at + 2) % 3]), "⌘[ goes back, wrapping");
+            press("cmd-[", cx);
+            wait(300).await;
+            assert_eq!(focus(cx).1.as_ref(), Some(&order[(at + 1) % 3]), "⌘[ again");
+            // ⌘⌥ arrows go by where panes sit: order is a | (b over c).
+            let (a, b, c) = (&order[0], &order[1], &order[2]);
+            for (keys, want, why) in [
+                ("cmd-alt-left", a, "⌘⌥← reaches the left column"),
+                ("cmd-alt-left", a, "⌘⌥← at the left edge stays"),
+                ("cmd-alt-right", b, "⌘⌥→ takes the first of two equal neighbours"),
+                ("cmd-alt-down", c, "⌘⌥↓ goes below"),
+                ("cmd-alt-up", b, "⌘⌥↑ goes back up"),
+                ("cmd-alt-down", c, "⌘⌥↓ again"),
+                ("cmd-alt-left", a, "⌘⌥← from the lower right pane"),
+            ] {
+                press(keys, cx);
+                wait(300).await;
+                assert_eq!(focus(cx).1.as_ref(), Some(want), "{why}");
+            }
+            eprintln!("shortcut native PASS: tabs {}->{}, ⌘T ⌘D ⌘⇧D ⌘1 ⌘⇧[ ⌘⇧] ⌘9, ⌘] ⌘[ cycle 3 panes with focus, ⌘⌥ arrows by position", start.len(), tabs.len());
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // Enough tabs to overflow the strip: the right edge says how many are out of sight,
+    // and clicking it scrolls them in until the left edge takes over the count.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_TAB_OVERFLOW_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            std::fs::create_dir_all(&directory).unwrap();
+            wait(2000).await;
+            for _ in 0..16 {
+                handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+                wait(300).await;
+            }
+            wait(1500).await;
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                    w.render_to_image()
+                        .unwrap()
+                        .save(directory.join(format!("{name}.png")))
+                        .unwrap();
+                })
+                .unwrap();
+            };
+            let overflow = |cx: &mut gpui::AsyncApp| {
+                handle
+                    .update(cx, |v, _, _| v.visual_tab_overflow())
+                    .unwrap()
+            };
+            // Opening a tab shows it, so the strip may end anywhere; start from the left.
+            handle
+                .update(cx, |v, _, cx| v.visual_tab_scroll_home(cx))
+                .unwrap();
+            wait(300).await;
+            shot("tabs-overflow-start", cx);
+            wait(300).await;
+            let (left, right, at) = overflow(cx);
+            eprintln!("tab overflow: start left={left} right={right}");
+            assert!(
+                left == 0 && right > 0,
+                "the strip starts scrolled left with tabs out of sight on the right"
+            );
+            let mut last = right;
+            while last > 0 {
+                cx.update_window(handle.into(), |_, w, a| {
+                    native_click(w, a, at, gpui::MouseButton::Left)
+                })
+                .unwrap();
+                wait(300).await;
+                let (_, right, _) = overflow(cx);
+                eprintln!("tab overflow: after click right={right}");
+                assert!(
+                    right < last,
+                    "each click on the marker brings one more tab into view"
+                );
+                last = right;
+            }
+            shot("tabs-overflow-end", cx);
+            let (left, right, _) = overflow(cx);
+            eprintln!("tab overflow: end left={left} right={right}");
+            assert!(
+                left > 0 && right == 0,
+                "scrolled to the end, the count moves to the left edge"
+            );
+            eprintln!("tab overflow native PASS");
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_TAB_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            wait(2000).await;
+            for _ in 0..2 {
+                handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+                wait(1500).await;
+            }
+            std::fs::create_dir_all(&directory).unwrap();
+            let shot = |name: &str, window: &mut gpui::Window, app: &mut App| {
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join(format!("{name}.png")))
+                    .unwrap();
+            };
+            let state = |cx: &mut gpui::AsyncApp| {
+                handle
+                    .update(cx, |v, w, a| v.visual_tab_state(w, a))
+                    .unwrap()
+            };
+            // The first tab sits right after the sidebar, in the strip under the top bar.
+            let tab = gpui::point(
+                px(theme::Theme::SIDEBAR + 30.),
+                px(theme::Theme::TOP + theme::Theme::TABS / 2.),
+            );
+            let hover = |at: gpui::Point<gpui::Pixels>| {
+                gpui::MouseMoveEvent {
+                    position: at,
+                    pressed_button: None,
+                    modifiers: Default::default(),
+                }
+                .to_platform_input()
+            };
+            // Hovering shows the tab's card; the menu must not sit under it.
+            cx.update_window(handle.into(), |_, w, a| {
+                w.dispatch_event(hover(tab), a);
+            })
+            .unwrap();
+            wait(900).await;
+            cx.update_window(handle.into(), |_, w, a| shot("0-tab-hover", w, a))
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                native_click(w, a, tab, gpui::MouseButton::Right)
+            })
+            .unwrap();
+            let (menu, renaming) = state(cx);
+            assert!(menu && renaming.is_none(), "right click opens the tab menu");
+            // Still over the tab with the menu open: the card stays away.
+            cx.update_window(handle.into(), |_, w, a| {
+                w.dispatch_event(hover(tab + gpui::point(px(4.), px(0.))), a);
+            })
+            .unwrap();
+            wait(900).await;
+            cx.update_window(handle.into(), |_, w, a| shot("1-tab-menu", w, a))
+                .unwrap();
+            let at = handle
+                .update(cx, |v, _, _| v.visual_tab_menu_point(0))
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                native_click(w, a, at, gpui::MouseButton::Left)
+            })
+            .unwrap();
+            wait(300).await;
+            let (menu, renaming) = state(cx);
+            eprintln!("menu rename: menu={menu} field={renaming:?}");
+            assert!(
+                !menu && renaming.as_ref().is_some_and(|(_, focused)| *focused),
+                "重命名 opens a focused field"
+            );
+            cx.update_window(handle.into(), |_, w, a| shot("2-rename-selected", w, a))
+                .unwrap();
+            let key = |key: &str| {
+                gpui::KeyDownEvent {
+                    keystroke: gpui::Keystroke::parse(key).unwrap(),
+                    is_held: false,
+                    prefer_character_input: false,
+                }
+                .to_platform_input()
+            };
+            cx.update_window(handle.into(), |_, w, a| {
+                w.dispatch_event(key("backspace"), a);
+            })
+            .unwrap();
+            wait(300).await;
+            eprintln!("after backspace: {:?}", state(cx).1);
+            cx.update_window(handle.into(), |_, w, a| shot("3-rename-caret", w, a))
+                .unwrap();
+            // A name longer than the tab stays on one line and slides to keep the caret.
+            let long = "PR 1234 修复标签重命名时长名字换行被裁掉的问题";
+            handle
+                .update(cx, |v, _, cx| v.visual_rename_type(long, cx))
+                .unwrap();
+            wait(300).await;
+            cx.update_window(handle.into(), |_, w, a| shot("3b-rename-long", w, a))
+                .unwrap();
+            for k in ["cmd-left", "alt-right", "shift-alt-right"] {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.dispatch_event(key(k), a);
+                })
+                .unwrap();
+            }
+            wait(300).await;
+            cx.update_window(handle.into(), |_, w, a| shot("3c-rename-moved", w, a))
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                w.dispatch_event(key("escape"), a);
+            })
+            .unwrap();
+            wait(300).await;
+            assert!(state(cx).1.is_none(), "Esc cancels the rename");
+            // A real double click: two presses, the second carrying click_count 2.
+            cx.update_window(handle.into(), |_, w, a| {
+                for count in [1, 2] {
+                    w.dispatch_event(
+                        gpui::MouseDownEvent {
+                            button: gpui::MouseButton::Left,
+                            position: tab,
+                            modifiers: Default::default(),
+                            click_count: count,
+                            first_mouse: false,
+                        }
+                        .to_platform_input(),
+                        a,
+                    );
+                    w.dispatch_event(
+                        gpui::MouseUpEvent {
+                            button: gpui::MouseButton::Left,
+                            position: tab,
+                            modifiers: Default::default(),
+                            click_count: count,
+                        }
+                        .to_platform_input(),
+                        a,
+                    );
+                }
+            })
+            .unwrap();
+            wait(300).await;
+            let (_, renaming) = state(cx);
+            eprintln!("double click: field={renaming:?}");
+            assert!(
+                renaming.as_ref().is_some_and(|(_, focused)| *focused),
+                "double click opens a focused field"
+            );
+            cx.update_window(handle.into(), |_, w, a| shot("4-double-click", w, a))
+                .unwrap();
+            // Clicking the terminal keeps the typed name. Focus events only reach an
+            // active window, as the user's is when they click in it.
+            cx.update_window(handle.into(), |_, w, _| w.activate_window())
+                .unwrap();
+            wait(500).await;
+            handle
+                .update(cx, |v, _, cx| v.visual_rename_type("部署 PR", cx))
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                let middle = w.viewport_size();
+                native_click(
+                    w,
+                    a,
+                    gpui::point(middle.width / 2., middle.height / 2.),
+                    gpui::MouseButton::Left,
+                );
+                // Focus listeners run once a frame is drawn, as the app does at once.
+                w.refresh();
+                w.draw(a).clear(a);
+            })
+            .unwrap();
+            wait(300).await;
+            let name = handle
+                .update(cx, |v, _, cx| v.visual_first_tab_name(cx))
+                .unwrap();
+            let active = cx
+                .update_window(handle.into(), |_, w, _| w.is_window_active())
+                .unwrap();
+            eprintln!(
+                "after click away: active={active} field={:?} name={name}",
+                state(cx).1
+            );
+            // macOS will not hand focus to a window started from a background shell.
+            if active {
+                assert!(state(cx).1.is_none(), "a click elsewhere ends the rename");
+                assert_eq!(name, "部署 PR", "and keeps the typed name");
+                cx.update_window(handle.into(), |_, w, a| shot("4b-blur-saved", w, a))
+                    .unwrap();
+            } else {
+                eprintln!("click away not checked: the window is not active");
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.dispatch_event(key("escape"), a);
+                })
+                .unwrap();
+                wait(300).await;
+            }
+            // A 出错了 conversation whose resume fails: the second click returns to the
+            // resume tab instead of opening another.
+            let (before, _) = handle.update(cx, |v, _, _| v.visual_tabs()).unwrap();
+            handle
+                .update(cx, |v, w, a| v.visual_open_failed_session(w, a))
+                .unwrap();
+            wait(3000).await;
+            let (first, resumed) = handle.update(cx, |v, _, _| v.visual_tabs()).unwrap();
+            cx.update_window(handle.into(), |_, w, a| shot("5-failed-resume", w, a))
+                .unwrap();
+            for _ in 0..3 {
+                handle
+                    .update(cx, |v, w, a| v.visual_open_failed_session(w, a))
+                    .unwrap();
+                wait(1500).await;
+            }
+            let (again, current) = handle.update(cx, |v, _, _| v.visual_tabs()).unwrap();
+            eprintln!(
+                "failed session tabs: before={before} first={first} after 3 more clicks={again}"
+            );
+            assert_eq!(first, before + 1, "the first click opens one resume tab");
+            assert_eq!(
+                (again, &current),
+                (first, &resumed),
+                "later clicks return to it"
+            );
+            cx.update_window(handle.into(), |_, w, a| shot("6-failed-reclick", w, a))
+                .unwrap();
+            // Closing the shown tab hands the view to a neighbour with a live shell; that
+            // shell must be drawable at once, before the host confirms the close.
+            let neighbour = handle
+                .update(cx, |v, _, cx| v.visual_close_tab(cx))
+                .unwrap();
+            assert!(neighbour.is_some(), "a neighbouring tab takes over");
+            cx.update_window(handle.into(), |_, w, a| shot("7-closed-tab", w, a))
+                .unwrap();
+            // A full-screen Agent such as Codex asks for mouse reports; right-click must
+            // still open Keepline's pane menu instead of going to the program.
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, cx| {
+                p.visual_type("printf '\\033[?1000;1002;1006h'\r", cx)
+            });
+            wait(1500).await;
+            let (tracking, center) = pane.read_with(cx, |p, _| p.visual_mouse_app());
+            assert!(tracking, "the shell turned on mouse reports");
+            let center = center.expect("painted pane");
+            cx.update_window(handle.into(), |_, w, a| {
+                native_click(w, a, center, gpui::MouseButton::Right)
+            })
+            .unwrap();
+            let opened = handle
+                .update(cx, |v, _, _| v.visual_pane_menu_open())
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                shot("8-right-click-mouse-app", w, a)
+            })
+            .unwrap();
+            eprintln!("right click over a mouse-reporting program: menu={opened}");
+            assert!(
+                opened,
+                "right-click opens the pane menu even when the program takes the mouse"
+            );
+            // A tab of several splits asks before its × takes them all down; a tab of one
+            // pane closes at once.
+            handle
+                .update(cx, |v, w, a| v.visual_split_down(w, a))
+                .unwrap();
+            wait(1000).await;
+            let (before, shown) = handle.update(cx, |v, _, _| v.visual_tabs()).unwrap();
+            handle
+                .update(cx, |v, _, cx| v.visual_close_tab(cx))
+                .unwrap();
+            wait(500).await;
+            cx.update_window(handle.into(), |_, w, a| shot("9-close-splits", w, a))
+                .unwrap();
+            let (asked, after) = handle
+                .update(cx, |v, _, _| (v.visual_confirming_close(), v.visual_tabs()))
+                .unwrap();
+            assert!(asked, "closing a tab of two splits asks first");
+            assert_eq!(after, (before, shown), "and keeps the tab until confirmed");
+            handle
+                .update(cx, |v, _, cx| v.visual_cancel_close(cx))
+                .unwrap();
+            handle
+                .update(cx, |v, _, cx| v.visual_close_focused(cx))
+                .unwrap();
+            wait(1000).await;
+            handle
+                .update(cx, |v, _, cx| v.visual_close_tab(cx))
+                .unwrap();
+            wait(500).await;
+            let (asked, (count, _)) = handle
+                .update(cx, |v, _, _| (v.visual_confirming_close(), v.visual_tabs()))
+                .unwrap();
+            assert!(!asked, "a tab of one shell closes without asking");
+            assert_eq!(count, before - 1, "and is gone");
+            cx.update_window(handle.into(), |_, w, a| shot("10-closed-single", w, a))
+                .unwrap();
+            eprintln!("tab evidence PASS");
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+    // Runs a real Codex in the shown pane, then scrolls and moves the mouse over it the
+    // way a user does; reports whether any report reached Codex as typed text.
+    if let Some(handle) = &handle
+        && let Ok(command) = std::env::var("KEEPLINE_WHEEL_EVIDENCE")
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            cx.background_executor().timer(Duration::from_secs(3)).await;
+            pane.update(cx, |p, cx| p.visual_type(&format!("{command}\r"), cx));
+            cx.background_executor()
+                .timer(Duration::from_secs(15))
+                .await;
+            let (tracking, center) = pane.read_with(cx, |p, _| p.visual_mouse_app());
+            let center = center.expect("pane laid out");
+            eprintln!("wheel evidence: tracking={tracking}");
+            let rounds: usize = std::env::var("KEEPLINE_WHEEL_ROUNDS")
+                .ok()
+                .and_then(|r| r.parse().ok())
+                .unwrap_or(40);
+            let gap: u64 = std::env::var("KEEPLINE_WHEEL_GAP_MS")
+                .ok()
+                .and_then(|r| r.parse().ok())
+                .unwrap_or(8);
+            for i in 0..rounds {
+                cx.update_window(handle.into(), |_, window, app| {
+                    use gpui::InputEvent;
+                    let at =
+                        center + gpui::point(px((i % 20) as f32 * 7.), px((i % 7) as f32 * 9.));
+                    window.dispatch_event(
+                        gpui::MouseMoveEvent {
+                            position: at,
+                            pressed_button: None,
+                            modifiers: Default::default(),
+                        }
+                        .to_platform_input(),
+                        app,
+                    );
+                    window.dispatch_event(
+                        gpui::ScrollWheelEvent {
+                            position: at,
+                            delta: gpui::ScrollDelta::Lines(gpui::point(
+                                0.,
+                                if i % 2 == 0 { -3. } else { 3. },
+                            )),
+                            modifiers: Default::default(),
+                            touch_phase: gpui::TouchPhase::Moved,
+                        }
+                        .to_platform_input(),
+                        app,
+                    );
+                })
+                .unwrap();
+                if gap > 0 {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(gap))
+                        .await;
+                }
+            }
+            cx.background_executor().timer(Duration::from_secs(3)).await;
+            let text = pane.read_with(cx, |p, _| p.visual_text());
+            eprintln!(
+                "wheel evidence: pane error = {:?}",
+                pane.read_with(cx, |p, _| p.visual_error())
+            );
+            let prompt = text
+                .lines()
+                .rfind(|l| l.trim_start().starts_with('›'))
+                .unwrap_or("")
+                .to_owned();
+            eprintln!("wheel evidence: prompt line = {prompt:?}");
+            eprintln!(
+                "wheel evidence: stray report text = {}",
+                ["<35", "<64", "<65", "[<"].iter().any(|m| text.contains(m))
+            );
+            // Leave Codex without submitting anything.
+            pane.update(cx, |p, cx| p.visual_type("\x03\x03", cx));
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+    // Scrolls a full shell back with the wheel, then types: the view returns to the
+    // input line for a real key event and for committed text alike.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_FOLLOW_INPUT_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, cx| p.visual_type("clear; seq 1 400\r", cx));
+            for _ in 0..30 {
+                cx.background_executor().timer(Duration::from_millis(300)).await;
+                if pane.update(cx, |p, _| p.visual_text()).contains("400") { break; }
+            }
+            let center = pane.read_with(cx, |p, _| p.visual_mouse_app().1).expect("pane laid out");
+            let scroll_up = |window: &mut gpui::Window, app: &mut App| {
+                window.dispatch_event(gpui::ScrollWheelEvent {
+                    position: center,
+                    delta: gpui::ScrollDelta::Lines(gpui::point(0., 60.)),
+                    modifiers: Default::default(),
+                    touch_phase: gpui::TouchPhase::Moved,
+                }.to_platform_input(), app);
+                window.refresh(); window.draw(app).clear(app);
+            };
+            for (name, key) in [("key", Some("left")), ("text", None)] {
+                cx.update_window(handle.into(), |_, window, app| {
+                    scroll_up(window, app);
+                    window.render_to_image().unwrap().save(directory.join(format!("{name}-scrolled.png"))).unwrap();
+                }).unwrap();
+                assert!(!pane.read_with(cx, |p, _| p.visual_at_bottom()), "{name}: wheel did not leave the bottom");
+                match key {
+                    Some(key) => cx.update_window(handle.into(), |_, window, app| {
+                        window.dispatch_event(gpui::KeyDownEvent { keystroke: gpui::Keystroke::parse(key).unwrap(), is_held: false, prefer_character_input: false }.to_platform_input(), app);
+                    }).unwrap(),
+                    None => pane.update(cx, |p, cx| p.visual_type("x", cx)),
+                }
+                cx.background_executor().timer(Duration::from_millis(300)).await;
+                assert!(pane.read_with(cx, |p, _| p.visual_at_bottom()), "{name}: input did not return to the bottom");
+                cx.update_window(handle.into(), |_, window, app| {
+                    window.refresh(); window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(directory.join(format!("{name}-typed.png"))).unwrap();
+                }).unwrap();
+            }
+            pane.update(cx, |p, cx| p.visual_type("\x15", cx));
+            eprintln!("follow input native PASS: wheel leaves the bottom; a key event and typed text both return to the input line");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // Plain-text URLs in Agent prose: hovering one underlines it, as an OSC 8 link does.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_LINK_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
+            pane.update(cx, |pane, cx| {
+                pane.visual_type(
+                    "clear; printf '7. Hunter / AI 雷达\\n- 加了 Rust 标签页，已经上线到 3002 端口：http://100.113.31.23:3002/radar?s=rust\\n- 见 (https://en.wikipedia.org/wiki/Rust_(language))。\\n'\r",
+                    cx,
+                )
+            });
+            for _ in 0..30 {
+                cx.background_executor().timer(Duration::from_millis(500)).await;
+                if pane.update(cx, |p, _| p.visual_text()).contains("3002 端口：http") {
+                    break;
+                }
+            }
+            for (name, prefix, cols) in [
+                ("hover-radar.png", "http://100.113.31.23", 38),
+                ("hover-wiki.png", "https://en.wikipedia.org", 45),
+            ] {
+                let (at, found) = pane
+                    .update(cx, |pane, _| pane.visual_link(prefix))
+                    .unwrap_or_else(|| panic!("no link for {prefix} in\n{}", pane.update(cx, |p, _| p.visual_text())));
+                assert_eq!(found, cols, "{prefix}");
+                cx.update_window(handle.into(), |_, window, app| {
+                    // Underlined only while ⌘ is held, when a click would open it.
+                    window.dispatch_event(
+                        gpui::MouseMoveEvent { position: at, pressed_button: None, modifiers: gpui::Modifiers { platform: true, ..Default::default() } }
+                            .to_platform_input(),
+                        app,
+                    );
+                    window.refresh(); window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                }).unwrap();
+            }
+            // A path longer than the pane is wide wraps onto the next row; a script beside it.
+            let deep = directory.join(format!("{}/{}", "a".repeat(120), "b".repeat(120)));
+            std::fs::create_dir_all(&deep).unwrap();
+            let page = deep.join("index.html");
+            std::fs::write(&page, "<p>hi</p>").unwrap();
+            let script = directory.join("run.sh");
+            std::fs::write(&script, "echo hi").unwrap();
+            pane.update(cx, |pane, cx| {
+                pane.visual_type(
+                    &format!(
+                        "clear; printf '8. 其他\\n- 把 3 个 Codex 的 skill 软链接到了 ~/.claude/skills。\\n- 改了 crates/keepline-app/Cargo.toml:3 和 full_v18.mp4\\n- 页面 {} 和脚本 {}\\n'\r",
+                        page.display(),
+                        script.display()
+                    ),
+                    cx,
+                )
+            });
+            for _ in 0..30 {
+                cx.background_executor().timer(Duration::from_millis(500)).await;
+                if pane.update(cx, |p, _| p.visual_text()).contains("和 full_v18") {
+                    break;
+                }
+            }
+            let page_word = page.display().to_string();
+            let script_word = script.display().to_string();
+            let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap());
+            for (name, word, expect) in [
+                ("hover-home.png", "~/.claude/skills", Some(home.join(".claude/skills"))),
+                (
+                    "hover-relative.png",
+                    "crates/keepline-app/Cargo.toml:3",
+                    Some(std::env::current_dir().unwrap().join("crates/keepline-app/Cargo.toml")),
+                ),
+                ("hover-missing.png", "full_v18.mp4", None),
+                ("hover-wrapped.png", page_word.as_str(), Some(page.clone())),
+                ("hover-script.png", script_word.as_str(), Some(script.clone())),
+            ] {
+                let (at, _) = pane
+                    .update(cx, |pane, _| pane.visual_path(word))
+                    .unwrap_or_else(|| panic!("no path word {word}"));
+                let hover = |modifiers: gpui::Modifiers, cx: &mut gpui::AsyncApp| {
+                    cx.update_window(handle.into(), |_, window, app| {
+                        window.dispatch_event(
+                            gpui::MouseMoveEvent { position: at, pressed_button: None, modifiers }
+                                .to_platform_input(),
+                            app,
+                        );
+                    }).unwrap();
+                };
+                hover(Default::default(), cx);
+                // A relative word waits for the host to say where the shell is.
+                cx.background_executor().timer(Duration::from_millis(500)).await;
+                let (_, hovered) = pane.update(cx, |pane, _| pane.visual_path(word)).unwrap();
+                assert_eq!(hovered, expect, "{word}");
+                assert_eq!(pane.update(cx, |p, _| p.visual_hint()), None, "{word}: a hint without ⌘");
+                hover(gpui::Modifiers { platform: true, ..Default::default() }, cx);
+                let hint = pane.update(cx, |p, _| p.visual_hint());
+                let wants = match name {
+                    "hover-relative.png" => Some("第 3 行"),
+                    "hover-wrapped.png" => Some("⌘ 点击打开"),
+                    "hover-script.png" => Some("不运行"),
+                    "hover-missing.png" => None,
+                    _ => Some("⌘ 点击在访达中打开"),
+                };
+                match wants {
+                    Some(text) => assert!(hint.as_deref().is_some_and(|h| h.contains(text)), "{word}: hint {hint:?}"),
+                    None => assert_eq!(hint, None, "{word}"),
+                }
+                eprintln!("{name}: hint {hint:?}");
+                cx.update_window(handle.into(), |_, window, app| {
+                    window.refresh(); window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                }).unwrap();
+            }
+            eprintln!("link native PASS: with ⌘ held, plain-text URLs and existing paths are underlined with a note on what a click does, a wrapped path is one link, a script is only shown; a missing file is not");
+            cx.update(|cx| cx.quit());
+        }).detach();
+        return;
+    }
+    // A brand-new space with no tab: 「运行 Claude Code」 opens a terminal with `claude`
+    // started in it, not a bare shell. A `claude` stand-in on PATH says it ran.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_NEW_SPACE_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            wait(2000).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                    w.render_to_image()
+                        .unwrap()
+                        .save(directory.join(format!("{name}.png")))
+                        .unwrap();
+                })
+                .unwrap();
+            };
+            handle
+                .update(cx, |v, _, cx| v.visual_add_space("fresh", "/tmp", cx))
+                .unwrap();
+            wait(800).await;
+            handle
+                .update(cx, |v, _, cx| v.visual_pick_space("fresh", cx))
+                .unwrap();
+            wait(500).await;
+            let (space, tab, _) = handle.update(cx, |v, _, a| v.visual_shown(a)).unwrap();
+            assert_eq!(space, "fresh");
+            assert!(tab.is_none(), "a new space opens with no tab");
+            shot("0-new-space", cx);
+            handle
+                .update(cx, |v, _, cx| v.visual_run_agent("claude", cx))
+                .unwrap();
+            let mut text = String::new();
+            for _ in 0..60 {
+                wait(250).await;
+                text = handle.update(cx, |v, _, a| v.visual_shown(a)).unwrap().2;
+                if text.contains("FAKE-CLAUDE") {
+                    break;
+                }
+            }
+            eprintln!("screen after 运行 Claude Code:\n{text}");
+            shot("1-claude-started", cx);
+            assert!(
+                text.contains("FAKE-CLAUDE --session-id"),
+                "运行 Claude Code started claude in the new terminal"
+            );
+            // The next new space offers the Agent just used as its one solid button.
+            handle
+                .update(cx, |v, _, cx| v.visual_add_space("second", "/tmp", cx))
+                .unwrap();
+            wait(800).await;
+            handle
+                .update(cx, |v, _, cx| v.visual_pick_space("second", cx))
+                .unwrap();
+            wait(500).await;
+            let first = handle.update(cx, |v, _, _| v.visual_first_agent()).unwrap();
+            assert_eq!(first, "claude", "the Agent used last comes first");
+            shot("2-second-space", cx);
+            eprintln!("new space evidence PASS: 运行 Claude Code starts claude in a new space, and leads the next one");
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // A space is renamed in place from its right-click menu, Esc keeps the old name,
+    // and a space whose folder is gone can still be renamed.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SPACE_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            wait(2000).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let shot = |name: &str, window: &mut gpui::Window, app: &mut App| {
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join(format!("{name}.png")))
+                    .unwrap();
+            };
+            let state = |cx: &mut gpui::AsyncApp| {
+                handle
+                    .update(cx, |v, w, a| v.visual_space_state(w, a))
+                    .unwrap()
+            };
+            let key = |key: &str| {
+                gpui::KeyDownEvent {
+                    keystroke: gpui::Keystroke::parse(key).unwrap(),
+                    is_held: false,
+                    prefer_character_input: false,
+                }
+                .to_platform_input()
+            };
+            handle
+                .update(cx, |v, _, cx| v.visual_lose_space_dir(cx))
+                .unwrap();
+            wait(800).await;
+            let (_, _, spaces) = state(cx);
+            eprintln!("spaces: {spaces:?}");
+            let before = spaces[0].0.clone();
+            cx.update_window(handle.into(), |_, w, a| shot("0-space-missing", w, a))
+                .unwrap();
+            // The first space row sits under the preset switch and the 空间 heading.
+            let row = gpui::point(
+                px(theme::Theme::S20 + 20.),
+                px(std::env::var("KL_SPACE_ROW_Y")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(132.)),
+            );
+            cx.update_window(handle.into(), |_, w, a| {
+                native_click(w, a, row, gpui::MouseButton::Right)
+            })
+            .unwrap();
+            let (menu, renaming, _) = state(cx);
+            assert!(
+                menu && renaming.is_none(),
+                "right click opens the space menu"
+            );
+            cx.update_window(handle.into(), |_, w, a| shot("1-space-menu", w, a))
+                .unwrap();
+            let at = handle
+                .update(cx, |v, _, _| v.visual_space_menu_point(0))
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                native_click(w, a, at, gpui::MouseButton::Left)
+            })
+            .unwrap();
+            wait(300).await;
+            let (menu, renaming, _) = state(cx);
+            eprintln!("menu rename: menu={menu} field={renaming:?}");
+            assert!(
+                !menu && renaming == Some((before.clone(), true)),
+                "重命名 opens a focused field holding the name"
+            );
+            cx.update_window(handle.into(), |_, w, a| shot("2-space-renaming", w, a))
+                .unwrap();
+            // Esc puts the old name back.
+            handle
+                .update(cx, |v, _, cx| v.visual_space_rename_type("不该留下", cx))
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                w.dispatch_event(key("escape"), a);
+            })
+            .unwrap();
+            wait(800).await;
+            let (_, renaming, spaces) = state(cx);
+            assert!(renaming.is_none(), "Esc ends the rename");
+            assert_eq!(spaces[0].0, before, "and keeps the old name");
+            // Enter keeps the new one, with the folder still missing.
+            handle
+                .update(cx, |v, w, cx| v.visual_rename_first_space(w, cx))
+                .unwrap();
+            handle
+                .update(cx, |v, _, cx| {
+                    v.visual_space_rename_type("改名后的空间", cx)
+                })
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| shot("3-space-typed", w, a))
+                .unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                w.dispatch_event(key("enter"), a);
+            })
+            .unwrap();
+            wait(1500).await;
+            let (_, renaming, spaces) = state(cx);
+            eprintln!("after enter: {spaces:?}");
+            assert!(renaming.is_none(), "Enter ends the rename");
+            assert_eq!(spaces[0].0, "改名后的空间", "and saves the name");
+            assert_eq!(
+                spaces[0].1, "/nonexistent/keepline-space-evidence",
+                "without touching the missing folder"
+            );
+            cx.update_window(handle.into(), |_, w, a| shot("4-space-renamed", w, a))
+                .unwrap();
+            eprintln!("space evidence PASS");
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // Tab order by dragging and by the tab menu, a pane moved to another tab, and a
+    // space removed after confirming, all against a real host.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_LAYOUT_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            use gpui::InputEvent;
+            let executor = cx.background_executor().clone();
+            let wait = move |ms: u64| executor.timer(Duration::from_millis(ms));
+            wait(2000).await;
+            for _ in 0..2 {
+                handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+                wait(1500).await;
+            }
+            handle
+                .update(cx, |v, _, cx| v.visual_name_tabs(&["alpha", "beta", "gamma"], cx))
+                .unwrap();
+            wait(800).await;
+            handle
+                .update(cx, |v, _, cx| v.visual_add_space("other", "/tmp", cx))
+                .unwrap();
+            wait(800).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                let path = directory.join(name);
+                cx.update_window(handle.into(), |_, window, app| {
+                    window.refresh();
+                    window.draw(app).clear(app);
+                    window.render_to_image().unwrap().save(path).unwrap();
+                })
+                .unwrap();
+            };
+            let titles =
+                |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_tab_titles()).unwrap();
+            shot("1-before.png", cx);
+            assert_eq!(titles(cx), ["alpha", "beta", "gamma"]);
+            let y = px(theme::Theme::TOP + theme::Theme::TABS / 2.);
+            let x = |at: f32| px(theme::Theme::SIDEBAR + at);
+            let env = |name: &str, default: f32| {
+                std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+            };
+            let (from, to) = (env("KL_DRAG_FROM", 30.), env("KL_DRAG_TO", 240.));
+            cx.update_window(handle.into(), |_, window, app| {
+                let at = gpui::point(x(from), y);
+                window.dispatch_event(
+                    gpui::MouseDownEvent {
+                        button: gpui::MouseButton::Left,
+                        position: at,
+                        modifiers: Default::default(),
+                        click_count: 1,
+                        first_mouse: false,
+                    }
+                    .to_platform_input(),
+                    app,
+                );
+                for i in 1..=12 {
+                    let p = gpui::point(x(from + (to - from) * i as f32 / 12.), y);
+                    window.dispatch_event(
+                        gpui::MouseMoveEvent {
+                            position: p,
+                            pressed_button: Some(gpui::MouseButton::Left),
+                            modifiers: Default::default(),
+                        }
+                        .to_platform_input(),
+                        app,
+                    );
+                }
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join("2-dragging.png"))
+                    .unwrap();
+                window.dispatch_event(
+                    gpui::MouseUpEvent {
+                        button: gpui::MouseButton::Left,
+                        position: gpui::point(x(to), y),
+                        modifiers: Default::default(),
+                        click_count: 1,
+                    }
+                    .to_platform_input(),
+                    app,
+                );
+            })
+            .unwrap();
+            wait(600).await;
+            shot("3-dragged.png", cx);
+            eprintln!("after drag: {:?}", titles(cx));
+            assert_eq!(
+                titles(cx),
+                ["beta", "alpha", "gamma"],
+                "dragged onto gamma: the tab lands before the one dropped on"
+            );
+            // The tab menu: right-click the first tab (beta), 向右移.
+            cx.update_window(handle.into(), |_, window, app| {
+                native_click(window, app, gpui::point(x(from), y), gpui::MouseButton::Right);
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join("4-tab-menu.png"))
+                    .unwrap();
+            })
+            .unwrap();
+            let item = handle.update(cx, |v, _, _| v.visual_tab_menu_point(1)).unwrap();
+            cx.update_window(handle.into(), |_, window, app| {
+                native_click(window, app, item, gpui::MouseButton::Left)
+            })
+            .unwrap();
+            wait(600).await;
+            assert_eq!(titles(cx), ["alpha", "beta", "gamma"], "向右移 swaps with the next tab");
+            // Move gamma's pane into alpha: gamma closes with its last pane.
+            handle
+                .update(cx, |v, window, cx| v.visual_page_tab("gamma", window, cx))
+                .unwrap();
+            wait(600).await;
+            handle
+                .update(cx, |v, _, cx| v.visual_move_pane("alpha", cx))
+                .unwrap();
+            wait(800).await;
+            shot("5-moved.png", cx);
+            assert_eq!(titles(cx), ["alpha", "beta"]);
+            assert_eq!(handle.update(cx, |v, _, _| v.visual_tab_layout("alpha")).unwrap(), 2);
+            // Remove the other space from its right-click menu: the first press asks,
+            // the second removes it.
+            handle
+                .update(cx, |v, _, cx| v.visual_open_space_menu("other", cx))
+                .unwrap();
+            wait(300).await;
+            let remove = handle
+                .update(cx, |v, _, _| v.visual_space_menu_point(2))
+                .unwrap();
+            // Clicks hit what was last drawn: paint the menu before pressing it.
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh();
+                window.draw(app).clear(app);
+                native_click(window, app, remove, gpui::MouseButton::Left)
+            })
+            .unwrap();
+            wait(300).await;
+            shot("6-remove-confirm.png", cx);
+            cx.update_window(handle.into(), |_, window, app| {
+                native_click(window, app, remove, gpui::MouseButton::Left)
+            })
+            .unwrap();
+            wait(800).await;
+            shot("7-removed.png", cx);
+            let spaces = handle.update(cx, |v, _, _| v.visual_spaces()).unwrap();
+            assert!(!spaces.iter().any(|s| s == "other"), "{spaces:?}");
+            eprintln!(
+                "layout native PASS: drag reorders tabs, 向右移 moves one step, a pane moves to another tab, a space is removed after confirming"
+            );
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // Peek: a session waiting at an approval in a hidden tab floats over the shown one,
+    // is answered from the peek's title bar, and its terminal keeps its own size until
+    // the peek is typed in.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_PEEK_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |ms| executor.timer(Duration::from_millis(ms));
+            // Peek is off until chosen in settings; this run turns it on, then off again.
+            cx.update(|cx| cx.set_global(crate::ui::peek::PeekChoice(true)));
+            wait(1500).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let socket = handle.update(cx, |v, _, _| v.visual_socket()).unwrap();
+            let root = socket.parent().unwrap().to_owned();
+            let call = |r: Request| rpc(&socket, &r).unwrap();
+            let workspace = || match call(Request::Workspace) { Reply::Workspace(w) => w, x => panic!("{x:?}") };
+            let w = workspace();
+            let space = match w.spaces.first() {
+                Some(s) => s.id.clone(),
+                None => {
+                    call(Request::Edit { revision: w.revision, edit: Edit::AddSpace(Space { id: "s".into(), name: "Tests".into(), cwd: "/tmp".into() }) });
+                    "s".into()
+                }
+            };
+            // A Claude stand-in: its transcript names the session, then it asks.
+            let logs = PathBuf::from(std::env::var_os("CLAUDE_CONFIG_DIR").expect("scratch CLAUDE_CONFIG_DIR")).join("projects/-tmp");
+            std::fs::create_dir_all(&logs).unwrap();
+            let claude = root.join("claude");
+            let _ = std::os::unix::fs::symlink("/bin/sh", &claude);
+            let id = format!("{:08x}-0000-4000-8000-000000000001", std::process::id());
+            let seed = root.join("seed");
+            let row = serde_json::json!({"type":"user","sessionId":id,"uuid":"u0","cwd":"/tmp","entrypoint":"cli","userType":"external","timestamp":keepline_core::content::now(),"message":{"content":"发布前检查"}});
+            std::fs::write(&seed, format!("{row}\n")).unwrap();
+            let script = format!(
+                "cat '{}' > '{}'; printf '%s\\n' '⏺ 测试都过了，准备推送到远端。' '' '⏺ Bash(git push origin feat/release)' '' 'Bash command' '  git push origin feat/release' 'Do you want to proceed?' '❯ 1. Yes' \"  2. Yes, and don't ask again for git push\" '  3. No, and tell Claude what to do differently (esc)'; read -r answer; printf '\\033[2J\\033[Hanswer=[%s] size=%s\\n' \"$answer\" \"$(stty size)\"; read -r end; echo \"end=[$end]\"; read -r typed; echo \"typed=[$typed] size=$(stty size)\"; sleep 600",
+                seed.display(), logs.join(format!("{id}.jsonl")).display()
+            );
+            let launch = |tid: &str, argv: Vec<String>| {
+                call(Request::Launch { id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+                let w = workspace();
+                call(Request::Edit { revision: w.revision, edit: Edit::PutTab { tab: Tab { id: format!("tab-{tid}"), space: space.clone(), default_task: None, title: tid.into(), layout: Some(Layout::Leaf(tid.into())) } } });
+            };
+            launch("agent", vec!["/bin/sh".into(), "-c".into(), format!("exec '{}' -c \"$0\" fixture --session-id {id}", claude.display()), script]);
+            launch("shell", vec!["/bin/sh".into(), "-c".into(), "printf '~/keepline $ cargo test\\n'; sleep 600".into()]);
+            wait(500).await;
+            handle.update(cx, |v, _, a| v.visual_peek_show_tab("shell", a)).unwrap();
+            // The session binds and the screen rule sees the approval within a few seconds.
+            let mut seen = None;
+            for _ in 0..120 {
+                wait(500).await;
+                let opened = handle.update(cx, |v, w, a| v.visual_peek_row("agent", w, a)).unwrap();
+                seen = handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap();
+                if opened && seen.as_ref().is_some_and(|(_, a, _)| a.is_some()) { break; }
+            }
+            let (terminal, approval, _) = seen.expect("peek never opened");
+            assert_eq!(terminal, "agent");
+            assert_eq!(approval.as_deref(), Some("Do you want to proceed?"), "approval not offered");
+            assert!(handle.update(cx, |v, w, a| v.visual_peek_focused(w, a)).unwrap(), "peek not focused");
+            let shot = |name: &str, cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh(); w.draw(a).clear(a);
+                    w.render_to_image().unwrap().save(directory.join(name)).unwrap();
+                }).unwrap();
+            };
+            wait(300).await;
+            shot("1-peek-light.png", cx);
+            cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Dark, a).unwrap());
+            wait(300).await;
+            shot("1-peek-dark.png", cx);
+            cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Light, a).unwrap());
+            let screen = || match call(Request::ReadScreen { id: "agent".into(), rows: 30 }) { Reply::Text(t) => t, x => panic!("{x:?}") };
+            handle.update(cx, |v, _, a| v.visual_peek_answer(true, a)).unwrap();
+            let mut answered = false;
+            for _ in 0..50 {
+                wait(100).await;
+                if screen().contains("answer=[]") { answered = true; break; }
+            }
+            assert!(answered, "允许一次 never reached the Agent: {}", screen());
+            // The peek never resized the terminal it looked at.
+            assert!(screen().contains("size=30 100"), "peek resized the terminal: {}", screen());
+            wait(500).await;
+            shot("2-answered.png", cx);
+            // The same answer again finds no approval and types nothing.
+            let w = workspace();
+            let stale = rpc(&socket, &Request::AnswerApproval { id: "agent".into(), question: "Do you want to proceed?".into(), allow: true });
+            assert!(stale.is_err(), "answered twice: {stale:?} rev {}", w.revision);
+            // Esc closes the peek and is not typed into the Agent.
+            cx.update_window(handle.into(), |_, w, a| {
+                w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a);
+            }).unwrap();
+            wait(300).await;
+            assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "Esc did not close the peek");
+            call(Request::SendText { id: "agent".into(), text: "done".into(), submit: true });
+            let mut ended = String::new();
+            for _ in 0..50 {
+                wait(100).await;
+                ended = screen();
+                if ended.contains("end=[") { break; }
+            }
+            assert!(ended.contains("end=[done]"), "Esc reached the Agent: {ended}");
+            // Opening the peeked terminal's own tab ends the peek, so the tab's pane owns it.
+            handle.update(cx, |v, w, a| v.visual_peek_row("agent", w, a)).unwrap();
+            assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_some());
+            // Typing in the peek makes it the terminal's user: the terminal takes its size.
+            wait(300).await;
+            cx.update_window(handle.into(), |_, w, a| {
+                for key in ["x", "enter"] {
+                    w.dispatch_keystroke(gpui::Keystroke::parse(key).unwrap(), a);
+                }
+            }).unwrap();
+            let mut typed = String::new();
+            for _ in 0..50 {
+                wait(100).await;
+                // The taller terminal's text may sit below the first 30 rows.
+                typed = match call(Request::ReadScreen { id: "agent".into(), rows: 200 }) { Reply::Text(t) => t, x => panic!("{x:?}") };
+                if typed.contains("typed=[") { break; }
+            }
+            assert!(typed.contains("typed=[x]"), "typing never reached the peeked Agent: {typed}");
+            assert!(!typed.contains("typed=[x] size=30 100"), "a used peek kept the old size: {typed}");
+            wait(300).await;
+            shot("3-peek-typed.png", cx);
+            handle.update(cx, |v, _, a| v.visual_peek_show_tab("agent", a)).unwrap();
+            assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "peek kept over its own tab");
+            wait(800).await;
+            shot("4-own-tab.png", cx);
+            // Turned off, the same sidebar click switches to the session instead.
+            cx.update(|cx| cx.set_global(crate::ui::peek::PeekChoice(false)));
+            handle.update(cx, |v, _, a| v.visual_peek_show_tab("shell", a)).unwrap();
+            wait(300).await;
+            handle.update(cx, |v, w, a| v.visual_peek_row("agent", w, a)).unwrap();
+            assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "peek opened while turned off");
+            wait(800).await;
+            shot("5-peek-off.png", cx);
+            eprintln!("peek native PASS: hidden approval peeked, answered once, size kept until typed in, Esc closes without reaching the Agent, off opens the session instead");
+            // 置顶: the row's dot shows on hover, a real click pins the terminal, the pin is
+            // saved, and it comes off once the terminal ends.
+            let row = gpui::point(px(100.), px(292.));
+            let dot = gpui::point(px(theme::Theme::SIDEBAR - 22.), px(292.));
+            cx.update_window(handle.into(), |_, w, a| {
+                use gpui::InputEvent;
+                w.dispatch_event(gpui::MouseMoveEvent { position: row, pressed_button: None, modifiers: Default::default() }.to_platform_input(), a);
+                w.refresh(); w.draw(a).clear(a);
+            }).unwrap();
+            wait(200).await;
+            shot("4-hover.png", cx);
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, dot, gpui::MouseButton::Left)).unwrap();
+            wait(300).await;
+            assert_eq!(handle.update(cx, |v, _, _| v.visual_pins()).unwrap(), vec!["agent".to_owned()], "the dot did not pin");
+            assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "the dot's click also reached the row");
+            let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("sidebar")).unwrap();
+            assert!(saved.lines().any(|l| l == "pin agent"), "pin not saved: {saved:?}");
+            shot("5-pinned.png", cx);
+            call(Request::Stop { id: "agent".into() });
+            let mut gone = false;
+            for _ in 0..50 {
+                wait(200).await;
+                if handle.update(cx, |v, _, _| v.visual_pins()).unwrap().is_empty() { gone = true; break; }
+            }
+            assert!(gone, "pin outlived its terminal");
+            let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("sidebar")).unwrap();
+            assert!(!saved.contains("pin "), "ended pin still saved: {saved:?}");
+            shot("6-unpinned.png", cx);
+            eprintln!("pin native PASS: hover dot, click pins and saves, ended terminal unpins");
+            // 在编辑器里看滚动内容: the pane menu opens the terminal's text with $EDITOR in a
+            // new tab; the stand-in editor (KEEPLINE_TEST_EDITOR) copies what it was given.
+            if let Some(edited) = std::env::var_os("KEEPLINE_EDITED") {
+                let edited = PathBuf::from(edited);
+                handle.update(cx, |v, _, a| v.visual_peek_show_tab("shell", a)).unwrap();
+                wait(500).await;
+                let at = gpui::point(px(theme::Theme::SIDEBAR + 200.), px(theme::Theme::TOP + theme::Theme::TABS + theme::Theme::PANE_HEADER + 120.));
+                cx.update_window(handle.into(), |_, w, a| { w.refresh(); w.draw(a).clear(a); native_click(w, a, at, gpui::MouseButton::Right) }).unwrap();
+                wait(300).await;
+                shot("7-menu.png", cx);
+                let item = handle.update(cx, |v, _, _| v.visual_menu_point("在编辑器里看滚动内容")).unwrap();
+                cx.update_window(handle.into(), |_, w, a| native_click(w, a, item, gpui::MouseButton::Left)).unwrap();
+                let mut text = String::new();
+                for _ in 0..100 {
+                    wait(200).await;
+                    if let Ok(t) = std::fs::read_to_string(&edited) { text = t; break; }
+                }
+                if text.is_empty() { shot("8-editor-failed.png", cx); }
+                assert!(text.contains("~/keepline $ cargo test"), "editor got: {text:?}");
+                let saved = root.join("scrollback/shell.txt");
+                let mode = std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&saved).unwrap().permissions()) & 0o777;
+                assert_eq!(mode, 0o600, "scrollback file readable by others");
+                wait(500).await;
+                shot("8-editor.png", cx);
+                eprintln!("scrollback native PASS: menu opens the terminal text with $EDITOR, file private");
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // The sidebar shows the space's branch; the pane menu explains the pane's state.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_WHY_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            // Near the top of the shown pane so the menu opens where it was asked,
+            // not pushed up to fit; clicks hit what was last drawn.
+            // Below the pane header, inside the screen.
+            let at = gpui::point(
+                px(theme::Theme::SIDEBAR + 120.),
+                px(theme::Theme::TOP + theme::Theme::TABS + theme::Theme::PANE_HEADER + 120.),
+            );
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh();
+                window.draw(app).clear(app);
+                native_click(window, app, at, gpui::MouseButton::Right)
+            })
+            .unwrap();
+            cx.background_executor()
+                .timer(Duration::from_millis(300))
+                .await;
+            // 为什么是这个状态, after 在编辑器里看滚动内容.
+            let item = handle
+                .update(cx, |v, _, _| v.visual_menu_point("为什么是这个状态"))
+                .unwrap();
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join("1-menu.png"))
+                    .unwrap();
+                native_click(window, app, item, gpui::MouseButton::Left);
+            })
+            .unwrap();
+            cx.background_executor()
+                .timer(Duration::from_millis(300))
+                .await;
+            assert!(
+                handle.update(cx, |v, _, _| v.visual_menu_why()).unwrap(),
+                "为什么是这个状态 turns the menu into the explanation"
+            );
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join("2-why.png"))
+                    .unwrap();
+            })
+            .unwrap();
+            eprintln!("why native PASS: the pane menu explains the state");
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+        return;
+    }
+    // Runs the top bar's 「重启后台」 for real, as confirming its dialog does.
+    if let Some(handle) = &handle
+        && std::env::var_os("KEEPLINE_RESTART_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            cx.background_executor().timer(Duration::from_secs(3)).await;
+            handle
+                .update(cx, |view, _, cx| view.visual_restart_host(cx))
+                .unwrap();
+        })
+        .detach();
+    }
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_PAGE_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            handle
+                .update(cx, |_, window, _| {
+                    if window.viewport_size().height < px(theme::Theme::WINDOW_HEIGHT) {
+                        window.toggle_simple_fullscreen();
+                    }
+                })
+                .unwrap();
+            cx.background_executor().timer(Duration::from_secs(1)).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let pages = std::env::var("KEEPLINE_PAGE_LIST").unwrap_or_else(|_| {
+                "Main,Overview,TodoNew,TodoDetail,TodoStart,Cleanup,Menubar".into()
+            });
+            for name in pages.split(',').map(str::to_owned).collect::<Vec<_>>() {
+                let name = name.as_str();
+                handle
+                    .update(cx, |view, window, cx| {
+                        window.resize(size(
+                            px(theme::Theme::WINDOW_WIDTH),
+                            px(theme::Theme::WINDOW_HEIGHT),
+                        ));
+                        window.bounds_changed(cx);
+                        view.visual_page(name, window, cx);
+                    })
+                    .unwrap();
+                if name == "HereTyped" {
+                    use gpui::InputEvent;
+                    // A plain keystroke into the terminal folds the card over it.
+                    cx.update_window(handle.into(), |_, w, a| {
+                        w.dispatch_event(
+                            gpui::KeyDownEvent {
+                                keystroke: gpui::Keystroke::parse("x").unwrap(),
+                                is_held: false,
+                                prefer_character_input: false,
+                            }
+                            .to_platform_input(),
+                            a,
+                        );
+                    })
+                    .unwrap();
+                    let open = handle.update(cx, |v, _, _| v.visual_here_open()).unwrap();
+                    assert!(!open, "typing into the pane folds its 你在这里 card");
+                    eprintln!("HereTyped: card folded after a keystroke");
+                }
+                if name == "HereClickOut" {
+                    use gpui::InputEvent;
+                    // A press anywhere outside the card puts it away.
+                    cx.update_window(handle.into(), |_, w, a| {
+                        w.refresh();
+                        w.draw(a).clear(a);
+                        w.dispatch_event(
+                            gpui::MouseDownEvent {
+                                button: gpui::MouseButton::Left,
+                                position: gpui::point(px(8.), px(theme::Theme::WINDOW_HEIGHT - 8.)),
+                                modifiers: Default::default(),
+                                click_count: 1,
+                                first_mouse: false,
+                            }
+                            .to_platform_input(),
+                            a,
+                        );
+                    })
+                    .unwrap();
+                    let open = handle.update(cx, |v, _, _| v.visual_here_open()).unwrap();
+                    assert!(!open, "a click outside folds its 你在这里 card");
+                    eprintln!("HereClickOut: card folded after an outside click");
+                }
+                // A real drag on the board: pick a card up, carry it over to 做完了,
+                // and let go, with shots while carried, in flight and after landing.
+                if name == "BoardDrag" || name == "BoardRefuseDrag" {
+                    use gpui::InputEvent;
+                    cx.background_executor()
+                        .timer(Duration::from_millis(1500))
+                        .await;
+                    cx.update_window(handle.into(), |_, w, a| {
+                        w.refresh();
+                        w.draw(a).clear(a);
+                    })
+                    .unwrap();
+                    let (from, steps) = if name == "BoardDrag" {
+                        ("review", 1.)
+                    } else {
+                        ("running", 2.)
+                    };
+                    let (start, step) = handle
+                        .update(cx, |v, _, _| {
+                            (v.visual_card_center(from), v.visual_column_step())
+                        })
+                        .unwrap();
+                    let start = start.expect("a card to drag on the board");
+                    let target = gpui::point(start.x + step * steps, start.y + px(60.));
+                    let shot = |label: &str, cx: &mut gpui::AsyncApp| {
+                        let path = directory.join(format!("{}-{label}.png", name.to_lowercase()));
+                        cx.update_window(handle.into(), |_, w, a| {
+                            w.refresh();
+                            w.draw(a).clear(a);
+                            w.render_to_image().unwrap().save(path).unwrap();
+                        })
+                        .unwrap();
+                    };
+                    cx.update_window(handle.into(), |_, w, a| {
+                        w.dispatch_event(
+                            gpui::MouseDownEvent {
+                                button: gpui::MouseButton::Left,
+                                position: start,
+                                modifiers: Default::default(),
+                                click_count: 1,
+                                first_mouse: false,
+                            }
+                            .to_platform_input(),
+                            a,
+                        );
+                    })
+                    .unwrap();
+                    for n in 1..=12 {
+                        let t = n as f32 / 12.;
+                        let at = gpui::point(
+                            start.x + (target.x - start.x) * t,
+                            start.y + (target.y - start.y) * t,
+                        );
+                        cx.update_window(handle.into(), |_, w, a| {
+                            w.dispatch_event(
+                                gpui::MouseMoveEvent {
+                                    position: at,
+                                    pressed_button: Some(gpui::MouseButton::Left),
+                                    modifiers: Default::default(),
+                                }
+                                .to_platform_input(),
+                                a,
+                            );
+                            w.refresh();
+                            w.draw(a).clear(a);
+                        })
+                        .unwrap();
+                        cx.background_executor()
+                            .timer(Duration::from_millis(30))
+                            .await;
+                    }
+                    cx.background_executor()
+                        .timer(Duration::from_millis(400))
+                        .await;
+                    shot("1-carried", cx);
+                    cx.update_window(handle.into(), |_, w, a| {
+                        w.dispatch_event(
+                            gpui::MouseUpEvent {
+                                button: gpui::MouseButton::Left,
+                                position: target,
+                                modifiers: Default::default(),
+                                click_count: 1,
+                            }
+                            .to_platform_input(),
+                            a,
+                        );
+                    })
+                    .unwrap();
+                    cx.background_executor()
+                        .timer(Duration::from_millis(120))
+                        .await;
+                    shot("2-flying", cx);
+                    cx.background_executor()
+                        .timer(Duration::from_millis(800))
+                        .await;
+                    shot("3-landed", cx);
+                    eprintln!("{name}: dragged from {from} to done");
+                }
+                // Starting an Agent and placing the task text takes a few quiet checks.
+                let settle = match name {
+                    "TodoStart" => 4,
+                    // A login shell with a rich prompt takes longer before the command goes in.
+                    "ActionRun" => 6,
+                    _ => 1,
+                };
+                cx.background_executor()
+                    .timer(Duration::from_secs(settle))
+                    .await;
+                cx.update_window(handle.into(), |_, window, app| {
+                    assert_eq!(
+                        window.viewport_size(),
+                        size(
+                            px(theme::Theme::WINDOW_WIDTH),
+                            px(theme::Theme::WINDOW_HEIGHT)
+                        )
+                    );
+                    window.refresh();
+                    window.draw(app).clear(app);
+                    let path = directory.join(format!("{}-native.png", name.to_lowercase()));
+                    if name == "Menubar" {
+                        desktop::snapshot(&path);
+                    } else {
+                        window.render_to_image().unwrap().save(path).unwrap();
+                    }
+                    eprintln!(
+                        "{name}: native viewport {:?}, scale {}",
+                        window.viewport_size(),
+                        window.scale_factor()
+                    );
+                })
+                .unwrap();
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_SPLIT_EVIDENCE").is_none()
+        && std::env::var_os("KEEPLINE_REASON_EVIDENCE").is_none()
+        && std::env::var_os("KEEPLINE_PINNED_ASK_EVIDENCE").is_none()
+        && std::env::var_os("KEEPLINE_TAB_EVIDENCE").is_none()
+        && std::env::var_os("KEEPLINE_PAGE_EVIDENCE").is_none()
+        && std::env::var_os("KEEPLINE_OVERVIEW_EVIDENCE").is_none()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            // Test-only single shots: native renderer output, no desktop capture permission.
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            handle
+                .update(cx, |_, window, _| {
+                    if window.viewport_size().height < px(theme::Theme::WINDOW_HEIGHT) {
+                        window.toggle_simple_fullscreen();
+                    }
+                })
+                .unwrap();
+            cx.background_executor().timer(Duration::from_secs(1)).await;
+            for overview in [false, true] {
+                handle
+                    .update(cx, |view, window, cx| {
+                        window.resize(size(
+                            px(theme::Theme::WINDOW_WIDTH),
+                            px(theme::Theme::WINDOW_HEIGHT),
+                        ));
+                        window.bounds_changed(cx);
+                        view.visual_view(overview, window, cx);
+                    })
+                    .unwrap();
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                handle
+                    .update(cx, |_, window, app| {
+                        assert_eq!(
+                            window.viewport_size(),
+                            size(
+                                px(theme::Theme::WINDOW_WIDTH),
+                                px(theme::Theme::WINDOW_HEIGHT)
+                            ),
+                            "visual comparison viewport"
+                        );
+                        eprintln!(
+                            "{}: viewport={:?}, scale={}, mono={}",
+                            if overview { "Overview" } else { "Main" },
+                            window.viewport_size(),
+                            window.scale_factor(),
+                            theme::Theme::mono(app).family
+                        );
+                        if !overview {
+                            screen::verify_native_geometry(window, app);
+                        }
+                        std::fs::create_dir_all(&directory).unwrap();
+                        window
+                            .render_to_image()
+                            .unwrap()
+                            .save(directory.join(if overview {
+                                "overview-native.png"
+                            } else {
+                                "main-native.png"
+                            }))
+                            .unwrap();
+                    })
+                    .unwrap();
+                if !overview {
+                    let marked = handle
+                        .update(cx, |view, window, cx| {
+                            view.visual_marked_overlay(window, cx)
+                        })
+                        .unwrap();
+                    // Render explicitly: an idle/occluded display link may not
+                    // have presented the notification yet. Do not hold the root
+                    // entity borrowed while draw renders it again.
+                    cx.update_window(handle.into(), |_, window, app| {
+                            window.refresh();
+                            window.draw(app).clear(app);
+                            window
+                                .render_to_image()
+                                .unwrap()
+                                .save(directory.join("ime-native.png"))
+                                .unwrap();
+                            if let Some(marked) = marked {
+                                let scale = window.scale_factor();
+                                eprintln!("IME rendered underlines: {:?}", window.painted_underlines());
+                                assert!(
+                                    window.painted_underlines().iter().any(|line| {
+                                        let x = line.bounds.origin.x.0 / scale;
+                                        let y = line.bounds.origin.y.0 / scale;
+                                        (x - f32::from(marked.left())).abs() < 1.
+                                            && y >= f32::from(marked.top())
+                                            && y <= f32::from(marked.bottom())
+                                    }),
+                                    "marked underline must be painted at the IME range, not the pane bottom"
+                                );
+                            }
+                        })
+                        .unwrap();
+                }
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+    // The overview sits in the same window as the panes: one toggle in the top bar goes
+    // in and back out, Esc and the tab strip return, the sidebar's spaces filter it.
+    if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
+        && std::env::var_os("KEEPLINE_OVERVIEW_EVIDENCE").is_some()
+    {
+        let handle = *handle;
+        cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
+            let wait = move |s: u64| executor.timer(Duration::from_millis(s));
+            wait(3000).await;
+            std::fs::create_dir_all(&directory).unwrap();
+            let shot = |name: &str, window: &mut gpui::Window, app: &mut App| {
+                window.refresh();
+                window.draw(app).clear(app);
+                window
+                    .render_to_image()
+                    .unwrap()
+                    .save(directory.join(format!("{name}.png")))
+                    .unwrap();
+            };
+            // Focus moves when a frame is drawn; idle frames are paused in this harness.
+            let state = |cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                })
+                .unwrap();
+                handle
+                    .update(cx, |v, w, a| v.visual_overview_state(w, a))
+                    .unwrap()
+            };
+            let click = |cx: &mut gpui::AsyncApp, at: gpui::Point<gpui::Pixels>| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    native_click(w, a, at, gpui::MouseButton::Left)
+                })
+                .unwrap();
+            };
+            let escape = |cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    use gpui::InputEvent;
+                    w.dispatch_event(
+                        gpui::KeyDownEvent {
+                            keystroke: gpui::Keystroke::parse("escape").unwrap(),
+                            is_held: false,
+                            prefer_character_input: false,
+                        }
+                        .to_platform_input(),
+                        a,
+                    );
+                    w.refresh();
+                    w.draw(a).clear(a);
+                })
+                .unwrap();
+            };
+            if state(cx).0 {
+                escape(cx);
+                wait(500).await;
+            }
+            // A live shell to come back to: the copied workspace's own terminals are gone.
+            handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+            wait(2000).await;
+            let start = state(cx);
+            eprintln!("work view: {start:?}");
+            assert!(!start.0, "starts on the panes");
+            assert_eq!(start.3, "pane", "the new shell has the keyboard");
+            cx.update_window(handle.into(), |_, w, a| shot("1-work", w, a))
+                .unwrap();
+            let toggle = handle
+                .update(cx, |v, _, _| v.visual_toggle_point())
+                .unwrap();
+            let open = |cx: &mut gpui::AsyncApp| {
+                click(cx, toggle);
+                let s = state(cx);
+                assert!(s.0, "the toggle opens the overview");
+                assert_eq!(s.3, "overview", "the overview takes the keyboard");
+                // Drawn in place: the toggle has not moved, so it can close it again.
+                let again = handle
+                    .update(cx, |v, _, _| v.visual_toggle_point())
+                    .unwrap();
+                assert_eq!(again, toggle, "the toggle does not move");
+                s
+            };
+            open(cx);
+            wait(1500).await;
+            cx.update_window(handle.into(), |_, w, a| shot("2-overview", w, a))
+                .unwrap();
+            // The same spot closes it.
+            click(cx, toggle);
+            wait(800).await;
+            let back = handle
+                .update(cx, |v, _, _| v.visual_toggle_point())
+                .unwrap();
+            assert_eq!(back, toggle, "the toggle does not move on the way back");
+            let s = state(cx);
+            assert!(!s.0, "the same toggle returns");
+            assert_eq!(s.1, start.1, "back on the tab that was shown");
+            cx.update_window(handle.into(), |_, w, a| shot("3-back-by-toggle", w, a))
+                .unwrap();
+            assert_eq!(state(cx).3, "pane", "the pane has the keyboard again");
+            // Esc returns.
+            open(cx);
+            escape(cx);
+            wait(800).await;
+            let s = state(cx);
+            assert!(!s.0, "Esc returns");
+            assert_eq!(s.3, "pane", "Esc hands the keyboard back to the pane");
+            // A tab in the strip returns to it.
+            open(cx);
+            click(
+                cx,
+                gpui::point(
+                    px(theme::Theme::SIDEBAR + 30.),
+                    px(theme::Theme::TOP + theme::Theme::TABS / 2.),
+                ),
+            );
+            wait(800).await;
+            let s = state(cx);
+            assert!(!s.0, "a tab returns");
+            assert!(s.1.is_some(), "a tab is shown");
+            // A space in the sidebar filters the overview and keeps it open.
+            open(cx);
+            let spaces = handle.update(cx, |v, _, _| v.visual_spaces()).unwrap();
+            let mut filtered = None;
+            for y in (0..12).map(|i| theme::Theme::TOP + 30. + i as f32 * 4.) {
+                click(cx, gpui::point(px(60.), px(y)));
+                let s = state(cx);
+                if s.2.is_some() {
+                    filtered = Some((y, s));
+                    break;
+                }
+            }
+            let (y, s) = filtered.expect("a sidebar space sets the filter");
+            eprintln!("sidebar space at y={y}: {s:?}");
+            assert!(s.0, "the overview stays open");
+            assert_eq!(s.2.as_ref(), spaces.first(), "the first space filters it");
+            wait(800).await;
+            cx.update_window(handle.into(), |_, w, a| shot("4-space-filter", w, a))
+                .unwrap();
+            escape(cx);
+            wait(500).await;
+            assert!(!state(cx).0);
+            eprintln!("overview evidence PASS");
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+}
+
+fn native_click(
+    window: &mut gpui::Window,
+    app: &mut App,
+    position: gpui::Point<gpui::Pixels>,
+    button: gpui::MouseButton,
+) {
+    use gpui::InputEvent;
+    window.dispatch_event(
+        gpui::MouseDownEvent {
+            button,
+            position,
+            modifiers: Default::default(),
+            click_count: 1,
+            first_mouse: false,
+        }
+        .to_platform_input(),
+        app,
+    );
+    window.dispatch_event(
+        gpui::MouseUpEvent {
+            button,
+            position,
+            modifiers: Default::default(),
+            click_count: 1,
+        }
+        .to_platform_input(),
+        app,
+    );
+    window.refresh();
+    window.draw(app).clear(app);
+}

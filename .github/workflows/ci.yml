@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  keeplined:
+    name: Workbench Rust checks
+    runs-on: macos-latest
+    env:
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+
+      # Local rust-toolchain.toml pins the same rustfmt/clippy version.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.16.0
+
+      - name: Prepare pinned native dependencies
+        run: sh bootstrap.sh
+
+      - name: Cargo fmt
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # managed_session runs real terminals against wall-clock limits; its failed cases get
+      # one retry each, every other failure fails the step (see ci-test.sh).
+      - name: Cargo test
+        run: sh ci-test.sh
