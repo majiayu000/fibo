@@ -4,6 +4,8 @@ use super::*;
 use crate::terminal::screen;
 use gpui::WindowHandle;
 use std::time::Duration;
+#[path = "cpu_probe_evidence.rs"]
+mod cpu_probe_evidence;
 #[path = "phones_evidence.rs"]
 mod phones_evidence;
 #[path = "settings_evidence.rs"]
@@ -19,6 +21,9 @@ pub fn start(
         return;
     }
     if phones_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    if cpu_probe_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
     // 标记完成: a finished session's pane plays the fill, seal and countdown, then closes;

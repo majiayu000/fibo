@@ -224,6 +224,7 @@ use layout::LayoutState;
 mod nav;
 use nav::Nav;
 mod overview;
+mod pace;
 use overview::OverviewState;
 mod palette;
 use palette::Search;

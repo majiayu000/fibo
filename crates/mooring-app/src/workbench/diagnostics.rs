@@ -4,7 +4,6 @@ use futures::{
     StreamExt,
     channel::mpsc::{UnboundedSender, unbounded},
 };
-use gpui::{Animation, AnimationExt};
 use mooring_core::diagnostics::{AppUsage, Diagnostics, gib, mib};
 use std::{
     io,
@@ -20,6 +19,9 @@ use std::{
 /// plus the first snapshot).
 const FIRST_REPORT: Duration = Duration::from_secs(8);
 const SPINNER: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
+/// One turn of the waiting spinner.
+const SPIN: Duration = Duration::from_millis(800);
+static SPINNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub(super) enum DiagnosticAction {
     Close,
@@ -587,17 +589,15 @@ impl DiagnosticView {
                 .id(id)
                 .into_any_element()
         };
+        // One redraw per glyph (100 ms), not per display frame: the panel measures the
+        // CPU of every app, Mooring included, and a 120 Hz spinner inflated its own bar.
+        super::pace::wake(&SPINNING, SPIN / SPINNER.len() as u32, cx);
         let spinner = || {
+            let t = super::pace::phase(SPIN);
+            let i = ((t * SPINNER.len() as f32) as usize).min(SPINNER.len() - 1);
             div()
                 .text_color(T::color(T::primary()))
-                .with_animation(
-                    "diagnostic-spinner",
-                    Animation::new(Duration::from_millis(800)).repeat(),
-                    |d, t| {
-                        let i = ((t * SPINNER.len() as f32) as usize).min(SPINNER.len() - 1);
-                        d.child(SPINNER[i])
-                    },
-                )
+                .child(SPINNER[i])
                 .into_any_element()
         };
         let done = || div().child("✓").into_any_element();

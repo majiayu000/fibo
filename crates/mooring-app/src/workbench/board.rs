@@ -292,13 +292,9 @@ fn animated_column_icon(column: Column, animate: bool) -> gpui::AnyElement {
                 .child(icon("icons/ring.svg", hue.opacity(0.25)))
                 .child(overlay(
                     icon("icons/arc.svg", hue)
-                        .with_animation(
-                            "board-running-spin",
-                            Animation::new(Duration::from_millis(1600)).repeat(),
-                            |s, t| {
-                                s.with_transformation(Transformation::rotate(gpui::percentage(t)))
-                            },
-                        )
+                        .with_transformation(Transformation::rotate(gpui::percentage(
+                            super::pace::phase(SPIN),
+                        )))
                         .into_any_element(),
                 ))
                 .into_any_element()
@@ -689,7 +685,13 @@ impl Workbench {
                     .flex()
                     .items_center()
                     .gap(px(T::S8))
-                    .child(animated_column_icon(column, active && count > 0))
+                    .child({
+                        let spin = active && count > 0;
+                        if spin && column == Column::Running {
+                            super::pace::wake(&MOTION, MOTION_STEP, cx);
+                        }
+                        animated_column_icon(column, spin)
+                    })
                     .child(
                         div()
                             .font_weight(gpui::FontWeight::MEDIUM)
@@ -1098,7 +1100,10 @@ impl Workbench {
             )
             .when(
                 column == Column::Running && animate && asks_you.is_none(),
-                |d| d.child(sweep()),
+                |d| {
+                    super::pace::wake(&MOTION, MOTION_STEP, cx);
+                    d.child(sweep())
+                },
             )
             .when(self.overview.card_menu.as_ref() == Some(&session.id), |d| {
                 d.child(
@@ -1144,6 +1149,14 @@ fn card_title(text: impl Into<gpui::SharedString>) -> gpui::Div {
         .line_clamp(2)
         .child(text.into())
 }
+/// One turn of the running column's arc, and one pass of a working card's comet.
+const SPIN: Duration = Duration::from_millis(1600);
+const SWEEP: Duration = Duration::from_millis(2400);
+/// The board's motion advances 20 times a second, not on every display frame: a frame
+/// redraws the whole board, and at 120 Hz the arc and comets alone held a quarter core.
+/// At 20 steps the arc turns 4.5° and a comet moves about 7 px a step.
+const MOTION_STEP: Duration = Duration::from_millis(50);
+static MOTION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// A comet of the running hue that runs along a working card's bottom edge.
 fn sweep() -> gpui::Div {
     let hue = Status::Running.colors().0;
@@ -1165,11 +1178,7 @@ fn sweep() -> gpui::Div {
                     linear_color_stop(hue.opacity(0.), 0.),
                     linear_color_stop(hue, 1.),
                 ))
-                .with_animation(
-                    "board-sweep",
-                    Animation::new(Duration::from_millis(2400)).repeat(),
-                    |d, t| d.left(relative(-0.4 + 1.4 * t)),
-                ),
+                .left(relative(-0.4 + 1.4 * super::pace::phase(SWEEP))),
         )
 }
 

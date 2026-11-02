@@ -1722,16 +1722,7 @@ impl Workbench {
             .child(when)
     }
     pub(super) fn tick_turn(&self, cx: &Context<Self>) {
-        use std::sync::atomic::Ordering;
-        if TURN_TICK.swap(true, Ordering::Relaxed) {
-            return;
-        }
-        cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(TURN_TICK_EVERY).await;
-            TURN_TICK.store(false, Ordering::Relaxed);
-            let _ = this.update(cx, |_, cx| cx.notify());
-        })
-        .detach();
+        super::pace::wake(&TURN_TICK, TURN_TICK_EVERY, cx);
     }
     /// The cached branch for `dir`; a missing or old entry is read in the background and
     /// redraws the window only if it changed.
