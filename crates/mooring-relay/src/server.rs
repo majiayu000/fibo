@@ -443,26 +443,44 @@ async fn run_phone(relay: Arc<Relay>, agent: Arc<Agent>, path: String, socket: W
     });
     let (mut sink, mut stream) = socket.split();
     let mut writer_cut = cut_rx.clone();
-    let writer = tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                // A cut wins over a closed inbox: the bridge is dropped right after it.
-                biased;
-                (code, reason) = was_cut(&mut writer_cut) => {
-                    let close = Message::Close(Some(CloseFrame { code, reason: reason.into() }));
-                    let _ = tokio::time::timeout(Duration::from_millis(200), sink.send(close)).await;
-                    break;
-                }
-                m = inbox.recv() => {
-                    let Some(m) = m else { break };
-                    let n = size(&m);
-                    let closing = matches!(m, Message::Close(_));
-                    if sink.send(m).await.is_err() || closing { break }
-                    behind.fetch_sub(n, Ordering::AcqRel);
+    // A phone gone without a close (battery out, NAT dropped) answers no ping: after two
+    // silent ones it is dropped, as a machine is, instead of holding its slot forever.
+    let seen = Arc::new(Mutex::new(Instant::now()));
+    let ping = relay.config.ping;
+    let (writer_done, mut writer_ended) = watch::channel(false);
+    let writer = {
+        let seen = seen.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(ping);
+            tick.tick().await;
+            loop {
+                tokio::select! {
+                    // A cut wins over a closed inbox: the bridge is dropped right after it.
+                    biased;
+                    (code, reason) = was_cut(&mut writer_cut) => {
+                        let close = Message::Close(Some(CloseFrame { code, reason: reason.into() }));
+                        let _ = tokio::time::timeout(Duration::from_millis(200), sink.send(close)).await;
+                        break;
+                    }
+                    m = inbox.recv() => {
+                        let Some(m) = m else { break };
+                        let n = size(&m);
+                        let closing = matches!(m, Message::Close(_));
+                        if sink.send(m).await.is_err() || closing { break }
+                        behind.fetch_sub(n, Ordering::AcqRel);
+                    }
+                    _ = tick.tick() => {
+                        let silent = seen.lock().map(|s| s.elapsed()).unwrap_or_default();
+                        if silent > ping * 2 || sink.send(Message::Ping(Default::default())).await.is_err() {
+                            break;
+                        }
+                    }
                 }
             }
-        }
-    });
+            // The reader learns the socket is gone even while the phone says nothing.
+            let _ = writer_done.send(true);
+        })
+    };
 
     let open_queue = relay.config.open_queue;
     let mut code = 1000;
@@ -470,7 +488,14 @@ async fn run_phone(relay: Arc<Relay>, agent: Arc<Agent>, path: String, socket: W
         let m = tokio::select! {
             m = stream.next() => m,
             _ = was_cut(&mut cut_rx) => break,
+            _ = writer_ended.wait_for(|done| *done) => {
+                code = 1006;
+                break;
+            }
         };
+        if let Ok(mut s) = seen.lock() {
+            *s = Instant::now();
+        }
         let m = match m {
             Some(Ok(m @ (Message::Text(_) | Message::Binary(_)))) => m,
             Some(Ok(Message::Close(f))) => {

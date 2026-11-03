@@ -324,3 +324,35 @@ async fn a_phone_that_stops_reading_is_cut_and_never_slows_its_neighbour() {
     );
     eprintln!("neighbour's worst round trip beside a stalled phone: {worst:?}");
 }
+
+/// A phone that vanished without a close (battery out, NAT dropped) is noticed by the
+/// pings it no longer answers, and its machine is told, so it stops holding one of its
+/// few phone slots and showing it online.
+#[tokio::test]
+async fn a_phone_that_stops_answering_pings_is_closed_and_its_machine_told() {
+    let base = relay(Config {
+        ping: Duration::from_millis(200),
+        ..Default::default()
+    })
+    .await;
+    let mut m = registered(&base, TOKEN).await;
+    let _silent = phone(&base, TOKEN).await; // never read again: never pongs
+    let Frame::Wopen { id, .. } = frame(&mut m).await else {
+        panic!()
+    };
+    m.send(Message::text(Frame::Wopened { id: id.clone() }.to_text()))
+        .await
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(3);
+    loop {
+        assert!(Instant::now() < until, "the silent phone was never closed");
+        if let Ok(Some(Ok(Message::Text(t)))) =
+            tokio::time::timeout(Duration::from_millis(100), m.next()).await
+        {
+            if let Ok(Frame::Wclose { id: gone, .. }) = serde_json::from_str(&t) {
+                assert_eq!(gone, id);
+                break;
+            }
+        }
+    }
+}
