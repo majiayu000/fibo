@@ -2,10 +2,12 @@
 //!
 //! Claude Code wakes the agent when a background shell exits, so a shell that will end
 //! (tests, a build, a download, a polling loop) keeps the turn working. A server never
-//! ends: a turn that left only servers behind is over. A shell whose processes hold a
-//! listening TCP port is a server; so is one running longer than [`JOB_LIMIT`], which
-//! covers what listens on nothing (`tail -f`, a watcher). Shells are found among the
-//! agent's child processes by the command the Stop hook listed.
+//! ends: a turn that left only servers behind is over. A shell whose processes listen
+//! on a chosen TCP port is a server; so is one running longer than [`JOB_LIMIT`], which
+//! covers what listens on nothing (`tail -f`, a watcher). A port the system handed out
+//! (bound to 0, so in the ephemeral range) does not count: that is a tool talking to its
+//! own helper, like a renderer serving a page to its headless browser. Shells are found
+//! among the agent's child processes by the command the Stop hook listed.
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::process::Command;
@@ -15,6 +17,9 @@ use std::sync::atomic::Ordering;
 pub const JOB_LIMIT: u64 = 2 * 3600;
 /// Seconds between looks while some turn has shells left.
 pub const EVERY: u64 = 5;
+/// macOS hands out ports from here up (`net.inet.ip.portrange.first`) to a socket bound
+/// to port 0; a server meant to be visited is put on a port below it.
+const EPHEMERAL: u16 = 49152;
 
 /// What one look found for a shell: its process tree listens on a port, and how long
 /// it has run. `None` from [`look`] when no child process runs the command.
@@ -150,7 +155,7 @@ fn started(pid: u32) -> Option<u64> {
     };
     (n == size).then_some(info.pbi_start_tvsec)
 }
-/// The pids among `pids` holding a listening TCP socket.
+/// The pids among `pids` listening on a chosen (not ephemeral) TCP port.
 fn listeners(pids: &[u32]) -> io::Result<HashSet<u32>> {
     if pids.is_empty() {
         return Ok(HashSet::new());
@@ -162,13 +167,27 @@ fn listeners(pids: &[u32]) -> io::Result<HashSet<u32>> {
         .join(",");
     crate::recognition::LSOF_SPAWNS.fetch_add(1, Ordering::Relaxed);
     let out = Command::new("/usr/sbin/lsof")
-        .args(["-nP", "-a", "-p", &list, "-iTCP", "-sTCP:LISTEN", "-Fp"])
+        .args(["-nP", "-a", "-p", &list, "-iTCP", "-sTCP:LISTEN", "-Fpn"])
         .output()?;
     // Exit 1 with no rows is "none listening".
-    Ok(String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|l| l.strip_prefix('p')?.parse().ok())
-        .collect())
+    Ok(chosen_ports(&String::from_utf8_lossy(&out.stdout)))
+}
+/// From `lsof -Fpn` rows (`p<pid>` then one `n<addr>:<port>` per socket), the pids with
+/// at least one socket on a port below [`EPHEMERAL`].
+fn chosen_ports(rows: &str) -> HashSet<u32> {
+    let mut out = HashSet::new();
+    let mut pid = None;
+    for line in rows.lines() {
+        if let Some(p) = line.strip_prefix('p') {
+            pid = p.parse().ok();
+        } else if let (Some(addr), Some(p)) = (line.strip_prefix('n'), pid) {
+            let port = addr.rsplit(':').next().and_then(|n| n.parse::<u16>().ok());
+            if port.is_some_and(|n| n < EPHEMERAL) {
+                out.insert(p);
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -208,6 +227,13 @@ mod tests {
         );
     }
     #[test]
+    fn only_a_chosen_port_makes_a_server() {
+        let rows = "p100\nf12\nn127.0.0.1:51174\np200\nf3\nn*:8000\np300\nf4\nn[::1]:5173\nf5\nn[::1]:60000\n";
+        let got = chosen_ports(rows);
+        assert!(!got.contains(&100), "a renderer's own ephemeral port");
+        assert!(got.contains(&200) && got.contains(&300), "{got:?}");
+    }
+    #[test]
     fn a_command_is_found_in_the_shell_that_evals_it() {
         let argv = "/bin/zsh -c source /x/snapshot.sh 2>/dev/null || true && eval 'python3 -m http.server 8000 --bind 127.0.0.1' < /dev/null && pwd -P >| /tmp/cwd";
         assert!(runs(argv, "python3 -m http.server 8000 --bind 127.0.0.1"));
@@ -218,22 +244,32 @@ mod tests {
         assert!(!runs(argv, "  "));
     }
     #[test]
-    fn real_children_are_found_by_command_and_a_listening_one_reads_as_a_server() {
+    fn real_children_are_found_by_command_and_only_a_chosen_port_reads_as_a_server() {
         let job = "sleep 30; echo job-7f3a";
-        let server = "python3 -c 'import socket,time; s=socket.socket(); s.bind((\"127.0.0.1\", 0)); s.listen(); time.sleep(30)' # srv-7f3a";
+        // Bound to 0: the system picks an ephemeral port, as a renderer does for its browser.
+        let helper = r#"python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(); time.sleep(30)' # eph-7f3a"#;
+        let server = r#"python3 -c 'import socket,time
+for p in range(41000, 41200):
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", p)); break
+    except OSError:
+        pass
+s.listen(); time.sleep(30)' # srv-7f3a"#;
         let spawn = |command: &str| {
             std::process::Command::new("/bin/sh")
                 .args(["-c", &format!("eval '{}'", command.replace('\'', "'\\''"))])
                 .spawn()
                 .unwrap()
         };
-        let mut children = [spawn(job), spawn(server)];
-        // The server needs a moment to bind.
+        let mut children = [spawn(job), spawn(helper), spawn(server)];
         let tasks = vec![
             ("j".to_owned(), job.to_owned()),
+            ("e".to_owned(), helper.to_owned()),
             ("s".to_owned(), server.to_owned()),
             ("gone".to_owned(), "never started".to_owned()),
         ];
+        // The servers need a moment to bind.
         let mut seen = HashMap::new();
         for _ in 0..50 {
             seen = look(&[(std::process::id(), tasks.clone())]).unwrap();
@@ -242,6 +278,9 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
+        // Give the helper as long again, so a miss on it is not a slow bind.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let again = look(&[(std::process::id(), tasks.clone())]).unwrap();
         for c in &mut children {
             let _ = c.kill();
             let _ = c.wait();
@@ -249,6 +288,11 @@ mod tests {
         assert_eq!(seen.get("j").map(|s| s.listening), Some(false), "{seen:?}");
         assert!(seen["j"].age < 60);
         assert_eq!(seen.get("s").map(|s| s.listening), Some(true), "{seen:?}");
+        assert_eq!(
+            again.get("e").map(|s| s.listening),
+            Some(false),
+            "{again:?}"
+        );
         assert!(!seen.contains_key("gone"));
     }
 }
