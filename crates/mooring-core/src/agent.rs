@@ -54,6 +54,16 @@ impl Agent {
             _ => None,
         }
     }
+    /// The CLI's own color as 0xRRGGBB, which its mark is drawn in (v3 mock,
+    /// `docs/ui-v3/v3-4.png`: Claude Code's clay, Codex's blue). Others have none and
+    /// keep the ink they are drawn with.
+    pub fn brand_color(self) -> Option<u32> {
+        match self.0 {
+            "Claude" => Some(0xd97757),
+            "Codex" => Some(0x3d4fd8),
+            _ => None,
+        }
+    }
     pub fn from_executable(name: &str) -> Option<Self> {
         registry()
             .specs
