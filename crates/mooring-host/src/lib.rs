@@ -1,4 +1,5 @@
 mod agents;
+mod background_shells;
 mod codex_status;
 mod command_marks;
 pub mod devices;

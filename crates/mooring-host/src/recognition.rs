@@ -9,7 +9,7 @@ use std::{
 
 use std::sync::atomic::{AtomicU64, Ordering};
 static PS_SPAWNS: AtomicU64 = AtomicU64::new(0);
-static LSOF_SPAWNS: AtomicU64 = AtomicU64::new(0);
+pub(crate) static LSOF_SPAWNS: AtomicU64 = AtomicU64::new(0);
 pub fn probe_counts() -> (u64, u64) {
     (
         PS_SPAWNS.load(Ordering::Relaxed),
@@ -59,7 +59,7 @@ pub fn transcript_owner(path: &Path, roots: &[(Agent, PathBuf)]) -> Option<Agent
 }
 /// Read argv boundaries from the kernel, never parse a prompt out of `ps command`.
 /// KERN_PROCARGS2 also returns an environment tail; stop after argc and never retain it.
-fn process_argv(pid: u32) -> io::Result<Vec<String>> {
+pub(crate) fn process_argv(pid: u32) -> io::Result<Vec<String>> {
     let bytes = procargs(pid)?;
     let Some((argc, mut pos)) = argv_start(&bytes) else {
         return Ok(vec![]);

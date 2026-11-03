@@ -383,6 +383,7 @@ impl Parser {
             self.card.choices.clear();
             self.card.error.clear();
             self.card.background = None;
+            self.card.shells.clear();
             self.completed_while_waiting = false;
             self.child_wait_from = None;
         }
@@ -665,6 +666,7 @@ impl Parser {
         if event == "SubagentStop" {
             if facts.background.is_some() {
                 self.card.background = facts.background;
+                self.card.shells = shell_tasks(facts);
             }
             return;
         }
@@ -690,6 +692,7 @@ impl Parser {
             "Stop" => {
                 // Absent arrays are unknown; an older turn's tasks never carry over.
                 self.card.background = facts.background;
+                self.card.shells = shell_tasks(facts);
                 self.card.completed_claim = claims_done(&self.card.last_reply);
                 self.phase(Turn::Completed, "", at, source);
             }
@@ -833,6 +836,18 @@ fn log_detail(v: &Value, records: &[Record]) -> String {
 /// "live updates for artifact <slug> (...)". A Monitor the agent armed itself (a shell is
 /// listed as "shell", a WebSocket as "monitor") carries the agent's own description.
 const ARTIFACT_WATCH: &str = "live updates for artifact ";
+/// The card's record of the shells a hook listed: descriptions, never commands.
+fn shell_tasks(facts: &HookFacts) -> Vec<mooring_core::content::ShellTask> {
+    facts
+        .shells
+        .iter()
+        .map(|t| mooring_core::content::ShellTask {
+            id: t.id.clone(),
+            description: t.description.clone(),
+            job: false,
+        })
+        .collect()
+}
 /// Reads the status facts from a hook payload. Stop and SubagentStop list the parent
 /// session's in-flight tasks; an entry counts unless its status says it has ended or it
 /// is the watch on a published Artifact.
@@ -850,6 +865,7 @@ pub fn hook_facts(v: &Value) -> HookFacts {
     ];
     let tasks = v["background_tasks"].as_array();
     let crons = v["session_crons"].as_array();
+    let mut shells = Vec::new();
     let background = (tasks.is_some() || crons.is_some()).then(|| {
         let mut b = mooring_core::content::Background {
             crons: crons.map_or(0, |c| c.len() as u32),
@@ -861,7 +877,15 @@ pub fn hook_facts(v: &Value) -> HookFacts {
                 continue;
             }
             match task["type"].as_str().unwrap_or("") {
-                "shell" => b.shells += 1,
+                "shell" => {
+                    b.shells += 1;
+                    let text = |k: &str| task[k].as_str().unwrap_or("").to_owned();
+                    shells.push(mooring_core::protocol::HookShell {
+                        id: text("id"),
+                        description: text("description"),
+                        command: text("command"),
+                    });
+                }
                 "monitor"
                     if task["description"]
                         .as_str()
@@ -876,6 +900,7 @@ pub fn hook_facts(v: &Value) -> HookFacts {
         background,
         notification: v["notification_type"].as_str().map(str::to_owned),
         subagent: v["agent_id"].as_str().is_some_and(|id| !id.is_empty()),
+        shells,
     }
 }
 #[cfg(test)]
@@ -1552,10 +1577,20 @@ mod tests {
                 agents: 2,
                 shells: 1,
                 monitors: 1,
-                crons: 1
+                crons: 1,
+                jobs: 0,
             })
         );
         assert!(!facts.subagent);
+        assert_eq!(
+            facts.shells,
+            vec![mooring_core::protocol::HookShell {
+                id: "2".into(),
+                description: String::new(),
+                command: "cargo test".into(),
+            }],
+            "the command rides to the host to find the shell's process"
+        );
         let watched = hook_facts(&json!({
             "hook_event_name": "Stop",
             "background_tasks": [{"id": "w", "type": "monitor", "status": "running",

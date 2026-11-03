@@ -21,6 +21,17 @@ pub struct HookFacts {
     pub notification: Option<String>,
     /// The event came from inside a subagent (`agent_id` present), not the parent turn.
     pub subagent: bool,
+    /// The running background shells a Stop or SubagentStop listed. Their commands only
+    /// ride to the host, which matches them to processes; the stored card keeps the
+    /// descriptions alone, since a command line may hold a secret.
+    #[serde(default)]
+    pub shells: Vec<HookShell>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HookShell {
+    pub id: String,
+    pub description: String,
+    pub command: String,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Request {

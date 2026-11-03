@@ -117,6 +117,22 @@ pub struct Content {
     /// transcript (`<session>/subagents/agent-*.meta.json`).
     #[serde(default)]
     pub subagents: Vec<Subagent>,
+    /// The background shells the last Stop listed as running (Claude Code names each with
+    /// its description and command). Which of them is a job the agent waits for is live
+    /// evidence the host adds to its snapshot; stored, every one is `job: false`.
+    #[serde(default)]
+    pub shells: Vec<ShellTask>,
+}
+/// A background shell the agent started and left running when its turn stopped.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShellTask {
+    pub id: String,
+    pub description: String,
+    /// Work that ends on its own and wakes the agent when it does (a test run, a build,
+    /// a download): no port listening below it and younger than two hours. A server, or a
+    /// shell the host could not look at, is not one.
+    #[serde(default)]
+    pub job: bool,
 }
 /// One subagent a session started: its description (its type without one), and when it
 /// started and ended.
@@ -206,17 +222,21 @@ impl Content {
 /// In-flight work by kind. Agents (subagents, workflows, teammates, cloud sessions, MCP
 /// tasks) keep a stopped turn working. A monitor or a scheduled wakeup will wake the session
 /// again, so it is not done either: it is waiting to wake, as Claude Code's agent view shows
-/// it. Shells alone are a mark on a finished turn.
+/// it. A shell that is a job (see [`ShellTask::job`]) keeps the turn working too: it ends
+/// and the agent carries on. The other shells (servers) are a mark on a finished turn.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Background {
     pub agents: u32,
     pub shells: u32,
     pub monitors: u32,
     pub crons: u32,
+    /// Of `shells`, the jobs: set only on the host's live snapshot, never stored.
+    #[serde(default)]
+    pub jobs: u32,
 }
 impl Background {
     pub fn keeps_working(&self) -> bool {
-        self.agents > 0
+        self.agents > 0 || self.jobs > 0
     }
     pub fn wakes(&self) -> bool {
         self.monitors > 0 || self.crons > 0
@@ -225,7 +245,8 @@ impl Background {
     pub fn describe(&self) -> Option<String> {
         let parts: Vec<String> = [
             (self.agents, "子 Agent"),
-            (self.shells, "shell"),
+            (self.jobs, "任务"),
+            (self.shells - self.jobs.min(self.shells), "shell"),
             (self.monitors, "监视任务"),
             (self.crons, "已排定唤醒"),
         ]
@@ -536,8 +557,11 @@ impl Content {
             }
         };
         let next = match self.turn {
-            Turn::Completed if self.background.is_some_and(|b| b.keeps_working()) => {
+            Turn::Completed if self.background.is_some_and(|b| b.agents > 0) => {
                 "等后台子 Agent 结束后再核对结果"
+            }
+            Turn::Completed if self.background.is_some_and(|b| b.jobs > 0) => {
+                "等后台任务跑完，Agent 会接着做"
             }
             Turn::Completed if self.waking() => "等它被监视任务或定时唤醒，回合结束后再核对",
             Turn::Waiting => "回应上面的审批或问题",
@@ -558,6 +582,18 @@ impl Content {
     /// turn read as words (`改 tabs.rs`, `运行 cargo build -p app`), else what it was
     /// asked (`做 修复登录`). `None` when neither says anything.
     pub fn doing(&self) -> Option<String> {
+        // The turn stopped and a job it started still runs: that is what it is doing.
+        if self.turn != Turn::Running {
+            let jobs: Vec<&ShellTask> = self.shells.iter().filter(|t| t.job).collect();
+            if let Some(first) = jobs.first() {
+                let name = short(&plain_line(&first.description), DOING_CHARS);
+                return Some(match (jobs.len(), name.is_empty()) {
+                    (1, false) => format!("等后台任务 {name}"),
+                    (n, false) => format!("等后台任务 {name} 等 {n} 个"),
+                    (n, true) => format!("等后台任务 {n} 个"),
+                });
+            }
+        }
         let this_turn = |e: &&Evidence| self.turn_started == 0 || e.at >= self.turn_started;
         let from_record =
             self.evidence
@@ -1014,5 +1050,44 @@ mod grouping_tests {
             Status::Review,
             "no live process, nothing runs"
         );
+    }
+    #[test]
+    fn a_stopped_turn_waiting_on_a_job_says_which_and_a_server_counts_apart() {
+        let mut c = Content {
+            turn: Turn::Completed,
+            background: Some(Background {
+                shells: 3,
+                jobs: 1,
+                ..Default::default()
+            }),
+            shells: vec![
+                ShellTask {
+                    id: "a".into(),
+                    description: "Start the Go relay".into(),
+                    job: false,
+                },
+                ShellTask {
+                    id: "b".into(),
+                    description: "Run needle-in-haystack context tests on Pulse".into(),
+                    job: true,
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            c.doing().as_deref(),
+            Some("等后台任务 Run needle-in-haystack context tests on …")
+        );
+        assert_eq!(
+            c.background.unwrap().describe().as_deref(),
+            Some("后台仍有任务 1 个、shell 2 个")
+        );
+        assert_eq!(c.here().next, "等后台任务跑完，Agent 会接着做");
+        c.shells[1].job = false;
+        c.background = Some(Background {
+            shells: 3,
+            ..Default::default()
+        });
+        assert_eq!(c.doing(), None, "servers alone: nothing it is doing");
     }
 }

@@ -25,6 +25,7 @@ mod events;
 mod live;
 pub(crate) mod remote;
 mod report_back;
+mod shell_watch;
 mod status;
 use association::*;
 use client::*;
@@ -79,6 +80,8 @@ struct Host {
     hooks: crate::plugin_hooks::Hooks,
     /// `mooring run`'s children and the reports waiting for their parents.
     report_back: report_back::ReportBack,
+    /// Which background shells of stopped turns are jobs the agent waits for.
+    shell_watch: shell_watch::ShellWatch,
 }
 /// Records which conversation a live cue says is running on `terminal`, since when;
 /// whether that changed. Only a turn starting or stopping is news.
@@ -151,6 +154,8 @@ impl Host {
         let retained: std::collections::HashSet<_> =
             w.agent_sessions.iter().map(|s| s.id.as_str()).collect();
         w.content.retain(|id, _| retained.contains(id.as_str()));
+        // A job left in the background keeps a stopped turn working; a server does not.
+        self.overlay_shells(&mut w);
         // A spinning title is a turn running even where the log shows none, as when only
         // the tail of a long turn was read. Never the other way: a still title proves
         // nothing the log has not said.
@@ -703,6 +708,7 @@ impl Host {
         if let Some(tx) = &self.deadlines {
             let _ = tx.try_send(());
         }
+        self.shell_watch.poke();
         self.publish_status()?;
         Ok(())
     }
@@ -953,6 +959,7 @@ fn serve_runtime(
         screen_busy: HashMap::new(),
         hooks: Default::default(),
         report_back: Default::default(),
+        shell_watch: Default::default(),
         reconciled: HashMap::new(),
         workspace,
         terminals: HashMap::new(),
@@ -1011,6 +1018,7 @@ fn serve_runtime(
         );
     }
     start_deadlines(&host)?;
+    shell_watch::start(&host)?;
     start_subscription(Arc::clone(&host), index);
     {
         let weak = Arc::downgrade(&host);
@@ -1116,6 +1124,7 @@ mod recognition_tests {
             screen_busy: HashMap::new(),
             hooks: Default::default(),
             report_back: Default::default(),
+            shell_watch: Default::default(),
             reconciled: HashMap::new(),
         }));
         let (tx, rx) = sync_channel(16);
@@ -1215,6 +1224,7 @@ mod snapshot_tests {
             screen_busy: HashMap::new(),
             hooks: Default::default(),
             report_back: Default::default(),
+            shell_watch: Default::default(),
             reconciled: HashMap::new(),
             remote: None,
         };

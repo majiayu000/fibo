@@ -288,6 +288,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 if let Some(card) = index.card(&observed.path)? {
                     next.content.insert(s.id.clone(), card);
                 }
+                if written {
+                    host.shell_watch.listed(&s.id, &facts);
+                }
             }
             host.commit(next)?;
             let mut ancestor = pid;

@@ -295,7 +295,7 @@ fn live(w: &Workspace, s: &AgentSession, c: Option<&Content>, now: u64) -> Statu
     match turn {
         Turn::Waiting => return Status::Waiting,
         Turn::Running => return Status::Running,
-        // Its subagents still work for it: the turn is not over.
+        // Its subagents, or a job it waits for, still work for it: the turn is not over.
         Turn::Completed if background.keeps_working() => return Status::Running,
         _ => (),
     }
@@ -469,6 +469,24 @@ mod tests {
         assert_eq!(
             with(Background {
                 crons: 1,
+                ..Default::default()
+            }),
+            Status::Background
+        );
+        // Of three shells, one a job it waits for (a test run): the turn is not over.
+        // Only servers left (an http.server, a relay): it is.
+        assert_eq!(
+            with(Background {
+                shells: 3,
+                jobs: 1,
+                ..Default::default()
+            }),
+            Status::Running
+        );
+        assert_eq!(
+            with(Background {
+                shells: 3,
+                jobs: 0,
                 ..Default::default()
             }),
             Status::Background
