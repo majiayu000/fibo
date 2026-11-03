@@ -377,7 +377,10 @@ fn reopening_a_failed_resume_returns_to_its_terminal() {
 fn edits_wait_behind_a_busy_action_but_creations_do_not() {
     use crate::host::store::queueable;
     let w = fixture();
-    let edit = |edit| Request::Edit { revision: 0, edit };
+    let edit = |edit| Request::Edit {
+        request: None,
+        edit,
+    };
     assert!(queueable(&edit(Edit::CloseTab { id: "tab".into() })));
     assert!(queueable(&edit(Edit::PutTab {
         tab: w.tabs[0].clone()

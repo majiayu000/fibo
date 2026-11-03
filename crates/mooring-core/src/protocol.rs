@@ -72,8 +72,12 @@ pub enum Request {
         #[serde(default)]
         cwd: String,
     },
+    /// A change to the workspace. With `request` it takes effect once however often it
+    /// is sent: a resend gets the first outcome back (the workspace if it was applied,
+    /// the same error if it was refused), across disconnects and host restarts.
     Edit {
-        revision: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<RequestId>,
         edit: Edit,
     },
     Launch {
@@ -274,6 +278,29 @@ pub struct RemoteAct {
     pub terminal: Option<String>,
     /// Unix milliseconds.
     pub at: u64,
+}
+
+/// Names one write: `client` stays the same for the sender's life, `id` is unique
+/// within it. The host remembers each outcome for a day (`REQUEST_KEPT_SECS`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RequestId {
+    pub client: String,
+    pub id: String,
+}
+pub const REQUEST_KEPT_SECS: u64 = 24 * 60 * 60;
+impl RequestId {
+    /// A new id from this process: one client for the process's life, ids in order.
+    pub fn fresh() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CLIENT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Self {
+            client: CLIENT
+                .get_or_init(|| uuid::Uuid::new_v4().to_string())
+                .clone(),
+            id: NEXT.fetch_add(1, Ordering::Relaxed).to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

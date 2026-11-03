@@ -481,9 +481,8 @@ fn pty_read_stall_under_load() {
         assert!(Instant::now() < until, "host never listened");
         thread::sleep(Duration::from_millis(50));
     }
-    let revision = f.workspace().revision;
     f.call(&Request::Edit {
-        revision,
+        request: None,
         edit: Edit::AddSpace(Space {
             id: "s".into(),
             name: "压测".into(),

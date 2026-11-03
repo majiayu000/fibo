@@ -1176,7 +1176,13 @@ fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<
             None,
         ),
     };
-    if let Err(e) = rpc(&a.socket, &Request::Edit { revision: 0, edit }) {
+    if let Err(e) = rpc(
+        &a.socket,
+        &Request::Edit {
+            request: Some(RequestId::fresh()),
+            edit,
+        },
+    ) {
         // Nothing shows it, so nothing would ever stop it.
         let _ = rpc(&a.socket, &Request::Stop { id });
         return Err(e);
@@ -1223,7 +1229,7 @@ fn close(a: Args) -> io::Result<()> {
     match rpc(
         &a.socket,
         &Request::Edit {
-            revision: 0,
+            request: Some(RequestId::fresh()),
             edit: Edit::ClosePane { terminal: id },
         },
     )? {

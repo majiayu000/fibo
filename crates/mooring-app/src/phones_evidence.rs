@@ -35,7 +35,7 @@ pub(super) fn start(
             Some(s) => s.id.clone(),
             None => {
                 call(Request::Edit {
-                    revision: w.revision,
+                    request: None,
                     edit: Edit::AddSpace(Space { id: "s".into(), name: "mooring".into(), cwd: "/tmp".into() }),
                 });
                 "s".into()
@@ -51,9 +51,8 @@ pub(super) fn start(
                 rows: 30,
                 scheme: Default::default(),
             });
-            let w = workspace();
             call(Request::Edit {
-                revision: w.revision,
+                request: None,
                 edit: Edit::PutTab {
                     tab: Tab { id: format!("tab-{tid}"), space: space.clone(), default_task: None, title: tid.into(), layout: Some(Layout::Leaf(tid.into())) },
                 },

@@ -132,7 +132,7 @@ impl Host {
     }
     fn setup(&self) {
         self.call(Request::Edit {
-            revision: self.workspace().revision,
+            request: None,
             edit: Edit::AddSpace(Space {
                 id: "s".into(),
                 name: "Tests".into(),
@@ -713,7 +713,7 @@ fn edits_ignore_the_workspace_revision() {
     h.call(h.launch("one", "sleep 30")).unwrap();
     let stale = h.workspace().revision;
     h.call(Request::Edit {
-        revision: stale,
+        request: None,
         edit: Edit::PutTab {
             tab: Tab {
                 id: "t".into(),
@@ -727,21 +727,21 @@ fn edits_ignore_the_workspace_revision() {
     .unwrap();
     assert!(h.workspace().revision > stale);
     h.call(Request::Edit {
-        revision: stale,
+        request: None,
         edit: Edit::CloseTab { id: "t".into() },
     })
     .unwrap();
     assert!(h.workspace().tabs.iter().all(|t| t.id != "t"));
     let missing = h
         .call(Request::Edit {
-            revision: stale,
+            request: None,
             edit: Edit::CloseTab { id: "gone".into() },
         })
         .unwrap_err();
     assert!(missing.to_string().contains("标签不存在"), "{missing}");
     let conflict = h
         .call(Request::Edit {
-            revision: stale,
+            request: None,
             edit: Edit::SetTaskOutcome {
                 seen: None,
                 id: "gone".into(),
@@ -762,7 +762,7 @@ fn launch_is_durable_and_deduplicated_and_tab_close_stops_and_deletes() {
     assert_eq!(h.workspace().terminals[0].pid, pid);
     assert!(h.call(h.launch("one", "sleep 31")).is_err());
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::PutTab {
             tab: Tab {
                 id: "t".into(),
@@ -775,7 +775,7 @@ fn launch_is_durable_and_deduplicated_and_tab_close_stops_and_deletes() {
     })
     .unwrap();
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::CloseTab { id: "t".into() },
     })
     .unwrap();
@@ -896,7 +896,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
     fs::write(&second,"{\"type\":\"user\",\"sessionId\":\"claude-two\",\"cwd\":\"/tmp\",\"message\":{\"content\":\"test\"}}\n").unwrap();
     for id in ["first-task", "second-task"] {
         h.call(Request::Edit {
-            revision: h.workspace().revision,
+            request: None,
             edit: Edit::AddTask(Task {
                 id: id.into(),
                 space: "s".into(),
@@ -932,7 +932,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
     );
     h.call(h.launch("one", &command)).unwrap();
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::PutTab {
             tab: Tab {
                 id: "t".into(),
@@ -966,7 +966,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
     h.call(hook()).unwrap();
     let first_id = h.workspace().agent_sessions[0].id.clone();
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::SetOutcome {
             seen: None,
             id: first_id.clone(),
@@ -1009,7 +1009,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
         .id
         .clone();
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::AssignTask {
             id: second_id,
             task: Some("second-task".into()),
@@ -1853,7 +1853,7 @@ fn stop_agent_clears_current_without_stopping_shell_or_changing_outcome() {
     .unwrap();
     let before = h.workspace().current_agent("shell").unwrap().clone();
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::SetOutcome {
             seen: None,
             id: before.id.clone(),
@@ -2168,7 +2168,7 @@ fn nested_split_tree_and_ratios_survive_store_reopen() {
         layout: Some(layout.clone()),
     };
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::PutTab { tab },
     })
     .unwrap();
@@ -2266,7 +2266,7 @@ fn external_content_updates_without_probes_saves_full_quotes_and_reopens_on_new_
     assert!(!s.current);
     assert_eq!(w.content[&s.id].asks[0].text, "修复输入法，不要提交");
     h.call(Request::Edit {
-        revision: w.revision,
+        request: None,
         edit: Edit::SaveSessionTask {
             session: s.id.clone(),
             task: Task {
@@ -2284,7 +2284,7 @@ fn external_content_updates_without_probes_saves_full_quotes_and_reopens_on_new_
     assert_eq!(w.tasks[0].description, "修复输入法，不要提交");
     assert_eq!(w.agent_sessions[0].task.as_deref(), Some("from-session"));
     h.call(Request::Edit {
-        revision: w.revision,
+        request: None,
         edit: Edit::SetOutcome {
             seen: None,
             id: s.id.clone(),
@@ -2309,7 +2309,7 @@ fn external_content_updates_without_probes_saves_full_quotes_and_reopens_on_new_
         .any(|e| e.reason == "新回合" && e.before == Outcome::Completed));
     let due = mooring_core::content::now() + 2;
     h.call(Request::Edit {
-        revision: w.revision,
+        request: None,
         edit: Edit::SetOutcome {
             seen: None,
             id: s.id.clone(),
@@ -3983,7 +3983,7 @@ fn real_claude_hooks_bind_at_startup_before_any_prompt() {
     let cwd = std::env::var("MOORING_REAL_CLAUDE_CWD").expect("MOORING_REAL_CLAUDE_CWD");
     let h = Host::start();
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::AddSpace(Space {
             id: "s".into(),
             name: "Real".into(),
@@ -4664,7 +4664,7 @@ fn command_line_splits_a_pane_beside_a_terminal_and_closes_it() {
     };
     h.call(h.launch("base", "exec /bin/sh -i")).unwrap();
     h.call(Request::Edit {
-        revision: 0,
+        request: None,
         edit: Edit::PutTab {
             tab: Tab {
                 id: "t".into(),
@@ -6228,7 +6228,7 @@ fn pty_fds(pid: u32) -> usize {
 fn close_in_tab(h: &Host, terminal: &str) {
     let tab = format!("tab-{terminal}");
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::PutTab {
             tab: Tab {
                 id: tab.clone(),
@@ -6241,7 +6241,7 @@ fn close_in_tab(h: &Host, terminal: &str) {
     })
     .unwrap();
     h.call(Request::Edit {
-        revision: h.workspace().revision,
+        request: None,
         edit: Edit::CloseTab { id: tab },
     })
     .unwrap();
@@ -6459,7 +6459,7 @@ fn marking_done_while_the_workspace_moves_is_never_refused() {
             };
             seen.stamp(&mut edit);
             if let Err(e) = h.call(Request::Edit {
-                revision: seen.revision,
+                request: None,
                 edit,
             }) {
                 refused.push(e.to_string());

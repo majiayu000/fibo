@@ -1,6 +1,7 @@
 //! One client connection: request dispatch, typed input and handing the socket to a
 //! newer host.
 use super::*;
+mod edit;
 
 pub(super) fn serve_client(
     mut stream: UnixStream,
@@ -366,71 +367,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let (cols, rows) = split_room(&*lock(shared)?, &target, axis, share)?;
             Ok(Reply::Size { cols, rows })
         }
-        // Each edit names the objects it changes and, where it depends on what its sender
-        // saw, says so itself (`Edit::SetOutcome`'s `seen`); the workspace revision moves
-        // with every line an Agent writes and is never a precondition.
-        Request::Edit { mut edit, .. } => {
-            let mut host = lock(shared)?;
-            if let Edit::SaveSessionTask { session, task } = &mut edit {
-                let s = host
-                    .workspace
-                    .agent_sessions
-                    .iter()
-                    .find(|s| &s.id == session)
-                    .ok_or_else(|| io::Error::other("会话不存在"))?;
-                task.description = host.index.original_words(&s.transcript)?;
-                if task.description.is_empty() {
-                    return Err(io::Error::other("已索引内容没有用户原话，不能建立待办"));
-                }
-                if host
-                    .workspace
-                    .content
-                    .get(session)
-                    .is_some_and(|c| c.partial_history)
-                {
-                    task.description
-                        .push_str("\n\n（历史仅覆盖索引尾段及之后的增量；此前要求未知。）");
-                }
-            }
-            // A pane split from outside the app must leave both halves usable, judged by
-            // the size the pane is shown at now. The app's own splits are the user's call.
-            if let Edit::SplitPane {
-                target,
-                axis,
-                share,
-                ..
-            } = &edit
-            {
-                split_room(&host, target, *axis, *share)?;
-            }
-            // Closing a tab or a pane ends what ran in it; placement alone never does.
-            let stopped = match &edit {
-                Edit::CloseTab { id } => host.workspace.tab_terminals(id),
-                Edit::ClosePane { terminal } => vec![terminal.clone()],
-                Edit::RemoveSpace { id } => host
-                    .workspace
-                    .tabs
-                    .iter()
-                    .filter(|t| &t.space == id)
-                    .flat_map(|t| host.workspace.tab_terminals(&t.id))
-                    .collect(),
-                _ => Vec::new(),
-            };
-            let mut next = host.workspace.clone();
-            next.edit(edit).map_err(io::Error::other)?;
-            host.commit(next)?;
-            for id in &stopped {
-                if let Some(Err(e)) = host.terminals.get(id).map(stop_terminal) {
-                    eprintln!("stop closed terminal {id}: {e}");
-                }
-            }
-            // One that had already ended goes now; the rest go as they end.
-            if !stopped.is_empty() {
-                host.closed.extend(stopped);
-                release_ended(&mut host);
-            }
-            Ok(Reply::Workspace(host.snapshot()))
-        }
+        Request::Edit { edit, request } => edit::edit(shared, edit, request),
         Request::Launch {
             id,
             space,

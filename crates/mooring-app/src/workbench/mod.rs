@@ -695,13 +695,13 @@ impl Workbench {
         })
         .detach();
     }
-    /// Sends an edit made on what this window shows: an outcome change carries the
-    /// outcome and turn seen here, and is refused if either moved on meanwhile.
+    /// Sends an edit made on what this window shows, named so a resend applies it once:
+    /// an outcome change carries the outcome and turn seen here, refused if either moved.
     pub(super) fn edit(&mut self, mut edit: Edit, cx: &mut Context<Self>) {
         self.workspace.stamp(&mut edit);
         self.request(
             Request::Edit {
-                revision: self.workspace.revision,
+                request: Some(mooring_core::protocol::RequestId::fresh()),
                 edit,
             },
             cx,

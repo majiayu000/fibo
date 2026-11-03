@@ -178,7 +178,7 @@ impl Workbench {
                 if let Ok(Reply::Workspace(w)) = rpc(
                     self.store.socket(),
                     &Request::Edit {
-                        revision: self.workspace.revision,
+                        request: None,
                         edit: Edit::PutTab { tab },
                     },
                 ) {

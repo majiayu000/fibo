@@ -38,7 +38,7 @@ impl Host {
             std::thread::sleep(Duration::from_millis(20));
         }
         h.call(Request::Edit {
-            revision: h.workspace().revision,
+            request: None,
             edit: Edit::AddSpace(Space {
                 id: "s".into(),
                 name: "Tests".into(),

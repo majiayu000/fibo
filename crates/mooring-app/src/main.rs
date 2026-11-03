@@ -98,7 +98,7 @@ fn load_workspace(root: &Path) -> io::Result<Workspace> {
         if let Reply::Workspace(w) = rpc(
             &socket,
             &Request::Edit {
-                revision: workspace.revision,
+                request: None,
                 edit: Edit::AddSpace(Space {
                     id: "default".into(),
                     name: "工作空间".into(),

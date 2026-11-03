@@ -73,10 +73,7 @@ impl Host {
             std::thread::sleep(Duration::from_millis(20));
         }
         h.call(Request::Edit {
-            revision: match h.call(Request::Workspace).unwrap() {
-                Reply::Workspace(w) => w.revision,
-                x => panic!("{x:?}"),
-            },
+            request: None,
             edit: Edit::AddSpace(Space {
                 id: "s".into(),
                 name: "Tests".into(),

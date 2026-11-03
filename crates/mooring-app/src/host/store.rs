@@ -153,13 +153,13 @@ impl Store {
                 space.clone_from(&narrower.id);
                 tab.space.clone_from(&narrower.id);
             }
-            let Reply::Workspace(w) = rpc(&socket, &request)? else {
+            let Reply::Workspace(_) = rpc(&socket, &request)? else {
                 return Err(std::io::Error::other("launch response missing"));
             };
             rpc(
                 &socket,
                 &Request::Edit {
-                    revision: w.revision,
+                    request: None,
                     edit: Edit::PutTab { tab },
                 },
             )
