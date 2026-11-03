@@ -32,6 +32,11 @@ fn flip(set: &mut HashSet<String>, id: &str) {
         set.insert(id.to_owned());
     }
 }
+/// Your last click on a row, else its default: open on the session you are in. Storing
+/// only "clicked" would turn a list you closed back open once you went elsewhere.
+fn opened(chosen: &HashMap<String, bool>, session: &str, current: bool) -> bool {
+    chosen.get(session).copied().unwrap_or(current)
+}
 
 /// The branches listed, in start order, and how many running and ended fold away. All
 /// of them when asked or when only one would fold; otherwise the running ones that have
@@ -65,9 +70,8 @@ fn shown(subs: &[Subagent], live: bool, all: bool) -> Shown<'_> {
 }
 
 impl Workbench {
-    /// Open on the session you are in unless you closed it, elsewhere once you opened it.
     pub(super) fn subagents_open(&self, session: &str, current: bool) -> bool {
-        current != self.layout.subagents_toggled.contains(session)
+        opened(&self.layout.subagents_toggled, session, current)
     }
     /// The row's second line: 子代理, the dots or bar, the counts and the fold chevron. A
     /// click opens or closes the list without opening the session.
@@ -128,7 +132,7 @@ impl Workbench {
             .child(super::sidebar_flat::fold_mark(open))
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
-                flip(&mut this.layout.subagents_toggled, &id);
+                this.layout.subagents_toggled.insert(id.clone(), !open);
                 cx.notify();
             }))
             .into_any_element()
@@ -274,6 +278,20 @@ impl Workbench {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_list_you_closed_stays_closed_when_you_go_elsewhere() {
+        let mut chosen = HashMap::new();
+        assert!(opened(&chosen, "s", true));
+        assert!(!opened(&chosen, "s", false));
+        // Closed while in it, then another session is selected.
+        chosen.insert("s".to_owned(), false);
+        assert!(!opened(&chosen, "s", true));
+        assert!(!opened(&chosen, "s", false));
+        // Opened elsewhere stays open when you come back.
+        chosen.insert("o".to_owned(), true);
+        assert!(opened(&chosen, "o", false));
+        assert!(opened(&chosen, "o", true));
+    }
     fn sub(started: u64, ended: Option<u64>) -> Subagent {
         Subagent {
             name: format!("a{started}"),

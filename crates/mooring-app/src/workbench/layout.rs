@@ -38,9 +38,9 @@ pub(super) struct LayoutState {
     /// The ✓ row unfolded in place: a session you marked complete opens nothing on a
     /// click, it shows what it ended with and offers 继续对话 and 撤销完成.
     pub(super) done_open: Option<String>,
-    /// Session rows whose subagent list was opened or closed against its default (open
-    /// on the session you are in, closed elsewhere).
-    pub(super) subagents_toggled: HashSet<String>,
+    /// Session rows whose subagent list you opened (true) or closed (false); the rest
+    /// follow the default, open on the session you are in.
+    pub(super) subagents_toggled: HashMap<String, bool>,
     /// Session rows whose subagent list shows every subagent, not the first few.
     pub(super) subagents_all: HashSet<String>,
     /// A tab's right-click menu: the tab and where it was opened.

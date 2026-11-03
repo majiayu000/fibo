@@ -444,7 +444,7 @@ impl Workbench {
                 tab_menu: None,
                 session_menu: None,
                 done_open: None,
-                subagents_toggled: HashSet::new(),
+                subagents_toggled: HashMap::new(),
                 subagents_all: HashSet::new(),
                 space_menu: None,
                 space_removing: false,
