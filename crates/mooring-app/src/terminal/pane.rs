@@ -1404,7 +1404,7 @@ impl Pane {
             PasteAction::Image => return self.input(vec![0x16], cx),
             PasteAction::Nothing => return,
         };
-        if !self.bracketed() && line_count(&text) > 1 && !text.contains('\x1b') {
+        if needs_paste_confirm(&text, self.bracketed()) {
             self.paste_confirm = Some(text);
             self.local_error = None;
             cx.notify();
@@ -2862,6 +2862,11 @@ fn paste_action(item: Option<&gpui::ClipboardItem>) -> PasteAction {
 }
 
 /// What a terminal sends for a paste without bracketed paste: newlines become CR.
+/// Without bracketed paste every line break runs what precedes it, so any pasted break,
+/// even one at the end of a single line, asks first. Text with escapes is refused anyway.
+fn needs_paste_confirm(text: &str, bracketed: bool) -> bool {
+    !bracketed && text.contains(['\n', '\r']) && !text.contains('\x1b')
+}
 fn plain_paste(text: &str) -> Vec<u8> {
     text.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
 }
@@ -2895,6 +2900,17 @@ mod paste_tests {
         assert_eq!(super::line_count("echo 一\necho 二\n"), 2);
         assert_eq!(super::line_count("single line\n"), 1);
         assert_eq!(super::plain_paste("a\r\nb\nc"), b"a\rb\rc");
+    }
+    /// A line copied with its newline (a triple-click in a browser) used to reach
+    /// neither the confirmation nor the terminal: refused as unsafe, nothing pasted.
+    #[test]
+    fn a_single_line_with_its_newline_asks_before_it_runs() {
+        assert!(super::needs_paste_confirm("ls -la\n", false));
+        assert!(super::needs_paste_confirm("a\nb", false));
+        assert!(!super::needs_paste_confirm("ls -la", false));
+        assert!(!super::needs_paste_confirm("ls -la\n", true));
+        assert!(!super::needs_paste_confirm("\x1b[201~\n", false));
+        assert_eq!(super::plain_paste("ls -la\n"), b"ls -la\r");
     }
 }
 #[cfg(test)]
