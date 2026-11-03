@@ -38,6 +38,9 @@ pub(super) struct LayoutState {
     /// The ✓ row unfolded in place: a session you marked complete opens nothing on a
     /// click, it shows what it ended with and offers 继续对话 and 撤销完成.
     pub(super) done_open: Option<String>,
+    /// Session rows whose subagent list was opened or closed against its default (open
+    /// on the session you are in, closed elsewhere).
+    pub(super) subagents_toggled: HashSet<String>,
     /// A tab's right-click menu: the tab and where it was opened.
     pub(super) tab_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
     /// The title-bar logo's menu for choosing the app icon, where it was opened.

@@ -108,6 +108,9 @@ impl Adapter for Claude {
             ],
         })
     }
+    fn subagents(&self, transcript: &Path) -> Option<Vec<mooring_core::content::Subagent>> {
+        Some(subagents(&transcript.with_extension("").join("subagents")))
+    }
     fn identity(&self, _path: &Path, value: &Value) -> Option<(String, String)> {
         if value["isSidechain"] == true {
             return Some((
@@ -342,9 +345,98 @@ fn inherited(v: &Value, source: &Source) -> bool {
         _ => false,
     }
 }
+fn unix(t: std::io::Result<std::time::SystemTime>) -> Option<u64> {
+    t.ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs())
+}
+/// Claude Code writes `agent-<id>.meta.json` (its description, type, whether it was
+/// started in the background, and `finished` once done) and `agent-<id>.jsonl` (its own
+/// log) for each subagent. It started when its log was created; it ended when its meta
+/// was last written with `finished`.
+pub(crate) fn subagents(dir: &Path) -> Vec<mooring_core::content::Subagent> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return vec![];
+    };
+    let mut out: Vec<_> = entries
+        .flatten()
+        .filter_map(|e| {
+            let path = e.path();
+            let name = path.file_name()?.to_str()?;
+            let id = name.strip_prefix("agent-")?.strip_suffix(".meta.json")?;
+            let meta = std::fs::metadata(&path).ok()?;
+            let v: Value = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
+            let log = std::fs::metadata(dir.join(format!("agent-{id}.jsonl"))).ok();
+            let written = unix(meta.modified())?;
+            let started = log
+                .as_ref()
+                .and_then(|m| unix(m.created()))
+                .or_else(|| unix(meta.created()))
+                .unwrap_or(written)
+                .min(written);
+            let description = v["description"].as_str().unwrap_or("").trim();
+            let kind = v["agentType"].as_str().unwrap_or("").to_owned();
+            Some(mooring_core::content::Subagent {
+                name: if description.is_empty() {
+                    kind.clone()
+                } else {
+                    description.to_owned()
+                },
+                kind,
+                // Older Claude Code wrote no shape; its subagents ran in the foreground.
+                foreground: v["requestShape"].as_str() != Some("background"),
+                started,
+                ended: (v["finished"] == true).then_some(written),
+            })
+        })
+        .collect();
+    out.sort_by_key(|s| s.started);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subagents_come_from_their_meta_files_oldest_first() {
+        let dir = std::env::temp_dir().join(format!("mooring-subagents-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let meta = |id: &str, v: Value| {
+            std::fs::write(dir.join(format!("agent-{id}.jsonl")), "{}\n").unwrap();
+            std::fs::write(dir.join(format!("agent-{id}.meta.json")), v.to_string()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(1100));
+        };
+        meta(
+            "a1",
+            serde_json::json!({"agentType": "general-purpose", "description": "Audit drift",
+            "requestShape": "background", "finished": true}),
+        );
+        meta(
+            "a2",
+            serde_json::json!({"agentType": "Explore", "description": " "}),
+        );
+        std::fs::write(dir.join("agent-a3.jsonl"), "{}\n").unwrap();
+        std::fs::write(dir.join("notes.txt"), "").unwrap();
+        let subs = subagents(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            subs.len(),
+            2,
+            "a log without its meta is not listed: {subs:?}"
+        );
+        assert_eq!(subs[0].name, "Audit drift");
+        assert!(!subs[0].running() && !subs[0].foreground);
+        // No description: its type names it; no request shape: the parent waited on it.
+        assert_eq!(
+            (subs[1].name.as_str(), subs[1].foreground),
+            ("Explore", true)
+        );
+        assert!(subs[1].running());
+        assert!(subagents(Path::new("/nonexistent/subagents")).is_empty());
+    }
 
     #[test]
     fn the_title_glyph_says_whether_a_turn_runs() {

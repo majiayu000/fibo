@@ -793,6 +793,9 @@ impl Index {
                 }
             }
         }
+        if let Some(all) = adapter.subagents(path) {
+            parser.card.keep_subagents(all);
+        }
         c.dev = meta.dev();
         c.inode = meta.ino();
         c.updated = updated;

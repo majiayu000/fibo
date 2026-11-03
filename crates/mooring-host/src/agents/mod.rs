@@ -133,6 +133,11 @@ pub trait Adapter: Sync {
     fn links_children(&self) -> bool {
         false
     }
+    /// The subagents this CLI keeps on disk beside a transcript, oldest first; `None`
+    /// when it keeps none there.
+    fn subagents(&self, _transcript: &Path) -> Option<Vec<mooring_core::content::Subagent>> {
+        None
+    }
     /// A live process of this CLI that no session has claimed yet.
     fn pending(
         &self,
