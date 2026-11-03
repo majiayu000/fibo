@@ -185,6 +185,22 @@ impl Host {
                 c.signal_at = since;
                 c.signal_detail = detail.into();
             }
+            // A dialog answered on the screen: the prompt is gone and the turn is ticking
+            // again, started after the dialog was reported. No hook says so until the
+            // approved tool finishes, which can be minutes.
+            let asking = s
+                .terminal
+                .as_ref()
+                .and_then(|t| self.screen_waits.get(t))
+                .is_some_and(|e| e.question().is_some());
+            if c.turn == mooring_core::content::Turn::Waiting && !asking && since >= c.signal_at {
+                c.turn = mooring_core::content::Turn::Running;
+                c.waiting.clear();
+                c.choices.clear();
+                c.signal = cue.into();
+                c.signal_at = since;
+                c.signal_detail = "确认框已答，画面上的计时行又出现了".into();
+            }
         }
         // A prompt visible on a live agent's screen outranks a log that has not caught up.
         // The source stays marked so it is never mistaken for a transcript record.
@@ -1271,6 +1287,38 @@ mod snapshot_tests {
         assert_eq!(host.workspace.content["live"], Content::default());
         host.workspace.agent_sessions.clear();
         assert!(host.snapshot().content.is_empty());
+        drop(host);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn an_approved_dialog_runs_again_once_the_screen_ticks() {
+        use mooring_core::content::{Content, Turn};
+        let (mut host, root) = fixture();
+        host.workspace.agent_sessions = vec![session("live", 0, Some("t"), true)];
+        let asked = Content {
+            turn: Turn::Waiting,
+            waiting: "CLI 请求工具审批（Hook）".into(),
+            signal: "Hook".into(),
+            signal_at: 100,
+            ..Content::default()
+        };
+        host.workspace.content.insert("live".into(), asked);
+        // Still on screen: waiting, even with a timer line under the dialog.
+        let seen = crate::screen_rules::explain(
+            crate::screen_rules::bundled(Agent::Claude),
+            "Do you want to proceed?\n❯ 1. Yes\n  2. No",
+        );
+        host.screen_waits.insert("t".into(), seen);
+        host.screen_busy.insert("t".into(), ("live".into(), 101));
+        assert_eq!(host.snapshot().content["live"].turn, Turn::Waiting);
+        // Answered: the dialog is gone and the timer came back after it.
+        host.screen_waits.remove("t");
+        let live = &host.snapshot().content["live"];
+        assert_eq!(live.turn, Turn::Running);
+        assert!(live.waiting.is_empty());
+        // A timer from before the dialog proves nothing about it.
+        host.screen_busy.insert("t".into(), ("live".into(), 99));
+        assert_eq!(host.snapshot().content["live"].turn, Turn::Waiting);
         drop(host);
         fs::remove_dir_all(root).unwrap();
     }

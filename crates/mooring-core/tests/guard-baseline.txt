@@ -20,7 +20,7 @@ field tab-title	crates/mooring-app/src/workbench/tabs.rs	3
 field turn	crates/mooring-host/examples/claim_scan.rs	1
 field turn	crates/mooring-host/src/control.rs	2
 field turn	crates/mooring-host/src/host/client.rs	1
-field turn	crates/mooring-host/src/host/mod.rs	6
+field turn	crates/mooring-host/src/host/mod.rs	8
 field turn	crates/mooring-host/src/host/report_back.rs	2
 field turn	crates/mooring-host/src/host/status.rs	1
 field turn	crates/mooring-host/src/plugin_hooks.rs	1
