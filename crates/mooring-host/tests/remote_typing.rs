@@ -258,3 +258,109 @@ fn a_taken_terminal_follows_the_remote_panes_size() {
         );
     }
 }
+
+/// Step 4: another desktop opens a terminal there (once per request), settles a
+/// conversation with the turn it saw, and ends the terminal.
+#[test]
+fn another_desktop_opens_settles_and_ends() {
+    let m = Machine::start("exec sleep 30");
+    let socket = m.root.join("workbench.sock");
+    let workspace = || match rpc(&socket, &Request::Workspace).unwrap() {
+        Reply::Workspace(w) => w,
+        other => panic!("{other:?}"),
+    };
+    let c = connect(&m.remote());
+    let open = || Op::Open {
+        cwd: Some("/tmp".into()),
+        request: Some("o1".into()),
+    };
+    let first = c.request(open(), T).unwrap();
+    let again = c.request(open(), T).unwrap();
+    assert_eq!(first, again, "the same request opens one terminal");
+    let terminal = first["terminal"].as_str().unwrap().to_owned();
+    let w = workspace();
+    assert_eq!(w.terminals.len(), 2);
+    assert!(w.terminal_tab(&terminal).is_some());
+
+    // A Codex conversation in `far`'s place, to settle.
+    let codex = m.root.join("codex");
+    std::os::unix::fs::symlink("/bin/sh", &codex).unwrap();
+    let log = m.root.join("log.jsonl");
+    std::fs::write(
+        &log,
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"far-codex\",\"cwd\":\"/tmp\"}}\n",
+    )
+    .unwrap();
+    let pid_file = m.root.join("pid");
+    let launch = Request::Launch {
+        id: "agent".into(),
+        space: "s".into(),
+        argv: vec![
+            codex.to_string_lossy().into_owned(),
+            "-c".into(),
+            format!("echo $$ > '{}'; sleep 30", pid_file.display()),
+        ],
+        cwd: "/tmp".into(),
+        cols: 80,
+        rows: 24,
+        scheme: Default::default(),
+    };
+    rpc(&socket, &launch).unwrap();
+    let until = Instant::now() + Duration::from_secs(10);
+    let pid = loop {
+        if let Ok(p) = std::fs::read_to_string(&pid_file).map(|p| p.trim().parse::<u32>()) {
+            if let Ok(p) = p {
+                break p;
+            }
+        }
+        assert!(Instant::now() < until, "no pid");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let hook = Request::Hook {
+        runtime: Agent::Codex,
+        pid,
+        cli_session_id: "far-codex".into(),
+        transcript: log.to_string_lossy().into_owned(),
+        ended: false,
+        event: None,
+        facts: Default::default(),
+        terminal: None,
+        cwd: String::new(),
+    };
+    rpc(&socket, &hook).unwrap();
+    let session = workspace().agent_sessions[0].id.clone();
+    let settle = |outcome: &str, turn: Option<&str>, request: &str| Op::Outcome {
+        session: session.clone(),
+        outcome: outcome.into(),
+        turn: turn.map(str::to_owned),
+        request: Some(request.into()),
+    };
+    let refused = c.request(settle("done", Some("an older turn"), "s1"), T);
+    assert!(refused.unwrap_err().to_string().contains("新的一轮"));
+    c.request(settle("done", None, "s2"), T).unwrap();
+    let outcome = |w: Workspace| w.agent_sessions[0].outcome.clone();
+    assert_eq!(outcome(workspace()), Outcome::Completed);
+    // Resent after the user reopened it here: the first answer, not a second done.
+    rpc(
+        &socket,
+        &Request::Edit {
+            request: None,
+            edit: Edit::SetOutcome {
+                id: session.clone(),
+                outcome: Outcome::Open,
+                seen: None,
+            },
+        },
+    )
+    .unwrap();
+    c.request(settle("done", None, "s2"), T).unwrap();
+    assert_eq!(outcome(workspace()), Outcome::Open);
+
+    let end = || Op::End {
+        terminal: terminal.clone(),
+        request: Some("e1".into()),
+    };
+    c.request(end(), T).unwrap();
+    c.request(end(), T).unwrap();
+    assert!(workspace().terminal_tab(&terminal).is_none());
+}

@@ -95,6 +95,29 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         take: bool,
     },
+    /// A shell in a new tab, in `cwd` (else its space's directory): `{terminal, tab}`.
+    Open {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cwd: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
+    /// Closes a terminal and stops what runs in it.
+    End {
+        terminal: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
+    /// `done`, `abandoned` or `open` for a conversation; with the card's `turn`, refused
+    /// once the Agent began another.
+    Outcome {
+        session: String,
+        outcome: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
     /// Sizes the terminal a taken `watch` stream shows.
     Resize {
         stream: u64,
@@ -120,6 +143,9 @@ impl Op {
             Self::Events => "events",
             Self::Watch { .. } => "watch",
             Self::Resize { .. } => "resize",
+            Self::Open { .. } => "open",
+            Self::End { .. } => "end",
+            Self::Outcome { .. } => "outcome",
             Self::Close { .. } => "close",
         }
     }
@@ -128,7 +154,7 @@ impl Op {
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
     "hello", "list", "read", "send", "keys", "input", "answer", "chat", "events", "watch",
-    "resize", "close",
+    "resize", "open", "end", "outcome", "close",
 ];
 
 /// A line from the machine.
@@ -266,6 +292,12 @@ pub struct Card {
     /// daemon): `agent` says which, this says so in the user's words. Phase stays `shell`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The conversation's current turn, for `outcome`'s `turn`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<String>,
+    /// How the conversation was settled: open, done, deferred or abandoned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

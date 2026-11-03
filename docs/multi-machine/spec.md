@@ -110,3 +110,19 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
   - 没在那台电脑的真窗口里看过它被接管后的样子。这里没有专门测，靠的是宿主原有的 `takeover`（`reconnect_input_resize_and_takeover_are_real_pty_operations`）。
   - 没在真的 apple 上测过接管。
 - 和原计划的差别：远程终端还只在偷看窗里用，放进本机的标签和分屏是第 4 步。
+
+### 第 4 步：协议部分完成（2026-11-04），界面待定方向
+
+- 远程协议新增三个写操作，都要「完全控制」权限，都可以带 `request`，重发只生效一次：
+  - `open { cwd? }`：在那台电脑上开一个 shell，放进新标签。空间按 `cwd` 选，取包含它的最深那个空间；没有就用第一个空间。终端和标签的 id 由请求 id 推出来，所以重发找到的还是第一次开的那个。回复 `{terminal, tab}`。
+  - `end { terminal }`：关掉窗格并停掉终端，走 `ClosePane`。
+  - `outcome { session, outcome: done|abandoned|open, turn? }`：带上卡片里的 `turn` 时，Agent 已经开始新一轮就拒绝。手机和桌面看不到完整的结局，所以「结局被别人改过」这一条不检查。
+- 卡片新增 `turn`（这一轮的标识）和 `outcome`（open、done、deferred、abandoned）。
+- 这些写操作放在 `src/remote/writes.rs`，`remote.rs` 现在 764 行。
+- 已验：集成测试 `another_desktop_opens_settles_and_ends`：
+  - 同一个请求 `open` 两次，回的是同一个终端，也只多了一个；
+  - 带过期的 `turn` 标完成被拒，不带 `turn` 时生效；
+  - 用户在那台电脑上重新打开会话之后，用同一个 id 重发「完成」，回的是第一次的结果，不会再标一次完成；
+  - `end` 发两次，终端只关一次。
+- 没做（等你选方向）：远程会话怎么进看板、卡片和鸟瞰。可选方向见 `docs/multi-machine/board-directions.html`。
+- 第 5 步（改走中继）要等第 4 阶段的独立 token，现在不能做。

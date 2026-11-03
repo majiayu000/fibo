@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
+mod writes;
+
 const MAX_LINE: u64 = rp::MAX_LINE as u64;
 use rp::OPS;
 /// A client that stops reading holds up its own streams, never the host: the terminal
@@ -275,15 +277,22 @@ fn hello(socket: &Path, role: Role) -> Value {
 
 /// A write its client named: it runs once however often it comes (`Request::Once`).
 fn named(client: Option<&str>, request: &Value, inner: Request) -> Request {
-    match (client, request["request"].as_str()) {
-        (Some(client), Some(id)) if !id.is_empty() => Request::Once {
-            request: mooring_core::protocol::RequestId {
-                client: format!("remote:{client}"),
-                id: id.to_owned(),
-            },
+    match named_id(client, request) {
+        Some(request) => Request::Once {
+            request,
             inner: Box::new(inner),
         },
-        _ => inner,
+        None => inner,
+    }
+}
+/// The id a write carries, unique to its client (named in `hello`).
+fn named_id(client: Option<&str>, request: &Value) -> Option<RequestId> {
+    match (client, request["request"].as_str()) {
+        (Some(client), Some(id)) if !id.is_empty() => Some(RequestId {
+            client: format!("remote:{client}"),
+            id: id.to_owned(),
+        }),
+        _ => None,
     }
 }
 
@@ -374,6 +383,9 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             ok_reply(rpc(socket, &named(client, request, answer))?)
         }
         "chat" => chat(socket, request),
+        "open" => writes::open(socket, request, client),
+        "end" => writes::end(socket, request, client),
+        "outcome" => writes::outcome(socket, request, client),
         op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
     }
 }
@@ -465,6 +477,10 @@ fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
                 status_label: status.map(|s| s.label().to_owned()),
                 needs_you: session.is_some_and(|s| w.needs_you(s, now)),
                 note,
+                turn: content
+                    .map(|c| c.turn_key.clone())
+                    .filter(|t| !t.is_empty()),
+                outcome: session.map(|s| outcome_key(&s.outcome).to_owned()),
             }
         })
         .collect();
@@ -482,6 +498,15 @@ fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
         spaces,
         terminals,
     })
+}
+
+fn outcome_key(o: &Outcome) -> &'static str {
+    match o {
+        Outcome::Open => "open",
+        Outcome::Completed => "done",
+        Outcome::Deferred { .. } => "deferred",
+        Outcome::Abandoned => "abandoned",
+    }
 }
 
 /// `resize`: sizes the terminal a taken stream writes to, as its pane does locally.
