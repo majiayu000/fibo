@@ -316,7 +316,14 @@ fn recorded(w: &Workspace, s: &AgentSession, c: Option<&Content>, now: u64) -> S
     if !running && now.saturating_sub(since) > u64::from(w.settings.stale_days) * 86400 {
         return Status::Stale;
     }
-    if c.turn == Turn::Waiting {
+    // A question in the log waits for you only while someone can answer it. A session
+    // bound to a Mooring terminal reads its record here only once its agent has left
+    // that terminal (or the terminal ended): nobody is left to ask.
+    let left_its_terminal = s
+        .terminal
+        .as_ref()
+        .is_some_and(|id| w.terminals.iter().any(|t| &t.id == id));
+    if c.turn == Turn::Waiting && !left_its_terminal {
         return Status::Waiting;
     }
     let failed = w
@@ -466,9 +473,19 @@ mod tests {
 
     #[test]
     fn recorded_session_reads_its_log() {
+        // An agent outside Mooring: its log is all there is.
+        assert_eq!(
+            of(
+                &workspace(Some(content(Turn::Waiting)), Some(0)),
+                &session(None, false),
+                NOW
+            ),
+            Status::Waiting
+        );
+        // Its Mooring terminal has ended: nobody is left to answer.
         assert_eq!(
             recorded_status(Some(content(Turn::Waiting))),
-            Status::Waiting
+            Status::Paused
         );
         assert_eq!(
             recorded_status(Some(content(Turn::Completed))),
@@ -498,5 +515,19 @@ mod tests {
                 assert_ne!(a.glyph(), b.glyph());
             }
         }
+    }
+
+    /// orca#10633: the agent quit at a permission prompt and its Mooring terminal is
+    /// back at the shell, or the terminal itself is gone. Nobody is left to answer, so it
+    /// does not sit under 要你处理 until it goes stale.
+    #[test]
+    fn an_agent_gone_from_its_terminal_is_not_waiting() {
+        let w = workspace(Some(content(Turn::Waiting)), None);
+        assert_eq!(of(&w, &session(Some("t"), false), NOW), Status::Paused);
+        let w = workspace(Some(content(Turn::Waiting)), Some(129));
+        assert_eq!(of(&w, &session(Some("t"), false), NOW), Status::Error);
+        // Still at the prompt in its terminal: waiting.
+        let w = workspace(Some(content(Turn::Waiting)), None);
+        assert_eq!(of(&w, &session(Some("t"), true), NOW), Status::Waiting);
     }
 }
