@@ -34,6 +34,12 @@ impl Workbench {
         let session = self.pane_session(terminal).expect("no session").id.clone();
         self.complete_pane(terminal.to_owned(), session, cx);
     }
+    /// The session card over the pane, as clicking its status opens it.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_open_here(&mut self, terminal: &str, cx: &mut Context<Self>) {
+        self.overview.here = self.pane_session(terminal).map(|s| s.id.clone());
+        cx.notify();
+    }
     /// 标记完成 with a given animation, held at `pin` of the way through when given.
     #[cfg(feature = "visual-test")]
     pub fn visual_complete_with(

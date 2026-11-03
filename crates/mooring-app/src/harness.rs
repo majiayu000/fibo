@@ -132,6 +132,32 @@ pub fn start(
                     eprintln!("FRAMES {style:?}: specks={specks} gap_ms {} | overlay_paint_ms {}", stat(gaps), stat(paints));
                     wait(300).await;
                     shot(&format!("{style:?}-closed.png"), cx);
+                } else if tid == "done" && let Ok(at) = std::env::var("MOORING_COMPLETE_CARD") {
+                    // 标记完成 from the session card on its own pane: a real click at the
+                    // card's solid button ("x,y" in window points) folds the card and plays
+                    // the animation picked in settings, then closes the pane.
+                    handle.update(cx, |v, _, a| v.visual_open_here(tid, a)).unwrap();
+                    wait(400).await;
+                    shot("card-0-open.png", cx);
+                    if let Some((x, y)) = at.split_once(',') {
+                        let at = gpui::point(px(x.parse().unwrap()), px(y.parse().unwrap()));
+                        cx.update_window(handle.into(), |_, w, a| native_click(w, a, at, gpui::MouseButton::Left)).unwrap();
+                        wait(600).await;
+                        shot("card-1-playing.png", cx);
+                        let mut closed = false;
+                        for _ in 0..60 {
+                            wait(100).await;
+                            if !handle.update(cx, |v, _, _| v.visual_completable(tid)).unwrap().2 { closed = true; break; }
+                        }
+                        assert!(closed, "the pane never closed after 标记完成 on its card");
+                        let w = workspace();
+                        assert!(w.agent_sessions.iter().any(|s| s.outcome == Outcome::Completed), "outcome not saved");
+                        wait(300).await;
+                        shot("card-2-closed.png", cx);
+                        eprintln!("complete card PASS: the card's 标记完成 played the animation and closed the pane");
+                    }
+                    cx.update(|cx| cx.quit());
+                    return;
                 } else if tid == "done" {
                     shot("0-review.png", cx);
                     handle.update(cx, |v, _, a| v.visual_complete(tid, a)).unwrap();

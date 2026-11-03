@@ -197,6 +197,36 @@ fn sweep_at(t: f32) -> f32 {
 }
 
 impl Workbench {
+    /// Settles a session from its card. 标记完成 from the card on the session's own pane
+    /// folds the card and plays the animation picked in settings there, like the pane's
+    /// button; every other ending, or a card in the overview, is only recorded.
+    pub(super) fn settle_session(
+        &mut self,
+        session: &AgentSession,
+        outcome: Outcome,
+        in_pane: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let pane = (in_pane && outcome == Outcome::Completed)
+            .then(|| live_terminal(&self.workspace, session))
+            .flatten()
+            .map(|t| t.id.clone())
+            .filter(|t| self.layout.panes.contains_key(t));
+        match pane {
+            Some(terminal) => {
+                self.overview.here = None;
+                self.overview.here_more = None;
+                self.complete_pane(terminal, session.id.clone(), cx)
+            }
+            None => self.edit(
+                Edit::SetOutcome {
+                    id: session.id.clone(),
+                    outcome,
+                },
+                cx,
+            ),
+        }
+    }
     /// Marks the pane's session completed and closes the pane once the animation ends,
     /// unless the user keeps it or the host turned the mark down.
     pub(super) fn complete_pane(

@@ -492,7 +492,7 @@ impl Workbench {
         } else {
             ("撤销结局", Outcome::Open)
         };
-        let settle_id = session.id.clone();
+        let settle_session = session.clone();
         let more = self.overview.here_more.as_ref() == Some(&session.id);
         let more_id = session.id.clone();
         let settle_button = button(
@@ -500,13 +500,7 @@ impl Workbench {
             settle_name,
         )
         .on_click(cx.listener(move |this, _, _, cx| {
-            this.edit(
-                Edit::SetOutcome {
-                    id: settle_id.clone(),
-                    outcome: settle.clone(),
-                },
-                cx,
-            )
+            this.settle_session(&settle_session, settle.clone(), in_pane, cx)
         }));
         let mut foot = div()
             .flex_none()
@@ -612,7 +606,7 @@ impl Workbench {
             .into_iter()
             .filter(|(name, o)| *o != session.outcome && *name != settle_name)
             {
-                let sid = session.id.clone();
+                let settled = session.clone();
                 let abandon = outcome == Outcome::Abandoned;
                 if abandon {
                     menu = menu.child(
@@ -635,13 +629,7 @@ impl Workbench {
                     .when(abandon, |d| d.text_color(Tone::Danger.ink()))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         fold(this);
-                        this.edit(
-                            Edit::SetOutcome {
-                                id: sid.clone(),
-                                outcome: outcome.clone(),
-                            },
-                            cx,
-                        )
+                        this.settle_session(&settled, outcome.clone(), in_pane, cx)
                     })),
                 );
             }
