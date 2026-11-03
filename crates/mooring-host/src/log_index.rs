@@ -12,6 +12,8 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, UNIX_EPOCH},
 };
+/// How long a turn may run before its prompt is logged and still be the one it opened.
+const TURN_LEAD: u64 = 120;
 fn err(e: impl std::error::Error + Send + Sync + 'static) -> io::Error {
     io::Error::other(e)
 }
@@ -551,6 +553,22 @@ impl Index {
             )),
             None => None,
         })
+    }
+    /// When the newest turn that began by `at` began: the turn a prompt logged at `at`
+    /// opened. Codex starts it at Enter and may log the prompt seconds later. A turn begun
+    /// over `TURN_LEAD` earlier is one the prompt was typed into, not one it opened.
+    pub fn turn_began(&self, path: &str, at: u64) -> io::Result<Option<u64>> {
+        let mut q = self
+            .db
+            .prepare_cached("SELECT MAX(at) FROM session_records WHERE path=?1 AND kind='turn' AND text='Running' AND at<=?2 AND at>=?3")
+            .map_err(err)?;
+        let began: Option<i64> = q
+            .query_row(
+                params![path, at as i64, at.saturating_sub(TURN_LEAD) as i64],
+                |row| row.get(0),
+            )
+            .map_err(err)?;
+        Ok(began.and_then(|b| u64::try_from(b).ok()))
     }
     pub fn latest_user_text(&self, path: &str) -> io::Result<Option<String>> {
         let mut q = self
@@ -1680,6 +1698,46 @@ mod tests {
             .unwrap()
             .0,
             "parent:sidechain:child"
+        );
+    }
+    #[test]
+    fn a_first_prompt_logged_late_still_knows_when_its_turn_began() {
+        // Codex 0.166 through its shared daemon, as logged: the turn starts at Enter and
+        // the first prompt lands once the thread is built, 5.5 s later.
+        let f = Fixture::new();
+        let path = f.0.join("logs/late.jsonl");
+        let at = |t: &str, payload: &str| {
+            format!("{{\"timestamp\":\"2026-11-03T13:{t}Z\",{payload}}}\n")
+        };
+        let user = |text: &str| {
+            format!("\"type\":\"response_item\",\"payload\":{{\"type\":\"message\",\"role\":\"user\",\"content\":[{{\"type\":\"input_text\",\"text\":\"{text}\"}}]}}")
+        };
+        let started = "\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\"}";
+        let done = "\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\"}";
+        let log = [
+            at("12:54.164", "\"type\":\"session_meta\",\"payload\":{\"id\":\"late\",\"cwd\":\"/repo\",\"originator\":\"codex-tui\",\"source\":\"cli\"}"),
+            at("12:54.164", started),
+            at("12:59.704", &user("看看")),
+            at("13:06.394", done),
+            at("13:47.347", started),
+            at("13:47.407", &user("再看看")),
+            at("13:53.882", done),
+        ]
+        .concat();
+        fs::write(&path, log).unwrap();
+        let mut index = f.index();
+        index.update(Agent::Codex, &path, true).unwrap();
+        let path = path.to_str().unwrap();
+        let (text, logged) = index.latest_user(path).unwrap().unwrap();
+        assert_eq!(text, "再看看");
+        assert_eq!(index.turn_began(path, logged).unwrap(), Some(logged));
+        // The first prompt: its turn began at Enter, before the prompt was logged.
+        let first = logged - 48;
+        assert_eq!(index.turn_began(path, first).unwrap(), Some(first - 5));
+        // A turn begun long before is one the prompt was typed into, not one it opened.
+        assert_eq!(
+            index.turn_began(path, logged + TURN_LEAD + 1).unwrap(),
+            None
         );
     }
     #[test]

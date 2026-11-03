@@ -187,6 +187,7 @@ impl Association {
         let mut threads = vec![];
         for t in cached.iter().filter(|t| unbound(t)) {
             if let Some((key, at)) = prompt(t)? {
+                let began = index.turn_began(&t.path, at)?;
                 let cwd = fs::canonicalize(&t.cwd)
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| t.cwd.clone());
@@ -194,6 +195,7 @@ impl Association {
                     transcript: t,
                     key,
                     at: Some(at),
+                    began,
                     cwd,
                 });
             }

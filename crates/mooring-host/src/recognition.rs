@@ -684,6 +684,10 @@ pub struct ScreenThread<'a> {
     pub key: Option<String>,
     /// When that prompt was logged, seconds since the epoch.
     pub at: Option<u64>,
+    /// When the turn that prompt opened began, if the log says. Shared-daemon Codex logs
+    /// a thread's first prompt only after building the thread (5 s and more after Enter),
+    /// but starts the turn at Enter.
+    pub began: Option<u64>,
     /// The log's cwd with symlinks resolved, comparable with the kernel's process cwd.
     pub cwd: String,
 }
@@ -702,8 +706,8 @@ pub struct ScreenTerminal {
 /// How far apart Enter in a pane and the prompt's log time may be and still be one event.
 pub const SUBMIT_WINDOW: u64 = 3;
 /// Pair threads with terminals one-to-one. Evidence is the prompt shown verbatim on the
-/// screen, or Enter pressed in that pane when the prompt was logged (a short or pasted
-/// prompt never shows verbatim). A thread fitting two panes, or a pane fitting two
+/// screen, or Enter pressed in that pane when the prompt was logged or its turn began (a
+/// short or pasted prompt never shows verbatim). A thread fitting two panes, or a pane fitting two
 /// threads, binds nothing; the next distinct prompt can settle it.
 pub fn screen_bindings<'a>(
     threads: &[ScreenThread<'a>],
@@ -714,7 +718,7 @@ pub fn screen_bindings<'a>(
             .key
             .as_ref()
             .is_some_and(|key| terminal.screen.contains(key));
-        let submitted = thread.at.is_some_and(|at| {
+        let submitted = [thread.at, thread.began].into_iter().flatten().any(|at| {
             terminal
                 .submits
                 .iter()
@@ -1034,6 +1038,7 @@ mod tests {
                     transcript,
                     key: Some(screen_key(prompt)?),
                     at: None,
+                    began: None,
                     cwd: "/same".into(),
                 })
             })
@@ -1085,6 +1090,7 @@ mod tests {
                 transcript: &t,
                 key: screen_key(prompt),
                 at: None,
+                began: None,
                 cwd: "/same".into(),
             }];
             assert_eq!(
@@ -1144,6 +1150,7 @@ mod tests {
             transcript,
             key: screen_key("继续"),
             at: Some(at),
+            began: None,
             cwd: "/same".into(),
         };
         let pane = |i: usize, submits: Vec<u64>| ScreenTerminal {
@@ -1170,6 +1177,21 @@ mod tests {
         );
         // Enter too far from the logged time is no evidence.
         assert!(bound(&[thread(&t0, 1000)], &[pane(0, vec![1010])]).is_empty());
+        // Shared-daemon Codex logs a thread's first prompt seconds after Enter, once the
+        // thread is built; the turn it opened began at Enter.
+        let first = ScreenThread {
+            began: Some(1000),
+            ..thread(&t0, 1006)
+        };
+        assert_eq!(
+            bound(&[first], &[pane(0, vec![1000])]),
+            vec![("pty-0".into(), "t0".into())]
+        );
+        let first = ScreenThread {
+            began: Some(1000),
+            ..thread(&t0, 1006)
+        };
+        assert!(bound(&[first], &[pane(0, vec![990])]).is_empty());
         // Two panes pressing Enter together in one directory: neither binds.
         assert!(bound(
             &[thread(&t0, 1000)],
