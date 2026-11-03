@@ -366,11 +366,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let (cols, rows) = split_room(&*lock(shared)?, &target, axis, share)?;
             Ok(Reply::Size { cols, rows })
         }
-        Request::Edit { revision, mut edit } => {
+        // Each edit names the objects it changes and, where it depends on what its sender
+        // saw, says so itself (`Edit::SetOutcome`'s `seen`); the workspace revision moves
+        // with every line an Agent writes and is never a precondition.
+        Request::Edit { mut edit, .. } => {
             let mut host = lock(shared)?;
-            if edit.checks_revision() && host.workspace.revision != revision {
-                return Err(io::Error::other("工作台已变化，请刷新后重试"));
-            }
             if let Edit::SaveSessionTask { session, task } = &mut edit {
                 let s = host
                     .workspace

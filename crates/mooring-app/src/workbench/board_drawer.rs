@@ -198,6 +198,7 @@ impl Workbench {
         };
         self.edit(
             Edit::SetOutcome {
+                seen: None,
                 id: card.id.clone(),
                 outcome,
             },
@@ -397,6 +398,7 @@ impl Workbench {
                             this.overview.toast = None;
                             this.edit(
                                 Edit::SetOutcome {
+                                    seen: None,
                                     id: id.clone(),
                                     outcome: outcome.clone(),
                                 },

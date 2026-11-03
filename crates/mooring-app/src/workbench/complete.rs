@@ -220,6 +220,7 @@ impl Workbench {
             }
             None => self.edit(
                 Edit::SetOutcome {
+                    seen: None,
                     id: session.id.clone(),
                     outcome,
                 },
@@ -313,6 +314,7 @@ impl Workbench {
         if !preview {
             self.edit(
                 Edit::SetOutcome {
+                    seen: None,
                     id: session.clone(),
                     outcome: Outcome::Completed,
                 },

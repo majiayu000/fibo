@@ -842,6 +842,7 @@ mod milestone_tests {
             .unwrap_err();
         assert!(err.contains("1 个没收尾的待办"), "{err}");
         w.edit(Edit::SetTaskOutcome {
+            seen: None,
             id: "task".into(),
             outcome: Outcome::Abandoned,
         })
@@ -932,6 +933,7 @@ mod milestone_tests {
         })
         .unwrap();
         w.edit(Edit::SetTaskOutcome {
+            seen: None,
             id: "t".into(),
             outcome: Outcome::Deferred {
                 reason: "await review".into(),

@@ -358,12 +358,20 @@ impl Workbench {
                     let Some(id) = self.nav.task_detail.clone() else {
                         return;
                     };
-                    Edit::SetTaskOutcome { id, outcome }
+                    Edit::SetTaskOutcome {
+                        id,
+                        outcome,
+                        seen: None,
+                    }
                 } else {
                     let Some(id) = self.overview.here.clone() else {
                         return;
                     };
-                    Edit::SetOutcome { id, outcome }
+                    Edit::SetOutcome {
+                        id,
+                        outcome,
+                        seen: None,
+                    }
                 }
             }
             FormKind::Task => {

@@ -318,6 +318,10 @@ pub enum Edit {
     SetTaskOutcome {
         id: String,
         outcome: Outcome,
+        /// The outcome the sender saw; the edit is refused when it changed since.
+        /// `Workspace::stamp` fills it from the sender's copy. Scripts may leave it out.
+        #[serde(default)]
+        seen: Option<Outcome>,
     },
     SetPendingTask {
         terminal: String,
@@ -349,6 +353,10 @@ pub enum Edit {
     SetOutcome {
         id: String,
         outcome: Outcome,
+        /// What the sender saw: refused when the outcome changed or the Agent began
+        /// another turn since. `Workspace::stamp` fills it. Scripts may leave it out.
+        #[serde(default)]
+        seen: Option<SeenSession>,
     },
     AssignTask {
         id: String,
@@ -375,27 +383,12 @@ pub enum Edit {
     },
 }
 
-impl Edit {
-    /// Whether the edit must be based on the host's current revision. Tabs and layouts
-    /// are addressed by id and only ever changed by the user, so like tmux window
-    /// commands they apply to whatever is there now and fail only when a referenced
-    /// object is gone. Session output bumps the revision every second; requiring it
-    /// here made 「收起标签」 fail almost every time.
-    pub fn checks_revision(&self) -> bool {
-        !matches!(
-            self,
-            Self::PutTab { .. }
-                | Self::CloseTab { .. }
-                | Self::ClosePane { .. }
-                | Self::SplitPane { .. }
-                | Self::RenameSession { .. }
-                | Self::MoveTab { .. }
-                // Settings replace themselves whole and nothing else writes them; a space
-                // removal re-checks its tasks against the host's state when applied.
-                | Self::Settings(_)
-                | Self::RemoveSpace { .. }
-        )
-    }
+/// The part of a session an outcome edit depends on, as its sender saw it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SeenSession {
+    pub outcome: Outcome,
+    /// The turn the sender judged (`Content::turn_key`); empty with no content.
+    pub turn: String,
 }
 
 fn validate_outcome(outcome: &Outcome) -> Result<(), String> {
@@ -407,6 +400,54 @@ fn validate_outcome(outcome: &Outcome) -> Result<(), String> {
     Ok(())
 }
 impl Workspace {
+    /// An outcome edit made on what the sender saw: refused once the session's outcome
+    /// changed or its Agent began another turn, unless it already is what was asked.
+    fn check_seen(&self, id: &str, seen: &SeenSession, outcome: &Outcome) -> Result<(), String> {
+        let session = self
+            .agent_sessions
+            .iter()
+            .find(|s| s.id == id)
+            .ok_or("Agent 会话不存在")?;
+        if &session.outcome == outcome {
+            return Ok(());
+        }
+        if session.outcome != seen.outcome {
+            return Err("这个会话的结局刚被改过，看一眼再定".into());
+        }
+        let turn = self.content.get(id).map_or("", |c| c.turn_key.as_str());
+        if turn != seen.turn {
+            return Err("Agent 又开始了新的一轮，没有标记；看完这一轮再定".into());
+        }
+        Ok(())
+    }
+    /// Fills an outcome edit's `seen` from this copy, the one its sender is looking at.
+    pub fn stamp(&self, edit: &mut Edit) {
+        match edit {
+            Edit::SetOutcome { id, seen, .. } if seen.is_none() => {
+                *seen = self
+                    .agent_sessions
+                    .iter()
+                    .find(|s| &s.id == id)
+                    .map(|s| SeenSession {
+                        outcome: s.outcome.clone(),
+                        turn: self
+                            .content
+                            .get(id.as_str())
+                            .map(|c| c.turn_key.clone())
+                            .unwrap_or_default(),
+                    });
+            }
+            Edit::SetTaskOutcome { id, seen, .. } if seen.is_none() => {
+                *seen = Some(
+                    self.task_outcomes
+                        .get(id.as_str())
+                        .cloned()
+                        .unwrap_or_default(),
+                );
+            }
+            _ => {}
+        }
+    }
     pub fn change_outcome(
         &mut self,
         id: &str,
@@ -875,11 +916,15 @@ impl Workspace {
                 check.edit(Edit::AddTask(task.clone()))?;
                 self.tasks[index] = task;
             }
-            Edit::SetTaskOutcome { id, outcome } => {
+            Edit::SetTaskOutcome { id, outcome, seen } => {
                 if !self.tasks.iter().any(|t| t.id == id) {
                     return Err("待办不存在".into());
                 }
                 validate_outcome(&outcome)?;
+                let now = self.task_outcomes.get(&id).cloned().unwrap_or_default();
+                if seen.is_some_and(|seen| seen != now) && now != outcome {
+                    return Err("这个待办的结局刚被改过，看一眼再定".into());
+                }
                 self.task_outcomes.insert(id, outcome);
             }
             Edit::SetPendingTask { terminal, task } => {
@@ -1077,7 +1122,10 @@ impl Workspace {
                     return Err("画面不存在".into());
                 }
             }
-            Edit::SetOutcome { id, outcome } => {
+            Edit::SetOutcome { id, outcome, seen } => {
+                if let Some(seen) = seen {
+                    self.check_seen(&id, &seen, &outcome)?;
+                }
                 self.change_outcome(&id, outcome, crate::content::now(), "用户操作")?;
             }
             Edit::AssignTask { id, task } => {
@@ -1153,6 +1201,70 @@ mod tests {
             binding: None,
             name: String::new(),
         }
+    }
+    /// Marking done goes through however often Agent output moved the revision, and is
+    /// refused only when the session itself moved on since the sender looked.
+    #[test]
+    fn outcome_edits_depend_on_what_their_sender_saw_not_the_revision() {
+        let mut w = workspace();
+        w.observe_agent(observation("s")).unwrap();
+        w.content.insert(
+            "s".into(),
+            crate::content::Content {
+                turn_key: "t1".into(),
+                ..Default::default()
+            },
+        );
+        let seen = w.clone();
+        let done = |seen: &Workspace| {
+            let mut e = Edit::SetOutcome {
+                id: "s".into(),
+                outcome: Outcome::Completed,
+                seen: None,
+            };
+            seen.stamp(&mut e);
+            e
+        };
+        // Output moves the revision; the edit made on the older copy still applies.
+        w.revision += 100;
+        w.edit(done(&seen)).unwrap();
+        assert_eq!(w.agent_sessions[0].outcome, Outcome::Completed);
+        // Sent twice, it is what was asked already.
+        w.edit(done(&seen)).unwrap();
+        // Reopened, then the Agent starts another turn: the old look is refused.
+        w.change_outcome("s", Outcome::Open, 0, "test").unwrap();
+        let seen = w.clone();
+        w.content.get_mut("s").unwrap().turn_key = "t2".into();
+        let err = w.edit(done(&seen)).unwrap_err();
+        assert!(err.contains("新的一轮"), "{err}");
+        // Changed by someone else since: refused too.
+        let seen = w.clone();
+        w.change_outcome("s", Outcome::Abandoned, 0, "test")
+            .unwrap();
+        let err = w.edit(done(&seen)).unwrap_err();
+        assert!(err.contains("刚被改过"), "{err}");
+        // Scripts that say nothing of what they saw are applied as before.
+        w.edit(Edit::SetOutcome {
+            id: "s".into(),
+            outcome: Outcome::Completed,
+            seen: None,
+        })
+        .unwrap();
+        // A todo's outcome the same way.
+        let seen = w.clone();
+        w.edit(Edit::SetTaskOutcome {
+            id: "a".into(),
+            outcome: Outcome::Abandoned,
+            seen: None,
+        })
+        .unwrap();
+        let mut e = Edit::SetTaskOutcome {
+            id: "a".into(),
+            outcome: Outcome::Completed,
+            seen: None,
+        };
+        seen.stamp(&mut e);
+        assert!(w.edit(e).unwrap_err().contains("刚被改过"));
     }
     #[test]
     fn a_temporary_directory_hides_only_sessions_mooring_did_not_start() {
@@ -1260,6 +1372,7 @@ mod tests {
         w.observe_agent(observation("next")).unwrap();
         assert_eq!(w.agent_sessions[1].task.as_deref(), Some("a"));
         w.edit(Edit::SetTaskOutcome {
+            seen: None,
             id: "a".into(),
             outcome: Outcome::Completed,
         })
@@ -1295,6 +1408,7 @@ mod tests {
         assert_eq!(w.tab_title(&w.tabs[0], &Default::default(), None), "Codex");
         assert!(
             w.edit(Edit::SetTaskOutcome {
+                seen: None,
                 id: "a".into(),
                 outcome: Outcome::Deferred {
                     reason: "".into(),
@@ -1431,6 +1545,7 @@ mod tests {
         tab(&mut w, "tab", "a", "a");
         w.observe_agent(observation("first")).unwrap();
         w.edit(Edit::SetOutcome {
+            seen: None,
             id: "first".into(),
             outcome: Outcome::Completed,
         })
@@ -1580,6 +1695,7 @@ mod tests {
         })
         .unwrap();
         w.edit(Edit::SetOutcome {
+            seen: None,
             id: "first".into(),
             outcome: Outcome::Abandoned,
         })

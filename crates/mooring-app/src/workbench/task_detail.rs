@@ -293,6 +293,7 @@ impl Workbench {
             button(name, name).on_click(cx.listener(move |this, _, _, cx| {
                 this.edit(
                     Edit::SetTaskOutcome {
+                        seen: None,
                         id: tid.clone(),
                         outcome: to.clone(),
                     },

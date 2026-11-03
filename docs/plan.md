@@ -40,6 +40,7 @@
 ### 第 1 阶段 · 编辑不再被挡、不再丢（I1–I7、I10、I11）
 
 - 会话内容单独计数，不再推高全局版本号。
+- 做法和进度见 [request-envelope/spec.md](request-envelope/spec.md)。
 - 请求信封 + 回执 + 去重表（`requests` 表保留 24 小时，和改动在同一事务里写）。
 - App、CLI、手机共用一个请求状态机；表单在确认后才关；超时显示「不确定是否成功」，并给出用同一个 id 重试的按钮。
 - 编辑按对象带前提：AddTask 不带；SetOutcome / SetTaskOutcome 带「我看到的结局」，SetOutcome 还带 turn_key；UpdateTask 拆成按字段改。

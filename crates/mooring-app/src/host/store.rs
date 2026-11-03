@@ -96,8 +96,9 @@ impl Store {
         self.busy = false;
         self.slow = false;
     }
-    /// Revision-free edits are idempotent, so a click during another action
-    /// waits its turn; anything else is still dropped to avoid double submits.
+    /// An edit made during another action waits its turn. Creating something, or any
+    /// other request, is still dropped while busy, so a double click makes one, not two
+    /// (until requests carry ids: docs/request-envelope/spec.md, step B).
     pub fn hold(&mut self, request: Request) {
         if queueable(&request) {
             self.queued.push_back(request);
@@ -172,5 +173,8 @@ pub fn record_left(socket: &Path, at: u64) {
     }
 }
 pub fn queueable(request: &Request) -> bool {
-    matches!(request, Request::Edit { edit, .. } if !edit.checks_revision())
+    matches!(request, Request::Edit { edit, .. } if !matches!(
+        edit,
+        Edit::AddTask(_) | Edit::AddSpace(_) | Edit::SaveSessionTask { .. }
+    ))
 }

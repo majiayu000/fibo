@@ -765,6 +765,7 @@ impl Workbench {
                         }
                         this.edit(
                             Edit::SetOutcome {
+                                seen: None,
                                 id: id.clone(),
                                 outcome: outcome.clone(),
                             },

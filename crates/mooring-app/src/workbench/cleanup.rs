@@ -44,6 +44,7 @@ impl Workbench {
         match key {
             "enter" | "backspace" => self.edit(
                 Edit::SetOutcome {
+                    seen: None,
                     id: s.id.clone(),
                     outcome: if key == "enter" {
                         Outcome::Completed
@@ -299,6 +300,7 @@ impl Workbench {
                 solid(button("完成", "完成 ⏎")).on_click(cx.listener(move |this, _, _, cx| {
                     this.edit(
                         Edit::SetOutcome {
+                            seen: None,
                             id: sid.clone(),
                             outcome: Outcome::Completed,
                         },
@@ -325,6 +327,7 @@ impl Workbench {
                 cx.listener(move |this, _, _, cx| {
                     this.edit(
                         Edit::SetOutcome {
+                            seen: None,
                             id: sid.clone(),
                             outcome: Outcome::Abandoned,
                         },

@@ -695,7 +695,10 @@ impl Workbench {
         })
         .detach();
     }
-    pub(super) fn edit(&mut self, edit: Edit, cx: &mut Context<Self>) {
+    /// Sends an edit made on what this window shows: an outcome change carries the
+    /// outcome and turn seen here, and is refused if either moved on meanwhile.
+    pub(super) fn edit(&mut self, mut edit: Edit, cx: &mut Context<Self>) {
+        self.workspace.stamp(&mut edit);
         self.request(
             Request::Edit {
                 revision: self.workspace.revision,

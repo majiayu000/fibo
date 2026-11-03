@@ -140,6 +140,7 @@ fn any_sequence_of_edits_keeps_one_name() {
                 }
                 3 => w
                     .edit(Edit::SetOutcome {
+                        seen: None,
                         id: s.id.clone(),
                         outcome: Outcome::Completed,
                     })
@@ -181,6 +182,7 @@ fn a_todo_and_its_sessions_move_together() {
     assert!(w.needs_you(&waiting(&w), at));
     assert_eq!(task_state(&w, &task, at), TaskState::Working);
     w.edit(Edit::SetTaskOutcome {
+        seen: None,
         id: task.id.clone(),
         outcome: Outcome::Completed,
     })

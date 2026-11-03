@@ -705,7 +705,9 @@ fn clear_history_reaches_the_daemon_and_every_display() {
     }
 }
 #[test]
-fn tab_edits_ignore_stale_revision_but_task_edits_do_not() {
+/// The revision moves with every line an Agent writes; no edit waits on it. An edit fails
+/// only on its own object: gone, or (outcomes) changed since its sender looked.
+fn edits_ignore_the_workspace_revision() {
     let h = Host::start();
     h.setup();
     h.call(h.launch("one", "sleep 30")).unwrap();
@@ -741,12 +743,13 @@ fn tab_edits_ignore_stale_revision_but_task_edits_do_not() {
         .call(Request::Edit {
             revision: stale,
             edit: Edit::SetTaskOutcome {
+                seen: None,
                 id: "gone".into(),
                 outcome: Outcome::Abandoned,
             },
         })
         .unwrap_err();
-    assert!(conflict.to_string().contains("工作台已变化"), "{conflict}");
+    assert!(conflict.to_string().contains("待办不存在"), "{conflict}");
 }
 #[test]
 fn launch_is_durable_and_deduplicated_and_tab_close_stops_and_deletes() {
@@ -965,6 +968,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
     h.call(Request::Edit {
         revision: h.workspace().revision,
         edit: Edit::SetOutcome {
+            seen: None,
             id: first_id.clone(),
             outcome: Outcome::Completed,
         },
@@ -1851,6 +1855,7 @@ fn stop_agent_clears_current_without_stopping_shell_or_changing_outcome() {
     h.call(Request::Edit {
         revision: h.workspace().revision,
         edit: Edit::SetOutcome {
+            seen: None,
             id: before.id.clone(),
             outcome: Outcome::Completed,
         },
@@ -2281,6 +2286,7 @@ fn external_content_updates_without_probes_saves_full_quotes_and_reopens_on_new_
     h.call(Request::Edit {
         revision: w.revision,
         edit: Edit::SetOutcome {
+            seen: None,
             id: s.id.clone(),
             outcome: Outcome::Completed,
         },
@@ -2305,6 +2311,7 @@ fn external_content_updates_without_probes_saves_full_quotes_and_reopens_on_new_
     h.call(Request::Edit {
         revision: w.revision,
         edit: Edit::SetOutcome {
+            seen: None,
             id: s.id.clone(),
             outcome: Outcome::Deferred {
                 reason: "deadline test".into(),

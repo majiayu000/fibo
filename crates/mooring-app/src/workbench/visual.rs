@@ -842,6 +842,7 @@ impl Workbench {
             "TodoDetailDone" => {
                 self.edit(
                     Edit::SetTaskOutcome {
+                        seen: None,
                         id: "task2".into(),
                         outcome: Outcome::Completed,
                     },

@@ -371,8 +371,10 @@ fn reopening_a_failed_resume_returns_to_its_terminal() {
     assert!(resume_terminal(&w, &resumed, &s).is_none());
 }
 
+/// An edit made during another action waits its turn; creating something is dropped, so
+/// a double click makes one.
 #[test]
-fn only_revision_free_edits_wait_behind_a_busy_action() {
+fn edits_wait_behind_a_busy_action_but_creations_do_not() {
     use crate::host::store::queueable;
     let w = fixture();
     let edit = |edit| Request::Edit { revision: 0, edit };
@@ -380,10 +382,12 @@ fn only_revision_free_edits_wait_behind_a_busy_action() {
     assert!(queueable(&edit(Edit::PutTab {
         tab: w.tabs[0].clone()
     })));
-    assert!(!queueable(&edit(Edit::SetTaskOutcome {
+    assert!(queueable(&edit(Edit::SetTaskOutcome {
+        seen: None,
         id: "task".into(),
         outcome: Outcome::Abandoned,
     })));
+    assert!(!queueable(&edit(Edit::AddSpace(w.spaces[0].clone()))));
     assert!(!queueable(&Request::Workspace));
 }
 #[test]
