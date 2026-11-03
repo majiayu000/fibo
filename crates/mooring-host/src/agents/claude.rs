@@ -207,7 +207,11 @@ impl Adapter for Claude {
                 parser.message(true, s, at, source, false);
             }
         }
-        if let Some(blocks) = blocks.as_array() {
+        // Only the conversation's own lines carry its calls. `api-request-blob` lines replay
+        // earlier messages, calls long answered included; read as new, every replayed call
+        // would wait for a result that already came.
+        let own = matches!(ty, "user" | "assistant");
+        if let Some(blocks) = blocks.as_array().filter(|_| own) {
             for b in blocks {
                 match b["type"].as_str() {
                     Some("tool_use") => parser.tool(

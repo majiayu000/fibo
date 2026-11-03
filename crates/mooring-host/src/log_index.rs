@@ -245,12 +245,15 @@ impl Index {
                 // Content is a newly introduced object. Seed only cached recent identities that
                 // have no projection, once, without another directory walk or replacing cursors.
                 let missing = {
-                    let mut q=self.db.prepare("SELECT runtime,path FROM log_files WHERE updated>=?1 AND NOT EXISTS(SELECT 1 FROM session_content WHERE session_content.path=log_files.path AND json_extract(parser,'$._rules')=13)").map_err(err)?;
+                    let mut q=self.db.prepare("SELECT runtime,path FROM log_files WHERE updated>=?1 AND NOT EXISTS(SELECT 1 FROM session_content WHERE session_content.path=log_files.path AND json_extract(parser,'$._rules')=?2)").map_err(err)?;
                     let rows = q
                         .query_map(
-                            [mooring_core::content::now()
-                                .saturating_sub(self.recent_days.saturating_mul(86400))
-                                as i64],
+                            [
+                                mooring_core::content::now()
+                                    .saturating_sub(self.recent_days.saturating_mul(86400))
+                                    as i64,
+                                i64::from(crate::content::RULES),
+                            ],
                             |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
                         )
                         .map_err(err)?;
@@ -757,12 +760,10 @@ impl Index {
             .duration_since(UNIX_EPOCH)
             .map_err(err)?
             .as_secs();
-        let seeded: bool = self
-            .db
-            .prepare_cached("SELECT EXISTS(SELECT 1 FROM session_content WHERE path=?1 AND json_extract(parser,'$._rules')=13)")
-            .map_err(err)?
-            .query_row([&key], |r| r.get(0))
-            .map_err(err)?;
+        // The saved state is read once: whether it is current decides both the early return
+        // and whether reading continues from it.
+        let stored = crate::content::load(&self.db, &key)?;
+        let seeded = stored.rules == crate::content::RULES;
         // Replaced or rewritten shorter: what was read from it before is gone too.
         let mut replaced = false;
         if let Some(c) = &cursor {
@@ -802,7 +803,7 @@ impl Index {
         let mut parser = if fresh || !seeded {
             crate::content::Parser::default()
         } else {
-            crate::content::load(&self.db, &key)?
+            stored
         };
         if !parser.card.interactive && parser.card.hidden_reason.is_empty() {
             adapter.observe_file(&mut parser, path);
@@ -1123,6 +1124,59 @@ mod tests {
     }
     fn line(id: &str) -> String {
         format!("{{\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"cwd\":\"/tmp\"}}}}\n")
+    }
+    /// `MOORING_BENCH_LOG=<real Claude transcript> cargo test --release -p mooring-host
+    /// --lib append_cost -- --ignored --nocapture`: indexes all but the last 500 lines, then
+    /// appends them one at a time and reports the cost of each `update_many`.
+    #[test]
+    #[ignore]
+    fn append_cost() {
+        let Some(src) = std::env::var_os("MOORING_BENCH_LOG") else {
+            return;
+        };
+        let text = fs::read_to_string(src).unwrap();
+        let lines: Vec<&str> = text.split_inclusive('\n').collect();
+        let tail = 500.min(lines.len() / 2);
+        let (head, rest) = lines.split_at(lines.len() - tail);
+        let f = Fixture::new();
+        let root = f.0.join("claude");
+        let log = root.join("p/0b1c2d3e-0000-4000-8000-000000000009.jsonl");
+        fs::create_dir_all(log.parent().unwrap()).unwrap();
+        fs::write(&log, head.concat()).unwrap();
+        let mut i = Index::open(&f.0, vec![(Agent::Claude, root.clone())]).unwrap();
+        i.initialize().unwrap();
+        i.update_many([log.clone()], 1).unwrap();
+        let cpu = || {
+            let mut u: libc::rusage = unsafe { std::mem::zeroed() };
+            unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut u) };
+            u.ru_utime.tv_sec as f64
+                + u.ru_utime.tv_usec as f64 / 1e6
+                + u.ru_stime.tv_sec as f64
+                + u.ru_stime.tv_usec as f64 / 1e6
+        };
+        let (c0, t0) = (cpu(), std::time::Instant::now());
+        for (n, line) in rest.iter().enumerate() {
+            fs::OpenOptions::new()
+                .append(true)
+                .open(&log)
+                .unwrap()
+                .write_all(line.as_bytes())
+                .unwrap();
+            i.update_many([log.clone()], n as u64 + 2).unwrap();
+        }
+        let (c, t) = (cpu() - c0, t0.elapsed().as_secs_f64());
+        let blob: i64 =
+            i.db.query_row(
+                "SELECT length(parser)+length(projection) FROM session_content",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        eprintln!(
+            "BENCH appends={tail} cpu/append={:.1}us wall/append={:.1}us stored={blob}B",
+            c / tail as f64 * 1e6,
+            t / tail as f64 * 1e6
+        );
     }
     #[test]
     fn a_subagent_meta_change_refreshes_its_parents_card_whose_log_did_not_move() {
