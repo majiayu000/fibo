@@ -54,8 +54,22 @@ pub fn move_old_config() {
 }
 
 fn move_dir(old: &Path, new: &Path) -> std::io::Result<()> {
-    let is_dir = std::fs::symlink_metadata(old).is_ok_and(|m| m.is_dir());
-    if new.exists() || !is_dir {
+    let Ok(meta) = std::fs::symlink_metadata(old) else {
+        return Ok(());
+    };
+    if new.exists() {
+        return Ok(());
+    }
+    if meta.is_symlink() {
+        // The user's own link (dotfiles): Mooring links to the same directory and
+        // leaves theirs alone. The link this move leaves behind points at `new`, which
+        // exists, so it never comes here.
+        return match std::fs::canonicalize(old) {
+            Ok(real) if real.is_dir() => std::os::unix::fs::symlink(real, new),
+            _ => Ok(()),
+        };
+    }
+    if !meta.is_dir() {
         return Ok(());
     }
     std::fs::rename(old, new)?;
@@ -127,5 +141,35 @@ mod tests {
         std::fs::create_dir_all(home.join(".local/share/mooring-workbench")).unwrap();
         assert!(runtime_dir(&home).ends_with("mooring-workbench"));
         std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    /// Dotfiles often make `~/.config/keepline` a link to a real directory. That is
+    /// the user's config: Mooring links to the same directory and keeps their link.
+    #[test]
+    fn a_linked_old_config_is_adopted_where_it_lives() {
+        let base = std::env::temp_dir().join(format!("mooring-legacy-ln-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let real = base.join("dotfiles/keepline");
+        std::fs::create_dir_all(real.join("plugins/mine")).unwrap();
+        let (old, new) = (base.join("keepline"), base.join("mooring"));
+        std::os::unix::fs::symlink(&real, &old).unwrap();
+        move_dir(&old, &new).unwrap();
+        assert!(new.join("plugins/mine").is_dir(), "adopted");
+        assert_eq!(
+            std::fs::read_link(&old).unwrap(),
+            real,
+            "their link is untouched"
+        );
+        assert!(
+            real.join("plugins/mine").is_dir(),
+            "the real directory stays put"
+        );
+        move_dir(&old, &new).unwrap(); // done once
+        // A link to nowhere is left alone.
+        let (dangling, other) = (base.join("gone"), base.join("other"));
+        std::os::unix::fs::symlink(base.join("missing"), &dangling).unwrap();
+        move_dir(&dangling, &other).unwrap();
+        assert!(!other.exists());
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }
