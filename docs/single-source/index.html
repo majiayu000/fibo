@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>重复来源清单</title>
+<style>
+:root{--bg:#fbfaf7;--ink:#1d1d1f;--mute:#6b6b72;--line:#e3e1db;--card:#fff;--hi:#c2410c;--mid:#a16207;--lo:#6b7280;--ok:#15803d;--code:#f2f0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#0e0e10;--ink:#e8e8ea;--mute:#9a9aa2;--line:#2a2a2f;--card:#16161a;--hi:#fb923c;--mid:#e5b83b;--lo:#9ca3af;--ok:#4cc38a;--code:#1f1f24}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC",sans-serif}
+main{max-width:1080px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:19px;margin:44px 0 6px;padding-top:12px;border-top:1px solid var(--line)}
+p.lead{color:var(--mute);margin:0 0 20px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0}
+.box h3{margin:0 0 8px;font-size:15px}
+.root{color:var(--mute);margin:2px 0 12px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--mute);font-size:12.5px;background:var(--code)}
+tr:last-child td{border-bottom:0}
+code{font:12px ui-monospace,Menlo,monospace;background:var(--code);padding:1px 4px;border-radius:4px;word-break:break-all}
+.s{font-weight:600;white-space:nowrap}.s.h{color:var(--hi)}.s.m{color:var(--mid)}.s.l{color:var(--lo)}
+.d{white-space:nowrap;font-weight:600}.d.y{color:var(--ok)}.d.w{color:var(--mid)}.d.n{color:var(--lo)}
+.wrap{overflow-x:auto}
+ol li,ul li{margin:4px 0}
+.tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-right:6px;color:var(--mute)}
+</style>
+</head>
+<body>
+<main>
+<h1>重复来源清单</h1>
+<p class="lead">2026-11-03 · 全仓库只读审计，范围包括 core、app、host、remote、mobile、native.m。找的是同一件事存了两份、或在两处各自判定的地方。同一份数据换个说法显示的不算。</p>
+
+<div class="box">
+<h3>这页要支撑的决定</h3>
+<p>哪些地方要并成一份、按什么顺序做，以及要不要把「每件事只有一个所有者」写进架构原则并加守卫测试。每条都给了结论：<span class="d y">采用</span>是要并成一份，<span class="d w">待验证</span>是先实跑复现再定，<span class="d n">不改</span>是有意为之或不值得改。</p>
+<p><b>放弃条件</b>：一类问题如果修起来要改协议又没有用户看得到的错，就只加测试守住，不重构。</p>
+</div>
+
+<div class="box">
+<h3>结论</h3>
+<ol>
+<li><b>根因只有一个</b>：core 已经有唯一的判定入口（<code>status::of</code>、<code>session_title</code>、<code>tab_title</code>），但宿主在对外边界上（手机卡片、<code>mooring</code> 命令、插件事件）绕开了它们，直接读原始字段重新拼一遍。手机端缺字段，只好再推一遍。A、C、D 三类大多出在这里。</li>
+<li><b>名字</b>（B 类）在标签页和会话上各存一份，优先级还正好相反。今天的修复只让显示对上了，底下仍是两份。</li>
+<li><b>「要你处理」</b>（C 类）在侧栏、顶栏、看板、菜单栏、手机上有 4 种数法、4 种叫法、3 种颜色。</li>
+<li>先做 A、B、C，它们现在就能被看到。其余的放第二批，最后补守卫测试。</li>
+</ol>
+</div>
+
+<h2>A · 宿主对外的数据绕开 core 的判定</h2>
+<p class="root">根因：<code>rp::Card</code>、<code>control.rs</code>、<code>plugin_hooks.rs</code> 没调用 <code>status::of</code> 和 <code>session_title</code>，而是从 <code>Content</code> 原始字段自己拼。</p>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>A1</td><td>手机和 CLI 上的状态</td><td><code>status::of</code> (core status.rs:136) ↔ <code>control::phase</code> (host control.rs:74) 只读 <code>Turn</code> → remote.rs:399 → mobile index.tsx:25</td><td>桌面是「出错了」或「等你验收」，手机显示「空闲」，<code>mooring list</code> 显示 idle，<code>mooring wait --until idle</code> 碰到出错也照样返回（已核源码）</td><td class="s h">高</td><td class="d y">采用：<code>phase</code> 改由 <code>status::of</code> 投影；Card 直接带 <code>status</code> 和 <code>label</code></td></tr>
+<tr><td>A2</td><td>手机卡片标题</td><td><code>session_title</code> ↔ remote.rs:414 用 <code>c.name</code> 否则 <code>c.title</code>，mobile format.ts:4 再兜底一次</td><td>桌面改过名或挂了待办，手机仍显示 Agent 起的名或原始首句，粘贴进来的多余行也会露出来（已核源码）</td><td class="s h">高</td><td class="d y">采用：<code>title = session_title(s)</code></td></tr>
+<tr><td>A3</td><td>CLI 和手机的标签名</td><td><code>Workspace::tab_title</code> ↔ control.rs:92 只取原始 <code>Tab.title</code></td><td>窗口里标签叫「修复登录」，<code>mooring list</code> 那一列是 <code>-</code>，<code>mooring send 修复登录</code> 也找不到</td><td class="s m">中高</td><td class="d y">采用：core 提供一个不依赖程序标题的 <code>tab_title</code>，CLI 按它解析</td></tr>
+<tr><td>A4</td><td>插件事件名和标题</td><td><code>Status</code> ↔ plugin_hooks.rs:29-38 把等你验收、等后台都发成 <code>done</code>；标题用 <code>c.title</code>（plugin_hooks.rs:103，events.rs:43）</td><td>按规则「完成由用户决定」，插件却在回合结束时就收到 done；用户标记完成时反而什么也不发</td><td class="s m">中</td><td class="d y">采用：事件名用 <code>Status::key()</code>，标题用 <code>session_title</code></td></tr>
+<tr><td>A5</td><td>会话 id 字段</td><td><code>mooring list --json</code> 的 session 是 CLI 的 id (control.rs:382) ↔ remote 里是内部 id (remote.rs:347, 413)</td><td>Agent 把 list 拿到的 id 填进 <code>chat</code>，会报找不到</td><td class="s l">低</td><td class="d y">采用：<code>session</code> 统一指内部 id，另设 <code>cli_session</code></td></tr>
+</table></div>
+
+<h2>B · 名字存了两份</h2>
+<p class="root">根因：<code>Tab.title</code> (model.rs:163) 和 <code>AgentSession.name</code> (model.rs:198) 都算「你起的名」。今天的修复 <code>28a0064</code> 只让显示对上了，底下仍是两份。</p>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>B1</td><td>优先级相反</td><td><code>session_naming</code> 先看 <code>s.name</code> ↔ <code>tab_given_title</code> 先看 <code>tab.title</code></td><td>先在侧栏改名为 A，再把标签改名为 B：标签显示 B，侧栏、通知、菜单栏显示 A</td><td class="s h">高</td><td class="d y">采用：只有一个会话的标签，改名直接写到会话上</td></tr>
+<tr><td>B2</td><td>待办名压过你起的名</td><td>标签先看待办名 (model.rs:549) ↔ 会话先看自己的名再看待办名</td><td>会话挂在待办「修登录」下，你给它改名为 X：标签显示「修登录」，侧栏显示 X</td><td class="s h">高</td><td class="d y">采用：只有一个会话的标签直接调 <code>session_name</code></td></tr>
+<tr><td>B3</td><td>名字跟着标签走</td><td><code>sole_session_tab</code> 要求会话还在跑</td><td>在起了名的标签里退出 claude 再开一个：旧对话变回首句名，新对话继承了这个名字</td><td class="s m">中</td><td class="d y">采用：和 B1 一起做</td></tr>
+</table></div>
+
+<h2>C · 「要你处理」有几种算法</h2>
+<p class="root">根因：core 只有 <code>needs_you()</code>，没有定义「要你处理」这一组包含哪些会话、叫什么、用什么颜色，各处界面各自定。</p>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>C1</td><td>包含哪些会话</td><td>侧栏：等你回答、出错、等你验收、等后台 (sidebar_list.rs:40) ↔ 顶栏芯片 (render.rs:1127) 和看板 (board.rs:84)：只有等你回答、出错</td><td>侧栏显示「要你处理 5」，顶栏显示「要你处理 2」（已核源码）</td><td class="s h">高</td><td class="d y">采用：core 定一个判定函数；两个集合真不一样就各起各的名</td></tr>
+<tr><td>C2</td><td>菜单栏和手机的计数</td><td>窗口还检查 <code>outcome.needs_review</code> 和会话在不在标签里 (sessions.rs:844) ↔ desktop.rs:185 不检查 ↔ 手机只算等审批和等你回答 (index.tsx:22)</td><td>标签已关、进程以非零码退出的会话，菜单栏算 1 项需要你，窗口算 0；出错的会话手机不算</td><td class="s m">中</td><td class="d y">采用：三处都调同一个判定</td></tr>
+<tr><td>C3</td><td>叫法</td><td>「要你处理」(sidebar_list.rs:949, board.rs:56, render.rs:1138) ↔「需要你」(sidebar_list.rs:1023, desktop.rs:236) ↔「等你 N」(statusbar.rs:447)；命令面板的「等你」只算等你回答 (palette.rs:117)</td><td>同一组会话有三种叫法；同叫「等你」，两处数出来不一样</td><td class="s h">高</td><td class="d y">采用：组名由 core 给出</td></tr>
+<tr><td>C4</td><td>计数的颜色</td><td>render.rs:1139 按领头的状态取色 ↔ sidebar.rs:718 固定用等你回答色 ↔ sidebar_list.rs:1166 用 <code>Tone::Danger</code></td><td>同一个数字三种颜色；最后一处是会话计数借了 Tone 的色，守卫测试测不到</td><td class="s h">高</td><td class="d y">采用：抽一个共用的计数徽章</td></tr>
+</table></div>
+
+<h2>D · 状态词写死在别处</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>D1</td><td>菜单栏的状态词</td><td>native.m:215 写死 ↔ <code>Status::label</code></td><td><b>已经对不上</b>：菜单栏写「出错」，主窗口写「出错了」（已核源码）</td><td class="s h">高</td><td class="d y">采用：desktop.rs 在 JSON 里带上 label</td></tr>
+<tr><td>D2</td><td>手机的状态词</td><td>mobile index.tsx:25 ↔ core</td><td>手机写「干活中」「空闲」，桌面是「在跑」，没有「空闲」这个词</td><td class="s m">中</td><td class="d y">采用：随 A1 一起改</td></tr>
+<tr><td>D3</td><td>在跑的叫法</td><td>statusbar.rs:441「工作中」↔「在跑」</td><td>同一个状态两种叫法</td><td class="s m">中</td><td class="d y">采用</td></tr>
+<tr><td>D4</td><td>做完了</td><td>board.rs:1063、complete.rs:434「✓ 已完成」↔「做完了」</td><td>「做完了」那一列的卡片上写着「已完成」</td><td class="s m">中</td><td class="d y">采用（待办的「已完成」是另一个概念，不动）</td></tr>
+<tr><td>D5</td><td>状态说明</td><td>session_state.rs:153 写死「等你验收 / …」</td><td>改状态名时要记得改两处</td><td class="s l">低</td><td class="d y">采用：用 <code>label()</code> 拼出来</td></tr>
+</table></div>
+
+<h2>E · 时间</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>E1</td><td>「最后更新」</td><td><code>AgentSession.updated</code> ↔ <code>Content.updated</code>；侧栏和窗格取后者 (sessions.rs:186)，命令面板 (palette.rs:132)、状态栏 (statusbar.rs:494)、标签选会话 (model.rs:557) 取前者</td><td>画面或 hook 带来的新动静不更新 <code>s.updated</code>：窗格显示「5 分钟前」，命令面板却把它排在更旧的位置</td><td class="s m">中</td><td class="d y">采用：把 <code>session_updated</code> 挪进 core，各处都调它</td></tr>
+<tr><td>E2</td><td>「N 前」的写法</td><td>time.rs 里有 3 种，另有 phones.rs:58、desktop.rs:205、sidebar_list.rs:304、sidebar_wasm.rs:391、relay.rs:315、mobile theme.ts:48</td><td>同一台设备：桌面写「30 秒前」，CLI 写「刚才」；26 小时有的写「26 小时」，有的写「1 天前」</td><td class="s m">中</td><td class="d y">采用：收进 core 的一个函数（手机可以例外）</td></tr>
+<tr><td>E3</td><td>状态的时间阈值</td><td><code>next_deadline</code> (model.rs:445) 又写了一遍 900 秒和 stale_days ↔ status.rs:183</td><td>只改一处，重新计算状态的定时器就会提前或推迟触发</td><td class="s l">低</td><td class="d y">采用：截止时间由 status 模块导出</td></tr>
+</table></div>
+
+<h2>F · 归属：会话在哪、属于哪个空间</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>F1</td><td>会话在哪个终端</td><td>宿主的 <code>AgentSession.terminal/current</code> ↔ App 内存里的 <code>resuming.resumed</code>（sessions.rs:20，从不清理）</td><td>恢复 S 开出终端 T，S 退出后在 T 里开了 S2：点 S 会跳到 S2；侧栏有两行都指向 T</td><td class="s m">中</td><td class="d w">待验证：先实跑复现，再改成绑定成功后删掉这条记录</td></tr>
+<tr><td>F2</td><td>属于哪个空间</td><td><code>Tab.space</code>、<code>Terminal.space</code>、<code>Task.space</code>；<code>PutTab</code> 不检查三者是否一致 (model.rs:853)</td><td>在空间 B 打开 A 的终端，标签就挂到 B 下；挂到 B 的待办之后，侧栏归到 B，标签还在 A</td><td class="s m">中</td><td class="d w">待验证</td></tr>
+<tr><td>F3</td><td>目录</td><td><code>Terminal.cwd</code>（启动时）↔ OSC 7 报的实时目录 ↔ <code>AgentSession.cwd</code></td><td>cd 进子目录后再开 claude：手机和 <code>mooring list</code> 显示启动目录，侧栏显示 Agent 的目录</td><td class="s m">中</td><td class="d y">采用：有会话就用会话的目录，否则用 OSC 7</td></tr>
+<tr><td>F4</td><td>标签里是哪个 Agent</td><td><code>tab_program</code> 只看 <code>current_agent</code> ↔ 窗格着色还会退到识别结果 (mod.rs:550)</td><td>读不到对话的 Codex：窗格按 Codex 着色，标签名写 zsh</td><td class="s l">低</td><td class="d w">待验证</td></tr>
+</table></div>
+
+<h2>G · 存储与配置</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>G1</td><td>置顶</td><td>全局的 <code>&lt;config&gt;/sidebar</code> 文件记终端 id ↔ 终端 id 只在各自 runtime 的数据库里有效</td><td>跑一次隔离的 runtime（例如截图），<code>prune_pins</code> 发现找不到这些终端，就把主 App 的置顶全删了</td><td class="s m">中</td><td class="d w">待验证：查隔离运行时是否设了 XDG_CONFIG_HOME</td></tr>
+<tr><td>G2</td><td>折叠状态</td><td><code>open(key, default)</code> 只记「点没点过」，不记开还是关 (sidebar_list.rs:154)，而有的默认值会随状态变化</td><td>收起一个闲置目录，等它开始跑，默认值变成展开，结果它反而收起了</td><td class="s m">中</td><td class="d y">采用：改成存开或关本身；顺带决定要不要跨重启保存（注释说会存，代码其实没存）</td></tr>
+<tr><td>G3</td><td>默认 runtime 目录</td><td>App 用 <code>legacy::runtime_dir</code> ↔ CLI 固定用 <code>mooring-workbench</code> (control.rs:166)</td><td>从 Keepline 升级的老安装，在 Mooring 终端外跑 <code>mooring</code>，会连到不存在的 socket</td><td class="s l">低中</td><td class="d y">采用</td></tr>
+<tr><td>G4</td><td>config 目录的算法</td><td>agent.rs:445 ↔ status_colors.rs:166 各写一份</td><td>现在两份一样；以后只改一份，设置就会写到两个目录</td><td class="s l">低</td><td class="d y">采用：App 调 core 那份</td></tr>
+</table></div>
+
+<h2>H · 颜色和样式常量</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>H1</td><td>手机的状态色</td><td>mobile theme.ts ↔ status_colors.rs</td><td>在跑：手机 #e8c547，桌面 #e5b83b；你在 colors.json 里改的颜色传不到手机</td><td class="s m">中</td><td class="d y">采用：随 A1 一起下发，或加对照测试</td></tr>
+<tr><td>H2</td><td>Tone 的默认色</td><td>status_colors.rs:79 的 tones 和等你验收、等你回答、出错共用同一组常量</td><td>「已连接」的点和「等你验收」的点同色，违背「Tone 不借状态色」这条规则</td><td class="s m">中</td><td class="d y">采用：给 Tone 单独定色值</td></tr>
+<tr><td>H3</td><td>侧栏的暗色</td><td>theme.rs:346 里 <code>Flat::*</code> 的暗色是 15 个写死的灰 ↔ <code>Theme::palette()</code></td><td>改暗色调色板时，会话优先侧栏不跟着变</td><td class="s m">中</td><td class="d y">采用</td></tr>
+<tr><td>H4</td><td>菜单栏写死的色值</td><td>theme.rs:643 <code>running: 0x1f8a5b</code>（绿色）后来被 <code>menu()</code> 覆盖掉</td><td>现在不生效；哪天有人删掉覆盖，在跑就会变成绿色</td><td class="s l">低</td><td class="d y">采用：删掉这些写死的值</td></tr>
+<tr><td>H5</td><td><code>T::</code> 和 <code>F::</code> 两套尺寸</td><td>theme.rs:305 ↔ <code>T::ROW</code> 等</td><td>两种排法的圆角是 7 和 6</td><td class="s l">低</td><td class="d n">不改：会话优先按 flat.html 逐像素对齐，是有意的</td></tr>
+<tr><td>H6</td><td>零碎</td><td>会话短编号两种写法 (sidebar_wasm.rs:161 取后 4 位 ↔ board_drawer.rs:505 取前 8 位)；<code>hh:mm</code> 写了两遍；搜索高亮色写了两遍</td><td>同一个会话在两处显示的编号不同</td><td class="s l">低</td><td class="d y">采用：短编号统一</td></tr>
+</table></div>
+
+<h2>I · 守卫测试的空白</h2>
+<p><code>ui/tone.rs</code> 的守卫只匹配 <code>Status::X.colors()</code> 这种字面写法，管不到下面几种：</p>
+<ul>
+<li>把状态先存进变量再取色，或通过 <code>widgets::badge</code> 间接取色；</li>
+<li>白名单按整个文件放行，所以 <code>sidebar.rs</code> 和 <code>board.rs</code> 里任何地方都能借状态色；</li>
+<li>反方向：会话的东西用了 Tone 的色（C4）；</li>
+<li>写死的状态词（D 类）；</li>
+<li><code>native.m</code> 和手机端完全不扫。</li>
+</ul>
+
+<h2>建议的顺序</h2>
+<ol>
+<li><b>第一批（现在就能看到的错）</b>：A1–A4，B1–B3，C1–C4，D1。核心改动是给 core 加三个唯一出口：<code>status::of</code>（已有）、<code>session_title</code>（已有）、新增的「要你处理」判定和组名。宿主的 Card、CLI、插件事件和 App 都只调这三个；名字只存在会话上。</li>
+<li><b>第二批</b>：E1、E2、F3、G2、G3、H1–H3、D2–D5。</li>
+<li><b>先复现再定</b>：F1、F2、F4、G1。</li>
+<li><b>守卫</b>：在 <code>docs/plan.md</code> 架构原则里加一条「每件事只有一个所有者：状态、名字、要你处理、更新时间都只在 core 判定」。补测试：同一个会话在标签、侧栏、手机卡片、CLI 拿到的名字和状态必须一样；扫写死的状态词（含 native.m 和 mobile）。</li>
+</ol>
+
+<h2>验证情况</h2>
+<p><span class="tag">已验</span>每条都由审计读过对应源码行。我又亲自对照源码核了 A1、A2、C1、D1 四条。</p>
+<p><span class="tag">没验</span>没有一条在运行中的 App 或真机上复现过，场景都是从代码推出来的。F 类和 G1 尤其要先跑一遍。</p>
+<p><span class="tag">相邻</span>没扫：<code>plugins/</code> 下的插件代码有没有写死状态名、待办的 <code>task_outcomes</code> 和会话 outcome 之间的关系、<code>Space.name/cwd</code>、手机端自己的缓存。</p>
+</main>
+</body>
+</html>
