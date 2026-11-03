@@ -3346,6 +3346,7 @@ dependencies = [
 name = "mooring-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "libghostty-vt",
  "regex",
  "serde",
