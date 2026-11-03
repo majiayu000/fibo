@@ -73,9 +73,9 @@ pub(super) fn start(
         }
         // 插件: install from the catalog with real clicks, confirm one that runs commands,
         // switch one of its actions off, uninstall, then pick a plugin's animation preset.
-        // MOORING_PLUGIN_CLICKS="x,y;…" in panel points, in this order: 安装 落印,
-        // 安装 常用命令, 确认安装, its first action's switch, 卸载 落印, then (on 外观 with
-        // the search 标记完成) the plugin preset 慢扫. Missing points stop after the shots.
+        // MOORING_PLUGIN_CLICKS="x,y;…" in panel points, in this order: 安装 落印 (in
+        // 完成动画), 安装 常用命令, 确认安装, its first action's switch, 卸载 落印, then
+        // 用这个 on 慢扫 in 完成动画. Missing points stop after the shots.
         if phase == "plugins" {
             use mooring_core::{action, effect, plugin};
             let clicks: Vec<(f32, f32)> = std::env::var("MOORING_PLUGIN_CLICKS").unwrap_or_default()
@@ -106,15 +106,8 @@ pub(super) fn start(
             let Some(remove) = at(4) else { eprintln!("settings plugins SHOTS"); cx.update(|a| a.quit()); return; };
             click(remove.0, remove.1, cx); wait(600).await;
             assert!(plugin::installed("complete-stamp").is_none(), "卸载 removes it");
-            assert_eq!(effect::picked(), None, "卸载 the one playing goes back to the seal");
+            assert_eq!(effect::picked(), Some(effect::Pick::Builtin(effect::Style::Seal)), "卸载 the one playing goes back to the seal");
             shot("plugins-removed", cx);
-            handle.update(cx, |v, _, a| {
-                v.visual_settings_show("外观", a);
-                let field = v.visual_settings_query(a);
-                field.update(a, |f, cx| { f.text = "标记完成".into(); cx.notify(); });
-            }).unwrap();
-            wait(400).await;
-            shot("plugins-look", cx);
             let Some(slow) = at(5) else { eprintln!("settings plugins SHOTS"); cx.update(|a| a.quit()); return; };
             click(slow.0, slow.1, cx); wait(400).await;
             assert_eq!(effect::picked(), Some(effect::Pick::Plugin("slow-sweep".into())));
@@ -124,10 +117,13 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
-        // 标记完成动画: pick one with a real click, then 试播 on the shown pane, which must
-        // stay open with nothing marked. MOORING_COMPLETE_CLICKS="x,y;x,y" are the
-        // panel points of 只淡出 and 试播 once the search leaves only that row.
+        // 标记完成动画: 外观's row shows what plays and 换一个 turns to 插件, where 只淡出 is
+        // picked with a real click and 试播 plays it on the shown pane, which must stay
+        // open with nothing marked. MOORING_COMPLETE_CLICKS="x,y;x,y;x,y" are the panel
+        // points of 换一个 (once the search leaves only that row), then 只淡出's 用这个 and
+        // its 试播 on 插件.
         if phase == "complete" {
+            use mooring_core::effect;
             click(106., 76., cx);
             cx.update_window(handle.into(), |_, w, a| {
                 for key in ["e", "f", "f", "e", "c", "t", "s"] { w.dispatch_keystroke(gpui::Keystroke::parse(key).unwrap(), a); }
@@ -136,19 +132,23 @@ pub(super) fn start(
             shot("complete-row", cx);
             let clicks: Vec<(f32, f32)> = std::env::var("MOORING_COMPLETE_CLICKS").unwrap_or_default()
                 .split(';').filter_map(|p| p.split_once(',')).map(|(x, y)| (x.parse().unwrap(), y.parse().unwrap())).collect();
-            if let [fade, preview] = clicks[..] {
+            if let Some(&change) = clicks.first() {
+                click(change.0, change.1, cx); wait(400).await;
+                shot("complete-animations", cx);
+            }
+            if let [_, fade, preview] = clicks[..] {
                 click(fade.0, fade.1, cx); wait(300).await;
-                assert_eq!(mooring_core::effect::picked(), Some(mooring_core::effect::Pick::Builtin(mooring_core::effect::Style::Fade)));
+                assert_eq!(effect::picked(), Some(effect::Pick::Builtin(effect::Style::Fade)));
                 let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("complete")).unwrap();
                 assert_eq!(saved, "fade");
                 shot("complete-picked", cx);
                 let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
                 pane.update(cx, |p, a| p.visual_type("printf 'preview of the completion animation\\n'\r", a));
                 wait(400).await;
-                click(preview.0, preview.1, cx); wait(700).await;
+                click(preview.0, preview.1, cx); wait(300).await;
                 assert!(handle.update(cx, |v, w, a| v.visual_settings(w, a)).unwrap().is_none(), "试播 closes 设置");
                 shot("complete-preview-mid", cx);
-                wait(2600).await;
+                wait(1200).await;
                 shot("complete-preview-after", cx);
                 assert!(handle.update(cx, |v, _, _| v.visual_shown_pane_alive()).unwrap(), "试播 keeps the pane");
             }

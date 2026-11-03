@@ -246,9 +246,13 @@ impl Workbench {
     ) {
         self.play_complete(terminal, session, effect, false, cx);
     }
-    /// Plays the animation that 标记完成 would on the focused pane without marking or
-    /// closing anything; false when no pane is showing.
-    pub(super) fn preview_complete(&mut self, cx: &mut Context<Self>) -> bool {
+    /// Plays `effect` (None: the animation 标记完成 would) on the focused pane without
+    /// marking or closing anything; false when no pane is showing.
+    pub(super) fn preview_complete(
+        &mut self,
+        effect: Option<Complete>,
+        cx: &mut Context<Self>,
+    ) -> bool {
         let Some(terminal) = self
             .nav
             .focused
@@ -261,7 +265,9 @@ impl Workbench {
             .pane_session(&terminal)
             .map(|s| s.id.clone())
             .unwrap_or_default();
-        let mut effect = mooring_core::effect::complete();
+        let mut effect = effect.map_or_else(mooring_core::effect::complete, |e| {
+            e.played(mooring_core::effect::reduce_motion())
+        });
         // Without a session there is no sidebar row to land in.
         effect.land &= !session.is_empty();
         self.play_complete(terminal, session, effect, true, cx);

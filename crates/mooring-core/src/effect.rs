@@ -4,7 +4,9 @@
 //! fade; 落印, 扫光合上 and 化进侧栏 come with their plugins. Installing or turning on an
 //! effects plugin makes it the animation at once; uninstalling or turning off the one
 //! playing goes back to the seal. What settings picks (`~/.config/mooring/complete`: a
-//! style name, or `plugin:<id>`) applies at once; nothing picked plays the built-in seal.
+//! style name, or `plugin:<id>`) applies at once; nothing ever picked plays the last
+//! installed effects plugin, else the built-in seal. Settings › 插件 › 完成动画 lists
+//! them all with 试播 and 用这个.
 //!
 //! ```json
 //! {"api": 1, "complete": {"style": "stamp", "duration_ms": 2400, "land": "sidebar"}}
@@ -292,19 +294,23 @@ pub fn install() {
     });
 }
 /// A style settings no longer offers by itself (picked before it moved into plugins)
-/// becomes the installed plugin that plays it, else the seal.
+/// becomes the installed plugin that plays it, else the seal. Nothing ever picked with
+/// effects plugins installed (installed before they took over on install, or while the
+/// app was closed) plays the last of them: choosing the seal is saved as `seal`.
 fn settled(picked: Option<Pick>, presets: &[Preset]) -> Option<Pick> {
     match picked {
         Some(Pick::Builtin(s)) if !Style::BUILTIN.contains(&s) => presets
             .iter()
             .find(|p| p.complete.style == s)
             .map(|p| Pick::Plugin(p.id.clone())),
+        None => presets.last().map(|p| Pick::Plugin(p.id.clone())),
         other => other,
     }
 }
 /// What to play after the installed effects changed from `before` to `after`: a plugin
 /// that just arrived (installed or turned on) takes over; the one playing going away
-/// (uninstalled or turned off) falls back to the seal. Some(new pick) when it changes.
+/// (uninstalled or turned off) falls back to the seal, saved as picked so the next start
+/// does not take another installed plugin for never picked. Some(new pick) when it changes.
 pub fn follow(picked: Option<&Pick>, before: &[Preset], after: &[Preset]) -> Option<Option<Pick>> {
     if let Some(new) = after
         .iter()
@@ -315,7 +321,9 @@ pub fn follow(picked: Option<&Pick>, before: &[Preset], after: &[Preset]) -> Opt
         return (picked != pick.as_ref()).then_some(pick);
     }
     match picked {
-        Some(Pick::Plugin(id)) if !after.iter().any(|p| &p.id == id) => Some(None),
+        Some(Pick::Plugin(id)) if !after.iter().any(|p| &p.id == id) => {
+            Some(Some(Pick::Builtin(Style::Seal)))
+        }
         _ => None,
     }
 }
@@ -372,6 +380,11 @@ pub fn chosen(picked: Option<&Pick>, presets: &[Preset]) -> Complete {
             .map_or_else(Complete::default, |p| p.complete),
         None => Complete::default(),
     }
+}
+/// What the picked animation is called: a built-in style's label, else the plugin's
+/// animation, or the seal when that plugin is gone.
+pub fn picked_label(picked: Option<&Pick>, presets: &[Preset]) -> &'static str {
+    chosen(picked, presets).style.label()
 }
 /// The completion animation to play now.
 pub fn complete() -> Complete {
@@ -508,7 +521,7 @@ mod tests {
         // The one playing uninstalled (or turned off): back to the seal.
         assert_eq!(
             follow(plug("complete-sweep").as_ref(), &both, dissolve),
-            Some(None)
+            Some(Some(Pick::Builtin(Style::Seal)))
         );
         // Another one leaving changes nothing.
         assert_eq!(follow(plug("complete-sweep").as_ref(), &both, sweep), None);
@@ -518,6 +531,13 @@ mod tests {
             plug("complete-sweep")
         );
         assert_eq!(settled(Some(Pick::Builtin(Style::Stamp)), &both), None);
+        // Never picked: the last installed plugin, else the seal.
+        assert_eq!(settled(None, &both), plug("complete-dissolve"));
+        assert_eq!(settled(None, &[]), None);
+        assert_eq!(
+            settled(Some(Pick::Builtin(Style::Seal)), &both),
+            Some(Pick::Builtin(Style::Seal))
+        );
         assert_eq!(
             settled(Some(Pick::Builtin(Style::Fade)), &both),
             Some(Pick::Builtin(Style::Fade))

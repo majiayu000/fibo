@@ -55,10 +55,15 @@ fn kinds(provides: &[Kind]) -> String {
         .join("、")
 }
 
+/// An animation plugin's name inside 完成动画, without the 「完成动画：」 its name starts with.
+fn short_name(name: &str) -> String {
+    name.strip_prefix("完成动画：").unwrap_or(name).to_owned()
+}
+
 /// Where a kind's choices live once installed.
 fn where_to_find(kind: Kind) -> Option<&'static str> {
     match kind {
-        Kind::Effects => Some("装上或打开就换成它，外观 › 标记完成动画 里能换回"),
+        Kind::Effects => Some("装上或打开就换成它，在上面「完成动画」里能换回"),
         Kind::Sidebar => Some("在左栏顶部切换排法"),
         Kind::Actions => Some("在窗格右键菜单和 ⌘P 里"),
         Kind::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
@@ -121,6 +126,145 @@ impl SettingsView {
         self.plugins_changed(cx);
     }
 
+    /// 完成动画: every animation 标记完成 can play, one row each: the one playing marked
+    /// 正在用, the others 用这个, each with 试播; animation plugins not installed yet
+    /// offer 安装, which also makes them the one playing.
+    fn animations(
+        &self,
+        offers: &[Offer],
+        busy: bool,
+        cx: &Context<Self>,
+    ) -> Vec<gpui::AnyElement> {
+        use mooring_core::effect::{self, Complete, Pick, Style};
+        let picked = effect::picked();
+        let presets = effect::presets();
+        // A picked plugin since turned off or removed plays the seal.
+        let playing = match &picked {
+            Some(Pick::Plugin(id)) if !presets.iter().any(|p| &p.id == id) => {
+                Pick::Builtin(Style::Seal)
+            }
+            Some(p) => p.clone(),
+            None => Pick::Builtin(Style::Seal),
+        };
+        let mut choices: Vec<(String, String, Pick, Complete)> = presets
+            .iter()
+            .map(|p| {
+                let description = plugin::installed(&p.id)
+                    .and_then(|i| i.description.clone())
+                    .unwrap_or_else(|| format!("{}，插件 {}", p.complete.style.label(), p.id));
+                (
+                    short_name(&p.name),
+                    description,
+                    Pick::Plugin(p.id.clone()),
+                    p.complete,
+                )
+            })
+            .collect();
+        choices.extend(Style::BUILTIN.into_iter().map(|s| {
+            (
+                s.label().to_owned(),
+                match s {
+                    Style::Fade => "内置；系统开了「减弱动态效果」时都播它".to_owned(),
+                    _ => "内置；按钮填满，印章盖在窗格上，窗格淡出".to_owned(),
+                },
+                Pick::Builtin(s),
+                Complete::of(s),
+            )
+        }));
+        let mut rows = Vec::new();
+        for (title, note, choice, complete) in choices {
+            let on = choice == playing;
+            let key = choice.name().replace(':', "-");
+            let mut controls = div().flex().items_center().gap(px(T::S8));
+            if on {
+                controls = controls.child(
+                    div()
+                        .text_size(px(T::SMALL))
+                        .text_color(T::color(T::primary()))
+                        .child("● 正在用"),
+                );
+            }
+            controls = controls.child(secondary(format!("complete-try-{key}"), "试播").on_click(
+                cx.listener(move |_, _, _, cx| {
+                    cx.emit(SettingsAction::PreviewComplete(Some(complete)))
+                }),
+            ));
+            if !on {
+                controls =
+                    controls.child(secondary(format!("complete-use-{key}"), "用这个").on_click(
+                        cx.listener(move |this, _, _, cx| {
+                            this.text_error = effect::pick(Some(choice.clone())).err();
+                            cx.notify();
+                        }),
+                    ));
+            }
+            rows.push(
+                self.row(rows.is_empty(), &title, &note, controls)
+                    .into_any_element(),
+            );
+        }
+        // Turned off in 已安装: turning it back on makes it the one playing.
+        for p in plugin::report()
+            .iter()
+            .filter_map(|f| f.result.as_ref().ok())
+            .filter(|p| !p.enabled && p.provides.contains(&Kind::Effects))
+        {
+            let id = p.id.clone();
+            let title = short_name(&p.name);
+            rows.push(
+                self.row(
+                    rows.is_empty(),
+                    &title,
+                    "已停用 · 打开插件就换成它",
+                    secondary(format!("complete-enable-{}", p.id), "打开并用这个").on_click(
+                        cx.listener(move |this, _, _, cx| {
+                            if let Err(e) = plugin::set_enabled(&id, true) {
+                                this.text_error = Some(format!("没能保存插件开关：{e}"));
+                            }
+                            this.plugins_changed(cx);
+                        }),
+                    ),
+                )
+                .into_any_element(),
+            );
+        }
+        let have = |id: &str| plugin::installed(id).is_some();
+        for o in offers
+            .iter()
+            .filter(|o| o.entry.provides.contains(&Kind::Effects) && !have(&o.entry.id))
+        {
+            let e = &o.entry;
+            let working = self.market.working.as_deref() == Some(e.id.as_str());
+            let title = short_name(&e.name);
+            let note = format!(
+                "未安装 · {}",
+                e.description.as_deref().unwrap_or("装上就换成它")
+            );
+            let control = if working {
+                div()
+                    .text_size(px(T::SMALL))
+                    .text_color(T::color(T::secondary()))
+                    .child("正在安装…")
+            } else {
+                let offer = o.clone();
+                div().child(
+                    secondary(format!("complete-install-{}", e.id), "安装")
+                        .when(busy, |b| b.opacity(0.5))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if this.market.working.is_none() {
+                                this.install_offer(offer.clone(), cx);
+                            }
+                        })),
+                )
+            };
+            rows.push(
+                self.row(rows.is_empty(), &title, &note, control)
+                    .into_any_element(),
+            );
+        }
+        rows
+    }
+
     /// Installed plugins with their switches, then the catalog, then each declaration
     /// file's outcome for whoever writes plugins.
     pub(super) fn plugins_page(&self, cx: &Context<Self>) -> gpui::Div {
@@ -141,6 +285,8 @@ impl SettingsView {
         };
         let offers = self.market.offers();
         let busy = self.market.working.is_some();
+
+        let animations = self.animations(&offers, busy, cx);
 
         // ── 已安装 ──
         let mut installed = Vec::new();
@@ -461,6 +607,7 @@ impl SettingsView {
         detail.extend(report(agent::report(), |t| format!("注册为 {t}")));
 
         self.cards(vec![
+            ("完成动画", animations),
             ("已安装", installed),
             ("可安装", available),
             ("声明文件明细", files(detail)),

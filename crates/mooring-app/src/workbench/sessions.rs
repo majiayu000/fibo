@@ -749,11 +749,23 @@ impl Workbench {
         .filter(|(_, o)| *o != session.outcome)
         {
             let id = session.id.clone();
+            let settled = session.clone();
             menu = menu.child(
                 button(gpui::SharedString::from(format!("card-{label}")), label).on_click(
-                    cx.listener(move |this, _, _, cx| {
+                    cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
                         this.overview.card_menu = None;
+                        // 标记完成 on a session with its terminal open goes to that pane
+                        // and plays the animation there, as the pane's own button does.
+                        if outcome == Outcome::Completed
+                            && let Some(t) = live_terminal(&this.workspace, &settled)
+                        {
+                            let t = t.id.clone();
+                            if this.focus_terminal(&t, window, cx) {
+                                this.settle_session(&settled, outcome.clone(), true, cx);
+                                return;
+                            }
+                        }
                         this.edit(
                             Edit::SetOutcome {
                                 id: id.clone(),

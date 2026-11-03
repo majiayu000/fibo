@@ -366,8 +366,9 @@ const ENTRIES: [(Page, &str, &str); 26] = [
 ];
 pub(super) enum SettingsAction {
     Close,
-    /// 试播: play the completion animation on the focused pane without marking anything.
-    PreviewComplete,
+    /// 试播: play a completion animation (None: the one picked) on the focused pane
+    /// without marking anything.
+    PreviewComplete(Option<mooring_core::effect::Complete>),
     Change(Settings),
     /// Plugins were installed, removed or switched and read again here: the workbench
     /// redraws what they feed and tells the host.
@@ -599,17 +600,19 @@ impl SettingsView {
                     .child(page.glyph()),
             )
             .child(page.label())
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.page = page;
-                this.recording = None;
-                this.taken = None;
-                this.refused = None;
-                this.query.update(cx, |field, cx| {
-                    field.set_text("");
-                    cx.notify();
-                });
-                cx.notify();
-            }))
+            .on_click(cx.listener(move |this, _, _, cx| this.show_page(page, cx)))
+    }
+    /// Turns to `page` with the search cleared.
+    fn show_page(&mut self, page: Page, cx: &mut Context<Self>) {
+        self.page = page;
+        self.recording = None;
+        self.taken = None;
+        self.refused = None;
+        self.query.update(cx, |field, cx| {
+            field.set_text("");
+            cx.notify();
+        });
+        cx.notify();
     }
     fn query(&self, cx: &gpui::App) -> String {
         self.query.read(cx).text.trim().to_lowercase()
@@ -923,71 +926,36 @@ impl SettingsView {
         }
         let mut motion = Vec::new();
         if self.shows(Page::Look, "标记完成动画", cx) {
-            use mooring_core::effect::{self, Pick, Style};
-            let picked = effect::picked();
-            let presets = effect::presets();
-            let on = |p: &Pick| match &picked {
-                Some(c) => c == p,
-                None => *p == Pick::Builtin(Style::Seal),
+            use mooring_core::effect;
+            let note = if effect::reduce_motion() {
+                "系统开了「减弱动态效果」，现在不管选哪种都只淡出"
+            } else {
+                "在 插件 › 完成动画 里试播、换一个或装新的；试播在当前窗格播一次，不会标记完成"
             };
-            let mut choices = segments();
-            let mut options: Vec<(String, String, Pick)> = Style::BUILTIN
-                .into_iter()
-                .map(|s| {
-                    (
-                        format!("complete-{}", s.name()),
-                        s.label().to_owned(),
-                        Pick::Builtin(s),
-                    )
-                })
-                .collect();
-            // Every installed effects plugin is one more choice, named by its animation
-            // unless two plugins play the same one.
-            options.extend(presets.iter().map(|p| {
-                let style = p.complete.style;
-                let shared = presets.iter().filter(|q| q.complete.style == style).count() > 1;
-                (
-                    format!("complete-plugin-{}", p.id),
-                    if shared {
-                        p.name.clone()
-                    } else {
-                        style.label().to_owned()
-                    },
-                    Pick::Plugin(p.id.clone()),
-                )
-            }));
-            for (id, text, choice) in options {
-                let selected = on(&choice);
-                choices = choices.child(segment(id, text, selected).on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        this.text_error = effect::pick(Some(choice.clone())).err();
-                        cx.notify();
-                    },
-                )));
-            }
-            let note = match &picked {
-                _ if effect::reduce_motion() => {
-                    "系统开了「减弱动态效果」，现在不管选哪种都只淡出".to_owned()
-                }
-                Some(Pick::Plugin(id)) if !presets.iter().any(|p| &p.id == id) => format!(
-                    "选的插件 {id} 已经卸载或停用，现在播印章；试播在当前窗格播一次，不会标记完成"
-                ),
-                _ if !presets.is_empty() => "印章和只淡出是内置的，其余来自插件，装上或打开插件就换成它；选了马上生效，试播在当前窗格播一次，不会标记完成".to_owned(),
-                _ => "落印、扫光合上、化进侧栏要在 插件 页安装，装上就换成它；试播在当前窗格播一次，不会标记完成".to_owned(),
-            };
+            let now = effect::picked_label(effect::picked().as_ref(), effect::presets());
             motion.push(
                 self.row(
                     true,
                     "标记完成动画",
-                    &note,
+                    note,
                     div()
                         .flex()
                         .items_center()
                         .gap(px(T::S8))
-                        .child(choices)
-                        .child(secondary("complete-preview", "试播").on_click(
-                            cx.listener(|_, _, _, cx| cx.emit(SettingsAction::PreviewComplete)),
-                        )),
+                        .child(
+                            div()
+                                .text_size(px(T::SMALL))
+                                .text_color(T::color(T::primary()))
+                                .child(now),
+                        )
+                        .child(secondary("complete-preview", "试播").on_click(cx.listener(
+                            |_, _, _, cx| cx.emit(SettingsAction::PreviewComplete(None)),
+                        )))
+                        .child(secondary("complete-change", "换一个").on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.show_page(Page::Plugins, cx);
+                            },
+                        ))),
                 )
                 .into_any_element(),
             );
@@ -2279,8 +2247,8 @@ impl Workbench {
                 cx.refresh_windows();
                 cx.notify();
             }
-            SettingsAction::PreviewComplete => {
-                if this.preview_complete(cx) {
+            SettingsAction::PreviewComplete(effect) => {
+                if this.preview_complete(*effect, cx) {
                     this.settings = None;
                     this.nav.pending_focus = true;
                 } else {
