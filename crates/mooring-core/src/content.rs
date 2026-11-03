@@ -106,28 +106,59 @@ pub struct Content {
     /// tool call named them: absolute, or relative to the session's cwd.
     #[serde(default)]
     pub files: Vec<Touch>,
+    /// The choices of the question `waiting` holds, when the agent asked through its
+    /// question tool (Claude's AskUserQuestion, Codex's request_user_input): the first
+    /// question's option labels in order, so a pane can offer them as buttons. Empty for
+    /// approvals, screen prompts and open questions.
+    #[serde(default)]
+    pub choices: Vec<String>,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Touch {
     pub path: String,
     pub at: u64,
+    /// Lines the session's edits added to and removed from this file in the turn that last
+    /// touched it, as its edit calls described them (old and new text, or a patch).
+    #[serde(default)]
+    pub added: u32,
+    #[serde(default)]
+    pub removed: u32,
 }
 /// Changed files a card keeps; the oldest goes first, so a long session keeps its latest.
 const TOUCHES: usize = 64;
 impl Content {
-    /// Records that `path` changed at `at`; a path already listed only moves to the end.
-    pub fn touch(&mut self, path: &str, at: u64) {
-        let at = match self.files.iter().position(|t| t.path == path) {
-            Some(i) => self.files.remove(i).at.max(at),
-            None => at,
+    /// Records that `path` changed at `at` by `added` and `removed` lines; a path already
+    /// listed moves to the end, keeping its counts while the same turn touches it again.
+    pub fn touch(&mut self, path: &str, at: u64, added: u32, removed: u32) {
+        let (at, added, removed) = match self.files.iter().position(|t| t.path == path) {
+            Some(i) => {
+                let old = self.files.remove(i);
+                if old.at >= self.turn_started {
+                    (old.at.max(at), old.added + added, old.removed + removed)
+                } else {
+                    (old.at.max(at), added, removed)
+                }
+            }
+            None => (at, added, removed),
         };
         self.files.push(Touch {
             path: path.into(),
             at,
+            added,
+            removed,
         });
         if self.files.len() > TOUCHES {
             self.files.remove(0);
         }
+    }
+}
+impl Content {
+    /// Lines added and removed in the current turn, over every file it touched.
+    pub fn turn_lines(&self) -> (u32, u32) {
+        self.files
+            .iter()
+            .filter(|t| t.at >= self.turn_started)
+            .fold((0, 0), |(a, r), t| (a + t.added, r + t.removed))
     }
 }
 /// In-flight work by kind. Agents (subagents, workflows, teammates, cloud sessions, MCP

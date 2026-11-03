@@ -92,14 +92,15 @@ impl Workbench {
                         ),
                 )
             })
+            // 设置 is at the sidebar's foot; the bar ends on the palette, as in the v3 design.
             .when(fit.settings, |d| {
                 d.child(
-                    item("open-settings", false)
-                        .aria_label("设置")
-                        .child("设置")
-                        .on_click(
-                            cx.listener(|this, _, window, cx| this.show_settings(window, cx)),
-                        ),
+                    item("open-palette", false)
+                        .aria_label("命令面板")
+                        .gap(px(T::S4))
+                        .child(div().text_color(T::color(T::muted())).child("⌘P"))
+                        .child("命令")
+                        .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
                 )
             })
     }
@@ -609,7 +610,7 @@ pub(super) fn left(at: u64, now: u64) -> String {
 
 /// One clickable spot on the bar, filled while its popover is open.
 /// What fits in the status bar at a window width. Things give way from the right: 本机诊断
-/// first, then 设置, the word 后台 and the running count; the dot, 等你 and the quota button
+/// first, then ⌘P 命令, the word 后台 and the running count; the dot, 等你 and the quota button
 /// stay at every width (quota-meter/statusbar.html).
 #[derive(Debug, PartialEq, Eq)]
 struct Fit {
@@ -620,7 +621,7 @@ struct Fit {
 }
 /// Below this, 本机诊断 goes (it is also in ⌘P and the app menu).
 const FIT_DIAGNOSE: f32 = 820.;
-/// Below this, only the dot, 等你 and the quota button stay (设置 is ⌘, and the app menu).
+/// Below this, only the dot, 等你 and the quota button stay (⌘P still opens the palette).
 const FIT_MINIMAL: f32 = 640.;
 impl Fit {
     fn of(width: f32) -> Self {

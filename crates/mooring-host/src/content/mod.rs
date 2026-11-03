@@ -8,7 +8,11 @@ use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, io, sync::LazyLock};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io,
+    sync::LazyLock,
+};
 mod db;
 mod rules;
 pub use db::{card, children, link_child, load, save, schema, Children};
@@ -35,6 +39,79 @@ pub(crate) fn input(v: &Value) -> Value {
     v.as_str()
         .map(|s| serde_json::from_str(s).unwrap_or_else(|_| json!({"input":s})))
         .unwrap_or_else(|| v.clone())
+}
+/// Lines an Edit, MultiEdit, Write or NotebookEdit call added and removed, by comparing
+/// its old and new text as multisets of lines: what both sides share is unchanged.
+pub(crate) fn edit_lines(input: &Value) -> (u32, u32) {
+    fn delta(old: &str, new: &str) -> (u32, u32) {
+        let mut left: HashMap<&str, i64> = HashMap::new();
+        for line in old.lines() {
+            *left.entry(line).or_default() += 1;
+        }
+        let mut added = 0;
+        for line in new.lines() {
+            match left.get_mut(line) {
+                Some(n) if *n > 0 => *n -= 1,
+                _ => added += 1,
+            }
+        }
+        let removed = left.values().filter(|n| **n > 0).sum::<i64>() as u32;
+        (added, removed)
+    }
+    let text = |key: &str| input[key].as_str().unwrap_or("");
+    if let Some(edits) = input["edits"].as_array() {
+        return edits.iter().fold((0, 0), |(a, r), e| {
+            let (da, dr) = delta(
+                e["old_string"].as_str().unwrap_or(""),
+                e["new_string"].as_str().unwrap_or(""),
+            );
+            (a + da, r + dr)
+        });
+    }
+    if input.get("old_string").is_some() || input.get("new_string").is_some() {
+        return delta(text("old_string"), text("new_string"));
+    }
+    // A whole file written: what it held before is not in the call.
+    for key in ["content", "new_source"] {
+        if let Some(body) = input[key].as_str() {
+            return (body.lines().count() as u32, 0);
+        }
+    }
+    (0, 0)
+}
+/// Each file an apply_patch names, with the `+` and `-` lines of its section.
+pub(crate) fn patch_lines(patch: &str) -> Vec<(String, u32, u32)> {
+    let mut out: Vec<(String, u32, u32)> = Vec::new();
+    for line in patch.lines() {
+        if let Some(c) = PATCH.captures(line) {
+            out.push((c[1].to_owned(), 0, 0));
+        } else if let Some(last) = out.last_mut() {
+            if line.starts_with("*** ") {
+                continue;
+            }
+            if line.starts_with('+') {
+                last.1 += 1;
+            } else if line.starts_with('-') {
+                last.2 += 1;
+            }
+        }
+    }
+    out
+}
+/// The first question's option labels, in order, for a question tool's arguments.
+pub(crate) fn question_choices(v: &Value) -> Vec<String> {
+    v.get("questions")
+        .and_then(Value::as_array)
+        .and_then(|q| q.first())
+        .and_then(|q| q["options"].as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|o| o.as_str().or_else(|| o["label"].as_str()))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 pub(crate) fn question_summary(v: &Value) -> String {
     let questions = v.get("questions").and_then(Value::as_array);
@@ -234,6 +311,7 @@ impl Parser {
             }
             self.card.turn = Turn::Running;
             self.card.waiting.clear();
+            self.card.choices.clear();
             self.card.error.clear();
             self.card.completed_claim = false;
         } else {
@@ -256,6 +334,7 @@ impl Parser {
             self.card.turn_key = self.turn_id.clone();
             self.card.completed_claim = false;
             self.card.waiting.clear();
+            self.card.choices.clear();
             self.card.error.clear();
             self.card.background = None;
             self.completed_while_waiting = false;
@@ -287,6 +366,7 @@ impl Parser {
         {
             self.card.turn = Turn::Waiting;
             self.card.waiting = question_summary(&args);
+            self.card.choices = question_choices(&args);
         }
         self.calls.insert(
             id.into(),
@@ -424,19 +504,20 @@ impl Parser {
             && (patch || matches!(name, "Edit" | "MultiEdit" | "Write" | "NotebookEdit"))
         {
             let mut paths = Vec::new();
+            let (added, removed) = edit_lines(&call.input);
             for key in ["file_path", "path", "notebook_path"] {
                 if let Some(s) = call.input[key].as_str() {
-                    paths.push(s.to_owned());
+                    paths.push((s.to_owned(), added, removed));
                 }
             }
             let patch_text = call.input["input"]
                 .as_str()
                 .or_else(|| call.input["patch"].as_str())
                 .unwrap_or("");
-            paths.extend(PATCH.captures_iter(patch_text).map(|c| c[1].to_owned()));
-            for path in paths {
+            paths.extend(patch_lines(patch_text));
+            for (path, added, removed) in paths {
                 if !self.inherited {
-                    self.card.touch(&path, at);
+                    self.card.touch(&path, at, added, removed);
                 }
                 self.fact("file", format!("文件修改：{path}"), code, at, source);
             }
@@ -494,6 +575,7 @@ impl Parser {
         {
             self.card.turn = Turn::Running;
             self.card.waiting.clear();
+            self.card.choices.clear();
         }
         self.calls.remove(id);
         self.executions.retain(|_, v| v != id);
@@ -577,6 +659,7 @@ impl Parser {
             {
                 self.card.turn = Turn::Running;
                 self.card.waiting.clear();
+                self.card.choices.clear();
             }
             // The prompt is in: the turn runs, whether or not its log record is read yet.
             "UserPromptSubmit" if !matches!(self.card.turn, Turn::Running | Turn::Waiting) => {
@@ -613,9 +696,11 @@ impl Parser {
             Official::Busy if self.card.turn == Turn::Waiting => {
                 self.card.turn = Turn::Running;
                 self.card.waiting.clear();
+                self.card.choices.clear();
             }
             Official::Idle if self.card.turn == Turn::Waiting => {
                 self.card.waiting.clear();
+                self.card.choices.clear();
                 let settled = if self.completed_while_waiting {
                     Turn::Completed
                 } else {
@@ -651,6 +736,7 @@ impl Parser {
             None if self.card.turn == Turn::Waiting => {
                 if let Some(turn) = self.child_wait_from.take() {
                     self.card.waiting.clear();
+                    self.card.choices.clear();
                     self.card.turn = turn;
                 }
             }
@@ -749,6 +835,37 @@ pub fn hook_facts(v: &Value) -> HookFacts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn edits_and_patches_count_their_lines() {
+        // A changed line is one removed and one added; shared lines are not counted.
+        assert_eq!(
+            edit_lines(&json!({"old_string": "a\nb\nc", "new_string": "a\nB\nc\nd"})),
+            (2, 1)
+        );
+        assert_eq!(
+            edit_lines(&json!({"edits": [
+                {"old_string": "x", "new_string": "y"},
+                {"old_string": "", "new_string": "z"}
+            ]})),
+            (2, 1)
+        );
+        assert_eq!(edit_lines(&json!({"content": "1\n2\n3"})), (3, 0));
+        let patch = "*** Begin Patch\n*** Update File: src/a.rs\n@@\n-old\n+new\n+more\n \
+                     same\n*** Add File: b.txt\n+one\n*** End Patch";
+        assert_eq!(
+            patch_lines(patch),
+            vec![("src/a.rs".into(), 2, 1), ("b.txt".into(), 1, 0)]
+        );
+    }
+    #[test]
+    fn a_question_tool_keeps_its_first_question_choices() {
+        let args = json!({"questions": [
+            {"question": "侧栏参考哪两家？", "options": [{"label": "按状态分组"}, {"label": "按空间分组"}]},
+            {"question": "第二问", "options": ["x"]}
+        ]});
+        assert_eq!(question_choices(&args), vec!["按状态分组", "按空间分组"]);
+        assert!(question_choices(&json!({"command": "ls"})).is_empty());
+    }
     fn add(p: &mut Parser, v: Value) {
         let n = p.records.len() as u64;
         p.add(

@@ -118,7 +118,7 @@ mod tests {
         });
         let mut c = Content::default();
         for (path, at) in files {
-            c.touch(path, *at);
+            c.touch(path, *at, 0, 0);
         }
         w.content.insert(id.into(), c);
     }

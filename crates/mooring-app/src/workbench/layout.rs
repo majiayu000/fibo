@@ -21,6 +21,8 @@ pub(super) struct LayoutState {
     pub(super) renaming_tab: Option<(String, Entity<Field>, [gpui::Subscription; 2])>,
     /// A sidebar conversation being renamed in place after a double-click.
     pub(super) renaming_session: Option<(String, Entity<Field>, [gpui::Subscription; 2])>,
+    /// The pane whose turn bar has 看改动 open: this turn's files listed under it.
+    pub(super) changes_open: Option<String>,
     /// A space renamed in place in the sidebar; it carries the space so a just-added
     /// one can be named before the host's reply lists it.
     pub(super) renaming_space: Option<(Space, Entity<Field>, [gpui::Subscription; 2])>,
@@ -331,9 +333,15 @@ impl Workbench {
             .zip(status)
             .filter(|(_, g)| *g == Status::Review && completing.is_none())
             .map(|(s, g)| self.turn_bar(id, s, g, cx));
+        let ask = session
+            .zip(status)
+            .filter(|(_, g)| *g == Status::Waiting && !terminal_style)
+            .and_then(|(s, g)| self.ask_card(id, s, g, cx));
         let body = div()
             .flex_1()
             .min_h_0()
+            .flex()
+            .flex_col()
             .px(px(T::S14))
             .py(px(T::S10))
             .when_some(
@@ -348,13 +356,19 @@ impl Workbench {
                     ),
                 |d, (state, task)| d.child(self.handoff_bar(id, task, state, cx)),
             )
-            .child(pane.clone().cached(gpui::StyleRefinement {
-                size: gpui::SizeRefinement {
-                    width: Some(gpui::relative(1.).into()),
-                    height: Some(gpui::relative(1.).into()),
-                },
-                ..Default::default()
-            }));
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(pane.clone().cached(gpui::StyleRefinement {
+                        size: gpui::SizeRefinement {
+                            width: Some(gpui::relative(1.).into()),
+                            height: Some(gpui::relative(1.).into()),
+                        },
+                        ..Default::default()
+                    })),
+            )
+            .children(ask);
         let footer = other_owner.then(|| self.pane_footer(id, takeover, cx));
         let mut pane_box = div()
             .id(gpui::SharedString::from(format!("pane-{id}")))
@@ -1632,6 +1646,109 @@ pub(super) fn urgency(group: Status) -> u8 {
     }
 }
 /// `3:12`, or `1:03:12` past an hour.
+impl Workbench {
+    /// The v3 question card at a waiting pane's foot: what the agent asks and its choices,
+    /// each a button that types its number into the terminal, then 自己写 for an answer
+    /// of your own. Only for a question tool's choices still in the asked text, so a
+    /// screen prompt or an approval never shows stale buttons.
+    fn ask_card(
+        &self,
+        id: &str,
+        s: &AgentSession,
+        g: Status,
+        cx: &Context<Self>,
+    ) -> Option<gpui::Div> {
+        let content = self.workspace.content.get(&s.id)?;
+        let first = content.waiting.lines().next()?.trim();
+        if content.choices.is_empty() || !content.choices.iter().all(|c| first.contains(c.as_str()))
+        {
+            return None;
+        }
+        let prompt = ask_prompt(first).to_owned();
+        let (dot, ink, wash) = g.colors();
+        let mut options: Vec<(String, String)> = content
+            .choices
+            .iter()
+            .enumerate()
+            .map(|(n, c)| ((n + 1).to_string(), format!("{}. {c}", n + 1)))
+            .collect();
+        let other = (options.len() + 1).to_string();
+        options.push((other.clone(), format!("{other}. 自己写")));
+        let rows = options.into_iter().enumerate().map(|(n, (key, text))| {
+            let pane = self.layout.panes.get(id).cloned();
+            let own = key == other;
+            let focus = id.to_owned();
+            div()
+                .id(gpui::SharedString::from(format!("ask-{id}-{n}")))
+                .px(px(T::S8))
+                .py(px(T::S4))
+                .rounded(px(T::CONTROL_RADIUS))
+                .cursor_pointer()
+                .text_color(if own {
+                    T::color(T::muted())
+                } else {
+                    T::color(T::primary())
+                })
+                .hover(|d| d.bg(wash.opacity(0.6)))
+                .child(text)
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    if let Some(pane) = &pane {
+                        pane.update(cx, |p, cx| p.press(&key, cx));
+                    }
+                    if own {
+                        this.focus_terminal(&focus, window, cx);
+                    }
+                }))
+        });
+        Some(
+            div()
+                .flex_shrink_0()
+                .mt(px(T::S8))
+                .p(px(T::S10))
+                .flex()
+                .flex_col()
+                .gap(px(T::S2))
+                .rounded(px(T::CONTROL_RADIUS))
+                .border(px(T::BORDER_WIDTH))
+                .border_color(dot.opacity(0.5))
+                .bg(wash.opacity(0.35))
+                .text_size(px(T::SMALL))
+                .child(
+                    div()
+                        .px(px(T::S8))
+                        .pb(px(T::S4))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(ink)
+                        .child(prompt),
+                )
+                .children(rows),
+        )
+    }
+}
+/// A question as the host words it, `【范围】问题（a / b）`, down to `问题`.
+pub(super) fn ask_prompt(line: &str) -> &str {
+    let line = line.split_once('】').map_or(line, |(_, rest)| rest);
+    line.rsplit_once('（').map_or(line, |(head, _)| head).trim()
+}
+/// `+128 −14`: lines a turn added in green and removed in red; a side that is zero is left
+/// out.
+pub(super) fn line_counts((added, removed): (u32, u32)) -> gpui::Div {
+    div()
+        .flex_shrink_0()
+        .flex()
+        .gap(px(T::S4))
+        .font_features(T::tabular())
+        .when(added > 0, |d| {
+            d.child(div().text_color(Tone::Ok.ink()).child(format!("+{added}")))
+        })
+        .when(removed > 0, |d| {
+            d.child(
+                div()
+                    .text_color(Tone::Danger.ink())
+                    .child(format!("−{removed}")),
+            )
+        })
+}
 pub(super) fn turn_clock(seconds: u64) -> String {
     let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
     if h > 0 {
@@ -1714,7 +1831,7 @@ impl Workbench {
                 self.tick_turn(cx);
                 format!("本轮 {}", turn_clock(now().saturating_sub(at)))
             }
-            None => age(content.map_or(s.updated, |c| c.updated)),
+            None => crate::model::time::short_ago(content.map_or(s.updated, |c| c.updated), now()),
         };
         meta.child(super::board::agent_mark(s.runtime, T::color(T::muted())))
             .child(s.runtime.executable().to_string())
@@ -1786,7 +1903,7 @@ impl Workbench {
                 self.tick_turn(cx);
                 format!("本轮 {}", turn_clock(now().saturating_sub(at)))
             }
-            None => age(content.map_or(s.updated, |c| c.updated)),
+            None => crate::model::time::short_ago(content.map_or(s.updated, |c| c.updated), now()),
         })
     }
     /// The files this turn changed, from the session's own record of its edits.
@@ -1833,6 +1950,10 @@ impl Workbench {
                     "这一轮做完了".to_owned()
                 }),
         );
+        let content = self.workspace.content.get(&s.id);
+        if let Some(lines) = content.map(|c| c.turn_lines()).filter(|(a, r)| a + r > 0) {
+            facts = facts.child(line_counts(lines));
+        }
         if let Some(task) = task.filter(|t| !t.acceptance.is_empty()) {
             let tid = task.id.clone();
             facts = facts
@@ -1862,7 +1983,66 @@ impl Workbench {
         let back = id.to_owned();
         let terminal = id.to_owned();
         let accept = s.id.clone();
-        div()
+        let open = self.layout.changes_open.as_deref() == Some(id);
+        let toggle = id.to_owned();
+        // 看改动: this turn's files, each with its own line counts, listed under the bar.
+        let changes = (files > 0).then(|| {
+            button(
+                gpui::SharedString::from(format!("turn-changes-{id}")),
+                "看改动",
+            )
+            .h(px(T::PANE_ACTION))
+            .px(px(T::S10))
+            .border(px(T::BORDER_WIDTH))
+            .border_color(T::color(T::control()))
+            .text_color(T::color(T::primary()))
+            .when(open, |d| d.bg(T::color(T::selection())))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.layout.changes_open =
+                    if this.layout.changes_open.as_deref() == Some(toggle.as_str()) {
+                        None
+                    } else {
+                        Some(toggle.clone())
+                    };
+                cx.notify();
+            }))
+        });
+        let list = open.then(|| {
+            let started = content.map_or(0, |c| c.turn_started);
+            let mut rows: Vec<_> = content
+                .map(|c| c.files.iter().filter(|t| t.at >= started).collect())
+                .unwrap_or_default();
+            rows.reverse();
+            div()
+                .flex_shrink_0()
+                .max_h(px(T::TURN_BAR * 6.))
+                .overflow_hidden()
+                .px(px(T::S14))
+                .py(px(T::S6))
+                .flex()
+                .flex_col()
+                .gap(px(T::S2))
+                .border_b(px(T::BORDER_WIDTH))
+                .border_color(T::color(T::border()))
+                .text_size(px(T::SMALL))
+                .font_features(T::tabular())
+                .children(rows.into_iter().map(|t| {
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(T::S8))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_color(T::color(T::secondary()))
+                                .child(t.path.clone()),
+                        )
+                        .child(line_counts((t.added, t.removed)))
+                }))
+        });
+        let bar = div()
             .h(px(T::TURN_BAR))
             .flex_shrink_0()
             .pl(px(T::S14))
@@ -1877,6 +2057,7 @@ impl Workbench {
             .bg(g.colors().2.opacity(0.35))
             .text_size(px(T::SMALL))
             .child(facts)
+            .children(changes)
             .child(
                 button(gpui::SharedString::from(format!("turn-back-{id}")), "退回")
                     .h(px(T::PANE_ACTION))
@@ -1902,7 +2083,13 @@ impl Workbench {
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.complete_pane(terminal.clone(), accept.clone(), cx)
                 })),
-            ))
+            ));
+        div()
+            .flex_shrink_0()
+            .flex()
+            .flex_col()
+            .child(bar)
+            .children(list)
     }
     /// `~/code/app · main`: where the pane's program is and on which branch.
     fn pane_place(

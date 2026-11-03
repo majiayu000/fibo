@@ -3,6 +3,8 @@
 //! so what needs you is the same row in all of them.
 use super::*;
 use mooring_core::sidebar::{self as presets, Bucket, Detail, Grouping, Preset};
+/// How a row's second line opens when the session asks you something.
+const ASKS: &str = "问你：";
 
 /// A session the column lists: its shown state and whether it still asks for a look.
 pub(super) type Listed<'a> = (&'a AgentSession, Status, bool);
@@ -209,10 +211,29 @@ impl Workbench {
         };
         let content = self.workspace.content.get(&s.id);
         match bucket(g) {
+            // A question reads as one, in the v3 design's words: 「问你：侧栏参考哪两家？」.
+            Bucket::Attention if g == Status::Waiting => self
+                .attention_reason(s, g)
+                .or_else(|| {
+                    let text = self.attention_text(s, g)?;
+                    Some(super::layout::ask_prompt(text.lines().next()?).to_owned())
+                })
+                .filter(|r| !r.is_empty())
+                .map(|r| format!("{ASKS}{r}")),
             Bucket::Attention => self.attention_reason(s, g).map(|r| format!("停在 {r}")),
             Bucket::Running => content.and_then(|c| c.doing()).map(|d| format!("正在{d}")),
             _ => content.and_then(|c| first(c.last_reply.lines().find(|l| !l.trim().is_empty())?)),
         }
+    }
+    /// Questions waiting in a row: how many the agent asked at once, at least one.
+    fn asked(&self, s: &AgentSession) -> usize {
+        self.workspace
+            .content
+            .get(&s.id)
+            .map_or(1, |c| {
+                c.waiting.lines().filter(|l| !l.trim().is_empty()).count()
+            })
+            .max(1)
     }
     fn session_row(
         &self,
@@ -492,23 +513,57 @@ impl Workbench {
                     .children(pin),
             )
             .when_some(detail, |d, text| {
-                // A second line that opens with the state word shows that word in its ink.
+                // A second line that opens with the state word shows that word in its ink;
+                // a question is in 等你回答's ink throughout, with how many it asks.
+                let asks = text.starts_with(ASKS);
                 let (state, rest) = match text.strip_prefix(g.label()) {
                     Some(rest) => (Some(g.label()), rest.to_owned()),
                     None => (None, text),
                 };
+                // What the turn changed leads, as the v3 rows have it: +128 −14.
+                let lines = self
+                    .workspace
+                    .content
+                    .get(&session.id)
+                    .map(|c| c.turn_lines())
+                    .filter(|(a, r)| a + r > 0 && !asks);
                 d.child(
                     div()
                         .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
                         .flex()
+                        .items_center()
+                        .gap(px(T::S4))
                         .min_w_0()
                         .font_family(T::UI_FONT)
                         .text_size(px(T::CHIP_SIZE))
-                        .text_color(T::color(T::secondary()))
+                        .text_color(if asks {
+                            g.colors().1
+                        } else {
+                            T::color(T::secondary())
+                        })
+                        .when_some(lines, |d, lines| {
+                            d.child(super::layout::line_counts(lines))
+                                .child(div().text_color(T::color(T::muted())).child("·"))
+                        })
                         .when_some(state, |d, word| {
                             d.child(div().flex_shrink_0().text_color(g.colors().1).child(word))
                         })
-                        .child(div().min_w_0().truncate().child(rest)),
+                        .child(div().flex_1().min_w_0().truncate().child(rest))
+                        .when(asks && attention, |d| {
+                            d.child(
+                                div()
+                                    .flex_shrink_0()
+                                    .size(px(T::S14))
+                                    .rounded_full()
+                                    .bg(g.colors().0)
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_color(T::color(T::terminal_bg()))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .child(self.asked(session).to_string()),
+                            )
+                        }),
                 )
             })
             .tooltip(super::diagnostics::tip(self.session_tip(session)))
@@ -793,7 +848,13 @@ impl Workbench {
                     if bucket(l.1) != Bucket::Done {
                         return detail;
                     }
-                    let files = self.turn_files(l.0);
+                    // With line counts on the row, the file count says nothing more.
+                    let counted = self
+                        .workspace
+                        .content
+                        .get(&l.0.id)
+                        .is_some_and(|c| c.turn_lines() != (0, 0));
+                    let files = if counted { 0 } else { self.turn_files(l.0) };
                     let parts: Vec<String> = [l.1.label().to_owned()]
                         .into_iter()
                         .chain((files > 0).then(|| format!("改了 {files} 个文件")))

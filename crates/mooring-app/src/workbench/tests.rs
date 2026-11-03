@@ -632,3 +632,15 @@ fn every_projection_of_a_status_agrees() {
         assert_eq!(b == Bucket::Attention, s.needs_you(), "{s:?}");
     }
 }
+
+#[test]
+fn a_question_reads_without_its_scope_and_choices() {
+    assert_eq!(
+        super::layout::ask_prompt("【侧栏】参考哪两家？（按状态 / 按空间）"),
+        "参考哪两家？"
+    );
+    assert_eq!(
+        super::layout::ask_prompt("要覆盖 config.toml 吗？"),
+        "要覆盖 config.toml 吗？"
+    );
+}

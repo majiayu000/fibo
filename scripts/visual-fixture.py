@@ -70,7 +70,8 @@ def call(cid, n, cmd, output, at):
 
 
 def patch(path):
-    return ('Success. Updated the following files:\nM ' + path, f'*** Begin Patch\n*** Update File: {path}\n@@\n-old\n+new\n*** End Patch')
+    body = ''.join(f'+line {n}\n' for n in range(12)) + '-old\n-older\n'
+    return ('Success. Updated the following files:\nM ' + path, f'*** Begin Patch\n*** Update File: {path}\n@@\n{body}*** End Patch')
 
 
 if sys.argv[1] == 'prepare':
@@ -97,7 +98,7 @@ if sys.argv[1] == 'prepare':
             records += call(cid, 2, 'cargo test -p mooring-app tab_title_survives_exit', 'Process exited with code 0\ntest result: ok. 1 passed; 0 failed', stamp - 300)
             records += call(cid, 3, 'cargo test -p mooring-app', 'Process exited with code 0\ntest result: ok. 213 passed; 0 failed', stamp - 200)
         group = n % 8
-        if group == 0: records.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '标签名在退出后要不要保留？我倾向保留，等你确认。'}))
+        if group == 0: records.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '标签名在退出后要不要保留？我倾向保留，等你确认。', 'questions': [{'question': '标签名在退出后要不要保留？', 'options': [{'label': '保留，下次打开还叫这个名字'}, {'label': '不保留，按目录重新起名'}]}]}))
         elif group == 1: records.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已找到 tab_name 的来源。'}))
         elif group == 2: records.extend([(stamp, 'response_item', {'type': 'function_call', 'name': 'exec_command', 'call_id': 'test', 'arguments': json.dumps({'cmd': 'bun test'})}), (stamp, 'response_item', {'type': 'function_call_output', 'call_id': 'test', 'output': 'Process exited with code 0\n31 pass 0 fail'}), (stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已完成，请核对。'})])
         elif group != 4: records.append((stamp, 'event_msg', {'type': 'turn_aborted'}))

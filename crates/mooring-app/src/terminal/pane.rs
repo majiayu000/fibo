@@ -1807,6 +1807,10 @@ impl Pane {
             cx.notify();
         }
     }
+    /// Keys typed for the user from outside the terminal, as a question card's choice.
+    pub fn press(&mut self, keys: &str, cx: &mut Context<Self>) {
+        self.send_input(keys.as_bytes().to_vec(), false, cx);
+    }
     fn send_input(&mut self, bytes: Vec<u8>, lossy: bool, cx: &mut Context<Self>) {
         self.take_size(cx);
         self.typed = Some(Instant::now());

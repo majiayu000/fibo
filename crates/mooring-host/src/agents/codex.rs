@@ -1,6 +1,6 @@
 //! Codex: `~/.codex/sessions` rollouts, one `session_meta` header per thread.
 use super::{home_dir, temporary, Adapter, Hint, OfficialAnswer, Pending};
-use crate::content::{input, question_summary, re, text, Parser};
+use crate::content::{input, question_choices, question_summary, re, text, Parser};
 use mooring_core::content::{short, Source, Turn};
 use mooring_core::model::AgentSession;
 use mooring_core::protocol::TerminalNote;
@@ -178,6 +178,7 @@ impl Adapter for Codex {
                 "agent_message" => parser.message(false, text(&p["message"]), at, source, false),
                 "approval_request" | "permission_request" | "request_user_input" => {
                     parser.card.waiting = question_summary(p);
+                    parser.card.choices = question_choices(p);
                     parser.phase(Turn::Waiting, "", at, source);
                 }
                 "error" | "turn_failed" => {

@@ -801,13 +801,17 @@ fn shape_cell(
         let target = metrics.width * run.cols as f32;
         let cjk = run.text.chars().any(|c| matches!(c as u32, 0x2e80..=0xa4cf | 0xac00..=0xd7ff | 0xf900..=0xfaff | 0xff01..=0xff60 | 0x20000..=0x323af));
         let scale = if cjk {
-            let ic = metrics.ic_width;
+            // Ideographs fill their two cells to CJK_FILL instead of keeping the font's own
+            // ideographic width: at a Latin mono's 0.6 em cells that width leaves a gap on
+            // each side that reads as letter spacing (「修 标 签 命 名」), where the v3
+            // design sets Chinese tight. Still capped by the line height.
             let fallback_ic = line
                 .runs
                 .first()
                 .and_then(|r| ts.advance(r.font_id, px(font_size()), '水').ok())
                 .map(|s| s.width)
                 .unwrap_or(line.width());
+            let ic = metrics.ic_width.max(target * CJK_FILL);
             (ic / fallback_ic).min(metrics.height / px(font_size()))
         } else {
             (target / line.width()).min(metrics.height / px(font_size()))
@@ -832,6 +836,8 @@ fn shape_cell(
     }
     (line, offset)
 }
+/// How much of its two cells an ideograph's advance takes; the rest is split on both sides.
+const CJK_FILL: f32 = 0.94;
 // Printable ASCII has no shaping context when terminal ligatures are disabled.
 // Shape this bounded alphabet once per face/style, then reuse the exact native
 // glyph IDs. Non-ASCII and fonts whose advances aren't one cell retain shaping.
