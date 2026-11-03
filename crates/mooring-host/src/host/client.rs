@@ -419,6 +419,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                     eprintln!("stop closed terminal {id}: {e}");
                 }
             }
+            // One that had already ended goes now; the rest go as they end.
+            if !stopped.is_empty() {
+                host.closed.extend(stopped);
+                release_ended(&mut host);
+            }
             Ok(Reply::Workspace(host.snapshot()))
         }
         Request::Launch {

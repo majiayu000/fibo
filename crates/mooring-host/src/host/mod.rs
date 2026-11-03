@@ -41,6 +41,8 @@ struct Host {
     store: Store,
     workspace: Workspace,
     terminals: HashMap<String, LiveTerminal>,
+    /// Terminals whose tab or pane was closed, let go of once they have ended.
+    closed: std::collections::HashSet<String>,
     instance: String,
     index: crate::log_index::Index,
     recognition: RecognitionStatus,
@@ -905,6 +907,7 @@ fn serve_runtime(
         reconciled: HashMap::new(),
         workspace,
         terminals: HashMap::new(),
+        closed: Default::default(),
         instance: uuid::Uuid::new_v4().to_string(),
     }));
     lock(&host)?.myself = Arc::downgrade(&host);
@@ -1043,6 +1046,7 @@ mod recognition_tests {
             store,
             workspace,
             terminals: HashMap::new(),
+            closed: Default::default(),
             instance: "test".into(),
             index: index.fork(&root).unwrap(),
             recognition: RecognitionStatus::default(),
@@ -1141,6 +1145,7 @@ mod snapshot_tests {
             store,
             workspace: Workspace::default(),
             terminals: HashMap::new(),
+            closed: Default::default(),
             instance: "test".into(),
             index,
             recognition: RecognitionStatus::default(),

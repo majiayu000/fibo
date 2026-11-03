@@ -209,7 +209,30 @@ pub(super) fn record_exit(host: &Shared, terminal: &LiveTerminal, id: &str) -> i
         }
     }
     live.broadcast(STATUS, status);
+    let ended = live.exited && live.drained;
+    drop(live);
+    if ended {
+        release_ended(&mut host);
+    }
     Ok(())
+}
+
+/// Lets go of closed terminals once they have ended: their pty and scrollback are no
+/// use to anyone, and macOS shares a few hundred ptys among all programs. Only one whose
+/// tab or pane was closed goes; one launched and not yet placed may still be shown.
+pub(super) fn release_ended(host: &mut Host) {
+    let Host {
+        closed, terminals, ..
+    } = host;
+    closed.retain(|id| {
+        let ended = terminals
+            .get(id)
+            .is_none_or(|t| lock(t).is_ok_and(|l| l.exited && l.drained));
+        if ended {
+            terminals.remove(id);
+        }
+        !ended
+    });
 }
 
 /// How a terminal's process end is seen: a child this host spawned, or, after a handoff,

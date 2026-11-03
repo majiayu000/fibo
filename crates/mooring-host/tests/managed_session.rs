@@ -6112,3 +6112,63 @@ fn phone_demo_machine() {
     println!("RUNTIME: {root}");
     machine.wait().ok();
 }
+
+fn pty_fds(pid: u32) -> usize {
+    let out = Command::new("lsof")
+        .args(["-n", "-P", "-p", &pid.to_string()])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|l| l.contains("ptmx") || l.contains("/dev/ttys"))
+        .count()
+}
+fn close_in_tab(h: &Host, terminal: &str) {
+    let tab = format!("tab-{terminal}");
+    h.call(Request::Edit {
+        revision: h.workspace().revision,
+        edit: Edit::PutTab {
+            tab: Tab {
+                id: tab.clone(),
+                space: "s".into(),
+                default_task: None,
+                title: "Test".into(),
+                layout: Some(Layout::Leaf(terminal.into())),
+            },
+        },
+    })
+    .unwrap();
+    h.call(Request::Edit {
+        revision: h.workspace().revision,
+        edit: Edit::CloseTab { id: tab },
+    })
+    .unwrap();
+}
+
+/// A terminal whose tab was closed and
+/// whose program ended must give its pty back. macOS has 511 ptys for the whole system.
+#[test]
+fn closed_and_exited_terminals_release_their_ptys() {
+    let h = Host::start();
+    h.setup();
+    let pid = h.child.id();
+    h.call(h.launch("warm", "sleep 60")).unwrap();
+    let base = pty_fds(pid);
+    for i in 0..8 {
+        let id = format!("t{i}");
+        h.call(h.launch(&id, "sleep 30")).unwrap();
+        close_in_tab(&h, &id);
+    }
+    wait_for(&h, "closed tabs' terminals exit", |w| {
+        w.terminals
+            .iter()
+            .filter(|t| t.id.starts_with('t'))
+            .all(|t| t.state == ProcessState::Exited)
+    });
+    std::thread::sleep(Duration::from_secs(2));
+    let after = pty_fds(pid);
+    assert!(
+        after <= base,
+        "host holds {after} pty fds after closing 8 terminals (was {base} with one live)"
+    );
+}
