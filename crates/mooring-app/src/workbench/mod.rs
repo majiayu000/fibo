@@ -686,7 +686,8 @@ impl Workbench {
                 this.layout.pending_command = Some((command.clone(), cwd.clone()));
                 this.launch(false, None, cx);
             }
-            crate::terminal::pane::PaneEvent::PinnedAsk => cx.notify(),
+            crate::terminal::pane::PaneEvent::PinnedAsk
+            | crate::terminal::pane::PaneEvent::ChoicesShown => cx.notify(),
         })
         .detach();
     }

@@ -145,6 +145,18 @@ pub struct Pane {
     pinned: mooring_core::prompt_pin::Pinned,
     /// When the viewport last moved through history, for the floating ask.
     scrolled_at: Option<Instant>,
+    /// The question card's choices without whitespace, and whether the viewport shows
+    /// them all: while the agent's own menu is in sight the card stays away.
+    watched_choices: std::cell::RefCell<Vec<String>>,
+    choices_shown: std::cell::Cell<bool>,
+}
+fn compact(text: &str) -> String {
+    text.chars().filter(|c| !c.is_whitespace()).collect()
+}
+/// Whether `shown` holds every compacted choice, however the menu wrapped it.
+fn all_shown(shown: &str, watched: &[String]) -> bool {
+    let shown = compact(shown);
+    !watched.is_empty() && watched.iter().all(|c| shown.contains(c.as_str()))
 }
 /// A hovered path word that exists on disk.
 #[derive(Clone, Debug, PartialEq)]
@@ -164,6 +176,8 @@ pub enum PaneEvent {
     Run { command: String, cwd: String },
     /// The turn's ask scrolled out of sight or back, for the header's 「↑ 你问」.
     PinnedAsk,
+    /// The watched question choices came into sight or left it, for the question card.
+    ChoicesShown,
 }
 impl gpui::EventEmitter<PaneEvent> for Pane {}
 impl Focusable for Pane {
@@ -506,6 +520,8 @@ impl Pane {
             locating_asks: false,
             pinned: Default::default(),
             scrolled_at: None,
+            watched_choices: Default::default(),
+            choices_shown: Default::default(),
         }
     }
     /// Attaches again after the host dropped this pane's stream; the snapshot restores
@@ -1106,6 +1122,36 @@ impl Pane {
     }
     /// Works out what to pin from where the asks were last found, and looks for them
     /// again once output may have moved them. Runs on each repaint.
+    /// Whether the viewport shows every one of `choices`, as the agent's own menu does;
+    /// they stay watched, and a change in sight emits [`PaneEvent::ChoicesShown`].
+    /// Read during the workbench's render, so the watch lives in cells.
+    pub fn choices_shown(&self, choices: &[String]) -> bool {
+        let watched: Vec<String> = choices.iter().map(|c| compact(c)).collect();
+        if watched != *self.watched_choices.borrow() {
+            *self.watched_choices.borrow_mut() = watched;
+            self.choices_shown.set(self.shows_watched());
+        }
+        self.choices_shown.get()
+    }
+    /// Labels wrap and indent in the menu, so both sides are compared without whitespace.
+    fn shows_watched(&self) -> bool {
+        let watched = self.watched_choices.borrow();
+        if watched.is_empty() {
+            return false;
+        }
+        let rows = self.screen.rows.iter().flatten().map(|r| r.text.as_str());
+        all_shown(&rows.collect::<String>(), &watched)
+    }
+    fn refresh_choices(&mut self, cx: &mut Context<Self>) {
+        if self.watched_choices.borrow().is_empty() {
+            return;
+        }
+        let shown = self.shows_watched();
+        if shown != self.choices_shown.get() {
+            self.choices_shown.set(shown);
+            cx.emit(PaneEvent::ChoicesShown);
+        }
+    }
     fn refresh_pinned(&mut self, cx: &mut Context<Self>) {
         let choice = crate::ui::pinned_ask::current(cx);
         let was = self.pinned.latest.is_some();
@@ -2188,6 +2234,7 @@ impl Render for Pane {
             match result {
                 Ok(_) => {
                     self.cursor_anchor.observe(self.screen.cursor);
+                    self.refresh_choices(cx);
                 }
                 Err(e) => self.local_error = Some(e.to_string()),
             }
@@ -2944,4 +2991,40 @@ fn until_shared_tick() -> std::time::Duration {
     const TICK: u128 = 50_000;
     let micros = START.get_or_init(Instant::now).elapsed().as_micros();
     std::time::Duration::from_micros((TICK - micros % TICK) as u64)
+}
+#[cfg(test)]
+mod choices_tests {
+    use super::{all_shown, compact};
+
+    fn watched(choices: &[&str]) -> Vec<String> {
+        choices.iter().map(|c| compact(c)).collect()
+    }
+
+    #[test]
+    fn a_menu_on_screen_shows_its_choices_even_wrapped_and_indented() {
+        // The rows as the viewport draws them: a label broken over two rows, indented.
+        let rows = concat!(
+            "❯ 1. 沿用看板那套语言 (Recommended)\n",
+            "  2. macOS 原生质感\n",
+            "  4. 大胆一点的新风格\n",
+            "     不跟现有任何稿，出 2-3\n",
+            "  5. Type something.\n",
+            "Enter to select · ↑/↓ to navigate · Esc to cancel",
+        );
+        let choices = watched(&[
+            "沿用看板那套语言 (Recommended)",
+            "macOS 原生质感",
+            "大胆一点的新风格",
+        ]);
+        assert!(all_shown(rows, &choices));
+        let wrapped = "  1. 沿用看板那套\n     语言 (Recommended)\n  2. macOS 原生质感\n  4. 大胆一点的新风格";
+        assert!(all_shown(wrapped, &choices));
+    }
+
+    #[test]
+    fn a_menu_scrolled_partly_away_or_nothing_watched_is_not_shown() {
+        let choices = watched(&["沿用看板那套语言", "macOS 原生质感"]);
+        assert!(!all_shown("  2. macOS 原生质感\nEnter to select", &choices));
+        assert!(!all_shown("anything", &[]));
+    }
 }

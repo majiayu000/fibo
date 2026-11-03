@@ -1652,7 +1652,8 @@ impl Workbench {
     /// The v3 question card at a waiting pane's foot: what the agent asks and its choices,
     /// each a button that types its number into the terminal, then 自己写 for an answer
     /// of your own. Only for a question tool's choices still in the asked text, so a
-    /// screen prompt or an approval never shows stale buttons.
+    /// screen prompt or an approval never shows stale buttons, and only while the
+    /// terminal does not show the agent's own menu: scrolled back, too short, or hidden.
     fn ask_card(
         &self,
         id: &str,
@@ -1664,6 +1665,9 @@ impl Workbench {
         let first = content.waiting.lines().next()?.trim();
         if content.choices.is_empty() || !content.choices.iter().all(|c| first.contains(c.as_str()))
         {
+            return None;
+        }
+        if (self.layout.panes.get(id)?.read(cx)).choices_shown(&content.choices) {
             return None;
         }
         let prompt = ask_prompt(first).to_owned();
