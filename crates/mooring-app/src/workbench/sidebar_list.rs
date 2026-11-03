@@ -470,8 +470,10 @@ impl Workbench {
         let seen = crate::ui::status_colors::StatusColors::get();
         let selected = current == Some(session.id.as_str());
         let mono = T::mono(cx).family;
-        // Every row and tab shows its CLI's mark, in its own color (v3 mock).
-        let marks = true;
+        // 会话优先 (flat.html) leads each row with its state and ends it with its space and
+        // time; the other presets show the CLI's mark first, the state last.
+        let recent = self.sidebar.preset().group == Grouping::Recent;
+        let marks = !recent;
         // 会话优先 lists every space's sessions, so each row carries its space as a small
         // tag: the space's colors and its name. Narrowed to one space, the tag says nothing.
         let space = (self.sidebar.preset().group == Grouping::Recent
@@ -511,6 +513,18 @@ impl Workbench {
                 None => short_ago(self.session_updated(session), now()),
             },
         };
+        // A finished turn you have seen keeps 等你验收's ring and its green.
+        let state = || {
+            div()
+                .w(px(T::S12))
+                .flex_shrink_0()
+                .flex()
+                .justify_center()
+                .font_family(mono.clone())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_size(px(T::SMALL))
+                .child(crate::ui::widgets::status_mark(g))
+        };
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))
             .px(px(T::S8))
@@ -520,6 +534,13 @@ impl Workbench {
             .rounded(px(T::CONTROL_RADIUS))
             .cursor_pointer()
             .when(selected, |d| d.bg(T::color(T::raised())))
+            .when(recent, |d| {
+                d.border(px(T::BORDER_WIDTH)).border_color(if selected {
+                    T::color(T::control())
+                } else {
+                    gpui::transparent_black()
+                })
+            })
             .hover(|s| s.bg(T::color(T::raised())))
             .when(self.peek_home(&session.id), |d| {
                 d.relative().child(super::peek::peek_home_outline())
@@ -543,6 +564,7 @@ impl Workbench {
                             T::color(T::muted()),
                         ))
                     })
+                    .when(recent, |d| d.child(state()))
                     .child(title)
                     .children(space)
                     .child(
@@ -554,22 +576,17 @@ impl Workbench {
                             .text_color(T::color(T::muted()))
                             .child(time),
                     )
-                    .child(
-                        // A finished turn you have seen keeps 等你验收's ring and its green.
-                        div()
-                            .w(px(T::S12))
-                            .flex()
-                            .justify_center()
-                            .font_family(mono)
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .text_size(px(T::SMALL))
-                            .child(crate::ui::widgets::status_mark(g)),
-                    ),
+                    .when(!recent, |d| d.child(state())),
             )
             .when_some(detail, |d, text| {
                 // A second line that opens with the state word shows that word in its ink;
                 // a question is in 等你回答's ink throughout, with how many it asks.
                 let asks = text.starts_with(ASKS);
+                let text = if recent && asks {
+                    text.replacen(ASKS, "问：", 1)
+                } else {
+                    text
+                };
                 let (state, rest) = match text.strip_prefix(g.label()) {
                     Some(rest) => (Some(g.label()), rest.to_owned()),
                     None => (None, text),
@@ -584,6 +601,7 @@ impl Workbench {
                 d.child(
                     div()
                         .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
+                        .when(recent, |d| d.pl(px(T::S12 + T::S8)))
                         .flex()
                         .items_center()
                         .gap(px(T::S4))
@@ -603,7 +621,7 @@ impl Workbench {
                             d.child(div().flex_shrink_0().text_color(g.colors().1).child(word))
                         })
                         .child(div().flex_1().min_w_0().truncate().child(rest))
-                        .when(asks && attention, |d| {
+                        .when(asks && attention && !recent, |d| {
                             d.child(
                                 div()
                                     .flex_shrink_0()
@@ -907,18 +925,16 @@ impl Workbench {
                 // Only what asks you or failed gets a second line: the question is what you
                 // act on. A finished turn or a running one reads from its state mark alone,
                 // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
-                for (title, rows, lines, ink) in [
-                    ("要你处理", need, true, Some(Status::Waiting)),
-                    ("在跑", running, false, Some(Status::Running)),
-                    ("停着", stopped, false, None),
+                for (title, rows, lines) in [
+                    ("要你处理", need, true),
+                    ("在跑", running, false),
+                    ("停着", stopped, false),
                 ] {
                     if rows.is_empty() {
                         continue;
                     }
-                    let ink = ink.map_or(T::color(T::secondary()), |g| g.colors().1);
                     out.push(
-                        Self::tinted_title(title.into(), Some(rows.len()), ink, cx)
-                            .into_any_element(),
+                        Self::group_title(title.into(), Some(rows.len()), cx).into_any_element(),
                     );
                     for l in rows {
                         let asks = bucket(l.1) == Bucket::Attention;
@@ -1162,40 +1178,9 @@ impl Workbench {
                 }),
             );
         let head = if self.sidebar.preset().group == Grouping::Recent {
-            // 会话 on the left, the view by name on the right as the menu's handle:
-            // `会话优先 ▾`. The sections below carry their own counts.
-            let name = self.sidebar.preset().name.clone();
-            Self::group_title("会话".into(), None, cx)
-                .child(div().flex_1())
-                .child(
-                    div()
-                        .id("sidebar-view")
-                        .role(gpui::accesskit::Role::Button)
-                        .aria_label("选择视图")
-                        .flex_shrink_0()
-                        .px(px(T::S4))
-                        .rounded(px(T::CONTROL_RADIUS))
-                        .cursor_pointer()
-                        .font_family(T::UI_FONT)
-                        .text_color(T::color(T::muted()))
-                        .when(open, |d| d.bg(T::color(T::button_hover())))
-                        .hover(|s| s.bg(T::color(T::button_hover())))
-                        .child(format!("{name} ▾"))
-                        .on_mouse_down(
-                            gpui::MouseButton::Left,
-                            cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                                this.sidebar.view_menu = match this.sidebar.view_menu {
-                                    Some(_) => None,
-                                    None => Some(gpui::point(
-                                        event.position.x,
-                                        event.position.y + px(T::S12),
-                                    )),
-                                };
-                                cx.stop_propagation();
-                                cx.notify();
-                            }),
-                        ),
-                )
+            // 会话优先 has no heading: its sections name themselves, and the view menu
+            // sits in the column's foot.
+            div()
         } else if self.sidebar.dense() {
             // 会话 3 on the left as the dense presets write it; the ≑ at the right end.
             Self::group_title("会话".into(), Some(count), cx)

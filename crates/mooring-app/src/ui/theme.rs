@@ -205,7 +205,13 @@ impl Palette {
             wash_share: if light { 150 } else { 220 },
             app: mix(bg, Theme::BLACK, by(light, 70, 150)),
             panel: bg,
-            sidebar: if light { mix(bg, fg, 45) } else { bg },
+            // On dark the column sits a step below the terminal's ground, near black
+            // (docs/sidebar-redesign/flat.html), so the panes read as the lit surface.
+            sidebar: if light {
+                mix(bg, fg, 45)
+            } else {
+                mix(bg, Theme::BLACK, 450)
+            },
             pane: bg,
             header: bg,
             todo: mix(bg, fg, by(light, 45, 30)),
