@@ -16,12 +16,12 @@ pub const MAX_ROWS: usize = 5000;
 const MIN_PARTIAL: usize = 4;
 
 /// The part of an ask a row is matched on: its first line with text, image placeholders
-/// and whitespace left out, cut to `KEY_CHARS`. `None` when too little is left to tell
-/// one ask from another.
+/// and whitespace left out, cut to `KEY_CHARS`. `None` when no text is left. A key
+/// shorter than `KEY_CHARS` is the whole line, so a row must hold exactly it: a one-word
+/// reply such as `1` or `ok` is told from rows that only start the same way.
 pub fn key(ask: &str) -> Option<String> {
     let line = ask.lines().map(plain).find(|l| !l.is_empty())?;
-    let key: String = line.chars().take(KEY_CHARS).collect();
-    (key.chars().count() >= 2).then_some(key)
+    Some(line.chars().take(KEY_CHARS).collect())
 }
 
 /// Whitespace and `[Image #n]` placeholders out; the CLI and its transcript disagree on
@@ -66,7 +66,13 @@ pub fn is_prompt_row(row: &str, key: &str, prompt: &PromptLine) -> bool {
     if rest.is_empty() {
         return false;
     }
-    rest.starts_with(key) || (rest.chars().count() >= MIN_PARTIAL && key.starts_with(&rest))
+    let whole = key.chars().count() < KEY_CHARS;
+    let full = if whole {
+        rest == key
+    } else {
+        rest.starts_with(key)
+    };
+    full || (rest.chars().count() >= MIN_PARTIAL && key.starts_with(&rest))
 }
 
 /// Each ask's history row, newest ask first found from the bottom up: an ask is looked
@@ -152,8 +158,35 @@ mod tests {
             Some("codex的这个设计")
         );
         assert_eq!(key("ok").as_deref(), Some("ok"));
-        assert_eq!(key(" a \n"), None);
+        assert_eq!(key(" a \n").as_deref(), Some("a"));
         assert_eq!(key("[Image #2]"), None);
+        assert_eq!(key("  \n"), None);
+    }
+
+    #[test]
+    fn a_short_ask_matches_only_a_row_that_is_exactly_it() {
+        // Answering a numbered menu with `1`: the sent row is found, and nothing else.
+        let k = key("1").unwrap();
+        assert!(is_prompt_row("❯ 1", &k, &claude()));
+        assert!(is_prompt_row("  ❯ 1   ", &k, &claude()));
+        assert!(!is_prompt_row("❯ 1. Yes", &k, &claude()));
+        assert!(!is_prompt_row("❯ 12", &k, &claude()));
+        assert!(!is_prompt_row("1", &k, &claude()));
+        let ok = key("ok").unwrap();
+        assert!(is_prompt_row("❯ ok", &ok, &claude()));
+        assert!(!is_prompt_row("❯ okay then", &ok, &claude()));
+        // Found in history, so it pins while reading back, not only at the bottom.
+        let keys = vec![key("修一下登录"), key("1")];
+        let screen = [
+            (5, "❯ 修一下登录"),
+            (8, "❯ 1. Yes"),
+            (30, "❯ 1"),
+            (60, "● 好"),
+        ];
+        let rows = screen.iter().rev().map(|(y, t)| (*y, t.to_string()));
+        let found = locate(&keys, &claude(), rows);
+        assert_eq!(found, vec![Some(5), Some(30)]);
+        assert_eq!(pinned(&found, (40, 100, 30)).latest, Some((1, Some(30))));
     }
 
     #[test]

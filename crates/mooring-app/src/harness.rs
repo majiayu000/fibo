@@ -308,7 +308,8 @@ pub fn start(
                     "s".into()
                 }
             };
-            let asks = ["先看看架构页还漏了什么", "你帮我看看代码再说啊"];
+            // The newest is a one-character reply, as when answering a numbered menu.
+            let asks = ["先看看架构页还漏了什么", "1"];
             for (id, mark) in [("pc", "❯"), ("px", "›")] {
                 let mut text = String::new();
                 for (turn, ask) in asks.iter().enumerate() {
