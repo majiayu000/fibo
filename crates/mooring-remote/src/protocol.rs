@@ -88,8 +88,18 @@ pub enum Op {
     /// Opens a stream of [`StreamBody::Event`]s, the current state first.
     Events,
     /// Opens a stream of one terminal's screen: [`StreamBody::Screen`], then output.
+    /// `take`: as its writer, as a pane there would take it over; that machine's own
+    /// panes turn read only until one takes it back. Then `resize` sizes it.
     Watch {
         terminal: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        take: bool,
+    },
+    /// Sizes the terminal a taken `watch` stream shows.
+    Resize {
+        stream: u64,
+        cols: u16,
+        rows: u16,
     },
     Close {
         stream: u64,
@@ -109,6 +119,7 @@ impl Op {
             Self::Chat { .. } => "chat",
             Self::Events => "events",
             Self::Watch { .. } => "watch",
+            Self::Resize { .. } => "resize",
             Self::Close { .. } => "close",
         }
     }
@@ -116,7 +127,8 @@ impl Op {
 
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
-    "hello", "list", "read", "send", "keys", "input", "answer", "chat", "events", "watch", "close",
+    "hello", "list", "read", "send", "keys", "input", "answer", "chat", "events", "watch",
+    "resize", "close",
 ];
 
 /// A line from the machine.

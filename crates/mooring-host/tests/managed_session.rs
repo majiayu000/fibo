@@ -4876,6 +4876,7 @@ fn the_desktop_client_lists_and_watches_another_machine() {
         .stream(
             Op::Watch {
                 terminal: "far".into(),
+                take: false,
             },
             move |body| {
                 let _ = tx.send(body);

@@ -161,6 +161,7 @@ fn key_echo_latency() {
         .stream(
             Op::Watch {
                 terminal: "far".into(),
+                take: false,
             },
             on,
             T,
@@ -196,5 +197,64 @@ fn key_echo_latency() {
     println!("LATENCY key→echo over {argv:?}: p50 {p50:.1} ms, p95 {p95:.1} ms, max {max:.1} ms");
     if let Ok(limit) = std::env::var("MOORING_LATENCY_P95_MS") {
         assert!(p95 <= limit.parse::<f64>().unwrap(), "p95 {p95:.1} ms");
+    }
+}
+
+/// Step 3: a `watch` that takes the terminal over sizes it with `resize`, and the
+/// program sees the new size; a stream that only looks may not.
+#[test]
+fn a_taken_terminal_follows_the_remote_panes_size() {
+    let m = Machine::start("trap 'stty size' WINCH; stty size; while :; do sleep 0.05; done");
+    let c = connect(&m.remote());
+    let seen = Arc::new((Mutex::new(String::new()), Condvar::new()));
+    let watch = |take: bool| {
+        let seen = Arc::clone(&seen);
+        let on = move |body: StreamBody| {
+            let b64 = base64::engine::general_purpose::STANDARD;
+            if let StreamBody::Output { vt } | StreamBody::Screen { vt, .. } = body {
+                let bytes = b64.decode(vt).unwrap_or_default();
+                seen.0
+                    .lock()
+                    .unwrap()
+                    .push_str(&String::from_utf8_lossy(&bytes));
+                seen.1.notify_all();
+            }
+        };
+        let op = Op::Watch {
+            terminal: "far".into(),
+            take,
+        };
+        c.stream(op, on, T).unwrap().0
+    };
+    let looking = watch(false);
+    let refused = c.request(
+        Op::Resize {
+            stream: looking,
+            cols: 132,
+            rows: 40,
+        },
+        T,
+    );
+    assert!(refused.unwrap_err().to_string().contains("没有接管"));
+    let taken = watch(true);
+    c.request(
+        Op::Resize {
+            stream: taken,
+            cols: 132,
+            rows: 40,
+        },
+        T,
+    )
+    .unwrap();
+    let (lock, wait) = &*seen;
+    let mut text = lock.lock().unwrap();
+    while !text.contains("40 132") {
+        let (t, timeout) = wait.wait_timeout(text, Duration::from_secs(5)).unwrap();
+        text = t;
+        assert!(
+            !timeout.timed_out(),
+            "the program never saw 40x132: {:?}",
+            *text
+        );
     }
 }

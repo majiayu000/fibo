@@ -276,6 +276,7 @@ mod tests {
             .stream(
                 Op::Watch {
                     terminal: "t".into(),
+                    take: false,
                 },
                 move |body| tx.send(body).unwrap(),
                 Duration::from_secs(5),

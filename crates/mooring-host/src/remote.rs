@@ -30,6 +30,8 @@ type Streams = Arc<Mutex<Registry>>;
 struct Registry {
     /// `None`: closed by the client before it had opened.
     open: HashMap<u64, Option<UnixStream>>,
+    /// Streams that took their terminal over (`watch` with `take`): `resize` sizes them.
+    writers: std::collections::HashSet<u64>,
     /// The client has gone; a stream still connecting must not open.
     ended: bool,
 }
@@ -213,6 +215,12 @@ pub fn serve(
                 let access = access.clone();
                 thread::spawn(move || stream(id, &request, &socket, &out, &streams, &access));
             }
+            "resize" => match resize(&streams, &request) {
+                Ok(()) => {
+                    let _ = out.send(json!({ "id": id, "ok": {} }));
+                }
+                Err(e) => fail(e.to_string()),
+            },
             "close" => match request["stream"].as_u64() {
                 Some(s) => {
                     if let Ok(mut r) = streams.lock() {
@@ -476,6 +484,40 @@ fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
     })
 }
 
+/// `resize`: sizes the terminal a taken stream writes to, as its pane does locally.
+fn resize(streams: &Streams, request: &Value) -> io::Result<()> {
+    let stream = request["stream"]
+        .as_u64()
+        .ok_or_else(|| io::Error::other("resize 需要 stream"))?;
+    let size = |key: &str| {
+        (request[key].as_u64())
+            .and_then(|n| u16::try_from(n).ok())
+            .filter(|n| *n > 0)
+            .ok_or_else(|| io::Error::other(format!("resize 需要 {key}")))
+    };
+    let (cols, rows) = (size("cols")?, size("rows")?);
+    let r = streams
+        .lock()
+        .map_err(|_| io::Error::other("streams lock poisoned"))?;
+    if !r.writers.contains(&stream) {
+        return Err(io::Error::other("这个画面没有接管，不能改尺寸"));
+    }
+    let mut socket = (r.open.get(&stream))
+        .and_then(|s| s.as_ref())
+        .ok_or_else(|| io::Error::other("画面已经关了"))?
+        .try_clone()?;
+    drop(r);
+    send(
+        &mut socket,
+        CONTROL,
+        &Request::Resize {
+            cols,
+            rows,
+            cell_width: 0,
+            cell_height: 0,
+        },
+    )
+}
 fn connect(socket: &Path, request: &Request) -> io::Result<UnixStream> {
     let mut stream = UnixStream::connect(socket)?;
     send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
@@ -526,7 +568,11 @@ fn stream(id: u64, request: &Value, socket: &Path, out: &Out, streams: &Streams,
         Some("events") => connect(socket, &Request::Subscribe).and_then(|c| events(&mut s, c)),
         _ => text(request, "terminal").map(str::to_owned).and_then(|t| {
             access.tell(Activity::Watching(t.clone()));
-            let watched = watch(&mut s, &t, socket);
+            let take = request["take"].as_bool().unwrap_or(false);
+            if take && !access.role.allows("resize") {
+                return Err(io::Error::other("这台设备只能看，不能接管"));
+            }
+            let watched = watch(&mut s, &t, socket, take);
             access.tell(Activity::Unwatched(t));
             watched
         }),
@@ -559,15 +605,16 @@ fn events(s: &mut Stream, mut socket: UnixStream) -> io::Result<()> {
 }
 
 /// The terminal's screen as escape sequences, then its output as it comes, for an
-/// emulator on the client. It only looks: no size change, never the writer.
-fn watch(st: &mut Stream, terminal: &str, socket: &Path) -> io::Result<()> {
+/// emulator on the client. It only looks unless it `take`s the terminal: then it is the
+/// writer, which `resize` sizes, and this machine's own panes look only.
+fn watch(st: &mut Stream, terminal: &str, socket: &Path, take: bool) -> io::Result<()> {
     let (id, b64) = (st.id, base64::engine::general_purpose::STANDARD);
     let mut s = connect(
         socket,
         &Request::Attach {
             id: terminal.to_owned(),
-            takeover: false,
-            watch: true,
+            takeover: take,
+            watch: !take,
         },
     )?;
     let (mut cols, mut rows) = match receive::<Reply>(&mut s)? {
@@ -576,6 +623,11 @@ fn watch(st: &mut Stream, terminal: &str, socket: &Path) -> io::Result<()> {
         other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     };
     st.open(&s, json!({ "stream": id, "cols": cols, "rows": rows }))?;
+    if take {
+        if let Ok(mut r) = st.streams.lock() {
+            r.writers.insert(id);
+        }
+    }
     let mut snapshot = Vec::new();
     let mut exited = false;
     loop {

@@ -50,5 +50,22 @@ PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude MOORING_REMOTE_TYPING
 echo "app exit $?"
 grep -E "PASS|panicked|assert" -A2 $R/app.log | head
 echo "typed: $(cat $R/typed.txt 2>/dev/null | tr '\n' '|')"
+python3 -I - "$R" <<'PY'
+import json, socket, struct, sys
+R = sys.argv[1]
+def read(s, n):
+    b = b''
+    while len(b) < n:
+        c = s.recv(n - len(b)); assert c; b += c
+    return b
+def send(s, o):
+    b = b'\1' + json.dumps(o).encode(); s.sendall(struct.pack('>I', len(b)) + b)
+def recv(s): return json.loads(read(s, struct.unpack('>I', read(s, 4))[0])[1:])
+with socket.socket(socket.AF_UNIX) as s:
+    s.settimeout(10); s.connect(R + '/far/workbench.sock'); send(s, {'Hello': {'major': 3}}); recv(s)
+    send(s, {'Attach': {'id': 'far', 'takeover': False, 'watch': True}})
+    a = recv(s)['Attached']
+    print('far size: %sx%s (launched 100x30; a taken peek sizes it to itself)' % (a['cols'], a['rows']))
+PY
 kill $FAR 2>/dev/null; sleep 1; pkill -f "$R/far" 2>/dev/null
 ls $R/shots

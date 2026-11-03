@@ -117,6 +117,8 @@ pub struct Linked {
     pub typing: bool,
     /// Answering its approvals (`answer`).
     pub answering: bool,
+    /// Taking its terminals over and sizing them (`resize`).
+    pub resizing: bool,
 }
 
 /// Where a machine's live connection is, if it has one now.
@@ -238,6 +240,7 @@ fn run_once(
         client: Arc::clone(&client),
         typing: hello.ops.iter().any(|o| o == "input"),
         answering: hello.ops.iter().any(|o| o == "answer"),
+        resizing: hello.ops.iter().any(|o| o == "resize"),
     });
     apply(view, Some(hello.machine), list);
     changed();

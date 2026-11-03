@@ -413,20 +413,12 @@ impl Pane {
         let connection = Connection::new(socket, id, takeover, tx.clone());
         Self::with(connection, socket.to_owned(), None, id, tx, rx, cx)
     }
-    /// Another machine's terminal, looked at only.
+    /// Another machine's terminal, looked at until it is used (`take_size`).
     pub fn remote(slot: crate::machines::Slot, id: &str, cx: &mut Context<Self>) -> Self {
         let (tx, rx) = unbounded();
-        let client = slot.lock().unwrap().clone();
-        let connection = Connection::remote(client, id, tx.clone());
-        let mut pane = Self::with(
-            connection,
-            std::path::PathBuf::new(),
-            Some(slot),
-            id,
-            tx,
-            rx,
-            cx,
-        );
+        let linked = slot.lock().unwrap().clone();
+        let connection = Connection::remote(linked, id, false, tx.clone());
+        let mut pane = Self::with(connection, Default::default(), Some(slot), id, tx, rx, cx);
         pane.peek = true;
         pane
     }
@@ -573,8 +565,8 @@ impl Pane {
             let _ = this.update(cx, |pane, cx| {
                 pane.connection = match &pane.remote {
                     Some(slot) => {
-                        let client = slot.lock().unwrap().clone();
-                        Connection::remote(client, &pane.terminal, pane.wake.clone())
+                        let linked = slot.lock().unwrap().clone();
+                        Connection::remote(linked, &pane.terminal, !pane.peek, pane.wake.clone())
                     }
                     None => Connection::new(&pane.socket, &pane.terminal, false, pane.wake.clone()),
                 };
@@ -1838,12 +1830,20 @@ impl Pane {
         .detach();
     }
     /// A peek that is used, not just looked at, sizes the terminal to itself.
+    /// Another machine's terminal is taken over, where it allows that, to be sized here.
     fn take_size(&mut self, cx: &mut Context<Self>) {
-        // Another machine's terminal stays looked at only: never sized from here.
-        if self.peek && self.remote.is_none() {
-            self.peek = false;
-            cx.notify();
+        if !self.peek {
+            return;
         }
+        if let Some(slot) = &self.remote {
+            let Some(linked) = slot.lock().unwrap().clone().filter(|l| l.resizing) else {
+                return;
+            };
+            let wake = self.wake.clone();
+            self.connection = Connection::remote(Some(linked), &self.terminal, true, wake);
+        }
+        self.peek = false;
+        cx.notify();
     }
     fn send_input(&mut self, bytes: Vec<u8>, lossy: bool, cx: &mut Context<Self>) {
         self.take_size(cx);

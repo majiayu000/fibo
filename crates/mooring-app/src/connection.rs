@@ -219,9 +219,12 @@ impl Connection {
     /// Another machine's terminal through `watch`, never resized from here; typed into
     /// (`input`) when that machine lets this desktop. `linked` is `None` while that
     /// machine is unreachable; the pane says so.
+    /// `take`: as the writer that sizes it (`watch` with `take`); that machine's own panes
+    /// then look only.
     pub fn remote(
         linked: Option<crate::machines::Linked>,
         id: &str,
+        take: bool,
         wake: UnboundedSender<()>,
     ) -> Self {
         use base64::Engine;
@@ -252,17 +255,8 @@ impl Connection {
             return result;
         };
         let client = linked.client;
-        if linked.typing {
-            state.lock().unwrap().writable = true;
-            let (client, id, state) = (Arc::clone(&client), id.to_owned(), Arc::clone(&state));
-            let wake = wake.clone();
-            std::thread::spawn(move || {
-                if let Err(e) = remote_typing(&client, &id, &typed) {
-                    state.lock().unwrap().error = Some(format!("没发过去：{e}"));
-                    let _ = wake.unbounded_send(());
-                }
-            });
-        }
+        let take = take && linked.resizing;
+        state.lock().unwrap().writable = linked.typing;
         let on = {
             let (state, dirty, wake) = (Arc::clone(&state), Arc::clone(&dirty), wake.clone());
             move |body: StreamBody| {
@@ -319,12 +313,26 @@ impl Connection {
         let opened = client.stream(
             Op::Watch {
                 terminal: id.to_owned(),
+                take,
             },
             on,
             std::time::Duration::from_secs(10),
         );
         match opened {
-            Ok((stream, _)) => result.remote = Some((client, stream)),
+            Ok((stream, _)) => {
+                if linked.typing {
+                    let (client, id) = (Arc::clone(&client), id.to_owned());
+                    let (state, wake) = (Arc::clone(&state), wake.clone());
+                    std::thread::spawn(move || {
+                        let sizes = take.then_some(stream);
+                        if let Err(e) = remote_typing(&client, &id, sizes, &typed) {
+                            state.lock().unwrap().error = Some(format!("没发过去：{e}"));
+                            let _ = wake.unbounded_send(());
+                        }
+                    });
+                }
+                result.remote = Some((client, stream));
+            }
             Err(e) => {
                 state.lock().unwrap().error = Some(format!("打不开那台电脑的终端：{e}"));
                 let _ = wake.unbounded_send(());
@@ -334,7 +342,8 @@ impl Connection {
     }
     pub fn send(&self, request: Request) -> Result<(), String> {
         let state = self.state.lock().map_err(|_| "terminal lock poisoned")?;
-        if state.vt.is_none() || !state.writable {
+        // Another machine's terminal queues what is typed while its screen is on the way.
+        if (state.vt.is_none() && self.remote.is_none()) || !state.writable {
             return Err("终端尚未恢复或当前为只读".into());
         }
         drop(state);
@@ -438,34 +447,51 @@ impl Drop for RecognitionConnection {
 /// Sends what is typed into another machine's terminal, in order: whatever queued while
 /// the last one was on its way goes as one `input`, so a fast typist waits one round
 /// trip, not one per key. Each carries a request id, so that machine types it once.
+/// With `sizes` (the taken stream), the pane's size changes go too, as `resize`.
 fn remote_typing(
     client: &mooring_remote::client::Client,
     terminal: &str,
+    sizes: Option<u64>,
     typed: &std::sync::mpsc::Receiver<Request>,
 ) -> io::Result<()> {
     use base64::Engine;
     use mooring_remote::protocol::Op;
-    let input = |r: Request| match r {
-        Request::Input { bytes, .. } => bytes,
-        _ => Vec::new(),
-    };
-    while let Ok(first) = typed.recv() {
-        let mut bytes = input(first);
+    let wait = std::time::Duration::from_secs(10);
+    let mut next = typed.recv().ok();
+    while let Some(request) = next.take() {
+        let mut bytes = match request {
+            Request::Input { bytes, .. } => bytes,
+            Request::Resize { cols, rows, .. } => {
+                if let Some(stream) = sizes {
+                    client.request(Op::Resize { stream, cols, rows }, wait)?;
+                }
+                next = typed.recv().ok();
+                continue;
+            }
+            _ => Vec::new(),
+        };
+        // Input queued meanwhile joins this one; anything else waits its turn.
         while bytes.len() < 32 << 10 {
             match typed.try_recv() {
-                Ok(next) => bytes.extend(input(next)),
+                Ok(Request::Input { bytes: more, .. }) => bytes.extend(more),
+                Ok(other) => {
+                    next = Some(other);
+                    break;
+                }
                 Err(_) => break,
             }
         }
-        if bytes.is_empty() {
-            continue;
+        if !bytes.is_empty() {
+            let op = Op::Input {
+                terminal: terminal.to_owned(),
+                data: base64::engine::general_purpose::STANDARD.encode(&bytes),
+                request: Some(mooring_core::protocol::RequestId::fresh().id),
+            };
+            client.request(op, wait)?;
         }
-        let op = Op::Input {
-            terminal: terminal.to_owned(),
-            data: base64::engine::general_purpose::STANDARD.encode(&bytes),
-            request: Some(mooring_core::protocol::RequestId::fresh().id),
-        };
-        client.request(op, std::time::Duration::from_secs(10))?;
+        if next.is_none() {
+            next = typed.recv().ok();
+        }
     }
     Ok(())
 }

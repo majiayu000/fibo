@@ -32,7 +32,7 @@ impl Role {
     }
     pub fn allows(self, op: &str) -> bool {
         match op {
-            "send" | "keys" | "input" => self == Self::Full,
+            "send" | "keys" | "input" | "resize" => self == Self::Full,
             "answer" => self != Self::View,
             _ => true,
         }
