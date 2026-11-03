@@ -72,7 +72,9 @@ pub fn is_prompt_row(row: &str, key: &str, prompt: &PromptLine) -> bool {
     } else {
         rest.starts_with(key)
     };
-    full || (rest.chars().count() >= MIN_PARTIAL && key.starts_with(&rest))
+    // A row holding only the start of the ask is a long ask wrapped on screen; a short
+    // one (under KEY_CHARS) fits on its row and must match it whole.
+    full || (!whole && rest.chars().count() >= MIN_PARTIAL && key.starts_with(&rest))
 }
 
 /// Each ask's history row, newest ask first found from the bottom up: an ask is looked
@@ -175,6 +177,10 @@ mod tests {
         let ok = key("ok").unwrap();
         assert!(is_prompt_row("❯ ok", &ok, &claude()));
         assert!(!is_prompt_row("❯ okay then", &ok, &claude()));
+        // Nor does a row holding only its start: a short ask is never wrapped.
+        let k = key("看看日志再说").unwrap();
+        assert!(!is_prompt_row("❯ 看看日志", &k, &claude()));
+        assert!(is_prompt_row("❯ 看看日志再说", &k, &claude()));
         // Found in history, so it pins while reading back, not only at the bottom.
         let keys = vec![key("修一下登录"), key("1")];
         let screen = [
