@@ -98,7 +98,12 @@ pub fn recv_fds(stream: &UnixStream, count: usize) -> io::Result<Vec<OwnedFd>> {
                 let data = libc::CMSG_DATA(header).cast::<RawFd>();
                 let len = (*header).cmsg_len as usize - (data as usize - header as usize);
                 for i in 0..len / std::mem::size_of::<RawFd>() {
-                    fds.push(OwnedFd::from_raw_fd(*data.add(i)));
+                    let fd = *data.add(i);
+                    // SCM_RIGHTS does not carry close-on-exec, and macOS has no
+                    // MSG_CMSG_CLOEXEC: without this every program the new host starts
+                    // would hold every handed-over terminal's master.
+                    libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
+                    fds.push(OwnedFd::from_raw_fd(fd));
                 }
             }
             header = libc::CMSG_NXTHDR(&msg, header);
@@ -147,5 +152,18 @@ mod tests {
         a.write_all(&[7u8; UNREAD]).unwrap();
         send_fds(&a, &[right.as_raw_fd()]).unwrap();
         assert_eq!(reader.join().unwrap(), 1);
+    }
+
+    /// Descriptors received in a takeover do not leak into the programs the new host
+    /// starts: SCM_RIGHTS drops FD_CLOEXEC.
+    #[test]
+    fn received_descriptors_are_close_on_exec() {
+        let (a, b) = UnixStream::pair().unwrap();
+        let (_left, right) = UnixStream::pair().unwrap();
+        unsafe { libc::fcntl(right.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) };
+        send_fds(&a, &[right.as_raw_fd()]).unwrap();
+        let fds = recv_fds(&b, 1).unwrap();
+        let flags = unsafe { libc::fcntl(fds[0].as_raw_fd(), libc::F_GETFD) };
+        assert!(flags & libc::FD_CLOEXEC != 0, "received fd is inheritable");
     }
 }
