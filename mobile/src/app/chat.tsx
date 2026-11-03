@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { catchUp } from '@/remote/gap';
 import { refresh, remote, useHub } from '@/remote/hub';
 import { cardTitle } from '@/ui/format';
 import { Markdown } from '@/ui/markdown';
@@ -91,15 +92,27 @@ export default function Chat() {
     if (!r) return;
     let live = true;
     r.request('chat', { terminal, limit: 50 })
-      .then((page) => {
+      .then(async (page) => {
         if (!live) return;
         const same = shown.current === null || shown.current === page.session;
+        const had = same ? last.current : 0;
         shown.current = page.session;
         setSession(page.session);
         setMore(page.more);
         // Another conversation: its messages replace the old one's, not join them.
         setMessages((have) => (same ? merge(have, page.messages) : page.messages));
         setError('');
+        // Back after a while: what came between the last one seen and this page.
+        const gap = await catchUp<Message>(
+          (after, limit) =>
+            r.request('chat', { session: page.session, after, limit }).then((p) => p.messages),
+          had,
+          page.messages[0]?.seq,
+          page.more,
+        );
+        if (live && gap.length && shown.current === page.session) {
+          setMessages((have) => merge(have, gap));
+        }
       })
       .catch((e) => live && setError(e.message))
       .finally(() => live && setLoading(false));
