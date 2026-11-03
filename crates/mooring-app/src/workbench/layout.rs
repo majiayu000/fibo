@@ -1596,7 +1596,7 @@ impl PaneAction for gpui::Stateful<gpui::Div> {
 /// The state word, and after it why the session needs you when a reasons rule knows:
 /// 「等你回答 · 批准 WebSearch」. The phrase is already cut to the rules' width.
 fn state_chip(group: Status, reason: Option<String>) -> gpui::Div {
-    let (dot, ink, wash) = group.colors();
+    let (_, ink, wash) = group.colors();
     div()
         .flex_shrink_0()
         .h(px(T::STATE_CHIP))
@@ -1609,7 +1609,7 @@ fn state_chip(group: Status, reason: Option<String>) -> gpui::Div {
         .text_color(ink)
         .text_size(px(T::META))
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .child(div().size(px(T::DOT)).rounded_full().bg(dot))
+        .child(crate::ui::widgets::status_mark(group))
         .child(group.label())
         .when_some(reason, |d, r| {
             d.child(div().opacity(0.6).child("·"))
@@ -1872,6 +1872,9 @@ impl Workbench {
             .gap(px(T::S8))
             .border_b(px(T::BORDER_WIDTH))
             .border_color(T::color(T::border()))
+            // A faint wash of the state's hue, as in the v3 design: the bar reads as the
+            // turn's verdict, not as one more toolbar.
+            .bg(g.colors().2.opacity(0.35))
             .text_size(px(T::SMALL))
             .child(facts)
             .child(

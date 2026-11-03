@@ -479,14 +479,15 @@ impl Workbench {
                             .child(time),
                     )
                     .child(
-                        // A finished turn you have seen keeps 等你验收's ◇ and its green.
-                        glyph(g)
+                        // A finished turn you have seen keeps 等你验收's ring and its green.
+                        div()
                             .w(px(T::S12))
                             .flex()
                             .justify_center()
                             .font_family(mono)
                             .font_weight(gpui::FontWeight::BOLD)
-                            .text_size(px(T::SMALL)),
+                            .text_size(px(T::SMALL))
+                            .child(crate::ui::widgets::status_mark(g)),
                     )
                     .children(pin),
             )

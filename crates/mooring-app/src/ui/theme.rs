@@ -131,9 +131,10 @@ pub struct Palette {
     vivid: u32,
     ink_share: u32,
     wash_share: u32,
-    /// One neutral surface: sidebar, top bar, panes and headers share the terminal's
-    /// background and are told apart by hairlines, not by bands of different shades.
+    /// Top bar, panes and headers share the terminal's background and are told apart by
+    /// hairlines; the sidebar alone sits one gray step below, as the v3 design has it.
     pub app: u32,
+    pub sidebar: u32,
     pub panel: u32,
     pub pane: u32,
     pub header: u32,
@@ -160,7 +161,8 @@ pub struct Palette {
     /// Selected text in a field.
     pub selection: u32,
     pub chip: u32,
-    /// In-window popovers (「你在这里」, cleanup) sit one step above the pane.
+    /// In-window popovers (「你在这里」, cleanup): one step above the pane on dark; on
+    /// light the pane is already white, so they are white too and float on their shadow.
     pub popover: u32,
     pub palette_row: u32,
     /// Matched text in search results: a quiet amber wash, the text keeps its own color.
@@ -189,7 +191,7 @@ impl Palette {
         let primary = mix(fg, vivid, 300);
         let border = mix(bg, fg, by(light, 170, 90));
         let control = mix(bg, fg, by(light, 300, 150));
-        // Popovers sit one step above the pane: lighter on light, never pure white.
+        // Popovers sit one step above the pane: on light that is white, like the pane.
         let popover = if light {
             mix(bg, Theme::WHITE, 700)
         } else {
@@ -203,6 +205,7 @@ impl Palette {
             wash_share: if light { 150 } else { 220 },
             app: mix(bg, Theme::BLACK, by(light, 70, 150)),
             panel: bg,
+            sidebar: if light { mix(bg, fg, 45) } else { bg },
             pane: bg,
             header: bg,
             todo: mix(bg, fg, by(light, 45, 30)),
@@ -259,6 +262,7 @@ tokens!(
     terminal_fg,
     app,
     panel,
+    sidebar,
     pane,
     header,
     todo,
@@ -739,7 +743,7 @@ mod tests {
     /// dots 3:1 even for the pale yellow and green hues; its surfaces step visibly.
     #[test]
     fn light_scheme_meets_contrast_floors() {
-        use super::{LIGHT, Status, Theme, contrast, status_colors_in};
+        use super::{LIGHT, Status, contrast, status_colors_in};
         let p = LIGHT;
         for (name, text) in [
             ("body", p.body),
@@ -756,7 +760,12 @@ mod tests {
         );
         assert!(contrast(p.app, p.pane) >= 1.15);
         assert!(contrast(p.card_border, p.pane) >= 1.6);
-        assert_ne!(p.popover, Theme::WHITE);
+        // The sidebar is the one gray step under the white panes (the v3 design).
+        assert!(contrast(p.pane, p.sidebar) >= 1.05);
+        assert!(
+            contrast(p.raised, p.sidebar) >= 1.05,
+            "selected row on the sidebar"
+        );
         for group in Status::ALL {
             let (dot, ink, _) = status_colors_in(group, &p);
             assert!(contrast(dot, p.pane) >= 3., "{} dot", group.label());

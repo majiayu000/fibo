@@ -409,7 +409,7 @@ impl Workbench {
                 .flex()
                 .flex_col()
                 .overflow_hidden()
-                .bg(T::color(T::panel()))
+                .bg(T::color(T::sidebar()))
                 .border_r(px(T::BORDER_WIDTH))
                 .border_color(T::color(T::border()))
                 // The window's top edge: the traffic lights and the name, then search

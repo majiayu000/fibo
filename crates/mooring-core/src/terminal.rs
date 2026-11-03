@@ -24,7 +24,9 @@ pub const DEFAULT_FG: u32 = 0xe4e2df;
 pub const DEFAULT_BG: u32 = 0x1c1c1e;
 /// The light scheme's defaults, the window's light theme being derived from them.
 pub const LIGHT_FG: u32 = 0x1f1e1c;
-pub const LIGHT_BG: u32 = 0xfafaf9;
+/// White as in the v3 design: panes and the chrome around them are white, the sidebar
+/// alone a step gray.
+pub const LIGHT_BG: u32 = 0xffffff;
 /// ANSI 0-15 for the light scheme: Ghostty's built-in palette is tuned for a dark
 /// background, where its white and yellow would vanish on this one. The grays (0, 7,
 /// 8, 15) lean warm like the background so the chrome and terminal share one neutral.

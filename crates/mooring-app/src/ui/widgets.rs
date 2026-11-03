@@ -86,6 +86,40 @@ pub fn glyph(group: Status) -> gpui::Div {
         .text_color(group.colors().1)
         .child(symbol)
 }
+/// The v3 mark beside a session in the sidebar and on its tab: a filled dot when it
+/// waits on you, a ring for a turn to check, a quarter arc on a pale ring while it runs,
+/// a gray ring once it stopped, and ✓ when you marked it done.
+pub fn status_mark(group: Status) -> gpui::AnyElement {
+    const SIZE: f32 = 10.;
+    let hue = group.colors().0;
+    let icon = |path: &'static str, color: gpui::Hsla| {
+        gpui::svg().path(path).size(px(SIZE)).text_color(color)
+    };
+    match group {
+        Status::Waiting | Status::Error => div()
+            .size(px(T::DOT))
+            .flex_shrink_0()
+            .rounded_full()
+            .bg(hue)
+            .into_any_element(),
+        Status::Running | Status::Background => div()
+            .relative()
+            .size(px(SIZE))
+            .flex_shrink_0()
+            .child(icon("icons/ring.svg", hue.opacity(0.25)))
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .child(icon("icons/arc.svg", hue)),
+            )
+            .into_any_element(),
+        Status::Review => icon("icons/ring.svg", hue).into_any_element(),
+        Status::Closed => glyph(group).into_any_element(),
+        _ => icon("icons/ring.svg", T::color(T::muted())).into_any_element(),
+    }
+}
 pub fn dot(group: Status) -> gpui::Div {
     div()
         .size(px(T::DOT))

@@ -388,7 +388,13 @@ impl Render for Workbench {
                             }),
                     )
                     .when_some(after, |d, g| {
-                        d.child(glyph(g).text_size(px(T::CHIP_SIZE)).pr(px(T::S4)))
+                        d.child(
+                            div()
+                                .flex_shrink_0()
+                                .text_size(px(T::CHIP_SIZE))
+                                .pr(px(T::S4))
+                                .child(crate::ui::widgets::status_mark(g)),
+                        )
                     })
                     .when(active || terminal_style, |d| d.child(close))
                     // The current tab: white with a hairline, the others bare.
