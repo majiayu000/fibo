@@ -95,12 +95,16 @@ impl Action {
             When::Task => ctx.task.is_some(),
         }
     }
-    /// The command for one pane, each value shell-quoted; a value the pane lacks is an
-    /// error naming it, never an empty argument.
+    /// The command for one pane, each value quoted for where it stands: bare, inside
+    /// `"…"` or inside `'…'` (plugins.md says not to add quotes, and some do anyway; a
+    /// single-quoted value inside double quotes would still run `$(…)`). A value the
+    /// pane lacks is an error naming it, never an empty argument.
     pub fn command(&self, ctx: &Context) -> Result<String, String> {
         let mut out = String::new();
         let mut rest = self.command.as_str();
+        let mut quote = Quote::None;
         while let Some(start) = rest.find('{') {
+            quote = quote.after(&rest[..start]);
             out.push_str(&rest[..start]);
             let after = &rest[start + 1..];
             match after.find('}') {
@@ -109,10 +113,21 @@ impl Action {
                     let value = ctx
                         .var(name)
                         .ok_or_else(|| format!("这个画面没有 {{{name}}}"))?;
-                    out.push_str(&shell_quote(value));
+                    out.push_str(&match quote {
+                        Quote::None => shell_quote(value),
+                        Quote::Double => value
+                            .chars()
+                            .flat_map(|c| {
+                                let escape = matches!(c, '\\' | '$' | '`' | '"');
+                                escape.then_some('\\').into_iter().chain([c])
+                            })
+                            .collect(),
+                        Quote::Single => value.replace('\'', "'\\''"),
+                    });
                     rest = &after[end + 1..];
                 }
                 _ => {
+                    quote = quote.after("{");
                     out.push('{');
                     rest = after;
                 }
@@ -120,6 +135,33 @@ impl Action {
         }
         out.push_str(rest);
         Ok(out)
+    }
+}
+
+/// Which quotes a point in a shell command sits inside.
+#[derive(Clone, Copy, PartialEq)]
+enum Quote {
+    None,
+    Single,
+    Double,
+}
+impl Quote {
+    fn after(mut self, text: &str) -> Self {
+        let mut chars = text.chars();
+        while let Some(c) = chars.next() {
+            self = match (self, c) {
+                (Self::None | Self::Double, '\\') => {
+                    chars.next();
+                    self
+                }
+                (Self::None, '\'') => Self::Single,
+                (Self::Single, '\'') => Self::None,
+                (Self::None, '"') => Self::Double,
+                (Self::Double, '"') => Self::None,
+                _ => self,
+            };
+        }
+        self
     }
 }
 
@@ -281,7 +323,7 @@ mod tests {
         };
         assert_eq!(
             a.command(&ctx).unwrap(),
-            "codex exec --cd '/tmp/my dir' \"看看 '修 bug; rm -rf /'\" {unknown}"
+            "codex exec --cd '/tmp/my dir' \"看看 修 bug; rm -rf /\" {unknown}"
         );
         let needs = Action {
             command: "claude --resume {session_id}".into(),
@@ -348,5 +390,50 @@ mod tests {
         assert!(report[2].result.as_ref().unwrap_err().contains("重名"));
         assert!(report[3].result.as_ref().unwrap_err().contains("api 2"));
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A value inside quotes the template added is quoted for that context: shell
+    /// syntax in a task title never runs, and the text arrives exactly as written.
+    #[test]
+    fn a_value_inside_the_templates_own_quotes_never_runs() {
+        let marker = std::env::temp_dir().join(format!("kl-inject-{}", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        let task = format!(
+            "it's \"$(touch {m})\" `touch {m}` \\ $HOME",
+            m = marker.display()
+        );
+        for template in [
+            "printf %s {task}",
+            "printf %s \"{task}\"",
+            "printf %s '{task}'",
+            "printf %s \"看看 {task}\"",
+            "printf %s \"a\\\"{task}\"",
+        ] {
+            let a = Action {
+                id: "t".into(),
+                title: "t".into(),
+                command: template.into(),
+                run: Run::Split,
+                when: When::Always,
+                file: PathBuf::new(),
+            };
+            let ctx = Context {
+                cwd: "/tmp".into(),
+                task: Some(task.clone()),
+                ..Context::default()
+            };
+            let command = a.command(&ctx).unwrap();
+            let out = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(&command)
+                .output()
+                .unwrap();
+            assert!(!marker.exists(), "{template} ran the title: {command}");
+            let shown = String::from_utf8(out.stdout).unwrap();
+            assert!(
+                shown.ends_with(&task),
+                "{template}: {shown:?} from {command}"
+            );
+        }
     }
 }
