@@ -1,14 +1,21 @@
 //! Plugin packages: one directory per plugin under `<config_dir>/plugins`, each with a
-//! `plugin.json` naming what it provides. Every kind (agents now; actions, rules and
-//! sidebar views next) reads its files from here, and every outcome lands in one report
-//! the settings page shows: which plugin and file took effect, and why one did not.
+//! `plugin.json` naming the kinds it provides (`Kind`). Every kind reads its files from
+//! here, and every outcome lands in one report the settings page shows: which plugin and
+//! file took effect, and why one did not.
 //!
-//! A bad plugin never stops the others or the app: it is reported and skipped.
+//! A bad plugin never stops the others or the app: it is reported and skipped. A plugin
+//! written for a newer Mooring loads what this one understands: a kind or a manifest field
+//! it does not know is skipped with a warning, and `mooring` (the plugin level it needs,
+//! `LEVEL`) refuses it outright when this build is too old.
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 /// The package format's major version; a plugin of another is refused, not guessed at.
 pub const API: u32 = 1;
+/// What this build's plugin support adds up to, raised whenever a kind or a manifest field
+/// is added: 1 the first seven kinds, 2 `setup`, `quota` and `files`. A plugin needing a
+/// higher level says so in `mooring`, and is refused with "update Mooring".
+pub const LEVEL: u32 = 2;
 
 /// What a plugin can extend. The file each kind reads is fixed, so a manifest only says
 /// which kinds it means to provide and a missing file is reported rather than ignored.
@@ -35,6 +42,17 @@ pub enum Kind {
     Quota,
 }
 impl Kind {
+    /// The kind a manifest names, if this build knows it.
+    pub fn from_name(name: &str) -> Option<Kind> {
+        serde_json::from_value(serde_json::Value::String(name.to_owned())).ok()
+    }
+    /// The plugin level that introduced it.
+    pub fn level(self) -> u32 {
+        match self {
+            Self::Setup | Self::Quota => 2,
+            _ => 1,
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
             Self::Agent => "Agent",
@@ -103,8 +121,26 @@ impl Kind {
     }
 }
 
+/// Names a newer Mooring may add to `provides` are kept as text, so this build can skip
+/// them instead of refusing the plugin.
+pub fn known_kinds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Kind>, D::Error> {
+    let names: Vec<String> = Deserialize::deserialize(d)?;
+    Ok(names.iter().filter_map(|n| Kind::from_name(n)).collect())
+}
+
+/// Fields a manifest may carry; any other is skipped with a warning.
+const MANIFEST_FIELDS: [&str; 8] = [
+    "api",
+    "id",
+    "name",
+    "version",
+    "description",
+    "provides",
+    "files",
+    "mooring",
+];
+
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct Manifest {
     api: u32,
     id: String,
@@ -113,7 +149,10 @@ struct Manifest {
     version: Option<String>,
     #[serde(default)]
     description: Option<String>,
-    provides: Vec<Kind>,
+    provides: Vec<String>,
+    /// The plugin level it needs (`LEVEL`); without it, what its kinds and fields need.
+    #[serde(default)]
+    mooring: Option<u32>,
     /// Other files it ships, such as the scripts its commands run, relative to its directory.
     #[serde(default)]
     files: Vec<String>,
@@ -130,6 +169,10 @@ pub struct Plugin {
     pub provides: Vec<Kind>,
     /// The other files it ships (`files` in its manifest).
     pub files: Vec<PathBuf>,
+    /// The plugin level it needs: its `mooring`, else what its kinds and fields need.
+    pub level: u32,
+    /// What this build skipped: kinds and manifest fields it does not know.
+    pub warnings: Vec<String>,
     /// Turned off in settings: listed, but none of its files load.
     pub enabled: bool,
 }
@@ -250,6 +293,11 @@ pub fn uninstall(id: &str) -> Result<(), String> {
     }
     std::fs::remove_dir_all(&found.dir)
         .map_err(|e| format!("删不掉 {}：{e}", found.dir.display()))?;
+    // What it kept is gone with it; teardown has already put back what needed putting.
+    let data = crate::setup::data_dir(&plugins, id);
+    if data.is_dir() {
+        let _ = std::fs::remove_dir_all(&data);
+    }
     let mut off = disabled(&plugins);
     if off.iter().any(|d| d == id) {
         off.retain(|d| d != id);
@@ -370,8 +418,10 @@ pub fn check(dir: &Path) -> Result<Plugin, String> {
 fn read(dir: &Path) -> Result<Plugin, String> {
     let file = dir.join("plugin.json");
     let bytes = std::fs::read(&file).map_err(|_| "缺少 plugin.json".to_owned())?;
-    let m: Manifest =
+    let value: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|e| format!("plugin.json 格式不对：{e}"))?;
+    let m: Manifest =
+        serde_json::from_value(value.clone()).map_err(|e| format!("plugin.json 格式不对：{e}"))?;
     if m.api != API {
         return Err(format!("插件格式是 api {}，这个版本只认 api {API}", m.api));
     }
@@ -390,6 +440,43 @@ fn read(dir: &Path) -> Result<Plugin, String> {
                 .into(),
         );
     }
+    let mut warnings = Vec::new();
+    let mut provides = Vec::new();
+    for name in &m.provides {
+        match Kind::from_name(name) {
+            Some(k) if !provides.contains(&k) => provides.push(k),
+            Some(_) => {}
+            None => warnings.push(format!(
+                "这个版本不认识「{name}」类，跳过了；更新 Mooring 后可用"
+            )),
+        }
+    }
+    if let Some(fields) = value.as_object() {
+        for key in fields
+            .keys()
+            .filter(|k| !MANIFEST_FIELDS.contains(&k.as_str()))
+        {
+            warnings.push(format!("这个版本不认识 plugin.json 的「{key}」，忽略了"));
+        }
+    }
+    let needed = provides
+        .iter()
+        .map(|k| k.level())
+        .chain((!m.files.is_empty()).then_some(2))
+        .max()
+        .unwrap_or(1);
+    let level = m.mooring.unwrap_or(needed).max(needed);
+    if level > LEVEL {
+        return Err(format!(
+            "要更新 Mooring：它需要插件级别 {level}，这个版本是 {LEVEL}"
+        ));
+    }
+    if provides.is_empty() {
+        return Err(format!(
+            "这个版本不认识它提供的任何一类（{}），要更新 Mooring",
+            m.provides.join("、")
+        ));
+    }
     let mut files = Vec::new();
     for f in &m.files {
         if !crate::market::safe_path(f) {
@@ -407,8 +494,10 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         version: m.version,
         description: m.description,
         dir: dir.to_owned(),
-        provides: m.provides,
+        provides,
         files,
+        level,
+        warnings,
         enabled: true,
     };
     for kind in &plugin.provides {
@@ -555,5 +644,61 @@ mod tests {
     #[test]
     fn no_plugins_directory_is_no_plugins() {
         assert!(discover(Path::new("/nonexistent/mooring/plugins")).is_empty());
+    }
+
+    #[test]
+    fn a_plugin_for_a_newer_mooring_loads_what_this_one_knows() {
+        let root = tmp("newer");
+        plugin(
+            &root,
+            "a-mixed",
+            r#"{"api":1,"id":"mixed","name":"M","provides":["actions","canvas"],"homepage":"x"}"#,
+            &[("actions.json", "{}")],
+        );
+        plugin(
+            &root,
+            "b-only-new",
+            r#"{"api":1,"id":"only-new","name":"N","provides":["canvas"]}"#,
+            &[],
+        );
+        plugin(
+            &root,
+            "c-level",
+            r#"{"api":1,"id":"level","name":"L","provides":["actions"],"mooring":99}"#,
+            &[("actions.json", "{}")],
+        );
+        plugin(
+            &root,
+            "d-quota",
+            r#"{"api":1,"id":"quota","name":"Q","provides":["quota"]}"#,
+            &[("quota.json", "{}")],
+        );
+        let found = discover(&root);
+        let mixed = found[0].result.as_ref().unwrap();
+        assert_eq!(mixed.provides, [Kind::Actions]);
+        assert_eq!(mixed.warnings.len(), 2, "{:?}", mixed.warnings);
+        assert!(mixed.warnings[0].contains("canvas"));
+        assert!(mixed.warnings[1].contains("homepage"));
+        assert_eq!(mixed.level, 1);
+        assert!(
+            found[1]
+                .result
+                .as_ref()
+                .unwrap_err()
+                .contains("更新 Mooring")
+        );
+        assert!(
+            found[2]
+                .result
+                .as_ref()
+                .unwrap_err()
+                .contains("插件级别 99")
+        );
+        assert_eq!(
+            found[3].result.as_ref().unwrap().level,
+            2,
+            "quota came in level 2"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

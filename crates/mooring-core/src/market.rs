@@ -14,8 +14,9 @@
 //! ```
 //!
 //! Installing copies exactly the listed files, each checked against its sha256, into a
-//! staging directory, checks it as a plugin, then swaps it in as `plugins/<id>`. Nothing
-//! is run while installing; what a plugin may run later is stated up front (`permissions`).
+//! staging directory, checks it as a plugin, then swaps it in as `plugins/<id>`. Copying
+//! runs nothing; once it is in place a plugin with `setup.json` runs its `setup`. What a
+//! plugin may run is stated up front (`permissions`).
 use crate::plugin::{self, Kind, Plugin};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -29,27 +30,30 @@ pub const DEFAULT_REMOTE: &str =
 /// No plugin file is this large; a bigger one is refused, not written.
 const MAX_FILE: u64 = 16 << 20;
 
+/// Fields a newer Mooring adds to the index are ignored, and kinds it does not know are
+/// dropped from `provides`, so an older build still lists what it can install.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Index {
     pub api: u32,
     pub plugins: Vec<Entry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Entry {
     pub id: String,
     pub name: String,
     pub version: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(deserialize_with = "plugin::known_kinds")]
     pub provides: Vec<Kind>,
+    /// The plugin level it needs (`plugin::LEVEL`), when above 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mooring: Option<u32>,
     pub files: Vec<FileEntry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct FileEntry {
     pub path: String,
     pub sha256: String,
@@ -73,7 +77,7 @@ pub struct Offer {
 }
 
 /// What a plugin's kinds may do once installed, in words for the install confirmation.
-/// Installing itself never runs anything.
+/// Copying it in runs nothing; its `setup`, if it has one, runs right after.
 pub fn permissions(provides: &[Kind]) -> Vec<&'static str> {
     let mut out = Vec::new();
     for k in provides {
@@ -142,6 +146,13 @@ impl Entry {
     pub fn check(&self) -> Result<(), String> {
         if !plugin::valid_id(&self.id) {
             return Err(format!("id \"{}\" 不合法", self.id));
+        }
+        if let Some(level) = self.mooring.filter(|l| *l > plugin::LEVEL) {
+            return Err(format!(
+                "要更新 Mooring 才能装 {}：它需要插件级别 {level}，这个版本是 {}",
+                self.id,
+                plugin::LEVEL
+            ));
         }
         if !self.files.iter().any(|f| f.path == "plugin.json") {
             return Err(format!("{} 的文件里没有 plugin.json", self.id));
@@ -220,6 +231,7 @@ pub fn index_of(dir: &Path) -> Result<Index, String> {
             version: p.version.unwrap_or_else(|| "0.0.0".into()),
             description: p.description,
             provides: p.provides,
+            mooring: (p.level > 1).then_some(p.level),
             files,
         });
     }
@@ -538,6 +550,7 @@ mod tests {
             version: "1".into(),
             description: None,
             provides: vec![Kind::Rules],
+            mooring: None,
             files,
         };
         assert!(
@@ -566,6 +579,7 @@ mod tests {
                 version: v.into(),
                 description: None,
                 provides: vec![Kind::Rules],
+                mooring: None,
                 files: vec![],
             },
             source: if remote {
@@ -613,5 +627,25 @@ mod tests {
         assert!(fetch_remote(&format!("file://{}/missing.json", catalog.display())).is_err());
         let _ = std::fs::remove_dir_all(&catalog);
         let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
+    fn an_index_from_a_newer_mooring_still_lists_what_this_one_can_install() {
+        let index = parse(
+            br#"{"api":1,"signed":"x","plugins":[
+              {"id":"a","name":"A","version":"1.0.0","provides":["actions","canvas"],"homepage":"h",
+               "files":[{"path":"plugin.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":1,"mode":"x"}]},
+              {"id":"b","name":"B","version":"1.0.0","provides":["quota"],"mooring":99,
+               "files":[{"path":"plugin.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":1}]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(index.plugins[0].provides, [Kind::Actions]);
+        assert!(index.plugins[0].check().is_ok());
+        assert!(
+            index.plugins[1]
+                .check()
+                .unwrap_err()
+                .contains("更新 Mooring")
+        );
     }
 }

@@ -374,10 +374,10 @@ impl Args {
         let runtime = match runtime {
             Some(r) => r,
             // Where the app keeps its host, so a script needs no flag next to it.
-            None => PathBuf::from(
+            // An install from before the rename keeps serving the old directory.
+            None => mooring_core::legacy::runtime_dir(&PathBuf::from(
                 std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
-            )
-            .join(".local/share/mooring-workbench"),
+            )),
         };
         Ok(Self {
             socket: runtime.join("workbench.sock"),

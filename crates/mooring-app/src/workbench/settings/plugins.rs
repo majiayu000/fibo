@@ -118,13 +118,44 @@ impl SettingsView {
         })
         .detach();
     }
+    /// Off the UI thread: the plugin's `teardown` runs first and may take seconds.
     fn uninstall(&mut self, id: String, name: String, cx: &mut Context<Self>) {
-        self.market.done = Some(
-            plugin::uninstall(&id)
-                .map(|()| format!("卸载了「{name}」"))
-                .map_err(|e| format!("没卸掉「{name}」：{e}")),
-        );
-        self.plugins_changed(cx);
+        self.market.working = Some(id.clone());
+        self.market.done = None;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { plugin::uninstall(&id) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.market.working = None;
+                this.market.done = Some(
+                    result
+                        .map(|()| format!("卸载了「{name}」"))
+                        .map_err(|e| format!("没卸掉「{name}」：{e}")),
+                );
+                this.plugins_changed(cx);
+            });
+        })
+        .detach();
+    }
+    /// Off the UI thread, like `uninstall`: turning one on or off runs its setup or teardown.
+    fn switch_plugin(&mut self, id: String, on: bool, cx: &mut Context<Self>) {
+        self.market.working = Some(id.clone());
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { plugin::set_enabled(&id, on) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.market.working = None;
+                if let Err(e) = result {
+                    this.text_error = Some(format!("没能切换插件：{e}"));
+                }
+                this.plugins_changed(cx);
+            });
+        })
+        .detach();
     }
 
     /// 完成动画: every animation 标记完成 can play, one row each: the one playing marked
@@ -219,10 +250,9 @@ impl SettingsView {
                     "已停用 · 打开插件就换成它",
                     secondary(format!("complete-enable-{}", p.id), "打开并用这个").on_click(
                         cx.listener(move |this, _, _, cx| {
-                            if let Err(e) = plugin::set_enabled(&id, true) {
-                                this.text_error = Some(format!("没能保存插件开关：{e}"));
+                            if this.market.working.is_none() {
+                                this.switch_plugin(id.clone(), true, cx);
                             }
-                            this.plugins_changed(cx);
                         }),
                     ),
                 )
@@ -367,6 +397,7 @@ impl SettingsView {
             if let Some(u) = update {
                 note.push(format!("{}有新版本 v{}", u.origin(), u.entry.version));
             }
+            note.extend(p.warnings.iter().cloned());
             let on = p.enabled;
             let (id, name) = (p.id.clone(), p.name.clone());
             let mut controls = div().flex().items_center().gap(px(T::S8));
@@ -397,12 +428,19 @@ impl SettingsView {
                         })),
                 );
             }
+            if self.market.working.as_deref() == Some(p.id.as_str()) {
+                controls = controls.child(
+                    div()
+                        .text_size(px(T::SMALL))
+                        .text_color(T::color(T::secondary()))
+                        .child("正在处理…"),
+                );
+            }
             controls = controls.child(switch(format!("plugin-switch-{}", p.id), on).on_click(
                 cx.listener(move |this, _, _, cx| {
-                    if let Err(e) = plugin::set_enabled(&id, !on) {
-                        this.text_error = Some(format!("没能保存插件开关：{e}"));
+                    if this.market.working.is_none() {
+                        this.switch_plugin(id.clone(), !on, cx);
                     }
-                    this.plugins_changed(cx);
                 }),
             ));
             installed.push(

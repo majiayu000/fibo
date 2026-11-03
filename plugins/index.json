@@ -10,6 +10,7 @@
         "setup",
         "quota"
       ],
+      "mooring": 2,
       "files": [
         {
           "path": "plugin.json",
