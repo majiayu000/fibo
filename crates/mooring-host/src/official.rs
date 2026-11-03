@@ -19,6 +19,24 @@ pub struct Entry {
     pub status: Official,
 }
 
+/// The program to ask `agents --json`, from a running Claude's executable. One installed
+/// with npm runs as `node` (or bun) with the script as an argument: asking node for its
+/// agents fails, so it is asked through `claude` on the PATH instead.
+pub fn claude_program(pid: u32) -> io::Result<String> {
+    let exe = executable(pid)?;
+    Ok(program_for(&exe))
+}
+fn program_for(exe: &str) -> String {
+    let name = std::path::Path::new(exe)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    if matches!(name, "node" | "bun" | "deno") || name.starts_with("node") {
+        "claude".into()
+    } else {
+        exe.into()
+    }
+}
 /// Absolute path of a running process's executable.
 pub fn executable(pid: u32) -> io::Result<String> {
     let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
@@ -139,5 +157,20 @@ mod tests {
             ]
         );
         assert!(parse(b"not json").is_err());
+    }
+}
+
+#[cfg(test)]
+mod program_tests {
+    #[test]
+    fn a_claude_run_by_node_is_asked_through_claude() {
+        assert_eq!(super::program_for("/opt/homebrew/bin/node"), "claude");
+        assert_eq!(
+            super::program_for("/Users/me/.nvm/versions/node/v22/bin/node"),
+            "claude"
+        );
+        assert_eq!(super::program_for("/usr/local/bin/bun"), "claude");
+        let native = "/Users/me/.local/share/claude/versions/2.1.317";
+        assert_eq!(super::program_for(native), native);
     }
 }

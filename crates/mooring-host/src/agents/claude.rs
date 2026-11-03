@@ -276,7 +276,7 @@ impl Adapter for Claude {
     fn sessions_by_pid(&self, pids: &[u32]) -> Vec<(u32, String)> {
         let Some(program) = std::env::var("MOORING_CLAUDE_AGENTS").ok().or_else(|| {
             pids.iter()
-                .find_map(|&p| crate::official::executable(p).ok())
+                .find_map(|&p| crate::official::claude_program(p).ok())
         }) else {
             return vec![];
         };
@@ -302,7 +302,7 @@ fn claude_status(
         Ok(program) => program,
         Err(_) => due
             .iter()
-            .find_map(|(_, pid)| pid.and_then(|p| crate::official::executable(p).ok()))
+            .find_map(|(_, pid)| pid.and_then(|p| crate::official::claude_program(p).ok()))
             .ok_or_else(|| std::io::Error::other("no live Claude process to ask"))?,
     };
     let entries = crate::official::query(&program)?;
