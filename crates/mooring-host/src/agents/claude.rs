@@ -192,7 +192,16 @@ impl Adapter for Claude {
         // The summary a compaction writes is shaped like a prompt but asks nothing:
         // a conversation compacted after its last reply has still finished.
         if ty == "user" && v["isMeta"] != true && v["isCompactSummary"] != true {
-            let s = user_text(&text(blocks));
+            let said = text(blocks);
+            // Esc: Claude Code records this line and, most times, nothing else until the
+            // next prompt; no Stop hook fires. The turn ended there.
+            if said
+                .trim_start()
+                .starts_with("[Request interrupted by user")
+            {
+                parser.phase(Turn::Interrupted, "", at, source);
+            }
+            let s = user_text(&said);
             if !s.is_empty() {
                 parser.phase(Turn::Running, v["uuid"].as_str().unwrap_or(""), at, source);
                 parser.message(true, s, at, source, false);

@@ -1846,4 +1846,48 @@ mod tests {
         assert_eq!(n, p.records.len() as i64);
         assert_eq!(load(&db, "fixture").unwrap().card, p.card);
     }
+
+    /// orca#9040 shape: Esc in Claude Code writes `[Request interrupted by user]` and, in
+    /// most real logs (16 of 22 sampled), no turn_duration or stop before the next prompt.
+    #[test]
+    fn claude_interrupted_by_user_ends_the_running_turn() {
+        let add = |p: &mut Parser, record: Value| {
+            p.add(
+                Agent::Claude,
+                &serde_json::to_vec(&record).unwrap(),
+                Source::default(),
+            )
+        };
+        let mut p = Parser::default();
+        add(
+            &mut p,
+            json!({"type":"user","message":{"role":"user","content":"跑一下全部测试"}}),
+        );
+        add(
+            &mut p,
+            json!({"type":"assistant","message":{"model":"claude","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"sleep 100"}}]}}),
+        );
+        assert_eq!(p.card.turn, Turn::Running);
+        add(
+            &mut p,
+            json!({"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"The user doesn't want to proceed with this tool use."}]}}),
+        );
+        add(
+            &mut p,
+            json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}),
+        );
+        assert_eq!(p.card.turn, Turn::Interrupted);
+        // Mid-reply, the plain form; the next prompt starts a new turn as before.
+        add(
+            &mut p,
+            json!({"type":"user","message":{"role":"user","content":"再试一次"}}),
+        );
+        assert_eq!(p.card.turn, Turn::Running);
+        add(
+            &mut p,
+            json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}),
+        );
+        assert_eq!(p.card.turn, Turn::Interrupted);
+        assert_eq!(p.card.asks.len(), 2, "the interrupt line is not an ask");
+    }
 }
