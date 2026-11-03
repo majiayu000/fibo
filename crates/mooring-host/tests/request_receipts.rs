@@ -293,6 +293,88 @@ fn layout_changes_from_two_hands_all_stay() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// Step E's acceptance: a phone or another computer that lost its connection before the
+/// reply sends the same line again on a new one, and it is typed once; unnamed, twice.
+#[test]
+fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
+    use mooring_remote::client::Client;
+    use mooring_remote::protocol::{Hello, Op};
+    let root = std::env::temp_dir().join(format!("kl-rq-{}", uuid::Uuid::new_v4().simple()));
+    let h = Host::start(&root);
+    h.call(
+        None,
+        Edit::AddSpace(Space {
+            id: "s".into(),
+            name: "Tests".into(),
+            cwd: "/tmp".into(),
+        }),
+    )
+    .unwrap();
+    let typed = root.join("typed.txt");
+    let launch = Request::Launch {
+        id: "far".into(),
+        space: "s".into(),
+        argv: vec![
+            "/bin/sh".into(),
+            "-c".into(),
+            format!("stty -echo; cat >> '{}'", typed.display()),
+        ],
+        cwd: "/tmp".into(),
+        cols: 80,
+        rows: 24,
+        scheme: Default::default(),
+    };
+    rpc(&root.join("workbench.sock"), &launch).unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    let t = Duration::from_secs(10);
+    let connect = || {
+        let c = Client::spawn(&[
+            env!("CARGO_BIN_EXE_mooring").to_owned(),
+            "remote".into(),
+            "--stdio".into(),
+            "--runtime".into(),
+            root.to_string_lossy().into_owned(),
+        ])
+        .unwrap();
+        let hello = Op::Hello {
+            version: Some(1),
+            client: Some("phone-1".into()),
+        };
+        let hello: Hello = serde_json::from_value(c.request(hello, t).unwrap()).unwrap();
+        assert!(hello.requests);
+        c
+    };
+    let send = |text: &str, request: Option<&str>| Op::Send {
+        terminal: "far".into(),
+        text: text.into(),
+        enter: true,
+        request: request.map(str::to_owned),
+    };
+    // The reply is lost with the connection; the phone reconnects and sends it again.
+    let first = connect();
+    first.request(send("named", Some("r1")), t).unwrap();
+    drop(first);
+    let again = connect();
+    again.request(send("named", Some("r1")), t).unwrap();
+    again.request(send("unnamed", None), t).unwrap();
+    again.request(send("unnamed", None), t).unwrap();
+    // A resend of a refused write is refused again, not tried a second time.
+    let gone = Op::Keys {
+        terminal: "gone".into(),
+        keys: vec!["enter".into()],
+        request: Some("r2".into()),
+    };
+    let refused = again.request(gone.clone(), t).unwrap_err().to_string();
+    assert_eq!(again.request(gone, t).unwrap_err().to_string(), refused);
+    std::thread::sleep(Duration::from_millis(500));
+    let lines = fs::read_to_string(&typed).unwrap();
+    let count = |w: &str| lines.lines().filter(|l| l.trim() == w).count();
+    assert_eq!((count("named"), count("unnamed")), (1, 2), "{lines:?}");
+    drop(again);
+    drop(h);
+    let _ = fs::remove_dir_all(&root);
+}
+
 #[test]
 #[ignore = "subprocess daemon entry for this file's tests"]
 fn receipts_daemon() {

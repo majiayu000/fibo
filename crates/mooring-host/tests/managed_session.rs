@@ -4860,7 +4860,15 @@ fn the_desktop_client_lists_and_watches_another_machine() {
     ])
     .unwrap();
     let t = Duration::from_secs(10);
-    client.request(Op::Hello { version: Some(1) }, t).unwrap();
+    client
+        .request(
+            Op::Hello {
+                version: Some(1),
+                client: None,
+            },
+            t,
+        )
+        .unwrap();
     let list: List = serde_json::from_value(client.request(Op::List, t).unwrap()).unwrap();
     assert!(list.terminals.iter().any(|c| c.id == "far"), "{list:?}");
     let (tx, rx) = std::sync::mpsc::channel();

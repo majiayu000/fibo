@@ -165,6 +165,13 @@ pub enum Request {
         question: String,
         allow: bool,
     },
+    /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `AnswerApproval`) run
+    /// at most once under `request`: a resend after a lost reply gets the first outcome
+    /// back (a phone or another computer that reconnected). Edits name themselves.
+    Once {
+        request: RequestId,
+        inner: Box<Request>,
+    },
     /// Named keys (`enter`, `esc`, `up`, `ctrl-c`, a single character…) typed into a
     /// terminal in order, beside whoever is typing there; arrows follow the program's
     /// cursor-key mode. For clients with no keyboard of their own, such as a phone.

@@ -24,6 +24,10 @@ impl Store {
             .map_err(db_error)?;
         Ok(error.map(|e| e.map_or(Ok(()), Err)))
     }
+    /// Records a request that changed nothing stored here (typing into a terminal).
+    pub fn applied(&mut self, request: &RequestId) -> io::Result<()> {
+        record(&self.0, request, None)
+    }
     pub fn refused(&mut self, request: &RequestId, error: &str) -> io::Result<()> {
         record(&self.0, request, Some(error))
     }

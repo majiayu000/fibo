@@ -203,7 +203,13 @@ fn run_once(
     stop: &AtomicBool,
 ) -> io::Result<()> {
     let client = Arc::new(connect(spec)?);
-    let hello: Hello = parse(client.request(Op::Hello { version: Some(1) }, REPLY)?)?;
+    let hello: Hello = parse(client.request(
+        Op::Hello {
+            version: Some(1),
+            client: None,
+        },
+        REPLY,
+    )?)?;
     let list: List = parse(client.request(Op::List, REPLY).map_err(not_running)?)?;
     let (tx, rx) = channel();
     let ends = tx.clone();

@@ -40,7 +40,7 @@
 ### 第 1 阶段 · 编辑不再被挡、不再丢（I1–I7、I10、I11）
 
 - 会话内容单独计数，不再推高全局版本号。
-- 做法和进度见 [request-envelope/spec.md](request-envelope/spec.md)。
+- 11-04 完成（A–E 全部合进 main）。做法、验收和没验的部分见 [request-envelope/spec.md](request-envelope/spec.md)。
 - 请求信封 + 回执 + 去重表（`requests` 表保留 24 小时，和改动在同一事务里写）。
 - App、CLI、手机共用一个请求状态机；表单在确认后才关；超时显示「不确定是否成功」，并给出用同一个 id 重试的按钮。
 - 编辑按对象带前提：AddTask 不带；SetOutcome / SetTaskOutcome 带「我看到的结局」，SetOutcome 还带 turn_key；UpdateTask 拆成按字段改。
@@ -79,7 +79,7 @@
 
 ### 穿插
 
-- 多机（桌面连远程机器，11-03 开工）：见 [multi-machine/spec.md](multi-machine/spec.md)。第 1 步「只看」不依赖任何阶段；打字、审批等写操作等第 1 阶段的请求信封；第 4 阶段的协议改动要同时满足手机和桌面连远程。
+- 多机（桌面连远程机器，11-03 开工）：见 [multi-machine/spec.md](multi-machine/spec.md)。第 1 步「只看」不依赖任何阶段；打字、审批等写操作用第 1 阶段的请求信封（11-04 已就绪）；第 4 阶段的协议改动要同时满足手机和桌面连远程。
 - 额度历史折线（额度条方向稿 B），挂进状态栏的额度弹层。
 
 ## 不做

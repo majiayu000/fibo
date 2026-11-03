@@ -55,6 +55,7 @@ pub fn resendable(request: &Request) -> bool {
     match request {
         Request::Edit { request, .. } => request.is_some(),
         Request::Launch { .. }
+        | Request::Once { .. }
         | Request::Workspace
         | Request::RecognitionStatus
         | Request::ReloadPlugins => true,

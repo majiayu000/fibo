@@ -29,7 +29,7 @@
 | 会话列表 | `list`：每张卡片有 `phase`（working / waiting / idle / shell）、`agent`、`title`、`waiting`（它在问什么）、`approval`（屏幕上的审批问题） |
 | 状态变化 | `events` 流：started、waiting、done、approval、approval_gone 等；收到 `lagged` 就重新 `list` |
 | 聊天记录 | `chat`：先取最新 50 条；往上翻页用 `before`；有新消息用 `after` |
-| 发一句话 | `send`，带 `text` 和 `enter: true`。Agent 正在忙时，Claude Code 会把它排进队列 |
+| 发一句话 | `send`，带 `text` 和 `enter: true`。Agent 正在忙时，Claude Code 会把它排进队列。11-04 起带上 `request`（每条写操作取一个新 id；`hello` 里要先报 `client`，填设备 id）：断线后用同一个 id 重发，电脑只执行一次，回的是第一次的结果。`keys`、`answer` 同样带 |
 | 审批 | `answer`，带 `question`（取卡片上的 `approval`）和 `allow` |
 | 选项题（例如 AskUserQuestion） | `keys`，发 `["1"]` 一类的按键；问题文字在卡片的 `waiting` 里 |
 

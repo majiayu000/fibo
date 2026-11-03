@@ -22,6 +22,10 @@ pub enum Op {
     Hello {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         version: Option<u32>,
+        /// Names this client for the `request` ids its writes carry; stays the same
+        /// across its reconnects (a device id). Without it, `request` is ignored.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        client: Option<String>,
     },
     /// Replies [`List`].
     List,
@@ -37,6 +41,9 @@ pub enum Op {
         text: String,
         #[serde(default)]
         enter: bool,
+        /// See [`Hello::requests`]; on `keys` and `answer` too.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
     },
     /// Presses named keys, all or none: `enter` `esc` `tab` `shift-tab` `backspace`
     /// `space` `up` `down` `left` `right` `home` `end` `page-up` `page-down` `delete`,
@@ -44,12 +51,16 @@ pub enum Op {
     Keys {
         terminal: String,
         keys: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
     },
     /// Answers the approval asking `question`; refused if it is no longer on screen.
     Answer {
         terminal: String,
         question: String,
         allow: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
     },
     /// A conversation as chat: [`Chat`]. Names the `terminal` running it (its current
     /// conversation) or the `session`. Without `after` or `before`, the newest `limit`
@@ -185,6 +196,11 @@ pub struct Hello {
     /// The ops this client may use.
     pub ops: Vec<String>,
     pub role: Role,
+    /// `send`, `keys` and `answer` may carry a `request` id, unique within the `client`
+    /// named in `hello`: sent again after a lost reply, it runs once and gets the first
+    /// reply back, for a day. Absent from machines before 11-04.
+    #[serde(default)]
+    pub requests: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -295,6 +311,7 @@ mod tests {
             op: Op::Keys {
                 terminal: "rt".into(),
                 keys: vec!["up".into()],
+                request: None,
             },
         };
         assert_eq!(

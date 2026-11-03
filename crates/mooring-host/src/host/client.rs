@@ -2,6 +2,7 @@
 //! newer host.
 use super::*;
 mod edit;
+mod once;
 
 pub(super) fn serve_client(
     mut stream: UnixStream,
@@ -368,6 +369,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             Ok(Reply::Size { cols, rows })
         }
         Request::Edit { edit, request } => edit::edit(shared, edit, request),
+        Request::Once { request, inner } => once::once(shared, request, *inner),
         Request::Launch {
             id,
             space,

@@ -132,13 +132,13 @@ pub fn serve(
             }
         }
     });
-    let (work, jobs) = mpsc::channel::<(u64, Value)>();
+    let (work, jobs) = mpsc::channel::<(u64, Value, Option<String>)>();
     let streams: Streams = Default::default();
     let worker = {
         let (out, socket, access) = (out.clone(), socket.to_owned(), access.clone());
         thread::spawn(move || {
-            for (id, request) in jobs {
-                let result = unary(&socket, &request);
+            for (id, request, client) in jobs {
+                let result = unary(&socket, &request, client.as_deref());
                 let op = request["op"].as_str().unwrap_or_default();
                 if devices::acts(op) {
                     access.record(op, &request, &result);
@@ -160,6 +160,8 @@ pub fn serve(
         })
     };
     let mut greeted = false;
+    // What `hello` named this client, for the ids its writes carry.
+    let mut client: Option<String> = None;
     let mut line = Vec::new();
     loop {
         line.clear();
@@ -196,6 +198,9 @@ pub fn serve(
         match op {
             "hello" => {
                 greeted = true;
+                client = (request["client"].as_str())
+                    .filter(|c| !c.is_empty())
+                    .map(str::to_owned);
                 let _ = out.send(json!({ "id": id, "ok": hello(socket, access.role) }));
             }
             _ if !greeted => fail("先发 hello".into()),
@@ -226,7 +231,7 @@ pub fn serve(
                 None => fail("close 需要 stream".into()),
             },
             _ if OPS.contains(&op) => {
-                let _ = work.send((id, request));
+                let _ = work.send((id, request, client.clone()));
             }
             _ => fail(format!("不认识的 op {op:?}")),
         }
@@ -256,7 +261,22 @@ fn hello(socket: &Path, role: Role) -> Value {
             .map(|op| op.to_string())
             .collect(),
         role,
+        requests: true,
     })
+}
+
+/// A write its client named: it runs once however often it comes (`Request::Once`).
+fn named(client: Option<&str>, request: &Value, inner: Request) -> Request {
+    match (client, request["request"].as_str()) {
+        (Some(client), Some(id)) if !id.is_empty() => Request::Once {
+            request: mooring_core::protocol::RequestId {
+                client: format!("remote:{client}"),
+                id: id.to_owned(),
+            },
+            inner: Box::new(inner),
+        },
+        _ => inner,
+    }
 }
 
 fn text<'a>(request: &'a Value, key: &str) -> io::Result<&'a str> {
@@ -270,7 +290,7 @@ fn ok_reply(reply: Reply) -> io::Result<Value> {
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }
-fn unary(socket: &Path, request: &Value) -> io::Result<Value> {
+fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
     let terminal = || text(request, "terminal").map(str::to_owned);
     match request["op"].as_str().unwrap_or_default() {
         "list" => match rpc(socket, &Request::Workspace)? {
@@ -302,14 +322,14 @@ fn unary(socket: &Path, request: &Value) -> io::Result<Value> {
                 other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
             }
         }
-        "send" => ok_reply(rpc(
-            socket,
-            &Request::SendText {
+        "send" => {
+            let send = Request::SendText {
                 id: terminal()?,
                 text: text(request, "text")?.to_owned(),
                 submit: request["enter"].as_bool().unwrap_or(false),
-            },
-        )?),
+            };
+            ok_reply(rpc(socket, &named(client, request, send))?)
+        }
         "keys" => {
             let keys = request["keys"]
                 .as_array()
@@ -318,24 +338,22 @@ fn unary(socket: &Path, request: &Value) -> io::Result<Value> {
                 .map(|k| k.as_str().map(str::to_owned))
                 .collect::<Option<Vec<_>>>()
                 .ok_or_else(|| io::Error::other("keys 需要字符串数组"))?;
-            ok_reply(rpc(
-                socket,
-                &Request::SendKeys {
-                    id: terminal()?,
-                    keys,
-                },
-            )?)
+            let keys = Request::SendKeys {
+                id: terminal()?,
+                keys,
+            };
+            ok_reply(rpc(socket, &named(client, request, keys))?)
         }
-        "answer" => ok_reply(rpc(
-            socket,
-            &Request::AnswerApproval {
+        "answer" => {
+            let answer = Request::AnswerApproval {
                 id: terminal()?,
                 question: text(request, "question")?.to_owned(),
                 allow: request["allow"]
                     .as_bool()
                     .ok_or_else(|| io::Error::other("answer 需要 allow: true 或 false"))?,
-            },
-        )?),
+            };
+            ok_reply(rpc(socket, &named(client, request, answer))?)
+        }
         "chat" => chat(socket, request),
         op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
     }
