@@ -111,7 +111,8 @@ impl Adapter for Claude {
     }
     /// Claude Code hands its status line the account's windows (`rate_limits`), and
     /// Mooring's status-line wrapper keeps the last payload of each conversation in
-    /// `$MOORING_HOME/context/claude-code/<id>.json` (`~/.mooring` by default).
+    /// `$MOORING_HOME/context/claude-code/<id>.json` (`~/.mooring` by default, or
+    /// `~/.keepline` where only the wrapper installed before the rename writes).
     fn account(&self, _transcript: &Path, id: &str) -> Option<Quota> {
         if id.is_empty()
             || !id
@@ -122,7 +123,9 @@ impl Adapter for Claude {
         }
         let home = std::env::var_os("MOORING_HOME")
             .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".mooring")))?;
+            .or_else(|| {
+                std::env::var_os("HOME").map(|h| mooring_core::legacy::agent_home(Path::new(&h)))
+            })?;
         let snapshot = std::fs::read(home.join("context/claude-code").join(format!("{id}.json")));
         statusline_quota(&serde_json::from_slice(&snapshot.ok()?).ok()?)
     }
