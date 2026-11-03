@@ -139,9 +139,15 @@ impl SidebarPrefs {
     }
 }
 
-/// The room a row's pin takes at its right end, empty.
-pub(super) fn pin_slot() -> gpui::Div {
-    div().flex_shrink_0().w(px(T::S12))
+/// What a session row's right-click menu does.
+#[derive(Clone)]
+pub(super) enum SessionAction {
+    Open,
+    /// Pins or unpins this terminal.
+    Pin(String),
+    Rename,
+    /// Closes this terminal's pane, asking first while its Agent runs.
+    Close(String),
 }
 
 /// The last path segment, as a folder is named.
@@ -165,7 +171,7 @@ impl Workbench {
         self.sidebar.save();
         cx.notify();
     }
-    /// The row's dot: pins its terminal to 置顶, or takes it off.
+    /// The session menu's 置顶: pins its terminal to 置顶, or takes it off.
     pub(super) fn toggle_pin(&mut self, terminal: &str, cx: &mut Context<Self>) {
         let pins = &mut self.sidebar.pinned;
         match pins.iter().position(|t| t == terminal) {
@@ -288,11 +294,8 @@ impl Workbench {
         } else {
             T::color(seen.seen_status())
         });
-        let row_group = gpui::SharedString::from(format!("session-row-{}", session.id));
-        let pin = self.pin_control(session, &row_group, cx);
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))
-            .group(row_group.clone())
             .min_h(px(T::ROW))
             .px(px(T::S8))
             .flex()
@@ -329,12 +332,7 @@ impl Workbench {
                     })
                     .child(title)
                     .child(if attention { dot(g) } else { seen_dot(g) })
-                    .child(trailing)
-                    // A row with nothing to pin keeps the pin's room, so every row's time
-                    // and the todos' 开始 end on one line.
-                    .child(
-                        pin.map_or_else(|| pin_slot().into_any_element(), |p| p.into_any_element()),
-                    ),
+                    .child(trailing),
             )
             .when_some(detail, |d, text| {
                 d.child(
@@ -348,7 +346,14 @@ impl Workbench {
                         .child(text),
                 )
             })
-            .tooltip(super::diagnostics::tip(self.session_tip(session)))
+            // The hover card would cover the right-click menu.
+            .when(self.layout.session_menu.is_none(), |d| {
+                d.tooltip(super::diagnostics::tip(self.session_tip(session)))
+            })
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                self.open_session_menu(session, cx),
+            )
             // Straight to its pane; an exited one resumes in a new pane.
             .on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
@@ -361,39 +366,89 @@ impl Workbench {
             )
             .into_any_element()
     }
-    /// The row's pin: only a session with a live terminal can be pinned, the pin being
-    /// that terminal. Shown on hover, or always once pinned.
-    fn pin_control(
+    /// Right-click on a session row: its menu at the pointer.
+    fn open_session_menu(
         &self,
         session: &AgentSession,
-        row_group: &gpui::SharedString,
         cx: &Context<Self>,
-    ) -> Option<gpui::Stateful<gpui::Div>> {
-        let terminal = live_terminal(&self.workspace, session).map(|t| t.id.clone())?;
-        let pinned = self.sidebar.pinned.contains(&terminal);
-        let row_group = row_group.clone();
-        Some(
-            div()
-                .id(gpui::SharedString::from(format!("pin-{}", session.id)))
-                .role(gpui::accesskit::Role::Button)
-                .aria_label(if pinned { "取消置顶" } else { "置顶" })
-                .flex_shrink_0()
-                .w(px(T::S12))
-                .flex()
-                .justify_center()
-                .cursor_pointer()
-                .text_size(px(T::CHIP_SIZE))
-                .text_color(T::color(if pinned { T::link() } else { T::muted() }))
-                .child(if pinned { "●" } else { "○" })
-                .when(!pinned, |d| {
-                    d.opacity(0.).group_hover(row_group, |s| s.opacity(1.))
-                })
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.toggle_pin(&terminal, cx);
-                })),
-        )
+    ) -> impl Fn(&gpui::MouseDownEvent, &mut Window, &mut gpui::App) + 'static {
+        let id = session.id.clone();
+        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+            this.layout.session_menu = Some((id.clone(), event.position));
+            cx.stop_propagation();
+            cx.notify();
+        })
+    }
+    /// What the session menu lists, in order: 打开, then 置顶 / 取消置顶 for a session
+    /// whose terminal runs (the pin being that terminal), 重命名, and 关闭终端.
+    pub(super) fn session_menu_entries(&self, id: &str) -> Vec<(&'static str, SessionAction)> {
+        let Some(session) = self.workspace.agent_sessions.iter().find(|s| s.id == id) else {
+            return vec![];
+        };
+        let terminal = live_terminal(&self.workspace, session).map(|t| t.id.clone());
+        let mut out = vec![("打开", SessionAction::Open)];
+        if let Some(t) = &terminal {
+            let pinned = self.sidebar.pinned.contains(t);
+            out.push((
+                if pinned { "取消置顶" } else { "置顶" },
+                SessionAction::Pin(t.clone()),
+            ));
+        }
+        out.push(("重命名", SessionAction::Rename));
+        if let Some(t) = terminal {
+            out.push(("关闭终端", SessionAction::Close(t)));
+        }
+        out
+    }
+    pub(super) fn session_menu_view(
+        &self,
+        id: &str,
+        position: gpui::Point<gpui::Pixels>,
+        window: &Window,
+        cx: &Context<Self>,
+    ) -> gpui::AnyElement {
+        let entries = self
+            .session_menu_entries(id)
+            .into_iter()
+            .map(|(name, action)| {
+                let id = id.to_owned();
+                button(
+                    gpui::SharedString::from(format!("session-menu-{name}")),
+                    name,
+                )
+                .w_full()
+                .justify_start()
+                .border_0()
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.layout.session_menu = None;
+                    this.session_action(&id, &action, window, cx);
+                    cx.notify();
+                }))
+                .into_any_element()
+            })
+            .collect();
+        self.popup(position, entries, window, cx, |this| {
+            this.layout.session_menu = None
+        })
+    }
+    fn session_action(
+        &mut self,
+        id: &str,
+        action: &SessionAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match action {
+            SessionAction::Open => {
+                if let Some(s) = self.workspace.agent_sessions.iter().find(|s| s.id == id) {
+                    let s = s.clone();
+                    self.open_session(&s, window, cx);
+                }
+            }
+            SessionAction::Pin(terminal) => self.toggle_pin(terminal, cx),
+            SessionAction::Rename => self.rename_session(id, window, cx),
+            SessionAction::Close(terminal) => self.close_pane(terminal, cx),
+        }
     }
     /// A row in the 状态 / 目录 presets (and plugin presets beside them), after
     /// sidebar-density.html: the CLI's mark, the title in the system font, then the
@@ -454,11 +509,8 @@ impl Workbench {
                 None => short_ago(self.session_updated(session), now()),
             },
         };
-        let row_group = gpui::SharedString::from(format!("session-row-{}", session.id));
-        let pin = self.pin_control(session, &row_group, cx);
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))
-            .group(row_group)
             .px(px(T::S8))
             .py(px(T::S4))
             .flex()
@@ -509,8 +561,7 @@ impl Workbench {
                             .font_weight(gpui::FontWeight::BOLD)
                             .text_size(px(T::SMALL))
                             .child(crate::ui::widgets::status_mark(g)),
-                    )
-                    .children(pin),
+                    ),
             )
             .when_some(detail, |d, text| {
                 // A second line that opens with the state word shows that word in its ink;
@@ -566,7 +617,14 @@ impl Workbench {
                         }),
                 )
             })
-            .tooltip(super::diagnostics::tip(self.session_tip(session)))
+            // The hover card would cover the right-click menu.
+            .when(self.layout.session_menu.is_none(), |d| {
+                d.tooltip(super::diagnostics::tip(self.session_tip(session)))
+            })
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                self.open_session_menu(session, cx),
+            )
             .on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     if event.click_count() == 2 {

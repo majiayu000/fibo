@@ -1015,7 +1015,6 @@ impl Workbench {
                             this.ask_agent(start.clone(), false, cx);
                         })),
                     )
-                    .child(super::sidebar_list::pin_slot())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.nav.task_detail = Some(tid.clone());
                         cx.notify();

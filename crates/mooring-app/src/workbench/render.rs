@@ -716,6 +716,9 @@ impl Render for Workbench {
         if let Some((id, position)) = &self.layout.tab_menu {
             root = root.child(self.tab_menu_view(id, *position, window, cx));
         }
+        if let Some((id, position)) = &self.layout.session_menu {
+            root = root.child(self.session_menu_view(id, *position, window, cx));
+        }
         if let Some((id, position)) = &self.layout.space_menu {
             root = root.child(self.space_menu_view(id, *position, window, cx));
         }

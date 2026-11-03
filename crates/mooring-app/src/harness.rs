@@ -2770,21 +2770,18 @@ pub fn start(
             wait(800).await;
             shot("5-peek-off.png", cx);
             eprintln!("peek native PASS: hidden approval peeked, answered once, size kept until typed in, Esc closes without reaching the Agent, off opens the session instead");
-            // 置顶: the row's dot shows on hover, a real click pins the terminal, the pin is
-            // saved, and it comes off once the terminal ends.
-            let row = gpui::point(px(100.), px(292.));
-            let dot = gpui::point(px(theme::Theme::SIDEBAR - 22.), px(292.));
-            cx.update_window(handle.into(), |_, w, a| {
-                use gpui::InputEvent;
-                w.dispatch_event(gpui::MouseMoveEvent { position: row, pressed_button: None, modifiers: Default::default() }.to_platform_input(), a);
-                w.refresh(); w.draw(a).clear(a);
-            }).unwrap();
-            wait(200).await;
-            shot("4-hover.png", cx);
-            cx.update_window(handle.into(), |_, w, a| native_click(w, a, dot, gpui::MouseButton::Left)).unwrap();
+            // 置顶: right-clicking the row opens its menu, 置顶 there pins the terminal, the
+            // pin is saved, and it comes off once the terminal ends. The row is the only
+            // session, under 会话 and its 在跑 heading.
+            let row = gpui::point(px(100.), px(197.));
+            cx.update_window(handle.into(), |_, w, a| { w.refresh(); w.draw(a).clear(a); native_click(w, a, row, gpui::MouseButton::Right) }).unwrap();
             wait(300).await;
-            assert_eq!(handle.update(cx, |v, _, _| v.visual_pins()).unwrap(), vec!["agent".to_owned()], "the dot did not pin");
-            assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "the dot's click also reached the row");
+            shot("4-session-menu.png", cx);
+            let item = handle.update(cx, |v, _, _| v.visual_session_menu_point("置顶")).unwrap();
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, item, gpui::MouseButton::Left)).unwrap();
+            wait(300).await;
+            assert_eq!(handle.update(cx, |v, _, _| v.visual_pins()).unwrap(), vec!["agent".to_owned()], "the menu did not pin");
+            assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "the menu's click also reached the row");
             let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("sidebar")).unwrap();
             assert!(saved.lines().any(|l| l == "pin agent"), "pin not saved: {saved:?}");
             shot("5-pinned.png", cx);
@@ -2798,7 +2795,7 @@ pub fn start(
             let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("sidebar")).unwrap();
             assert!(!saved.contains("pin "), "ended pin still saved: {saved:?}");
             shot("6-unpinned.png", cx);
-            eprintln!("pin native PASS: hover dot, click pins and saves, ended terminal unpins");
+            eprintln!("pin native PASS: row menu pins and saves, ended terminal unpins");
             // 在编辑器里看滚动内容: the pane menu opens the terminal's text with $EDITOR in a
             // new tab; the stand-in editor (MOORING_TEST_EDITOR) copies what it was given.
             if let Some(edited) = std::env::var_os("MOORING_EDITED") {

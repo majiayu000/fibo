@@ -421,6 +421,7 @@ impl Workbench {
                 pending_command: None,
                 menu: None,
                 tab_menu: None,
+                session_menu: None,
                 space_menu: None,
                 space_removing: false,
                 space_switch: false,
@@ -804,6 +805,7 @@ impl Workbench {
     pub(super) fn request_close(&mut self, closing: Closing, cx: &mut Context<Self>) {
         self.layout.menu = None;
         self.layout.tab_menu = None;
+        self.layout.session_menu = None;
         self.layout.space_menu = None;
         let quiet = match closing {
             // A host that hands its terminals over ends none of them: nothing to confirm.

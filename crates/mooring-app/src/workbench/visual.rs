@@ -247,6 +247,21 @@ impl Workbench {
         }
         panic!("no {title} in the pane menu");
     }
+    /// Where the open session menu lists `title`.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_session_menu_point(&self, title: &str) -> gpui::Point<gpui::Pixels> {
+        let (id, position) = self
+            .layout
+            .session_menu
+            .as_ref()
+            .expect("right mouse opened session menu");
+        let index = self
+            .session_menu_entries(id)
+            .iter()
+            .position(|(name, _)| *name == title)
+            .unwrap_or_else(|| panic!("no {title} in the session menu"));
+        *position + gpui::point(px(T::S20), px(T::S6 + T::ROW * (index as f32 + 0.5)))
+    }
     #[cfg(feature = "visual-test")]
     pub fn visual_tab_menu_point(&self, index: usize) -> gpui::Point<gpui::Pixels> {
         let (_, position) = self
