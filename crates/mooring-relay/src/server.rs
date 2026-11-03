@@ -20,7 +20,10 @@ use axum::{
     Json, Router,
 };
 use futures_util::{SinkExt, StreamExt};
-use mooring_remote::wire::{self, bin, Frame};
+use mooring_remote::{
+    close,
+    wire::{self, bin, Frame},
+};
 use std::{
     collections::HashMap,
     io,
@@ -76,6 +79,7 @@ pub async fn serve(listener: TcpListener, config: Config) -> io::Result<()> {
     let relay = Arc::new(Relay {
         config,
         agents: Mutex::default(),
+        retired: Mutex::default(),
     });
     let app = Router::new()
         .route("/healthz", get(health))
@@ -88,6 +92,9 @@ pub async fn serve(listener: TcpListener, config: Config) -> io::Result<()> {
 struct Relay {
     config: Config,
     agents: Mutex<HashMap<String, Arc<Agent>>>,
+    /// Token hashes a registered machine said it no longer uses, to the hash it uses now;
+    /// kept only while that machine is on.
+    retired: Mutex<HashMap<String, String>>,
 }
 
 struct Agent {
@@ -131,10 +138,12 @@ impl Agent {
         if b.behind.fetch_add(n, Ordering::AcqRel) + n > limit {
             let b = sockets.remove(id).expect("present");
             drop(sockets);
-            let _ = b.cut.send(Some((1013, "phone too far behind".into())));
+            let _ = b
+                .cut
+                .send(Some((close::TOO_SLOW, "phone too far behind".into())));
             self.send(&Frame::Wclose {
                 id: id.into(),
-                code: Some(1013),
+                code: Some(close::TOO_SLOW),
                 reason: Some("phone too far behind".into()),
             });
             return;
@@ -183,6 +192,23 @@ async fn phone(
         .ok()
         .and_then(|a| a.get(&wire::token_hash(token)).cloned());
     let Some(agent) = found else {
+        // A token its machine replaced: say so with a close code, which a phone's
+        // WebSocket reports where an HTTP status before the upgrade is lost.
+        let retired = relay
+            .retired
+            .lock()
+            .is_ok_and(|r| r.contains_key(&wire::token_hash(token)));
+        if retired {
+            return ws.on_upgrade(|mut socket| async move {
+                let _ = socket
+                    .send(close(
+                        close::UNKNOWN_MACHINE,
+                        "Machine has a new code; pair again",
+                    ))
+                    .await;
+            });
+        }
+        // Not registered: the machine may just be offline.
         return StatusCode::BAD_GATEWAY.into_response();
     };
     if agent.sockets().len() >= relay.config.max_sockets_per_agent {
@@ -204,11 +230,12 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
         }
         None
     });
-    let (token_hash, proto) = match register.await {
+    let (token_hash, proto, retired) = match register.await {
         Ok(Some(Frame::Register {
             token_hash,
             key,
             proto,
+            retired,
             ..
         })) => {
             let refuse = if config.key.as_ref().is_some_and(|k| key.as_ref() != Some(k)) {
@@ -228,11 +255,17 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
                 let _ = sink.send(close(code, message)).await;
                 return;
             }
+            let retired: Vec<String> = retired
+                .into_iter()
+                .filter(|h| wire::is_token_hash(h) && *h != token_hash)
+                .take(wire::MAX_RETIRED)
+                .collect();
             (
                 token_hash,
                 proto
                     .filter(|&p| p >= 2)
                     .map_or(1, |p| p.min(wire::PROTOCOL)),
+                retired,
             )
         }
         _ => return,
@@ -255,6 +288,14 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
         let _ = old
             .out
             .send(Out::Close(4000, "Replaced by a newer connection"));
+    }
+    {
+        let mut r = relay.retired.lock().unwrap_or_else(|e| e.into_inner());
+        // What this machine listed last time goes; the list it sends now is the whole list.
+        r.retain(|_, owner| *owner != token_hash);
+        for old in retired {
+            r.insert(old, token_hash.clone());
+        }
     }
     agent.send(&Frame::Registered { proto: Some(proto) });
 
@@ -364,12 +405,19 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
             .is_some_and(|a| Arc::ptr_eq(a, &agent))
         {
             agents.remove(&token_hash);
+            relay
+                .retired
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .retain(|_, owner| *owner != token_hash);
         }
     }
     // Phones redial instead of talking into a dead tunnel.
     let gone: Vec<_> = agent.sockets().drain().map(|(_, b)| b).collect();
     for b in gone {
-        let _ = b.cut.send(Some((1012, "Machine disconnected".into())));
+        let _ = b
+            .cut
+            .send(Some((close::MACHINE_GONE, "Machine disconnected".into())));
     }
 }
 

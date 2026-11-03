@@ -1,10 +1,13 @@
 // Every paired machine's connection and what it last said: online or not, what this
 // device may do, and its conversations. Screens read it with `useHub`; it reconnects on
-// its own (1 s, doubling, at most 30 s) except when the machine refused this device.
+// its own (1 s, doubling, at most 30 s) except when the machine refused this device; what
+// each close code means is in `close.ts`. Cards of a machine that is not online are what
+// it last said, not what is true now.
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { forgetMachine, loadMachines, machineId, saveMachine } from '../store/machines';
-import { closeText, Remote } from './client';
+import { Remote, type RemoteError } from './client';
+import { closeOutcome } from './close';
 import type { Link } from './link';
 
 export type Phase = 'working' | 'waiting' | 'idle' | 'shell';
@@ -87,21 +90,13 @@ async function connect(id: string) {
   try {
     r = await Remote.connect(m.link);
   } catch (e) {
-    const message = (e as Error).message;
-    const refused = message.includes('没有配对');
-    set(id, { status: refused ? 'refused' : 'offline', error: message });
-    if (!refused) later(id);
+    ended(id, (e as RemoteError).code, (e as Error).message);
     return;
   }
   remotes.set(id, r);
   r.onEnded((e) => {
     remotes.delete(id);
-    if (!get(id)) return;
-    set(id, {
-      status: e.refused ? 'refused' : 'offline',
-      error: e.refused ? '这台手机被取消配对，或者权限改了；重新扫码配对' : closeText(e.code),
-    });
-    if (!e.refused) later(id);
+    ended(id, e.code);
   });
   try {
     const hello = await r.request('hello', { version: 1 });
@@ -112,20 +107,44 @@ async function connect(id: string) {
       ops: hello.ops ?? [],
       name: hello.machine?.name || m.name,
     });
-    let queued = false;
-    await r.stream('events', {}, () => {
-      // A burst of events is one list.
-      if (queued) return;
-      queued = true;
-      setTimeout(() => {
-        queued = false;
-        refresh(id);
-      }, 150);
-    });
+    await follow(id, r);
     await refresh(id);
   } catch (e) {
     r.close();
   }
+}
+
+/** The connection is down: shown by its close code, and tried again unless refused. */
+function ended(id: string, code: number | undefined, fallback?: string) {
+  if (!get(id)) return;
+  const o = closeOutcome(code);
+  // Without a code, what the connection said (a timeout, a bad handshake) says more.
+  set(id, { status: o.status, error: code === undefined && fallback ? fallback : o.text });
+  if (o.retry === 'now') {
+    retry.delete(id);
+    connect(id);
+  } else if (o.retry === 'later') later(id);
+}
+
+/** Follows the machine's events, a burst of them one list; opened again if it ends alone. */
+function follow(id: string, r: Remote): Promise<unknown> {
+  let queued = false;
+  return r.stream('events', {}, (m) => {
+    if (m.type === 'end') {
+      // The connection ending ends it too; then the reconnect opens a new one.
+      if (r.ended || remotes.get(id) !== r) return;
+      setTimeout(() => {
+        if (!r.ended && remotes.get(id) === r) follow(id, r).catch(() => r.close());
+      }, 1000);
+      return;
+    }
+    if (queued) return;
+    queued = true;
+    setTimeout(() => {
+      queued = false;
+      refresh(id);
+    }, 150);
+  });
 }
 
 function later(id: string) {

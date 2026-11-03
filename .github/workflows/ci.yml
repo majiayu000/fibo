@@ -42,3 +42,26 @@ jobs:
       # one retry each, every other failure fails the step (see ci-test.sh).
       - name: Cargo test
         run: sh ci-test.sh
+
+  mobile:
+    name: Phone app tests and typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Also checks the app against crates/mooring-remote/vectors/v1.json.
+      - name: Bun test
+        run: bun test
+
+      - name: Typecheck
+        run: bun run typecheck

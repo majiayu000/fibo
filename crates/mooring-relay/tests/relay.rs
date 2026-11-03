@@ -1,7 +1,10 @@
 //! The relay end to end over real sockets: a fake machine and fake phones.
 use futures_util::{SinkExt, StreamExt};
 use mooring_relay::server::{self, Config};
-use mooring_remote::wire::{self, bin, Frame};
+use mooring_remote::{
+    close,
+    wire::{self, bin, Frame},
+};
 use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
@@ -17,6 +20,10 @@ async fn relay(config: Config) -> String {
 }
 
 async fn machine(base: &str, token: &str, key: Option<&str>) -> Ws {
+    machine_retiring(base, token, key, &[]).await
+}
+
+async fn machine_retiring(base: &str, token: &str, key: Option<&str>, retired: &[&str]) -> Ws {
     let hash = wire::token_hash(token);
     let (mut ws, _) = connect_async(format!("{base}/agent?th={hash}"))
         .await
@@ -27,6 +34,7 @@ async fn machine(base: &str, token: &str, key: Option<&str>) -> Ws {
         ver: None,
         key: key.map(Into::into),
         proto: Some(2),
+        retired: retired.iter().map(|t| wire::token_hash(t)).collect(),
     };
     ws.send(Message::text(register.to_text())).await.unwrap();
     ws
@@ -195,6 +203,7 @@ async fn unknown_tokens_bad_keys_and_bad_hashes_are_refused() {
         ver: None,
         key: Some("k".into()),
         proto: None,
+        retired: vec![],
     };
     m.send(Message::text(bad.to_text())).await.unwrap();
     assert!(matches!(frame(&mut m).await, Frame::Error { .. }));
@@ -203,6 +212,40 @@ async fn unknown_tokens_bad_keys_and_bad_hashes_are_refused() {
     let mut m = machine(&base, TOKEN, Some("k")).await;
     // No proto offered would be 1; this one offers 2.
     assert_eq!(frame(&mut m).await, Frame::Registered { proto: Some(2) });
+}
+
+#[tokio::test]
+async fn a_phone_on_a_retired_token_is_told_to_pair_again_while_its_machine_is_on() {
+    const OLD: &str = "oldoldoldoldoldoldoldoldoldold01";
+    let base = relay(Config::default()).await;
+    let mut m = machine_retiring(&base, TOKEN, None, &[OLD]).await;
+    assert_eq!(frame(&mut m).await, Frame::Registered { proto: Some(2) });
+
+    // The old token gets a socket that closes with its own code, which a phone can read
+    // (an HTTP status before the upgrade it cannot).
+    let mut p = phone(&base, OLD).await;
+    assert_eq!(closed(&mut p).await, close::UNKNOWN_MACHINE);
+    // The machine's current token still reaches it.
+    let _p = phone(&base, TOKEN).await;
+    assert!(matches!(frame(&mut m).await, Frame::Wopen { .. }));
+
+    // Once the machine is gone the old token is only unknown again: it may just be offline.
+    drop(m);
+    drop(_p);
+    let status = async || loop {
+        match connect_async(format!("{base}/c/{OLD}/keepline")).await {
+            Err(tokio_tungstenite::tungstenite::Error::Http(r)) => break r.status().as_u16(),
+            Ok((mut p, _)) => {
+                closed(&mut p).await;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Err(e) => panic!("{e:?}"),
+        }
+    };
+    let got = tokio::time::timeout(Duration::from_secs(5), status())
+        .await
+        .expect("the retired token outlived its machine");
+    assert_eq!(got, 502);
 }
 
 #[tokio::test]

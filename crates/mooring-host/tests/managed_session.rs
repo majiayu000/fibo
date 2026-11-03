@@ -5488,7 +5488,10 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert_eq!(view.closed(Duration::from_secs(5)), Some(4401));
+    assert_eq!(
+        view.closed(Duration::from_secs(5)),
+        Some(mooring_remote::close::ROLE_CHANGED)
+    );
     eprintln!("role changed → session dropped in {:?}", changed.elapsed());
     let mut view = Phone::connect(&viewer);
     view.say(json!({ "id": 1, "op": "hello" }));
@@ -5744,7 +5747,10 @@ fn the_host_keeps_phones_on_a_relay_and_shows_the_app_who_is_on() {
         change: RemoteChange::Kick,
     })
     .unwrap();
-    assert_eq!(phone.closed(Duration::from_secs(5)), Some(4401));
+    assert_eq!(
+        phone.closed(Duration::from_secs(5)),
+        Some(mooring_remote::close::KICKED)
+    );
     until("gone", &|s| {
         s.live.online.is_empty() && s.devices.len() == 1
     });

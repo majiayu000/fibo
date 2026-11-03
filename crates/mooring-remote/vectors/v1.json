@@ -1,9 +1,23 @@
 {
   "about": "mooring remote v1 / pairing link v2. Bytes are lowercase hex; codes are base64url without padding.",
+  "close": {
+    "bad_message": 4400,
+    "kicked": 4410,
+    "machine_gone": 1012,
+    "normal": 1000,
+    "role_changed": 4411,
+    "too_slow": 1013,
+    "unknown_machine": 4404,
+    "unpaired": 4401
+  },
   "device_key": {
     "bytes": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
     "psk": "7ca4eb360cddd7db1276e9542609d3df4f0387497969d710acd7e16534a52adb",
     "text": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8"
+  },
+  "limits": {
+    "chunk": 32768,
+    "window": 1048576
   },
   "link": {
     "text": "mooring://pair?v=2&relay=https%3A%2F%2Frelay.example.com&code=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&device=a1b2c3d4e5f6&key=QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8&machine=2fd56880-55df-4677-86df-7c3496a1b2c3&name=Lin%20%E7%9A%84%20Mac",

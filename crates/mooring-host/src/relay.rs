@@ -19,6 +19,7 @@ use mooring_core::protocol::{
 };
 use mooring_host::devices::{self, Device, Role};
 use mooring_remote::{
+    close,
     link::Link,
     secure::{self, Channel, Code, Message as Secure},
     wire::{self, bin, Frame},
@@ -394,6 +395,7 @@ async fn connect(
         ver: Some(format!("mooring/{}", env!("CARGO_PKG_VERSION"))),
         key: key.map(Into::into),
         proto: Some(wire::PROTOCOL),
+        retired: devices::retired(socket),
     };
     if let Err(e) = sink.send(Message::text(register.to_text())).await {
         return (Ended::Lost(e.to_string()), false);
@@ -454,23 +456,26 @@ async fn connect(
             // Only while a phone is on: an unpaired one is dropped within RECHECK.
             _ = recheck.tick(), if open => {
                 let now = paired.load(socket);
-                let gone: Vec<String> = sessions
+                let gone: Vec<(String, Dropped)> = sessions
                     .iter()
                     .filter_map(|(id, s)| match s {
-                        Session::Open { device, role, since, .. } => (!now
-                            .iter()
-                            .any(|d| &d.id == device && d.role == *role && d.kicked < *since))
-                        .then(|| id.clone()),
+                        Session::Open { device, role, since, .. } => {
+                            dropped(now, device, *role, *since).map(|why| (id.clone(), why))
+                        }
                         Session::Pairing(_) => None,
                     })
                     .collect();
-                for id in gone {
+                for (id, why) in gone {
                     // Tell the phone why before the session ends and says only "done".
-                    close(&out, &id, 4401, "unpaired").await;
+                    let (code, reason) = why.close();
+                    close(&out, &id, code, reason).await;
                     if let Some(Session::Open { device, .. }) = sessions.remove(&id) {
                         live.left(&id);
-                        eprintln!("mooring remote: 设备 {device} 被断开、取消配对或改了权限");
-                        devices::log(&log, json!({ "event": "dropped", "device": device }));
+                        eprintln!("mooring remote: 设备 {device} {}", why.label());
+                        devices::log(
+                            &log,
+                            json!({ "event": "dropped", "device": device, "why": reason }),
+                        );
                     }
                 }
                 continue;
@@ -543,7 +548,7 @@ async fn connect(
                         None => {
                             eprintln!("mooring remote: 设备 {device} 没有配对或密钥不对，已拒绝");
                             devices::log(&log, json!({ "event": "refused", "device": device }));
-                            close(&out, &id, 4401, "not paired").await;
+                            close(&out, &id, close::UNPAIRED, "not paired").await;
                             None
                         }
                     }
@@ -563,7 +568,7 @@ async fn connect(
                     Err(e) => {
                         eprintln!("mooring remote: 手机 {id} 断开：{e}");
                         live.left(&id);
-                        close(&out, &id, 4400, "bad message").await;
+                        close(&out, &id, close::BAD_MESSAGE, "bad message").await;
                         None
                     }
                 },
@@ -604,7 +609,7 @@ async fn connect(
                 // Text messages from a phone are not part of this protocol.
                 Ok(Frame::Wmsg { id, s: Some(_), .. }) => {
                     sessions.remove(&id);
-                    close(&out, &id, 4400, "binary only").await;
+                    close(&out, &id, close::BAD_MESSAGE, "binary only").await;
                 }
                 Ok(Frame::Hreq { id }) => {
                     let head = Frame::Hres {
@@ -673,6 +678,49 @@ enum Session {
         /// Unix milliseconds; a "disconnect now" after it drops the session.
         since: u64,
     },
+}
+
+/// Why an open session ends before the phone leaves; each has its own close code, since
+/// the phone does something different for each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Dropped {
+    /// No longer paired: only a new pairing helps.
+    Unpaired,
+    /// "Disconnect" on the computer: still paired, may come back.
+    Kicked,
+    /// A new role: connecting again gives it.
+    RoleChanged,
+}
+
+impl Dropped {
+    fn close(self) -> (u16, &'static str) {
+        match self {
+            Dropped::Unpaired => (close::UNPAIRED, "unpaired"),
+            Dropped::Kicked => (close::KICKED, "disconnected"),
+            Dropped::RoleChanged => (close::ROLE_CHANGED, "role changed"),
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Dropped::Unpaired => "被取消配对",
+            Dropped::Kicked => "被电脑断开",
+            Dropped::RoleChanged => "改了权限，断开等它重连",
+        }
+    }
+}
+
+/// Whether a session the device opened at `since` (ms) with `role` must end now.
+fn dropped(now: &[Device], device: &str, role: Role, since: u64) -> Option<Dropped> {
+    let Some(d) = now.iter().find(|d| d.id == device) else {
+        return Some(Dropped::Unpaired);
+    };
+    if d.kicked >= since {
+        Some(Dropped::Kicked)
+    } else if d.role != role {
+        Some(Dropped::RoleChanged)
+    } else {
+        None
+    }
 }
 
 /// The paired devices, read again only when their file changed.
@@ -851,8 +899,55 @@ fn pump(
     }
     let frame = Frame::Wclose {
         id: id.into(),
-        code: Some(1000),
+        code: Some(close::NORMAL),
         reason: None,
     };
     let _ = out.blocking_send(Message::text(frame.to_text()));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn device(id: &str, role: Role, kicked: u64) -> Device {
+        serde_json::from_value(json!({
+            "id": id, "name": id, "key": "", "role": role, "paired": 0, "kicked": kicked,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn each_reason_a_session_ends_has_its_own_close_code() {
+        let since = 1_000;
+        let now = [device("a", Role::Full, 0), device("b", Role::View, 0)];
+        assert_eq!(dropped(&now, "a", Role::Full, since), None);
+
+        // Unpaired: the phone must pair again.
+        assert_eq!(
+            dropped(&now, "gone", Role::Full, since),
+            Some(Dropped::Unpaired)
+        );
+        assert_eq!(Dropped::Unpaired.close().0, close::UNPAIRED);
+
+        // "Disconnect" after the session opened ends it; one from before does not.
+        let kicked = [device("a", Role::Full, since + 1)];
+        assert_eq!(
+            dropped(&kicked, "a", Role::Full, since),
+            Some(Dropped::Kicked)
+        );
+        assert_eq!(Dropped::Kicked.close().0, close::KICKED);
+        let earlier = [device("a", Role::Full, since - 1)];
+        assert_eq!(dropped(&earlier, "a", Role::Full, since), None);
+
+        // A new role: reconnect to get it.
+        assert_eq!(
+            dropped(&now, "b", Role::Full, since),
+            Some(Dropped::RoleChanged)
+        );
+        assert_eq!(Dropped::RoleChanged.close().0, close::ROLE_CHANGED);
+
+        // Three different codes; only unpairing is the "refused" one.
+        let codes = [Dropped::Unpaired, Dropped::Kicked, Dropped::RoleChanged].map(|d| d.close().0);
+        assert_eq!(codes, [4401, 4410, 4411]);
+    }
 }
