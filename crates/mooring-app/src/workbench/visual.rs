@@ -259,6 +259,17 @@ impl Workbench {
         }
         panic!("no {title} in the pane menu");
     }
+    /// Opens the session menu on `id` at `at`, as a right click on its row does.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_open_session_menu(
+        &mut self,
+        id: &str,
+        at: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        self.layout.session_menu = Some((id.to_owned(), at));
+        cx.notify();
+    }
     /// Where the open session menu lists `title`.
     #[cfg(feature = "visual-test")]
     pub fn visual_session_menu_point(&self, title: &str) -> gpui::Point<gpui::Pixels> {
@@ -1519,7 +1530,7 @@ impl Workbench {
             .workspace
             .tabs
             .iter()
-            .find(|t| t.title == title)
+            .find(|t| visual_tab_is(&self.workspace, t, title))
             .expect("tab")
             .id
             .clone();
@@ -1534,7 +1545,7 @@ impl Workbench {
             .workspace
             .tabs
             .iter()
-            .find(|t| t.title == title)
+            .find(|t| visual_tab_is(&self.workspace, t, title))
             .map(|t| t.id.clone());
         self.move_pane(&pane, to.as_deref(), cx);
     }
@@ -1543,7 +1554,7 @@ impl Workbench {
         self.workspace
             .tabs
             .iter()
-            .find(|t| t.title == title)
+            .find(|t| visual_tab_is(&self.workspace, t, title))
             .map_or(0, |t| self.workspace.tab_terminals(&t.id).len())
     }
     #[cfg(feature = "visual-test")]
@@ -1834,4 +1845,13 @@ impl Workbench {
         self.workspace.revision = u64::MAX / 2;
         cx.notify();
     }
+}
+
+/// A tab the visual runs name: by what it shows, its own pinned name, or its terminal
+/// (a tab holding one conversation hands its name to that conversation).
+#[cfg(feature = "visual-test")]
+pub(super) fn visual_tab_is(w: &Workspace, tab: &Tab, title: &str) -> bool {
+    tab.title == title
+        || w.tab_title(tab, &std::collections::HashMap::new(), None) == title
+        || w.terminal_tab(title).is_some_and(|t| t.id == tab.id)
 }

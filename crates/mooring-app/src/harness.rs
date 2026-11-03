@@ -2905,6 +2905,20 @@ pub fn start(
             let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("sidebar")).unwrap();
             assert!(saved.lines().any(|l| l == "pin agent"), "pin not saved: {saved:?}");
             shot("5-pinned.png", cx);
+            // 放弃 sits last in the same menu, and gives the session up.
+            let w = workspace();
+            let given = w.agent_sessions.iter().find(|s| s.terminal.as_deref() == Some("agent")).expect("agent's session").id.clone();
+            handle.update(cx, |v, _, a| v.visual_open_session_menu(&given, row, a)).unwrap();
+            wait(300).await;
+            shot("5-session-menu-endings.png", cx);
+            let item = handle.update(cx, |v, _, _| v.visual_session_menu_point("放弃")).unwrap();
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, item, gpui::MouseButton::Left)).unwrap();
+            wait(300).await;
+            let w = workspace();
+            let s = w.agent_sessions.iter().find(|s| s.id == given).unwrap();
+            assert_eq!(s.outcome, Outcome::Abandoned, "the menu's 放弃 did not give the session up");
+            shot("5-abandoned.png", cx);
+            eprintln!("abandon native PASS: the row menu's 放弃 gives the session up");
             call(Request::Stop { id: "agent".into() });
             let mut gone = false;
             for _ in 0..50 {

@@ -279,7 +279,7 @@ impl Workbench {
             .workspace
             .tabs
             .iter()
-            .find(|t| t.title == title)
+            .find(|t| super::visual::visual_tab_is(&self.workspace, t, title))
             .expect("tab");
         self.nav.space = tab.space.clone();
         self.nav.tab = Some(tab.id.clone());

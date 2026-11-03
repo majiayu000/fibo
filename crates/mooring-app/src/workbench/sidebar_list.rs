@@ -183,6 +183,8 @@ pub(super) enum SessionAction {
     Rename,
     /// Closes this terminal's pane, asking first while its Agent runs.
     Close(String),
+    /// 标记完成, 放弃 or 撤销结局: the same endings the session's card offers.
+    Settle(Outcome),
 }
 
 /// The last path segment, as a folder is named.
@@ -415,7 +417,8 @@ impl Workbench {
         })
     }
     /// What the session menu lists, in order: 打开, then 置顶 / 取消置顶 for a session
-    /// whose terminal runs (the pin being that terminal), 重命名, and 关闭终端.
+    /// whose terminal runs (the pin being that terminal), 重命名, 标记完成 (撤销结局 once
+    /// it has an ending), 关闭终端, and last 放弃 while it is not given up.
     pub(super) fn session_menu_entries(&self, id: &str) -> Vec<(&'static str, SessionAction)> {
         let Some(session) = self.workspace.agent_sessions.iter().find(|s| s.id == id) else {
             return vec![];
@@ -430,8 +433,15 @@ impl Workbench {
             ));
         }
         out.push(("重命名", SessionAction::Rename));
+        out.push(match session.outcome {
+            Outcome::Open => ("标记完成", SessionAction::Settle(Outcome::Completed)),
+            _ => ("撤销结局", SessionAction::Settle(Outcome::Open)),
+        });
         if let Some(t) = terminal {
             out.push(("关闭终端", SessionAction::Close(t)));
+        }
+        if session.outcome != Outcome::Abandoned {
+            out.push(("放弃", SessionAction::Settle(Outcome::Abandoned)));
         }
         out
     }
@@ -454,6 +464,7 @@ impl Workbench {
                 .w_full()
                 .justify_start()
                 .border_0()
+                .when(name == "放弃", |d| d.text_color(Tone::Danger.ink()))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.layout.session_menu = None;
                     this.session_action(&id, &action, window, cx);
@@ -483,6 +494,13 @@ impl Workbench {
             SessionAction::Pin(terminal) => self.toggle_pin(terminal, cx),
             SessionAction::Rename => self.rename_session(id, window, cx),
             SessionAction::Close(terminal) => self.close_pane(terminal, cx),
+            SessionAction::Settle(outcome) => {
+                if let Some(s) = self.workspace.agent_sessions.iter().find(|s| s.id == id) {
+                    let s = s.clone();
+                    // 标记完成 plays its animation on the session's pane when one shows it.
+                    self.settle_session(&s, outcome.clone(), true, cx);
+                }
+            }
         }
     }
     /// A row in the 状态 / 目录 presets (and plugin presets beside them), after
