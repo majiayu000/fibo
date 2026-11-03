@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>远程会话进看板</title>
+<style>
+  :root {
+    --bg: #121418; --panel: #181b20; --card: #1f2329; --line: #2a2f37;
+    --text: #d6dbe3; --muted: #8a93a1; --green: #4fbf7a; --yellow: #e0b341;
+    --red: #e0645c; --blue: #6aa3ff; --chip: #2a3140;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 40px 0 6px; }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  .rec { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px;
+    background: #1f3a2a; color: var(--green); margin-left: 8px; vertical-align: 2px; }
+  .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+    margin: 12px 0; overflow-x: auto; }
+  .col h3 { font-size: 12px; font-weight: 600; margin: 0 0 8px; color: var(--muted); }
+  .col h3 b { font-weight: 600; }
+  .c-wait b { color: var(--red); } .c-run b { color: var(--yellow); }
+  .c-review b { color: var(--green); } .c-idle b, .c-done b { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
+  .card .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .mach { display: inline-block; font-size: 10px; padding: 0 6px; border-radius: 8px;
+    background: var(--chip); color: var(--blue); margin-right: 6px; vertical-align: 1px; }
+  .lane { grid-column: 1 / -1; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line);
+    padding-top: 8px; margin-top: 4px; }
+  .lane:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+  .strip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; margin: 12px 0 0; display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+  .strip span b { color: var(--green); font-weight: 600; }
+  .strip .on { color: var(--blue); }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 13px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  @media (max-width: 700px) { .board { grid-template-columns: repeat(5, 160px); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>远程会话进看板：三个方向</h1>
+  <p class="muted">多机第 4 步的界面部分（docs/multi-machine/spec.md）。协议已经就绪：另一台电脑上的会话可以标完成、放弃、重开（outcome），能开终端（open）、关终端（end）。这里只定它们在看板、卡片、鸟瞰里怎么出现。看板五列不变（11-02 定）。</p>
+
+  <h2>A 混排，卡片带机器名<span class="rec">推荐</span></h2>
+  <p>远程会话和本机会话放进同一套五列，按同样的规则排；远程卡片标题前多一个机器名小标。拖到「做完了」就是标完成，和本机一样。</p>
+  <div class="board">
+    <div class="col c-wait"><h3><b>●</b> 等你回答</h3>
+      <div class="card"><span class="mach">apple</span>你好啊<div class="meta">claude · 2 分钟前</div></div>
+      <div class="card">侧栏配色差距<div class="meta">codex · 刚刚</div></div></div>
+    <div class="col c-run"><h3><b>●</b> 在跑</h3>
+      <div class="card">库版本与 issue 状态<div class="meta">claude · 在改测试</div></div></div>
+    <div class="col c-review"><h3><b>●</b> 等你验收</h3>
+      <div class="card"><span class="mach">apple</span>w你好<div class="meta">claude · 7 小时前</div></div>
+      <div class="card">界面元素对齐<div class="meta">codex · 1 小时前</div></div></div>
+    <div class="col c-idle"><h3><b>○</b> 空闲</h3>
+      <div class="card"><span class="mach">apple</span>codex · 看不到对话<div class="meta">没有对话可标</div></div></div>
+    <div class="col c-done"><h3><b>○</b> 做完了</h3>
+      <div class="card">CPU 占用异常<div class="meta">claude · 昨天</div></div></div>
+  </div>
+  <ul>
+    <li>好处：一眼看完所有等你的东西，不用切；远程机器少（现在只有 apple）时最省事。</li>
+    <li>代价：机器多、会话多时一列会很长；断开的机器，它的卡片要变灰并标「断开」。</li>
+  </ul>
+
+  <h2>B 按机器分泳道</h2>
+  <p>五列不变，每台机器一条横带，本机在最上面。</p>
+  <div class="board">
+    <div class="lane">本机 · 10 个会话</div>
+    <div class="col c-wait"><h3><b>●</b> 等你回答</h3><div class="card">侧栏配色差距<div class="meta">codex · 刚刚</div></div></div>
+    <div class="col c-run"><h3><b>●</b> 在跑</h3><div class="card">库版本与 issue 状态<div class="meta">claude</div></div></div>
+    <div class="col c-review"><h3><b>●</b> 等你验收</h3><div class="card">界面元素对齐<div class="meta">codex</div></div></div>
+    <div class="col c-idle"><h3><b>○</b> 空闲</h3></div>
+    <div class="col c-done"><h3><b>○</b> 做完了</h3><div class="card">CPU 占用异常<div class="meta">claude</div></div></div>
+    <div class="lane">apple · 3 个会话</div>
+    <div class="col c-wait"><h3>&nbsp;</h3><div class="card">你好啊<div class="meta">claude</div></div></div>
+    <div class="col c-run"><h3>&nbsp;</h3></div>
+    <div class="col c-review"><h3>&nbsp;</h3><div class="card">w你好<div class="meta">claude</div></div></div>
+    <div class="col c-idle"><h3>&nbsp;</h3><div class="card">codex · 看不到对话</div></div>
+    <div class="col c-done"><h3>&nbsp;</h3></div>
+  </div>
+  <ul>
+    <li>好处：哪台机器的事一目了然；一台断开整条泳道变灰，好表达。</li>
+    <li>代价：「等你回答」被拆在几条泳道里，要上下扫；空泳道占地方。</li>
+  </ul>
+
+  <h2>C 看板只放本机，顶上一条机器摘要</h2>
+  <p>看板照旧只有本机；顶部一条写每台机器要你处理的数。点某台机器，看板切到那台。</p>
+  <div class="strip"><span class="on">本机</span><span>apple · <b>1 等你回答</b> · 1 等你验收</span><span class="muted">mac-mini · 断开</span></div>
+  <div class="board">
+    <div class="col c-wait"><h3><b>●</b> 等你回答</h3><div class="card">侧栏配色差距<div class="meta">codex</div></div></div>
+    <div class="col c-run"><h3><b>●</b> 在跑</h3><div class="card">库版本与 issue 状态<div class="meta">claude</div></div></div>
+    <div class="col c-review"><h3><b>●</b> 等你验收</h3><div class="card">界面元素对齐<div class="meta">codex</div></div></div>
+    <div class="col c-idle"><h3><b>○</b> 空闲</h3></div>
+    <div class="col c-done"><h3><b>○</b> 做完了</h3><div class="card">CPU 占用异常<div class="meta">claude</div></div></div>
+  </div>
+  <ul>
+    <li>好处：本机看板一点不变；每台机器各自完整。</li>
+    <li>代价：远程的事要多点一下才看见；和「一眼看完要你处理的」相反。</li>
+  </ul>
+
+  <h2>三个方向共用的部分</h2>
+  <table>
+    <tr><th>地方</th><th>做法</th></tr>
+    <tr><td>远程卡片的操作</td><td>标完成、放弃、重开走 <code>outcome</code>，带卡片的 <code>turn</code>：Agent 已开新一轮就拒绝并说明，和本机一样。</td></tr>
+    <tr><td>侧栏机器分组</td><td>分组标题右边加「＋」：在那台电脑开一个新终端（<code>open</code>），开好后在偷看窗里打开。</td></tr>
+    <tr><td>远程偷看窗</td><td>标题栏加「关闭终端」（<code>end</code>），先确认，和本机关窗格一样。</td></tr>
+    <tr><td>鸟瞰</td><td>跟看板走同一个方向。</td></tr>
+    <tr><td>断开的机器</td><td>卡片和行变灰，写「断开」，不能拖、不能标。</td></tr>
+  </table>
+  <p class="muted">放弃条件（spec 原文）：你两周内没有真正连上一台远程机器用，就停在第 2 步。</p>
+</main>
+</body>
+</html>
