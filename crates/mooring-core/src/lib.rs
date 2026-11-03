@@ -8,6 +8,7 @@ pub mod legacy;
 pub mod market;
 pub mod model;
 pub mod plugin;
+pub mod plugin_context;
 pub mod process;
 pub mod prompt_pin;
 pub mod protocol;

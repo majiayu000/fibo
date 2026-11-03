@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 /// The package format's major version; a plugin of another is refused, not guessed at.
 pub const API: u32 = 1;
 /// What this build's plugin support adds up to, raised whenever a kind or a manifest field
-/// is added: 1 the first seven kinds, 2 `setup`, `quota` and `files`. A plugin needing a
+/// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`. A plugin needing a
 /// higher level says so in `mooring`, and is refused with "update Mooring".
 pub const LEVEL: u32 = 2;
 
@@ -129,7 +129,7 @@ pub fn known_kinds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Kind>, 
 }
 
 /// Fields a manifest may carry; any other is skipped with a warning.
-const MANIFEST_FIELDS: [&str; 8] = [
+const MANIFEST_FIELDS: [&str; 9] = [
     "api",
     "id",
     "name",
@@ -138,6 +138,7 @@ const MANIFEST_FIELDS: [&str; 8] = [
     "provides",
     "files",
     "mooring",
+    "options",
 ];
 
 #[derive(Deserialize)]
@@ -153,13 +154,16 @@ struct Manifest {
     /// The plugin level it needs (`LEVEL`); without it, what its kinds and fields need.
     #[serde(default)]
     mooring: Option<u32>,
+    /// Its settings, shown in Settings › 插件 and handed to its commands.
+    #[serde(default)]
+    options: Vec<crate::plugin_context::Opt>,
     /// Other files it ships, such as the scripts its commands run, relative to its directory.
     #[serde(default)]
     files: Vec<String>,
 }
 
 /// A plugin whose manifest checked out.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Plugin {
     pub id: String,
     pub name: String,
@@ -173,6 +177,8 @@ pub struct Plugin {
     pub level: u32,
     /// What this build skipped: kinds and manifest fields it does not know.
     pub warnings: Vec<String>,
+    /// Its settings (`options` in its manifest).
+    pub options: Vec<crate::plugin_context::Opt>,
     /// Turned off in settings: listed, but none of its files load.
     pub enabled: bool,
 }
@@ -188,7 +194,7 @@ impl Plugin {
 }
 
 /// One plugin directory's outcome; its files' own outcomes are reported per kind.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Found {
     pub dir: PathBuf,
     pub result: Result<Plugin, String>,
@@ -462,7 +468,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
     let needed = provides
         .iter()
         .map(|k| k.level())
-        .chain((!m.files.is_empty()).then_some(2))
+        .chain((!m.files.is_empty() || !m.options.is_empty()).then_some(2))
         .max()
         .unwrap_or(1);
     let level = m.mooring.unwrap_or(needed).max(needed);
@@ -477,6 +483,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
             m.provides.join("、")
         ));
     }
+    crate::plugin_context::check_options(&m.options)?;
     let mut files = Vec::new();
     for f in &m.files {
         if !crate::market::safe_path(f) {
@@ -498,6 +505,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         files,
         level,
         warnings,
+        options: m.options,
         enabled: true,
     };
     for kind in &plugin.provides {

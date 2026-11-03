@@ -90,7 +90,24 @@ pub fn run(plugins: &Path, dir: &Path, phase: Phase) -> Result<(), String> {
     }
     let s = read(&file)?;
     let data = data_dir(plugins, &p.id);
-    create_private_dir(&data).map_err(|e| format!("建不了 {}：{e}", data.display()))?;
+    crate::plugin_context::create_private_dir(&data)
+        .map_err(|e| format!("建不了 {}：{e}", data.display()))?;
+    let started = Instant::now();
+    let result = run_command(dir, &s, phase);
+    crate::plugin_context::record(
+        dir,
+        match phase {
+            Phase::Setup => "setup",
+            Phase::Teardown => "teardown",
+        },
+        &result,
+        started.elapsed().as_millis() as u64,
+        false,
+    );
+    result
+}
+
+fn run_command(dir: &Path, s: &Setup, phase: Phase) -> Result<(), String> {
     let (name, command) = match phase {
         Phase::Setup => ("setup", &s.setup),
         Phase::Teardown => ("teardown", &s.teardown),
@@ -99,8 +116,7 @@ pub fn run(plugins: &Path, dir: &Path, phase: Phase) -> Result<(), String> {
         .arg("-c")
         .arg(command)
         .current_dir(dir)
-        .env("MOORING_PLUGIN_DIR", dir)
-        .env("MOORING_PLUGIN_DATA", &data)
+        .envs(crate::plugin_context::env(dir))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -150,14 +166,6 @@ pub fn run(plugins: &Path, dir: &Path, phase: Phase) -> Result<(), String> {
             }
         ))
     }
-}
-
-fn create_private_dir(dir: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    std::fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(dir)
 }
 
 #[cfg(test)]

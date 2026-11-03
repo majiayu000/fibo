@@ -201,8 +201,7 @@ impl Source {
             .arg("-c")
             .arg(self.command.as_deref().unwrap_or_default())
             .current_dir(&self.dir)
-            .env("MOORING_PLUGIN_DIR", &self.dir)
-            .env("MOORING_PLUGIN_DATA", &self.data)
+            .envs(crate::plugin_context::env(&self.dir))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -393,7 +392,16 @@ fn start(i: usize, source: Source, generation: u64) {
     std::thread::spawn(move || {
         let current = || GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
         while current() {
-            if let Ok(doc) = source.run() {
+            let started = Instant::now();
+            let ran = source.run();
+            crate::plugin_context::record(
+                &source.dir,
+                &format!("quota/{}", source.agent),
+                &ran.as_ref().map(|_| ()).map_err(Clone::clone),
+                started.elapsed().as_millis() as u64,
+                true,
+            );
+            if let Ok(doc) = ran {
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map_or(0, |d| d.as_secs());

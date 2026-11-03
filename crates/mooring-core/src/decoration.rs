@@ -113,12 +113,34 @@ impl Decoration {
         Duration::from_secs(self.refresh_s)
     }
     /// Runs it for `pane` (blocking, up to its timeout): the line to show, or why none.
+    /// A non-zero exit is the script opting out, not a failure; a command that cannot
+    /// start or runs out of time is, and goes to the plugin's runs.
     pub fn run(&self, pane: &Pane) -> Result<Option<String>, String> {
+        let started = Instant::now();
+        let result = self.run_once(pane);
+        if let Some(dir) = self.file.parent() {
+            crate::plugin_context::record(
+                dir,
+                &format!("decorations/{}", self.id),
+                &result.as_ref().map(|_| ()).map_err(Clone::clone),
+                started.elapsed().as_millis() as u64,
+                true,
+            );
+        }
+        result
+    }
+    fn run_once(&self, pane: &Pane) -> Result<Option<String>, String> {
         use std::os::unix::process::CommandExt;
         let mut child = Command::new("/bin/sh")
             .arg("-c")
             .arg(&self.command)
             .current_dir(&pane.cwd)
+            .envs(
+                self.file
+                    .parent()
+                    .map(crate::plugin_context::env)
+                    .unwrap_or_default(),
+            )
             // Plugins written for Keepline read the old names too.
             .envs(crate::legacy::with_old_names(vec![
                 ("MOORING_CWD".to_owned(), pane.cwd.clone()),

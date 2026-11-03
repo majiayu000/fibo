@@ -3,8 +3,12 @@
   "hooks": [
     {
       "id": "notify-macos",
-      "on": ["waiting", "error", "done"],
-      "command": "osascript -e 'on run argv' -e 'display notification (item 2 of argv) with title (item 1 of argv)' -e 'end run' \"$MOORING_SPACE · $MOORING_TITLE\" \"$MOORING_EVENT · $MOORING_DETAIL\"",
+      "on": [
+        "waiting",
+        "error",
+        "done"
+      ],
+      "command": "[ \"$MOORING_OPTION_ONLY_ERRORS\" = 1 ] && [ \"$MOORING_EVENT\" != error ] && exit 0; osascript -e 'on run argv' -e 'display notification (item 2 of argv) with title (item 1 of argv)' -e 'end run' \"$MOORING_SPACE · $MOORING_TITLE\" \"$MOORING_EVENT · $MOORING_DETAIL\"",
       "timeout_ms": 5000
     }
   ]

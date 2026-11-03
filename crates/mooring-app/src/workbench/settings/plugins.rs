@@ -22,6 +22,13 @@ pub(in crate::workbench) struct Market {
     working: Option<String>,
     /// What the last install, update or removal did.
     done: Option<Result<String, String>>,
+    /// A plugin setting being typed: plugin id, key, the field and its Enter/Esc events.
+    editing: Option<(
+        String,
+        String,
+        Entity<crate::ui::field::Field>,
+        gpui::Subscription,
+    )>,
 }
 impl Market {
     pub(in crate::workbench) fn read() -> Self {
@@ -117,6 +124,115 @@ impl SettingsView {
             });
         })
         .detach();
+    }
+    /// One plugin setting under its plugin.
+    fn option_row(
+        &self,
+        id: &str,
+        o: mooring_core::plugin_context::Opt,
+        v: serde_json::Value,
+        cx: &Context<Self>,
+    ) -> gpui::Div {
+        use mooring_core::plugin_context::{Opt, OptKind};
+        let note = o.description.clone().unwrap_or_default();
+        let title = format!("　└ {}", o.title);
+        let (pid, key) = (id.to_owned(), o.key.clone());
+        let save = move |this: &mut Self, value: serde_json::Value, cx: &mut Context<Self>| {
+            this.text_error = plugin::config()
+                .map(plugin::dir)
+                .ok_or_else(|| "找不到配置目录".to_owned())
+                .and_then(|d| mooring_core::plugin_context::set(&d, &pid, &key, value))
+                .err();
+            cx.notify();
+        };
+        let key_id = format!("plugin-option-{id}-{}", o.key);
+        let editing = self
+            .market
+            .editing
+            .as_ref()
+            .filter(|(i, k, ..)| i == id && *k == o.key)
+            .map(|(_, _, f, _)| f.clone());
+        let control = match o.kind {
+            OptKind::Boolean => {
+                let on = v.as_bool().unwrap_or(false);
+                div().child(switch(key_id, on).on_click(
+                    cx.listener(move |this, _, _, cx| save(this, serde_json::Value::Bool(!on), cx)),
+                ))
+            }
+            OptKind::Choice => {
+                let now = v.as_str().unwrap_or_default().to_owned();
+                let next = o
+                    .choices
+                    .iter()
+                    .position(|c| *c == now)
+                    .map_or(0, |i| (i + 1) % o.choices.len());
+                let next = serde_json::Value::String(o.choices[next].clone());
+                div().child(
+                    secondary(key_id, format!("{now} ▸"))
+                        .on_click(cx.listener(move |this, _, _, cx| save(this, next.clone(), cx))),
+                )
+            }
+            OptKind::String | OptKind::Number => match editing {
+                Some(field) => div().w(px(220.)).child(field),
+                None => {
+                    let shown = Opt::text(&v);
+                    let (pid, opt) = (id.to_owned(), o.clone());
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(T::S8))
+                        .child(
+                            div()
+                                .text_size(px(T::SMALL))
+                                .text_color(T::color(T::secondary()))
+                                .child(if shown.is_empty() {
+                                    "（空）".to_owned()
+                                } else {
+                                    shown.clone()
+                                }),
+                        )
+                        .child(secondary(key_id, "改").on_click(cx.listener(
+                            move |this, _, window, cx| {
+                                this.edit_option(&pid, &opt, &shown, window, cx)
+                            },
+                        )))
+                }
+            },
+        };
+        self.row(false, &title, &note, control)
+    }
+    /// Opens a field for a text or number setting; Enter saves it, Esc leaves it.
+    fn edit_option(
+        &mut self,
+        id: &str,
+        opt: &mooring_core::plugin_context::Opt,
+        current: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let field = cx.new(|cx| crate::ui::field::Field::new(&opt.title, current, cx).compact());
+        window.focus(&field.focus_handle(cx), cx);
+        let key = opt.key.clone();
+        let opt = opt.clone();
+        let pid = id.to_owned();
+        let events = cx.subscribe(&field, move |this, field, event, cx| {
+            if let crate::ui::field::FieldEvent::Submit = event {
+                let text = field.read(cx).text.clone();
+                this.text_error = opt
+                    .parse(&text)
+                    .and_then(|v| {
+                        plugin::config()
+                            .map(plugin::dir)
+                            .ok_or_else(|| "找不到配置目录".to_owned())
+                            .and_then(|d| mooring_core::plugin_context::set(&d, &pid, &opt.key, v))
+                    })
+                    .err();
+            }
+            this.market.editing = None;
+            cx.notify();
+        });
+        self.market.editing = Some((id.to_owned(), key, field, events));
+        cx.notify();
     }
     /// Off the UI thread: the plugin's `teardown` runs first and may take seconds.
     fn uninstall(&mut self, id: String, name: String, cx: &mut Context<Self>) {
@@ -398,6 +514,16 @@ impl SettingsView {
                 note.push(format!("{}有新版本 v{}", u.origin(), u.entry.version));
             }
             note.extend(p.warnings.iter().cloned());
+            if let Some(last) = plugin::config()
+                .map(|c| mooring_core::plugin_context::runs(&plugin::dir(c), &p.id))
+                .and_then(|runs| runs.last().cloned())
+                .filter(|r| !r.ok && mooring_core::content::now().saturating_sub(r.at) < 7 * 86_400)
+            {
+                note.push(format!(
+                    "上次运行出错（{}）：{}；终端里 mooring plugins log {} 看全部",
+                    last.what, last.detail, p.id
+                ));
+            }
             let on = p.enabled;
             let (id, name) = (p.id.clone(), p.name.clone());
             let mut controls = div().flex().items_center().gap(px(T::S8));
@@ -447,6 +573,14 @@ impl SettingsView {
                 self.row(first, &p.name, &note.join(" · "), controls)
                     .into_any_element(),
             );
+            // Its settings, each a row: a switch, a choice to step through, or text to type.
+            if p.enabled
+                && let Some(plugins) = plugin::config().map(plugin::dir)
+            {
+                for (o, v) in mooring_core::plugin_context::values(&plugins, p) {
+                    installed.push(self.option_row(&p.id, o, v, cx).into_any_element());
+                }
+            }
             // Each right-click action of the plugin, switched one by one.
             if p.enabled && p.provides.contains(&Kind::Actions) {
                 for a in mooring_core::action::all()

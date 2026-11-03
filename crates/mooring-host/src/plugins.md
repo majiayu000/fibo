@@ -49,6 +49,34 @@ mooring plugins            # 检查；有问题以 1 退出
 - `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `setup` `quota` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。
 - 每个类型文件里也都写 `"api": 1`（`agent.json` 除外，见最后），不认识的字段同样整份拒绝。
 
+## 所有插件命令都拿得到的环境变量
+
+hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 在终端里跑，用 `{cwd}` 这类模板）：
+
+- `MOORING_PLUGIN_ID`、`MOORING_PLUGIN_DIR`：哪个插件、它的目录（找 `files` 里带的脚本）。
+- `MOORING_PLUGIN_DATA`：插件自己的数据目录，更新时保留，卸载时删除。
+- `MOORING_BIN`、`MOORING_RUNTIME`：`mooring` 命令和它连的后台，插件里 `"$MOORING_BIN" list` 和在 Mooring 终端里一样能用。
+- `MOORING_OPTION_<KEY>`：插件的每个设置项（见下）。开关是 `1` / `0`。
+
+## 设置项（`plugin.json` 的 `options`）
+
+```json
+"options": [
+  {"key": "only_errors", "title": "只在出错时通知", "type": "boolean", "default": false, "description": "打开后只在出错时弹"},
+  {"key": "interval", "title": "间隔（秒）", "type": "number", "default": 300},
+  {"key": "sound", "title": "声音", "type": "choice", "choices": ["Glass", "Ping"], "default": "Glass"}
+]
+```
+
+- `type`：`string`、`number`、`boolean`、`choice`（要写 `choices`）。`key` 只用小写字母、数字和 `_`，最多 20 个。
+- 用户在 设置 › 插件 里每个插件下面改，或者 `mooring plugins set <id> <key> <值>`；值存在数据目录的 `options.json`，下次运行就用。
+- 值只以环境变量传给命令，不会拼进命令文字里：脚本里读 `"$MOORING_OPTION_SOUND"`，不要让值变成命令的一部分。
+- 凡是用户可能想要不同值的参数都做成设置项，不要写死在脚本里。
+
+## 运行记录
+
+`mooring plugins log <id>` 列出最近 50 次：setup、teardown 和 hook 每次都记，装饰和 quota 命令只在结果变化时记（第一次出错、恢复）。最近一次出错也显示在 设置 › 插件 那个插件的说明里。
+
 ## actions：右键菜单和 ⌘P 里的命令（`actions.json`）
 
 ```json

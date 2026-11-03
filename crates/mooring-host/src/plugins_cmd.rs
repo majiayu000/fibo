@@ -11,6 +11,8 @@ pub const USAGE: &str = "用法：mooring plugins [--dir 插件目录] [--json]
       mooring plugins install <id> [--remote] 安装或更新一个插件
       mooring plugins uninstall <id>          卸载一个插件
       mooring plugins index <目录> [--check]  为插件目录生成 index.json（--check 只检查是否最新）
+      mooring plugins log <id>                这个插件最近的运行：setup、hook、出过错的装饰和额度命令
+      mooring plugins set <id> [<key> <值>]   看或改插件的设置项；值写 true/false、数字或文字
 
 检查插件能不能装上：逐个读 plugin.json 和它提供的文件，说哪个生效、哪个为什么没生效。
 默认目录是 ${XDG_CONFIG_HOME:-$HOME/.config}/mooring/plugins。有问题时以 1 退出。
@@ -79,6 +81,17 @@ struct Checked {
     files: Vec<File>,
     /// Files it has but does not declare: they never load.
     unused: Vec<String>,
+    /// Kinds and fields this build skipped.
+    warnings: Vec<String>,
+}
+
+fn ago(secs: u64) -> String {
+    match secs {
+        s if s < 60 => format!("{s} 秒"),
+        s if s < 3600 => format!("{} 分", s / 60),
+        s if s < 86_400 => format!("{} 小时", s / 3600),
+        s => format!("{} 天", s / 86_400),
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -188,6 +201,60 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
             println!("卸载了 {id}");
             Ok(())
         }
+        ("log", [id]) => {
+            let runs = mooring_core::plugin_context::runs(&plugins_dir()?, id);
+            if runs.is_empty() {
+                println!("{id} 还没有运行记录");
+            }
+            let now = mooring_core::content::now();
+            for r in runs {
+                println!(
+                    "{} {:>6} 前  {:<28} {:>5} ms  {}",
+                    if r.ok { "✓" } else { "✗" },
+                    ago(now.saturating_sub(r.at)),
+                    r.what,
+                    r.ms,
+                    r.detail
+                );
+            }
+            Ok(())
+        }
+        ("set", [id, rest @ ..]) => {
+            let dir = plugins_dir()?;
+            let p = plugin::discover(&dir)
+                .into_iter()
+                .find_map(|f| f.result.ok().filter(|p| &p.id == id))
+                .ok_or_else(|| io::Error::other(format!("没有装叫 {id} 的插件")))?;
+            match rest {
+                [] => {
+                    if p.options.is_empty() {
+                        println!("{id} 没有设置项");
+                    }
+                    for (o, v) in mooring_core::plugin_context::values(&dir, &p) {
+                        println!(
+                            "{} = {}    {}{}",
+                            o.key,
+                            mooring_core::plugin_context::Opt::text(&v),
+                            o.title,
+                            o.description.map(|d| format!("：{d}")).unwrap_or_default()
+                        );
+                    }
+                    Ok(())
+                }
+                [key, value] => {
+                    let opt =
+                        p.options.iter().find(|o| &o.key == key).ok_or_else(|| {
+                            io::Error::other(format!("{id} 没有叫 {key} 的设置项"))
+                        })?;
+                    let v = opt.parse(value).map_err(io::Error::other)?;
+                    mooring_core::plugin_context::set(&dir, id, key, v)
+                        .map_err(io::Error::other)?;
+                    println!("{id} 的 {key} 改成了 {value}，下次运行就用");
+                    Ok(())
+                }
+                _ => Err(io::Error::other(USAGE)),
+            }
+        }
         _ => Err(io::Error::other(USAGE)),
     }
 }
@@ -196,7 +263,12 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
     let mut args = args.by_ref().peekable();
     if let Some(command) = args
         .peek()
-        .filter(|a| matches!(a.as_str(), "index" | "available" | "install" | "uninstall"))
+        .filter(|a| {
+            matches!(
+                a.as_str(),
+                "index" | "available" | "install" | "uninstall" | "log" | "set"
+            )
+        })
         .cloned()
     {
         args.next();
@@ -258,6 +330,7 @@ fn check(dir: &Path, home: &Path) -> Vec<Checked> {
             match found.result {
                 Err(error) => Checked {
                     unused: vec![],
+                    warnings: vec![],
                     dir: found.dir,
                     id: None,
                     name: None,
@@ -267,6 +340,7 @@ fn check(dir: &Path, home: &Path) -> Vec<Checked> {
                 },
                 Ok(p) => Checked {
                     unused: undeclared(&p.provides),
+                    warnings: p.warnings.clone(),
                     files: p
                         .provides
                         .iter()
@@ -340,6 +414,9 @@ fn render(dir: &Path, checked: &[Checked]) -> String {
                     if bad { "✗" } else { "✓" },
                     c.name.as_deref().unwrap_or_default()
                 ));
+                for w in &c.warnings {
+                    out.push_str(&format!("    ! {w}\n"));
+                }
                 for f in &c.files {
                     let file = name(&c.dir, &f.file);
                     match (&f.ok, &f.error) {

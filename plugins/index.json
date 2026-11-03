@@ -147,21 +147,22 @@
     {
       "id": "notify-macos",
       "name": "系统通知",
-      "version": "0.1.0",
-      "description": "会话等你回答、出错或做完时弹一条 macOS 通知；App 没开也会发",
+      "version": "0.2.0",
+      "description": "会话等你回答、出错或做完时弹一条 macOS 通知；App 没开也会发。可以设成只在出错时通知",
       "provides": [
         "hooks"
       ],
+      "mooring": 2,
       "files": [
         {
           "path": "hooks.json",
-          "sha256": "8feeffaaeb6ddcd31e17b909b63f488dc7035122b38ec24c47c5bdf50b1f4e83",
-          "size": 346
+          "sha256": "29e44c31bd544857c89fdfb9c183b8676081266fd5708371ab3a29df59a74c63",
+          "size": 464
         },
         {
           "path": "plugin.json",
-          "sha256": "a68f6a3fc2cd04128fbb7193a9f20648e1483a3a2722a1f0c990cedabe1aafb5",
-          "size": 216
+          "sha256": "03e4910daa0f0754652e5fc0e965a8c8bb631d62b8640e6b83cb95379ffdf118",
+          "size": 481
         }
       ]
     },

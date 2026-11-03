@@ -150,7 +150,17 @@ fn spawn(h: &Hook, p: Payload) {
     }
     let h = h.clone();
     std::thread::spawn(move || {
+        let started = Instant::now();
         let result = run(&h, &p);
+        if let Some(dir) = h.file.parent() {
+            mooring_core::plugin_context::record(
+                dir,
+                &format!("hooks/{}", h.id),
+                &result,
+                started.elapsed().as_millis() as u64,
+                false,
+            );
+        }
         IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
         if let Err(e) = result {
             eprintln!("mooring: hook {} ({}) failed: {e}", h.id, p.event.name());
@@ -164,7 +174,11 @@ pub fn run(h: &Hook, p: &Payload) -> Result<(), String> {
     let mut cmd = match (&h.command, &h.webhook) {
         (Some(c), _) => {
             let mut cmd = Command::new("/bin/sh");
-            cmd.arg("-c").arg(c).envs(p.env());
+            cmd.arg("-c").arg(c);
+            if let Some(dir) = h.file.parent() {
+                cmd.envs(mooring_core::plugin_context::env(dir));
+            }
+            cmd.envs(p.env());
             cmd
         }
         (None, Some(url)) => {
@@ -393,5 +407,49 @@ mod tests {
         }
         let _ = std::fs::remove_file(&f);
         assert!(!alive, "the hook's child {pid} outlived its timeout");
+    }
+
+    #[test]
+    fn the_shipped_notifier_stays_quiet_except_on_errors_when_set_so() {
+        // The real notify-macos plugin, with osascript swapped for a file the test reads.
+        let root = std::env::temp_dir().join(format!("kl-notify-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("plugins/notify-macos");
+        std::fs::create_dir_all(&dir).unwrap();
+        let shipped =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/notify-macos");
+        std::fs::copy(shipped.join("plugin.json"), dir.join("plugin.json")).unwrap();
+        let out = root.join("said");
+        let hooks = std::fs::read_to_string(shipped.join("hooks.json"))
+            .unwrap()
+            .replace(
+                "osascript",
+                &format!(
+                    "echo \\\"$MOORING_PLUGIN_ID $MOORING_EVENT\\\" >> {} #",
+                    out.display()
+                ),
+            );
+        std::fs::write(dir.join("hooks.json"), hooks).unwrap();
+        let (loaded, report) = mooring_core::hook::load(vec![dir.join("hooks.json")]);
+        assert!(report[0].result.is_ok(), "{report:?}");
+        let h = &loaded[0];
+        let fire = |event| {
+            let mut p = payload();
+            p.event = event;
+            run(h, &p).unwrap();
+        };
+        fire(Event::Waiting);
+        mooring_core::plugin_context::set(
+            &root.join("plugins"),
+            "notify-macos",
+            "only_errors",
+            serde_json::Value::Bool(true),
+        )
+        .unwrap();
+        fire(Event::Waiting);
+        fire(Event::Error);
+        let said = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(said, "notify-macos waiting\nnotify-macos error\n");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
