@@ -205,7 +205,13 @@ impl Palette {
             wash_share: if light { 150 } else { 220 },
             app: mix(bg, Theme::BLACK, by(light, 70, 150)),
             panel: bg,
-            sidebar: if light { mix(bg, fg, 45) } else { bg },
+            // On dark the column sits a step below the terminal's ground, near black
+            // (docs/sidebar-redesign/flat.html), so the panes read as the lit surface.
+            sidebar: if light {
+                mix(bg, fg, 45)
+            } else {
+                mix(bg, Theme::BLACK, 450)
+            },
             pane: bg,
             header: bg,
             todo: mix(bg, fg, by(light, 45, 30)),
@@ -292,6 +298,176 @@ tokens!(
     chart_grid,
     chart_ref,
 );
+/// The 会话优先 column exactly as docs/sidebar-redesign/flat.html draws it: sizes in px,
+/// and on dark its own near-black colors; on light it falls back to the palette.
+pub struct Flat;
+impl Flat {
+    pub const WIDTH: f32 = Theme::SIDEBAR;
+    pub const BRAND_ROW: f32 = 26.;
+    pub const BRAND_TEXT: f32 = 11.;
+    /// Letter spacing for MOORING, drawn as gaps between its letters.
+    pub const BRAND_TRACK: f32 = 2.;
+    pub const ICON_BUTTON: f32 = 26.;
+    pub const ICON: f32 = 14.;
+    pub const HOST_DOT: f32 = 6.;
+    pub const SEARCH: f32 = 30.;
+    pub const SEARCH_ICON: f32 = 13.;
+    pub const FIELD_RADIUS: f32 = 8.;
+    pub const CHIP: f32 = 24.;
+    pub const CHIP_DOT: f32 = 9.;
+    pub const CHIP_TEXT: f32 = 11.5;
+    pub const CHIP_GAP: f32 = 5.;
+    pub const BADGE: f32 = 14.;
+    pub const BADGE_TEXT: f32 = 9.5;
+    pub const HEAD_TEXT: f32 = 11.;
+    pub const HEAD_LINE: f32 = 14.;
+    pub const TITLE: f32 = 12.5;
+    pub const TITLE_LINE: f32 = 16.;
+    pub const SUB: f32 = 11.5;
+    pub const SUB_LINE: f32 = 15.;
+    pub const TAG: f32 = 11.;
+    pub const TAG_DOT: f32 = 7.;
+    pub const TAG_MAX: f32 = 76.;
+    pub const TIME: f32 = 11.;
+    pub const TIME_WIDTH: f32 = 26.;
+    pub const STATE: f32 = 8.;
+    pub const ROW_RADIUS: f32 = 7.;
+    pub const ROW_GAP: f32 = 9.;
+    pub const ROW_PAD_Y: f32 = 6.;
+    pub const ONE_PAD_Y: f32 = 5.;
+    pub const EDGE: f32 = 18.;
+    pub const KEY_TEXT: f32 = 10.5;
+    pub const FOOT_TEXT: f32 = 12.;
+    pub const LINE_SMALL: f32 = 14.;
+    pub const LINE_TEXT: f32 = 16.;
+    fn dark() -> bool {
+        Theme::scheme() == Scheme::Dark
+    }
+    pub fn bg() -> u32 {
+        if Self::dark() {
+            0x0c0c0f
+        } else {
+            Theme::sidebar()
+        }
+    }
+    pub fn line() -> u32 {
+        if Self::dark() {
+            0x1c1c21
+        } else {
+            Theme::border()
+        }
+    }
+    pub fn field_line() -> u32 {
+        if Self::dark() {
+            0x1f1f25
+        } else {
+            Theme::border()
+        }
+    }
+    pub fn chip_line() -> u32 {
+        if Self::dark() {
+            0x23232a
+        } else {
+            Theme::border()
+        }
+    }
+    pub fn chip_on() -> u32 {
+        if Self::dark() {
+            0x1c1c22
+        } else {
+            Theme::raised()
+        }
+    }
+    pub fn chip_on_line() -> u32 {
+        if Self::dark() {
+            0x4a4a54
+        } else {
+            Theme::control()
+        }
+    }
+    pub fn hover() -> u32 {
+        if Self::dark() {
+            0x131317
+        } else {
+            Theme::raised()
+        }
+    }
+    pub fn selected() -> u32 {
+        if Self::dark() {
+            0x17171c
+        } else {
+            Theme::raised()
+        }
+    }
+    pub fn selected_line() -> u32 {
+        if Self::dark() {
+            0x2a2a31
+        } else {
+            Theme::control()
+        }
+    }
+    /// MOORING and a chosen chip's name.
+    pub fn bright() -> u32 {
+        if Self::dark() {
+            0xececee
+        } else {
+            Theme::primary()
+        }
+    }
+    /// A title that needs you, is running or is being checked.
+    pub fn title() -> u32 {
+        if Self::dark() {
+            0xe4e4e7
+        } else {
+            Theme::primary()
+        }
+    }
+    /// A stopped session's title and a chip's name.
+    pub fn quiet() -> u32 {
+        if Self::dark() {
+            0xc9c9cf
+        } else {
+            Theme::body()
+        }
+    }
+    pub fn second() -> u32 {
+        if Self::dark() {
+            0xa2a2aa
+        } else {
+            Theme::secondary()
+        }
+    }
+    pub fn third() -> u32 {
+        if Self::dark() {
+            0x7e7e87
+        } else {
+            Theme::muted()
+        }
+    }
+    /// A stopped session's ring.
+    pub fn idle() -> u32 {
+        if Self::dark() {
+            0x45454d
+        } else {
+            Theme::control()
+        }
+    }
+    /// The bar naming the one space the list is narrowed to.
+    pub fn scope() -> u32 {
+        if Self::dark() {
+            0x121216
+        } else {
+            Theme::raised()
+        }
+    }
+    pub fn key_line() -> u32 {
+        if Self::dark() {
+            0x2a2a31
+        } else {
+            Theme::control()
+        }
+    }
+}
 #[allow(dead_code)] // The complete design palette also covers the deferred components.
 impl Theme {
     pub const WHITE: u32 = 0xffffff;
@@ -335,7 +511,8 @@ impl Theme {
     pub const S14: f32 = 14.;
     pub const S16: f32 = 16.;
     pub const S20: f32 = 20.;
-    pub const SIDEBAR: f32 = 270.;
+    /// Wide enough for a session title beside its space tag, time and state.
+    pub const SIDEBAR: f32 = 316.;
     pub const TOP: f32 = 46.;
     /// macOS draws the traffic lights inside the top bar; its content starts after them.
     pub const TRAFFIC_LIGHT_X: f32 = 16.;
@@ -381,6 +558,8 @@ impl Theme {
     pub const FOCUS_RING: f32 = 2.;
     pub const CARET_WIDTH: f32 = 1.5;
     pub const PANE_RADIUS: f32 = 8.;
+    /// The faint glow inside a pane that asks you something.
+    pub const RING_GLOW: f32 = 28.;
     pub const CONTROL_RADIUS: f32 = 6.;
     pub const CHIP_RADIUS: f32 = 4.;
     pub const CARD_RADIUS: f32 = 10.;

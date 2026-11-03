@@ -670,7 +670,15 @@ impl Render for Workbench {
                 .map(|t| self.workspace.tab_terminals(&t.id))
                 .unwrap_or_default();
             let count = ids.len();
-            let mut grid = div().flex_1().min_h_0().min_w_0().relative();
+            // The standard style sets its panes as rounded cards with a gap around them
+            // (flat.html); the terminal style keeps its own frames.
+            let cards = crate::ui::style::current(cx) != crate::ui::style::Style::Terminal;
+            let mut grid = div()
+                .flex_1()
+                .min_h_0()
+                .min_w_0()
+                .relative()
+                .when(cards, |d| d.p(px(T::S8)).bg(T::color(T::pane())));
             if let Some(zoomed) = &self.nav.zoomed {
                 grid = grid.child(self.pane_view(zoomed, false, window, cx));
             } else if let Some(tree) = current.and_then(|t| t.layout.as_ref()) {
@@ -684,6 +692,14 @@ impl Render for Workbench {
         if let Some(peek) = &self.peek {
             main = main.relative().child(self.peek_view(peek, cx));
         }
+        // Beside 会话优先's column the status bar belongs to the main column, so the
+        // column runs to the window's foot (flat.html); otherwise it spans the window.
+        let width = f32::from(window.viewport_size().width);
+        let beside = sidebar.is_some()
+            && self.sidebar.preset().group == mooring_core::sidebar::Grouping::Recent;
+        if beside {
+            main = main.child(self.statusbar_view(width - T::SIDEBAR, cx));
+        }
         root = root
             .relative()
             .child(
@@ -694,7 +710,7 @@ impl Render for Workbench {
                     .children(sidebar)
                     .child(main),
             )
-            .child(self.statusbar_view(f32::from(window.viewport_size().width), cx));
+            .when(!beside, |d| d.child(self.statusbar_view(width, cx)));
         // 标记完成 runs leave their panes for the sidebar, so they draw over everything
         // but the menus.
         if let Some(overlay) = self.completing_overlay(window) {

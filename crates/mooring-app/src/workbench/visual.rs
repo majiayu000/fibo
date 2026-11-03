@@ -678,12 +678,14 @@ impl Workbench {
         );
         self.overview.show_running = false;
         self.statusbar = None;
+        // `MainSpace` narrows 会话优先 to the sample's 工作空间, as a click on its chip does.
+        self.sidebar.space_filter = (name == "MainSpace").then(|| "s0".to_owned());
         self.sync_panes(cx);
         match name {
             // The status bar's 工作中 popover beside the sidebar: one session, one color.
             "StatusSessions" => self.statusbar = Some(super::statusbar::StatusPop::Sessions),
             // Main is the window as it opens (docs/ui-v3/v3-4.png); 看进度's card has its own.
-            "Main" => {}
+            "Main" | "MainSpace" => {}
             "HereClickOut" => {
                 self.overview.here = self.workspace.current_agent("p0").map(|s| s.id.clone())
             }
