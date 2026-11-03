@@ -36,8 +36,10 @@ pub(super) fn flat_state(g: Status, unseen: bool) -> gpui::AnyElement {
             .text_color(color)
             .into_any_element()
     };
-    match bucket(g) {
-        Bucket::Attention => div()
+    // By state, not bucket: 要你处理 also holds 等你验收 and 等后台 (11-03), which keep
+    // their ring once you have looked.
+    match g {
+        Status::Waiting | Status::Error => div()
             .size(px(F::STATE))
             .flex_shrink_0()
             .rounded_full()
@@ -50,16 +52,16 @@ pub(super) fn flat_state(g: Status, unseen: bool) -> gpui::AnyElement {
                 inset: false,
             }])
             .into_any_element(),
-        Bucket::Running => svg("icons/state-run.svg", dot),
-        Bucket::Done if unseen => div()
+        Status::Running => svg("icons/state-run.svg", dot),
+        Status::Review | Status::Background if unseen => div()
             .size(px(F::STATE))
             .flex_shrink_0()
             .rounded_full()
             .bg(dot)
             .into_any_element(),
-        Bucket::Done => svg("icons/state-ring.svg", dot),
+        Status::Review | Status::Background => svg("icons/state-ring.svg", dot),
         // What you marked complete is done with: a muted ✓, apart from rings that stopped.
-        _ if g == Status::Closed => svg("icons/state-done.svg", ink(F::done())),
+        Status::Closed => svg("icons/state-done.svg", ink(F::done())),
         _ => svg("icons/state-ring.svg", ink(F::idle())),
     }
 }
