@@ -3,6 +3,7 @@
 //! reference for phone apps in other languages.
 //!
 //! - [`protocol`]: the JSON lines a client and a machine exchange.
+//! - [`client`]: a client of one machine over a pipe (`mooring remote --stdio`, often via ssh).
 //! - [`close`]: the close codes a phone's socket ends with, one per case.
 //! - [`role`]: what a paired device may do.
 //! - [`link`]: the pairing link a QR code carries.
@@ -12,6 +13,7 @@
 //! `tests/vectors.rs` checks `vectors/v1.json`: fixed inputs and the exact bytes they
 //! must produce, for an implementation in another language to check itself against.
 //! Shapes and rules are in `specs/extensions/remote-protocol.md` and `relay.md`.
+pub mod client;
 pub mod close;
 pub mod link;
 pub mod protocol;
