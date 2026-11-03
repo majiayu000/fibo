@@ -7,7 +7,7 @@
 //! Whether you have looked yet is attention, not a state: an unseen finished turn is
 //! still 等你验收.
 use crate::content::{Content, Turn};
-use crate::model::{AgentSession, Outcome, ProcessState, Terminal, Workspace};
+use crate::model::{AgentSession, Outcome, ProcessState, Task, Terminal, Workspace};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -159,12 +159,80 @@ pub fn fresh(c: Option<&Content>) -> bool {
     c.is_none_or(|c| c.asks.is_empty() && c.turn == Turn::Unknown)
 }
 
+/// Where a todo stands. Its outcome is yours; the rest is read from its sessions and
+/// its acceptance evidence. The only place a todo's state is decided: the todo detail,
+/// the sidebar's todo rows and the board read this.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskState {
+    NotStarted,
+    /// A session of it is still open.
+    Working,
+    /// Every session you started for it is marked done, and you have not closed it.
+    Settled,
+    /// Every acceptance criterion has evidence.
+    Proven,
+    Completed,
+    Deferred,
+    Abandoned,
+}
+impl TaskState {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NotStarted => "未开始",
+            Self::Working => "进行中",
+            Self::Settled => "会话都做完了",
+            Self::Proven => "验收齐了",
+            Self::Completed => "已完成",
+            Self::Deferred => "稍后再看",
+            Self::Abandoned => "已放弃",
+        }
+    }
+    /// Closed by you: its sessions no longer ask for you and take no new conversation.
+    pub fn closed(self) -> bool {
+        matches!(self, Self::Completed | Self::Abandoned)
+    }
+}
+pub fn task_state(w: &Workspace, task: &Task, now: u64) -> TaskState {
+    match w.task_outcomes.get(&task.id).unwrap_or(&Outcome::Open) {
+        Outcome::Completed => return TaskState::Completed,
+        Outcome::Abandoned => return TaskState::Abandoned,
+        Outcome::Deferred { until, .. } if *until > now => return TaskState::Deferred,
+        _ => (),
+    }
+    if !task.acceptance.is_empty() && task.proven() == task.acceptance.len() {
+        return TaskState::Proven;
+    }
+    let mut sessions = w
+        .agent_sessions
+        .iter()
+        .filter(|s| s.task.as_ref() == Some(&task.id))
+        .peekable();
+    if sessions.peek().is_none() {
+        return TaskState::NotStarted;
+    }
+    if sessions.all(|s| of(w, s, now) == Status::Closed) {
+        TaskState::Settled
+    } else {
+        TaskState::Working
+    }
+}
+/// The todo a session works for is one you closed.
+fn task_closed(w: &Workspace, s: &AgentSession) -> bool {
+    s.task.as_ref().is_some_and(|id| {
+        matches!(
+            w.task_outcomes.get(id),
+            Some(Outcome::Completed | Outcome::Abandoned)
+        )
+    })
+}
+
 /// The name of the group `needs_you` counts (waiting on you or failed), wherever it is
 /// shown: the window's chip and board column, the menu bar, the sidebar's status group.
 pub const NEEDS_YOU: &str = "要你处理";
 
 /// Whether a session asks for you now: waiting on you or failed, in a Mooring terminal
-/// that is open in a tab, not one you put off or closed, and not hidden as automation.
+/// that is open in a tab, not one you put off or closed (nor its todo), and not hidden
+/// as automation.
 /// The one place 要你处理 is counted: the window's chip and board, the menu bar, the
 /// phone and notifications all ask this.
 pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
@@ -176,6 +244,7 @@ pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
         && s.managed()
         && live_terminal(w, s).is_some_and(|t| w.terminal_tab(&t.id).is_some())
         && s.outcome.needs_review(now)
+        && !task_closed(w, s)
         && of(w, s, now).needs_you()
 }
 

@@ -766,6 +766,13 @@ impl Workspace {
                     .unwrap_or_else(|| {
                         self.terminal_tab(&terminal.id)
                             .and_then(|t| t.default_task.clone())
+                    })
+                    // A todo you closed takes no new conversation, even from its own tab.
+                    .filter(|id| {
+                        !matches!(
+                            self.task_outcomes.get(id),
+                            Some(Outcome::Completed | Outcome::Abandoned)
+                        )
                     });
             }
             if observed.current {

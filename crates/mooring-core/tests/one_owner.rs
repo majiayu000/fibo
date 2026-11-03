@@ -141,3 +141,58 @@ fn any_sequence_of_edits_keeps_one_name() {
         }
     }
 }
+
+/// A todo and its sessions: closing the todo stops its sessions asking for you and
+/// stops it taking new conversations; sessions all marked done show on the todo.
+#[test]
+fn a_todo_and_its_sessions_move_together() {
+    use mooring_core::status::{TaskState, task_state};
+    let mut w = every_state();
+    let at = now();
+    let task = w.tasks[0].clone();
+    // `waiting` asks for you; hang it on the todo.
+    w.agent_sessions
+        .iter_mut()
+        .find(|s| s.id == "waiting")
+        .unwrap()
+        .task = Some(task.id.clone());
+    let waiting = |w: &Workspace| {
+        w.agent_sessions
+            .iter()
+            .find(|s| s.id == "waiting")
+            .unwrap()
+            .clone()
+    };
+    assert!(w.needs_you(&waiting(&w), at));
+    assert_eq!(task_state(&w, &task, at), TaskState::Working);
+    w.edit(Edit::SetTaskOutcome {
+        id: task.id.clone(),
+        outcome: Outcome::Completed,
+    })
+    .unwrap();
+    assert_eq!(task_state(&w, &task, at), TaskState::Completed);
+    assert!(
+        !w.needs_you(&waiting(&w), at),
+        "a closed todo's session stops asking"
+    );
+    // A new conversation in the todo's tab does not join the closed todo.
+    if let Some(tab) = w.tabs.iter_mut().find(|t| t.id == "tab-review") {
+        tab.default_task = Some(task.id.clone());
+    }
+    let mut next = w
+        .agent_sessions
+        .iter()
+        .find(|s| s.id == "review")
+        .unwrap()
+        .clone();
+    next.id = "review-next".into();
+    next.cli_session_id = "cli-review-next".into();
+    next.task = None;
+    w.observe_agent(next).unwrap();
+    let next = w
+        .agent_sessions
+        .iter()
+        .find(|s| s.id == "review-next")
+        .unwrap();
+    assert_eq!(next.task, None);
+}

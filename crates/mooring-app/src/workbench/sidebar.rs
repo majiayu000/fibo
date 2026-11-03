@@ -1201,19 +1201,15 @@ impl Workbench {
                 .iter()
                 .filter(|s| s.task.as_ref() == Some(&tid))
                 .count();
-            let outcome = self
-                .workspace
-                .task_outcomes
-                .get(&tid)
-                .unwrap_or(&Outcome::Open);
-            let state = if *outcome == Outcome::Open {
-                if count == 0 {
-                    "未开始".into()
-                } else {
-                    format!("未完成 · {count} 个会话")
+            // The detail's word for where it stands, with how many sessions it has.
+            let status = super::task_detail::task_status(&self.workspace, task);
+            let state = match status {
+                mooring_core::status::TaskState::Working
+                | mooring_core::status::TaskState::Settled
+                | mooring_core::status::TaskState::Proven => {
+                    format!("{} · {count} 个会话", status.label())
                 }
-            } else {
-                outcome_label(outcome)
+                _ => status.label().to_owned(),
             };
             sidebar = sidebar.child(
                 div()

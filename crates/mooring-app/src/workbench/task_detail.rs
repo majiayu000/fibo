@@ -3,46 +3,10 @@ use super::forms::{plain, solid};
 use super::*;
 use mooring_core::content::Evidence;
 
-/// Where a todo stands, as the detail's status names it. Outcomes come from the user;
-/// 进行中 and 验收齐了 are read from the linked sessions and the attached evidence.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum TaskStatus {
-    NotStarted,
-    Working,
-    Proven,
-    Completed,
-    Deferred,
-    Abandoned,
-}
-impl TaskStatus {
-    pub(super) fn label(self) -> &'static str {
-        match self {
-            Self::NotStarted => "未开始",
-            Self::Working => "进行中",
-            Self::Proven => "验收齐了",
-            Self::Completed => "已完成",
-            Self::Deferred => "稍后再看",
-            Self::Abandoned => "已放弃",
-        }
-    }
-}
+/// See `mooring_core::status::task_state`, the one place a todo's state is decided.
+pub(super) use mooring_core::status::TaskState as TaskStatus;
 pub(super) fn task_status(w: &Workspace, task: &Task) -> TaskStatus {
-    match w.task_outcomes.get(&task.id).unwrap_or(&Outcome::Open) {
-        Outcome::Completed => TaskStatus::Completed,
-        Outcome::Abandoned => TaskStatus::Abandoned,
-        Outcome::Deferred { .. } => TaskStatus::Deferred,
-        Outcome::Open if !task.acceptance.is_empty() && task.proven() == task.acceptance.len() => {
-            TaskStatus::Proven
-        }
-        Outcome::Open
-            if w.agent_sessions
-                .iter()
-                .any(|s| s.task.as_ref() == Some(&task.id)) =>
-        {
-            TaskStatus::Working
-        }
-        Outcome::Open => TaskStatus::NotStarted,
-    }
+    mooring_core::status::task_state(w, task, now())
 }
 /// Records from the todo's sessions that a criterion can hold, newest first, each with the
 /// session it came from; ones already on `criterion` are left out.
@@ -103,7 +67,9 @@ fn ring(status: TaskStatus) -> gpui::Div {
         TaskStatus::NotStarted | TaskStatus::Deferred | TaskStatus::Abandoned => {
             base.border_color(T::color(T::muted()))
         }
-        TaskStatus::Working => base.flex().child(div().w_1_2().h_full().bg(ink)),
+        TaskStatus::Working | TaskStatus::Settled => {
+            base.flex().child(div().w_1_2().h_full().bg(ink))
+        }
         TaskStatus::Proven | TaskStatus::Completed => base.bg(ink),
     }
 }
@@ -1120,6 +1086,10 @@ mod tests {
         w.tasks.push(task.clone());
         assert_eq!(task_status(&w, &task), TaskStatus::NotStarted);
         w.agent_sessions[0].task = Some(task.id.clone());
+        // Every session it had is marked done, and the todo is not: it says so instead
+        // of staying 进行中 for good.
+        assert_eq!(task_status(&w, &task), TaskStatus::Settled);
+        w.agent_sessions[0].outcome = Outcome::Open;
         assert_eq!(task_status(&w, &task), TaskStatus::Working);
         let sid = w.agent_sessions[0].id.clone();
         w.content.insert(
