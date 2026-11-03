@@ -2358,7 +2358,7 @@ pub fn start(
             eprintln!("screen after 运行 Claude Code:\n{text}");
             shot("1-claude-started", cx);
             assert!(
-                text.contains("FAKE-CLAUDE --session-id"),
+                text.contains("FAKE-CLAUDE") && !text.contains("FAKE-CLAUDE --session-id"),
                 "运行 Claude Code started claude in the new terminal"
             );
             // The next new space offers the Agent just used as its one solid button.

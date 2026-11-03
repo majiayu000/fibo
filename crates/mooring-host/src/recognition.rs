@@ -511,6 +511,9 @@ pub fn reconcile(
         }
     }
     for (terminal, transcript, binding) in &bindings {
+        if *binding == Binding::Process && hook_spoke(workspace, terminal, &transcript.cli_id) {
+            continue;
+        }
         if bindings.iter().filter(|(id, ..)| id == terminal).count() != 1
             || bindings
                 .iter()
@@ -527,6 +530,16 @@ pub fn reconcile(
             .map_err(io::Error::other)?;
     }
     Ok(())
+}
+/// An id on argv is fixed for the life of the process; the CLI's own hook follows the
+/// conversation. Once the hook has named what runs in this terminal (`/clear` or `/resume`
+/// switched it), or said this very conversation ended there, argv no longer decides.
+fn hook_spoke(workspace: &Workspace, terminal: &str, cli_id: &str) -> bool {
+    workspace.agent_sessions.iter().any(|s| {
+        s.terminal.as_deref() == Some(terminal)
+            && s.binding == Some(Binding::Hook)
+            && (s.current || s.cli_session_id == cli_id)
+    })
 }
 /// A CLI with no process, file or hook evidence (shared-daemon Codex, a hand-started
 /// Claude without hooks) is left with the thread's newest prompt shown verbatim on one
@@ -1274,6 +1287,90 @@ mod tests {
         )
         .unwrap();
         assert!(mismatch.current_agent("pty-0").is_none());
+    }
+
+    #[test]
+    fn a_hook_switch_after_clear_outlives_the_launch_id_on_argv() {
+        let mut w = Workspace::default();
+        let [a, b] = [0, 1].map(|_| uuid::Uuid::new_v4().to_string());
+        w.terminals.push(Terminal {
+            id: "pty-0".into(),
+            space: "s".into(),
+            argv: vec!["claude".into()],
+            cwd: "/same".into(),
+            pid: Some(100),
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
+        // Reopened by `claude --resume <a>`: argv names `a` for the life of the process.
+        let processes = vec![Process {
+            pid: 100,
+            parent: 1,
+            runtime: Some(Agent::Claude),
+            cli_session_id: Some(a.clone()),
+            no_daemon: false,
+            launch: vec![],
+        }];
+        let log = |id: &str, updated| Transcript {
+            runtime: Agent::Claude,
+            cli_id: id.into(),
+            path: format!("/same/{id}.jsonl"),
+            cwd: "/same".into(),
+            updated,
+        };
+        let (ta, tb) = (log(&a, 1), log(&b, 2));
+        let both = [ta.clone(), tb.clone()];
+        let current = |w: &Workspace| w.current_agent("pty-0").map(|s| s.cli_session_id.clone());
+        reconcile(&mut w, &both, &processes, &HashMap::new()).unwrap();
+        assert_eq!(current(&w), Some(a.clone()));
+        // `/clear`: SessionEnd for `a`; a scan before SessionStart must not revive it.
+        apply_hook(
+            &mut w,
+            Agent::Claude,
+            100,
+            Some("pty-0"),
+            &a,
+            &ta,
+            &processes,
+            true,
+        )
+        .unwrap();
+        reconcile(&mut w, &both, &processes, &HashMap::new()).unwrap();
+        assert_eq!(current(&w), None);
+        apply_hook(
+            &mut w,
+            Agent::Claude,
+            100,
+            Some("pty-0"),
+            &b,
+            &tb,
+            &processes,
+            false,
+        )
+        .unwrap();
+        for _ in 0..2 {
+            reconcile(&mut w, &both, &processes, &HashMap::new()).unwrap();
+            assert_eq!(current(&w), Some(b.clone()));
+        }
+        assert_eq!(
+            w.current_agent("pty-0").unwrap().binding,
+            Some(Binding::Hook)
+        );
+        // `/resume <a>` from inside: the hook moves the terminal back.
+        apply_hook(
+            &mut w,
+            Agent::Claude,
+            100,
+            Some("pty-0"),
+            &a,
+            &ta,
+            &processes,
+            false,
+        )
+        .unwrap();
+        reconcile(&mut w, &both, &processes, &HashMap::new()).unwrap();
+        assert_eq!(current(&w), Some(a));
     }
 
     #[test]

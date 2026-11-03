@@ -412,7 +412,9 @@ fn builtin() -> Vec<AgentSpec> {
                 "Claude",
                 "Claude Code",
                 "claude",
-                "claude --session-id {uuid}",
+                // Started bare: its SessionStart hook names the conversation, and keeps
+                // naming it after `/clear` or `/resume`, which an id on argv cannot.
+                "claude",
                 "claude --resume {id}",
             ),
             &["❯", ">"],
@@ -737,7 +739,7 @@ mod tests {
             Agent::Claude.resume_command("id", &["--dangerously-skip-permissions".into()]),
             "command claude --dangerously-skip-permissions --resume 'id'"
         );
-        assert!(Agent::Claude.command().starts_with("claude --session-id "));
+        assert_eq!(Agent::Claude.command(), "claude");
     }
 
     #[test]

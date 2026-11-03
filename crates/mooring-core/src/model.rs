@@ -1269,10 +1269,7 @@ mod tests {
     }
     #[test]
     fn agent_start_commands_need_no_daemon_flag_and_quote_resume_ids() {
-        let first = Agent::Claude.command();
-        let second = Agent::Claude.command();
-        assert_ne!(first, second);
-        assert!(uuid::Uuid::parse_str(first.strip_prefix("claude --session-id ").unwrap()).is_ok());
+        assert_eq!(Agent::Claude.command(), "claude");
         assert_eq!(Agent::Codex.command(), "codex");
         assert_eq!(
             Agent::Codex.resume_command("a'b", &[]),
