@@ -23,11 +23,13 @@ if grep -q '^error: could not compile' "$log"; then
 fi
 # "Running tests/managed_session.rs (...)" starts that binary's output; doc-tests and unit
 # tests have their own headers.
-failures=$(awk '
+# CI colors cargo's output; strip the escapes so the headers match.
+esc=$(printf '\033')
+failures=$(sed "s/$esc\[[0-9;]*m//g" "$log" | awk '
 	/^ *Running / { bin = $2 }
 	/^ *Doc-tests / { bin = "doc-tests" }
 	/^test .* \.\.\. FAILED$/ { print bin "\t" $2 }
-' "$log")
+')
 if [ -z "$failures" ]; then
 	echo "ci-test: cargo test failed without a failed case to retry"
 	exit 1

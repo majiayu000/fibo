@@ -464,6 +464,11 @@ pub(super) fn attach(
             rows,
         },
     )?;
+    // From here only the writer thread below writes to this socket, holding no lock. The
+    // connection's 5-second write timeout would cut a viewer that stops reading for longer
+    // (a stalled window) in the middle of a frame; a full queue marks it lagged and resyncs
+    // it instead, and a viewer that goes away fails the write at once.
+    stream.set_write_timeout(None)?;
     let ready = Arc::new(AtomicBool::new(false));
     let writer_ready = Arc::clone(&ready);
     let mut writer = stream.try_clone()?;

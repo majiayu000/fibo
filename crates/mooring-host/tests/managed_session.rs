@@ -315,8 +315,9 @@ fn a_viewer_that_falls_behind_a_burst_is_resynced_not_cut() {
     .unwrap();
     let (mut stream, mut vt, writable) = h.attach("burst", false);
     assert!(writable);
-    // Not reading while the burst runs: the host's queue for this viewer fills up.
-    std::thread::sleep(Duration::from_secs(6));
+    // Not reading while the burst runs: the host's queue for this viewer fills up. Longer
+    // than a connection's 5-second write timeout, which used to cut the viewer here.
+    std::thread::sleep(Duration::from_secs(8));
     stream
         .set_read_timeout(Some(Duration::from_secs(20)))
         .unwrap();
