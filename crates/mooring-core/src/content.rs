@@ -118,16 +118,11 @@ pub struct Content {
     #[serde(default)]
     pub subagents: Vec<Subagent>,
 }
-/// One subagent a session started: its description, and when it started and ended.
+/// One subagent a session started: its description (its type without one), and when it
+/// started and ended.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Subagent {
     pub name: String,
-    /// `general-purpose`, `Explore` or a custom agent's name.
-    #[serde(default)]
-    pub kind: String,
-    /// The parent turn waits on it (not started in the background).
-    #[serde(default)]
-    pub foreground: bool,
     pub started: u64,
     /// `None` while it runs.
     #[serde(default)]
@@ -846,7 +841,6 @@ mod subagent_tests {
             name: format!("a{started}"),
             started,
             ended,
-            ..Default::default()
         }
     }
     #[test]

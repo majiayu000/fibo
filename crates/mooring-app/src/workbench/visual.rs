@@ -1051,124 +1051,55 @@ impl Workbench {
                         ..Default::default()
                     });
                 }
-                // `-sub`: subagents under two sessions. The one you are in runs three of
-                // four (its list open); 标签命名依旧有问题 ended its turn with one still
-                // running, which keeps it 在跑, after a foreground one it waited on.
-                if parts.get(4) == Some(&"sub") {
+                // `-sub`: four subagents under the session you are in (one ended, its
+                // list open) and two under 标签命名依旧有问题, whose turn ended with one
+                // still running, which keeps it 在跑. `-many`: twenty-three under the
+                // one you are in; `-manyall` with all of them listed.
+                if let Some(v @ ("sub" | "many" | "manyall")) = parts.get(4).copied() {
                     use mooring_core::content::{Background, Subagent, Turn};
                     let now = mooring_core::content::now();
-                    let sub =
-                        |name: &str, kind: &str, ago: u64, took: Option<u64>, fg: bool| Subagent {
-                            name: name.into(),
-                            kind: kind.into(),
-                            foreground: fg,
-                            started: now - ago,
-                            ended: took.map(|t| now - ago + t),
-                        };
+                    // A subagent a name, ten seconds apart; every `every`-th has ended.
+                    let subs = |names: &str, every: usize| -> Vec<Subagent> {
+                        let ended = |i: usize| (i % every == 0).then(|| now - 120 + i as u64);
+                        let at = |i: usize| now - 400 + 10 * i as u64;
+                        names
+                            .split(',')
+                            .enumerate()
+                            .map(|(i, name)| Subagent {
+                                name: name.into(),
+                                started: at(i),
+                                ended: ended(i),
+                            })
+                            .collect()
+                    };
+                    let many = "tasks,spaces,shortcuts,plugins,market,phone link,relay,quota,file events,marks,handoff,legacy,CLI,board,sidebar,overview,palette,settings,keymap,statusbar,tabs,peek,cleanup"
+                        .split(',')
+                        .map(|a| format!("Audit {a} drift"))
+                        .collect::<Vec<_>>()
+                        .join(",");
                     for c in self.workspace.content.values_mut() {
                         match c.title.as_str() {
-                            "这个诊断的 ui 感觉很丑啊" => {
-                                c.subagents = vec![
-                                    sub(
-                                        "Check IME/keyboard charters",
-                                        "general-purpose",
-                                        400,
-                                        Some(157),
-                                        false,
-                                    ),
-                                    sub(
-                                        "Check PTY/process lifecycle charters",
-                                        "general-purpose",
-                                        183,
-                                        None,
-                                        false,
-                                    ),
-                                    sub(
-                                        "Check agent status/hook charters",
-                                        "general-purpose",
-                                        172,
-                                        None,
-                                        false,
-                                    ),
-                                    sub(
-                                        "Check remote/phone & render charters",
-                                        "general-purpose",
-                                        163,
-                                        None,
-                                        false,
-                                    ),
-                                ]
+                            "这个诊断的 ui 感觉很丑啊" if v == "sub" => {
+                                c.subagents = subs(
+                                    "Check IME/keyboard charters,Check PTY/process lifecycle charters,Check agent status/hook charters,Check remote/phone & render charters",
+                                    4,
+                                )
                             }
-                            "标签命名依旧有问题" => {
+                            "这个诊断的 ui 感觉很丑啊" => c.subagents = subs(&many, 8),
+                            "标签命名依旧有问题" if v == "sub" => {
                                 c.turn = Turn::Completed;
                                 c.completed_claim = false;
                                 c.background = Some(Background {
                                     agents: 1,
                                     ..Default::default()
                                 });
-                                c.subagents = vec![
-                                    sub("Explore tab naming paths", "Explore", 300, Some(41), true),
-                                    sub(
-                                        "Audit phone link protocol drift",
-                                        "general-purpose",
-                                        260,
-                                        None,
-                                        false,
-                                    ),
-                                ]
+                                c.subagents = subs(
+                                    "Explore tab naming paths,Audit phone link protocol drift",
+                                    2,
+                                );
                             }
                             _ => (),
                         }
-                    }
-                }
-                // `-many` / `-manyall`: the session you are in runs twenty subagents and
-                // three ended; `-manyall` with the whole list opened.
-                if let Some(v @ ("many" | "manyall")) = parts.get(4).copied() {
-                    use mooring_core::content::Subagent;
-                    let now = mooring_core::content::now();
-                    let areas = [
-                        "tasks",
-                        "spaces",
-                        "shortcuts",
-                        "plugins",
-                        "market",
-                        "phone link",
-                        "relay",
-                        "quota",
-                        "file events",
-                        "marks",
-                        "handoff",
-                        "legacy",
-                        "CLI",
-                        "board",
-                        "sidebar",
-                        "overview",
-                        "palette",
-                        "settings",
-                        "keymap",
-                        "statusbar",
-                        "tabs",
-                        "peek",
-                        "cleanup",
-                    ];
-                    let subs = areas
-                        .iter()
-                        .enumerate()
-                        .map(|(i, area)| Subagent {
-                            name: format!("Audit {area} drift"),
-                            kind: "general-purpose".into(),
-                            foreground: false,
-                            started: now - 400 + 10 * i as u64,
-                            ended: (i % 8 == 1).then(|| now - 120 + i as u64),
-                        })
-                        .collect::<Vec<_>>();
-                    if let Some(c) = self
-                        .workspace
-                        .content
-                        .values_mut()
-                        .find(|c| c.title == "这个诊断的 ui 感觉很丑啊")
-                    {
-                        c.subagents = subs;
                     }
                     if v == "manyall"
                         && let Some(s) = self
@@ -1194,6 +1125,7 @@ impl Workbench {
                         pane,
                         answering: false,
                         note: None,
+                        remote: None,
                     }
                 });
                 self.layout.space_menu = (parts.get(4) == Some(&"menu"))

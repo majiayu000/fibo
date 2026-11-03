@@ -351,9 +351,6 @@ impl Flat {
     pub const SUB_BRANCH: f32 = 14.;
     pub const SUB_TRUNK: f32 = 3.;
     pub const SUB_LEAF: f32 = 20.;
-    /// The 前台 mark on a subagent the parent waits on.
-    pub const SUB_MARK_PAD: f32 = 3.;
-    pub const SUB_MARK_LINE: f32 = 12.;
     fn dark() -> bool {
         Theme::scheme() == Scheme::Dark
     }

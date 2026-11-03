@@ -360,8 +360,8 @@ fn unix(t: std::io::Result<std::time::SystemTime>) -> Option<u64> {
         .ok()
         .map(|d| d.as_secs())
 }
-/// Claude Code writes `agent-<id>.meta.json` (its description, type, whether it was
-/// started in the background, and `finished` once done) and `agent-<id>.jsonl` (its own
+/// Claude Code writes `agent-<id>.meta.json` (its description, type, and `finished` once
+/// done) and `agent-<id>.jsonl` (its own
 /// log) for each subagent. It started when its log was created; it ended when its meta
 /// was last written with `finished`.
 pub(crate) fn subagents(dir: &Path) -> Vec<mooring_core::content::Subagent> {
@@ -384,17 +384,14 @@ pub(crate) fn subagents(dir: &Path) -> Vec<mooring_core::content::Subagent> {
                 .or_else(|| unix(meta.created()))
                 .unwrap_or(written)
                 .min(written);
-            let description = v["description"].as_str().unwrap_or("").trim();
-            let kind = v["agentType"].as_str().unwrap_or("").to_owned();
+            let name = [&v["description"], &v["agentType"]]
+                .into_iter()
+                .filter_map(|n| n.as_str().map(str::trim))
+                .find(|n| !n.is_empty())
+                .unwrap_or("")
+                .to_owned();
             Some(mooring_core::content::Subagent {
-                name: if description.is_empty() {
-                    kind.clone()
-                } else {
-                    description.to_owned()
-                },
-                kind,
-                // Older Claude Code wrote no shape; its subagents ran in the foreground.
-                foreground: v["requestShape"].as_str() != Some("background"),
+                name,
                 started,
                 ended: (v["finished"] == true).then_some(written),
             })
@@ -437,12 +434,9 @@ mod tests {
             "a log without its meta is not listed: {subs:?}"
         );
         assert_eq!(subs[0].name, "Audit drift");
-        assert!(!subs[0].running() && !subs[0].foreground);
-        // No description: its type names it; no request shape: the parent waited on it.
-        assert_eq!(
-            (subs[1].name.as_str(), subs[1].foreground),
-            ("Explore", true)
-        );
+        assert!(!subs[0].running());
+        // No description: its type names it.
+        assert_eq!(subs[1].name, "Explore");
         assert!(subs[1].running());
         assert!(subagents(Path::new("/nonexistent/subagents")).is_empty());
     }
