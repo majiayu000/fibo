@@ -81,6 +81,40 @@ impl Workbench {
             .child(host)
             .child(div().flex_1())
             .child(self.quota_cells(cx))
+            // Only while memory is tight: a click opens 本机诊断, memory row first.
+            .when_some(super::pressure::tight(), |d, (pressure, swap)| {
+                let tone = if pressure == mooring_core::diagnostics::Pressure::Critical {
+                    Tone::Danger
+                } else {
+                    Tone::Warn
+                };
+                d.child(divider()).child(
+                    item("status-memory", false)
+                        .aria_label(format!("内存{}", pressure.label()))
+                        .gap(px(T::S4))
+                        .child(div().size(px(T::DOT)).rounded_full().bg(tone.dot()))
+                        .child(
+                            div()
+                                .text_color(tone.ink())
+                                .child(format!("内存{}", pressure.label())),
+                        )
+                        .when(swap > 0 && fit.working, |d| {
+                            d.child(
+                                div().text_color(T::color(T::secondary())).child(format!(
+                                    "交换 {}",
+                                    mooring_core::diagnostics::gib(swap)
+                                )),
+                            )
+                        })
+                        .tooltip(super::diagnostics::tip(vec![
+                            format!("系统内存压力{}", pressure.label()),
+                            "点开本机诊断，看谁占得多".into(),
+                        ]))
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx)),
+                        ),
+                )
+            })
             .when(fit.diagnose || fit.settings, |d| d.child(divider()))
             .when(fit.diagnose, |d| {
                 d.child(

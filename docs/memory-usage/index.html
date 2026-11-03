@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>内存占用 · 设计稿</title>
+<style>
+  :root {
+    --win: #1c1c1e; --pop: #2a2a2c; --sunk: #232325; --line: #39393b; --line2: #333335;
+    --text: #ecebe9; --sec: #a3a2a0; --muted: #8a8988; --faint: #5f5e5d;
+    --s0: #3987e5; --s1: #d95926; --s2: #199e70; --s3: #c98500; --s4: #d55181;
+    --other: #6d6c6b; --hatch: #4a4a4b; --wait: #e8823a; --err: #e5534b; --track: #333335;
+    --mono: -apple-system, "PingFang SC", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { font-variant-numeric: tabular-nums; margin: 0; background: #111113; color: var(--text);
+    font: 14px/1.45 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+  .controls { max-width: 1340px; margin: 0 auto; padding: 20px 16px 12px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+  .controls h1 { font-size: 15px; margin: 0 12px 0 0; font-weight: 600; }
+  .seg { display: inline-flex; background: #1f1f21; border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+  .seg button { all: unset; cursor: pointer; padding: 4px 12px; border-radius: 6px; color: var(--sec); font-size: 13px; }
+  .seg button.on { background: #3a3a3c; color: var(--text); }
+  .lbl { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  .why { max-width: 1340px; margin: 0 auto; padding: 0 16px 14px; color: var(--muted); font-size: 12.5px; }
+
+  .window { max-width: 1340px; margin: 0 auto 40px; padding: 0 16px; }
+  .panel { background: var(--pop); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .head { padding: 18px 24px 14px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .head .t { font-size: 19px; font-weight: 600; }
+  .head .t small { font-size: 13px; color: var(--sec); font-weight: 400; margin-left: 10px; }
+  .head .sub { color: var(--sec); font-size: 13px; margin-top: 6px; display: flex; gap: 10px; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .close { color: var(--text); font-size: 13px; padding: 6px 12px; }
+
+  .cards { margin: 4px 24px 0; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px dashed transparent; position: relative; }
+  .cards::before, .cards::after { content: ""; position: absolute; width: 8px; height: 8px; border: 1px solid var(--muted); }
+  .cards::before { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+  .cards::after { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+  .card { padding: 18px 20px 16px; border-right: 1px solid var(--line2); min-height: 196px; }
+  .card:last-child { border-right: 0; }
+  .card.hl { background: rgba(255,255,255,.025); outline: 1px solid #4a4a4c; outline-offset: -1px; border-radius: 4px; }
+  .ch { display: flex; justify-content: space-between; color: var(--sec); font-size: 13px; }
+  .cells { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; }
+  .cells .k { color: var(--muted); font-size: 12.5px; }
+  .cells .v { font-size: 19px; font-family: var(--mono); letter-spacing: -.3px; margin-top: 2px; }
+  .ticks { display: flex; gap: 2px; height: 18px; margin-top: 16px; }
+  .ticks i { flex: 1; background: var(--track); }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 14px; }
+  .segbar { display: flex; height: 18px; margin-top: 16px; gap: 2px; }
+  .segbar > div { height: 100%; }
+  .legend-s { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--sec); flex-wrap: wrap; }
+  .legend-s span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 5px; background: var(--c); border-radius: 2px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--sec); }
+  .big { font-size: 26px; font-weight: 600; margin-top: 12px; display: flex; align-items: baseline; gap: 10px; }
+  .big small { font-size: 13px; font-weight: 400; color: var(--sec); }
+  .tone-ok { color: var(--text); } .tone-warn { color: var(--wait); } .tone-err { color: var(--err); }
+  svg text { font-family: -apple-system, "PingFang SC", sans-serif; }
+
+  section { padding: 22px 24px 4px; }
+  .sh { display: flex; justify-content: space-between; align-items: baseline; }
+  .sh h3 { margin: 0; font-size: 15px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
+  .sh .r { color: var(--muted); font-size: 12.5px; }
+  .new { font-size: 11px; font-weight: 500; color: #9ec3f5; border: 1px solid #36557d; border-radius: 4px; padding: 0 5px; }
+  .stack { display: flex; height: 30px; margin-top: 14px; background: var(--track); gap: 2px; }
+  .stack > div { height: 100%; position: relative; cursor: default; }
+  .stack > div:hover { filter: brightness(1.2); }
+  .hatched { background: repeating-linear-gradient(135deg, var(--hatch) 0 3px, transparent 3px 7px) !important; outline: 1px solid var(--hatch); outline-offset: -1px; }
+  .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; font-family: var(--mono); }
+  .legend { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 28px; margin-top: 12px; }
+  .legend div { display: flex; justify-content: space-between; font-size: 14px; }
+  .legend b { font-weight: 400; display: flex; align-items: center; gap: 8px; }
+  .legend b::before { content: ""; width: 11px; height: 11px; border-radius: 2px; background: var(--c); }
+  .legend b.h::before { background: repeating-linear-gradient(135deg, var(--hatch) 0 2px, transparent 2px 4px); outline: 1px solid var(--hatch); }
+  .legend span { color: var(--sec); font-family: var(--mono); font-size: 13px; }
+  .guess { margin-top: 12px; border: 1px solid var(--line2); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: var(--sec); display: flex; gap: 10px; }
+  .guess em { font-style: normal; font-size: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; color: var(--sec); white-space: nowrap; height: fit-content; }
+
+  #lower { display: flex; flex-direction: column; }
+  .bottom.mem { order: var(--memOrder, 1); }
+  .bottom { display: grid; grid-template-columns: 1.15fr 1fr; border-top: 1px solid var(--line2); margin-top: 18px; }
+  .bottom > div { padding: 20px 24px; }
+  .bottom > div:first-child { border-right: 1px solid var(--line2); }
+  .rows { margin-top: 12px; }
+  .row { display: grid; grid-template-columns: 230px 1fr 76px; align-items: center; height: 42px; border-bottom: 1px solid var(--line2); }
+  .row .n { display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .row .n i { font-style: normal; color: var(--muted); font-size: 13px; }
+  .chip { font-size: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; color: var(--sec); cursor: pointer; }
+  .chip:hover { border-color: #5a5a5c; color: var(--text); }
+  .bar { height: 12px; border-radius: 2px; }
+  .row .v { text-align: right; font-family: var(--mono); font-weight: 600; }
+  .row .v small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; line-height: 1; }
+  .sub-rows { background: var(--sunk); border-bottom: 1px solid var(--line2); padding: 4px 0 6px; }
+  .sub-row { display: grid; grid-template-columns: 230px 1fr 76px; align-items: center; height: 30px; font-size: 13px; color: var(--sec); }
+  .sub-row .n { padding-left: 18px; display: flex; gap: 8px; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .sub-row .n::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--sd, var(--muted)); flex: none; }
+  .sub-row .v { text-align: right; font-family: var(--mono); }
+  .sub-row .jump { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .colhead { display: grid; grid-template-columns: 230px 1fr 76px; color: var(--muted); font-size: 12px; margin-top: 12px; align-items: end; }
+  .colhead .sort { cursor: pointer; grid-column: span 2; display: flex; justify-content: space-between; border-bottom: 2px solid transparent; padding-bottom: 4px; }
+  .colhead .sort b { color: var(--sec); font-weight: 600; font-size: 13px; }
+  .colhead .sort.on { border-color: var(--text); }
+  .colhead .sort.on b { color: var(--text); }
+  .row.dim .c-dim { opacity: .55; }
+  .auto { font-size: 12px; color: var(--wait); margin-left: 8px; font-weight: 400; }
+
+  .foot { border-top: 1px solid var(--line2); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; color: var(--sec); font-size: 13px; }
+  .btn { padding: 7px 16px; border-radius: 6px; font-weight: 600; font-size: 13.5px; }
+  .btn.p { background: #ecebe9; color: #1c1c1e; }
+
+  .status { margin-top: 14px; background: var(--win); border: 1px solid var(--line); border-radius: 10px; height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 12.5px; color: var(--muted); }
+  .status .l, .status .r { display: flex; gap: 16px; align-items: center; }
+  .mem-cell { display: none; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 5px; cursor: pointer; }
+  .mem-cell.show { display: inline-flex; }
+  .mem-cell:hover { background: #2a2a2c; }
+  .mini { width: 44px; height: 4px; background: var(--track); border-radius: 2px; overflow: hidden; }
+  .mini i { display: block; height: 100%; }
+  .cap { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
+
+  @media (max-width: 1000px) {
+    .cards, .bottom { grid-template-columns: 1fr; }
+    .card { border-right: 0; border-bottom: 1px solid var(--line2); }
+    .legend { grid-template-columns: repeat(2, 1fr); }
+    .row, .colhead, .sub-row { grid-template-columns: 150px 1fr 70px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <h1>内存占用 · 设计稿</h1>
+  <div><span class="lbl">内存卡方向</span><span class="seg" id="dir">
+    <button data-v="A" class="on">A 压力优先</button><button data-v="B">B 压力曲线</button><button data-v="C">C 一条说完</button></span></div>
+  <div><span class="lbl">模拟内存压力</span><span class="seg" id="pres">
+    <button data-v="ok" class="on">正常</button><button data-v="warn">偏紧</button><button data-v="err">紧张</button></span></div>
+</div>
+<p class="why">改动：① 顶部内存卡（三个方向可切）② 新增「内存都给了谁」③ CPU 排行和散点图原样保留，下面新加一行「内存占用排行」（claude 的 9 个终端默认展开），内存偏紧时这一行自动挪到最上面 ④ 状态栏只在偏紧或紧张时出现内存格。数据都是假的。各 App 的数改用 phys_footprint（活动监视器「内存」列），不再用 RSS。</p>
+
+<div class="window">
+  <div class="panel">
+    <div class="head">
+      <div>
+        <div class="t">本机诊断<small>看谁在占 CPU / GPU / 内存，再把证据交给 Agent</small></div>
+        <div class="sub"><span class="dot"></span><b style="color:var(--text);font-weight:500">采样已结束</b> 已采 15.2 秒 · 区间 2 / 2 · 开始于 14:12:26</div>
+      </div>
+      <div class="close">关闭 · Esc</div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="ch"><span>整机 CPU · 采样平均</span><span>25%</span></div>
+        <div class="cells"><div><div class="k">核心</div><div class="v">16</div></div><div><div class="k">在忙</div><div class="v">约 3.9 核</div></div><div><div class="k">排行能解释</div><div class="v">2.6 核</div></div></div>
+        <div class="ticks" id="cpuTicks"></div>
+        <div class="note">排行前 20 项 · 共 1578 个进程</div>
+      </div>
+      <div class="card hl" id="memCard"></div>
+      <div class="card">
+        <div class="ch"><span>GPU 设备 · 最新读数</span><span>0%</span></div>
+        <div class="cells"><div><div class="k">活跃度</div><div class="v">0.0%</div></div><div><div class="k">有计数的应用</div><div class="v">9 个</div></div><div><div class="k">区间</div><div class="v">2 / 2</div></div></div>
+        <div class="ticks" id="gpuTicks"></div>
+        <div class="note">设备活跃度，不是各应用份额之和</div>
+      </div>
+    </div>
+
+    <section>
+      <div class="sh"><h3>全部核心都在忙什么</h3><span class="r">宽度 = 平均占用的核心数 · 悬停看明细</span></div>
+      <div class="stack" style="height:22px">
+        <div style="width:3.6%;background:var(--s0)"></div><div style="width:2.8%;background:var(--s1)"></div><div style="width:1.8%;background:var(--s2)"></div><div style="width:1.6%;background:var(--s3)"></div><div style="width:1.2%;background:var(--s4)"></div><div style="width:5.3%;background:var(--other)"></div><div class="hatched" style="width:8.5%"></div>
+      </div>
+      <div class="cap">（CPU 这一段不变，缩成一行方便对照）</div>
+    </section>
+
+    <section>
+      <div class="sh"><h3 id="memTitle">128 GB 都给了谁 <span class="new">新</span></h3><span class="r">宽度 = 物理内存 · 和活动监视器「内存」列同口径 · 悬停看明细</span></div>
+      <div class="stack" id="memStack"></div>
+      <div class="axis"><span>0</span><span>32</span><span>64</span><span>96</span><span>128 GB</span></div>
+      <div class="legend" id="memLegend"></div>
+      <div class="guess"><em>说明</em><span id="memGuess"></span></div>
+    </section>
+
+    <div id="lower">
+    <div class="bottom cpu" style="order:0">
+      <div>
+        <div class="sh"><h3>CPU 占用排行</h3><span class="r">平均 · 虚线 = 1 个核心</span></div>
+        <div class="colhead" id="colheadCpu"></div>
+        <div class="rows" id="rowsCpu"></div>
+      </div>
+      <div>
+        <div class="sh"><h3>CPU × 内存</h3><span class="r">纵轴为对数 · 内存 = phys_footprint</span></div>
+        <svg id="scatter" viewBox="0 0 520 330" width="100%"></svg>
+      </div>
+    </div>
+    <div class="bottom mem">
+      <div>
+        <div class="sh"><h3>内存占用排行 <span class="new">新</span><span class="auto" id="autoNote"></span></h3><span class="r">最新读数 · 淡色段 = 其中被压缩</span></div>
+        <div class="colhead" id="colheadMem"></div>
+        <div class="rows" id="rowsMem"></div>
+      </div>
+      <div>
+        <div class="sh"><h3>GPU 活动份额</h3><span class="r">已观测计数的占比</span></div>
+        <div class="rows" style="margin-top:14px"><div class="row"><span class="n">WindowServer</span><span><span class="bar" style="display:block;width:85.0%;background:var(--s2)"></span></span><span class="v">46.2%</span></div><div class="row"><span class="n">Google Chrome</span><span><span class="bar" style="display:block;width:39.9%;background:var(--s0)"></span></span><span class="v">21.7%</span></div><div class="row"><span class="n">Mooring</span><span><span class="bar" style="display:block;width:27.4%;background:var(--s3)"></span></span><span class="v">14.9%</span></div><div class="row"><span class="n">LarkSuite</span><span><span class="bar" style="display:block;width:14.9%;background:var(--s4)"></span></span><span class="v">8.1%</span></div><div class="row"><span class="n">com.apple.Virtualization…</span><span><span class="bar" style="display:block;width:9.2%;background:var(--other)"></span></span><span class="v">5.0%</span></div><div class="row"><span class="n">其余 4 个</span><span><span class="bar" style="display:block;width:7.5%;background:var(--other)"></span></span><span class="v">4.1%</span></div></div><div class="cap">（原有区块，不变）</div>
+      </div>
+    </div>
+    </div>
+
+    <div class="foot">
+      <span>ⓘ 读数说明 · 4 条 ▾ &nbsp;&nbsp; 只在本机读取，结束后停止采样</span>
+      <span style="display:flex;gap:18px;align-items:center"><span class="btn" style="color:var(--text)">重新采样</span><span class="btn p">复制摘要给 Agent · ⌘C</span></span>
+    </div>
+  </div>
+
+  <div class="status">
+    <div class="l"><span>本机 · 4 个空间 · 9 个会话</span><span>待办 0</span></div>
+    <div class="r">
+      <span>■ 周 ▬ 32%</span><span>● 周 ▬ 100% +1</span>
+      <span class="mem-cell" id="memCell"></span>
+      <span>本机诊断</span><span>⌘P 命令</span>
+    </div>
+  </div>
+  <div class="cap">↑ 状态栏：内存正常时不出现；偏紧 / 紧张才冒出一格，点它直接打开诊断并切到内存排行。切换上面的「模拟内存压力」看效果。</div>
+</div>
+
+<script>
+const GB = 1;
+const STATES = {
+  ok:   { label: "正常", tone: "ok",   used: 98.0,  wired: 9.5,  comp: 34.6, swap: 0,    cache: 22.0, scale: 1.00,
+          hist: [12,13,12,14,13,15,14,13,14,16,15,14,15,16,15,14,16,17,16,15,16,15,16,17,16,15,16,17,16,17] },
+  warn: { label: "偏紧", tone: "warn", used: 116.4, wired: 9.8,  comp: 51.9, swap: 3.2,  cache: 7.1,  scale: 1.22,
+          hist: [16,18,20,22,25,27,30,34,36,40,43,45,48,50,52,51,53,55,54,56,58,57,59,60,58,61,62,60,63,62] },
+  err:  { label: "紧张", tone: "err",  used: 124.6, wired: 10.1, comp: 61.3, swap: 14.8, cache: 1.9,  scale: 1.36,
+          hist: [40,44,48,52,55,58,60,63,66,70,72,75,78,80,82,84,83,86,88,87,89,90,88,91,92,90,93,92,94,93] },
+};
+const APPS = [
+  { n: "Google Chrome", c: "var(--s0)", x: 142, cpu: 57.6, mem: 24.6, comp: 9.1 },
+  { n: "claude", c: "var(--s1)", x: 27, term: 9, cpu: 44.3, mem: 16.8, comp: 5.2 },
+  { n: "com.apple.Virtualization…", c: "var(--s2)", cpu: 13.2, mem: 8.2, comp: 0.4 },
+  { n: "LarkSuite", c: "var(--s3)", x: 16, cpu: 19.0, mem: 6.1, comp: 2.0 },
+  { n: "Mooring", c: "var(--s4)", x: 2, cpu: 24.5, mem: 2.4, comp: 0.3 },
+  { n: "WindowServer", cpu: 27.8, mem: 1.9, comp: 0.1 },
+  { n: "coreaudiod", cpu: 15.7, mem: 0.09, comp: 0 },
+  { n: "Clash Verge", x: 2, cpu: 9.0, mem: 0.31, comp: 0.05 },
+  { n: "bluetoothd", cpu: 6.6, mem: 0.04, comp: 0 },
+];
+const TERMS = [
+  { n: "页面拖动倾斜效果", cpu: 9.8, mem: 3.4, d: "var(--wait)" },
+  { n: "安装不生效问题", cpu: 7.6, mem: 2.9, d: "#e0b23a" },
+  { n: "库的聊天记录与多终端移动…", cpu: 6.9, mem: 2.6, d: "#e0b23a" },
+  { n: "侧边栏 UI 设计", cpu: 5.2, mem: 2.2, d: "var(--wait)" },
+  { n: "超分炒粉测评", cpu: 4.1, mem: 1.8, d: "#e0b23a" },
+  { n: "Write Me Down 方向的 AI 角…", cpu: 3.3, mem: 1.4, d: "var(--wait)" },
+  { n: "其余 3 个终端", cpu: 4.6, mem: 1.6 },
+  { n: "不在终端里（后台 MCP 等）", cpu: 2.8, mem: 0.9 },
+];
+let dir = "A", pres = "ok", mode = "mem", openTerm = true;
+const $ = id => document.getElementById(id);
+const f1 = v => v >= 10 ? v.toFixed(1) : v >= 1 ? v.toFixed(2) : (v * 1024).toFixed(0);
+const unit = v => v >= 1 ? f1(v) + " GB" : f1(v) + " MB";
+const tone = t => t === "ok" ? "var(--text)" : t === "warn" ? "var(--wait)" : "var(--err)";
+const toneBar = t => t === "ok" ? "#8f8e8c" : tone(t);
+
+function ticks(el, share) { el.innerHTML = Array.from({length: 64}, (_, i) => `<i style="${i < share * 64 ? "background:#bdbcba" : ""}"></i>`).join(""); }
+
+function appsFor(s) { return APPS.map(a => ({ ...a, mem: a.mem * (a.mem > 1 ? s.scale : 1), comp: a.comp * s.scale * s.scale })); }
+
+function memCard() {
+  const s = STATES[pres], appMem = s.used - s.wired - s.comp;
+  const seg = (w, c, t) => `<div style="width:${w / 128 * 100}%;background:${c}" title="${t}"></div>`;
+  const bar = `<div class="segbar" style="background:var(--track)">${seg(appMem, "#bdbcba", "App 内存 " + appMem.toFixed(1) + " GB")}${seg(s.wired, "#8f8e8c", "联动 " + s.wired + " GB")}${seg(s.comp, "#666564", "压缩 " + s.comp + " GB")}</div>
+     <div class="legend-s"><span style="--c:#bdbcba">App ${appMem.toFixed(1)}</span><span style="--c:#8f8e8c">联动 ${s.wired}</span><span style="--c:#666564">压缩 ${s.comp}</span><span style="--c:var(--track)">缓存与可用 ${(128 - s.used).toFixed(1)}</span></div>`;
+  const pill = `<span class="pill"><span class="dot" style="background:${toneBar(s.tone)}"></span>压力${s.label}</span>`;
+  let html;
+  if (dir === "A") {
+    html = `<div class="ch"><span>内存 · 最新读数</span>${pill}</div>
+      <div class="big tone-${s.tone}">${s.label}<small>已用 ${s.used.toFixed(1)} / 128 GB · ${Math.round(s.used / 128 * 100)}%</small></div>
+      <div class="cells" style="margin-top:8px"><div><div class="k">压缩</div><div class="v">${s.comp.toFixed(1)} GB</div></div><div><div class="k">交换</div><div class="v" style="color:${s.swap ? tone(s.tone) : ""}">${s.swap ? s.swap.toFixed(1) + " GB" : "0"}</div></div><div><div class="k">缓存</div><div class="v">${s.cache.toFixed(1)} GB</div></div></div>
+      ${bar}`;
+  } else if (dir === "B") {
+    const w = 330, h = 54, n = s.hist.length;
+    const pts = s.hist.map((v, i) => `${(i / (n - 1) * w).toFixed(1)},${(h - v / 100 * h).toFixed(1)}`).join(" ");
+    html = `<div class="ch"><span>内存 · 采样期间</span><span>${Math.round(s.used / 128 * 100)}%</span></div>
+      <div class="cells"><div><div class="k">已用</div><div class="v">${s.used.toFixed(1)} GB</div></div><div><div class="k">其中压缩</div><div class="v">${s.comp.toFixed(1)} GB</div></div><div><div class="k">交换</div><div class="v" style="color:${s.swap ? tone(s.tone) : ""}">${s.swap ? s.swap.toFixed(1) + " GB" : "0"}</div></div></div>
+      <svg viewBox="0 0 ${w} ${h + 16}" width="100%" style="margin-top:12px;display:block">
+        <rect x="0" y="0" width="${w}" height="${h * .4}" fill="rgba(229,83,75,.07)"/><rect x="0" y="${h * .4}" width="${w}" height="${h * .3}" fill="rgba(232,130,58,.06)"/>
+        <line x1="0" x2="${w}" y1="${h}" y2="${h}" stroke="var(--line)"/>
+        <polygon points="0,${h} ${pts} ${w},${h}" fill="${toneBar(s.tone)}" opacity=".18"/>
+        <polyline points="${pts}" fill="none" stroke="${toneBar(s.tone)}" stroke-width="1.6"/>
+        <text x="0" y="${h + 13}" font-size="10.5" fill="var(--muted)">内存压力 · 采样 15 秒</text><text x="${w}" y="${h + 13}" font-size="10.5" fill="${tone(s.tone)}" text-anchor="end">现在：${s.label}</text>
+      </svg>`;
+  } else {
+    html = `<div class="ch"><span>内存 · 最新读数</span>${pill}</div>
+      <div style="margin-top:16px;font-family:var(--mono);font-size:19px">${s.used.toFixed(1)} <span style="color:var(--muted);font-size:14px">/ 128 GB</span>
+      <span style="float:right;font-size:14px;color:${s.swap ? tone(s.tone) : "var(--muted)"}">交换 ${s.swap ? s.swap.toFixed(1) + " GB" : "0"}</span></div>
+      ${bar.replace('margin-top:16px', '')}`;
+  }
+  html += `<div class="note">${dir === "B" ? "曲线是系统内存压力，不是已用百分比" : "看压力和交换判断紧不紧；百分比高不代表不够用"}</div>`;
+  $("memCard").innerHTML = html;
+}
+
+function memStack() {
+  const s = STATES[pres], apps = appsFor(s);
+  const top = apps.slice(0, 5), restSum = apps.slice(5).reduce((a, b) => a + b.mem, 0) + 5.6 * s.scale;
+  const appSum = top.reduce((a, b) => a + b.mem, 0) + restSum;
+  const unattributed = Math.max(0, s.used - s.wired - appSum);
+  const parts = [
+    ...top.map(a => ({ n: a.n.replace("com.apple.", ""), v: a.mem, c: a.c })),
+    { n: "排行其余 15 项", v: restSum, c: "var(--other)" },
+    { n: "系统联动", v: s.wired, c: "#55595f" },
+    { n: "未归属", v: unattributed, h: true },
+    { n: "缓存与可用", v: 128 - s.used, c: "transparent", free: true },
+  ];
+  $("memStack").innerHTML = parts.map(p => `<div class="${p.h ? "hatched" : ""}" style="width:${p.v / 128 * 100}%;${p.h ? "" : "background:" + p.c}" title="${p.n} · ${unit(p.v)}"></div>`).join("");
+  $("memLegend").innerHTML = parts.map(p => `<div><b class="${p.h ? "h" : ""}" style="--c:${p.free ? "var(--track)" : p.c}">${p.n}</b><span>${unit(p.v)}</span></div>`).join("");
+  $("memGuess").textContent = `各 App 的数含它被压缩的部分（合计 ${s.comp.toFixed(1)} GB 压缩里的大部分），所以「未归属」是已用减去联动和各 App 后剩下的：多是排行外的进程和内核。` +
+    (s.swap ? ` 已经用了 ${s.swap.toFixed(1)} GB 交换，机器会变慢；先看上面最宽的两段。` : " 没有用到交换，内存还够。");
+}
+
+function rankInto(kind) {
+  const s = STATES[pres];
+  const apps = appsFor(s).slice().sort((a, b) => kind === "cpu" ? b.cpu - a.cpu : b.mem - a.mem);
+  const max = kind === "cpu" ? 100 : Math.max(...apps.map(a => a.mem));
+  const ax = kind === "cpu" ? ["0%", "50%", "1 核"] : ["0", (max / 2).toFixed(0) + " GB", max.toFixed(0) + " GB"];
+  $(kind === "cpu" ? "colheadCpu" : "colheadMem").innerHTML = `<span></span><span style="display:flex;justify-content:space-between;padding-right:20px">${ax.map(t => `<span>${t}</span>`).join("")}</span><span></span>`;
+  let html = "";
+  for (const a of apps) {
+    const c = a.c || "var(--other)", v = kind === "cpu" ? a.cpu : a.mem, w = v / max * 92;
+    const cw = kind === "mem" ? a.comp / max * 92 : 0;
+    const chip = a.term ? `<span class="chip">${a.term} 终端${kind === "mem" ? " ▴" : " ▾"}</span>` : "";
+    const tick = kind === "cpu" ? `<span style="width:2px;height:22px;background:#ddd;margin-left:${Math.min(8, 100 - w)}%"></span>` : "";
+    html += `<div class="row"><span class="n">${a.n}${a.x ? `<i>×${a.x}</i>` : ""}${chip}</span>
+      <span style="display:flex;align-items:center"><span class="bar" style="width:${Math.max(w - cw, .4)}%;background:${c}"></span>${cw ? `<span class="bar" style="width:${cw}%;background:${c};opacity:.38"></span>` : ""}${tick}</span>
+      <span class="v">${kind === "cpu" ? v.toFixed(1) + "%" : unit(v)}${kind === "mem" && a.comp >= .1 ? `<small>压缩 ${unit(a.comp)}</small>` : ""}</span></div>`;
+    if (a.term && kind === "mem") {
+      const tw = Math.max(...TERMS.map(t => t.mem));
+      html += `<div class="sub-rows">${TERMS.map(t => `<div class="sub-row"><span class="n" style="--sd:${t.d || "var(--faint)"}">${t.n}</span>
+        <span><span class="bar" style="display:block;height:6px;width:${t.mem / tw * 40}%;background:var(--s1);opacity:.55"></span></span>
+        <span class="v">${unit(t.mem * s.scale)}${t.d ? '<span class="jump">↗</span>' : ""}</span></div>`).join("")}
+        <div style="padding:4px 18px 0;font-size:12px;color:var(--muted)">按终端的进程树归：Agent 自己 + 它拉起的 node / MCP 子进程。↗ 跳到会话卡。（第二期）</div></div>`;
+    }
+  }
+  $(kind === "cpu" ? "rowsCpu" : "rowsMem").innerHTML = html;
+}
+function rank() {
+  const s = STATES[pres];
+  document.documentElement.style.setProperty("--memOrder", pres === "ok" ? 1 : -1);
+  $("autoNote").textContent = pres !== "ok" ? `内存${s.label}，这一行挪到了最上面` : "";
+  rankInto("cpu"); rankInto("mem");
+}
+
+function scatter() {
+  const s = STATES[pres], apps = appsFor(s), L = 64, B = 290, R = 500, T = 16;
+  const ys = [0.008, 0.064, 0.5, 4, 32], yl = ["8 MB", "64 MB", "512 MB", "4 GB", "32 GB"];
+  const y = g => B - (Math.log2(g / 0.008) / Math.log2(32 / 0.008)) * (B - T);
+  const x = c => L + c / 100 * (R - L);
+  let g = ys.map((v, i) => `<line x1="${L}" x2="${R}" y1="${y(v)}" y2="${y(v)}" stroke="#333335"/><text x="${L - 8}" y="${y(v) + 4}" font-size="12" fill="var(--muted)" text-anchor="end">${yl[i]}</text>`).join("");
+  g += [0, 50, 100].map((c, i) => `<line x1="${x(c)}" x2="${x(c)}" y1="${T}" y2="${B}" stroke="#333335"/><text x="${x(c)}" y="${B + 20}" font-size="12" fill="var(--muted)" text-anchor="middle">${["0%", "50%", "1 核"][i]}</text>`).join("");
+  const extra = [[2, .02], [3, .05], [1, .2], [4, .9], [6, .15], [9, 1.1], [2, .4], [5, .03], [1, .07], [14, .6], [3, 2.2], [7, .012]];
+  g += extra.map(([c, m]) => `<circle cx="${x(c)}" cy="${y(m)}" r="3" fill="var(--s0)" opacity=".75"/>`).join("");
+  const labelled = new Set(["Google Chrome", "claude", "com.apple.Virtualization…", "WindowServer"]);
+  g += apps.map(a => `<circle cx="${x(a.cpu)}" cy="${y(Math.max(a.mem, .009))}" r="${labelled.has(a.n) ? 4 : 3}" fill="${labelled.has(a.n) ? "#fff" : "var(--s0)"}"/>` +
+    (labelled.has(a.n) ? `<text x="${x(a.cpu) + 8}" y="${y(Math.max(a.mem, .009)) + 4}" font-size="13" fill="var(--text)">${a.n.replace("com.apple.", "")}</text>` : "")).join("");
+  $("scatter").innerHTML = g;
+}
+
+function statusCell() {
+  const s = STATES[pres], el = $("memCell");
+  el.classList.toggle("show", pres !== "ok");
+  el.innerHTML = `<span style="color:${tone(s.tone)}">内存${s.label}</span><span class="mini"><i style="width:${s.used / 128 * 100}%;background:${tone(s.tone)}"></i></span><span>交换 ${s.swap.toFixed(1)} GB</span>`;
+  el.title = "打开本机诊断 · 内存排行";
+  el.onclick = () => { document.querySelector(".bottom.mem").scrollIntoView({ behavior: "smooth" }); };
+}
+
+function setSeg(id, v) { document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
+function bind(id, fn) { document.querySelectorAll(`#${id} button`).forEach(b => b.onclick = () => { setSeg(id, b.dataset.v); fn(b.dataset.v); render(); }); }
+bind("dir", v => dir = v); bind("pres", v => pres = v);
+
+function render() {
+  $("memTitle").innerHTML = `128 GB 都给了谁 <span class="new">新</span>`;
+  ticks($("cpuTicks"), .25); ticks($("gpuTicks"), 0);
+  memCard(); memStack(); rank(); scatter(); statusCell();
+}
+render();
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@ use futures::{
     StreamExt,
     channel::mpsc::{UnboundedSender, unbounded},
 };
-use mooring_core::diagnostics::{AppUsage, Diagnostics, gib, mib};
+use mooring_core::diagnostics::{AppUsage, Diagnostics, Memory, Pressure, gib, mib};
 use std::{
     io,
     os::unix::net::UnixStream,
@@ -109,6 +109,9 @@ pub(super) struct DiagnosticView {
     /// The app whose terminal chips are expanded.
     open: Option<String>,
     all_rows: bool,
+    /// Apps whose terminal rows under the memory ranking are folded; open by default.
+    memory_folded: HashSet<String>,
+    all_memory_rows: bool,
     notes_open: bool,
     focus: gpui::FocusHandle,
 }
@@ -206,6 +209,175 @@ fn cores(percent: f64) -> String {
     } else {
         format!("{:.1}", percent / 100.)
     }
+}
+/// The memory axis end and step in GB: the smallest of 1, 2, 5, 10 … GB that needs at most
+/// four intervals, since the memory ranking shares the narrower half of the panel.
+fn gb_scale(largest: f64) -> (f64, f64) {
+    let step = [0.25, 0.5]
+        .into_iter()
+        .chain(
+            [1., 2., 5.]
+                .into_iter()
+                .cycle()
+                .zip((0..).flat_map(|n| [10f64.powi(n); 3]))
+                .map(|(k, decade)| k * decade),
+        )
+        .find(|&step| (largest / step).ceil() <= 4.)
+        .unwrap();
+    (axis_max(largest, step, step), step)
+}
+const GB: f64 = 1_073_741_824.;
+/// Apps keep the color the CPU ranking gave them in every chart; others share one gray.
+fn app_colors(report: &Diagnostics) -> HashMap<String, u32> {
+    report
+        .ranked()
+        .take(COLORED)
+        .enumerate()
+        .map(|(i, a)| (a.name.clone(), T::series(i)))
+        .collect()
+}
+/// A tick gauge filled by several parts in order, for the memory panel.
+fn parts_gauge(parts: Vec<(f64, gpui::Hsla)>, height: f32) -> gpui::Canvas<()> {
+    gpui::canvas(
+        |_, _, _| (),
+        move |bounds, (), window, _| {
+            let ticks = (f32::from(bounds.size.width) / T::GAUGE_PITCH).floor() as usize;
+            let empty = T::color(T::chart_grid());
+            let mut ends = Vec::new();
+            let mut sum = 0.;
+            for (share, color) in &parts {
+                sum += share.clamp(0., 1.);
+                ends.push(((ticks as f64 * sum.min(1.)).round() as usize, *color));
+            }
+            for i in 0..ticks {
+                let color = ends.iter().find(|(end, _)| i < *end).map_or(empty, |e| e.1);
+                let at = bounds.origin + gpui::point(px(i as f32 * T::GAUGE_PITCH), px(0.));
+                window.paint_quad(gpui::fill(
+                    gpui::Bounds::new(at, gpui::size(px(T::GAUGE_TICK), bounds.size.height)),
+                    color,
+                ));
+            }
+        },
+    )
+    .w_full()
+    .h(px(height))
+}
+/// The memory panel leads with pressure: a high percentage alone does not mean short,
+/// since macOS keeps memory full of cache and compressed pages on purpose.
+fn memory_panel(memory: Option<Memory>) -> gpui::Div {
+    let pressure = memory.and_then(|m| m.pressure);
+    let tone = pressure.and_then(|p| match p {
+        Pressure::Normal => None,
+        Pressure::Warn => Some(Tone::Warn),
+        Pressure::Critical => Some(Tone::Danger),
+    });
+    let ink = tone.map_or_else(|| T::color(T::primary()), Tone::ink);
+    let unread = || "不可读".to_string();
+    let reading = |key: &'static str, value: String, colored: bool| {
+        div()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(T::S2))
+            .child(
+                div()
+                    .text_size(px(T::META))
+                    .text_color(T::color(T::muted()))
+                    .child(key),
+            )
+            .child(
+                div()
+                    .truncate()
+                    .text_size(px(T::PANEL_VALUE))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(if colored { ink } else { T::color(T::primary()) })
+                    .child(value),
+            )
+    };
+    let badge = div()
+        .px(px(T::S4))
+        .rounded(px(T::S2))
+        .text_size(px(T::SMALL))
+        .child(
+            memory
+                .and_then(|m| m.percent())
+                .map_or_else(unread, |p| format!("{p:.0}%")),
+        );
+    let badge = match tone {
+        Some(t) => badge.text_color(t.ink()).bg(t.wash()),
+        None => badge.text_color(T::color(T::muted())),
+    };
+    let swap = memory.map_or(0, |m| m.swap_bytes);
+    let (parts, hint) = match memory.filter(|m| m.total_bytes > 0) {
+        Some(m) => {
+            let share = |b: u64| b as f64 / m.total_bytes as f64;
+            (
+                vec![
+                    (
+                        share(m.app_bytes()),
+                        tone.map_or_else(|| T::color(T::secondary()), |t| t.colors().0),
+                    ),
+                    (share(m.wired_bytes), T::color(T::series_other())),
+                    (share(m.compressed_bytes), T::color(T::hatch())),
+                ],
+                format!(
+                    "App {:.1} · 联动 {:.1} · 压缩 {:.1} · 缓存 {:.1} GB",
+                    m.app_bytes() as f64 / GB,
+                    m.wired_bytes as f64 / GB,
+                    m.compressed_bytes as f64 / GB,
+                    m.cached_bytes as f64 / GB
+                ),
+            )
+        }
+        None => (Vec::new(), "内存读数不可读".into()),
+    };
+    div()
+        .flex_1()
+        .min_w_0()
+        .px(px(T::S16))
+        .py(px(T::S14))
+        .flex()
+        .flex_col()
+        .gap(px(T::S12))
+        .border_r(px(T::BORDER_WIDTH))
+        .border_color(T::color(T::border()))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(label("内存 · 最新读数"))
+                .child(badge),
+        )
+        .child(
+            div()
+                .flex()
+                .gap(px(T::S12))
+                .child(reading(
+                    "压力",
+                    pressure.map_or_else(unread, |p| p.label().into()),
+                    true,
+                ))
+                .child(reading(
+                    "已用",
+                    memory.map_or_else(unread, |m| gib(m.used_bytes)),
+                    false,
+                ))
+                .child(reading(
+                    "交换",
+                    memory.map_or_else(unread, |_| if swap == 0 { "0".into() } else { gib(swap) }),
+                    swap > 0 && tone.is_some(),
+                )),
+        )
+        .child(parts_gauge(parts, T::GAUGE_HEIGHT))
+        .child(
+            div()
+                .text_size(px(T::SMALL))
+                .text_color(T::color(T::muted()))
+                .truncate()
+                .child(hint),
+        )
 }
 /// An axis end that is a round step past the largest value, never below `floor`.
 fn axis_max(largest: f64, step: f64, floor: f64) -> f64 {
@@ -385,14 +557,25 @@ fn tick(text: String, at: f32) -> gpui::Div {
 }
 /// Tick labels over a bar column: the grid shares the bar plot's x scale.
 fn axis(max: f64, step: f64, reference: Option<f64>, label_width: f32) -> gpui::Div {
-    let mut ticks = div().flex_1().relative().h(px(T::TICK_ROW));
-    let mut v = 0.;
-    while v <= max + 0.01 {
-        let text = if Some(v) == reference {
+    axis_by(max, step, reference, label_width, |v| {
+        if Some(v) == reference {
             "1 核".to_owned()
         } else {
             format!("{v:.0}%")
-        };
+        }
+    })
+}
+fn axis_by(
+    max: f64,
+    step: f64,
+    reference: Option<f64>,
+    label_width: f32,
+    text: impl Fn(f64) -> String,
+) -> gpui::Div {
+    let mut ticks = div().flex_1().relative().h(px(T::TICK_ROW));
+    let mut v = 0.;
+    while v <= max + 0.01 {
+        let text = text(v);
         // The value column to the right leaves room, so the end label centres on its
         // tick like the others instead of leaning into its neighbour.
         let at = (v / max) as f32;
@@ -502,10 +685,131 @@ fn bar_row(
                 .w(px(T::BAR_VALUE))
                 .flex_shrink_0()
                 .text_right()
+                .whitespace_nowrap()
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(T::color(T::primary()))
                 .child(value),
         )
+}
+/// One part of a stacked bar and its legend entry.
+struct Segment {
+    name: String,
+    value: f64,
+    color: u32,
+    hatched: bool,
+    detail: String,
+}
+impl Segment {
+    fn new(name: String, value: f64, color: u32) -> Self {
+        Self {
+            name,
+            value,
+            color,
+            hatched: false,
+            detail: String::new(),
+        }
+    }
+    fn detail(mut self, detail: String) -> Self {
+        self.detail = detail;
+        self
+    }
+}
+/// A stacked bar whose widths follow the values, and its four-column legend. `text` gives
+/// a value's hover line and its legend number.
+fn stack_chart(
+    prefix: &str,
+    segments: Vec<Segment>,
+    text: impl Fn(f64) -> (String, String),
+) -> (gpui::Div, gpui::Div) {
+    let mut stack = div().flex().gap(px(T::S2)).h(px(T::STACK_HEIGHT));
+    let mut legend = div()
+        .mt(px(T::S10))
+        .grid()
+        .grid_cols(4)
+        .gap_x(px(T::S20))
+        .gap_y(px(T::S6));
+    let last = segments.len().saturating_sub(1);
+    for (i, seg) in segments.into_iter().enumerate() {
+        let (color, hatched) = (seg.color, seg.hatched);
+        let fill = move |d: gpui::Div| {
+            if hatched {
+                d.bg(gpui::pattern_slash(T::color(color), T::S2, T::S6))
+                    .border(px(T::BORDER_WIDTH))
+                    .border_color(T::color(color))
+            } else {
+                d.bg(T::color(color))
+            }
+        };
+        let (hover, number) = text(seg.value);
+        let mut lines = vec![seg.name.clone(), hover];
+        if !seg.detail.is_empty() {
+            lines.push(seg.detail);
+        }
+        let mut segment = fill(div())
+            .id(gpui::SharedString::from(format!("{prefix}-{i}")))
+            .h_full()
+            .min_w(px(T::STEP_HEIGHT))
+            .flex_grow(seg.value as f32)
+            .flex_basis(gpui::relative(0.))
+            .tooltip(tip(lines));
+        if i == 0 {
+            segment = segment.rounded_l(px(T::CHIP_RADIUS));
+        }
+        if i == last {
+            segment = segment.rounded_r(px(T::CHIP_RADIUS));
+        }
+        stack = stack.child(segment);
+        legend = legend.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(T::S6))
+                .min_w_0()
+                .text_size(px(T::SMALL))
+                .child(fill(
+                    div().size(px(T::SWATCH)).flex_shrink_0().rounded(px(T::S2)),
+                ))
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(T::color(T::body()))
+                        .child(seg.name),
+                )
+                .child(div().flex_1())
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .text_color(T::color(T::secondary()))
+                        .child(number),
+                ),
+        );
+    }
+    (stack, legend)
+}
+/// The quiet boxed note under a chart, with a small tag such as 推测 or 说明.
+fn chart_note(tag: &'static str, text: String) -> gpui::Div {
+    div()
+        .mt(px(T::S12))
+        .px(px(T::S12))
+        .py(px(T::S8))
+        .rounded(px(T::CONTROL_RADIUS))
+        .bg(T::color(T::raised()))
+        .flex()
+        .gap(px(T::S8))
+        .text_size(px(T::SMALL))
+        .text_color(T::color(T::secondary()))
+        .child(
+            div()
+                .flex_shrink_0()
+                .px(px(T::S6))
+                .rounded(px(T::CHIP_RADIUS))
+                .border(px(T::BORDER_WIDTH))
+                .border_color(T::color(T::control()))
+                .text_size(px(T::CHIP_SIZE))
+                .child(tag),
+        )
+        .child(div().flex_1().min_w_0().child(text))
 }
 fn chip(text: String) -> gpui::Div {
     div()
@@ -529,6 +833,8 @@ impl DiagnosticView {
             terminals,
             open: None,
             all_rows: false,
+            memory_folded: HashSet::new(),
+            all_memory_rows: false,
             notes_open: false,
             focus: cx.focus_handle(),
         };
@@ -677,106 +983,36 @@ impl DiagnosticView {
             .sum::<f64>()
             / 100.;
         let unattributed = report.unattributed_cores()?;
-        // (name, cores, color, hatched, detail)
-        let mut segments: Vec<(String, f64, u32, bool, String)> = ranked
+        let mut segments: Vec<Segment> = ranked
             .iter()
             .take(COLORED)
             .enumerate()
             .map(|(i, a)| {
-                (
-                    a.name.clone(),
-                    a.cpu_percent / 100.,
-                    T::series(i),
-                    false,
-                    format!("{} 个进程", a.processes),
-                )
+                Segment::new(a.name.clone(), a.cpu_percent / 100., T::series(i))
+                    .detail(format!("{} 个进程", a.processes))
             })
             .collect();
         if ranked.len() > COLORED {
-            segments.push((
+            segments.push(Segment::new(
                 format!("排行其余 {} 项", ranked.len() - COLORED),
                 rest,
                 T::series_other(),
-                false,
-                String::new(),
             ));
         }
-        segments.push((
-            "未归属".into(),
-            unattributed,
-            T::hatch(),
-            true,
-            "排行之外或采样间隙里的短命进程".into(),
-        ));
+        let mut hatched = Segment::new("未归属".into(), unattributed, T::hatch())
+            .detail("排行之外或采样间隙里的短命进程".into());
+        hatched.hatched = true;
+        segments.push(hatched);
         let idle = (total - busy).max(0.);
         if idle >= 0.05 {
-            segments.push(("空闲".into(), idle, T::chart_grid(), false, String::new()));
+            segments.push(Segment::new("空闲".into(), idle, T::chart_grid()));
         }
-        let mut stack = div().flex().gap(px(T::S2)).h(px(T::STACK_HEIGHT));
-        let mut legend = div()
-            .mt(px(T::S10))
-            .grid()
-            .grid_cols(4)
-            .gap_x(px(T::S20))
-            .gap_y(px(T::S6));
-        let last = segments.len() - 1;
-        for (i, (name, value, color, hatched, detail)) in segments.into_iter().enumerate() {
-            let fill = |d: gpui::Div| {
-                if hatched {
-                    d.bg(gpui::pattern_slash(T::color(color), T::S2, T::S6))
-                        .border(px(T::BORDER_WIDTH))
-                        .border_color(T::color(color))
-                } else {
-                    d.bg(T::color(color))
-                }
-            };
-            let mut lines = vec![
-                name.clone(),
-                format!("{value:.2} 核 · 整机 {:.1}%", value / total * 100.),
-            ];
-            if !detail.is_empty() {
-                lines.push(detail);
-            }
-            let mut segment = fill(div())
-                .id(gpui::SharedString::from(format!("diag-core-{i}")))
-                .h_full()
-                .min_w(px(T::STEP_HEIGHT))
-                .flex_grow(value as f32)
-                .flex_basis(gpui::relative(0.))
-                .tooltip(tip(lines));
-            if i == 0 {
-                segment = segment.rounded_l(px(T::CHIP_RADIUS));
-            }
-            if i == last {
-                segment = segment.rounded_r(px(T::CHIP_RADIUS));
-            }
-            stack = stack.child(segment);
-            legend = legend.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(T::S6))
-                    .min_w_0()
-                    .text_size(px(T::SMALL))
-                    .child(fill(
-                        div().size(px(T::SWATCH)).flex_shrink_0().rounded(px(T::S2)),
-                    ))
-                    .child(
-                        div()
-                            .min_w_0()
-                            .truncate()
-                            .text_color(T::color(T::body()))
-                            .child(name),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .flex_shrink_0()
-                            .text_color(T::color(T::secondary()))
-                            .child(format!("{value:.2} 核")),
-                    ),
-            );
-        }
+        let (stack, legend) = stack_chart("diag-core", segments, |v| {
+            (
+                format!("{v:.2} 核 · 整机 {:.1}%", v / total * 100.),
+                format!("{v:.2} 核"),
+            )
+        });
         let mut scale = div()
             .relative()
             .h(px(T::TICK_ROW))
@@ -806,33 +1042,299 @@ impl DiagnosticView {
             .child(scale)
             .child(legend);
         if unattributed >= 0.5 {
-            section = section.child(
-                div()
-                    .mt(px(T::S12))
-                    .px(px(T::S12))
-                    .py(px(T::S8))
-                    .rounded(px(T::CONTROL_RADIUS))
-                    .bg(T::color(T::raised()))
-                    .flex()
-                    .gap(px(T::S8))
-                    .text_size(px(T::SMALL))
-                    .text_color(T::color(T::secondary()))
-                    .child(
-                        div()
-                            .flex_shrink_0()
-                            .px(px(T::S6))
-                            .rounded(px(T::CHIP_RADIUS))
-                            .border(px(T::BORDER_WIDTH))
-                            .border_color(T::color(T::control()))
-                            .text_size(px(T::CHIP_SIZE))
-                            .child("推测"),
-                    )
-                    .child(div().flex_1().min_w_0().child(format!(
-                        "约 {unattributed:.1} 核没有归到排行里的应用。可能来自排行之外的进程，或在两次采样之间出生又退出的短命进程（排行只统计前后都在的进程）。要确认，需要抓进程创建记录。"
-                    ))),
-            );
+            section = section.child(chart_note("推测", format!(
+                "约 {unattributed:.1} 核没有归到排行里的应用。可能来自排行之外的进程，或在两次采样之间出生又退出的短命进程（排行只统计前后都在的进程）。要确认，需要抓进程创建记录。"
+            )));
         }
         Some(section)
+    }
+    /// Where memory went, app by app. Widths split the apps' total, which counts compressed
+    /// pages at their original size, so it is a share of the apps, not of physical memory.
+    fn memory_stack(&self, report: &Diagnostics) -> Option<gpui::Div> {
+        let total = report.apps_memory();
+        if total == 0 {
+            return None;
+        }
+        let colors = app_colors(report);
+        let ranked = report.memory_ranked();
+        // Seven apps and the rest fill the legend's two rows of four.
+        let top: Vec<&&AppUsage> = ranked.iter().take(7).collect();
+        let shown: u64 = top.iter().map(|a| a.memory_bytes).sum();
+        let mut segments: Vec<Segment> = top
+            .iter()
+            .map(|a| {
+                Segment::new(
+                    a.name.clone(),
+                    a.memory_bytes as f64 / GB,
+                    colors.get(&a.name).copied().unwrap_or(T::series_other()),
+                )
+                .detail(format!("{} 个进程", a.processes))
+            })
+            .collect();
+        let others = report.apps.iter().filter(|a| a.memory_bytes > 0).count() - top.len();
+        if others > 0 {
+            let mut rest = Segment::new(
+                format!("其余 {others} 个应用"),
+                total.saturating_sub(shown) as f64 / GB,
+                T::hatch(),
+            );
+            // Hatched, so the long tail never reads as one more gray app.
+            rest.hatched = true;
+            segments.push(rest);
+        }
+        let all = total as f64 / GB;
+        let (stack, legend) = stack_chart("diag-mem", segments, |v| {
+            (
+                format!(
+                    "{} · 各应用合计的 {:.1}%",
+                    mib((v * GB) as u64),
+                    v / all * 100.
+                ),
+                mib((v * GB) as u64),
+            )
+        });
+        let mut scale = div()
+            .relative()
+            .h(px(T::TICK_ROW))
+            .mt(px(T::S4))
+            .text_size(px(T::CHIP_SIZE))
+            .text_color(T::color(T::muted()));
+        for q in 0..=4 {
+            let at = q as f32 / 4.;
+            scale = scale.child(tick(
+                format!("{:.0}{}", all * at as f64, if q == 4 { " GB" } else { "" }),
+                at,
+            ));
+        }
+        let used = report.memory.map_or_else(String::new, |m| {
+            format!("，所以比已用的 {} 多", gib(m.used_bytes))
+        });
+        Some(
+            div()
+                .px(px(T::S20))
+                .pt(px(T::S16))
+                .pb(px(T::S16))
+                .border_b(px(T::BORDER_WIDTH))
+                .border_color(T::color(T::border()))
+                .child(heading("内存都给了谁", "宽度 = 各应用占用 · 悬停看明细"))
+                .child(stack)
+                .child(scale)
+                .child(legend)
+                .child(chart_note(
+                    "说明",
+                    format!(
+                        "各应用合计 {}，按活动监视器「内存」列的口径：被压缩的页按原始大小算{used}。这条看谁占得多，还剩多少看压力和交换。",
+                        gib(total)
+                    ),
+                )),
+        )
+    }
+    fn memory_ranking(&self, report: &Diagnostics, cx: &Context<Self>) -> gpui::Div {
+        let ranked = report.memory_ranked();
+        let colors = app_colors(report);
+        let (max, step) = gb_scale(ranked.first().map_or(0., |a| a.memory_bytes as f64 / GB));
+        let mut column = div()
+            .flex_1()
+            .min_w_0()
+            .px(px(T::S20))
+            .py(px(T::S16))
+            .child(heading("内存占用排行", "最新读数 · 活动监视器口径"))
+            .child(axis_by(max, step, None, T::BAR_LABEL, |v| {
+                if v == 0. {
+                    "0".into()
+                } else if v < 1. {
+                    format!("{:.0} MB", v * 1024.)
+                } else {
+                    format!("{v:.0} GB")
+                }
+            }));
+        let first = FIRST_ROWS.max(report.gpu_ranked().len() + 3);
+        let first = if ranked.len() <= first + 2 {
+            ranked.len()
+        } else {
+            first
+        };
+        let shown = if self.all_memory_rows {
+            ranked.len()
+        } else {
+            ranked.len().min(first)
+        };
+        let mut assigned: HashSet<&str> = HashSet::new();
+        for app in ranked.iter().take(shown) {
+            // A terminal's tree spans several apps (shell, Agent, node); it sits under
+            // the biggest of them.
+            let mut terms: Vec<_> = report
+                .terminals
+                .iter()
+                .filter(|t| app.terminals.contains(&t.id) && !assigned.contains(t.id.as_str()))
+                .filter_map(|t| self.terminals.get(&t.id).map(|title| (t, title.clone())))
+                .collect();
+            terms.sort_by_key(|t| std::cmp::Reverse(t.0.memory_bytes));
+            assigned.extend(terms.iter().map(|(t, _)| t.id.as_str()));
+            let folded = self.memory_folded.contains(&app.name);
+            let mut extra = div().flex().items_center().gap(px(T::S4)).flex_shrink_0();
+            if app.processes > 1 {
+                extra = extra.child(chip(format!("×{}", app.processes)));
+            }
+            if !terms.is_empty() {
+                let name = app.name.clone();
+                extra = extra.child(
+                    div()
+                        .id(gpui::SharedString::from(format!(
+                            "diag-memterms-{}",
+                            app.name
+                        )))
+                        .flex_shrink_0()
+                        .px(px(T::S6))
+                        .rounded(px(T::S8))
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(T::color(T::control()))
+                        .text_size(px(T::CHIP_SIZE))
+                        .text_color(T::color(T::link()))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(T::color(T::button_hover())))
+                        .child(format!(
+                            "{} 终端 {}",
+                            terms.len(),
+                            if folded { "▾" } else { "▴" }
+                        ))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if !this.memory_folded.remove(&name) {
+                                this.memory_folded.insert(name.clone());
+                            }
+                            cx.notify();
+                        })),
+                );
+            }
+            let color = colors.get(&app.name).copied().unwrap_or(T::series_other());
+            column = column.child(
+                bar_row(
+                    format!("diag-mem-{}", app.name).into(),
+                    &app.name,
+                    extra,
+                    plot(app.memory_bytes as f64 / GB, max, step, None, color),
+                    mib(app.memory_bytes),
+                    T::BAR_LABEL,
+                )
+                .tooltip(tip(vec![
+                    app.name.clone(),
+                    format!("内存 {} · {} 个进程", mib(app.memory_bytes), app.processes),
+                    format!("CPU 平均 {:.1}%", app.cpu_percent),
+                ])),
+            );
+            if !terms.is_empty() && !folded {
+                let mut list = div()
+                    .pb(px(T::S6))
+                    .border_b(px(T::BORDER_WIDTH))
+                    .border_color(T::color(T::border()));
+                for (t, title) in terms {
+                    let id = t.id.clone();
+                    let share = (t.memory_bytes as f64 / GB / max).min(1.) as f32;
+                    list = list.child(
+                        div()
+                            .id(gpui::SharedString::from(format!("diag-memterm-{id}")))
+                            .flex()
+                            .items_center()
+                            .gap(px(T::S10))
+                            .h(px(T::ROW - T::S6))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(T::color(T::raised())))
+                            .child(
+                                div()
+                                    .w(px(T::BAR_LABEL))
+                                    .flex_shrink_0()
+                                    .pl(px(T::S12))
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(T::S6))
+                                    .child(
+                                        div()
+                                            .size(px(T::S6))
+                                            .flex_shrink_0()
+                                            .rounded_full()
+                                            .bg(T::color(color)),
+                                    )
+                                    .child(
+                                        div()
+                                            .min_w_0()
+                                            .truncate()
+                                            .text_size(px(T::SMALL))
+                                            .text_color(T::color(T::secondary()))
+                                            .child(title.clone()),
+                                    ),
+                            )
+                            .child(
+                                div().flex_1().min_w_0().relative().h_full().child(
+                                    div()
+                                        .absolute()
+                                        .left_0()
+                                        .top(px((T::ROW - T::S6 - T::S4) / 2.))
+                                        .h(px(T::S4))
+                                        .min_w(px(T::S2))
+                                        .w(gpui::relative(share))
+                                        .rounded_r(px(T::CHIP_RADIUS))
+                                        .bg(T::color(color).opacity(0.6)),
+                                ),
+                            )
+                            .child(
+                                div()
+                                    .w(px(T::BAR_VALUE))
+                                    .flex_shrink_0()
+                                    .text_right()
+                                    .text_size(px(T::SMALL))
+                                    .text_color(T::color(T::secondary()))
+                                    .child(format!("{} ↗", mib(t.memory_bytes))),
+                            )
+                            .tooltip(tip(vec![
+                                title,
+                                format!(
+                                    "整棵进程树 {} · {} 个进程",
+                                    mib(t.memory_bytes),
+                                    t.processes
+                                ),
+                                "含 Agent 拉起的 node、MCP 等子进程".into(),
+                                "点击跳到这个终端".into(),
+                            ]))
+                            .on_click(cx.listener(move |_, _, _, cx| {
+                                cx.emit(DiagnosticAction::Terminal(id.clone()))
+                            })),
+                    );
+                }
+                column = column.child(
+                    list.child(
+                        div()
+                            .pl(px(T::S12))
+                            .pt(px(T::S4))
+                            .text_size(px(T::META))
+                            .text_color(T::color(T::muted()))
+                            .child("按终端算整棵进程树，含它拉起的子进程；和上面应用的数不相加。"),
+                    ),
+                );
+            }
+        }
+        if ranked.len() > first {
+            column = column.child(
+                button(
+                    "diagnostic-memory-more",
+                    if self.all_memory_rows {
+                        "收起".to_owned()
+                    } else {
+                        format!("再显示 {} 项", ranked.len() - first)
+                    },
+                )
+                .mt(px(T::S6))
+                .px(px(T::S8))
+                .text_color(T::color(T::link()))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.all_memory_rows = !this.all_memory_rows;
+                    cx.notify();
+                })),
+            );
+        }
+        if ranked.is_empty() {
+            column = column.child(label("这次没有读到应用的内存。"));
+        }
+        column
     }
     fn cpu_ranking(&self, report: &Diagnostics, cx: &Context<Self>) -> gpui::Div {
         let ranked: Vec<&AppUsage> = report.ranked().collect();
@@ -844,7 +1346,8 @@ impl DiagnosticView {
             .py(px(T::S16))
             .child(heading("CPU 占用排行", "平均 · 虚线 = 1 个核心"))
             .child(axis(max, step, Some(100.), T::BAR_LABEL));
-        let first = first_rows(report.gpu_ranked().len());
+        // The right column holds the scatter only; GPU moved beside the memory ranking.
+        let first = first_rows(0);
         // A 「再显示 1 项」 row costs as much space as the row it hides.
         let first = if ranked.len() <= first + 2 {
             ranked.len()
@@ -905,8 +1408,8 @@ impl DiagnosticView {
                 lines.push(format!("区间峰值 {:.1}%", app.cpu_peak_percent));
             }
             lines.push(format!(
-                "RSS {} · {} 个进程",
-                mib(app.rss_bytes),
+                "内存 {} · {} 个进程",
+                mib(app.memory_bytes),
                 app.processes
             ));
             let color = if i < COLORED {
@@ -1001,14 +1504,14 @@ impl DiagnosticView {
         }
         column
     }
-    /// CPU on a linear x, resident memory on a log y: tells CPU hogs from memory hogs.
+    /// CPU on a linear x, memory footprint on a log y: tells CPU hogs from memory hogs.
     fn scatter(&self, report: &Diagnostics) -> gpui::Div {
         const MB: f64 = 1_048_576.;
         let ranked: Vec<&AppUsage> = report.ranked().collect();
         let (x_max, x_step) = cpu_scale(ranked.first().map_or(0., |a| a.cpu_percent));
         let biggest = ranked
             .iter()
-            .map(|a| a.rss_bytes as f64 / MB)
+            .map(|a| a.memory_bytes as f64 / MB)
             .fold(8., f64::max);
         // Ticks every power of eight from 8 MB up past the largest app.
         let mut ticks = vec![8.];
@@ -1022,7 +1525,7 @@ impl DiagnosticView {
         let x = |cpu: f64| (cpu / x_max).min(1.) as f32;
         // Label the three biggest CPU users and the two biggest memory users.
         let mut by_rss = ranked.clone();
-        by_rss.sort_by_key(|a| std::cmp::Reverse(a.rss_bytes));
+        by_rss.sort_by_key(|a| std::cmp::Reverse(a.memory_bytes));
         let labelled: Vec<&str> = ranked
             .iter()
             .take(3)
@@ -1037,7 +1540,7 @@ impl DiagnosticView {
                     (
                         a.name.as_str(),
                         x(a.cpu_percent),
-                        y(a.rss_bytes as f64 / MB),
+                        y(a.memory_bytes as f64 / MB),
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -1102,7 +1605,7 @@ impl DiagnosticView {
             );
         }
         for app in &ranked {
-            let (px_, py_) = (x(app.cpu_percent), y(app.rss_bytes as f64 / MB));
+            let (px_, py_) = (x(app.cpu_percent), y(app.memory_bytes as f64 / MB));
             let named = labelled.contains(&app.name.as_str());
             area = area.child(
                 div()
@@ -1119,7 +1622,11 @@ impl DiagnosticView {
                     .bg(T::color(if named { T::primary() } else { T::series(0) }))
                     .tooltip(tip(vec![
                         app.name.clone(),
-                        format!("CPU {:.1}% · RSS {}", app.cpu_percent, mib(app.rss_bytes)),
+                        format!(
+                            "CPU {:.1}% · 内存 {}",
+                            app.cpu_percent,
+                            mib(app.memory_bytes)
+                        ),
                         format!("{} 个进程", app.processes),
                     ])),
             );
@@ -1150,7 +1657,7 @@ impl DiagnosticView {
             v += x_step;
         }
         div()
-            .child(heading("CPU × 内存", "纵轴为对数 · RSS 不等于物理内存"))
+            .child(heading("CPU × 内存", "纵轴为对数 · 内存为活动监视器口径"))
             .child(
                 div()
                     .flex()
@@ -1175,9 +1682,7 @@ impl DiagnosticView {
     }
     fn gpu_ranking(&self, report: &Diagnostics) -> gpui::Div {
         let apps = report.gpu_ranked();
-        let mut section = div()
-            .mt(px(T::S20))
-            .child(heading("GPU 活动份额", "已观测计数的占比"));
+        let mut section = div().child(heading("GPU 活动份额", "已观测计数的占比"));
         if apps.is_empty() {
             return section.child(label("没有可比较的 GPU 活动数据，不代表 GPU 空闲。"));
         }
@@ -1340,20 +1845,7 @@ impl Render for DiagnosticView {
                                 ),
                                 false,
                             ))
-                            .child(panel(
-                                "内存 · 最新读数",
-                                memory.and_then(|m| m.percent()),
-                                [
-                                    ("总量", memory.map_or_else(unread, |m| gib(m.total_bytes))),
-                                    ("已用", memory.map_or_else(unread, |m| gib(m.used_bytes))),
-                                    (
-                                        "其中压缩",
-                                        memory.map_or_else(unread, |m| gib(m.compressed_bytes)),
-                                    ),
-                                ],
-                                "已用 = App 内存 + 联动 + 压缩，和活动监视器一致".into(),
-                                false,
-                            ))
+                            .child(memory_panel(memory))
                             .child(panel(
                                 "GPU 设备 · 最新读数",
                                 report.gpu_percent,
@@ -1376,11 +1868,14 @@ impl Render for DiagnosticView {
             if let Some(stack) = self.core_stack(report) {
                 body = body.child(stack);
             }
-            body = body.child(
+            if let Some(stack) = self.memory_stack(report) {
+                body = body.child(stack);
+            }
+            let pair = |left: gpui::Div, right: gpui::Div| {
                 div()
                     .flex()
                     .items_start()
-                    .child(self.cpu_ranking(report, cx))
+                    .child(left)
                     .child(
                         div()
                             .w(px(T::BORDER_WIDTH))
@@ -1393,10 +1888,25 @@ impl Render for DiagnosticView {
                             .flex_shrink_0()
                             .px(px(T::S20))
                             .py(px(T::S16))
-                            .child(self.scatter(report))
-                            .child(self.gpu_ranking(report)),
-                    ),
-            );
+                            .child(right),
+                    )
+            };
+            let cpu = pair(self.cpu_ranking(report, cx), self.scatter(report));
+            let memory_row = pair(self.memory_ranking(report, cx), self.gpu_ranking(report));
+            // Under memory pressure the memory row is what to read first.
+            let tight = report
+                .memory
+                .and_then(|m| m.pressure)
+                .is_some_and(|p| p != Pressure::Normal);
+            let line = |d: gpui::Div| {
+                d.border_t(px(T::BORDER_WIDTH))
+                    .border_color(T::color(T::border()))
+            };
+            body = if tight {
+                body.child(memory_row).child(line(cpu))
+            } else {
+                body.child(cpu).child(line(memory_row))
+            };
         } else {
             body = body.child(match (&self.sampling, waited) {
                 (Some(sampling), Some(waited)) => self.waiting(sampling, waited, cx),
@@ -1468,7 +1978,7 @@ impl Render for DiagnosticView {
                                             .text_color(T::color(T::primary()))
                                             .child("本机诊断"),
                                     )
-                                    .child(label("看谁在占 CPU / GPU，再把证据交给 Agent")),
+                                    .child(label("看谁在占 CPU / 内存 / GPU，再把证据交给 Agent")),
                             )
                             .child(status),
                     )
@@ -1575,6 +2085,20 @@ impl Workbench {
     #[cfg(feature = "visual-test")]
     pub fn visual_diagnostic_report(&self, cx: &gpui::App) -> Option<Diagnostics> {
         self.diagnostics.as_ref()?.read(cx).report.clone()
+    }
+    /// Pretends memory is tight, so the screenshot shows the warn colors and order.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_tighten_diagnostic_memory(&mut self, cx: &mut Context<Self>) {
+        super::pressure::force(2);
+        cx.notify();
+        let view = self.diagnostics.as_ref().unwrap().clone();
+        view.update(cx, |view, cx| {
+            if let Some(m) = view.report.as_mut().and_then(|r| r.memory.as_mut()) {
+                m.pressure = Some(Pressure::Warn);
+                m.swap_bytes = 3 << 30;
+            }
+            cx.notify();
+        });
     }
     #[cfg(feature = "visual-test")]
     pub fn visual_diagnostic_closed(&self) -> bool {

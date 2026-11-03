@@ -1,6 +1,6 @@
 //! On-demand sampling, independent of session recognition and workspace persistence.
 use mooring_core::{
-    diagnostics::{AppUsage, Diagnostics, Memory},
+    diagnostics::{AppUsage, Diagnostics, Memory, Pressure, TerminalUsage},
     model::Terminal,
     protocol::*,
 };
@@ -21,7 +21,8 @@ struct Process {
     parent: u32,
     started: String,
     cpu_secs: f64,
-    rss: u64,
+    /// Physical footprint when this user may read it, else RSS.
+    memory: u64,
     app: String,
 }
 #[derive(Default)]
@@ -150,7 +151,7 @@ fn parse_processes(text: &str) -> io::Result<HashMap<u32, Process>> {
                     parent: fields[1].parse().ok()?,
                     started: fields[2..7].join(" "),
                     cpu_secs: cpu_time(fields[7])?,
-                    rss: fields[8].parse::<u64>().ok()? * 1024,
+                    memory: fields[8].parse::<u64>().ok()? * 1024,
                     app: app_name(&fields[9..].join(" ")),
                 },
             ))
@@ -162,6 +163,45 @@ fn parse_processes(text: &str) -> io::Result<HashMap<u32, Process>> {
         return Err(io::Error::other("系统进程快照为空"));
     }
     Ok(out)
+}
+
+/// Activity Monitor's Memory column for one process. Only our own user's processes answer;
+/// root and system daemons return EPERM.
+fn footprint(pid: u32) -> Option<u64> {
+    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    let result = unsafe {
+        libc::proc_pid_rusage(
+            pid as libc::c_int,
+            libc::RUSAGE_INFO_V4,
+            (&mut info as *mut libc::rusage_info_v4).cast(),
+        )
+    };
+    (result == 0).then_some(info.ri_phys_footprint)
+}
+/// Swaps each readable process's RSS for its footprint; returns how many kept RSS.
+fn read_footprints(processes: &mut HashMap<u32, Process>) -> usize {
+    let mut kept = 0;
+    for (&pid, process) in processes.iter_mut() {
+        match footprint(pid) {
+            Some(bytes) => process.memory = bytes,
+            None => kept += 1,
+        }
+    }
+    kept
+}
+fn sysctl<T: Copy>(name: &std::ffi::CStr) -> Option<T> {
+    let mut value: T = unsafe { std::mem::zeroed() };
+    let mut len = std::mem::size_of::<T>();
+    let read = unsafe {
+        libc::sysctlbyname(
+            name.as_ptr(),
+            (&mut value as *mut T).cast(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    (read == 0 && len == std::mem::size_of::<T>()).then_some(value)
 }
 
 fn parse_gpu(text: &str) -> Gpu {
@@ -220,20 +260,7 @@ fn memory() -> Option<Memory> {
     extern "C" {
         fn mach_port_deallocate(task: u32, name: u32) -> i32;
     }
-    let mut total: u64 = 0;
-    let mut len = std::mem::size_of::<u64>();
-    let read = unsafe {
-        libc::sysctlbyname(
-            c"hw.memsize".as_ptr(),
-            (&mut total as *mut u64).cast(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        )
-    };
-    if read != 0 || total == 0 {
-        return None;
-    }
+    let total: u64 = sysctl(c"hw.memsize").filter(|&t| t > 0)?;
     let mut info: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
     let mut count = libc::HOST_VM_INFO64_COUNT;
     let result = unsafe {
@@ -257,17 +284,31 @@ fn memory() -> Option<Memory> {
             .saturating_sub(info.purgeable_count),
     );
     let compressed = u64::from(info.compressor_page_count) * page;
+    let wired = u64::from(info.wire_count) * page;
     Some(Memory {
         total_bytes: total,
-        used_bytes: ((app + u64::from(info.wire_count)) * page + compressed).min(total),
+        used_bytes: (app * page + wired + compressed).min(total),
         compressed_bytes: compressed,
+        wired_bytes: wired,
+        cached_bytes: (u64::from(info.external_page_count) + u64::from(info.purgeable_count))
+            * page,
+        swap_bytes: sysctl::<libc::xsw_usage>(c"vm.swapusage").map_or(0, |s| s.xsu_used),
+        pressure: sysctl::<i32>(c"kern.memorystatus_vm_pressure_level")
+            .and_then(Pressure::from_level),
     })
 }
 fn snapshot(stream: &UnixStream, notes: &mut Vec<String>) -> io::Result<Snapshot> {
-    let processes = parse_processes(&capture(
+    let mut processes = parse_processes(&capture(
         Command::new("/bin/ps").args(["-axo", "pid=,ppid=,lstart=,time=,rss=,comm="]),
         stream,
     )?)?;
+    let kept = read_footprints(&mut processes);
+    if kept > 0 {
+        notes.push(format!(
+            "内存按活动监视器的口径（含被压缩部分的原始大小，所以各应用合计会超过已用）；约 {} 个系统或其他用户的进程读不到，按 RSS 计。",
+            kept / 10 * 10
+        ));
+    }
     let at = Instant::now();
     let gpu = match capture(
         Command::new("/usr/sbin/ioreg").args(["-r", "-l", "-c", "AGXAccelerator"]),
@@ -388,19 +429,29 @@ pub fn serve(stream: &mut UnixStream, terminals: &[Terminal]) -> io::Result<()> 
                 )
             })
             .collect();
+        let mut by_terminal: BTreeMap<String, TerminalUsage> = BTreeMap::new();
         for (&pid, process) in &current.processes {
             let app = apps.entry(process.app.clone()).or_insert_with(|| AppUsage {
                 name: process.app.clone(),
                 ..AppUsage::default()
             });
             app.processes += 1;
-            app.rss_bytes += process.rss;
+            app.memory_bytes += process.memory;
             if let Some(id) = terminal_for(pid, &first, &current, terminals) {
+                let usage = by_terminal
+                    .entry(id.clone())
+                    .or_insert_with(|| TerminalUsage {
+                        id: id.clone(),
+                        ..TerminalUsage::default()
+                    });
+                usage.memory_bytes += process.memory;
+                usage.processes += 1;
                 if !app.terminals.contains(&id) {
                     app.terminals.push(id);
                 }
             }
         }
+        report.terminals = by_terminal.into_values().collect();
         report.apps = apps.into_values().collect();
         report.apps.sort_by(|a, b| {
             b.cpu_percent
@@ -424,13 +475,27 @@ mod tests {
         assert!(m.total_bytes >= 1 << 30);
         assert!(m.used_bytes > 0 && m.used_bytes <= m.total_bytes);
         assert!(m.compressed_bytes <= m.used_bytes);
+        assert!(m.wired_bytes > 0 && m.wired_bytes + m.compressed_bytes <= m.used_bytes);
+        assert!(
+            m.pressure.is_some(),
+            "kern.memorystatus_vm_pressure_level is readable"
+        );
+    }
+
+    #[test]
+    fn own_process_reads_its_footprint() {
+        let me = std::process::id();
+        let bytes = footprint(me).expect("our own process answers proc_pid_rusage");
+        assert!(bytes > 1 << 20);
+        // launchd belongs to root: unreadable, so the RSS from ps stays.
+        assert_eq!(footprint(1), None);
     }
 
     #[test]
     fn process_snapshot_keeps_bundle_spaces_start_identity_and_long_cpu_time() {
         let p = parse_processes("42 1 Wed Oct 28 10:30:00 2026 123:04.50 2048 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n").unwrap();
         assert_eq!(p[&42].app, "Google Chrome");
-        assert_eq!(p[&42].rss, 2_097_152);
+        assert_eq!(p[&42].memory, 2_097_152);
         assert_eq!(p[&42].cpu_secs, 7384.5);
         assert_eq!(cpu_time("1-02:03:04.50"), Some(93784.5));
         assert!(parse_processes("unexpected format").is_err());

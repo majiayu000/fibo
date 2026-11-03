@@ -238,6 +238,7 @@ mod nav;
 use nav::Nav;
 mod overview;
 mod pace;
+mod pressure;
 use overview::OverviewState;
 mod palette;
 use palette::Search;
@@ -320,6 +321,7 @@ impl Workbench {
         .detach();
         cx.observe_global::<crate::desktop::Status>(|_, cx| cx.notify())
             .detach();
+        pressure::watch(cx);
         let since = workspace.last_left;
         let overview = show_on_return(since, now(), workspace.settings.away_minutes);
         let search = Search::new(window, cx);
