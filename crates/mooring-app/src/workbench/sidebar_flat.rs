@@ -304,7 +304,7 @@ impl Workbench {
                             .children(space)
                             .child(
                                 div()
-                                    .w(px(F::TIME_WIDTH))
+                                    .min_w(px(F::TIME_WIDTH))
                                     .flex_shrink_0()
                                     .flex()
                                     .justify_end()
