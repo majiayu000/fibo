@@ -31,6 +31,79 @@ struct Cursor {
     discard: bool,
     identity: Option<(String, String)>,
     updated: u64,
+    /// Where `pending` stands inside a JSON string; rebuilt from it, never stored.
+    elide: Elide,
+}
+
+/// The longest stretch of one JSON string a buffered line keeps.
+const STRING_KEEP: usize = 32 * 1024;
+/// Shortens each long JSON string of a line as it streams in, keeping the line valid
+/// JSON: a pasted image's base64 or a huge tool output would otherwise push the whole
+/// line past the 256 KiB buffer and the ask on it would be lost. A string is cut only
+/// between whole characters, never inside an escape or a surrogate pair.
+#[derive(Default, Clone, Copy)]
+struct Elide {
+    in_string: bool,
+    escaped: bool,
+    hex_left: u8,
+    hex: u16,
+    /// A `\uD8xx` just ended; its low half must follow before a cut.
+    high: bool,
+    run: usize,
+    skipping: bool,
+}
+impl Elide {
+    fn over(bytes: &[u8]) -> Self {
+        let mut e = Self::default();
+        for &b in bytes {
+            e.keep(b);
+        }
+        e
+    }
+    /// Whether `b` stays in the buffered line.
+    fn keep(&mut self, b: u8) -> bool {
+        if !self.in_string {
+            if b == b'"' {
+                *self = Self {
+                    in_string: true,
+                    ..Self::default()
+                };
+            }
+            return true;
+        }
+        let whole = !self.escaped && self.hex_left == 0 && !self.high && b & 0xC0 != 0x80;
+        if !self.skipping && self.run >= STRING_KEEP && whole && b != b'"' {
+            self.skipping = true;
+        }
+        if self.escaped {
+            self.escaped = false;
+            if b == b'u' {
+                self.hex_left = 4;
+                self.hex = 0;
+            } else {
+                self.high = false;
+            }
+        } else if self.hex_left > 0 {
+            self.hex_left -= 1;
+            self.hex = self.hex << 4 | (b as char).to_digit(16).unwrap_or(0) as u16;
+            if self.hex_left == 0 {
+                self.high = (0xD800..0xDC00).contains(&self.hex);
+            }
+        } else if b == b'\\' {
+            self.escaped = true;
+        } else if b == b'"' {
+            self.in_string = false;
+            self.skipping = false;
+            return true;
+        } else {
+            self.high = false;
+        }
+        if self.skipping {
+            return false;
+        }
+        self.run += 1;
+        true
+    }
 }
 pub struct Index {
     db: Connection,
@@ -664,7 +737,7 @@ impl Index {
         let key = path.to_string_lossy().into_owned();
         let mut cursor = self.db.prepare_cached("SELECT dev,inode,offset,pending,discard,cli_id,cwd,updated FROM log_files WHERE path=?1").map_err(err)?.query_row([&key],|r| {
             let id: Option<String> = r.get(5)?; let cwd: Option<String> = r.get(6)?;
-            Ok(Cursor { dev:r.get::<_,i64>(0)? as u64,inode:r.get::<_,i64>(1)? as u64,offset:r.get::<_,i64>(2)? as u64,pending:r.get(3)?,discard:r.get(4)?,identity:id.zip(cwd),updated:r.get::<_,i64>(7)? as u64 })
+            Ok(Cursor { dev:r.get::<_,i64>(0)? as u64,inode:r.get::<_,i64>(1)? as u64,offset:r.get::<_,i64>(2)? as u64,pending:r.get(3)?,discard:r.get(4)?,identity:id.zip(cwd),updated:r.get::<_,i64>(7)? as u64, elide: Elide::default() })
         }).optional().map_err(err)?;
         // No symlink traversal in event handling, just as in the initial directory walk.
         let meta = match fs::symlink_metadata(path) {
@@ -705,6 +778,7 @@ impl Index {
         }
         let fresh = cursor.is_none();
         let mut c = cursor.unwrap_or_default();
+        c.elide = Elide::over(&c.pending);
         self.counts.opens += 1;
         let mut file = File::open(path)?;
         let opened = file.metadata()?;
@@ -779,6 +853,7 @@ impl Index {
             // The prefix is original intent, never proof of the current turn.
             parser.card.turn = mooring_core::content::Turn::Unknown;
             c.pending.clear();
+            c.elide = Elide::default();
             c.discard = c.offset > 0;
             parser.card.partial_history = c.offset > 0;
             parser.card.from_offset = c.offset;
@@ -822,6 +897,7 @@ impl Index {
                         parser.card.partial_history = true;
                     }
                     c.pending.clear();
+                    c.elide = Elide::default();
                     c.discard = false;
                     line_offset = c.offset;
                 } else if !c.discard {
@@ -829,7 +905,7 @@ impl Index {
                         c.pending.clear();
                         c.discard = true;
                         parser.card.unknown_records += 1;
-                    } else {
+                    } else if c.elide.keep(*byte) {
                         c.pending.push(*byte);
                     }
                 }
@@ -1434,5 +1510,50 @@ mod tests {
             "two"
         );
         assert_eq!(i.cached().unwrap().len(), 2);
+    }
+
+    fn ask(text: &str) -> String {
+        format!("{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"user_message\",\"message\":\"{text}\"}}}}\n")
+    }
+    /// An ask carrying a pasted image is one JSONL line well over 256 KiB (76 such
+    /// Claude asks in a week of real logs). It still counts as an ask.
+    #[test]
+    fn an_ask_line_over_256k_is_still_an_ask() {
+        let f = Fixture::new();
+        let path = f.0.join("logs/big.jsonl");
+        let big = serde_json::json!({"type":"event_msg","payload":{"type":"user_message","message":"看这张图","images":["x".repeat(300 * 1024)]}});
+        fs::write(&path, format!("{}{}\n{}", line("big"), big, ask("然后呢"))).unwrap();
+        let mut i = f.index();
+        i.update(Agent::Codex, &path, false).unwrap();
+        let card = i.card(path.to_str().unwrap()).unwrap().unwrap();
+        let asks: Vec<_> = card.asks.iter().map(|a| a.text.as_str()).collect();
+        assert_eq!(asks, ["看这张图", "然后呢"]);
+    }
+    /// Long strings are cut between whole characters, never inside an escape or a
+    /// surrogate pair, and a line stopped half-read resumes in the same place.
+    #[test]
+    fn eliding_long_strings_keeps_each_line_valid_json() {
+        let tail = "é😀\\\"\\u00e9\\ud83d\\ude00x";
+        for pad in 0..12 {
+            let text = format!("{}{}", "a".repeat(STRING_KEEP - 6 + pad), tail.repeat(400));
+            let raw = format!("{{\"k\":\"{text}\",\"next\":\"保留\"}}");
+            assert!(serde_json::from_str::<serde_json::Value>(&raw).is_ok());
+            for split in [0, raw.len() / 3, STRING_KEEP + pad, raw.len() - 3] {
+                let mut kept = Vec::new();
+                let mut e = Elide::default();
+                for (n, &b) in raw.as_bytes().iter().enumerate() {
+                    if n == split {
+                        e = Elide::over(&kept);
+                    }
+                    if e.keep(b) {
+                        kept.push(b);
+                    }
+                }
+                let v: serde_json::Value = serde_json::from_slice(&kept)
+                    .unwrap_or_else(|e| panic!("pad {pad} split {split}: {e}"));
+                assert_eq!(v["next"], "保留");
+                assert!(kept.len() < STRING_KEEP + 64);
+            }
+        }
     }
 }
