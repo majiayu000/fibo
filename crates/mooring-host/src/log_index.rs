@@ -105,12 +105,61 @@ impl Elide {
         true
     }
 }
+/// How long a moving log's card and cursor may stay ahead of the database.
+const FLUSH_AFTER: Duration = Duration::from_secs(1);
+/// Clean entries kept for logs that stopped moving.
+const HELD_CLEAN: usize = 64;
+/// One log's state while it is being read: the card and the cursor it was read to. The
+/// database holds the same pair as of the last flush, so a restart that replays events
+/// from the checkpoint continues from a consistent snapshot.
+struct Entry {
+    runtime: Agent,
+    cursor: Cursor,
+    parser: crate::content::Parser,
+    /// Since when this entry is ahead of the database.
+    dirty: Option<std::time::Instant>,
+    used: std::time::Instant,
+}
+/// The single owner of the cards being read, shared by every fork of an index and
+/// guarded by its gate: each line updates the entry in memory instead of loading and
+/// saving the whole card. The checkpoint never passes an event whose entry is unflushed.
+#[derive(Default)]
+pub struct Held {
+    entries: std::collections::HashMap<String, Entry>,
+    /// The newest event folded into an unflushed entry.
+    pending_event: Option<u64>,
+}
+impl Held {
+    fn oldest_dirty(&self) -> Option<std::time::Instant> {
+        self.entries.values().filter_map(|e| e.dirty).min()
+    }
+    /// Forget clean entries beyond the limit, least recently used first.
+    fn trim(&mut self) {
+        while self.entries.len() > HELD_CLEAN {
+            let Some(key) = self
+                .entries
+                .iter()
+                .filter(|(_, e)| e.dirty.is_none())
+                .min_by_key(|(_, e)| e.used)
+                .map(|(k, _)| k.clone())
+            else {
+                return;
+            };
+            self.entries.remove(&key);
+        }
+    }
+}
+fn write_cursor(db: &Connection, key: &str, runtime: Agent, c: &Cursor) -> io::Result<()> {
+    db.prepare_cached("INSERT INTO log_files VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(path) DO UPDATE SET runtime=excluded.runtime,dev=excluded.dev,inode=excluded.inode,offset=excluded.offset,pending=excluded.pending,discard=excluded.discard,cli_id=excluded.cli_id,cwd=excluded.cwd,updated=excluded.updated").map_err(err)?.execute(
+        params![key,runtime.executable(),i64::try_from(c.dev).map_err(err)?,i64::try_from(c.inode).map_err(err)?,i64::try_from(c.offset).map_err(err)?,c.pending,c.discard,c.identity.as_ref().map(|v| &v.0),c.identity.as_ref().map(|v| &v.1),i64::try_from(c.updated).map_err(err)?]).map_err(err)?;
+    Ok(())
+}
 pub struct Index {
     db: Connection,
     pub roots: Vec<(Agent, PathBuf)>,
     pub counts: IoCounts,
     pub recent_days: u64,
-    gate: std::sync::Arc<std::sync::Mutex<()>>,
+    gate: std::sync::Arc<std::sync::Mutex<Held>>,
     /// Parents whose card a subagent's log changed during the current batch.
     touched: Vec<Transcript>,
 }
@@ -118,7 +167,9 @@ impl Index {
     pub fn open(root: &Path, roots: Vec<(Agent, PathBuf)>) -> io::Result<Self> {
         let db = Connection::open(root.join("workbench.sqlite")).map_err(err)?;
         db.busy_timeout(Duration::from_secs(5)).map_err(err)?;
-        db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
+        // NORMAL keeps WAL commits atomic and ordered; a power loss can drop only the last ones,
+        // whose lines are read again from the logs.
+        db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
             CREATE TABLE IF NOT EXISTS log_index (id INTEGER PRIMARY KEY CHECK(id=1), event_id INTEGER NOT NULL, error TEXT);
             CREATE TABLE IF NOT EXISTS log_scan_dirs(path TEXT PRIMARY KEY,runtime TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS log_files(path TEXT PRIMARY KEY,runtime TEXT NOT NULL,dev INTEGER NOT NULL,inode INTEGER NOT NULL,offset INTEGER NOT NULL,pending BLOB NOT NULL,discard INTEGER NOT NULL,cli_id TEXT,cwd TEXT,updated INTEGER NOT NULL);
@@ -134,7 +185,7 @@ impl Index {
             roots,
             recent_days: 7,
             counts: IoCounts::default(),
-            gate: std::sync::Arc::new(std::sync::Mutex::new(())),
+            gate: std::sync::Arc::new(std::sync::Mutex::new(Held::default())),
             touched: Vec::new(),
         })
     }
@@ -300,7 +351,9 @@ impl Index {
             self.counts.writes += 1;
         }
     }
-    pub fn reset_checkpoint(&self, event: u64) -> io::Result<()> {
+    pub fn reset_checkpoint(&mut self, event: u64) -> io::Result<()> {
+        // A checkpoint moved to now skips what came before it: nothing may be unflushed.
+        self.flush()?;
         self.db
             .execute(
                 "UPDATE log_index SET event_id=?1 WHERE id=1",
@@ -406,8 +459,31 @@ impl Index {
             .find(|(_, root)| path.starts_with(root))
             .map(|(a, _)| *a)
     }
+    /// Every identified log, as recent as memory has it: a held log's database row lags
+    /// by up to `FLUSH_AFTER`, and its update time decides which thread is newer.
     pub fn cached(&self) -> io::Result<Vec<Transcript>> {
-        cached(&self.db)
+        let held = self
+            .gate
+            .lock()
+            .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
+        let mut out = cached(&self.db)?;
+        for (path, e) in &held.entries {
+            let Some((cli_id, cwd)) = &e.cursor.identity else {
+                continue;
+            };
+            let t = Transcript {
+                runtime: e.runtime,
+                cli_id: cli_id.clone(),
+                path: path.clone(),
+                cwd: cwd.clone(),
+                updated: e.cursor.updated,
+            };
+            match out.iter_mut().find(|o| &o.path == path) {
+                Some(o) => *o = t,
+                None => out.push(t),
+            }
+        }
+        Ok(out)
     }
     pub fn original_words(&self, path: &str) -> io::Result<String> {
         let mut q=self.db.prepare_cached("SELECT text FROM session_records WHERE path=?1 AND kind='user' ORDER BY at,offset,ordinal").map_err(err)?;
@@ -509,7 +585,17 @@ impl Index {
         Ok(out)
     }
     pub fn card(&self, path: &str) -> io::Result<Option<mooring_core::content::Content>> {
-        let mut card = crate::content::card(&self.db, path)?;
+        let held = self
+            .gate
+            .lock()
+            .map_err(|_| io::Error::other("log cursor lock poisoned"))?
+            .entries
+            .get(path)
+            .map(|e| e.parser.card.clone());
+        let mut card = match held {
+            Some(card) => Some(card),
+            None => crate::content::card(&self.db, path)?,
+        };
         if let Some(c) = card.as_mut().filter(|c| c.name.is_empty()) {
             let path = Path::new(path);
             if let Some((agent, root)) = self.roots.iter().find(|(_, r)| path.starts_with(r)) {
@@ -545,26 +631,40 @@ impl Index {
         path: &str,
         apply: impl FnOnce(&mut crate::content::Parser, u64, mooring_core::content::Source),
     ) -> io::Result<()> {
-        let _guard = self
+        let mut held = self
             .gate
             .lock()
             .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
+        let source = mooring_core::content::Source {
+            path: path.into(),
+            offset: std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(err)?
+                .as_nanos() as u64,
+            ..Default::default()
+        };
+        // A log being read: its entry takes the signal and is written with its cursor.
+        if let Some(e) = held.entries.get_mut(path) {
+            apply(&mut e.parser, mooring_core::content::now(), source);
+            let tx = self.db.unchecked_transaction().map_err(err)?;
+            let written = write_cursor(&tx, path, e.runtime, &e.cursor)
+                .and_then(|()| crate::content::save(&tx, path, &e.parser))
+                .and_then(|()| tx.commit().map_err(err));
+            e.parser.records.clear();
+            e.parser.transitions.clear();
+            e.dirty = None;
+            if written.is_err() {
+                held.entries.remove(path);
+            }
+            return written;
+        }
         let mut parser = crate::content::load(&self.db, path)?;
-        apply(
-            &mut parser,
-            mooring_core::content::now(),
-            mooring_core::content::Source {
-                path: path.into(),
-                offset: std::time::SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(err)?
-                    .as_nanos() as u64,
-                ..Default::default()
-            },
-        );
+        apply(&mut parser, mooring_core::content::now(), source);
         let tx = self.db.unchecked_transaction().map_err(err)?;
         crate::content::save(&tx, path, &parser)?;
-        tx.commit().map_err(err)
+        tx.commit().map_err(err)?;
+        drop(held);
+        Ok(())
     }
     /// A first read of a recent log takes its last 128 KiB. When that tail is the middle
     /// of a turn (replies or tool results, but no start or end), the turn began earlier:
@@ -626,10 +726,57 @@ impl Index {
         historical: bool,
     ) -> io::Result<Option<Transcript>> {
         let gate = self.gate.clone();
-        let _guard = gate
+        let mut held = gate
             .lock()
             .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
-        self.update_unlocked(runtime, path, historical)
+        // Walks and repairs write through: their directory leaves the worklist once done.
+        let result = self.update_unlocked(&mut held, runtime, path, historical, false);
+        if result.is_err() {
+            held.entries.clear();
+            held.pending_event = None;
+        }
+        result
+    }
+    /// Writes every entry that is ahead of the database, then the checkpoint it held back.
+    pub fn flush(&mut self) -> io::Result<()> {
+        let gate = self.gate.clone();
+        let mut held = gate
+            .lock()
+            .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
+        self.db.execute_batch("BEGIN IMMEDIATE").map_err(err)?;
+        let result = self.flush_unlocked(&mut held);
+        self.finish(&mut held, result)
+    }
+    /// How long until an unflushed entry is due; `None` when nothing waits, so an idle
+    /// subscriber keeps blocking on events alone.
+    pub fn flush_due(&self) -> Option<Duration> {
+        let oldest = self.gate.lock().ok()?.oldest_dirty()?;
+        Some(FLUSH_AFTER.saturating_sub(oldest.elapsed()))
+    }
+    fn flush_unlocked(&mut self, held: &mut Held) -> io::Result<()> {
+        for (key, e) in held.entries.iter_mut() {
+            if e.dirty.take().is_some() {
+                write_cursor(&self.db, key, e.runtime, &e.cursor)?;
+                crate::content::save_state(&self.db, key, &e.parser)?;
+                self.counts.writes += 1;
+            }
+        }
+        if let Some(event) = held.pending_event.take() {
+            self.checkpoint(event)?;
+        }
+        held.trim();
+        Ok(())
+    }
+    /// Commits a batch, or rolls it back and forgets what memory held beyond the
+    /// database: the subscriber restarts from the checkpoint and reads it again.
+    fn finish<T>(&mut self, held: &mut Held, result: io::Result<T>) -> io::Result<T> {
+        let result = result.and_then(|v| self.db.execute_batch("COMMIT").map_err(err).map(|()| v));
+        if result.is_err() {
+            let _ = self.db.execute_batch("ROLLBACK");
+            held.entries.clear();
+            held.pending_event = None;
+        }
+        result
     }
     /// Coalesced native notifications share one durable commit, with no timer or durability loss.
     pub fn update_many(
@@ -638,26 +785,32 @@ impl Index {
         event: u64,
     ) -> io::Result<Vec<Transcript>> {
         let gate = self.gate.clone();
-        let _guard = gate
+        let mut held = gate
             .lock()
             .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
         self.db.execute_batch("BEGIN IMMEDIATE").map_err(err)?;
         let result = (|| {
             let mut found = vec![];
             for path in paths {
-                if let Some(t) = self.refresh_subagents(&path)? {
+                if let Some(t) = self.refresh_subagents(&mut held, &path)? {
                     if !found.iter().any(|f: &Transcript| f.path == t.path) {
                         found.push(t);
                     }
                     continue;
                 }
                 if let Some(runtime) = self.runtime(&path) {
-                    if let Some(t) = self.update_unlocked(runtime, &path, true)? {
+                    if let Some(t) = self.update_unlocked(&mut held, runtime, &path, true, true)? {
                         found.push(t);
                     }
                 }
             }
-            self.checkpoint(event)?;
+            held.pending_event = held.pending_event.max(Some(event));
+            if held
+                .oldest_dirty()
+                .is_none_or(|t| t.elapsed() >= FLUSH_AFTER)
+            {
+                self.flush_unlocked(&mut held)?;
+            }
             // A subagent's log moved its parent's card; the parent is refreshed with it.
             for t in std::mem::take(&mut self.touched) {
                 if !found.iter().any(|f: &Transcript| f.path == t.path) {
@@ -666,22 +819,17 @@ impl Index {
             }
             Ok(found)
         })();
-        match result {
-            Ok(found) => {
-                self.db.execute_batch("COMMIT").map_err(err)?;
-                Ok(found)
-            }
-            Err(e) => {
-                self.db.execute_batch("ROLLBACK").map_err(err)?;
-                Err(e)
-            }
-        }
+        self.finish(&mut held, result)
     }
     /// `meta` is a subagent's `agent-<id>.meta.json` under `<session>/subagents/`: the
     /// CLI writes it when the subagent starts and again when it finishes, while the
     /// parent's own log may not move. Re-reads the list into the parent's card and
     /// returns the parent when that changed it; `None` for any other path.
-    fn refresh_subagents(&mut self, meta: &Path) -> io::Result<Option<Transcript>> {
+    fn refresh_subagents(
+        &mut self,
+        held: &mut Held,
+        meta: &Path,
+    ) -> io::Result<Option<Transcript>> {
         let Some(parent) = subagent_parent(meta) else {
             return Ok(None);
         };
@@ -711,14 +859,23 @@ impl Index {
         let Some((cli_id, cwd, updated)) = row else {
             return Ok(None);
         };
-        let mut parser = crate::content::load(&self.db, &key)?;
-        let before = parser.card.subagents.clone();
-        parser.card.keep_subagents(all);
-        if parser.card.subagents == before {
-            return Ok(None);
+        if let Some(e) = held.entries.get_mut(&key) {
+            let before = e.parser.card.subagents.clone();
+            e.parser.card.keep_subagents(all);
+            if e.parser.card.subagents == before {
+                return Ok(None);
+            }
+            e.dirty.get_or_insert_with(std::time::Instant::now);
+        } else {
+            let mut parser = crate::content::load(&self.db, &key)?;
+            let before = parser.card.subagents.clone();
+            parser.card.keep_subagents(all);
+            if parser.card.subagents == before {
+                return Ok(None);
+            }
+            crate::content::save(&self.db, &key, &parser)?;
+            self.counts.writes += 1;
         }
-        crate::content::save(&self.db, &key, &parser)?;
-        self.counts.writes += 1;
         Ok(Some(Transcript {
             runtime,
             cli_id,
@@ -727,21 +884,38 @@ impl Index {
             updated,
         }))
     }
+    /// `defer`: a log that keeps moving stays ahead of the database in `held` for up to
+    /// `FLUSH_AFTER`; its first read, a replacement and a newly known identity are
+    /// written at once, since walks and `cached` read them from the database.
     fn update_unlocked(
         &mut self,
+        held: &mut Held,
         runtime: Agent,
         path: &Path,
         historical: bool,
+        defer: bool,
     ) -> io::Result<Option<Transcript>> {
         let adapter = crate::agents::adapter(runtime);
         if !adapter.is_transcript(path) {
             return Ok(None);
         }
         let key = path.to_string_lossy().into_owned();
-        let mut cursor = self.db.prepare_cached("SELECT dev,inode,offset,pending,discard,cli_id,cwd,updated FROM log_files WHERE path=?1").map_err(err)?.query_row([&key],|r| {
+        // The entry, when this log is held, is newer than the database.
+        let entry = held.entries.remove(&key);
+        let ahead = entry.as_ref().and_then(|e| e.dirty);
+        let (mut cursor, stored) = match entry {
+            Some(e) => (Some(e.cursor), Some(e.parser)),
+            None => (None, None),
+        };
+        let in_db = ahead.is_some()
+            || cursor.is_some()
+            || {
+                cursor = self.db.prepare_cached("SELECT dev,inode,offset,pending,discard,cli_id,cwd,updated FROM log_files WHERE path=?1").map_err(err)?.query_row([&key],|r| {
             let id: Option<String> = r.get(5)?; let cwd: Option<String> = r.get(6)?;
             Ok(Cursor { dev:r.get::<_,i64>(0)? as u64,inode:r.get::<_,i64>(1)? as u64,offset:r.get::<_,i64>(2)? as u64,pending:r.get(3)?,discard:r.get(4)?,identity:id.zip(cwd),updated:r.get::<_,i64>(7)? as u64, elide: Elide::default() })
         }).optional().map_err(err)?;
+                cursor.is_some()
+            };
         // No symlink traversal in event handling, just as in the initial directory walk.
         let meta = match fs::symlink_metadata(path) {
             Ok(m) if m.is_file() => m,
@@ -761,9 +935,13 @@ impl Index {
             .map_err(err)?
             .as_secs();
         // The saved state is read once: whether it is current decides both the early return
-        // and whether reading continues from it.
-        let stored = crate::content::load(&self.db, &key)?;
+        // and whether reading continues from it. A held entry was saved under these rules.
+        let stored = match stored {
+            Some(p) => p,
+            None => crate::content::load(&self.db, &key)?,
+        };
         let seeded = stored.rules == crate::content::RULES;
+        let known = cursor.as_ref().is_some_and(|c| c.identity.is_some());
         // Replaced or rewritten shorter: what was read from it before is gone too.
         let mut replaced = false;
         if let Some(c) = &cursor {
@@ -771,13 +949,26 @@ impl Index {
                 cursor = None;
                 replaced = true;
             } else if c.offset == meta.len() && (seeded || !self.recent(updated)) {
-                return Ok(c.identity.as_ref().map(|(id, cwd)| Transcript {
+                let found = c.identity.as_ref().map(|(id, cwd)| Transcript {
                     runtime,
                     cli_id: id.clone(),
                     cwd: cwd.clone(),
-                    path: key,
+                    path: key.clone(),
                     updated: c.updated,
-                }));
+                });
+                if in_db && seeded && (ahead.is_some() || defer) {
+                    held.entries.insert(
+                        key,
+                        Entry {
+                            runtime,
+                            cursor: cursor.unwrap_or_default(),
+                            parser: stored,
+                            dirty: ahead,
+                            used: std::time::Instant::now(),
+                        },
+                    );
+                }
+                return Ok(found);
             }
         }
         let fresh = cursor.is_none();
@@ -945,8 +1136,12 @@ impl Index {
         c.inode = meta.ino();
         c.updated = updated;
         let tx = self.db.savepoint().map_err(err)?;
-        tx.prepare_cached("INSERT INTO log_files VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(path) DO UPDATE SET runtime=excluded.runtime,dev=excluded.dev,inode=excluded.inode,offset=excluded.offset,pending=excluded.pending,discard=excluded.discard,cli_id=excluded.cli_id,cwd=excluded.cwd,updated=excluded.updated").map_err(err)?.execute(
-            params![key,runtime.executable(),i64::try_from(c.dev).map_err(err)?,i64::try_from(c.inode).map_err(err)?,i64::try_from(c.offset).map_err(err)?,c.pending,c.discard,c.identity.as_ref().map(|v| &v.0),c.identity.as_ref().map(|v| &v.1),i64::try_from(c.updated).map_err(err)?]).map_err(err)?;
+        // Records are keyed by where they were read: written now, read again harmlessly.
+        let now_written =
+            !defer || !in_db || replaced || !seeded || (c.identity.is_some() && !known);
+        if now_written {
+            write_cursor(&tx, &key, runtime, &c)?;
+        }
         if !seeded || replaced {
             tx.execute("DELETE FROM session_records WHERE path=?1", [&key])
                 .map_err(err)?;
@@ -968,7 +1163,10 @@ impl Index {
                 parser.children(&kids, now, live(&key));
             }
         }
-        crate::content::save(&tx, &key, &parser)?;
+        crate::content::save_records(&tx, &key, &parser)?;
+        if now_written {
+            crate::content::save_state(&tx, &key, &parser)?;
+        }
         if let Some(parent) = parent {
             let row = tx
                 .prepare_cached("SELECT cli_id,path,cwd,updated FROM log_files WHERE runtime=?2 AND cli_id=?1 LIMIT 1")
@@ -985,22 +1183,48 @@ impl Index {
                 .optional()
                 .map_err(err)?;
             if let Some(t) = row.filter(|t| t.path != key) {
-                let mut owner = crate::content::load(&tx, &t.path)?;
                 let kids = crate::content::children(&tx, &parent, now)?;
-                owner.children(&kids, now, live(&t.path));
-                crate::content::save(&tx, &t.path, &owner)?;
+                if let Some(e) = held.entries.get_mut(&t.path) {
+                    e.parser.children(&kids, now, live(&t.path));
+                    e.dirty.get_or_insert_with(std::time::Instant::now);
+                } else {
+                    let mut owner = crate::content::load(&tx, &t.path)?;
+                    owner.children(&kids, now, live(&t.path));
+                    crate::content::save(&tx, &t.path, &owner)?;
+                }
                 self.touched.push(t);
             }
         }
         tx.commit().map_err(err)?;
         self.counts.writes += 1;
-        Ok(c.identity.map(|(cli_id, cwd)| Transcript {
+        let found = c.identity.clone().map(|(cli_id, cwd)| Transcript {
             runtime,
             cli_id,
-            path: key,
+            path: key.clone(),
             cwd,
             updated,
-        }))
+        });
+        // Only moving logs are held; a walk's write-through does not fill memory.
+        if defer || ahead.is_some() {
+            parser.records.clear();
+            parser.transitions.clear();
+            parser.rules = crate::content::RULES;
+            held.entries.insert(
+                key,
+                Entry {
+                    runtime,
+                    cursor: c,
+                    parser,
+                    dirty: if now_written {
+                        None
+                    } else {
+                        Some(ahead.unwrap_or_else(std::time::Instant::now))
+                    },
+                    used: std::time::Instant::now(),
+                },
+            );
+        }
+        Ok(found)
     }
 }
 pub fn cached(db: &Connection) -> io::Result<Vec<Transcript>> {
@@ -1127,7 +1351,8 @@ mod tests {
     }
     /// `MOORING_BENCH_LOG=<real Claude transcript> cargo test --release -p mooring-host
     /// --lib append_cost -- --ignored --nocapture`: indexes all but the last 500 lines, then
-    /// appends them one at a time and reports the cost of each `update_many`.
+    /// appends them one at a time, flushing every 10 as a log moving at 10 lines a second
+    /// would be, and reports the cost per line.
     #[test]
     #[ignore]
     fn append_cost() {
@@ -1163,7 +1388,12 @@ mod tests {
                 .write_all(line.as_bytes())
                 .unwrap();
             i.update_many([log.clone()], n as u64 + 2).unwrap();
+            // A log moving at 10 lines a second is flushed once a second.
+            if n % 10 == 9 {
+                i.flush().unwrap();
+            }
         }
+        i.flush().unwrap();
         let (c, t) = (cpu() - c0, t0.elapsed().as_secs_f64());
         let blob: i64 =
             i.db.query_row(
@@ -1177,6 +1407,74 @@ mod tests {
             c / tail as f64 * 1e6,
             t / tail as f64 * 1e6
         );
+    }
+    #[test]
+    fn a_crash_before_the_flush_replays_from_a_consistent_snapshot() {
+        let msg = |kind: &str, text: &str| {
+            format!("{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"{kind}\",\"message\":\"{text}\"}}}}\n")
+        };
+        let lines = [
+            line("crash"),
+            msg("user_message", "改一下"),
+            msg("agent_message", "第一段"),
+            msg("agent_message", "第二段"),
+            msg("user_message", "再看看"),
+            msg("agent_message", "第三段"),
+        ];
+        let state = |root: &Path, n: usize, crash: bool| {
+            let log = root.join("logs/crash.jsonl");
+            fs::write(&log, lines[..2].concat()).unwrap();
+            let mut i = Index::open(root, vec![(Agent::Codex, root.join("logs"))]).unwrap();
+            i.initialize().unwrap();
+            i.reset_checkpoint(10).unwrap();
+            i.update_many([log.clone()], 11).unwrap();
+            for (k, l) in lines[2..n].iter().enumerate() {
+                fs::OpenOptions::new()
+                    .append(true)
+                    .open(&log)
+                    .unwrap()
+                    .write_all(l.as_bytes())
+                    .unwrap();
+                i.update_many([log.clone()], 12 + k as u64).unwrap();
+            }
+            let key = log.to_str().unwrap().to_owned();
+            if crash {
+                // Held ahead of the database: the checkpoint stayed behind it.
+                assert!(i.flush_due().is_some());
+                let event: i64 =
+                    i.db.query_row("SELECT event_id FROM log_index", [], |r| r.get(0))
+                        .unwrap();
+                assert_eq!(event, 11);
+                drop(i);
+                // A new host replays the events after the checkpoint.
+                let mut j = Index::open(root, vec![(Agent::Codex, root.join("logs"))]).unwrap();
+                j.initialize().unwrap();
+                j.update_many([log.clone()], 20).unwrap();
+                j.flush().unwrap();
+                i = j;
+            } else {
+                i.flush().unwrap();
+            }
+            assert!(i.flush_due().is_none());
+            let card = i.card(&key).unwrap().unwrap();
+            let records: Vec<(String, String)> =
+                i.db.prepare("SELECT kind,text FROM session_records ORDER BY offset,ordinal")
+                    .unwrap()
+                    .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .collect();
+            let offset: i64 =
+                i.db.query_row("SELECT offset FROM log_files", [], |r| r.get(0))
+                    .unwrap();
+            let asks: Vec<String> = card.asks.into_iter().map(|q| q.text).collect();
+            (card.turn, card.last_reply, asks, records, offset)
+        };
+        let calm = Fixture::new();
+        let crashed = Fixture::new();
+        let expected = state(&calm.0, lines.len(), false);
+        assert_eq!(expected.4 as usize, lines.concat().len());
+        assert_eq!(state(&crashed.0, lines.len(), true), expected);
     }
     #[test]
     fn a_subagent_meta_change_refreshes_its_parents_card_whose_log_did_not_move() {

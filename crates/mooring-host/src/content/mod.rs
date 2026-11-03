@@ -15,7 +15,7 @@ use std::{
 };
 mod db;
 mod rules;
-pub use db::{card, children, link_child, load, save, schema, Children};
+pub use db::{card, children, link_child, load, save, save_records, save_state, schema, Children};
 use rules::*;
 pub(crate) use rules::{claims_done, re, user_text};
 // A session_meta line may exceed the 16 KiB head budget because of base_instructions.

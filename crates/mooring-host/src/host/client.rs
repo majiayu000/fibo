@@ -165,7 +165,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 if let Some(error) = host.store.subscription_error()? {
                     return Err(io::Error::other(error));
                 }
-                host.store.transcripts()?
+                host.index.cached()?
             };
             refresh_agents(shared, &transcripts)?;
             let mut host = lock(shared)?;
@@ -203,7 +203,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 (
                     host.workspace.clone(),
                     host.index.fork_current()?,
-                    host.store.transcripts()?,
+                    host.index.cached()?,
                 )
             };
             let processes = crate::recognition::processes(&workspace)?;

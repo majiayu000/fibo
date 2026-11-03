@@ -100,8 +100,18 @@ pub(super) fn trace(path: &str, parser: &Parser) {
         .and_then(|mut f| std::io::Write::write_all(&mut f, lines.as_bytes()));
 }
 pub fn save(db: &Connection, path: &str, parser: &Parser) -> io::Result<()> {
-    trace(path, parser);
+    save_state(db, path, parser)?;
+    save_records(db, path, parser)
+}
+/// The card and the parser state, which the next line continues from.
+pub fn save_state(db: &Connection, path: &str, parser: &Parser) -> io::Result<()> {
     db.prepare_cached("INSERT INTO session_content VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(path) DO UPDATE SET title=excluded.title,turn=excluded.turn,updated=excluded.updated,projection=excluded.projection,parser=excluded.parser").map_err(db_err)?.execute(params![path,parser.card.title,format!("{:?}",parser.card.turn),i64::try_from(parser.card.updated).map_err(db_err)?,serde_json::to_string(&parser.card).map_err(db_err)?,serde_json::to_string(parser).map_err(db_err)?]).map_err(db_err)?;
+    Ok(())
+}
+/// The records and status transitions this read produced; keyed by where each was read,
+/// so writing them again after a replay changes nothing.
+pub fn save_records(db: &Connection, path: &str, parser: &Parser) -> io::Result<()> {
+    trace(path, parser);
     let mut ordinals = BTreeMap::new();
     for r in &parser.records {
         let i = ordinals

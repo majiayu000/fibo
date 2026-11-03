@@ -164,7 +164,7 @@ pub(super) fn refresh_registered(shared: &Shared) -> io::Result<()> {
         {
             return Ok(());
         }
-        host.store.transcripts()?
+        host.index.cached()?
     };
     refresh_agents(shared, &transcripts)
 }
@@ -340,7 +340,7 @@ pub(super) fn probe_after_submission(shared: &Shared, terminal: &str) -> io::Res
                 if host.workspace.current_agent(&terminal).is_some() {
                     return Ok(());
                 }
-                host.store.transcripts()?
+                host.index.cached()?
             };
             refresh_agents(&shared, &transcripts)?;
             Ok(())

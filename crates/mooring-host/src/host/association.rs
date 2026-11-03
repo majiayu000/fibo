@@ -449,7 +449,18 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                 association.apply(&shared, &index, &index.cached()?)?;
                 follow_associated(&shared, &mut index, &mut association, &watch)?;
                 loop {
-                    let mut batch = watch.rx.recv().map_err(io::Error::other)?;
+                    // Held cards wait at most a second for the database. With nothing held the
+                    // subscriber blocks on events alone, so an idle host still never wakes.
+                    let mut batch = loop {
+                        let Some(due) = index.flush_due() else {
+                            break watch.rx.recv().map_err(io::Error::other)?;
+                        };
+                        match watch.rx.recv_timeout(due) {
+                            Ok(batch) => break batch,
+                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => index.flush()?,
+                            Err(e) => return Err(io::Error::other(e)),
+                        }
+                    };
                     // A single bounded burst window starts ONLY after a native event arrives.
                     // This matches FSEvents' 200 ms latency for eager vnode writes too. It never
                     // wakes an idle subscriber, and continuous writers cannot extend the deadline.

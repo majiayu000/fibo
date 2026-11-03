@@ -130,9 +130,6 @@ impl Store {
     pub fn claim_notification(&self, session: &str, key: &str) -> io::Result<bool> {
         self.0.execute("INSERT INTO notification_receipts VALUES(?1,?2) ON CONFLICT(session_id) DO UPDATE SET fact_key=excluded.fact_key WHERE fact_key<>excluded.fact_key",params![session,key]).map(|n|n>0).map_err(db_error)
     }
-    pub fn transcripts(&self) -> io::Result<Vec<crate::recognition::Transcript>> {
-        crate::log_index::cached(&self.0)
-    }
     pub fn subscription_error(&self) -> io::Result<Option<String>> {
         use rusqlite::OptionalExtension;
         Ok(self
