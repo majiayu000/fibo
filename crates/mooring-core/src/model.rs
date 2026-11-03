@@ -612,6 +612,11 @@ impl Workspace {
         if !named.is_empty() {
             return Some((named.to_owned(), NameSource::User));
         }
+        if let Some(title) = self.sole_session_tab(s).map(|t| t.title.trim())
+            && !title.is_empty()
+        {
+            return Some((title.to_owned(), NameSource::User));
+        }
         if let Some(task) = s
             .task
             .as_ref()
@@ -634,6 +639,19 @@ impl Workspace {
         Some(crate::content::short(&crate::content::topic(first), 70))
             .filter(|t| !t.is_empty())
             .map(|t| (t, NameSource::FirstAsk))
+    }
+    /// The tab a running conversation has to itself: a name given to that tab names
+    /// the conversation too, so the tab and the sidebar never disagree.
+    pub fn sole_session_tab(&self, s: &AgentSession) -> Option<&Tab> {
+        if !s.current {
+            return None;
+        }
+        let tab = self.terminal_tab(s.terminal.as_deref()?)?;
+        let ids = self.tab_terminals(&tab.id);
+        let others = self.agent_sessions.iter().any(|o| {
+            o.id != s.id && o.current && o.terminal.as_ref().is_some_and(|id| ids.contains(id))
+        });
+        (!others).then_some(tab)
     }
     pub fn session_name(&self, s: &AgentSession) -> Option<String> {
         self.session_naming(s).map(|(name, _)| name)
@@ -1262,6 +1280,16 @@ mod tests {
         assert_eq!(title(&w, &titles, 2), "评估接入 Kling v4 ESR");
         w.tabs[2].title = "kling".into();
         assert_eq!(title(&w, &titles, 2), "kling");
+        // The tab's name is its only conversation's name too, below one given to it.
+        let s = w.agent_sessions[0].clone();
+        assert_eq!(
+            w.session_naming(&s),
+            Some(("kling".into(), NameSource::User))
+        );
+        w.agent_sessions[0].name = "接入 Kling".into();
+        let s = w.agent_sessions[0].clone();
+        assert_eq!(w.session_title(&s), "接入 Kling");
+        w.agent_sessions[0].name.clear();
         titles.insert("spare".to_owned(), "vim".to_owned());
         assert_eq!(title(&w, &titles, 1), "vim");
         titles.insert("other".to_owned(), "htop".to_owned());

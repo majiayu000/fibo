@@ -158,13 +158,26 @@ impl Workbench {
             return;
         };
         let name = field.read(cx).text.trim().to_owned();
+        // A tab the conversation has to itself shows the same name; one pinned there
+        // moves onto the conversation, so the two stay one name.
+        let pinned = self
+            .workspace
+            .sole_session_tab(session)
+            .filter(|t| !t.title.is_empty())
+            .cloned();
         // Keeping the shown name unchanged must not pin today's automatic one.
-        let name = if session.name.is_empty() && name == self.session_title(session) {
-            String::new()
-        } else {
-            name
-        };
-        if name != session.name {
+        let name =
+            if pinned.is_none() && session.name.is_empty() && name == self.session_title(session) {
+                String::new()
+            } else {
+                name
+            };
+        let renamed = name != session.name;
+        if let Some(mut tab) = pinned {
+            tab.title.clear();
+            self.edit(Edit::PutTab { tab }, cx);
+        }
+        if renamed {
             self.edit(Edit::RenameSession { id, name }, cx);
         }
         cx.notify();
