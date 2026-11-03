@@ -30,13 +30,16 @@ function status(c: Card): string {
 }
 
 function Row({ m, c, t }: { m: Machine; c: Card; t: Theme }) {
-  const waiting = rank(c) === 0;
+  // Not online: what the machine last said, which may no longer hold.
+  const stale = m.status !== 'online';
+  const waiting = !stale && rank(c) === 0;
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/chat', params: { machine: m.id, terminal: c.id } })}
       style={({ pressed }) => [
         s.row,
         { backgroundColor: waiting ? t.waitingBg : t.card, borderColor: t.line },
+        stale && { opacity: 0.6 },
         pressed && { opacity: 0.7 },
       ]}
     >
@@ -47,10 +50,10 @@ function Row({ m, c, t }: { m: Machine; c: Card; t: Theme }) {
         <Text
           style={[
             s.badge,
-            { color: waiting ? t.waiting : c.phase === 'working' ? t.running : t.dim },
+            { color: waiting ? t.waiting : !stale && c.phase === 'working' ? t.running : t.dim },
           ]}
         >
-          {status(c)}
+          {stale ? `断开前：${status(c)}` : status(c)}
         </Text>
       </View>
       <Text style={[s.meta, { color: t.dim }]} numberOfLines={1}>

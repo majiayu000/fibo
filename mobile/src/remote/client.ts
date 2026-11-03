@@ -4,31 +4,24 @@
 // `specs/extensions/remote-protocol.md`.
 import { concat, text, utf8 } from './bytes';
 import { type Link, linkUrl } from './link';
+import { closeOutcome } from './close';
 import { CHUNK, type Channel, Handshake } from './noise';
 
-/** Why the connection ended, from the relay's or machine's close code. */
-export type Ended = {
-  code: number;
-  reason: string;
-  /** 4401: unknown device, wrong key, revoked or role changed. Do not retry blindly. */
-  refused: boolean;
-};
+/** Why the connection ended, from the relay's or machine's close code (see `close.ts`). */
+export type Ended = { code: number; reason: string };
 
-export class RemoteError extends Error {}
-
-/** What a close code means to the person holding the phone; the number stays for support. */
-export function closeText(code: number): string {
-  switch (code) {
-    case 4401:
-      return '这台手机没有配对，或者已经被取消';
-    case 1012:
-      return '电脑上的 Mooring 不在线';
-    case 1013:
-      return '网络太慢，中继断开了连接';
-    default:
-      return `连不上：电脑或中继不在线，或者网络不通（${code}）`;
+export class RemoteError extends Error {
+  /** The close code, when the socket closed with one before the connection was up. */
+  constructor(
+    message: string,
+    readonly code?: number,
+  ) {
+    super(message);
   }
 }
+
+/** What a close code means to the person holding the phone; the number stays for support. */
+export const closeText = (code: number) => closeOutcome(code).text;
 
 /** WebSocket.send's types want bytes over a plain ArrayBuffer, which these always are. */
 const own = (b: Uint8Array) => b as Uint8Array<ArrayBuffer>;
@@ -49,7 +42,7 @@ export class Remote {
     private channel: Channel,
   ) {
     ws.onmessage = (ev) => this.receive(new Uint8Array(ev.data as ArrayBuffer));
-    ws.onclose = (ev) => this.end({ code: ev.code, reason: ev.reason, refused: ev.code === 4401 });
+    ws.onclose = (ev) => this.end({ code: ev.code, reason: ev.reason });
     ws.onerror = () => undefined;
   }
 
@@ -75,7 +68,7 @@ export class Remote {
       };
       ws.onclose = (ev) => {
         clearTimeout(timer);
-        reject(new RemoteError(closeText(ev.code)));
+        reject(new RemoteError(closeText(ev.code), ev.code));
       };
       ws.onerror = () => undefined;
     });
