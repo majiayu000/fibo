@@ -712,11 +712,8 @@ impl Workbench {
         Self::flat_group(title, count)
             .id(gpui::SharedString::from(format!("sidebar-group-{key}")))
             .cursor_pointer()
-            .child(
-                div()
-                    .text_color(T::color(T::muted()))
-                    .child(if open { "⌄" } else { "›" }),
-            )
+            // At the line's right end, level with the rows' times below it.
+            .child(div().ml_auto().child(super::sidebar_flat::fold_mark(open)))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
             .into_any_element()
     }

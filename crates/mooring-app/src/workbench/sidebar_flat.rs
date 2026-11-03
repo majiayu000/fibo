@@ -10,6 +10,19 @@ fn ink(v: u32) -> gpui::Hsla {
     T::color(v)
 }
 
+/// The fold mark at a heading's right end: a chevron down while open, right when folded.
+pub(super) fn fold_mark(open: bool) -> gpui::Svg {
+    gpui::svg()
+        .path(if open {
+            "icons/chevron-down.svg"
+        } else {
+            "icons/chevron-right.svg"
+        })
+        .size(px(F::STATE + 2.))
+        .flex_shrink_0()
+        .text_color(ink(F::third()))
+}
+
 /// A row's state at its head: a lit dot for what asks you or failed, an open ring with a
 /// gap while it runs, a ring for a turn to check (filled while you have not looked at
 /// it), a gray ✓ for what you marked complete and a gray ring for the rest.
@@ -226,7 +239,7 @@ impl Workbench {
             .text_color(ink(F::third()))
             .child(flat_state(Status::Stale, false))
             .child(div().flex_1().min_w_0().truncate().child(text))
-            .child(if open { "⌄" } else { "›" })
+            .child(fold_mark(open))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
             .into_any_element()
     }
