@@ -98,7 +98,9 @@ fn landing_mark(zone: Zone) -> gpui::Div {
 }
 
 impl Workbench {
-    /// A pane's title bar: dragging it picks the pane up.
+    /// A pane's title bar: dragging it picks the pane up. Hovered it shows the open
+    /// hand, so it reads as something to grab; while carried, the closed hand (GPUI
+    /// keeps the bar's own cursor, not its hover one, for the whole drag).
     pub(super) fn pane_grip(&self, id: &str, title: &str, bar: gpui::Div) -> Stateful<gpui::Div> {
         let dragged = DraggedPane {
             id: id.to_owned(),
@@ -106,6 +108,8 @@ impl Workbench {
             grab: Point::default(),
         };
         bar.id(gpui::SharedString::from(format!("pane-grip-{id}")))
+            .cursor(gpui::CursorStyle::ClosedHand)
+            .hover(|s| s.cursor(gpui::CursorStyle::OpenHand))
             .on_drag(dragged, |p, grab, _, cx| {
                 cx.new(|_| DraggedPane { grab, ..p.clone() })
             })
