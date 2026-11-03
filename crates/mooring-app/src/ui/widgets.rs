@@ -90,6 +90,11 @@ pub fn glyph(group: Status) -> gpui::Div {
 /// waits on you, a ring for a turn to check, a quarter arc on a pale ring while it runs,
 /// a gray ring once it stopped, and ✓ when you marked it done.
 pub fn status_mark(group: Status) -> gpui::AnyElement {
+    status_mark_seen(group, false)
+}
+/// The sidebar's mark: a finished turn you have not looked at yet is a filled green dot;
+/// once seen it turns back into 等你验收's ring.
+pub fn status_mark_seen(group: Status, unseen: bool) -> gpui::AnyElement {
     const SIZE: f32 = 10.;
     let hue = group.colors().0;
     let icon = |path: &'static str, color: gpui::Hsla| {
@@ -114,6 +119,12 @@ pub fn status_mark(group: Status) -> gpui::AnyElement {
                     .left_0()
                     .child(icon("icons/arc.svg", hue)),
             )
+            .into_any_element(),
+        Status::Review if unseen => div()
+            .size(px(T::DOT))
+            .flex_shrink_0()
+            .rounded_full()
+            .bg(hue)
             .into_any_element(),
         Status::Review => icon("icons/ring.svg", hue).into_any_element(),
         Status::Closed => glyph(group).into_any_element(),

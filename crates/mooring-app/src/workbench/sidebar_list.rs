@@ -552,7 +552,8 @@ impl Workbench {
                             .child(time),
                     )
                     .child(
-                        // A finished turn you have seen keeps 等你验收's ring and its green.
+                        // A finished turn not seen yet is a filled green dot; once seen it
+                        // keeps 等你验收's ring and its green.
                         div()
                             .w(px(T::S12))
                             .flex()
@@ -560,7 +561,7 @@ impl Workbench {
                             .font_family(mono)
                             .font_weight(gpui::FontWeight::BOLD)
                             .text_size(px(T::SMALL))
-                            .child(crate::ui::widgets::status_mark(g)),
+                            .child(crate::ui::widgets::status_mark_seen(g, attention)),
                     ),
             )
             .when_some(detail, |d, text| {
