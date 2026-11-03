@@ -25,7 +25,7 @@ pub const DEFAULT_BG: u32 = 0x0e0e11;
 /// A blue-gray dark: a lifted, cool ground under slightly blue text, for displays where
 /// near-black with neutral white reads as glare.
 pub const SLATE_FG: u32 = 0xcad3e1;
-pub const SLATE_BG: u32 = 0x121720;
+pub const SLATE_BG: u32 = 0x21252c;
 /// The light scheme's defaults, the window's light theme being derived from them.
 pub const LIGHT_FG: u32 = 0x1f1e1c;
 /// White as in the v3 design: panes and the chrome around them are white, the sidebar

@@ -210,6 +210,9 @@ impl Palette {
             // (docs/sidebar-redesign/flat.html), so the panes read as the lit surface.
             sidebar: if light {
                 mix(bg, fg, 45)
+            } else if matches!(scheme, Scheme::Slate) {
+                // Slate's column is a softer step down, so the lifted ground still reads.
+                mix(bg, Theme::BLACK, 330)
             } else {
                 mix(bg, Theme::BLACK, 450)
             },
@@ -382,8 +385,10 @@ impl Flat {
         Theme::scheme() != Scheme::Light
     }
     pub fn bg() -> u32 {
-        if Self::dark() {
-            ink(0x0c0c0f)
+        if Theme::scheme() == Scheme::Slate {
+            Theme::sidebar()
+        } else if Self::dark() {
+            0x0c0c0f
         } else {
             Theme::sidebar()
         }
