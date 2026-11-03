@@ -29,7 +29,7 @@ Mooring 以前叫 Keepline：旧的 `keepline` / `keeplined` 命令和 `KEEPLINE
 
 | 命令 | 做什么 |
 |---|---|
-| `mooring list [--json]` | 正在运行的终端：编号、Agent、状态、标签、目录。`--json` 每项有 `id` `cwd` `tab` `agent` `phase` `session` |
+| `mooring list [--json]` | 正在运行的终端：编号、Agent、状态、标签、目录。`--json` 每项有 `id` `cwd` `tab` `agent` `phase` `status` `status_label` `title` `session`：`status` / `status_label` 和窗口上的状态同词（waiting / error / running / background / review…），`title` 是侧栏上的会话名，`cwd` 是会话自己的目录 |
 | `mooring read <终端> [--lines N]` | 画面最后 N 行，默认 50；画面下方的空行不算 |
 | `mooring send <终端> <文字\|-> [--enter]` | 把文字作为粘贴放进终端；`--enter` 再按回车。`-` 从标准输入读，长文字不用转义；超过 64 KiB 报错、一个字也不发，拆开再发 |
 | `mooring prompt <终端> <文字\|-> [--wait] [--timeout 秒] [--force]` | 给终端里的 Agent 发一条并回车 |

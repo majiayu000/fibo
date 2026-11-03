@@ -20,6 +20,7 @@
 4. **宿主内部**：状态线程只改内存，不做 I/O；写库在单独的线程里；PTY 读写不等全局状态；长期线程有监督者，出错时进入 Degraded 并显示出来，宿主不退出。
 5. **交接两阶段**：Prepare → READY → COMMIT → SERVING。READY 之前失败，旧宿主继续服务。
 6. **外来输入要显式授权**：本机进程（包括 Agent）可信；配对链接要先确认；每台手机独立 token。
+7. **每件事只有一个所有者**（11-03 加，第 3 条的推广）：会话的状态、名字、要你处理、更新时间、目录、待办状态、状态词都只在 core 里决定一次——`status::of`、`session_title`、`status::needs_you` 和 `NEEDS_YOU`、`session_updated`、`terminal_cwd`、`status::task_state`、`Status::label`、`mooring_core::time`。窗口、菜单栏、`mooring` 命令、手机、插件只调它们，不读原始字段自己拼；对外数据（手机卡片、`list --json`、插件事件）带上算好的值。名字只存在会话上，标签只给装着多个或零个会话的标签自己起名。守住它的是三条测试：`crates/mooring-core/tests/one_owner.rs`（样例和随机操作序列）、宿主各出口对 `sample::every_state()` 的对照、`tests/guard.rs` 棘轮（core 之外的原始字段读取和手写状态词、按键按文件计数，基线 `tests/guard-baseline.txt`，只许审查后改）。清单和来龙去脉在 `docs/single-source/index.html`。
 
 ## 阶段
 

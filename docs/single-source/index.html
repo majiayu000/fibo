@@ -50,6 +50,62 @@ ol li,ul li{margin:4px 0}
 </ol>
 </div>
 
+<h2>11-03 处理结果（分支 refactor/single-source）</h2>
+<div class="box">
+<h3>六步各做了什么</h3>
+<ol>
+<li><b>挖历史（第 6 步）</b>：老仓库 697 个提交里，「统一状态词」这件事手工修过 4 次（b591c9ed、e3574804、d4f10767、6151b07c），今天仍有 D 类 5 条。目标设计 blueprint.html 已写了「状态只在一处派生」（P3），但名字、要你处理、时间、id 都没有立规矩，正好是这两轮的大头。结论：手工统一会回退，必须由机器守。</li>
+<li><b>让编译器列名单（第 1 步）</b>：把关键字段临时改成 <code>pub(crate)</code>，编译器报出 core 以外 420 处直接读写，其中观测层写入约 200 处（合理），做判断的读取 146 处。Rust 分不开读和写，所以长期由 <code>tests/guard.rs</code> 棘轮守：原始字段读取、手写状态词和 ⌘ 按键按文件计数，基线变动必须改 <code>guard-baseline.txt</code>，审查看得见。当前基线约 170 处（含新加的按键计数），只降不升。</li>
+<li><b>边界协议（第 2 步）</b>：手机卡片、<code>mooring list --json</code>、插件事件带上 core 算好的标题、状态、状态词、要你处理、目录；手机只显示。命令行每个子命令只认自己的选项，用法和 skill.md 由一张表生成并有测试对照；CI 加跑手机端测试。</li>
+<li><b>跨界面一致性测试（第 3 步）</b>：<code>sample::every_state()</code> 一份覆盖 16 种状态和命名情况的样例；core 断言标签与侧栏同名、要你处理只含等你回答和出错，并跑 200 组随机操作（标签改名、侧栏改名、同终端新开对话、标记完成）每步检查；宿主的 list、手机卡片、插件事件逐字段对照 core。</li>
+<li><b>状态机（第 4 步）</b>：待办和会话的联动、手机断开原因写成下面两张表并实现。</li>
+<li><b>词汇表和缓存（第 5 步）</b>：状态词只在 <code>Status::label</code>，组名 <code>status::NEEDS_YOU</code>，守卫拦手写和走样的词；缓存里修了恢复记录（F1）和折叠状态（G2）。</li>
+</ol>
+</div>
+
+<h3>事实 → 唯一所有者</h3>
+<div class="wrap"><table>
+<tr><th>事实</th><th>所有者（core）</th><th>谁在读</th></tr>
+<tr><td>会话状态、状态词、粗分 phase</td><td><code>status::of</code>、<code>Status::label</code>、<code>Status::phase</code></td><td>窗口各处、菜单栏、<code>mooring list/wait</code>、手机卡片、插件事件</td></tr>
+<tr><td>会话名、标签名</td><td><code>session_title</code>（名字只存会话上）、<code>tab_title</code> / <code>terminal_tab_title</code></td><td>侧栏、标签、通知、菜单栏、CLI 标签列与按名找终端、手机、插件、<code>mooring events</code></td></tr>
+<tr><td>要你处理（集合和组名）</td><td><code>status::needs_you</code>、<code>status::NEEDS_YOU</code></td><td>顶栏芯片、看板列、按状态排法、菜单栏计数与标题、系统通知、手机排序</td></tr>
+<tr><td>最后更新时间</td><td><code>session_updated</code></td><td>侧栏、窗格、命令面板排序与时间、状态栏、菜单栏、待办详情</td></tr>
+<tr><td>「N 前」文字</td><td><code>mooring_core::time</code></td><td>窗口、菜单栏、手机页设备时间、<code>mooring remote --devices</code>（手机端 TS 例外）</td></tr>
+<tr><td>目录</td><td><code>terminal_cwd</code></td><td>侧栏、<code>mooring list</code>、手机卡片</td></tr>
+<tr><td>待办状态</td><td><code>status::task_state</code></td><td>待办详情、侧栏待办行</td></tr>
+<tr><td>快捷键提示</td><td><code>keymap::keycap</code></td><td>侧栏、状态栏、顶栏芯片</td></tr>
+<tr><td>手机断开原因</td><td><code>mooring_remote::close</code> 码表（TS 镜像有测试对照）</td><td>宿主中继连接、手机 hub</td></tr>
+</table></div>
+
+<h3>状态机：待办 × 会话</h3>
+<div class="wrap"><table>
+<tr><th>待办结局</th><th>挂的会话</th><th>待办显示</th><th>会话算不算要你处理</th><th>新开的对话挂不挂上来</th></tr>
+<tr><td>未定</td><td>没有</td><td>未开始</td><td>—</td><td>挂</td></tr>
+<tr><td>未定</td><td>有没做完的</td><td>进行中</td><td>按会话自己</td><td>挂</td></tr>
+<tr><td>未定</td><td>全都标了完成</td><td><b>会话都做完了</b>（新，原来永远「进行中」）</td><td>否（已收尾）</td><td>挂</td></tr>
+<tr><td>未定，验收标准都有证据</td><td>任意</td><td>验收齐了</td><td>按会话自己</td><td>挂</td></tr>
+<tr><td>稍后再看（未到期）</td><td>任意</td><td>稍后再看</td><td>按会话自己</td><td>挂</td></tr>
+<tr><td>已完成 / 已放弃</td><td>任意</td><td>已完成 / 已放弃</td><td><b>否</b>（新）</td><td><b>不挂</b>（新）</td></tr>
+</table></div>
+
+<h3>状态机：手机连接为什么断</h3>
+<div class="wrap"><table>
+<tr><th>电脑这边发生了什么</th><th>关闭码</th><th>手机怎么做</th></tr>
+<tr><td>设备不认识、密钥不对、取消配对</td><td>4401</td><td>提示重新扫码，不重试</td></tr>
+<tr><td>点了「断开」</td><td>4410（新）</td><td>显示离线，照常重连</td></tr>
+<tr><td>改了权限</td><td>4411（新）</td><td>立刻重连，拿新权限</td></tr>
+<tr><td>换了配对码（<code>--new-code</code>），机器在线</td><td>4404（新，原来 502）</td><td>提示「电脑换了配对码」，不重试</td></tr>
+<tr><td>换了配对码，机器离线</td><td>502</td><td>仍显示离线（中继认不出旧码，已知局限）</td></tr>
+</table></div>
+
+<h3>逐条结论</h3>
+<div class="wrap"><table>
+<tr><th>结论</th><th>条目</th></tr>
+<tr><td class="d y">已修</td><td>A1 A2 A3，A4 的标题和终端号，B1–B3，C2 C3，D1–D3，D4 看板卡片，E1 E2，F1 F3，G2，J1–J3，K1，L1 L3 L4 L6 L7，M1 M3，M8 的命令行帮助 / skill.md / 标准输入截断</td></tr>
+<tr><td class="d w">要你定</td><td>C1 会话优先侧栏的「要你处理」含等你验收，和顶栏、看板不同；J4 放弃的会话显示成「做完了 ✓」；D4 的完成印章写「已完成」</td></tr>
+<tr><td class="d n">留待以后（守卫已计数，不会变多）</td><td>A4 插件事件名、A5 / M2 id 与环境变量命名、C4 计数颜色、D5、E3、F2 F4、G1 G3 G4、H 类颜色、J5 J6 空间名、K2–K4、L2 旧设备、L5 请求格式、M4–M7、M8 的 plugins.md 文档</td></tr>
+</table></div>
+
 <h2>A · 宿主对外的数据绕开 core 的判定</h2>
 <p class="root">根因：<code>rp::Card</code>、<code>control.rs</code>、<code>plugin_hooks.rs</code> 没调用 <code>status::of</code> 和 <code>session_title</code>，而是从 <code>Content</code> 原始字段自己拼。</p>
 <div class="wrap"><table>
