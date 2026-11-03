@@ -12,7 +12,10 @@ static TURN: Mutex<()> = Mutex::new(());
 pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::Result<Reply> {
     if !matches!(
         inner,
-        Request::SendText { .. } | Request::SendKeys { .. } | Request::AnswerApproval { .. }
+        Request::SendText { .. }
+            | Request::SendKeys { .. }
+            | Request::SendInput { .. }
+            | Request::AnswerApproval { .. }
     ) {
         return Err(io::Error::other(
             "只有打字、按键和回答审批能这样带请求 id；编辑用 Edit 自己的 request",

@@ -165,7 +165,8 @@ pub enum Request {
         question: String,
         allow: bool,
     },
-    /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `AnswerApproval`) run
+    /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `SendInput`,
+    /// `AnswerApproval`) run
     /// at most once under `request`: a resend after a lost reply gets the first outcome
     /// back (a phone or another computer that reconnected). Edits name themselves.
     Once {
@@ -178,6 +179,12 @@ pub enum Request {
     SendKeys {
         id: String,
         keys: Vec<String>,
+    },
+    /// Bytes as a terminal emulator encodes keys and pastes, typed into a terminal beside
+    /// whoever types there: another desktop's pane on this machine (`mooring remote`).
+    SendInput {
+        id: String,
+        bytes: Vec<u8>,
     },
     /// Scripts, other Agents and other clients: the sessions' states now, then every
     /// change as it happens, until this socket closes (`mooring events`).

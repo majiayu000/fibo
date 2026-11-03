@@ -155,7 +155,7 @@ impl Workbench {
         out
     }
 
-    fn open_remote_peek(
+    pub(super) fn open_remote_peek(
         &mut self,
         index: usize,
         card: Card,
@@ -182,6 +182,9 @@ impl Workbench {
                 remote: Some(RemoteTitle {
                     title: format!("{name} · {title}"),
                     status: card.status.as_deref().and_then(Status::from_key),
+                    machine: index,
+                    terminal: card.id.clone(),
+                    slot: remote.slot(),
                 }),
             });
         }
@@ -208,4 +211,77 @@ fn shown_title(card: &Card) -> String {
         .clone()
         .or_else(|| card.note.clone())
         .unwrap_or_else(|| card.cwd.clone())
+}
+
+impl Workbench {
+    /// The approval another machine's terminal asks now, as that machine's list says.
+    pub(super) fn remote_approval(&self, r: &super::peek::RemoteTitle) -> Option<String> {
+        let view = self.machines.get(r.machine)?.view.lock().unwrap();
+        let card = view.terminals.iter().find(|c| c.id == r.terminal)?;
+        card.approval.clone().filter(|a| !a.is_empty())
+    }
+}
+
+/// Answers another machine's approval over its link, named so a resend answers once.
+pub(super) fn answer_remote(
+    r: &super::peek::RemoteTitle,
+    question: String,
+    allow: bool,
+) -> impl std::future::Future<Output = std::io::Result<mooring_core::protocol::Reply>> + use<> {
+    use mooring_remote::protocol::Op;
+    let linked = r.slot.lock().unwrap().clone();
+    let terminal = r.terminal.clone();
+    async move {
+        let linked = linked.ok_or_else(|| std::io::Error::other("那台电脑没连上"))?;
+        if !linked.answering {
+            return Err(std::io::Error::other("那台电脑不让这里回答审批"));
+        }
+        let op = Op::Answer {
+            terminal,
+            question,
+            allow,
+            request: Some(mooring_core::protocol::RequestId::fresh().id),
+        };
+        linked
+            .client
+            .request(op, std::time::Duration::from_secs(10))
+            .map(|_| mooring_core::protocol::Reply::Ok)
+    }
+}
+
+#[cfg(feature = "visual-test")]
+impl Workbench {
+    /// Opens machine `index`'s terminal `id` the way a click on its sidebar row does,
+    /// once that machine lists it; false until then.
+    pub fn visual_peek_remote(
+        &mut self,
+        index: usize,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(remote) = self.machines.get(index) else {
+            return false;
+        };
+        let (card, name) = {
+            let view = remote.view.lock().unwrap();
+            let Some(card) = view.terminals.iter().find(|c| c.id == id).cloned() else {
+                return false;
+            };
+            let name = view
+                .machine
+                .as_ref()
+                .map_or(view.spec.host.clone(), |m| m.name.clone());
+            (card, name)
+        };
+        self.open_remote_peek(index, card, &name, window, cx);
+        true
+    }
+    /// The open peek's pane, and whether its title bar says 只读.
+    pub fn visual_peek_pane(&self) -> Option<(Entity<Pane>, bool)> {
+        let peek = self.peek.as_ref()?;
+        let read_only = (peek.remote.as_ref())
+            .is_some_and(|r| !r.slot.lock().unwrap().as_ref().is_some_and(|l| l.typing));
+        Some((peek.pane.clone(), read_only))
+    }
 }

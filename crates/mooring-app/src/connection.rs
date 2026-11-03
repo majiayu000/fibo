@@ -216,10 +216,11 @@ impl Connection {
         });
         result
     }
-    /// Another machine's terminal, looked at through `watch`: read only, never resized.
-    /// `client` is `None` while that machine is unreachable; the pane says so.
+    /// Another machine's terminal through `watch`, never resized from here; typed into
+    /// (`input`) when that machine lets this desktop. `linked` is `None` while that
+    /// machine is unreachable; the pane says so.
     pub fn remote(
-        client: Option<Arc<mooring_remote::client::Client>>,
+        linked: Option<crate::machines::Linked>,
         id: &str,
         wake: UnboundedSender<()>,
     ) -> Self {
@@ -237,8 +238,7 @@ impl Connection {
             scheme: None,
         }));
         let dirty = Arc::new(AtomicBool::new(false));
-        // Read only: nothing is ever sent, so the queue needs no reader.
-        let (sender, _) = sync_channel(1);
+        let (sender, typed) = sync_channel(128);
         let mut result = Self {
             state: Arc::clone(&state),
             dirty: Arc::clone(&dirty),
@@ -247,10 +247,22 @@ impl Connection {
             sender,
             remote: None,
         };
-        let Some(client) = client else {
+        let Some(linked) = linked else {
             state.lock().unwrap().error = Some("那台电脑没连上".into());
             return result;
         };
+        let client = linked.client;
+        if linked.typing {
+            state.lock().unwrap().writable = true;
+            let (client, id, state) = (Arc::clone(&client), id.to_owned(), Arc::clone(&state));
+            let wake = wake.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = remote_typing(&client, &id, &typed) {
+                    state.lock().unwrap().error = Some(format!("没发过去：{e}"));
+                    let _ = wake.unbounded_send(());
+                }
+            });
+        }
         let on = {
             let (state, dirty, wake) = (Arc::clone(&state), Arc::clone(&dirty), wake.clone());
             move |body: StreamBody| {
@@ -421,6 +433,41 @@ impl Drop for RecognitionConnection {
             let _ = socket.shutdown(std::net::Shutdown::Both);
         }
     }
+}
+
+/// Sends what is typed into another machine's terminal, in order: whatever queued while
+/// the last one was on its way goes as one `input`, so a fast typist waits one round
+/// trip, not one per key. Each carries a request id, so that machine types it once.
+fn remote_typing(
+    client: &mooring_remote::client::Client,
+    terminal: &str,
+    typed: &std::sync::mpsc::Receiver<Request>,
+) -> io::Result<()> {
+    use base64::Engine;
+    use mooring_remote::protocol::Op;
+    let input = |r: Request| match r {
+        Request::Input { bytes, .. } => bytes,
+        _ => Vec::new(),
+    };
+    while let Ok(first) = typed.recv() {
+        let mut bytes = input(first);
+        while bytes.len() < 32 << 10 {
+            match typed.try_recv() {
+                Ok(next) => bytes.extend(input(next)),
+                Err(_) => break,
+            }
+        }
+        if bytes.is_empty() {
+            continue;
+        }
+        let op = Op::Input {
+            terminal: terminal.to_owned(),
+            data: base64::engine::general_purpose::STANDARD.encode(&bytes),
+            request: Some(mooring_core::protocol::RequestId::fresh().id),
+        };
+        client.request(op, std::time::Duration::from_secs(10))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

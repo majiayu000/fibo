@@ -13,13 +13,17 @@ pub(super) struct Peek {
     /// Why the host turned the last answer down, e.g. it was answered in the pane already.
     pub(super) note: Option<String>,
     /// Set for another machine's terminal: what its title bar says, from that machine's
-    /// card. Looked at only, so it offers no answers and nothing to open here.
+    /// card, and the link its answers go over. Nothing to open here.
     pub(super) remote: Option<RemoteTitle>,
 }
 
 pub(super) struct RemoteTitle {
     pub(super) title: String,
     pub(super) status: Option<Status>,
+    /// Which of `Workbench::machines`, and the terminal's id there.
+    pub(super) machine: usize,
+    pub(super) terminal: String,
+    pub(super) slot: crate::machines::Slot,
 }
 
 impl Workbench {
@@ -103,6 +107,9 @@ impl Workbench {
     /// The approval question the peeked session's screen shows, if any.
     fn peek_approval(&self) -> Option<String> {
         let peek = self.peek.as_ref()?;
+        if let Some(r) = &peek.remote {
+            return self.remote_approval(r);
+        }
         self.workspace
             .content
             .get(&peek.session)
@@ -119,11 +126,14 @@ impl Workbench {
         peek.answering = true;
         peek.note = None;
         let terminal = peek.terminal.clone();
-        let task = cx.background_spawn(self.store.send(Request::AnswerApproval {
-            id: terminal.clone(),
-            question,
-            allow,
-        }));
+        let task = match &peek.remote {
+            Some(r) => cx.background_spawn(super::machines::answer_remote(r, question, allow)),
+            None => cx.background_spawn(self.store.send(Request::AnswerApproval {
+                id: terminal.clone(),
+                question,
+                allow,
+            })),
+        };
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
@@ -154,6 +164,9 @@ impl Workbench {
                 .unwrap_or_else(|| "终端".into()),
         };
         let remote = peek.remote.is_some();
+        // Read only unless that machine lets this desktop type there.
+        let read_only = (peek.remote.as_ref())
+            .is_some_and(|r| !r.slot.lock().unwrap().as_ref().is_some_and(|l| l.typing));
         let approval = self.peek_approval();
         let state = match (&approval, group) {
             (Some(_), _) => Some("等你批准".to_owned()),
@@ -206,7 +219,7 @@ impl Workbench {
                         .on_click(cx.listener(|this, _, _, cx| this.answer_peek(false, cx))),
                 )
             })
-            .when(remote, |d| {
+            .when(read_only, |d| {
                 d.child(
                     label("只读")
                         .flex_shrink_0()

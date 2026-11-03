@@ -109,8 +109,18 @@ pub struct View {
     pub terminals: Vec<Card>,
 }
 
+/// A machine's live connection and what its `hello` lets this desktop do there.
+#[derive(Clone)]
+pub struct Linked {
+    pub client: Arc<Client>,
+    /// Typing into its terminals (`input`).
+    pub typing: bool,
+    /// Answering its approvals (`answer`).
+    pub answering: bool,
+}
+
 /// Where a machine's live connection is, if it has one now.
-pub type Slot = Arc<Mutex<Option<Arc<Client>>>>;
+pub type Slot = Arc<Mutex<Option<Linked>>>;
 
 /// One machine's connection, kept running by its supervisor until dropped.
 pub struct Remote {
@@ -160,7 +170,7 @@ fn supervise(
     connect: impl Fn(&Spec) -> io::Result<Client>,
     changed: impl Fn(),
     view: Arc<Mutex<View>>,
-    slot: Arc<Mutex<Option<Arc<Client>>>>,
+    slot: Slot,
     stop: Arc<AtomicBool>,
 ) {
     let mut backoff = Duration::from_secs(1);
@@ -199,14 +209,15 @@ fn run_once(
     connect: &impl Fn(&Spec) -> io::Result<Client>,
     changed: &impl Fn(),
     view: &Mutex<View>,
-    slot: &Mutex<Option<Arc<Client>>>,
+    slot: &Mutex<Option<Linked>>,
     stop: &AtomicBool,
 ) -> io::Result<()> {
     let client = Arc::new(connect(spec)?);
     let hello: Hello = parse(client.request(
         Op::Hello {
             version: Some(1),
-            client: None,
+            // One name for this app's life, so a write resent after a reconnect is known.
+            client: Some(mooring_core::protocol::RequestId::fresh().client),
         },
         REPLY,
     )?)?;
@@ -223,7 +234,11 @@ fn run_once(
         },
         REPLY,
     )?;
-    *slot.lock().unwrap() = Some(Arc::clone(&client));
+    *slot.lock().unwrap() = Some(Linked {
+        client: Arc::clone(&client),
+        typing: hello.ops.iter().any(|o| o == "input"),
+        answering: hello.ops.iter().any(|o| o == "answer"),
+    });
     apply(view, Some(hello.machine), list);
     changed();
     let mut listed = std::time::Instant::now();

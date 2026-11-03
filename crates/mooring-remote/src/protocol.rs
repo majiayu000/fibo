@@ -54,6 +54,14 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
+    /// Raw keyboard input, as a terminal emulator encodes it (base64): another desktop
+    /// typing into this terminal. At most 64 KiB once decoded.
+    Input {
+        terminal: String,
+        data: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
     /// Answers the approval asking `question`; refused if it is no longer on screen.
     Answer {
         terminal: String,
@@ -96,6 +104,7 @@ impl Op {
             Self::Read { .. } => "read",
             Self::Send { .. } => "send",
             Self::Keys { .. } => "keys",
+            Self::Input { .. } => "input",
             Self::Answer { .. } => "answer",
             Self::Chat { .. } => "chat",
             Self::Events => "events",
@@ -107,7 +116,7 @@ impl Op {
 
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
-    "hello", "list", "read", "send", "keys", "answer", "chat", "events", "watch", "close",
+    "hello", "list", "read", "send", "keys", "input", "answer", "chat", "events", "watch", "close",
 ];
 
 /// A line from the machine.

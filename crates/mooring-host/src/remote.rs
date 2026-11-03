@@ -344,6 +344,17 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             };
             ok_reply(rpc(socket, &named(client, request, keys))?)
         }
+        "input" => {
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(text(request, "data")?)
+                .map_err(|e| io::Error::other(format!("data 不是 base64：{e}")))?;
+            let input = Request::SendInput {
+                id: terminal()?,
+                bytes,
+            };
+            ok_reply(rpc(socket, &named(client, request, input))?)
+        }
         "answer" => {
             let answer = Request::AnswerApproval {
                 id: terminal()?,

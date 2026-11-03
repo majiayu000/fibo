@@ -32,7 +32,7 @@ impl Role {
     }
     pub fn allows(self, op: &str) -> bool {
         match op {
-            "send" | "keys" => self == Self::Full,
+            "send" | "keys" | "input" => self == Self::Full,
             "answer" => self != Self::View,
             _ => true,
         }
@@ -41,7 +41,7 @@ impl Role {
 
 /// Ops that change something on the machine; the machine logs each one.
 pub fn acts(op: &str) -> bool {
-    matches!(op, "send" | "keys" | "answer")
+    matches!(op, "send" | "keys" | "input" | "answer")
 }
 
 #[cfg(test)]

@@ -10,6 +10,8 @@ mod cpu_probe_evidence;
 mod pane_drag_evidence;
 #[path = "phones_evidence.rs"]
 mod phones_evidence;
+#[path = "remote_typing_evidence.rs"]
+mod remote_typing_evidence;
 #[path = "settings_evidence.rs"]
 mod settings_evidence;
 
@@ -21,6 +23,7 @@ pub fn start(
 ) {
     if settings_evidence::start(handle, evidence.clone(), cx)
         || phones_evidence::start(handle, evidence.clone(), cx)
+        || remote_typing_evidence::start(handle, evidence.clone(), cx)
         || cpu_probe_evidence::start(handle, evidence.clone(), cx)
         || pane_drag_evidence::start(handle, evidence.clone(), cx)
     {
