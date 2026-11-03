@@ -118,6 +118,10 @@ struct Entry {
     parser: crate::content::Parser,
     /// Since when this entry is ahead of the database.
     dirty: Option<std::time::Instant>,
+    /// The subagents on disk, read again only when their meta files change: each line
+    /// filters them against the card, but listing and parsing every meta per line costs
+    /// as much as the line itself once a conversation has run a dozen.
+    subagents: Option<Vec<mooring_core::content::Subagent>>,
     used: std::time::Instant,
 }
 /// The single owner of the cards being read, shared by every fork of an index and
@@ -860,6 +864,7 @@ impl Index {
             return Ok(None);
         };
         if let Some(e) = held.entries.get_mut(&key) {
+            e.subagents = Some(all.clone());
             let before = e.parser.card.subagents.clone();
             e.parser.card.keep_subagents(all);
             if e.parser.card.subagents == before {
@@ -903,9 +908,9 @@ impl Index {
         // The entry, when this log is held, is newer than the database.
         let entry = held.entries.remove(&key);
         let ahead = entry.as_ref().and_then(|e| e.dirty);
-        let (mut cursor, stored) = match entry {
-            Some(e) => (Some(e.cursor), Some(e.parser)),
-            None => (None, None),
+        let (mut cursor, stored, mut subagents) = match entry {
+            Some(e) => (Some(e.cursor), Some(e.parser), e.subagents),
+            None => (None, None, None),
         };
         let in_db = ahead.is_some()
             || cursor.is_some()
@@ -964,6 +969,7 @@ impl Index {
                             cursor: cursor.unwrap_or_default(),
                             parser: stored,
                             dirty: ahead,
+                            subagents,
                             used: std::time::Instant::now(),
                         },
                     );
@@ -1129,8 +1135,14 @@ impl Index {
                 }
             }
         }
-        if let Some(all) = adapter.subagents(path) {
-            parser.card.keep_subagents(all);
+        if replaced {
+            subagents = None;
+        }
+        if subagents.is_none() {
+            subagents = adapter.subagents(path);
+        }
+        if let Some(all) = &subagents {
+            parser.card.keep_subagents(all.clone());
         }
         c.dev = meta.dev();
         c.inode = meta.ino();
@@ -1220,6 +1232,7 @@ impl Index {
                     } else {
                         Some(ahead.unwrap_or_else(std::time::Instant::now))
                     },
+                    subagents,
                     used: std::time::Instant::now(),
                 },
             );
@@ -1368,6 +1381,18 @@ mod tests {
         let log = root.join("p/0b1c2d3e-0000-4000-8000-000000000009.jsonl");
         fs::create_dir_all(log.parent().unwrap()).unwrap();
         fs::write(&log, head.concat()).unwrap();
+        // MOORING_BENCH_SUBAGENTS=<n>: the conversation has run n subagents.
+        let subs = log.with_extension("").join("subagents");
+        fs::create_dir_all(&subs).unwrap();
+        let n: usize = std::env::var("MOORING_BENCH_SUBAGENTS").map_or(0, |v| v.parse().unwrap());
+        for k in 0..n {
+            fs::write(subs.join(format!("agent-a{k}.jsonl")), "{}\n").unwrap();
+            fs::write(
+                subs.join(format!("agent-a{k}.meta.json")),
+                format!(r#"{{"agentType":"Explore","description":"task {k}","finished":true}}"#),
+            )
+            .unwrap();
+        }
         let mut i = Index::open(&f.0, vec![(Agent::Claude, root.clone())]).unwrap();
         i.initialize().unwrap();
         i.update_many([log.clone()], 1).unwrap();
@@ -1475,6 +1500,56 @@ mod tests {
         let expected = state(&calm.0, lines.len(), false);
         assert_eq!(expected.4 as usize, lines.concat().len());
         assert_eq!(state(&crashed.0, lines.len(), true), expected);
+    }
+    #[test]
+    fn a_moving_log_reads_its_subagents_again_only_when_their_meta_changes() {
+        let f = Fixture::new();
+        let root = f.0.join("claude");
+        let id = "0b1c2d3e-0000-4000-8000-000000000002";
+        let log = root.join(format!("p/{id}.jsonl"));
+        let subs = root.join(format!("p/{id}/subagents"));
+        fs::create_dir_all(&subs).unwrap();
+        let ask = |text: &str| {
+            format!(
+                "{}\n",
+                serde_json::json!({"type": "user", "sessionId": id, "cwd": "/repo",
+                "timestamp": "2026-11-03T10:00:00Z", "message": {"role": "user", "content": text}})
+            )
+        };
+        fs::write(&log, ask("查一下")).unwrap();
+        let mut i = Index::open(&f.0, vec![(Agent::Claude, root.clone())]).unwrap();
+        i.initialize().unwrap();
+        i.update_many([log.clone()], 1).unwrap();
+        i.update_many([log.clone()], 2).unwrap();
+        let key = log.to_str().unwrap();
+        let meta = subs.join("agent-a1.meta.json");
+        fs::write(subs.join("agent-a1.jsonl"), "{}\n").unwrap();
+        fs::write(
+            &meta,
+            r#"{"agentType":"Explore","description":"Audit drift"}"#,
+        )
+        .unwrap();
+        // The parent's own lines reuse the list held in memory.
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&log)
+            .unwrap()
+            .write_all(ask("继续").as_bytes())
+            .unwrap();
+        i.update_many([log.clone()], 3).unwrap();
+        assert!(i.card(key).unwrap().unwrap().subagents.is_empty());
+        // The meta's own event reads it.
+        i.update_many([meta.clone()], 4).unwrap();
+        assert_eq!(i.card(key).unwrap().unwrap().subagents.len(), 1);
+        // And later lines keep it.
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&log)
+            .unwrap()
+            .write_all(ask("再看看").as_bytes())
+            .unwrap();
+        i.update_many([log.clone()], 5).unwrap();
+        assert_eq!(i.card(key).unwrap().unwrap().subagents.len(), 1);
     }
     #[test]
     fn a_subagent_meta_change_refreshes_its_parents_card_whose_log_did_not_move() {
