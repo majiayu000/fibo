@@ -31,7 +31,7 @@ ol li,ul li{margin:4px 0}
 <body>
 <main>
 <h1>重复来源清单</h1>
-<p class="lead">2026-11-03 · 全仓库只读审计，范围包括 core、app、host、remote、mobile、native.m。找的是同一件事存了两份、或在两处各自判定的地方。同一份数据换个说法显示的不算。</p>
+<p class="lead">2026-11-03 · 两轮全仓库只读审计，共 78 条，范围包括 core、app、host、remote、mobile、native.m。找的是同一件事存了两份、或在两处各自判定的地方。同一份数据换个说法显示的不算。</p>
 
 <div class="box">
 <h3>这页要支撑的决定</h3>
@@ -46,6 +46,7 @@ ol li,ul li{margin:4px 0}
 <li><b>名字</b>（B 类）在标签页和会话上各存一份，优先级还正好相反。今天的修复只让显示对上了，底下仍是两份。</li>
 <li><b>「要你处理」</b>（C 类）在侧栏、顶栏、看板、菜单栏、手机上有 4 种数法、4 种叫法、3 种颜色。</li>
 <li>先做 A、B、C，它们现在就能被看到。其余的放第二批，最后补守卫测试。</li>
+<li>第二轮又补了 37 条（J–M），最要紧的四条：待办和会话的结局不联动；电脑上点「断开」，手机却以为被取消配对；手机聊天页停在旧对话上；<code>mooring close … --help</code> 会真的把分屏关掉。</li>
 </ol>
 </div>
 
@@ -136,10 +137,59 @@ ol li,ul li{margin:4px 0}
 <li><code>native.m</code> 和手机端完全不扫。</li>
 </ul>
 
+<h2>第二轮 · 11-03 补扫</h2>
+<p class="root">补扫第一轮没覆盖的部分：待办与空间、快捷键与设置文字、手机连接协议、插件与 CLI 文档，共 37 条新问题。插件市场索引和插件文件逐个核对过，完全一致；README 的命令和路径也都对得上。</p>
+
+<h2>J · 待办和空间</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>J1</td><td>待办结局和会话结局</td><td><code>SetTaskOutcome</code> 只写 <code>task_outcomes</code> (model.rs:775) ↔ 会话的 <code>outcome</code>；只要挂过会话，<code>task_status</code> 就算「进行中」(task_detail.rs:35)</td><td>待办标了完成，下面的会话仍在「要你处理」里；会话都做完了，待办却一直「进行中」，而且看板和总览的待办区都不显示它</td><td class="s h">高</td><td class="d y">采用：core 提供一个 <code>task_state</code>，并定好两者怎么联动</td></tr>
+<tr><td>J2</td><td>已收尾的待办还在收新会话</td><td>绑定新会话时不看待办结局 (model.rs:725) ↔ 标签名照用待办名</td><td>「修登录」已完成，在同一个标签里再开 claude，新会话又挂到这个待办下</td><td class="s m">中</td><td class="d y">采用</td></tr>
+<tr><td>J3</td><td>待办状态算两遍</td><td>task_detail.rs:17 ↔ sidebar.rs:1206</td><td>详情页写「验收齐了」，侧栏同一条写「未完成 · 2 个会话」</td><td class="s m">中</td><td class="d y">采用</td></tr>
+<tr><td>J4</td><td>放弃的会话</td><td><code>Abandoned</code> 归入 <code>Status::Closed</code>，显示「做完了」(status.rs:148) ↔ 历史和总览写「已放弃」</td><td>放弃的会话在侧栏打钩写「做完了」</td><td class="s m">中</td><td class="d w">待定：加一个「放弃」状态，还是只在文字上区分</td></tr>
+<tr><td>J5</td><td>侧栏分组名</td><td><code>folder_name(session.cwd)</code> (sidebar_list.rs:1034) ↔ <code>Space.name</code></td><td>空间改名为「前端」后，侧栏分组仍叫「web」</td><td class="s m">中</td><td class="d y">采用</td></tr>
+<tr><td>J6</td><td>空间换目录</td><td>只改了 <code>cwd</code>，自动取的名字还是旧目录名 (sidebar.rs:1396)；两个空间可以指向同一个目录</td><td>标签上叫 foo，侧栏显示 bar</td><td class="s m">中</td><td class="d y">采用</td></tr>
+</table></div>
+
+<h2>K · 快捷键提示和设置说明</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>K1</td><td>快捷键提示</td><td>写死的 ⌘P / ⌘J：sidebar.rs:516、567，sidebar_flat.rs:190、524，statusbar.rs:135（已核源码）↔ keymap.rs</td><td>在 keys.json 改了键，顶栏提示跟着变，侧栏底部仍写 ⌘J</td><td class="s m">中</td><td class="d y">采用：共用一个 <code>keycap(Action)</code></td></tr>
+<tr><td>K2</td><td>设置、插件页、诊断里写死的按键</td><td>settings.rs:1251（⌘+/⌘−），settings/plugins.rs:68（⌘P），diagnostics.rs:1983 只认 ⌘W</td><td>改键后说明文字过时；诊断浮层不响应新的关闭键</td><td class="s l">低</td><td class="d y">采用</td></tr>
+<tr><td>K3</td><td>「旧会话收起时间」</td><td>设置说明是「已关闭的会话过这段时间收起」(settings.rs:724) ↔ 实际只影响没收尾的会话多久算「很久没动」(status.rs:200)；看板「做完了」列固定 1 天</td><td>改成 14 天，变化的不是用户以为的那样</td><td class="s m">中</td><td class="d y">采用：先改说明文字</td></tr>
+<tr><td>K4</td><td>设置的默认值和通知说明</td><td><code>Settings::default</code> ↔ 建库时的 <code>VALUES(1,0,3,30,'Codex')</code> (store.rs:68)；通知说明写「停下来等你时」↔ 实际只通知等你回答和出错</td><td>只改一处默认值就会分叉；以为等你验收也会弹通知</td><td class="s l">低</td><td class="d y">采用</td></tr>
+</table></div>
+
+<h2>L · 手机连接</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>L1</td><td>断开的原因</td><td>电脑上取消配对、点「断开」(<code>kicked</code>)、改权限，三种都发 4401 (relay.rs:474，已核源码) ↔ 手机把 4401 一律当成「被取消」(client.ts:52, hub.ts:86)</td><td>电脑上只点了「断开」，手机却提示「重新扫码配对」，而且不再自动重连</td><td class="s h">高</td><td class="d y">采用：分成三个关闭码，码表由 mooring-remote 导出</td></tr>
+<tr><td>L2</td><td>重新配对后的旧设备</td><td>手机覆盖成新的连接 (machines.ts:51) ↔ 电脑每次新加一台设备 (devices.rs:77)</td><td>同一部手机扫两次码，电脑上列出两部手机，旧密钥仍然有效（安全问题）</td><td class="s m">中</td><td class="d y">采用：配对时替换同名设备；手机移除时通知电脑</td></tr>
+<tr><td>L3</td><td>聊天页用哪个会话</td><td>chat.tsx:84 只取进入时的 session ↔ 卡片每次刷新都会带上新的 session</td><td>终端里开了新对话，手机还在看旧对话，发出的消息找不到回复</td><td class="s m">中高</td><td class="d y">采用</td></tr>
+<tr><td>L4</td><td>换新码之后</td><td>中继对不认识的 token 回 502 ↔ 手机当成「离线」</td><td>手机永远显示「电脑不在线」，不会提示重新配对</td><td class="s m">中</td><td class="d y">采用</td></tr>
+<tr><td>L5</td><td>请求格式有三份</td><td><code>rp::Op</code> 只有测试在用 ↔ 宿主手动按 JSON 解析 (remote.rs:282) ↔ TS 用 <code>op: string</code></td><td>目前字段对得上，但改一处其余两处不会报错</td><td class="s m">中</td><td class="d y">采用：宿主改为反序列化 <code>rp::Request</code></td></tr>
+<tr><td>L6</td><td>CI 不跑手机端</td><td>ci.yml 只跑 cargo ↔ 密码学常量的核对只在 mobile/test 里</td><td>改了 TS 那边的常量，CI 仍是绿的，到真机上握手失败</td><td class="s m">中</td><td class="d y">采用：CI 加一步 <code>bun test</code></td></tr>
+<tr><td>L7</td><td>零碎</td><td>离线后仍显示旧卡片；收到 events 的 end 后不重开；协议版本号没人校验；单行上限只有宿主知道；权限文案有三份；靠文案字符串判断是否被拒</td><td>过期的审批卡点了没反应；粘贴超大文本整条连接断掉</td><td class="s l">低中</td><td class="d y">采用（顺手修）</td></tr>
+</table></div>
+
+<h2>M · 插件和 <code>mooring</code> 命令</h2>
+<div class="wrap"><table>
+<tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
+<tr><td>M1</td><td>状态事件的终端编号</td><td>plugin_hooks.rs:117 写死 <code>terminal: None</code>（已核源码）↔ skill.md:35 和 plugins.md 说事件里有终端编号</td><td>Agent 用 <code>mooring events</code> 盯多个终端，started/done 对不上是哪个；hook 里的 <code>$MOORING_TERMINAL</code> 是空的</td><td class="s m">中高</td><td class="d y">采用</td></tr>
+<tr><td>M2</td><td>同名环境变量取值不同</td><td><code>MOORING_SESSION</code>：动作里是 CLI 的会话 id (actions.rs:38)，hook 里是内部 id；<code>MOORING_AGENT</code> 是显示名「Claude Code」，<code>list</code> 里却是 <code>claude</code></td><td><code>[ "$MOORING_AGENT" = claude ]</code> 永远不成立；拿 hook 给的 id 去 resume 会失败</td><td class="s m">中</td><td class="d y">采用：和 A5 一起统一</td></tr>
+<tr><td>M3</td><td>子命令不校验选项</td><td>control.rs:150 不认识的 <code>--xxx</code> 也照收</td><td><code>mooring close &lt;终端&gt; --help</code> 会真的把分屏关掉；<code>--timout</code> 拼错了也不报错</td><td class="s m">中</td><td class="d y">采用：未知选项报错，<code>-h</code> 打印用法</td></tr>
+<tr><td>M4</td><td>粗分状态有三套键名</td><td>sidebar.json 用 <code>done/stopped</code> ↔ WASM 用 <code>review/paused</code> ↔ colors.json 的 <code>done</code> 指等你验收</td><td>想给「做完了」改色写了 <code>done</code>，改掉的却是等你验收</td><td class="s m">中</td><td class="d y">采用：统一用 <code>Status::key</code></td></tr>
+<tr><td>M5</td><td>示例插件用了宿主不认的值</td><td>sidebar-status 发 <code>detail_mode: "hover"</code> ↔ 宿主只认 always/selected</td><td>选了 WASM 左栏后，第二行永远不显示</td><td class="s l">中低</td><td class="d w">待验证</td></tr>
+<tr><td>M6</td><td>colors.json</td><td>一个键写错整份就被忽略 (status_colors.rs:93) ↔ 文档说缺了的键保持默认</td><td>拼错一个键，所有自定义颜色都失效，也没有提示</td><td class="s l">中低</td><td class="d y">采用</td></tr>
+<tr><td>M7</td><td>只给 Claude 用的动作</td><td>common-actions 的 <code>claude --resume</code> 只要有会话就出现</td><td>在 Codex 窗格里点它，必然失败</td><td class="s l">中低</td><td class="d y">采用</td></tr>
+<tr><td>M8</td><td>文档和代码</td><td>plugins.md 关于完成动画、生效方式、排法列表的说法和代码不一致；帮助里缺 <code>hooks</code>、<code>serve</code>、<code>plugins install</code> 等；stdin 超过 64 KiB 被悄悄截断；<code>explain --json</code> 的 phase 用的是另一套词；CLAUDE.md 和 README 漏了 mooring-plugin-host；引用的 specs 文件在仓库里不存在</td><td>Agent 和插件作者照着文档写，结果和预期不符</td><td class="s l">低</td><td class="d y">采用：统一改一遍文档</td></tr>
+</table></div>
+
 <h2>建议的顺序</h2>
 <ol>
-<li><b>第一批（现在就能看到的错）</b>：A1–A4，B1–B3，C1–C4，D1。核心改动是给 core 加三个唯一出口：<code>status::of</code>（已有）、<code>session_title</code>（已有）、新增的「要你处理」判定和组名。宿主的 Card、CLI、插件事件和 App 都只调这三个；名字只存在会话上。</li>
-<li><b>第二批</b>：E1、E2、F3、G2、G3、H1–H3、D2–D5。</li>
+<li><b>第一批（现在就能看到的错）</b>：A1–A4，B1–B3，C1–C4，D1，再加上第二轮的 J1、L1、L3、M1、M3。核心改动是给 core 加三个唯一出口：<code>status::of</code>（已有）、<code>session_title</code>（已有）、新增的「要你处理」判定和组名。宿主的 Card、CLI、插件事件和 App 都只调这三个；名字只存在会话上。</li>
+<li><b>第二批</b>：E1、E2、F3、G2、G3、H1–H3、D2–D5、J2–J6、K1–K4、L2、L4–L6、M2、M4、M6–M7。</li>
+<li><b>文档一次改完</b>：M8，以及 L7 里的文案。</li>
 <li><b>先复现再定</b>：F1、F2、F4、G1。</li>
 <li><b>守卫</b>：在 <code>docs/plan.md</code> 架构原则里加一条「每件事只有一个所有者：状态、名字、要你处理、更新时间都只在 core 判定」。补测试：同一个会话在标签、侧栏、手机卡片、CLI 拿到的名字和状态必须一样；扫写死的状态词（含 native.m 和 mobile）。</li>
 </ol>
@@ -147,7 +197,7 @@ ol li,ul li{margin:4px 0}
 <h2>验证情况</h2>
 <p><span class="tag">已验</span>每条都由审计读过对应源码行。我又亲自对照源码核了 A1、A2、C1、D1 四条。</p>
 <p><span class="tag">没验</span>没有一条在运行中的 App 或真机上复现过，场景都是从代码推出来的。F 类和 G1 尤其要先跑一遍。</p>
-<p><span class="tag">相邻</span>没扫：<code>plugins/</code> 下的插件代码有没有写死状态名、待办的 <code>task_outcomes</code> 和会话 outcome 之间的关系、<code>Space.name/cwd</code>、手机端自己的缓存。</p>
+<p><span class="tag">相邻</span>第一轮没扫的部分已在第二轮补上。仍然没扫：设置页里中继地址和密钥是否另存了一份；<code>examples/phone.rs</code> 和手机 e2e 脚本与真实客户端是否一致；<code>rules.json</code> 的命令匹配。第二轮我亲自对照源码核了 L1、K1、M1、M3 四条，其余只经审计读过源码，同样没有实际复现。</p>
 </main>
 </body>
 </html>
