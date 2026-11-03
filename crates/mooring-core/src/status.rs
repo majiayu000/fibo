@@ -61,6 +61,10 @@ impl Status {
             Self::Closed => "closed",
         }
     }
+    /// The state named by [`Status::key`], e.g. from another machine's cards.
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.key() == key)
+    }
     /// One word per state everywhere; nothing else spells these (tests/guard.rs).
     pub fn label(self) -> &'static str {
         match self {

@@ -42,6 +42,9 @@ pub type Glyph = (gpui::Point<Pixels>, u32, u16);
 pub struct Pane {
     terminal: String,
     socket: std::path::PathBuf,
+    /// Set for another machine's terminal: where its live connection is found, read
+    /// only. Reattaching takes whatever connection that machine has then.
+    remote: Option<crate::machines::Slot>,
     /// Wakes this pane on terminal output; every connection it opens shares it.
     wake: futures::channel::mpsc::UnboundedSender<()>,
     connection: Connection,
@@ -406,8 +409,36 @@ impl Pane {
         range
     }
     pub fn new(socket: &Path, id: &str, takeover: bool, cx: &mut Context<Self>) -> Self {
-        let (tx, mut rx) = unbounded();
+        let (tx, rx) = unbounded();
         let connection = Connection::new(socket, id, takeover, tx.clone());
+        Self::with(connection, socket.to_owned(), None, id, tx, rx, cx)
+    }
+    /// Another machine's terminal, looked at only.
+    pub fn remote(slot: crate::machines::Slot, id: &str, cx: &mut Context<Self>) -> Self {
+        let (tx, rx) = unbounded();
+        let client = slot.lock().unwrap().clone();
+        let connection = Connection::remote(client, id, tx.clone());
+        let mut pane = Self::with(
+            connection,
+            std::path::PathBuf::new(),
+            Some(slot),
+            id,
+            tx,
+            rx,
+            cx,
+        );
+        pane.peek = true;
+        pane
+    }
+    fn with(
+        connection: Connection,
+        socket: std::path::PathBuf,
+        remote: Option<crate::machines::Slot>,
+        id: &str,
+        tx: futures::channel::mpsc::UnboundedSender<()>,
+        mut rx: futures::channel::mpsc::UnboundedReceiver<()>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         cx.spawn(async move |this, cx| {
             while rx.next().await.is_some() {
                 // Coalesce bursts at 60 Hz; no timer exists when the terminal is idle.
@@ -443,7 +474,8 @@ impl Pane {
         let focus = cx.focus_handle();
         Self {
             terminal: id.into(),
-            socket: socket.to_owned(),
+            socket,
+            remote,
             wake: tx,
             connection,
             reconnecting: false,
@@ -539,8 +571,13 @@ impl Pane {
                 .timer(std::time::Duration::from_millis(delay))
                 .await;
             let _ = this.update(cx, |pane, cx| {
-                pane.connection =
-                    Connection::new(&pane.socket, &pane.terminal, false, pane.wake.clone());
+                pane.connection = match &pane.remote {
+                    Some(slot) => {
+                        let client = slot.lock().unwrap().clone();
+                        Connection::remote(client, &pane.terminal, pane.wake.clone())
+                    }
+                    None => Connection::new(&pane.socket, &pane.terminal, false, pane.wake.clone()),
+                };
                 pane.reconnecting = false;
                 pane.bells_seen = 0;
                 pane.requested_cell = (0, 0);
@@ -1802,7 +1839,8 @@ impl Pane {
     }
     /// A peek that is used, not just looked at, sizes the terminal to itself.
     fn take_size(&mut self, cx: &mut Context<Self>) {
-        if self.peek {
+        // Another machine's terminal stays looked at only: never sized from here.
+        if self.peek && self.remote.is_none() {
             self.peek = false;
             cx.notify();
         }

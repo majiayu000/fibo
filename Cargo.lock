@@ -3331,12 +3331,14 @@ dependencies = [
 name = "mooring-app"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "futures",
  "gpui",
  "gpui_platform",
  "libc",
  "mooring-core",
  "mooring-plugin-host",
+ "mooring-remote",
  "qrcode",
  "serde",
  "serde_json",

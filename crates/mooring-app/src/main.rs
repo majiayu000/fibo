@@ -6,6 +6,7 @@ mod harness;
 mod host;
 mod keymap;
 mod lifecycle;
+mod machines;
 mod model;
 mod terminal;
 mod ui;

@@ -45,3 +45,26 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
 
 - 没跨两台真实机器测过，只测过 `ssh localhost`。
 - 远端 `mooring` 和本机版本不一致时的提示，还没设计。
+
+## 结果
+
+### 第 1 步「只看」（2026-11-03）：部分完成，待真机验收
+
+- 代码：
+  - `mooring-remote` 加了 Rust 客户端（`client.rs`）：按 id 对回复，按流 id 分发流消息；对方断开时，等着的请求和流都会收到原因，ssh 的报错取自它的 stderr。
+  - App 加了远程机器模块（`machines.rs`）：每台机器一个监管线程，负责重连。
+  - 远程终端走只读的 `Connection::remote` 和 `Pane::remote`，用浮层预览显示，标题栏写「机器名 · 会话名」，标「只读」，不显示「↗ 打开」和审批按钮。
+  - 侧栏底部按机器分组；设置 › 手机与远程 › 其他电脑，可以添加和移除机器。
+  - core 加了 `Status::from_key`，远程卡片的状态由它换回状态类型。
+- 守卫基线多了一处 `card.title`：读的是远端宿主用 `session_title` 算好的名字，不是原始字段。
+- 已验：
+  - 单测：客户端 4 个、机器模块 3 个。
+  - 集成测试 `the_desktop_client_lists_and_watches_another_machine`：经 `mooring remote --stdio` 连真实后台，能拿到列表，watch 的整屏能还原出终端文字，之后的输出也能跟上。
+  - 隔离环境里真的走了一遍 `ssh localhost`：侧栏出现「Agent-OS.local · 2 个会话」，两个会话的状态词和颜色都来自远端（在跑、等你回答），并显示「另有 1 个普通终端」。截图在本地，没进仓库。
+- 没验：
+  - 点开远程会话后的浮层画面没在真窗口里看到。模拟点击时测试窗口被别的窗口挡住，点击没落到 App 上，之后不再用模拟点击。
+  - 没在真的另一台 Mac 上测，也没测断网后 5 秒内连回。
+- 隔离验证的做法：
+  - App 用 `HOME=<临时目录> mooring-app --runtime <短路径>` 启动；
+  - ssh 用 PATH 里的包装脚本，加上 `-o UserKnownHostsFile=<临时文件>`，不碰 `~/.ssh`；
+  - 远端用 `phone_demo_machine` 的运行目录，路径指向一个带 `--runtime` 的小脚本。

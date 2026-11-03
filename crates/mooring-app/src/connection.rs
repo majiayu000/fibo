@@ -32,9 +32,14 @@ pub struct Connection {
     /// Separate from `state`: the callback runs while the reader holds that lock.
     pub clipboard: Arc<Mutex<Option<String>>>,
     sender: SyncSender<Request>,
+    /// Another machine's terminal: the `watch` stream to close when this goes.
+    remote: Option<(Arc<mooring_remote::client::Client>, u64)>,
 }
 impl Drop for Connection {
     fn drop(&mut self) {
+        if let Some((client, stream)) = self.remote.take() {
+            client.close(stream);
+        }
         if let Ok(s) = self.state.lock()
             && let Some(socket) = &s.socket
         {
@@ -65,6 +70,7 @@ impl Connection {
             bells: Arc::clone(&bells),
             clipboard: Arc::clone(&clipboard),
             sender,
+            remote: None,
         };
         let socket = socket.to_owned();
         let id = id.to_owned();
@@ -208,6 +214,110 @@ impl Connection {
                 let _ = wake.unbounded_send(());
             }
         });
+        result
+    }
+    /// Another machine's terminal, looked at through `watch`: read only, never resized.
+    /// `client` is `None` while that machine is unreachable; the pane says so.
+    pub fn remote(
+        client: Option<Arc<mooring_remote::client::Client>>,
+        id: &str,
+        wake: UnboundedSender<()>,
+    ) -> Self {
+        use base64::Engine;
+        use mooring_remote::protocol::{Op, StreamBody};
+        let state = Arc::new(Mutex::new(State {
+            vt: None,
+            writable: false,
+            error: None,
+            cols: 80,
+            rows: 24,
+            socket: None,
+            ended: false,
+            dropped: false,
+            scheme: None,
+        }));
+        let dirty = Arc::new(AtomicBool::new(false));
+        // Read only: nothing is ever sent, so the queue needs no reader.
+        let (sender, _) = sync_channel(1);
+        let mut result = Self {
+            state: Arc::clone(&state),
+            dirty: Arc::clone(&dirty),
+            bells: Arc::new(AtomicU64::new(0)),
+            clipboard: Arc::new(Mutex::new(None)),
+            sender,
+            remote: None,
+        };
+        let Some(client) = client else {
+            state.lock().unwrap().error = Some("那台电脑没连上".into());
+            return result;
+        };
+        let on = {
+            let (state, dirty, wake) = (Arc::clone(&state), Arc::clone(&dirty), wake.clone());
+            move |body: StreamBody| {
+                let b64 = base64::engine::general_purpose::STANDARD;
+                let mut s = state.lock().unwrap();
+                let fed = match body {
+                    StreamBody::Screen { cols, rows, vt } => {
+                        b64.decode(vt).map_err(io::Error::other).and_then(|bytes| {
+                            let mut fresh = Vt::new(cols, rows)?;
+                            fresh.feed(&bytes);
+                            s.vt = Some(fresh);
+                            s.scheme = None;
+                            s.cols = cols;
+                            s.rows = rows;
+                            Ok(())
+                        })
+                    }
+                    StreamBody::Output { vt } => {
+                        b64.decode(vt).map_err(io::Error::other).map(|bytes| {
+                            if let Some(v) = s.vt.as_mut() {
+                                v.feed(&bytes);
+                            }
+                        })
+                    }
+                    StreamBody::Resized { cols, rows } => match s.vt.as_mut() {
+                        Some(v) => v.resize(cols, rows).map(|()| {
+                            s.cols = cols;
+                            s.rows = rows;
+                        }),
+                        None => Ok(()),
+                    },
+                    StreamBody::Exited { .. } => {
+                        s.ended = true;
+                        Ok(())
+                    }
+                    StreamBody::End { reason } => {
+                        if !s.ended {
+                            s.error = Some(format!("连接已断开：{reason}"));
+                            s.dropped = s.vt.is_some();
+                        }
+                        Ok(())
+                    }
+                    StreamBody::Event { .. } => Ok(()),
+                };
+                if let Err(e) = fed {
+                    s.error = Some(format!("画面读不懂：{e}"));
+                }
+                drop(s);
+                if !dirty.swap(true, Ordering::AcqRel) {
+                    let _ = wake.unbounded_send(());
+                }
+            }
+        };
+        let opened = client.stream(
+            Op::Watch {
+                terminal: id.to_owned(),
+            },
+            on,
+            std::time::Duration::from_secs(10),
+        );
+        match opened {
+            Ok((stream, _)) => result.remote = Some((client, stream)),
+            Err(e) => {
+                state.lock().unwrap().error = Some(format!("打不开那台电脑的终端：{e}"));
+                let _ = wake.unbounded_send(());
+            }
+        }
         result
     }
     pub fn send(&self, request: Request) -> Result<(), String> {

@@ -284,7 +284,12 @@ impl Page {
     }
 }
 /// Every searchable setting: its page, its title and the words that find it.
-const ENTRIES: [(Page, &str, &str); 26] = [
+const ENTRIES: [(Page, &str, &str); 27] = [
+    (
+        Page::Phones,
+        "其他电脑",
+        "多机 远程 ssh mac 机器 主机 另一台",
+    ),
     (
         Page::Phones,
         "让手机连过来",
@@ -373,6 +378,8 @@ pub(super) enum SettingsAction {
     /// Plugins were installed, removed or switched and read again here: the workbench
     /// redraws what they feed and tells the host.
     PluginsChanged,
+    /// The other machines list was saved: connect to them afresh.
+    MachinesChanged,
     /// Phones on a relay: on or off, the relay, and its key (None keeps the saved one).
     Remote {
         enabled: bool,
@@ -406,6 +413,11 @@ pub(super) struct SettingsView {
     relay_key: Entity<Field>,
     /// Why the phones setting was not sent.
     remote_error: Option<&'static str>,
+    /// 其他电脑: as saved in `<config>/machines.json`, the field a new one is typed in,
+    /// and why the last change was not saved.
+    machines: Vec<crate::machines::Spec>,
+    machine_field: Entity<Field>,
+    machines_error: Option<String>,
     /// 插件: the catalog and what the last install did.
     market: plugins::Market,
 }
@@ -429,6 +441,12 @@ impl SettingsView {
                 .placeholder("可不填")
         });
         cx.observe(&relay, |_, _, cx| cx.notify()).detach();
+        let machine_field = cx.new(|cx| {
+            Field::new("电脑", "", cx)
+                .compact()
+                .placeholder("ssh 主机名，例如 mac2")
+        });
+        cx.observe(&machine_field, |_, _, cx| cx.notify()).detach();
         cx.observe(&relay_key, |_, _, cx| cx.notify()).detach();
         let query = cx.new(|cx| {
             Field::new("搜索设置", "", cx)
@@ -461,6 +479,9 @@ impl SettingsView {
             relay,
             relay_key,
             remote_error: None,
+            machines: crate::machines::load(),
+            machine_field,
+            machines_error: None,
             market: plugins::Market::read(),
         }
     }
@@ -1935,7 +1956,93 @@ impl SettingsView {
                 cx,
             ));
         }
-        self.cards(vec![("连接", link), ("手机", phones)])
+        let machines = if self.shows(Page::Phones, "其他电脑", cx) {
+            self.machine_rows(cx)
+        } else {
+            Vec::new()
+        };
+        self.cards(vec![
+            ("连接", link),
+            ("手机", phones),
+            ("其他电脑", machines),
+        ])
+    }
+    /// 其他电脑: each saved machine with 移除, then a field to add one. Looked at only
+    /// for now (docs/multi-machine/spec.md, step 1).
+    fn machine_rows(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
+        let mut rows = Vec::new();
+        for (index, spec) in self.machines.iter().enumerate() {
+            let note = spec
+                .path
+                .clone()
+                .unwrap_or_else(|| "自动找那台电脑上的 mooring".into());
+            rows.push(
+                self.row(
+                    rows.is_empty(),
+                    &spec.host,
+                    &note,
+                    secondary(("machine-remove", index), "移除").on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            let mut next = this.machines.clone();
+                            next.remove(index);
+                            this.save_machines(next, cx);
+                        },
+                    )),
+                )
+                .into_any_element(),
+            );
+        }
+        let typed = self.machine_field.read(cx).text.trim().to_owned();
+        rows.push(
+            self.row(
+                rows.is_empty(),
+                "加一台电脑",
+                self.machines_error.as_deref().unwrap_or(
+                    "填 ssh 能免密登录的主机名；那台电脑上要装着 Mooring。侧栏里只看，不能打字",
+                ),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(T::S8))
+                    .child(
+                        div()
+                            .w(px(T::FORM_WIDTH * 0.45))
+                            .child(self.machine_field.clone()),
+                    )
+                    .child(
+                        secondary("machine-add", "添加")
+                            .when(typed.is_empty(), |b| b.opacity(0.5))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                let host = this.machine_field.read(cx).text.trim().to_owned();
+                                if host.is_empty() {
+                                    return;
+                                }
+                                if this.machines.iter().any(|m| m.host == host) {
+                                    this.machines_error = Some(format!("{host} 已经加过了"));
+                                    cx.notify();
+                                    return;
+                                }
+                                let mut next = this.machines.clone();
+                                next.push(crate::machines::Spec { host, path: None });
+                                this.machine_field.update(cx, |f, _| f.set_text(""));
+                                this.save_machines(next, cx);
+                            })),
+                    ),
+            )
+            .into_any_element(),
+        );
+        rows
+    }
+    fn save_machines(&mut self, next: Vec<crate::machines::Spec>, cx: &mut Context<Self>) {
+        match crate::machines::save(&next) {
+            Ok(()) => {
+                self.machines = next;
+                self.machines_error = None;
+                cx.emit(SettingsAction::MachinesChanged);
+            }
+            Err(e) => self.machines_error = Some(format!("没存上：{e}")),
+        }
+        cx.notify();
     }
     fn about_page(&self, cx: &Context<Self>) -> gpui::Div {
         let mut page = div().flex().flex_col();
@@ -2237,6 +2344,11 @@ impl Workbench {
             SettingsAction::Close => {
                 this.settings = None;
                 this.nav.pending_focus = true;
+                cx.notify();
+            }
+            SettingsAction::MachinesChanged => {
+                // Dropping the old connections ends their ssh children.
+                this.machines = Workbench::start_machines(cx);
                 cx.notify();
             }
             SettingsAction::PluginsChanged => {

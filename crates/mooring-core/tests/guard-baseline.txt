@@ -9,6 +9,7 @@ field content-name	crates/mooring-host/src/control.rs	1
 field content-name	crates/mooring-host/src/plugins_cmd.rs	1
 field content-title	crates/mooring-app/src/native.m	1
 field content-title	crates/mooring-app/src/workbench/board_drawer.rs	3
+field content-title	crates/mooring-app/src/workbench/machines.rs	1
 field content-title	mobile/src/ui/format.ts	1
 field session-updated	crates/mooring-app/src/model/session_state.rs	1
 field session-updated	crates/mooring-app/src/workbench/layout.rs	2

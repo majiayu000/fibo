@@ -7,6 +7,9 @@ license = "MIT"
 
 [dependencies]
 mooring-core = { path = "../mooring-core" }
+# Other machines, over the same remote protocol the phone speaks.
+mooring-remote = { path = "../mooring-remote" }
+base64 = "0.22"
 # Sandboxed WebAssembly for left-column plugins that need logic (`"group": "wasm"`).
 mooring-plugin-host = { path = "../mooring-plugin-host" }
 gpui = { path = "../../.deps/zed/crates/gpui" }

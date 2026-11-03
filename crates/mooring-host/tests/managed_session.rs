@@ -4817,6 +4817,101 @@ fn command_line_splits_a_pane_beside_a_terminal_and_closes_it() {
     }
 }
 
+/// The desktop's client of another machine (docs/multi-machine/spec.md, step 1): through
+/// `mooring remote --stdio`, as ssh would run it, it lists the terminals and rebuilds a
+/// watched screen from its replay, then follows the output after it.
+#[test]
+fn the_desktop_client_lists_and_watches_another_machine() {
+    use base64::Engine;
+    use mooring_remote::client::Client;
+    use mooring_remote::protocol::{List, Op, StreamBody};
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let h = Host::start();
+    h.setup();
+    h.call(h.launch(
+        "far",
+        r#"printf 'hello from mac2\r\n'; read -r line; printf 'later %s\r\n' "$line"; exec cat"#,
+    ))
+    .unwrap();
+    let (mut app, mut app_vt, _) = h.attach("far", false);
+    read_until(&mut app, &mut app_vt, "hello from mac2");
+    let client = Client::spawn(&[
+        env!("CARGO_BIN_EXE_mooring").to_owned(),
+        "remote".into(),
+        "--stdio".into(),
+        "--runtime".into(),
+        h.root.to_string_lossy().into_owned(),
+    ])
+    .unwrap();
+    let t = Duration::from_secs(10);
+    client.request(Op::Hello { version: Some(1) }, t).unwrap();
+    let list: List = serde_json::from_value(client.request(Op::List, t).unwrap()).unwrap();
+    assert!(list.terminals.iter().any(|c| c.id == "far"), "{list:?}");
+    let (tx, rx) = std::sync::mpsc::channel();
+    client
+        .stream(
+            Op::Watch {
+                terminal: "far".into(),
+            },
+            move |body| {
+                let _ = tx.send(body);
+            },
+            t,
+        )
+        .unwrap();
+    let mut vt = None;
+    let until = Instant::now() + Duration::from_secs(10);
+    let shown = |vt: &Option<Vt>| {
+        vt.as_ref()
+            .map(|v: &Vt| v.tail_text(24).unwrap())
+            .unwrap_or_default()
+    };
+    while !shown(&vt).contains("hello from mac2") {
+        assert!(
+            Instant::now() < until,
+            "screen never came: {:?}",
+            shown(&vt)
+        );
+        match rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(StreamBody::Screen {
+                cols,
+                rows,
+                vt: replay,
+            }) => {
+                let mut fresh = Vt::new(cols, rows).unwrap();
+                fresh.feed(&b64.decode(replay).unwrap());
+                vt = Some(fresh);
+            }
+            Ok(StreamBody::Output { vt: bytes }) => {
+                if let Some(v) = vt.as_mut() {
+                    v.feed(&b64.decode(bytes).unwrap());
+                }
+            }
+            _ => (),
+        }
+    }
+    // What happens there after the screen arrived follows it.
+    h.call(Request::SendText {
+        id: "far".into(),
+        text: "ok".into(),
+        submit: true,
+    })
+    .unwrap();
+    let until = Instant::now() + Duration::from_secs(10);
+    while !shown(&vt).contains("later ok") {
+        assert!(
+            Instant::now() < until,
+            "output never followed: {:?}",
+            shown(&vt)
+        );
+        if let Ok(StreamBody::Output { vt: bytes }) = rx.recv_timeout(Duration::from_secs(1)) {
+            if let Some(v) = vt.as_mut() {
+                v.feed(&b64.decode(bytes).unwrap());
+            }
+        }
+    }
+}
+
 /// `mooring remote --stdio` as a phone or another machine runs it over ssh: it watches
 /// a terminal the workbench owns without taking it or resizing it, types named keys and
 /// text into it, streams events, and closes streams and itself cleanly.

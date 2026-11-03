@@ -417,6 +417,7 @@ impl Workbench {
                 .on_click(cx.listener(|this, _, _, cx| this.show_closed(cx))),
             );
         }
+        sidebar = sidebar.children(self.machine_rows(recent, cx));
         if recent {
             use crate::ui::theme::Flat as F;
             return Some(

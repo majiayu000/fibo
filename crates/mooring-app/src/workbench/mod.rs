@@ -45,6 +45,8 @@ pub struct Workbench {
     /// A session's live screen floated over the current tab from the sidebar.
     peek: Option<peek::Peek>,
     phones: phones::Phones,
+    /// Other machines shown under this one's sessions (docs/multi-machine/spec.md).
+    machines: Vec<crate::machines::Remote>,
     /// The bottom bar's open popover.
     statusbar: Option<statusbar::StatusPop>,
     /// The CLI the quota button always shows, picked in its popover; `None` shows the
@@ -233,6 +235,7 @@ mod divergence;
 mod filters;
 mod forms;
 mod layout;
+mod machines;
 use layout::LayoutState;
 mod nav;
 use nav::Nav;
@@ -362,6 +365,7 @@ impl Workbench {
             sidebar: sidebar_list::SidebarPrefs::load(),
             peek: None,
             phones: Default::default(),
+            machines: Self::start_machines(cx),
             statusbar: None,
             quota_pin: statusbar::load_quota_pin(),
             copied: None,

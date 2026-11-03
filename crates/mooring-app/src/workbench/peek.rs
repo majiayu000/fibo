@@ -12,6 +12,14 @@ pub(super) struct Peek {
     pub(super) answering: bool,
     /// Why the host turned the last answer down, e.g. it was answered in the pane already.
     pub(super) note: Option<String>,
+    /// Set for another machine's terminal: what its title bar says, from that machine's
+    /// card. Looked at only, so it offers no answers and nothing to open here.
+    pub(super) remote: Option<RemoteTitle>,
+}
+
+pub(super) struct RemoteTitle {
+    pub(super) title: String,
+    pub(super) status: Option<Status>,
 }
 
 impl Workbench {
@@ -56,6 +64,7 @@ impl Workbench {
                 pane,
                 answering: false,
                 note: None,
+                remote: None,
             });
         }
         if let Some(peek) = &self.peek {
@@ -134,10 +143,17 @@ impl Workbench {
             .agent_sessions
             .iter()
             .find(|s| s.id == peek.session);
-        let group = session.map(|s| status_of(&self.workspace, s));
-        let title = session
-            .map(|s| self.session_title(s))
-            .unwrap_or_else(|| "终端".into());
+        let group = match &peek.remote {
+            Some(r) => r.status,
+            None => session.map(|s| status_of(&self.workspace, s)),
+        };
+        let title = match &peek.remote {
+            Some(r) => r.title.clone(),
+            None => session
+                .map(|s| self.session_title(s))
+                .unwrap_or_else(|| "终端".into()),
+        };
+        let remote = peek.remote.is_some();
         let approval = self.peek_approval();
         let state = match (&approval, group) {
             (Some(_), _) => Some("等你批准".to_owned()),
@@ -190,14 +206,24 @@ impl Workbench {
                         .on_click(cx.listener(|this, _, _, cx| this.answer_peek(false, cx))),
                 )
             })
-            .child(button("peek-open", "↗ 打开").on_click(cx.listener(
-                move |this, _, window, cx| {
-                    this.close_peek(cx);
-                    if let Some(s) = &open {
-                        this.open_session(s, window, cx);
-                    }
-                },
-            )))
+            .when(remote, |d| {
+                d.child(
+                    label("只读")
+                        .flex_shrink_0()
+                        .text_size(px(T::CHIP_SIZE))
+                        .text_color(T::color(T::muted())),
+                )
+            })
+            .when(!remote, |d| {
+                d.child(button("peek-open", "↗ 打开").on_click(cx.listener(
+                    move |this, _, window, cx| {
+                        this.close_peek(cx);
+                        if let Some(s) = &open {
+                            this.open_session(s, window, cx);
+                        }
+                    },
+                )))
+            })
             .child(
                 button("peek-close", "✕")
                     .aria_label("关闭偷看")
