@@ -38,6 +38,8 @@ pub(super) fn flat_state(g: Status) -> gpui::AnyElement {
             .into_any_element(),
         Bucket::Running => svg("icons/state-run.svg", dot),
         Bucket::Done => svg("icons/state-ring.svg", dot),
+        // What you marked complete is done with: a muted ✓, apart from rings that stopped.
+        _ if g == Status::Closed => svg("icons/check.svg", ink(F::second())),
         _ => svg("icons/state-ring.svg", ink(F::idle())),
     }
 }
