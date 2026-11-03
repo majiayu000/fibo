@@ -880,7 +880,10 @@ impl Theme {
     pub fn terminal_mono(cx: &App) -> Font {
         let mut face = Self::mono(cx);
         let family = super::terminal_text::current().family;
-        if !family.is_empty() {
+        // A family that is not installed (typed into the file, or uninstalled since)
+        // would fall through to a proportional face whose letters miss the cells; the
+        // monospace default stands in, and the setting stays as you wrote it.
+        if !family.is_empty() && installed(&family, cx) {
             face.family = family.into();
         }
         face
@@ -909,6 +912,25 @@ impl Theme {
         ]));
         face
     }
+}
+
+/// Whether a font family is installed, asked once per family name: listing every font
+/// is slow and the terminal face is read on each frame.
+fn installed(family: &str, cx: &App) -> bool {
+    static SEEN: std::sync::Mutex<Option<(String, bool)>> = std::sync::Mutex::new(None);
+    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((name, there)) = seen.as_ref()
+        && name == family
+    {
+        return *there;
+    }
+    let there = cx
+        .text_system()
+        .all_font_names()
+        .iter()
+        .any(|n| n == family);
+    *seen = Some((family.to_owned(), there));
+    there
 }
 
 #[cfg(test)]
