@@ -295,19 +295,27 @@ fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                     .child(value),
             )
     };
-    let badge = div()
-        .px(px(T::S4))
-        .rounded(px(T::S2))
+    // Direction A (11-03): the pressure leads, in words, with the percentage beside it.
+    let pill = div()
+        .flex()
+        .items_center()
+        .gap(px(T::S4))
+        .px(px(T::S6))
+        .rounded(px(T::S8))
+        .border(px(T::BORDER_WIDTH))
+        .border_color(T::color(T::control()))
         .text_size(px(T::SMALL))
+        .text_color(T::color(T::secondary()))
         .child(
-            memory
-                .and_then(|m| m.percent())
-                .map_or_else(unread, |p| format!("{p:.0}%")),
-        );
-    let badge = match tone {
-        Some(t) => badge.text_color(t.ink()).bg(t.wash()),
-        None => badge.text_color(T::color(T::muted())),
-    };
+            div()
+                .size(px(T::DOT))
+                .rounded_full()
+                .bg(tone.map_or_else(|| T::color(T::muted()), Tone::dot)),
+        )
+        .child(pressure.map_or_else(
+            || "压力不可读".to_string(),
+            |p| format!("压力{}", p.label()),
+        ));
     let swap = memory.map_or(0, |m| m.swap_bytes);
     let (parts, hint) = match memory.filter(|m| m.total_bytes > 0) {
         Some(m) => {
@@ -322,11 +330,11 @@ fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                     (share(m.compressed_bytes), T::color(T::hatch())),
                 ],
                 format!(
-                    "App {:.1} · 联动 {:.1} · 压缩 {:.1} · 缓存 {:.1} GB",
+                    // The gauge's three parts, in order; cache has its own reading above.
+                    "App {:.1} · 联动 {:.1} · 压缩 {:.1} GB",
                     m.app_bytes() as f64 / GB,
                     m.wired_bytes as f64 / GB,
-                    m.compressed_bytes as f64 / GB,
-                    m.cached_bytes as f64 / GB
+                    m.compressed_bytes as f64 / GB
                 ),
             )
         }
@@ -348,26 +356,56 @@ fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                 .items_center()
                 .justify_between()
                 .child(label("内存 · 最新读数"))
-                .child(badge),
+                .child(pill),
+        )
+        .child(
+            div()
+                .flex()
+                .items_baseline()
+                .gap(px(T::S10))
+                .min_w_0()
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(T::TITLE))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(ink)
+                        .child(pressure.map_or_else(unread, |p| p.label().into())),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(T::SMALL))
+                        .text_color(T::color(T::secondary()))
+                        .child(memory.map_or_else(unread, |m| {
+                            format!(
+                                "已用 {} / {:.0} GB · {:.0}%",
+                                gib(m.used_bytes).trim_end_matches(" GB"),
+                                m.total_bytes as f64 / GB,
+                                m.percent().unwrap_or_default()
+                            )
+                        })),
+                ),
         )
         .child(
             div()
                 .flex()
                 .gap(px(T::S12))
                 .child(reading(
-                    "压力",
-                    pressure.map_or_else(unread, |p| p.label().into()),
-                    true,
-                ))
-                .child(reading(
-                    "已用",
-                    memory.map_or_else(unread, |m| gib(m.used_bytes)),
+                    "压缩",
+                    memory.map_or_else(unread, |m| gib(m.compressed_bytes)),
                     false,
                 ))
                 .child(reading(
                     "交换",
                     memory.map_or_else(unread, |_| if swap == 0 { "0".into() } else { gib(swap) }),
                     swap > 0 && tone.is_some(),
+                ))
+                .child(reading(
+                    "缓存",
+                    memory.map_or_else(unread, |m| gib(m.cached_bytes)),
+                    false,
                 )),
         )
         .child(parts_gauge(parts, T::GAUGE_HEIGHT))
