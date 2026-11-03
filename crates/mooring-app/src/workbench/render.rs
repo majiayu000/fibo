@@ -692,6 +692,14 @@ impl Render for Workbench {
         if let Some(peek) = &self.peek {
             main = main.relative().child(self.peek_view(peek, cx));
         }
+        // Beside 会话优先's column the status bar belongs to the main column, so the
+        // column runs to the window's foot (flat.html); otherwise it spans the window.
+        let width = f32::from(window.viewport_size().width);
+        let beside = sidebar.is_some()
+            && self.sidebar.preset().group == mooring_core::sidebar::Grouping::Recent;
+        if beside {
+            main = main.child(self.statusbar_view(width - T::SIDEBAR, cx));
+        }
         root = root
             .relative()
             .child(
@@ -702,7 +710,7 @@ impl Render for Workbench {
                     .children(sidebar)
                     .child(main),
             )
-            .child(self.statusbar_view(f32::from(window.viewport_size().width), cx));
+            .when(!beside, |d| d.child(self.statusbar_view(width, cx)));
         // 标记完成 runs leave their panes for the sidebar, so they draw over everything
         // but the menus.
         if let Some(overlay) = self.completing_overlay(window) {

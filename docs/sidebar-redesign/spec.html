@@ -1,0 +1,50 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Mooring 侧栏规格</title><style>
+*{box-sizing:border-box}
+body{margin:0;background:#0c0c0f;width:316px;height:900px;overflow:hidden;font-family:system-ui,-apple-system,'PingFang SC',sans-serif}
+.mono{font-family:'JetBrains Mono','SF Mono',Menlo,monospace}
+.col{width:316px;height:900px;background:#0c0c0f;border-right:1px solid #1c1c21;display:flex;flex-direction:column}
+.top{height:44px;flex-shrink:0}
+.brand{height:26px;padding:0 12px 0 18px;display:flex;align-items:center;gap:8px;font-size:11px;line-height:14px}
+.letters{display:flex;gap:2px;font-weight:600;color:#ececee}
+.host{display:flex;align-items:center;gap:6px;color:#7e7e87}
+.ib{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.search{margin:12px 12px 0;height:30px;padding:0 10px;display:flex;align-items:center;gap:8px;border-radius:8px;border:1px solid #1f1f25;color:#7e7e87}
+.search .p{flex:1;font-size:12px;line-height:16px}
+.search .k{font-size:11px;line-height:14px}
+.list{flex:1;min-height:0;padding-bottom:12px}
+.chips{display:flex;flex-wrap:wrap;gap:5px;padding:10px 12px 2px}
+.chip{height:24px;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #23232a;font-size:11.5px;line-height:14px}
+.chip.add{width:24px;padding:0;justify-content:center;border:1px dashed #4a4a54;color:#7e7e87;font-size:12px}
+.badge{min-width:14px;height:14px;padding:0 4px;border-radius:7px;background:#e8823a;color:#fff;font-size:9.5px;line-height:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.grp{padding:14px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px}
+.grp b{font-weight:500;color:#a2a2aa} .grp span{color:#7e7e87}
+.row{position:relative;margin:0 8px;padding:5px 10px;display:flex;align-items:center;gap:9px;border-radius:7px}
+.row.two{padding:6px 10px;align-items:flex-start}
+.row.two .st{margin-top:4px}
+.row.sel{background:#17171c}
+.ring{position:absolute;inset:0;border-radius:7px;border:1px solid #2a2a31}
+.st{flex-shrink:0}
+.x{flex:1;min-width:0;display:flex;flex-direction:column}
+.t{display:flex;align-items:center;gap:8px}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px;line-height:16px;color:#e4e4e7}
+.tag{max-width:76px;flex-shrink:0;display:flex;align-items:center;gap:5px;font-size:11px;line-height:14px;color:#7e7e87}
+.tm{width:26px;flex-shrink:0;display:flex;justify-content:flex-end;font-family:'JetBrains Mono','SF Mono',Menlo,monospace;font-size:11px;line-height:14px;color:#7e7e87}
+.sub{margin-top:2px;font-size:11.5px;line-height:15px;color:#f6d0b4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.keys{flex-shrink:0;padding:8px 16px;display:flex;align-items:center;gap:4px;border-top:1px solid #1c1c21;font-size:11px;line-height:14px;color:#7e7e87}
+.kbd{padding:0 4px;border-radius:4px;border:1px solid #2a2a31;font-family:'JetBrains Mono','SF Mono',Menlo,monospace;font-size:10.5px;color:#a2a2aa}
+.foot{flex-shrink:0;padding:8px 10px 10px 16px;display:flex;align-items:center;gap:4px;border-top:1px solid #1c1c21;font-size:12px;line-height:16px;color:#a2a2aa}
+.foot .c{flex:1;min-width:0}
+.todo{height:26px;padding:0 6px;display:flex;align-items:center;border-radius:7px}
+</style></head><body><div class="col">
+<div class="top"></div>
+<div class="brand"><div class="letters"><span>M</span><span>O</span><span>O</span><span>R</span><span>I</span><span>N</span><span>G</span></div><div style="flex:1"></div><div class="host"><span style="width:6px;height:6px;border-radius:50%;background:#4cc38a"></span>本机</div><div class="ib"><svg width="14" height="14" style="display:block;color:#a2a2aa;flex-shrink:0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="2.6"/><path d="M9.25 4.25v15.5"/><path d="M15.25 9.5L12.75 12l2.5 2.5"/></g></svg></div></div>
+<div class="search"><svg width="13" height="13" style="display:block;color:#7e7e87;flex-shrink:0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l4.5 4.5"/></g></svg><span class="p">找会话、空间或原话</span><span class="k mono">⌘P</span></div>
+<div class="list"><div class="chips"><div class="chip"><span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#f59e6b,#d9467a)"></span><span style="color:#c9c9cf">工作空间</span><span class="badge">3</span></div><div class="chip"><span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span><span style="color:#c9c9cf">sys</span></div><div class="chip"><span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#7bd389,#2f9e66)"></span><span style="color:#c9c9cf">模型上线 work</span></div><div class="chip"><span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#c04f9c,#8a5ad8)"></span><span style="color:#c9c9cf">mooring</span></div><div class="chip"><span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#3d62c9,#7b8cf0)"></span><span style="color:#c9c9cf">codex-mall</span></div><div class="chip"><span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#8a6a2a,#b38a3a)"></span><span style="color:#f5bebb">新空间</span></div><div class="chip add">+</div></div>
+<div class="grp"><b>要你处理</b><span>3</span></div>
+<div class="row two sel"><div class="st"><span style="display:block;width:8px;height:8px;border-radius:50%;background:#e8823a;box-shadow:0 0 8px rgba(232,130,58,.75)"></span></div><div class="x"><div class="t"><span class="ttl">标签命名依旧有问题</span><span class="tag"><span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#f59e6b,#d9467a)"></span><span>工作空间</span></span><span class="tm">1分</span></div><div class="sub">问：标签名在退出后要不要保留？</div></div><div class="ring"></div></div>
+<div class="row"><div class="st"><svg width="8" height="8" style="display:block;color:#4cc38a;flex-shrink:0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/></svg></div><div class="x"><div class="t"><span class="ttl">标签命名依旧有问题</span><span class="tag"><span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#f59e6b,#d9467a)"></span><span>工作空间</span></span><span class="tm">2分</span></div></div></div>
+<div class="row"><div class="st"><svg width="8" height="8" style="display:block;color:#4cc38a;flex-shrink:0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="3"/></svg></div><div class="x"><div class="t"><span class="ttl">标签命名依旧有问题</span><span class="tag"><span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,#f59e6b,#d9467a)"></span><span>工作空间</span></span><span class="tm">3分</span></div></div></div>
+</div>
+<div class="keys"><span class="kbd">⌘J</span>下一个要你的</div>
+<div class="foot"><span class="c">本机 · 6 个空间 · 3 个会话</span><span class="todo">待办 3</span><span class="ib"><svg width="14" height="14" style="display:block;color:#a2a2aa;flex-shrink:0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 8h16M4 16h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="8" r="2.6" fill="currentColor" stroke="currentColor" stroke-width="1.8"/><circle cx="15" cy="16" r="2.6" fill="currentColor" stroke="currentColor" stroke-width="1.8"/></svg></span><span class="ib"><svg width="14" height="14" style="display:block;color:#a2a2aa;flex-shrink:0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.4"/><path d="M10.5 18h3"/></g></svg></span><span class="ib"><svg width="14" height="14" style="display:block;color:#a2a2aa;flex-shrink:0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></g></svg></span></div>
+</div></body></html>

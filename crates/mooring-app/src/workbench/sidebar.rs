@@ -59,11 +59,14 @@ impl Workbench {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .px(px(T::S8))
-            .py(px(if dense { T::S8 } else { T::S12 }))
+            .when(!recent, |d| {
+                d.px(px(T::S8))
+                    .py(px(if dense { T::S8 } else { T::S12 }))
+                    .gap(px(T::S2))
+            })
+            .when(recent, |d| d.pb(px(T::S12)))
             .flex()
             .flex_col()
-            .gap(px(T::S2))
             .font_features(super::diagnostics::tabular());
         if recent {
             sidebar = sidebar.children(self.space_tiles(cx));
@@ -326,7 +329,12 @@ impl Workbench {
             })
             .collect();
         unread.sort_by(|a, b| a.0.cmp(&b.0));
-        sidebar = sidebar.child(self.todos_view(space_name, dense, cx));
+        sidebar = sidebar.child(
+            div()
+                .when(recent, |d| d.px(px(T::S8)))
+                .child(self.todos_view(space_name, dense, cx)),
+        );
+        let listed_count = sessions.len() + unread.len();
         sidebar = sidebar.child(self.sessions_header(sessions.len() + unread.len(), cx));
         if sessions.is_empty() && unread.is_empty() {
             sidebar = sidebar.child(
@@ -343,6 +351,7 @@ impl Workbench {
             sidebar = sidebar.child(
                 div()
                     .id(gpui::SharedString::from(format!("unread-row-{terminal}")))
+                    .when(recent, |d| d.mx(px(T::S8)))
                     .h(px(T::ROW))
                     .px(px(T::S8))
                     .flex()
@@ -379,6 +388,7 @@ impl Workbench {
                 )
                 .border_0()
                 .justify_start()
+                .when(recent, |d| d.mx(px(T::S8)))
                 .text_size(px(T::META))
                 .text_color(T::color(T::link()))
                 .on_click(cx.listener(|this, _, _, cx| this.show_overview(cx))),
@@ -399,9 +409,32 @@ impl Workbench {
                 .when(dense, |d| {
                     d.mt(px(T::S8)).px(px(T::S8)).font_family(T::UI_FONT)
                 })
+                .when(recent, |d| d.mx(px(T::S8)).px(px(T::S10)))
                 .text_size(px(T::META))
                 .text_color(T::color(T::muted()))
                 .on_click(cx.listener(|this, _, _, cx| this.show_closed(cx))),
+            );
+        }
+        if recent {
+            use crate::ui::theme::Flat as F;
+            return Some(
+                div()
+                    .id("sidebar")
+                    .w(px(F::WIDTH))
+                    .h_full()
+                    .min_h_0()
+                    .flex_shrink_0()
+                    .flex()
+                    .flex_col()
+                    .overflow_hidden()
+                    .bg(T::color(F::bg()))
+                    .border_r(px(T::BORDER_WIDTH))
+                    .border_color(T::color(F::line()))
+                    .child(self.flat_head(cx))
+                    .child(self.flat_search(cx))
+                    .child(sidebar)
+                    .child(self.flat_keys(cx))
+                    .child(self.flat_foot(listed_count, cx)),
             );
         }
         Some(
@@ -584,6 +617,7 @@ impl Workbench {
             )
     }
     fn space_tiles(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
+        use crate::ui::theme::Flat as F;
         let mut out: Vec<gpui::AnyElement> = vec![];
         // The spaces as chips that wrap: each its colors, its name and how many of its
         // sessions need you. A click narrows the list below to that space (and shows it on
@@ -592,9 +626,11 @@ impl Workbench {
         let mut chips = div()
             .flex()
             .flex_wrap()
-            .gap(px(T::S4))
-            .px(px(T::S4))
-            .mt(px(T::S4));
+            .gap(px(F::CHIP_GAP))
+            .px(px(T::S12))
+            .pt(px(T::S10))
+            .pb(px(T::S2))
+            .font_family(T::UI_FONT);
         for space in &self.workspace.spaces {
             let id = space.id.clone();
             if let Some((_, field, _)) = self
@@ -638,30 +674,37 @@ impl Workbench {
                     } else {
                         format!("只看 {}", space.name)
                     })
-                    .h(px(T::ICON_HEIGHT + T::S2))
+                    .h(px(F::CHIP))
                     .max_w_full()
                     .pl(px(T::S6))
-                    .pr(px(if need > 0 { T::S4 } else { T::S8 }))
+                    .pr(px(T::S8))
                     .flex()
                     .items_center()
-                    .gap(px(T::S6))
-                    .rounded_full()
+                    .gap(px(F::CHIP_GAP))
+                    .rounded(px(F::CHIP / 2.))
                     .border(px(T::BORDER_WIDTH))
-                    .border_color(T::color(if on { T::focus() } else { T::border() }))
-                    .when(on, |d| d.bg(T::color(T::raised())))
-                    .when(dimmed, |d| d.opacity(0.55))
+                    .border_color(T::color(if on {
+                        F::chip_on_line()
+                    } else {
+                        F::chip_line()
+                    }))
+                    .when(on, |d| d.bg(T::color(F::chip_on())))
+                    .when(dimmed, |d| d.opacity(0.5))
                     .cursor_pointer()
-                    .hover(|s| s.bg(T::color(T::raised())).opacity(1.))
-                    .child(self.space_dot(&space.id, T::S10))
+                    .hover(|s| s.border_color(T::color(F::chip_on_line())).opacity(1.))
+                    .child(self.space_dot(&space.id, F::CHIP_DOT))
                     .child(
                         div()
                             .min_w_0()
                             .truncate()
-                            .text_size(px(T::CHIP_SIZE))
+                            .text_size(px(F::CHIP_TEXT))
+                            .line_height(px(F::LINE_SMALL))
                             .text_color(if missing {
                                 Tone::Danger.ink()
+                            } else if on {
+                                T::color(F::bright())
                             } else {
-                                T::color(T::primary())
+                                T::color(F::quiet())
                             })
                             .child(space.name.clone()),
                     )
@@ -669,16 +712,17 @@ impl Workbench {
                         d.child(
                             div()
                                 .flex_shrink_0()
-                                .min_w(px(T::S14))
-                                .h(px(T::S14))
+                                .min_w(px(F::BADGE))
+                                .h(px(F::BADGE))
                                 .px(px(T::S4))
-                                .rounded_full()
+                                .rounded(px(F::BADGE / 2.))
                                 .bg(Status::Waiting.colors().0)
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .text_size(px(T::CHIP_SIZE - 1.))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_size(px(F::BADGE_TEXT))
+                                .line_height(px(F::BADGE))
+                                .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(T::color(T::WHITE))
                                 .child(need.to_string()),
                         )
@@ -719,18 +763,18 @@ impl Workbench {
                 .id("add-space")
                 .role(gpui::accesskit::Role::Button)
                 .aria_label("新建空间")
-                .size(px(T::ICON_HEIGHT + T::S2))
+                .size(px(F::CHIP))
                 .flex()
                 .items_center()
                 .justify_center()
                 .rounded_full()
                 .border(px(T::BORDER_WIDTH))
                 .border_dashed()
-                .border_color(T::color(T::control()))
+                .border_color(T::color(F::chip_on_line()))
                 .cursor_pointer()
-                .hover(|s| s.bg(T::color(T::raised())))
+                .hover(|s| s.bg(T::color(F::chip_on())))
                 .text_size(px(T::SMALL))
-                .text_color(T::color(T::muted()))
+                .text_color(T::color(F::third()))
                 .child("+")
                 .on_click(
                     cx.listener(|this, _, window, cx| this.choose_space_dir(None, window, cx)),
@@ -748,16 +792,19 @@ impl Workbench {
                 .and_then(super::divergence::divergence_label);
             out.push(
                 div()
-                    .mt(px(T::S8))
-                    .mx(px(T::S4))
-                    .h(px(T::ROW))
-                    .px(px(T::S8))
+                    .mt(px(T::S10))
+                    .mx(px(T::S12))
+                    .px(px(T::S10))
+                    .py(px(T::S8))
                     .flex()
                     .items_center()
-                    .gap(px(T::S6))
-                    .rounded(px(T::CONTROL_RADIUS))
-                    .bg(T::color(T::raised()))
+                    .gap(px(T::S8))
+                    .rounded(px(T::S10))
+                    .bg(T::color(F::scope()))
+                    .border(px(T::BORDER_WIDTH))
+                    .border_color(T::color(F::chip_line()))
                     .text_size(px(T::SMALL))
+                    .line_height(px(F::LINE_TEXT))
                     .child(self.space_dot(&space.id, T::S12))
                     .child(
                         div()
@@ -854,23 +901,26 @@ impl Workbench {
     }
     /// A session row's space: its dot and name, quiet, at the row's end.
     pub(super) fn space_tag(&self, id: &str, name: &str) -> gpui::Div {
+        use crate::ui::theme::Flat as F;
         div()
             .flex_shrink_0()
-            .max_w(px(T::SIDEBAR * 0.3))
+            .max_w(px(F::TAG_MAX))
             .flex()
             .items_center()
-            .gap(px(T::S4))
-            .child(self.space_dot(id, T::S6 + 1.))
+            .gap(px(F::CHIP_GAP))
+            .child(self.space_dot(id, F::TAG_DOT))
             .child(
                 div()
                     .min_w_0()
                     .truncate()
                     .font_family(T::UI_FONT)
-                    .text_size(px(T::CHIP_SIZE))
-                    .text_color(T::color(T::muted()))
+                    .text_size(px(F::TAG))
+                    .line_height(px(F::LINE_SMALL))
+                    .text_color(T::color(F::third()))
                     .child(name.to_owned()),
             )
     }
+
     /// Whether a space is the one shown; over the overview the spaces are its filter.
     fn space_active(&self, id: &str) -> bool {
         if self.nav.overview {

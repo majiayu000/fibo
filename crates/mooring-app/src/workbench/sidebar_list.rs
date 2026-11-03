@@ -4,7 +4,7 @@
 use super::*;
 use mooring_core::sidebar::{self as presets, Bucket, Detail, Grouping, Preset};
 /// How a row's second line opens when the session asks you something.
-const ASKS: &str = "问你：";
+pub(super) const ASKS: &str = "问你：";
 
 /// A session the column lists: its shown state and whether it still asks for a look.
 pub(super) type Listed<'a> = (&'a AgentSession, Status, bool);
@@ -253,6 +253,9 @@ impl Workbench {
         end: End,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
+        if self.sidebar.preset().group == Grouping::Recent {
+            return self.flat_row((session, g, attention), current, detail, end, cx);
+        }
         if self.sidebar.dense() {
             return self.dense_row((session, g, attention), current, detail, end, cx);
         }
@@ -371,7 +374,7 @@ impl Workbench {
             .into_any_element()
     }
     /// Right-click on a session row: its menu at the pointer.
-    fn open_session_menu(
+    pub(super) fn open_session_menu(
         &self,
         session: &AgentSession,
         cx: &Context<Self>,
@@ -470,18 +473,8 @@ impl Workbench {
         let seen = crate::ui::status_colors::StatusColors::get();
         let selected = current == Some(session.id.as_str());
         let mono = T::mono(cx).family;
-        // 会话优先 (flat.html) leads each row with its state and ends it with its space and
-        // time; the other presets show the CLI's mark first, the state last.
-        let recent = self.sidebar.preset().group == Grouping::Recent;
-        let marks = !recent;
-        // 会话优先 lists every space's sessions, so each row carries its space as a small
-        // tag: the space's colors and its name. Narrowed to one space, the tag says nothing.
-        let space = (self.sidebar.preset().group == Grouping::Recent
-            && self.space_filter().is_none())
-        .then(|| session_space(&self.workspace, session))
-        .flatten()
-        .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
-        .map(|s| self.space_tag(&s.id, &s.name));
+        // Every row and tab shows its CLI's mark, in its own color (v3 mock).
+        let marks = true;
         let title = match self
             .layout
             .renaming_session
@@ -534,13 +527,6 @@ impl Workbench {
             .rounded(px(T::CONTROL_RADIUS))
             .cursor_pointer()
             .when(selected, |d| d.bg(T::color(T::raised())))
-            .when(recent, |d| {
-                d.border(px(T::BORDER_WIDTH)).border_color(if selected {
-                    T::color(T::control())
-                } else {
-                    gpui::transparent_black()
-                })
-            })
             .hover(|s| s.bg(T::color(T::raised())))
             .when(self.peek_home(&session.id), |d| {
                 d.relative().child(super::peek::peek_home_outline())
@@ -564,9 +550,7 @@ impl Workbench {
                             T::color(T::muted()),
                         ))
                     })
-                    .when(recent, |d| d.child(state()))
                     .child(title)
-                    .children(space)
                     .child(
                         div()
                             .flex_shrink_0()
@@ -576,17 +560,12 @@ impl Workbench {
                             .text_color(T::color(T::muted()))
                             .child(time),
                     )
-                    .when(!recent, |d| d.child(state())),
+                    .child(state()),
             )
             .when_some(detail, |d, text| {
                 // A second line that opens with the state word shows that word in its ink;
                 // a question is in 等你回答's ink throughout, with how many it asks.
                 let asks = text.starts_with(ASKS);
-                let text = if recent && asks {
-                    text.replacen(ASKS, "问：", 1)
-                } else {
-                    text
-                };
                 let (state, rest) = match text.strip_prefix(g.label()) {
                     Some(rest) => (Some(g.label()), rest.to_owned()),
                     None => (None, text),
@@ -601,7 +580,6 @@ impl Workbench {
                 d.child(
                     div()
                         .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
-                        .when(recent, |d| d.pl(px(T::S12 + T::S8)))
                         .flex()
                         .items_center()
                         .gap(px(T::S4))
@@ -621,7 +599,7 @@ impl Workbench {
                             d.child(div().flex_shrink_0().text_color(g.colors().1).child(word))
                         })
                         .child(div().flex_1().min_w_0().truncate().child(rest))
-                        .when(asks && attention && !recent, |d| {
+                        .when(asks && attention, |d| {
                             d.child(
                                 div()
                                     .flex_shrink_0()
@@ -824,11 +802,13 @@ impl Workbench {
             top.sort_by_key(|l| {
                 pinned_terminal(l).and_then(|t| self.sidebar.pinned.iter().position(|p| *p == t))
             });
-            out.push(
+            out.push(if preset.group == Grouping::Recent {
+                Self::flat_group("置顶", top.len()).into_any_element()
+            } else {
                 self.heading("置顶".into(), top.len(), cx)
                     .mt(px(T::S14))
-                    .into_any_element(),
-            );
+                    .into_any_element()
+            });
             for l in top {
                 let d = detail(&l);
                 out.push(self.session_row(l, current, d, End::State, cx));
@@ -933,9 +913,7 @@ impl Workbench {
                     if rows.is_empty() {
                         continue;
                     }
-                    out.push(
-                        Self::group_title(title.into(), Some(rows.len()), cx).into_any_element(),
-                    );
+                    out.push(Self::flat_group(title, rows.len()).into_any_element());
                     for l in rows {
                         let asks = bucket(l.1) == Bucket::Attention;
                         let d = if lines && asks { second(&l) } else { None };
@@ -944,18 +922,12 @@ impl Workbench {
                 }
                 if !quiet.is_empty() {
                     let open = self.sidebar.open("recent:quiet", false);
-                    out.push(
-                        div()
-                            .mt(px(T::S12))
-                            .child(self.fold_row(
-                                "recent:quiet".into(),
-                                &[(Bucket::Stale, quiet.len())],
-                                open,
-                                "",
-                                cx,
-                            ))
-                            .into_any_element(),
-                    );
+                    out.push(self.flat_more(
+                        "recent:quiet",
+                        format!("很久没动 {} 个", quiet.len()),
+                        open,
+                        cx,
+                    ));
                     for l in quiet {
                         if open || current == Some(l.0.id.as_str()) {
                             push(&mut out, l, None, End::State);

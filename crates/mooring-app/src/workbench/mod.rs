@@ -236,6 +236,7 @@ mod settings;
 use sessions::{Attention, Resuming};
 mod sidebar;
 use sidebar::closed_recently;
+mod sidebar_flat;
 mod sidebar_list;
 mod sidebar_wasm;
 mod statusbar;
