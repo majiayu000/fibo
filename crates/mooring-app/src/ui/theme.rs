@@ -445,6 +445,14 @@ impl Flat {
             Theme::muted()
         }
     }
+    /// The ✓ of a session you marked complete (flat.html `.st.d`).
+    pub fn done() -> u32 {
+        if Self::dark() {
+            0x6a6a72
+        } else {
+            Theme::muted()
+        }
+    }
     /// A stopped session's ring.
     pub fn idle() -> u32 {
         if Self::dark() {

@@ -11,8 +11,9 @@ fn ink(v: u32) -> gpui::Hsla {
 }
 
 /// A row's state at its head: a lit dot for what asks you or failed, an open ring with a
-/// gap while it runs, a ring for a turn to check, a gray ring for the rest.
-pub(super) fn flat_state(g: Status) -> gpui::AnyElement {
+/// gap while it runs, a ring for a turn to check (filled while you have not looked at
+/// it), a gray ✓ for what you marked complete and a gray ring for the rest.
+pub(super) fn flat_state(g: Status, unseen: bool) -> gpui::AnyElement {
     let dot = g.colors().0;
     let svg = |path: &'static str, color: gpui::Hsla| {
         gpui::svg()
@@ -37,9 +38,15 @@ pub(super) fn flat_state(g: Status) -> gpui::AnyElement {
             }])
             .into_any_element(),
         Bucket::Running => svg("icons/state-run.svg", dot),
+        Bucket::Done if unseen => div()
+            .size(px(F::STATE))
+            .flex_shrink_0()
+            .rounded_full()
+            .bg(dot)
+            .into_any_element(),
         Bucket::Done => svg("icons/state-ring.svg", dot),
         // What you marked complete is done with: a muted ✓, apart from rings that stopped.
-        _ if g == Status::Closed => svg("icons/check.svg", ink(F::second())),
+        _ if g == Status::Closed => svg("icons/state-done.svg", ink(F::done())),
         _ => svg("icons/state-ring.svg", ink(F::idle())),
     }
 }
@@ -217,7 +224,7 @@ impl Workbench {
             .text_size(px(T::SMALL))
             .line_height(px(F::LINE_TEXT))
             .text_color(ink(F::third()))
-            .child(flat_state(Status::Stale))
+            .child(flat_state(Status::Stale, false))
             .child(div().flex_1().min_w_0().truncate().child(text))
             .child(if open { "⌄" } else { "›" })
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
@@ -245,7 +252,7 @@ impl Workbench {
     /// it asks, on a second line.
     pub(super) fn flat_row(
         &self,
-        (session, g, _attention): Listed,
+        (session, g, attention): Listed,
         current: Option<&str>,
         detail: Option<String>,
         end: End,
@@ -313,7 +320,7 @@ impl Workbench {
                 div()
                     .flex_shrink_0()
                     .when(two, |d| d.mt(px(T::S4)))
-                    .child(flat_state(g)),
+                    .child(flat_state(g, attention)),
             )
             .child(
                 div()

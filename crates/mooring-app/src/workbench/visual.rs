@@ -1024,7 +1024,10 @@ impl Workbench {
                     },
                     cx,
                 );
-                if parts.get(4) == Some(&"bg")
+                // `-shell`: the same turn ended with only a server left in a background
+                // shell: 等后台, read with the finished ones.
+                let shell = parts.get(4) == Some(&"shell");
+                if (parts.get(4) == Some(&"bg") || shell)
                     && let Some(c) = self
                         .workspace
                         .content
@@ -1034,7 +1037,8 @@ impl Workbench {
                     c.turn = mooring_core::content::Turn::Completed;
                     c.completed_claim = false;
                     c.background = Some(mooring_core::content::Background {
-                        agents: 1,
+                        agents: u32::from(!shell),
+                        shells: if shell { 2 } else { 0 },
                         ..Default::default()
                     });
                 }
@@ -1076,9 +1080,26 @@ impl Workbench {
         if self.workspace.terminals.iter().any(|t| t.id == "dense-t0") {
             return;
         }
-        let Some(template) = self.workspace.agent_sessions.first().cloned() else {
-            return;
-        };
+        // A fresh runtime has no session to copy: start from a bare Claude one.
+        let template = self
+            .workspace
+            .agent_sessions
+            .first()
+            .cloned()
+            .unwrap_or_else(|| AgentSession {
+                id: String::new(),
+                runtime: Agent::Claude,
+                cli_session_id: String::new(),
+                terminal: None,
+                current: false,
+                task: None,
+                outcome: Outcome::Open,
+                updated: 0,
+                cwd: String::new(),
+                transcript: String::new(),
+                name: String::new(),
+                binding: None,
+            });
         let Some(shell) = self.workspace.terminals.first().cloned() else {
             return;
         };
@@ -1224,7 +1245,12 @@ impl Workbench {
                 terminal: Some(tid.clone()),
                 current: live,
                 task: None,
-                outcome: Outcome::Open,
+                // One you marked complete: the column draws its ✓.
+                outcome: if i == 6 {
+                    Outcome::Completed
+                } else {
+                    Outcome::Open
+                },
                 updated: at,
                 cwd: dir(folder),
                 name: title.into(),
@@ -1232,6 +1258,10 @@ impl Workbench {
             });
             if !live {
                 self.resuming.resumed.insert(sid.clone(), tid.clone());
+            }
+            // A finished turn not looked at yet: its green dot is filled.
+            if i == 4 {
+                self.attention.unseen.insert(sid.clone());
             }
             let record = |kind: &str, summary: &str| Evidence {
                 kind: kind.into(),

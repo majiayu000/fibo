@@ -253,7 +253,8 @@ pub fn section(status: Status) -> Status {
 pub fn session_status(w: &Workspace, unseen: &HashSet<String>, s: &AgentSession) -> (Status, bool) {
     let status = status_of(w, s);
     let attention = (status.needs_you() && s.managed() && s.outcome.needs_review(now()))
-        || (unseen.contains(&s.id) && matches!(status, Status::Review | Status::Paused));
+        || (unseen.contains(&s.id)
+            && matches!(status, Status::Review | Status::Background | Status::Paused));
     (status, attention)
 }
 /// Waiting or failed in a Mooring terminal and not yet looked at.

@@ -928,7 +928,8 @@ impl Workbench {
                     }
                     out.push(Self::flat_group(title, rows.len()).into_any_element());
                     for l in rows {
-                        let asks = bucket(l.1) == Bucket::Attention;
+                        // 等后台 says what it left running, or it reads as plain 等你验收.
+                        let asks = bucket(l.1) == Bucket::Attention || l.1 == Status::Background;
                         let d = if lines && asks { second(&l) } else { None };
                         push(&mut out, l, d, End::State);
                     }
