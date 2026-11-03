@@ -670,7 +670,15 @@ impl Render for Workbench {
                 .map(|t| self.workspace.tab_terminals(&t.id))
                 .unwrap_or_default();
             let count = ids.len();
-            let mut grid = div().flex_1().min_h_0().min_w_0().relative();
+            // The standard style sets its panes as rounded cards with a gap around them
+            // (flat.html); the terminal style keeps its own frames.
+            let cards = crate::ui::style::current(cx) != crate::ui::style::Style::Terminal;
+            let mut grid = div()
+                .flex_1()
+                .min_h_0()
+                .min_w_0()
+                .relative()
+                .when(cards, |d| d.p(px(T::S8)).bg(T::color(T::pane())));
             if let Some(zoomed) = &self.nav.zoomed {
                 grid = grid.child(self.pane_view(zoomed, false, window, cx));
             } else if let Some(tree) = current.and_then(|t| t.layout.as_ref()) {

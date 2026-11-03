@@ -487,50 +487,62 @@ impl Workbench {
                         .children(footer),
                 );
         } else {
-            // No card: panes sit flush on the main column's white, split by the
-            // gutter's hairline, and the header is the pane's own surface.
+            // A rounded card: its edge drawn over everything inside it, so a program's
+            // own background never covers the line, and the gutter shares the pane's
+            // ground so nothing shows past the corners.
             pane_box = pane_box
                 .bg(T::color(T::pane()))
+                .rounded(px(T::PANE_RADIUS))
                 .child(
                     div()
                         .h(px(T::PANE_HEADER))
                         .flex_shrink_0()
+                        .rounded_t(px(T::PANE_RADIUS))
                         .pl(px(T::S14))
                         .pr(px(T::S10))
                         .flex()
                         .items_center()
                         .gap(px(T::S8))
-                        // A pane that asks you something tints its title in its state's
-                        // wash, so the ring around it reads as that pane's, not as focus.
-                        .bg(asking.map_or(T::color(T::header()), |g| g.colors().2))
+                        // A pane that asks you something says so by its ring and its
+                        // state chip; the title row keeps the card's own ground.
+                        .bg(T::color(T::header()))
                         .child(left.flex_1())
                         .child(right),
                 )
                 .children(turn)
                 .child(body)
                 .children(footer)
-                // Among several panes the focused one carries a line along its top edge,
-                // drawn over the pane so focus moving never resizes a program.
-                .when(borders && focused, |d| {
-                    d.child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right_0()
-                            .h(px(T::FOCUS_RING))
-                            .bg(T::color(T::focus())),
-                    )
-                })
+                // The card's edge; among several panes the focused one's is lighter.
+                .child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .rounded(px(T::PANE_RADIUS))
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(T::color(if borders && focused {
+                            T::control()
+                        } else {
+                            T::border()
+                        })),
+                )
                 // Among several panes one that asks you something rings in its state's
-                // color, so a glance across the split finds it; drawn over the pane too.
+                // color with a faint glow inside, so a glance across the split finds it.
                 .when_some(asking.filter(|_| borders), |d, g| {
+                    let ink = g.colors().0;
                     d.child(
                         div()
                             .absolute()
                             .inset_0()
+                            .rounded(px(T::PANE_RADIUS))
                             .border(px(T::FOCUS_RING))
-                            .border_color(g.colors().0),
+                            .border_color(ink)
+                            .shadow(vec![gpui::BoxShadow {
+                                color: ink.opacity(0.14),
+                                offset: gpui::point(px(0.), px(0.)),
+                                blur_radius: px(T::RING_GLOW),
+                                spread_radius: px(0.),
+                                inset: true,
+                            }]),
                     )
                 });
         }
@@ -583,8 +595,6 @@ impl Workbench {
                 second,
             } => {
                 let down = *axis == Axis::Down;
-                let terminal_style =
-                    crate::ui::style::current(cx) == crate::ui::style::Style::Terminal;
                 let mut left = path.clone();
                 left.push(false);
                 let mut right = path.clone();
@@ -622,9 +632,8 @@ impl Workbench {
                             .child(self.layout_view(first, left, true, window, cx)),
                     )
                     .child(
-                        // The gutter is a hairline between flush panes (terminal style
-                        // keeps its framed panes and an empty gutter), with a thicker
-                        // handle on hover or while dragging.
+                        // The gutter is the gap between the panes' cards, with a handle
+                        // on hover or while dragging.
                         div()
                             .id(gpui::SharedString::from(format!("divider-{path:?}")))
                             .group("divider")
@@ -633,32 +642,13 @@ impl Workbench {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .when(!terminal_style, |d| {
-                                d.child(
-                                    div()
-                                        .absolute()
-                                        .bg(T::color(T::border()))
-                                        .when(down, |d| {
-                                            d.left_0()
-                                                .right_0()
-                                                .top(px((T::S6 - T::BORDER_WIDTH) / 2.))
-                                                .h(px(T::BORDER_WIDTH))
-                                        })
-                                        .when(!down, |d| {
-                                            d.top_0()
-                                                .bottom_0()
-                                                .left(px((T::S6 - T::BORDER_WIDTH) / 2.))
-                                                .w(px(T::BORDER_WIDTH))
-                                        }),
-                                )
-                            })
                             .when(down, |d| {
-                                d.h(px(T::S6))
+                                d.h(px(T::S8))
                                     .w_full()
                                     .cursor(gpui::CursorStyle::ResizeUpDown)
                             })
                             .when(!down, |d| {
-                                d.w(px(T::S6))
+                                d.w(px(T::S8))
                                     .h_full()
                                     .cursor(gpui::CursorStyle::ResizeLeftRight)
                             })

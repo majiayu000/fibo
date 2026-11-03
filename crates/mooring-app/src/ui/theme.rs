@@ -388,6 +388,8 @@ impl Theme {
     pub const FOCUS_RING: f32 = 2.;
     pub const CARET_WIDTH: f32 = 1.5;
     pub const PANE_RADIUS: f32 = 8.;
+    /// The faint glow inside a pane that asks you something.
+    pub const RING_GLOW: f32 = 28.;
     pub const CONTROL_RADIUS: f32 = 6.;
     pub const CHIP_RADIUS: f32 = 4.;
     pub const CARD_RADIUS: f32 = 10.;
