@@ -547,7 +547,12 @@ impl Keymap {
         } else {
             path.parent()
                 .map_or(Ok(()), std::fs::create_dir_all)
-                .and_then(|()| std::fs::write(&path, json))
+                // Written beside and renamed over: a crash mid-write must not leave a
+                // half file that loads as the defaults and is then saved over yours.
+                .and_then(|()| {
+                    let tmp = path.with_extension("json.tmp");
+                    std::fs::write(&tmp, json).and_then(|()| std::fs::rename(&tmp, &path))
+                })
         };
         if let Err(e) = written {
             eprintln!("mooring: saving {}: {e}", path.display());
