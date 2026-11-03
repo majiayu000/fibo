@@ -6336,3 +6336,53 @@ fn a_takeover_that_cannot_start_leaves_the_old_host_serving() {
     );
     assert!(h.workspace().terminals.iter().any(|t| t.id == "t"));
 }
+
+/// Anyone who has seen the pairing code can open phone sessions; one that never
+/// finishes its handshake is closed instead of holding one of the machine's slots.
+#[test]
+fn a_phone_that_never_finishes_its_handshake_is_closed() {
+    use futures_util::StreamExt;
+    use tokio_tungstenite::tungstenite::Message;
+    let h = Host::start();
+    h.setup();
+    let (base, stop, relay) = local_relay("127.0.0.1:0", Default::default());
+    let root = h.root.to_string_lossy().into_owned();
+    let link = pair(&root, &base, "手机", "full");
+    let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
+        .args(["remote", "--relay", &base, "--runtime", &root])
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let rt = Phone::rt();
+    let url = link.url().unwrap();
+    let until = Instant::now() + Duration::from_secs(20);
+    let mut ws = loop {
+        match rt.block_on(tokio_tungstenite::connect_async(&url)) {
+            Ok((ws, _)) => break ws,
+            Err(_) if Instant::now() < until => std::thread::sleep(Duration::from_millis(50)),
+            Err(e) => panic!("phone never reached the machine: {e}"),
+        }
+    };
+    // Says nothing: no half of a handshake ever comes.
+    let code = rt.block_on(async {
+        tokio::time::timeout(Duration::from_secs(15), async {
+            loop {
+                match ws.next().await {
+                    Some(Ok(Message::Close(f))) => return f.map(|f| u16::from(f.code)),
+                    Some(Ok(_)) => continue,
+                    _ => return None,
+                }
+            }
+        })
+        .await
+    });
+    let _ = machine.kill();
+    let _ = machine.wait();
+    drop(stop);
+    let _ = relay.join();
+    assert_eq!(
+        code,
+        Ok(Some(1000)),
+        "an idle unpaired session stayed open: {code:?}"
+    );
+}

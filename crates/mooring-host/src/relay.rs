@@ -46,6 +46,9 @@ const INPUT_QUEUE: usize = 256;
 /// How often open sessions are checked against the paired devices, so an unpaired
 /// phone is dropped within this long.
 const RECHECK: Duration = Duration::from_secs(1);
+/// How long an opened phone may take to finish its handshake. Anyone who has seen the
+/// code can open sessions; without a limit a few idle ones would fill MAX_SESSIONS.
+const HANDSHAKE_LIMIT: Duration = Duration::from_secs(10);
 
 pub fn run(a: &Args) -> io::Result<()> {
     if a.has("devices") {
@@ -450,10 +453,11 @@ async fn connect(
     let mut paired = Paired::default();
     let ended = loop {
         let deadline = tokio::time::Instant::now() + SILENCE;
-        let open = sessions.values().any(|s| matches!(s, Session::Open { .. }));
+        let open = !sessions.is_empty();
         let m = tokio::select! {
             m = tokio::time::timeout_at(deadline, stream.next()) => m,
-            // Only while a phone is on: an unpaired one is dropped within RECHECK.
+            // Only while a phone is on: an unpaired one is dropped within RECHECK, and one
+            // that never finishes its handshake within HANDSHAKE_LIMIT.
             _ = recheck.tick(), if open => {
                 let now = paired.load(socket);
                 let gone: Vec<(String, Dropped)> = sessions
@@ -462,7 +466,8 @@ async fn connect(
                         Session::Open { device, role, since, .. } => {
                             dropped(now, device, *role, *since).map(|why| (id.clone(), why))
                         }
-                        Session::Pairing(_) => None,
+                        Session::Pairing(_, at) => (at.elapsed() > HANDSHAKE_LIMIT)
+                            .then(|| (id.clone(), Dropped::Handshake)),
                     })
                     .collect();
                 for (id, why) in gone {
@@ -508,7 +513,7 @@ async fn connect(
         if let Some((id, payload)) = phone {
             let payload = &payload[..];
             let next = match sessions.remove(&id) {
-                Some(Session::Pairing(device)) => {
+                Some(Session::Pairing(device, _)) => {
                     let known = paired.load(socket).iter().find(|d| d.id == device).cloned();
                     let answered = known.as_ref().and_then(|d| {
                         let key = d.key()?;
@@ -594,7 +599,10 @@ async fn connect(
                             message: "too many phones".into(),
                         }
                     } else {
-                        sessions.insert(id.clone(), Session::Pairing(query(&path, "d")));
+                        sessions.insert(
+                            id.clone(),
+                            Session::Pairing(query(&path, "d"), std::time::Instant::now()),
+                        );
                         Frame::Wopened { id }
                     };
                     let _ = out.send(Message::text(reply.to_text())).await;
@@ -669,7 +677,8 @@ async fn close(out: &mpsc::Sender<Message>, id: &str, code: u16, reason: &str) {
 
 enum Session {
     /// Opened by the device the path names; its first message is its half of the handshake.
-    Pairing(String),
+    /// When it opened: one that never finishes is closed after `HANDSHAKE_LIMIT`.
+    Pairing(String, std::time::Instant),
     Open {
         bridge: Bridge,
         device: String,
@@ -690,6 +699,8 @@ enum Dropped {
     Kicked,
     /// A new role: connecting again gives it.
     RoleChanged,
+    /// Opened but never finished its handshake within HANDSHAKE_LIMIT.
+    Handshake,
 }
 
 impl Dropped {
@@ -698,6 +709,9 @@ impl Dropped {
             Dropped::Unpaired => (close::UNPAIRED, "unpaired"),
             Dropped::Kicked => (close::KICKED, "disconnected"),
             Dropped::RoleChanged => (close::ROLE_CHANGED, "role changed"),
+            // A plain close (the relay passes only 1000 and 3000–4999 on): a real phone
+            // that was merely slow retries later.
+            Dropped::Handshake => (1000, "handshake timeout"),
         }
     }
     fn label(self) -> &'static str {
@@ -705,6 +719,7 @@ impl Dropped {
             Dropped::Unpaired => "被取消配对",
             Dropped::Kicked => "被电脑断开",
             Dropped::RoleChanged => "改了权限，断开等它重连",
+            Dropped::Handshake => "没在时限内完成握手，已断开",
         }
     }
 }
