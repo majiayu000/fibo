@@ -20,6 +20,7 @@ const MIDDLE: f32 = 0.2;
 pub(in crate::workbench) struct DraggedPane {
     pub(in crate::workbench) id: String,
     pub(in crate::workbench) title: String,
+    agent: Option<Agent>,
     /// Where in the title bar it was picked up. GPUI draws the chip that far up and
     /// left of the pointer, as if the whole bar were carried; a wide bar would leave
     /// the chip far from the pointer, so the chip is pushed back next to it.
@@ -30,8 +31,50 @@ impl gpui::Render for DraggedPane {
         div()
             .pl(self.grab.x + px(T::S12))
             .pt(self.grab.y + px(T::S12))
-            .child(super::super::tabs::drag_chip(self.title.clone()))
+            .child(pane_chip(&self.title, self.agent))
     }
+}
+
+/// What marks a pane: its CLI's mark, or a terminal for a plain shell.
+fn mark(agent: Option<Agent>, ink: gpui::Hsla) -> gpui::AnyElement {
+    match agent {
+        Some(a) => super::super::board::agent_mark(a, ink),
+        None => gpui::svg()
+            .path("icons/terminal.svg")
+            .size(px(T::BOARD_MARK))
+            .flex_shrink_0()
+            .text_color(ink)
+            .into_any_element(),
+    }
+}
+/// The carried pane under the pointer: a raised pill with its mark and title.
+fn pane_chip(title: &str, agent: Option<Agent>) -> gpui::Div {
+    div()
+        .h(px(T::ROW + T::S6))
+        .max_w(px(T::TAB_MAX_WIDTH))
+        .px(px(T::S14))
+        .flex()
+        .items_center()
+        .gap(px(T::S8))
+        .rounded_full()
+        .bg(T::color(T::raised()))
+        .border(px(T::BORDER_WIDTH))
+        .border_color(T::color(T::border()))
+        .shadow(vec![gpui::BoxShadow {
+            color: gpui::black().opacity(0.28),
+            offset: gpui::point(px(0.), px(T::S4)),
+            blur_radius: px(T::S16),
+            spread_radius: px(0.),
+            inset: false,
+        }])
+        .text_size(px(T::SMALL))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(T::color(T::primary()))
+        .child(mark(agent, T::color(T::secondary())))
+        .child(div().min_w_0().truncate().child(title.to_owned()))
+}
+fn grip_group(id: &str) -> gpui::SharedString {
+    format!("pane-grip-{id}").into()
 }
 
 /// Where on the pane under it a dragged pane would land.
@@ -52,6 +95,8 @@ pub(in crate::workbench) struct DropState {
     tab: Option<String>,
     /// The tab a dragged tab is over, and whether it would go after it.
     strip: Option<(String, bool)>,
+    /// The pane being carried, veiled in its old place.
+    carrying: Option<String>,
     /// The tab being dragged along the strip, drawn faded in its old place.
     lifted: Option<String>,
     /// A dragged pane that could leave its tab is over 「＋」.
@@ -105,14 +150,58 @@ impl Workbench {
         let dragged = DraggedPane {
             id: id.to_owned(),
             title: title.to_owned(),
+            agent: self.pane_session(id).map(|s| s.runtime),
             grab: Point::default(),
         };
-        bar.id(gpui::SharedString::from(format!("pane-grip-{id}")))
+        bar.id(grip_group(id))
+            .group(grip_group(id))
             .cursor(gpui::CursorStyle::ClosedHand)
             .hover(|s| s.cursor(gpui::CursorStyle::OpenHand))
             .on_drag(dragged, |p, grab, _, cx| {
                 cx.new(|_| DraggedPane { grab, ..p.clone() })
             })
+    }
+    /// The title's mark: hovering the bar swaps it for the move arrows, as the whole
+    /// title lights up, so the bar reads as a handle before it is pressed.
+    pub(super) fn grip_mark(&self, id: &str, session: Option<&AgentSession>) -> gpui::Div {
+        let group = grip_group(id);
+        let size = px(T::BOARD_MARK);
+        let arrows = gpui::svg().path("icons/move.svg").size(size);
+        div()
+            .relative()
+            .flex_shrink_0()
+            .size(size)
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .flex()
+                    .group_hover(group.clone(), |s| s.opacity(0.))
+                    .child(mark(session.map(|s| s.runtime), T::color(T::secondary()))),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .opacity(0.)
+                    .group_hover(group, |s| s.opacity(1.))
+                    .child(arrows.text_color(T::color(T::primary()))),
+            )
+    }
+    /// The title's group lit as one pill while its bar is hovered. A rounded card's
+    /// title keeps its place: the pill reaches out into the bar's own padding.
+    pub(super) fn grip_title(
+        &self,
+        id: &str,
+        terminal_style: bool,
+        title: Stateful<gpui::Div>,
+    ) -> Stateful<gpui::Div> {
+        title
+            .py(px(T::S2))
+            .rounded(px(T::S6))
+            .when(!terminal_style, |d| d.px(px(T::S6)).ml(-px(T::S6)))
+            .group_hover(grip_group(id), |s| s.bg(T::color(T::raised())))
     }
     /// A pane takes dragged panes: it shows where one would land and puts it there.
     pub(super) fn pane_landing(
@@ -124,10 +213,16 @@ impl Workbench {
         let shown = (self.layout.drop.pane.as_ref())
             .filter(|(p, _)| p == id && cx.has_active_drag())
             .map(|(_, z)| *z);
+        let carried = cx.has_active_drag() && self.layout.drop.carrying.as_deref() == Some(id);
         let (me, target) = (id.to_owned(), id.to_owned());
         pane.on_drag_move(
             cx.listener(move |this, e: &DragMoveEvent<DraggedPane>, _, cx| {
-                let moving = &e.drag(cx).id;
+                let moving = &e.drag(cx).id.clone();
+                let picked = *moving == me && this.layout.drop.carrying.as_ref() != Some(&me);
+                if picked {
+                    this.layout.drop.carrying = Some(me.clone());
+                    cx.notify();
+                }
                 let at = (e.bounds.contains(&e.event.position) && *moving != me)
                     .then(|| this.landing_zone(moving, &me, zone(e.bounds, e.event.position)));
                 let drop = &mut this.layout.drop.pane;
@@ -154,6 +249,17 @@ impl Workbench {
             cx.notify();
         }))
         .when_some(shown, |d, z| d.child(landing_mark(z)))
+        // The carried pane greys out where it was, so what is moving is plain to see.
+        .when(carried, |d| {
+            d.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(px(T::PANE_RADIUS))
+                    // Grey in either theme: a dark wash vanishes on a dark pane.
+                    .bg(T::color(T::muted()).opacity(0.3)),
+            )
+        })
     }
     /// The middle of a pane from another tab has no place to trade with; the pane
     /// arrives on its right instead, and the mark says so.

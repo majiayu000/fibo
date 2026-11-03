@@ -114,6 +114,14 @@ pub(super) fn start(
         let (l, t, w, h) = (area.left(), area.top(), area.size.width, area.size.height);
         let header = px(T::PANE_HEADER / 2.);
         shot("1-stacked.png", cx);
+        // Hovering a title bar lights its title and shows the move arrows.
+        let hover = gpui::MouseMoveEvent {
+            position: point(l + w * 0.3, t + header),
+            pressed_button: None,
+            modifiers: Default::default(),
+        };
+        send(handle, cx, hover.to_platform_input());
+        shot("1b-hover.png", cx);
 
         // 1. The top pane onto the bottom one's right edge.
         let grip = point(l + w * 0.3, t + header);

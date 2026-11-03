@@ -184,6 +184,7 @@ impl Workbench {
         let place = self.pane_cwd(id, session, cx).map(|c| short_place(&c));
         let left = div()
             .id(gpui::SharedString::from(format!("pane-title-{id}")))
+            .map(|d| self.grip_title(id, terminal_style, d))
             .min_w_0()
             .flex()
             .items_center()
@@ -202,13 +203,8 @@ impl Workbench {
                     )
                 })
             })
-            // Whose pane: its CLI's mark always, even when every session is the same CLI.
-            .when_some(session, |d, s| {
-                d.child(super::board::agent_mark(
-                    s.runtime,
-                    T::color(T::secondary()),
-                ))
-            })
+            // Whose pane: its CLI's mark always, or a terminal's; the move arrows on hover.
+            .child(self.grip_mark(id, session))
             .child(
                 div()
                     .flex_shrink_0()
@@ -513,7 +509,9 @@ impl Workbench {
                         // A pane that asks you something says so by its ring and its
                         // state chip; the title row keeps the card's own ground.
                         .bg(T::color(T::header()))
-                        .child(left.flex_1())
+                        // The title keeps its own width, so its hover pill hugs it.
+                        .child(left)
+                        .child(div().flex_1())
                         .child(right),
                 )
                 .children(turn)
