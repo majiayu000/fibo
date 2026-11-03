@@ -45,7 +45,7 @@
 | [Happier](https://github.com/happier-dev/happier) | Happy 分支，多端 | 2,123★ |
 | [Nimbalyst](https://github.com/nimbalyst/nimbalyst) | 桌面工作区 + 手机看板 | 2,016★ |
 | [agent-of-empires](https://github.com/agent-of-empires/agent-of-empires) | TUI + Web | 3,404★ |
-| [collie](https://github.com/AltanS/collie)、[ovis](https://github.com/devswha/ovis) | herdr 的手机 / 浏览器客户端 | 1,556★ / 1,834★ |
+| [collie](https://github.com/AltanS/collie)、[ovis](https://github.com/devswha/ovis) | 同类终端工具 的手机 / 浏览器客户端 | 1,556★ / 1,834★ |
 
 **替代物（用户现在不用 App 时怎么做）**
 

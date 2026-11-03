@@ -103,7 +103,7 @@ figcaption span{font-weight:400;color:var(--sub);margin-left:6px}
 <div class="page">
   <div>
     <h1>Keepline 主界面：现在 · 参照 · 重做 v1–v3</h1>
-    <div class="sub">2026-11-02 · 六张同为 1440×788：Keepline 实拍、Herdr 实拍（同是 GPUI 原生 App）、重做 v1、参照 Herdr 的 v2，以及参照五家同类产品的 v3（主界面和看改动两张）</div>
+    <div class="sub">2026-11-02 · 六张同为 1440×788：Keepline 实拍、同类终端工具 实拍（同是 GPUI 原生 App）、重做 v1、参照 同类终端工具 的 v2，以及参照五家同类产品的 v3（主界面和看改动两张）</div>
   </div>
   <div class="switch" role="group" aria-label="排列方式">
     <button id="bSide" aria-pressed="true">两列</button>
@@ -112,7 +112,7 @@ figcaption span{font-weight:400;color:var(--sub);margin-left:6px}
 
   <div id="boards" class="side">
     <figure><figcaption>Keepline 现在<span>实拍</span></figcaption><div class="fit"><div class="frame"><img src="now.png" alt="Keepline 主界面实拍" style="width:1440px;height:788px;display:block;object-fit:cover"></div></div></figure>
-    <figure><figcaption>Herdr<span>实拍 · 参照</span></figcaption><div class="fit"><div class="frame"><img src="herdr-s.png" alt="Herdr 主界面实拍" style="width:1440px;height:788px;display:block;object-fit:cover"></div></div></figure>
+    <figure><figcaption>同类终端工具<span>实拍 · 参照</span></figcaption><div class="fit"><div class="frame"><img src="peer-s.png" alt="同类终端工具 主界面实拍" style="width:1440px;height:788px;display:block;object-fit:cover"></div></div></figure>
 
     <!-- v1 -->
     <figure><figcaption>重做 v1<span>上一版</span></figcaption><div class="fit"><div class="frame">
@@ -178,7 +178,7 @@ figcaption span{font-weight:400;color:var(--sub);margin-left:6px}
     </div></div></figure>
 
     <!-- v2 -->
-    <figure><figcaption>重做 v2<span>参照 Herdr</span></figcaption><div class="fit"><div class="frame">
+    <figure><figcaption>重做 v2<span>参照 同类终端工具</span></figcaption><div class="fit"><div class="frame">
       <div class="r v2" style="width:1440px;height:788px">
         <aside>
           <div style="height:44px;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px">
@@ -471,20 +471,20 @@ figcaption span{font-weight:400;color:var(--sub);margin-left:6px}
     <div class="note"><b>⑥ 等你的窗格亮一圈</b>分屏时等你回答的窗格描一圈橙色、标题栏浅橙；当前聚焦的窗格顶边一条深线（沿用 79cb070d 的做法）。左栏对应行有未读数字。</div>
   </div>
 
-  <h2>从 Herdr 借的六处</h2>
+  <h2>从 同类终端工具 借的六处</h2>
   <div class="notes">
-    <div class="note"><b>① 每个会话带 Agent 自己的图标</b>Herdr 在标签、左栏行、窗格标题上都放 Agent 的小图标（Claude Code 是橙色像素小怪，Codex 是蓝色圆标）。一眼分清是谁在干活，比写「claude」两个字快。<div class="fix">→ v2 标签、左栏、窗格标题、额度按钮都换成 Agent 图标；普通终端用灰色终端图标。</div></div>
-    <div class="note"><b>② 窗格标题 = 谁 + 在哪</b>Herdr 的窗格标题只有「图标 Claude Code ~/路径」，不重复会话标题。<div class="fix">→ v2 窗格标题写 Agent 名和目录，状态和「标记完成」放右边；会话标题只留在标签和左栏。</div></div>
+    <div class="note"><b>① 每个会话带 Agent 自己的图标</b>同类终端工具 在标签、左栏行、窗格标题上都放 Agent 的小图标（Claude Code 是橙色像素小怪，Codex 是蓝色圆标）。一眼分清是谁在干活，比写「claude」两个字快。<div class="fix">→ v2 标签、左栏、窗格标题、额度按钮都换成 Agent 图标；普通终端用灰色终端图标。</div></div>
+    <div class="note"><b>② 窗格标题 = 谁 + 在哪</b>同类终端工具 的窗格标题只有「图标 Claude Code ~/路径」，不重复会话标题。<div class="fix">→ v2 窗格标题写 Agent 名和目录，状态和「标记完成」放右边；会话标题只留在标签和左栏。</div></div>
     <div class="note"><b>③ 左栏上下两块：空间在上，会话在下</b>空间是彩色字母方块，右边跟分支和 ↑↓；会话按 Done / Working / Idle 分组带计数，钉在左栏下半。<div class="fix">→ v2 空间行加分支和领先落后数；会话按「要你处理 / 在跑 / 停着」分组。空间方块保留 Keepline 的渐变色。</div></div>
-    <div class="note"><b>④ 会话行写「空间 · 标题」，状态是最右一个符号</b>Herdr 不写「等你回答」「在跑」这些字，最右一列只放一个符号：蓝点、转圈、空心圈。<div class="fix">→ v2 用 Keepline 自己的状态色：橙点＝等你回答，绿空心圈＝等你验收，黄转圈＝在跑，灰 ✓＝做完了，灰空心＝停着。分组标题已经说了是什么状态，所以行里不再写字。</div></div>
-    <div class="note"><b>⑤ 标签只在当前那个显示 ×，别的显示状态</b>Herdr 的未读标签带一个小蓝点，正在干活的标签转圈。<div class="fix">→ v2 当前标签显示 ×，其他标签在名字后面放状态符号，不再给每个标签都加圆点。</div></div>
-    <div class="note"><b>⑥ 底栏只有两件事</b>Herdr 底栏左边是「This computer · 12 agents」，右边是「⌘⇧P commands」。<div class="fix">→ v2 底栏左边是「本机 · 11 个会话」，右边是额度、诊断、⌘P；设置和「连接手机或其他电脑」挪到左栏底部，和 Herdr 的 Settings / Add machine 一样。</div></div>
+    <div class="note"><b>④ 会话行写「空间 · 标题」，状态是最右一个符号</b>同类终端工具 不写「等你回答」「在跑」这些字，最右一列只放一个符号：蓝点、转圈、空心圈。<div class="fix">→ v2 用 Keepline 自己的状态色：橙点＝等你回答，绿空心圈＝等你验收，黄转圈＝在跑，灰 ✓＝做完了，灰空心＝停着。分组标题已经说了是什么状态，所以行里不再写字。</div></div>
+    <div class="note"><b>⑤ 标签只在当前那个显示 ×，别的显示状态</b>同类终端工具 的未读标签带一个小蓝点，正在干活的标签转圈。<div class="fix">→ v2 当前标签显示 ×，其他标签在名字后面放状态符号，不再给每个标签都加圆点。</div></div>
+    <div class="note"><b>⑥ 底栏只有两件事</b>同类终端工具 底栏左边是「This computer · 12 agents」，右边是「⌘⇧P commands」。<div class="fix">→ v2 底栏左边是「本机 · 11 个会话」，右边是额度、诊断、⌘P；设置和「连接手机或其他电脑」挪到左栏底部，和 同类终端工具 的 Settings / Add machine 一样。</div></div>
   </div>
   <h2>没照搬的</h2>
   <div class="notes">
-    <div class="note"><b>窗格做成圆角卡片、底色发灰</b>Herdr 的窗格是灰底上的白卡片，聚焦时描蓝边。Keepline 11-02 刚定了「正文一整块白、窗格不做卡片」（79cb070d），所以 v2 没跟。</div>
-    <div class="note"><b>只用蓝一种状态色</b>Herdr 的状态只有蓝点和灰圈。Keepline 已经定了黄 / 绿 / 灰三档，再加上「等你回答」的橙，信息更多，所以保留了。</div>
-    <div class="note"><b>Keepline 独有的「要你处理」和「标记完成」</b>Herdr 没有验收这一步，这是 Keepline 的核心，v2 里保留成右上角按钮和窗格里唯一的实心按钮。</div>
+    <div class="note"><b>窗格做成圆角卡片、底色发灰</b>同类终端工具 的窗格是灰底上的白卡片，聚焦时描蓝边。Keepline 11-02 刚定了「正文一整块白、窗格不做卡片」（79cb070d），所以 v2 没跟。</div>
+    <div class="note"><b>只用蓝一种状态色</b>同类终端工具 的状态只有蓝点和灰圈。Keepline 已经定了黄 / 绿 / 灰三档，再加上「等你回答」的橙，信息更多，所以保留了。</div>
+    <div class="note"><b>Keepline 独有的「要你处理」和「标记完成」</b>同类终端工具 没有验收这一步，这是 Keepline 的核心，v2 里保留成右上角按钮和窗格里唯一的实心按钮。</div>
   </div>
 </div>
 <script>
