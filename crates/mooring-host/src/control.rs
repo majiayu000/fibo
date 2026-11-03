@@ -360,31 +360,39 @@ fn events(a: Args) -> io::Result<()> {
         }
     }
 }
-fn list(a: Args) -> io::Result<()> {
-    let w = workspace(&a.socket)?;
-    let rows: Vec<_> = w
-        .terminals
+type Row<'a> = (&'a Terminal, Option<&'a AgentSession>, Phase, String);
+fn list_rows(w: &Workspace) -> Vec<Row<'_>> {
+    w.terminals
         .iter()
         .filter(|t| t.state == ProcessState::Running)
         .map(|t| {
             let s = w.current_agent(&t.id);
-            (t, s, phase(&w, &t.id), tab_title(&w, &t.id))
+            (t, s, phase(w, &t.id), tab_title(w, &t.id))
         })
-        .collect();
-    if a.has("json") {
-        let json: Vec<_> = rows
-            .iter()
-            .map(|(t, s, phase, tab)| {
-                serde_json::json!({
-                    "id": t.id, "cwd": w.terminal_cwd(t), "tab": tab,
-                    "agent": s.map(|s| agent_label(s.runtime)),
-                    "phase": phase.name(),
-                    "status": status(&w, &t.id).map(Status::key),
-                    "status_label": status(&w, &t.id).map(Status::label),
-                    "session": s.map(|s| &s.cli_session_id),
-                })
+        .collect()
+}
+/// `mooring list --json`: every field read from its one owner in core.
+fn list_json(w: &Workspace) -> Vec<serde_json::Value> {
+    list_rows(w)
+        .iter()
+        .map(|(t, s, phase, tab)| {
+            serde_json::json!({
+                "id": t.id, "cwd": w.terminal_cwd(t), "tab": tab,
+                "agent": s.map(|s| agent_label(s.runtime)),
+                "phase": phase.name(),
+                "status": status(w, &t.id).map(Status::key),
+                "status_label": status(w, &t.id).map(Status::label),
+                "title": s.map(|s| w.session_title(s)),
+                "session": s.map(|s| &s.cli_session_id),
             })
-            .collect();
+        })
+        .collect()
+}
+fn list(a: Args) -> io::Result<()> {
+    let w = workspace(&a.socket)?;
+    let rows = list_rows(&w);
+    if a.has("json") {
+        let json = list_json(&w);
         println!(
             "{}",
             serde_json::to_string_pretty(&json).map_err(io::Error::other)?
@@ -1095,6 +1103,28 @@ mod tests {
         assert_eq!(a.value("size"), Some("0.3"));
         assert_eq!(a.rest, ["ls", "--all"]);
         assert!(!a.has("all"));
+    }
+    /// `mooring list --json` says what the window says, on every sample case.
+    #[test]
+    fn list_reads_every_field_from_its_owner() {
+        let w = mooring_core::sample::every_state();
+        let at = mooring_core::content::now();
+        let rows = list_json(&w);
+        assert!(!rows.is_empty());
+        for row in rows {
+            let t = row["id"].as_str().unwrap();
+            let Some(s) = w.current_agent(t) else {
+                continue;
+            };
+            let st = status::of(&w, s, at);
+            assert_eq!(row["status"], st.key(), "{t}");
+            assert_eq!(row["status_label"], st.label(), "{t}");
+            assert_eq!(row["phase"], st.phase().key(), "{t}");
+            assert_eq!(row["title"], w.session_title(s), "{t}");
+            assert_eq!(row["tab"], w.terminal_tab_title(t), "{t}");
+            let term = w.terminals.iter().find(|x| x.id == t).unwrap();
+            assert_eq!(row["cwd"], w.terminal_cwd(term), "{t}");
+        }
     }
     #[test]
     fn phase_follows_the_current_conversation() {

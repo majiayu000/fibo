@@ -570,3 +570,40 @@ fn watch(st: &mut Stream, terminal: &str, socket: &Path) -> io::Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mooring_core::status;
+
+    /// The phone's cards say what the window says, on every sample case.
+    #[test]
+    fn cards_read_every_field_from_its_owner() {
+        let w = mooring_core::sample::every_state();
+        let dir = std::env::temp_dir().join(format!("mooring-cards-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let list: rp::List = serde_json::from_value(list(&w, &dir.join("sock"))).unwrap();
+        let at = mooring_core::content::now();
+        assert!(!list.terminals.is_empty());
+        for card in &list.terminals {
+            let term = w.terminals.iter().find(|t| t.id == card.id).unwrap();
+            assert_eq!(card.tab, w.terminal_tab_title(&card.id), "{}", card.id);
+            assert_eq!(card.cwd, w.terminal_cwd(term), "{}", card.id);
+            let Some(s) = w.current_agent(&card.id) else {
+                assert_eq!(card.phase, rp::Phase::Shell);
+                continue;
+            };
+            let st = status::of(&w, s, at);
+            assert_eq!(card.title.as_deref(), Some(w.session_title(s).as_str()));
+            assert_eq!(card.status.as_deref(), Some(st.key()), "{}", card.id);
+            assert_eq!(
+                card.status_label.as_deref(),
+                Some(st.label()),
+                "{}",
+                card.id
+            );
+            assert_eq!(card.needs_you, w.needs_you(s, at), "{}", card.id);
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

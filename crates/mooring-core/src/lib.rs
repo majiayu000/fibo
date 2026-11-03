@@ -13,6 +13,8 @@ pub mod protocol;
 pub mod quota;
 pub mod reason;
 pub mod rule;
+#[doc(hidden)]
+pub mod sample;
 pub mod sidebar;
 pub mod status;
 pub mod terminal;

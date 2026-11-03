@@ -216,6 +216,18 @@ pub fn run(h: &Hook, p: &Payload) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    /// Plugin events name a conversation as the window does, and say where it runs.
+    #[test]
+    fn events_read_title_and_terminal_from_their_owners() {
+        let w = mooring_core::sample::every_state();
+        let fired = Hooks::current(&w);
+        assert!(!fired.is_empty());
+        for p in fired {
+            let s = w.agent_sessions.iter().find(|s| s.id == p.session).unwrap();
+            assert_eq!(p.title, short(&w.session_title(s), 120), "{}", p.session);
+            assert_eq!(p.terminal, s.terminal, "{}", p.session);
+        }
+    }
     use super::*;
     use std::path::PathBuf;
 
