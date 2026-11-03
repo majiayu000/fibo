@@ -6393,3 +6393,87 @@ fn a_phone_that_never_finishes_its_handshake_is_closed() {
         "an idle unpaired session stayed open: {code:?}"
     );
 }
+
+/// plan.md stage 1 acceptance: while the workspace keeps moving (here every few ms, as an
+/// Agent's output moves it), marking a session done and open again 100 times, each from
+/// the copy the window had a moment before, is never refused.
+#[test]
+fn marking_done_while_the_workspace_moves_is_never_refused() {
+    let h = Host::start();
+    h.setup();
+    let codex = h.root.join("codex");
+    std::os::unix::fs::symlink("/bin/sh", &codex).unwrap();
+    let log = h.root.join("log.jsonl");
+    fs::write(
+        &log,
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"codex-busy\",\"cwd\":\"/tmp\"}}\n",
+    )
+    .unwrap();
+    let script = format!("echo $$ > {}/pid; sleep 30", h.root.display());
+    h.call(h.launch(
+        "one",
+        &format!(
+            "{} -c {}",
+            shell_quote(&codex.to_string_lossy()),
+            shell_quote(&script)
+        ),
+    ))
+    .unwrap();
+    let pid: u32 = wait_file(&h.root.join("pid")).trim().parse().unwrap();
+    h.call(Request::Hook {
+        runtime: Agent::Codex,
+        pid,
+        cli_session_id: "codex-busy".into(),
+        transcript: log.to_string_lossy().into_owned(),
+        ended: false,
+        event: None,
+        facts: Default::default(),
+        terminal: None,
+        cwd: String::new(),
+    })
+    .unwrap();
+    let id = h.workspace().agent_sessions[0].id.clone();
+    let start = h.workspace().revision;
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let mut refused = Vec::new();
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            let mut at = 1;
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                h.call(Request::ClientLeft { at }).unwrap();
+                at += 1;
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+        for i in 0..100 {
+            let seen = h.workspace();
+            std::thread::sleep(Duration::from_millis(5));
+            let mut edit = Edit::SetOutcome {
+                id: id.clone(),
+                outcome: if i % 2 == 0 {
+                    Outcome::Completed
+                } else {
+                    Outcome::Open
+                },
+                seen: None,
+            };
+            seen.stamp(&mut edit);
+            if let Err(e) = h.call(Request::Edit {
+                revision: seen.revision,
+                edit,
+            }) {
+                refused.push(e.to_string());
+            }
+        }
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+    let moved = h.workspace().revision - start;
+    assert!(moved > 200, "the workspace barely moved: {moved}");
+    assert!(
+        refused.is_empty(),
+        "{} refused: {:?}",
+        refused.len(),
+        refused
+    );
+    assert_eq!(h.workspace().agent_sessions[0].outcome, Outcome::Open);
+}
