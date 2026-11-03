@@ -48,6 +48,7 @@ unsafe extern "C" {
         sound: i32,
     );
     fn kl_play_sound();
+    fn kl_desktop_withdraw(session: *const c_char);
 }
 pub fn set_dock_icon(png: &[u8]) {
     unsafe { kl_set_dock_icon(png.as_ptr(), png.len()) }
@@ -129,6 +130,23 @@ fn entered(
             };
             Some((s.id.clone(), key, title, body))
         })
+        .collect()
+}
+/// Sessions that needed you and no longer do: answered here or in the terminal, or gone.
+/// Their banner would otherwise sit in Notification Center asking for what is done.
+fn left(before: &Workspace, after: &Workspace) -> Vec<String> {
+    before
+        .agent_sessions
+        .iter()
+        .filter(|s| fact(before, s).is_some())
+        .filter(|s| {
+            after
+                .agent_sessions
+                .iter()
+                .find(|a| a.id == s.id)
+                .is_none_or(|a| fact(after, a).is_none())
+        })
+        .map(|s| s.id.clone())
         .collect()
 }
 /// The project a session's terminal belongs to, as notifications and the panel name it.
@@ -383,6 +401,9 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                 cx.update(|_| unsafe { kl_notifications_enable() });
             }
             if ready {
+                for session in left(&before, &after) {
+                    cx.update(|_| unsafe { kl_desktop_withdraw(cstring(&session).as_ptr()) });
+                }
                 let watching =
                     cx.update(|cx| cx.try_global::<Watching>().and_then(|w| w.0.clone()));
                 for (session, key, title, body) in entered(&before, &after, watching.as_deref()) {
@@ -737,6 +758,24 @@ mod tests {
         for (name, w, link) in samples() {
             std::fs::write(dir.join(format!("{name}.json")), panel(&w, &link)).unwrap();
         }
+    }
+
+    /// orca#4496: once a session no longer needs you, its banner is taken back.
+    #[test]
+    fn a_banner_goes_once_its_session_no_longer_needs_you() {
+        use mooring_core::content::Turn;
+        let mut before = Workspace::default();
+        session(&mut before, "answered", Turn::Waiting, 60);
+        session(&mut before, "still", Turn::Waiting, 60);
+        session(&mut before, "closed", Turn::Waiting, 60);
+        session(&mut before, "busy", Turn::Running, 60);
+        let mut after = before.clone();
+        after.content.get_mut("answered").unwrap().turn = Turn::Running;
+        after.agent_sessions.retain(|s| s.id != "closed");
+        let mut gone = left(&before, &after);
+        gone.sort();
+        assert_eq!(gone, ["answered", "closed"]);
+        assert!(left(&after, &after).is_empty());
     }
 }
 

@@ -371,6 +371,13 @@ void kl_desktop_notify(const char *session,const char *title,const char *body,in
     }];
 }
 
+// Takes back a session's banner once it no longer needs you; its id is the request's.
+void kl_desktop_withdraw(const char *session) {
+    if(!NSBundle.mainBundle.bundleIdentifier) return;
+    NSString *sid=[NSString stringWithUTF8String:session];
+    [[UNUserNotificationCenter currentNotificationCenter]removeDeliveredNotificationsWithIdentifiers:@[sid]];
+    [[UNUserNotificationCenter currentNotificationCenter]removePendingNotificationRequestsWithIdentifiers:@[sid]];
+}
 void kl_desktop_show(void) { [desktop show:nil]; }
 // A terminal bell while Mooring is in the background: one Dock bounce, as in Terminal.app.
 void kl_request_attention(void) { [NSApp requestUserAttention:NSInformationalRequest]; }
