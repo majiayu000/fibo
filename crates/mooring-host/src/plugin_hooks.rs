@@ -183,6 +183,8 @@ pub fn run(h: &Hook, p: &Payload) -> Result<(), String> {
         }
         (None, None) => return Err("没有 command 也没有 webhook".into()),
     };
+    // Its own group, so a timed-out hook's children end with it.
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -193,19 +195,30 @@ pub fn run(h: &Hook, p: &Payload) -> Result<(), String> {
         // A hook that ignores stdin closes it early; that is not a failure.
         let _ = stdin.write_all(&body);
     }
+    // Read on its own thread: a child left in the background may hold stderr open.
+    let (said, heard) = std::sync::mpsc::channel();
+    if let Some(mut e) = child.stderr.take() {
+        std::thread::spawn(move || {
+            let mut err = String::new();
+            let _ = std::io::Read::read_to_string(
+                &mut std::io::Read::take(&mut e, 64 * 1024),
+                &mut err,
+            );
+            let _ = said.send(err);
+        });
+    }
     let deadline = Instant::now() + Duration::from_millis(h.timeout_ms);
     loop {
         match child.try_wait().map_err(|e| e.to_string())? {
             Some(status) if status.success() => return Ok(()),
             Some(status) => {
-                let mut err = String::new();
-                if let Some(mut e) = child.stderr.take() {
-                    let _ = std::io::Read::read_to_string(&mut e, &mut err);
-                }
+                let err = heard
+                    .recv_timeout(Duration::from_millis(200))
+                    .unwrap_or_default();
                 return Err(format!("{status} {}", short(err.trim(), 200)));
             }
             None if Instant::now() >= deadline => {
-                let _ = child.kill();
+                mooring_core::process::kill_group(&child);
                 let _ = child.wait();
                 return Err(format!("超过 {} ms，已停止", h.timeout_ms));
             }
@@ -347,5 +360,38 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(2));
         let err = run(&hook("echo nope >&2; exit 3", 2_000), &payload()).unwrap_err();
         assert!(err.contains("nope"), "{err}");
+    }
+
+    /// A failing hook that left a background child holding stderr returns at once;
+    /// it would otherwise hold one of the 8 in-flight slots for as long as the child runs.
+    #[test]
+    fn a_failed_hook_with_a_background_child_returns_promptly() {
+        let start = Instant::now();
+        let err = run(&hook("echo bad >&2; sleep 3 & exit 1", 2_000), &payload()).unwrap_err();
+        assert!(
+            start.elapsed() < Duration::from_millis(1500),
+            "{:?}",
+            start.elapsed()
+        );
+        assert!(err.contains("bad") || err.contains("exit"), "{err}");
+    }
+
+    /// A timed-out hook's children are stopped with it.
+    #[test]
+    fn a_timed_out_hook_stops_its_children() {
+        let f = std::env::temp_dir().join(format!("kl-hook-child-{}", std::process::id()));
+        let _ = std::fs::remove_file(&f);
+        let _ = run(
+            &hook(&format!("sleep 30 & echo $! > {}; wait", f.display()), 300),
+            &payload(),
+        );
+        let pid: i32 = std::fs::read_to_string(&f).unwrap().trim().parse().unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        let alive = unsafe { libc::kill(pid, 0) } == 0;
+        if alive {
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
+        let _ = std::fs::remove_file(&f);
+        assert!(!alive, "the hook's child {pid} outlived its timeout");
     }
 }

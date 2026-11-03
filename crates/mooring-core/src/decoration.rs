@@ -114,6 +114,7 @@ impl Decoration {
     }
     /// Runs it for `pane` (blocking, up to its timeout): the line to show, or why none.
     pub fn run(&self, pane: &Pane) -> Result<Option<String>, String> {
+        use std::os::unix::process::CommandExt;
         let mut child = Command::new("/bin/sh")
             .arg("-c")
             .arg(&self.command)
@@ -144,6 +145,8 @@ impl Decoration {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
+            // Its own group, so what it leaves running can be ended with it.
+            .process_group(0)
             .spawn()
             .map_err(|e| format!("启动不了：{e}"))?;
         // Read on its own thread, so a command that fills the pipe still ends.
@@ -158,13 +161,16 @@ impl Decoration {
             match child.try_wait().map_err(|e| e.to_string())? {
                 Some(status) => break status,
                 None if Instant::now() >= deadline => {
-                    let _ = child.kill();
+                    crate::process::kill_group(&child);
                     let _ = child.wait();
                     return Err(format!("超过 {} ms，已停止", self.timeout_ms));
                 }
                 None => std::thread::sleep(Duration::from_millis(10)),
             }
         };
+        // A line is one shot: whatever it left in the background would hold the pipe
+        // open past the timeout and run unseen, so it ends with the command.
+        crate::process::kill_group(&child);
         let out = reader.join().unwrap_or_default();
         if !status.success() {
             return Ok(None);
@@ -434,5 +440,27 @@ mod tests {
         assert!(report[2].result.as_ref().unwrap_err().contains("格式不对"));
         assert!(report[3].result.as_ref().unwrap_err().contains("重名"));
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A command that leaves a background child holding stdout still gives up at its
+    /// timeout, and the child ends with it.
+    #[test]
+    fn what_a_command_leaves_running_ends_with_it() {
+        let dir = std::env::temp_dir();
+        let start = std::time::Instant::now();
+        let shown = decoration("echo hi; sleep 3 &", Place::Title, 2_000).run(&pane(&dir));
+        assert!(
+            start.elapsed() < Duration::from_millis(1500),
+            "{:?}",
+            start.elapsed()
+        );
+        assert_eq!(shown, Ok(Some("hi".into())));
+        let start = std::time::Instant::now();
+        let _ = decoration("sleep 3 & sleep 3", Place::Title, 200).run(&pane(&dir));
+        assert!(
+            start.elapsed() < Duration::from_millis(1500),
+            "{:?}",
+            start.elapsed()
+        );
     }
 }
