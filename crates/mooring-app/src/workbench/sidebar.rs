@@ -229,8 +229,13 @@ impl Workbench {
             .enumerate()
             .filter(|(_, s)| {
                 self.session_hidden(s).is_none()
-                    && (recent
-                        || session_space(&self.workspace, s) == Some(self.nav.space.as_str()))
+                    && match (recent, self.space_filter()) {
+                        (true, None) => true,
+                        (true, Some(only)) => session_space(&self.workspace, s) == Some(only),
+                        (false, _) => {
+                            session_space(&self.workspace, s) == Some(self.nav.space.as_str())
+                        }
+                    }
             })
             .collect();
         let closed = in_space
@@ -520,6 +525,16 @@ impl Workbench {
                 )
                 .into_any_element(),
         ];
+        // The spaces as chips that wrap: each its colors, its name and how many of its
+        // sessions need you. A click narrows the list below to that space (and shows it on
+        // the right); a second click lists every space again.
+        let filter = self.space_filter().map(str::to_owned);
+        let mut chips = div()
+            .flex()
+            .flex_wrap()
+            .gap(px(T::S4))
+            .px(px(T::S4))
+            .mt(px(T::S4));
         for space in &self.workspace.spaces {
             let id = space.id.clone();
             if let Some((_, field, _)) = self
@@ -528,83 +543,149 @@ impl Workbench {
                 .as_ref()
                 .filter(|(s, ..)| s.id == id)
             {
-                out.push(
+                // Named in place: the chip widens into a field until Enter.
+                chips = chips.child(
                     div()
-                        .h(px(T::ROW))
+                        .w_full()
+                        .h(px(T::ICON_HEIGHT + T::S4))
                         .px(px(T::S8 - T::BORDER_WIDTH))
                         .flex()
                         .items_center()
-                        .gap(px(T::S8))
+                        .gap(px(T::S6))
                         .rounded(px(T::CONTROL_RADIUS))
                         .bg(T::color(T::raised()))
                         .border(px(T::BORDER_WIDTH))
                         .border_color(T::color(T::focus()))
                         .text_size(px(T::SMALL))
-                        .child(self.space_tile(&space.id, &space.name))
-                        .child(div().flex_1().min_w_0().h_full().child(field.clone()))
-                        .into_any_element(),
+                        .child(self.space_dot(&space.id, T::S10))
+                        .child(div().flex_1().min_w_0().h_full().child(field.clone())),
                 );
                 continue;
             }
-            let active = self.space_active(&id);
+            let on = filter.as_deref() == Some(id.as_str());
+            let dimmed = filter.is_some() && !on;
             let missing = !Path::new(&space.cwd).is_dir();
-            let branch = (!missing)
-                .then(|| self.git_branch(&space.cwd, cx))
-                .flatten();
-            let counts = (!missing)
-                .then(|| {
-                    self.git_divergence(&space.cwd, cx)
-                        .and_then(super::divergence::divergence_label)
-                })
-                .flatten();
+            let need = self.space_needs(&id);
             let fix = id.clone();
-            out.push(
-                button(gpui::SharedString::from(format!("space-{id}")), "")
-                    .aria_label(space.name.clone())
-                    .h(px(T::ROW))
-                    .px(px(T::S8))
-                    .gap(px(T::S8))
-                    .justify_start()
-                    .border_0()
-                    .when(active, |s| s.bg(T::color(T::raised())))
-                    .child(self.space_tile(&space.id, &space.name))
+            chips = chips.child(
+                div()
+                    .id(gpui::SharedString::from(format!("space-{id}")))
+                    .role(gpui::accesskit::Role::Button)
+                    .aria_label(if missing {
+                        format!("{}，目录不在了，点一下重新选择", space.name)
+                    } else if on {
+                        format!("{}，正在只看这个空间，点一下看全部", space.name)
+                    } else {
+                        format!("只看 {}", space.name)
+                    })
+                    .h(px(T::ICON_HEIGHT + T::S2))
+                    .max_w_full()
+                    .pl(px(T::S6))
+                    .pr(px(if need > 0 { T::S4 } else { T::S8 }))
+                    .flex()
+                    .items_center()
+                    .gap(px(T::S6))
+                    .rounded_full()
+                    .border(px(T::BORDER_WIDTH))
+                    .border_color(T::color(if on { T::focus() } else { T::border() }))
+                    .when(on, |d| d.bg(T::color(T::raised())))
+                    .when(dimmed, |d| d.opacity(0.55))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(T::color(T::raised())).opacity(1.))
+                    .child(self.space_dot(&space.id, T::S10))
                     .child(
                         div()
-                            .flex_1()
                             .min_w_0()
                             .truncate()
-                            .text_size(px(T::SMALL))
-                            .text_color(T::color(T::primary()))
+                            .text_size(px(T::CHIP_SIZE))
+                            .text_color(if missing {
+                                Tone::Danger.ink()
+                            } else {
+                                T::color(T::primary())
+                            })
                             .child(space.name.clone()),
                     )
-                    // A deleted worktree leaves the space pointing nowhere; a click here
-                    // picks the folder again.
-                    .when(missing, |d| {
+                    .when(need > 0, |d| {
                         d.child(
                             div()
-                                .id(gpui::SharedString::from(format!("space-missing-{id}")))
-                                .role(gpui::accesskit::Role::Button)
-                                .aria_label(format!("重新选择 {} 的目录", space.name))
                                 .flex_shrink_0()
-                                .cursor_pointer()
-                                .text_size(px(T::CHIP_SIZE))
-                                .text_color(Tone::Danger.ink())
-                                .child("目录不在了")
-                                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
-                                    cx.stop_propagation()
-                                })
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    cx.stop_propagation();
-                                    this.choose_space_dir(Some(fix.clone()), window, cx);
-                                })),
+                                .min_w(px(T::S14))
+                                .h(px(T::S14))
+                                .px(px(T::S4))
+                                .rounded_full()
+                                .bg(Status::Waiting.colors().0)
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_size(px(T::CHIP_SIZE - 1.))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(T::color(T::WHITE))
+                                .child(need.to_string()),
                         )
                     })
+                    .tooltip(super::diagnostics::tip(vec![if missing {
+                        "目录不在了，点一下重新选择".to_owned()
+                    } else {
+                        format!("{} · {}", space.name, space.cwd)
+                    }]))
+                    .on_mouse_down(gpui::MouseButton::Right, {
+                        let id = id.clone();
+                        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                            this.layout.space_menu = Some((id.clone(), event.position));
+                            this.layout.space_switch = false;
+                            this.layout.space_removing = false;
+                            cx.stop_propagation();
+                            cx.notify();
+                        })
+                    })
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            if missing {
+                                this.choose_space_dir(Some(fix.clone()), window, cx);
+                                return;
+                            }
+                            if event.click_count() == 2 {
+                                this.rename_space(&id, window, cx);
+                                return;
+                            }
+                            this.toggle_space_filter(&id, cx);
+                        }),
+                    ),
+            );
+        }
+        out.push(chips.into_any_element());
+        // Narrowed to one space: what it is, its folder's branch, and the way back.
+        if let Some(space) = filter
+            .as_deref()
+            .and_then(|f| self.workspace.spaces.iter().find(|s| s.id == f))
+        {
+            let branch = self.git_branch(&space.cwd, cx);
+            let counts = self
+                .git_divergence(&space.cwd, cx)
+                .and_then(super::divergence::divergence_label);
+            out.push(
+                div()
+                    .mt(px(T::S8))
+                    .mx(px(T::S4))
+                    .h(px(T::ROW))
+                    .px(px(T::S8))
+                    .flex()
+                    .items_center()
+                    .gap(px(T::S6))
+                    .rounded(px(T::CONTROL_RADIUS))
+                    .bg(T::color(T::raised()))
+                    .text_size(px(T::SMALL))
+                    .child(self.space_dot(&space.id, T::S12))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(space.name.clone()),
+                    )
                     .when_some(branch, |d, branch| {
                         d.child(
                             label(branch)
-                                .flex_shrink_1()
                                 .min_w_0()
-                                .max_w(px(T::SIDEBAR * 0.4))
                                 .truncate()
                                 .text_size(px(T::CHIP_SIZE))
                                 .text_color(T::color(T::muted())),
@@ -619,54 +700,93 @@ impl Workbench {
                                 .font_features(T::tabular()),
                         )
                     })
-                    .on_mouse_down(gpui::MouseButton::Right, {
-                        let id = id.clone();
-                        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
-                            this.layout.space_menu = Some((id.clone(), event.position));
-                            this.layout.space_switch = false;
-                            this.layout.space_removing = false;
-                            cx.stop_propagation();
-                            cx.notify();
-                        })
-                    })
-                    .on_click(
-                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                            if event.click_count() == 2 {
-                                this.rename_space(&id, window, cx);
-                                return;
-                            }
-                            this.pick_space(&id, cx);
-                        }),
+                    .child(div().flex_1())
+                    .child(
+                        button("space-filter-clear", "✕")
+                            .aria_label("看全部空间")
+                            .flex_shrink_0()
+                            .h(px(T::ICON_HEIGHT))
+                            .px(px(T::S6))
+                            .border_0()
+                            .text_size(px(T::CHIP_SIZE))
+                            .text_color(T::color(T::muted()))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.sidebar.space_filter = None;
+                                cx.notify();
+                            })),
                     )
                     .into_any_element(),
             );
         }
         out
     }
-    /// A space's letter on a small rounded tile in its two colors.
-    fn space_tile(&self, id: &str, name: &str) -> gpui::Div {
+    /// The space 会话优先 is narrowed to, while that space still exists.
+    pub(super) fn space_filter(&self) -> Option<&str> {
+        self.sidebar
+            .space_filter
+            .as_deref()
+            .filter(|f| self.workspace.spaces.iter().any(|s| s.id == *f))
+    }
+    /// Narrows the list to a space and shows it, or lists every space again.
+    pub(super) fn toggle_space_filter(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.space_filter() == Some(id) {
+            self.sidebar.space_filter = None;
+            cx.notify();
+            return;
+        }
+        self.sidebar.space_filter = Some(id.to_owned());
+        self.pick_space(id, cx);
+    }
+    /// How many of a space's open sessions need you: asking, failed, or a turn to check.
+    fn space_needs(&self, id: &str) -> usize {
+        self.workspace
+            .agent_sessions
+            .iter()
+            .filter(|s| {
+                self.session_hidden(s).is_none()
+                    && self.session_open(s)
+                    && session_space(&self.workspace, s) == Some(id)
+            })
+            .filter(|s| {
+                let (g, _) = session_status(&self.workspace, &self.attention.unseen, s);
+                matches!(
+                    super::sidebar_list::bucket(g),
+                    mooring_core::sidebar::Bucket::Attention | mooring_core::sidebar::Bucket::Done
+                )
+            })
+            .count()
+    }
+    /// A space's two colors on a round dot, as the 鸟瞰 board shows spaces.
+    pub(super) fn space_dot(&self, id: &str, size: f32) -> gpui::Div {
         let [from, to] = T::SPACE_TILES[self.space_mesh(id) % T::SPACE_TILES.len()];
-        let letter: String = name
-            .chars()
-            .find(|c| !c.is_whitespace())
-            .map(|c| c.to_uppercase().collect())
-            .unwrap_or_default();
         div()
-            .size(px(T::SPACE_TILE))
+            .size(px(size))
             .flex_shrink_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(px(T::CHIP_RADIUS))
+            .rounded_full()
             .bg(gpui::linear_gradient(
                 135.,
                 gpui::linear_color_stop(T::color(from), 0.),
                 gpui::linear_color_stop(T::color(to), 1.),
             ))
-            .text_size(px(T::CHIP_SIZE))
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(T::color(T::WHITE))
-            .child(letter)
+    }
+    /// A session row's space: its dot and name, quiet, at the row's end.
+    pub(super) fn space_tag(&self, id: &str, name: &str) -> gpui::Div {
+        div()
+            .flex_shrink_0()
+            .max_w(px(T::SIDEBAR * 0.3))
+            .flex()
+            .items_center()
+            .gap(px(T::S4))
+            .child(self.space_dot(id, T::S6 + 1.))
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .font_family(T::UI_FONT)
+                    .text_size(px(T::CHIP_SIZE))
+                    .text_color(T::color(T::muted()))
+                    .child(name.to_owned()),
+            )
     }
     /// Whether a space is the one shown; over the overview the spaces are its filter.
     fn space_active(&self, id: &str) -> bool {

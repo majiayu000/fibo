@@ -86,6 +86,9 @@ pub(super) struct SidebarPrefs {
     pub pinned: Vec<String>,
     /// The view menu opened from the ≑ beside 会话, where it was opened. Not saved.
     pub view_menu: Option<gpui::Point<gpui::Pixels>>,
+    /// 会话优先 narrowed to one space's sessions by clicking its chip; None lists every
+    /// space. Not saved: a new launch starts on everything.
+    pub space_filter: Option<String>,
 }
 impl SidebarPrefs {
     fn path() -> Option<PathBuf> {
@@ -109,6 +112,7 @@ impl SidebarPrefs {
                 .map(str::to_owned)
                 .collect(),
             view_menu: None,
+            space_filter: None,
         }
     }
     /// Best effort: a choice that cannot be written still holds until quit.
@@ -468,12 +472,14 @@ impl Workbench {
         let mono = T::mono(cx).family;
         // Every row and tab shows its CLI's mark, in its own color (v3 mock).
         let marks = true;
-        // 会话优先 lists every space's sessions, so each row says whose it is first.
-        let space = (self.sidebar.preset().group == Grouping::Recent)
-            .then(|| session_space(&self.workspace, session))
-            .flatten()
-            .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
-            .map(|s| format!("{} · ", s.name));
+        // 会话优先 lists every space's sessions, so each row carries its space as a small
+        // tag: the space's colors and its name. Narrowed to one space, the tag says nothing.
+        let space = (self.sidebar.preset().group == Grouping::Recent
+            && self.space_filter().is_none())
+        .then(|| session_space(&self.workspace, session))
+        .flatten()
+        .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
+        .map(|s| self.space_tag(&s.id, &s.name));
         let title = match self
             .layout
             .renaming_session
@@ -492,11 +498,7 @@ impl Workbench {
                 } else {
                     T::color(seen.seen_title())
                 })
-                .child(format!(
-                    "{}{}",
-                    space.unwrap_or_default(),
-                    self.session_title(session)
-                )),
+                .child(self.session_title(session)),
         };
         let time = match end {
             End::Text(text) => text,
@@ -542,6 +544,7 @@ impl Workbench {
                         ))
                     })
                     .child(title)
+                    .children(space)
                     .child(
                         div()
                             .flex_shrink_0()
@@ -891,38 +894,22 @@ impl Workbench {
                     stopped,
                     quiet,
                 } = recent_order(&rows);
-                // A second line only where it says what to do or what is happening: what
-                // it asks or why it failed, what a finished turn changed, what it runs now.
+                // What it asks or why it failed; with neither to show, what it is at now.
                 let second = |l: &Listed| {
-                    // With no reason or reply to show, what the session is at now.
-                    let headline = || {
+                    self.row_detail(l.0, l.1).or_else(|| {
                         self.workspace
                             .content
                             .get(&l.0.id)
                             .map(|c| mooring_core::content::short(&c.headline(), 100))
                             .filter(|h| !h.trim().is_empty())
-                    };
-                    let detail = self.row_detail(l.0, l.1).or_else(headline);
-                    if bucket(l.1) != Bucket::Done {
-                        return detail;
-                    }
-                    // With line counts on the row, the file count says nothing more.
-                    let counted = self
-                        .workspace
-                        .content
-                        .get(&l.0.id)
-                        .is_some_and(|c| c.turn_lines() != (0, 0));
-                    let files = if counted { 0 } else { self.turn_files(l.0) };
-                    let parts: Vec<String> = [l.1.label().to_owned()]
-                        .into_iter()
-                        .chain((files > 0).then(|| format!("改了 {files} 个文件")))
-                        .chain(detail)
-                        .collect();
-                    Some(parts.join(" · "))
+                    })
                 };
+                // Only what asks you or failed gets a second line: the question is what you
+                // act on. A finished turn or a running one reads from its state mark alone,
+                // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
                 for (title, rows, lines, ink) in [
                     ("要你处理", need, true, Some(Status::Waiting)),
-                    ("在跑", running, true, Some(Status::Running)),
+                    ("在跑", running, false, Some(Status::Running)),
                     ("停着", stopped, false, None),
                 ] {
                     if rows.is_empty() {
@@ -934,7 +921,8 @@ impl Workbench {
                             .into_any_element(),
                     );
                     for l in rows {
-                        let d = if lines { second(&l) } else { None };
+                        let asks = bucket(l.1) == Bucket::Attention;
+                        let d = if lines && asks { second(&l) } else { None };
                         push(&mut out, l, d, End::State);
                     }
                 }
