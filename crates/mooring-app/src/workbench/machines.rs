@@ -53,7 +53,8 @@ impl Workbench {
             let sessions: Vec<&Card> = view
                 .terminals
                 .iter()
-                .filter(|c| c.phase != Phase::Shell)
+                // An Agent with no conversation tied to it is listed too, as at home.
+                .filter(|c| c.phase != Phase::Shell || c.note.is_some())
                 .collect();
             let shells = view.terminals.len() - sessions.len();
             let (note, bad) = match &view.link {
@@ -93,7 +94,11 @@ impl Workbench {
                 continue;
             }
             for card in sessions {
-                let status = card.status.as_deref().and_then(Status::from_key);
+                let status = card
+                    .status
+                    .as_deref()
+                    .and_then(Status::from_key)
+                    .or(card.note.is_some().then_some(Status::Stale));
                 let title = shown_title(card);
                 let word = card.status_label.clone();
                 let shown = self
@@ -196,7 +201,11 @@ fn remote_key(view: &crate::machines::View, terminal: &str) -> String {
     format!("remote:{machine}:{terminal}")
 }
 
-/// The name that machine's host gave the session (its `session_title`), else the folder.
+/// The name that machine's host gave the session (its `session_title`), else what it says
+/// about an Agent it cannot read, else the folder.
 fn shown_title(card: &Card) -> String {
-    card.title.clone().unwrap_or_else(|| card.cwd.clone())
+    card.title
+        .clone()
+        .or_else(|| card.note.clone())
+        .unwrap_or_else(|| card.cwd.clone())
 }

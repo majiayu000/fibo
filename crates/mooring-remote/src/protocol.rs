@@ -225,6 +225,10 @@ pub struct Card {
     /// Waiting on you or failed, as the desktop counts 要你处理.
     #[serde(default)]
     pub needs_you: bool,
+    /// An Agent runs here but no conversation is tied to it (e.g. a Codex on the shared
+    /// daemon): `agent` says which, this says so in the user's words. Phase stays `shell`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

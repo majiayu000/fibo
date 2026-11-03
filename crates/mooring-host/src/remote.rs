@@ -274,7 +274,15 @@ fn unary(socket: &Path, request: &Value) -> io::Result<Value> {
     let terminal = || text(request, "terminal").map(str::to_owned);
     match request["op"].as_str().unwrap_or_default() {
         "list" => match rpc(socket, &Request::Workspace)? {
-            Reply::Workspace(w) => Ok(list(&w, socket)),
+            Reply::Workspace(w) => {
+                // Which terminals run an Agent no conversation is tied to; without it they
+                // still list, as shells.
+                let seen = match rpc(socket, &Request::RecognitionStatus) {
+                    Ok(Reply::Recognition(r)) => r,
+                    _ => Default::default(),
+                };
+                Ok(list(&w, &seen, socket))
+            }
             other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
         "read" => {
@@ -379,7 +387,7 @@ fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
 }
 
 /// Spaces and running terminals as cards: what each Agent is doing and what it asks.
-fn list(w: &Workspace, socket: &Path) -> Value {
+fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
     let now = mooring_core::content::now();
     let terminals: Vec<_> = w
         .terminals
@@ -396,13 +404,22 @@ fn list(w: &Workspace, socket: &Path) -> Value {
             };
             let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
             let status = control::status(w, &t.id);
+            // An Agent here that no conversation is tied to: what it is, in the host's words.
+            let unbound = session
+                .is_none()
+                .then(|| seen.terminal_agents.get(&t.id).copied())
+                .flatten();
+            let note = unbound.and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
             rp::Card {
                 id: t.id.clone(),
                 space: t.space.clone(),
                 tab: control::tab_title(w, &t.id),
                 cwd: w.terminal_cwd(t),
                 phase,
-                agent: session.map(|s| control::agent_label(s.runtime).to_owned()),
+                agent: session
+                    .map(|s| s.runtime)
+                    .or(unbound)
+                    .map(|a| control::agent_label(a).to_owned()),
                 session: session.map(|s| s.id.clone()),
                 title: session.map(|s| w.session_title(s)),
                 approval: content.and_then(|c| said(&c.approval)),
@@ -410,6 +427,7 @@ fn list(w: &Workspace, socket: &Path) -> Value {
                 status: status.map(|s| s.key().to_owned()),
                 status_label: status.map(|s| s.label().to_owned()),
                 needs_you: session.is_some_and(|s| w.needs_you(s, now)),
+                note,
             }
         })
         .collect();
@@ -573,7 +591,8 @@ mod tests {
         let w = mooring_core::sample::every_state();
         let dir = std::env::temp_dir().join(format!("mooring-cards-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let list: rp::List = serde_json::from_value(list(&w, &dir.join("sock"))).unwrap();
+        let list: rp::List =
+            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock"))).unwrap();
         let at = mooring_core::content::now();
         assert!(!list.terminals.is_empty());
         for card in &list.terminals {
@@ -595,6 +614,45 @@ mod tests {
             );
             assert_eq!(card.needs_you, w.needs_you(s, at), "{}", card.id);
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A Codex on the shared daemon has no conversation, yet it is no plain shell.
+    #[test]
+    fn an_agent_without_a_conversation_lists_with_its_note() {
+        let mut w = mooring_core::sample::every_state();
+        let shell = w
+            .terminals
+            .iter()
+            .find(|t| t.state == ProcessState::Running)
+            .unwrap()
+            .id
+            .clone();
+        w.agent_sessions
+            .retain(|s| s.terminal.as_deref() != Some(shell.as_str()));
+        assert!(w.current_agent(&shell).is_none());
+        let mut seen = RecognitionStatus::default();
+        seen.terminal_agents
+            .insert(shell.clone(), mooring_core::agent::Agent::Codex);
+        seen.terminal_notes.insert(
+            shell.clone(),
+            TerminalNote {
+                note: "codex · 空闲 · 看不到对话".into(),
+                why: String::new(),
+            },
+        );
+        let dir = std::env::temp_dir().join(format!("mooring-unbound-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let list: rp::List = serde_json::from_value(list(&w, &seen, &dir.join("sock"))).unwrap();
+        let card = list.terminals.iter().find(|c| c.id == shell).unwrap();
+        assert_eq!(card.phase, rp::Phase::Shell);
+        assert_eq!(card.agent.as_deref(), Some("codex"));
+        assert_eq!(card.note.as_deref(), Some("codex · 空闲 · 看不到对话"));
+        assert!(list
+            .terminals
+            .iter()
+            .filter(|c| c.id != shell)
+            .all(|c| c.note.is_none()));
         let _ = std::fs::remove_dir_all(dir);
     }
 }
