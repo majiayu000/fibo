@@ -11,8 +11,6 @@ pub(super) struct DraggedCard {
     pub(super) id: String,
     pub(super) title: String,
     pub(super) from: Column,
-    /// It waits on you or failed: it moves once you answer it in its terminal.
-    pub(super) asks_you: bool,
 }
 impl gpui::Render for DraggedCard {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -99,6 +97,7 @@ pub(super) fn legal(from: Column, to: Column) -> bool {
 /// Why a card cannot go where it was dropped, named by where it came from.
 pub(super) fn refusal(from: Column) -> &'static str {
     match from {
+        Column::Needs => "要你处理的会话得先在终端里回答它",
         Column::Running => "在跑的状态由 Agent 自己决定",
         Column::Review => "等你验收只能拖到「做完了」，表示验收通过",
         Column::Todo => "待办只能拖到「在跑」来开始",
@@ -106,9 +105,6 @@ pub(super) fn refusal(from: Column) -> &'static str {
         Column::Stale => "很久没动的会话用「逐个清理」处理",
     }
 }
-
-/// Why a card marked 等你 / 出错 does not move: answering it moves it.
-pub(super) const ASKS_YOU: &str = "它在等你，先在终端里回答它";
 
 /// The note at the bottom of the board; `undo` puts that outcome back on that session.
 #[derive(Clone)]
@@ -169,10 +165,6 @@ impl Workbench {
         self.land(if accepted { slot } else { None }, cx);
         if card.from == to {
             cx.notify();
-            return;
-        }
-        if card.asks_you {
-            self.show_toast(ASKS_YOU.into(), None, true, cx);
             return;
         }
         if !legal(card.from, to) {
@@ -483,8 +475,8 @@ impl Workbench {
             .find(|p| p.id == space_id)
             .map_or("外部", |p| p.name.as_str());
         let live = live_terminal(&self.workspace, s).is_some();
-        // A card marked 等你 / 出错 shows that status, not its column's spinner.
-        let marked = super::board::asks_you(&self.workspace, s).is_some();
+        // 要你处理 tells 等你回答 from 出错 by the status's own dot.
+        let marked = column == Column::Needs;
         let status_icon = || {
             if marked {
                 dot(group).into_any_element()
@@ -555,7 +547,6 @@ impl Workbench {
                 id: s.id.clone(),
                 title: self.session_title(s),
                 from: column,
-                asks_you: false,
             };
             actions = actions.child(
                 super::overview::quiet(button("drawer-move", text))
@@ -806,8 +797,14 @@ mod tests {
         assert!(legal(Column::Todo, Column::Running));
         assert!(legal(Column::Review, Column::Done));
         assert!(legal(Column::Done, Column::Review));
-        for from in [Column::Running, Column::Stale] {
-            for to in [Column::Todo, Column::Running, Column::Review, Column::Done] {
+        for from in [Column::Needs, Column::Running, Column::Stale] {
+            for to in [
+                Column::Todo,
+                Column::Running,
+                Column::Needs,
+                Column::Review,
+                Column::Done,
+            ] {
                 assert!(!legal(from, to), "{from:?} → {to:?}");
             }
         }
@@ -816,7 +813,7 @@ mod tests {
 
     #[test]
     fn a_refused_drop_says_why() {
-        assert!(ASKS_YOU.contains("回答"));
+        assert!(refusal(Column::Needs).contains("回答"));
         assert!(refusal(Column::Running).contains("Agent"));
     }
 

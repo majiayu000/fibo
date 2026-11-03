@@ -1,6 +1,6 @@
-//! 鸟瞰 as a board (specs/overview-kanban/kanban-inbox.html): one column per stage, left to
-//! right in the order work moves. A session waiting on you or failed stays in its stage,
-//! marked and raised to the top, instead of jumping to a column of its own. Each card
+//! 鸟瞰 as a board (specs/overview-kanban/kanban.html): one column per thing you might do
+//! next, left to right in the order work moves; what waits on you or failed has its own
+//! column, 要你处理 (decided 11-02: five columns, the inbox variant is not done). Each card
 //! carries one colored mark, its space's gradient; everything else stays neutral so the
 //! status colors read first.
 use super::*;
@@ -16,6 +16,7 @@ use std::time::Duration;
 pub(super) enum Column {
     Todo,
     Running,
+    Needs,
     Review,
     Done,
     Stale,
@@ -52,6 +53,7 @@ impl Column {
         match self {
             Self::Todo => "待办",
             Self::Running => Status::Running.label(),
+            Self::Needs => "要你处理",
             Self::Review => Status::Review.label(),
             Self::Done => Status::Closed.label(),
             Self::Stale => Status::Stale.label(),
@@ -61,6 +63,7 @@ impl Column {
         match self {
             Self::Todo => "todo",
             Self::Running => "running",
+            Self::Needs => "needs",
             Self::Review => "review",
             Self::Done => "done",
             Self::Stale => "stale",
@@ -78,18 +81,14 @@ pub(super) fn column_of(w: &Workspace, s: &AgentSession, now: u64) -> Option<Col
     Some(match status {
         // Just opened, no turn yet: nothing to put on a card.
         Status::Fresh => return None,
-        // Waiting on you or failed: still at the running stage, marked. 等后台 counts
-        // with 在跑. A turn you stopped ended, so it waits for your next step with the
-        // finished ones.
-        Status::Running | Status::Background | Status::Waiting | Status::Error => Column::Running,
+        // 等后台 counts with 在跑. Waiting on you or failed: 要你处理, the sidebar's group
+        // of the same name. A turn you stopped ended, so it waits for your next step
+        // with the finished ones.
+        Status::Running | Status::Background => Column::Running,
+        Status::Waiting | Status::Error => Column::Needs,
         Status::Stale => Column::Stale,
         Status::Review | Status::Paused | Status::Deferred | Status::Closed => Column::Review,
     })
-}
-/// The mark on a card whose Agent waits on you or failed: that group, or `None`.
-pub(super) fn asks_you(w: &Workspace, s: &AgentSession) -> Option<Status> {
-    let g = status_of(w, s);
-    g.needs_you().then_some(g)
 }
 const DAY: u64 = 86_400;
 fn completed_within(w: &Workspace, id: &str, now: u64, window: u64) -> bool {
@@ -278,6 +277,9 @@ fn animated_column_icon(column: Column, animate: bool) -> gpui::AnyElement {
             ))
             .into_any_element();
     }
+    if !animate && column == Column::Needs {
+        return icon("icons/target.svg", Status::Waiting.colors().0).into_any_element();
+    }
     match column {
         Column::Todo => icon("icons/dashed.svg", T::color(T::muted())).into_any_element(),
         Column::Stale => icon("icons/dashed.svg", Status::Stale.colors().0).into_any_element(),
@@ -293,6 +295,20 @@ fn animated_column_icon(column: Column, animate: bool) -> gpui::AnyElement {
                         )))
                         .into_any_element(),
                 ))
+                .into_any_element()
+        }
+        Column::Needs => {
+            // A halo that grows from the target and fades, once per HALO.
+            let hue = Status::Waiting.colors().0;
+            let t = super::pace::phase(HALO);
+            let k = 0.7 + 0.8 * t;
+            frame()
+                .child(overlay(
+                    icon("icons/ring.svg", hue.opacity(0.7 * (1. - t)))
+                        .with_transformation(Transformation::scale(gpui::size(k, k)))
+                        .into_any_element(),
+                ))
+                .child(icon("icons/target.svg", hue))
                 .into_any_element()
         }
         Column::Done => frame()
@@ -364,16 +380,19 @@ impl Workbench {
         self.sort_column(c, &mut list);
         list
     }
-    fn sort_column(&self, _c: Column, list: &mut [&AgentSession]) {
-        // Cards that wait on you come first: an Agent holding a live terminal for you, then
-        // what has waited longest. The rest follow, latest first.
-        list.sort_by_key(|s| {
-            let at = i128::from(self.session_updated(s));
-            match asks_you(&self.workspace, s) {
-                Some(_) => (false, !needs_attention(&self.workspace, s), at),
-                None => (true, false, -at),
-            }
-        });
+    fn sort_column(&self, c: Column, list: &mut [&AgentSession]) {
+        // An Agent holding a live terminal for you comes first, then what has waited
+        // longest; elsewhere the latest comes first.
+        if c == Column::Needs {
+            list.sort_by_key(|s| {
+                (
+                    !needs_attention(&self.workspace, s),
+                    self.session_updated(s),
+                )
+            });
+        } else {
+            list.sort_by_key(|s| std::cmp::Reverse(self.session_updated(s)));
+        }
     }
     pub(super) fn board_view(
         &self,
@@ -401,7 +420,7 @@ impl Workbench {
             )
             .into_any_element(),
         ];
-        let mut shown = vec![Column::Running, Column::Review, Column::Done];
+        let mut shown = vec![Column::Running, Column::Needs, Column::Review, Column::Done];
         if self.overview.show_stale {
             shown.push(Column::Stale);
         }
@@ -594,14 +613,6 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         use super::board_drawer::{DraggedCard, legal};
-        let asking = if column == Column::Running {
-            self.column_sessions(column, now())
-                .iter()
-                .filter(|s| asks_you(&self.workspace, s).is_some())
-                .count()
-        } else {
-            0
-        };
         // The slot stays above the virtual viewport, so it remains visible even
         // when the receiving column is scrolled away from its first item.
         let slot = (cx.has_active_drag()
@@ -683,7 +694,7 @@ impl Workbench {
                     .gap(px(T::S8))
                     .child({
                         let spin = active && count > 0;
-                        if spin && column == Column::Running {
+                        if spin && matches!(column, Column::Running | Column::Needs) {
                             super::pace::wake(&MOTION, MOTION_STEP, cx);
                         }
                         animated_column_icon(column, spin)
@@ -699,19 +710,6 @@ impl Workbench {
                             .text_color(T::color(T::muted()))
                             .child(count.to_string()),
                     )
-                    .when(asking > 0, |d| {
-                        let hue = Status::Waiting.colors().0;
-                        d.child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(T::S4))
-                                .text_size(px(T::META))
-                                .text_color(hue)
-                                .child(div().size(px(T::S6)).rounded_full().bg(hue))
-                                .child(format!("{asking} 等你")),
-                        )
-                    })
                     .child(div().flex_1())
                     .when(column == Column::Stale && count > 0, |d| {
                         d.child(
@@ -839,7 +837,6 @@ impl Workbench {
                     id: id.clone(),
                     title: task.title.clone(),
                     from: Column::Todo,
-                    asks_you: false,
                 },
                 super::board_drawer::lift_card(cx.entity().downgrade()),
             )
@@ -901,7 +898,8 @@ impl Workbench {
     ) -> gpui::Stateful<gpui::Div> {
         let enter = session.clone();
         let menu_id = session.id.clone();
-        let asks_you = asks_you(&self.workspace, session);
+        // 要你处理's cards say what they wait on: the status, its age and the question.
+        let asks_you = (column == Column::Needs).then(|| status_of(&self.workspace, session));
         let content = self.workspace.content.get(&session.id);
         let space_id = session_space(&self.workspace, session).unwrap_or("外部");
         let space_name = self
@@ -973,20 +971,6 @@ impl Workbench {
             .filter(|q| !q.trim().is_empty() && q.trim() != title.trim());
 
         card_frame(gpui::SharedString::from(format!("card-{}", session.id)))
-            .when_some(asks_you, |d, g| {
-                // Marked in place: the status hue on the border and a bar down the left.
-                let hue = g.colors().0;
-                d.border_color(hue.opacity(0.55)).child(
-                    div()
-                        .absolute()
-                        .left(px(-T::BORDER_WIDTH))
-                        .top(px(T::S10))
-                        .bottom(px(T::S10))
-                        .w(px(T::BOARD_FLAG))
-                        .rounded_r(px(T::BOARD_FLAG))
-                        .bg(hue),
-                )
-            })
             .group(hover_group.clone())
             .aria_label(gpui::SharedString::from(format!(
                 "会话：{}",
@@ -1002,7 +986,6 @@ impl Workbench {
                     id: session.id.clone(),
                     title: title.clone(),
                     from: column,
-                    asks_you: asks_you.is_some(),
                 },
                 super::board_drawer::lift_card(cx.entity().downgrade()),
             )
@@ -1094,13 +1077,10 @@ impl Workbench {
                         )
                     }),
             )
-            .when(
-                column == Column::Running && animate && asks_you.is_none(),
-                |d| {
-                    super::pace::wake(&MOTION, MOTION_STEP, cx);
-                    d.child(sweep())
-                },
-            )
+            .when(column == Column::Running && animate, |d| {
+                super::pace::wake(&MOTION, MOTION_STEP, cx);
+                d.child(sweep())
+            })
             .when(self.overview.card_menu.as_ref() == Some(&session.id), |d| {
                 d.child(
                     gpui::deferred(
@@ -1148,6 +1128,8 @@ fn card_title(text: impl Into<gpui::SharedString>) -> gpui::Div {
 /// One turn of the running column's arc, and one pass of a working card's comet.
 const SPIN: Duration = Duration::from_millis(1600);
 const SWEEP: Duration = Duration::from_millis(2400);
+/// One pulse of 要你处理's halo.
+const HALO: Duration = Duration::from_millis(2000);
 /// The board's motion advances 20 times a second, not on every display frame: a frame
 /// redraws the whole board, and at 120 Hz the arc and comets alone held a quarter core.
 /// At 20 steps the arc turns 4.5° and a comet moves about 7 px a step.
