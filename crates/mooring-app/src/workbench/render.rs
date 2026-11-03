@@ -17,7 +17,7 @@ impl Render for Workbench {
             }
             self.layout.revealed_tab = self.nav.tab.clone();
         }
-        self.open_pending_route(window, cx);
+        self.before_render(window, cx);
         // The overview and 逐个清理 take the main area beside the sidebar; the top bar,
         // sidebar and tab strip stay, so leaving is a click in the same place or Esc.
         let page = if self.tasks.form.is_some() {
@@ -219,7 +219,7 @@ impl Render for Workbench {
         } else {
             tail.extend(self.phones_button(cx).map(|b| b.into_any_element()));
         }
-        let sidebar = self.sidebar_view(space_name, cx);
+        let sidebar = self.cached_sidebar(window, cx);
         let current = self
             .workspace
             .tabs
@@ -703,7 +703,7 @@ impl Render for Workbench {
         if self.phones.open {
             root = root.child(self.phones_panel(window, cx));
         }
-        root = root.children(self.statusbar_popover(cx));
+        root = root.children(self.overlays(cx));
         if let Some(position) = self.layout.icon_menu {
             root = root.child(self.icon_menu_view(position, window, cx));
         }

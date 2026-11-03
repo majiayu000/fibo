@@ -61,7 +61,8 @@ impl Workbench {
                 pane.peek = true;
                 pane
             });
-            cx.observe(&pane, |_, _, cx| cx.notify()).detach();
+            cx.observe(&pane, |this, _, cx| this.pane_changed(cx))
+                .detach();
             self.peek = Some(Peek {
                 terminal,
                 session: session.id.clone(),

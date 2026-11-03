@@ -46,6 +46,7 @@ pub struct Workbench {
     sidebar: sidebar_list::SidebarPrefs,
     /// A session's live screen floated over the current tab from the sidebar.
     peek: Option<peek::Peek>,
+    redraw: Option<redraw::Redraw>,
     phones: phones::Phones,
     /// Other machines shown under this one's sessions (docs/multi-machine/spec.md).
     machines: Vec<crate::machines::Remote>,
@@ -251,6 +252,7 @@ mod palette;
 use palette::Search;
 mod peek;
 mod phones;
+mod redraw;
 mod render;
 mod requests;
 mod sessions;
@@ -369,6 +371,7 @@ impl Workbench {
             settings: None,
             sidebar: sidebar_list::SidebarPrefs::load(),
             peek: None,
+            redraw: None,
             phones: Default::default(),
             machines: Self::start_machines(cx),
             statusbar: None,
@@ -524,8 +527,7 @@ impl Workbench {
         for id in ids {
             if !self.layout.panes.contains_key(&id) {
                 let pane = cx.new(|cx| Pane::new(self.store.socket(), &id, false, cx));
-                cx.observe(&pane, |_, _, cx| cx.notify()).detach();
-                Self::watch_pane(&pane, cx);
+                Self::adopt_pane(&pane, cx);
                 self.layout.panes.insert(id, pane);
             }
         }
@@ -625,17 +627,6 @@ impl Workbench {
                 }
                 cx.notify();
             });
-        })
-        .detach();
-    }
-    /// A pane's asks: `$EDITOR` for a ⌘-clicked `file:line` runs in a new tab.
-    pub(super) fn watch_pane(pane: &Entity<Pane>, cx: &mut Context<Self>) {
-        cx.subscribe(pane, |this, _, event, cx| match event {
-            crate::terminal::pane::PaneEvent::Run { command, cwd } => {
-                this.layout.pending_command = Some((command.clone(), cwd.clone()));
-                this.launch(false, None, cx);
-            }
-            crate::terminal::pane::PaneEvent::PinnedAsk => cx.notify(),
         })
         .detach();
     }

@@ -171,7 +171,8 @@ impl Workbench {
             let slot = remote.slot();
             let id = card.id.clone();
             let pane = cx.new(|cx| Pane::remote(slot, &id, cx));
-            cx.observe(&pane, |_, _, cx| cx.notify()).detach();
+            cx.observe(&pane, |this, _, cx| this.pane_changed(cx))
+                .detach();
             let title = shown_title(&card);
             self.peek = Some(Peek {
                 terminal: key,

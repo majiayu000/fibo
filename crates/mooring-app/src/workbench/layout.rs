@@ -2066,8 +2066,7 @@ impl Workbench {
                 .on_click(cx.listener(move |this, _, window, cx| {
                     let pane = cx.new(|cx| Pane::new(this.store.socket(), &takeover, true, cx));
                     window.focus(&pane.focus_handle(cx), cx);
-                    cx.observe(&pane, |_, _, cx| cx.notify()).detach();
-                    Self::watch_pane(&pane, cx);
+                    Self::adopt_pane(&pane, cx);
                     this.layout.panes.insert(takeover.clone(), pane);
                     cx.notify();
                 })),
