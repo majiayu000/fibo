@@ -86,6 +86,8 @@ impl Association {
                     }
                 }
             }
+            // A `continued-in` line read just now moves its terminal to the new session.
+            crate::recognition::follow_continued(&mut next, transcripts)?;
             if next.agent_sessions != host.workspace.agent_sessions
                 || next.content != host.workspace.content
             {

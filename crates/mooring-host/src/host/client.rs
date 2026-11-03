@@ -217,6 +217,8 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             });
             if crate::recognition::terminal_for_process(pid, &processes, &workspace).is_none()
                 && named.is_none()
+                && crate::recognition::continued_terminal(&workspace, runtime, &cli_session_id)
+                    .is_none()
             {
                 return Err(io::Error::other(
                     "Hook process is not a descendant of a managed terminal",

@@ -415,6 +415,11 @@ pub fn apply_hook(
             .iter()
             .any(|t| &t.id == id && t.state == ProcessState::Running)
     });
+    let binding = if traced.is_none() && named.is_none() {
+        Binding::Continued
+    } else {
+        Binding::Hook
+    };
     let terminal = match (traced, named) {
         (Some(traced), Some(named)) if traced != named => {
             return Err(io::Error::other(
@@ -423,11 +428,14 @@ pub fn apply_hook(
         }
         (Some(traced), _) => traced,
         (None, Some(named)) => named.to_owned(),
-        (None, None) => {
-            return Err(io::Error::other(
-                "Hook process is not a descendant of a managed terminal",
-            ));
-        }
+        (None, None) => match continued_terminal(workspace, runtime, cli_id) {
+            Some(t) => t,
+            None => {
+                return Err(io::Error::other(
+                    "Hook process is not a descendant of a managed terminal",
+                ));
+            }
+        },
     };
     if transcript.cli_id != cli_id {
         return Err(io::Error::other(
@@ -455,9 +463,70 @@ pub fn apply_hook(
             "Hook from an Agent nested in the terminal's Agent keeps the binding",
         ));
     }
-    let mut observed = bound(transcript, terminal, Binding::Hook);
+    let mut observed = bound(transcript, terminal, binding);
     observed.current = !ended;
     workspace.observe_agent(observed).map_err(io::Error::other)
+}
+/// Claude Code can hand a terminal's conversation to its background daemon: a forked
+/// session goes on outside the terminal's process tree, the old log ends with
+/// `continued-in`, and the terminal's CLI only shows it. The terminal whose conversation
+/// it continues, still showing that one or already this one, holds it.
+pub fn continued_terminal(workspace: &Workspace, runtime: Agent, cli_id: &str) -> Option<String> {
+    workspace
+        .agent_sessions
+        .iter()
+        .filter(|s| {
+            s.runtime == runtime
+                && workspace
+                    .content
+                    .get(&s.id)
+                    .is_some_and(|c| c.continued_in == cli_id)
+        })
+        .filter_map(|s| s.terminal.as_deref())
+        .find(|t| {
+            workspace
+                .terminals
+                .iter()
+                .any(|x| x.id == *t && x.state == ProcessState::Running)
+                && workspace.current_agent(t).is_some_and(|c| {
+                    c.runtime == runtime
+                        && (c.cli_session_id == cli_id
+                            || workspace
+                                .content
+                                .get(&c.id)
+                                .is_some_and(|x| x.continued_in == cli_id))
+                })
+        })
+        .map(str::to_owned)
+}
+/// Moves each terminal whose conversation went on in another session (its log says
+/// `continued-in`) to that session, once its transcript is known. The new session keeps
+/// the todo the old one worked on.
+pub fn follow_continued(workspace: &mut Workspace, transcripts: &[Transcript]) -> io::Result<()> {
+    loop {
+        let next = workspace.agent_sessions.iter().find_map(|s| {
+            let to = &workspace.content.get(&s.id)?.continued_in;
+            let terminal = s.terminal.clone().filter(|_| s.current && !to.is_empty())?;
+            let t = transcripts.iter().find(|t| {
+                t.runtime == s.runtime && &t.cli_id == to && t.cli_id != s.cli_session_id
+            })?;
+            Some((terminal, t.clone(), s.task.clone()))
+        });
+        let Some((terminal, transcript, task)) = next else {
+            return Ok(());
+        };
+        workspace
+            .observe_agent(bound(&transcript, terminal, Binding::Continued))
+            .map_err(io::Error::other)?;
+        if let Some(s) = workspace
+            .agent_sessions
+            .iter_mut()
+            .find(|s| s.runtime == transcript.runtime && s.cli_session_id == transcript.cli_id)
+            .filter(|s| s.task.is_none())
+        {
+            s.task = task;
+        }
+    }
 }
 /// Remember how each managed terminal's current conversation was started, while its
 /// process is still there to ask: a host back from a crash or reboot resumes with the same
@@ -548,6 +617,10 @@ pub fn reconcile(
         if *binding == Binding::Process && hook_spoke(workspace, terminal, &transcript.cli_id) {
             continue;
         }
+        // The terminal's CLI may still hold the log it handed off; that session is over.
+        if handed_off(workspace, transcript) {
+            continue;
+        }
         if bindings.iter().filter(|(id, ..)| id == terminal).count() != 1
             || bindings
                 .iter()
@@ -563,7 +636,15 @@ pub fn reconcile(
             .observe_agent(bound(transcript, terminal.clone(), *binding))
             .map_err(io::Error::other)?;
     }
-    Ok(())
+    follow_continued(workspace, transcripts)
+}
+fn handed_off(workspace: &Workspace, t: &Transcript) -> bool {
+    workspace
+        .agent_sessions
+        .iter()
+        .find(|s| s.runtime == t.runtime && s.cli_session_id == t.cli_id)
+        .and_then(|s| workspace.content.get(&s.id))
+        .is_some_and(|c| !c.continued_in.is_empty())
 }
 /// An id on argv is fixed for the life of the process; the CLI's own hook follows the
 /// conversation. Once the hook has named what runs in this terminal (`/clear` or `/resume`
@@ -1545,5 +1626,144 @@ mod tests {
             workspace.current_agent("pty").unwrap().cli_session_id,
             "two"
         );
+    }
+
+    #[test]
+    fn a_conversation_handed_to_the_claude_daemon_stays_with_its_terminal() {
+        let mut w = Workspace::default();
+        let [a, b, other] = [0, 1, 2].map(|_| uuid::Uuid::new_v4().to_string());
+        w.terminals.push(Terminal {
+            id: "pty-0".into(),
+            space: "s".into(),
+            argv: vec!["zsh".into()],
+            cwd: "/same".into(),
+            pid: Some(100),
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
+        // The terminal's Claude only shows it now; the daemon runs the forked session `b`.
+        let processes = vec![
+            Process {
+                pid: 101,
+                parent: 100,
+                runtime: Some(Agent::Claude),
+                cli_session_id: None,
+                no_daemon: false,
+                launch: vec![],
+            },
+            Process {
+                pid: 300,
+                parent: 1,
+                runtime: Some(Agent::Claude),
+                cli_session_id: None,
+                no_daemon: false,
+                launch: vec![],
+            },
+            Process {
+                pid: 301,
+                parent: 300,
+                runtime: Some(Agent::Claude),
+                cli_session_id: Some(b.clone()),
+                no_daemon: false,
+                launch: vec![],
+            },
+        ];
+        let log = |id: &str| Transcript {
+            runtime: Agent::Claude,
+            cli_id: id.into(),
+            path: format!("/same/{id}.jsonl"),
+            cwd: "/same".into(),
+            updated: 1,
+        };
+        let (ta, tb, tc) = (log(&a), log(&b), log(&other));
+        apply_hook(
+            &mut w,
+            Agent::Claude,
+            101,
+            Some("pty-0"),
+            &a,
+            &ta,
+            &processes,
+            false,
+        )
+        .unwrap();
+        let first = w.current_agent("pty-0").unwrap().id.clone();
+        w.agent_sessions[0].task = Some("todo".into());
+        let current = |w: &Workspace| w.current_agent("pty-0").map(|s| s.cli_session_id.clone());
+        // Before the old log says where it went, a daemon's hook belongs to nobody.
+        assert!(apply_hook(&mut w, Agent::Claude, 301, None, &b, &tb, &processes, false).is_err());
+        w.content.insert(
+            first.clone(),
+            mooring_core::content::Content {
+                continued_in: b.clone(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            continued_terminal(&w, Agent::Claude, &b).as_deref(),
+            Some("pty-0")
+        );
+        assert_eq!(continued_terminal(&w, Agent::Claude, &other), None);
+        assert!(
+            apply_hook(
+                &mut w,
+                Agent::Claude,
+                301,
+                None,
+                &other,
+                &tc,
+                &processes,
+                false
+            )
+            .is_err(),
+            "only the session the log names"
+        );
+        apply_hook(&mut w, Agent::Claude, 301, None, &b, &tb, &processes, false).unwrap();
+        assert_eq!(current(&w), Some(b.clone()));
+        assert_eq!(
+            w.current_agent("pty-0").unwrap().binding,
+            Some(Binding::Continued)
+        );
+        // Its next hooks (Stop, approvals) keep reaching the terminal.
+        apply_hook(&mut w, Agent::Claude, 301, None, &b, &tb, &processes, false).unwrap();
+        assert_eq!(current(&w), Some(b.clone()));
+        // The old log held open by the terminal's Claude does not take it back.
+        let open = HashMap::from([(101, vec![ta.path.clone()])]);
+        reconcile(&mut w, &[ta.clone(), tb.clone()], &processes, &open).unwrap();
+        assert_eq!(current(&w), Some(b.clone()));
+
+        // Without hooks the log alone moves the terminal, and the todo goes along.
+        let mut w = Workspace {
+            terminals: w.terminals.clone(),
+            ..Default::default()
+        };
+        apply_hook(
+            &mut w,
+            Agent::Claude,
+            101,
+            Some("pty-0"),
+            &a,
+            &ta,
+            &processes,
+            false,
+        )
+        .unwrap();
+        let first = w.current_agent("pty-0").unwrap().id.clone();
+        w.agent_sessions[0].task = Some("todo".into());
+        w.content.insert(
+            first,
+            mooring_core::content::Content {
+                continued_in: b.clone(),
+                ..Default::default()
+            },
+        );
+        reconcile(&mut w, std::slice::from_ref(&ta), &[], &HashMap::new()).unwrap();
+        assert_eq!(current(&w), Some(a.clone()), "the new log is not known yet");
+        reconcile(&mut w, &[ta, tb], &[], &HashMap::new()).unwrap();
+        assert_eq!(current(&w), Some(b));
+        let moved = w.current_agent("pty-0").unwrap();
+        assert_eq!(moved.binding, Some(Binding::Continued));
+        assert_eq!(moved.task.as_deref(), Some("todo"));
     }
 }

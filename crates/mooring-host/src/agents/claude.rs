@@ -7,6 +7,9 @@ use mooring_core::protocol::{TerminalNote, CLAUDE_TRANSCRIPT_OFF};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+/// Why a conversation's older session is not listed: it went on in another one.
+const CONTINUED: &str = "Claude 会话已转到另一个会话接着跑";
+
 pub struct Claude;
 impl Adapter for Claude {
     /// A Braille (up to 2.1.227) or half-circle (2.1.228 on) spinner opens the title while
@@ -187,6 +190,17 @@ impl Adapter for Claude {
             return;
         }
         parser.inherited = inherited(v, source);
+        // Handed to Claude Code's background daemon: the conversation goes on in a forked
+        // session, which holds this one's history. This turn is over here, and this copy
+        // would show the same conversation twice.
+        if ty == "continued-in" {
+            if let Some(next) = v["continuedInSessionId"].as_str().filter(|s| !s.is_empty()) {
+                parser.card.continued_in = next.to_owned();
+                parser.hide(CONTINUED);
+                parser.phase(Turn::Completed, "", at, source);
+            }
+            return;
+        }
         let msg = &v["message"];
         let blocks = &msg["content"];
         // The summary a compaction writes is shaped like a prompt but asks nothing:
@@ -203,6 +217,13 @@ impl Adapter for Claude {
             }
             let s = user_text(&said);
             if !s.is_empty() {
+                // Resumed here again: this session is the one in use once more.
+                if !parser.card.continued_in.is_empty() {
+                    parser.card.continued_in.clear();
+                    if parser.card.hidden_reason == CONTINUED {
+                        parser.card.hidden_reason.clear();
+                    }
+                }
                 parser.phase(Turn::Running, v["uuid"].as_str().unwrap_or(""), at, source);
                 parser.message(true, s, at, source, false);
             }

@@ -2017,4 +2017,39 @@ mod tests {
         assert_eq!(p.card.turn, Turn::Interrupted);
         assert_eq!(p.card.asks.len(), 2, "the interrupt line is not an ask");
     }
+
+    /// Claude Code 2.1.317 shape: a conversation handed to its background daemon ends its
+    /// log mid-turn with `continued-in`, and a forked session goes on with its history.
+    #[test]
+    fn claude_continued_in_ends_the_turn_here_and_hides_this_copy() {
+        let add = |p: &mut Parser, record: Value| {
+            p.add(
+                Agent::Claude,
+                &serde_json::to_vec(&record).unwrap(),
+                Source::default(),
+            )
+        };
+        let mut p = Parser::default();
+        add(
+            &mut p,
+            json!({"type":"user","entrypoint":"cli","userType":"external","cwd":"/w","sessionId":"a","timestamp":"2026-11-03T08:15:28Z","message":{"role":"user","content":"你帮我改啊"}}),
+        );
+        assert_eq!(p.card.turn, Turn::Running);
+        assert!(p.card.hidden_reason().is_none());
+        add(
+            &mut p,
+            json!({"type":"continued-in","timestamp":"2026-11-03T08:15:48.805Z","sessionId":"a","continuedInSessionId":"b"}),
+        );
+        assert_eq!(p.card.turn, Turn::Completed);
+        assert_eq!(p.card.continued_in, "b");
+        assert!(p.card.hidden_reason().is_some());
+        // `claude --resume a` later: this session is in use again.
+        add(
+            &mut p,
+            json!({"type":"user","entrypoint":"cli","userType":"external","cwd":"/w","sessionId":"a","timestamp":"2026-11-03T09:00:00Z","message":{"role":"user","content":"接着来"}}),
+        );
+        assert_eq!(p.card.turn, Turn::Running);
+        assert!(p.card.continued_in.is_empty());
+        assert!(p.card.hidden_reason().is_none());
+    }
 }

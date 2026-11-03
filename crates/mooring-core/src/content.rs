@@ -122,6 +122,11 @@ pub struct Content {
     /// evidence the host adds to its snapshot; stored, every one is `job: false`.
     #[serde(default)]
     pub shells: Vec<ShellTask>,
+    /// The session this conversation went on in, when its CLI handed it to another one
+    /// (Claude Code's `continued-in` record: a forked session run by its background daemon).
+    /// Empty while this session is the one in use.
+    #[serde(default)]
+    pub continued_in: String,
 }
 /// A background shell the agent started and left running when its turn stopped.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -229,6 +229,9 @@ pub enum Binding {
     OpenFile,
     /// The newest prompt shows on exactly one screen, or was submitted there.
     Screen,
+    /// The conversation this terminal ran went on in this session, run by the CLI outside
+    /// the terminal (Claude Code's background daemon); the terminal only shows it.
+    Continued,
 }
 impl Binding {
     pub fn label(self) -> &'static str {
@@ -237,6 +240,7 @@ impl Binding {
             Self::Hook => "Agent 的 Hook 上报",
             Self::OpenFile => "进程打开的对话文件",
             Self::Screen => "画面上的提示词",
+            Self::Continued => "日志写明从这个终端的会话接着跑",
         }
     }
 }
