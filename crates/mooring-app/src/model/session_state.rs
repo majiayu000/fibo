@@ -3,14 +3,8 @@ use super::time::now;
 use mooring_core::model::*;
 use std::collections::{HashMap, HashSet};
 
+pub use mooring_core::status::Phase;
 pub use mooring_core::status::{Status, live_terminal};
-/// What a live agent in a Mooring terminal is doing right now.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Phase {
-    Working,
-    Waiting,
-    Idle,
-}
 /// A terminal with no live conversation whose program reports its own status (OSC 7501):
 /// the dot and the line its pane and sidebar row show.
 pub fn report_view(
@@ -71,11 +65,7 @@ pub fn resume_terminal<'a>(
 /// terminal. A projection of [`status_of`], never a second judgment.
 pub fn live_phase(w: &Workspace, s: &AgentSession) -> Option<Phase> {
     live_terminal(w, s)?;
-    Some(match status_of(w, s) {
-        Status::Waiting => Phase::Waiting,
-        Status::Running => Phase::Working,
-        _ => Phase::Idle,
-    })
+    Some(status_of(w, s).phase())
 }
 /// "Done" versus "idle": a turn that ends out of view stays unseen until its
 /// pane is shown; one that ends in view, or any other phase, is seen.
@@ -257,9 +247,9 @@ pub fn session_status(w: &Workspace, unseen: &HashSet<String>, s: &AgentSession)
             && matches!(status, Status::Review | Status::Background | Status::Paused));
     (status, attention)
 }
-/// Waiting or failed in a Mooring terminal and not yet looked at.
+/// See `mooring_core::status::needs_you`: the one count of 要你处理.
 pub fn needs_attention(w: &Workspace, s: &AgentSession) -> bool {
-    s.managed() && s.outcome.needs_review(now()) && status_of(w, s).needs_you()
+    w.needs_you(s, now())
 }
 
 #[cfg(test)]

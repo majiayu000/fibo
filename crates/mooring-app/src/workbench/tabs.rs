@@ -124,6 +124,39 @@ impl Workbench {
             return;
         };
         let name = field.read(cx).text.trim().to_owned();
+        // A tab holding one conversation is named by naming the conversation: the name
+        // has one owner, which the sidebar, notifications and the phone all read.
+        let sole = self
+            .workspace
+            .agent_sessions
+            .iter()
+            .find(|s| {
+                s.current
+                    && self
+                        .workspace
+                        .sole_session_tab(s)
+                        .is_some_and(|t| t.id == tab.id)
+            })
+            .map(|s| {
+                (
+                    s.id.clone(),
+                    s.name.clone(),
+                    self.workspace.session_title(s),
+                )
+            });
+        if let Some((session, given, shown)) = sole {
+            // Keeping the shown name unchanged must not pin today's automatic one.
+            let name = if given.is_empty() && name == shown {
+                String::new()
+            } else {
+                name
+            };
+            if name != given {
+                self.edit(Edit::RenameSession { id: session, name }, cx);
+            }
+            cx.notify();
+            return;
+        }
         // Keeping the shown name unchanged must not pin today's automatic title.
         tab.title = if tab.title.is_empty() && name == self.tab_name(&tab, cx) {
             String::new()

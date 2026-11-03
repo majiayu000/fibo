@@ -102,7 +102,7 @@ impl Hooks {
                     event: e,
                     session: s.id.clone(),
                     agent: s.runtime.name().to_owned(),
-                    title: short(&c.title, 120),
+                    title: short(&w.session_title(s), 120),
                     cwd: s.cwd.clone(),
                     space,
                     detail: short(
@@ -114,7 +114,8 @@ impl Hooks {
                         500,
                     ),
                     at,
-                    terminal: None,
+                    // Which terminal it ran in, as `mooring list` names it.
+                    terminal: s.terminal.clone(),
                     exit_code: None,
                     duration_ms: None,
                 });

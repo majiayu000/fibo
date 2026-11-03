@@ -97,6 +97,8 @@ impl Store {
         let mut store = Self(db);
         let mut workspace = store.load()?;
         let before = workspace.clone();
+        // Names pinned on tabs before a name had one owner move onto their conversation.
+        workspace.adopt_tab_names();
         for terminal in &mut workspace.terminals {
             if !kept.contains(&terminal.id)
                 && matches!(

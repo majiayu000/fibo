@@ -40,11 +40,7 @@ fn session_notice(event: &str, w: &Workspace, id: &str, detail: &str, at: u64) -
         n.agent = s.runtime.name().to_owned();
         n.cwd = s.cwd.clone();
         n.terminal = s.terminal.clone();
-        n.title = w
-            .content
-            .get(id)
-            .map(|c| mooring_core::content::short(&c.title, 120))
-            .unwrap_or_default();
+        n.title = mooring_core::content::short(&w.session_title(s), 120);
         n.space = space_of(w, s.terminal.as_deref());
     }
     n

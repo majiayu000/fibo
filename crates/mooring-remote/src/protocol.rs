@@ -216,6 +216,15 @@ pub struct Card {
     pub approval: Option<String>,
     /// What it waits on the user for.
     pub waiting: Option<String>,
+    /// The state the desktop shows (`Status::key`: waiting, error, running, review…)
+    /// and its word; absent from hosts before 11-03 and for shells.
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub status_label: Option<String>,
+    /// Waiting on you or failed, as the desktop counts 要你处理.
+    #[serde(default)]
+    pub needs_you: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

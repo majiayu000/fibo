@@ -21,6 +21,11 @@ export type Card = {
   title?: string | null;
   approval?: string | null;
   waiting?: string | null;
+  /** The desktop's state (`Status::key`) and its word; absent from hosts before 11-03. */
+  status?: string | null;
+  status_label?: string | null;
+  /** Waiting on you or failed, counted as the desktop counts 要你处理. */
+  needs_you?: boolean;
 };
 
 export type Machine = {

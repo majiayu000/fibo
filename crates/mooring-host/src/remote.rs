@@ -389,6 +389,7 @@ fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
 
 /// Spaces and running terminals as cards: what each Agent is doing and what it asks.
 fn list(w: &Workspace, socket: &Path) -> Value {
+    let now = mooring_core::content::now();
     let terminals: Vec<_> = w
         .terminals
         .iter()
@@ -403,6 +404,7 @@ fn list(w: &Workspace, socket: &Path) -> Value {
                 Phase::None => rp::Phase::Shell,
             };
             let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
+            let status = control::status(w, &t.id);
             rp::Card {
                 id: t.id.clone(),
                 space: t.space.clone(),
@@ -411,9 +413,12 @@ fn list(w: &Workspace, socket: &Path) -> Value {
                 phase,
                 agent: session.map(|s| control::agent_label(s.runtime).to_owned()),
                 session: session.map(|s| s.id.clone()),
-                title: content.map(|c| if c.name.is_empty() { &c.title } else { &c.name }.clone()),
+                title: session.map(|s| w.session_title(s)),
                 approval: content.and_then(|c| said(&c.approval)),
                 waiting: content.and_then(|c| said(&c.waiting)),
+                status: status.map(|s| s.key().to_owned()),
+                status_label: status.map(|s| s.label().to_owned()),
+                needs_you: session.is_some_and(|s| w.needs_you(s, now)),
             }
         })
         .collect();

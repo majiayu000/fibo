@@ -1,5 +1,6 @@
 //! Driving Mooring terminals from scripts and other Agents: list them, read a screen, send text, prompt an Agent and wait.
-use mooring_core::{content::Turn, model::*, protocol::*};
+use mooring_core::status::{self, Status};
+use mooring_core::{model::*, protocol::*};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -71,28 +72,27 @@ impl Phase {
         }
     }
 }
+/// Read from `status::of`, the one place a session's state is decided, so `list`,
+/// `wait` and the phone never disagree with the window.
 pub fn phase(w: &Workspace, terminal: &str) -> Phase {
-    let Some(s) = w.current_agent(terminal) else {
-        return Phase::None;
-    };
-    match w.content.get(&s.id) {
-        None => Phase::Idle,
-        Some(c) => match c.turn {
-            Turn::Waiting => Phase::Waiting,
-            Turn::Running => Phase::Working,
-            Turn::Completed if c.background.is_some_and(|b| b.keeps_working()) => Phase::Working,
-            _ => Phase::Idle,
-        },
+    match status(w, terminal).map(Status::phase) {
+        None => Phase::None,
+        Some(status::Phase::Working) => Phase::Working,
+        Some(status::Phase::Waiting) => Phase::Waiting,
+        Some(status::Phase::Idle) => Phase::Idle,
     }
+}
+/// The state of the conversation current in a terminal, as the window shows it.
+pub fn status(w: &Workspace, terminal: &str) -> Option<Status> {
+    w.current_agent(terminal)
+        .map(|s| status::of(w, s, mooring_core::content::now()))
 }
 /// The registry key in lower case, the way the CLI is usually typed.
 pub(crate) fn agent_label(agent: mooring_core::agent::Agent) -> String {
     agent.key().to_lowercase()
 }
 pub(crate) fn tab_title(w: &Workspace, terminal: &str) -> String {
-    w.terminal_tab(terminal)
-        .map(|t| t.title.clone())
-        .unwrap_or_default()
+    w.terminal_tab_title(terminal)
 }
 /// A full id, a unique id prefix, or a unique tab title, among running terminals.
 pub fn resolve(w: &Workspace, needle: &str) -> io::Result<String> {
@@ -379,6 +379,8 @@ fn list(a: Args) -> io::Result<()> {
                     "id": t.id, "cwd": t.cwd, "tab": tab,
                     "agent": s.map(|s| agent_label(s.runtime)),
                     "phase": phase.name(),
+                    "status": status(&w, &t.id).map(Status::key),
+                    "status_label": status(&w, &t.id).map(Status::label),
                     "session": s.map(|s| &s.cli_session_id),
                 })
             })
@@ -949,7 +951,7 @@ fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<
     let placed = after.terminal_tab(&id);
     Ok(Opened {
         tab: placed.map(|t| t.id.clone()),
-        tab_title: placed.map(|t| t.title.clone()).unwrap_or_default(),
+        tab_title: after.terminal_tab_title(&id),
         id,
         beside,
         overflow: overflow.then_some(why),
@@ -1099,6 +1101,7 @@ mod tests {
         let mut w = fixture();
         assert_eq!(phase(&w, "aaaa2222"), Phase::None);
         assert_eq!(phase(&w, "aaaa1111"), Phase::Idle);
+        use mooring_core::content::Turn;
         let mut c = mooring_core::content::Content {
             turn: Turn::Waiting,
             ..Default::default()
@@ -1106,7 +1109,12 @@ mod tests {
         w.content.insert("s1".into(), c.clone());
         assert_eq!(phase(&w, "aaaa1111"), Phase::Waiting);
         c.turn = Turn::Running;
-        w.content.insert("s1".into(), c);
+        w.content.insert("s1".into(), c.clone());
         assert_eq!(phase(&w, "aaaa1111"), Phase::Working);
+        // A failed turn reads as the window reads it, not as a plain idle.
+        c.turn = Turn::Error;
+        w.content.insert("s1".into(), c);
+        assert_eq!(phase(&w, "aaaa1111"), Phase::Idle);
+        assert_eq!(status(&w, "aaaa1111"), Some(Status::Error));
     }
 }

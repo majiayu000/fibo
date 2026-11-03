@@ -19,14 +19,16 @@ function askForget(m: Machine) {
   ]);
 }
 
-const rank = (c: Card) => (c.approval || c.phase === 'waiting' ? 0 : c.phase === 'working' ? 1 : 2);
-
+// What needs you first, then what runs. The host decides both (`status::needs_you`,
+// `Status::label`); the fallbacks only serve hosts from before 11-03.
+const needsYou = (c: Card) => c.needs_you ?? Boolean(c.approval || c.phase === 'waiting');
+const rank = (c: Card) => (needsYou(c) ? 0 : c.phase === 'working' ? 1 : 2);
 
 function status(c: Card): string {
-  if (c.approval) return '等你审批';
+  if (c.status_label) return c.status_label;
   if (c.phase === 'waiting') return '等你回答';
-  if (c.phase === 'working') return '干活中';
-  return '空闲';
+  if (c.phase === 'working') return '在跑';
+  return c.phase === 'shell' ? '终端' : '等你验收';
 }
 
 function Row({ m, c, t }: { m: Machine; c: Card; t: Theme }) {

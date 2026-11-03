@@ -531,10 +531,21 @@ impl Workspace {
         titles: &std::collections::HashMap<String, String>,
         focused: Option<&str>,
     ) -> Option<String> {
+        let ids = self.tab_terminals(&tab.id);
+        // A tab holding one conversation is called what the conversation is called,
+        // everywhere the same: `session_name` is the one owner of that name.
+        let mut live = self
+            .agent_sessions
+            .iter()
+            .filter(|s| s.current && s.terminal.as_ref().is_some_and(|id| ids.contains(id)));
+        if let (Some(only), None) = (live.next(), live.next())
+            && let Some(name) = self.session_name(only)
+        {
+            return Some(name);
+        }
         if !tab.title.trim().is_empty() {
             return Some(tab.title.clone());
         }
-        let ids = self.tab_terminals(&tab.id);
         let sessions: Vec<_> = self
             .agent_sessions
             .iter()
@@ -570,6 +581,14 @@ impl Workspace {
             .filter_map(|id| titles.get(id))
             .find(|t| !t.trim().is_empty())
             .cloned()
+    }
+    /// The tab name of a terminal as every surface outside the window shows it (the
+    /// CLI, the phone, plugins): `tab_title` without the titles programs set, which
+    /// only the window reads. Empty when the terminal sits in no tab.
+    pub fn terminal_tab_title(&self, terminal: &str) -> String {
+        self.terminal_tab(terminal)
+            .map(|tab| self.tab_title(tab, &std::collections::HashMap::new(), None))
+            .unwrap_or_default()
     }
     /// What runs in the tab's first pane: its agent, else its program ("zsh").
     fn tab_program(&self, tab: &Tab) -> String {
@@ -612,11 +631,6 @@ impl Workspace {
         if !named.is_empty() {
             return Some((named.to_owned(), NameSource::User));
         }
-        if let Some(title) = self.sole_session_tab(s).map(|t| t.title.trim())
-            && !title.is_empty()
-        {
-            return Some((title.to_owned(), NameSource::User));
-        }
         if let Some(task) = s
             .task
             .as_ref()
@@ -652,6 +666,10 @@ impl Workspace {
             o.id != s.id && o.current && o.terminal.as_ref().is_some_and(|id| ids.contains(id))
         });
         (!others).then_some(tab)
+    }
+    /// See `status::needs_you`, the one count of 要你处理.
+    pub fn needs_you(&self, s: &AgentSession, now: u64) -> bool {
+        crate::status::needs_you(self, s, now)
     }
     pub fn session_name(&self, s: &AgentSession) -> Option<String> {
         self.session_naming(s).map(|(name, _)| name)
@@ -742,13 +760,53 @@ impl Workspace {
                 }
             }
         }
+        let id = observed.id.clone();
         if let Some(index) = prior {
             self.agent_sessions[index] = observed;
         } else {
             self.agent_sessions.push(observed);
         }
+        self.adopt_tab_name(&id);
         self.revision += 1;
         Ok(())
+    }
+    /// A name is kept once, on the conversation. A tab named before (or without) its
+    /// Agent hands that name to the conversation it comes to hold alone, and stops
+    /// keeping its own; tabs with several conversations or none keep theirs.
+    pub fn adopt_tab_name(&mut self, session: &str) {
+        let Some(s) = self.agent_sessions.iter().find(|s| s.id == session) else {
+            return;
+        };
+        if !s.name.trim().is_empty() {
+            return;
+        }
+        let Some(tab) = self
+            .sole_session_tab(s)
+            .filter(|t| !t.title.trim().is_empty())
+            .map(|t| t.id.clone())
+        else {
+            return;
+        };
+        let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab) else {
+            return;
+        };
+        let name = std::mem::take(&mut tab.title);
+        if let Some(s) = self.agent_sessions.iter_mut().find(|s| s.id == session) {
+            s.name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        }
+    }
+    /// Moves names pinned on tabs onto the conversation each holds alone; run once
+    /// after loading a workspace saved before names had one owner.
+    pub fn adopt_tab_names(&mut self) {
+        let ids: Vec<String> = self
+            .agent_sessions
+            .iter()
+            .filter(|s| s.current)
+            .map(|s| s.id.clone())
+            .collect();
+        for id in ids {
+            self.adopt_tab_name(&id);
+        }
     }
     pub fn edit(&mut self, edit: Edit) -> Result<(), String> {
         match edit {
@@ -1278,18 +1336,27 @@ mod tests {
             },
         );
         assert_eq!(title(&w, &titles, 2), "评估接入 Kling v4 ESR");
+        // A name pinned on a tab (saved before names had one owner) moves onto the
+        // conversation the tab holds alone; both read that one name from then on.
         w.tabs[2].title = "kling".into();
+        w.adopt_tab_names();
+        assert!(w.tabs[2].title.is_empty());
         assert_eq!(title(&w, &titles, 2), "kling");
-        // The tab's name is its only conversation's name too, below one given to it.
         let s = w.agent_sessions[0].clone();
         assert_eq!(
             w.session_naming(&s),
             Some(("kling".into(), NameSource::User))
         );
-        w.agent_sessions[0].name = "接入 Kling".into();
-        let s = w.agent_sessions[0].clone();
-        assert_eq!(w.session_title(&s), "接入 Kling");
+        // Renaming the conversation renames its tab: one owner, no order to disagree on.
+        w.edit(Edit::RenameSession {
+            id: s.id.clone(),
+            name: "接入 Kling".into(),
+        })
+        .unwrap();
+        assert_eq!(title(&w, &titles, 2), "接入 Kling");
+        // The program title only names a tab whose conversation has no name at all.
         w.agent_sessions[0].name.clear();
+        w.content.clear();
         titles.insert("spare".to_owned(), "vim".to_owned());
         assert_eq!(title(&w, &titles, 1), "vim");
         titles.insert("other".to_owned(), "htop".to_owned());

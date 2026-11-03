@@ -212,7 +212,9 @@ static NSImage *offline_mark(void) {
     NSDictionary *counts=self.data[@"counts"];
     NSView *grid=fill(color(p[@"sunken"]),radius);grid.layer.borderColor=border.CGColor;grid.layer.borderWidth=1;
     NSStackView *cells=line_of(@[],0);cells.distribution=NSStackViewDistributionFillEqually;cells.alignment=NSLayoutAttributeTop;
-    NSArray *specs=@[@[@"waiting",@"等你回答",@"wait"],@[@"errors",@"出错",@"error"],@[@"review",@"等你验收",@"review"],@[@"running",@"在跑",@"running"]];
+    // Words from Status::label, sent with the counts; nothing spelled here.
+    NSDictionary *words=self.data[@"labels"];
+    NSArray *specs=@[@[@"waiting",text(words[@"waiting"]),@"wait"],@[@"errors",text(words[@"errors"]),@"error"],@[@"review",text(words[@"review"]),@"review"],@[@"running",text(words[@"running"]),@"running"]];
     for(NSArray *spec in specs) {
         NSInteger n=[counts[spec[0]] integerValue];
         NSTextField *value=label([NSString stringWithFormat:@"%ld",(long)n],[t[@"count"] doubleValue],n?NSFontWeightSemibold:NSFontWeightRegular,n?ink:muted);

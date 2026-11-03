@@ -78,7 +78,8 @@ fn cstring(value: &str) -> CString {
 }
 fn fact(w: &Workspace, s: &AgentSession) -> Option<(String, String)> {
     let c = w.content.get(&s.id)?;
-    if c.hidden_for(s).is_some() {
+    // Banners follow the one count of 要你处理: nothing the window would not list.
+    if !status::needs_you(w, s, now()) {
         return None;
     }
     let group = status::of(w, s, now());
@@ -190,7 +191,10 @@ fn panel(w: &Workspace, link: &Link) -> String {
             continue;
         }
         let group = status::of(w, s, at);
-        if !s.managed() && group.needs_you() {
+        let attention = status::needs_you(w, s, at);
+        // Waiting or failed but not yours to answer (outside Mooring, put off, closed
+        // tab): counted nowhere, as the window does.
+        if group.needs_you() && !attention {
             continue;
         }
         match group {
@@ -201,7 +205,7 @@ fn panel(w: &Workspace, link: &Link) -> String {
             State::Error => errors += 1,
             _ => (),
         };
-        if group.needs_you() {
+        if attention {
             let minutes = at.saturating_sub(c.updated) / 60;
             let meta = match space_name(w, s) {
                 Some(space) => format!("{space} · {}", s.runtime.name()),
@@ -269,6 +273,11 @@ fn panel(w: &Workspace, link: &Link) -> String {
         "counts": {
             "waiting": waiting, "errors": errors, "review": review,
             "running": running, "stale": stale,
+        },
+        // The words come from the one table every surface uses (`Status::label`).
+        "labels": {
+            "waiting": State::Waiting.label(), "errors": State::Error.label(),
+            "review": State::Review.label(), "running": State::Running.label(),
         },
         "section": section,
         "section_note": section_note,
@@ -425,12 +434,36 @@ mod tests {
     #[test]
     fn notifications_only_follow_new_attention_facts_and_opt_in() {
         let mut w = Workspace::default();
+        // A conversation live in a Mooring terminal open in a tab: the only kind that
+        // asks for you (`status::needs_you`).
+        w.spaces.push(Space {
+            id: "space".into(),
+            name: "工作空间".into(),
+            cwd: "/project".into(),
+        });
+        w.terminals.push(Terminal {
+            id: "pty".into(),
+            space: "space".into(),
+            argv: vec![],
+            cwd: "/project".into(),
+            pid: None,
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
+        w.tabs.push(Tab {
+            id: "tab".into(),
+            space: "space".into(),
+            default_task: None,
+            title: String::new(),
+            layout: Some(Layout::Leaf("pty".into())),
+        });
         let s = AgentSession {
             id: "s".into(),
             runtime: Agent::Codex,
             cli_session_id: "cli".into(),
             terminal: Some("pty".into()),
-            current: false,
+            current: true,
             task: None,
             outcome: Outcome::Open,
             updated: now(),
@@ -492,7 +525,10 @@ mod tests {
         let c = asked.content.get_mut("s").unwrap();
         c.waiting = "要继续吗？".into();
         c.waiting_episode += 1;
-        assert_eq!(entered(&renamed, &asked, None)[0].2, "发布前检查");
+        assert_eq!(
+            entered(&renamed, &asked, None)[0].2,
+            "工作空间 · 发布前检查"
+        );
         let mut scanned = previous.clone();
         scanned.agent_sessions[0].terminal = None;
         assert!(
@@ -524,6 +560,14 @@ mod tests {
             state: ProcessState::Running,
             exit_code: None,
             error: None,
+        });
+        // Open in a tab, as every terminal that can ask for you is.
+        w.tabs.push(Tab {
+            id: format!("tab-{id}"),
+            space: "space".into(),
+            default_task: None,
+            title: String::new(),
+            layout: Some(Layout::Leaf(format!("pty-{id}"))),
         });
         w.agent_sessions.push(AgentSession {
             id: id.into(),

@@ -101,6 +101,33 @@ impl Status {
     pub fn working(self) -> bool {
         matches!(self, Self::Running)
     }
+    /// The coarse phase scripts and the phone wait on: at work, asking you, or not
+    /// moving (everything else, failed included).
+    pub fn phase(self) -> Phase {
+        match self {
+            Self::Running => Phase::Working,
+            Self::Waiting => Phase::Waiting,
+            _ => Phase::Idle,
+        }
+    }
+}
+
+/// What a live Agent is doing at the coarsest grain, always taken from a `Status`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Phase {
+    Working,
+    Waiting,
+    Idle,
+}
+impl Phase {
+    /// The word `mooring list`, `mooring wait` and the phone protocol use.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Working => "working",
+            Self::Waiting => "waiting",
+            Self::Idle => "idle",
+        }
+    }
 }
 
 /// A terminal with no conversation whose program reports its own state (OSC 7501):
@@ -130,6 +157,22 @@ pub fn live_terminal<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a Termi
 /// turn state. An empty Claude reads as this, not as 等你验收.
 pub fn fresh(c: Option<&Content>) -> bool {
     c.is_none_or(|c| c.asks.is_empty() && c.turn == Turn::Unknown)
+}
+
+/// Whether a session asks for you now: waiting on you or failed, in a Mooring terminal
+/// that is open in a tab, not one you put off or closed, and not hidden as automation.
+/// The one place 要你处理 is counted: the window's chip and board, the menu bar, the
+/// phone and notifications all ask this.
+pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
+    let shown = match w.content.get(&s.id) {
+        Some(c) => c.hidden_for(s).is_none(),
+        None => s.current && s.binding.is_some(),
+    };
+    shown
+        && s.managed()
+        && live_terminal(w, s).is_some_and(|t| w.terminal_tab(&t.id).is_some())
+        && s.outcome.needs_review(now)
+        && of(w, s, now).needs_you()
 }
 
 /// The session's state now. The only place that decides it.
