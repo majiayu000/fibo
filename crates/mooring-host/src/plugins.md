@@ -63,11 +63,14 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 ## 设置项（`plugin.json` 的 `options`）
 
 ```json
-"options": [
-  {"key": "only_errors", "title": "只在出错时通知", "type": "boolean", "default": false, "description": "打开后只在出错时弹"},
-  {"key": "interval", "title": "间隔（秒）", "type": "number", "default": 300},
-  {"key": "sound", "title": "声音", "type": "choice", "choices": ["Glass", "Ping"], "default": "Glass"}
-]
+{
+  "api": 1, "id": "notify-me", "name": "通知我", "provides": ["hooks"],
+  "options": [
+    {"key": "only_errors", "title": "只在出错时通知", "type": "boolean", "default": false, "description": "打开后只在出错时弹"},
+    {"key": "interval", "title": "间隔（秒）", "type": "number", "default": 300},
+    {"key": "sound", "title": "声音", "type": "choice", "choices": ["Glass", "Ping"], "default": "Glass"}
+  ]
+}
 ```
 
 - `type`：`string`、`number`、`boolean`、`choice`（要写 `choices`）。`key` 只用小写字母、数字和 `_`，最多 20 个。

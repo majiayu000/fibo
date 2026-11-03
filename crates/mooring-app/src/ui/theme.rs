@@ -731,6 +731,8 @@ impl Theme {
     pub const DISABLED_OPACITY: f32 = 0.45;
     pub const SETTINGS_WIDTH: f32 = 940.;
     pub const SETTINGS_NAV: f32 = 164.;
+    /// A plugin setting being typed in its row.
+    pub const OPTION_FIELD: f32 = 220.;
     pub const FORM_TITLE: f32 = 16.;
     pub const TASK_ROW: f32 = 48.;
     pub const SEARCH_WIDTH: f32 = 360.;

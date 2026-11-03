@@ -173,7 +173,7 @@ impl SettingsView {
                 )
             }
             OptKind::String | OptKind::Number => match editing {
-                Some(field) => div().w(px(220.)).child(field),
+                Some(field) => div().w(px(T::OPTION_FIELD)).child(field),
                 None => {
                     let shown = Opt::text(&v);
                     let (pid, opt) = (id.to_owned(), o.clone());

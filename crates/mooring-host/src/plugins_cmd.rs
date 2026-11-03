@@ -546,6 +546,8 @@ mod tests {
                 "hooks",
                 "verify",
                 "complete",
+                "teardown",
+                "sources",
             ]
             .into_iter()
             .find(|k| value.get(k).is_some())
@@ -553,6 +555,8 @@ mod tests {
                 "presets" => "sidebar",
                 "verify" => "rules",
                 "complete" => "effects",
+                "teardown" => "setup",
+                "sources" => "quota",
                 other => other,
             });
             let Some(kind) = file else {
