@@ -3,8 +3,9 @@
 //! - `remote-devices.json`: one entry per phone, its own key, its role.
 //! - `remote-log.jsonl`: connections, refusals, and every send, keys and answer.
 //! - `remote-code`: the machine's code its phones find it by on a relay.
+//! - `remote-code-retired`: token hashes of the codes `--new-code` replaced.
 //! - `machine-id`: this machine's id, the same across restarts.
-use mooring_remote::{link::Link, protocol::Machine, secure::Code};
+use mooring_remote::{link::Link, protocol::Machine, secure::Code, wire};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::io::{self, Write};
@@ -216,15 +217,17 @@ pub fn machine(socket: &Path) -> Machine {
 }
 
 /// The machine's pairing code, made on first use, readable only by this user.
+/// A replaced code's token hash goes to `remote-code-retired`, so the relay can tell a
+/// phone still on it to pair again.
 pub fn machine_code(socket: &Path, new: bool) -> io::Result<Code> {
     let file = socket.with_file_name("remote-code");
-    if !new {
-        if let Some(code) = std::fs::read_to_string(&file)
-            .ok()
-            .and_then(|t| Code::parse(&t))
-        {
-            return Ok(code);
-        }
+    let kept = std::fs::read_to_string(&file)
+        .ok()
+        .and_then(|t| Code::parse(&t));
+    match kept {
+        Some(code) if !new => return Ok(code),
+        Some(old) => retire(socket, &old)?,
+        None => (),
     }
     let code = Code::generate()?;
     let tmp = file.with_extension("tmp");
@@ -237,6 +240,37 @@ pub fn machine_code(socket: &Path, new: bool) -> io::Result<Code> {
         .write_all(code.text().as_bytes())?;
     std::fs::rename(&tmp, &file)?;
     Ok(code)
+}
+
+fn retired_file(socket: &Path) -> PathBuf {
+    socket.with_file_name("remote-code-retired")
+}
+
+/// Token hashes of the codes this machine used before, newest last, at most
+/// [`wire::MAX_RETIRED`]; the relay hears them on register.
+pub fn retired(socket: &Path) -> Vec<String> {
+    std::fs::read_to_string(retired_file(socket))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| wire::is_token_hash(l))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn retire(socket: &Path, old: &Code) -> io::Result<()> {
+    let mut list = retired(socket);
+    list.push(wire::token_hash(&old.token()));
+    let start = list.len().saturating_sub(wire::MAX_RETIRED);
+    let path = retired_file(socket);
+    let tmp = path.with_extension("tmp");
+    let _ = std::fs::remove_file(&tmp);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&tmp)?
+        .write_all((list[start..].join("\n") + "\n").as_bytes())?;
+    std::fs::rename(&tmp, &path)
 }
 
 /// Pairs one more phone: its device entry, and the link its QR code carries.
@@ -315,9 +349,19 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600);
+        assert!(retired(&socket).is_empty());
         let b = machine_code(&socket, true).unwrap();
         assert_ne!(a, b);
         assert_eq!(machine_code(&socket, false).unwrap(), b);
+        // The replaced code is remembered by its token hash only, newest last, capped.
+        assert_eq!(retired(&socket), [wire::token_hash(&a.token())]);
+        for _ in 0..wire::MAX_RETIRED {
+            machine_code(&socket, true).unwrap();
+        }
+        let list = retired(&socket);
+        assert_eq!(list.len(), wire::MAX_RETIRED);
+        assert!(!list.contains(&wire::token_hash(&a.token())));
+        assert!(list.contains(&wire::token_hash(&b.token())));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

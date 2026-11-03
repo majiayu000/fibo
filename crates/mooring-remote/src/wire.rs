@@ -5,6 +5,8 @@ use sha2::{Digest, Sha256};
 
 /// The newest tunnel protocol spoken here.
 pub const PROTOCOL: u32 = 2;
+/// Old tokens a machine lists as retired; a relay keeps at most this many per machine.
+pub const MAX_RETIRED: usize = 8;
 /// Where a machine registers.
 pub const AGENT_PATH: &str = "/agent";
 /// The path after `/c/<token>` that reaches Mooring's remote protocol.
@@ -34,6 +36,11 @@ pub enum Frame {
         key: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         proto: Option<u32>,
+        /// Hashes of this machine's earlier tokens (before `--new-code`): while it is
+        /// registered, a phone still on one of them is told to pair again instead of
+        /// finding nothing. A relay that does not know the field ignores it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        retired: Vec<String>,
     },
     Registered {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -145,6 +152,7 @@ mod tests {
             ver: None,
             key: None,
             proto: Some(2),
+            retired: vec![],
         };
         assert_eq!(
             f.to_text(),

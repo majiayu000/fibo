@@ -2,6 +2,7 @@
 //! other languages to check themselves against. Run with `MOORING_WRITE_VECTORS=1` to
 //! write the file after a deliberate change; otherwise the bytes must not move.
 use mooring_remote::{
+    close,
     link::Link,
     secure::{self, Code, Message},
     wire::{self, bin},
@@ -65,6 +66,8 @@ fn vectors() -> Value {
             { "kind": bin::WBIN, "id": "w1", "payload": hex(&m1), "frame": hex(&wire::encode(bin::WBIN, "w1", &m1)) },
         ],
         "link": { "text": link.text(), "url": link.url().unwrap() },
+        "limits": { "chunk": secure::CHUNK, "window": secure::WINDOW },
+        "close": close::ALL.iter().map(|&(name, code)| (name.to_owned(), json!(code))).collect::<serde_json::Map<_, _>>(),
     })
 }
 
