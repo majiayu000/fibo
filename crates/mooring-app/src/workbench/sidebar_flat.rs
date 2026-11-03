@@ -260,7 +260,9 @@ impl Workbench {
     ) -> gpui::AnyElement {
         let open = session.clone();
         let selected = current == Some(session.id.as_str());
-        let two = detail.is_some();
+        let done = g == Status::Closed;
+        let unfolded = done && self.layout.done_open.as_deref() == Some(session.id.as_str());
+        let two = detail.is_some() || unfolded;
         let title_ink = match bucket(g) {
             Bucket::Attention | Bucket::Running | Bucket::Done => F::title(),
             Bucket::Stopped | Bucket::Fresh => F::quiet(),
@@ -359,7 +361,8 @@ impl Workbench {
                                 .text_color(asks_ink)
                                 .child(text.replacen(ASKS, "问：", 1)),
                         )
-                    }),
+                    })
+                    .when(unfolded, |d| d.child(self.done_card(session, cx))),
             )
             // The selected row's edge, drawn over it so it never moves the row's text.
             .when(selected, |d| {
@@ -396,10 +399,88 @@ impl Workbench {
                         this.rename_session(&open.id, window, cx);
                         return;
                     }
+                    // Done with: a click unfolds what it ended with instead of resuming it.
+                    if done {
+                        let id = Some(open.id.clone());
+                        this.layout.done_open = if this.layout.done_open == id {
+                            None
+                        } else {
+                            id
+                        };
+                        cx.notify();
+                        return;
+                    }
                     this.peek_or_open(&open, window, cx)
                 }),
             )
             .into_any_element()
+    }
+    /// Under an unfolded ✓ row: the first line it ended with, and the two ways back in.
+    fn done_card(&self, session: &AgentSession, cx: &Context<Self>) -> gpui::Div {
+        let said = self
+            .workspace
+            .content
+            .get(&session.id)
+            .and_then(|c| {
+                c.last_reply
+                    .lines()
+                    .map(mooring_core::content::plain_line)
+                    .find(|l| !l.is_empty())
+            })
+            .unwrap_or_else(|| "没有留下回复".into());
+        let (resume, undo) = (session.clone(), session.clone());
+        let action = |id: String, text: &'static str| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .px(px(T::S8))
+                .h(px(F::SUB_LINE + T::S6))
+                .flex()
+                .items_center()
+                .rounded(px(T::CONTROL_RADIUS))
+                .border(px(T::BORDER_WIDTH))
+                .border_color(ink(F::selected_line()))
+                .text_size(px(F::SUB))
+                .text_color(ink(F::second()))
+                .cursor_pointer()
+                .hover(|s| s.bg(ink(F::selected())).text_color(ink(F::title())))
+                .child(text)
+        };
+        div()
+            .mt(px(T::S4))
+            .flex()
+            .flex_col()
+            .gap(px(T::S6))
+            .child(
+                div()
+                    .text_size(px(F::SUB))
+                    .line_height(px(F::SUB_LINE))
+                    .text_color(ink(F::third()))
+                    .line_clamp(2)
+                    .child(said),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(T::S6))
+                    .child(
+                        action(format!("done-resume-{}", session.id), "继续对话").on_click(
+                            cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.layout.done_open = None;
+                                this.peek_or_open(&resume, window, cx)
+                            }),
+                        ),
+                    )
+                    .child(
+                        action(format!("done-undo-{}", session.id), "撤销完成").on_click(
+                            cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.layout.done_open = None;
+                                this.settle_session(&undo, Outcome::Open, false, cx)
+                            }),
+                        ),
+                    ),
+            )
     }
     /// The key to the next session that needs you.
     pub(super) fn flat_keys(&self, cx: &Context<Self>) -> gpui::Div {

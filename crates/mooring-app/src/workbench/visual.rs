@@ -1024,6 +1024,9 @@ impl Workbench {
                     },
                     cx,
                 );
+                // `-done`: the ✓ row unfolded, as a click on it leaves it.
+                self.layout.done_open =
+                    (parts.get(4) == Some(&"done")).then(|| "dense-s6".to_owned());
                 // `-shell`: the same turn ended with only a server left in a background
                 // shell: 等后台, read with the finished ones.
                 let shell = parts.get(4) == Some(&"shell");

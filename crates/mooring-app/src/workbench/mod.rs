@@ -438,6 +438,7 @@ impl Workbench {
                 menu: None,
                 tab_menu: None,
                 session_menu: None,
+                done_open: None,
                 space_menu: None,
                 space_removing: false,
                 space_switch: false,
