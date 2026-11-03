@@ -318,7 +318,8 @@ impl Workbench {
         let time = match end {
             End::Text(text) => text,
             End::Nothing => String::new(),
-            End::State => match self.turn_started(session) {
+            // Only a running turn ticks; a stopped, waking or closed row shows its age.
+            End::State => match self.turn_started(session).filter(|_| g == Status::Running) {
                 Some(at) => {
                     self.tick_turn(cx);
                     super::layout::turn_clock(now().saturating_sub(at))
