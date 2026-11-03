@@ -523,7 +523,7 @@ impl SettingsView {
                 .filter(|r| !r.ok && mooring_core::content::now().saturating_sub(r.at) < 7 * 86_400)
             {
                 note.push(format!(
-                    "上次运行出错（{}）：{}；终端里 mooring plugins log {} 看全部",
+                    "上次运行失败（{}）：{}；终端里 mooring plugins log {} 看全部",
                     last.what, last.detail, p.id
                 ));
             }

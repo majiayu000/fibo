@@ -138,12 +138,15 @@ mooring remote --revoke <设备编号或名字>   取消一台手机的配对，
     Command {
         name: "plugins",
         valued: &["dir"],
-        switches: &["json", "remote", "check"],
+        switches: &["json", "remote", "check", "yes"],
         usage: "\
 mooring plugins [--dir 目录] [--json]      检查插件能不能装上：哪个生效、哪个为什么没生效
 mooring plugins available [--remote]       列出可安装的插件（App 附带的，加 --remote 再查远程目录）
-mooring plugins install <id> [--remote]    安装或更新一个插件
+mooring plugins install <id> [--remote] [--yes]
+                                             安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
 mooring plugins uninstall <id>             卸载一个插件
+mooring plugins log <id>                   这个插件最近的运行和出过的错
+mooring plugins set <id> [<key> <值>]      看或改插件的设置项
 mooring plugins index <目录> [--check]     为插件目录生成 index.json（--check 只检查是否最新）",
     },
     Command {
