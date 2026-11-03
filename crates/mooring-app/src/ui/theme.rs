@@ -303,8 +303,6 @@ tokens!(
 pub struct Flat;
 impl Flat {
     pub const WIDTH: f32 = Theme::SIDEBAR;
-    /// The drag strip holding the traffic lights.
-    pub const TOP: f32 = 44.;
     pub const BRAND_ROW: f32 = 26.;
     pub const BRAND_TEXT: f32 = 11.;
     /// Letter spacing for MOORING, drawn as gaps between its letters.

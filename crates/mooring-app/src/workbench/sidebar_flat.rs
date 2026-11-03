@@ -43,14 +43,23 @@ pub(super) fn flat_state(g: Status) -> gpui::AnyElement {
 }
 
 impl Workbench {
-    /// The column's top: the traffic lights' strip, then MOORING, 本机 and the fold button.
+    /// The column's top: the traffic lights' strip with the fold button where the folded
+    /// window keeps it (beside the lights), then MOORING and 本机.
     pub(super) fn flat_head(&self, cx: &Context<Self>) -> gpui::Div {
         let letters = "MOORING".chars().map(|ch| div().child(ch.to_string()));
         div()
             .flex_shrink_0()
             .flex()
             .flex_col()
-            .child(div().h(px(F::TOP)).flex().child(self.title_drag_area(cx)))
+            .child(
+                div()
+                    .h(px(T::TOP))
+                    .pl(px(T::TRAFFIC_LIGHT_INSET))
+                    .flex()
+                    .items_center()
+                    .child(self.sidebar_toggle(cx))
+                    .child(self.title_drag_area(cx)),
+            )
             .child(
                 div()
                     .h(px(F::BRAND_ROW))
@@ -84,10 +93,6 @@ impl Workbench {
                                     .bg(Tone::Ok.dot()),
                             )
                             .child("本机"),
-                    )
-                    .child(
-                        self.flat_icon("sidebar-toggle", "icons/sidebar.svg", "收起侧栏")
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_sidebar(cx))),
                     ),
             )
     }
