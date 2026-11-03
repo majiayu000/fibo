@@ -1017,7 +1017,7 @@ impl Workbench {
                     .collect();
                 if !pinned.is_empty() {
                     out.push(
-                        self.heading("需要你".into(), pinned.len(), cx)
+                        self.heading(mooring_core::status::NEEDS_YOU.into(), pinned.len(), cx)
                             .into_any_element(),
                     );
                     for l in &pinned {
@@ -1162,7 +1162,7 @@ impl Workbench {
                         .text_size(px(T::CHIP_SIZE))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(Tone::Danger.ink())
-                        .child(format!("{needs} 需要你")),
+                        .child(format!("{needs} {}", mooring_core::status::NEEDS_YOU)),
                 )
             })
             .child(

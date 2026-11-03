@@ -114,11 +114,11 @@ const COLLAPSED: usize = 6;
 const MORE_STEP: usize = 20;
 const EXCERPT: usize = 90;
 /// The status counts above an empty query, as the top bar and 鸟瞰 name them.
-const COUNTED: [(Status, &str); 4] = [
-    (Status::Waiting, "等你"),
-    (Status::Error, "出错"),
-    (Status::Running, "在跑"),
-    (Status::Review, "等你验收"),
+const COUNTED: [Status; 4] = [
+    Status::Waiting,
+    Status::Error,
+    Status::Running,
+    Status::Review,
 ];
 impl Workbench {
     /// Every session search can show, newest first.
@@ -137,7 +137,7 @@ impl Workbench {
     fn counted_group(&self, s: &AgentSession) -> Option<Status> {
         let (group, _) = session_status(&self.workspace, &self.attention.unseen, s);
         let group = section(group);
-        (s.outcome.needs_review(now()) && COUNTED.iter().any(|(g, _)| *g == group)).then_some(group)
+        (s.outcome.needs_review(now()) && COUNTED.contains(&group)).then_some(group)
     }
     fn status_counts(&self) -> Vec<(Status, &'static str, usize)> {
         let groups: Vec<Status> = self
@@ -147,7 +147,7 @@ impl Workbench {
             .collect();
         COUNTED
             .iter()
-            .map(|(g, name)| (*g, *name, groups.iter().filter(|x| *x == g).count()))
+            .map(|g| (*g, g.label(), groups.iter().filter(|x| *x == g).count()))
             .collect()
     }
     /// A group's first rows and a 「再显示」 row for the rest.

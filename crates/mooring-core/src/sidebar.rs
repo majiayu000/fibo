@@ -6,6 +6,7 @@
 //! The four built-in presets (会话优先 / 经典 / 状态 / 目录) are written in this format too; plugins
 //! add presets beside them and never replace one.
 use crate::agent::Loaded;
+use crate::status::Status;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -58,12 +59,12 @@ impl Bucket {
     ];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Attention => "需要你",
-            Self::Running => "在跑",
-            Self::Done => "等你验收",
-            Self::Stopped => "停下了",
-            Self::Fresh => "新开的",
-            Self::Stale => "很久没动",
+            Self::Attention => crate::status::NEEDS_YOU,
+            Self::Running => Status::Running.label(),
+            Self::Done => Status::Review.label(),
+            Self::Stopped => Status::Paused.label(),
+            Self::Fresh => Status::Fresh.label(),
+            Self::Stale => Status::Stale.label(),
         }
     }
 }
@@ -185,7 +186,11 @@ fn read(file: &Path, taken: &[Preset]) -> Result<Vec<Preset>, String> {
             return Err(format!("左栏 {} 的 name 要写，最多 6 个字", p.id));
         }
         if p.fold.contains(&Bucket::Attention) {
-            return Err(format!("左栏 {} 不能折叠需要你的会话", p.id));
+            return Err(format!(
+                "左栏 {} 不能折叠「{}」的会话",
+                p.id,
+                crate::status::NEEDS_YOU
+            ));
         }
         if !(1..=100).contains(&p.limit) {
             return Err(format!("左栏 {} 的 limit 要在 1 到 100 之间", p.id));
@@ -312,7 +317,13 @@ mod tests {
         assert!(presets[4].folds(Bucket::Running));
         assert_eq!(report[0].result, Ok("安静".into()));
         assert!(report[1].result.as_ref().unwrap_err().contains("重名"));
-        assert!(report[2].result.as_ref().unwrap_err().contains("需要你"));
+        assert!(
+            report[2]
+                .result
+                .as_ref()
+                .unwrap_err()
+                .contains(crate::status::NEEDS_YOU)
+        );
         assert!(report[3].result.as_ref().unwrap_err().contains("格式不对"));
         let _ = std::fs::remove_dir_all(&d);
     }

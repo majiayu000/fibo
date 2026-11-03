@@ -61,7 +61,7 @@ impl Status {
             Self::Closed => "closed",
         }
     }
-    /// One word per state everywhere.
+    /// One word per state everywhere; nothing else spells these (tests/guard.rs).
     pub fn label(self) -> &'static str {
         match self {
             Self::Waiting => "等你回答",
@@ -158,6 +158,10 @@ pub fn live_terminal<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a Termi
 pub fn fresh(c: Option<&Content>) -> bool {
     c.is_none_or(|c| c.asks.is_empty() && c.turn == Turn::Unknown)
 }
+
+/// The name of the group `needs_you` counts (waiting on you or failed), wherever it is
+/// shown: the window's chip and board column, the menu bar, the sidebar's status group.
+pub const NEEDS_YOU: &str = "要你处理";
 
 /// Whether a session asks for you now: waiting on you or failed, in a Mooring terminal
 /// that is open in a tab, not one you put off or closed, and not hidden as automation.

@@ -1135,7 +1135,7 @@ impl Workbench {
         } else {
             Status::Error
         };
-        let text = "要你处理";
+        let text = mooring_core::status::NEEDS_YOU;
         let (dot_color, ink, wash) = group.colors();
         let key = crate::keymap::current(cx)
             .chords(crate::keymap::Action::NextWaiting)

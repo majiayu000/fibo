@@ -438,13 +438,17 @@ impl Workbench {
     ) -> gpui::Stateful<gpui::Div> {
         let (working, needs) = self.status_sessions();
         if working.is_empty() && needs.is_empty() {
-            return panel.child(label("没有工作中或等你的会话"));
+            return panel.child(label(format!(
+                "没有{}或{}的会话",
+                Status::Running.label(),
+                mooring_core::status::NEEDS_YOU
+            )));
         }
         let now = now();
         for (title, group, list) in [
             (format!("等你 {}", needs.len()), Status::Waiting, &needs),
             (
-                format!("工作中 {}", working.len()),
+                format!("{} {}", Status::Running.label(), working.len()),
                 Status::Running,
                 &working,
             ),

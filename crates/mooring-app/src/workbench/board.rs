@@ -53,7 +53,7 @@ impl Column {
         match self {
             Self::Todo => "待办",
             Self::Running => Status::Running.label(),
-            Self::Needs => "要你处理",
+            Self::Needs => mooring_core::status::NEEDS_YOU,
             Self::Review => Status::Review.label(),
             Self::Done => Status::Closed.label(),
             Self::Stale => Status::Stale.label(),
@@ -1060,7 +1060,7 @@ impl Workbench {
                             div()
                                 .text_size(px(T::META))
                                 .text_color(Status::Closed.colors().1)
-                                .child("✓ 已完成"),
+                                .child(format!("✓ {}", Status::Closed.label())),
                         )
                     })
                     .when(asks > 0, |d| {

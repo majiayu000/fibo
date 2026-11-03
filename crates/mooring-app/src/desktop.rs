@@ -232,14 +232,20 @@ fn panel(w: &Workspace, link: &Link) -> String {
     let (heading, when) = if offline {
         ("连不上后台".to_owned(), format!("数据停在 {stopped}"))
     } else if total == 0 {
-        ("没有需要你的".to_owned(), "刚刚更新".to_owned())
+        (
+            format!("没有{}的", status::NEEDS_YOU),
+            "刚刚更新".to_owned(),
+        )
     } else {
-        (format!("{total} 项需要你"), "刚刚更新".to_owned())
+        (
+            format!("{total} 项{}", status::NEEDS_YOU),
+            "刚刚更新".to_owned(),
+        )
     };
     let (section, section_note) = if offline {
-        (format!("{stopped} 时需要你"), "可能已经变了")
+        (format!("{stopped} 时{}", status::NEEDS_YOU), "可能已经变了")
     } else {
-        ("需要你".to_owned(), "等你在前，按时间")
+        (status::NEEDS_YOU.to_owned(), "等你在前，按时间")
     };
     // The empty view says what happens next instead of leaving a blank.
     let empty = (!offline && total == 0).then(|| {
@@ -641,7 +647,7 @@ mod tests {
             unreachable!()
         };
         let v = value(needs, link);
-        assert_eq!(v["heading"], "3 项需要你");
+        assert_eq!(v["heading"], "3 项要你处理");
         assert_eq!(v["when"], "刚刚更新");
         assert_eq!(v["badge"], "K 3");
         assert_eq!(v["needs"], 3);
@@ -687,7 +693,7 @@ mod tests {
         let samples = samples();
         let (_, none, link) = &samples[1];
         let v = value(none, link);
-        assert_eq!(v["heading"], "没有需要你的");
+        assert_eq!(v["heading"], "没有要你处理的");
         assert_eq!(v["badge"], "K");
         assert!(v["rows"].as_array().unwrap().is_empty());
         assert_eq!(v["empty"]["title"], "在跑的 2 个停下来要你时，会发系统通知");
@@ -706,7 +712,7 @@ mod tests {
         let stopped = minute(link.since);
         assert_eq!(v["heading"], "连不上后台");
         assert_eq!(v["when"], format!("数据停在 {stopped}"));
-        assert_eq!(v["section"], format!("{stopped} 时需要你"));
+        assert_eq!(v["section"], format!("{stopped} 时要你处理"));
         assert_eq!(v["section_note"], "可能已经变了");
         assert_eq!(v["badge"], "K", "the offline badge carries no count");
         assert_eq!(v["rows"].as_array().unwrap().len(), 3);
