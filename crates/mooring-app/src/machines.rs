@@ -17,6 +17,8 @@ const REPLY: Duration = Duration::from_secs(10);
 /// Events in a burst are one fresh list.
 const SETTLE: Duration = Duration::from_millis(150);
 const BACKOFF_MAX: Duration = Duration::from_secs(30);
+/// How stale the list may get when no event says anything changed.
+const REFRESH: Duration = Duration::from_secs(3);
 
 /// One machine as the user wrote it down, kept in `<config>/machines.json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,6 +220,7 @@ fn run_once(
     *slot.lock().unwrap() = Some(Arc::clone(&client));
     apply(view, Some(hello.machine), list);
     changed();
+    let mut listed = std::time::Instant::now();
     loop {
         if stop.load(Ordering::Relaxed) {
             return Ok(());
@@ -235,12 +238,23 @@ fn run_once(
                     }
                 }
                 let list: List = parse(client.request(Op::List, REPLY)?)?;
-                apply(view, None, list);
-                changed();
+                listed = std::time::Instant::now();
+                if apply(view, None, list) {
+                    changed();
+                }
             }
             Err(RecvTimeoutError::Timeout) => {
                 if let Some(why) = client.ended() {
                     return Err(io::Error::other(why));
+                }
+                // `events` only says when a session changes state; an Agent started in a
+                // plain terminal, a new title or a closed terminal is not one. Ask again.
+                if listed.elapsed() >= REFRESH {
+                    let list: List = parse(client.request(Op::List, REPLY)?)?;
+                    listed = std::time::Instant::now();
+                    if apply(view, None, list) {
+                        changed();
+                    }
                 }
             }
             Err(RecvTimeoutError::Disconnected) => {
@@ -259,12 +273,19 @@ fn not_running(e: io::Error) -> io::Error {
     }
 }
 
-fn apply(view: &Mutex<View>, machine: Option<Machine>, list: List) {
+/// Takes in a fresh list; says whether anything the window draws changed.
+fn apply(view: &Mutex<View>, machine: Option<Machine>, list: List) -> bool {
     let mut v = view.lock().unwrap();
+    let machine = machine.or(Some(list.machine));
+    let same = v.link == Link::Online
+        && v.machine == machine
+        && v.spaces == list.spaces
+        && v.terminals == list.terminals;
     v.link = Link::Online;
-    v.machine = machine.or(Some(list.machine));
+    v.machine = machine;
     v.spaces = list.spaces;
     v.terminals = list.terminals;
+    !same
 }
 
 fn parse<T: serde::de::DeserializeOwned>(v: serde_json::Value) -> io::Result<T> {
@@ -368,6 +389,23 @@ mod tests {
             r.view.lock().unwrap().terminals[1].status.as_deref(),
             Some("waiting")
         );
+    }
+
+    /// An Agent started in a plain terminal changes no session's state, so no event says so.
+    #[test]
+    fn a_change_without_an_event_still_shows_up() {
+        let (fake, connect) = fake();
+        let (tx, rx) = channel();
+        let spec = Spec {
+            host: "mac2".into(),
+            path: None,
+        };
+        let r = Remote::start(spec, connect, move || {
+            let _ = tx.send(());
+        });
+        wait(&rx, &r.view, |v| v.link == Link::Online);
+        fake.terminals.lock().unwrap().push(card("b", "review"));
+        wait(&rx, &r.view, |v| v.terminals.len() == 2);
     }
 
     #[test]
