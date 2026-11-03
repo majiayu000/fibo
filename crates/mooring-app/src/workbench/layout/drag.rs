@@ -153,8 +153,25 @@ impl Workbench {
             agent: self.pane_session(id).map(|s| s.runtime),
             grab: Point::default(),
         };
+        // Six dots in the middle of the bar while it is hovered: the handle to grab.
+        let dots = gpui::svg()
+            .path("icons/grip.svg")
+            .w(px(T::S20))
+            .h(px(T::S10))
+            .text_color(T::color(T::secondary()));
+        let handle = div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .opacity(0.)
+            .group_hover(grip_group(id), |s| s.opacity(1.))
+            .child(dots);
         bar.id(grip_group(id))
             .group(grip_group(id))
+            .relative()
+            .child(handle)
             .cursor(gpui::CursorStyle::ClosedHand)
             .hover(|s| s.cursor(gpui::CursorStyle::OpenHand))
             .on_drag(dragged, |p, grab, _, cx| {
