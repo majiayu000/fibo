@@ -15,5 +15,6 @@
       "default": false,
       "description": "打开后，等你回答和做完不再弹通知"
     }
-  ]
+  ],
+  "network": false
 }

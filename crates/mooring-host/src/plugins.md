@@ -44,6 +44,8 @@ mooring plugins            # 检查；有问题以 1 退出
 - `api` 固定写 `1`。`id` 只用小写字母、数字和 `-`，不超过 40 个字，最好和目录名一样；和别的插件重名时后一个不加载。
 - `name` 必填；`version`、`description` 可选；不认识的字段整份拒绝。
 - `files` 可选：插件还要带上的其他文件（命令要跑的脚本），相对插件目录写。不写进来的文件从插件目录安装时不会被带上。
+- `touches` 可选：setup 会改的别的程序的文件，如 `["~/.claude/settings.json"]`；`network` 可选：命令会不会联网。安装确认里照写给用户看，Mooring 不拦截，所以要如实写。
+- 命令行安装会跑命令的插件时先列出这些，交互终端里问 y/N，非交互（Agent、脚本）要加 `--yes`。
 - `mooring` 可选：插件需要的插件级别（现在是 2：`setup`、`quota`、`files` 是 2 级加的）。不写时按用到的类型和字段自动算，一般不用写。级别不够的 Mooring 会拒绝它并提示更新。
 - 新版本 Mooring 才有的类型和字段，旧版本会跳过并在设置页写一条警告，其余照常加载；只有一类都不认识时才整个不加载。
 - `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `setup` `quota` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。

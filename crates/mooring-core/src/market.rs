@@ -50,6 +50,11 @@ pub struct Entry {
     /// The plugin level it needs (`plugin::LEVEL`), when above 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mooring: Option<u32>,
+    /// Files of other programs it changes, and whether it goes online, as it declares.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub touches: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<bool>,
     pub files: Vec<FileEntry>,
 }
 
@@ -141,7 +146,29 @@ pub(crate) fn safe_path(path: &str) -> bool {
         })
 }
 
+/// What installing it means, for the confirmation: what its kinds may do, then the files
+/// of other programs it says it changes and whether it goes online. The last two are the
+/// plugin's own word; nothing enforces them.
+pub fn disclosure(provides: &[Kind], touches: &[String], network: Option<bool>) -> Vec<String> {
+    let mut out: Vec<String> = permissions(provides)
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    if !touches.is_empty() {
+        out.push(format!("会改别的程序的文件：{}", touches.join("、")));
+    }
+    match network {
+        Some(true) => out.push("会联网".into()),
+        Some(false) if runs_commands(provides) => out.push("声明不联网".into()),
+        _ => {}
+    }
+    out
+}
+
 impl Entry {
+    pub fn disclosure(&self) -> Vec<String> {
+        disclosure(&self.provides, &self.touches, self.network)
+    }
     /// Refuses an entry that could not be installed safely, before fetching anything.
     pub fn check(&self) -> Result<(), String> {
         if !plugin::valid_id(&self.id) {
@@ -232,6 +259,8 @@ pub fn index_of(dir: &Path) -> Result<Index, String> {
             description: p.description,
             provides: p.provides,
             mooring: (p.level > 1).then_some(p.level),
+            touches: p.touches,
+            network: p.network,
             files,
         });
     }
@@ -551,6 +580,8 @@ mod tests {
             description: None,
             provides: vec![Kind::Rules],
             mooring: None,
+            touches: vec![],
+            network: None,
             files,
         };
         assert!(
@@ -580,6 +611,8 @@ mod tests {
                 description: None,
                 provides: vec![Kind::Rules],
                 mooring: None,
+                touches: vec![],
+                network: None,
                 files: vec![],
             },
             source: if remote {
@@ -647,5 +680,22 @@ mod tests {
                 .unwrap_err()
                 .contains("更新 Mooring")
         );
+    }
+
+    #[test]
+    fn the_confirmation_says_what_it_changes_and_whether_it_goes_online() {
+        let d = disclosure(
+            &[Kind::Setup],
+            &["~/.claude/settings.json".into()],
+            Some(false),
+        );
+        assert!(
+            d.iter().any(|l| l.contains("~/.claude/settings.json")),
+            "{d:?}"
+        );
+        assert_eq!(d.last().unwrap(), "声明不联网");
+        assert!(disclosure(&[Kind::Quota], &[], Some(true)).contains(&"会联网".to_owned()));
+        // Nothing runs: nothing to say about the network.
+        assert_eq!(disclosure(&[Kind::Effects], &[], Some(false)).len(), 1);
     }
 }

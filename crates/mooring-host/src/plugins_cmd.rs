@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 
 pub const USAGE: &str = "用法：mooring plugins [--dir 插件目录] [--json]
       mooring plugins available [--remote]   列出可安装的插件（App 附带的，加 --remote 再查远程目录）
-      mooring plugins install <id> [--remote] 安装或更新一个插件
+      mooring plugins install <id> [--remote] [--yes]
+                                              安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
       mooring plugins uninstall <id>          卸载一个插件
       mooring plugins index <目录> [--check]  为插件目录生成 index.json（--check 只检查是否最新）
       mooring plugins log <id>                这个插件最近的运行：setup、hook、出过错的装饰和额度命令
@@ -121,9 +122,11 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
     let mut rest: Vec<String> = Vec::new();
     let mut remote = false;
     let mut check_only = false;
+    let mut yes = false;
     for a in args.by_ref() {
         match a.as_str() {
             "--remote" => remote = true,
+            "--yes" | "-y" => yes = true,
             "--check" => check_only = true,
             _ => rest.push(a),
         }
@@ -183,13 +186,30 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                 .into_iter()
                 .find(|o| &o.entry.id == id)
                 .ok_or_else(|| io::Error::other(format!("目录里没有叫 {id} 的插件")))?;
+            println!("{id} v{} 装上后会：", offer.entry.version);
+            for p in offer.entry.disclosure() {
+                println!("  · {p}");
+            }
+            // An Agent or a script installing one that runs commands says so on purpose,
+            // and what it will do is now in its output for the user to read.
+            use std::io::IsTerminal;
+            if market::runs_commands(&offer.entry.provides) && !yes {
+                if !std::io::stdin().is_terminal() {
+                    return Err(io::Error::other(
+                        "它会在这台电脑上运行命令：确认上面这些后加 --yes 再装",
+                    ));
+                }
+                eprint!("确认安装？[y/N] ");
+                let mut answer = String::new();
+                std::io::stdin().read_line(&mut answer)?;
+                if !matches!(answer.trim(), "y" | "Y" | "yes") {
+                    return Err(io::Error::other("没有安装"));
+                }
+            }
             let at = offer
                 .install_into(&plugins_dir()?)
                 .map_err(io::Error::other)?;
             println!("装好了 {id} v{} → {}", offer.entry.version, at.display());
-            for p in market::permissions(&offer.entry.provides) {
-                println!("  · {p}");
-            }
             println!("在 Mooring 的 设置 › 插件 点「重新读取」就生效");
             Ok(())
         }

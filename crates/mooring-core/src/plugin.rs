@@ -129,7 +129,7 @@ pub fn known_kinds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Kind>, 
 }
 
 /// Fields a manifest may carry; any other is skipped with a warning.
-const MANIFEST_FIELDS: [&str; 9] = [
+const MANIFEST_FIELDS: [&str; 11] = [
     "api",
     "id",
     "name",
@@ -139,6 +139,8 @@ const MANIFEST_FIELDS: [&str; 9] = [
     "files",
     "mooring",
     "options",
+    "touches",
+    "network",
 ];
 
 #[derive(Deserialize)]
@@ -157,6 +159,12 @@ struct Manifest {
     /// Its settings, shown in Settings › 插件 and handed to its commands.
     #[serde(default)]
     options: Vec<crate::plugin_context::Opt>,
+    /// Files of other programs its setup changes, shown before it is installed.
+    #[serde(default)]
+    touches: Vec<String>,
+    /// Whether its commands reach the network; shown before it is installed.
+    #[serde(default)]
+    network: Option<bool>,
     /// Other files it ships, such as the scripts its commands run, relative to its directory.
     #[serde(default)]
     files: Vec<String>,
@@ -179,6 +187,9 @@ pub struct Plugin {
     pub warnings: Vec<String>,
     /// Its settings (`options` in its manifest).
     pub options: Vec<crate::plugin_context::Opt>,
+    /// Files of other programs it changes (`touches`), and whether it goes online.
+    pub touches: Vec<String>,
+    pub network: Option<bool>,
     /// Turned off in settings: listed, but none of its files load.
     pub enabled: bool,
 }
@@ -506,6 +517,8 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         level,
         warnings,
         options: m.options,
+        touches: m.touches,
+        network: m.network,
         enabled: true,
     };
     for kind in &plugin.provides {

@@ -71,6 +71,25 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
+        // 插件 scrolled to what is installed: settings rows under their plugin, the files it
+        // changes and its last error. The scratch config's plugins are installed beforehand.
+        if phase == "plugin-options" {
+            use gpui::InputEvent as _;
+            for (scheme, look) in [("light", crate::ui::appearance::Appearance::Light), ("dark", crate::ui::appearance::Appearance::Dark)] {
+                cx.update(|a| crate::ui::appearance::choose(look, a).unwrap());
+                handle.update(cx, |v, _, a| v.visual_settings_show("插件", a)).unwrap();
+                wait(300).await;
+                cx.update_window(handle.into(), |_, w, a| {
+                    let center = gpui::point(w.viewport_size().width / 2. + px(200.), w.viewport_size().height / 2.);
+                    w.dispatch_event(gpui::ScrollWheelEvent { position: center, delta: gpui::ScrollDelta::Lines(gpui::point(0., -12.)), modifiers: Default::default(), touch_phase: gpui::TouchPhase::Moved }.to_platform_input(), a);
+                }).unwrap();
+                wait(300).await;
+                shot(&format!("plugin-options-{scheme}"), cx);
+            }
+            eprintln!("settings plugin-options PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         // 插件: install from the catalog with real clicks, confirm one that runs commands,
         // switch one of its actions off, uninstall, then pick a plugin's animation preset.
         // MOORING_PLUGIN_CLICKS="x,y;…" in panel points, in this order: 安装 落印 (in

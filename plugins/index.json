@@ -4,18 +4,22 @@
     {
       "id": "claude-quota",
       "name": "Claude 额度",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Mooring 状态栏；原来的状态栏照常显示，卸载时还原。只读本机，不联网",
       "provides": [
         "setup",
         "quota"
       ],
       "mooring": 2,
+      "touches": [
+        "~/.claude/settings.json"
+      ],
+      "network": false,
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "514c83e372ebaa34c408ec893e1eec4e7a6406fcbe1169a25cba34b651990922",
-          "size": 363
+          "sha256": "7e69cfa996c2fb7a14cfc08f39a4dcf6e379db047c8fba915a45d2ce48aa472c",
+          "size": 457
         },
         {
           "path": "quota.json",
@@ -153,6 +157,7 @@
         "hooks"
       ],
       "mooring": 2,
+      "network": false,
       "files": [
         {
           "path": "hooks.json",
@@ -161,8 +166,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "03e4910daa0f0754652e5fc0e965a8c8bb631d62b8640e6b83cb95379ffdf118",
-          "size": 481
+          "sha256": "fd105014aa661d433c456e3e4264b56abf4d1b65cbae43ff5611e0c65405714c",
+          "size": 501
         }
       ]
     },
@@ -190,11 +195,12 @@
     {
       "id": "pane-facts",
       "name": "窗格信息",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "窗格标题栏显示上一条命令失败的退出码和 git 未提交的改动数，悬停标题看上一条命令用时和最近一次提交",
       "provides": [
         "decorations"
       ],
+      "network": false,
       "files": [
         {
           "path": "decorations.json",
@@ -203,8 +209,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "d82871f4dd6a316fb280c19c9aa07a81c4056f763a1035238cffcf68a6f3b230",
-          "size": 288
+          "sha256": "3a67ef1a393154e0ccafda3c214124f30a8b65450c318ca32b66ac06e897b99d",
+          "size": 308
         }
       ]
     },

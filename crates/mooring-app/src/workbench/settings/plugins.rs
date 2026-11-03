@@ -513,6 +513,9 @@ impl SettingsView {
             if let Some(u) = update {
                 note.push(format!("{}有新版本 v{}", u.origin(), u.entry.version));
             }
+            if !p.touches.is_empty() {
+                note.push(format!("改了别的程序的文件：{}", p.touches.join("、")));
+            }
             note.extend(p.warnings.iter().cloned());
             if let Some(last) = plugin::config()
                 .map(|c| mooring_core::plugin_context::runs(&plugin::dir(c), &p.id))
@@ -649,7 +652,7 @@ impl SettingsView {
             } else if confirming {
                 note = vec![format!(
                     "装上后它会：{}。确认吗？",
-                    market::permissions(&e.provides).join("；")
+                    e.disclosure().join("；")
                 )];
                 let offer = o.clone();
                 div()
