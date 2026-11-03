@@ -52,8 +52,27 @@ fn run() -> std::io::Result<()> {
     mooring_core::rule::install();
     mooring_core::hook::install();
     let mut args = std::env::args().skip(1);
-    match args.next().as_deref() {
-        Some("serve") => {
+    let name = args.next();
+    let cmd = match name.as_deref() {
+        Some("-h" | "--help" | "help") => {
+            println!("{}", control::usage());
+            return Ok(());
+        }
+        None => return Err(usage_error("缺少命令".into())),
+        Some(name) => {
+            control::command(name).ok_or_else(|| usage_error(format!("没有 {name} 这个命令")))?
+        }
+    };
+    // Every command is checked against its declared flags before it acts, so a typo or a
+    // `--help` never runs it with defaults.
+    let rest: Vec<String> = args.collect();
+    if control::check(cmd, &rest)? {
+        println!("{}", cmd.usage);
+        return Ok(());
+    }
+    let mut args = rest.into_iter();
+    match cmd.name {
+        "serve" => {
             raise_open_file_limit();
             let mut remaining = Vec::new();
             let mut days = 7;
@@ -85,16 +104,13 @@ fn run() -> std::io::Result<()> {
                 days,
             )
         }
-        Some("scan") => scan(args),
-        Some(
-            command @ ("list" | "read" | "send" | "prompt" | "wait" | "explain" | "events"
-            | "split" | "close" | "run"),
-        ) => control::run(command, args),
-        Some("remote") => remote::run(args),
-        Some("hook") => hook(args),
-        Some("hooks") => hooks_cmd::run(args),
-        Some("plugins") => plugins_cmd::run(args),
-        Some("--skill") => {
+        "scan" => scan(args),
+        name if control::DRIVES.contains(&name) => control::run(cmd, args),
+        "remote" => remote::run(args),
+        "hook" => hook(args),
+        "hooks" => hooks_cmd::run(args),
+        "plugins" => plugins_cmd::run(args),
+        "--skill" => {
             match args.next().as_deref() {
                 None => print!("{}", control::SKILL),
                 Some("plugins") => print!("{}", control::PLUGINS_SKILL),
@@ -106,7 +122,7 @@ fn run() -> std::io::Result<()> {
             }
             Ok(())
         }
-        Some("--version") => {
+        "--version" => {
             println!(
                 "mooring protocol {}.{} experimental",
                 mooring_host::PROTOCOL_MAJOR,
@@ -114,17 +130,14 @@ fn run() -> std::io::Result<()> {
             );
             Ok(())
         }
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!(
-                "experimental managed PTY daemon (protocol major {}). \
-                 the mooring command does not start it. \
-                 usage: mooring serve --runtime <dir>\n{}",
-                mooring_host::PROTOCOL_MAJOR,
-                control::USAGE
-            ),
-        )),
+        other => Err(usage_error(format!("{other} 还没有接上"))),
     }
+}
+fn usage_error(what: String) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        format!("{what}\n用法：\n{}", control::usage()),
+    )
 }
 
 fn runtime_dir(mut args: impl Iterator<Item = String>) -> std::io::Result<String> {

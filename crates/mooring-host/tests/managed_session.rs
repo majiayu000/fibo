@@ -4752,7 +4752,8 @@ fn command_line_splits_a_pane_beside_a_terminal_and_closes_it() {
         "the shown tab is untouched"
     );
     let (ok, _, err) = cli(&["split", &id, "--before"]);
-    assert!(!ok && err.contains("--before 已去掉"), "{err}");
+    // Gone, so refused like any flag split does not take.
+    assert!(!ok && err.contains("没有 --before 这个选项"), "{err}");
 
     // Fill the tab to four panes; the first one stays first, at the top left.
     let (ok, out, err) = cli(&["split", &id]);

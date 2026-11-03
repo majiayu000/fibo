@@ -5,34 +5,125 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-pub const USAGE: &str = "\
-mooring list [--json]                      终端列表：编号、Agent 状态、标签、目录
-mooring read <终端> [--lines N]            画面最后 N 行（默认 50）
-mooring send <终端> <文字|-> [--enter]     把文字作为粘贴放进终端；- 从标准输入读
+/// One `mooring` command: the flags it takes and its lines in the usage text. The full
+/// usage is put together from this table, `-h`/`--help` prints a command's own lines,
+/// and a test checks that each command's lines name exactly its flags, so what is
+/// documented and what is accepted cannot drift apart again. `--runtime <目录>` is
+/// accepted by every command and is not listed.
+pub(crate) struct Command {
+    pub(crate) name: &'static str,
+    /// Flags followed by a value.
+    pub(crate) valued: &'static [&'static str],
+    /// Flags that stand alone.
+    pub(crate) switches: &'static [&'static str],
+    /// The command's lines: each starts `mooring <name>`, descriptions are indented.
+    pub(crate) usage: &'static str,
+}
+pub(crate) const COMMANDS: &[Command] = &[
+    Command {
+        name: "list",
+        valued: &[],
+        switches: &["json"],
+        usage: "\
+mooring list [--json]                      终端列表：编号、Agent 状态、标签、目录",
+    },
+    Command {
+        name: "read",
+        valued: &["lines"],
+        switches: &[],
+        usage: "\
+mooring read <终端> [--lines N]            画面最后 N 行（默认 50）",
+    },
+    Command {
+        name: "send",
+        valued: &[],
+        switches: &["enter"],
+        usage: "\
+mooring send <终端> <文字|-> [--enter]     把文字作为粘贴放进终端；- 从标准输入读（最多 64 KiB）",
+    },
+    Command {
+        name: "prompt",
+        valued: &["timeout"],
+        switches: &["wait", "force"],
+        usage: "\
 mooring prompt <终端> <文字|-> [--wait] [--timeout 秒] [--force]
-                                             给 Agent 发一条并回车；它正等你回答时拒绝，除非 --force
+                                             给 Agent 发一条并回车；它正等你回答时拒绝，除非 --force",
+    },
+    Command {
+        name: "wait",
+        valued: &["until", "timeout"],
+        switches: &[],
+        usage: "\
 mooring wait <终端> [--until idle|waiting|working] [--timeout 秒]
-                                             等 Agent 进入某个状态（默认 idle：这一轮做完）
+                                             等 Agent 进入某个状态（默认 idle：这一轮做完）",
+    },
+    Command {
+        name: "explain",
+        valued: &["file", "agent"],
+        switches: &["json"],
+        usage: "\
 mooring explain --file <画面.txt> --agent <claude|codex> [--json]
-mooring explain <终端> [--json]            画面规则怎么读这块屏：状态、命中的规则、规则版本和来源、看到的行
+mooring explain <终端> [--json]            画面规则怎么读这块屏：状态、命中的规则、规则版本和来源、看到的行",
+    },
+    Command {
+        name: "events",
+        valued: &[],
+        switches: &["json"],
+        usage: "\
 mooring events [--json]                    先列出现在的状态，再每有变化输出一行，直到 Ctrl-C：
                                              started / waiting / error / done、approval / approval_gone、
                                              terminal_started / terminal_exited、command_done / command_failed；
-                                             lagged 表示跟不上丢了事件，应重新开一次取现状
+                                             lagged 表示跟不上丢了事件，应重新开一次取现状",
+    },
+    Command {
+        name: "split",
+        valued: &["size", "cwd"],
+        switches: &["down", "tab", "here", "json"],
+        usage: "\
 mooring split <终端> [--down] [--size 0.5] [--tab|--here] [--cwd 目录] [--json] [-- 命令…]
                                              在这个终端右边（--down 下面）开一块新分屏，打印新终端编号；
                                              标签已有 4 块或切开太窄时开到「旁屏」标签（--here 改为拒绝，
-                                             --tab 直接开到旁屏）；给了命令就在新 shell 里跑，跑完留在 shell
+                                             --tab 直接开到旁屏）；给了命令就在新 shell 里跑，跑完留在 shell",
+    },
+    Command {
+        name: "run",
+        valued: &["cwd", "from", "timeout"],
+        switches: &["split", "no-report", "json"],
+        usage: "\
 mooring run <agent> <任务|-> [--split] [--cwd 目录] [--no-report] [--from <终端>] [--timeout 秒] [--json]
                                              派一个 Agent 去做事：开在旁屏标签（--split 开在旁边），等它出现输入框
-                                             再交任务；它每结束一轮，结果自动发回你的输入框（<mooring from=…>）
-mooring close <终端>                       关掉这块分屏并结束里面的程序
+                                             再交任务；它每结束一轮，结果自动发回你的输入框（<mooring from=…>）；
+                                             不在 Mooring 终端里时用 --from 说开在谁旁边、汇报给谁",
+    },
+    Command {
+        name: "close",
+        valued: &[],
+        switches: &[],
+        usage: "\
+mooring close <终端>                       关掉这块分屏并结束里面的程序",
+    },
+    Command {
+        name: "remote",
+        valued: &[
+            "relay",
+            "relay-key",
+            "name",
+            "role",
+            "revoke",
+            "device",
+            "kick",
+        ],
+        switches: &[
+            "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report",
+        ],
+        usage: "\
 mooring remote --stdio                     给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
                                              答审批、事件），经 ssh 连过来：ssh 主机 mooring remote --stdio
-mooring remote --relay <中继地址> [--relay-key <密钥>]
+mooring remote --relay <中继地址> [--relay-key <密钥>] [--report]
                                              连上中继并一直挂着，配对过的手机在哪都能连过来；内容端到端加密，
-                                             中继看不到。中继要密钥时也可以设 MOORING_RELAY_KEY
-mooring remote --pair --relay <中继地址> [--name 名字] [--role view|answer|full]
+                                             中继看不到。中继要密钥时也可以设 MOORING_RELAY_KEY；
+                                             --report 把连接状态报给后台（后台自己启动它时用）
+mooring remote --pair --relay <中继地址> [--name 名字] [--role view|answer|full] [--new-code]
                                              配对一台新手机，打印它的二维码和链接；权限分只看 / 能答审批 / 完全控制（默认）。
                                              加 --new-code 换掉机器码，已配对的手机全部失效
 mooring remote --enable --relay <中继地址> [--relay-key <密钥>] | --disable
@@ -42,12 +133,120 @@ mooring remote --kick <设备>               立刻断开这台手机正连着�
 mooring remote --devices                   列出配对过的手机、权限和最近连接时间；操作记在运行目录的 remote-log.jsonl
 mooring remote --device <设备> --role <view|answer|full>
                                              改一台手机的权限；它正连着的会话一秒内断开，重连后按新权限
-mooring remote --revoke <设备编号或名字>   取消一台手机的配对，它正连着的会话一秒内断开
+mooring remote --revoke <设备编号或名字>   取消一台手机的配对，它正连着的会话一秒内断开",
+    },
+    Command {
+        name: "plugins",
+        valued: &["dir"],
+        switches: &["json", "remote", "check"],
+        usage: "\
 mooring plugins [--dir 目录] [--json]      检查插件能不能装上：哪个生效、哪个为什么没生效
+mooring plugins available [--remote]       列出可安装的插件（App 附带的，加 --remote 再查远程目录）
+mooring plugins install <id> [--remote]    安装或更新一个插件
+mooring plugins uninstall <id>             卸载一个插件
+mooring plugins index <目录> [--check]     为插件目录生成 index.json（--check 只检查是否最新）",
+    },
+    Command {
+        name: "hooks",
+        valued: &["agent"],
+        switches: &["json", "outdated-only"],
+        usage: "\
+mooring hooks install|uninstall [--agent <cli>]
+                                             把 Mooring 的 hook 写进（或移出）Agent CLI 自己的设置；不写 --agent 就是全部
+mooring hooks status [--agent <cli>] [--json] [--outdated-only]
+                                             各 CLI 的 hook 装了没有、和现在 install 会写的差在哪",
+    },
+    Command {
+        name: "hook",
+        valued: &["agent"],
+        switches: &[],
+        usage: "\
+mooring hook --agent <claude|codex|grok>   Agent CLI 的 hook 调用的入口：从标准输入读一条 hook JSON（最多 1 MiB）
+                                             报给后台；不在 Mooring 终端里什么都不做。不用手动跑",
+    },
+    Command {
+        name: "serve",
+        valued: &["recent-days"],
+        switches: &["takeover"],
+        usage: "\
+mooring serve --runtime <目录> [--takeover] [--recent-days N]
+                                             启动后台（App 自己会启动，不用手动跑）；--takeover 从正在跑的后台
+                                             接过全部终端，--recent-days 只读最近 N 天的会话（默认 7）",
+    },
+    Command {
+        name: "scan",
+        valued: &[],
+        switches: &[],
+        usage: "\
+mooring scan --runtime <目录>              让后台重新扫一遍 Agent 会话，打印会话数和终端数",
+    },
+    Command {
+        name: "--skill",
+        valued: &[],
+        switches: &[],
+        usage: "\
 mooring --skill                            给 Coding Agent 看的用法说明（Markdown）
-mooring --skill plugins                    给 Coding Agent 看的写插件、改外观说明（Markdown）
-<终端> 可以是编号的前几位或标签名；全部命令都接受 --runtime <目录>。
+mooring --skill plugins                    给 Coding Agent 看的写插件、改外观说明（Markdown）",
+    },
+    Command {
+        name: "--version",
+        valued: &[],
+        switches: &[],
+        usage: "\
+mooring --version                          打印协议版本",
+    },
+];
+const FOOTER: &str = "\
+<终端> 可以是编号的前几位或标签名；全部命令都接受 --runtime <目录>；-h / --help 只打印用法、什么都不做。
 Agent 藏在包装器（沙盒、虚拟机、nono 等）后面认不出时，启动前设 MOORING_AGENT=<claude|codex|…>。";
+/// Every command's lines, then what holds for all of them.
+pub(crate) fn usage() -> String {
+    let mut text: String = COMMANDS.iter().map(|c| format!("{}\n", c.usage)).collect();
+    text.push_str(FOOTER);
+    text
+}
+pub(crate) fn command(name: &str) -> Option<&'static Command> {
+    COMMANDS.iter().find(|c| c.name == name)
+}
+fn help_flag(arg: &str) -> bool {
+    arg == "-h" || arg == "--help"
+}
+/// Checks `args` against what `cmd` takes, before anything acts: `Ok(true)` when they
+/// ask for help (`-h`/`--help` anywhere before a bare `--`), an error naming the flag
+/// and showing the command's usage for an unknown flag or a missing value.
+pub(crate) fn check(cmd: &Command, args: &[String]) -> io::Result<bool> {
+    let mut args = args.iter();
+    let mut wrong = None;
+    while let Some(arg) = args.next() {
+        if arg == "--" {
+            break;
+        }
+        if help_flag(arg) {
+            return Ok(true);
+        }
+        let Some(name) = arg.strip_prefix("--") else {
+            continue;
+        };
+        if name == "runtime" || cmd.valued.contains(&name) {
+            match args.next() {
+                Some(v) if help_flag(v) => return Ok(true),
+                Some(_) => (),
+                None => {
+                    wrong.get_or_insert_with(|| format!("--{name} 需要一个值"));
+                }
+            }
+        } else if !cmd.switches.contains(&name) {
+            wrong.get_or_insert_with(|| format!("mooring {} 没有 --{name} 这个选项", cmd.name));
+        }
+    }
+    match wrong {
+        Some(e) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{e}\n用法：\n{}", cmd.usage),
+        )),
+        None => Ok(false),
+    }
+}
 /// `mooring --skill`: how a coding Agent drives these commands, and when it must not.
 pub const SKILL: &str = include_str!("skill.md");
 /// `mooring --skill plugins`: how a coding Agent changes Mooring with plugins.
@@ -132,14 +331,23 @@ pub(crate) struct Args {
     flags: Vec<(String, Option<String>)>,
     /// Everything after a bare `--`, untouched: a command and its own flags.
     rest: Vec<String>,
+    /// The command's own usage lines, for errors about its arguments.
+    usage: &'static str,
 }
 impl Args {
-    pub(crate) fn parse(args: impl Iterator<Item = String>, valued: &[&str]) -> io::Result<Self> {
+    /// Rejects a flag `cmd` does not take before anything acts; help is answered by the
+    /// caller (`main`) before this runs.
+    pub(crate) fn parse(args: impl Iterator<Item = String>, cmd: &Command) -> io::Result<Self> {
+        let args: Vec<String> = args.collect();
+        if check(cmd, &args)? {
+            return Err(io::Error::other(format!("用法：\n{}", cmd.usage)));
+        }
+        let valued = cmd.valued;
         let mut runtime = std::env::var_os("MOORING_RUNTIME").map(PathBuf::from);
         let mut positional = vec![];
         let mut flags = vec![];
         let mut rest = vec![];
-        let mut args = args.peekable();
+        let mut args = args.into_iter();
         while let Some(arg) = args.next() {
             if arg == "--" {
                 rest.extend(args.by_ref());
@@ -176,6 +384,7 @@ impl Args {
             positional,
             flags,
             rest,
+            usage: cmd.usage,
         })
     }
     pub(crate) fn has(&self, name: &str) -> bool {
@@ -199,7 +408,7 @@ impl Args {
         self.positional
             .get(i)
             .map(String::as_str)
-            .ok_or_else(|| io::Error::other(format!("缺少{what}\n{USAGE}")))
+            .ok_or_else(|| io::Error::other(format!("缺少{what}\n用法：\n{}", self.usage)))
     }
     /// `-` reads the text from standard input, so long prompts need no shell quoting.
     fn text(&self, i: usize) -> io::Result<String> {
@@ -207,10 +416,21 @@ impl Args {
         if text != "-" {
             return Ok(self.positional[i..].join(" "));
         }
-        let mut s = String::new();
-        io::stdin().take(64 * 1024 + 1).read_to_string(&mut s)?;
-        Ok(s.trim_end_matches('\n').to_owned())
+        read_limited(io::stdin(), STDIN_LIMIT).map(|s| s.trim_end_matches('\n').to_owned())
     }
+}
+/// The most `-` reads from standard input; more is an error, never a silent cut.
+const STDIN_LIMIT: usize = 64 * 1024;
+fn read_limited(input: impl Read, limit: usize) -> io::Result<String> {
+    let mut bytes = Vec::new();
+    input.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(io::Error::other(format!(
+            "标准输入超过 {} KiB，没有发送；拆成几段再发",
+            limit / 1024
+        )));
+    }
+    String::from_utf8(bytes).map_err(|_| io::Error::other("标准输入不是 UTF-8 文字"))
 }
 fn workspace(socket: &Path) -> io::Result<Workspace> {
     match rpc(socket, &Request::Workspace)? {
@@ -225,19 +445,24 @@ fn expect_ok(reply: Reply) -> io::Result<()> {
     }
 }
 
-pub fn run(command: &str, args: impl Iterator<Item = String>) -> io::Result<()> {
-    match command {
-        "list" => list(Args::parse(args, &[])?),
-        "read" => read(Args::parse(args, &["lines"])?),
-        "send" => send(Args::parse(args, &[])?),
-        "prompt" => prompt(Args::parse(args, &["timeout"])?),
-        "wait" => wait_cmd(Args::parse(args, &["until", "timeout"])?),
-        "explain" => explain(Args::parse(args, &["file", "agent"])?),
-        "events" => events(Args::parse(args, &[])?),
-        "split" => split(Args::parse(args, &["size", "cwd"])?),
-        "run" => run_agent(Args::parse(args, &["cwd", "from", "timeout"])?),
-        "close" => close(Args::parse(args, &[])?),
-        _ => Err(io::Error::other(USAGE)),
+/// The commands this module carries out; `main` sends each of them here.
+pub(crate) const DRIVES: &[&str] = &[
+    "list", "read", "send", "prompt", "wait", "explain", "events", "split", "run", "close",
+];
+pub fn run(cmd: &Command, args: impl Iterator<Item = String>) -> io::Result<()> {
+    let a = Args::parse(args, cmd)?;
+    match cmd.name {
+        "list" => list(a),
+        "read" => read(a),
+        "send" => send(a),
+        "prompt" => prompt(a),
+        "wait" => wait_cmd(a),
+        "explain" => explain(a),
+        "events" => events(a),
+        "split" => split(a),
+        "run" => run_agent(a),
+        "close" => close(a),
+        _ => Err(io::Error::other(usage())),
     }
 }
 /// `explain`: replays a saved screen, or a live terminal's, through the
@@ -246,9 +471,9 @@ fn explain(a: Args) -> io::Result<()> {
     use mooring_host::screen_rules;
     let (agent, screen, daemon) = match a.value("file") {
         Some(file) => {
-            let name = a
-                .value("agent")
-                .ok_or_else(|| io::Error::other(format!("--file 要配 --agent\n{USAGE}")))?;
+            let name = a.value("agent").ok_or_else(|| {
+                io::Error::other(format!("--file 要配 --agent\n用法：\n{}", a.usage))
+            })?;
             let agent = mooring_core::agent::Agent::all()
                 .into_iter()
                 .find(|g| agent_label(*g) == name.to_lowercase())
@@ -274,6 +499,9 @@ fn explain(a: Args) -> io::Result<()> {
         let mut json = e.to_json();
         if let Some(c) = &daemon {
             json["daemon"] = serde_json::json!({
+                // TODO: this says Running/Waiting/Completed (the content turn) while
+                // `list` says working/waiting/idle (`Phase::name`); settle on one wording
+                // when `phase` is reworked.
                 "phase": format!("{:?}", c.turn),
                 "signal": c.signal,
                 "signal_detail": c.signal_detail,
@@ -809,11 +1037,6 @@ fn split(a: Args) -> io::Result<()> {
 /// Opens a shell beside `needle`'s terminal (or in its side tab when `to_tab`, when that
 /// tab is full, or when a split would leave a half too small) running `command`.
 fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<Opened> {
-    if a.has("before") {
-        return Err(io::Error::other(
-            "--before 已去掉：新分屏只往右或往下开，原来那块保持在左上角",
-        ));
-    }
     if a.has("here") && to_tab {
         return Err(io::Error::other("--here 和 --tab 只能选一个"));
     }
@@ -1069,16 +1292,98 @@ mod tests {
     #[test]
     fn the_skill_names_the_marker_and_every_command() {
         assert!(SKILL.contains("MOORING_ENV"));
-        for command in [
-            "list", "read", "send", "prompt", "wait", "explain", "split", "close",
-        ] {
-            assert!(SKILL.contains(&format!("mooring {command} ")), "{command}");
+        // Every command and every flag it takes, so the skill cannot fall behind the table.
+        let named = flags_in(SKILL, "");
+        for c in COMMANDS {
+            assert!(SKILL.contains(&format!("mooring {}", c.name)), "{}", c.name);
+            for f in declared(c) {
+                assert!(named.contains(&f), "{} --{f}", c.name);
+            }
         }
-        for flag in [
-            "--force", "--wait", "--until", "--enter", "--lines", "--tab", "--here",
-        ] {
-            assert!(SKILL.contains(flag), "{flag}");
+    }
+    /// `--name` words in a text, without `--runtime` (every command takes it) and the
+    /// command's own name (`--skill`).
+    fn flags_in(text: &str, own: &str) -> std::collections::BTreeSet<String> {
+        text.split("--")
+            .skip(1)
+            .map(|s| {
+                s.chars()
+                    .take_while(|c| c.is_ascii_lowercase() || *c == '-')
+                    .collect::<String>()
+            })
+            .filter(|f| !f.is_empty() && f != "runtime" && format!("--{f}") != own)
+            .collect()
+    }
+    fn declared(c: &Command) -> std::collections::BTreeSet<String> {
+        c.valued
+            .iter()
+            .chain(c.switches)
+            .map(|f| f.to_string())
+            .collect()
+    }
+    #[test]
+    fn every_command_documents_exactly_the_flags_it_takes() {
+        for c in COMMANDS {
+            assert_eq!(flags_in(c.usage, c.name), declared(c), "{}", c.name);
+            for line in c.usage.lines().filter(|l| !l.starts_with(' ')) {
+                assert!(line.starts_with(&format!("mooring {}", c.name)), "{line}");
+            }
+            assert!(usage().contains(c.usage), "{}", c.name);
         }
+        // `mooring plugins` prints its own fuller text on errors; it names the same flags.
+        let plugins = command("plugins").unwrap();
+        let mut own = flags_in(crate::plugins_cmd::USAGE, "--skill");
+        own.remove("help");
+        assert_eq!(own, declared(plugins));
+        for name in DRIVES {
+            assert!(
+                command(name).is_some(),
+                "{name} is dispatched but has no usage"
+            );
+        }
+    }
+    #[test]
+    fn every_documented_flag_is_accepted_and_nothing_else() {
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        for c in COMMANDS {
+            for f in c.valued {
+                let given = args(&["x", &format!("--{f}"), "1"]);
+                assert!(!check(c, &given).unwrap(), "{} --{f}", c.name);
+                let e = check(c, &args(&["x", &format!("--{f}")])).unwrap_err();
+                assert!(e.to_string().contains("需要一个值"), "{e}");
+            }
+            for f in c.switches {
+                let given = args(&["x", &format!("--{f}"), "--runtime", "/r"]);
+                assert!(!check(c, &given).unwrap(), "{} --{f}", c.name);
+            }
+            let e = check(c, &args(&["x", "--timout", "60"])).unwrap_err();
+            assert!(e.to_string().contains("--timout"), "{e}");
+            assert!(e.to_string().contains(c.usage), "{e}");
+            // Help anywhere wins over everything, so the command never acts.
+            assert!(check(c, &args(&["x", "--help"])).unwrap(), "{}", c.name);
+            assert!(check(c, &args(&["-h", "--timout"])).unwrap(), "{}", c.name);
+        }
+        let split = command("split").unwrap();
+        // After a bare `--` the words are the command's, its `--help` included.
+        assert!(!check(split, &args(&["x", "--", "ls", "--help", "--bogus"])).unwrap());
+        assert!(Args::parse(
+            args(&["x", "--wiat"]).into_iter(),
+            command("prompt").unwrap()
+        )
+        .is_err());
+        let a = Args::parse(
+            args(&["x", "--wait", "--timeout", "5"]).into_iter(),
+            command("prompt").unwrap(),
+        )
+        .unwrap();
+        assert!(a.has("wait") && a.value("timeout") == Some("5"));
+    }
+    #[test]
+    fn standard_input_past_the_limit_is_an_error_not_a_cut() {
+        assert_eq!(read_limited(&b"abcd"[..], 4).unwrap(), "abcd");
+        let e = read_limited(&b"abcde"[..], 4).unwrap_err();
+        assert!(e.to_string().contains("超过"), "{e}");
+        assert!(read_limited(&[0xff, 0xfe][..], 4).is_err());
     }
     #[test]
     fn a_split_runs_its_command_in_a_shell_that_stays_open() {
@@ -1095,7 +1400,7 @@ mod tests {
             ["t", "--down", "--size", "0.3", "--", "ls", "--all"]
                 .into_iter()
                 .map(String::from),
-            &["size"],
+            command("split").unwrap(),
         )
         .unwrap();
         assert_eq!(a.positional, ["t"]);
