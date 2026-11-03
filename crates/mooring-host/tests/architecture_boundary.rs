@@ -16,6 +16,10 @@ const FIXTURES: &[(&str, &str)] = &[
         "mooring-app/src/settings_evidence.rs",
         "settings evidence checks a saved default Agent",
     ),
+    (
+        "mooring-core/src/sample.rs",
+        "the cross-surface sample puts two kinds of Agent in one split tab",
+    ),
 ];
 
 const NAMED: &[&str] = &["Agent::Codex", "Agent::Claude", "Agent::Grok"];

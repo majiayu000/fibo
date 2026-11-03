@@ -4492,7 +4492,8 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
         n.event == "terminal_started" && n.terminal.as_deref() == Some("ev")
     });
     let (_, waiting) = next("waiting", &|n| n.event == "waiting" && mine(n));
-    assert_eq!(waiting.terminal, None, "hook payloads keep their shape");
+    // Status events say which terminal they came from, as skill.md promises.
+    assert_eq!(waiting.terminal.as_deref(), Some("ev"));
     let (_, approval) = next("approval", &|n| n.event == "approval" && mine(n));
     assert_eq!(approval.detail, "Do you want to proceed?");
     assert_eq!(approval.terminal.as_deref(), Some("ev"));
@@ -5521,7 +5522,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         .unwrap();
     let listed = String::from_utf8(listed.stdout).unwrap();
     assert!(
-        listed.contains("全权") && listed.contains("完全控制") && listed.contains("刚才"),
+        listed.contains("全权") && listed.contains("完全控制") && listed.contains("刚刚"),
         "{listed}"
     );
     assert!(!listed.contains("只看的平板"), "{listed}");
