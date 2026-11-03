@@ -931,7 +931,7 @@ impl SettingsView {
                 None => *p == Pick::Builtin(Style::Seal),
             };
             let mut choices = segments();
-            let mut options: Vec<(String, String, Pick)> = Style::ALL
+            let mut options: Vec<(String, String, Pick)> = Style::BUILTIN
                 .into_iter()
                 .map(|s| {
                     (
@@ -941,12 +941,18 @@ impl SettingsView {
                     )
                 })
                 .collect();
-            // A plugin's tuning is one more choice; one that plays exactly a built-in
-            // style is that style's choice already.
-            options.extend(presets.iter().filter(|p| !p.same_as_builtin()).map(|p| {
+            // Every installed effects plugin is one more choice, named by its animation
+            // unless two plugins play the same one.
+            options.extend(presets.iter().map(|p| {
+                let style = p.complete.style;
+                let shared = presets.iter().filter(|q| q.complete.style == style).count() > 1;
                 (
                     format!("complete-plugin-{}", p.id),
-                    p.name.clone(),
+                    if shared {
+                        p.name.clone()
+                    } else {
+                        style.label().to_owned()
+                    },
                     Pick::Plugin(p.id.clone()),
                 )
             }));
@@ -966,15 +972,8 @@ impl SettingsView {
                 Some(Pick::Plugin(id)) if !presets.iter().any(|p| &p.id == id) => format!(
                     "选的插件 {id} 已经卸载或停用，现在播印章；试播在当前窗格播一次，不会标记完成"
                 ),
-                _ if presets.iter().any(|p| !p.same_as_builtin()) => format!(
-                    "{} 来自插件；选了马上生效，试播在当前窗格播一次，不会标记完成",
-                    presets
-                        .iter()
-                        .filter(|p| !p.same_as_builtin())
-                        .map(|p| format!("「{}」", p.name))
-                        .collect::<String>()
-                ),
-                _ => "选了马上生效；试播在当前窗格播一次，不会标记完成。插件 页能装更多".to_owned(),
+                _ if !presets.is_empty() => "印章和只淡出是内置的，其余来自插件，装上或打开插件就换成它；选了马上生效，试播在当前窗格播一次，不会标记完成".to_owned(),
+                _ => "落印、扫光合上、化进侧栏要在 插件 页安装，装上就换成它；试播在当前窗格播一次，不会标记完成".to_owned(),
             };
             motion.push(
                 self.row(

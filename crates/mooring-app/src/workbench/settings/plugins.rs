@@ -58,7 +58,7 @@ fn kinds(provides: &[Kind]) -> String {
 /// Where a kind's choices live once installed.
 fn where_to_find(kind: Kind) -> Option<&'static str> {
     match kind {
-        Kind::Effects => Some("在 外观 › 标记完成动画 里选"),
+        Kind::Effects => Some("装上或打开就换成它，外观 › 标记完成动画 里能换回"),
         Kind::Sidebar => Some("在左栏顶部切换排法"),
         Kind::Actions => Some("在窗格右键菜单和 ⌘P 里"),
         Kind::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),

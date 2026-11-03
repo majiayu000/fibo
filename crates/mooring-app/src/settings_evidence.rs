@@ -88,6 +88,7 @@ pub(super) fn start(
             let Some(stamp) = at(0) else { eprintln!("settings plugins SHOTS"); cx.update(|a| a.quit()); return; };
             click(stamp.0, stamp.1, cx); wait(1500).await;
             assert!(plugin::installed("complete-stamp").is_some(), "安装 installs and reloads");
+            assert_eq!(effect::picked(), Some(effect::Pick::Plugin("complete-stamp".into())), "安装 switches to its animation");
             shot("plugins-installed", cx);
             let Some(actions) = at(1) else { eprintln!("settings plugins SHOTS"); cx.update(|a| a.quit()); return; };
             click(actions.0, actions.1, cx); wait(400).await;
@@ -105,6 +106,7 @@ pub(super) fn start(
             let Some(remove) = at(4) else { eprintln!("settings plugins SHOTS"); cx.update(|a| a.quit()); return; };
             click(remove.0, remove.1, cx); wait(600).await;
             assert!(plugin::installed("complete-stamp").is_none(), "卸载 removes it");
+            assert_eq!(effect::picked(), None, "卸载 the one playing goes back to the seal");
             shot("plugins-removed", cx);
             handle.update(cx, |v, _, a| {
                 v.visual_settings_show("外观", a);
@@ -124,7 +126,7 @@ pub(super) fn start(
         }
         // 标记完成动画: pick one with a real click, then 试播 on the shown pane, which must
         // stay open with nothing marked. MOORING_COMPLETE_CLICKS="x,y;x,y" are the
-        // panel points of 落印 and 试播 once the search leaves only that row.
+        // panel points of 只淡出 and 试播 once the search leaves only that row.
         if phase == "complete" {
             click(106., 76., cx);
             cx.update_window(handle.into(), |_, w, a| {
@@ -134,11 +136,11 @@ pub(super) fn start(
             shot("complete-row", cx);
             let clicks: Vec<(f32, f32)> = std::env::var("MOORING_COMPLETE_CLICKS").unwrap_or_default()
                 .split(';').filter_map(|p| p.split_once(',')).map(|(x, y)| (x.parse().unwrap(), y.parse().unwrap())).collect();
-            if let [stamp, preview] = clicks[..] {
-                click(stamp.0, stamp.1, cx); wait(300).await;
-                assert_eq!(mooring_core::effect::picked(), Some(mooring_core::effect::Pick::Builtin(mooring_core::effect::Style::Stamp)));
+            if let [fade, preview] = clicks[..] {
+                click(fade.0, fade.1, cx); wait(300).await;
+                assert_eq!(mooring_core::effect::picked(), Some(mooring_core::effect::Pick::Builtin(mooring_core::effect::Style::Fade)));
                 let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("complete")).unwrap();
-                assert_eq!(saved, "stamp");
+                assert_eq!(saved, "fade");
                 shot("complete-picked", cx);
                 let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
                 pane.update(cx, |p, a| p.visual_type("printf 'preview of the completion animation\\n'\r", a));

@@ -1,9 +1,10 @@
 //! How the app plays 标记完成 (`effects.json`). A plugin names one of the animations the
 //! app draws and tunes it; it never draws anything itself, so every style follows the
-//! theme and the status colors. Each plugin's tuning becomes one more choice beside the
-//! built-in ones in settings; none of them takes over by being installed. What settings
-//! picks (`~/.config/mooring/complete`: a style name, or `plugin:<id>`) applies at once;
-//! nothing picked plays the built-in seal.
+//! theme and the status colors. Without plugins settings offers only the seal and the
+//! fade; 落印, 扫光合上 and 化进侧栏 come with their plugins. Installing or turning on an
+//! effects plugin makes it the animation at once; uninstalling or turning off the one
+//! playing goes back to the seal. What settings picks (`~/.config/mooring/complete`: a
+//! style name, or `plugin:<id>`) applies at once; nothing picked plays the built-in seal.
 //!
 //! ```json
 //! {"api": 1, "complete": {"style": "stamp", "duration_ms": 2400, "land": "sidebar"}}
@@ -38,6 +39,8 @@ pub enum Style {
     Fade,
 }
 impl Style {
+    /// What settings offers without any plugin installed.
+    pub const BUILTIN: [Self; 2] = [Self::Seal, Self::Fade];
     pub const ALL: [Self; 5] = [
         Self::Seal,
         Self::Stamp,
@@ -177,7 +180,7 @@ fn describe(c: &Complete) -> String {
     )
 }
 
-/// One plugin's tuning, offered in settings beside the built-in styles.
+/// One plugin's animation, offered in settings beside the built-in styles.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Preset {
     /// The plugin's id, which settings saves as `plugin:<id>`.
@@ -185,12 +188,6 @@ pub struct Preset {
     /// The plugin's name, shown on the choice.
     pub name: String,
     pub complete: Complete,
-}
-impl Preset {
-    /// Plays exactly what choosing the built-in style of the same name plays.
-    pub fn same_as_builtin(&self) -> bool {
-        self.complete == Complete::of(self.complete.style)
-    }
 }
 
 /// The plugin a file belongs to: the loaded plugin whose directory holds it, else the
@@ -227,19 +224,10 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Preset>, Vec<Loaded>) {
                         name,
                         complete: c,
                     };
-                    let did = if preset.same_as_builtin() {
-                        format!(
-                            "{}；和内置的「{}」一样，在外观 › 标记完成动画里选它就是",
-                            describe(&c),
-                            c.style.label()
-                        )
-                    } else {
-                        format!(
-                            "{}；在外观 › 标记完成动画里多了「{}」",
-                            describe(&c),
-                            preset.name
-                        )
-                    };
+                    let did = format!(
+                        "{}；装上或打开时就换成它，外观 › 标记完成动画里能换回别的",
+                        describe(&c)
+                    );
                     presets.push(preset);
                     Ok(did)
                 }
@@ -292,7 +280,7 @@ pub fn install() {
     let saved = picked_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|t| Pick::parse(&t));
-    *PICKED.lock().unwrap_or_else(|e| e.into_inner()) = saved;
+    *PICKED.lock().unwrap_or_else(|e| e.into_inner()) = settled(saved, presets());
     #[cfg(target_os = "macos")]
     std::thread::spawn(|| {
         let on = std::process::Command::new("defaults")
@@ -303,9 +291,46 @@ pub fn install() {
         REDUCE_MOTION.store(on, Ordering::Relaxed);
     });
 }
-/// Loads them again after plugins changed (`plugin::reload`).
+/// A style settings no longer offers by itself (picked before it moved into plugins)
+/// becomes the installed plugin that plays it, else the seal.
+fn settled(picked: Option<Pick>, presets: &[Preset]) -> Option<Pick> {
+    match picked {
+        Some(Pick::Builtin(s)) if !Style::BUILTIN.contains(&s) => presets
+            .iter()
+            .find(|p| p.complete.style == s)
+            .map(|p| Pick::Plugin(p.id.clone())),
+        other => other,
+    }
+}
+/// What to play after the installed effects changed from `before` to `after`: a plugin
+/// that just arrived (installed or turned on) takes over; the one playing going away
+/// (uninstalled or turned off) falls back to the seal. Some(new pick) when it changes.
+pub fn follow(picked: Option<&Pick>, before: &[Preset], after: &[Preset]) -> Option<Option<Pick>> {
+    if let Some(new) = after
+        .iter()
+        .rev()
+        .find(|p| !before.iter().any(|b| b.id == p.id))
+    {
+        let pick = Some(Pick::Plugin(new.id.clone()));
+        return (picked != pick.as_ref()).then_some(pick);
+    }
+    match picked {
+        Some(Pick::Plugin(id)) if !after.iter().any(|p| &p.id == id) => Some(None),
+        _ => None,
+    }
+}
+/// Loads them again after plugins changed (`plugin::reload`), switching to a plugin
+/// that just arrived and away from one that left.
 pub(crate) fn reload() {
+    // Only the app plays and picks; the host never ran `install`.
+    let before = EFFECTS.get().map(|(p, _)| p.clone());
     EFFECTS.set(load(crate::plugin::files(crate::plugin::Kind::Effects)));
+    let Some(before) = before else {
+        return;
+    };
+    if let Some(pick) = follow(picked().as_ref(), &before, presets()) {
+        let _ = self::pick(pick);
+    }
 }
 /// Every installed plugin's preset, in plugin order.
 pub fn presets() -> &'static [Preset] {
@@ -389,14 +414,7 @@ mod tests {
         assert_eq!(c.style, Style::Stamp);
         assert_eq!(c.duration, Duration::from_millis(2_400));
         assert!(c.land, "stamp lands in the sidebar unless told not to");
-        assert!(presets[0].same_as_builtin());
-        assert!(
-            report[0]
-                .result
-                .as_ref()
-                .unwrap()
-                .contains("内置的「落印」一样")
-        );
+        assert!(report[0].result.as_ref().unwrap().contains("就换成它"));
         assert!(
             report[1]
                 .result
@@ -408,14 +426,12 @@ mod tests {
         assert!(report[3].result.as_ref().unwrap_err().contains("格式不对"));
         assert!(report[4].result.is_ok());
 
-        let (presets, report) = load(vec![sweep]);
+        let (presets, _) = load(vec![sweep]);
         let c = presets[0].complete;
         assert_eq!(
             (c.style, c.duration, c.land),
             (Style::Sweep, Duration::from_millis(1_800), false)
         );
-        assert!(!presets[0].same_as_builtin());
-        assert!(report[0].result.as_ref().unwrap().contains("多了"));
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -439,7 +455,7 @@ mod tests {
             },
         };
         let presets = [tuned.clone()];
-        // Installing a plugin never changes what plays.
+        // Without a pick the seal plays; `follow` is what picks a new plugin.
         assert_eq!(chosen(None, &presets), Complete::default());
         assert_eq!(
             chosen(Some(&Pick::Plugin("slow-sweep".into())), &presets),
@@ -465,5 +481,46 @@ mod tests {
         assert_eq!(Pick::parse(&p.name()), Some(p));
         assert_eq!(Pick::parse("fancy"), None);
         assert_eq!(Pick::parse("plugin:../x"), None);
+    }
+
+    #[test]
+    fn installing_an_effect_plugin_switches_to_it_and_removing_it_falls_back() {
+        let preset = |id: &str, style| Preset {
+            id: id.into(),
+            name: id.into(),
+            complete: Complete::of(style),
+        };
+        let both = [
+            preset("complete-sweep", Style::Sweep),
+            preset("complete-dissolve", Style::Dissolve),
+        ];
+        let (sweep, dissolve) = (&both[..1], &both[1..]);
+        let plug = |id: &str| Some(Pick::Plugin(id.into()));
+        // Installed (or turned on): it plays from now on.
+        assert_eq!(follow(None, &[], sweep), Some(plug("complete-sweep")));
+        assert_eq!(
+            follow(Some(&Pick::Builtin(Style::Fade)), sweep, &both),
+            Some(plug("complete-dissolve"))
+        );
+        // Nothing arrived or left: what was picked stays, even a plugin not playing.
+        assert_eq!(follow(plug("complete-sweep").as_ref(), &both, &both), None);
+        assert_eq!(follow(None, &both, &both), None);
+        // The one playing uninstalled (or turned off): back to the seal.
+        assert_eq!(
+            follow(plug("complete-sweep").as_ref(), &both, dissolve),
+            Some(None)
+        );
+        // Another one leaving changes nothing.
+        assert_eq!(follow(plug("complete-sweep").as_ref(), &both, sweep), None);
+        // A style picked before it moved into plugins.
+        assert_eq!(
+            settled(Some(Pick::Builtin(Style::Sweep)), &both),
+            plug("complete-sweep")
+        );
+        assert_eq!(settled(Some(Pick::Builtin(Style::Stamp)), &both), None);
+        assert_eq!(
+            settled(Some(Pick::Builtin(Style::Fade)), &both),
+            Some(Pick::Builtin(Style::Fade))
+        );
     }
 }
