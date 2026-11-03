@@ -569,6 +569,12 @@ impl Index {
         let result = (|| {
             let mut found = vec![];
             for path in paths {
+                if let Some(t) = self.refresh_subagents(&path)? {
+                    if !found.iter().any(|f: &Transcript| f.path == t.path) {
+                        found.push(t);
+                    }
+                    continue;
+                }
                 if let Some(runtime) = self.runtime(&path) {
                     if let Some(t) = self.update_unlocked(runtime, &path, true)? {
                         found.push(t);
@@ -594,6 +600,56 @@ impl Index {
                 Err(e)
             }
         }
+    }
+    /// `meta` is a subagent's `agent-<id>.meta.json` under `<session>/subagents/`: the
+    /// CLI writes it when the subagent starts and again when it finishes, while the
+    /// parent's own log may not move. Re-reads the list into the parent's card and
+    /// returns the parent when that changed it; `None` for any other path.
+    fn refresh_subagents(&mut self, meta: &Path) -> io::Result<Option<Transcript>> {
+        let Some(parent) = subagent_parent(meta) else {
+            return Ok(None);
+        };
+        let Some(runtime) = self.runtime(&parent) else {
+            return Ok(None);
+        };
+        let Some(all) = crate::agents::adapter(runtime).subagents(&parent) else {
+            return Ok(None);
+        };
+        let key = parent.to_string_lossy().into_owned();
+        let row = self
+            .db
+            .prepare_cached(
+                "SELECT cli_id,cwd,updated FROM log_files WHERE path=?1 AND cli_id IS NOT NULL",
+            )
+            .map_err(err)?
+            .query_row([&key], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)? as u64,
+                ))
+            })
+            .optional()
+            .map_err(err)?;
+        // A parent not indexed yet reads its subagents when its log is.
+        let Some((cli_id, cwd, updated)) = row else {
+            return Ok(None);
+        };
+        let mut parser = crate::content::load(&self.db, &key)?;
+        let before = parser.card.subagents.clone();
+        parser.card.keep_subagents(all);
+        if parser.card.subagents == before {
+            return Ok(None);
+        }
+        crate::content::save(&self.db, &key, &parser)?;
+        self.counts.writes += 1;
+        Ok(Some(Transcript {
+            runtime,
+            cli_id,
+            path: key,
+            cwd,
+            updated,
+        }))
     }
     fn update_unlocked(
         &mut self,
@@ -941,6 +997,22 @@ impl Recovery {
     }
 }
 
+/// The transcript whose subagent `path` describes: `<dir>/<session>.jsonl` for
+/// `<dir>/<session>/subagents/agent-<id>.meta.json`.
+fn subagent_parent(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    if !(name.starts_with("agent-") && name.ends_with(".meta.json")) {
+        return None;
+    }
+    let dir = path.parent()?;
+    if dir.file_name()? != "subagents" {
+        return None;
+    }
+    let session = dir.parent()?;
+    let mut parent = session.as_os_str().to_owned();
+    parent.push(".jsonl");
+    Some(PathBuf::from(parent))
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -963,6 +1035,46 @@ mod tests {
     }
     fn line(id: &str) -> String {
         format!("{{\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"cwd\":\"/tmp\"}}}}\n")
+    }
+    #[test]
+    fn a_subagent_meta_change_refreshes_its_parents_card_whose_log_did_not_move() {
+        let f = Fixture::new();
+        let root = f.0.join("claude");
+        let id = "0b1c2d3e-0000-4000-8000-000000000001";
+        let log = root.join(format!("p/{id}.jsonl"));
+        let subs = root.join(format!("p/{id}/subagents"));
+        fs::create_dir_all(&subs).unwrap();
+        let ask = serde_json::json!({"type": "user", "sessionId": id, "cwd": "/repo",
+            "timestamp": "2026-11-03T10:00:00Z", "message": {"role": "user", "content": "查一下"}});
+        fs::write(&log, format!("{ask}\n")).unwrap();
+        let mut i = Index::open(&f.0, vec![(Agent::Claude, root.clone())]).unwrap();
+        i.initialize().unwrap();
+        i.update_many([log.clone()], 1).unwrap();
+        let key = log.to_str().unwrap();
+        assert!(i.card(key).unwrap().unwrap().subagents.is_empty());
+        // Started: its meta and log appear, the parent's log stays as it was.
+        let meta = subs.join("agent-a1.meta.json");
+        fs::write(subs.join("agent-a1.jsonl"), "{}\n").unwrap();
+        fs::write(
+            &meta,
+            r#"{"agentType":"Explore","description":"Audit drift","requestShape":"background"}"#,
+        )
+        .unwrap();
+        let found = i.update_many([meta.clone()], 2).unwrap();
+        assert_eq!(
+            found.iter().map(|t| t.path.as_str()).collect::<Vec<_>>(),
+            [key]
+        );
+        let card = i.card(key).unwrap().unwrap();
+        assert_eq!(card.subagents.len(), 1);
+        assert!(card.subagents[0].running());
+        // Finished: the same meta rewritten.
+        fs::write(&meta, r#"{"agentType":"Explore","description":"Audit drift","requestShape":"background","finished":true}"#).unwrap();
+        i.update_many([meta.clone()], 3).unwrap();
+        assert!(!i.card(key).unwrap().unwrap().subagents[0].running());
+        // Nothing new: the parent is not reported again.
+        assert!(i.update_many([meta], 4).unwrap().is_empty());
+        assert_eq!(subagent_parent(&subs.join("notes.json")), None);
     }
     #[test]
     fn a_removed_declarations_rows_read_back_without_failing_the_index() {
