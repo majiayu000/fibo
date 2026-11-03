@@ -27,6 +27,8 @@ export const closeText = (code: number) => closeOutcome(code).text;
 const own = (b: Uint8Array) => b as Uint8Array<ArrayBuffer>;
 
 type Pending = { resolve: (ok: any) => void; reject: (e: Error) => void };
+/** How long a request may go unanswered before the link counts as dead. */
+export const REQUEST_TIMEOUT_MS = 20_000;
 type StreamHandler = (message: any) => void;
 
 export class Remote {
@@ -74,12 +76,26 @@ export class Remote {
     });
   }
 
-  /** One request; resolves with `ok`, rejects with the machine's `error`. */
+  /**
+   * One request; resolves with `ok`, rejects with the machine's `error`. No answer within
+   * REQUEST_TIMEOUT_MS means the link is dead though the socket never said so (Wi-Fi to
+   * cellular, a NAT forgetting it): it is ended, so the hub reconnects instead of showing
+   * a machine online whose answers never come.
+   */
   request<T = any>(op: string, fields: Record<string, unknown> = {}): Promise<T> {
     if (this.ended) return Promise.reject(new RemoteError('连接已断开'));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        if (!this.pending.has(id)) return;
+        this.end({ code: 4408, reason: 'no answer' });
+        this.ws.close();
+      }, REQUEST_TIMEOUT_MS);
+      const done = () => clearTimeout(timer);
+      this.pending.set(id, {
+        resolve: (ok) => (done(), resolve(ok)),
+        reject: (e) => (done(), reject(e)),
+      });
       this.send({ ...fields, id, op });
     });
   }
