@@ -225,9 +225,7 @@ fn a_live_turn_is_done_only_when_you_say_so() {
         assert!(session_status(&w, &unseen, &s) == (Status::Background, false));
     }
     assert_eq!(Status::Background.label(), "等后台");
-    assert!(
-        super::sidebar_list::bucket(Status::Background) == mooring_core::sidebar::Bucket::Running
-    );
+    assert!(super::sidebar_list::bucket(Status::Background) == mooring_core::sidebar::Bucket::Done);
 
     // A failed turn says so.
     w.content.insert(

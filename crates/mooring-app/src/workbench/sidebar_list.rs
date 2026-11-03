@@ -63,9 +63,10 @@ pub(super) fn split_today<R>(mut rows: Vec<(R, u64)>, now: u64) -> (Vec<R>, Vec<
 pub(super) fn bucket(g: Status) -> Bucket {
     match g {
         Status::Waiting | Status::Error => Bucket::Attention,
-        Status::Running | Status::Background => Bucket::Running,
-        // A finished turn, seen or not: still yours to check.
-        Status::Review => Bucket::Done,
+        Status::Running => Bucket::Running,
+        // A finished turn, seen or not: still yours to check. One that left a server or a
+        // wakeup behind in the background is over too; its second line says what is left.
+        Status::Review | Status::Background => Bucket::Done,
         // Marked complete, put off or interrupted: no longer moving on its own.
         Status::Paused | Status::Closed | Status::Deferred => Bucket::Stopped,
         Status::Fresh => Bucket::Fresh,
@@ -244,6 +245,7 @@ impl Workbench {
                 .map(|r| format!("{ASKS}{r}")),
             Bucket::Attention => self.attention_reason(s, g).map(|r| format!("停在 {r}")),
             Bucket::Running => content.and_then(|c| c.doing()).map(|d| format!("正在{d}")),
+            _ if g == Status::Background => content.and_then(|c| c.background?.describe()),
             _ => content.and_then(|c| first(c.last_reply.lines().find(|l| !l.trim().is_empty())?)),
         }
     }
@@ -793,6 +795,7 @@ impl Workbench {
             Detail::Never => None,
             Detail::Always => self.row_detail(l.0, l.1),
             Detail::Attention => (matches!(bucket(l.1), Bucket::Attention | Bucket::Running)
+                || l.1 == Status::Background
                 || current == Some(l.0.id.as_str()))
             .then(|| self.row_detail(l.0, l.1))
             .flatten(),

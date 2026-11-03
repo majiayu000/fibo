@@ -28,10 +28,10 @@ pub struct Hooks {
 /// `done` is any turn that ended, claimed finished or not: paused is still yours to look at.
 pub(crate) fn event(status: Status, turn: Turn) -> Option<Event> {
     match status {
-        Status::Running | Status::Background => Some(Event::Started),
+        Status::Running => Some(Event::Started),
         Status::Waiting => Some(Event::Waiting),
         Status::Error => Some(Event::Error),
-        Status::Review => Some(Event::Done),
+        Status::Review | Status::Background => Some(Event::Done),
         Status::Paused if matches!(turn, Turn::Completed | Turn::Interrupted) => Some(Event::Done),
         _ => None,
     }

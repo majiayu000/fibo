@@ -107,7 +107,7 @@ pub fn status_mark_seen(group: Status, unseen: bool) -> gpui::AnyElement {
             .rounded_full()
             .bg(hue)
             .into_any_element(),
-        Status::Running | Status::Background => div()
+        Status::Running => div()
             .relative()
             .size(px(SIZE))
             .flex_shrink_0()
@@ -120,13 +120,13 @@ pub fn status_mark_seen(group: Status, unseen: bool) -> gpui::AnyElement {
                     .child(icon("icons/arc.svg", hue)),
             )
             .into_any_element(),
-        Status::Review if unseen => div()
+        Status::Review | Status::Background if unseen => div()
             .size(px(T::DOT))
             .flex_shrink_0()
             .rounded_full()
             .bg(hue)
             .into_any_element(),
-        Status::Review => icon("icons/ring.svg", hue).into_any_element(),
+        Status::Review | Status::Background => icon("icons/ring.svg", hue).into_any_element(),
         Status::Closed => glyph(group).into_any_element(),
         _ => icon("icons/ring.svg", T::color(T::muted())).into_any_element(),
     }

@@ -61,10 +61,10 @@ const fn default_hue(status: Status) -> Option<u32> {
     match status {
         Status::Waiting => Some(ORANGE),
         Status::Error => Some(RED),
-        // 等后台 counts with 在跑; its ◔ tells them apart.
-        Status::Running | Status::Background => Some(YELLOW),
-        // Unseen fills the dot, seen draws it as a ring.
-        Status::Review => Some(GREEN),
+        Status::Running => Some(YELLOW),
+        // Unseen fills the dot, seen draws it as a ring. 等后台's turn ended too: it waits
+        // for you with 等你验收, its ◔ tells them apart.
+        Status::Review | Status::Background => Some(GREEN),
         // Quiet states share one slate and differ by glyph: ‖ ○ ◷.
         Status::Paused | Status::Fresh | Status::Deferred => Some(SLATE),
         // The muted text tone: 很久没动, and 做完了 once you marked it (its ✓ says so).
@@ -229,7 +229,11 @@ mod tests {
         }
         for s in Status::ALL {
             assert_eq!(d.hue(s) == YELLOW, s.working(), "{s:?}");
-            assert_eq!(d.hue(s) == GREEN, s == Status::Review, "{s:?}");
+            assert_eq!(
+                d.hue(s) == GREEN,
+                matches!(s, Status::Review | Status::Background),
+                "{s:?}"
+            );
         }
     }
 }

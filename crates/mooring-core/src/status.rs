@@ -96,9 +96,10 @@ impl Status {
     pub fn needs_you(self) -> bool {
         matches!(self, Self::Waiting | Self::Error)
     }
-    /// Work in flight: 在跑 and 等后台 count together.
+    /// Work in flight: a turn under way. 等后台 is not: its turn ended and only a server
+    /// or a wakeup it left behind is still alive, so it waits for you with 等你验收.
     pub fn working(self) -> bool {
-        matches!(self, Self::Running | Self::Background)
+        matches!(self, Self::Running)
     }
 }
 

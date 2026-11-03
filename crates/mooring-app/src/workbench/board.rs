@@ -81,13 +81,17 @@ pub(super) fn column_of(w: &Workspace, s: &AgentSession, now: u64) -> Option<Col
     Some(match status {
         // Just opened, no turn yet: nothing to put on a card.
         Status::Fresh => return None,
-        // 等后台 counts with 在跑. Waiting on you or failed: 要你处理, the sidebar's group
-        // of the same name. A turn you stopped ended, so it waits for your next step
-        // with the finished ones.
-        Status::Running | Status::Background => Column::Running,
+        // Waiting on you or failed: 要你处理, the sidebar's group of the same name. A turn
+        // you stopped ended, so it waits for your next step with the finished ones, and
+        // so does one that left a server or a wakeup in the background (等后台).
+        Status::Running => Column::Running,
         Status::Waiting | Status::Error => Column::Needs,
         Status::Stale => Column::Stale,
-        Status::Review | Status::Paused | Status::Deferred | Status::Closed => Column::Review,
+        Status::Review
+        | Status::Background
+        | Status::Paused
+        | Status::Deferred
+        | Status::Closed => Column::Review,
     })
 }
 const DAY: u64 = 86_400;
