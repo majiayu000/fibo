@@ -1,5 +1,5 @@
-//! Light, dark or slate: chosen from the Mooring menu and kept in
-//! `~/.config/mooring/appearance` as "system", "light", "dark" or "slate".
+//! System, light, dark or one of the lifted darks: chosen from the Mooring menu and
+//! kept in `~/.config/mooring/appearance` as "system" or the scheme's name.
 use super::style::Style;
 use super::theme::{Scheme, Theme};
 use gpui::{App, Global, WindowAppearance};
@@ -13,18 +13,27 @@ pub enum Appearance {
     /// docs/sidebar-redesign/flat.html.
     #[default]
     Dark,
-    /// A blue-gray dark with a lifted ground, never chosen by the system.
-    Slate,
+    /// A lifted dark (`Scheme::is_lifted`), never chosen by the system.
+    Lifted(Scheme),
 }
 impl Global for Appearance {}
 impl Appearance {
-    pub const ALL: [Self; 4] = [Self::System, Self::Light, Self::Dark, Self::Slate];
+    pub const ALL: [Self; 8] = [
+        Self::System,
+        Self::Light,
+        Self::Dark,
+        Self::Lifted(Scheme::Slate),
+        Self::Lifted(Scheme::Graphite),
+        Self::Lifted(Scheme::Warm),
+        Self::Lifted(Scheme::Pine),
+        Self::Lifted(Scheme::Plum),
+    ];
     pub fn label(self) -> &'static str {
         match self {
             Self::System => "跟随系统",
             Self::Light => "亮色",
             Self::Dark => "暗色",
-            Self::Slate => "蓝灰",
+            Self::Lifted(scheme) => scheme.label(),
         }
     }
     fn name(self) -> &'static str {
@@ -32,7 +41,7 @@ impl Appearance {
             Self::System => "system",
             Self::Light => "light",
             Self::Dark => "dark",
-            Self::Slate => "slate",
+            Self::Lifted(scheme) => scheme.name(),
         }
     }
     fn parse(text: &str) -> Option<Self> {
@@ -57,7 +66,7 @@ impl Appearance {
         match (self, system) {
             (Self::Light, _) => Scheme::Light,
             (Self::Dark, _) => Scheme::Dark,
-            (Self::Slate, _) => Scheme::Slate,
+            (Self::Lifted(scheme), _) => scheme,
             (Self::System, _) if style == Style::Terminal => Scheme::Dark,
             (Self::System, WindowAppearance::Light | WindowAppearance::VibrantLight) => {
                 Scheme::Light

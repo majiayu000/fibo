@@ -210,8 +210,8 @@ impl Palette {
             // (docs/sidebar-redesign/flat.html), so the panes read as the lit surface.
             sidebar: if light {
                 mix(bg, fg, 45)
-            } else if matches!(scheme, Scheme::Slate) {
-                // Slate's column is a softer step down, so the lifted ground still reads.
+            } else if scheme.is_lifted() {
+                // A lifted ground's column is a softer step down, so the ground still reads.
                 mix(bg, Theme::BLACK, 330)
             } else {
                 mix(bg, Theme::BLACK, 450)
@@ -256,16 +256,27 @@ const fn by(light: bool, on_light: u32, on_dark: u32) -> u32 {
     if light { on_light } else { on_dark }
 }
 const DARK: Palette = Palette::new(Scheme::Dark);
+#[cfg(test)]
 const LIGHT: Palette = Palette::new(Scheme::Light);
-const SLATE: Palette = Palette::new(Scheme::Slate);
+/// One palette per scheme, in `Scheme::ALL` order.
+const PALETTES: [Palette; Scheme::ALL.len()] = {
+    let mut out = [DARK; Scheme::ALL.len()];
+    let mut i = 0;
+    while i < out.len() {
+        out[i] = Palette::new(Scheme::ALL[i]);
+        i += 1;
+    }
+    out
+};
+/// Index into `Scheme::ALL`.
 static SCHEME: AtomicU8 = AtomicU8::new(0);
-const SCHEMES: [Scheme; 3] = [Scheme::Dark, Scheme::Light, Scheme::Slate];
-/// The sidebar's own dark grays are tuned against the dark terminal; on slate each keeps
-/// its place on the ladder below, between or above that terminal's colors, taken onto
-/// slate's.
+/// The sidebar's own dark grays are tuned against the dark terminal; on a lifted scheme
+/// each keeps its place on the ladder below, between or above that terminal's colors,
+/// taken onto the scheme's.
 fn ink(dark: u32) -> u32 {
-    if Theme::scheme() == Scheme::Slate {
-        restate(dark)
+    let scheme = Theme::scheme();
+    if scheme.is_lifted() {
+        restate(dark, scheme)
     } else {
         dark
     }
@@ -273,9 +284,9 @@ fn ink(dark: u32) -> u32 {
 const fn gray(c: u32) -> u32 {
     (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)) / 3
 }
-const fn restate(dark: u32) -> u32 {
+const fn restate(dark: u32, to: Scheme) -> u32 {
     let (bg, fg) = (Scheme::Dark.bg(), Scheme::Dark.fg());
-    let (to_bg, to_fg) = (Scheme::Slate.bg(), Scheme::Slate.fg());
+    let (to_bg, to_fg) = (to.bg(), to.fg());
     let (v, b, f) = (gray(dark), gray(bg), gray(fg));
     if v <= b {
         mix(to_bg, Theme::BLACK, (b - v) * 1000 / b)
@@ -385,7 +396,7 @@ impl Flat {
         Theme::scheme() != Scheme::Light
     }
     pub fn bg() -> u32 {
-        if Theme::scheme() == Scheme::Slate {
+        if Theme::scheme().is_lifted() {
             Theme::sidebar()
         } else if Self::dark() {
             0x0c0c0f
@@ -525,22 +536,14 @@ impl Theme {
     const BLACK: u32 = 0x000000;
     /// The scheme the window and its terminals paint with; read on every render.
     pub fn scheme() -> Scheme {
-        SCHEMES[SCHEME.load(Ordering::Relaxed) as usize]
+        Scheme::ALL[SCHEME.load(Ordering::Relaxed) as usize]
     }
     pub fn set_scheme(scheme: Scheme) {
-        let index = match scheme {
-            Scheme::Dark => 0,
-            Scheme::Light => 1,
-            Scheme::Slate => 2,
-        };
-        SCHEME.store(index, Ordering::Relaxed);
+        let index = Scheme::ALL.iter().position(|s| *s == scheme).unwrap_or(0);
+        SCHEME.store(index as u8, Ordering::Relaxed);
     }
     pub fn palette() -> &'static Palette {
-        match Self::scheme() {
-            Scheme::Dark => &DARK,
-            Scheme::Light => &LIGHT,
-            Scheme::Slate => &SLATE,
-        }
+        &PALETTES[SCHEME.load(Ordering::Relaxed) as usize]
     }
     /// Search matches drawn over terminal text, in either scheme: the hue of `matched`.
     pub const SEARCH_HIT: u32 = 0xe8a33a;
@@ -980,17 +983,41 @@ mod tests {
     }
 
     #[test]
-    fn slate_keeps_the_dark_sidebar_ladder_on_its_own_colors() {
-        use super::{SLATE, restate};
-        assert_eq!(SLATE.terminal_bg, Scheme::Slate.bg());
-        assert_eq!(restate(Scheme::Dark.bg()), Scheme::Slate.bg());
-        assert_eq!(restate(Scheme::Dark.fg()), Scheme::Slate.fg());
-        // The sidebar's grays keep their order from ground to bright text.
-        let ladder = [
-            0x0c0c0f, 0x121216, 0x1c1c21, 0x45454d, 0x7e7e87, 0xc9c9cf, 0xececee,
-        ];
-        for pair in ladder.windows(2) {
-            assert!(super::gray(restate(pair[0])) < super::gray(restate(pair[1])));
+    fn lifted_schemes_keep_the_dark_sidebar_ladder_on_their_own_colors() {
+        use super::{PALETTES, restate};
+        for (i, scheme) in Scheme::ALL.into_iter().enumerate() {
+            assert_eq!(PALETTES[i].terminal_bg, scheme.bg());
+            if !scheme.is_lifted() {
+                continue;
+            }
+            assert_eq!(restate(Scheme::Dark.bg(), scheme), scheme.bg());
+            assert_eq!(restate(Scheme::Dark.fg(), scheme), scheme.fg());
+            // The sidebar's grays keep their order from ground to bright text.
+            let ladder = [
+                0x0c0c0f, 0x121216, 0x1c1c21, 0x45454d, 0x7e7e87, 0xc9c9cf, 0xececee,
+            ];
+            for pair in ladder.windows(2) {
+                assert!(
+                    super::gray(restate(pair[0], scheme)) < super::gray(restate(pair[1], scheme))
+                );
+            }
+            // Text stays readable on the ground: about 10:1, never below 7:1.
+            let lum = |c: u32| {
+                let ch = |v: u32| {
+                    let v = v as f64 / 255.;
+                    if v <= 0.04045 {
+                        v / 12.92
+                    } else {
+                        ((v + 0.055) / 1.055).powf(2.4)
+                    }
+                };
+                0.2126 * ch(c >> 16 & 255) + 0.7152 * ch(c >> 8 & 255) + 0.0722 * ch(c & 255)
+            };
+            let ratio = (lum(scheme.fg()) + 0.05) / (lum(scheme.bg()) + 0.05);
+            assert!(
+                (7. ..13.).contains(&ratio),
+                "{scheme:?} contrast {ratio:.1}"
+            );
         }
     }
 

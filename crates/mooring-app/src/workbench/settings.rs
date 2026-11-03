@@ -854,28 +854,38 @@ impl SettingsView {
         let mut theme = Vec::new();
         if self.shows(Page::Look, "主题", cx) {
             let chosen = cx.try_global::<Appearance>().copied().unwrap_or_default();
-            let mut tiles = div().flex().gap(px(T::S16)).p(px(T::S16));
+            // System, light and dark on one row; the lifted darks on a second, so all
+            // fit the page width.
+            let row = || div().flex().gap(px(T::S16)).px(px(T::S16)).pt(px(T::S16));
+            let (mut tiles, mut lifted) = (row(), row().pb(px(T::S16)));
             for (i, look) in Appearance::ALL.into_iter().enumerate() {
                 let picture = match look {
                     Appearance::Light => div().flex_1().flex().child(window_sketch(Scheme::Light)),
                     Appearance::Dark => div().flex_1().flex().child(window_sketch(Scheme::Dark)),
-                    Appearance::Slate => div().flex_1().flex().child(window_sketch(Scheme::Slate)),
+                    Appearance::Lifted(scheme) => {
+                        div().flex_1().flex().child(window_sketch(scheme))
+                    }
                     Appearance::System => div()
                         .flex_1()
                         .flex()
                         .child(window_sketch(Scheme::Light))
                         .child(window_sketch(Scheme::Dark)),
                 };
-                tiles = tiles.child(
-                    self.tile(format!("look-{i}"), look.label(), look == chosen, picture)
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.text_error = crate::ui::appearance::choose(look, cx).err();
-                            crate::set_menus(cx);
-                            cx.notify();
-                        })),
-                );
+                let tile = self
+                    .tile(format!("look-{i}"), look.label(), look == chosen, picture)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.text_error = crate::ui::appearance::choose(look, cx).err();
+                        crate::set_menus(cx);
+                        cx.notify();
+                    }));
+                if matches!(look, Appearance::Lifted(_)) {
+                    lifted = lifted.child(tile);
+                } else {
+                    tiles = tiles.child(tile);
+                }
             }
             theme.push(tiles.into_any_element());
+            theme.push(lifted.into_any_element());
             theme.push(
                 div()
                     .px(px(T::S16))
@@ -2484,6 +2494,13 @@ impl Workbench {
     /// The page labels in nav order, for a tour that shows each in turn.
     pub(crate) fn visual_settings_pages() -> Vec<&'static str> {
         Page::ALL.into_iter().map(Page::label).collect()
+    }
+    pub(crate) fn visual_settings_close(&mut self, cx: &mut Context<Self>) {
+        self.settings = None;
+        cx.notify();
+    }
+    pub(crate) fn visual_settings_open(&self) -> bool {
+        self.settings.is_some()
     }
     pub(crate) fn visual_settings_show(&mut self, label: &str, cx: &mut Context<Self>) {
         let view = self.settings.clone().expect("settings open");

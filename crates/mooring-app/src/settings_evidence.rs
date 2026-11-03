@@ -51,6 +51,27 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
+        // Every fixed appearance: its 外观 page, then the workbench behind it.
+        if phase == "themes" {
+            for look in crate::ui::appearance::Appearance::ALL {
+                if look == crate::ui::appearance::Appearance::System {
+                    continue;
+                }
+                cx.update(|a| crate::ui::appearance::choose(look, a).unwrap());
+                if !handle.update(cx, |v, _, _| v.visual_settings_open()).unwrap() {
+                    handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+                }
+                handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+                wait(300).await;
+                shot(&format!("themes-{}-look", look.label()), cx);
+                handle.update(cx, |v, _, a| v.visual_settings_close(a)).unwrap();
+                wait(300).await;
+                shot(&format!("themes-{}-workbench", look.label()), cx);
+            }
+            eprintln!("settings themes PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         // 钉住这一轮的提问: the row alone under its search, default (bar only) then all on.
         if phase == "pinned-ask" {
             for (name, choice) in [

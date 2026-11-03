@@ -22,10 +22,6 @@ use std::{
 /// box from the background, so an unanswered query leaves it flat).
 pub const DEFAULT_FG: u32 = 0xd4d4d8;
 pub const DEFAULT_BG: u32 = 0x0e0e11;
-/// A blue-gray dark: a lifted, cool ground under slightly blue text, for displays where
-/// near-black with neutral white reads as glare.
-pub const SLATE_FG: u32 = 0xcad3e1;
-pub const SLATE_BG: u32 = 0x21252c;
 /// The light scheme's defaults, the window's light theme being derived from them.
 pub const LIGHT_FG: u32 = 0x1f1e1c;
 /// White as in the v3 design: panes and the chrome around them are white, the sidebar
@@ -41,42 +37,92 @@ const LIGHT_ANSI: [u32; 16] = [
 
 /// Which defaults a terminal paints with and reports through OSC 10/11/12 and
 /// CSI ? 996 n; programs such as Codex pick their own tints from them.
+///
+/// Past dark and light, each scheme is a lifted dark: a ground a few steps above black
+/// under slightly softened text (about 10:1), for displays where near-black under
+/// neutral white reads as glare. The window's colors all follow from `fg` and `bg`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Scheme {
     #[default]
     Dark,
     Light,
+    /// Blue-gray.
     Slate,
+    /// Neutral gray.
+    Graphite,
+    /// Warm gray, like dark paper.
+    Warm,
+    /// Green-gray.
+    Pine,
+    /// Violet-gray.
+    Plum,
 }
 impl Scheme {
+    pub const ALL: [Self; 7] = [
+        Self::Dark,
+        Self::Light,
+        Self::Slate,
+        Self::Graphite,
+        Self::Warm,
+        Self::Pine,
+        Self::Plum,
+    ];
+    pub const fn is_light(self) -> bool {
+        matches!(self, Self::Light)
+    }
+    /// A dark scheme on a lifted ground rather than near-black.
+    pub const fn is_lifted(self) -> bool {
+        !matches!(self, Self::Dark | Self::Light)
+    }
+    /// Kept in `~/.config/mooring/appearance`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+            Self::Slate => "slate",
+            Self::Graphite => "graphite",
+            Self::Warm => "warm",
+            Self::Pine => "pine",
+            Self::Plum => "plum",
+        }
+    }
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Dark => "暗色",
+            Self::Light => "亮色",
+            Self::Slate => "蓝灰",
+            Self::Graphite => "石墨",
+            Self::Warm => "暖灰",
+            Self::Pine => "松绿",
+            Self::Plum => "紫灰",
+        }
+    }
     /// `COLORFGBG` for a program started under this scheme ("fg;bg" in ANSI numbers),
     /// which some read before they query the terminal.
     pub const fn colorfgbg(self) -> &'static str {
+        if self.is_light() { "0;15" } else { "15;0" }
+    }
+    /// (foreground, background).
+    const fn colors(self) -> (u32, u32) {
         match self {
-            Self::Dark | Self::Slate => "15;0",
-            Self::Light => "0;15",
+            Self::Dark => (DEFAULT_FG, DEFAULT_BG),
+            Self::Light => (LIGHT_FG, LIGHT_BG),
+            Self::Slate => (0xcad3e1, 0x21252c),
+            Self::Graphite => (0xd2d2d6, 0x232326),
+            Self::Warm => (0xddd5c8, 0x262320),
+            Self::Pine => (0xcbd9d2, 0x1d2624),
+            Self::Plum => (0xd6cfe2, 0x25222c),
         }
     }
     pub const fn fg(self) -> u32 {
-        match self {
-            Self::Dark => DEFAULT_FG,
-            Self::Light => LIGHT_FG,
-            Self::Slate => SLATE_FG,
-        }
+        self.colors().0
     }
     pub const fn bg(self) -> u32 {
-        match self {
-            Self::Dark => DEFAULT_BG,
-            Self::Light => LIGHT_BG,
-            Self::Slate => SLATE_BG,
-        }
+        self.colors().1
     }
     /// GitHub's Ghostty themes: a blue that reads as the cursor on either background.
     pub const fn cursor(self) -> u32 {
-        match self {
-            Self::Dark | Self::Slate => 0x2f81f7,
-            Self::Light => 0x0969da,
-        }
+        if self.is_light() { 0x0969da } else { 0x2f81f7 }
     }
 }
 /// Reported for XTVERSION (CSI > q), like "ghostty 1.2.3".
