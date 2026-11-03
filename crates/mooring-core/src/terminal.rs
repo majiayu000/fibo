@@ -22,6 +22,10 @@ use std::{
 /// box from the background, so an unanswered query leaves it flat).
 pub const DEFAULT_FG: u32 = 0xd4d4d8;
 pub const DEFAULT_BG: u32 = 0x0e0e11;
+/// A blue-gray dark: a lifted, cool ground under slightly blue text, for displays where
+/// near-black with neutral white reads as glare.
+pub const SLATE_FG: u32 = 0xcad3e1;
+pub const SLATE_BG: u32 = 0x121720;
 /// The light scheme's defaults, the window's light theme being derived from them.
 pub const LIGHT_FG: u32 = 0x1f1e1c;
 /// White as in the v3 design: panes and the chrome around them are white, the sidebar
@@ -42,13 +46,14 @@ pub enum Scheme {
     #[default]
     Dark,
     Light,
+    Slate,
 }
 impl Scheme {
     /// `COLORFGBG` for a program started under this scheme ("fg;bg" in ANSI numbers),
     /// which some read before they query the terminal.
     pub const fn colorfgbg(self) -> &'static str {
         match self {
-            Self::Dark => "15;0",
+            Self::Dark | Self::Slate => "15;0",
             Self::Light => "0;15",
         }
     }
@@ -56,18 +61,20 @@ impl Scheme {
         match self {
             Self::Dark => DEFAULT_FG,
             Self::Light => LIGHT_FG,
+            Self::Slate => SLATE_FG,
         }
     }
     pub const fn bg(self) -> u32 {
         match self {
             Self::Dark => DEFAULT_BG,
             Self::Light => LIGHT_BG,
+            Self::Slate => SLATE_BG,
         }
     }
     /// GitHub's Ghostty themes: a blue that reads as the cursor on either background.
     pub const fn cursor(self) -> u32 {
         match self {
-            Self::Dark => 0x2f81f7,
+            Self::Dark | Self::Slate => 0x2f81f7,
             Self::Light => 0x0969da,
         }
     }

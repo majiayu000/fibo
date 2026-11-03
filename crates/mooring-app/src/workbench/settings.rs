@@ -859,6 +859,7 @@ impl SettingsView {
                 let picture = match look {
                     Appearance::Light => div().flex_1().flex().child(window_sketch(Scheme::Light)),
                     Appearance::Dark => div().flex_1().flex().child(window_sketch(Scheme::Dark)),
+                    Appearance::Slate => div().flex_1().flex().child(window_sketch(Scheme::Slate)),
                     Appearance::System => div()
                         .flex_1()
                         .flex()

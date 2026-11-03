@@ -3,7 +3,7 @@
 pub use crate::model::session_state::Status;
 use gpui::{App, Font, Hsla, Rgba, font};
 pub use mooring_core::terminal::Scheme;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 pub fn hsla(c: u32) -> Hsla {
     Rgba {
@@ -254,7 +254,34 @@ const fn by(light: bool, on_light: u32, on_dark: u32) -> u32 {
 }
 const DARK: Palette = Palette::new(Scheme::Dark);
 const LIGHT: Palette = Palette::new(Scheme::Light);
-static LIGHT_ON: AtomicBool = AtomicBool::new(false);
+const SLATE: Palette = Palette::new(Scheme::Slate);
+static SCHEME: AtomicU8 = AtomicU8::new(0);
+const SCHEMES: [Scheme; 3] = [Scheme::Dark, Scheme::Light, Scheme::Slate];
+/// The sidebar's own dark grays are tuned against the dark terminal; on slate each keeps
+/// its place on the ladder below, between or above that terminal's colors, taken onto
+/// slate's.
+fn ink(dark: u32) -> u32 {
+    if Theme::scheme() == Scheme::Slate {
+        restate(dark)
+    } else {
+        dark
+    }
+}
+const fn gray(c: u32) -> u32 {
+    (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)) / 3
+}
+const fn restate(dark: u32) -> u32 {
+    let (bg, fg) = (Scheme::Dark.bg(), Scheme::Dark.fg());
+    let (to_bg, to_fg) = (Scheme::Slate.bg(), Scheme::Slate.fg());
+    let (v, b, f) = (gray(dark), gray(bg), gray(fg));
+    if v <= b {
+        mix(to_bg, Theme::BLACK, (b - v) * 1000 / b)
+    } else if v <= f {
+        mix(to_bg, to_fg, (v - b) * 1000 / (f - b))
+    } else {
+        mix(to_fg, Theme::WHITE, (v - f) * 1000 / (255 - f))
+    }
+}
 macro_rules! tokens {
     ($($name:ident),* $(,)?) => {
         impl Theme {
@@ -352,67 +379,67 @@ impl Flat {
     pub const SUB_TRUNK: f32 = 3.;
     pub const SUB_LEAF: f32 = 20.;
     fn dark() -> bool {
-        Theme::scheme() == Scheme::Dark
+        Theme::scheme() != Scheme::Light
     }
     pub fn bg() -> u32 {
         if Self::dark() {
-            0x0c0c0f
+            ink(0x0c0c0f)
         } else {
             Theme::sidebar()
         }
     }
     pub fn line() -> u32 {
         if Self::dark() {
-            0x1c1c21
+            ink(0x1c1c21)
         } else {
             Theme::border()
         }
     }
     pub fn field_line() -> u32 {
         if Self::dark() {
-            0x1f1f25
+            ink(0x1f1f25)
         } else {
             Theme::border()
         }
     }
     pub fn chip_line() -> u32 {
         if Self::dark() {
-            0x23232a
+            ink(0x23232a)
         } else {
             Theme::border()
         }
     }
     pub fn chip_on() -> u32 {
         if Self::dark() {
-            0x1c1c22
+            ink(0x1c1c22)
         } else {
             Theme::raised()
         }
     }
     pub fn chip_on_line() -> u32 {
         if Self::dark() {
-            0x4a4a54
+            ink(0x4a4a54)
         } else {
             Theme::control()
         }
     }
     pub fn hover() -> u32 {
         if Self::dark() {
-            0x131317
+            ink(0x131317)
         } else {
             Theme::raised()
         }
     }
     pub fn selected() -> u32 {
         if Self::dark() {
-            0x17171c
+            ink(0x17171c)
         } else {
             Theme::raised()
         }
     }
     pub fn selected_line() -> u32 {
         if Self::dark() {
-            0x2a2a31
+            ink(0x2a2a31)
         } else {
             Theme::control()
         }
@@ -420,7 +447,7 @@ impl Flat {
     /// MOORING and a chosen chip's name.
     pub fn bright() -> u32 {
         if Self::dark() {
-            0xececee
+            ink(0xececee)
         } else {
             Theme::primary()
         }
@@ -428,7 +455,7 @@ impl Flat {
     /// A title that needs you, is running or is being checked.
     pub fn title() -> u32 {
         if Self::dark() {
-            0xe4e4e7
+            ink(0xe4e4e7)
         } else {
             Theme::primary()
         }
@@ -436,21 +463,21 @@ impl Flat {
     /// A stopped session's title and a chip's name.
     pub fn quiet() -> u32 {
         if Self::dark() {
-            0xc9c9cf
+            ink(0xc9c9cf)
         } else {
             Theme::body()
         }
     }
     pub fn second() -> u32 {
         if Self::dark() {
-            0xa2a2aa
+            ink(0xa2a2aa)
         } else {
             Theme::secondary()
         }
     }
     pub fn third() -> u32 {
         if Self::dark() {
-            0x7e7e87
+            ink(0x7e7e87)
         } else {
             Theme::muted()
         }
@@ -458,7 +485,7 @@ impl Flat {
     /// The ✓ of a session you marked complete (flat.html `.st.d`).
     pub fn done() -> u32 {
         if Self::dark() {
-            0x6a6a72
+            ink(0x6a6a72)
         } else {
             Theme::muted()
         }
@@ -466,7 +493,7 @@ impl Flat {
     /// A stopped session's ring.
     pub fn idle() -> u32 {
         if Self::dark() {
-            0x45454d
+            ink(0x45454d)
         } else {
             Theme::control()
         }
@@ -474,14 +501,14 @@ impl Flat {
     /// The bar naming the one space the list is narrowed to.
     pub fn scope() -> u32 {
         if Self::dark() {
-            0x121216
+            ink(0x121216)
         } else {
             Theme::raised()
         }
     }
     pub fn key_line() -> u32 {
         if Self::dark() {
-            0x2a2a31
+            ink(0x2a2a31)
         } else {
             Theme::control()
         }
@@ -493,19 +520,21 @@ impl Theme {
     const BLACK: u32 = 0x000000;
     /// The scheme the window and its terminals paint with; read on every render.
     pub fn scheme() -> Scheme {
-        if LIGHT_ON.load(Ordering::Relaxed) {
-            Scheme::Light
-        } else {
-            Scheme::Dark
-        }
+        SCHEMES[SCHEME.load(Ordering::Relaxed) as usize]
     }
     pub fn set_scheme(scheme: Scheme) {
-        LIGHT_ON.store(scheme == Scheme::Light, Ordering::Relaxed);
+        let index = match scheme {
+            Scheme::Dark => 0,
+            Scheme::Light => 1,
+            Scheme::Slate => 2,
+        };
+        SCHEME.store(index, Ordering::Relaxed);
     }
     pub fn palette() -> &'static Palette {
         match Self::scheme() {
             Scheme::Dark => &DARK,
             Scheme::Light => &LIGHT,
+            Scheme::Slate => &SLATE,
         }
     }
     /// Search matches drawn over terminal text, in either scheme: the hue of `matched`.
@@ -943,6 +972,21 @@ mod tests {
         assert_eq!(mix(0x000000, 0xffffff, 1000), 0xffffff);
         assert_eq!(mix(0x102030, 0x304050, 500), 0x203040);
         assert_eq!(Theme::pane(), Theme::terminal_bg());
+    }
+
+    #[test]
+    fn slate_keeps_the_dark_sidebar_ladder_on_its_own_colors() {
+        use super::{SLATE, restate};
+        assert_eq!(SLATE.terminal_bg, Scheme::Slate.bg());
+        assert_eq!(restate(Scheme::Dark.bg()), Scheme::Slate.bg());
+        assert_eq!(restate(Scheme::Dark.fg()), Scheme::Slate.fg());
+        // The sidebar's grays keep their order from ground to bright text.
+        let ladder = [
+            0x0c0c0f, 0x121216, 0x1c1c21, 0x45454d, 0x7e7e87, 0xc9c9cf, 0xececee,
+        ];
+        for pair in ladder.windows(2) {
+            assert!(super::gray(restate(pair[0])) < super::gray(restate(pair[1])));
+        }
     }
 
     #[test]

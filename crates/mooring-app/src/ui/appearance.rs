@@ -1,5 +1,5 @@
-//! Light or dark: chosen from the Mooring menu and kept in
-//! `~/.config/mooring/appearance` as "system", "light" or "dark".
+//! Light, dark or slate: chosen from the Mooring menu and kept in
+//! `~/.config/mooring/appearance` as "system", "light", "dark" or "slate".
 use super::style::Style;
 use super::theme::{Scheme, Theme};
 use gpui::{App, Global, WindowAppearance};
@@ -13,15 +13,18 @@ pub enum Appearance {
     /// docs/sidebar-redesign/flat.html.
     #[default]
     Dark,
+    /// A blue-gray dark with a lifted ground, never chosen by the system.
+    Slate,
 }
 impl Global for Appearance {}
 impl Appearance {
-    pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
+    pub const ALL: [Self; 4] = [Self::System, Self::Light, Self::Dark, Self::Slate];
     pub fn label(self) -> &'static str {
         match self {
             Self::System => "跟随系统",
             Self::Light => "亮色",
             Self::Dark => "暗色",
+            Self::Slate => "蓝灰",
         }
     }
     fn name(self) -> &'static str {
@@ -29,6 +32,7 @@ impl Appearance {
             Self::System => "system",
             Self::Light => "light",
             Self::Dark => "dark",
+            Self::Slate => "slate",
         }
     }
     fn parse(text: &str) -> Option<Self> {
@@ -53,6 +57,7 @@ impl Appearance {
         match (self, system) {
             (Self::Light, _) => Scheme::Light,
             (Self::Dark, _) => Scheme::Dark,
+            (Self::Slate, _) => Scheme::Slate,
             (Self::System, _) if style == Style::Terminal => Scheme::Dark,
             (Self::System, WindowAppearance::Light | WindowAppearance::VibrantLight) => {
                 Scheme::Light
