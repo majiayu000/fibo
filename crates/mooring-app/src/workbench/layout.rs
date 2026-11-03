@@ -338,42 +338,35 @@ impl Workbench {
             .zip(status)
             .filter(|(_, g)| *g == Status::Review && completing.is_none())
             .map(|(s, g)| self.turn_bar(id, s, g, cx));
-        let ask = session
-            .zip(status)
-            .filter(|(_, g)| *g == Status::Waiting && !terminal_style)
-            .and_then(|(s, g)| self.ask_card(id, s, g, cx));
-        let body = div()
-            .flex_1()
-            .min_h_0()
-            .flex()
-            .flex_col()
-            .px(px(T::S14))
-            .py(px(T::S10))
-            .when_some(
-                pane.read(cx)
-                    .handoff_state()
-                    .filter(|_| self.workspace.pending_tasks.get(id) != Some(&None))
-                    .zip(
-                        self.workspace
-                            .terminal_tab(id)
-                            .and_then(|t| t.default_task.as_ref())
-                            .and_then(|tid| self.workspace.tasks.iter().find(|t| &t.id == tid)),
-                    ),
-                |d, (state, task)| d.child(self.handoff_bar(id, task, state, cx)),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .child(pane.clone().cached(gpui::StyleRefinement {
+        let body =
+            div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .px(px(T::S14))
+                .py(px(T::S10))
+                .when_some(
+                    pane.read(cx)
+                        .handoff_state()
+                        .filter(|_| self.workspace.pending_tasks.get(id) != Some(&None))
+                        .zip(
+                            self.workspace
+                                .terminal_tab(id)
+                                .and_then(|t| t.default_task.as_ref())
+                                .and_then(|tid| self.workspace.tasks.iter().find(|t| &t.id == tid)),
+                        ),
+                    |d, (state, task)| d.child(self.handoff_bar(id, task, state, cx)),
+                )
+                .child(div().flex_1().min_h_0().child(pane.clone().cached(
+                    gpui::StyleRefinement {
                         size: gpui::SizeRefinement {
                             width: Some(gpui::relative(1.).into()),
                             height: Some(gpui::relative(1.).into()),
                         },
                         ..Default::default()
-                    })),
-            )
-            .children(ask);
+                    },
+                )));
         let footer = other_owner.then(|| self.pane_footer(id, takeover, cx));
         let mut pane_box = div()
             .id(gpui::SharedString::from(format!("pane-{id}")))
@@ -1643,89 +1636,6 @@ pub(super) fn urgency(group: Status) -> u8 {
     }
 }
 /// `3:12`, or `1:03:12` past an hour.
-impl Workbench {
-    /// The v3 question card at a waiting pane's foot: what the agent asks and its choices,
-    /// each a button that types its number into the terminal, then 自己写 for an answer
-    /// of your own. Only for a question tool's choices still in the asked text, so a
-    /// screen prompt or an approval never shows stale buttons, and only while the
-    /// terminal does not show the agent's own menu: scrolled back, too short, or hidden.
-    fn ask_card(
-        &self,
-        id: &str,
-        s: &AgentSession,
-        g: Status,
-        cx: &Context<Self>,
-    ) -> Option<gpui::Div> {
-        let content = self.workspace.content.get(&s.id)?;
-        let first = content.waiting.lines().next()?.trim();
-        if content.choices.is_empty() || !content.choices.iter().all(|c| first.contains(c.as_str()))
-        {
-            return None;
-        }
-        if (self.layout.panes.get(id)?.read(cx)).choices_shown(&content.choices) {
-            return None;
-        }
-        let prompt = ask_prompt(first).to_owned();
-        let (dot, ink, wash) = g.colors();
-        let mut options: Vec<(String, String)> = content
-            .choices
-            .iter()
-            .enumerate()
-            .map(|(n, c)| ((n + 1).to_string(), format!("{}. {c}", n + 1)))
-            .collect();
-        let other = (options.len() + 1).to_string();
-        options.push((other.clone(), format!("{other}. 自己写")));
-        let rows = options.into_iter().enumerate().map(|(n, (key, text))| {
-            let pane = self.layout.panes.get(id).cloned();
-            let own = key == other;
-            let focus = id.to_owned();
-            div()
-                .id(gpui::SharedString::from(format!("ask-{id}-{n}")))
-                .px(px(T::S8))
-                .py(px(T::S4))
-                .rounded(px(T::CONTROL_RADIUS))
-                .cursor_pointer()
-                .text_color(if own {
-                    T::color(T::muted())
-                } else {
-                    T::color(T::primary())
-                })
-                .hover(|d| d.bg(wash.opacity(0.6)))
-                .child(text)
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    if let Some(pane) = &pane {
-                        pane.update(cx, |p, cx| p.press(&key, cx));
-                    }
-                    if own {
-                        this.focus_terminal(&focus, window, cx);
-                    }
-                }))
-        });
-        Some(
-            div()
-                .flex_shrink_0()
-                .mt(px(T::S8))
-                .p(px(T::S10))
-                .flex()
-                .flex_col()
-                .gap(px(T::S2))
-                .rounded(px(T::CONTROL_RADIUS))
-                .border(px(T::BORDER_WIDTH))
-                .border_color(dot.opacity(0.5))
-                .bg(wash.opacity(0.35))
-                .text_size(px(T::SMALL))
-                .child(
-                    div()
-                        .px(px(T::S8))
-                        .pb(px(T::S4))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(ink)
-                        .child(prompt),
-                )
-                .children(rows),
-        )
-    }
-}
 /// A question as the host words it, `【范围】问题（a / b）`, down to `问题`.
 pub(super) fn ask_prompt(line: &str) -> &str {
     let line = line.split_once('】').map_or(line, |(_, rest)| rest);
