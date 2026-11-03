@@ -80,7 +80,10 @@ export default function Chat() {
   const last = useRef(0);
   last.current = messages.at(-1)?.seq ?? 0;
 
-  // The newest page; again whenever the connection comes back.
+  // The newest page; again whenever the connection comes back, and when the terminal's
+  // card names another conversation (a new one started in the same terminal).
+  const shown = useRef<string | null>(null);
+  const cardSession = card?.session ?? null;
   useEffect(() => {
     const r = online ? remote(machine) : null;
     if (!r) return;
@@ -88,9 +91,12 @@ export default function Chat() {
     r.request('chat', { terminal, limit: 50 })
       .then((page) => {
         if (!live) return;
+        const same = shown.current === null || shown.current === page.session;
+        shown.current = page.session;
         setSession(page.session);
         setMore(page.more);
-        setMessages((have) => merge(have, page.messages));
+        // Another conversation: its messages replace the old one's, not join them.
+        setMessages((have) => (same ? merge(have, page.messages) : page.messages));
         setError('');
       })
       .catch((e) => live && setError(e.message))
@@ -98,7 +104,7 @@ export default function Chat() {
     return () => {
       live = false;
     };
-  }, [online, machine, terminal]);
+  }, [online, machine, terminal, cardSession]);
 
   // New messages: the Agent's words mid-turn raise no event, so ask every two seconds.
   useEffect(() => {
@@ -108,7 +114,10 @@ export default function Chat() {
       if (!r) return;
       try {
         const page = await r.request('chat', { session, after: last.current });
-        if (page.messages.length) setMessages((have) => merge(have, page.messages));
+        // An answer for a conversation this page has since left is dropped.
+        if (page.messages.length && shown.current === session) {
+          setMessages((have) => merge(have, page.messages));
+        }
       } catch {
         // The next tick or the reconnect tries again.
       }
@@ -131,6 +140,7 @@ export default function Chat() {
     const r = remote(machine);
     if (!r || !session || !more || !messages.length) return;
     const page = await r.request('chat', { session, before: messages[0].seq });
+    if (shown.current !== session) return;
     setMore(page.more);
     setMessages((have) => merge(have, page.messages));
   }, [machine, session, more, messages]);
@@ -171,7 +181,8 @@ export default function Chat() {
     [messages, pending],
   );
 
-  const ask = card?.approval || (card?.phase === 'waiting' ? card.waiting : null);
+  // Offline, the card is what the machine said before it went: shown, but not answerable.
+  const ask = online ? card?.approval || (card?.phase === 'waiting' ? card.waiting : null) : null;
 
   // What the approval is for (the command, the file) is on screen above the question.
   const [screen, setScreen] = useState('');
