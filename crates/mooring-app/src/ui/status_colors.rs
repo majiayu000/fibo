@@ -49,10 +49,10 @@ fn legacy(key: &str) -> Option<Status> {
         _ => None,
     }
 }
-const YELLOW: u32 = 0xe8c547;
-const GREEN: u32 = 0x4cc38a;
+const YELLOW: u32 = 0xe5b83b;
+const GREEN: u32 = 0x3fb27f;
 const SLATE: u32 = 0x8a9bb0;
-const ORANGE: u32 = 0xe8823a;
+const ORANGE: u32 = 0xe8732c;
 const RED: u32 = 0xe5534b;
 /// The default hue of each status (2026-11-02): yellow is only ever work in flight,
 /// green only ever a finished turn waiting for you; what you marked complete is done

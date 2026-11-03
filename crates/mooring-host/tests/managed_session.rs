@@ -526,8 +526,8 @@ time.sleep(60)
         .collect();
     let got = String::from_utf8(got).unwrap();
     for reply in [
-        "\x1b]11;rgb:1c1c/1c1c/1e1e\x07",
-        "\x1b]10;rgb:e4e4/e2e2/dfdf\x07",
+        "\x1b]11;rgb:0e0e/0e0e/1111\x07",
+        "\x1b]10;rgb:d4d4/d4d4/d8d8\x07",
         "\x1b[?62;22c",
         "\x1bP>|mooring ",
         "\x1b[8;30;100t",

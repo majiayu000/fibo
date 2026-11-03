@@ -203,7 +203,8 @@ impl Palette {
             vivid,
             ink_share: if light { 450 } else { 620 },
             wash_share: if light { 150 } else { 220 },
-            app: mix(bg, Theme::BLACK, by(light, 70, 150)),
+            // On dark the window around the panes is near black (#08080A), as flat.html has it.
+            app: mix(bg, Theme::BLACK, by(light, 70, 430)),
             panel: bg,
             // On dark the column sits a step below the terminal's ground, near black
             // (docs/sidebar-redesign/flat.html), so the panes read as the lit surface.

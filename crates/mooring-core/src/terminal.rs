@@ -20,8 +20,8 @@ use std::{
 /// Default colors of every terminal. The display paints unset cells with them, and
 /// programs read the same values back through OSC 10/11/12 (Codex tints its input
 /// box from the background, so an unanswered query leaves it flat).
-pub const DEFAULT_FG: u32 = 0xe4e2df;
-pub const DEFAULT_BG: u32 = 0x1c1c1e;
+pub const DEFAULT_FG: u32 = 0xd4d4d8;
+pub const DEFAULT_BG: u32 = 0x0e0e11;
 /// The light scheme's defaults, the window's light theme being derived from them.
 pub const LIGHT_FG: u32 = 0x1f1e1c;
 /// White as in the v3 design: panes and the chrome around them are white, the sidebar
@@ -729,8 +729,8 @@ mod tests {
         vt.answer_queries(cell.clone()).unwrap();
         cell.set(16, 34);
         for (query, reply) in [
-            (&b"\x1b]10;?\x1b\\"[..], "\x1b]10;rgb:e4e4/e2e2/dfdf\x1b\\"),
-            (b"\x1b]11;?\x07", "\x1b]11;rgb:1c1c/1c1c/1e1e\x07"),
+            (&b"\x1b]10;?\x1b\\"[..], "\x1b]10;rgb:d4d4/d4d4/d8d8\x1b\\"),
+            (b"\x1b]11;?\x07", "\x1b]11;rgb:0e0e/0e0e/1111\x07"),
             (b"\x1b]12;?\x07", "\x1b]12;rgb:2f2f/8181/f7f7\x07"),
             (b"\x1b]4;1;?\x07", "\x1b]4;1;rgb:"),
             (b"\x1b[c", "\x1b[?62;22c"),

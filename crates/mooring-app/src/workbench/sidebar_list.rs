@@ -48,6 +48,18 @@ pub(super) fn recent_order<R: Copy>(rows: &[(R, Bucket, u64)]) -> RecentOrder<R>
     }
 }
 
+/// Rows no longer moving, newest first, split at 24 hours: 今天 and 更早.
+pub(super) fn split_today<R>(mut rows: Vec<(R, u64)>, now: u64) -> (Vec<R>, Vec<R>) {
+    rows.sort_by_key(|(_, when)| std::cmp::Reverse(*when));
+    let (today, older): (Vec<_>, Vec<_>) = rows
+        .into_iter()
+        .partition(|(_, when)| now.saturating_sub(*when) < 86_400);
+    (
+        today.into_iter().map(|(r, _)| r).collect(),
+        older.into_iter().map(|(r, _)| r).collect(),
+    )
+}
+
 pub(super) fn bucket(g: Status) -> Bucket {
     match g {
         Status::Waiting | Status::Error => Bucket::Attention,
@@ -906,11 +918,8 @@ impl Workbench {
                 // Only what asks you or failed gets a second line: the question is what you
                 // act on. A finished turn or a running one reads from its state mark alone,
                 // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
-                for (title, rows, lines) in [
-                    ("要你处理", need, true),
-                    ("在跑", running, false),
-                    ("停着", stopped, false),
-                ] {
+                for (title, rows, lines) in [("要你处理", need, true), ("在跑", running, false)]
+                {
                     if rows.is_empty() {
                         continue;
                     }
@@ -921,20 +930,45 @@ impl Workbench {
                         push(&mut out, l, d, End::State);
                     }
                 }
-                if !quiet.is_empty() {
-                    let open = self.sidebar.open("recent:quiet", false);
+                // What is no longer moving, open in a tab or closed: today's in full, the
+                // rest folded into one line, as flat.html has it. These rows skip the
+                // preset's limit, which is there to keep 要你处理 and 在跑 on one screen.
+                let history: Vec<(Listed, u64)> = stopped
+                    .into_iter()
+                    .chain(quiet)
+                    .chain(closed.rows.iter().copied())
+                    .map(|l| (l, self.session_updated(l.0)))
+                    .collect();
+                let (today, older) = split_today(history, crate::model::time::now());
+                if !today.is_empty() {
+                    out.push(Self::flat_group("今天", today.len()).into_any_element());
+                    for l in today {
+                        out.push(self.session_row(l, current, None, End::State, cx));
+                    }
+                }
+                // Older ones a module was not handed are still counted, and open in 鸟瞰.
+                let unlisted = closed.total.saturating_sub(closed.rows.len());
+                if !older.is_empty() || unlisted > 0 {
+                    // Narrowed to one space the list is short, so it opens by itself.
+                    let open = self
+                        .sidebar
+                        .open("recent:older", self.space_filter().is_some());
                     out.push(self.flat_more(
-                        "recent:quiet",
-                        format!("很久没动 {} 个", quiet.len()),
+                        "recent:older",
+                        format!("更早 {} 个 · 停着或做完了", older.len() + unlisted),
                         open,
                         cx,
                     ));
-                    for l in quiet {
+                    for l in older {
                         if open || current == Some(l.0.id.as_str()) {
-                            push(&mut out, l, None, End::State);
+                            out.push(self.session_row(l, current, None, End::State, cx));
                         }
                     }
+                    if open && unlisted > 0 {
+                        out.push(self.flat_closed_more(unlisted, cx));
+                    }
                 }
+                owns_closed = true;
             }
             Grouping::Wasm => {
                 owns_closed =
@@ -1235,5 +1269,19 @@ mod recent_tests {
         assert_eq!(order.running, ["running"]);
         assert!(order.stopped.is_empty());
         assert_eq!(order.quiet, ["quiet"]);
+    }
+
+    #[test]
+    fn history_splits_at_a_day_newest_first() {
+        let now = 10 * 86_400;
+        let rows = vec![
+            ("two-days", now - 2 * 86_400),
+            ("hour", now - 3_600),
+            ("minute", now - 60),
+            ("day-and-a-bit", now - 86_400),
+        ];
+        let (today, older) = split_today(rows, now);
+        assert_eq!(today, ["minute", "hour"]);
+        assert_eq!(older, ["day-and-a-bit", "two-days"]);
     }
 }

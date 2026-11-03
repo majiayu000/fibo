@@ -221,6 +221,24 @@ impl Workbench {
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
             .into_any_element()
     }
+    /// Closed sessions past the ones listed under 更早: one line that opens them in 鸟瞰.
+    pub(super) fn flat_closed_more(&self, count: usize, cx: &Context<Self>) -> gpui::AnyElement {
+        div()
+            .id("sidebar-closed-sessions")
+            .mx(px(T::S8))
+            .px(px(T::S10))
+            .py(px(F::ONE_PAD_Y))
+            .rounded(px(F::ROW_RADIUS))
+            .cursor_pointer()
+            .hover(|s| s.bg(ink(F::hover())))
+            .font_family(T::UI_FONT)
+            .text_size(px(F::SUB))
+            .line_height(px(F::SUB_LINE))
+            .text_color(ink(F::third()))
+            .child(format!("还有 {count} 个已关闭 · 在鸟瞰里找"))
+            .on_click(cx.listener(|this, _, _, cx| this.show_closed(cx)))
+            .into_any_element()
+    }
     /// One session: its state, its title, its space and its time; what it asks you, when
     /// it asks, on a second line.
     pub(super) fn flat_row(

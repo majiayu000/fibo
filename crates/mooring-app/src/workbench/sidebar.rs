@@ -334,7 +334,8 @@ impl Workbench {
         );
         let listed_count = sessions.len() + unread.len();
         sidebar = sidebar.child(self.sessions_header(sessions.len() + unread.len(), cx));
-        if sessions.is_empty() && unread.is_empty() {
+        // 会话优先 lists closed sessions under 今天 and 更早, so the column is not empty.
+        if sessions.is_empty() && unread.is_empty() && !(recent && ended.total > 0) {
             sidebar = sidebar.child(
                 label("没有打开的会话。从右边启动一个 Agent，或在终端里运行 claude、codex，它们会出现在这里")
                     .mt(px(T::S14))
