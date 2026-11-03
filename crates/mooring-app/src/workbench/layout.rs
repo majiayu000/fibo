@@ -1708,7 +1708,7 @@ impl Workbench {
                 .agent_sessions
                 .iter()
                 .filter(|s| s.terminal.as_deref() == Some(id))
-                .max_by_key(|s| s.updated)
+                .max_by_key(|s| self.workspace.session_updated(s))
         })
     }
     /// A pane's status as the sidebar shows it, and whether it asks for attention; a

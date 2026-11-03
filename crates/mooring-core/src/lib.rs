@@ -16,6 +16,7 @@ pub mod rule;
 pub mod sidebar;
 pub mod status;
 pub mod terminal;
+pub mod time;
 
 pub mod content;
 pub mod diagnostics;

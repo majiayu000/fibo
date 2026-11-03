@@ -171,10 +171,7 @@ impl Workbench {
     }
     /// When its conversation last moved.
     pub(super) fn session_updated(&self, s: &AgentSession) -> u64 {
-        self.workspace
-            .content
-            .get(&s.id)
-            .map_or(s.updated, |c| c.updated)
+        self.workspace.session_updated(s)
     }
     pub(super) fn session_line(&self, s: &AgentSession) -> String {
         self.workspace

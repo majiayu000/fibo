@@ -206,23 +206,18 @@ fn panel(w: &Workspace, link: &Link) -> String {
             _ => (),
         };
         if attention {
-            let minutes = at.saturating_sub(c.updated) / 60;
             let meta = match space_name(w, s) {
                 Some(space) => format!("{space} · {}", s.runtime.name()),
                 None => s.runtime.name().to_owned(),
             };
             let waits = group == State::Waiting;
             rows.push((
-                (!waits, std::cmp::Reverse(c.updated)),
+                (!waits, std::cmp::Reverse(w.session_updated(s))),
                 json!({
                     "id": s.id,
                     "title": short(&w.session_title(s), 24),
                     "summary": short(if waits { &c.waiting } else { &c.error }, 40),
-                    "age": if minutes < 60 {
-                        format!("{minutes} 分钟")
-                    } else {
-                        format!("{} 小时", minutes / 60)
-                    },
+                    "age": crate::model::time::age(w.session_updated(s)),
                     "kind": if waits { "wait" } else { "error" },
                     "meta": meta,
                 }),

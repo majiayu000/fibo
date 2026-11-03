@@ -567,7 +567,7 @@ impl Workspace {
         }
         if let Some(title) = sessions
             .iter()
-            .filter_map(|s| Some((s.updated, self.session_name(s)?)))
+            .filter_map(|s| Some((self.session_updated(s), self.session_name(s)?)))
             .max_by_key(|(updated, _)| *updated)
             .map(|(_, t)| t)
         {
@@ -666,6 +666,23 @@ impl Workspace {
             o.id != s.id && o.current && o.terminal.as_ref().is_some_and(|id| ids.contains(id))
         });
         (!others).then_some(tab)
+    }
+    /// When the conversation last moved: the newer of what its log index recorded and
+    /// what its content (log, hook or screen) last saw. Every "N 分钟前", every sort by
+    /// recency and every 今天 / 更早 split reads this.
+    pub fn session_updated(&self, s: &AgentSession) -> u64 {
+        self.content
+            .get(&s.id)
+            .map_or(s.updated, |c| c.updated.max(s.updated))
+    }
+    /// The folder a terminal works in as every surface names it: its conversation's
+    /// when one is current there (an Agent started after a `cd` reports its own),
+    /// else the one it was started in.
+    pub fn terminal_cwd(&self, terminal: &Terminal) -> String {
+        self.current_agent(&terminal.id)
+            .map(|s| s.cwd.clone())
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| terminal.cwd.clone())
     }
     /// See `status::needs_you`, the one count of 要你处理.
     pub fn needs_you(&self, s: &AgentSession, now: u64) -> bool {

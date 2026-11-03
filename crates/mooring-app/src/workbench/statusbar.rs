@@ -491,7 +491,7 @@ impl Workbench {
                         .child(label(format!(
                             "{} · {}",
                             s.runtime.name(),
-                            ago(s.updated, now)
+                            ago(self.workspace.session_updated(s), now)
                         )))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.statusbar = None;

@@ -301,10 +301,7 @@ impl Workbench {
             End::Text(text) => text,
             End::Nothing => String::new(),
             End::State if g == Status::Review && !attention => {
-                match age(self.session_updated(session)) {
-                    a if a == "刚刚" => a,
-                    a => format!("{a}前"),
-                }
+                ago(self.session_updated(session), now())
             }
             End::State => g.label().to_owned(),
         })

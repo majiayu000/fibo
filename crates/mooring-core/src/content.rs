@@ -788,10 +788,7 @@ mod tests {
 }
 
 pub fn now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    crate::time::now()
 }
 
 #[cfg(test)]

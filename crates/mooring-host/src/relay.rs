@@ -313,12 +313,7 @@ fn list_devices(socket: &Path) -> io::Result<()> {
         return Ok(());
     }
     let seen = devices::last_seen(socket);
-    let ago = |at: u64| match devices::now().saturating_sub(at) {
-        s if s < 60 => "刚才".to_owned(),
-        s if s < 3600 => format!("{} 分钟前", s / 60),
-        s if s < 86400 => format!("{} 小时前", s / 3600),
-        s => format!("{} 天前", s / 86400),
-    };
+    let ago = |at: u64| mooring_core::time::ago(at, devices::now());
     for d in list {
         let last = seen.get(&d.id).map_or("没连过".to_owned(), |&at| ago(at));
         println!(

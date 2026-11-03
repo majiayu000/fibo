@@ -56,17 +56,8 @@ pub(super) fn role_label(role: &str) -> &'static str {
 }
 
 fn ago(ms_or_s: u64, millis: bool) -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
     let at = if millis { ms_or_s / 1000 } else { ms_or_s };
-    match now.saturating_sub(at) {
-        s if s < 10 => "刚刚".into(),
-        s if s < 60 => format!("{s} 秒前"),
-        s if s < 3600 => format!("{} 分钟前", s / 60),
-        s if s < 86400 => format!("{} 小时前", s / 3600),
-        s => format!("{} 天前", s / 86400),
-    }
+    crate::model::time::ago(at, crate::model::time::now())
 }
 
 fn act_label(op: &str) -> &'static str {

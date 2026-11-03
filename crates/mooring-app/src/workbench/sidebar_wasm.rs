@@ -388,10 +388,7 @@ impl Workbench {
             .and_then(mooring_core::content::Content::running_since)
     }
     fn wasm_end(&self, (s, _, _): Listed, trailing: &Trailing, cx: &Context<Self>) -> End {
-        let ago = || match age(self.session_updated(s)) {
-            a if a == "刚刚" => a,
-            a => format!("{a}前"),
-        };
+        let ago = || crate::model::time::ago(self.session_updated(s), crate::model::time::now());
         match trailing {
             Trailing::State => End::State,
             Trailing::None => End::Nothing,

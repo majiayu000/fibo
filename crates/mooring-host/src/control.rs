@@ -376,7 +376,7 @@ fn list(a: Args) -> io::Result<()> {
             .iter()
             .map(|(t, s, phase, tab)| {
                 serde_json::json!({
-                    "id": t.id, "cwd": t.cwd, "tab": tab,
+                    "id": t.id, "cwd": w.terminal_cwd(t), "tab": tab,
                     "agent": s.map(|s| agent_label(s.runtime)),
                     "phase": phase.name(),
                     "status": status(&w, &t.id).map(Status::key),
@@ -407,7 +407,7 @@ fn list(a: Args) -> io::Result<()> {
             t.id,
             agent,
             phase.name(),
-            t.cwd
+            w.terminal_cwd(t)
         );
     }
     Ok(())

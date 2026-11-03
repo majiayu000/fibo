@@ -1019,13 +1019,7 @@ impl Workbench {
         let count = sessions.len();
         for (n, session) in sessions.iter().enumerate() {
             let group = status_of(&self.workspace, session);
-            let updated = self
-                .workspace
-                .content
-                .get(&session.id)
-                .map(|c| c.updated)
-                .filter(|u| *u > 0)
-                .unwrap_or(session.updated);
+            let updated = self.workspace.session_updated(session);
             let open = session.clone();
             p = p.child(
                 div()

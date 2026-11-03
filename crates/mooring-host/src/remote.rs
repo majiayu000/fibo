@@ -409,7 +409,7 @@ fn list(w: &Workspace, socket: &Path) -> Value {
                 id: t.id.clone(),
                 space: t.space.clone(),
                 tab: control::tab_title(w, &t.id),
-                cwd: t.cwd.clone(),
+                cwd: w.terminal_cwd(t),
                 phase,
                 agent: session.map(|s| control::agent_label(s.runtime).to_owned()),
                 session: session.map(|s| s.id.clone()),

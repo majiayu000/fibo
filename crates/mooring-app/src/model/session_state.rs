@@ -109,7 +109,7 @@ pub fn interrupted_session<'a>(w: &'a Workspace, terminal: &str) -> Option<&'a A
             .agent_sessions
             .iter()
             .filter(|s| s.terminal.as_deref() == Some(terminal) && s.outcome == Outcome::Open)
-            .max_by_key(|s| s.updated),
+            .max_by_key(|s| w.session_updated(s)),
     }
 }
 pub fn attachable_ids(workspace: &Workspace, ids: Vec<String>) -> Vec<String> {

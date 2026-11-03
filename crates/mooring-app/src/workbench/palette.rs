@@ -129,7 +129,7 @@ impl Workbench {
             .iter()
             .filter(|s| self.session_hidden(s).is_none())
             .collect();
-        visible.sort_by_key(|s| std::cmp::Reverse(s.updated));
+        visible.sort_by_key(|s| std::cmp::Reverse(self.workspace.session_updated(s)));
         visible
     }
     /// The status its row shows, when that is one of the four the palette counts. Only
@@ -197,7 +197,7 @@ impl Workbench {
                 .into_iter()
                 .filter(|s| group.is_none() || self.counted_group(s) == group)
             {
-                let title = recency(s.updated, at);
+                let title = recency(self.workspace.session_updated(s), at);
                 match runs.last_mut() {
                     Some((last, hits)) if *last == title => hits.push(session(s, None)),
                     _ => runs.push((title, vec![session(s, None)])),
@@ -818,7 +818,7 @@ impl Workbench {
                     };
                     let (group, _) = session_status(&self.workspace, &self.attention.unseen, s);
                     status = Some(group);
-                    let when = ago(s.updated, now());
+                    let when = ago(self.workspace.session_updated(s), now());
                     match hit {
                         Hit::Quote { text, .. } => (
                             glyph("“"),
@@ -1091,7 +1091,7 @@ impl Workbench {
                         .child(format!(
                             "{} · {place} · {}",
                             s.runtime.executable(),
-                            ago(s.updated, now())
+                            ago(self.workspace.session_updated(s), now())
                         )),
                 )
                 .child(

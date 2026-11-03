@@ -10,5 +10,6 @@ uuid = { version = "1", features = ["v4"] }
 serde.workspace = true
 serde_json.workspace = true
 regex = "1"
+libc.workspace = true
 sha2 = "0.10"
 libghostty-vt.workspace = true
