@@ -55,7 +55,7 @@ pub struct Pane {
     screen: Screen,
     capture: Option<screen::Capture>,
     layout_cache: screen::LayoutCache,
-    metrics_font: Option<(gpui::Font, f32, f32)>,
+    metrics_font: Option<(gpui::Font, f32, f32, f32)>,
     marked: String,
     selection: Range<usize>,
     bounds: Option<Bounds<Pixels>>,
@@ -2301,19 +2301,29 @@ impl Render for Pane {
                         }
                         _ => bounds,
                     };
+                    // The grid starts on a backing pixel so its pixel-wide cells keep
+                    // every glyph stem on whole pixels.
+                    let scale = window.scale_factor();
+                    let snap = |v: Pixels| px((f32::from(v) * scale).round() / scale);
+                    let bounds = Bounds::new(
+                        gpui::point(snap(bounds.origin.x), snap(bounds.origin.y)),
+                        bounds.size,
+                    );
                     pane.bounds = Some(bounds);
-                    pane.scale = window.scale_factor();
+                    pane.scale = scale;
                     window.handle_input(
                         &pane.focus,
                         ElementInputHandler::new(bounds, cx.entity()),
                         cx,
                     );
                     let font = T::terminal_mono(cx);
-                    // Font metrics are logical pixels, independent of backing scale.
+                    // Cells are rounded to backing pixels, so a move to a display with
+                    // another scale measures again.
                     let key = (
                         font.clone(),
                         screen::font_size(),
                         crate::ui::terminal_text::line_height(),
+                        scale,
                     );
                     if pane.metrics_font.as_ref() != Some(&key) || pane.metrics.is_none() {
                         pane.metrics = screen::CellMetrics::measure(&font, window);

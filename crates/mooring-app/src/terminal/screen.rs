@@ -624,7 +624,12 @@ fn zoomed(size: f32, step: Option<i8>) -> f32 {
 /// One measurement shared by terminal paint, resize, preedit and IME geometry.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellMetrics {
+    /// The face's own advance rounded to backing pixels, as Ghostty font/Metrics.zig
+    /// does: a fractional pitch (JetBrains Mono 13pt is 15.6px at 2x) puts most glyph
+    /// stems across two pixels, which reads as blur on a lower-density display.
     pub width: Pixels,
+    /// The face's unrounded advance, where shaping places each glyph.
+    pub advance: Pixels,
     pub height: Pixels,
     /// Offsets from the cell top, matching where `ShapedLine::paint` puts the baseline.
     pub baseline: Pixels,
@@ -637,11 +642,12 @@ impl CellMetrics {
     pub fn measure(font: &Font, window: &Window) -> Option<Self> {
         let ts = window.text_system();
         let id = ts.resolve_font(font);
-        // Width stays the shaped advance so glyph runs land on the grid (GPUI positions
-        // them at subpixel x). Height follows Ghostty font/Metrics.zig: the face's own
-        // ascent + descent, rounded to backing pixels so every row starts on a pixel edge.
-        let width = ts.advance(id, px(font_size()), 'm').ok()?.width;
+        // Width and height follow Ghostty font/Metrics.zig: the face's advance and its
+        // ascent + descent, rounded to backing pixels so every cell starts on a pixel edge.
+        // Glyphs are then placed per cell rather than at their shaped advances.
+        let advance = ts.advance(id, px(font_size()), 'm').ok()?.width;
         let scale = window.scale_factor();
+        let width = px((f32::from(advance) * scale).round().max(1.) / scale);
         // GPUI's TextSystem reports descent as a negative distance; ShapedLine::paint
         // uses it positive, which TextSystem::baseline_offset gets wrong by one descent.
         let ascent = ts.ascent(id, px(font_size()));
@@ -665,10 +671,11 @@ impl CellMetrics {
                         bottom = bottom.max(b.bottom());
                     }
                 }
-                (bottom - top).min(width * 2.)
+                (bottom - top).min(advance * 2.)
             });
-        (width > px(0.)).then_some(Self {
+        (advance > px(0.)).then_some(Self {
             width,
+            advance,
             height,
             baseline: (height - ascent - descent) / 2. + ascent,
             x_height: ts.x_height(id, px(font_size())),
@@ -871,7 +878,8 @@ impl AsciiGlyphs {
                 if glyph.index >= 95
                     || glyphs[glyph.index].is_some()
                     || glyph.is_emoji
-                    || f32::from(glyph.position.x - metrics.width * glyph.index as f32).abs() > 0.02
+                    || f32::from(glyph.position.x - metrics.advance * glyph.index as f32).abs()
+                        > 0.02
                     || glyph.position.y != px(0.)
                 {
                     return None;
@@ -880,7 +888,7 @@ impl AsciiGlyphs {
             }
         }
         if glyphs.iter().any(Option::is_none)
-            || f32::from(line.width() - metrics.width * 95.).abs() > 0.02
+            || f32::from(line.width() - metrics.advance * 95.).abs() > 0.02
         {
             return None;
         }
@@ -960,10 +968,11 @@ pub fn paint_cached(
     // One layer for the grid: its thousands of glyphs and cell backgrounds share a
     // draw order instead of each being inserted into GPUI's per-primitive bounds tree.
     // Inside the layer quads draw under sprites, as Ghostty's background/text passes do.
-    // Ghostty leaves glyph strokes as drawn (font-thicken = false); GPUI's default
-    // thickens light text by luminance, which blurs white-on-dark terminal output.
+    // Glyph strokes thicken by luminance as the rest of the UI's text does (Ghostty's
+    // font-thicken = true): left as drawn, light thin strokes on the dark grid read
+    // as blur on a lower-density display.
     window.paint_layer(bounds, |window| {
-        window.with_glyph_dilation(Some(0), |window| {
+        window.with_glyph_dilation(None, |window| {
             paint_grid(sc, f, bounds, metrics, cache, window, cx)
         })
     });
@@ -1108,6 +1117,23 @@ fn paint_grid(
             }
             let (_, line, offset) = &cached[index];
             index += 1;
+            if run.text.is_ascii() {
+                // One glyph per column: place each on its cell, since the cell width is
+                // rounded to backing pixels and the shaped advances are not.
+                let baseline = (lh - line.ascent - line.descent) / 2. + line.ascent;
+                for shaped in &line.runs {
+                    for g in &shaped.glyphs {
+                        let _ = window.paint_glyph(
+                            point(ox + cw * g.index as f32, oy + baseline),
+                            shaped.font_id,
+                            g.id,
+                            px(font_size()),
+                            text_color(run),
+                        );
+                    }
+                }
+                continue;
+            }
             let _ = line.paint(
                 point(ox + *offset, oy),
                 lh,
@@ -1676,7 +1702,9 @@ pub fn verify_native_geometry(window: &Window, cx: &App) {
                         cached.glyphs[(text.as_bytes()[g.index] - b' ') as usize],
                         (shaped.font_id, g.id)
                     );
-                    assert!(f32::from(g.position.x - metrics.width * g.index as f32).abs() < 0.02);
+                    assert!(
+                        f32::from(g.position.x - metrics.advance * g.index as f32).abs() < 0.02
+                    );
                 }
             }
         }
