@@ -989,7 +989,7 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
-            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-menu|-bg|-peek|-pop]`:
+            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop]`:
             // the denser presets over sessions shaped like sidebar-density.html's; `-bg`
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
             // the status bar's 工作中 popover beside the column.
@@ -1008,6 +1008,12 @@ impl Workbench {
                 self.sidebar.toggled.clear();
                 if parts.get(4) == Some(&"open") {
                     for key in ["status:rest", "wasm:wasm-status:rest"] {
+                        self.sidebar.toggled.insert(key.into());
+                    }
+                }
+                // `-fold`: 会话优先 with 要你处理 and 今天 folded to their headings.
+                if parts.get(4) == Some(&"fold") {
+                    for key in ["recent:need", "recent:today"] {
                         self.sidebar.toggled.insert(key.into());
                     }
                 }

@@ -698,6 +698,28 @@ impl Workbench {
             .child(label(title).flex_1().text_size(px(T::CHIP_SIZE)))
             .child(label(count.to_string()).text_size(px(T::CHIP_SIZE)))
     }
+    /// A 会话优先 section's heading that folds its rows away and opens them again:
+    /// `要你处理 3 ⌄`. Every section starts open.
+    fn flat_fold(
+        &self,
+        key: &str,
+        title: &str,
+        count: usize,
+        cx: &Context<Self>,
+    ) -> gpui::AnyElement {
+        let open = self.sidebar.open(key, true);
+        let key = key.to_owned();
+        Self::flat_group(title, count)
+            .id(gpui::SharedString::from(format!("sidebar-group-{key}")))
+            .cursor_pointer()
+            .child(
+                div()
+                    .text_color(T::color(T::muted()))
+                    .child(if open { "⌄" } else { "›" }),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
+            .into_any_element()
+    }
     /// A group's heading in the chosen preset's look.
     pub(super) fn heading(&self, title: String, count: usize, cx: &Context<Self>) -> gpui::Div {
         if self.sidebar.dense() {
@@ -818,16 +840,21 @@ impl Workbench {
             top.sort_by_key(|l| {
                 pinned_terminal(l).and_then(|t| self.sidebar.pinned.iter().position(|p| *p == t))
             });
-            out.push(if preset.group == Grouping::Recent {
-                Self::flat_group("置顶", top.len()).into_any_element()
+            let recent = preset.group == Grouping::Recent;
+            out.push(if recent {
+                self.flat_fold("recent:pinned", "置顶", top.len(), cx)
             } else {
                 self.heading("置顶".into(), top.len(), cx)
                     .mt(px(T::S14))
                     .into_any_element()
             });
+            let open = !recent || self.sidebar.open("recent:pinned", true);
             for l in top {
-                let d = detail(&l);
-                out.push(self.session_row(l, current, d, End::State, cx));
+                // The session you are in stays in sight while its group is folded.
+                if open || current == Some(l.0.id.as_str()) {
+                    let d = detail(&l);
+                    out.push(self.session_row(l, current, d, End::State, cx));
+                }
             }
         }
         let mut budget = preset.limit;
@@ -921,13 +948,19 @@ impl Workbench {
                 // Only what asks you or failed gets a second line: the question is what you
                 // act on. A finished turn or a running one reads from its state mark alone,
                 // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
-                for (title, rows, lines) in [("要你处理", need, true), ("在跑", running, false)]
-                {
+                for (key, title, rows, lines) in [
+                    ("recent:need", "要你处理", need, true),
+                    ("recent:running", "在跑", running, false),
+                ] {
                     if rows.is_empty() {
                         continue;
                     }
-                    out.push(Self::flat_group(title, rows.len()).into_any_element());
+                    out.push(self.flat_fold(key, title, rows.len(), cx));
+                    let open = self.sidebar.open(key, true);
                     for l in rows {
+                        if !open && current != Some(l.0.id.as_str()) {
+                            continue;
+                        }
                         // 等后台 says what it left running, or it reads as plain 等你验收.
                         let asks = bucket(l.1) == Bucket::Attention || l.1 == Status::Background;
                         let d = if lines && asks { second(&l) } else { None };
@@ -945,9 +978,12 @@ impl Workbench {
                     .collect();
                 let (today, older) = split_today(history, crate::model::time::now());
                 if !today.is_empty() {
-                    out.push(Self::flat_group("今天", today.len()).into_any_element());
+                    out.push(self.flat_fold("recent:today", "今天", today.len(), cx));
+                    let open = self.sidebar.open("recent:today", true);
                     for l in today {
-                        out.push(self.session_row(l, current, None, End::State, cx));
+                        if open || current == Some(l.0.id.as_str()) {
+                            out.push(self.session_row(l, current, None, End::State, cx));
+                        }
                     }
                 }
                 // Older ones a module was not handed are still counted, and open in 鸟瞰.
