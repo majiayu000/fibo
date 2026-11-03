@@ -907,13 +907,13 @@ impl Workbench {
                 self.sidebar.view_menu = (name == "SidebarViewMenu")
                     .then(|| gpui::point(px(T::SIDEBAR - 24.), px(T::TOP + 170.)));
                 if name == "SidebarStatusOpen" {
-                    self.sidebar.toggled.insert("status:rest".into());
+                    self.sidebar.toggled.insert("status:rest".into(), true);
                 }
                 if name == "SidebarWasmOpen" || name == "SidebarWasmClosed" {
                     for section in ["rest", "closed"] {
                         self.sidebar
                             .toggled
-                            .insert(format!("wasm:wasm-status:{section}"));
+                            .insert(format!("wasm:wasm-status:{section}"), true);
                     }
                 }
                 // Closes the tab's last pane, a finished Agent, so the plugin has a closed
@@ -1008,13 +1008,13 @@ impl Workbench {
                 self.sidebar.toggled.clear();
                 if parts.get(4) == Some(&"open") {
                     for key in ["status:rest", "wasm:wasm-status:rest"] {
-                        self.sidebar.toggled.insert(key.into());
+                        self.sidebar.toggled.insert(key.into(), true);
                     }
                 }
                 // `-fold`: 会话优先 with 要你处理 and 今天 folded to their headings.
                 if parts.get(4) == Some(&"fold") {
                     for key in ["recent:need", "recent:today"] {
-                        self.sidebar.toggled.insert(key.into());
+                        self.sidebar.toggled.insert(key.into(), false);
                     }
                 }
                 cx.set_global(if parts[2] == "terminal" {

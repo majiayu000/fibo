@@ -187,7 +187,7 @@ impl Workbench {
                         .text_size(px(F::TIME))
                         .line_height(px(F::LINE_SMALL))
                         .text_color(ink(F::third()))
-                        .child("⌘P"),
+                        .child(crate::keymap::keycap(cx, crate::keymap::Action::Search)),
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
         )
@@ -240,7 +240,7 @@ impl Workbench {
             .child(flat_state(Status::Stale, false))
             .child(div().flex_1().min_w_0().truncate().child(text))
             .child(fold_mark(open))
-            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
             .into_any_element()
     }
     /// Closed sessions past the ones listed under 更早: one line that opens them in 鸟瞰.
@@ -521,7 +521,10 @@ impl Workbench {
                     .font_family(T::mono(cx).family)
                     .text_size(px(F::KEY_TEXT))
                     .text_color(ink(F::second()))
-                    .child("⌘J"),
+                    .child(crate::keymap::keycap(
+                        cx,
+                        crate::keymap::Action::NextWaiting,
+                    )),
             )
             .child("下一个要你的")
     }

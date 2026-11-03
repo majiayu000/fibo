@@ -35,6 +35,14 @@ field turn_started	crates/mooring-host/src/host/association.rs	1
 field turn_started	crates/mooring-host/src/host/mod.rs	2
 field turn_started	crates/mooring-host/src/host/report_back.rs	3
 field turn_started	crates/mooring-host/src/plugin_hooks.rs	3
+keycap	crates/mooring-app/src/terminal/open_path.rs	7
+keycap	crates/mooring-app/src/terminal/pane.rs	1
+keycap	crates/mooring-app/src/workbench/diagnostics.rs	1
+keycap	crates/mooring-app/src/workbench/forms.rs	1
+keycap	crates/mooring-app/src/workbench/layout.rs	2
+keycap	crates/mooring-app/src/workbench/settings.rs	9
+keycap	crates/mooring-app/src/workbench/settings/plugins.rs	2
+keycap	crates/mooring-core/src/market.rs	1
 word 做完了	crates/mooring-app/src/model/session_state.rs	1
 word 做完了	crates/mooring-app/src/workbench/board_drawer.rs	3
 word 做完了	crates/mooring-app/src/workbench/layout.rs	1

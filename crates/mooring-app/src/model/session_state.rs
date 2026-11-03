@@ -59,6 +59,9 @@ pub fn resume_terminal<'a>(
         .iter()
         .find(|t| &t.id == id && t.state == ProcessState::Running)
         .filter(|t| w.terminal_tab(&t.id).is_some())
+        // The host's binding wins over this note: once another conversation is current
+        // in that terminal, it is not this one's any more.
+        .filter(|t| w.current_agent(&t.id).is_none_or(|c| c.id == s.id))
 }
 /// What a live agent in a Mooring terminal is doing, for tracking turns that end out
 /// of view and warning before closing one that works; `None` outside a running Mooring
@@ -277,5 +280,32 @@ mod report_view_tests {
         assert!(report_view(&report("done", "x", "", None)).0 == Status::Review);
         assert!(report_view(&report("error", "x", "", None)).0 == Status::Error);
         assert!(report_view(&report("idle", "x", "", None)).0 == Status::Paused);
+    }
+}
+#[cfg(test)]
+mod resume_tests {
+    use super::*;
+    /// A resumed conversation that exited, with a new one started in its terminal, no
+    /// longer claims that terminal (the host says who is current there).
+    #[test]
+    fn a_resume_note_gives_way_to_the_current_conversation() {
+        let mut w = mooring_core::sample::every_state();
+        let old = w
+            .agent_sessions
+            .iter()
+            .find(|s| s.id == "review")
+            .unwrap()
+            .clone();
+        let mut resumed = HashMap::new();
+        resumed.insert("gone".to_owned(), "pty-review".to_owned());
+        let mut gone = old.clone();
+        gone.id = "gone".into();
+        gone.current = false;
+        assert!(resume_terminal(&w, &resumed, &gone).is_none());
+        w.agent_sessions.retain(|s| s.id != "review");
+        assert_eq!(
+            resume_terminal(&w, &resumed, &gone).map(|t| t.id.as_str()),
+            Some("pty-review")
+        );
     }
 }

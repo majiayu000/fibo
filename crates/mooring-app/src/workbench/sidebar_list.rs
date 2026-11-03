@@ -86,13 +86,16 @@ fn bucket_group(b: Bucket) -> Status {
 }
 
 /// The left column on this machine: the chosen preset, whether it is folded away, and
-/// the groups opened or closed against their default, and the pinned terminals. Kept in
-/// `<config>/sidebar`.
+/// the groups you opened or closed, and the pinned terminals. The preset, the fold and
+/// the pins are kept in `<config>/sidebar`; opened groups last until quit.
 #[derive(Default)]
 pub(super) struct SidebarPrefs {
     pub preset: String,
     pub collapsed: bool,
-    pub toggled: HashSet<String>,
+    /// Open (true) or closed, as you last left each group. A group you never touched
+    /// follows its default, which may change with what is in it; one you touched stays
+    /// as you left it (storing only "flipped" turned it over when the default moved).
+    pub toggled: HashMap<String, bool>,
     /// WASM presets loaded so far, with their last answers.
     pub wasm: super::sidebar_wasm::Views,
     /// Terminals whose session sits in 置顶, in the order pinned; dropped when it ends.
@@ -117,7 +120,7 @@ impl SidebarPrefs {
         Self {
             preset,
             collapsed: rest.contains(&"collapsed"),
-            toggled: HashSet::new(),
+            toggled: HashMap::new(),
             wasm: Default::default(),
             pinned: rest
                 .iter()
@@ -152,7 +155,7 @@ impl SidebarPrefs {
     }
     /// Whether a group is open: its default, flipped once per click.
     pub fn open(&self, key: &str, default: bool) -> bool {
-        default != self.toggled.contains(key)
+        self.toggled.get(key).copied().unwrap_or(default)
     }
 }
 
@@ -176,10 +179,9 @@ fn folder_name(cwd: &str) -> String {
 }
 
 impl Workbench {
-    pub(super) fn toggle_sidebar_group(&mut self, key: &str, cx: &mut Context<Self>) {
-        if !self.sidebar.toggled.remove(key) {
-            self.sidebar.toggled.insert(key.to_owned());
-        }
+    /// Opens a group shown closed, or closes one shown open, and keeps it that way.
+    pub(super) fn toggle_sidebar_group(&mut self, key: &str, open: bool, cx: &mut Context<Self>) {
+        self.sidebar.toggled.insert(key.to_owned(), !open);
         cx.notify();
     }
     pub(super) fn choose_sidebar_preset(&mut self, id: &str, cx: &mut Context<Self>) {
@@ -711,7 +713,7 @@ impl Workbench {
             .cursor_pointer()
             // At the line's right end, level with the rows' times below it.
             .child(div().ml_auto().child(super::sidebar_flat::fold_mark(open)))
-            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
             .into_any_element()
     }
     /// A group's heading in the chosen preset's look.
@@ -793,7 +795,7 @@ impl Workbench {
                     .text_color(T::color(T::muted()))
                     .child(if open { "⌄" } else { "›" }),
             )
-            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
             .into_any_element()
     }
     /// The session rows for the current space, arranged by the chosen preset; returns the
@@ -1173,7 +1175,7 @@ impl Workbench {
                     .text_color(T::color(T::muted()))
                     .child(count.to_string()),
             )
-            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, cx)))
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
             .into_any_element()
     }
     /// The switch over the list: one segment per preset.

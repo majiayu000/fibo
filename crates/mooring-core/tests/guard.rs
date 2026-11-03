@@ -102,6 +102,8 @@ fn count(root: &Path) -> BTreeMap<String, usize> {
             )
         })
         .collect();
+    // A shortcut spelled in a string instead of read from the keymap (`keycap`).
+    let key = Regex::new(r#"["'`][^"'`\n]*⌘[^"'`\n]*["'`]"#).unwrap();
     let bare = Regex::new(r#"["'`][^"'`\n]*出错[^了][^"'`\n]*["'`]|["'`]出错["'`]"#).unwrap();
     let mut out = BTreeMap::new();
     for p in paths {
@@ -122,6 +124,12 @@ fn count(root: &Path) -> BTreeMap<String, usize> {
                 if n > 0 {
                     out.insert(format!("field {k}\t{rel}"), n);
                 }
+            }
+        }
+        if !rel.ends_with("keymap.rs") {
+            let n = key.find_iter(&body).count();
+            if n > 0 {
+                out.insert(format!("keycap\t{rel}"), n);
             }
         }
         // Status words belong to `Status::label` in core/status.rs alone.

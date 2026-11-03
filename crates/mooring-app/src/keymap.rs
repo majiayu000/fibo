@@ -561,6 +561,16 @@ pub fn action(k: &Keystroke, cx: &App) -> Option<Action> {
         None => Keymap::default().action_for(k),
     }
 }
+/// The key an action is on now, as a hint shows it (`⌘P`); empty when you unbound it.
+/// Every hint that names a shortcut reads this, so a rebind in keys.json shows
+/// everywhere at once.
+pub fn keycap(cx: &App, action: Action) -> String {
+    current(cx)
+        .chords(action)
+        .first()
+        .map(|c| c.display())
+        .unwrap_or_default()
+}
 /// The current keymap, or the defaults before one is loaded.
 pub fn current(cx: &App) -> Keymap {
     cx.try_global::<Keymap>().cloned().unwrap_or_default()

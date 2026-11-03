@@ -427,14 +427,15 @@ impl Workbench {
             .child(div().flex_1().min_w_0().truncate().child(text));
         let section = section.to_owned();
         match action {
-            Some("toggle") => row
-                .cursor_pointer()
-                .hover(|s| s.bg(T::color(T::raised())))
-                .child(if open { "⌄" } else { "›" })
-                .on_click(
-                    cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&section, cx)),
-                )
-                .into_any_element(),
+            Some("toggle") => {
+                row.cursor_pointer()
+                    .hover(|s| s.bg(T::color(T::raised())))
+                    .child(if open { "⌄" } else { "›" })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.toggle_sidebar_group(&section, open, cx)
+                    }))
+                    .into_any_element()
+            }
             Some("palette") => row
                 .cursor_pointer()
                 .hover(|s| s.bg(T::color(T::raised())))

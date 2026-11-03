@@ -398,7 +398,10 @@ impl Workbench {
                 button(
                     "sidebar-closed-sessions",
                     if dense {
-                        format!("已关闭 {closed} · ⌘P 找回")
+                        format!(
+                            "已关闭 {closed} · {} 找回",
+                            crate::keymap::keycap(cx, crate::keymap::Action::Search)
+                        )
                     } else {
                         format!("已关闭 {closed} 个 · 点开接着聊")
                     },
@@ -513,7 +516,7 @@ impl Workbench {
                         .flex_shrink_0()
                         .font_family(T::mono(cx).family)
                         .text_size(px(T::CHIP_SIZE))
-                        .child("⌘P"),
+                        .child(crate::keymap::keycap(cx, crate::keymap::Action::Search)),
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
         )
@@ -564,7 +567,10 @@ impl Workbench {
                             .border_color(T::color(T::control()))
                             .font_family(mono)
                             .text_color(T::color(T::secondary()))
-                            .child("⌘J"),
+                            .child(crate::keymap::keycap(
+                                cx,
+                                crate::keymap::Action::NextWaiting,
+                            )),
                     )
                     .child(div().min_w_0().truncate().child("下一个要你的")),
             )

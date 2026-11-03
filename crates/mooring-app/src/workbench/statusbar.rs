@@ -132,7 +132,11 @@ impl Workbench {
                     item("open-palette", false)
                         .aria_label("命令面板")
                         .gap(px(T::S4))
-                        .child(div().text_color(T::color(T::muted())).child("⌘P"))
+                        .child(
+                            div()
+                                .text_color(T::color(T::muted()))
+                                .child(crate::keymap::keycap(cx, crate::keymap::Action::Search)),
+                        )
                         .child("命令")
                         .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
                 )
