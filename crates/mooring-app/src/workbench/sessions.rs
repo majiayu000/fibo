@@ -827,10 +827,11 @@ impl Workbench {
     }
     /// Only Mooring's own terminals ask for attention; scanned-only sessions stay in the overview.
     pub(super) fn needs_you(&self) -> Vec<&AgentSession> {
+        let now = now();
         self.workspace
             .agent_sessions
             .iter()
-            .filter(|s| needs_attention(&self.workspace, s))
+            .filter(|s| self.workspace.needs_you(s, now))
             .collect()
     }
     pub(super) fn next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {

@@ -251,16 +251,18 @@ pub const NEEDS_YOU: &str = "要你处理";
 /// The one place 要你处理 is counted: the window's chip and board, the menu bar, the
 /// phone and notifications all ask this.
 pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
-    let shown = match w.content.get(&s.id) {
+    // The session's own fields first: the window asks this of every session on every
+    // frame, and most fail here before the content lookup hashes their id.
+    let shown = || match w.content.get(&s.id) {
         Some(c) => c.hidden_for(s).is_none(),
         None => s.current && s.binding.is_some(),
     };
-    shown
-        && s.managed()
+    s.managed()
         // The terminal's conversation, in a tab: one whose process failed still asks.
         && s.current
-        && s.terminal.as_ref().is_some_and(|t| w.terminal_tab(t).is_some())
         && s.outcome.needs_review(now)
+        && s.terminal.as_ref().is_some_and(|t| w.terminal_tab(t).is_some())
+        && shown()
         && !task_closed(w, s)
         && of(w, s, now).needs_you()
 }
