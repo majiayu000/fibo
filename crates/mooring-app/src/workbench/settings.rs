@@ -7,7 +7,7 @@ use crate::keymap::{self, Action, Chord, Keymap, Section};
 use crate::ui::{
     app_icon::{AppIcon, Chosen},
     appearance::Appearance,
-    terminal_text::{self, Editor, TerminalText, UnfocusedCursor},
+    terminal_text::{self, Editor, OptionKey, TerminalText, UnfocusedCursor},
     theme::{Scheme, mix},
 };
 use std::path::PathBuf;
@@ -284,7 +284,7 @@ impl Page {
     }
 }
 /// Every searchable setting: its page, its title and the words that find it.
-const ENTRIES: [(Page, &str, &str); 27] = [
+const ENTRIES: [(Page, &str, &str); 28] = [
     (
         Page::Phones,
         "其他电脑",
@@ -335,6 +335,11 @@ const ENTRIES: [(Page, &str, &str); 27] = [
         Page::Terminal,
         "用哪个编辑器打开行号",
         "编辑器 editor zed vscode cursor 行号 路径 点击 打开 ⌘",
+    ),
+    (
+        Page::Terminal,
+        "Option 键",
+        "option alt meta 键盘 德语 法语 波兰 @ 重音 字符 keyboard",
     ),
     (
         Page::Terminal,
@@ -1364,6 +1369,30 @@ impl SettingsView {
                 .into_any_element(),
             );
         }
+        let mut keys = Vec::new();
+        if shows("Option 键") {
+            let option = text.option_key;
+            let choices = self.text_choices(
+                "option-key",
+                &[
+                    (OptionKey::Auto, "自动"),
+                    (OptionKey::Alt, "当 Alt"),
+                    (OptionKey::Text, "打字符"),
+                ],
+                |o| o == option,
+                |t, o| t.option_key = o,
+                cx,
+            );
+            keys.push(
+                self.row(
+                    true,
+                    "Option 键",
+                    "自动：键盘在这里有 @ [ | 这类符号时打出来，其余当 Alt；要打 ą é 这类字母选「打字符」",
+                    choices,
+                )
+                .into_any_element(),
+            );
+        }
         let mut paths = Vec::new();
         if shows("用哪个编辑器打开行号") {
             let editor = text.editor;
@@ -1401,6 +1430,7 @@ impl SettingsView {
             ("文字大小", size),
             ("终端字体", font),
             ("光标与分屏", cursor),
+            ("键盘", keys),
             ("点击路径", paths),
         ]))
         .when(typing, |d| {

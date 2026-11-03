@@ -30,6 +30,19 @@ pub enum Editor {
     System,
 }
 
+/// What Option does with a key that types something.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OptionKey {
+    /// Types the character when the layout puts a plain ASCII one there (`@`, `[`, `|` on
+    /// German, French or Nordic keyboards), else acts as Alt (US and ABC keep Alt-b, Alt-f).
+    #[default]
+    Auto,
+    /// Always Alt: Esc before the key, as readline and Emacs expect.
+    Alt,
+    /// Always the character macOS composes, accents and dead keys included.
+    Text,
+}
+
 /// Fields added later fall back to their defaults in an older file.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -45,6 +58,7 @@ pub struct TerminalText {
     /// The focused cursor blinks unless the program asked for a steady one.
     pub cursor_blink: bool,
     pub editor: Editor,
+    pub option_key: OptionKey,
 }
 impl Default for TerminalText {
     fn default() -> Self {
@@ -57,6 +71,7 @@ impl Default for TerminalText {
             unfocused_cursor: UnfocusedCursor::Hidden,
             cursor_blink: true,
             editor: Editor::Auto,
+            option_key: OptionKey::Auto,
         }
     }
 }
@@ -99,6 +114,9 @@ pub fn current() -> TerminalText {
 pub fn size() -> f32 {
     state().read().unwrap().size
 }
+pub fn option_key() -> OptionKey {
+    state().read().unwrap().option_key
+}
 pub fn line_height() -> f32 {
     state().read().unwrap().line_height
 }
@@ -134,6 +152,7 @@ mod tests {
             unfocused_cursor: UnfocusedCursor::Hollow,
             cursor_blink: false,
             editor: Editor::Cursor,
+            option_key: OptionKey::Text,
         };
         assert_eq!(
             TerminalText::parse(&serde_json::to_string(&value).unwrap()).unwrap(),
@@ -158,5 +177,6 @@ mod tests {
         assert_eq!(value.unfocused_cursor, UnfocusedCursor::Hidden);
         assert!(value.cursor_blink);
         assert_eq!(value.editor, Editor::Auto);
+        assert_eq!(value.option_key, OptionKey::Auto);
     }
 }

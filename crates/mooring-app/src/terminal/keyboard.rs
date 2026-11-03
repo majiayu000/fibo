@@ -1,4 +1,5 @@
 //! Physical keys feed Ghostty; committed text remains on the IME path.
+use crate::ui::terminal_text::OptionKey;
 use mooring_core::terminal::{
     Vt,
     libghostty_vt::key::{self, Key, Mods},
@@ -112,6 +113,22 @@ pub fn physical_key(name: &str) -> Option<Key> {
 pub fn is_text_key(name: &str) -> bool {
     name.chars().count() == 1 || name == "space"
 }
+/// Whether Option+`name` should reach the program as the character macOS composed
+/// (`composed`) rather than as Alt. Only text keys qualify: Option-Enter, Option-arrows
+/// and Option-Backspace stay Alt in every mode.
+pub fn option_types(setting: OptionKey, name: &str, composed: Option<&str>) -> bool {
+    if !is_text_key(name) {
+        return false;
+    }
+    match setting {
+        OptionKey::Alt => false,
+        OptionKey::Text => true,
+        OptionKey::Auto => composed.is_some_and(|c| {
+            let mut chars = c.chars();
+            matches!((chars.next(), chars.next()), (Some(ch), None) if ch.is_ascii_graphic())
+        }),
+    }
+}
 pub fn encode(vt: &Vt, physical: Key, name: &str, mods: Mods) -> Result<Vec<u8>, String> {
     let mut mods = mods;
     if unshifted(name) != name {
@@ -173,6 +190,32 @@ mod tests {
                 encode(&vt, physical_key(name).unwrap(), name, Mods::ALT).unwrap(),
                 format!("\x1b{name}").as_bytes()
             );
+        }
+    }
+    #[test]
+    fn option_types_layout_characters_only_where_chosen() {
+        // German Option-L is @, Option-5 is [; US Option-b is ∫ and Option-2 is ™.
+        for (name, composed, auto) in [
+            ("l", "@", true),
+            ("5", "[", true),
+            ("7", "|", true),
+            ("b", "∫", false),
+            ("2", "™", false),
+            ("e", "", false),
+        ] {
+            let composed = Some(composed);
+            assert_eq!(
+                option_types(OptionKey::Auto, name, composed),
+                auto,
+                "{name}"
+            );
+            assert!(option_types(OptionKey::Text, name, composed), "{name}");
+            assert!(!option_types(OptionKey::Alt, name, composed), "{name}");
+        }
+        for name in ["enter", "left", "backspace", "escape"] {
+            for setting in [OptionKey::Auto, OptionKey::Text, OptionKey::Alt] {
+                assert!(!option_types(setting, name, Some("@")), "{name}");
+            }
         }
     }
     #[test]

@@ -2107,6 +2107,19 @@ impl Pane {
         {
             return;
         }
+        // Option typing a layout's character (German @, Polish ą) goes the same way:
+        // macOS inserts what it composed, dead keys included.
+        if k.modifiers.alt
+            && !k.modifiers.control
+            && !k.modifiers.platform
+            && crate::terminal::keyboard::option_types(
+                crate::ui::terminal_text::option_key(),
+                &k.key,
+                k.key_char.as_deref(),
+            )
+        {
+            return;
+        }
         let result = (|| -> Result<Vec<u8>, String> {
             let state = self
                 .connection
