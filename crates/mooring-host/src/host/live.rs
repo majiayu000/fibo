@@ -146,7 +146,8 @@ pub(super) fn resync(
 /// Hang up one terminal, as closing a terminal window does: SIGHUP to the shell's
 /// process group and to its foreground job's. An interactive zsh ignores SIGTERM and
 /// runs an Agent in a group of its own, so SIGTERM to the shell's group alone ended
-/// neither. A terminal that already ended is left alone.
+/// neither. A terminal that already ended is left alone. Whatever ignores the hangup is
+/// killed after `HANGUP_GRACE`: the tab is gone, so nothing could stop it later.
 pub(super) fn stop_terminal(terminal: &LiveTerminal) -> io::Result<()> {
     let live = lock(terminal)?;
     if live.exited && live.drained {
@@ -154,9 +155,23 @@ pub(super) fn stop_terminal(terminal: &LiveTerminal) -> io::Result<()> {
     }
     let shell = live.pid as i32;
     let foreground = crate::pty::foreground_group(&live.master).filter(|&g| g != shell);
+    drop(live);
     // Only this terminal's own process groups, never a name-based kill.
-    for group in std::iter::once(shell).chain(foreground) {
-        if unsafe { libc::kill(-group, libc::SIGHUP) } < 0 {
+    let groups: Vec<i32> = std::iter::once(shell).chain(foreground).collect();
+    signal_groups(&groups, libc::SIGHUP)?;
+    thread::spawn(move || {
+        thread::sleep(HANGUP_GRACE);
+        if let Err(e) = signal_groups(&groups, libc::SIGKILL) {
+            eprintln!("kill closed terminal's groups {groups:?}: {e}");
+        }
+    });
+    Ok(())
+}
+/// Long enough for an Agent to save its conversation on hangup.
+const HANGUP_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+fn signal_groups(groups: &[i32], signal: i32) -> io::Result<()> {
+    for &group in groups {
+        if unsafe { libc::kill(-group, signal) } < 0 {
             let error = io::Error::last_os_error();
             if error.raw_os_error() != Some(libc::ESRCH) {
                 return Err(error);

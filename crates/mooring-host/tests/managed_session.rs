@@ -6172,3 +6172,38 @@ fn closed_and_exited_terminals_release_their_ptys() {
         "host holds {after} pty fds after closing 8 terminals (was {base} with one live)"
     );
 }
+
+/// orca#10475: closing a tab must end its program even when the
+/// program ignores SIGHUP; Terminal.app revokes the tty, Mooring only signals.
+#[test]
+fn closing_a_tab_ends_a_program_that_ignores_hangup() {
+    let h = Host::start();
+    h.setup();
+    let marker = h.root.join("hup-pid");
+    h.call(h.launch(
+        "one",
+        &format!(
+            "trap '' HUP; sleep 120 & echo $! > {}; wait",
+            marker.display()
+        ),
+    ))
+    .unwrap();
+    let child: i32 = wait_file(&marker).trim().parse().unwrap();
+    close_in_tab(&h, "one");
+    let until = Instant::now() + Duration::from_secs(10);
+    let mut alive = true;
+    while Instant::now() < until {
+        alive = unsafe { libc::kill(child, 0) } == 0;
+        if !alive {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    if alive {
+        unsafe { libc::kill(child, libc::SIGKILL) };
+    }
+    assert!(
+        !alive,
+        "a SIGHUP-ignoring child of a closed tab is still running 10s later"
+    );
+}
