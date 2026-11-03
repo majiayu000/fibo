@@ -6,6 +6,8 @@ use gpui::WindowHandle;
 use std::time::Duration;
 #[path = "cpu_probe_evidence.rs"]
 mod cpu_probe_evidence;
+#[path = "pane_drag_evidence.rs"]
+mod pane_drag_evidence;
 #[path = "phones_evidence.rs"]
 mod phones_evidence;
 #[path = "settings_evidence.rs"]
@@ -17,13 +19,11 @@ pub fn start(
     evidence: Option<PathBuf>,
     cx: &mut App,
 ) {
-    if settings_evidence::start(handle, evidence.clone(), cx) {
-        return;
-    }
-    if phones_evidence::start(handle, evidence.clone(), cx) {
-        return;
-    }
-    if cpu_probe_evidence::start(handle, evidence.clone(), cx) {
+    if settings_evidence::start(handle, evidence.clone(), cx)
+        || phones_evidence::start(handle, evidence.clone(), cx)
+        || cpu_probe_evidence::start(handle, evidence.clone(), cx)
+        || pane_drag_evidence::start(handle, evidence.clone(), cx)
+    {
         return;
     }
     // 标记完成: a finished session's pane plays the fill, seal and countdown, then closes;
@@ -2631,12 +2631,12 @@ pub fn start(
                 |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_tab_titles()).unwrap();
             shot("1-before.png", cx);
             assert_eq!(titles(cx), ["alpha", "beta", "gamma"]);
-            let y = px(theme::Theme::TOP + theme::Theme::TABS / 2.);
+            let y = px(theme::Theme::TOP / 2.); // The tabs share the title row.
             let x = |at: f32| px(theme::Theme::SIDEBAR + at);
             let env = |name: &str, default: f32| {
                 std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
             };
-            let (from, to) = (env("KL_DRAG_FROM", 30.), env("KL_DRAG_TO", 240.));
+            let (from, to) = (env("KL_DRAG_FROM", 30.), env("KL_DRAG_TO", 140.));
             cx.update_window(handle.into(), |_, window, app| {
                 let at = gpui::point(x(from), y);
                 window.dispatch_event(

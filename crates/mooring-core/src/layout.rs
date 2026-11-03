@@ -96,6 +96,30 @@ impl Layout {
             _ => false,
         }
     }
+    /// `moving` dropped on `target`: half of `target`'s space on that side, leaving its
+    /// old place in this tree if it had one; or, with no side, the two trade places
+    /// (then both must be here). None when nothing would change or `target` is missing.
+    pub fn dropped(&self, moving: &str, target: &str, side: Option<(Axis, bool)>) -> Option<Self> {
+        if moving == target || !self.contains(target) {
+            return None;
+        }
+        let Some((axis, before)) = side else {
+            if !self.contains(moving) {
+                return None;
+            }
+            let mut tree = self.clone();
+            // A name no terminal has holds `moving`'s place while `target` takes it.
+            let hold = "\u{0}";
+            tree.replace(moving, hold);
+            tree.replace(target, moving);
+            tree.replace(hold, target);
+            return Some(tree);
+        };
+        let mut tree = self.clone().without(moving)?;
+        tree.split_beside(target, moving.to_owned(), axis, before, 5000)
+            .then_some(tree)
+            .filter(|t| t != self)
+    }
     pub fn replace(&mut self, target: &str, new: &str) -> bool {
         match self {
             Self::Leaf(id) if id == target => {
@@ -281,6 +305,37 @@ mod tests {
             }
         ));
         assert_eq!(before.ids(), ["a", "b", "c"]);
+    }
+    #[test]
+    fn a_dropped_pane_leaves_its_place_and_takes_half_of_the_target() {
+        // a | b, then c under b.
+        let mut tree = Layout::Leaf("a".into());
+        assert!(tree.split("a", "b".into(), Axis::Right));
+        assert!(tree.split("b", "c".into(), Axis::Down));
+        // c onto a's left edge: c | a | b, the old b-over-c split gone.
+        let left = tree.dropped("c", "a", Some((Axis::Right, true))).unwrap();
+        assert_eq!(left.ids(), ["c", "a", "b"]);
+        assert!(!format!("{left:?}").contains("Down"));
+        // A pane from another tab arrives without disturbing the rest.
+        let below = tree.dropped("x", "a", Some((Axis::Down, false))).unwrap();
+        assert_eq!(below.ids(), ["a", "x", "b", "c"]);
+        // The center trades places and keeps every ratio.
+        let swapped = tree.dropped("a", "c", None).unwrap();
+        assert_eq!(swapped.ids(), ["c", "b", "a"]);
+        assert!(
+            tree.dropped("x", "a", None).is_none(),
+            "swap needs both here"
+        );
+        // Onto itself, onto a missing pane, or back where it already is: no change.
+        assert!(tree.dropped("a", "a", Some((Axis::Right, false))).is_none());
+        assert!(
+            tree.dropped("a", "zz", Some((Axis::Right, false)))
+                .is_none()
+        );
+        let pair = tree.clone().without("c").unwrap();
+        assert!(pair.dropped("b", "a", Some((Axis::Right, false))).is_none());
+        // The only pane of a tab dropped on its own tab has nowhere to go.
+        assert!(Layout::Leaf("a".into()).dropped("a", "a", None).is_none());
     }
     #[test]
     fn eight_and_more_panes_have_no_fixed_cap() {

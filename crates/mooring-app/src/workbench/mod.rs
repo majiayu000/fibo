@@ -438,6 +438,7 @@ impl Workbench {
                 panes: HashMap::new(),
                 drag: None,
                 split_bounds: HashMap::new(),
+                drop: Default::default(),
                 split_target: None,
                 pending_command: None,
                 menu: None,
@@ -852,8 +853,7 @@ impl Workbench {
             cx.notify();
         }
     }
-    /// Stops the older host off the UI thread, then quits; this app reopens itself and
-    /// starts its own host.
+    /// Stops the older host off the UI thread and quits; the app reopens with its own host.
     fn restart_host(&mut self, cx: &mut Context<Self>) {
         let Some(root) = self.store.socket().parent().map(Path::to_path_buf) else {
             return;

@@ -312,7 +312,6 @@ impl Render for Workbench {
                 id: id.clone(),
                 title: title.clone(),
             };
-            let drop_before = id.clone();
             let group_name = gpui::SharedString::from(format!("tab-group-{id}"));
             // Shown on the current tab, and on the others while hovered, like a browser.
             let close = button(gpui::SharedString::from(format!("tab-close-{id}")), "×")
@@ -415,25 +414,8 @@ impl Render for Workbench {
                             this.close_tab(&id, cx);
                         })
                     })
-                    // Dragging a tab onto another puts it right before that one.
-                    .on_drag(dragged, |tab, _, _, cx| cx.new(|_| tab.clone()))
-                    .drag_over::<super::tabs::DraggedTab>(|s, _, _, _| {
-                        s.border_l(px(T::BORDER_WIDTH * 2.))
-                            .border_color(T::color(T::accent()))
-                    })
-                    .on_drop(
-                        cx.listener(move |this, tab: &super::tabs::DraggedTab, _, cx| {
-                            if tab.id != drop_before {
-                                this.edit(
-                                    Edit::MoveTab {
-                                        id: tab.id.clone(),
-                                        before: Some(drop_before.clone()),
-                                    },
-                                    cx,
-                                );
-                            }
-                        }),
-                    )
+                    // Tabs move along the strip; panes dropped on one join it.
+                    .map(|d| self.tab_landing(d, dragged, cx))
                     .on_mouse_down(gpui::MouseButton::Right, {
                         let id = id.clone();
                         cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
@@ -494,7 +476,8 @@ impl Render for Workbench {
             .flex_shrink_0()
             .border_0()
             .text_color(T::color(T::link()))
-            .on_click(cx.listener(|this, _, _, cx| this.launch(false, None, cx)));
+            .on_click(cx.listener(|this, _, _, cx| this.launch(false, None, cx)))
+            .map(|d| self.new_tab_landing(d, cx));
         // Terminal style puts the tabs in a status line under the panes, tmux-like:
         // the space, the tabs, then what needs you on the right.
         let tabs = if terminal_style {

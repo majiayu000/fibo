@@ -3,6 +3,10 @@ use super::*;
 
 /// The most a terminal's text opened in an editor holds: the host's own read limit.
 const SCROLLBACK_ROWS: usize = 10_000;
+mod branch;
+mod drag;
+use branch::read_branch;
+use drag::DropState;
 
 /// The visible panes and what is open over them: menus, drags and pending closes.
 pub(super) struct LayoutState {
@@ -13,6 +17,8 @@ pub(super) struct LayoutState {
     pub(super) pending_command: Option<(String, String)>,
     pub(super) drag: Option<Vec<bool>>,
     pub(super) split_bounds: HashMap<Vec<bool>, gpui::Bounds<gpui::Pixels>>,
+    /// Where a pane or tab being dragged would land.
+    pub(super) drop: DropState,
     /// The tab strip's sideways scroll, read to tell which tabs are out of sight.
     pub(super) tab_scroll: gpui::ScrollHandle,
     /// The tab the strip last scrolled into view.
@@ -432,7 +438,7 @@ impl Workbench {
             let frame = |d: gpui::Div| d.bg(line);
             pane_box = pane_box
                 .child(
-                    div()
+                    self.pane_grip(id, &title, div())
                         .h(px(T::PANE_HEADER))
                         .flex_shrink_0()
                         .relative()
@@ -495,7 +501,7 @@ impl Workbench {
                 .bg(T::color(T::pane()))
                 .rounded(px(T::PANE_RADIUS))
                 .child(
-                    div()
+                    self.pane_grip(id, &title, div())
                         .h(px(T::PANE_HEADER))
                         .flex_shrink_0()
                         .rounded_t(px(T::PANE_RADIUS))
@@ -547,7 +553,8 @@ impl Workbench {
                     )
                 });
         }
-        let pane_box = pane_box
+        let pane_box = self
+            .pane_landing(id, pane_box, cx)
             .when_some(
                 session.filter(|s| self.overview.here.as_ref() == Some(&s.id)),
                 |d, s| {
@@ -720,6 +727,7 @@ impl Workbench {
         cx.notify();
     }
     pub(super) fn finish_drag(&mut self, cx: &mut Context<Self>) {
+        self.layout.drop = DropState::default();
         if self.layout.drag.take().is_none() {
             return;
         }
@@ -1683,28 +1691,6 @@ type Branches = HashMap<String, (std::time::Instant, Option<String>)>;
 static BRANCHES: std::sync::LazyLock<std::sync::Mutex<Branches>> =
     std::sync::LazyLock::new(Default::default);
 const BRANCH_TTL: Duration = Duration::from_secs(10);
-/// The branch checked out where `dir` sits, from `.git/HEAD` (a linked worktree's `.git`
-/// file points at its own HEAD); a detached HEAD shows its short commit.
-fn read_branch(dir: &Path) -> Option<String> {
-    for d in dir.ancestors() {
-        let dot = d.join(".git");
-        let git_dir = if dot.is_dir() {
-            dot
-        } else if dot.is_file() {
-            let text = std::fs::read_to_string(&dot).ok()?;
-            d.join(text.trim().strip_prefix("gitdir:")?.trim())
-        } else {
-            continue;
-        };
-        let head = std::fs::read_to_string(git_dir.join("HEAD")).ok()?;
-        let head = head.trim();
-        return Some(match head.strip_prefix("ref: refs/heads/") {
-            Some(branch) => branch.to_owned(),
-            None => head.chars().take(7).collect(),
-        });
-    }
-    None
-}
 impl Workbench {
     /// The conversation a pane shows: its current one, else the latest it ran.
     pub(super) fn pane_session(&self, id: &str) -> Option<&AgentSession> {
@@ -2156,28 +2142,5 @@ mod tests {
         assert_eq!(super::turn_clock(0), "0:00");
         assert_eq!(super::turn_clock(192), "3:12");
         assert_eq!(super::turn_clock(3792), "1:03:12");
-    }
-    #[test]
-    fn branch_comes_from_head_in_a_repo_or_a_linked_worktree() {
-        let root = std::env::temp_dir().join(format!("kl-branch-{}", std::process::id()));
-        let repo = root.join("repo");
-        let nested = repo.join("a/b");
-        std::fs::create_dir_all(repo.join(".git")).unwrap();
-        std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(repo.join(".git/HEAD"), "ref: refs/heads/feat/ui-main\n").unwrap();
-        assert_eq!(super::read_branch(&nested).as_deref(), Some("feat/ui-main"));
-        let linked = root.join("linked");
-        let gitdir = repo.join(".git/worktrees/linked");
-        std::fs::create_dir_all(&linked).unwrap();
-        std::fs::create_dir_all(&gitdir).unwrap();
-        std::fs::write(gitdir.join("HEAD"), "0123456789abcdef\n").unwrap();
-        std::fs::write(
-            linked.join(".git"),
-            format!("gitdir: {}\n", gitdir.display()),
-        )
-        .unwrap();
-        assert_eq!(super::read_branch(&linked).as_deref(), Some("0123456"));
-        assert_eq!(super::read_branch(&root), None);
-        std::fs::remove_dir_all(&root).unwrap();
     }
 }
