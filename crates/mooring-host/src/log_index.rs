@@ -780,7 +780,16 @@ impl Index {
         let mut c = cursor.unwrap_or_default();
         c.elide = Elide::over(&c.pending);
         self.counts.opens += 1;
-        let mut file = File::open(path)?;
+        let mut file = match File::open(path) {
+            Ok(f) => f,
+            // One log this user cannot read (written by `sudo claude`, say) is skipped;
+            // failing here would stop every other session from updating.
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                eprintln!("跳过读不了的对话记录 {}：{e}", path.display());
+                return Ok(None);
+            }
+            Err(e) => return Err(e),
+        };
         let opened = file.metadata()?;
         if opened.dev() != meta.dev() || opened.ino() != meta.ino() {
             return Err(io::Error::other(
@@ -1555,5 +1564,29 @@ mod tests {
                 assert!(kept.len() < STRING_KEEP + 64);
             }
         }
+    }
+
+    /// One unreadable log (e.g. written by `sudo claude`) does not stop every other
+    /// session from indexing.
+    #[test]
+    fn an_unreadable_log_does_not_block_the_index() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = Fixture::new();
+        let bad = f.0.join("logs/a.jsonl");
+        fs::write(&bad, line("a")).unwrap();
+        fs::set_permissions(&bad, fs::Permissions::from_mode(0o000)).unwrap();
+        let good = f.0.join("logs/b.jsonl");
+        fs::write(&good, line("b")).unwrap();
+        let mut i = f.index();
+        let init = i.initialize();
+        let boot = i.bootstrap();
+        let card = i.card(good.to_str().unwrap()).ok().flatten();
+        fs::set_permissions(&bad, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(init.is_ok(), "{init:?}");
+        assert!(boot.is_ok(), "{boot:?}");
+        assert!(card.is_some());
+        // Readable again: it is picked up on its next change.
+        fs::write(&bad, format!("{}{}", line("a"), line("a"))).unwrap();
+        assert!(i.update(Agent::Codex, &bad, false).unwrap().is_some());
     }
 }
