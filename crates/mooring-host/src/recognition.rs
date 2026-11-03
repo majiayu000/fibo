@@ -306,6 +306,19 @@ fn ancestors(pid: u32, processes: &[Process]) -> Vec<&Process> {
     }
     out
 }
+/// Whether an Agent was started from another one's shell, not merely wrapped by it: a
+/// node wrapper is the native CLI's direct parent, a shell tool puts a shell between them.
+fn nested(process: &Process, processes: &[Process]) -> bool {
+    let mut crossed = false;
+    for ancestor in ancestors(process.parent, processes) {
+        match ancestor.runtime {
+            Some(_) if crossed => return true,
+            Some(_) => (),
+            None => crossed = true,
+        }
+    }
+    false
+}
 pub fn terminal_for_process(
     pid: u32,
     processes: &[Process],
@@ -419,6 +432,27 @@ pub fn apply_hook(
     if transcript.cli_id != cli_id {
         return Err(io::Error::other(
             "Hook session ID disagrees with transcript",
+        ));
+    }
+    // An Agent run from inside the terminal's Agent (`claude -p` from its shell tool)
+    // inherits the terminal's environment and fires the same hooks; it must not take the
+    // terminal from the conversation that ran it. Its hook usually runs after its caller
+    // left, so the tree is all there is: some Agent of this kind sits under another one.
+    let other = workspace
+        .current_agent(&terminal)
+        .is_some_and(|s| s.runtime == runtime && s.cli_session_id != cli_id);
+    let inner = match agent {
+        Some(a) => nested(a, processes),
+        None => processes.iter().any(|p| {
+            p.runtime == Some(runtime)
+                && nested(p, processes)
+                && terminal_for_process(p.pid, processes, workspace).as_deref()
+                    == Some(terminal.as_str())
+        }),
+    };
+    if other && inner {
+        return Err(io::Error::other(
+            "Hook from an Agent nested in the terminal's Agent keeps the binding",
         ));
     }
     let mut observed = bound(transcript, terminal, Binding::Hook);
@@ -1371,6 +1405,72 @@ mod tests {
         .unwrap();
         reconcile(&mut w, &both, &processes, &HashMap::new()).unwrap();
         assert_eq!(current(&w), Some(a));
+    }
+
+    #[test]
+    fn a_claude_run_from_the_terminals_claude_keeps_the_binding() {
+        let mut w = Workspace::default();
+        let [outer, inner] = [0, 1].map(|_| uuid::Uuid::new_v4().to_string());
+        w.terminals.push(Terminal {
+            id: "pty-0".into(),
+            space: "s".into(),
+            argv: vec!["zsh".into()],
+            cwd: "/same".into(),
+            pid: Some(100),
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
+        let process = |pid, parent, runtime| Process {
+            pid,
+            parent,
+            runtime,
+            cli_session_id: None,
+            no_daemon: false,
+            launch: vec![],
+        };
+        // zsh → claude (node wrapper → native) → its shell tool → claude -p
+        let mut processes = vec![
+            process(100, 1, None),
+            process(101, 100, Some(Agent::Claude)),
+            process(102, 101, Some(Agent::Claude)),
+        ];
+        let log = |id: &str| Transcript {
+            runtime: Agent::Claude,
+            cli_id: id.into(),
+            path: format!("/same/{id}.jsonl"),
+            cwd: "/same".into(),
+            updated: 1,
+        };
+        let current = |w: &Workspace| w.current_agent("pty-0").map(|s| s.cli_session_id.clone());
+        let hook = |w: &mut Workspace, pid, id: &str, processes: &[Process], ended| {
+            apply_hook(
+                w,
+                Agent::Claude,
+                pid,
+                Some("pty-0"),
+                id,
+                &log(id),
+                processes,
+                ended,
+            )
+        };
+        // The wrapper and its native child are one Agent, not a nesting.
+        hook(&mut w, 1, &outer, &processes, false).unwrap();
+        assert_eq!(current(&w), Some(outer.clone()));
+        processes.push(process(103, 102, None));
+        processes.push(process(104, 103, Some(Agent::Claude)));
+        // Traced to the inner CLI, or only named by the environment after its caller left.
+        for pid in [104, 1] {
+            assert!(hook(&mut w, pid, &inner, &processes, false).is_err());
+            assert!(hook(&mut w, pid, &inner, &processes, true).is_err());
+            assert_eq!(current(&w), Some(outer.clone()));
+        }
+        // The terminal's own Agent still reports, and `/clear` there still moves it.
+        hook(&mut w, 1, &outer, &processes, true).unwrap();
+        assert_eq!(current(&w), None);
+        hook(&mut w, 1, &inner, &processes, false).unwrap();
+        assert_eq!(current(&w), Some(inner));
     }
 
     #[test]
