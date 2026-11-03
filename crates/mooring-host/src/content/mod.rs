@@ -80,6 +80,43 @@ pub(crate) fn edit_lines(input: &Value) -> (u32, u32) {
     (0, 0)
 }
 /// Each file an apply_patch names, with the `+` and `-` lines of its section.
+/// Where a kept call input holds its edit's line counts and its patch's files, worked out
+/// when the call arrived.
+const LINES: &str = "_lines";
+const PATCHED: &str = "_patch";
+/// Fields of a call's input that its result is read against. The rest (a Write's whole
+/// file, an Edit's old and new text) is reduced to line counts up front, so the pending
+/// calls saved after every log line stay small.
+fn kept_input(args: &Value) -> Value {
+    let mut kept = serde_json::Map::new();
+    for key in [
+        "session_id",
+        "file_path",
+        "path",
+        "notebook_path",
+        "cmd",
+        "command",
+    ] {
+        if let Some(v) = args.get(key) {
+            kept.insert(key.into(), v.clone());
+        }
+    }
+    let lines = edit_lines(args);
+    if lines != (0, 0) {
+        kept.insert(LINES.into(), json!(lines));
+    }
+    let patch = patch_lines(patch_text(args));
+    if !patch.is_empty() {
+        kept.insert(PATCHED.into(), json!(patch));
+    }
+    Value::Object(kept)
+}
+fn patch_text(input: &Value) -> &str {
+    input["input"]
+        .as_str()
+        .or_else(|| input["patch"].as_str())
+        .unwrap_or("")
+}
 pub(crate) fn patch_lines(patch: &str) -> Vec<(String, u32, u32)> {
     let mut out: Vec<(String, u32, u32)> = Vec::new();
     for line in patch.lines() {
@@ -208,6 +245,15 @@ pub struct Parser {
     /// "Running→Waiting Hook" lines for the status trace, one per change of `card.turn`.
     #[serde(skip)]
     pub transitions: Vec<String>,
+    /// The content rules this state was built under, `RULES` when saved. State from older
+    /// rules is rebuilt from the log instead of continued.
+    #[serde(rename = "_rules", default, serialize_with = "current_rules")]
+    pub(crate) rules: u32,
+}
+/// Bumped when parsing rules change what a saved state means; such states are reseeded.
+pub const RULES: u32 = 13;
+fn current_rules<S: serde::Serializer>(_: &u32, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_u32(RULES)
 }
 /// What `claude agents --json` says about a live session.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -372,7 +418,7 @@ impl Parser {
             id.into(),
             Call {
                 name: name.into(),
-                input: args,
+                input: kept_input(&args),
                 source: source.clone(),
                 at,
             },
@@ -504,17 +550,17 @@ impl Parser {
             && (patch || matches!(name, "Edit" | "MultiEdit" | "Write" | "NotebookEdit"))
         {
             let mut paths = Vec::new();
-            let (added, removed) = edit_lines(&call.input);
+            let (added, removed) = serde_json::from_value(call.input[LINES].clone())
+                .unwrap_or_else(|_| edit_lines(&call.input));
             for key in ["file_path", "path", "notebook_path"] {
                 if let Some(s) = call.input[key].as_str() {
                     paths.push((s.to_owned(), added, removed));
                 }
             }
-            let patch_text = call.input["input"]
-                .as_str()
-                .or_else(|| call.input["patch"].as_str())
-                .unwrap_or("");
-            paths.extend(patch_lines(patch_text));
+            paths.extend(
+                serde_json::from_value(call.input[PATCHED].clone())
+                    .unwrap_or_else(|_| patch_lines(patch_text(&call.input))),
+            );
             for (path, added, removed) in paths {
                 if !self.inherited {
                     self.card.touch(&path, at, added, removed);
@@ -1437,6 +1483,52 @@ mod tests {
         }
         let paths: Vec<_> = p.card.files.iter().map(|t| t.path.as_str()).collect();
         assert_eq!(paths, ["/r/own.rs"]);
+    }
+    #[test]
+    fn a_replayed_request_neither_reopens_answered_calls_nor_asks_again() {
+        // Claude Code 2.1.3xx writes `api-request-blob` lines that replay earlier messages.
+        let mut p = Parser::default();
+        let s = Source::default();
+        let ask = json!({"type":"tool_use","id":"q","name":"AskUserQuestion","input":{"questions":[{"question":"部署吗？","options":["是","否"]}]}});
+        let run =
+            json!({"type":"tool_use","id":"b","name":"Bash","input":{"command":"cargo test"}});
+        for v in [
+            json!({"type":"assistant","message":{"content":[ask]}}),
+            json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"q","content":"是"}]}}),
+            json!({"type":"assistant","message":{"content":[run]}}),
+            json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"b","content":"ok"}]}}),
+            json!({"type":"api-request-blob","hash":"h","message":{"role":"assistant","content":[ask, run]}}),
+            json!({"type":"api-request-blob","hash":"i","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"b","content":"ok"}]}}),
+        ] {
+            p.add(Agent::Claude, &serde_json::to_vec(&v).unwrap(), s.clone());
+        }
+        assert!(
+            p.calls.is_empty(),
+            "{:?}",
+            p.calls.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(p.card.turn, Turn::Running);
+        assert!(p.card.waiting.is_empty());
+    }
+    #[test]
+    fn pending_calls_keep_line_counts_not_text_and_saved_full_inputs_still_count() {
+        let edit = json!({"file_path":"/r/a.rs","old_string":"a\nb\nc","new_string":"a\nB\nc\nd"});
+        let mut p = Parser::default();
+        let s = Source::default();
+        p.add(Agent::Claude, &serde_json::to_vec(&json!({"type":"assistant","message":{"content":[{"type":"tool_use","id":"e","name":"Edit","input":edit}]}})).unwrap(), s.clone());
+        assert_eq!(
+            p.calls["e"].input,
+            json!({"file_path":"/r/a.rs","_lines":[2,1]})
+        );
+        p.add(Agent::Claude, &serde_json::to_vec(&json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"e","content":"ok"}]}})).unwrap(), s.clone());
+        assert_eq!((p.card.files[0].added, p.card.files[0].removed), (2, 1));
+        // A call saved before inputs were reduced still carries the whole input.
+        let mut saved = serde_json::to_value(Parser::default()).unwrap();
+        saved["calls"] =
+            json!({"e":{"name":"Edit","input":edit,"source":Source::default(),"at":0}});
+        let mut p: Parser = serde_json::from_value(saved).unwrap();
+        p.add(Agent::Claude, &serde_json::to_vec(&json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"e","content":"ok"}]}})).unwrap(), s);
+        assert_eq!((p.card.files[0].added, p.card.files[0].removed), (2, 1));
     }
     #[test]
     fn hook_payload_facts_count_running_tasks_by_kind() {
