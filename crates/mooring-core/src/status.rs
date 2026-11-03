@@ -96,8 +96,17 @@ impl Status {
             Self::Closed => "✓",
         }
     }
-    /// Waiting on you or failed.
+    /// Stopped and yours (要你处理, 11-03 定不再分处理和验收): waiting on you, failed, or a
+    /// turn that ended for you to check, with or without work left in the background.
     pub fn needs_you(self) -> bool {
+        matches!(
+            self,
+            Self::Waiting | Self::Error | Self::Review | Self::Background
+        )
+    }
+    /// The Agent cannot go on without you: the urgent part of 要你处理, the only one that
+    /// sends a notification or a sound and colors the 要你处理 chip orange or red.
+    pub fn blocked(self) -> bool {
         matches!(self, Self::Waiting | Self::Error)
     }
     /// Work in flight: a turn under way. 等后台 is not: its turn ended and only a server
@@ -230,12 +239,14 @@ fn task_closed(w: &Workspace, s: &AgentSession) -> bool {
     })
 }
 
-/// The name of the group `needs_you` counts (waiting on you or failed), wherever it is
-/// shown: the window's chip and board column, the menu bar, the sidebar's status group.
+/// The name of the group `needs_you` counts (waiting on you, failed, or finished for you
+/// to check), wherever it is shown: the window's chip and board column, the menu bar,
+/// the sidebar's groups.
 pub const NEEDS_YOU: &str = "要你处理";
 
-/// Whether a session asks for you now: waiting on you or failed, in a Mooring terminal
-/// that is open in a tab, not one you put off or closed (nor its todo), and not hidden
+/// Whether a session asks for you now: stopped and yours (`Status::needs_you`), in a Mooring terminal
+/// that is open in a tab (its process may have failed), not one you put off or closed
+/// (nor its todo), and not hidden
 /// as automation.
 /// The one place 要你处理 is counted: the window's chip and board, the menu bar, the
 /// phone and notifications all ask this.
@@ -246,7 +257,9 @@ pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
     };
     shown
         && s.managed()
-        && live_terminal(w, s).is_some_and(|t| w.terminal_tab(&t.id).is_some())
+        // The terminal's conversation, in a tab: one whose process failed still asks.
+        && s.current
+        && s.terminal.as_ref().is_some_and(|t| w.terminal_tab(t).is_some())
         && s.outcome.needs_review(now)
         && !task_closed(w, s)
         && of(w, s, now).needs_you()
@@ -256,14 +269,18 @@ pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
 pub fn of(w: &Workspace, s: &AgentSession, now: u64) -> Status {
     let content = w.content.get(&s.id);
     if live_terminal(w, s).is_some() {
-        live(s, content, now)
+        live(w, s, content, now)
     } else {
         recorded(w, s, content, now)
     }
 }
 
 /// What you decided overrides what the agent last did, once its turn is over.
-fn decided(s: &AgentSession, now: u64) -> Option<Status> {
+fn decided(w: &Workspace, s: &AgentSession, now: u64) -> Option<Status> {
+    // Closing a todo is your outcome for every session working on it.
+    if task_closed(w, s) {
+        return Some(Status::Closed);
+    }
     match s.outcome {
         Outcome::Completed | Outcome::Abandoned => Some(Status::Closed),
         Outcome::Deferred { until, .. } if until > now => Some(Status::Deferred),
@@ -272,7 +289,7 @@ fn decided(s: &AgentSession, now: u64) -> Option<Status> {
 }
 
 /// An agent in a Mooring terminal: what it is doing right now wins.
-fn live(s: &AgentSession, c: Option<&Content>, now: u64) -> Status {
+fn live(w: &Workspace, s: &AgentSession, c: Option<&Content>, now: u64) -> Status {
     let background = c.and_then(|c| c.background).unwrap_or_default();
     let turn = c.map_or(Turn::Unknown, |c| c.turn);
     match turn {
@@ -282,7 +299,7 @@ fn live(s: &AgentSession, c: Option<&Content>, now: u64) -> Status {
         Turn::Completed if background.keeps_working() => return Status::Running,
         _ => (),
     }
-    if let Some(d) = decided(s, now) {
+    if let Some(d) = decided(w, s, now) {
         return d;
     }
     if fresh(c) {
@@ -298,7 +315,7 @@ fn live(s: &AgentSession, c: Option<&Content>, now: u64) -> Status {
 
 /// Every other session: what its log and its terminal's exit say.
 fn recorded(w: &Workspace, s: &AgentSession, c: Option<&Content>, now: u64) -> Status {
-    if let Some(d) = decided(s, now) {
+    if let Some(d) = decided(w, s, now) {
         return d;
     }
     let default = Content {

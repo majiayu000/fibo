@@ -45,7 +45,7 @@ keycap	crates/mooring-app/src/workbench/settings.rs	9
 keycap	crates/mooring-app/src/workbench/settings/plugins.rs	2
 keycap	crates/mooring-core/src/market.rs	1
 word 做完了	crates/mooring-app/src/model/session_state.rs	1
-word 做完了	crates/mooring-app/src/workbench/board_drawer.rs	3
+word 做完了	crates/mooring-app/src/workbench/board_drawer.rs	1
 word 做完了	crates/mooring-app/src/workbench/layout.rs	1
 word 做完了	crates/mooring-app/src/workbench/sidebar_list.rs	1
 word 做完了	crates/mooring-app/src/workbench/task_detail.rs	1
@@ -57,7 +57,6 @@ word 出错(无了)	crates/mooring-core/src/market.rs	1
 word 出错了	crates/mooring-host/src/host/report_back.rs	1
 word 在跑	crates/mooring-app/src/desktop.rs	1
 word 在跑	crates/mooring-app/src/model/session_state.rs	4
-word 在跑	crates/mooring-app/src/workbench/board_drawer.rs	2
 word 在跑	crates/mooring-app/src/workbench/layout.rs	1
 word 在跑	crates/mooring-app/src/workbench/sidebar_list.rs	1
 word 在跑	crates/mooring-host/src/agents/mod.rs	1
@@ -69,7 +68,6 @@ word 已完成	crates/mooring-app/src/workbench/overview.rs	1
 word 已完成	crates/mooring-app/src/workbench/sidebar_subagents.rs	1
 word 很久没动	crates/mooring-app/src/desktop.rs	1
 word 很久没动	crates/mooring-app/src/workbench/board.rs	2
-word 很久没动	crates/mooring-app/src/workbench/board_drawer.rs	1
 word 很久没动	crates/mooring-app/src/workbench/cleanup.rs	1
 word 很久没动	crates/mooring-app/src/workbench/overview.rs	1
 word 新开的	crates/mooring-app/src/model/session_state.rs	2
@@ -91,7 +89,6 @@ word 等你回答	crates/mooring-host/src/control.rs	1
 word 等你回答	mobile/src/app/chat.tsx	1
 word 等你回答	mobile/src/app/index.tsx	1
 word 等你验收	crates/mooring-app/src/model/session_state.rs	1
-word 等你验收	crates/mooring-app/src/workbench/board_drawer.rs	4
 word 等你验收	crates/mooring-app/src/workbench/overview.rs	1
 word 等你验收	crates/mooring-app/src/workbench/task_detail.rs	1
 word 等你验收	mobile/src/app/index.tsx	1

@@ -148,7 +148,11 @@ fn load(preset: &Preset) -> Result<host::Plugin, String> {
 fn group_name(g: Status) -> &'static str {
     // The plugin protocol keeps its coarse words: the same buckets as the native list.
     match super::sidebar_list::bucket(g) {
-        Bucket::Attention => g.key(),
+        // Finished turns joined 要你处理 on 11-03; plugins still read them as `review`.
+        Bucket::Attention => match g {
+            Status::Waiting | Status::Error => g.key(),
+            _ => "review",
+        },
         Bucket::Running => "running",
         Bucket::Done => "review",
         Bucket::Stopped => "paused",
@@ -341,9 +345,9 @@ impl Workbench {
                         }
                         let needs = under
                             .iter()
-                            .filter(|l| bucket(l.1) == Bucket::Attention)
+                            .filter(|l| self.row_bucket(l) == Bucket::Attention)
                             .count();
-                        let running = under.iter().any(|l| bucket(l.1) == Bucket::Running);
+                        let running = under.iter().any(|l| self.row_bucket(l) == Bucket::Running);
                         out.push(self.folder_row(
                             cwd,
                             &folder,
@@ -720,7 +724,7 @@ mod tests {
             assert!(documented.contains(&group_name(g)), "{}", group_name(g));
             assert_eq!(
                 bucket(g) == Bucket::Attention,
-                matches!(group_name(g), "waiting" | "error")
+                matches!(group_name(g), "waiting" | "error" | "review")
             );
         }
     }

@@ -60,13 +60,26 @@ pub(super) fn split_today<R>(mut rows: Vec<(R, u64)>, now: u64) -> (Vec<R>, Vec<
     )
 }
 
+impl Workbench {
+    /// The group a listed row sits in: its state's bucket, except that 要你处理 holds only
+    /// what `status::needs_you` counts, so the sidebar, the chip and the board agree. A
+    /// row whose state would ask but is not the terminal's conversation any more (a
+    /// resume not taken yet) waits with the stopped ones, its dot still saying why.
+    pub(super) fn row_bucket(&self, l: &Listed) -> Bucket {
+        match bucket(l.1) {
+            Bucket::Attention if !self.workspace.needs_you(l.0, crate::model::time::now()) => {
+                Bucket::Stopped
+            }
+            b => b,
+        }
+    }
+}
 pub(super) fn bucket(g: Status) -> Bucket {
     match g {
-        Status::Waiting | Status::Error => Bucket::Attention,
+        // 要你处理 holds every stopped turn that is yours (11-03): asking, failed, or
+        // finished for you to check; its second line says what is left in the background.
+        Status::Waiting | Status::Error | Status::Review | Status::Background => Bucket::Attention,
         Status::Running => Bucket::Running,
-        // A finished turn, seen or not: still yours to check. One that left a server or a
-        // wakeup behind in the background is over too; its second line says what is left.
-        Status::Review | Status::Background => Bucket::Done,
         // Marked complete, put off or interrupted: no longer moving on its own.
         Status::Paused | Status::Closed | Status::Deferred => Bucket::Stopped,
         Status::Fresh => Bucket::Fresh,
@@ -815,11 +828,13 @@ impl Workbench {
         let detail = |l: &Listed| match preset.detail {
             Detail::Never => None,
             Detail::Always => self.row_detail(l.0, l.1),
-            Detail::Attention => (matches!(bucket(l.1), Bucket::Attention | Bucket::Running)
-                || l.1 == Status::Background
-                || current == Some(l.0.id.as_str()))
-            .then(|| self.row_detail(l.0, l.1))
-            .flatten(),
+            Detail::Attention => {
+                (matches!(self.row_bucket(l), Bucket::Attention | Bucket::Running)
+                    || l.1 == Status::Background
+                    || current == Some(l.0.id.as_str()))
+                .then(|| self.row_detail(l.0, l.1))
+                .flatten()
+            }
         };
         let mut out = vec![];
         // 置顶 comes first in every preset; its rows leave their usual group.
@@ -879,12 +894,20 @@ impl Workbench {
                 let folded: Vec<(Bucket, usize)> = Bucket::ALL
                     .into_iter()
                     .filter(|b| preset.folds(*b))
-                    .map(|b| (b, sessions.iter().filter(|l| bucket(l.1) == b).count()))
+                    .map(|b| {
+                        (
+                            b,
+                            sessions.iter().filter(|l| self.row_bucket(l) == b).count(),
+                        )
+                    })
                     .filter(|(_, n)| *n > 0)
                     .collect();
                 let rest_open = self.sidebar.open("status:rest", false);
                 for b in Bucket::ALL.into_iter().filter(|b| !preset.folds(*b)) {
-                    let rows: Vec<_> = sessions.iter().filter(|l| bucket(l.1) == b).collect();
+                    let rows: Vec<_> = sessions
+                        .iter()
+                        .filter(|l| self.row_bucket(l) == b)
+                        .collect();
                     if rows.is_empty() {
                         continue;
                     }
@@ -907,9 +930,9 @@ impl Workbench {
                 // Opened, in the summary's order: done, stopped, then gone quiet.
                 let mut rest: Vec<_> = sessions
                     .iter()
-                    .filter(|l| preset.folds(bucket(l.1)))
+                    .filter(|l| preset.folds(self.row_bucket(l)))
                     .collect();
-                rest.sort_by_key(|l| Bucket::ALL.iter().position(|b| *b == bucket(l.1)));
+                rest.sort_by_key(|l| Bucket::ALL.iter().position(|b| *b == self.row_bucket(l)));
                 for l in rest {
                     // The session you are in stays in sight while its group is folded.
                     if rest_open || current == Some(l.0.id.as_str()) {
@@ -918,7 +941,7 @@ impl Workbench {
                 }
             }
             Grouping::Recent => {
-                let when = |l: &Listed| match bucket(l.1) {
+                let when = |l: &Listed| match self.row_bucket(l) {
                     Bucket::Running => self
                         .turn_started(l.0)
                         .unwrap_or_else(|| self.session_updated(l.0)),
@@ -926,7 +949,7 @@ impl Workbench {
                 };
                 let rows: Vec<(Listed, Bucket, u64)> = sessions
                     .iter()
-                    .map(|l| (*l, bucket(l.1), when(l)))
+                    .map(|l| (*l, self.row_bucket(l), when(l)))
                     .collect();
                 let RecentOrder {
                     need,
@@ -961,7 +984,7 @@ impl Workbench {
                             continue;
                         }
                         // 等后台 says what it left running, or it reads as plain 等你验收.
-                        let asks = bucket(l.1) == Bucket::Attention || l.1 == Status::Background;
+                        let asks = l.1.blocked() || l.1 == Status::Background;
                         let d = if lines && asks { second(&l) } else { None };
                         push(&mut out, l, d, End::State);
                     }
@@ -1018,7 +1041,7 @@ impl Workbench {
                 // line; the folders below only count it.
                 let pinned: Vec<_> = sessions
                     .iter()
-                    .filter(|l| bucket(l.1) == Bucket::Attention)
+                    .filter(|l| self.row_bucket(l) == Bucket::Attention)
                     .collect();
                 if !pinned.is_empty() {
                     out.push(
@@ -1041,7 +1064,7 @@ impl Workbench {
                 // Open folders (something running) first, then those holding what needs
                 // you, then the quiet ones; otherwise as their first session sorts.
                 folders.sort_by_key(|(_, rows)| {
-                    let has = |b: Bucket| rows.iter().any(|l| bucket(l.1) == b);
+                    let has = |b: Bucket| rows.iter().any(|l| self.row_bucket(l) == b);
                     (!has(Bucket::Running), !has(Bucket::Attention))
                 });
                 if !folders.is_empty() {
@@ -1058,9 +1081,9 @@ impl Workbench {
                 for (cwd, rows) in folders {
                     let needs = rows
                         .iter()
-                        .filter(|l| bucket(l.1) == Bucket::Attention)
+                        .filter(|l| self.row_bucket(l) == Bucket::Attention)
                         .count();
-                    let running = rows.iter().any(|l| bucket(l.1) == Bucket::Running);
+                    let running = rows.iter().any(|l| self.row_bucket(l) == Bucket::Running);
                     let key = format!("dir:{cwd}");
                     let open = self.sidebar.open(&key, running);
                     out.push(self.folder_row(cwd, &key, rows.len(), needs, open, running, cx));
@@ -1069,8 +1092,11 @@ impl Workbench {
                     }
                     let from = out.len();
                     let mut folded: Vec<(Bucket, usize)> = vec![];
-                    for l in rows.iter().filter(|l| bucket(l.1) != Bucket::Attention) {
-                        let b = bucket(l.1);
+                    for l in rows
+                        .iter()
+                        .filter(|l| self.row_bucket(l) != Bucket::Attention)
+                    {
+                        let b = self.row_bucket(l);
                         if preset.folds(b) {
                             match folded.iter_mut().find(|(f, _)| *f == b) {
                                 Some((_, n)) => *n += 1,
@@ -1087,7 +1113,8 @@ impl Workbench {
                         out.push(self.fold_row(more_key, &folded, more_open, "另有", cx));
                         if more_open {
                             for l in rows.iter().filter(|l| {
-                                bucket(l.1) != Bucket::Attention && preset.folds(bucket(l.1))
+                                self.row_bucket(l) != Bucket::Attention
+                                    && preset.folds(self.row_bucket(l))
                             }) {
                                 push(&mut out, *l, detail(l), End::State);
                             }

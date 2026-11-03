@@ -1121,19 +1121,19 @@ impl Workbench {
         }
         row
     }
-    /// 下一个等你的: the sessions that need you are waiting ones and failed ones, so the
-    /// chip names and colors whichever it holds, keeping it consistent with the 等你 count.
+    /// 下一个要你的: every session 要你处理 counts; the chip takes the color of the most
+    /// urgent kind it holds (asking, then failed, then finished for you to check).
     fn next_waiting_chip(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
         let needs = self.needs_you();
         let count = needs.len();
-        let waiting = needs
-            .iter()
-            .any(|s| status_of(&self.workspace, s) == Status::Waiting);
-        // One count for everything that needs you; the color says which kind leads.
-        let group = if waiting {
+        let has = |want: Status| needs.iter().any(|s| status_of(&self.workspace, s) == want);
+        // One count for everything that needs you; the color says the most urgent kind.
+        let group = if has(Status::Waiting) {
             Status::Waiting
-        } else {
+        } else if has(Status::Error) {
             Status::Error
+        } else {
+            Status::Review
         };
         let text = mooring_core::status::NEEDS_YOU;
         let (dot_color, ink, wash) = group.colors();

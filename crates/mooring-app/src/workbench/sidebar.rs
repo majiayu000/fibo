@@ -871,22 +871,14 @@ impl Workbench {
         self.sidebar.space_filter = Some(id.to_owned());
         self.pick_space(id, cx);
     }
-    /// How many of a space's open sessions need you: asking, failed, or a turn to check.
+    /// How many of a space's sessions 要你处理 counts (`status::needs_you`).
     fn space_needs(&self, id: &str) -> usize {
+        let now = crate::model::time::now();
         self.workspace
             .agent_sessions
             .iter()
             .filter(|s| {
-                self.session_hidden(s).is_none()
-                    && self.session_open(s)
-                    && session_space(&self.workspace, s) == Some(id)
-            })
-            .filter(|s| {
-                let (g, _) = session_status(&self.workspace, &self.attention.unseen, s);
-                matches!(
-                    super::sidebar_list::bucket(g),
-                    mooring_core::sidebar::Bucket::Attention | mooring_core::sidebar::Bucket::Done
-                )
+                session_space(&self.workspace, s) == Some(id) && self.workspace.needs_you(s, now)
             })
             .count()
     }

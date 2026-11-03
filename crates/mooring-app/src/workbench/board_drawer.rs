@@ -84,25 +84,27 @@ pub(super) fn lift_card(
     }
 }
 
-/// Dropping is an action, so only these moves exist: start a todo, accept finished work,
-/// or send accepted work back.
+/// Dropping is an action, so only these moves exist: start a todo, mark a stopped
+/// session done, or send done work back.
 pub(super) fn legal(from: Column, to: Column) -> bool {
     matches!(
         (from, to),
         (Column::Todo, Column::Running)
+            | (Column::Needs, Column::Done)
             | (Column::Review, Column::Done)
-            | (Column::Done, Column::Review)
+            | (Column::Done, Column::Needs)
     )
 }
 /// Why a card cannot go where it was dropped, named by where it came from.
-pub(super) fn refusal(from: Column) -> &'static str {
+pub(super) fn refusal(from: Column) -> String {
+    let (needs, done) = (mooring_core::status::NEEDS_YOU, Status::Closed.label());
     match from {
-        Column::Needs => "要你处理的会话得先在终端里回答它",
-        Column::Running => "在跑的状态由 Agent 自己决定",
-        Column::Review => "等你验收只能拖到「做完了」，表示验收通过",
-        Column::Todo => "待办只能拖到「在跑」来开始",
-        Column::Done => "做完了只能拖回「等你验收」",
-        Column::Stale => "很久没动的会话用「逐个清理」处理",
+        Column::Needs => format!("{needs}只能拖到「{done}」，表示做完了"),
+        Column::Running => format!("{}的状态由 Agent 自己决定", Status::Running.label()),
+        Column::Review => format!("{}只能拖到「{done}」", Status::Paused.label()),
+        Column::Todo => format!("待办只能拖到「{}」来开始", Status::Running.label()),
+        Column::Done => format!("{done}只能拖回「{needs}」"),
+        Column::Stale => format!("{}的会话用「逐个清理」处理", Status::Stale.label()),
     }
 }
 
@@ -169,7 +171,7 @@ impl Workbench {
         }
         if !legal(card.from, to) {
             self.shake(to, cx);
-            self.show_toast(refusal(card.from).into(), None, true, cx);
+            self.show_toast(refusal(card.from), None, true, cx);
             return;
         }
         let (outcome, before, text) = match to {
@@ -186,12 +188,12 @@ impl Workbench {
             Column::Done => (
                 Outcome::Completed,
                 Outcome::Open,
-                format!("「{}」已验收，移到做完了", card.title),
+                format!("「{}」移到{}", card.title, Status::Closed.label()),
             ),
             _ => (
                 Outcome::Open,
                 Outcome::Completed,
-                format!("「{}」退回等你验收", card.title),
+                format!("「{}」退回{}", card.title, mooring_core::status::NEEDS_YOU),
             ),
         };
         self.edit(
@@ -538,8 +540,8 @@ impl Workbench {
             )),
         );
         let move_to = match column {
-            Column::Review => Some((Column::Done, "验收通过")),
-            Column::Done => Some((Column::Review, "退回等你验收")),
+            Column::Needs | Column::Review => Some((Column::Done, "标记完成")),
+            Column::Done => Some((Column::Needs, "退回要你处理")),
             _ => None,
         };
         if let Some((to, text)) = move_to {
@@ -796,8 +798,9 @@ mod tests {
     fn only_moves_that_are_actions_drop() {
         assert!(legal(Column::Todo, Column::Running));
         assert!(legal(Column::Review, Column::Done));
-        assert!(legal(Column::Done, Column::Review));
-        for from in [Column::Needs, Column::Running, Column::Stale] {
+        assert!(legal(Column::Needs, Column::Done));
+        assert!(legal(Column::Done, Column::Needs));
+        for from in [Column::Running, Column::Stale] {
             for to in [
                 Column::Todo,
                 Column::Running,
@@ -813,7 +816,7 @@ mod tests {
 
     #[test]
     fn a_refused_drop_says_why() {
-        assert!(refusal(Column::Needs).contains("回答"));
+        assert!(refusal(Column::Needs).contains("做完了"));
         assert!(refusal(Column::Running).contains("Agent"));
     }
 

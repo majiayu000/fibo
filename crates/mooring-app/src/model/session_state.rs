@@ -251,7 +251,7 @@ pub fn section(status: Status) -> Status {
 /// not yet handled, or a turn that ended out of view (`unseen`) and was not looked at.
 pub fn session_status(w: &Workspace, unseen: &HashSet<String>, s: &AgentSession) -> (Status, bool) {
     let status = status_of(w, s);
-    let attention = (status.needs_you() && s.managed() && s.outcome.needs_review(now()))
+    let attention = (status.blocked() && s.managed() && s.outcome.needs_review(now()))
         || (unseen.contains(&s.id)
             && matches!(status, Status::Review | Status::Background | Status::Paused));
     (status, attention)

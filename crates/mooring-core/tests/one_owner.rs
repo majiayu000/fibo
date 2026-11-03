@@ -41,13 +41,28 @@ fn every_sample_reads_one_name_one_state() {
     // The phone and the CLI read the same folder the sidebar does.
     let sub = w.terminals.iter().find(|t| t.id == "pty-subdir").unwrap();
     assert_eq!(w.terminal_cwd(sub), "/project/web");
-    // 要你处理 is waiting or failed, live in a tab, not put off, closed or hidden.
+    // 要你处理 is every stopped turn that is yours (asking, failed, finished for you to
+    // check, work left in the background), current in a tab, not put off, closed or hidden.
     let needs: Vec<_> = CASES
         .iter()
         .filter(|c| w.needs_you(by(c), at))
         .copied()
         .collect();
-    assert_eq!(needs, ["waiting", "error"]);
+    assert_eq!(
+        needs,
+        [
+            "waiting",
+            "error",
+            "background",
+            "review",
+            "renamed",
+            "tasked",
+            "tab-named",
+            // Its terminal failed but sits in its tab: a failed turn still asks.
+            "exited",
+            "subdir"
+        ]
+    );
     for case in CASES {
         let s = by(case);
         let st = status::of(&w, s, at);

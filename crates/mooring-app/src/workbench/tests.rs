@@ -232,7 +232,10 @@ fn a_live_turn_is_done_only_when_you_say_so() {
         assert!(session_status(&w, &unseen, &s) == (Status::Background, false));
     }
     assert_eq!(Status::Background.label(), "等后台");
-    assert!(super::sidebar_list::bucket(Status::Background) == mooring_core::sidebar::Bucket::Done);
+    // 要你处理 holds it with the finished ones (11-03: 处理 and 验收 are one group).
+    assert!(
+        super::sidebar_list::bucket(Status::Background) == mooring_core::sidebar::Bucket::Attention
+    );
 
     // A failed turn says so.
     w.content.insert(

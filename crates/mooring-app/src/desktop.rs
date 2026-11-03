@@ -229,14 +229,29 @@ fn panel(w: &Workspace, link: &Link) -> String {
                 None => s.runtime.name().to_owned(),
             };
             let waits = group == State::Waiting;
+            let kind = match group {
+                State::Waiting => "wait",
+                State::Error => "error",
+                _ => "review",
+            };
+            let summary = match group {
+                State::Waiting => c.waiting.clone(),
+                State::Error => c.error.clone(),
+                _ => c.headline(),
+            };
             rows.push((
-                (!waits, std::cmp::Reverse(w.session_updated(s))),
+                // Asking first, then failed, then finished; newest first within each.
+                (
+                    !waits,
+                    group != State::Error,
+                    std::cmp::Reverse(w.session_updated(s)),
+                ),
                 json!({
                     "id": s.id,
                     "title": short(&w.session_title(s), 24),
-                    "summary": short(if waits { &c.waiting } else { &c.error }, 40),
+                    "summary": short(&summary, 40),
                     "age": crate::model::time::age(w.session_updated(s)),
-                    "kind": if waits { "wait" } else { "error" },
+                    "kind": kind,
                     "meta": meta,
                 }),
             ));

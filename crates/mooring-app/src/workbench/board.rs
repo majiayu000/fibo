@@ -54,7 +54,8 @@ impl Column {
             Self::Todo => "待办",
             Self::Running => Status::Running.label(),
             Self::Needs => mooring_core::status::NEEDS_YOU,
-            Self::Review => Status::Review.label(),
+            // Stopped and put off ones; finished turns are in 要你处理 since 11-03.
+            Self::Review => Status::Paused.label(),
             Self::Done => Status::Closed.label(),
             Self::Stale => Status::Stale.label(),
         }
@@ -81,17 +82,15 @@ pub(super) fn column_of(w: &Workspace, s: &AgentSession, now: u64) -> Option<Col
     Some(match status {
         // Just opened, no turn yet: nothing to put on a card.
         Status::Fresh => return None,
-        // Waiting on you or failed: 要你处理, the sidebar's group of the same name. A turn
-        // you stopped ended, so it waits for your next step with the finished ones, and
-        // so does one that left a server or a wakeup in the background (等后台).
+        // Every stopped turn that is yours: 要你处理, the sidebar's group of the same name
+        // (asking, failed, finished for you to check, work left in the background).
         Status::Running => Column::Running,
-        Status::Waiting | Status::Error => Column::Needs,
+        // The one count of 要你处理 (status::needs_you): the chip, the sidebar and this
+        // column agree. A finished or failed one whose tab you closed waits in 停下了.
+        _ if w.needs_you(s, now) => Column::Needs,
         Status::Stale => Column::Stale,
-        Status::Review
-        | Status::Background
-        | Status::Paused
-        | Status::Deferred
-        | Status::Closed => Column::Review,
+        // A turn you stopped, or one put off whose time came: 停下了.
+        _ => Column::Review,
     })
 }
 const DAY: u64 = 86_400;
@@ -287,7 +286,7 @@ fn animated_column_icon(column: Column, animate: bool) -> gpui::AnyElement {
     match column {
         Column::Todo => icon("icons/dashed.svg", T::color(T::muted())).into_any_element(),
         Column::Stale => icon("icons/dashed.svg", Status::Stale.colors().0).into_any_element(),
-        Column::Review => icon("icons/half.svg", Status::Review.colors().0).into_any_element(),
+        Column::Review => icon("icons/half.svg", Status::Paused.colors().0).into_any_element(),
         Column::Running => {
             let hue = Status::Running.colors().0;
             frame()

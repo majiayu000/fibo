@@ -148,13 +148,14 @@ static NSImage *offline_mark(void) {
     KLRow *view=[KLRow new];view.owner=self;view.route=row[@"id"];view.hover=color(p[@"hover"]);
     view.wantsLayer=YES;view.layer.cornerRadius=[t[@"radius"] doubleValue];view.translatesAutoresizingMaskIntoConstraints=NO;
     BOOL waits=[row[@"kind"] isEqualToString:@"wait"];
-    NSView *mark=dot(color(p[waits?@"wait":@"error"]));
+    NSString *kind=text(row[@"kind"]);
+    NSView *mark=dot(color(p[kind.length?kind:@"error"]));
     NSTextField *title=label(row[@"title"],[t[@"font"] doubleValue],NSFontWeightSemibold,color(p[@"text"]));
     NSTextField *age=label(row[@"age"],[t[@"meta"] doubleValue],NSFontWeightRegular,color(p[@"muted"]));
     age.font=[NSFont monospacedDigitSystemFontOfSize:[t[@"meta"] doubleValue] weight:NSFontWeightRegular];age.alignment=NSTextAlignmentRight;
     // Measured, not intrinsic: the label's own size cut short ages such as 「2 分钟」.
     [age.widthAnchor constraintGreaterThanOrEqualToConstant:ceil([age.stringValue sizeWithAttributes:@{NSFontAttributeName:age.font}].width)+4].active=YES;
-    NSTextField *summary=label(row[@"summary"],[t[@"small"] doubleValue],NSFontWeightRegular,color(p[waits?@"wait_ink":@"error_ink"]));
+    NSTextField *summary=label(row[@"summary"],[t[@"small"] doubleValue],NSFontWeightRegular,color(p[waits?@"wait_ink":[kind isEqualToString:@"review"]?@"secondary":@"error_ink"]));
     NSTextField *meta=label(text(row[@"meta"]),[t[@"chip"] doubleValue],NSFontWeightRegular,color(p[@"muted"]));
     view.line=hairline(color(p[@"border"]));
     for(NSView *v in @[view.line,mark,title,age,summary,meta]) {v.translatesAutoresizingMaskIntoConstraints=NO;[view addSubview:v];}
