@@ -29,6 +29,10 @@ pub enum Kind {
     Decorations,
     /// `effects.json`: which animation 标记完成 plays (see `effect`).
     Effects,
+    /// `setup.json`: commands run when it is put to use and taken away (see `setup`).
+    Setup,
+    /// `quota.json`: where an Agent's usage limits are read (see `quota`).
+    Quota,
 }
 impl Kind {
     pub fn label(self) -> &'static str {
@@ -40,6 +44,8 @@ impl Kind {
             Self::Hooks => "Hooks",
             Self::Decorations => "窗格装饰",
             Self::Effects => "动效",
+            Self::Setup => "安装步骤",
+            Self::Quota => "额度",
         }
     }
     /// The files of this kind inside a plugin directory, in load order.
@@ -85,6 +91,14 @@ impl Kind {
                 .into_iter()
                 .filter(|p| p.is_file())
                 .collect(),
+            Self::Setup => [dir.join("setup.json")]
+                .into_iter()
+                .filter(|p| p.is_file())
+                .collect(),
+            Self::Quota => [dir.join("quota.json")]
+                .into_iter()
+                .filter(|p| p.is_file())
+                .collect(),
         }
     }
 }
@@ -100,6 +114,9 @@ struct Manifest {
     #[serde(default)]
     description: Option<String>,
     provides: Vec<Kind>,
+    /// Other files it ships, such as the scripts its commands run, relative to its directory.
+    #[serde(default)]
+    files: Vec<String>,
 }
 
 /// A plugin whose manifest checked out.
@@ -111,6 +128,8 @@ pub struct Plugin {
     pub description: Option<String>,
     pub dir: PathBuf,
     pub provides: Vec<Kind>,
+    /// The other files it ships (`files` in its manifest).
+    pub files: Vec<PathBuf>,
     /// Turned off in settings: listed, but none of its files load.
     pub enabled: bool,
 }
@@ -193,6 +212,7 @@ pub fn reload() {
     crate::effect::reload();
     crate::rule::reload();
     crate::hook::reload();
+    crate::quota::reload();
 }
 
 /// Kinds a running app cannot swap in: the agent registry is fixed at start.
@@ -222,6 +242,12 @@ pub fn uninstall(id: &str) -> Result<(), String> {
     if found.dir.parent() != Some(plugins.as_path()) {
         return Err(format!("{} 不在插件目录里，没有删", found.dir.display()));
     }
+    // What it set up is undone first; when that fails it stays, since what it changed
+    // may still need its files (a status line pointing at its script).
+    if found.result.as_ref().is_ok_and(|p| p.enabled) {
+        crate::setup::run(&plugins, &found.dir, crate::setup::Phase::Teardown)
+            .map_err(|e| format!("没有卸载：{e}"))?;
+    }
     std::fs::remove_dir_all(&found.dir)
         .map_err(|e| format!("删不掉 {}：{e}", found.dir.display()))?;
     let mut off = disabled(&plugins);
@@ -246,6 +272,10 @@ fn disabled(plugins: &Path) -> Vec<String> {
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default()
 }
+/// Whether the plugin with this id is turned off in the plugins directory `plugins`.
+pub fn turned_off(plugins: &Path, id: &str) -> bool {
+    disabled(plugins).iter().any(|d| d == id)
+}
 /// Whether the plugin will load at the next start: what settings show its switch as.
 pub fn enabled_next_start(id: &str) -> bool {
     CONFIG
@@ -258,6 +288,19 @@ pub fn set_enabled(id: &str, on: bool) -> std::io::Result<()> {
         .get()
         .ok_or_else(|| std::io::Error::other("找不到配置目录"))?);
     let mut off = disabled(&plugins);
+    let was_on = !off.iter().any(|d| d == id);
+    if was_on != on
+        && let Some(found) = discover(&plugins)
+            .into_iter()
+            .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
+    {
+        let phase = if on {
+            crate::setup::Phase::Setup
+        } else {
+            crate::setup::Phase::Teardown
+        };
+        crate::setup::run(&plugins, &found.dir, phase).map_err(std::io::Error::other)?;
+    }
     off.retain(|d| d != id);
     if !on {
         off.push(id.to_owned());
@@ -343,9 +386,20 @@ fn read(dir: &Path) -> Result<Plugin, String> {
     }
     if m.provides.is_empty() {
         return Err(
-            "provides 至少写一种：agent、actions、rules、sidebar、hooks、decorations、effects"
+            "provides 至少写一种：agent、actions、rules、sidebar、hooks、decorations、effects、setup、quota"
                 .into(),
         );
+    }
+    let mut files = Vec::new();
+    for f in &m.files {
+        if !crate::market::safe_path(f) {
+            return Err(format!("files 里的 \"{f}\" 要是插件目录里的相对路径"));
+        }
+        let path = dir.join(f);
+        if !path.is_file() {
+            return Err(format!("files 里写了 {f}，但目录里没有它"));
+        }
+        files.push(path);
     }
     let plugin = Plugin {
         id: m.id,
@@ -354,6 +408,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         description: m.description,
         dir: dir.to_owned(),
         provides: m.provides,
+        files,
         enabled: true,
     };
     for kind in &plugin.provides {
@@ -460,6 +515,8 @@ mod tests {
             let (_, hooks) = crate::hook::load(p.files(Kind::Hooks));
             let (_, decorations) = crate::decoration::load(p.files(Kind::Decorations));
             let (_, effects) = crate::effect::load(p.files(Kind::Effects));
+            let (_, quota) = crate::quota::load(p.files(Kind::Quota));
+            let setup = crate::setup::load(p.files(Kind::Setup));
             for loaded in actions
                 .iter()
                 .chain(&rules)
@@ -467,6 +524,8 @@ mod tests {
                 .chain(&hooks)
                 .chain(&decorations)
                 .chain(&effects)
+                .chain(&quota)
+                .chain(&setup)
             {
                 assert!(loaded.result.is_ok(), "{loaded:?}");
             }

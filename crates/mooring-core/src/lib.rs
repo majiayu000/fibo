@@ -15,6 +15,7 @@ pub mod reason;
 pub mod rule;
 #[doc(hidden)]
 pub mod sample;
+pub mod setup;
 pub mod sidebar;
 pub mod status;
 pub mod terminal;

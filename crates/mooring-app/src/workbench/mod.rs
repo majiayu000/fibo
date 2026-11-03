@@ -252,6 +252,7 @@ mod sidebar;
 use sidebar::closed_recently;
 mod sidebar_flat;
 mod sidebar_list;
+mod sidebar_subagents;
 mod sidebar_wasm;
 mod statusbar;
 mod tabs;
@@ -439,6 +440,7 @@ impl Workbench {
                 tab_menu: None,
                 session_menu: None,
                 done_open: None,
+                subagents_toggled: HashSet::new(),
                 space_menu: None,
                 space_removing: false,
                 space_switch: false,

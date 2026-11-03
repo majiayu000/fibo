@@ -68,7 +68,8 @@ fn where_to_find(kind: Kind) -> Option<&'static str> {
         Kind::Actions => Some("在窗格右键菜单和 ⌘P 里"),
         Kind::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
         Kind::Agent => Some("Agent 类要等 Mooring 后台下次启动（更新 App 或重启电脑）才生效"),
-        Kind::Hooks | Kind::Rules => None,
+        Kind::Quota => Some("显示在状态栏的额度里"),
+        Kind::Hooks | Kind::Rules | Kind::Setup => None,
     }
 }
 
@@ -604,6 +605,9 @@ impl SettingsView {
             format!("窗格标题栏或悬停卡片里显示：{t}")
         }));
         detail.extend(report(mooring_core::effect::report(), |t| t));
+        detail.extend(report(mooring_core::quota::report(), |t| {
+            format!("状态栏额度多了：{t}")
+        }));
         detail.extend(report(agent::report(), |t| format!("注册为 {t}")));
 
         self.cards(vec![

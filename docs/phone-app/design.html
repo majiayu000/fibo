@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mooring 手机端设计</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0c0e;--side:#0f0f12;--card:#16161a;--card-h:#1b1b20;--line:#232328;--line-h:#2e2e35;
+  --text:#ececef;--sub:#b8b8bf;--muted:#8e8e97;--faint:#6f6f78;
+  --wait:#f0883e;--wait-t:#f0a46a;--wait-bg:#1a1410;--wait-line:#4a2e18;
+  --run:#e8c547;--review:#3fb950;--err:#f2555a;--link:#8fb4ff;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#050506;color:var(--text);font-family:Inter,"PingFang SC","Noto Sans SC",system-ui,sans-serif}
+a{color:var(--link);text-decoration:none}
+button{font:inherit;cursor:pointer}
+.page{max-width:1760px;margin:0 auto;padding:48px 32px 120px}
+.intro{max-width:880px;margin-bottom:48px}
+.intro h1{font-size:40px;letter-spacing:-.02em;margin:0 0 12px}
+.intro p{color:var(--sub);line-height:1.7;margin:6px 0;font-size:15px}
+.intro .k{display:inline-flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:13px;color:var(--muted)}
+.intro .k span{display:inline-flex;align-items:center;gap:6px}
+section{margin:72px 0 0}
+section>h2{font-size:28px;margin:0 0 6px;letter-spacing:-.01em}
+section>p{color:var(--muted);margin:0 0 28px;font-size:14px;line-height:1.6;max-width:880px}
+.row{display:flex;flex-wrap:wrap;gap:48px 40px}
+.shot{display:flex;flex-direction:column;gap:14px;width:390px}
+.cap h3{margin:0 0 6px;font-size:16px}
+.cap p{margin:0;font-size:13px;color:var(--muted);line-height:1.6}
+.cap .api{margin-top:8px;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.cap .have{color:#7fd08a}.cap .need{color:var(--wait-t)}
+.pick{display:inline-block;margin-left:8px;font-size:12px;padding:2px 8px;border-radius:10px;background:#1d2a1f;color:#7fd08a;vertical-align:2px}
+
+/* phone */
+.ph{width:390px;height:844px;border-radius:44px;border:1px solid #26262c;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5);scroll-margin-top:40px}
+.mono{font-family:var(--mono)}
+.top{padding:58px 20px 14px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.top h1{margin:0;font-size:30px;font-weight:700;letter-spacing:-.02em}
+.nav{padding:54px 12px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line)}
+.back{width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;color:var(--text)}
+.back:hover{background:var(--card)}
+.nav .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nav .t b{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav .t span{font-size:12px;color:var(--muted)}
+.main{flex:1;overflow:hidden;padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.main>*{flex-shrink:0}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--muted);display:flex;align-items:center;gap:8px}
+.sd{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.g1{background:linear-gradient(135deg,#7f5af0,#2cb67d)}
+.g2{background:linear-gradient(135deg,#f25f4c,#ff8906)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;color:var(--text)}
+.card.w{border-color:var(--wait-line);background:var(--wait-bg)}
+.meta{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cmd{font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid #2a2118;border-radius:10px;padding:10px 12px;color:#e8dccf;white-space:pre-wrap;line-height:1.5}
+.btns{display:flex;gap:8px}
+.btn{height:44px;border-radius:12px;border:0;font-size:15px;font-weight:600;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;gap:6px;color:var(--text)}
+.bp{background:var(--text);color:var(--bg)}
+.bg{background:#232328;color:var(--text)}
+.bd{background:#2a1517;color:#ff8a8e}
+.chip{height:36px;border-radius:18px;border:1px solid var(--line-h);background:transparent;color:var(--text);font-size:14px;padding:0 14px;display:inline-flex;align-items:center;gap:6px;flex:none}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.list{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.li{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line);color:var(--text);min-height:48px}
+.li:first-child{border-top:0}
+.li .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.li .tx b{font-size:15px;font-weight:500}
+.li .tx span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st{font-size:12px;font-weight:600;flex:none}
+.tabs{height:84px;flex:none;border-top:1px solid var(--line);background:var(--side);display:flex;justify-content:space-around;padding-top:6px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);min-width:64px;min-height:44px;padding-top:4px}
+.tab:hover,.tab.on{color:var(--text)}
+.badge{min-width:18px;height:18px;border-radius:9px;background:var(--wait);color:#1a0f05;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
+.seg button{flex:1;height:38px;border:0;border-radius:9px;background:transparent;color:var(--sub);font-size:14px}
+.seg .cur{background:#2a2a31;color:var(--text);font-weight:600}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>span{font-size:12px;color:var(--muted);font-weight:600}
+.sel{height:48px;border-radius:12px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 14px;color:var(--text);font-size:15px}
+.sel .c{margin-left:auto;color:var(--muted)}
+.sw{width:51px;height:31px;border-radius:16px;background:#3a3a42;border:0;position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;transition:.15s}
+.sw[aria-checked="true"]{background:#34c759}
+.sw[aria-checked="true"]::after{left:22px}
+.gauge{display:flex;gap:2px;height:10px}
+.gauge i{flex:1;border-radius:1px;background:#26262c}
+.bubble-u{align-self:flex-end;max-width:80%;background:#2f6fed;color:#fff;border-radius:18px 18px 6px 18px;padding:10px 14px;font-size:15px;line-height:1.45}
+.bubble-a{align-self:flex-start;max-width:88%;background:var(--card);border:1px solid var(--line);border-radius:18px 18px 18px 6px;padding:10px 14px;font-size:15px;line-height:1.5;display:flex;flex-direction:column;gap:6px}
+.tool{align-self:flex-start;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);background:transparent;min-height:36px;padding:6px 10px;border-radius:10px;border:1px dashed var(--line-h)}
+.time{font-size:11px;color:var(--faint);text-align:center}
+/* ===== 新外观：参照 T3 Code ===== */
+.t3{--s:#fcfcfc;--c:#ffffff;--g:#f4f4f5;--f:#27272a;--f2:#6f6f79;--b:#e4e4e7;--sep:rgba(228,228,231,.7);--pri:#1b4ed8;--act:#27272a;--actf:#fcfcfc;
+  --wait:#bb4d00;--waitbg:#fcf4e8;--run:#1b4ed8;--ok:#15803d;--okbg:#e8f5ec;--err:#c10007;--errbg:#fcebec;--bubble:#f1f1f3;
+  font-family:"DM Sans",Inter,"PingFang SC",system-ui,sans-serif;background:var(--s);color:var(--f);border-color:#d9d9de;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.t3.dk{--s:#0a0a0a;--c:#111111;--g:#1a1b1b;--f:#f5f5f5;--f2:#8a8a8a;--b:#1f1f1f;--sep:#1c1c1c;--pri:#346bf1;--act:#f5f5f5;--actf:#0a0a0a;
+  --wait:#ffb900;--waitbg:#312108;--run:#7aa2ff;--ok:#4ade80;--okbg:#0f2a19;--err:#ff6467;--errbg:#301214;--bubble:#1c1c1e;border-color:#26262c}
+.t3 .hd{padding:56px 18px 8px;display:flex;align-items:center;justify-content:space-between}
+.t3 .brand{font-size:22px;font-weight:500;letter-spacing:-.01em}
+.t3 .brand small{font-size:10px;letter-spacing:.12em;color:var(--f2);margin-left:6px;vertical-align:3px}
+.t3 .rb{width:44px;height:44px;border-radius:22px;border:1px solid var(--b);background:var(--c);color:var(--f);display:flex;align-items:center;justify-content:center;flex:none}
+.t3 .pill{display:flex;align-items:center;border:1px solid var(--b);background:var(--c);border-radius:22px;height:44px;padding:0 4px}
+.t3 .pill a,.t3 .pill button{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--f);background:transparent;border:0}
+.t3 .rows{display:flex;flex-direction:column}
+.t3 .r{display:flex;flex-direction:column;gap:3px;padding:12px 18px;border-bottom:1px solid var(--sep);color:var(--f)}
+.t3 .r .l1{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--f2)}
+.t3 .r .l1 .s{margin-left:auto;font-size:13px}
+.t3 .r .l2{font-size:16px;font-weight:500;line-height:1.35}
+.t3 .r .l3{font-family:var(--mono);font-size:12px;color:var(--f2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t3 .ico{width:16px;height:16px;border-radius:4px;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff}
+.t3 .grp{display:flex;align-items:center;gap:10px;padding:14px 18px 6px;font-size:13px;color:var(--f2)}
+.t3 .grp i{flex:1;height:1px;background:var(--sep)}
+.t3 .act{display:flex;gap:8px;margin-top:8px}
+.t3 .b{height:36px;border-radius:18px;border:1px solid var(--b);background:var(--c);color:var(--f);font-size:14px;font-weight:500;padding:0 14px;display:inline-flex;align-items:center;gap:6px}
+.t3 .b.p{background:var(--act);color:var(--actf);border-color:var(--act)}
+.t3 .cmdl{font-family:var(--mono);font-size:13px;background:var(--g);border-radius:10px;padding:9px 11px;color:var(--f);margin-top:6px}
+.t3 .ub{align-self:flex-end;max-width:80%;background:var(--bubble);border-radius:20px;padding:11px 15px;font-size:15px;line-height:1.5}
+.t3 .meta2{font-size:12px;color:var(--f2);display:flex;align-items:center;gap:6px}
+.t3 .at{font-size:15px;line-height:1.6;display:flex;flex-direction:column;gap:8px}
+.t3 .worked{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--f2);padding:8px 0;border-bottom:1px solid var(--sep);background:transparent;border-top:0;border-left:0;border-right:0;width:100%;text-align:left}
+.t3 .comp{margin:0 12px 28px;border:1px solid var(--b);background:var(--c);border-radius:24px;padding:12px 12px 10px;box-shadow:0 8px 24px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:10px}
+.t3 .tag{height:30px;border-radius:15px;border:1px solid var(--b);background:transparent;color:var(--f);font-size:12px;padding:0 10px;display:inline-flex;align-items:center;gap:5px}
+.t3 .sheet{background:var(--c);border:1px solid var(--b);border-radius:20px;overflow:hidden}
+.t3 .fh{display:flex;align-items:center;gap:8px;padding:10px 12px;font-family:var(--mono);font-size:12px;border-bottom:1px solid var(--sep)}
+.t3 .dl{font-family:var(--mono);font-size:12px;line-height:1.75;display:flex;gap:10px;padding:0 12px;white-space:pre;overflow:hidden}
+.t3 .dl span:first-child{width:18px;text-align:right;color:var(--f2);flex:none}
+.t3 .add{background:var(--okbg)}.t3 .del{background:var(--errbg)}
+.t3 .chk{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--f2);margin-left:auto;flex:none;background:transparent}
+.ref{width:390px;height:845px;border-radius:44px;object-fit:cover;object-position:top;box-shadow:0 30px 80px rgba(0,0,0,.5);background:#f4f4f4}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="intro">
+  <h1>Mooring 手机端</h1>
+  <p>手机只做一件事：<b>不在电脑前时，也能看住、答复和推动你的 Agent</b>。不做终端，所有操作都落到电脑上已有的会话里。</p>
+  <p>布局沿用桌面端看板的用词和颜色：要你处理、在跑、待核对、待办、今天完成。空间用渐变圆点，状态用纯色。点屏幕里的按钮会跳到对应的屏。</p>
+  <div class="k">
+    <span><i class="sd" style="background:var(--wait)"></i>要你处理（审批 / 等你回答）</span>
+    <span><i class="sd" style="background:var(--run)"></i>在跑</span>
+    <span><i class="sd" style="background:var(--review)"></i>待核对</span>
+    <span><i class="sd" style="background:var(--err)"></i>出错</span>
+    <span style="color:#7fd08a">绿字：现有接口已支持</span>
+    <span style="color:var(--wait-t)">橙字：需要新增后端</span>
+  </div>
+</div>
+
+<!-- ========== 新外观：参照 T3 Code ========== -->
+<section>
+  <h2>新外观 · 参照 T3 Code <span class="pick">推荐</span></h2>
+  <p>按竞品调研的结论重做：会话列表不用卡片，改成平铺的行；Agent 的回复不放气泡；自己的消息用中性灰；输入框做成大圆角卡片，把权限模式和模型收进去；审批照 coucou，加 Face ID 和失效时间。浅色、深色各一套，跟随系统。下面几节是第一版外观，留着对照。</p>
+  <div class="row">
+
+  <!-- 收件箱 · 浅色 -->
+  <div class="shot">
+  <div class="ph t3" id="t3home">
+    <div class="hd">
+      <div class="brand">Mooring<small>2 台电脑</small></div>
+      <div style="display:flex;gap:8px">
+        <a href="#board" class="rb" aria-label="看板"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg></a>
+        <a href="#newtask" class="rb" aria-label="新任务"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></a>
+      </div>
+    </div>
+    <div class="rows" style="flex:1;overflow:hidden">
+      <div class="r">
+        <div class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--wait)">等你审批</span></div>
+        <div class="l2">把 main 推到远端</div>
+        <div class="cmdl">git push origin main</div>
+        <div class="act">
+          <button class="b p"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 10v1M15 10v1M10 15a3 3 0 0 0 4 0"/></svg>允许</button>
+          <button class="b">拒绝</button>
+          <a href="#t3approve" class="b">详情</a>
+        </div>
+      </div>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--wait)">等你回答</span></span>
+        <span class="l2">侧栏额度条换成竖条纹</span>
+        <span class="l3">feat/quota-stripes · Codex</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--err)">出错</span></span>
+        <span class="l2">cargo test 失败 3 个用例</span>
+        <span class="l3">fix/pty-ci · Claude Code</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--run)">在跑 · 12 分钟</span></span>
+        <span class="l2">手机端键盘挡住输入框</span>
+        <span class="l3">main · ./gradlew assembleRelease</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g2">B</span>blog · dev-linux<span class="s" style="color:var(--run)">在跑 · 26 分钟</span></span>
+        <span class="l2">整理十月的周报草稿</span>
+        <span class="l3">main · Claude Code</span>
+      </a>
+      <div class="grp">未发送<i></i></div>
+      <div class="r" style="border-bottom:0">
+        <div class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s">重连后发送</span></div>
+        <div class="l2" style="color:var(--f2)">测完把 APK 装到手机上</div>
+      </div>
+      <button class="grp" style="border:0;background:transparent;width:100%">稍后提醒 · 2<i></i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="grp" style="border:0;background:transparent;width:100%">已处理 · 5<i></i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>收件箱 · 浅色</h3>
+    <p>平铺的行：项目和电脑 → 标题 → 等宽的分支；状态只在右边写一个彩色词。审批直接在行里批，「允许」带 Face ID 图标。左滑标为已处理，右滑稍后提醒；断网时写的话进「未发送」。看板、电脑、额度收进标题栏，不再常驻底部标签栏。</p>
+    <div class="api"><span class="need">待定：「在跑」这里用了蓝色（T3 Code 的做法），桌面端看板用的是黄色。浅色背景上黄字看不清，要不要统一请你定。</span></div>
+  </div>
+  </div>
+
+  <!-- 会话 · 浅色 -->
+  <div class="shot">
+  <div class="ph t3" id="t3session">
+    <div class="hd" style="gap:10px;padding-bottom:10px;border-bottom:1px solid var(--sep)">
+      <a href="#t3home" class="rb" aria-label="返回"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+        <b style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">手机端键盘挡住输入框</b>
+        <span style="font-size:12px;color:var(--f2)">mooring · Agent-OS · main</span>
+      </div>
+      <div class="pill">
+        <a href="#t3diff" aria-label="改动"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 11v6M9 14h6"/></svg></a>
+        <button aria-label="终端最后几行"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg></button>
+      </div>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:14px 18px;display:flex;flex-direction:column;gap:10px;justify-content:flex-end">
+      <div class="ub">安卓上键盘弹出来把输入框挡住了，看不到自己在打什么</div>
+      <div class="meta2" style="justify-content:flex-end">16:31</div>
+      <button class="worked">干了 2 分钟 · 跑了 3 个命令 · 改了 <span class="mono" style="color:var(--ok)">chat.tsx +6 −2</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="margin-left:auto"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div class="at">
+        <span>RN 0.88 在 Android 上强制全屏绘制，键盘弹出时窗口不再缩小。改了两处：</span>
+        <span style="display:flex;gap:10px"><span>•</span><span><code class="mono" style="font-size:13px;background:var(--g);padding:1px 5px;border-radius:5px">KeyboardAvoidingView</code> 两个平台都用 padding</span></span>
+        <span style="display:flex;gap:10px"><span>•</span><span>偏移量取真实的标题栏高度</span></span>
+        <span>类型检查通过。要我重新打包装到手机上吗？</span>
+      </div>
+      <div class="meta2">16:33 · Claude Code</div>
+      <div style="display:flex;gap:8px"><button class="b">打包并安装</button><button class="b">先别</button></div>
+    </div>
+    <div class="comp">
+      <label style="display:flex"><input placeholder="回复，或者让它接着做…" aria-label="给 Agent 发消息" style="flex:1;border:0;background:transparent;color:var(--f);font:inherit;font-size:15px;outline:none;padding:2px 4px"></label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="rb" aria-label="拍照或选图片" style="width:32px;height:32px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="tag"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/></svg>逐个确认</button>
+        <button class="tag">Opus 5.5</button>
+        <span style="flex:1"></span>
+        <button class="rb" aria-label="发送" style="width:34px;height:34px;background:var(--act);color:var(--actf);border-color:var(--act)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>会话 · 浅色</h3>
+    <p>Agent 的回复整宽显示，不放气泡；自己的消息用浅灰气泡。工具过程折成一行，点开看每条命令。输入框是一张大圆角卡片：附件、权限模式、模型都在里面；Agent 在跑的时候，右下角的发送键变成停止键。停止由后台先核对画面再中断 Agent，手机不直接发 Esc（见 docs/plan.md 第 2 阶段）。标题栏右侧的胶囊里是「改动」和「终端最后几行」。</p>
+    <div class="api"><span class="have">现有：chat、send、keys</span><span class="need">新增：读当前权限模式和模型（从终端画面识别）、传图片</span></div>
+  </div>
+  </div>
+
+  <!-- 改动 · 浅色 -->
+  <div class="shot">
+  <div class="ph t3" id="t3diff">
+    <div class="hd" style="gap:10px">
+      <a href="#t3session" class="rb" aria-label="返回"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <div style="flex:1;display:flex;flex-direction:column;gap:1px"><b style="font-size:18px">未提交的改动</b><span style="font-size:12px;color:var(--f2)"><span style="color:var(--ok)">+9</span> <span style="color:var(--err)">−3</span> · 2 个文件 · main</span></div>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:4px 12px;display:flex;flex-direction:column;gap:10px">
+      <div class="sheet">
+        <div class="fh"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>src/app/chat.tsx<span style="color:var(--ok)">+6</span><span style="color:var(--err)">−2</span><button class="chk" aria-label="标为看过"></button></div>
+        <div class="dl" style="color:var(--f2)"><span></span><span>@@ -190,8 +191,12 @@</span></div>
+        <div class="dl"><span>191</span><span>  &lt;KeyboardAvoidingView</span></div>
+        <div class="dl del"><span>193</span><span>-   behavior={ios ? 'padding' : undefined}</span></div>
+        <div class="dl del"><span>194</span><span>-   keyboardVerticalOffset={ios ? 90 : 0}</span></div>
+        <div class="dl add"><span>193</span><span>+   // Android draws edge to edge…</span></div>
+        <div class="dl add"><span>194</span><span>+   behavior={web ? undefined : 'padding'}</span></div>
+        <div class="dl add"><span>195</span><span>+   keyboardVerticalOffset={header}</span></div>
+        <div class="dl"><span>196</span><span>  &gt;</span></div>
+      </div>
+      <div class="sheet">
+        <div class="fh"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>app.json<span style="color:var(--ok)">+3</span><span style="color:var(--err)">−1</span><button class="chk" aria-label="标为看过" style="background:var(--act);border-color:var(--act)"></button></div>
+      </div>
+    </div>
+    <div class="sheet" style="margin:0 12px 28px;padding:14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -6px 24px rgba(0,0,0,.06)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:36px;height:36px;border-radius:10px;background:var(--okbg);color:var(--ok);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
+        <div style="display:flex;flex-direction:column;gap:1px"><b style="font-size:16px">看过 1 / 2 个文件</b><span style="font-size:12px;color:var(--f2)">类型检查通过 · 8 个测试通过</span></div>
+      </div>
+      <div style="display:flex;gap:8px"><button class="b" style="flex:1;height:44px;justify-content:center">要求修改</button><button class="b p" style="flex:1;height:44px;justify-content:center">让它提交</button></div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>改动 · 浅色</h3>
+    <p>照 T3 Code 的写法：每个文件一张卡片，带「看过」勾选框；底部固定一张汇总卡片，写看了几个文件、测试结果。「要求修改」会让你写一句话发给 Agent，「让它提交」等于发一句「提交吧」。</p>
+    <div class="api"><span class="need">新增：diff 操作（读工作目录的 git diff，只读、限大小）</span></div>
+  </div>
+  </div>
+
+  <!-- 审批 · 深色 -->
+  <div class="shot">
+  <div class="ph t3 dk" id="t3approve">
+    <div class="hd" style="gap:10px">
+      <a href="#t3home" class="rb" aria-label="返回"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:4px 18px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;gap:14px;align-items:center">
+        <span class="ico g1" style="width:56px;height:56px;border-radius:16px;font-size:22px">K</span>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <b style="font-size:19px">把 main 推到远端</b>
+          <span style="font-size:15px;color:var(--wait);font-weight:500">等你同意</span>
+          <span style="font-size:13px;color:var(--f2)">Agent-OS · mooring · Claude Code · 2 分钟前</span>
+        </div>
+      </div>
+      <div style="border:1.5px solid rgba(255,185,0,.45);border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--c)">
+        <span style="font-size:14px;color:var(--wait);font-weight:500">它要运行</span>
+        <div class="mono" style="font-size:20px;line-height:1.45;background:var(--g);border-radius:14px;padding:14px">git push origin main</div>
+        <span style="font-size:13px;color:var(--f2);line-height:1.5">推送 6 个提交到 origin/main。它刚才说：「本地检查都过了，准备推送。」</span>
+        <div style="display:flex;gap:10px">
+          <button class="b" style="flex:1;height:52px;justify-content:center;font-size:17px;background:var(--errbg);color:var(--err);border-color:transparent">拒绝</button>
+          <button class="b" style="flex:1;height:52px;justify-content:center;font-size:17px;background:#22c55e;color:#04210f;border-color:transparent"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 10v1M15 10v1M10 15a3 3 0 0 0 4 0"/></svg>允许</button>
+        </div>
+        <span style="font-size:12px;color:var(--f2)">允许要 Face ID。电脑上的这个请求 2 分钟后失效。</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="b" style="height:46px;justify-content:center">这个会话里都允许 git push</button>
+        <button class="b" style="height:46px;justify-content:center">拒绝，并告诉它…</button>
+      </div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>审批 · 深色</h3>
+    <p>照 coucou 的写法：命令用大字号等宽字体；「拒绝」暗红，「允许」绿色并带 Face ID 图标；下面写明要验证、多久失效。上方一句话说清会造成什么后果，再引用它刚说的话。</p>
+    <div class="api"><span class="have">现有：answer、read、chat</span><span class="need">新增：请求失效时间、后果说明（按命令类型补充）</span></div>
+  </div>
+  </div>
+
+  <!-- 收件箱 · 深色 -->
+  <div class="shot">
+  <div class="ph t3 dk" id="t3homedk">
+    <div class="hd">
+      <div class="brand">Mooring<small>2 台电脑</small></div>
+      <div style="display:flex;gap:8px">
+        <a href="#board" class="rb" aria-label="看板"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg></a>
+        <a href="#newtask" class="rb" aria-label="新任务"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></a>
+      </div>
+    </div>
+    <div class="rows" style="flex:1;overflow:hidden">
+      <a href="#t3approve" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--wait)">等你审批</span></span>
+        <span class="l2">把 main 推到远端</span>
+        <span class="l3">main · git push origin main</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--wait)">等你回答</span></span>
+        <span class="l2">侧栏额度条换成竖条纹</span>
+        <span class="l3">feat/quota-stripes · Codex</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--err)">出错</span></span>
+        <span class="l2">cargo test 失败 3 个用例</span>
+        <span class="l3">fix/pty-ci · Claude Code</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--run)">在跑 · 12 分钟</span></span>
+        <span class="l2">手机端键盘挡住输入框</span>
+        <span class="l3">main · ./gradlew assembleRelease</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g2">B</span>blog · dev-linux<span class="s" style="color:var(--run)">在跑 · 26 分钟</span></span>
+        <span class="l2">整理十月的周报草稿</span>
+        <span class="l3">main · Claude Code</span>
+      </a>
+      <a href="#t3session" class="r">
+        <span class="l1"><span class="ico g1">K</span>mooring · Agent-OS<span class="s" style="color:var(--ok)">待核对</span></span>
+        <span class="l2">合并 feat/ux-polish</span>
+        <span class="l3">main · Claude Code</span>
+      </a>
+      <button class="grp" style="border:0;background:transparent;width:100%">稍后提醒 · 2<i></i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="grp" style="border:0;background:transparent;width:100%">已处理 · 5<i></i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>收件箱 · 深色</h3>
+    <p>深色用 T3 Code 的近黑底 #0a0a0a 和更暗的分隔线；状态色在深色下调亮一档，保证对比度。</p>
+  </div>
+  </div>
+
+  </div>
+
+  <h3 style="margin:56px 0 6px;font-size:20px">和 T3 Code 并排对照</h3>
+  <p style="color:var(--muted);margin:0 0 24px;font-size:14px">左边是 T3 Code 在 App Store 上的官方截图（上方带宣传标题），右边是我们的新稿，同样宽度。逐项看：列表的行结构、Agent 回复不放气泡、输入框形状、diff 卡片和底部汇总。</p>
+  <div class="row">
+    <div class="shot"><img class="ref" src="peerscope/rounds/20261103-s1/evidence/look/t3-01-sessions.png" alt="T3 Code 会话列表截图"><div class="cap"><h3>T3 Code · 会话列表</h3></div></div>
+    <div class="shot"><img class="ref" src="peerscope/rounds/20261103-s1/evidence/look/t3-03-chat.png" alt="T3 Code 聊天页截图"><div class="cap"><h3>T3 Code · 聊天</h3></div></div>
+    <div class="shot"><img class="ref" src="peerscope/rounds/20261103-s1/evidence/look/t3-05-diff.png" alt="T3 Code 改动页截图"><div class="cap"><h3>T3 Code · 改动</h3></div></div>
+    <div class="shot"><img class="ref" src="peerscope/rounds/20261103-s1/evidence/look/coucou-iphone-approval.jpg" alt="coucou 审批截图" style="object-fit:contain;background:#000"><div class="cap"><h3>coucou · 审批</h3></div></div>
+  </div>
+</section>
+
+<!-- ========== 首页三个方向 ========== -->
+<section>
+  <h2>第一版 · 首页：三个方向</h2>
+  <p>三个方向的差别在于打开 App 第一眼看到什么。A 只把要你动手的事放在最上面；B 和桌面端看板一一对应；C 先按电脑分组，最接近现在的版本。我推荐 A：手机上多数时候只是来处理一件事。</p>
+  <div class="row">
+
+  <!-- A -->
+  <div class="shot">
+  <div class="ph" id="home">
+    <div class="top">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <h1>收件箱</h1>
+        <div style="font-size:13px;color:var(--muted)">2 台电脑在线 · 9 个对话 · 3 件要你处理</div>
+      </div>
+      <a href="#newtask" aria-label="新任务" style="width:44px;height:44px;border-radius:22px;background:var(--text);color:var(--bg);display:flex;align-items:center;justify-content:center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </a>
+    </div>
+    <div class="main">
+      <div class="lbl" style="color:var(--wait-t)"><i class="sd" style="background:var(--wait)"></i>要你处理 · 3</div>
+      <div class="card w">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="meta"><i class="sd g1"></i>mooring · Claude Code · Agent-OS</div>
+          <span style="font-size:12px;color:var(--wait-t);font-weight:600">等你审批 · 2 分钟</span>
+        </div>
+        <div style="font-size:16px;font-weight:600">把 main 推到远端</div>
+        <div class="cmd">$ git push origin main</div>
+        <div class="btns">
+          <button class="btn bp" style="flex:1">允许一次</button>
+          <button class="btn bg">拒绝</button>
+          <a href="#approval" class="btn bg">详情</a>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="meta"><i class="sd g1"></i>mooring · Codex · Agent-OS</div>
+          <span style="font-size:12px;color:var(--wait-t);font-weight:600">等你回答</span>
+        </div>
+        <a href="#session" style="color:var(--text);display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:16px;font-weight:600">侧栏额度条换成竖条纹</span>
+          <span style="font-size:14px;color:var(--sub);line-height:1.45">侧栏已经换好。诊断页的三格面板要不要也一起换成竖条纹？</span>
+        </a>
+        <div class="chips">
+          <button class="chip">都换</button>
+          <button class="chip">只换侧栏</button>
+          <a href="#session" class="chip" style="color:var(--muted)">自己说…</a>
+        </div>
+      </div>
+      <a href="#session" class="card" style="flex-direction:row;align-items:center;gap:12px">
+        <span style="width:36px;height:36px;border-radius:10px;background:#2a1517;color:var(--err);display:flex;align-items:center;justify-content:center;flex:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>
+        </span>
+        <span style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">
+          <span style="font-size:15px;font-weight:600">cargo test 失败 3 个用例</span>
+          <span style="font-size:12px;color:var(--muted)">mooring · 查 pty 测试只在 CI 上失败</span>
+        </span>
+        <span class="st" style="color:var(--err)">出错</span>
+      </a>
+      <div class="lbl" style="margin-top:6px"><i class="sd" style="background:var(--run)"></i>在跑 · 4</div>
+      <div class="list">
+        <a href="#session" class="li"><span class="tx"><b>手机端键盘挡住输入框</b><span class="mono">./gradlew assembleRelease…</span></span><span style="font-size:12px;color:var(--muted)">12 分钟</span></a>
+        <a href="#session" class="li"><span class="tx"><b>中继加心跳和断线重连</b><span class="mono">cargo test -p mooring-relay</span></span><span style="font-size:12px;color:var(--muted)">4 分钟</span></a>
+        <a href="#board" class="li" style="justify-content:center;color:var(--muted);font-size:14px">还有 2 个 · 去看板</a>
+      </div>
+      <div class="lbl" style="margin-top:6px"><i class="sd" style="background:var(--review)"></i>待核对 · 2</div>
+    </div>
+    <nav class="tabs" aria-label="主导航">
+      <a href="#home" class="tab on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg><span style="display:flex;align-items:center;gap:4px">收件箱 <span class="badge">3</span></span></a>
+      <a href="#board" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>看板</a>
+      <a href="#machines" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>电脑</a>
+      <a href="#usage" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg>额度</a>
+    </nav>
+  </div>
+  <div class="cap">
+    <h3>A · 收件箱优先 <span class="pick">推荐</span></h3>
+    <p>要你动手的事排在最前：审批卡片上直接点允许或拒绝；Agent 问你问题时，给出几个一键回复；出错的单独标红。下面是在跑和待核对的摘要。</p>
+    <div class="api"><span class="have">现有：list、events、answer、send、read</span><span class="need">新增：Agent 提问时给出可选回复（从 Claude / Codex 的提问里解析）、出错原因摘要</span></div>
+  </div>
+  </div>
+
+  <!-- B -->
+  <div class="shot">
+  <div class="ph" id="board">
+    <div class="top" style="flex-direction:column;align-items:stretch;gap:14px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between">
+        <h1>看板</h1>
+        <button class="chip" style="color:var(--sub);font-size:13px">全部电脑 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;gap:2px" aria-label="各列占比">
+        <span style="flex:3;background:var(--wait)"></span><span style="flex:4;background:var(--run)"></span><span style="flex:2;background:var(--review)"></span><span style="flex:5;background:#4a4a52"></span><span style="flex:7;background:#2e2e35"></span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;padding:0 16px 14px;overflow:hidden">
+      <button class="chip"><i class="sd" style="background:var(--wait)"></i>要你处理 <b>3</b></button>
+      <button class="chip" style="background:var(--text);color:var(--bg);border-color:var(--text)"><i class="sd" style="background:#b08a00"></i>在跑 <b>4</b></button>
+      <button class="chip"><i class="sd" style="background:var(--review)"></i>待核对 <b>2</b></button>
+      <button class="chip"><i class="sd" style="background:var(--muted)"></i>待办 <b>5</b></button>
+    </div>
+    <div class="main" style="padding-top:0;gap:10px">
+      <div class="lbl" style="color:var(--sub);font-size:13px"><i class="sd g1" style="width:10px;height:10px"></i>mooring <span style="color:var(--faint);font-weight:400">· 3</span></div>
+      <a href="#session" class="card" style="gap:6px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between"><b style="font-size:15px">手机端键盘挡住输入框</b><span style="font-size:12px;color:var(--muted)">12 分钟</span></div>
+        <span class="mono" style="font-size:12px;color:var(--sub)">./gradlew assembleRelease</span>
+        <span class="meta">Claude Code · Agent-OS · main</span>
+      </a>
+      <a href="#session" class="card" style="gap:6px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between"><b style="font-size:15px">中继加心跳和断线重连</b><span style="font-size:12px;color:var(--muted)">4 分钟</span></div>
+        <span class="mono" style="font-size:12px;color:var(--sub)">cargo test -p mooring-relay</span>
+        <span class="meta">Codex · Agent-OS · feat/relay-heartbeat</span>
+      </a>
+      <a href="#session" class="card" style="gap:6px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between"><b style="font-size:15px">诊断页取消采样改临时文件</b><span style="font-size:12px;color:var(--muted)">1 分钟</span></div>
+        <span style="font-size:13px;color:var(--sub)">在读 diagnostics.rs</span>
+        <span class="meta">Claude Code · Agent-OS · main</span>
+      </a>
+      <div class="lbl" style="color:var(--sub);font-size:13px;margin-top:4px"><i class="sd g2" style="width:10px;height:10px"></i>blog <span style="color:var(--faint);font-weight:400">· 1</span></div>
+      <a href="#session" class="card" style="gap:6px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between"><b style="font-size:15px">整理十月的周报草稿</b><span style="font-size:12px;color:var(--muted)">26 分钟</span></div>
+        <span style="font-size:13px;color:var(--sub)">在写第 3 节「中继」</span>
+        <span class="meta">Claude Code · dev-linux</span>
+      </a>
+    </div>
+    <nav class="tabs" aria-label="主导航">
+      <a href="#home" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg><span style="display:flex;align-items:center;gap:4px">收件箱 <span class="badge">3</span></span></a>
+      <a href="#board" class="tab on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>看板</a>
+      <a href="#machines" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>电脑</a>
+      <a href="#usage" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg>额度</a>
+    </nav>
+  </div>
+  <div class="cap">
+    <h3>B · 看板五列</h3>
+    <p>和桌面端鸟瞰看板一一对应。顶部一条五色比例条，一眼看出各列多少；横向切列，列里按空间分组。适合想「巡视一遍」的时候。</p>
+    <div class="api"><span class="have">现有：list（phase、空间）、events</span><span class="need">新增：待办和今天完成两列（桌面端看板的数据还没进远程协议）、当前分支、最近一条命令</span></div>
+  </div>
+  </div>
+
+  <!-- C -->
+  <div class="shot">
+  <div class="ph" id="bymachine">
+    <div class="top" style="flex-direction:column;align-items:stretch;gap:12px">
+      <h1>会话</h1>
+      <label style="height:40px;border-radius:12px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--muted)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input placeholder="搜对话标题、目录、分支" aria-label="搜索对话" style="flex:1;border:0;background:transparent;color:var(--text);font:inherit;font-size:15px;outline:none">
+      </label>
+    </div>
+    <div class="main" style="padding-top:0;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;padding:4px"><i class="sd" style="background:var(--review)"></i><b style="font-size:15px">Agent-OS</b><span style="font-size:12px;color:var(--muted)">Mac · 局域网 · 18 ms</span></div>
+      <div class="list">
+        <a href="#approval" class="li" style="background:var(--wait-bg)"><span class="tx"><b>把 main 推到远端</b><span>mooring · Claude Code</span></span><span class="st" style="color:var(--wait-t)">等你审批</span></a>
+        <a href="#session" class="li"><span class="tx"><b>侧栏额度条换成竖条纹</b><span>mooring · Codex</span></span><span class="st" style="color:var(--wait-t)">等你回答</span></a>
+        <a href="#session" class="li"><span class="tx"><b>手机端键盘挡住输入框</b><span>mooring · Claude Code</span></span><span class="st" style="color:var(--run)">在跑</span></a>
+        <a href="#session" class="li"><span class="tx"><b>中继加心跳和断线重连</b><span>mooring · Codex</span></span><span class="st" style="color:var(--run)">在跑</span></a>
+        <a href="#session" class="li"><span class="tx"><b>合并 feat/ux-polish</b><span>mooring · Claude Code</span></span><span class="st" style="color:var(--review)">待核对</span></a>
+        <div class="li" style="color:var(--muted);font-size:13px">另有 3 个普通终端</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:4px;margin-top:6px"><i class="sd" style="background:var(--review)"></i><b style="font-size:15px">dev-linux</b><span style="font-size:12px;color:var(--muted)">Linux · 经中继 · 64 ms</span></div>
+      <div class="list">
+        <a href="#session" class="li"><span class="tx"><b>整理十月的周报草稿</b><span>blog · Claude Code</span></span><span class="st" style="color:var(--run)">在跑</span></a>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:4px;margin-top:6px"><i class="sd" style="background:#4a4a52"></i><b style="font-size:15px;color:var(--sub)">MacBook Air</b><span style="font-size:12px;color:var(--muted)">不在线 · 3 小时前</span></div>
+      <a href="#machines" class="li" style="border:1px dashed var(--line-h);border-radius:16px;color:var(--sub);font-size:14px"><span style="flex:1">电脑合上了，或者没开 Mooring</span><span style="color:var(--link)">重试</span></a>
+    </div>
+    <nav class="tabs" aria-label="主导航">
+      <a href="#bymachine" class="tab on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span style="display:flex;align-items:center;gap:4px">会话 <span class="badge">3</span></span></a>
+      <a href="#board" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>看板</a>
+      <a href="#machines" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>电脑</a>
+      <a href="#usage" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg>额度</a>
+    </nav>
+  </div>
+  <div class="cap">
+    <h3>C · 按电脑分组</h3>
+    <p>现在 App 的结构，补上搜索、电脑类型和延迟、不在线时的说明。电脑多的时候最清楚，但要你处理的事会被分散在各台电脑下面。</p>
+    <div class="api"><span class="have">现有：hello、list、连接状态</span><span class="need">新增：延迟测量、电脑类型（macOS / Linux）</span></div>
+  </div>
+  </div>
+
+  </div>
+</section>
+
+<!-- ========== 处理一件事 ========== -->
+<section>
+  <h2>处理一件事</h2>
+  <p>从收件箱或看板点进来之后的四个屏：看对话并回复、看清审批再决定、在电脑上开一个新任务、配对新电脑。</p>
+  <div class="row">
+
+  <!-- Session -->
+  <div class="shot">
+  <div class="ph" id="session">
+    <div class="nav">
+      <a href="#home" class="back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <div class="t"><b>手机端键盘挡住输入框</b><span><i class="sd g1" style="width:6px;height:6px"></i> mooring · Claude Code · main</span></div>
+      <span class="st" style="color:var(--run);padding-right:8px">在跑 12′</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:14px 14px 10px;display:flex;flex-direction:column;gap:10px;justify-content:flex-end">
+      <div class="time">16:31</div>
+      <div class="bubble-u">安卓上键盘弹出来把输入框挡住了，看不到自己在打什么</div>
+      <div class="bubble-a">
+        <span>RN 0.88 在 Android 上强制全屏绘制，键盘弹出时窗口不再缩小。改法：</span>
+        <span style="display:flex;gap:8px"><span>1.</span><span><code class="mono" style="font-size:13px;background:var(--bg);padding:1px 5px;border-radius:5px">KeyboardAvoidingView</code> 两个平台都用 padding</span></span>
+        <span style="display:flex;gap:8px"><span>2.</span><span>偏移量取真实标题栏高度</span></span>
+      </div>
+      <button class="tool">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
+        跑了 3 个命令 · 改了 1 个文件
+        <span class="mono" style="color:#7fd08a">chat.tsx +6 −2</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="bubble-a"><span>改好了，类型检查通过。要我重新打包装到手机上吗？</span></div>
+      <div class="chips" style="padding-left:2px">
+        <button class="chip">打包并安装</button>
+        <button class="chip">先别</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--line);padding:10px 12px 30px;display:flex;flex-direction:column;gap:10px;background:var(--side)">
+      <div class="chips" style="flex-wrap:nowrap;overflow:hidden">
+        <button class="chip" style="height:32px;font-size:13px;color:var(--err)">停下</button>
+        <button class="chip" style="height:32px;font-size:13px">继续</button>
+        <button class="chip" style="height:32px;font-size:13px">看终端最后几行</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label style="flex:1;height:44px;border-radius:22px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;padding:0 16px">
+          <input placeholder="说点什么…" aria-label="给 Agent 发消息" style="flex:1;border:0;background:transparent;color:var(--text);font:inherit;font-size:15px;outline:none">
+        </label>
+        <button class="btn bp" aria-label="发送" style="width:44px;padding:0;border-radius:22px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>会话详情</h3>
+    <p>只显示人和 Agent 说的话，工具调用折成一行「跑了几个命令、改了哪些文件」，点开再看。Agent 问问题时给一键回复；底部常驻「停下」「继续」两个最常用的动作；「停下」由后台核对画面后中断，手机不直接发按键。</p>
+    <div class="api"><span class="have">现有：chat（文字消息）、send、keys、read</span><span class="need">新增：chat 带上工具调用摘要（命令数、改动文件和行数）</span></div>
+  </div>
+  </div>
+
+  <!-- Approval -->
+  <div class="shot">
+  <div class="ph" id="approval">
+    <div class="nav" style="border-bottom:0">
+      <a href="#home" class="back" aria-label="关闭"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+      <div class="t"><b style="color:var(--wait-t)">等你审批</b><span>mooring · Claude Code · Agent-OS · 2 分钟前</span></div>
+    </div>
+    <div class="main" style="gap:14px;padding-top:8px">
+      <div style="font-size:22px;font-weight:700;letter-spacing:-.01em">Claude 想推送到远端</div>
+      <div class="cmd" style="font-size:14px">$ git push origin main</div>
+      <div class="card" style="gap:8px">
+        <span class="lbl">它为什么要这么做</span>
+        <span style="font-size:14px;color:var(--sub);line-height:1.55">「本地检查都过了，准备推送。」— 你在 16:20 让它「测完把 main 推上去」。</span>
+      </div>
+      <div class="card" style="gap:8px">
+        <span class="lbl">会发生什么</span>
+        <span style="font-size:14px;line-height:1.6">推送 <b>6 个提交</b>到 origin/main</span>
+        <span class="mono" style="font-size:12px;color:var(--muted);line-height:1.7">2c9ca0b6 feat(mobile): Android 真机跑通…<br>1a0e903b feat(mobile): iOS 模拟器上跑通…<br>+4 个</span>
+      </div>
+      <details class="card" style="gap:8px">
+        <summary style="font-size:13px;color:var(--muted);cursor:pointer;list-style:none">终端原文（最后 8 行）▾</summary>
+        <span class="mono" style="font-size:12px;color:var(--sub);white-space:pre;line-height:1.6">Bash command
+  git push origin main
+Do you want to proceed?
+&gt; 1. Yes
+  2. No</span>
+      </details>
+      <div style="flex:1"></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn bp" style="height:52px;font-size:16px">允许一次</button>
+        <button class="btn bg" style="height:52px">这个会话里都允许 git push</button>
+        <button class="btn bd" style="height:52px">拒绝，并告诉它…</button>
+      </div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>审批详情</h3>
+    <p>先用一句人话说清要做什么，再给出它为什么做、会造成什么后果，终端原文折起来备查。拒绝时可以顺带说一句理由，直接发给 Agent。</p>
+    <div class="api"><span class="have">现有：answer（允许 / 拒绝）、read（终端原文）、chat（上一句话）</span><span class="need">新增：「会话里都允许」对应终端菜单的第 2 项；推送提交列表等后果说明需要后台按命令类型补充</span></div>
+  </div>
+  </div>
+
+  <!-- NewTask -->
+  <div class="shot">
+  <div class="ph" id="newtask">
+    <div class="nav" style="border-bottom:0">
+      <a href="#home" class="back" aria-label="关闭"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+      <div class="t"><b>新任务</b><span>在电脑上开一个新终端，运行 Agent</span></div>
+    </div>
+    <div class="main" style="gap:16px;padding-top:10px">
+      <label class="field"><span>电脑</span><span class="sel"><i class="sd" style="background:var(--review)"></i>Agent-OS<span class="c">›</span></span></label>
+      <a href="#dirpick" class="field" style="color:var(--text)"><span>目录</span><span class="sel" style="height:auto;min-height:56px;padding:8px 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span class="mono" style="font-size:14px">~/code/mooring</span><span style="font-size:12px;color:var(--muted)">git · main · 空间 mooring</span></span>
+        <span class="c">›</span></span></a>
+      <div class="field"><span>Agent</span>
+        <div class="seg"><button class="cur">Claude Code</button><button>Codex</button></div>
+      </div>
+      <label class="field"><span>要它做什么</span>
+        <textarea aria-label="任务内容" style="height:180px;border-radius:14px;background:var(--card);border:1px solid var(--line);color:var(--text);font:inherit;font-size:15px;line-height:1.5;padding:12px 14px;resize:none;outline:none">把审批框里的终端内容换成等宽字体，安卓上 OPPO 的 monospace 不是等宽的。</textarea>
+      </label>
+      <div class="chips">
+        <button class="chip" style="font-size:13px">从剪贴板粘贴</button>
+        <button class="chip" style="font-size:13px">接着上次的对话</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn bp" style="height:52px;font-size:16px">开始</button>
+      <p style="margin:0 0 6px;font-size:12px;color:var(--muted);text-align:center">电脑上会出现一个新标签页，你回到电脑前可以直接接着用</p>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>新任务</h3>
+    <p>在路上想到一件事，直接让电脑开工。选电脑、空间、Agent，写一句话就行；默认继承空间的目录。</p>
+    <div class="api"><span class="need">新增：launch 操作（在指定空间开终端、运行 claude / codex 并带上第一句话）；只给「完全控制」权限的手机开放</span></div>
+  </div>
+  </div>
+
+  <!-- Pair -->
+  <div class="shot">
+  <div class="ph" id="pair">
+    <div class="nav" style="border-bottom:0">
+      <a href="#machines" class="back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <div class="t"><b>配对电脑</b></div>
+    </div>
+    <div class="main" style="gap:18px;padding-top:6px">
+      <div style="height:340px;border-radius:24px;background:#111114;border:1px solid var(--line);position:relative;display:flex;align-items:center;justify-content:center">
+        <div style="width:200px;height:200px;position:relative">
+          <span style="position:absolute;left:0;top:0;width:34px;height:34px;border-left:3px solid var(--text);border-top:3px solid var(--text);border-radius:10px 0 0 0"></span>
+          <span style="position:absolute;right:0;top:0;width:34px;height:34px;border-right:3px solid var(--text);border-top:3px solid var(--text);border-radius:0 10px 0 0"></span>
+          <span style="position:absolute;left:0;bottom:0;width:34px;height:34px;border-left:3px solid var(--text);border-bottom:3px solid var(--text);border-radius:0 0 0 10px"></span>
+          <span style="position:absolute;right:0;bottom:0;width:34px;height:34px;border-right:3px solid var(--text);border-bottom:3px solid var(--text);border-radius:0 0 10px 0"></span>
+        </div>
+        <span style="position:absolute;bottom:16px;font-size:13px;color:var(--muted)">[相机取景]</span>
+      </div>
+      <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14px;color:var(--sub);line-height:1.5">
+        <li>在电脑的 Mooring 里点标题栏的手机图标</li>
+        <li>选「配对新手机」，屏幕上会出现二维码</li>
+        <li>用<b style="color:var(--text)">这里</b>对准它。微信和系统相机打不开这种码</li>
+      </ol>
+      <div style="flex:1"></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn bg">粘贴配对链接</button>
+        <p style="margin:0;font-size:12px;color:var(--muted);text-align:center;line-height:1.5">手机和电脑最好在同一个 Wi‑Fi；不在时经中继连接，内容端到端加密</p>
+      </div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>配对电脑</h3>
+    <p>真机测试时发现用户会拿微信扫码，所以把「用这里扫」写进步骤。粘贴链接作为备用，不再常驻一个输入框。</p>
+    <div class="api"><span class="have">现有：配对链接 v2、expo-camera 扫码</span></div>
+  </div>
+  </div>
+
+  </div>
+</section>
+
+<!-- ========== 选择目录 ========== -->
+<section>
+  <h2>选择目录</h2>
+  <p>新任务的目录不再只能从空间里挑。可以一层层浏览电脑上的文件夹，也可以直接输入路径或名字搜索。git 仓库会标出分支和改动数，已经有会话的目录也会标出来，免得在同一个仓库里重复开工。只列文件夹，不显示文件内容。</p>
+  <div class="row">
+
+  <!-- Browse -->
+  <div class="shot">
+  <div class="ph" id="dirpick">
+    <div class="nav" style="border-bottom:0">
+      <a href="#newtask" class="back" aria-label="返回新任务"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <div class="t"><b>选择目录</b><span><i class="sd" style="background:var(--review);width:6px;height:6px"></i> Agent-OS</span></div>
+    </div>
+    <div style="padding:0 16px 10px;display:flex;flex-direction:column;gap:10px">
+      <nav aria-label="当前路径" class="mono" style="display:flex;align-items:center;gap:2px;font-size:13px;overflow:hidden;white-space:nowrap">
+        <a href="#dirpick" style="color:var(--muted);padding:6px 4px">~</a><span style="color:var(--faint)">/</span>
+        <a href="#dirpick" style="color:var(--muted);padding:6px 4px">code</a><span style="color:var(--faint)">/</span>
+        <a href="#dirpick" style="color:var(--muted);padding:6px 4px">AI</a><span style="color:var(--faint)">/</span>
+        <span style="color:var(--text);padding:6px 4px;font-weight:500">tools</span>
+      </nav>
+      <a href="#dirsearch" style="height:44px;border-radius:12px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--muted);font-size:15px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        输入路径，或搜文件夹名
+      </a>
+    </div>
+    <div class="main" style="padding-top:0;gap:10px">
+      <div class="lbl">最近用过</div>
+      <div class="chips" style="flex-wrap:nowrap;overflow:hidden">
+        <button class="chip" style="font-size:13px"><i class="sd g1"></i>mooring</button>
+        <button class="chip" style="font-size:13px"><i class="sd g2"></i>blog</button>
+        <button class="chip" style="font-size:13px">alma-relay</button>
+      </div>
+      <div class="lbl" style="margin-top:4px">tools 里的文件夹 · 4</div>
+      <div class="list">
+        <div class="li" style="background:#17202e;padding:0 0 0 14px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--link)" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <button style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;background:transparent;border:0;color:var(--text);text-align:left;padding:12px 0">
+            <b style="font-size:15px;font-weight:600">mooring</b>
+            <span style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center"><span class="mono">main</span>· 2 个改动 · <span style="color:var(--run)">3 个会话在跑</span></span>
+          </button>
+          <span style="width:22px;height:22px;border-radius:11px;background:var(--link);display:flex;align-items:center;justify-content:center;flex:none" aria-label="已选"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0c0c0e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
+          <a href="#dirpick" aria-label="打开 mooring" style="width:48px;align-self:stretch;display:flex;align-items:center;justify-content:center;color:var(--muted);border-left:1px solid var(--line)">›</a>
+        </div>
+        <div class="li" style="padding:0 0 0 14px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <button style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;background:transparent;border:0;color:var(--text);text-align:left;padding:12px 0">
+            <b style="font-size:15px;font-weight:500">mooring-mobile</b>
+            <span style="font-size:12px;color:var(--muted)"><span class="mono">feat/mobile</span> · mooring 的工作树</span>
+          </button>
+          <a href="#dirpick" aria-label="打开 mooring-mobile" style="width:48px;align-self:stretch;display:flex;align-items:center;justify-content:center;color:var(--muted);border-left:1px solid var(--line)">›</a>
+        </div>
+        <div class="li" style="padding:0 0 0 14px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <button style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;background:transparent;border:0;color:var(--text);text-align:left;padding:12px 0">
+            <b style="font-size:15px;font-weight:500">alma-relay</b>
+            <span style="font-size:12px;color:var(--muted)"><span class="mono">main</span> · 没有改动</span>
+          </button>
+          <a href="#dirpick" aria-label="打开 alma-relay" style="width:48px;align-self:stretch;display:flex;align-items:center;justify-content:center;color:var(--muted);border-left:1px solid var(--line)">›</a>
+        </div>
+        <div class="li" style="padding:0 0 0 14px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <button style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;background:transparent;border:0;color:var(--text);text-align:left;padding:12px 0">
+            <b style="font-size:15px;font-weight:500">scratch</b>
+            <span style="font-size:12px;color:var(--muted)">普通文件夹</span>
+          </button>
+          <a href="#dirpick" aria-label="打开 scratch" style="width:48px;align-self:stretch;display:flex;align-items:center;justify-content:center;color:var(--muted);border-left:1px solid var(--line)">›</a>
+        </div>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--line);padding:12px 16px 30px;display:flex;flex-direction:column;gap:8px;background:var(--side)">
+      <a href="#newtask" class="btn bp" style="height:50px">在 <span class="mono" style="font-size:14px">~/code/AI/tools/mooring</span> 开始</a>
+      <div class="btns"><button class="btn bg" style="flex:1;height:40px;font-size:14px">新建文件夹</button><button class="btn bg" style="flex:1;height:40px;font-size:14px">设为空间</button></div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>浏览文件夹</h3>
+    <p>点名字是选中，点右边的箭头是进去；顶部路径每一段都能点回去。最近用过的目录放在最上面，带空间颜色。选中 git 仓库时显示分支、改动数和已经在跑的会话。</p>
+    <div class="api"><span class="have">现有：list（会话的 cwd，可算出最近用过和每个目录的会话数）</span><span class="need">新增：dirs 操作（列出一个目录下的子文件夹，带 git 分支和改动数）；mkdir；把目录设为空间</span></div>
+  </div>
+  </div>
+
+  <!-- Search -->
+  <div class="shot">
+  <div class="ph" id="dirsearch">
+    <div class="nav" style="border-bottom:0">
+      <a href="#dirpick" class="back" aria-label="返回浏览"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <div class="t"><b>选择目录</b><span><i class="sd" style="background:var(--review);width:6px;height:6px"></i> Agent-OS</span></div>
+    </div>
+    <div style="padding:0 16px 12px">
+      <label style="height:48px;border-radius:12px;background:var(--card);border:1px solid var(--link);display:flex;align-items:center;gap:8px;padding:0 12px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input class="mono" value="kee" aria-label="路径或文件夹名" style="flex:1;border:0;background:transparent;color:var(--text);font-size:15px;outline:none">
+        <button aria-label="清空" style="width:28px;height:28px;border-radius:14px;border:0;background:#2e2e35;color:var(--sub);display:flex;align-items:center;justify-content:center">×</button>
+      </label>
+    </div>
+    <div class="main" style="padding-top:0;gap:10px">
+      <div class="lbl">家目录下名字里有「kee」的文件夹 · 4</div>
+      <div class="list">
+        <a href="#newtask" class="li"><span class="tx"><b class="mono" style="font-size:14px">~/code/AI/tools/<span style="color:var(--link)">kee</span>pline</b><span>git · main · 3 个会话在跑 · 最近用过</span></span></a>
+        <a href="#newtask" class="li"><span class="tx"><b class="mono" style="font-size:14px">~/code/AI/tools/<span style="color:var(--link)">kee</span>pline-mobile</b><span>git · feat/mobile · 工作树</span></span></a>
+        <a href="#newtask" class="li"><span class="tx"><b class="mono" style="font-size:14px">~/code/AI/tools/<span style="color:var(--link)">kee</span>pline-t3-titlebar</b><span>git · feat/t3-titlebar · 工作树</span></span></a>
+        <a href="#newtask" class="li"><span class="tx"><b class="mono" style="font-size:14px">~/Documents/<span style="color:var(--link)">kee</span>p-notes</b><span>普通文件夹</span></span></a>
+      </div>
+      <div class="lbl" style="margin-top:6px">也可以直接输入完整路径</div>
+      <div class="card" style="gap:8px">
+        <span class="mono" style="font-size:13px;color:var(--sub)">/opt/projects/new-thing</span>
+        <span style="font-size:12px;color:var(--muted);line-height:1.5">路径不存在时可以「新建并在这里开始」。以 <span class="mono">~</span> 开头的路径按电脑上的家目录展开。</span>
+      </div>
+      <div class="card" style="flex-direction:row;gap:10px;align-items:flex-start;background:transparent;border-style:dashed">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex:none;margin-top:2px"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <span style="font-size:12px;color:var(--muted);line-height:1.55">只列文件夹，不读文件内容；跳过 node_modules、.git 和隐藏文件夹。只有「完全控制」权限的手机能浏览和开新任务。</span>
+      </div>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>输入和搜索</h3>
+    <p>输入几个字母就在家目录下按名字找文件夹，命中部分高亮；输入完整路径则直接用，不存在可以新建。搜索结果把最近用过、git 仓库排在前面。</p>
+    <div class="api"><span class="need">新增：dirs 带 query 参数（在家目录下按名字找，限制深度和数量）；路径展开和存在性检查</span></div>
+  </div>
+  </div>
+
+  </div>
+</section>
+
+<!-- ========== 电脑、额度与设置 ========== -->
+<section>
+  <h2>电脑、额度与设置</h2>
+  <p>不常用但必须有的三屏：管理连上的电脑和这台手机的权限，看 Claude / Codex 的额度还剩多少，以及哪些事要推送通知。</p>
+  <div class="row">
+
+  <!-- Machines -->
+  <div class="shot">
+  <div class="ph" id="machines">
+    <div class="top"><h1>电脑</h1><div style="display:flex;gap:8px"><a href="#pair" class="chip" style="color:var(--text)">＋ 配对</a><a href="#settings" class="chip" aria-label="通知与设置" style="width:36px;padding:0;justify-content:center;color:var(--text)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></a></div></div>
+    <div class="main" style="padding-top:0;gap:14px">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px"><i class="sd" style="background:var(--review)"></i><b style="font-size:16px;flex:1">Agent-OS</b><span style="font-size:12px;color:var(--review);font-weight:600">在线</span></div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+          <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:11px;color:var(--muted)">对话</span><b style="font-size:18px">7</b></div>
+          <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:11px;color:var(--muted)">连接</span><b style="font-size:15px">局域网</b></div>
+          <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:11px;color:var(--muted)">延迟</span><b style="font-size:18px">18<span style="font-size:12px;color:var(--muted)"> ms</span></b></div>
+        </div>
+        <div class="meta">macOS · 权限：完全控制 · 配对于 11-03</div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px"><i class="sd" style="background:var(--review)"></i><b style="font-size:16px;flex:1">dev-linux</b><span style="font-size:12px;color:var(--review);font-weight:600">在线</span></div>
+        <div class="meta">Linux · 经中继 relay.example.com · 64 ms · 能答审批</div>
+      </div>
+      <div class="card" style="border-style:dashed;background:transparent">
+        <div style="display:flex;align-items:center;gap:10px"><i class="sd" style="background:#4a4a52"></i><b style="font-size:16px;flex:1;color:var(--sub)">MacBook Air</b><span style="font-size:12px;color:var(--muted)">3 小时前在线</span></div>
+        <div class="btns"><button class="btn bg" style="flex:1;height:40px;font-size:14px">重试</button><button class="btn bg" style="height:40px;font-size:14px;color:var(--err)">移除</button></div>
+      </div>
+      <div class="lbl" style="margin-top:4px">中继</div>
+      <div class="list">
+        <div class="li"><span class="tx"><b>relay.example.com</b><span>自建 · 端到端加密，中继看不到内容</span></span><span class="st" style="color:var(--review)">正常</span></div>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="主导航">
+      <a href="#home" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg><span style="display:flex;align-items:center;gap:4px">收件箱 <span class="badge">3</span></span></a>
+      <a href="#board" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>看板</a>
+      <a href="#machines" class="tab on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>电脑</a>
+      <a href="#usage" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg>额度</a>
+    </nav>
+  </div>
+  <div class="cap">
+    <h3>电脑与连接</h3>
+    <p>每台电脑的在线状态、连接方式（局域网还是中继）、延迟和这台手机的权限。不在线的可以重试或移除。</p>
+    <div class="api"><span class="have">现有：hello（名字、权限）、移除配对</span><span class="need">新增：延迟、连接方式、电脑类型</span></div>
+  </div>
+  </div>
+
+  <!-- Usage -->
+  <div class="shot">
+  <div class="ph" id="usage">
+    <div class="top"><div style="display:flex;flex-direction:column;gap:4px"><h1>额度</h1><span style="font-size:13px;color:var(--muted)">来自 Agent-OS · 1 分钟前更新</span></div></div>
+    <div class="main" style="padding-top:0;gap:14px">
+      <div class="card" style="gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between"><b style="font-size:16px">Claude Code</b><span style="font-size:12px;color:var(--muted)">Max 计划</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--sub)">5 小时窗口</span><span><b>62%</b> <span style="color:var(--muted)">· 1 时 40 分后重置</span></span></div>
+          <div class="gauge"><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i style="background:var(--run)"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--sub)">本周</span><span><b>38%</b> <span style="color:var(--muted)">· 周四重置</span></span></div>
+          <div class="gauge"><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="card" style="gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between"><b style="font-size:16px">Codex</b><span style="font-size:12px;color:var(--muted)">Pro 计划</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--sub)">5 小时窗口</span><span><b>15%</b></span></div>
+          <div class="gauge"><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i style="background:var(--review)"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--sub)">本周</span><span><b style="color:var(--wait-t)">81%</b> <span style="color:var(--muted)">· 周六重置</span></span></div>
+          <div class="gauge"><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i style="background:var(--wait)"></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="card" style="flex-direction:row;gap:0;padding:0">
+        <div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line)"><span style="font-size:11px;color:var(--muted)">今天 tokens</span><b style="font-size:20px">[数值]</b></div>
+        <div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:2px"><span style="font-size:11px;color:var(--muted)">按 API 价估算</span><b style="font-size:20px">[金额]</b></div>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="主导航">
+      <a href="#home" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg><span style="display:flex;align-items:center;gap:4px">收件箱 <span class="badge">3</span></span></a>
+      <a href="#board" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>看板</a>
+      <a href="#machines" class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>电脑</a>
+      <a href="#usage" class="tab on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg>额度</a>
+    </nav>
+  </div>
+  <div class="cap">
+    <h3>额度与用量</h3>
+    <p>沿用桌面端侧栏的竖条纹额度条：用掉的部分上色，过 80% 变橙。示例里的百分比只是示意，今天的 token 数和估算金额先留空位。</p>
+    <div class="api"><span class="need">新增：quota 操作（把桌面端已有的额度读数和本地计量发给手机）</span></div>
+  </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="shot">
+  <div class="ph" id="settings">
+    <div class="nav" style="border-bottom:0">
+      <a href="#machines" class="back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <div class="t"><b>通知与设置</b></div>
+    </div>
+    <div class="main" style="gap:14px;padding-top:6px">
+      <div class="lbl">什么时候提醒我</div>
+      <div class="list">
+        <div class="li"><span class="tx"><b>等你审批</b><span>立即，带「允许一次」按钮</span></span><button class="sw" role="switch" aria-checked="true" aria-label="等你审批"></button></div>
+        <div class="li"><span class="tx"><b>等你回答</b><span>Agent 问你问题停下来时</span></span><button class="sw" role="switch" aria-checked="true" aria-label="等你回答"></button></div>
+        <div class="li"><span class="tx"><b>出错</b><span>命令失败或 Agent 报错</span></span><button class="sw" role="switch" aria-checked="true" aria-label="出错"></button></div>
+        <div class="li"><span class="tx"><b>做完了</b><span>一个任务跑完、等你核对</span></span><button class="sw" role="switch" aria-checked="false" aria-label="做完了"></button></div>
+      </div>
+      <div class="list">
+        <div class="li"><span class="tx"><b>免打扰</b><span>23:00 – 08:00，审批除外</span></span><button class="sw" role="switch" aria-checked="true" aria-label="免打扰"></button></div>
+      </div>
+      <div class="lbl" style="margin-top:4px">外观与安全</div>
+      <div class="list">
+        <div class="li"><span class="tx"><b>外观</b></span><span style="font-size:14px;color:var(--muted)">跟随系统 ›</span></div>
+        <div class="li"><span class="tx"><b>打开时要 Face ID / 指纹</b><span>别人拿到手机也批不了你的命令</span></span><button class="sw" role="switch" aria-checked="false" aria-label="打开时要生物识别"></button></div>
+        <div class="li"><span class="tx"><b>允许前再确认一次</b><span>只对 push、rm、部署这类命令</span></span><button class="sw" role="switch" aria-checked="true" aria-label="危险命令二次确认"></button></div>
+      </div>
+      <p style="margin:auto 0 8px;font-size:12px;color:var(--muted);text-align:center">Mooring 1.0.0 · 这台手机：演示手机</p>
+    </div>
+  </div>
+  <div class="cap">
+    <h3>通知与设置</h3>
+    <p>通知按事件分开开关，审批默认带操作按钮，在锁屏上就能批。危险命令（push、rm、部署）允许前多确认一次。</p>
+    <div class="api"><span class="have">现有：events（approval、waiting、error、done）</span><span class="need">新增：推送通道（iOS 需要 APNs 和开发者账号，安卓可走 FCM 或厂商推送）；危险命令识别</span></div>
+  </div>
+  </div>
+
+  </div>
+</section>
+
+</div>
+</body>
+</html>

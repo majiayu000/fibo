@@ -43,7 +43,8 @@ mooring plugins            # 检查；有问题以 1 退出
 
 - `api` 固定写 `1`。`id` 只用小写字母、数字和 `-`，不超过 40 个字，最好和目录名一样；和别的插件重名时后一个不加载。
 - `name` 必填；`version`、`description` 可选；不认识的字段整份拒绝。
-- `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。
+- `files` 可选：插件还要带上的其他文件（命令要跑的脚本），相对插件目录写。不写进来的文件从插件目录安装时不会被带上。
+- `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `setup` `quota` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。
 - 每个类型文件里也都写 `"api": 1`（`agent.json` 除外，见最后），不认识的字段同样整份拒绝。
 
 ## actions：右键菜单和 ⌘P 里的命令（`actions.json`）
@@ -131,6 +132,37 @@ mooring plugins            # 检查；有问题以 1 退出
 - `style`：`seal`（印章，默认）、`stamp`（落印）、`sweep`（扫光合上）、`dissolve`（化进侧栏）、`fade`（只淡出）。
 - `duration_ms` 在 600–4000 之间；`land`：`sidebar`（落到侧栏那一行）或 `none`。
 - 每个插件的设定是 设置 › 外观 › 标记完成动画 里多出来的一个选项（用插件的 name 当名字），装上不会自动换掉用户选的；和内置某种一模一样的（同 style、默认时长和落点）不另列。系统开了「减弱动态效果」时一律只淡出。
+
+## setup：装上时改别的程序，卸载时改回来（`setup.json`）
+
+```json
+{"api": 1, "setup": "sh setup.sh", "teardown": "sh teardown.sh", "timeout_ms": 10000}
+```
+
+- `setup` 在装上、更新、打开时运行，`teardown` 在停用、卸载时运行；都在插件目录里用 `sh -c` 跑。`MOORING_PLUGIN_DIR` 是插件目录，`MOORING_PLUGIN_DATA` 是插件自己的数据目录（`<配置>/plugin-data/<id>`，更新和重装都保留）。
+- 两条都要写：装上时改了什么，`teardown` 就要能原样改回去。原来的设置存进 `MOORING_PLUGIN_DATA`。
+- `setup` 会在已经装过的情况下再跑（更新时），要能重复运行。
+- 失败（非 0 退出或超时，`timeout_ms` 100–30000，默认 10000）时，打印的内容会显示在设置页；`teardown` 失败时插件不会被卸载或停用。
+- 例子：`plugins/claude-quota`（接上 Claude Code 的状态栏，原来的状态栏照常显示）。
+
+## quota：某个 Agent 的额度（`quota.json`）
+
+```json
+{"api": 1, "sources": [{
+  "agent": "claude",
+  "file": "statusline.json",
+  "windows": [
+    {"minutes": 300, "used": "/rate_limits/five_hour/used_percentage", "resets_at": "/rate_limits/five_hour/resets_at"},
+    {"minutes": 10080, "used": "/rate_limits/seven_day/used_percentage", "resets_at": "/rate_limits/seven_day/resets_at"}
+  ]
+}]}
+```
+
+- `agent`：CLI 的可执行文件名或名字。显示在状态栏的额度里，和内置的读数比谁新。
+- 数据来源二选一：`file` 是一个 JSON 文件（相对 `MOORING_PLUGIN_DATA`，也可以写绝对路径或 `~/`），文件变了就重读；`command` 是输出 JSON 的命令，App 开着时每 `refresh_s` 秒（60–86400，默认 300）在插件目录里跑一次，最多 20 秒。
+- `windows` 里每个窗口写 `minutes`（300 显示成 5h，10080 显示成 周），`used` 和 `resets_at` 是 JSON 指针（以 `/` 开头）：已用百分比、重置时间（Unix 秒）。取不到 `used` 的窗口不显示；一个都没有就不显示这家。
+- `at`、`plan` 可选，也是 JSON 指针：记录时间（Unix 秒，不写就用文件修改时间或命令运行时间）、套餐名。
+- 要联网查的话写在 `command` 里；Mooring 自己不联网，这类插件的说明里要写清楚。
 
 ## agent：让 Mooring 认识一个新 CLI（`agent.json` 或 `agents/*.json`）
 

@@ -1,0 +1,46 @@
+{
+  "name": "Mooring 手机端",
+  "premise": {
+    "product": "Mooring 手机端（远程看住、回复、审批 Claude Code / Codex 会话）",
+    "from_scratch": false,
+    "baseline": "main@d88045ec，设计稿 specs/phone-app/design.html，App mobile",
+    "scope": "手机 App",
+    "out_of_scope": "桌面工作台、中继部署",
+    "intent": "借鉴原则，完善设计稿",
+    "known_peers": [
+      "Happy",
+      "Paseo",
+      "coucou",
+      "codex-relay",
+      "Nexting",
+      "Claude Remote Control",
+      "ChatGPT Codex"
+    ],
+    "resources": "公开源码、官方文档、HN",
+    "confirmed": true,
+    "confirmed_by": "user"
+  },
+  "peers": [
+    "slopus/happy",
+    "getpaseo/paseo",
+    "Louis-CFM/coucou",
+    "gronxb/codex-relay",
+    "Nexting-ai/nexting"
+  ],
+  "rubric": {
+    "version": 1,
+    "dimensions": []
+  },
+  "rules": [
+    "沿用用户约定：不开子代理（含审查），主线程自查。",
+    "报告放在 specs/phone-app/peerscope/，跟仓库提交。"
+  ],
+  "available_skills": [],
+  "rounds": [
+    "20261103-s1"
+  ],
+  "stage": 1,
+  "tiers": {
+    "20261103-s1": "standard"
+  }
+}

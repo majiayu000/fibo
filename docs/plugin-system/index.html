@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件机制审视</title>
+<style>
+:root{--bg:#fbfaf7;--ink:#1d1d1f;--mute:#6b6b72;--line:#e3e1db;--card:#fff;--hi:#c2410c;--mid:#a16207;--lo:#6b7280;--ok:#15803d;--code:#f2f0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#0e0e10;--ink:#e8e8ea;--mute:#9a9aa2;--line:#2a2a2f;--card:#16161a;--hi:#fb923c;--mid:#e5b83b;--lo:#9ca3af;--ok:#4cc38a;--code:#1f1f24}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC",sans-serif}
+main{max-width:1120px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:19px;margin:44px 0 6px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:15px;margin:22px 0 6px}
+p.lead{color:var(--mute);margin:0 0 20px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0}
+.box h3{margin:0 0 8px}
+.note{color:var(--mute);font-size:13.5px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--mute);font-size:12.5px;background:var(--code)}
+tr:last-child td{border-bottom:0}
+code{font:12px ui-monospace,Menlo,monospace;background:var(--code);padding:1px 4px;border-radius:4px;word-break:break-all}
+.s{font-weight:600;white-space:nowrap}.s.h{color:var(--hi)}.s.m{color:var(--mid)}.s.l{color:var(--lo)}
+.d{white-space:nowrap;font-weight:600}.d.y{color:var(--ok)}.d.w{color:var(--mid)}.d.n{color:var(--lo)}
+.wrap{overflow-x:auto}
+ol li,ul li{margin:4px 0}
+.good{color:var(--ok);font-weight:600}.bad{color:var(--hi);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>插件机制审视</h1>
+<p class="lead">2026-11-03 · 把 Mooring 的插件机制和 11 个产品对照：同类 Agent 工作台（下文称 H，它有终端版插件和桌面版 mods 两套）、Zellij、WezTerm、tmux、Kitty、Warp、VS Code、Zed、Raycast、Obsidian、Claude Code。Mooring 部分读的是当前 main（70deadd）的源码，并在本机实跑核对过；别家来自官方文档、源码和 issue，链接列在文末。</p>
+
+<div class="box">
+<h3>这页要支撑的决定</h3>
+<p>插件机制下一步改什么、按什么顺序改。每条建议都标了结论：<span class="d y">采用</span>是建议做，<span class="d w">待验证</span>是先确认有真实需要再定，<span class="d n">不做</span>是看过别家之后决定不跟。</p>
+<p><b>放弃条件</b>：一项改动如果不能让现有某个插件（claude-quota、notify-macos、pane-facts、common-actions）写得更简单、更安全或者更好排查，就不做，哪怕别家都有。</p>
+</div>
+
+<div class="box">
+<h3>结论</h3>
+<ol>
+<li><b>总体路线是对的，不用推倒。</b>Mooring 的写法是「声明式 JSON + 子进程跑 shell 命令 + 插件画不了界面，由宿主来画」。这和 H 的终端版插件、Claude Code 插件同属一类，也是三类做法里门槛最低、最难把 App 搞崩的一类：另外两类是 VS Code、Obsidian、H 桌面版那样的进程内代码，以及 Zellij 那样只能用 WASM。另外，有两件事 Mooring 比别家做得好：
+  <ul>
+  <li><b>可逆的 setup / teardown</b>。11 家里没有一家提供「装上时改别的程序、卸载时改回来」的声明式钩子。H 的社区插件只能在 README 里让用户再手动跑一次 setup，忘了跑就以为没装好，这是它们最常见的抱怨。</li>
+  <li><b>插件不画界面</b>。完成动画、左栏、额度这几类都只提交数据，由宿主统一画，所以主题和深浅色不会被插件弄乱。H 桌面版走的是反方向，让插件自己画，结果已经出现性能问题（issue #88）。</li>
+  </ul></li>
+<li><b>有 4 个问题现在就该修。</b>其中 3 个是这次核对时找到的真 bug，1 个是文档过期，见第三节的 B1 到 B4。</li>
+<li><b>还有 5 处机制短板，都有别家的现成做法可以照抄。</b>按重要程度：
+  <ul>
+  <li>插件和 App 的版本不配套时会出问题；</li>
+  <li>传给插件命令的上下文，每种类型给法都不一样；</li>
+  <li>插件没有自己的设置项；</li>
+  <li>插件命令跑没跑、报了什么错，在 App 里看不到；</li>
+  <li>安装前的说明只按插件类型笼统地写，没说具体会动哪些文件、会不会联网。</li>
+  </ul>
+  这五项都不涉及大改，排期见第五节。</li>
+<li><b>不跟的做法</b>：让插件在 App 进程里跑代码、每种类型都改成 WASM、靠人工审核来把关插件市场、第三方插件自动更新。理由见第四节。</li>
+</ol>
+</div>
+
+<h2>一、Mooring 现在有什么</h2>
+<p class="note">一个插件就是 <code>~/.config/mooring/plugins/&lt;id&gt;/</code> 下的一个目录。<code>plugin.json</code> 写明它提供哪几类，每类对应一个固定文件名，可以同时提供多类。加载时一个插件出错不影响别的插件，每份文件的加载结果都会显示在 设置 › 插件 › 声明文件明细 里。</p>
+<div class="wrap"><table>
+<tr><th>类型</th><th>文件</th><th>做什么</th><th>跑代码吗</th><th>在哪个进程</th><th>改了以后</th><th>插件拿到的上下文</th></tr>
+<tr><td>agent</td><td><code>agent.json</code></td><td>让 Mooring 认识一个新 CLI：怎么启动、恢复，怎么读它的对话记录（JSONL 或 SQLite）</td><td>启动和恢复命令</td><td>后台和 App 都用</td><td><span class="bad">要重启后台</span></td><td>模板 <code>{id}</code></td></tr>
+<tr><td>actions</td><td><code>actions.json</code></td><td>窗格右键菜单和 ⌘P 里的命令</td><td>用户点了才跑</td><td>App（在分屏、新标签里跑，或粘贴到终端）</td><td>立即生效</td><td>模板 <code>{cwd} {session_id} {transcript} {task} {agent}</code>，都加了引号</td></tr>
+<tr><td>hooks</td><td><code>hooks.json</code></td><td>会话进入等你、出错、做完，或命令跑完时，调一条命令或一个 webhook</td><td>是</td><td>后台（App 关着也会触发）</td><td>立即生效</td><td>stdin 收到事件 JSON，外加 <code>MOORING_EVENT/SESSION/AGENT/TITLE/CWD/SPACE/DETAIL/TERMINAL/EXIT_CODE/DURATION_MS</code></td></tr>
+<tr><td>decorations</td><td><code>decorations.json</code></td><td>在窗格标题栏或悬停卡片里显示一行命令输出</td><td>是，定时跑</td><td>App</td><td>立即生效</td><td><code>MOORING_CWD/AGENT/SESSION/LAST_EXIT/LAST_DURATION_MS</code></td></tr>
+<tr><td>rules</td><td><code>rules.json</code></td><td>补充哪些命令算跑过验证</td><td>否</td><td>后台</td><td>立即生效</td><td>—</td></tr>
+<tr><td>sidebar</td><td><code>sidebar.json</code>（可以带 <code>.wasm</code>）</td><td>左栏的排法；用 WASM 的那种在沙盒里跑</td><td>WASM 沙盒：没有文件和网络权限，限时、限内存</td><td>App</td><td>立即生效</td><td>会话卡片的 JSON</td></tr>
+<tr><td>effects</td><td><code>effects.json</code></td><td>标记完成时播哪种动画</td><td>否</td><td>App</td><td>立即生效</td><td>—</td></tr>
+<tr><td>setup</td><td><code>setup.json</code></td><td>装上、更新、打开时跑 setup，停用、卸载时跑 teardown</td><td>是</td><td>App（市场安装在后台线程，卸载和开关在主线程，见 B1）</td><td>—</td><td><code>MOORING_PLUGIN_DIR/DATA</code></td></tr>
+<tr><td>quota</td><td><code>quota.json</code></td><td>某个 Agent 的额度，从文件或定时运行的命令取</td><td>写 command 时是</td><td>App</td><td>立即生效</td><td><code>MOORING_PLUGIN_DIR/DATA</code></td></tr>
+</table></div>
+<p class="note">插件市场：App 自带的目录加一个远程 <code>index.json</code>（默认是本仓库在 GitHub 上的那份）。安装时只拷索引里登记的文件，逐个核对 sha256，先写进暂存目录，检查通过再整个换进去。会跑命令的类型装之前要点「确认安装」。开关记在 <code>disabled.json</code>。命令行有 <code>mooring plugins</code>（检查）和 <code>available / install / uninstall / index</code>。写插件的说明在 <code>mooring --skill plugins</code>。</p>
+
+<h2>二、和别家逐项对照</h2>
+<div class="wrap"><table>
+<tr><th>维度</th><th>Mooring</th><th>H 终端版插件</th><th>H 桌面版 mods</th><th>Claude Code</th><th>VS Code</th><th>Zed</th><th>Zellij</th><th>Raycast / Obsidian</th></tr>
+<tr><td>写法</td><td>9 类 JSON 声明 + shell 命令；左栏可以用 WASM</td><td>一份 TOML 清单声明命令（argv 数组，不经过 shell）</td><td>JS 描述 GPUI 界面</td><td>十多类声明（Markdown、JSON）+ 子进程</td><td>38 类声明 + JS 代码</td><td>文件 + Rust/WASM</td><td>Rust/WASM</td><td>TS 代码 / JS 代码</td></tr>
+<tr><td>在哪跑</td><td>子进程，单次运行加超时；WASM 在进程内的沙盒里</td><td>子进程，单次运行</td><td>App 进程内，所有 mod 共用一个 JS 上下文</td><td>子进程；MCP、LSP 可以常驻，有重启上限</td><td>单独的扩展宿主进程</td><td>进程内 wasmtime</td><td>进程内 wasmi</td><td>Node 进程，每个扩展一个隔离区 / App 进程内</td></tr>
+<tr><td>插件怎么回调宿主</td><td>理论上调 <code>mooring</code> 命令，但终端外有 bug（B2）</td><td><b>整个 CLI 就是插件 API</b>，传 程序路径、socket 和上下文 JSON</td><td>JS API：实时数据加 run/exec</td><td>环境变量；MCP 工具</td><td>完整 API</td><td>WIT 接口</td><td>事件、管道、权限 API</td><td>RPC API</td></tr>
+<tr><td>装上和卸载时做事</td><td><span class="good">setup / teardown，teardown 失败就不卸</span></td><td><span class="bad">没有</span>；只有 build 和 startup，改别的程序要用户手动跑 action</td><td>没有；由 Agent 照着说明文件安装</td><td>没有</td><td>只有卸载后、下次重启时跑的一个 Node 脚本</td><td>没有</td><td>没有</td><td>没有</td></tr>
+<tr><td>数据目录</td><td><code>plugin-data/&lt;id&gt;</code>，更新时保留，<span class="bad">卸载后也一直保留</span></td><td>分开的 config 目录和 state 目录</td><td>每个 mod 有自己的 localStorage，另有共享状态</td><td><code>PLUGIN_DATA</code>：更新时保留，卸载时默认删，可加 <code>--keep-data</code></td><td>globalState、secrets</td><td><code>work/</code> 目录</td><td><code>/data</code>，卸载时删</td><td>LocalStorage，加密 / data.json</td></tr>
+<tr><td>插件自己的设置项</td><td><span class="bad">没有</span></td><td>config 目录，插件自己管</td><td>没有</td><td><b>userConfig 写 schema</b>，启用时弹表单；敏感值进钥匙串；不往 shell 命令里插值</td><td>写 JSON Schema，设置界面自动生成</td><td>没有</td><td>插件配置写在 KDL 里</td><td>preferences 自动生成界面 / 用代码画设置页</td></tr>
+<tr><td>安全</td><td>按插件类型列出它能做什么，会跑命令的要确认；没有沙盒</td><td>安装前列出要跑的全部命令；不审核、没有沙盒</td><td>受信代码；要求 Agent 告诉用户会不会联网、会不会跑程序</td><td>工作区信任；MCP 逐个审批；下架的插件自动卸载</td><td>信任发布者；Workspace Trust；市场有扫描和签名</td><td><b>能力可以收窄</b>（能跑哪些程序、能从哪里下载）</td><td><b>14 种权限，运行时弹窗申请</b>，授权只按 URL 记</td><td>人工审核 / 每个版本自动扫描</td></tr>
+<tr><td>分发与完整性</td><td>索引带 sha256，<span class="bad">索引和文件出自同一处，没有签名</span>；手动更新</td><td>按 GitHub topic 自动上架，记录 commit，不审核</td><td>同上</td><td>git 仓库当市场；支持钉 sha256；第三方市场默认不自动更新</td><td>签名，默认自动更新</td><td>官方 CI 编译，提 PR 审核（要等几周）</td><td>直接给 URL</td><td>PR 审核 / GitHub release</td></tr>
+<tr><td>版本兼容</td><td>每份文件写 <code>api</code>；<span class="bad">不能声明最低 App 版本，旧 App 遇到不认识的类型会拒掉整个插件</span>（B4）</td><td>最低宿主版本字段</td><td>—</td><td>未知字段只警告，严格的地方才报错</td><td><code>engines.vscode</code></td><td>宿主同时支持多个接口版本</td><td>改用 protobuf 换来向前兼容</td><td>Obsidian 的 <code>versions.json</code> 让旧 App 拿到兼容的旧版插件</td></tr>
+<tr><td>开发体验</td><td><code>mooring plugins</code> 检查，带 <code>--json</code>；有给 Agent 看的写插件说明；不需要重启</td><td><code>plugin link</code> 加 <b><code>plugin log list</code></b>（每次运行的命令、退出码、输出）</td><td><code>check</code> 加载并渲染一次；新版出错时继续跑旧版</td><td><code>validate --strict</code>，有 Errors 页</td><td>F5 调试宿主</td><td>装本地开发版</td><td>开发布局里自动重载</td><td>热重载</td></tr>
+</table></div>
+
+<h2>三、这次核对找到的问题</h2>
+<div class="wrap"><table>
+<tr><th>编号</th><th>问题</th><th>证据</th><th>后果</th><th>严重度</th><th>结论</th></tr>
+<tr><td>B1</td><td>在设置页卸载、开关插件时，setup / teardown 在主线程上同步运行</td><td><code>settings/plugins.rs</code> 的 <code>uninstall</code> 直接调用 <code>plugin::uninstall</code>，开关调用 <code>plugin::set_enabled</code>，两者都会跑 <code>setup::run</code>，超时上限 30 秒；市场安装走的是后台线程</td><td>插件的脚本一慢，整个窗口就卡住。claude-quota 的 JXA 脚本大约要 0.2 秒，还不明显</td><td class="s h">高</td><td class="d y">采用：和安装一样放到后台，界面显示「正在卸载…」</td></tr>
+<tr><td>B2</td><td><code>mooring</code> 命令在终端外默认去 <code>mooring-workbench</code> 找后台，没有走改名后的兼容逻辑</td><td><code>control.rs:166-172</code> 写死了路径，没调 <code>legacy::runtime_dir</code>。本机实跑 <code>env -u MOORING_RUNTIME mooring list</code> 报 <code>RPC connect: No such file</code></td><td>从 Keepline 升级上来的机器上，hook、窗格装饰、quota 命令和外部脚本调 <code>mooring list/read/send</code> 都会失败。「整个 CLI 就是插件 API」这条路在这些机器上走不通</td><td class="s h">高</td><td class="d y">采用：改成 <code>legacy::runtime_dir</code>，同时给所有插件命令传 <code>MOORING_RUNTIME</code>（见 G2）</td></tr>
+<tr><td>B3</td><td>文档过期</td><td><code>market.rs</code> 开头还写着「安装时不运行任何东西」，但现在装上就会跑 setup；<code>plugin.rs</code> 开头还写着「目前只有 agent，actions 等以后做」；旧规格稿 <code>specs/plugins/plugin-system.md</code> 只在老仓库里，见重复来源清单 M8</td><td>照着注释写插件、做安全判断的人会被误导</td><td class="s m">中</td><td class="d y">采用：一并改掉，并把规格稿搬进本仓库 <code>docs/</code></td></tr>
+<tr><td>B4</td><td>旧 App 遇到不认识的插件类型，会拒掉整个插件</td><td><code>Kind</code> 是 serde 枚举，<code>Manifest</code> 又设了 <code>deny_unknown_fields</code>。现在本机运行中的旧 App 就把 claude-quota 判成坏插件</td><td>只要发布新的插件类型，没更新 App 的用户就会看到报错，而且他们装着的插件里能用的部分也一起失效</td><td class="s m">中</td><td class="d y">采用：见 G1</td></tr>
+<tr><td>—</td><td>重复来源清单里已经登记的插件问题</td><td>A4：插件收到的 done 事件和「完成由用户决定」的规则冲突；M1：事件里的终端编号写死成空；M5：sidebar-status 用了宿主不认的值</td><td>见 <a href="../single-source/index.html">重复来源清单</a></td><td class="s m">中</td><td class="d y">已排在那份清单的第一批</td></tr>
+</table></div>
+
+<h2>四、机制上的短板，以及别家的做法</h2>
+<div class="wrap"><table>
+<tr><th>编号</th><th>短板</th><th>别家怎么做</th><th>建议</th><th>结论</th></tr>
+<tr><td>G1</td><td><b>版本兼容</b>：不能声明最低 App 版本；旧 App 遇到不认识的类型或字段，会拒掉整个插件</td><td>H 写 最低宿主版本字段，VS Code 写 <code>engines</code>；Obsidian 的 <code>versions.json</code> 让旧 App 拿到兼容的旧版插件；Claude Code 对未知字段只警告</td><td><code>plugin.json</code> 加 <code>"mooring": "&gt;=0.x"</code>，市场里不列不满足的插件；不认识的类型只警告并跳过，其余类型照常加载</td><td class="d y">采用</td></tr>
+<tr><td>G2</td><td><b>每类插件拿到的上下文都不一样</b>：actions 用模板，hooks 用 stdin 加环境变量，decorations 只有环境变量，setup 和 quota 用 PLUGIN_DIR/DATA。没有哪一类拿得到 <code>mooring</code> 程序的路径和后台位置，脚本也找不到自己插件目录里的文件</td><td>H 给所有命令统一传 <code>BIN_PATH</code>、<code>SOCKET_PATH</code>、<code>PLUGIN_{ID,ROOT,CONFIG_DIR,STATE_DIR}</code>，外加 <code>CONTEXT_JSON</code></td><td>每条插件命令都统一带上 <code>MOORING_PLUGIN_ID/DIR/DATA</code>、<code>MOORING_BIN</code>、<code>MOORING_RUNTIME</code>、<code>MOORING_CONTEXT_JSON</code>；各类型现有的变量保留。这样 notify-macos 能读自己的设置，装饰脚本也能调 <code>mooring</code></td><td class="d y">采用</td></tr>
+<tr><td>G3</td><td><b>插件没有自己的设置项</b>：notify-macos 想只在出错时通知、quota 想改刷新间隔，现在只能改插件文件，而一更新就被覆盖</td><td>Claude Code 的 userConfig、Raycast 的 preferences、VS Code 的 configuration：写一份 schema，界面自动生成；敏感值进钥匙串；用环境变量传给命令，不往 shell 命令里插值</td><td><code>plugin.json</code> 加 <code>options</code>（字符串、数字、开关、单选，可以标敏感），设置页在每个插件下面生成表单，值存进 <code>plugin-data/&lt;id&gt;/options.json</code>，以 <code>MOORING_OPTION_&lt;KEY&gt;</code> 传给命令</td><td class="d w">待验证：先确认至少两个插件真用得上</td></tr>
+<tr><td>G4</td><td><b>看不到插件运行的结果</b>：hook 的结果只写在后台日志里，装饰和 quota 命令失败时什么都不显示，setup 的报错只在点按钮那一下出现</td><td>H 有 <code>plugin log list</code>（命令、退出码、截断的输出）；H 桌面版出错时继续跑旧版，错误写在 status 里；Claude Code 有 Errors 页</td><td>每个插件保留最近 20 次运行记录（哪类、退出码、耗时、输出前 300 字），在设置页的插件行展开查看；命令行加 <code>mooring plugins log &lt;id&gt;</code></td><td class="d y">采用</td></tr>
+<tr><td>G5</td><td><b>安装前的说明太笼统</b>：只按类型写「会跑命令」「会改别的程序」，没说具体动哪个文件、会不会联网</td><td>H 安装前列出要跑的全部命令；Zed 声明能跑哪些程序、从哪里下载；H 桌面版要求说明会不会联网、会不会读插件目录以外的文件</td><td>setup 类加 <code>touches</code>（会改哪些外部文件，比如 <code>~/.claude/settings.json</code>），quota 和 hooks 加 <code>network: true/false</code>，安装确认时列出来。只做展示，不强制拦截</td><td class="d y">采用（小）</td></tr>
+<tr><td>G6</td><td><b>卸载后数据目录一直留着</b></td><td>Claude Code 卸载时默认删，加 <code>--keep-data</code> 保留；Zellij 也删</td><td>teardown 成功后删除；teardown 不成功（比如里面还存着原设置的备份）就保留，并在提示里说明</td><td class="d y">采用（小）</td></tr>
+<tr><td>G7</td><td><b>插件命令继承 App 的环境</b>：用干净环境启动 App 时 PATH 里只有系统目录，<code>node</code>、<code>python3</code> 都找不到（旧规格稿第 8 步已经记过这个缺口）</td><td>H 用 argv 数组，并明确写出给插件的环境；VS Code 远程宿主会读取登录 shell 的环境</td><td>App 启动时用登录 shell 解析一次 PATH，传给插件命令；文档写明这一点</td><td class="d w">待验证：先查哪个插件真被这个问题绊倒过</td></tr>
+<tr><td>G8</td><td><b>改了 agent 类插件要重启后台</b></td><td>H 装新版本到新目录，旧进程继续用旧版；Claude Code 正在跑的会话继续用旧版，<code>/reload</code> 才换</td><td>暂不改：agent 插件很少，而且页面上已经写明</td><td class="d n">不改</td></tr>
+<tr><td>G9</td><td><b>插件只能被动地等宿主来要数据</b>：装饰和 quota 都是宿主去拉，插件不能自己往界面上推一个值</td><td>H 用 <code>report-metadata --token NAME=VALUE --ttl-ms</code> 推送具名值，怎么显示由用户配置决定</td><td>等有真实需要再做；quota 的「文件变了就重读」已经能覆盖推送这种用法</td><td class="d n">不做（现在）</td></tr>
+</table></div>
+
+<h3>看过之后决定不跟的做法</h3>
+<ul>
+<li><b>插件在 App 进程里跑代码</b>（H 桌面版、Obsidian）：H 桌面版热重载 85 次后，旧代码都留在共享的 JS 上下文里，渲染慢到 0.4–1.4 秒（#88）；Obsidian 官方明说「没有权限系统」。Mooring 是 GPUI 原生 App，一旦在进程内跑插件代码，就等于把卡顿和崩溃的风险交给第三方。</li>
+<li><b>每种类型都改成 WASM</b>（Zellij、Zed）：门槛太高，只有 Rust 好写，Zed 的审核还要积压几周。WASM 只留在左栏这类真需要写逻辑的地方，和原规格稿的定位一致。</li>
+<li><b>靠人工审核把关插件市场</b>：现在没有第三方作者，没必要。等出现了，先学 H 的做法，在市场上标「未经审核」。</li>
+<li><b>第三方插件自动更新</b>：VS Code 的 GlassWorm 事件就是靠自动更新扩散的。Claude Code 只对官方市场默认开自动更新，Mooring 保持手动。</li>
+<li><b>多种合并规则、多层启用优先级</b>（Claude Code）：它为此要专门写排查文档。Mooring 维持现在这一种：插件只追加，不覆盖内置。</li>
+<li><b>授权只按 URL 记</b>（Zellij）：将来要做授权，应该绑定文件的 sha256。</li>
+</ul>
+
+<h2>五、建议顺序</h2>
+<div class="wrap"><table>
+<tr><th>批次</th><th>内容</th><th>验收</th><th>放弃条件</th></tr>
+<tr><td>第一批（小，马上做）</td><td>B1 setup 放到后台；B2 <code>mooring</code> 命令找后台走兼容逻辑；B3 改掉过期文档、搬来规格稿；B4 / G1 不认识的类型只警告并跳过，加最低 App 版本；G6 卸载时删数据目录</td><td>旧 App 加载带新类型的插件，其余部分照常工作；终端外跑 <code>mooring list</code> 能列出终端；卸载 claude-quota 时窗口不卡</td><td>—</td></tr>
+<tr><td>第二批</td><td>G2 统一插件命令拿到的上下文；G4 每个插件的运行记录</td><td>pane-facts 用 <code>$MOORING_BIN list</code> 显示终端数；故意写一个失败的 hook，能在设置页看到退出码和报错</td><td>运行记录拖慢后台（每次运行写盘超过 1 毫秒）就改成只记在内存里</td></tr>
+<tr><td>第三批</td><td>G5 安装前列出会改哪些文件、会不会联网</td><td>装 claude-quota 时，确认框里写着「会改 ~/.claude/settings.json，不联网」</td><td>—</td></tr>
+<tr><td>待定</td><td>G3 插件设置项；G7 登录 shell 的 PATH</td><td>—</td><td>找不到两个真要用的插件就不做</td></tr>
+</table></div>
+
+<div class="box">
+<h3>决定</h3>
+<p>待你拍板。我建议：第一批<span class="d y">采用</span>，第二、三批<span class="d y">采用</span>但第一批做完再动，G3 和 G7 <span class="d w">待验证</span>，G8 和 G9 <span class="d n">不做</span>。</p>
+<p class="note">没验：别家的结论来自文档、源码和 issue，没有在本机装任何一家跑过；Obsidian、VS Code 有少数细节调研时标了「未核对」（数据存放位置、自动更新默认值），这些细节没有被拿来当依据。</p>
+</div>
+
+<h2>来源</h2>
+<ul class="note">
+<li>Mooring：<code>crates/mooring-core/src/{plugin,market,setup,quota,action,hook,decoration,effect,rule,sidebar}.rs</code>、<code>crates/mooring-host/src/{plugins.md,plugins_cmd.rs,plugin_hooks.rs,control.rs}</code>、<code>crates/mooring-app/src/workbench/settings/plugins.rs</code>、<code>crates/mooring-plugin-host</code>；旧规格稿在老仓库的 <code>specs/plugins/plugin-system.md</code></li>
+<li>H：官方仓库 docs 下的 plugins.mdx、cli-reference.mdx、marketplace.mdx、integrations.mdx，桌面版的 defaults/AGENTS.md；issue #5619 #5594 #5194 #4428 #5444 #5550 #5726，桌面版 #88 #211 #213 #246 #289；社区插件 status-ui-bar、context-limits-bar、usage-bar</li>
+<li>Zellij：<a href="https://zellij.dev/documentation/plugins.html">plugins</a>、<a href="https://zellij.dev/documentation/plugin-api-permissions.html">permissions</a>、<a href="https://zellij.dev/news/session-manager-protobuffs/">protobuf</a></li>
+<li>WezTerm：<a href="https://wezterm.org/config/plugins.html">plugins</a>；tmux：<a href="https://github.com/tmux-plugins/tpm">TPM</a>；Kitty：<a href="https://sw.kovidgoyal.net/kitty/kittens/custom/">kittens</a>、<a href="https://sw.kovidgoyal.net/kitty/remote-control/">remote control</a>；Warp：<a href="https://github.com/warpdotdev/Warp/discussions/435">#435</a></li>
+<li>VS Code：<a href="https://code.visualstudio.com/api/references/extension-manifest">manifest</a>、<a href="https://code.visualstudio.com/api/advanced-topics/extension-host">extension host</a>、<a href="https://code.visualstudio.com/docs/configure/extensions/extension-runtime-security">runtime security</a>、<a href="https://code.visualstudio.com/api/extension-guides/workspace-trust">workspace trust</a>、<a href="https://www.veracode.com/blog/glassworm-vs-code-extension">GlassWorm</a></li>
+<li>Zed：<a href="https://zed.dev/docs/extensions/capabilities">capabilities</a>、<a href="https://zed.dev/blog/zed-decoded-extensions">extensions 解读</a>、<a href="https://zed.dev/docs/extensions/publishing/faq">publishing FAQ</a></li>
+<li>Raycast：<a href="https://developers.raycast.com/information/security">security</a>、<a href="https://developers.raycast.com/information/manifest">manifest</a>；Obsidian：<a href="https://obsidian.md/help/plugin-security">plugin security</a>、<a href="https://docs.obsidian.md/Reference/Versions">versions</a></li>
+<li>Claude Code：<a href="https://code.claude.com/docs/en/plugins-reference">plugins reference</a>、<a href="https://code.claude.com/docs/en/plugin-marketplaces">marketplaces</a></li>
+</ul>
+</main>
+</body>
+</html>

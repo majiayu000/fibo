@@ -106,6 +106,12 @@ code{font:11.5px ui-monospace,Menlo,monospace;color:var(--text)}
 </main>
 
 <div class="wrap">
+  <h2>已做：B 方案的原生截图（截图样例 Dense-first-standard-{dark|light}-sub）</h2>
+  <p style="color:var(--second);font-size:12px;margin:0 0 10px">你所在的会话默认展开；其他会话收起，点「子代理」那一行展开。截图里的子代理数据是样例。</p>
+  <div style="display:flex;gap:18px;flex-wrap:wrap">
+    <img src="native-dark.png" alt="深色侧栏原生截图" style="width:320px;border:1px solid var(--border);border-radius:10px">
+    <img src="native-light.png" alt="浅色侧栏原生截图" style="width:320px;border:1px solid var(--border);border-radius:10px">
+  </div>
   <h2>子代理行的几种状态（以 B 展开后为例）</h2>
   <div class="states" id="states"></div>
 
@@ -207,7 +213,7 @@ render('A','A'); render('B','B'); render('C','C');
 // State gallery
 const S = [
   {h:'在跑 + 跑完混着', r:{t:'issuelens 库检测 mooring…',st:'run',sp:'mooring',time:'0:36',subs:DATA[6].subs}, p:'跑完的变灰、留在原位，直到这一轮结束。'},
-  {h:'回合结束了，子代理还在跑', r:{t:'Pulse Alpha stealth model on…',st:'review',sp:'code',time:'24分',l2:'后台仍有 shell 2 个',subs:[['Survey model card claims','run','1:12'],['Compare pricing pages','done','0:58']]}, p:'会话已经是「等你验收」（绿圈），子代理行照样挂着，计数和「后台仍有 shell」合成一行。'},
+  {h:'回合结束了，子代理还在跑', r:{t:'Pulse Alpha stealth model on…',st:'run',sp:'code',time:'24分',l2:'后台仍有 shell 2 个',subs:[['Survey model card claims','run','1:12'],['Compare pricing pages','done','0:58']]}, p:'按现有状态规则，子代理还在跑，回合就不算结束，会话留在「在跑」。计数和「后台仍有 shell」合成一行。'},
   {h:'失败 + 超过 4 个', r:{t:'重复来源审计 第二轮',st:'run',sp:'mooring',time:'6:10',subs:[['Audit persisted state','run','5:40'],['Audit session facts','err','2:11'],['Audit UI constants','done','4:02']],more:4}, p:'红 ✕ 保留到你看过为止；更早跑完的折成一行。'},
   {h:'前台子代理', r:{t:'Image #1 元素静止异常',st:'run',sp:'mooring',time:'4:56',subs:[['Explore','run','0:41',true]]}, p:'父会话在等它，标「前台」。只有一个时也显示，因为它说明了会话卡在哪。'},
 ];

@@ -341,6 +341,16 @@ impl Flat {
     pub const FOOT_TEXT: f32 = 12.;
     pub const LINE_SMALL: f32 = 14.;
     pub const LINE_TEXT: f32 = 16.;
+    /// A session's subagents: a dot per subagent on its count line, and one branch row
+    /// each, hung from a trunk under the row's state mark.
+    pub const SUB_PIP: f32 = 6.;
+    pub const SUB_PIP_GAP: f32 = 3.;
+    pub const SUB_BRANCH: f32 = 14.;
+    pub const SUB_TRUNK: f32 = 3.;
+    pub const SUB_LEAF: f32 = 20.;
+    /// The 前台 mark on a subagent the parent waits on.
+    pub const SUB_MARK_PAD: f32 = 3.;
+    pub const SUB_MARK_LINE: f32 = 12.;
     fn dark() -> bool {
         Theme::scheme() == Scheme::Dark
     }

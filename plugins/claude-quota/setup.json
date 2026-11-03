@@ -1,0 +1,5 @@
+{
+  "api": 1,
+  "setup": "/usr/bin/osascript -l JavaScript settings.js setup",
+  "teardown": "/usr/bin/osascript -l JavaScript settings.js teardown"
+}

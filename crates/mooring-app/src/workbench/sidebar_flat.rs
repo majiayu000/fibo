@@ -275,7 +275,17 @@ impl Workbench {
         let selected = current == Some(session.id.as_str());
         let done = g == Status::Closed;
         let unfolded = done && self.layout.done_open.as_deref() == Some(session.id.as_str());
-        let two = detail.is_some() || unfolded;
+        // Subagents take the second line, except on a row that asks you something.
+        let subs = self
+            .workspace
+            .content
+            .get(&session.id)
+            .map(|c| c.subagents.as_slice())
+            .filter(|s| !s.is_empty() && bucket(g) != Bucket::Attention);
+        let detail = if subs.is_some() { None } else { detail };
+        let subs_live = matches!(g, Status::Running | Status::Background);
+        let subs_open = self.subagents_open(&session.id, selected);
+        let two = detail.is_some() || unfolded || subs.is_some();
         let title_ink = match bucket(g) {
             Bucket::Attention | Bucket::Running | Bucket::Done => F::title(),
             Bucket::Stopped | Bucket::Fresh => F::quiet(),
@@ -374,6 +384,12 @@ impl Workbench {
                                 .text_color(asks_ink)
                                 .child(text.replacen(ASKS, "问：", 1)),
                         )
+                    })
+                    .when_some(subs, |d, subs| {
+                        d.child(self.subagent_line(&session.id, subs, subs_live, subs_open, cx))
+                            .when(subs_open, |d| {
+                                d.child(self.subagent_tree(subs, subs_live, cx))
+                            })
                     })
                     .when(unfolded, |d| d.child(self.done_card(session, cx))),
             )

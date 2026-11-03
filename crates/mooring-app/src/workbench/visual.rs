@@ -989,7 +989,7 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
-            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop]`:
+            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub]`:
             // the denser presets over sessions shaped like sidebar-density.html's; `-bg`
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
             // the status bar's 工作中 popover beside the column.
@@ -1050,6 +1050,76 @@ impl Workbench {
                         shells: if shell { 2 } else { 0 },
                         ..Default::default()
                     });
+                }
+                // `-sub`: subagents under two sessions. The one you are in runs three of
+                // four (its list open); 标签命名依旧有问题 ended its turn with one still
+                // running, which keeps it 在跑, after a foreground one it waited on.
+                if parts.get(4) == Some(&"sub") {
+                    use mooring_core::content::{Background, Subagent, Turn};
+                    let now = mooring_core::content::now();
+                    let sub =
+                        |name: &str, kind: &str, ago: u64, took: Option<u64>, fg: bool| Subagent {
+                            name: name.into(),
+                            kind: kind.into(),
+                            foreground: fg,
+                            started: now - ago,
+                            ended: took.map(|t| now - ago + t),
+                        };
+                    for c in self.workspace.content.values_mut() {
+                        match c.title.as_str() {
+                            "这个诊断的 ui 感觉很丑啊" => {
+                                c.subagents = vec![
+                                    sub(
+                                        "Check IME/keyboard charters",
+                                        "general-purpose",
+                                        400,
+                                        Some(157),
+                                        false,
+                                    ),
+                                    sub(
+                                        "Check PTY/process lifecycle charters",
+                                        "general-purpose",
+                                        183,
+                                        None,
+                                        false,
+                                    ),
+                                    sub(
+                                        "Check agent status/hook charters",
+                                        "general-purpose",
+                                        172,
+                                        None,
+                                        false,
+                                    ),
+                                    sub(
+                                        "Check remote/phone & render charters",
+                                        "general-purpose",
+                                        163,
+                                        None,
+                                        false,
+                                    ),
+                                ]
+                            }
+                            "标签命名依旧有问题" => {
+                                c.turn = Turn::Completed;
+                                c.completed_claim = false;
+                                c.background = Some(Background {
+                                    agents: 1,
+                                    ..Default::default()
+                                });
+                                c.subagents = vec![
+                                    sub("Explore tab naming paths", "Explore", 300, Some(41), true),
+                                    sub(
+                                        "Audit phone link protocol drift",
+                                        "general-purpose",
+                                        260,
+                                        None,
+                                        false,
+                                    ),
+                                ]
+                            }
+                            _ => (),
+                        }
+                    }
                 }
                 self.nav.focused = Some("dense-t2".into());
                 // `-peek`: the first session floats over the focused one.

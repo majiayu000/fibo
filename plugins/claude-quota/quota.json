@@ -1,0 +1,13 @@
+{
+  "api": 1,
+  "sources": [
+    {
+      "agent": "claude",
+      "file": "statusline.json",
+      "windows": [
+        {"minutes": 300, "used": "/rate_limits/five_hour/used_percentage", "resets_at": "/rate_limits/five_hour/resets_at"},
+        {"minutes": 10080, "used": "/rate_limits/seven_day/used_percentage", "resets_at": "/rate_limits/seven_day/resets_at"}
+      ]
+    }
+  ]
+}
