@@ -410,6 +410,8 @@ impl Workbench {
                         cx.notify();
                         return;
                     }
+                    // Any other row folds the unfolded ✓ away.
+                    this.layout.done_open = None;
                     this.peek_or_open(&open, window, cx)
                 }),
             )
