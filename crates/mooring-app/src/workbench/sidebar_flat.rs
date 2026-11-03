@@ -43,8 +43,9 @@ pub(super) fn flat_state(g: Status) -> gpui::AnyElement {
 }
 
 impl Workbench {
-    /// The column's top: the traffic lights' strip with the fold button where the folded
-    /// window keeps it (beside the lights), then MOORING and 本机.
+    /// The column's top: the traffic lights' strip with the fold button at its right end
+    /// (folded, the window keeps it beside the lights, on the same line), then MOORING
+    /// and 本机.
     pub(super) fn flat_head(&self, cx: &Context<Self>) -> gpui::Div {
         let letters = "MOORING".chars().map(|ch| div().child(ch.to_string()));
         div()
@@ -54,11 +55,11 @@ impl Workbench {
             .child(
                 div()
                     .h(px(T::TOP))
-                    .pl(px(T::TRAFFIC_LIGHT_INSET))
+                    .pr(px(T::S12))
                     .flex()
                     .items_center()
-                    .child(self.sidebar_toggle(cx))
-                    .child(self.title_drag_area(cx)),
+                    .child(self.title_drag_area(cx))
+                    .child(self.sidebar_toggle(cx)),
             )
             .child(
                 div()
