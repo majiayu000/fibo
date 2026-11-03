@@ -1016,6 +1016,9 @@ impl Workbench {
             std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             resume.as_ref().map(|r| r.0.as_str()),
         );
+        // A new tab may move to the space of the project it opens in; a split or a
+        // relaunch stays in its tab's space.
+        let new_tab = !split && previous.is_none();
         let mut tab = if split {
             let Some(tab) = self
                 .workspace
@@ -1101,7 +1104,8 @@ impl Workbench {
         };
         let tab_id = tab.id.clone();
         self.begin_busy(cx);
-        let job = cx.background_spawn(self.store.launch(cwd_source, request, tab));
+        let spaces = new_tab.then(|| self.workspace.spaces.clone());
+        let job = cx.background_spawn(self.store.launch(cwd_source, spaces, request, tab));
         cx.spawn(async move |this, cx| {
             let reply = job.await;
             let _ = this.update(cx, |this, cx| {
@@ -1111,6 +1115,9 @@ impl Workbench {
                         this.apply_workspace(w, cx);
                         if let Some(session) = resuming {
                             this.resuming.resumed.insert(session, terminal.clone());
+                        }
+                        if let Some(tab) = this.workspace.tabs.iter().find(|t| t.id == tab_id) {
+                            this.nav.space = tab.space.clone();
                         }
                         this.nav.tab = Some(tab_id);
                         this.nav.zoomed = None;

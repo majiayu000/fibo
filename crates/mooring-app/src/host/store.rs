@@ -126,12 +126,14 @@ impl Store {
         async move { rpc(&socket, &request) }
     }
     /// Launches a terminal, then saves the tab that shows it. A split from a running
-    /// shell first asks the host for that shell's current directory.
+    /// shell first asks the host for that shell's current directory. Given `spaces`, a
+    /// new tab whose directory lies in a space inside its own goes to that space.
     pub fn launch(
         &self,
         cwd_source: Option<String>,
+        spaces: Option<Vec<Space>>,
         mut request: Request,
-        tab: Tab,
+        mut tab: Tab,
     ) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();
         async move {
@@ -142,6 +144,13 @@ impl Store {
                 && let Request::Launch { cwd, .. } = &mut request
             {
                 *cwd = current;
+            }
+            if let Some(spaces) = spaces
+                && let Request::Launch { space, cwd, .. } = &mut request
+                && let Some(narrower) = narrower_space(&spaces, space, cwd)
+            {
+                space.clone_from(&narrower.id);
+                tab.space.clone_from(&narrower.id);
             }
             let Reply::Workspace(w) = rpc(&socket, &request)? else {
                 return Err(std::io::Error::other("launch response missing"));

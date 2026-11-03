@@ -54,6 +54,22 @@ impl Default for Settings {
         }
     }
 }
+/// The deepest space whose folder holds `cwd` and lies inside `within`'s folder, when
+/// there is one deeper than `within` itself: a terminal opened in a broad space (say
+/// ~/code) at a project that has its own space belongs to that project's space. A
+/// space without a folder, or a `cwd` outside `within`, keeps `within`.
+pub fn narrower_space<'a>(spaces: &'a [Space], within: &str, cwd: &str) -> Option<&'a Space> {
+    let outer = spaces.iter().find(|s| s.id == within)?;
+    if outer.cwd.is_empty() {
+        return None;
+    }
+    let cwd = std::path::Path::new(cwd);
+    spaces
+        .iter()
+        .filter(|s| s.cwd.len() > outer.cwd.len())
+        .filter(|s| std::path::Path::new(&s.cwd).starts_with(&outer.cwd) && cwd.starts_with(&s.cwd))
+        .max_by_key(|s| s.cwd.len())
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Space {
     pub id: String,
@@ -1742,6 +1758,34 @@ mod tests {
 #[cfg(test)]
 mod identity_tests {
     use super::*;
+    #[test]
+    fn a_broad_space_hands_a_project_folder_to_its_own_space() {
+        let space = |id: &str, cwd: &str| Space {
+            id: id.into(),
+            name: id.into(),
+            cwd: cwd.into(),
+        };
+        let spaces = [
+            space("code", "/u/code"),
+            space("work", "/u/code/work"),
+            space("her", "/u/code/work/infra/her"),
+            space("other", "/u/elsewhere"),
+            space("folderless", ""),
+        ];
+        let at = |within, cwd| narrower_space(&spaces, within, cwd).map(|s| s.id.as_str());
+        // The deepest space holding the folder wins, from any broader space.
+        assert_eq!(at("code", "/u/code/work/infra/her/src"), Some("her"));
+        assert_eq!(at("work", "/u/code/work/infra/her"), Some("her"));
+        assert_eq!(at("code", "/u/code/work/x"), Some("work"));
+        // At the space's own folder, beside it, or outside it nothing moves.
+        assert_eq!(at("code", "/u/code"), None);
+        assert_eq!(at("her", "/u/code/work/infra/her/src"), None);
+        assert_eq!(at("her", "/u/elsewhere/a"), None);
+        assert_eq!(at("code", "/u/code-old/her"), None);
+        // A space without a folder was picked on purpose.
+        assert_eq!(at("folderless", "/u/code/work/infra/her"), None);
+        assert_eq!(at("missing", "/u/code/work"), None);
+    }
     #[test]
     fn one_cli_identity_cannot_be_current_in_two_terminals() {
         let mut w = Workspace::default();

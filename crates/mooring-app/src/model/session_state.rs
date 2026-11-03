@@ -28,16 +28,22 @@ pub fn report_view(
     }
     (group, mooring_core::protocol::TerminalNote { note, why })
 }
+/// The space a session is listed under: its todo's; else its terminal's, or the space
+/// of the project it works in when that one sits inside the terminal's (an Agent opened
+/// in ~/code that works in a project with its own space); else, for one Mooring did not
+/// open, the deepest space holding its folder.
 pub fn session_space<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
     s.task
         .as_ref()
         .and_then(|id| w.tasks.iter().find(|t| &t.id == id))
         .map(|t| t.space.as_str())
         .or_else(|| {
-            s.terminal
+            let space = s
+                .terminal
                 .as_ref()
                 .and_then(|id| w.terminals.iter().find(|t| &t.id == id))
-                .map(|t| t.space.as_str())
+                .map(|t| t.space.as_str())?;
+            Some(narrower_space(&w.spaces, space, &s.cwd).map_or(space, |n| n.id.as_str()))
         })
         .or_else(|| {
             w.spaces
