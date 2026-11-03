@@ -32,7 +32,14 @@ impl Spec {
     pub fn command(&self) -> Vec<String> {
         let run = match &self.path {
             Some(path) => format!("exec {} remote --stdio", quote(path)),
-            None => "p=$(command -v mooring || echo /Applications/Mooring.app/Contents/MacOS/mooring); exec \"$p\" remote --stdio".into(),
+            // On its PATH, else the app bundle in ~/Applications, else /Applications.
+            None => [
+                "p=$(command -v mooring)",
+                "[ -n \"$p\" ] || p=\"$HOME/Applications/Mooring.app/Contents/MacOS/mooring\"",
+                "[ -x \"$p\" ] || p=/Applications/Mooring.app/Contents/MacOS/mooring",
+                "exec \"$p\" remote --stdio",
+            ]
+            .join("; "),
         };
         [
             "ssh",
@@ -195,7 +202,7 @@ fn run_once(
 ) -> io::Result<()> {
     let client = Arc::new(connect(spec)?);
     let hello: Hello = parse(client.request(Op::Hello { version: Some(1) }, REPLY)?)?;
-    let list: List = parse(client.request(Op::List, REPLY)?)?;
+    let list: List = parse(client.request(Op::List, REPLY).map_err(not_running)?)?;
     let (tx, rx) = channel();
     let ends = tx.clone();
     client.stream(
@@ -240,6 +247,15 @@ fn run_once(
                 return Err(io::Error::other("事件流断了"));
             }
         }
+    }
+}
+
+/// The machine answered but its host is not there to ask: Mooring is not open on it.
+fn not_running(e: io::Error) -> io::Error {
+    if e.to_string().starts_with("RPC connect") {
+        io::Error::other("那台电脑上的 Mooring 没打开")
+    } else {
+        e
     }
 }
 
@@ -400,12 +416,9 @@ mod tests {
             host: "mac2".into(),
             path: None,
         };
-        assert!(
-            unnamed
-                .command()
-                .last()
-                .unwrap()
-                .contains("command -v mooring")
-        );
+        let probe = unnamed.command().last().unwrap().clone();
+        assert!(probe.contains("command -v mooring"));
+        assert!(probe.contains("$HOME/Applications/Mooring.app"));
+        assert!(probe.contains("p=/Applications/Mooring.app"));
     }
 }

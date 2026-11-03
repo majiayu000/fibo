@@ -31,7 +31,7 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
 ## 第 1 步的做法
 
 - **连接**：`crates/mooring-app` 新加一个远程机器模块，每台机器一个线程：起 `ssh -T -o BatchMode=yes 主机 <路径> remote --stdio`，用 `mooring-remote` 的请求和回复类型收发；`hello` 之后 `list`，再开 `events` 流，有事件就重新 `list`（150 ms 内合并）。断开后按 1、2、4…30 秒重连。
-- **远端路径**：每台机器可以填；不填时依次试 `mooring` 和 `/Applications/Mooring.app/Contents/MacOS/mooring`。
+- **远端路径**：每台机器可以填；不填时依次试 PATH 里的 `mooring`、`~/Applications/Mooring.app` 和 `/Applications/Mooring.app` 里的 `mooring`。
 - **侧栏**：本机在最上面；每台远程机器一个分组，标题写机器名和连接状态。行的内容直接用 `list` 回复里算好的值（plan.md 第 7 条：对外数据带上算好的值），不在 App 里重新判断状态。
 - **窗格**：点开远程终端，用 `watch` 收整屏和后续输出，喂给现有的终端模拟器，只读；标题栏标出机器名。
 - **测试**：连接命令可替换。集成测试不经过 ssh，直接起本地的 `mooring remote --stdio --runtime <临时目录>`；`ssh localhost` 只在本机手动验证时用。
