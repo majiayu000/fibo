@@ -1514,6 +1514,11 @@ impl Workbench {
             cx,
         );
     }
+    /// The sidebar's 「＋ 空间」, pressed.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_new_space(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.new_space(window, cx);
+    }
     /// Whether the pane menu shows 「为什么是这个状态」.
     #[cfg(feature = "visual-test")]
     pub fn visual_menu_why(&self) -> bool {

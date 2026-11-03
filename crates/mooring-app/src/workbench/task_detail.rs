@@ -316,7 +316,7 @@ impl Workbench {
                         .text_size(px(T::META))
                         .min_w_0()
                         .truncate()
-                        .child(home_relative(&space.cwd)),
+                        .child(space_dir_label(space)),
                 );
             }
         }

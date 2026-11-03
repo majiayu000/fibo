@@ -1492,7 +1492,7 @@ impl Workbench {
                                 None => "在这里开始".to_owned(),
                             }),
                     )
-                    .when_some(space, |d, s| d.child(label(super::settings::tilde(&s.cwd)))),
+                    .when_some(space, |d, s| d.child(label(super::space_dir_label(s)))),
             )
             .child(
                 super::overview::solid(button(

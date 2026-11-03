@@ -116,6 +116,9 @@ impl Workbench {
     /// The last counts for `dir`; looks at its refs at most once a second while drawn, and
     /// counts again in the background only after one of them changed.
     pub(super) fn git_divergence(&self, dir: &str, cx: &Context<Self>) -> Option<Divergence> {
+        if dir.is_empty() {
+            return None;
+        }
         let mut cache = CACHE.lock().ok()?;
         let entry = cache.entry(dir.to_owned()).or_default();
         if entry.counting || entry.looked.is_some_and(|at| at.elapsed() < LOOK_EVERY) {

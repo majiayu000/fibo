@@ -72,6 +72,19 @@ pub(super) fn usable_cwd(candidates: impl IntoIterator<Item = String>) -> String
         .or_else(|| std::env::var("HOME").ok())
         .unwrap_or_else(|| "/".into())
 }
+/// A space whose folder was set but is gone. A space with no folder set is not missing:
+/// its terminals start in `$HOME` until one is chosen.
+pub(super) fn space_dir_missing(space: &Space) -> bool {
+    !space.cwd.is_empty() && !Path::new(&space.cwd).is_dir()
+}
+/// The space's folder as shown: home as `~`, or where an unset one starts.
+pub(super) fn space_dir_label(space: &Space) -> String {
+    if space.cwd.is_empty() {
+        "未设目录 · 从 ~ 开始".to_owned()
+    } else {
+        home_relative(&space.cwd)
+    }
+}
 /// The new terminal's command line. A resume is the shell's first command, so it cannot be
 /// lost when its pane is not on screen yet to type it; `-i` keeps the user's aliases, as
 /// typing it would, and the shell stays afterwards.

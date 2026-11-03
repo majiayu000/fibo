@@ -321,7 +321,7 @@ impl Workbench {
                 .spaces
                 .iter()
                 .find(|s| s.id == form.space)
-                .is_some_and(|s| !Path::new(&s.cwd).is_dir()),
+                .is_some_and(space_dir_missing),
             agent_missing: self
                 .tasks
                 .found
@@ -594,12 +594,12 @@ impl Workbench {
             .spaces
             .iter()
             .find(|s| s.id == form.space)
-            .map(|s| home_relative(&s.cwd))
+            .map(space_dir_label)
             .unwrap_or_default();
         let mut row = segments();
         for space in &self.workspace.spaces {
             let sid = space.id.clone();
-            let missing = !Path::new(&space.cwd).is_dir();
+            let missing = space_dir_missing(space);
             row = row.child(
                 segment(
                     gpui::SharedString::from(format!("project-{sid}")),

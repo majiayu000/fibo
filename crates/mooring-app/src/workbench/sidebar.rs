@@ -113,7 +113,7 @@ impl Workbench {
                 );
                 continue;
             }
-            let missing = !Path::new(&space.cwd).is_dir();
+            let missing = space_dir_missing(space);
             sidebar = sidebar.child(
                 button(gpui::SharedString::from(format!("space-{id}")), "")
                     .aria_label(space.name.clone())
@@ -213,9 +213,7 @@ impl Workbench {
                     .border_0()
                     .justify_start()
                     .text_color(T::color(T::muted()))
-                    .on_click(
-                        cx.listener(|this, _, window, cx| this.choose_space_dir(None, window, cx)),
-                    ),
+                    .on_click(cx.listener(|this, _, window, cx| this.new_space(window, cx))),
             );
         }
         // Sorted by what each row shows. Within a state, newest started first: the
@@ -514,9 +512,7 @@ impl Workbench {
                         .border_0()
                         .text_size(px(T::CHIP_SIZE))
                         .text_color(T::color(T::muted()))
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            this.choose_space_dir(None, window, cx)
-                        })),
+                        .on_click(cx.listener(|this, _, window, cx| this.new_space(window, cx))),
                 )
                 .into_any_element(),
         ];
@@ -547,7 +543,7 @@ impl Workbench {
                 continue;
             }
             let active = self.space_active(&id);
-            let missing = !Path::new(&space.cwd).is_dir();
+            let missing = space_dir_missing(space);
             let branch = (!missing)
                 .then(|| self.git_branch(&space.cwd, cx))
                 .flatten();
@@ -1027,6 +1023,16 @@ impl Workbench {
         sidebar
     }
 }
+/// 「新空间」, or 「新空间 2」 and on when that name is taken.
+pub(super) fn new_space_name(spaces: &[Space]) -> String {
+    (1..)
+        .map(|i| match i {
+            1 => "新空间".to_owned(),
+            i => format!("新空间 {i}"),
+        })
+        .find(|name| !spaces.iter().any(|s| &s.name == name))
+        .unwrap_or_default()
+}
 impl Workbench {
     /// Turns the space's name in the sidebar into a field: Enter or a click elsewhere
     /// keeps it, Esc puts the old name back.
@@ -1069,6 +1075,41 @@ impl Workbench {
             self.edit(Edit::UpdateSpace(space), cx);
         }
         cx.notify();
+    }
+    /// Starts a space with no folder and shows it with its name in a field once the host
+    /// has it, so it can be named at once. Its terminals start in `$HOME` until 设置目录… in its menu picks one.
+    pub(super) fn new_space(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.layout.space_menu = None;
+        let space = Space {
+            id: id(),
+            name: new_space_name(&self.workspace.spaces),
+            cwd: String::new(),
+        };
+        self.edit(Edit::AddSpace(space.clone()), cx);
+        self.nav.space = space.id.clone();
+        self.nav.tab = None;
+        self.sync_panes(cx);
+        // The field lives in the space's sidebar row, which is drawn once the host's
+        // reply carries the space; focused before that, it would blur and close at once.
+        cx.spawn_in(window, async move |this, cx| {
+            for _ in 0..40 {
+                let added = this.update_in(cx, |this, window, cx| {
+                    let found = this.workspace.spaces.iter().find(|s| s.id == space.id);
+                    if let Some(found) = found.cloned() {
+                        this.start_space_rename(found, window, cx);
+                        return true;
+                    }
+                    false
+                });
+                if !matches!(added, Ok(false)) {
+                    return;
+                }
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(50))
+                    .await;
+            }
+        })
+        .detach();
     }
     /// Asks macOS for a folder: for `target` it becomes that space's directory; with no
     /// target it starts a new space named after the folder and shows it, its empty tab
@@ -1187,7 +1228,7 @@ impl Workbench {
                     })
                     .child(dot(group))
                     .child(div().min_w_0().truncate().child(space.name.clone()))
-                    .when(!Path::new(&space.cwd).is_dir(), |d| {
+                    .when(space_dir_missing(space), |d| {
                         d.child(
                             label("目录不在了")
                                 .flex_shrink_0()
@@ -1212,14 +1253,12 @@ impl Workbench {
                 );
             }
             picks.push(
-                button("space-menu-add", "＋ 新空间…")
+                button("space-menu-add", "＋ 新空间")
                     .w_full()
                     .justify_start()
                     .border_0()
                     .text_color(T::color(T::link()))
-                    .on_click(
-                        cx.listener(|this, _, window, cx| this.choose_space_dir(None, window, cx)),
-                    )
+                    .on_click(cx.listener(|this, _, window, cx| this.new_space(window, cx)))
                     .into_any_element(),
             );
         }
@@ -1230,6 +1269,11 @@ impl Workbench {
             .find(|s| s.id == id)
             .map(|s| s.name.clone())
             .unwrap_or_default();
+        let has_dir = self
+            .workspace
+            .spaces
+            .iter()
+            .any(|s| s.id == id && !s.cwd.is_empty());
         let mut entries = picks;
         entries.extend([
             button(
@@ -1248,14 +1292,21 @@ impl Workbench {
                 this.rename_space(&rename, window, cx);
             }))
             .into_any_element(),
-            button("space-menu-folder", "更换目录…")
-                .w_full()
-                .justify_start()
-                .border_0()
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    this.choose_space_dir(Some(folder.clone()), window, cx);
-                }))
-                .into_any_element(),
+            button(
+                "space-menu-folder",
+                if has_dir {
+                    "更换目录…"
+                } else {
+                    "设置目录…"
+                },
+            )
+            .w_full()
+            .justify_start()
+            .border_0()
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.choose_space_dir(Some(folder.clone()), window, cx);
+            }))
+            .into_any_element(),
             // Two presses: the first says what goes with it, the second removes it.
             button(
                 "space-menu-remove",

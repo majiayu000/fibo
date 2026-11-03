@@ -1850,6 +1850,9 @@ impl Workbench {
     /// The cached branch for `dir`; a missing or old entry is read in the background and
     /// redraws the window only if it changed.
     pub(super) fn git_branch(&self, dir: &str, cx: &Context<Self>) -> Option<String> {
+        if dir.is_empty() {
+            return None;
+        }
         let mut map = BRANCHES.lock().ok()?;
         let old = match map.get(dir) {
             Some((at, branch)) if at.elapsed() < BRANCH_TTL => return branch.clone(),

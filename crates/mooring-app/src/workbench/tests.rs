@@ -644,3 +644,34 @@ fn a_question_reads_without_its_scope_and_choices() {
         "要覆盖 config.toml 吗？"
     );
 }
+#[test]
+fn a_space_without_a_folder_is_not_missing() {
+    let space = |cwd: &str| Space {
+        id: "s".into(),
+        name: "s".into(),
+        cwd: cwd.into(),
+    };
+    assert!(!space_dir_missing(&space("")));
+    assert!(!space_dir_missing(&space("/")));
+    assert!(space_dir_missing(&space("/nonexistent/mooring-gone")));
+    assert_eq!(space_dir_label(&space("")), "未设目录 · 从 ~ 开始");
+    assert_eq!(usable_cwd([String::new()]), std::env::var("HOME").unwrap());
+}
+#[test]
+fn new_spaces_take_the_next_free_name() {
+    let named = |names: &[&str]| -> Vec<Space> {
+        names
+            .iter()
+            .map(|n| Space {
+                id: n.to_string(),
+                name: n.to_string(),
+                cwd: String::new(),
+            })
+            .collect()
+    };
+    assert_eq!(sidebar::new_space_name(&named(&["工作空间"])), "新空间");
+    assert_eq!(
+        sidebar::new_space_name(&named(&["新空间", "新空间 2"])),
+        "新空间 3"
+    );
+}
