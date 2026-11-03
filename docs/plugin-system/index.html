@@ -32,7 +32,7 @@ ol li,ul li{margin:4px 0}
 <body>
 <main>
 <h1>插件机制审视</h1>
-<p class="lead">2026-11-03 · 把 Mooring 的插件机制和 11 个产品对照：同类 Agent 工作台（下文称 H，它有终端版插件和桌面版 mods 两套）、Zellij、WezTerm、tmux、Kitty、Warp、VS Code、Zed、Raycast、Obsidian、Claude Code。Mooring 部分读的是当前 main（70deadd）的源码，并在本机实跑核对过；别家来自官方文档、源码和 issue，链接列在文末。</p>
+<p class="lead">2026-11-03 · 把 Mooring 的插件机制和 12 个产品对照（文末附 DeepSeek Harness 一节）：同类 Agent 工作台（下文称 H，它有终端版插件和桌面版 mods 两套）、Zellij、WezTerm、tmux、Kitty、Warp、VS Code、Zed、Raycast、Obsidian、Claude Code。Mooring 部分读的是当前 main（70deadd）的源码，并在本机实跑核对过；别家来自官方文档、源码和 issue，链接列在文末。</p>
 
 <div class="box">
 <h3>这页要支撑的决定</h3>
@@ -126,6 +126,24 @@ ol li,ul li{margin:4px 0}
 <li><b>多种合并规则、多层启用优先级</b>（Claude Code）：它为此要专门写排查文档。Mooring 维持现在这一种：插件只追加，不覆盖内置。</li>
 <li><b>授权只按 URL 记</b>（Zellij）：将来要做授权，应该绑定文件的 sha256。</li>
 </ul>
+
+<h2>附：DeepSeek Harness（DSH）怎么做</h2>
+<p class="note">读的是 deepseek-ai/deepseek-harness 当前默认分支的文档：architecture、capability-seams、user/develop、plugin-manager 的 README、SAFETY；生态数字来自本机的 dsh-plugin 索引站（已发布 5808 个，另有 2767 个因为清单不合格被拒）。</p>
+<div class="wrap"><table>
+<tr><th>方面</th><th>DSH</th><th>和 Mooring 比</th></tr>
+<tr><td>定位</td><td>「一切皆插件」：底层框架是 Cordis，没有一个享有特权的内核。模型适配器、工具注册表、会话日志，连 agent loop 本身都是插件，<code>ctx</code> 上有 109 个服务。每个可替换的能力叫一个 seam，由三部分组成：声明接口的一方、提供实现的一方、使用它的一方</td><td>Mooring 的核心（终端、PTY、状态判定）不开放，插件只在 9 个固定位置往里加东西。DSH 是框架，Mooring 是产品，所以这一点不该照搬</td></tr>
+<tr><td>插件长什么样</td><td>TypeScript 模块，导出 <code>apply(ctx, config)</code>，在宿主进程里运行；用 <code>inject</code> 声明依赖哪些服务，依赖就绪才加载，依赖没了就自动卸载</td><td>Mooring 是 JSON 声明加子进程，插件代码不进 App 进程</td></tr>
+<tr><td>撤回</td><td><b>插件通过 <code>ctx</code> 注册的东西，卸载时都会自动撤回</b>，包括监听、工具、适配器和 <code>ctx.effect</code> 返回的清理函数。热重载也靠这一点。但对外部程序的改动它没有特别处理，和别家一样</td><td>Mooring 的声明式类型本来就不留状态，卸载就等于撤回；只有改外部程序的那部分要靠 setup/teardown。两边思路一致，各自的边界不同</td></tr>
+<tr><td>配置</td><td>插件导出 schema（Schemastery），加载时校验并填默认值，配错了加载失败并报原因；约定「凡是不同部署可能取不同值的参数，都必须做成配置项」；改了配置就热替换这个插件</td><td>Mooring 没有插件配置项（G3）。DSH 的经验说明这件事有用，G3 值得往前排</td></tr>
+<tr><td>组合</td><td><b>bundle</b> 是一个 npm 包，用 <code>dsh.bundle</code> 指向一份 YAML patch，patch 可以插入新的行，也可以按 id 覆盖已有的行。<b>profile</b> 是一个目录，里面有按顺序排好的 bundle 列表，外加用户自己的 patch。叠加顺序：各 bundle → profile 的 patch → home 下的 patch → 命令行 <code>--patch</code>。后面的层按行胜出，覆盖时整份 config 一起换掉，不做深度合并。<code>--dump-config</code> 打印叠完之后的最终配置</td><td>Mooring 只允许追加、不允许覆盖，规则简单得多。值得学的是「能看到最终生效的是什么」：<code>mooring plugins</code> 可以加一个视图，列出每一项最终来自哪个插件</td></tr>
+<tr><td>开关</td><td>停用某一行，就是往用户的 patch 里写一条 <code>disabled: true</code>；如果和 bundle 自带的状态一样就不写，只记录与 bundle 不同的部分</td><td>Mooring 用 <code>disabled.json</code> 记，效果相近</td></tr>
+<tr><td>安装与兼容</td><td>插件就是 npm、git 或 tarball 包，由 pnpm 装进 profile 目录。<code>engines.dsh</code> 版本范围在安装时和启动时都会检查；不兼容但想硬用，需要写一条带 <code>acceptRisk</code> 的豁免，而且只对精确的「插件版本 × DSH 版本」组合有效。git 包要跑构建脚本时需要单独授权（<code>allowBuilds</code>），授权时钉到具体提交。安装失败会把清单和锁文件恢复原样</td><td>正是 G1 要补的东西。索引里每个版本单独写 <code>engines</code>，旧 App 自动挑兼容的那个版本，这一点比只写一个最低版本更好</td></tr>
+<tr><td>市场</td><td>索引是 JSON（<code>format: 1</code>），按插件列出多个版本，每个版本带来源（npm，或 git 的 40 位提交）、发布时间和 <code>engines</code>；不认识的字段直接忽略；App 不内置任何索引源，由用户自己添加</td><td>Mooring 的索引每个插件只有一个版本，也没有 engines。可以照这个格式升级</td></tr>
+<tr><td>谁来管理插件</td><td>插件管理是一个服务，Web 页面和 <code>plugin_manager</code> 工具共用它。<b>Agent 自己就能装插件、开关插件</b>，每次操作要用户批准，或者处在完全放开的权限模式下</td><td>Mooring 的 Agent 已经可以用 <code>mooring plugins install</code> 和 <code>mooring --skill plugins</code> 写插件、装插件，但这一步没有批准环节</td></tr>
+<tr><td>安全</td><td>SAFETY 文档写明「尚未经过安全审计」；宿主代码在宿主进程里运行，不受工作区沙盒限制；只能靠用户自己核对插件来源</td><td>和 VS Code、Obsidian 同一档。Mooring 的插件代码不进 App 进程，这一点上更稳</td></tr>
+<tr><td>复杂度代价</td><td>光是 plugin-manager 的 README 就讲了注册表回退、peer 依赖解析、HMR 期间的重启原因、构建授权等十几种情况；核心文档总共约 4.3 万行</td><td>用 npm 做分发、在进程内跑代码，就要付出这么多处理边角情况的代价。Mooring 不该走这条路</td></tr>
+</table></div>
+<p><b>从 DSH 能借的</b>：每个版本带 engines 的索引格式，配合兼容版本自动挑选（强化 G1）；插件配置写 schema、改了就热生效，并且约定可调参数都做成配置项（G3 往前排）；一个「最终生效了什么」的视图；Agent 动插件之前要用户批准。<b>不借的</b>：一切皆插件的内核、插件代码在进程内运行、npm/pnpm 依赖解析。</p>
 
 <h2>五、建议顺序</h2>
 <div class="wrap"><table>
