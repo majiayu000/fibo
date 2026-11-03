@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>侧栏子代理展开</title>
+<style>
+:root{
+  --page:#0e0e10; --panel:#18181a; --hover:#232326; --sel:#2a2a2e;
+  --text:#ecebe9; --second:#a3a2a0; --muted:#7e7d7b; --line:#38383b; --border:#2e2e2f;
+  --run:#e5b83b; --review:#3fb27f; --wait:#e8732c; --err:#e5534b; --slate:#8a9bb0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font:13px/1.45 -apple-system,"PingFang SC","Helvetica Neue",sans-serif}
+header{max-width:1400px;margin:0 auto;padding:28px 24px 8px}
+h1{font-size:20px;margin:0 0 6px}
+header p{margin:4px 0;color:var(--second);max-width:900px}
+.decide{margin-top:12px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--panel);max-width:900px;color:var(--second)}
+.decide b{color:var(--text)}
+main{display:flex;gap:28px;padding:20px 24px 32px;overflow-x:auto;max-width:1400px;margin:0 auto;align-items:flex-start}
+section{flex-shrink:0;width:300px}
+section h2{font-size:15px;margin:0 0 4px}
+section>p{font-size:12px;color:var(--second);margin:0 0 12px;min-height:72px}
+.rec{display:inline-block;font-size:11px;color:#111;background:var(--review);border-radius:4px;padding:0 6px;margin-left:6px;vertical-align:2px}
+.frame{width:300px;height:720px;overflow:hidden;border-radius:10px;border:1px solid var(--border);background:var(--panel)}
+.shot{width:300px;height:720px;overflow:hidden;border-radius:10px;border:1px solid var(--border);background:url(now.png) 0 -290px/1846px auto no-repeat}
+/* sidebar */
+.sb{padding:10px 0;user-select:none}
+.grp{display:flex;align-items:center;padding:12px 18px 6px;font-size:12px;color:var(--second)}
+.grp span{color:var(--muted);margin-left:6px}
+.row{margin:0 8px;padding:4px 10px;border-radius:6px;display:flex;gap:8px;cursor:pointer}
+.row:hover{background:var(--hover)}
+.row.sel{background:var(--sel)}
+.dot{width:14px;flex-shrink:0;display:flex;justify-content:center;padding-top:3px}
+.body{flex:1;min-width:0}
+.l1{display:flex;gap:8px;align-items:center}
+.t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.space{font-size:11px;color:var(--second);display:flex;align-items:center;gap:4px;white-space:nowrap}
+.space i{width:6px;height:6px;border-radius:50%;background:#e5534b;display:inline-block}
+.time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+.l2{font-size:12px;color:#cdb873;display:flex;align-items:center;gap:6px;margin-top:1px}
+.l2t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{width:12px;height:12px;flex-shrink:0;transition:transform .15s}
+.chev.open{transform:rotate(90deg)}
+/* subagent rows */
+.subs{margin:0 8px 2px 0;position:relative}
+.sub{display:flex;align-items:center;gap:6px;height:22px;padding:0 10px 0 0;margin-left:26px;font-size:12px;color:var(--second);border-radius:5px;cursor:pointer}
+.sub:hover{background:var(--hover)}
+.sub .br{width:14px;align-self:stretch;position:relative;flex-shrink:0}
+.sub .br:before{content:"";position:absolute;left:4px;top:0;bottom:0;border-left:1px solid var(--line)}
+.sub.last .br:before{bottom:50%}
+.sub .br:after{content:"";position:absolute;left:4px;top:50%;width:8px;border-top:1px solid var(--line)}
+.sub .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub.done .n{color:var(--muted)}
+.sub .tm{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sub .fg{font-size:10px;color:var(--run);border:1px solid #5a4a1c;border-radius:3px;padding:0 3px;line-height:13px}
+.more{margin-left:26px;padding-left:20px;font-size:11px;color:var(--muted);height:20px;display:flex;align-items:center;cursor:pointer}
+.pips{display:inline-flex;gap:3px;vertical-align:1px;margin-right:6px}
+.pips i{width:6px;height:6px;border-radius:50%;display:inline-block}
+.pips .r{background:var(--run)} .pips .d{border:1px solid var(--muted)} .pips .e{background:var(--err)}
+.badge{font-size:11px;color:var(--run);display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+/* states & rules */
+.wrap{max-width:1400px;margin:0 auto;padding:0 24px 40px}
+.wrap h2{font-size:15px;margin:24px 0 10px}
+.states{display:flex;gap:18px;flex-wrap:wrap}
+.state{width:300px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 0}
+.state h3{font-size:12px;font-weight:600;margin:0 18px 6px;color:var(--text)}
+.state p{font-size:12px;color:var(--second);margin:8px 18px 4px}
+table{border-collapse:collapse;max-width:1000px;width:100%;font-size:12.5px}
+td,th{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--second);font-weight:500}
+td:first-child{white-space:nowrap;color:var(--text)}
+td{color:var(--second)}
+code{font:11.5px ui-monospace,Menlo,monospace;color:var(--text)}
+@media (max-width:700px){main{padding:16px}header,.wrap{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>侧栏：会话下面挂子代理</h1>
+  <p>Claude Code 每开一个子代理会写 <code>&lt;会话&gt;/subagents/agent-*.meta.json</code>（名字、类型、前台/后台、跑完写 <code>finished</code>）。三个方向都基于同一份数据，只是摆放不同。可以点有箭头的会话行来展开或收起。</p>
+  <div class="decide"><b>要定的事：</b>子代理放在侧栏哪里、什么时候展开、跑完后留多久。<b>放弃条件：</b>如果五个在跑的会话各开三四个子代理时侧栏超过一屏，或子代理行比会话行还显眼，就退回只显示计数的「后台仍有子 Agent N 个」。</div>
+</header>
+
+<main>
+  <section>
+    <h2>现在</h2>
+    <p>截自你的截图。有子代理的会话看不出来，只有回合结束后，第二行才会写「后台仍有…」。</p>
+    <div class="shot" role="img" aria-label="当前侧栏截图"></div>
+  </section>
+  <section>
+    <h2>A · 树枝常开</h2>
+    <p>只要有子代理在跑，就在父会话下面直接展开 ├ └；全部跑完后自动收起。一眼就能看全，但会话多、子代理多的时候侧栏会很长。</p>
+    <div class="frame"><div class="sb" id="A"></div></div>
+  </section>
+  <section>
+    <h2>B · 摘要行，点开成树 <span class="rec">推荐</span></h2>
+    <p>第二行写「子代理 ●●●○ 3 在跑」，默认收起；你当前所在的会话自动展开。每个会话的高度不变，进度一眼能看到，点开才看名字。</p>
+    <div class="frame"><div class="sb" id="B"></div></div>
+  </section>
+  <section>
+    <h2>C · 行尾计数</h2>
+    <p>行尾时间旁边加一个「⑂3」，只有当前会话展开。最安静，但没选中的会话只能看到数字，看不出跑了多少、完成了多少。</p>
+    <div class="frame"><div class="sb" id="C"></div></div>
+  </section>
+</main>
+
+<div class="wrap">
+  <h2>子代理行的几种状态（以 B 展开后为例）</h2>
+  <div class="states" id="states"></div>
+
+  <h2>规则</h2>
+  <table>
+    <tr><th>情形</th><th>怎么显示</th></tr>
+    <tr><td>开了子代理</td><td>看到新的 <code>meta.json</code> 就加一行，名字用 <code>description</code>。顺序按开启时间，先开的在上面。</td></tr>
+    <tr><td>在跑</td><td>黄色缺口圈，时间从开启算起、跟着走秒，和会话行的「本轮 0:36」写法一样。</td></tr>
+    <tr><td>跑完</td><td>灰色 ✓，名字变灰，时间定格为用时。保留到父会话这一轮结束；你发下一句话后，上一轮的子代理行就清掉。</td></tr>
+    <tr><td>失败或被停</td><td>红色 ✕，保留到你看过这个会话为止。</td></tr>
+    <tr><td>前台子代理</td><td>父会话被它挡住、在等它，名字后面标一个小「前台」。</td></tr>
+    <tr><td>父会话没了</td><td>不显示。没写 <code>finished</code> 的 meta 只在父会话活着时才算在跑，避免旧会话留下的 3000 多个文件被当成在跑。</td></tr>
+    <tr><td>数量对不上</td><td>Stop hook 报的子代理数比文件里在跑的少时，以 hook 为准，多出来的标为跑完。</td></tr>
+    <tr><td>超过 4 个</td><td>展开时只列在跑的和最近 3 个，其余折成「还有 N 个已完成」。</td></tr>
+    <tr><td>点子代理行</td><td>切到父会话的终端，不另开窗口。子代理的记录先不在侧栏里打开。</td></tr>
+    <tr><td>颜色</td><td>子代理只用三种标记：在跑黄、跑完灰 ✓、失败红 ✕。不用会话的绿、橙，避免被当成「要你处理」。</td></tr>
+  </table>
+</div>
+
+<script>
+const SVG = {
+  run:'<svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 1-4.5 4.5" fill="none" stroke="#e5b83b" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  runS:'<svg width="10" height="10" viewBox="0 0 12 12"><path d="M6 1.5a4.5 4.5 0 1 1-4.5 4.5" fill="none" stroke="#e5b83b" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  review:'<svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.3" fill="none" stroke="#3fb27f" stroke-width="1.6"/></svg>',
+  wait:'<svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.8" fill="#e8732c"/></svg>',
+  doneS:'<svg width="10" height="10" viewBox="0 0 12 12"><path d="M2.5 6.3l2.4 2.4 4.6-5" fill="none" stroke="#7e7d7b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  errS:'<svg width="10" height="10" viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="#e5534b" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  chev:'<svg class="chev" viewBox="0 0 12 12"><path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="#7e7d7b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+// Sessions, taken from the screenshot. subs: [name, state, time, fg?]
+const DATA = [
+  {grp:'要你处理', n:4},
+  {t:'截图内容显示异常', st:'review', sp:'mooring', time:'2分'},
+  {t:'Pulse Alpha stealth model on…', st:'review', sp:'code', time:'24分', l2:'后台仍有 shell 2 个',
+   subs:[['Survey model card claims','run','1:12']]},
+  {t:'Gödel, Escher, Bach 电子书', st:'review', sp:'工作空间', time:'6时'},
+  {grp:'在跑', n:5},
+  {t:'侧栏账号名未同步', st:'run', sp:'mooring', time:'0:00', sel:true,
+   subs:[['Audit phone link protocol drift','done','3:18'],['Audit tasks, spaces, shortcuts drift','done','3:48'],['Audit plugins and CLI docs drift','run','4:31']]},
+  {t:'issuelens 库检测 mooring…', st:'run', sp:'mooring', time:'0:36',
+   subs:[['Check IME/keyboard charters','done','2:37'],['Check PTY/process lifecycle charters','run','3:03'],['Check agent status/hook charters','run','2:52'],['Check remote/phone & render charters','run','2:43']]},
+  {t:'Write Me Down 方向的 AI 角…', st:'run', sp:'工作空间', time:'2:46'},
+  {t:'Image #1 元素静止异常', st:'run', sp:'mooring', time:'4:56',
+   subs:[['Explore','run','0:41',true]]},
+  {t:'标记完成动画', st:'run', sp:'mooring', time:'1:04:45'},
+  {grp:'今天', n:49},
+  {t:'codex的聊天记录 你觉得他…', st:'wait', sp:'工作空间', time:'刚刚'},
+  {t:'左侧侧边栏运行状态异常', st:'doneM', sp:'mooring', time:'2分'},
+];
+const dotOf = s => s==='run'?SVG.run: s==='review'?SVG.review: s==='wait'?SVG.wait:
+  '<span style="color:#7e7d7b;font-size:11px;line-height:12px">✓</span>';
+const subIcon = s => s==='run'?SVG.runS: s==='err'?SVG.errS: SVG.doneS;
+const running = r => r.subs.filter(s=>s[1]==='run').length;
+const doneN = r => r.subs.filter(s=>s[1]!=='run').length;
+
+function subsHtml(r){
+  return '<div class="subs">'+r.subs.map((s,i)=>
+    `<div class="sub ${s[1]!=='run'?'done':''} ${i===r.subs.length-1?'last':''}"><span class="br"></span>${subIcon(s[1])}<span class="n">${s[0]}</span>${s[3]?'<span class="fg">前台</span>':''}<span class="tm">${s[2]}</span></div>`
+  ).join('')+'</div>';
+}
+function pips(r){
+  return '<span class="pips">'+r.subs.map(s=>`<i class="${s[1]==='run'?'r':s[1]==='err'?'e':'d'}"></i>`).join('')+'</span>';
+}
+function summary(r){
+  const a=running(r), d=doneN(r);
+  return `子代理 ${pips(r)}${a?a+' 在跑':''}${a&&d?' · ':''}${d?d+' 完成':''}`;
+}
+
+function render(id, style){
+  const el=document.getElementById(id);
+  const open = el._open || (el._open = {});
+  let h='';
+  DATA.forEach((r,i)=>{
+    if(r.grp){h+=`<div class="grp">${r.grp}<span>${r.n}</span></div>`;return}
+    const has = !!r.subs, active = has && running(r)>0;
+    let isOpen;
+    if(style==='A') isOpen = open[i] ?? active;
+    else isOpen = open[i] ?? (has && r.sel);
+    let l2 = r.l2 || '', end = '';
+    if(has && style==='B') l2 = summary(r) + (r.l2?' · '+r.l2:'');
+    if(has && style==='A') l2 = isOpen ? (r.l2||'子代理 '+r.subs.length+' 个') : summary(r);
+    if(has && style==='C') end = `<span class="badge">${SVG.runS}${running(r)}</span>`;
+    const chev = has ? SVG.chev.replace('class="chev"', `class="chev${isOpen?' open':''}"`) : '';
+    h+=`<div class="row${r.sel?' sel':''}" data-i="${has?i:''}">
+      <span class="dot">${dotOf(r.st)}</span>
+      <div class="body"><div class="l1"><span class="t" style="${r.st==='doneM'?'color:var(--second)':''}">${r.t}</span>
+        ${style==='C'?end:''}<span class="space"><i></i>${r.sp}</span><span class="time">${r.time}</span></div>
+        ${l2?`<div class="l2"><span class="l2t">${l2}</span>${has&&style!=='C'?chev:''}</div>`:''}</div></div>`;
+    if(has && isOpen) h+=subsHtml(r);
+  });
+  el.innerHTML=h;
+  el.querySelectorAll('.row[data-i]').forEach(row=>{
+    const i=row.dataset.i; if(i==='')return;
+    row.onclick=()=>{const r=DATA[i];const cur=row.querySelector('.chev.open')!==null||(style==='C'&&row.nextElementSibling&&row.nextElementSibling.classList.contains('subs'));open[i]=!cur;render(id,style)};
+  });
+}
+render('A','A'); render('B','B'); render('C','C');
+
+// State gallery
+const S = [
+  {h:'在跑 + 跑完混着', r:{t:'issuelens 库检测 mooring…',st:'run',sp:'mooring',time:'0:36',subs:DATA[6].subs}, p:'跑完的变灰、留在原位，直到这一轮结束。'},
+  {h:'回合结束了，子代理还在跑', r:{t:'Pulse Alpha stealth model on…',st:'review',sp:'code',time:'24分',l2:'后台仍有 shell 2 个',subs:[['Survey model card claims','run','1:12'],['Compare pricing pages','done','0:58']]}, p:'会话已经是「等你验收」（绿圈），子代理行照样挂着，计数和「后台仍有 shell」合成一行。'},
+  {h:'失败 + 超过 4 个', r:{t:'重复来源审计 第二轮',st:'run',sp:'mooring',time:'6:10',subs:[['Audit persisted state','run','5:40'],['Audit session facts','err','2:11'],['Audit UI constants','done','4:02']],more:4}, p:'红 ✕ 保留到你看过为止；更早跑完的折成一行。'},
+  {h:'前台子代理', r:{t:'Image #1 元素静止异常',st:'run',sp:'mooring',time:'4:56',subs:[['Explore','run','0:41',true]]}, p:'父会话在等它，标「前台」。只有一个时也显示，因为它说明了会话卡在哪。'},
+];
+document.getElementById('states').innerHTML = S.map(s=>{
+  const r=s.r;
+  return `<div class="state"><h3>${s.h}</h3>
+    <div class="row"><span class="dot">${dotOf(r.st)}</span><div class="body"><div class="l1"><span class="t">${r.t}</span><span class="space"><i></i>${r.sp}</span><span class="time">${r.time}</span></div>
+    <div class="l2"><span class="l2t">${summary(r)}${r.l2?' · '+r.l2:''}</span>${SVG.chev.replace('class="chev"','class="chev open"')}</div></div></div>
+    ${subsHtml(r)}${r.more?`<div class="more">还有 ${r.more} 个已完成</div>`:''}
+    <p>${s.p}</p></div>`;
+}).join('');
+</script>
+</body>
+</html>
