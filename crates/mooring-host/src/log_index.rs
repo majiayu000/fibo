@@ -763,9 +763,12 @@ impl Index {
             .map_err(err)?
             .query_row([&key], |r| r.get(0))
             .map_err(err)?;
+        // Replaced or rewritten shorter: what was read from it before is gone too.
+        let mut replaced = false;
         if let Some(c) = &cursor {
             if c.dev != meta.dev() || c.inode != meta.ino() || meta.len() < c.offset {
                 cursor = None;
+                replaced = true;
             } else if c.offset == meta.len() && (seeded || !self.recent(updated)) {
                 return Ok(c.identity.as_ref().map(|(id, cwd)| Transcript {
                     runtime,
@@ -943,7 +946,7 @@ impl Index {
         let tx = self.db.savepoint().map_err(err)?;
         tx.prepare_cached("INSERT INTO log_files VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(path) DO UPDATE SET runtime=excluded.runtime,dev=excluded.dev,inode=excluded.inode,offset=excluded.offset,pending=excluded.pending,discard=excluded.discard,cli_id=excluded.cli_id,cwd=excluded.cwd,updated=excluded.updated").map_err(err)?.execute(
             params![key,runtime.executable(),i64::try_from(c.dev).map_err(err)?,i64::try_from(c.inode).map_err(err)?,i64::try_from(c.offset).map_err(err)?,c.pending,c.discard,c.identity.as_ref().map(|v| &v.0),c.identity.as_ref().map(|v| &v.1),i64::try_from(c.updated).map_err(err)?]).map_err(err)?;
-        if !seeded {
+        if !seeded || replaced {
             tx.execute("DELETE FROM session_records WHERE path=?1", [&key])
                 .map_err(err)?;
         }
@@ -1588,5 +1591,24 @@ mod tests {
         // Readable again: it is picked up on its next change.
         fs::write(&bad, format!("{}{}", line("a"), line("a"))).unwrap();
         assert!(i.update(Agent::Codex, &bad, false).unwrap().is_some());
+    }
+
+    /// A log rewritten shorter in place keeps no words from before.
+    #[test]
+    fn a_rewritten_log_forgets_its_old_words() {
+        let f = Fixture::new();
+        let path = f.0.join("logs/re.jsonl");
+        fs::write(
+            &path,
+            format!("{}{}", line("re"), ask("第一次的很长很长很长的要求")),
+        )
+        .unwrap();
+        let mut i = f.index();
+        i.update(Agent::Codex, &path, false).unwrap();
+        fs::write(&path, format!("{}{}", line("re"), ask("新要求"))).unwrap();
+        i.update(Agent::Codex, &path, false).unwrap();
+        let words = i.original_words(path.to_str().unwrap()).unwrap();
+        assert!(!words.contains("第一次"), "old words survive: {words}");
+        assert!(words.contains("新要求"), "{words}");
     }
 }
