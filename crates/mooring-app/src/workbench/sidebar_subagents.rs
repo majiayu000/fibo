@@ -73,7 +73,7 @@ impl Workbench {
         let ended = leaves.len() - running;
         let mut counts = vec![];
         if running > 0 {
-            counts.push(format!("{running} 在跑"));
+            counts.push(format!("{running} {}", Status::Running.label()));
         }
         if ended > 0 {
             counts.push(format!("{ended} 完成"));
