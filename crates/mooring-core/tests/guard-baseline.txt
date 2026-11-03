@@ -63,7 +63,6 @@ word 在跑	crates/mooring-host/src/agents/mod.rs	1
 word 在跑	crates/mooring-host/src/host/mod.rs	2
 word 在跑	mobile/src/app/index.tsx	1
 word 工作中	crates/mooring-host/src/agents/codex.rs	2
-word 已完成	crates/mooring-app/src/workbench/complete.rs	2
 word 已完成	crates/mooring-app/src/workbench/mod.rs	1
 word 已完成	crates/mooring-app/src/workbench/overview.rs	1
 word 已完成	crates/mooring-app/src/workbench/sidebar_subagents.rs	1

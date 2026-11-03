@@ -15,7 +15,7 @@ use std::time::Instant;
 /// The most specks the dissolve sends; a fuller screen sends one from every n-th cell,
 /// though every cell's text is still wiped away.
 const MAX_SPECKS: usize = 900;
-/// The seal's line under 「已完成」: the session title, cut to the seal's width.
+/// The seal's line under 「做完了」: the session title, cut to the seal's width.
 const SEAL_TITLE_MAX_W: f32 = 336.;
 /// The fill bar along the bottom of the pane header while the button presses.
 const PRESS_BAR_H: f32 = 2.;
@@ -148,7 +148,7 @@ fn rng(mut seed: u32) -> impl FnMut() -> f32 {
 
 /// Per style, the slices of the run each part plays in.
 struct Timing {
-    /// Where the button has filled and turned into ✓ 已完成.
+    /// Where the button has filled and turned into ✓ 做完了 (`Status::Closed.label()`).
     button: f32,
     /// The words in, and out (0 when they stay).
     words: (f32, f32, f32, f32),
@@ -431,9 +431,9 @@ impl Workbench {
                     })
                     .opacity(if turned > 0.5 { turned } else { 1. - turned })
                     .child(if turned > 0.5 {
-                        "✓ 已完成"
+                        format!("✓ {}", Status::Closed.label())
                     } else {
-                        "标记完成"
+                        "标记完成".to_owned()
                     }),
             )
             .into_any_element()
@@ -491,7 +491,7 @@ impl Workbench {
                     .text_size(px(T::BODY_SIZE))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(ink)
-                    .child("已完成"),
+                    .child(Status::Closed.label()),
             )
             .child(
                 div()
