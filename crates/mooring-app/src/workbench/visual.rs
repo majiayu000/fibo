@@ -989,7 +989,7 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
-            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub]`:
+            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall]`:
             // the denser presets over sessions shaped like sidebar-density.html's; `-bg`
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
             // the status bar's 工作中 popover beside the column.
@@ -1119,6 +1119,65 @@ impl Workbench {
                             }
                             _ => (),
                         }
+                    }
+                }
+                // `-many` / `-manyall`: the session you are in runs twenty subagents and
+                // three ended; `-manyall` with the whole list opened.
+                if let Some(v @ ("many" | "manyall")) = parts.get(4).copied() {
+                    use mooring_core::content::Subagent;
+                    let now = mooring_core::content::now();
+                    let areas = [
+                        "tasks",
+                        "spaces",
+                        "shortcuts",
+                        "plugins",
+                        "market",
+                        "phone link",
+                        "relay",
+                        "quota",
+                        "file events",
+                        "marks",
+                        "handoff",
+                        "legacy",
+                        "CLI",
+                        "board",
+                        "sidebar",
+                        "overview",
+                        "palette",
+                        "settings",
+                        "keymap",
+                        "statusbar",
+                        "tabs",
+                        "peek",
+                        "cleanup",
+                    ];
+                    let subs = areas
+                        .iter()
+                        .enumerate()
+                        .map(|(i, area)| Subagent {
+                            name: format!("Audit {area} drift"),
+                            kind: "general-purpose".into(),
+                            foreground: false,
+                            started: now - 400 + 10 * i as u64,
+                            ended: (i % 8 == 1).then(|| now - 120 + i as u64),
+                        })
+                        .collect::<Vec<_>>();
+                    if let Some(c) = self
+                        .workspace
+                        .content
+                        .values_mut()
+                        .find(|c| c.title == "这个诊断的 ui 感觉很丑啊")
+                    {
+                        c.subagents = subs;
+                    }
+                    if v == "manyall"
+                        && let Some(s) = self
+                            .workspace
+                            .agent_sessions
+                            .iter()
+                            .find(|s| s.terminal.as_deref() == Some("dense-t2"))
+                    {
+                        self.layout.subagents_all.insert(s.id.clone());
                     }
                 }
                 self.nav.focused = Some("dense-t2".into());

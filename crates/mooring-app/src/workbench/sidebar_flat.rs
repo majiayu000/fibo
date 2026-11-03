@@ -388,7 +388,7 @@ impl Workbench {
                     .when_some(subs, |d, subs| {
                         d.child(self.subagent_line(&session.id, subs, subs_live, subs_open, cx))
                             .when(subs_open, |d| {
-                                d.child(self.subagent_tree(subs, subs_live, cx))
+                                d.child(self.subagent_tree(&session.id, subs, subs_live, cx))
                             })
                     })
                     .when(unfolded, |d| d.child(self.done_card(session, cx))),

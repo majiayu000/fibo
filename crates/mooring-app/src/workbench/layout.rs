@@ -41,6 +41,8 @@ pub(super) struct LayoutState {
     /// Session rows whose subagent list was opened or closed against its default (open
     /// on the session you are in, closed elsewhere).
     pub(super) subagents_toggled: HashSet<String>,
+    /// Session rows whose subagent list shows every subagent, not the first few.
+    pub(super) subagents_all: HashSet<String>,
     /// A tab's right-click menu: the tab and where it was opened.
     pub(super) tab_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
     /// The title-bar logo's menu for choosing the app icon, where it was opened.

@@ -345,6 +345,9 @@ impl Flat {
     /// each, hung from a trunk under the row's state mark.
     pub const SUB_PIP: f32 = 6.;
     pub const SUB_PIP_GAP: f32 = 3.;
+    /// Past eight subagents the dots give way to a bar of ended and running.
+    pub const SUB_BAR: f32 = 56.;
+    pub const SUB_BAR_HEIGHT: f32 = 4.;
     pub const SUB_BRANCH: f32 = 14.;
     pub const SUB_TRUNK: f32 = 3.;
     pub const SUB_LEAF: f32 = 20.;

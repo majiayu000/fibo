@@ -1,6 +1,9 @@
 //! A session row's subagents in 会话优先 (docs/subagent-tree/index.html, option B): a
-//! second line that counts them with a dot each, and under it, once opened, one branch
-//! per subagent with its state and clock. Open by default on the session you are in.
+//! second line that counts them, a dot each or past [`PIPS`] a bar, and under it, once
+//! opened, a branch per subagent with its state and clock, at most [`SHOWN`] of them
+//! before the rest fold into one line that opens the whole list. Open by default on the
+//! session you are in. The marks stay still: the clocks already tick each second, and a
+//! dozen spinning rings would redraw the column every frame.
 use super::layout::turn_clock;
 use super::*;
 use crate::ui::theme::Flat as F;
@@ -9,8 +12,11 @@ use mooring_core::content::Subagent;
 fn ink(v: u32) -> gpui::Hsla {
     T::color(v)
 }
-/// Branches listed before the rest fold into 还有 N 个已完成.
+/// Branches listed before the rest fold into 还有 N 个在跑 · M 个已完成; a list one longer
+/// shows whole, a fold line in place of its last branch would hide nothing.
 const SHOWN: usize = 4;
+/// Subagents counted with a dot each; more take a bar.
+const PIPS: usize = 8;
 const BRANCH: f32 = F::SUB_BRANCH;
 const LEAF: f32 = F::SUB_LEAF;
 const PIP: f32 = F::SUB_PIP;
@@ -31,24 +37,37 @@ fn leaf(s: &Subagent, live: bool) -> Leaf {
         (true, false) => Leaf::Unknown,
     }
 }
-/// The branches to list, oldest first: every running one, then the newest ended ones up
-/// to [`SHOWN`]; and how many ended ones fold away.
-fn shown(subs: &[Subagent], live: bool) -> (Vec<(&Subagent, Leaf)>, usize) {
-    let all: Vec<_> = subs.iter().map(|s| (s, leaf(s, live))).collect();
-    let running = all.iter().filter(|(_, l)| *l == Leaf::Running).count();
-    let room = SHOWN.saturating_sub(running);
-    let ended: Vec<usize> = (0..all.len())
-        .filter(|i| all[*i].1 != Leaf::Running)
-        .collect();
-    let keep_from = ended.len().saturating_sub(room);
-    let dropped: std::collections::HashSet<usize> = ended[..keep_from].iter().copied().collect();
-    let list = all
-        .into_iter()
-        .enumerate()
-        .filter(|(i, _)| !dropped.contains(i))
-        .map(|(_, x)| x)
-        .collect();
-    (list, dropped.len())
+/// What the opened list shows: its branches in start order, and how many running and
+/// ended ones fold away. Asked for whole (`all`), or short enough, it lists every one;
+/// otherwise [`SHOWN`]: the running ones that have run longest, then the ones that ended
+/// last.
+struct Shown<'a> {
+    list: Vec<(&'a Subagent, Leaf)>,
+    running: usize,
+    ended: usize,
+}
+fn shown(subs: &[Subagent], live: bool, all: bool) -> Shown<'_> {
+    let mut leaves: Vec<_> = subs.iter().map(|s| (s, leaf(s, live))).collect();
+    if all || leaves.len() <= SHOWN + 1 {
+        return Shown {
+            list: leaves,
+            running: 0,
+            ended: 0,
+        };
+    }
+    let rank = |(s, l): &(&Subagent, Leaf)| match l {
+        Leaf::Running => (0, s.started),
+        _ => (1, u64::MAX - s.ended.unwrap_or(s.started)),
+    };
+    leaves.sort_by_key(rank);
+    let rest = leaves.split_off(SHOWN);
+    leaves.sort_by_key(|(s, _)| s.started);
+    let running = rest.iter().filter(|(_, l)| *l == Leaf::Running).count();
+    Shown {
+        list: leaves,
+        running,
+        ended: rest.len() - running,
+    }
 }
 
 impl Workbench {
@@ -78,17 +97,32 @@ impl Workbench {
         if ended > 0 {
             counts.push(format!("{ended} 完成"));
         }
-        let pips = div()
-            .flex()
-            .items_center()
-            .gap(px(F::SUB_PIP_GAP))
-            .children(leaves.iter().take(8).map(|l| {
-                let pip = div().size(px(PIP)).rounded_full().flex_shrink_0();
-                match l {
-                    Leaf::Running => pip.bg(run),
-                    _ => pip.border(px(HAIR)).border_color(ink(F::third())),
-                }
-            }));
+        let pips = if leaves.len() <= PIPS {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(F::SUB_PIP_GAP))
+                .children(leaves.iter().map(|l| {
+                    let pip = div().size(px(PIP)).rounded_full().flex_shrink_0();
+                    match l {
+                        Leaf::Running => pip.bg(run),
+                        _ => pip.border(px(HAIR)).border_color(ink(F::third())),
+                    }
+                }))
+        } else {
+            // Ended on the left, still running on the right, in proportion.
+            let share = |n: usize| F::SUB_BAR * n as f32 / leaves.len() as f32;
+            div()
+                .w(px(F::SUB_BAR))
+                .h(px(F::SUB_BAR_HEIGHT))
+                .flex_shrink_0()
+                .flex()
+                .rounded_full()
+                .overflow_hidden()
+                .bg(ink(F::third()).opacity(0.3))
+                .child(div().w(px(share(ended))).h_full().bg(ink(F::third())))
+                .child(div().w(px(share(running))).h_full().bg(run))
+        };
         let id = session.to_owned();
         div()
             .id(gpui::SharedString::from(format!("subagents-{session}")))
@@ -125,18 +159,38 @@ impl Workbench {
     /// how long it took.
     pub(super) fn subagent_tree(
         &self,
+        session: &str,
         subs: &[Subagent],
         live: bool,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
-        let (list, folded) = shown(subs, live);
+        let whole = self.layout.subagents_all.contains(session);
+        let Shown {
+            list,
+            running: more_running,
+            ended: more_ended,
+        } = shown(subs, live, whole);
+        let folded = more_running + more_ended;
+        // The last line: what folds away, or a way back to the short list.
+        let fold = if folded > 0 {
+            let mut parts = vec![];
+            if more_running > 0 {
+                parts.push(format!("{more_running} 个{}", Status::Running.label()));
+            }
+            if more_ended > 0 {
+                parts.push(format!("{more_ended} 个已完成"));
+            }
+            Some(format!("还有 {}", parts.join(" · ")))
+        } else {
+            (whole && subs.len() > SHOWN + 1).then(|| "收起".to_owned())
+        };
         let now = mooring_core::content::now();
         let line = ink(F::third()).opacity(0.45);
         let run = Status::Running.colors().0;
         if list.iter().any(|(_, l)| *l == Leaf::Running) {
             self.tick_turn(cx);
         }
-        let last = list.len() - 1 + usize::from(folded > 0);
+        let last = list.len() - 1 + usize::from(fold.is_some());
         let branch = |i: usize| {
             div()
                 .relative()
@@ -236,20 +290,28 @@ impl Workbench {
             .flex()
             .flex_col()
             .children(rows)
-            .when(folded > 0, |d| {
+            .when_some(fold, |d, text| {
+                let id = session.to_owned();
                 d.child(
                     div()
+                        .id(gpui::SharedString::from(format!("subagents-all-{session}")))
                         .h(px(LEAF))
                         .flex()
                         .items_center()
                         .gap(px(T::S6))
+                        .cursor_pointer()
+                        .text_color(ink(F::third()))
+                        .hover(|s| s.text_color(ink(F::second())))
                         .child(branch(last))
-                        .child(
-                            div()
-                                .text_size(px(F::TAG))
-                                .text_color(ink(F::third()))
-                                .child(format!("还有 {folded} 个已完成")),
-                        ),
+                        .child(div().flex_1().text_size(px(F::TAG)).child(text))
+                        .child(super::sidebar_flat::fold_mark(whole))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            if !this.layout.subagents_all.remove(&id) {
+                                this.layout.subagents_all.insert(id.clone());
+                            }
+                            cx.notify();
+                        })),
                 )
             })
             .into_any_element()
@@ -267,22 +329,39 @@ mod tests {
             ..Default::default()
         }
     }
+    fn names<'a>(s: &Shown<'a>) -> Vec<&'a str> {
+        s.list.iter().map(|(s, _)| s.name.as_str()).collect()
+    }
     #[test]
-    fn running_ones_stay_and_the_oldest_ended_fold_away() {
+    fn the_longest_running_and_the_last_ended_stay_the_rest_fold() {
         let subs = [
             sub(1, Some(2)),
-            sub(2, Some(3)),
+            sub(2, Some(30)),
             sub(3, None),
             sub(4, Some(5)),
             sub(5, None),
             sub(6, Some(7)),
         ];
-        let (list, folded) = shown(&subs, true);
-        let names: Vec<_> = list.iter().map(|(s, _)| s.name.as_str()).collect();
-        assert_eq!(names, ["a3", "a4", "a5", "a6"]);
-        assert_eq!(folded, 2);
+        let s = shown(&subs, true, false);
+        assert_eq!(names(&s), ["a2", "a3", "a5", "a6"]);
+        assert_eq!((s.running, s.ended), (0, 2));
+        // Asked for whole, every one in start order.
+        assert_eq!(shown(&subs, true, true).list.len(), 6);
+        // One more than fits shows whole.
+        assert_eq!(shown(&subs[..5], true, false).list.len(), 5);
         // Once the session stopped, unfinished ones are not shown as running.
-        let (list, _) = shown(&subs, false);
-        assert!(list.iter().all(|(_, l)| *l != Leaf::Running));
+        assert!(
+            shown(&subs, false, true)
+                .list
+                .iter()
+                .all(|(_, l)| *l != Leaf::Running)
+        );
+    }
+    #[test]
+    fn twenty_running_keep_the_four_that_ran_longest() {
+        let subs: Vec<_> = (1..=20).map(|i| sub(i, None)).collect();
+        let s = shown(&subs, true, false);
+        assert_eq!(names(&s), ["a1", "a2", "a3", "a4"]);
+        assert_eq!((s.running, s.ended), (16, 0));
     }
 }
