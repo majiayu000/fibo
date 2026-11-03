@@ -6302,3 +6302,37 @@ fn closing_a_tab_ends_a_program_that_ignores_hangup() {
         "a SIGHUP-ignoring child of a closed tab is still running 10s later"
     );
 }
+
+/// A takeover that cannot finish starting must not take the terminals with it: the old
+/// host lets go of them as soon as the new one says it has them, so whatever can be
+/// checked first is checked before that.
+#[test]
+fn a_takeover_that_cannot_start_leaves_the_old_host_serving() {
+    let mut h = Host::start();
+    h.setup();
+    h.call(h.launch("t", "sleep 600")).unwrap();
+    let pid = h
+        .workspace()
+        .terminals
+        .iter()
+        .find(|t| t.id == "t")
+        .and_then(|t| t.pid)
+        .unwrap() as i32;
+    // Something that is not a socket where the new host would bind.
+    fs::write(h.root.join(".sock-start"), "not a socket").unwrap();
+    let status = fixture_command(&h.root)
+        .env("MOORING_FIXTURE_TAKEOVER", "1")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(!status.success(), "the takeover was expected to fail");
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(h.child.try_wait().unwrap().is_none(), "the old host exited");
+    assert_eq!(
+        unsafe { libc::kill(pid, 0) },
+        0,
+        "the terminal's shell was hung up"
+    );
+    assert!(h.workspace().terminals.iter().any(|t| t.id == "t"));
+}

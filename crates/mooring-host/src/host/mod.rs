@@ -813,6 +813,32 @@ fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
         })
         .collect())
 }
+/// What starting would trip over that does not wait on the old host leaving: an entry
+/// where the listening socket goes that is not one, a store this user cannot read.
+fn ready_to_take_over(root: &Path) -> io::Result<()> {
+    for name in ["workbench.sock", ".sock-start"] {
+        match fs::symlink_metadata(root.join(name)) {
+            Ok(m) if m.file_type().is_socket() && m.uid() == unsafe { libc::geteuid() } => (),
+            Ok(_) => {
+                return Err(io::Error::other(format!(
+                    "not taking over: {name} in the runtime is not this user's socket"
+                )));
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => (),
+            Err(e) => return Err(e),
+        }
+    }
+    let db = rusqlite::Connection::open_with_flags(
+        root.join("workbench.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| io::Error::other(format!("not taking over: the store does not open: {e}")))?;
+    db.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+        r.get::<_, i64>(0)
+    })
+    .map_err(|e| io::Error::other(format!("not taking over: the store does not read: {e}")))?;
+    Ok(())
+}
 fn serve_runtime(
     root: &Path,
     roots: Vec<(Agent, std::path::PathBuf)>,
@@ -835,7 +861,14 @@ fn serve_runtime(
             "runtime must be an owned, non-symlink 0700 directory",
         ));
     }
-    let taken = if takeover { take_over(root)? } else { vec![] };
+    let taken = if takeover {
+        // The old host lets go of every terminal once told they are taken, so what can
+        // fail without it gone is tried first: failing later would hang them all up.
+        ready_to_take_over(root)?;
+        take_over(root)?
+    } else {
+        vec![]
+    };
     let instance_lock = OpenOptions::new()
         .read(true)
         .write(true)
