@@ -87,18 +87,8 @@ impl Access {
 }
 
 pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
-    let a = Args::parse(
-        args,
-        &[
-            "relay",
-            "relay-key",
-            "name",
-            "role",
-            "revoke",
-            "device",
-            "kick",
-        ],
-    )?;
+    let cmd = control::command("remote").expect("remote is in the command table");
+    let a = Args::parse(args, cmd)?;
     if a.value("relay").is_some()
         || a.has("devices")
         || a.value("revoke").is_some()
@@ -111,8 +101,9 @@ pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
         return crate::relay::run(&a);
     }
     if !a.has("stdio") {
-        return Err(io::Error::other(
-            "usage: mooring remote --stdio | --relay <中继地址> [--relay-key <密钥>] | --pair --relay <中继地址> [--name <名字>] [--role view|answer|full] [--new-code] | --devices | --device <设备> --role <权限> | --revoke <设备>",
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("mooring remote 要选一种用法：\n{}", cmd.usage),
         ));
     }
     serve(

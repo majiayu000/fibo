@@ -25,18 +25,34 @@ Mooring 以前叫 Keepline：旧的 `keepline` / `keeplined` 命令和 `KEEPLINE
 
 `<终端>` 可以是完整编号、唯一的编号前缀，或唯一的标签名；只认正在运行的终端。每个命令都接受 `--runtime <目录>`，在 Mooring 终端里不用写（读 `MOORING_RUNTIME`）。
 
+每个命令只认自己列出的选项：写错的选项（比如 `--timout`）直接报错、打印这个命令的用法、以非零退出，什么都不做。`-h` / `--help` 写在哪都只打印用法（`--` 后面给子命令的除外）。不确定怎么写时先 `mooring <命令> --help`。
+
 | 命令 | 做什么 |
 |---|---|
 | `mooring list [--json]` | 正在运行的终端：编号、Agent、状态、标签、目录。`--json` 每项有 `id` `cwd` `tab` `agent` `phase` `session` |
 | `mooring read <终端> [--lines N]` | 画面最后 N 行，默认 50；画面下方的空行不算 |
-| `mooring send <终端> <文字\|-> [--enter]` | 把文字作为粘贴放进终端；`--enter` 再按回车。`-` 从标准输入读（最多 64 KiB），长文字不用转义 |
+| `mooring send <终端> <文字\|-> [--enter]` | 把文字作为粘贴放进终端；`--enter` 再按回车。`-` 从标准输入读，长文字不用转义；超过 64 KiB 报错、一个字也不发，拆开再发 |
 | `mooring prompt <终端> <文字\|-> [--wait] [--timeout 秒] [--force]` | 给终端里的 Agent 发一条并回车 |
 | `mooring wait <终端> [--until idle\|waiting\|working] [--timeout 秒]` | 等 Agent 进入某个状态，默认 `idle`；超时默认 1800 秒 |
 | `mooring events [--json]` | 先列现在的状态，再每有变化输出一行（started / waiting / error / done、approval、terminal_*、command_*）；要盯多个终端时用它，不要反复轮询 `list` |
-| `mooring explain <终端> [--json]` | 画面规则怎么读这块屏：状态、命中的规则、看到的行 |
+| `mooring explain <终端> [--json]` | 画面规则怎么读这块屏：状态、命中的规则、看到的行。`--file <画面.txt> --agent <claude\|codex>` 读存下来的画面 |
 | `mooring split <终端> [--down] [--size 0.5] [--tab\|--here] [--cwd 目录] [--json] [-- 命令…]` | 在这个终端右边开一块新分屏，对半分；`--down` 开在下面，`--size` 是新分屏占的比例。只往右或往下开，用户原来那块一直在左上角。这个标签已经有 4 块、或切开后一边少于 20 列 / 5 行时，自动开到「<Agent> 的旁屏」标签（每个终端一个，满了再开「旁屏 2」），stderr 说明原因和标签名；`--here` 改为直接拒绝，`--tab` 不在当前标签切、直接开到旁屏。都不切换用户的画面和键盘焦点。目录默认跟那个 shell 现在所在的目录。stdout 只打印新终端编号（`--json` 还有 `tab` `tab_title` `beside` `overflow`）。给了命令就在新分屏的 shell 里跑，跑完留在 shell；一个参数当整行命令（可带 `&&`、管道），多个参数逐个转义；`--` 后面全算命令，选项都写在它前面 |
 | `mooring close <终端>` | 关掉这块分屏并结束里面的程序，标签里只剩它时连标签一起关；`events` 会报 `terminal_exited` |
-| `mooring run <agent> <任务\|-> [--split] [--cwd 目录] [--no-report] [--timeout 秒] [--json]` | 派一个 Agent（`claude`、`codex`……）去做一件事：在你的旁屏标签里启动它（`--split` 开在你旁边），等它出现输入框再把任务交给它，stdout 打印它的终端编号。它每结束一轮（做完、提问、出错），结果自动发回你的输入框，见下面「派出去的 Agent」；`--no-report` 不发回。`--timeout` 是等输入框的秒数，默认 90 |
+| `mooring run <agent> <任务\|-> [--split] [--cwd 目录] [--no-report] [--from <终端>] [--timeout 秒] [--json]` | 派一个 Agent（`claude`、`codex`……）去做一件事：在你的旁屏标签里启动它（`--split` 开在你旁边），等它出现输入框再把任务交给它，stdout 打印它的终端编号。它每结束一轮（做完、提问、出错），结果自动发回你的输入框，见下面「派出去的 Agent」；`--no-report` 不发回。`--timeout` 是等输入框的秒数，默认 90。不在 Mooring 终端里（没有 `MOORING_TERMINAL`）时用 `--from <终端>` 说开在谁旁边、汇报给谁 |
+
+### 其他命令
+
+一般用不到，用户问起或明确要你做时再用：
+
+| 命令 | 做什么 |
+|---|---|
+| `mooring plugins [--dir 目录] [--json]` | 检查插件能不能装上；`mooring plugins available [--remote]`、`install <id> [--remote]`、`uninstall <id>`、`index <目录> [--check]` 管插件市场。写插件看 `mooring --skill plugins` |
+| `mooring hooks install\|uninstall\|status [--agent <cli>] [--json] [--outdated-only]` | 把 Mooring 的 hook 写进或移出 Agent CLI 的设置，或看装了没有（`--json` `--outdated-only` 只对 status）。会改用户的设置文件，用户要求才 install / uninstall |
+| `mooring hook --agent <cli>` | Agent CLI 的 hook 自己调用的入口，别手动跑 |
+| `mooring remote --stdio` / `--relay <地址> [--relay-key <密钥>] [--report]` / `--pair [--name 名字] [--role view\|answer\|full] [--new-code]` / `--enable` / `--disable` / `--status` / `--devices` / `--device <设备> --role <权限>` / `--kick <设备>` / `--revoke <设备>` | 手机和别的机器连过来。配对、改权限、断开、取消配对都是用户的决定，别自己做；细节看 `mooring remote --help` |
+| `mooring serve --runtime <目录> [--takeover] [--recent-days N]` | 后台本身，App 会自己启动。**不要自己跑** |
+| `mooring scan --runtime <目录>` | 让后台重新扫一遍 Agent 会话 |
+| `mooring --version` | 协议版本 |
 
 状态（`phase`）：`working` 在干活，`waiting` 在等用户回答（审批或选择题），`idle` 这一轮做完了，`-` 不是可识别的 Agent 对话（shell 或别的程序）。
 
