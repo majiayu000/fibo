@@ -1,0 +1,330 @@
+{
+ "Happy Claude Code mobile": [
+  {
+   "objectID": "44904039",
+   "title": "Show HN: Happy Coder – End-to-End Encrypted Mobile Client for Claude Code",
+   "url": "https://github.com/slopus/happy",
+   "points": 30,
+   "num_comments": 8,
+   "created_at": "2025-08-14T18:41:24Z"
+  },
+  {
+   "objectID": "46430340",
+   "title": "Claude Code Mobile Client [MIT License]",
+   "url": "https://happy.engineering",
+   "points": 4,
+   "num_comments": 1,
+   "created_at": "2025-12-30T06:56:45Z"
+  },
+  {
+   "objectID": "47218252",
+   "title": "Show HN: Rebuilt an old-school browser strategy game inspired by Inselkampf",
+   "url": "https://inselnova.com",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-03-02T14:17:34Z"
+  },
+  {
+   "objectID": "47575827",
+   "title": "Show HN: Paseo, an open source environment for coding agents",
+   "url": "https://github.com/getpaseo/paseo",
+   "points": 6,
+   "num_comments": 1,
+   "created_at": "2026-03-30T15:51:09Z"
+  },
+  {
+   "objectID": "48399358",
+   "title": "Show HN: Boxes.dev: ditch localhost; run Claude Code and Codex in the cloud",
+   "url": "https://boxes.dev",
+   "points": 105,
+   "num_comments": 79,
+   "created_at": "2026-06-04T14:38:35Z"
+  },
+  {
+   "objectID": "47530027",
+   "title": "Show HN: Paseo – Open-source coding agent interface (desktop, mobile, CLI)",
+   "url": "https://github.com/getpaseo/paseo",
+   "points": 14,
+   "num_comments": 0,
+   "created_at": "2026-03-26T13:11:34Z"
+  },
+  {
+   "objectID": "47600002",
+   "title": "Show HN: I made a Mario Galaxy game with Claude Code and Three.js in 53 days",
+   "url": "https://supertommy.com/games/super-mario-galaxy-movie-game/",
+   "points": 7,
+   "num_comments": 14,
+   "created_at": "2026-04-01T12:34:56Z"
+  },
+  {
+   "objectID": "47529963",
+   "title": "Show HN: Paseo – Open-source coding agent interface (desktop, mobile, CLI)",
+   "url": null,
+   "points": 5,
+   "num_comments": 1,
+   "created_at": "2026-03-26T13:06:06Z"
+  },
+  {
+   "objectID": "47322838",
+   "title": "Show HN: DD Photos – open-source photo album site generator (Go and SvelteKit)",
+   "url": "https://github.com/dougdonohoe/ddphotos",
+   "points": 71,
+   "num_comments": 22,
+   "created_at": "2026-03-10T13:13:48Z"
+  },
+  {
+   "objectID": "47252334",
+   "title": "Show HN: AgentsMesh – AI agent fleet command center",
+   "url": "https://github.com/AgentsMesh/AgentsMesh",
+   "points": 3,
+   "num_comments": 3,
+   "created_at": "2026-03-04T19:11:21Z"
+  }
+ ],
+ "Claude Code remote control phone": [
+  {
+   "objectID": "47158091",
+   "title": "Claude Code Remote control: continue local sessions on your phone",
+   "url": "https://twitter.com/noahzweben/status/2026371260805271615",
+   "points": 1,
+   "num_comments": 1,
+   "created_at": "2026-02-25T21:24:58Z"
+  },
+  {
+   "objectID": "50183892",
+   "title": "Show HN: Omnara – Open-source alternative to Claude Managed Agents",
+   "url": "https://github.com/omnara-ai/omnara",
+   "points": 114,
+   "num_comments": 35,
+   "created_at": "2026-10-21T16:44:53Z"
+  },
+  {
+   "objectID": "47443298",
+   "title": "Show HN: Pocodex – Remote Control for Codex",
+   "url": "https://github.com/davej/pocodex",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-03-19T17:56:57Z"
+  },
+  {
+   "objectID": "47196575",
+   "title": "Show HN: The most awesome AI programming application desktop has emerged",
+   "url": "https://github.com/golutra/golutra",
+   "points": 1,
+   "num_comments": 1,
+   "created_at": "2026-02-28T15:38:45Z"
+  },
+  {
+   "objectID": "47032993",
+   "title": "Show HN: Claude Remote – control Claude Code on your Mac from your phone",
+   "url": null,
+   "points": 2,
+   "num_comments": 1,
+   "created_at": "2026-02-16T09:45:52Z"
+  },
+  {
+   "objectID": "49964977",
+   "title": "Show HN: Claude Remote – start Claude Code on your own PC from your phone",
+   "url": "https://github.com/MrTig-afk/claude-remote",
+   "points": 1,
+   "num_comments": 1,
+   "created_at": "2026-10-05T13:56:45Z"
+  },
+  {
+   "objectID": "49044039",
+   "title": "Show HN: WhipDesk – Control your full dev machine from your phone",
+   "url": "https://github.com/BinaryBananaLLC/WhipDesk",
+   "points": 3,
+   "num_comments": 0,
+   "created_at": "2026-07-25T02:49:10Z"
+  },
+  {
+   "objectID": "46532952",
+   "title": "Show HN: Anyware – Remote Control for Claude Code",
+   "url": "https://anyware.run/",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-01-07T21:16:10Z"
+  },
+  {
+   "objectID": "47154391",
+   "title": "Show HN: ForkOff – Orchestrate Your Claude Agents, Anytime, Anywhere",
+   "url": "https://www.forkoff.app/",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-02-25T17:14:00Z"
+  },
+  {
+   "objectID": "50272329",
+   "title": "Show HN: Multi-platform remote-control for any harness",
+   "url": "https://github.com/tinybig-ai/jep",
+   "points": 1,
+   "num_comments": 0,
+   "created_at": "2026-10-28T12:10:43Z"
+  }
+ ],
+ "Codex mobile phone": [
+  {
+   "objectID": "46742298",
+   "title": "Ask HN: How do you AI code from your phone?",
+   "url": null,
+   "points": 7,
+   "num_comments": 3,
+   "created_at": "2026-01-24T09:59:37Z"
+  },
+  {
+   "objectID": "48728744",
+   "title": "I have open-sourced gojaja, a CLI for local multi-agent collaboration",
+   "url": null,
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-06-30T05:17:52Z"
+  },
+  {
+   "objectID": "47196575",
+   "title": "Show HN: The most awesome AI programming application desktop has emerged",
+   "url": "https://github.com/golutra/golutra",
+   "points": 1,
+   "num_comments": 1,
+   "created_at": "2026-02-28T15:38:45Z"
+  },
+  {
+   "objectID": "49912618",
+   "title": "Show HN: Ciao – Control coding agents from your phone",
+   "url": "https://apps.apple.com/us/app/ciaooo-claude-code-codex/id6793695487",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-09-30T18:34:32Z"
+  },
+  {
+   "objectID": "46678461",
+   "title": "Show HN: Relayd – mobile dashboard for Codex agents",
+   "url": "https://relayd.dev",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-01-19T12:56:08Z"
+  },
+  {
+   "objectID": "48516399",
+   "title": "Show HN: Lark – Use Codex from Telegram or iMessage",
+   "url": "https://github.com/AhmadTheTech/lark",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-06-13T11:57:17Z"
+  },
+  {
+   "objectID": "47352564",
+   "title": "Show HN: CloudCLI-Web/Mobile UI for Claude Code,Codex and Gemini(8.2k stars)",
+   "url": "https://github.com/siteboon/claudecodeui",
+   "points": 5,
+   "num_comments": 1,
+   "created_at": "2026-03-12T15:49:40Z"
+  },
+  {
+   "objectID": "50272329",
+   "title": "Show HN: Multi-platform remote-control for any harness",
+   "url": "https://github.com/tinybig-ai/jep",
+   "points": 1,
+   "num_comments": 0,
+   "created_at": "2026-10-28T12:10:43Z"
+  },
+  {
+   "objectID": "49846613",
+   "title": "Show HN: Tui2web – use any TUI on the web",
+   "url": "https://tui2web.com/",
+   "points": 7,
+   "num_comments": 2,
+   "created_at": "2026-09-25T16:22:08Z"
+  },
+  {
+   "objectID": "46991591",
+   "title": "Launch HN: Omnara (YC S25) – Run Claude Code and Codex from anywhere",
+   "url": null,
+   "points": 147,
+   "num_comments": 161,
+   "created_at": "2026-02-12T17:14:28Z"
+  }
+ ],
+ "Paseo agents": [
+  {
+   "objectID": "47397226",
+   "title": "Show HN: Paseo – Run coding agents from your phone, desktop, or terminal (FOSS)",
+   "url": "https://github.com/getpaseo/paseo",
+   "points": 5,
+   "num_comments": 2,
+   "created_at": "2026-03-16T10:29:55Z"
+  },
+  {
+   "objectID": "48827057",
+   "title": "Paseo: Orchestrate coding agents from your desk and your phone",
+   "url": "https://paseo.sh/",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-07-08T03:16:38Z"
+  },
+  {
+   "objectID": "47530027",
+   "title": "Show HN: Paseo – Open-source coding agent interface (desktop, mobile, CLI)",
+   "url": "https://github.com/getpaseo/paseo",
+   "points": 14,
+   "num_comments": 0,
+   "created_at": "2026-03-26T13:11:34Z"
+  },
+  {
+   "objectID": "47529963",
+   "title": "Show HN: Paseo – Open-source coding agent interface (desktop, mobile, CLI)",
+   "url": null,
+   "points": 5,
+   "num_comments": 1,
+   "created_at": "2026-03-26T13:06:06Z"
+  },
+  {
+   "objectID": "48377250",
+   "title": "Show HN: Paseo – Beautiful open-source coding agent interface",
+   "url": "https://github.com/getpaseo/paseo",
+   "points": 92,
+   "num_comments": 54,
+   "created_at": "2026-06-02T22:34:42Z"
+  },
+  {
+   "objectID": "47575827",
+   "title": "Show HN: Paseo, an open source environment for coding agents",
+   "url": "https://github.com/getpaseo/paseo",
+   "points": 6,
+   "num_comments": 1,
+   "created_at": "2026-03-30T15:51:09Z"
+  },
+  {
+   "objectID": "49093727",
+   "title": "Paseo: Open-source desktop and mobile app for TUI coding agents (Codex, CC)",
+   "url": "https://paseo.sh/",
+   "points": 3,
+   "num_comments": 2,
+   "created_at": "2026-07-29T05:28:46Z"
+  },
+  {
+   "objectID": "49331391",
+   "title": "Does whispering to agents in docs help?",
+   "url": "https://passo.uno/if-you-are-an-agent-read-this/",
+   "points": 28,
+   "num_comments": 9,
+   "created_at": "2026-08-17T14:16:41Z"
+  },
+  {
+   "objectID": "49360592",
+   "title": "Does whispering to agents in docs help?",
+   "url": "https://passo.uno/if-you-are-an-agent-read-this/",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-08-19T12:23:40Z"
+  },
+  {
+   "objectID": "45459952",
+   "title": "Show HN: Vibe Flow – Pure-prompt toolkit for AI-assisted development",
+   "url": "https://github.com/paleo/vibe-flow",
+   "points": 3,
+   "num_comments": 0,
+   "created_at": "2025-10-03T07:10:41Z"
+  }
+ ]
+}
