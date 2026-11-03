@@ -576,13 +576,8 @@ impl Render for Workbench {
             let details = vec![detail.to_string()];
             main = main.child(self.notice_strip(text, details, false, cx));
         }
-        if let Some(error) = &self.error {
-            main = main.child(
-                label(error.clone())
-                    .px(px(T::S14))
-                    .py(px(T::S6))
-                    .text_color(Tone::Danger.ink()),
-            );
+        if let Some(strip) = self.error_strip(cx) {
+            main = main.child(strip);
         }
         if let Some(form) = &self.tasks.form {
             main = main.child(self.form_panel(form, window, cx));

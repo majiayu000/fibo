@@ -1,4 +1,5 @@
 //! Driving Mooring terminals from scripts and other Agents: list them, read a screen, send text, prompt an Agent and wait.
+use mooring_core::delivery::{deliver, PATIENCE};
 use mooring_core::status::{self, Status};
 use mooring_core::{model::*, protocol::*};
 use std::io::{self, Read};
@@ -1176,13 +1177,11 @@ fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<
             None,
         ),
     };
-    if let Err(e) = rpc(
-        &a.socket,
-        &Request::Edit {
-            request: Some(RequestId::fresh()),
-            edit,
-        },
-    ) {
+    let place = Request::Edit {
+        request: Some(RequestId::fresh()),
+        edit,
+    };
+    if let Err(e) = deliver(&a.socket, &place, PATIENCE).into_result() {
         // Nothing shows it, so nothing would ever stop it.
         let _ = rpc(&a.socket, &Request::Stop { id });
         return Err(e);
@@ -1226,13 +1225,11 @@ fn close(a: Args) -> io::Result<()> {
     if w.terminal_tab(&id).is_none() {
         return Err(io::Error::other("这个终端没有摆在任何画面里"));
     }
-    match rpc(
-        &a.socket,
-        &Request::Edit {
-            request: Some(RequestId::fresh()),
-            edit: Edit::ClosePane { terminal: id },
-        },
-    )? {
+    let close = Request::Edit {
+        request: Some(RequestId::fresh()),
+        edit: Edit::ClosePane { terminal: id },
+    };
+    match deliver(&a.socket, &close, PATIENCE).into_result()? {
         Reply::Workspace(_) => Ok(()),
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }

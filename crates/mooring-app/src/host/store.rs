@@ -2,6 +2,7 @@
 //! syncs and the recognition status the host pushes. Views never call `rpc` themselves.
 use crate::connection::RecognitionConnection;
 use futures::channel::mpsc::UnboundedSender;
+use mooring_core::delivery::{PATIENCE, Settled, deliver};
 use mooring_core::{model::*, protocol::*};
 use std::{
     collections::VecDeque,
@@ -25,7 +26,9 @@ pub struct Store {
     /// A background refresh is in flight; it never blocks input or shows a label.
     syncing: bool,
     sync_again: bool,
-    /// Tab and layout edits clicked while another user action was in flight.
+    /// The user action in flight, when it is a request (launches are not).
+    in_flight: Option<Request>,
+    /// Requests made while another user action was in flight, in order.
     queued: VecDeque<Request>,
     recognition: RecognitionStatus,
     /// When the status link to the host dropped; `None` while it is up.
@@ -43,6 +46,7 @@ impl Store {
             busy_seq: 0,
             syncing: false,
             sync_again: false,
+            in_flight: None,
             queued: VecDeque::new(),
             recognition: RecognitionStatus::default(),
             cut_off_at: None,
@@ -79,8 +83,9 @@ impl Store {
         self.recognition.workspace_revision > revision
     }
     /// Marks a user action in flight and returns its sequence number.
-    pub fn begin_busy(&mut self) -> u64 {
+    pub fn begin_busy(&mut self, request: Option<&Request>) -> u64 {
         self.busy = true;
+        self.in_flight = request.cloned();
         self.busy_seq += 1;
         self.busy_seq
     }
@@ -94,15 +99,19 @@ impl Store {
     }
     pub fn end_busy(&mut self) {
         self.busy = false;
+        self.in_flight = None;
         self.slow = false;
     }
-    /// An edit made during another action waits its turn. Creating something, or any
-    /// other request, is still dropped while busy, so a double click makes one, not two
-    /// (until requests carry ids: docs/request-envelope/spec.md, step B).
+    /// A request made during another action waits its turn. Dropped only when it repeats
+    /// one still pending: a second creation of the same kind (a double click makes one,
+    /// not two) or a second refresh.
     pub fn hold(&mut self, request: Request) {
-        if queueable(&request) {
-            self.queued.push_back(request);
+        let key = repeat_key(&request);
+        let repeats = |r: &Request| key.is_some() && repeat_key(r) == key;
+        if self.in_flight.as_ref().is_some_and(repeats) || self.queued.iter().any(repeats) {
+            return;
         }
+        self.queued.push_back(request);
     }
     pub fn next_queued(&mut self) -> Option<Request> {
         self.queued.pop_front()
@@ -125,6 +134,12 @@ impl Store {
     pub fn send(&self, request: Request) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();
         async move { rpc(&socket, &request) }
+    }
+    /// A user's request: resent with the same id while the host is away, until it is
+    /// confirmed, refused, or `PATIENCE` says its outcome is unknown.
+    pub fn deliver(&self, request: Request) -> impl Future<Output = Settled> + use<> {
+        let socket = self.socket.clone();
+        async move { deliver(&socket, &request, PATIENCE) }
     }
     /// Launches a terminal, then saves the tab that shows it. A split from a running
     /// shell first asks the host for that shell's current directory. Given `spaces`, a
@@ -172,9 +187,16 @@ pub fn record_left(socket: &Path, at: u64) {
         eprintln!("记录离开时间失败: {e}");
     }
 }
-pub fn queueable(request: &Request) -> bool {
-    matches!(request, Request::Edit { edit, .. } if !matches!(
-        edit,
-        Edit::AddTask(_) | Edit::AddSpace(_) | Edit::SaveSessionTask { .. }
-    ))
+/// What makes two pending requests the same click: creations by kind, a refresh.
+pub fn repeat_key(request: &Request) -> Option<String> {
+    match request {
+        Request::Edit { edit, .. } => match edit {
+            Edit::AddTask(_) => Some("add task".into()),
+            Edit::AddSpace(_) => Some("add space".into()),
+            Edit::SaveSessionTask { session, .. } => Some(format!("save {session}")),
+            _ => None,
+        },
+        Request::Workspace => Some("workspace".into()),
+        _ => None,
+    }
 }

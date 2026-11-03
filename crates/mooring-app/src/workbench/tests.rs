@@ -371,27 +371,46 @@ fn reopening_a_failed_resume_returns_to_its_terminal() {
     assert!(resume_terminal(&w, &resumed, &s).is_none());
 }
 
-/// An edit made during another action waits its turn; creating something is dropped, so
-/// a double click makes one.
+/// Whatever is asked during another action waits its turn; only a repeat of something
+/// still pending is dropped: a second creation of the same kind, a second refresh.
 #[test]
-fn edits_wait_behind_a_busy_action_but_creations_do_not() {
-    use crate::host::store::queueable;
+fn requests_wait_behind_a_busy_action_and_only_repeats_are_dropped() {
+    use crate::host::store::repeat_key;
     let w = fixture();
     let edit = |edit| Request::Edit {
-        request: None,
+        request: Some(RequestId::fresh()),
         edit,
     };
-    assert!(queueable(&edit(Edit::CloseTab { id: "tab".into() })));
-    assert!(queueable(&edit(Edit::PutTab {
-        tab: w.tabs[0].clone()
-    })));
-    assert!(queueable(&edit(Edit::SetTaskOutcome {
-        seen: None,
-        id: "task".into(),
-        outcome: Outcome::Abandoned,
-    })));
-    assert!(!queueable(&edit(Edit::AddSpace(w.spaces[0].clone()))));
-    assert!(!queueable(&Request::Workspace));
+    for queued in [
+        edit(Edit::CloseTab { id: "tab".into() }),
+        edit(Edit::SetTaskOutcome {
+            seen: None,
+            id: "task".into(),
+            outcome: Outcome::Abandoned,
+        }),
+        Request::StopAgent { id: "t".into() },
+    ] {
+        assert_eq!(repeat_key(&queued), None);
+    }
+    let space = |id: &str| {
+        let mut s = w.spaces[0].clone();
+        s.id = id.into();
+        edit(Edit::AddSpace(s))
+    };
+    assert_eq!(repeat_key(&space("a")), repeat_key(&space("b")));
+    assert!(repeat_key(&space("a")).is_some());
+    assert_ne!(
+        repeat_key(&space("a")),
+        repeat_key(&edit(Edit::AddTask(Task {
+            id: "t".into(),
+            space: "s".into(),
+            title: "t".into(),
+            description: String::new(),
+            acceptance: vec![],
+            agent: Agent::Claude,
+        })))
+    );
+    assert!(repeat_key(&Request::Workspace).is_some());
 }
 #[test]
 fn a_removed_directory_falls_back_to_one_that_exists() {

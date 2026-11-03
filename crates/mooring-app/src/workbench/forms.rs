@@ -195,6 +195,7 @@ impl Workbench {
             space: self.nav.space.clone(),
             criteria: vec![],
             tried: false,
+            sending: None,
             _watch: watch,
         });
         if matches!(kind, FormKind::Task) {
@@ -329,8 +330,10 @@ impl Workbench {
                 .is_some_and(|f| !f.contains(form.agent.executable())),
         }
     }
+    /// Saves the open form; it closes on the host's receipt, and a second press while
+    /// that is pending does nothing.
     pub(super) fn save_form(&mut self, start: bool, cx: &mut Context<Self>) {
-        let Some(mut form) = self.tasks.form.take() else {
+        let Some(mut form) = self.tasks.form.take_if(|f| f.sending.is_none()) else {
             return;
         };
         let edit = match form.kind {
@@ -389,14 +392,15 @@ impl Workbench {
                 if start {
                     self.tasks.start_after_save = Some(task.id.clone());
                 }
-                if self.tasks.editing_task.take().is_some() {
+                if self.tasks.editing_task.is_some() {
                     Edit::UpdateTask(task)
                 } else {
                     Edit::AddTask(task)
                 }
             }
         };
-        self.edit(edit, cx);
+        form.sending = Some(self.edit_named(edit, cx));
+        self.tasks.form = Some(form);
     }
     pub(super) fn form_panel(
         &self,
@@ -480,8 +484,7 @@ impl Workbench {
                             .px_0()
                             .text_color(T::color(T::muted()))
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.tasks.form = None;
-                                this.tasks.editing_task = None;
+                                this.close_form();
                                 cx.notify();
                             })),
                     ),
@@ -577,8 +580,7 @@ impl Workbench {
                 )
                 .child(
                     button("cancel", "取消").on_click(cx.listener(|this, _, _, cx| {
-                        this.tasks.form = None;
-                        this.tasks.editing_task = None;
+                        this.close_form();
                         cx.notify();
                     })),
                 )

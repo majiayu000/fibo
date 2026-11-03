@@ -142,6 +142,58 @@ fn a_named_edit_takes_effect_once_across_hangups_and_restarts() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// Step C's acceptance: a write sent while the host is gone waits it out and lands once
+/// it is back, instead of vanishing; with no host at all it reports that it was not sent.
+#[test]
+fn a_write_made_while_the_host_is_away_lands_once_it_is_back() {
+    use mooring_core::delivery::{deliver, Settled, PATIENCE};
+    let root = std::env::temp_dir().join(format!("kl-rq-{}", uuid::Uuid::new_v4().simple()));
+    let h = Host::start(&root);
+    h.call(
+        None,
+        Edit::AddSpace(Space {
+            id: "s".into(),
+            name: "Tests".into(),
+            cwd: "/tmp".into(),
+        }),
+    )
+    .unwrap();
+    h.stop();
+    let socket = root.join("workbench.sock");
+    let back = {
+        let root = root.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(1500));
+            Host::start(&root)
+        })
+    };
+    let write = Request::Edit {
+        request: Some(RequestId::fresh()),
+        edit: task("t1"),
+    };
+    let started = Instant::now();
+    let settled = deliver(&socket, &write, PATIENCE);
+    assert!(
+        matches!(settled, Settled::Confirmed(Reply::Workspace(_))),
+        "{settled:?}"
+    );
+    assert!(started.elapsed() >= Duration::from_millis(1000));
+    let h = back.join().unwrap();
+    // Sent again (the window's 重试), it is the same write.
+    assert!(matches!(
+        deliver(&socket, &write, PATIENCE),
+        Settled::Confirmed(_)
+    ));
+    assert_eq!(h.tasks(), ["t1"]);
+    h.stop();
+    let gone = deliver(&socket, &write, Duration::from_millis(500));
+    assert!(
+        matches!(gone, Settled::Unknown { sent: false, .. }),
+        "{gone:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
 #[test]
 #[ignore = "subprocess daemon entry for this file's tests"]
 fn receipts_daemon() {

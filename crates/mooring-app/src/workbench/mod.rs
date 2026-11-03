@@ -26,6 +26,8 @@ pub struct Workbench {
     /// A press on the top bar's empty space that has not moved the window yet.
     title_drag: bool,
     error: Option<String>,
+    /// The request whose outcome is unknown, for 重试 to send again under its id.
+    unsure: Option<Request>,
     /// A session a notification asked for before it was loaded, and the page the user was
     /// on then: opened once it loads, unless the user has moved on.
     pending_route: Option<(String, nav::Page)>,
@@ -141,6 +143,8 @@ struct Form {
     criteria: Vec<forms::CriterionRow>,
     /// A save was pressed, so a missing title now shows as an error.
     tried: bool,
+    /// Saved and waiting for the host's receipt: closes on it, stays open if refused.
+    sending: Option<RequestId>,
     /// Typing in any field redraws the form's checks and preview.
     _watch: Vec<gpui::Subscription>,
 }
@@ -248,6 +252,7 @@ use palette::Search;
 mod peek;
 mod phones;
 mod render;
+mod requests;
 mod sessions;
 mod settings;
 use sessions::{Attention, Resuming};
@@ -375,6 +380,7 @@ impl Workbench {
             workspace,
             title_drag: false,
             error: None,
+            unsure: None,
             pending_route: None,
             restarting: false,
             reconnecting: false,
@@ -568,33 +574,6 @@ impl Workbench {
             });
         }
     }
-    /// Marks a user action in flight; the label appears only if it outlasts 300ms.
-    fn begin_busy(&mut self, cx: &mut Context<Self>) {
-        let seq = self.store.begin_busy();
-        if let Some(view) = &self.settings {
-            view.update(cx, |v, cx| {
-                v.busy = true;
-                v.save_error = None;
-                cx.notify();
-            });
-        }
-        self.error = None;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(300))
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                if this.store.mark_slow(seq) {
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
-    }
-    fn end_busy(&mut self) {
-        self.store.end_busy();
-    }
     /// Takes a snapshot unless a newer one already arrived by another reply.
     fn apply_workspace(&mut self, w: Workspace, cx: &mut Context<Self>) {
         if w.revision < self.workspace.revision {
@@ -648,64 +627,6 @@ impl Workbench {
             });
         })
         .detach();
-    }
-    pub(super) fn request(&mut self, request: Request, cx: &mut Context<Self>) {
-        if self.store.busy() {
-            self.store.hold(request);
-            return;
-        }
-        self.begin_busy(cx);
-        let task = cx.background_spawn(self.store.send(request));
-        cx.spawn(async move |this, cx| {
-            let reply = task.await;
-            let _ = this.update(cx, |this, cx| {
-                this.end_busy();
-                let received_workspace = matches!(&reply, Ok(Reply::Workspace(_)));
-                match reply {
-                    Ok(Reply::Workspace(w)) => {
-                        this.apply_workspace(w, cx);
-                        if let Some(task) = this.tasks.start_after_save.take() {
-                            this.launch(false, Some(task), cx);
-                        }
-                    }
-                    Ok(_) => (),
-                    Err(e) => {
-                        this.tasks.start_after_save = None;
-                        this.error = Some(e.to_string());
-                    }
-                }
-                if let Some(view) = &this.settings {
-                    view.update(cx, |v, cx| {
-                        v.values = this.workspace.settings.clone();
-                        v.busy = this.store.busy();
-                        v.save_error = this.error.clone();
-                        cx.notify();
-                    });
-                }
-                if received_workspace && this.store.behind(this.workspace.revision) {
-                    this.sync(cx);
-                }
-                if let Some(next) = this.store.next_queued() {
-                    let error = this.error.take();
-                    this.request(next, cx);
-                    this.error = this.error.take().or(error);
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-    /// Sends an edit made on what this window shows, named so a resend applies it once:
-    /// an outcome change carries the outcome and turn seen here, refused if either moved.
-    pub(super) fn edit(&mut self, mut edit: Edit, cx: &mut Context<Self>) {
-        self.workspace.stamp(&mut edit);
-        self.request(
-            Request::Edit {
-                request: Some(mooring_core::protocol::RequestId::fresh()),
-                edit,
-            },
-            cx,
-        );
     }
     /// A pane's asks: `$EDITOR` for a ⌘-clicked `file:line` runs in a new tab.
     pub(super) fn watch_pane(pane: &Entity<Pane>, cx: &mut Context<Self>) {
@@ -1110,7 +1031,7 @@ impl Workbench {
             scheme: crate::ui::theme::Theme::scheme(),
         };
         let tab_id = tab.id.clone();
-        self.begin_busy(cx);
+        self.begin_busy(None, cx);
         let spaces = new_tab.then(|| self.workspace.spaces.clone());
         let job = cx.background_spawn(self.store.launch(cwd_source, spaces, request, tab));
         cx.spawn(async move |this, cx| {
