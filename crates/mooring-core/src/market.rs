@@ -115,16 +115,53 @@ pub fn runs_commands(provides: &[Kind]) -> bool {
     })
 }
 
-/// `1.10.0` is newer than `1.9.2`; parts that are not numbers compare as text.
+/// `1.10.0` is newer than `1.9.2`, as semver orders them: a pre-release (`1.0.0-beta`)
+/// comes before its release, and build metadata (`+abc`) does not count.
 pub fn newer(a: &str, b: &str) -> bool {
-    let parts = |v: &str| -> Vec<(u64, String)> {
-        v.trim()
-            .trim_start_matches('v')
-            .split(['.', '-'])
-            .map(|p| (p.parse().unwrap_or(0), p.to_owned()))
-            .collect()
+    use std::cmp::Ordering;
+    fn split(v: &str) -> (Vec<u64>, Option<Vec<&str>>) {
+        let v = v.trim().trim_start_matches('v');
+        let v = v.split_once('+').map_or(v, |(v, _)| v);
+        let (core, pre) = match v.split_once('-') {
+            Some((core, pre)) => (core, Some(pre.split('.').collect())),
+            None => (v, None),
+        };
+        (
+            core.split('.').map(|p| p.parse().unwrap_or(0)).collect(),
+            pre,
+        )
+    }
+    let ((ca, pa), (cb, pb)) = (split(a), split(b));
+    let width = ca.len().max(cb.len());
+    let pad = |c: &[u64]| {
+        (0..width)
+            .map(|i| c.get(i).copied().unwrap_or(0))
+            .collect::<Vec<_>>()
     };
-    parts(a) > parts(b)
+    match pad(&ca).cmp(&pad(&cb)) {
+        Ordering::Equal => (),
+        o => return o == Ordering::Greater,
+    }
+    match (pa, pb) {
+        (None, None) => false,
+        // The release is newer than any of its pre-releases.
+        (None, Some(_)) => true,
+        (Some(_), None) => false,
+        (Some(x), Some(y)) => {
+            for (p, q) in x.iter().zip(&y) {
+                let o = match (p.parse::<u64>(), q.parse::<u64>()) {
+                    (Ok(p), Ok(q)) => p.cmp(&q),
+                    (Ok(_), Err(_)) => Ordering::Less,
+                    (Err(_), Ok(_)) => Ordering::Greater,
+                    (Err(_), Err(_)) => p.cmp(q),
+                };
+                if o != Ordering::Equal {
+                    return o == Ordering::Greater;
+                }
+            }
+            x.len() > y.len()
+        }
+    }
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -438,6 +475,15 @@ impl Offer {
                     p.id, e.id
                 ));
             }
+            // What you were asked to confirm comes from the listing: the package may
+            // not do more than it says.
+            if let Some(k) = p.provides.iter().find(|k| !e.provides.contains(k)) {
+                return Err(format!(
+                    "{} 的 plugin.json 声明了 {}，目录里没有登记，没有安装",
+                    e.id,
+                    k.label()
+                ));
+            }
             Ok(())
         })();
         if let Err(err) = staged {
@@ -449,8 +495,21 @@ impl Offer {
             .into_iter()
             .find(|f| f.result.as_ref().is_ok_and(|p| p.id == e.id))
             .map(|f| f.dir)
-            .filter(|d| d.parent() == Some(plugins))
-            .unwrap_or_else(|| plugins.join(&e.id));
+            .filter(|d| d.parent() == Some(plugins));
+        let target = match target {
+            Some(dir) => dir,
+            // `<id>` may hold another plugin (an example copied and renamed) or a broken
+            // one someone is writing: never delete it to make room.
+            None if plugins.join(&e.id).exists() => {
+                let _ = std::fs::remove_dir_all(&stage);
+                return Err(format!(
+                    "{} 已被别的东西占用（不是插件 {}），没有安装；把它移走或改名后再装",
+                    plugins.join(&e.id).display(),
+                    e.id
+                ));
+            }
+            None => plugins.join(&e.id),
+        };
         let old = plugins.join(format!(".replaced-{}-{}", e.id, std::process::id()));
         let _ = std::fs::remove_dir_all(&old);
         let had = target.exists();
@@ -602,6 +661,27 @@ mod tests {
     }
 
     #[test]
+    fn versions_order_as_semver_does() {
+        assert!(newer("1.10.0", "1.9.2"));
+        assert!(newer("v2", "1.99.99"));
+        assert!(newer("1.0.1", "1.0"));
+        assert!(!newer("1.0", "1.0.0"));
+        assert!(
+            !newer("1.0.0-beta", "1.0.0"),
+            "a pre-release is older than its release"
+        );
+        assert!(newer("1.0.0", "1.0.0-rc.1"));
+        assert!(newer("1.0.0-beta.11", "1.0.0-beta.2"));
+        assert!(newer("1.0.0-rc.1", "1.0.0-beta"));
+        assert!(newer("1.0.0-alpha.1", "1.0.0-alpha"));
+        assert!(
+            !newer("1.0.0+build.7", "1.0.0"),
+            "build metadata does not count"
+        );
+        assert!(!newer("1.0.0", "1.0.0"));
+    }
+
+    #[test]
     fn remote_offers_replace_bundled_only_when_newer() {
         let offer = |id: &str, v: &str, remote: bool| Offer {
             entry: Entry {
@@ -697,5 +777,56 @@ mod tests {
         assert!(disclosure(&[Kind::Quota], &[], Some(true)).contains(&"会联网".to_owned()));
         // Nothing runs: nothing to say about the network.
         assert_eq!(disclosure(&[Kind::Effects], &[], Some(false)).len(), 1);
+    }
+
+    /// The fallback `<plugins>/<id>` directory may hold a different plugin (a copied
+    /// example whose id was changed): installing refuses instead of deleting it.
+    #[test]
+    fn install_keeps_another_plugin_living_in_the_id_directory() {
+        let catalog = tmp("other-catalog");
+        plugin(&catalog, "quick-sweep", "1.0.0");
+        let offer = Offer {
+            entry: index_of(&catalog).unwrap().plugins[0].clone(),
+            source: Source::Bundled(catalog.clone()),
+        };
+        let plugins = tmp("other-plugins");
+        plugin(&plugins, "other", "0.1.0");
+        std::fs::rename(plugins.join("other"), plugins.join("quick-sweep")).unwrap();
+        let err = offer.install_into(&plugins).unwrap_err();
+        let kept = plugin::check(&plugins.join("quick-sweep")).map(|p| p.id);
+        let entries = std::fs::read_dir(&plugins).unwrap().count();
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(err.contains("占用"), "{err}");
+        assert_eq!(kept.as_deref(), Ok("other"));
+        assert_eq!(entries, 1, "no staging left behind");
+    }
+
+    /// The confirmation for command-running plugins reads the listing's `provides`;
+    /// a package whose plugin.json provides more is refused.
+    #[test]
+    fn install_refuses_a_package_that_provides_more_than_listed() {
+        let catalog = tmp("provides");
+        plugin(&catalog, "sneaky", "1.0.0");
+        let d = catalog.join("sneaky");
+        std::fs::write(
+            d.join("plugin.json"),
+            r#"{"api":1,"id":"sneaky","name":"sneaky","version":"1.0.0","provides":["effects","hooks"]}"#,
+        )
+        .unwrap();
+        std::fs::write(d.join("hooks.json"), r#"{"api":1,"hooks":[]}"#).unwrap();
+        let mut entry = index_of(&catalog).unwrap().plugins[0].clone();
+        entry.provides = vec![Kind::Effects];
+        let offer = Offer {
+            entry,
+            source: Source::Bundled(catalog.clone()),
+        };
+        let plugins = tmp("provides-into");
+        let result = offer.install_into(&plugins);
+        let installed = plugins.join("sneaky").exists();
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(result.is_err_and(|e| e.contains("没有登记")));
+        assert!(!installed);
     }
 }
