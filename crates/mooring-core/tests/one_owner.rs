@@ -117,10 +117,12 @@ fn any_sequence_of_edits_keeps_one_name() {
                             name,
                         })
                         .unwrap(),
-                    Some(mut tab) => {
-                        tab.title = name;
-                        w.edit(Edit::PutTab { tab }).unwrap()
-                    }
+                    Some(tab) => w
+                        .edit(Edit::RenameTab {
+                            id: tab.id,
+                            title: name,
+                        })
+                        .unwrap(),
                     None => (),
                 },
                 1 => w

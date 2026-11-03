@@ -167,24 +167,34 @@ impl Workbench {
         }
     }
     fn drop_pane(&mut self, moving: &str, target: &str, zone: Zone, cx: &mut Context<Self>) {
-        let Some(mut tab) = self.workspace.terminal_tab(target).cloned() else {
+        let Some(tab) = self.workspace.terminal_tab(target).cloned() else {
             return;
         };
         let side = match self.landing_zone(moving, target, zone) {
             Zone::Side(axis, before) => Some((axis, before)),
             Zone::Middle => None,
         };
-        let Some(layout) = (tab.layout.as_ref()).and_then(|l| l.dropped(moving, target, side))
-        else {
+        if (tab.layout.as_ref())
+            .and_then(|l| l.dropped(moving, target, side))
+            .is_none()
+        {
             return;
-        };
-        // Leaving another tab closes it with its last pane (`PutTab`).
-        tab.layout = Some(layout);
+        }
+        // The host moves it in the layout as it is then; leaving another tab closes it
+        // with its last pane.
         self.nav.zoomed = None;
         self.nav.tab = Some(tab.id.clone());
         self.nav.focused = Some(moving.to_owned());
         self.nav.pending_focus = true;
-        self.edit(Edit::PutTab { tab }, cx);
+        let (terminal, target) = (moving.to_owned(), target.to_owned());
+        self.edit(
+            Edit::MovePane {
+                terminal,
+                target,
+                side,
+            },
+            cx,
+        );
     }
     /// 「＋」: a pane dropped on it leaves its tab for one of its own; a tab's only
     /// pane has nothing to leave and is not taken.

@@ -1161,11 +1161,12 @@ fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<
                 axis,
                 before: false,
                 share,
+                forced: false,
             },
             Some(target),
         ),
         Placement::NewTab { id: tab, title } => (
-            Edit::PutTab {
+            Edit::CreateTab {
                 tab: Tab {
                     id: tab,
                     space: source.space.clone(),

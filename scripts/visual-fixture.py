@@ -47,8 +47,7 @@ def rpc(root, obj):
 
 
 def edit(root, obj):
-    w = rpc(root, 'Workspace')['Workspace']
-    r = rpc(root, {'Edit': {'revision': w['revision'], 'edit': obj}})
+    r = rpc(root, {'Edit': {'edit': obj}})
     assert 'Error' not in r, r
     return r
 
@@ -122,7 +121,7 @@ if sys.argv[1] == 'prepare':
     def leaf(p): return {'Leaf': p}
     def split(a, b, axis): return {'Split': {'axis': axis, 'ratio': 5000, 'first': a, 'second': b}}
     for id, title, task, layout in [('feedback', '标签命名依旧有问题', 'task0', split(leaf('p0'), split(leaf('p1'), leaf('p2'), 'Down'), 'Right')), ('start', '健身', 'task1', leaf('pstart'))]:
-        edit(root, {'PutTab': {'tab': {'id': id, 'space': 's0', 'title': title, 'default_task': task, 'closed': False, 'layout': layout}}})
+        edit(root, {'CreateTab': {'tab': {'id': id, 'space': 's0', 'title': title, 'default_task': task, 'closed': False, 'layout': layout}}})
     while True:
         w = rpc(root, 'Workspace')['Workspace']
         if len(w['agent_sessions']) >= 40: break

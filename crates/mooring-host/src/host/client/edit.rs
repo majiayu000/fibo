@@ -61,6 +61,7 @@ fn apply(
         target,
         axis,
         share,
+        forced: false,
         ..
     } = &edit
     {
@@ -70,7 +71,7 @@ fn apply(
     }
     // Closing a tab or a pane ends what ran in it; placement alone never does.
     let stopped = match &edit {
-        Edit::CloseTab { id } => host.workspace.tab_terminals(id),
+        Edit::CloseTab { id, .. } => host.workspace.tab_terminals(id),
         Edit::ClosePane { terminal } => vec![terminal.clone()],
         Edit::RemoveSpace { id } => host
             .workspace

@@ -728,52 +728,58 @@ impl Workbench {
     }
     pub(super) fn finish_drag(&mut self, cx: &mut Context<Self>) {
         self.layout.drop = DropState::default();
-        if self.layout.drag.take().is_none() {
+        let (Some(path), Some(tab)) = (self.layout.drag.take(), self.nav.tab.clone()) else {
             return;
-        }
-        if let Some(tab) = self
-            .workspace
-            .tabs
-            .iter()
-            .find(|t| Some(&t.id) == self.nav.tab.as_ref())
-            .cloned()
-        {
-            self.edit(Edit::PutTab { tab }, cx);
+        };
+        let at = (self.workspace.tabs.iter_mut().find(|t| t.id == tab))
+            .and_then(|t| t.layout.as_mut()?.at_mut(&path).cloned());
+        if let Some(Layout::Split { axis, ratio, .. }) = at {
+            self.edit(
+                Edit::ResizeSplit {
+                    tab,
+                    path,
+                    axis,
+                    ratio,
+                },
+                cx,
+            );
         }
     }
     /// Moves a pane, process and all, beside the panes of another tab or into a tab of
     /// its own, and follows it there. Its old tab closes with its last pane.
     pub(super) fn move_pane(&mut self, terminal: &str, to: Option<&str>, cx: &mut Context<Self>) {
-        let tab = match to {
+        let (id, edit) = match to {
             Some(to) => {
-                let Some(mut tab) = self.workspace.tabs.iter().find(|t| t.id == to).cloned() else {
+                let Some(target) = self.workspace.tab_terminals(to).last().cloned() else {
                     return;
                 };
-                let Some(last) = tab.layout.as_ref().and_then(|l| l.ids().last().cloned()) else {
-                    return;
-                };
-                if !tab
-                    .layout
-                    .as_mut()
-                    .is_some_and(|l| l.split(&last, terminal.to_owned(), Axis::Right))
-                {
-                    return;
-                }
-                tab
+                let side = Some((Axis::Right, false));
+                let terminal = terminal.to_owned();
+                (
+                    to.to_owned(),
+                    Edit::MovePane {
+                        terminal,
+                        target,
+                        side,
+                    },
+                )
             }
-            None => Tab {
-                id: super::id(),
-                space: self.nav.space.clone(),
-                default_task: None,
-                title: String::new(),
-                layout: Some(Layout::Leaf(terminal.to_owned())),
-            },
+            None => {
+                let tab = Tab {
+                    id: super::id(),
+                    space: self.nav.space.clone(),
+                    default_task: None,
+                    title: String::new(),
+                    layout: Some(Layout::Leaf(terminal.to_owned())),
+                };
+                (tab.id.clone(), Edit::CreateTab { tab })
+            }
         };
         self.nav.zoomed = None;
-        self.nav.tab = Some(tab.id.clone());
+        self.nav.tab = Some(id);
         self.nav.focused = Some(terminal.to_owned());
         self.nav.pending_focus = true;
-        self.edit(Edit::PutTab { tab }, cx);
+        self.edit(edit, cx);
     }
     /// The terminal's text, scrollback included, saved under the host's private runtime
     /// directory and opened with `$EDITOR` in a new tab. The host reads it,

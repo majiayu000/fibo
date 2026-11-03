@@ -714,7 +714,7 @@ fn edits_ignore_the_workspace_revision() {
     let stale = h.workspace().revision;
     h.call(Request::Edit {
         request: None,
-        edit: Edit::PutTab {
+        edit: Edit::CreateTab {
             tab: Tab {
                 id: "t".into(),
                 space: "s".into(),
@@ -728,14 +728,20 @@ fn edits_ignore_the_workspace_revision() {
     assert!(h.workspace().revision > stale);
     h.call(Request::Edit {
         request: None,
-        edit: Edit::CloseTab { id: "t".into() },
+        edit: Edit::CloseTab {
+            id: "t".into(),
+            expect: None,
+        },
     })
     .unwrap();
     assert!(h.workspace().tabs.iter().all(|t| t.id != "t"));
     let missing = h
         .call(Request::Edit {
             request: None,
-            edit: Edit::CloseTab { id: "gone".into() },
+            edit: Edit::CloseTab {
+                id: "gone".into(),
+                expect: None,
+            },
         })
         .unwrap_err();
     assert!(missing.to_string().contains("标签不存在"), "{missing}");
@@ -763,7 +769,7 @@ fn launch_is_durable_and_deduplicated_and_tab_close_stops_and_deletes() {
     assert!(h.call(h.launch("one", "sleep 31")).is_err());
     h.call(Request::Edit {
         request: None,
-        edit: Edit::PutTab {
+        edit: Edit::CreateTab {
             tab: Tab {
                 id: "t".into(),
                 space: "s".into(),
@@ -776,7 +782,10 @@ fn launch_is_durable_and_deduplicated_and_tab_close_stops_and_deletes() {
     .unwrap();
     h.call(Request::Edit {
         request: None,
-        edit: Edit::CloseTab { id: "t".into() },
+        edit: Edit::CloseTab {
+            id: "t".into(),
+            expect: None,
+        },
     })
     .unwrap();
     wait_for(&h, "closed tab's terminal exits", |w| {
@@ -933,7 +942,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
     h.call(h.launch("one", &command)).unwrap();
     h.call(Request::Edit {
         request: None,
-        edit: Edit::PutTab {
+        edit: Edit::CreateTab {
             tab: Tab {
                 id: "t".into(),
                 space: "s".into(),
@@ -2169,7 +2178,7 @@ fn nested_split_tree_and_ratios_survive_store_reopen() {
     };
     h.call(Request::Edit {
         request: None,
-        edit: Edit::PutTab { tab },
+        edit: Edit::CreateTab { tab },
     })
     .unwrap();
     // Stop only this isolated fixture's processes before restarting its store.
@@ -4665,7 +4674,7 @@ fn command_line_splits_a_pane_beside_a_terminal_and_closes_it() {
     h.call(h.launch("base", "exec /bin/sh -i")).unwrap();
     h.call(Request::Edit {
         request: None,
-        edit: Edit::PutTab {
+        edit: Edit::CreateTab {
             tab: Tab {
                 id: "t".into(),
                 space: "s".into(),
@@ -6229,7 +6238,7 @@ fn close_in_tab(h: &Host, terminal: &str) {
     let tab = format!("tab-{terminal}");
     h.call(Request::Edit {
         request: None,
-        edit: Edit::PutTab {
+        edit: Edit::CreateTab {
             tab: Tab {
                 id: tab.clone(),
                 space: "s".into(),
@@ -6242,7 +6251,10 @@ fn close_in_tab(h: &Host, terminal: &str) {
     .unwrap();
     h.call(Request::Edit {
         request: None,
-        edit: Edit::CloseTab { id: tab },
+        edit: Edit::CloseTab {
+            id: tab,
+            expect: None,
+        },
     })
     .unwrap();
 }

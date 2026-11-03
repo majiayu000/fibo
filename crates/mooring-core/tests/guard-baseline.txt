@@ -16,7 +16,7 @@ field session-updated	crates/mooring-app/src/workbench/layout.rs	2
 field session-updated	crates/mooring-host/src/host/association.rs	3
 field session-updated	crates/mooring-host/src/host/mod.rs	1
 field tab-title	crates/mooring-app/src/workbench/diagnostics.rs	1
-field tab-title	crates/mooring-app/src/workbench/tabs.rs	3
+field tab-title	crates/mooring-app/src/workbench/tabs.rs	2
 field turn	crates/mooring-host/examples/claim_scan.rs	1
 field turn	crates/mooring-host/src/control.rs	2
 field turn	crates/mooring-host/src/host/client.rs	1

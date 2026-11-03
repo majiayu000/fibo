@@ -327,21 +327,30 @@ pub enum Edit {
         terminal: String,
         task: Option<String>,
     },
-    PutTab {
+    /// Opens a tab. Panes it names that another tab shows move here, and a tab left
+    /// without panes closes. Refused if the id is taken: it never overwrites a tab.
+    CreateTab {
         tab: Tab,
     },
-    /// Removes the tab; the host stops every terminal it held.
+    /// An empty title hands the name back to what runs in the tab.
+    RenameTab {
+        id: String,
+        title: String,
+    },
+    /// Removes the tab; the host stops every terminal it held. With `expect`, the
+    /// terminals the user agreed to end: refused if the tab holds others by now.
     CloseTab {
         id: String,
+        #[serde(default)]
+        expect: Option<Vec<String>>,
     },
     /// Takes one terminal out of its tab, closing the tab with its last pane; the host
     /// stops that terminal.
     ClosePane {
         terminal: String,
     },
-    /// Places a terminal no tab shows yet beside `target`, in `target`'s tab. Scripts and
-    /// other Agents open panes with it (`mooring split`); applied to the host's state
-    /// as it is then, so it never undoes a layout change made meanwhile.
+    /// Places a terminal no tab shows yet beside `target`, in `target`'s tab, applied
+    /// to the layout as it is then, so it never undoes a change made meanwhile.
     SplitPane {
         target: String,
         terminal: String,
@@ -349,6 +358,31 @@ pub enum Edit {
         before: bool,
         /// The new pane's share of the space it splits, in basis points.
         share: u16,
+        /// Split by the user's hand: placed even where the halves come out cramped,
+        /// which scripts and other Agents (`mooring split`) are refused.
+        #[serde(default)]
+        forced: bool,
+    },
+    /// `terminal` dropped on `target`: half of its space on `side` (axis, before), out of
+    /// whichever tab showed it; with no side, the two in one tab trade places.
+    MovePane {
+        terminal: String,
+        target: String,
+        side: Option<(Axis, bool)>,
+    },
+    /// Drags the divider of the split at `path` in `tab`; refused if no split with
+    /// that axis stands there any more.
+    ResizeSplit {
+        tab: String,
+        path: Vec<bool>,
+        axis: Axis,
+        /// The first side's share, in basis points.
+        ratio: u16,
+    },
+    /// A terminal relaunched in place of an interrupted one takes its pane.
+    ReplacePane {
+        old: String,
+        new: String,
     },
     SetOutcome {
         id: String,
@@ -992,65 +1026,15 @@ impl Workspace {
                 }
                 self.tasks.push(task);
             }
-            Edit::PutTab { tab } => {
-                let terminals = tab.layout.as_ref().map(Layout::ids).unwrap_or_default();
-                if tab.layout.as_ref().is_some_and(|l| !l.valid_ratios()) {
-                    return Err("分屏比例必须在 0 与 1 之间".into());
-                }
-                if !self.spaces.iter().any(|s| s.id == tab.space) {
-                    return Err("空间不存在".into());
-                }
-                if tab
-                    .default_task
-                    .as_ref()
-                    .is_some_and(|id| !self.tasks.iter().any(|t| &t.id == id))
-                {
-                    return Err("默认待办不存在".into());
-                }
-                for (i, id) in terminals.iter().enumerate() {
-                    if terminals[..i].contains(id) {
-                        return Err("终端不能重复摆放".into());
-                    }
-                    if !self.terminals.iter().any(|t| &t.id == id) {
-                        return Err("终端不存在".into());
-                    }
-                }
-                // Moving a leaf collapses its old parent, without changing work ownership.
-                for other in &mut self.tabs {
-                    if other.id != tab.id {
-                        for id in &terminals {
-                            other.layout = other.layout.take().and_then(|l| l.without(id));
-                        }
-                    }
-                }
-                if let Some(old) = self.tabs.iter_mut().find(|t| t.id == tab.id) {
-                    *old = tab;
-                } else {
-                    self.tabs.push(tab);
-                }
-                // A tab without panes has nothing to show; it closes with its last pane.
-                self.tabs.retain(|t| t.layout.is_some());
-            }
-            Edit::MoveTab { id, before } => {
-                let from = self
-                    .tabs
-                    .iter()
-                    .position(|t| t.id == id)
-                    .ok_or("标签不存在")?;
-                if before.as_ref() == Some(&id) {
-                    return Ok(());
-                }
-                let tab = self.tabs.remove(from);
-                let to = match &before {
-                    Some(other) => self
-                        .tabs
-                        .iter()
-                        .position(|t| &t.id == other)
-                        .ok_or("目标标签不存在")?,
-                    None => self.tabs.len(),
-                };
-                self.tabs.insert(to, tab);
-            }
+            edit @ (Edit::CreateTab { .. }
+            | Edit::RenameTab { .. }
+            | Edit::MoveTab { .. }
+            | Edit::CloseTab { .. }
+            | Edit::ClosePane { .. }
+            | Edit::SplitPane { .. }
+            | Edit::MovePane { .. }
+            | Edit::ResizeSplit { .. }
+            | Edit::ReplacePane { .. }) => self.edit_tabs(edit)?,
             Edit::RemoveSpace { id } => {
                 if !self.spaces.iter().any(|s| s.id == id) {
                     return Err("空间不存在".into());
@@ -1076,51 +1060,6 @@ impl Workspace {
                 }
                 self.tabs.retain(|t| t.space != id);
                 self.spaces.retain(|s| s.id != id);
-            }
-            Edit::CloseTab { id } => {
-                let before = self.tabs.len();
-                self.tabs.retain(|t| t.id != id);
-                if self.tabs.len() == before {
-                    return Err("标签不存在".into());
-                }
-            }
-            Edit::ClosePane { terminal } => {
-                let tab = self
-                    .tabs
-                    .iter_mut()
-                    .find(|t| t.layout.as_ref().is_some_and(|l| l.contains(&terminal)))
-                    .ok_or("画面不存在")?;
-                tab.layout = tab.layout.take().and_then(|l| l.without(&terminal));
-                self.tabs.retain(|t| t.layout.is_some());
-            }
-            Edit::SplitPane {
-                target,
-                terminal,
-                axis,
-                before,
-                share,
-            } => {
-                if !(1..10000).contains(&share) {
-                    return Err("分屏比例必须在 0 与 1 之间".into());
-                }
-                if !self.terminals.iter().any(|t| t.id == terminal) {
-                    return Err("终端不存在".into());
-                }
-                if self.terminal_tab(&terminal).is_some() {
-                    return Err("终端已经摆在别的画面里".into());
-                }
-                let tab = self
-                    .tabs
-                    .iter_mut()
-                    .find(|t| t.layout.as_ref().is_some_and(|l| l.contains(&target)))
-                    .ok_or("画面不存在")?;
-                let placed = tab
-                    .layout
-                    .as_mut()
-                    .is_some_and(|l| l.split_beside(&target, terminal, axis, before, share));
-                if !placed {
-                    return Err("画面不存在".into());
-                }
             }
             Edit::SetOutcome { id, outcome, seen } => {
                 if let Some(seen) = seen {
@@ -1154,6 +1093,7 @@ impl Workspace {
     }
 }
 
+mod tabs;
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1282,7 +1222,7 @@ mod tests {
         assert!(c.hidden_for(&s).is_some());
     }
     fn tab(w: &mut Workspace, id: &str, space: &str, task: &str) {
-        w.edit(Edit::PutTab {
+        w.edit(Edit::CreateTab {
             tab: Tab {
                 id: id.into(),
                 space: space.into(),
@@ -1457,7 +1397,7 @@ mod tests {
                 id: terminal.into(),
                 ..w.terminals[0].clone()
             });
-            w.edit(Edit::PutTab {
+            w.edit(Edit::CreateTab {
                 tab: Tab {
                     id: tab.into(),
                     space: "a".into(),
@@ -1576,10 +1516,20 @@ mod tests {
         assert_eq!(w.tab_terminals("new"), ["pty"]);
         assert_eq!(w.agent_sessions[0].task.as_deref(), Some("a"));
         assert_eq!(w.terminals[0].space, "a");
-        w.edit(Edit::CloseTab { id: "new".into() }).unwrap();
+        w.edit(Edit::CloseTab {
+            id: "new".into(),
+            expect: None,
+        })
+        .unwrap();
         assert!(w.tabs.is_empty());
         assert!(w.terminal_tab("pty").is_none());
-        assert!(w.edit(Edit::CloseTab { id: "new".into() }).is_err());
+        assert!(
+            w.edit(Edit::CloseTab {
+                id: "new".into(),
+                expect: None
+            })
+            .is_err()
+        );
     }
     #[test]
     fn closing_the_last_pane_closes_its_tab() {
@@ -1588,7 +1538,7 @@ mod tests {
             id: "second".into(),
             ..w.terminals[0].clone()
         });
-        w.edit(Edit::PutTab {
+        w.edit(Edit::CreateTab {
             tab: Tab {
                 id: "t".into(),
                 space: "a".into(),
@@ -1623,7 +1573,7 @@ mod tests {
                 ..w.terminals[0].clone()
             });
         }
-        w.edit(Edit::PutTab {
+        w.edit(Edit::CreateTab {
             tab: Tab {
                 id: "t".into(),
                 space: "a".into(),
@@ -1639,6 +1589,7 @@ mod tests {
             axis: Axis::Right,
             before: false,
             share: 3000,
+            forced: false,
         })
         .unwrap();
         w.edit(Edit::SplitPane {
@@ -1647,6 +1598,7 @@ mod tests {
             axis: Axis::Down,
             before: true,
             share: 2500,
+            forced: false,
         })
         .unwrap();
         let leaf = |id: &str| Box::new(Layout::Leaf(id.into()));
@@ -1670,6 +1622,7 @@ mod tests {
             axis: Axis::Right,
             before: false,
             share: 5000,
+            forced: false,
         };
         assert!(
             w.edit(again).is_err(),
@@ -1681,6 +1634,7 @@ mod tests {
             axis: Axis::Right,
             before: false,
             share: 5000,
+            forced: false,
         };
         assert!(w.edit(missing).is_err());
     }

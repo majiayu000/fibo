@@ -815,7 +815,11 @@ impl Workbench {
         let (tab, edit) = match closing {
             Closing::Host => return self.restart_host(cx),
             Closing::Agent(_) => return,
-            Closing::Tab(id) => (Some(id.clone()), Edit::CloseTab { id }),
+            // What the user agreed to end: refused if an Agent split it meanwhile.
+            Closing::Tab(id) => {
+                let expect = Some(self.workspace.tab_terminals(&id));
+                (Some(id.clone()), Edit::CloseTab { id, expect })
+            }
             Closing::Pane(terminal) => (
                 self.workspace
                     .terminal_tab(&terminal)
@@ -969,7 +973,8 @@ impl Workbench {
             }
         };
         let terminal = id();
-        if let Some(old) = replace {
+        // Where the pane goes, as one operation the host applies to its layout then.
+        let place = if let Some(old) = replace {
             if !tab
                 .layout
                 .as_mut()
@@ -977,16 +982,30 @@ impl Workbench {
             {
                 return;
             }
+            Edit::ReplacePane {
+                old,
+                new: terminal.clone(),
+            }
         } else if let Some(tree) = &mut tab.layout {
-            let Some((target, axis)) = &source else {
+            let Some((target, axis)) = source.clone() else {
                 return;
             };
-            if !tree.split(target, terminal.clone(), *axis) {
+            if !tree.split(&target, terminal.clone(), axis) {
                 return;
+            }
+            let (terminal, before, share, forced) = (terminal.clone(), false, 5000, true);
+            Edit::SplitPane {
+                target,
+                terminal,
+                axis,
+                before,
+                share,
+                forced,
             }
         } else {
             tab.layout = Some(Layout::Leaf(terminal.clone()));
-        }
+            Edit::CreateTab { tab: tab.clone() }
+        };
         let task_cwd = task_id
             .as_ref()
             .and_then(|id| self.workspace.tasks.iter().find(|t| &t.id == id))
@@ -1033,7 +1052,7 @@ impl Workbench {
         let tab_id = tab.id.clone();
         self.begin_busy(None, cx);
         let spaces = new_tab.then(|| self.workspace.spaces.clone());
-        let job = cx.background_spawn(self.store.launch(cwd_source, spaces, request, tab));
+        let job = cx.background_spawn(self.store.launch(cwd_source, spaces, request, place));
         cx.spawn(async move |this, cx| {
             let reply = job.await;
             let _ = this.update(cx, |this, cx| {

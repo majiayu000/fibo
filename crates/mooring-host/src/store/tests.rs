@@ -114,7 +114,12 @@ fn reopen_drops_tabs_an_older_build_only_hid_and_tabs_without_panes() {
             .unwrap();
     assert_eq!(rows, 1);
     let mut closed = loaded.clone();
-    closed.edit(Edit::CloseTab { id: "kept".into() }).unwrap();
+    closed
+        .edit(Edit::CloseTab {
+            id: "kept".into(),
+            expect: None,
+        })
+        .unwrap();
     let mut db = db;
     db.save(&loaded, &closed).unwrap();
     drop(db);

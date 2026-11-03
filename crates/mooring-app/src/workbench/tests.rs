@@ -123,9 +123,11 @@ fn reopening_full_tab_replaces_exact_slot_and_preserves_history() {
     replacement.id = "new".into();
     replacement.state = ProcessState::Running;
     w.terminals.push(replacement);
-    let mut tab = w.tabs[0].clone();
-    assert!(tab.layout.as_mut().unwrap().replace("t1", "new"));
-    w.edit(Edit::PutTab { tab }).unwrap();
+    w.edit(Edit::ReplacePane {
+        old: "t1".into(),
+        new: "new".into(),
+    })
+    .unwrap();
     assert_eq!(w.tab_terminals("tab"), ["t0", "new", "t2", "t3"]);
     assert!(w.terminal_tab("t1").is_none());
     assert_eq!(w.terminals[1].state, ProcessState::Interrupted);
@@ -136,9 +138,10 @@ fn reopening_full_tab_replaces_exact_slot_and_preserves_history() {
 fn closing_interrupted_pane_only_removes_its_placement() {
     let mut w = fixture();
     let history = w.agent_sessions.clone();
-    let mut tab = w.tabs[0].clone();
-    tab.layout = tab.layout.take().unwrap().without("t1");
-    w.edit(Edit::PutTab { tab }).unwrap();
+    w.edit(Edit::ClosePane {
+        terminal: "t1".into(),
+    })
+    .unwrap();
     assert_eq!(w.tab_terminals("tab"), ["t0", "t2", "t3"]);
     assert_eq!(w.terminals.len(), 4);
     assert_eq!(w.agent_sessions, history);
@@ -382,7 +385,10 @@ fn requests_wait_behind_a_busy_action_and_only_repeats_are_dropped() {
         edit,
     };
     for queued in [
-        edit(Edit::CloseTab { id: "tab".into() }),
+        edit(Edit::CloseTab {
+            id: "tab".into(),
+            expect: None,
+        }),
         edit(Edit::SetTaskOutcome {
             seen: None,
             id: "task".into(),

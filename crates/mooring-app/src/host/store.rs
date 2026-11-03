@@ -141,7 +141,8 @@ impl Store {
         let socket = self.socket.clone();
         async move { deliver(&socket, &request, PATIENCE) }
     }
-    /// Launches a terminal, then saves the tab that shows it. A split from a running
+    /// Launches a terminal, then places it (`place`: a new tab, a split, a relaunch in
+    /// an old pane's place), each resent with the same id while the host is away. A split from a running
     /// shell first asks the host for that shell's current directory. Given `spaces`, a
     /// new tab whose directory lies in a space inside its own goes to that space.
     pub fn launch(
@@ -149,7 +150,7 @@ impl Store {
         cwd_source: Option<String>,
         spaces: Option<Vec<Space>>,
         mut request: Request,
-        mut tab: Tab,
+        mut place: Edit,
     ) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();
         async move {
@@ -164,20 +165,19 @@ impl Store {
             if let Some(spaces) = spaces
                 && let Request::Launch { space, cwd, .. } = &mut request
                 && let Some(narrower) = narrower_space(&spaces, space, cwd)
+                && let Edit::CreateTab { tab } = &mut place
             {
                 space.clone_from(&narrower.id);
                 tab.space.clone_from(&narrower.id);
             }
-            let Reply::Workspace(_) = rpc(&socket, &request)? else {
+            let Reply::Workspace(_) = deliver(&socket, &request, PATIENCE).into_result()? else {
                 return Err(std::io::Error::other("launch response missing"));
             };
-            rpc(
-                &socket,
-                &Request::Edit {
-                    request: None,
-                    edit: Edit::PutTab { tab },
-                },
-            )
+            let place = Request::Edit {
+                request: Some(RequestId::fresh()),
+                edit: place,
+            };
+            deliver(&socket, &place, PATIENCE).into_result()
         }
     }
 }

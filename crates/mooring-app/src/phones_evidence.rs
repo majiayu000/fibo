@@ -53,7 +53,7 @@ pub(super) fn start(
             });
             call(Request::Edit {
                 request: None,
-                edit: Edit::PutTab {
+                edit: Edit::CreateTab {
                     tab: Tab { id: format!("tab-{tid}"), space: space.clone(), default_task: None, title: tid.into(), layout: Some(Layout::Leaf(tid.into())) },
                 },
             });

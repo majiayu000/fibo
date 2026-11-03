@@ -51,6 +51,12 @@ impl Host {
         };
         send(&mut s, CONTROL, &edit).unwrap();
     }
+    fn workspace(&self) -> Workspace {
+        match rpc(&self.root.join("workbench.sock"), &Request::Workspace).unwrap() {
+            Reply::Workspace(w) => w,
+            other => panic!("{other:?}"),
+        }
+    }
     fn tasks(&self) -> Vec<String> {
         match rpc(&self.root.join("workbench.sock"), &Request::Workspace).unwrap() {
             Reply::Workspace(w) => w.tasks.into_iter().map(|t| t.id).collect(),
@@ -191,6 +197,99 @@ fn a_write_made_while_the_host_is_away_lands_once_it_is_back() {
         matches!(gone, Settled::Unknown { sent: false, .. }),
         "{gone:?}"
     );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Step D's acceptance on a real host: an Agent's split (`mooring split`), the window's
+/// rename and divider drag all stay; closing a tab that gained a pane since the user
+/// agreed is refused and ends nothing.
+#[test]
+fn layout_changes_from_two_hands_all_stay() {
+    use mooring_core::layout::{Axis, Layout};
+    let root = std::env::temp_dir().join(format!("kl-rq-{}", uuid::Uuid::new_v4().simple()));
+    let h = Host::start(&root);
+    h.call(
+        None,
+        Edit::AddSpace(Space {
+            id: "s".into(),
+            name: "Tests".into(),
+            cwd: "/tmp".into(),
+        }),
+    )
+    .unwrap();
+    let socket = root.join("workbench.sock");
+    for id in ["a", "b", "agent"] {
+        let launch = Request::Launch {
+            id: id.into(),
+            space: "s".into(),
+            argv: vec!["/bin/sh".into(), "-c".into(), "sleep 30".into()],
+            cwd: "/tmp".into(),
+            cols: 160,
+            rows: 48,
+            scheme: Default::default(),
+        };
+        rpc(&socket, &launch).unwrap();
+    }
+    let leaf = |id: &str| Box::new(Layout::Leaf(id.into()));
+    let tab = Tab {
+        id: "t".into(),
+        space: "s".into(),
+        default_task: None,
+        title: String::new(),
+        layout: Some(Layout::Split {
+            axis: Axis::Right,
+            ratio: 5000,
+            first: leaf("a"),
+            second: leaf("b"),
+        }),
+    };
+    h.call(Some(RequestId::fresh()), Edit::CreateTab { tab })
+        .unwrap();
+    // What the window saw before the Agent split.
+    let seen = h.workspace();
+    let agreed = Some(seen.tab_terminals("t"));
+    h.call(
+        None,
+        Edit::SplitPane {
+            target: "b".into(),
+            terminal: "agent".into(),
+            axis: Axis::Down,
+            before: false,
+            share: 5000,
+            forced: false,
+        },
+    )
+    .unwrap();
+    let rename = Edit::RenameTab {
+        id: "t".into(),
+        title: "部署".into(),
+    };
+    h.call(Some(RequestId::fresh()), rename).unwrap();
+    let drag = Edit::ResizeSplit {
+        tab: "t".into(),
+        path: vec![],
+        axis: Axis::Right,
+        ratio: 3000,
+    };
+    h.call(Some(RequestId::fresh()), drag).unwrap();
+    let w = h.workspace();
+    let t = w.tabs.iter().find(|t| t.id == "t").unwrap();
+    assert_eq!(t.title, "部署");
+    assert_eq!(w.tab_terminals("t"), ["a", "b", "agent"]);
+    assert!(matches!(t.layout, Some(Layout::Split { ratio: 3000, .. })));
+    let close = |expect| Edit::CloseTab {
+        id: "t".into(),
+        expect,
+    };
+    let refused = h.call(Some(RequestId::fresh()), close(agreed)).unwrap_err();
+    assert!(refused.to_string().contains("再确认"), "{refused}");
+    let w = h.workspace();
+    assert_eq!(w.tab_terminals("t"), ["a", "b", "agent"]);
+    assert!(w.terminals.iter().all(|t| t.state == ProcessState::Running));
+    h.call(Some(RequestId::fresh()), close(Some(w.tab_terminals("t"))))
+        .unwrap();
+    assert!(h.workspace().tabs.is_empty());
+    drop(h);
     let _ = fs::remove_dir_all(&root);
 }
 

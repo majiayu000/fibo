@@ -55,7 +55,7 @@ impl Workbench {
             };
             self.nav.tab = Some(tab.id.clone());
             self.nav.overview = false;
-            self.edit(Edit::PutTab { tab }, cx);
+            self.edit(Edit::CreateTab { tab }, cx);
         }
     }
     /// Shows the tab holding `terminal_id` and focuses its pane; false when no tab holds it.

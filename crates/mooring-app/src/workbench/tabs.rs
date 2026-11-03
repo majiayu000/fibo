@@ -124,7 +124,7 @@ impl Workbench {
         let Some((id, field, _)) = self.layout.renaming_tab.take() else {
             return;
         };
-        let Some(mut tab) = self.workspace.tabs.iter().find(|t| t.id == id).cloned() else {
+        let Some(tab) = self.workspace.tabs.iter().find(|t| t.id == id).cloned() else {
             return;
         };
         let name = field.read(cx).text.trim().to_owned();
@@ -162,12 +162,12 @@ impl Workbench {
             return;
         }
         // Keeping the shown name unchanged must not pin today's automatic title.
-        tab.title = if tab.title.is_empty() && name == self.tab_name(&tab, cx) {
+        let title = if tab.title.is_empty() && name == self.tab_name(&tab, cx) {
             String::new()
         } else {
             name
         };
-        self.edit(Edit::PutTab { tab }, cx);
+        self.edit(Edit::RenameTab { id: tab.id, title }, cx);
         cx.notify();
     }
 }

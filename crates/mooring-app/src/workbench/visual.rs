@@ -167,6 +167,7 @@ impl Workbench {
                     })
                     .collect();
             }
+            // A new tab takes every pane; the old ones close as they empty.
             if let Some(mut tab) = self
                 .workspace
                 .tabs
@@ -174,19 +175,27 @@ impl Workbench {
                 .find(|t| t.id == "eight")
                 .cloned()
             {
+                tab.id = "eight-all".into();
                 tab.layout = leaves.pop();
                 if let Ok(Reply::Workspace(w)) = rpc(
                     self.store.socket(),
                     &Request::Edit {
                         request: None,
-                        edit: Edit::PutTab { tab },
+                        edit: Edit::CreateTab { tab },
                     },
                 ) {
                     self.workspace = w;
                 }
             }
         }
-        self.nav.tab = Some(if name == "menu" { "nested" } else { name }.into());
+        self.nav.tab = Some(
+            match name {
+                "menu" => "nested",
+                "eight" => "eight-all",
+                name => name,
+            }
+            .into(),
+        );
         self.sync_panes(cx);
         if let Some(id) = self
             .nav
@@ -1576,15 +1585,8 @@ impl Workbench {
             .cloned()
             .collect();
         for (tab, name) in tabs.into_iter().zip(names) {
-            self.edit(
-                Edit::PutTab {
-                    tab: Tab {
-                        title: (*name).into(),
-                        ..tab
-                    },
-                },
-                cx,
-            );
+            let title = (*name).into();
+            self.edit(Edit::RenameTab { id: tab.id, title }, cx);
         }
     }
     /// Shows space `id` as a click on it in the sidebar does.

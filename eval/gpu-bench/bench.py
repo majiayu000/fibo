@@ -80,12 +80,11 @@ class Fixture:
             if isinstance(r, dict) and 'Error' in r: raise RuntimeError(r)
             return r
     def edit(self, obj):
-        rev = self.rpc('Workspace')['Workspace']['revision']
-        return self.rpc({'Edit': {'revision': rev, 'edit': obj}})
+        return self.rpc({'Edit': {'edit': obj}})
     def launch(self, id, script):
         self.rpc({'Launch': {'id': id, 'space': 's', 'argv': ['/bin/sh', '-c', script], 'cwd': str(self.root), 'cols': 100, 'rows': 30}})
     def tab(self, id, tree):
-        self.edit({'PutTab': {'tab': {'id': id, 'space': 's', 'title': id, 'default_task': None, 'closed': False, 'layout': tree}}})
+        self.edit({'CreateTab': {'tab': {'id': id, 'space': 's', 'title': id, 'default_task': None, 'closed': False, 'layout': tree}}})
     def close(self):
         self.host.terminate(); self.host.wait(5)
         # The app takes the terminals over into its own detached host, which outlives both

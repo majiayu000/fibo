@@ -49,11 +49,15 @@ impl Settled {
     }
 }
 
-/// Safe to send again after it may have arrived: a named edit, or one that only reads.
+/// Safe to send again after it may have arrived: a named edit, a launch (its id makes
+/// it once), or one that only reads.
 pub fn resendable(request: &Request) -> bool {
     match request {
         Request::Edit { request, .. } => request.is_some(),
-        Request::Workspace | Request::RecognitionStatus | Request::ReloadPlugins => true,
+        Request::Launch { .. }
+        | Request::Workspace
+        | Request::RecognitionStatus
+        | Request::ReloadPlugins => true,
         _ => false,
     }
 }
@@ -155,7 +159,10 @@ mod tests {
     fn named() -> Request {
         Request::Edit {
             request: Some(RequestId::fresh()),
-            edit: Edit::CloseTab { id: "t".into() },
+            edit: Edit::CloseTab {
+                id: "t".into(),
+                expect: None,
+            },
         }
     }
     const SHORT: Duration = Duration::from_millis(700);
