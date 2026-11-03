@@ -6018,6 +6018,7 @@ fn the_js_phone_client_chats_through_a_real_relay() {
 /// on 127.0.0.1:8790, an Agent that answers whatever it is sent and one stopped on an
 /// approval, prints a pairing link, and runs until killed:
 /// `cargo test -p mooring-host --test managed_session -- --ignored --exact phone_demo_machine --nocapture`
+/// (prefix `MOORING_DEMO_LAN=<Wi-Fi address>` to pair a real phone on the same network)
 #[test]
 #[ignore = "manual: a demo machine for the phone app"]
 fn phone_demo_machine() {
@@ -6082,7 +6083,16 @@ fn phone_demo_machine() {
     );
     h.call(h.launch("shell", "exec cat")).unwrap();
 
-    let (base, _stop, _relay) = local_relay("127.0.0.1:8790", Default::default());
+    // MOORING_DEMO_LAN=<this Mac's Wi-Fi address> listens on every interface, so a real
+    // phone on the same network can pair; otherwise only this machine and its simulators.
+    let lan = std::env::var("MOORING_DEMO_LAN").ok();
+    let listen = if lan.is_some() {
+        "0.0.0.0:8790"
+    } else {
+        "127.0.0.1:8790"
+    };
+    let (bound, _stop, _relay) = local_relay(listen, Default::default());
+    let base = lan.map_or(bound, |ip| format!("ws://{ip}:8790"));
     let root = h.root.to_string_lossy().into_owned();
     let link = pair(&root, &base, "演示手机", "full");
     let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))

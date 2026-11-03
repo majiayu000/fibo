@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { refresh, remote, useHub } from '@/remote/hub';
 import { cardTitle } from '@/ui/format';
@@ -63,6 +64,7 @@ function Bubble({ m, t }: { m: Message | (Pending & { role: 'user'; pending: tru
 export default function Chat() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
+  const header = useHeaderHeight();
   const { machine, terminal } = useLocalSearchParams<{ machine: string; terminal: string }>();
   const { machines } = useHub();
   const m = machines.find((x) => x.id === machine);
@@ -190,8 +192,10 @@ export default function Chat() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: t.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      // Android draws edge to edge, so the window no longer shrinks for the keyboard there
+      // either: both platforms push the composer up themselves, below the real header.
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
+      keyboardVerticalOffset={header}
     >
       <Stack.Screen options={{ title: card ? cardTitle(card) : '对话' }} />
       {!online && (
