@@ -1,0 +1,208 @@
+//! What a plugin does to the computer when it is put to use and when it is taken away
+//! (`setup.json`): `setup` runs when the plugin is installed, updated or turned on,
+//! `teardown` when it is turned off or uninstalled. A plugin that changes another
+//! program's settings (wraps Claude Code's status line, say) does it here and puts them
+//! back in `teardown`, so taking the plugin away leaves nothing of it behind.
+//!
+//! Both run with `sh -c` in the plugin's directory. `MOORING_PLUGIN_DIR` is that
+//! directory, `MOORING_PLUGIN_DATA` a directory of the plugin's own that survives updates
+//! and reinstalls (`<config>/plugin-data/<id>`): the place to keep what `teardown` needs.
+//! `setup` must be safe to run again on an installed plugin: an update runs it once more.
+use serde::Deserialize;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+/// The `setup.json` format's major version.
+pub const API: u32 = 1;
+pub const MAX_TIMEOUT_MS: u64 = 30_000;
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Setup {
+    api: u32,
+    pub setup: String,
+    pub teardown: String,
+    #[serde(default = "default_timeout")]
+    pub timeout_ms: u64,
+}
+fn default_timeout() -> u64 {
+    10_000
+}
+
+/// Which of the two to run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    Setup,
+    Teardown,
+}
+
+pub fn read(file: &Path) -> Result<Setup, String> {
+    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let s: Setup = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    if s.api != API {
+        return Err(format!(
+            "安装步骤格式是 api {}，这个版本只认 api {API}",
+            s.api
+        ));
+    }
+    if s.setup.trim().is_empty() || s.teardown.trim().is_empty() {
+        return Err("setup 和 teardown 都要写：装上时做了什么，卸载时就要能撤回".into());
+    }
+    if !(100..=MAX_TIMEOUT_MS).contains(&s.timeout_ms) {
+        return Err(format!("timeout_ms 要在 100 到 {MAX_TIMEOUT_MS} 之间"));
+    }
+    Ok(s)
+}
+
+/// The report line for the settings page.
+pub fn load(files: Vec<PathBuf>) -> Vec<crate::agent::Loaded> {
+    files
+        .into_iter()
+        .map(|file| crate::agent::Loaded {
+            result: read(&file).map(|_| "setup、teardown".to_owned()),
+            file,
+        })
+        .collect()
+}
+
+/// `<plugins>/../plugin-data/<id>`: kept when the plugin is updated or reinstalled.
+pub fn data_dir(plugins: &Path, id: &str) -> PathBuf {
+    plugins
+        .parent()
+        .unwrap_or(plugins)
+        .join("plugin-data")
+        .join(id)
+}
+
+/// Runs `phase` of the plugin in `dir` (whose plugins directory is `plugins`), when it
+/// has a `setup.json`; nothing to do is success. Blocks up to its timeout. The error
+/// carries what the command printed, for the settings page.
+pub fn run(plugins: &Path, dir: &Path, phase: Phase) -> Result<(), String> {
+    let file = dir.join("setup.json");
+    if !file.is_file() {
+        return Ok(());
+    }
+    let p = crate::plugin::check(dir)?;
+    if !p.provides.contains(&crate::plugin::Kind::Setup) {
+        return Ok(());
+    }
+    let s = read(&file)?;
+    let data = data_dir(plugins, &p.id);
+    create_private_dir(&data).map_err(|e| format!("建不了 {}：{e}", data.display()))?;
+    let (name, command) = match phase {
+        Phase::Setup => ("setup", &s.setup),
+        Phase::Teardown => ("teardown", &s.teardown),
+    };
+    let mut child = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(command)
+        .current_dir(dir)
+        .env("MOORING_PLUGIN_DIR", dir)
+        .env("MOORING_PLUGIN_DATA", &data)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("{name} 启动不了：{e}"))?;
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut out = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.by_ref().take(16 * 1024).read_to_end(&mut out);
+            }
+            out
+        })
+    };
+    let stdout = drain(child.stdout.take().map(|p| Box::new(p) as _));
+    let stderr = drain(child.stderr.take().map(|p| Box::new(p) as _));
+    let deadline = Instant::now() + Duration::from_millis(s.timeout_ms);
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break status,
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("{name} 超过 {} ms，已停止", s.timeout_ms));
+            }
+            None => std::thread::sleep(Duration::from_millis(10)),
+        }
+    };
+    let out = [stderr.join(), stdout.join()]
+        .into_iter()
+        .flatten()
+        .map(|b| String::from_utf8_lossy(&b).trim().to_owned())
+        .find(|s| !s.is_empty())
+        .unwrap_or_default();
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{name} 失败（{}）{}",
+            status
+                .code()
+                .map_or("被信号停止".into(), |c| format!("退出码 {c}")),
+            if out.is_empty() {
+                String::new()
+            } else {
+                format!("：{}", crate::content::short(&out, 300))
+            }
+        ))
+    }
+}
+
+fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_and_teardown_run_in_the_plugin_with_a_data_directory() {
+        let root = std::env::temp_dir().join(format!("kl-setup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let plugins = root.join("plugins");
+        let dir = plugins.join("wrap");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"api":1,"id":"wrap","name":"W","provides":["setup"]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("setup.json"),
+            r#"{"api":1,"setup":"pwd > \"$MOORING_PLUGIN_DATA/on\"","teardown":"echo 还原不了 >&2; exit 3"}"#,
+        )
+        .unwrap();
+        run(&plugins, &dir, Phase::Setup).unwrap();
+        let data = root.join("plugin-data/wrap");
+        let pwd = std::fs::read_to_string(data.join("on")).unwrap();
+        assert_eq!(
+            Path::new(pwd.trim()).canonicalize().unwrap(),
+            dir.canonicalize().unwrap()
+        );
+        let err = run(&plugins, &dir, Phase::Teardown).unwrap_err();
+        assert!(
+            err.contains("退出码 3") && err.contains("还原不了"),
+            "{err}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn both_steps_are_required() {
+        let root = std::env::temp_dir().join(format!("kl-setup-bad-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let f = root.join("setup.json");
+        std::fs::write(&f, r#"{"api":1,"setup":"true","teardown":" "}"#).unwrap();
+        assert!(read(&f).unwrap_err().contains("撤回"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

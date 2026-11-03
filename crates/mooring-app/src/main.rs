@@ -292,6 +292,7 @@ fn run() -> io::Result<()> {
     mooring_core::hook::install();
     mooring_core::decoration::install();
     mooring_core::effect::install();
+    mooring_core::quota::install();
     let args: Vec<String> = std::env::args().collect();
     // Without the feature the flag would be ignored and the app would just run, so a
     // scripted run waits out its timeout with no picture. Say so and stop instead: the

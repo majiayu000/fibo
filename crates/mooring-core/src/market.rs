@@ -85,6 +85,8 @@ pub fn permissions(provides: &[Kind]) -> Vec<&'static str> {
             Kind::Rules => "只决定哪些命令算跑过验证，不运行任何东西",
             Kind::Sidebar => "只决定左栏怎么排；WASM 排法在沙盒里跑，读不到文件和网络",
             Kind::Effects => "只挑选标记完成时播哪种动画，不运行任何东西",
+            Kind::Setup => "装上、更新或打开时运行它的 setup 命令，停用或卸载时运行 teardown 撤回，可以改别的程序的设置",
+            Kind::Quota => "读它指定的文件或定时运行它写的命令，取某个 Agent 的额度",
         });
     }
     out
@@ -94,7 +96,12 @@ pub fn runs_commands(provides: &[Kind]) -> bool {
     provides.iter().any(|k| {
         matches!(
             k,
-            Kind::Actions | Kind::Hooks | Kind::Decorations | Kind::Agent
+            Kind::Actions
+                | Kind::Hooks
+                | Kind::Decorations
+                | Kind::Agent
+                | Kind::Setup
+                | Kind::Quota
         )
     })
 }
@@ -120,7 +127,7 @@ fn sha256(bytes: &[u8]) -> String {
 
 /// A listed path that stays inside the plugin's directory: relative, no `..`, no hidden
 /// segments, no backslashes.
-fn safe_path(path: &str) -> bool {
+pub(crate) fn safe_path(path: &str) -> bool {
     let p = Path::new(path);
     !path.is_empty()
         && !path.contains('\\')
@@ -161,6 +168,7 @@ pub fn shipped_files(plugin: &Plugin) -> Vec<PathBuf> {
     for kind in &plugin.provides {
         files.extend(kind.files(&plugin.dir));
     }
+    files.extend(plugin.files.iter().cloned());
     if plugin.provides.contains(&Kind::Sidebar)
         && let Ok(bytes) = std::fs::read(plugin.dir.join("sidebar.json"))
         && let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes)
@@ -419,6 +427,13 @@ impl Offer {
             return Err(format!("装不进 {}：{err}", target.display()));
         }
         let _ = std::fs::remove_dir_all(&old);
+        // Installed or updated: it does what it sets up now (again, after an update),
+        // unless it was turned off.
+        if !plugin::turned_off(plugins, &e.id) {
+            crate::setup::run(plugins, &target, crate::setup::Phase::Setup).map_err(|err| {
+                format!("装好了，但 {err}；修好后在 设置 › 插件 里停用再打开可以重试")
+            })?;
+        }
         Ok(target)
     }
     /// Installs it into this process's plugins directory (after `plugin::install`).

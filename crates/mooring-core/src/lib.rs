@@ -13,6 +13,7 @@ pub mod protocol;
 pub mod quota;
 pub mod reason;
 pub mod rule;
+pub mod setup;
 pub mod sidebar;
 pub mod status;
 pub mod terminal;

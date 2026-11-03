@@ -1,11 +1,17 @@
-//! Account usage limits, as each CLI records them on this machine: Codex in its
-//! conversation logs, Claude Code through its status line (kept by Mooring's wrapper),
-//! Grok in its own log when it starts. Mooring never asks a provider for them: a reading
-//! is only as fresh as the last record, so every use keeps its time. Cursor and Qoder
-//! record no limit locally (Qoder only the credits each reply cost).
+//! Account usage limits. Built in: what a CLI records on this machine anyway, Codex in
+//! its conversation logs and Grok in its own log when it starts. Everything else comes
+//! from plugins (`quota.json`): a file a plugin keeps up to date (the `claude-quota`
+//! plugin saves what Claude Code hands its status line) or a command it runs. Mooring
+//! itself never asks a provider: a reading is only as fresh as its source, so every use
+//! keeps its time.
+use crate::agent::Loaded;
 use crate::model::{Agent, Workspace};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Readings older than this are left out: that CLI has not been used for a week.
 pub const SHOWN_FOR: u64 = 7 * 86_400;
@@ -50,17 +56,25 @@ impl Window {
     }
 }
 
-/// The newest reading of each CLI used in the last week, in the app's agent order.
-pub fn latest(w: &Workspace, now: u64) -> Vec<(Agent, &Quota)> {
+/// The newest reading of each CLI used in the last week, in the app's agent order: from
+/// its sessions and from plugins (`plugins`, what `from_plugins` returned).
+pub fn latest<'a>(
+    w: &'a Workspace,
+    plugins: &'a [(Agent, Quota)],
+    now: u64,
+) -> Vec<(Agent, &'a Quota)> {
     let mut newest: HashMap<Agent, &Quota> = HashMap::new();
-    for s in &w.agent_sessions {
-        let Some(q) = w.content.get(&s.id).and_then(|c| c.quota.as_ref()) else {
-            continue;
-        };
+    let sessions = w.agent_sessions.iter().filter_map(|s| {
+        w.content
+            .get(&s.id)
+            .and_then(|c| c.quota.as_ref())
+            .map(|q| (s.runtime, q))
+    });
+    for (agent, q) in sessions.chain(plugins.iter().map(|(a, q)| (*a, q))) {
         if q.windows.is_empty() || now.saturating_sub(q.at) > SHOWN_FOR {
             continue;
         }
-        let slot = newest.entry(s.runtime).or_insert(q);
+        let slot = newest.entry(agent).or_insert(q);
         if q.at > slot.at {
             *slot = q;
         }
@@ -74,6 +88,329 @@ pub fn latest(w: &Workspace, now: u64) -> Vec<(Agent, &Quota)> {
         )
     });
     out
+}
+
+/// The `quota.json` format's major version.
+pub const API: u32 = 1;
+
+/// One Agent's limits as a plugin provides them: a JSON document, from a file or from a
+/// command's output, and where in it each window's numbers are (JSON pointers).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Source {
+    /// The Agent's executable (`claude`) or name (`Claude`).
+    pub agent: String,
+    /// A JSON file: relative to the plugin's data directory (`MOORING_PLUGIN_DATA`), or
+    /// absolute, or under `~/`. Read again whenever it changes.
+    #[serde(default)]
+    pub file: Option<String>,
+    /// Or a command printing the JSON, run with `sh -c` in the plugin's directory every
+    /// `refresh_s` while the app runs.
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default = "default_refresh")]
+    pub refresh_s: u64,
+    /// When it was recorded, Unix seconds; without it, when the file last changed or the
+    /// command ran.
+    #[serde(default)]
+    pub at: Option<String>,
+    /// The plan's name, if the document has one.
+    #[serde(default)]
+    pub plan: Option<String>,
+    pub windows: Vec<WindowField>,
+    /// The plugin's directory and data directory.
+    #[serde(skip)]
+    pub dir: PathBuf,
+    #[serde(skip)]
+    pub data: PathBuf,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WindowField {
+    pub minutes: u32,
+    /// Percent used, a number.
+    pub used: String,
+    /// When it resets, Unix seconds.
+    #[serde(default)]
+    pub resets_at: Option<String>,
+}
+fn default_refresh() -> u64 {
+    300
+}
+/// How long a command may take.
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
+
+impl Source {
+    /// The Agent it is for, once the registry knows it.
+    pub fn agent(&self) -> Option<Agent> {
+        Agent::from_executable(&self.agent).or_else(|| {
+            Agent::all()
+                .into_iter()
+                .find(|a| a.key().eq_ignore_ascii_case(&self.agent))
+        })
+    }
+    fn path(&self) -> Option<PathBuf> {
+        let f = self.file.as_deref()?;
+        Some(if let Some(rest) = f.strip_prefix("~/") {
+            PathBuf::from(std::env::var_os("HOME")?).join(rest)
+        } else if Path::new(f).is_absolute() {
+            PathBuf::from(f)
+        } else {
+            self.data.join(f)
+        })
+    }
+    /// The reading in `doc`; `at` when the document does not say when. None without a
+    /// window: an account with no limits there (an API key) shows nothing.
+    pub fn reading(&self, doc: &Value, at: u64) -> Option<Quota> {
+        let num = |ptr: &str| doc.pointer(ptr).and_then(Value::as_f64);
+        let windows: Vec<Window> = self
+            .windows
+            .iter()
+            .filter_map(|w| {
+                Some(Window {
+                    minutes: w.minutes,
+                    used: num(&w.used)?.round().clamp(0., 999.) as u16,
+                    resets_at: w
+                        .resets_at
+                        .as_deref()
+                        .and_then(num)
+                        .map_or(0, |t| t.max(0.) as u64),
+                })
+            })
+            .collect();
+        (!windows.is_empty()).then(|| Quota {
+            at: self
+                .at
+                .as_deref()
+                .and_then(num)
+                .map_or(at, |t| t.max(0.) as u64),
+            plan: self
+                .plan
+                .as_deref()
+                .and_then(|p| doc.pointer(p))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            windows,
+        })
+    }
+    fn run(&self) -> Result<Value, String> {
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(self.command.as_deref().unwrap_or_default())
+            .current_dir(&self.dir)
+            .env("MOORING_PLUGIN_DIR", &self.dir)
+            .env("MOORING_PLUGIN_DATA", &self.data)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        let mut stdout = child.stdout.take().expect("piped");
+        let reader = std::thread::spawn(move || {
+            let mut out = Vec::new();
+            let _ = stdout.by_ref().take(1024 * 1024).read_to_end(&mut out);
+            out
+        });
+        let deadline = Instant::now() + COMMAND_TIMEOUT;
+        let status = loop {
+            match child.try_wait().map_err(|e| e.to_string())? {
+                Some(status) => break status,
+                None if Instant::now() >= deadline => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err("超时".into());
+                }
+                None => std::thread::sleep(Duration::from_millis(50)),
+            }
+        };
+        let out = reader.join().unwrap_or_default();
+        if !status.success() {
+            return Err(format!("退出码 {:?}", status.code()));
+        }
+        serde_json::from_slice(&out).map_err(|e| e.to_string())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct File {
+    api: u32,
+    sources: Vec<Source>,
+}
+
+fn read(file: &Path) -> Result<Vec<Source>, String> {
+    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let f: File = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    if f.api != API {
+        return Err(format!("额度格式是 api {}，这个版本只认 api {API}", f.api));
+    }
+    if f.sources.is_empty() {
+        return Err("sources 至少写一条".into());
+    }
+    let dir = file.parent().unwrap_or(Path::new("/")).to_owned();
+    let id = crate::plugin::check(&dir).map(|p| p.id)?;
+    let data = crate::setup::data_dir(dir.parent().unwrap_or(&dir), &id);
+    let mut sources = f.sources;
+    for s in &mut sources {
+        let who = &s.agent;
+        if who.trim().is_empty() {
+            return Err("agent 不能为空".into());
+        }
+        if s.file.is_some() == s.command.is_some() {
+            return Err(format!("{who}：file 和 command 写一个"));
+        }
+        if !(60..=86_400).contains(&s.refresh_s) {
+            return Err(format!("{who}：refresh_s 要在 60 到 86400 之间"));
+        }
+        if s.windows.is_empty() {
+            return Err(format!("{who}：windows 至少写一个"));
+        }
+        let pointers = s
+            .windows
+            .iter()
+            .flat_map(|w| [Some(&w.used), w.resets_at.as_ref()]);
+        if let Some(bad) = pointers
+            .chain([s.at.as_ref(), s.plan.as_ref()])
+            .flatten()
+            .find(|p| !p.starts_with('/'))
+        {
+            return Err(format!("{who}：\"{bad}\" 要写成 JSON 指针，以 / 开头"));
+        }
+        if s.windows.iter().any(|w| w.minutes == 0) {
+            return Err(format!("{who}：窗口的 minutes 要大于 0"));
+        }
+        s.dir = dir.clone();
+        s.data = data.clone();
+    }
+    Ok(sources)
+}
+
+pub fn load(files: Vec<PathBuf>) -> (Vec<Source>, Vec<Loaded>) {
+    let mut all = Vec::new();
+    let mut report = Vec::new();
+    for file in files {
+        let result = read(&file);
+        report.push(Loaded {
+            file: file.clone(),
+            result: result
+                .as_ref()
+                .map(|found| {
+                    found
+                        .iter()
+                        .map(|s| s.agent.as_str())
+                        .collect::<Vec<_>>()
+                        .join("、")
+                })
+                .map_err(Clone::clone),
+        });
+        if let Ok(found) = result {
+            all.extend(found);
+        }
+    }
+    (all, report)
+}
+
+static SOURCES: crate::plugin::Slot<(Vec<Source>, Vec<Loaded>)> = crate::plugin::Slot::new();
+/// Bumped on every reload, so the command loops of the sources replaced stop.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// The last reading of each command source, by generation and index.
+static RAN: Mutex<Option<(u64, HashMap<usize, Quota>)>> = Mutex::new(None);
+/// File sources' last reading, by path and modification time.
+type FileReadings = HashMap<PathBuf, (SystemTime, Option<Quota>)>;
+static READ: Mutex<Option<FileReadings>> = Mutex::new(None);
+
+/// Loads the installed plugins' sources once (after `plugin::install`).
+pub fn install() {
+    SOURCES.get_or_init(|| load(crate::plugin::files(crate::plugin::Kind::Quota)));
+}
+/// Loads them again after plugins changed (`plugin::reload`).
+pub(crate) fn reload() {
+    if SOURCES.get().is_none() {
+        return;
+    }
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    SOURCES.set(load(crate::plugin::files(crate::plugin::Kind::Quota)));
+}
+pub fn report() -> &'static [Loaded] {
+    SOURCES.get().map_or(&[], |(_, r)| r.as_slice())
+}
+
+/// Every plugin's current reading. Files are read again when they changed; a command
+/// source starts its loop the first time and shows its last good reading.
+pub fn from_plugins() -> Vec<(Agent, Quota)> {
+    let Some((sources, _)) = SOURCES.get() else {
+        return vec![];
+    };
+    let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
+    let mut out = Vec::new();
+    let mut ran = RAN.lock().unwrap_or_else(|e| e.into_inner());
+    if ran.as_ref().is_none_or(|(g, _)| *g != generation) {
+        *ran = Some((generation, HashMap::new()));
+        for (i, s) in sources.iter().enumerate() {
+            if s.command.is_some() {
+                start(i, s.clone(), generation);
+            }
+        }
+    }
+    let ran = ran.as_ref().map(|(_, r)| r.clone()).unwrap_or_default();
+    let mut read = READ.lock().unwrap_or_else(|e| e.into_inner());
+    let read = read.get_or_insert_with(HashMap::new);
+    for (i, s) in sources.iter().enumerate() {
+        let Some(agent) = s.agent() else { continue };
+        let q = match s.path() {
+            Some(path) => {
+                let Ok(changed) = std::fs::metadata(&path).and_then(|m| m.modified()) else {
+                    continue;
+                };
+                match read.get(&path) {
+                    Some((t, q)) if *t == changed => q.clone(),
+                    _ => {
+                        let at = changed
+                            .duration_since(UNIX_EPOCH)
+                            .map_or(0, |d| d.as_secs());
+                        let q = std::fs::read(&path)
+                            .ok()
+                            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+                            .and_then(|doc| s.reading(&doc, at));
+                        read.insert(path, (changed, q.clone()));
+                        q
+                    }
+                }
+            }
+            None => ran.get(&i).cloned(),
+        };
+        if let Some(q) = q {
+            out.push((agent, q));
+        }
+    }
+    out
+}
+
+fn start(i: usize, source: Source, generation: u64) {
+    std::thread::spawn(move || {
+        let current = || GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
+        while current() {
+            if let Ok(doc) = source.run() {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                if let Some(q) = source.reading(&doc, now)
+                    && let Some((g, readings)) =
+                        RAN.lock().unwrap_or_else(|e| e.into_inner()).as_mut()
+                    && *g == generation
+                {
+                    readings.insert(i, q);
+                }
+            }
+            let until = Instant::now() + Duration::from_secs(source.refresh_s);
+            while current() && Instant::now() < until {
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        }
+    });
 }
 
 #[cfg(test)]
@@ -132,7 +469,7 @@ mod tests {
         w.content
             .insert("old".into(), reading(now - SHOWN_FOR - 1, 99));
         w.content.insert("none".into(), Content::default());
-        let got: Vec<_> = latest(&w, now)
+        let got: Vec<_> = latest(&w, &[], now)
             .into_iter()
             .map(|(a, q)| (a.key(), q.windows[0].used))
             .collect();
@@ -153,5 +490,112 @@ mod tests {
         assert_eq!(w(120).label(), "2h");
         assert!(w(300).reset(100) && !w(300).reset(99));
         assert!(!Window::default().reset(u64::MAX));
+    }
+
+    #[test]
+    fn a_plugin_reading_counts_when_newer_than_the_sessions() {
+        let now = 10 * 86_400;
+        let mut w = Workspace {
+            agent_sessions: vec![session("c", Agent::Claude)],
+            ..Default::default()
+        };
+        w.content.insert("c".into(), reading(now - 600, 7));
+        let plugin = |at, used| reading(at, used).quota.unwrap();
+        let newer = [(Agent::Claude, plugin(now - 60, 30))];
+        let older = [(Agent::Claude, plugin(now - 6000, 90))];
+        let used = |extra: &[(Agent, Quota)]| latest(&w, extra, now)[0].1.windows[0].used;
+        assert_eq!(used(&newer), 30);
+        assert_eq!(used(&older), 7);
+        let only = [(Agent::Grok, plugin(now - 60, 5))];
+        assert_eq!(latest(&Workspace::default(), &only, now).len(), 1);
+    }
+
+    #[test]
+    fn the_claude_plugin_reads_what_its_status_line_kept() {
+        let root = std::env::temp_dir().join(format!("kl-quota-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("plugins/claude-quota");
+        std::fs::create_dir_all(&dir).unwrap();
+        let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/claude-quota");
+        for f in [
+            "plugin.json",
+            "quota.json",
+            "setup.json",
+            "statusline.sh",
+            "settings.js",
+        ] {
+            std::fs::copy(shipped.join(f), dir.join(f)).unwrap();
+        }
+        let (sources, report) = load(vec![dir.join("quota.json")]);
+        assert!(report[0].result.is_ok(), "{report:?}");
+        let s = &sources[0];
+        assert_eq!(
+            s.path().unwrap(),
+            root.join("plugin-data/claude-quota/statusline.json")
+        );
+        let doc = serde_json::json!({
+            "session_id": "abc",
+            "rate_limits": {
+                "five_hour": {"used_percentage": 23.6, "resets_at": 1_798_000_000},
+                "seven_day": {"used_percentage": 41, "resets_at": 1_798_400_000},
+                "seven_day_opus": null
+            }
+        });
+        let q = s.reading(&doc, 1_793_605_648).unwrap();
+        assert_eq!(q.at, 1_793_605_648);
+        assert_eq!(
+            q.windows,
+            [
+                Window {
+                    minutes: 300,
+                    used: 24,
+                    resets_at: 1_798_000_000
+                },
+                Window {
+                    minutes: 10_080,
+                    used: 41,
+                    resets_at: 1_798_400_000
+                },
+            ]
+        );
+        // API-key sign-ins: no limits, nothing to show.
+        assert_eq!(
+            s.reading(&serde_json::json!({"rate_limits": null}), 1),
+            None
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_source_says_where_and_how() {
+        let root = std::env::temp_dir().join(format!("kl-quota-bad-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("plugins/x");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"api":1,"id":"x","name":"X","provides":["quota"]}"#,
+        )
+        .unwrap();
+        let check = |body: &str| {
+            std::fs::write(dir.join("quota.json"), body).unwrap();
+            load(vec![dir.join("quota.json")]).1[0].result.clone()
+        };
+        let w = r#""windows":[{"minutes":300,"used":"/u"}]"#;
+        assert!(
+            check(&format!(r#"{{"api":1,"sources":[{{"agent":"a",{w}}}]}}"#))
+                .unwrap_err()
+                .contains("写一个")
+        );
+        assert!(check(r#"{"api":1,"sources":[{"agent":"a","file":"f","windows":[{"minutes":300,"used":"u"}]}]}"#)
+            .unwrap_err()
+            .contains("JSON 指针"));
+        assert_eq!(
+            check(&format!(
+                r#"{{"api":1,"sources":[{{"agent":"a","command":"echo {{}}",{w}}}]}}"#
+            )),
+            Ok("a".into())
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

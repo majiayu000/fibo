@@ -2,8 +2,7 @@
 //! update: terminals started by the old host and the Agents in them still carry
 //! `KEEPLINE_*` variables, Claude's settings still hold hook entries that test
 //! `$KEEPLINE_HOOK`, the user's plugins may read `KEEPLINE_CWD`, the config lives in
-//! `~/.config/keepline`, a host may be serving `~/.local/share/keepline-workbench`, and
-//! Claude's status line still runs the wrapper that saves its readings under `~/.keepline`.
+//! `~/.config/keepline` and a host may be serving `~/.local/share/keepline-workbench`.
 use std::path::{Path, PathBuf};
 
 const OLD: &str = "KEEPLINE_";
@@ -75,19 +74,6 @@ pub fn runtime_dir(home: &Path) -> PathBuf {
     }
 }
 
-/// Where Agent wrappers keep their files under `home`: `~/.mooring`, unless only
-/// `~/.keepline` exists. Claude's status line, set up before the rename, still runs the
-/// wrapper that saves each payload under the old directory.
-pub fn agent_home(home: &Path) -> PathBuf {
-    let new = home.join(".mooring");
-    let old = home.join(".keepline");
-    if !new.exists() && old.is_dir() {
-        old
-    } else {
-        new
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,18 +126,6 @@ mod tests {
         );
         std::fs::create_dir_all(home.join(".local/share/mooring-workbench")).unwrap();
         assert!(runtime_dir(&home).ends_with("mooring-workbench"));
-        std::fs::remove_dir_all(&home).unwrap();
-    }
-
-    #[test]
-    fn status_line_readings_from_before_stay_readable() {
-        let home = std::env::temp_dir().join(format!("mooring-agent-home-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
-        assert!(agent_home(&home).ends_with(".mooring"), "a new install");
-        std::fs::create_dir_all(home.join(".keepline/context")).unwrap();
-        assert!(agent_home(&home).ends_with(".keepline"), "an old one");
-        std::fs::create_dir_all(home.join(".mooring")).unwrap();
-        assert!(agent_home(&home).ends_with(".mooring"));
         std::fs::remove_dir_all(&home).unwrap();
     }
 }

@@ -171,7 +171,11 @@ impl Workbench {
     /// for the popover, which lists them all.
     fn quota_cells(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
         let now = now();
-        let readings = bar_order(&tightest_first(&self.workspace, now), self.quota_pin);
+        let plugins = mooring_core::quota::from_plugins();
+        let readings = bar_order(
+            &tightest_first(&self.workspace, &plugins, now),
+            self.quota_pin,
+        );
         let on = self.statusbar == Some(StatusPop::Quota);
         let mut b = item("status-quota", on)
             .gap(px(T::S10))
@@ -283,7 +287,8 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         let now = now();
-        let readings = tightest_first(&self.workspace, now);
+        let plugins = mooring_core::quota::from_plugins();
+        let readings = tightest_first(&self.workspace, &plugins, now);
         panel = panel.child(heading(
             "额度",
             match self.quota_pin {
@@ -506,7 +511,8 @@ impl Workbench {
     /// The pane header's warning when the CLI running there has used up a window.
     pub(super) fn quota_alert(&self, session: &AgentSession) -> Option<String> {
         let now = now();
-        let (_, quota) = mooring_core::quota::latest(&self.workspace, now)
+        let plugins = mooring_core::quota::from_plugins();
+        let (_, quota) = mooring_core::quota::latest(&self.workspace, &plugins, now)
             .into_iter()
             .find(|(a, _)| *a == session.runtime)?;
         let w = quota
@@ -534,8 +540,12 @@ impl Workbench {
 }
 
 /// Every CLI with a reading, the one closest to its limit first, with that window.
-fn tightest_first(w: &Workspace, now: u64) -> Vec<Reading<'_>> {
-    let mut out: Vec<_> = mooring_core::quota::latest(w, now)
+fn tightest_first<'a>(
+    w: &'a Workspace,
+    plugins: &'a [(mooring_core::agent::Agent, Quota)],
+    now: u64,
+) -> Vec<Reading<'a>> {
+    let mut out: Vec<_> = mooring_core::quota::latest(w, plugins, now)
         .into_iter()
         .map(|(a, q)| (a, q, tightest(q, now)))
         .collect();
