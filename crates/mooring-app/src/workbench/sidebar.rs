@@ -629,6 +629,7 @@ impl Workbench {
         // sessions need you. A click narrows the list below to that space (and shows it on
         // the right); a second click lists every space again.
         let filter = self.space_filter().map(str::to_owned);
+        let needs = crate::model::session_state::needs_by_space(&self.workspace);
         let mut chips = div()
             .flex()
             .flex_wrap()
@@ -667,7 +668,7 @@ impl Workbench {
             let on = filter.as_deref() == Some(id.as_str());
             let dimmed = filter.is_some() && !on;
             let missing = space_dir_missing(space);
-            let need = self.space_needs(&id);
+            let need = needs.get(id.as_str()).copied().unwrap_or(0);
             let fix = id.clone();
             chips = chips.child(
                 div()
@@ -870,17 +871,6 @@ impl Workbench {
         }
         self.sidebar.space_filter = Some(id.to_owned());
         self.pick_space(id, cx);
-    }
-    /// How many of a space's sessions 要你处理 counts (`status::needs_you`).
-    fn space_needs(&self, id: &str) -> usize {
-        let now = crate::model::time::now();
-        self.workspace
-            .agent_sessions
-            .iter()
-            .filter(|s| {
-                session_space(&self.workspace, s) == Some(id) && self.workspace.needs_you(s, now)
-            })
-            .count()
     }
     /// A space's two colors on a round dot, as the 鸟瞰 board shows spaces.
     pub(super) fn space_dot(&self, id: &str, size: f32) -> gpui::Div {

@@ -53,6 +53,18 @@ pub fn session_space<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> 
                 .map(|p| p.id.as_str())
         })
 }
+/// How many sessions 要你处理 counts (`status::needs_you`) in each space, in one pass:
+/// asked per space, every render walked all sessions once per space.
+pub fn needs_by_space(w: &Workspace) -> HashMap<&str, usize> {
+    let now = now();
+    let mut out = HashMap::new();
+    for s in w.agent_sessions.iter().filter(|s| w.needs_you(s, now)) {
+        if let Some(space) = session_space(w, s) {
+            *out.entry(space).or_default() += 1;
+        }
+    }
+    out
+}
 /// A resume that has not taken yet, or failed and left its shell, still owns a running
 /// terminal in a tab; clicking the session returns there instead of stacking tabs.
 pub fn resume_terminal<'a>(
@@ -313,5 +325,31 @@ mod resume_tests {
             resume_terminal(&w, &resumed, &gone).map(|t| t.id.as_str()),
             Some("pty-review")
         );
+    }
+}
+#[cfg(test)]
+mod needs_tests {
+    use super::*;
+    /// The one-pass count matches asking each space on its own.
+    #[test]
+    fn needs_by_space_matches_counting_each_space() {
+        let w = mooring_core::sample::every_state();
+        let counts = needs_by_space(&w);
+        assert!(counts.values().sum::<usize>() > 0);
+        for space in &w.spaces {
+            let each = w
+                .agent_sessions
+                .iter()
+                .filter(|s| {
+                    session_space(&w, s) == Some(space.id.as_str()) && needs_attention(&w, s)
+                })
+                .count();
+            assert_eq!(
+                counts.get(space.id.as_str()).copied().unwrap_or(0),
+                each,
+                "{}",
+                space.id
+            );
+        }
     }
 }
