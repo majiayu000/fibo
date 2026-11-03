@@ -7,9 +7,11 @@ use gpui::{App, Global, WindowAppearance};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Appearance {
     /// Follows macOS, switching when the system does.
-    #[default]
     System,
     Light,
+    /// Until one is picked from the Mooring menu: the dark workbench of
+    /// docs/sidebar-redesign/flat.html.
+    #[default]
     Dark,
 }
 impl Global for Appearance {}
