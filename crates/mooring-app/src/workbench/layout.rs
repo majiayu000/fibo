@@ -1115,8 +1115,9 @@ impl Workbench {
                             .aria_label(title)
                             .w_full()
                             .justify_between()
-                            .gap(px(T::S16))
                             .border_0()
+                            // No row gap: `button` puts its (empty) text first, and a gap
+                            // would indent these titles past the ones above the rule.
                             .child(
                                 div()
                                     .flex_1()
@@ -1126,6 +1127,7 @@ impl Workbench {
                             .when_some(shortcut, |d, keys| {
                                 d.child(
                                     div()
+                                        .ml(px(T::S16))
                                         .text_size(px(T::META))
                                         .text_color(T::color(T::muted()))
                                         .child(keys),
