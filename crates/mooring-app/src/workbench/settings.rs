@@ -1687,7 +1687,7 @@ impl SettingsView {
                                     return;
                                 }
                                 let mut next = this.machines.clone();
-                                next.push(crate::machines::Spec { host, path: None });
+                                next.push(crate::machines::Spec::new(host));
                                 this.machine_field.update(cx, |f, _| f.set_text(""));
                                 this.save_machines(next, cx);
                             })),
@@ -1698,7 +1698,7 @@ impl SettingsView {
         rows
     }
     fn save_machines(&mut self, next: Vec<crate::machines::Spec>, cx: &mut Context<Self>) {
-        match crate::machines::save(&next) {
+        match crate::machines::save_keeping_quiet(&next) {
             Ok(()) => {
                 self.machines = next;
                 self.machines_error = None;

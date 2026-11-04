@@ -408,7 +408,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .font_features(super::diagnostics::tabular())
-            .child(self.board_header(open, stale, empty, cx))
+            .children(self.board_top(open, stale, empty, cx))
             .when_some(self.error.clone(), |d, error| {
                 d.child(
                     div()

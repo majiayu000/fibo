@@ -245,6 +245,10 @@ impl SidebarMotion {
 }
 
 impl SidebarPrefs {
+    /// Whether a group is open: its default, flipped once per click.
+    pub fn open(&self, key: &str, default: bool) -> bool {
+        self.toggled.get(key).copied().unwrap_or(default)
+    }
     /// Whether a group's rows are drawn: open, or still closing.
     pub(super) fn showing(&self, key: &str, default: bool) -> bool {
         self.open(key, default) || self.motion.folding(key).is_some()
@@ -392,7 +396,10 @@ impl Workbench {
         let slot = |w: &Self, h: &Option<String>| -> f32 {
             h.as_ref()
                 .and_then(|h| {
-                    (0..w.machines.len()).find(|i| w.machine_host(*i).as_deref() == Some(h))
+                    // Its place in the rail, which leaves out quiet machines.
+                    (0..w.machines.len())
+                        .filter(|i| !w.machine_quiet(*i))
+                        .position(|i| w.machine_host(i).as_deref() == Some(h))
                 })
                 .map_or(0., |i| i as f32 + 1.)
         };
