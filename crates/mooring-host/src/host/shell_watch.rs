@@ -5,9 +5,14 @@ use super::*;
 use crate::background_shells::{self as shells, Judged, Seen};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::Instant;
 
 /// How often to check for new targets when nothing has poked.
 const IDLE: Duration = Duration::from_secs(30);
+/// After a restart, how long a stored shell with no verdict yet still counts as a job.
+/// Agents are recognized and logs searched in this time; without an end, a shell whose
+/// agent is never recognized would keep its session spinning.
+const SETTLE: Duration = Duration::from_secs(120);
 /// (task id, command) for each shell one Stop listed.
 type Tasks = Vec<(String, String)>;
 #[derive(Default)]
@@ -19,6 +24,10 @@ pub(super) struct ShellWatch {
     judged: HashMap<(String, String), Judged>,
     /// Sessions whose log was already searched for commands a restart lost.
     searched: HashSet<String>,
+    /// When this host started looking; `SETTLE` runs from here.
+    started: Option<Instant>,
+    /// `SETTLE` has ended and clients were told: unjudged shells stop counting as jobs.
+    settled: bool,
     wake: Option<SyncSender<()>>,
 }
 impl ShellWatch {
@@ -67,11 +76,28 @@ impl ShellWatch {
         }
         changed
     }
-    /// Whether this task of `session` is a job, by what the looks so far found.
+    /// Whether this task of `session` is a job, by what the looks so far found. With no
+    /// look yet, a host that just restarted takes it for one: claiming work for a minute
+    /// is better than calling you over to a session that is still working.
     pub(super) fn job(&self, session: &str, task: &str) -> bool {
-        self.judged
-            .get(&(session.to_owned(), task.to_owned()))
-            .is_some_and(|j| j.job)
+        match self.judged.get(&(session.to_owned(), task.to_owned())) {
+            Some(j) => j.job,
+            None => self.settling() && !self.search_found_nothing(session),
+        }
+    }
+    fn settling(&self) -> bool {
+        self.started.is_some_and(|at| at.elapsed() < SETTLE)
+    }
+    fn search_found_nothing(&self, session: &str) -> bool {
+        self.searched.contains(session) && !self.commands.contains_key(session)
+    }
+    /// True once, when `SETTLE` has just ended and the snapshot may read differently.
+    fn just_settled(&mut self) -> bool {
+        if self.settled || self.started.is_none() || self.settling() {
+            return false;
+        }
+        self.settled = true;
+        true
     }
 }
 impl Host {
@@ -136,13 +162,25 @@ impl Host {
 }
 pub(super) fn start(shared: &Shared) -> io::Result<()> {
     let (tx, rx) = sync_channel(1);
-    lock(shared)?.shell_watch.wake = Some(tx);
+    {
+        let mut host = lock(shared)?;
+        host.shell_watch.wake = Some(tx);
+        host.shell_watch.started = Some(Instant::now());
+    }
     let weak = Arc::downgrade(shared);
     thread::spawn(move || loop {
         let Some(shared) = weak.upgrade() else {
             return;
         };
-        let Ok(lost) = lock(&shared).map(|mut host| host.shells_lost()) else {
+        let Ok(lost) = lock(&shared).map(|mut host| {
+            if host.shell_watch.just_settled() {
+                let next = host.workspace.clone();
+                if let Err(e) = host.commit(next) {
+                    eprintln!("background shells: {e}");
+                }
+            }
+            host.shells_lost()
+        }) else {
             return;
         };
         for (session, log, ids) in lost {
@@ -154,6 +192,13 @@ pub(super) fn start(shared: &Shared) -> io::Result<()> {
                 return;
             };
             host.shell_watch.recovered(&session, tasks);
+            // A search that found nothing changes what the snapshot says.
+            if host.shell_watch.search_found_nothing(&session) {
+                let next = host.workspace.clone();
+                if let Err(e) = host.commit(next) {
+                    eprintln!("background shells: {e}");
+                }
+            }
         }
         let targets = match lock(&shared) {
             Ok(host) => host.shell_targets(),
@@ -203,6 +248,61 @@ pub(super) fn start(shared: &Shared) -> io::Result<()> {
 mod tests {
     use super::*;
     use mooring_core::content::{Background, Content, ShellTask};
+    fn watch_started(ago: Duration) -> ShellWatch {
+        ShellWatch {
+            started: Instant::now().checked_sub(ago),
+            ..Default::default()
+        }
+    }
+    /// Undoing `settling` in `job` fails the first assert: the session shows 等后台 under
+    /// 要你处理 for the seconds after every restart.
+    #[test]
+    fn a_shell_with_no_verdict_is_a_job_only_while_a_restart_settles() {
+        let young = watch_started(Duration::from_secs(1));
+        assert!(young.job("s", "b1"), "just restarted, not looked at yet");
+
+        let mut empty = watch_started(Duration::from_secs(1));
+        empty.searched.insert("s".into());
+        assert!(!empty.job("s", "b1"), "its log does not know this shell");
+
+        let mut found = watch_started(Duration::from_secs(1));
+        found.searched.insert("s".into());
+        found.recovered("s", vec![("b1".into(), "cargo test".into())]);
+        assert!(found.job("s", "b1"), "found, the first look is coming");
+
+        let old = watch_started(SETTLE + Duration::from_secs(1));
+        assert!(
+            !old.job("s", "b1"),
+            "an agent never recognized: no spinning"
+        );
+        assert!(!ShellWatch::default().job("s", "b1"));
+
+        // A server's verdict wins at once, even while settling.
+        let mut judged = watch_started(Duration::from_secs(1));
+        let server = shells::Seen {
+            listening: true,
+            own_client: false,
+            worker: false,
+            age: 60,
+        };
+        let targets = vec![(
+            "s".to_owned(),
+            1,
+            vec![("b1".to_owned(), "python3 -m http.server".to_owned())],
+        )];
+        judged.judge(&targets, &HashMap::from([("b1".to_owned(), server)]));
+        assert!(!judged.job("s", "b1"));
+    }
+    #[test]
+    fn the_end_of_settling_is_announced_once() {
+        let mut watch = watch_started(Duration::from_secs(1));
+        assert!(!watch.just_settled());
+        let mut watch_old = watch_started(SETTLE + Duration::from_secs(1));
+        assert!(watch_old.just_settled());
+        assert!(!watch_old.just_settled());
+        watch.started = None;
+        assert!(!watch.just_settled());
+    }
     /// A host just restarted: the session's shell is alive and listed in the store, and
     /// the command is known only to the log. Undoing the search leaves `jobs` at 0, which
     /// is the session showing 等后台 under 要你处理 while its polling loop still runs.
