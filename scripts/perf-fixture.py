@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A large isolated workbench for the window's CPU probe: N Codex sessions over 8 spaces,
 T terminals in tabs of three panes, each bound to a session so the sidebar lists them
-(2000 and 60 by default, near a long-used install). No model calls, credentials or user
+(2000 and 60 by default, near a long-used install), each log with an account-limit
+reading as Codex writes one. No model calls, credentials or user
 data. Needs `cargo build --release -p mooring-host -p mooring-app --features
 mooring-app/visual-test`; BIN_DIR is where those binaries are.
 
@@ -43,7 +44,8 @@ if cmd == 'prepare':
         stamp = now - 60 * (n + 1) * 3; cid = f'perf-{n}'
         rec = [(stamp - 3600, 'session_meta', {'id': cid, 'cwd': str(project), 'source': 'cli', 'originator': 'codex-tui', 'thread_source': 'user'}),
                (stamp - 3600, 'event_msg', {'type': 'user_message', 'message': f'任务 {n}：修一下 {sp} 里的问题'}),
-               (stamp - 3600, 'event_msg', {'type': 'task_started', 'turn_id': cid + '-turn'})]
+               (stamp - 3600, 'event_msg', {'type': 'task_started', 'turn_id': cid + '-turn'}),
+               (stamp - 1800, 'event_msg', {'type': 'token_count', 'rate_limits': {'primary': {'used_percent': 40.0, 'window_minutes': 300, 'resets_at': now + 3600}, 'secondary': None}})]
         g = n % 10
         if g == 0: rec.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '要不要继续？', 'questions': [{'question': '要不要继续？', 'options': [{'label': '继续'}, {'label': '停'}]}]}))
         elif g < 7: rec.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已完成，请核对。'}))

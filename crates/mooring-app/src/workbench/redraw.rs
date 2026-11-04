@@ -5,13 +5,34 @@
 //! never because only a pane did.
 use super::*;
 use crate::ui::theme::Flat as F;
+use mooring_core::{agent::Agent, quota::Quota};
 use std::cell::Cell;
+use std::rc::Rc;
 use std::time::Instant;
 
 /// How long the sidebar may show what it drew while the rest of the window keeps
 /// drawing: a change that reached the window without a workbench notify (a child view's
 /// own state, a clock) shows within this.
 const CATCH_UP: Duration = Duration::from_secs(1);
+
+/// The newest account limits per CLI, worked out at most once a second per workspace
+/// revision: every pane header asks, and finding them looks at each session's content.
+pub(super) fn quotas(w: &Workspace, now: u64) -> Rc<[(Agent, Quota)]> {
+    type Seen = Option<(u64, u64, Rc<[(Agent, Quota)]>)>;
+    thread_local!(static SEEN: std::cell::RefCell<Seen> = const { std::cell::RefCell::new(None) });
+    SEEN.with_borrow_mut(|seen| match seen {
+        Some((r, t, q)) if *r == w.revision && *t == now => q.clone(),
+        _ => {
+            let plugins = mooring_core::quota::from_plugins();
+            let q: Rc<[_]> = mooring_core::quota::latest(w, &plugins, now)
+                .into_iter()
+                .map(|(a, q)| (a, q.clone()))
+                .collect();
+            *seen = Some((w.revision, now, q.clone()));
+            q
+        }
+    })
+}
 
 pub(super) struct Redraw {
     sidebar: Entity<SidebarView>,
@@ -231,5 +252,60 @@ impl Workbench {
             .spaces
             .iter()
             .any(|s| s.name == "改过名字的空间")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quotas;
+    use mooring_core::agent::Agent;
+    use mooring_core::content::Content;
+    use mooring_core::model::{AgentSession, Outcome, Workspace};
+    use mooring_core::quota::{Quota, Window};
+
+    #[test]
+    fn quotas_show_a_new_reading_by_the_next_second_or_revision() {
+        let reading = |used| Content {
+            quota: Some(Quota {
+                at: 1000,
+                plan: String::new(),
+                windows: vec![Window {
+                    minutes: 300,
+                    used,
+                    resets_at: 9000,
+                }],
+            }),
+            ..Default::default()
+        };
+        let mut w = Workspace {
+            agent_sessions: vec![AgentSession {
+                id: "a".into(),
+                runtime: Agent::Codex,
+                cli_session_id: "a".into(),
+                terminal: None,
+                current: false,
+                task: None,
+                outcome: Outcome::Open,
+                updated: 0,
+                cwd: "/tmp".into(),
+                transcript: String::new(),
+                binding: None,
+                name: String::new(),
+            }],
+            ..Default::default()
+        };
+        w.content.insert("a".into(), reading(10));
+        let used = |w: &Workspace, now| quotas(w, now)[0].1.windows[0].used;
+        assert_eq!(used(&w, 2000), 10);
+        w.content.insert("a".into(), reading(90));
+        assert_eq!(
+            used(&w, 2000),
+            10,
+            "same second and revision: the worked-out one"
+        );
+        assert_eq!(used(&w, 2001), 90);
+        w.content.insert("a".into(), reading(50));
+        w.revision += 1;
+        assert_eq!(used(&w, 2001), 50);
     }
 }
