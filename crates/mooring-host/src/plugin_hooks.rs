@@ -27,8 +27,8 @@ const MAX_QUEUED: usize = 16;
 /// slow hook holds up another's.
 struct Scheduler<J> {
     plugins: Vec<Line<J>>,
-    /// The plugin whose turn comes next.
-    turn: usize,
+    /// The line that goes next.
+    up_next: usize,
     running: usize,
 }
 struct Line<J> {
@@ -40,7 +40,7 @@ impl<J> Scheduler<J> {
     const fn new() -> Self {
         Self {
             plugins: Vec::new(),
-            turn: 0,
+            up_next: 0,
             running: 0,
         }
     }
@@ -71,7 +71,7 @@ impl<J> Scheduler<J> {
         }
         let n = self.plugins.len();
         for i in 0..n {
-            let at = (self.turn + i) % n;
+            let at = (self.up_next + i) % n;
             let line = &mut self.plugins[at];
             if line.running >= MAX_PER_PLUGIN {
                 continue;
@@ -79,7 +79,7 @@ impl<J> Scheduler<J> {
             if let Some(job) = line.waiting.pop_front() {
                 line.running += 1;
                 self.running += 1;
-                self.turn = (at + 1) % n;
+                self.up_next = (at + 1) % n;
                 return Some((line.plugin.clone(), job));
             }
         }
@@ -93,10 +93,10 @@ impl<J> Scheduler<J> {
         // A plugin with nothing left gives up its line; plugins come and go with reloads.
         self.plugins
             .retain(|l| l.running > 0 || !l.waiting.is_empty());
-        self.turn = if self.plugins.is_empty() {
+        self.up_next = if self.plugins.is_empty() {
             0
         } else {
-            self.turn % self.plugins.len()
+            self.up_next % self.plugins.len()
         };
     }
 }

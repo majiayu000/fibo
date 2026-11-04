@@ -188,10 +188,6 @@ fn compile(preset: &Preset) -> Result<host::Module, String> {
 fn instantiate(module: &host::Module) -> Result<host::Plugin, String> {
     host::Plugin::new(engine()?, module).map_err(|e| format!("加载失败：{e}"))
 }
-#[cfg(test)]
-fn load(preset: &Preset) -> Result<host::Plugin, String> {
-    instantiate(&compile(preset)?)
-}
 
 /// The state string a session's group goes by, the same coarse words as the spec.
 fn group_name(g: Status) -> &'static str {
@@ -582,6 +578,10 @@ impl Workbench {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn load(preset: &Preset) -> Result<host::Plugin, String> {
+        instantiate(&compile(preset)?)
+    }
 
     fn session<'a>(id: &'a str, group: &'static str) -> StateSession<'a> {
         StateSession {

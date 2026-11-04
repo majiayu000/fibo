@@ -77,7 +77,7 @@ fn where_to_find(kind: Kind) -> Option<&'static str> {
         Kind::Sidebar => Some("在左栏顶部切换排法"),
         Kind::Actions => Some("在窗格右键菜单和 ⌘P 里"),
         Kind::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
-        Kind::Agent => Some("新开窗格的 Agent 列表里就有；已经在跑的会话不受影响"),
+        Kind::Agent => Some("新开窗格的 Agent 列表里就有；已经开着的会话不受影响"),
         Kind::Quota => Some("显示在状态栏的额度里"),
         Kind::Hooks | Kind::Rules | Kind::Setup => None,
     }
