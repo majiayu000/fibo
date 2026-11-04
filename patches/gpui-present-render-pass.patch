@@ -1,8 +1,7 @@
 diff --git a/crates/gpui_apple/src/metal_renderer.rs b/crates/gpui_apple/src/metal_renderer.rs
-index 07ae30d..ca7c989 100644
 --- a/crates/gpui_apple/src/metal_renderer.rs
 +++ b/crates/gpui_apple/src/metal_renderer.rs
-@@ -123,6 +123,7 @@ pub struct MetalRenderer {
+@@ -123,6 +123,7 @@
      monochrome_sprites_pipeline_state: metal::RenderPipelineState,
      polychrome_sprites_pipeline_state: metal::RenderPipelineState,
      surfaces_pipeline_state: metal::RenderPipelineState,
@@ -10,7 +9,7 @@ index 07ae30d..ca7c989 100644
      unit_vertices: metal::Buffer,
      #[allow(clippy::arc_with_non_send_sync)]
      instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
-@@ -185,10 +186,6 @@ impl MetalRenderer {
+@@ -185,10 +186,6 @@
          // https://developer.apple.com/documentation/metal/managing-your-game-window-for-metal-in-macos
          layer.set_opaque(!transparent);
          layer.set_maximum_drawable_count(3);
@@ -21,7 +20,7 @@ index 07ae30d..ca7c989 100644
          // Allow texture reading for visual tests and UI automation screenshots
          // (captures without ScreenCaptureKit). Only debug builds pay the
          // presentation cost, even when `test-support` is compiled in.
-@@ -368,6 +365,8 @@ impl MetalRenderer {
+@@ -368,6 +365,8 @@
              MTLPixelFormat::BGRA8Unorm,
          );
  
@@ -30,7 +29,7 @@ index 07ae30d..ca7c989 100644
          let command_queue = device.new_command_queue();
          let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
          let sprite_atlas = Arc::new(MetalAtlas::new(device.clone(), supports_shared_storage));
-@@ -390,6 +389,7 @@ impl MetalRenderer {
+@@ -390,6 +389,7 @@
              monochrome_sprites_pipeline_state,
              polychrome_sprites_pipeline_state,
              surfaces_pipeline_state,
@@ -38,16 +37,12 @@ index 07ae30d..ca7c989 100644
              unit_vertices,
              instance_buffer_pool,
              sprite_atlas,
-@@ -583,15 +583,18 @@ impl MetalRenderer {
+@@ -579,11 +579,18 @@
                  return;
              }
          };
 -        let blit = command_buffer.new_blit_command_encoder();
--        let size = metal::MTLSize {
--            width: w as u64,
--            height: h as u64,
--            depth: 1,
--        };
+-        let size = metal::MTLSize { width: w as u64, height: h as u64, depth: 1 };
 -        let origin = metal::MTLOrigin { x: 0, y: 0, z: 0 };
 -        blit.copy_from_texture(&back, 0, 0, origin, size, drawable.texture(), 0, 0, origin);
 -        blit.end_encoding();
@@ -66,7 +61,7 @@ index 07ae30d..ca7c989 100644
          if self.presents_with_transaction {
              command_buffer.commit();
              command_buffer.wait_until_scheduled();
-@@ -1593,6 +1596,28 @@ fn build_pipeline_state(
+@@ -1559,6 +1566,28 @@
          .expect("could not create render pipeline state")
  }
  
@@ -96,10 +91,9 @@ index 07ae30d..ca7c989 100644
      device: &metal::DeviceRef,
      library: &metal::LibraryRef,
 diff --git a/crates/gpui_apple/src/shaders.metal b/crates/gpui_apple/src/shaders.metal
-index 2b52bb9..656b41f 100644
 --- a/crates/gpui_apple/src/shaders.metal
 +++ b/crates/gpui_apple/src/shaders.metal
-@@ -1277,3 +1277,14 @@ float4 fill_color(Background background,
+@@ -1277,3 +1277,14 @@
  
    return color;
  }
