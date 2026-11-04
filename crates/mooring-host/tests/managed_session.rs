@@ -1555,14 +1555,14 @@ fn recognition(h: &Host) -> RecognitionStatus {
         other => panic!("{other:?}"),
     }
 }
-fn usage(pid: u32) -> libc::rusage_info_v2 {
+fn usage(pid: u32) -> libc::rusage_info_v4 {
     unsafe {
-        let mut r: libc::rusage_info_v2 = std::mem::zeroed();
+        let mut r: libc::rusage_info_v4 = std::mem::zeroed();
         assert_eq!(
             libc::proc_pid_rusage(
                 pid as i32,
-                libc::RUSAGE_INFO_V2,
-                (&mut r as *mut libc::rusage_info_v2).cast()
+                libc::RUSAGE_INFO_V4,
+                (&mut r as *mut libc::rusage_info_v4).cast()
             ),
             0
         );
@@ -1703,35 +1703,28 @@ read -r finish
     let after = usage(h.child.id());
     let control_after = usage(control.child.id());
     let stats = recognition(&h);
-    let cpu_ticks =
-        after.ri_user_time + after.ri_system_time - cpu.ri_user_time - cpu.ri_system_time;
-    let seconds = cpu_seconds(cpu_ticks);
-    let idle_seconds = cpu_seconds(
-        control_after.ri_user_time + control_after.ri_system_time
-            - control_cpu.ri_user_time
-            - control_cpu.ri_system_time,
+    // Gated on retired instructions per appended line, not CPU time, which moves with
+    // machine load (649-666 k a line at load 31-50 on 2026-11-04, about 1.3% of a core).
+    // A virtual machine (CI) counts none; there the budget is 2% of a core.
+    let seconds = cpu_seconds(
+        after.ri_user_time + after.ri_system_time - cpu.ri_user_time - cpu.ri_system_time,
     );
-    let incremental_seconds = (seconds - idle_seconds).max(0.);
-    let percent = incremental_seconds / window as f64 * 100.;
+    let idle = control_after.ri_instructions - control_cpu.ri_instructions;
+    let per_line = (after.ri_instructions - cpu.ri_instructions).saturating_sub(idle)
+        / (4 * (1 + window * 10));
     let ps = stats.metrics.ps_spawns - before.metrics.ps_spawns;
     let lsof = stats.metrics.lsof_spawns - before.metrics.lsof_spawns;
     eprintln!(
-        "4 agents / {window}s (load {load:?}, {cores} cores): daemon CPU {seconds:.4}s, idle control {idle_seconds:.4}s, incremental {percent:.3}%, ps spawns {ps}, lsof spawns {lsof}, incremental bytes {}",
+        "4 agents / {window}s (load {load:?}, {cores} cores): daemon CPU {seconds:.4}s, {per_line} instructions a line, idle control {idle}, ps spawns {ps}, lsof spawns {lsof}, incremental bytes {}",
         stats.metrics.log_bytes - before.metrics.log_bytes
     );
-    assert_eq!(
-        (ps, lsof),
-        (0, 0),
-        "known transcript appends must not spawn probes"
-    );
-    assert!(
-        idle_seconds <= 0.002 * window as f64,
-        "idle control is not idle ({idle_seconds}s); do not subtract a contaminated control"
-    );
-    assert!(
-        incremental_seconds <= 0.02 * window as f64,
-        "incremental daemon CPU budget <=2% of one core, got {percent:.3}% ({seconds}s, idle {idle_seconds}s)"
-    );
+    assert_eq!((ps, lsof), (0, 0), "transcript appends spawned probes");
+    assert!(idle <= 50_000_000, "idle control busy: {idle}");
+    let within = match after.ri_instructions {
+        0 => seconds <= 0.02 * window as f64,
+        _ => per_line <= 1_000_000,
+    };
+    assert!(within, "daemon over its budget, see the line above");
     assert!(
         stats.metrics.log_bytes - before.metrics.log_bytes > 80_000 * scale,
         "the subscriber must actually consume the workload"
