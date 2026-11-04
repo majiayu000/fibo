@@ -37,7 +37,7 @@ const likes=load();const save=()=>{try{localStorage.setItem('mooring-icon-likes'
 let view='all',batch='all',q='',shown=[];
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const VIEWS=[['all','全部'],['liked','我喜欢的'],['rec','Claude 看好'],['codex','Codex 的点子'],['fail','翻车的'],['ring','圆环加一点']];
-const RING=['1-current','4-bay','13-cradle','7-fly','9-br3'];
+const RING=['1-current','0-v8b-clean','0-v8a-clean','0-v7c','0-v7b','0-v7a','0-v6d','0-m2a-clean','0-m2b-clean','0-m1d-clean','4-bay','13-cradle','7-fly','9-br3'];
 function chips(){
   document.getElementById('views').innerHTML=VIEWS.map(([k,l])=>`<button class="chip" data-v="${k}" aria-pressed="${view===k}">${l}</button>`).join('')+'<input type="search" id="q" placeholder="搜名字或想法" aria-label="搜索" value="'+esc(q)+'"><span id="picked"></span>';
   const ks=Object.keys(batches).sort((a,b)=>b-a);
