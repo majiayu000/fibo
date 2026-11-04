@@ -40,18 +40,18 @@ pub enum Style {
     Dissolve,
     /// Only a short fade; also what reduced motion plays.
     Fade,
-    /// Every face below starts as a tired `-_-` and ends smiling. This one takes a deep
-    /// breath, sighs it out, and its sweat drop falls off.
+    /// Every face below is typed in the terminal's font, from `- _ -` to `^ — ^`. This
+    /// one takes a deep breath, sweats, sighs it out.
     Relief,
-    /// Dozes under its Z's, opens one eye, then the other, stretches.
+    /// Dozes under its z's, opens one eye, then the other, blinks.
     Wake,
-    /// Rises over the horizon like the sun, and the sky warms.
+    /// Rises over a horizon of underscores like the sun, and the sky warms.
     Sunrise,
-    /// A heart floats up to it; it blushes, and hearts rise around it.
+    /// A `<3` floats up to it; it smiles, and more of them rise around it.
     Heart,
-    /// A sleepy cat: its ears perk up one by one, it waves, and leaves paw prints.
+    /// A sleepy `=- . -=` opens its eyes one by one, waves, and leaves prints.
     Cat,
-    /// A cup of hot tea warms up and smiles, a heart over its steam.
+    /// A cup `c[- _ -]` warms up and smiles, a `<3` over its `~` steam.
     Tea,
     /// Cheers up and hops all the way to its sidebar row.
     Hop,

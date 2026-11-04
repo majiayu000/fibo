@@ -3,6 +3,6 @@
   "id": "complete-hop",
   "name": "完成动画：蹦回家",
   "version": "0.1.0",
-  "description": "-_- 忽然高兴起来，一蹦一跳一路蹦回侧栏那一行",
+  "description": "字符 - _ - 很快变成 ^ — ^，一蹦一跳一路蹦回侧栏那一行",
   "provides": ["effects"]
 }

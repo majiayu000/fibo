@@ -69,7 +69,7 @@
       "id": "complete-cat",
       "name": "完成动画：小猫",
       "version": "0.1.0",
-      "description": "困困的小猫 -ω-，耳朵一只只竖起来，笑着招招手，留下一串爪印走进侧栏",
+      "description": "字符小猫 =- . -= 一只只睁开眼，变成 =^ . ^=，招招手，留下一串 :. 走进侧栏",
       "provides": [
         "effects"
       ],
@@ -81,8 +81,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "575025a8cd200fff23fd4de0d3c889d0324c3219e300b941c0d84847c2f9b7e4",
-          "size": 242
+          "sha256": "715244a594edce1d0abd4738028a09d64ee5c2cd216944a6dcfe9eccbf9d0872",
+          "size": 243
         }
       ]
     },
@@ -111,7 +111,7 @@
       "id": "complete-heart",
       "name": "完成动画：比心",
       "version": "0.1.0",
-      "description": "一颗小心飘向 -_-，它脸红了，笑起来，满屏小心往上飘",
+      "description": "一个 <3 飘向字符 - _ -，它变成 ^ — ^，更多 <3 往上飘",
       "provides": [
         "effects"
       ],
@@ -123,8 +123,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "905074b2af9d3f2aab1159fd1e4eba8d0fea7a5174d74af68fa3c1d5f7c29e57",
-          "size": 219
+          "sha256": "5041d5fa20d1fa31aa325df764c222bab76d0955692c04d47812522389229b0e",
+          "size": 216
         }
       ]
     },
@@ -132,7 +132,7 @@
       "id": "complete-hop",
       "name": "完成动画：蹦回家",
       "version": "0.1.0",
-      "description": "-_- 忽然高兴起来，一蹦一跳一路蹦回侧栏那一行",
+      "description": "字符 - _ - 很快变成 ^ — ^，一蹦一跳一路蹦回侧栏那一行",
       "provides": [
         "effects"
       ],
@@ -144,8 +144,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "07f3330bdf5e7a2c075f096a00cb028e64525c6899ba644f635302213c7654e0",
-          "size": 211
+          "sha256": "5ae8754a4b4928dd76e78cbc65632e9495076a3493f664baca65f62254263c7b",
+          "size": 222
         }
       ]
     },
@@ -153,7 +153,7 @@
       "id": "complete-relief",
       "name": "完成动画：松口气",
       "version": "0.1.0",
-      "description": "-_- 深吸一口气、长长呼出来，汗珠滑落，舒展成笑脸，说一声辛苦啦",
+      "description": "字符 - _ - 冒汗、深吸一口气、呼出一串 ~，变成 ^ — ^，说一声辛苦啦",
       "provides": [
         "effects"
       ],
@@ -165,8 +165,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "9ca1a5c19832cb7d8e167b8694515df8cdf4e3865458bbe3b13d294846583748",
-          "size": 241
+          "sha256": "b703d2e5396745d8786d6031598b1debb333a5fc0704c3a2106f831931d47d1d",
+          "size": 242
         }
       ]
     },
@@ -195,7 +195,7 @@
       "id": "complete-sunrise",
       "name": "完成动画：小太阳",
       "version": "0.1.0",
-      "description": "-_- 从地平线慢慢升起，光芒散开、天色变暖，升到顶时笑了",
+      "description": "字符 - _ - 从一排 ____ 后面升起，天色变暖，\\ | / 光芒散开时变成 ^ — ^",
       "provides": [
         "effects"
       ],
@@ -207,8 +207,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "8c7d6ede1eabc4955a1f96fe51e81145984958a78ffaee717349b76e4eb3b78f",
-          "size": 230
+          "sha256": "9bb5762ded1c65ba5c611dc166f64cd61d38c8e309bffa053368a1b0d5643c7e",
+          "size": 245
         }
       ]
     },
@@ -237,7 +237,7 @@
       "id": "complete-tea",
       "name": "完成动画：一杯热茶",
       "version": "0.1.0",
-      "description": "杯子上的 -_- 被热气捂暖，笑了，头顶冒出一颗心",
+      "description": "字符茶杯 c[- _ -] 冒着 ~ 热气，暖了变成 c[^ — ^]，头顶冒出 <3",
       "provides": [
         "effects"
       ],
@@ -249,8 +249,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "77b072de9f730af979ef9263e9b9b96f10c629f35da55cb9dab97956ce7d251e",
-          "size": 215
+          "sha256": "506fe62db5119c1b8e413a7f382ebf587a2be58769692deb762f72668ddf51f4",
+          "size": 231
         }
       ]
     },
@@ -258,7 +258,7 @@
       "id": "complete-wake",
       "name": "完成动画：睡醒了",
       "version": "0.1.0",
-      "description": "-_- 打着呼噜冒 Z，先睁一只眼、再睁另一只，伸个懒腰笑起来",
+      "description": "字符 - _ - 打瞌睡冒 z，先睁一只眼 - _ o，再睁另一只 o _ o，眨一下变成 ^ — ^",
       "provides": [
         "effects"
       ],
@@ -270,8 +270,8 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "3eeb626e6c2d004d27656b334c9571615754015b9fc4d077613a51031b89c94d",
-          "size": 229
+          "sha256": "81da71bc1d76d829db6a67215f2c330116b1b24f610986f5f140a4529fc72d81",
+          "size": 249
         }
       ]
     },

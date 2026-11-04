@@ -13,7 +13,6 @@ use std::rc::Rc;
 use std::time::Instant;
 
 mod cozy;
-mod face;
 mod paint;
 mod timing;
 use paint::Painter;
@@ -599,7 +598,8 @@ impl Workbench {
         let spots = self.layout.spots.clone();
         let (green, _, _) = Tone::Ok.colors();
         let on_accent = T::color(T::on_accent());
-        let (warm, rose, soft) = (
+        let (ink, warm, rose, soft) = (
+            T::color(T::primary()),
             Tone::Warn.dot(),
             Tone::Danger.dot(),
             T::color(T::secondary()),
@@ -607,7 +607,8 @@ impl Workbench {
         Some(
             gpui::canvas(
                 |_, _, _| (),
-                move |_, _, window, _| {
+                move |_, _, window, cx| {
+                    let mono = T::mono(cx);
                     #[cfg(feature = "visual-test")]
                     let started = Instant::now();
                     let spots = spots.borrow();
@@ -624,10 +625,14 @@ impl Workbench {
                         });
                         let mut p = Painter {
                             window,
+                            cx,
+                            mono: mono.clone(),
+                            clip: None,
                             paths: 0,
                             quads: 0,
                             green,
                             on_accent,
+                            ink,
                             warm,
                             rose,
                             soft,

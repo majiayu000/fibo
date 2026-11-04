@@ -20,12 +20,18 @@ fn diameter(radius: f32) -> Pixels {
 
 pub(super) struct Painter<'a> {
     pub(super) window: &'a mut Window,
+    pub(super) cx: &'a mut gpui::App,
+    /// The terminal's font, for the faces written in characters.
+    pub(super) mono: gpui::Font,
+    /// Where text stays, when it must not go past something.
+    pub(super) clip: Option<Bounds<Pixels>>,
     pub(super) paths: usize,
     pub(super) quads: usize,
     pub(super) green: Hsla,
     pub(super) on_accent: Hsla,
-    /// The face styles' warm tones, from the theme: the skin and the sun, cheeks and
-    /// hearts, and what is neither (steam, breath, a sleeper's Z).
+    /// The face styles' colors, from the theme: the text, the smile and the sun, hearts,
+    /// and what is neither (steam, breath, a sleeper's z).
+    pub(super) ink: Hsla,
     pub(super) warm: Hsla,
     pub(super) rose: Hsla,
     pub(super) soft: Hsla,

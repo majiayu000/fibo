@@ -3,6 +3,6 @@
   "id": "complete-sunrise",
   "name": "完成动画：小太阳",
   "version": "0.1.0",
-  "description": "-_- 从地平线慢慢升起，光芒散开、天色变暖，升到顶时笑了",
+  "description": "字符 - _ - 从一排 ____ 后面升起，天色变暖，\\ | / 光芒散开时变成 ^ — ^",
   "provides": ["effects"]
 }
