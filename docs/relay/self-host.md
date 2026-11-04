@@ -12,11 +12,12 @@ docker build -f crates/mooring-relay/Dockerfile -t mooring-relay .
 docker run -d --name mooring-relay --restart unless-stopped \
   -p 127.0.0.1:8787:8787 \
   -e RELAY_REGISTRATION_KEY="$(openssl rand -hex 24)" \
+  -e RELAY_TRUST_PROXY=1 \
   mooring-relay
 docker exec mooring-relay printenv RELAY_REGISTRATION_KEY   # 记下这个密钥，第 3 步要填
 ```
 
-- 端口只开在 `127.0.0.1`，外面由第 2 步的 HTTPS 代理接进来。
+- 端口只开在 `127.0.0.1`，外面由第 2 步的 HTTPS 代理接进来。`RELAY_TRUST_PROXY=1` 让中继按代理转来的真实 IP 限流；端口直接暴露在公网时不要设它，否则别人能伪造 IP 绕过限流。
 - 注册密钥决定哪些电脑能挂到这个中继上，手机不需要它。不设密钥时谁都能挂，只适合内网试用。
 - 不想用 Docker 时，`cargo build --release -p mooring-relay`，然后运行 `target/release/mooring-relay --listen 127.0.0.1:8787 --key <密钥>`。CI 每次也会产出一份 Linux x86_64 的二进制，在 Actions 页面的 `mooring-relay-linux-x86_64` 里。
 
@@ -40,6 +41,7 @@ location / {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
+    proxy_set_header X-Real-IP $remote_addr;
     proxy_read_timeout 1h;
 }
 ```
@@ -76,4 +78,8 @@ docker rm -f mooring-relay   # 然后用第 1 步同样的 docker run 启动，�
 
 ## 默认限制
 
-一台中继最多挂 10,000 台电脑，每台电脑最多同时开 256 个手机连接。手机落后超过 16 MB 时会被断开，重连后从最新画面接着看。这些数值都在 `crates/mooring-relay/src/server.rs` 的 `Config` 里，要改就改源码重新构建。
+- 同一个 IP 最多同时开 64 个连接，每分钟最多新开 120 个；超了返回 429。可以用环境变量 `RELAY_LIMIT_OPEN`、`RELAY_LIMIT_PER_MINUTE` 改，填 0 表示不限。
+- 一台中继最多挂 10,000 台电脑，每台电脑最多同时开 256 个手机连接。
+- 手机落后超过 16 MB 时会被断开，重连后从最新画面接着看。
+
+后两项在 `crates/mooring-relay/src/server.rs` 的 `Config` 里，要改就改源码重新构建。还没有按流量计的配额：对所有人开放的中继，先用注册密钥控制谁能挂上来。

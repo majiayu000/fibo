@@ -9,12 +9,13 @@
 //!   machine's socket keeps flowing for its other phones. Mooring machines keep
 //!   [`mooring_remote::secure::WINDOW`] per phone in flight, so only a phone that stops
 //!   acknowledging gets there.
+use crate::limit::{Limits, Rules, Slot};
 use axum::{
     extract::{
         ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
-        OriginalUri, State,
+        ConnectInfo, OriginalUri, State,
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
@@ -27,6 +28,7 @@ use mooring_remote::{
 use std::{
     collections::HashMap,
     io,
+    net::SocketAddr,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
@@ -55,6 +57,8 @@ pub struct Config {
     pub register_timeout: Duration,
     /// How often the relay pings machines; one silent for two of these is dropped.
     pub ping: Duration,
+    /// Sockets per address, open at once and opened per minute.
+    pub limits: Rules,
 }
 
 impl Default for Config {
@@ -68,6 +72,7 @@ impl Default for Config {
             open_queue: 4 << 20,
             register_timeout: Duration::from_secs(10),
             ping: Duration::from_secs(25),
+            limits: Rules::default(),
         }
     }
 }
@@ -77,6 +82,7 @@ const PHONE_MAX_MESSAGE: usize = 24 << 20;
 
 pub async fn serve(listener: TcpListener, config: Config) -> io::Result<()> {
     let relay = Arc::new(Relay {
+        limits: Limits::new(config.limits.clone()),
         config,
         agents: Mutex::default(),
         retired: Mutex::default(),
@@ -88,11 +94,16 @@ pub async fn serve(listener: TcpListener, config: Config) -> io::Result<()> {
         .route(wire::AGENT_PATH, get(agent))
         .route("/c/{*rest}", get(phone))
         .with_state(relay);
-    axum::serve(listener, app).await
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
 }
 
 struct Relay {
     config: Config,
+    limits: Limits,
     agents: Mutex<HashMap<String, Arc<Agent>>>,
     /// Token hashes a registered machine said it no longer uses, to the hash it uses now;
     /// kept only while that machine is on.
@@ -205,17 +216,38 @@ async fn health(State(relay): State<Arc<Relay>>) -> Json<serde_json::Value> {
     }))
 }
 
-async fn agent(State(relay): State<Arc<Relay>>, ws: WebSocketUpgrade) -> Response {
+/// A place for this socket under its address's limits; `None` is answered with 429.
+fn admit(relay: &Relay, peer: SocketAddr, headers: &HeaderMap) -> Option<Slot> {
+    relay.limits.admit(relay.limits.address(peer, headers))
+}
+
+async fn agent(
+    State(relay): State<Arc<Relay>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let Some(slot) = admit(&relay, peer, &headers) else {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    };
     ws.max_message_size(AGENT_MAX_FRAME)
         .max_frame_size(AGENT_MAX_FRAME)
-        .on_upgrade(move |socket| run_agent(relay, socket))
+        .on_upgrade(move |socket| async move {
+            run_agent(relay, socket).await;
+            drop(slot);
+        })
 }
 
 async fn phone(
     State(relay): State<Arc<Relay>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     OriginalUri(uri): OriginalUri,
     ws: WebSocketUpgrade,
 ) -> Response {
+    let Some(slot) = admit(&relay, peer, &headers) else {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    };
     let target = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
     let Some((token, rest)) = wire::client_path(target) else {
         return StatusCode::NOT_FOUND.into_response();
@@ -246,7 +278,10 @@ async fn phone(
     }
     let rest = rest.to_owned();
     ws.max_message_size(PHONE_MAX_MESSAGE)
-        .on_upgrade(move |socket| run_phone(relay, agent, rest, socket))
+        .on_upgrade(move |socket| async move {
+            run_phone(relay, agent, rest, socket).await;
+            drop(slot);
+        })
 }
 
 async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {

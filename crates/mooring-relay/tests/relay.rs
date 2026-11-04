@@ -437,3 +437,41 @@ async fn a_phone_the_machine_never_opens_is_closed() {
         }
     );
 }
+
+#[tokio::test]
+async fn one_address_holds_only_so_many_sockets_and_gets_them_back() {
+    let base = relay(Config {
+        limits: mooring_relay::limit::Rules {
+            open: 2,
+            per_minute: 0,
+            trust_proxy: false,
+        },
+        ..Config::default()
+    })
+    .await;
+    let mut first = registered(&base, TOKEN).await;
+    let _phone = phone(&base, TOKEN).await;
+    let refused = connect_async(format!("{base}/c/{TOKEN}/keepline")).await;
+    let status = match refused {
+        Err(tokio_tungstenite::tungstenite::Error::Http(r)) => r.status().as_u16(),
+        other => panic!("a third socket was let in: {:?}", other.map(|_| ())),
+    };
+    assert_eq!(status, 429);
+    // The machine goes; its place comes back for the next socket from the same address.
+    first.close(None).await.unwrap();
+    let start = Instant::now();
+    loop {
+        let hash = wire::token_hash("abcdefghijklmnopqrstuvwxyz999999");
+        if connect_async(format!("{base}/agent?th={hash}"))
+            .await
+            .is_ok()
+        {
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "place never came back"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}

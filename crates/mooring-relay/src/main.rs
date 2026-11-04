@@ -18,6 +18,12 @@ async fn main() -> io::Result<()> {
             .filter(|k| !k.is_empty()),
         ..Default::default()
     };
+    // Per-address limits; RELAY_TRUST_PROXY=1 only when the port is reachable through
+    // the HTTPS proxy alone (see docs/relay/self-host.md).
+    let limits = &mut config.limits;
+    limits.open = number("RELAY_LIMIT_OPEN").unwrap_or(limits.open);
+    limits.per_minute = number("RELAY_LIMIT_PER_MINUTE").unwrap_or(limits.per_minute);
+    limits.trust_proxy = std::env::var("RELAY_TRUST_PROXY").is_ok_and(|v| v == "1");
     let mut check = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -68,4 +74,8 @@ fn healthy(listen: &str) -> io::Result<()> {
         Some(status) if status.contains(" 200 ") => Ok(()),
         status => Err(io::Error::other(format!("/healthz: {status:?}"))),
     }
+}
+
+fn number<T: std::str::FromStr>(name: &str) -> Option<T> {
+    std::env::var(name).ok().and_then(|v| v.parse().ok())
 }
