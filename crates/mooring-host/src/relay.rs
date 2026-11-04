@@ -8,9 +8,8 @@
 //! - one key per phone, in `remote-devices.json`: its handshake proves it holds it, and
 //!   the key decides what it may do. Unpairing a phone drops its open sessions too.
 //!
-//! `mooring remote --pair --relay <url>` pairs one more phone and prints its link and QR
-//! code; `--devices` lists them, `--revoke` unpairs one, and `--new-code` replaces the
-//! machine's code and unpairs every phone. Shapes are in `specs/extensions/relay.md`.
+//! `--pair --relay <url>` pairs a phone and prints its link and QR code; `--devices`
+//! lists them, `--revoke` unpairs one, `--new-code` replaces the code and unpairs all.
 use crate::control::Args;
 use crate::remote::{self, Access, Activity, Observer};
 use futures_util::{SinkExt, StreamExt};
@@ -355,14 +354,9 @@ async fn stay_connected(
                 if was_up {
                     wait = Duration::from_secs(1);
                 }
-                eprintln!(
-                    "mooring remote: 和中继断开（{why}），{} 秒后重连",
-                    wait.as_secs()
-                );
-                live.state(
-                    RemoteState::Connecting,
-                    format!("{why}，{} 秒后重连", wait.as_secs()),
-                );
+                let again = format!("{why}，{} 秒后重连", wait.as_secs());
+                eprintln!("mooring remote: 和中继断开：{again}");
+                live.state(RemoteState::Connecting, again);
                 tokio::time::sleep(wait).await;
                 wait = (wait * 2).min(Duration::from_secs(30));
             }
@@ -416,7 +410,10 @@ async fn connect(
         let m = tokio::time::timeout(Duration::from_secs(10), stream.next()).await;
         match m {
             Ok(Some(Ok(Message::Text(t)))) => match serde_json::from_str::<Frame>(&t) {
-                Ok(Frame::Registered { proto }) => break proto.unwrap_or(1),
+                Ok(Frame::Registered { proto }) => match wire::relay_too_old(proto) {
+                    Some(why) => return (Ended::Refused(why), false),
+                    None => break proto.unwrap_or(1),
+                },
                 Ok(Frame::Error { message }) => refusal = Some(message),
                 _ => (),
             },
