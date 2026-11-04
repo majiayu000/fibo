@@ -89,6 +89,7 @@ impl SettingsView {
     /// 中文和符号字体 and 连字, under the font list.
     pub(super) fn face_rows(
         &self,
+        first: bool,
         text: &TerminalText,
         cx: &Context<Self>,
     ) -> Vec<gpui::AnyElement> {
@@ -114,7 +115,7 @@ impl SettingsView {
             }
             rows.push(
                 self.row(
-                    false,
+                    first,
                     "中文和符号字体",
                     "英文和数字仍用上面的字体；这里缺的字继续自动回退",
                     choices,
@@ -133,7 +134,7 @@ impl SettingsView {
             );
             rows.push(
                 self.row(
-                    false,
+                    first && rows.is_empty(),
                     "连字",
                     "字体支持时把 => != 画成一个符号；开着时画面变化多的终端会多花一点时间排版",
                     choices,

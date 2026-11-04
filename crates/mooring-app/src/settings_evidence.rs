@@ -154,6 +154,13 @@ pub(super) fn start(
             handle.update(cx, |v, _, a| v.visual_settings_show("终端", a)).unwrap();
             wait(400).await;
             shot("details-page", cx);
+            // Each new row, found by the search that also lists it.
+            let query = handle.update(cx, |v, _, a| v.visual_settings_query(a)).unwrap();
+            for (name, words) in [("cursor", "光标"), ("reading", "对比度"), ("faces", "连字"), ("chinese", "中文"), ("margin", "边距")] {
+                query.update(cx, |f, cx| { f.set_text(words); cx.notify(); });
+                wait(300).await;
+                shot(&format!("details-row-{name}"), cx);
+            }
             eprintln!("settings details PASS");
             cx.update(|a| a.quit());
             return;

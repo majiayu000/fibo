@@ -1004,8 +1004,8 @@ impl SettingsView {
         let mut font = Vec::new();
         if shows("终端字体") {
             font.push(self.font_list(&text, cx).into_any_element());
-            font.extend(self.face_rows(&text, cx));
         }
+        font.extend(self.face_rows(font.is_empty(), &text, cx));
         let cursor = self.cursor_rows(&text, cx);
         let reading = self.reading_rows(&text, cx);
         let frame = self.frame_rows(&text, cx);
@@ -1081,7 +1081,7 @@ impl SettingsView {
                     .pt(px(T::S12))
                     .flex()
                     .items_center()
-                    .child(label("只列出本机已安装的等宽字体；中文和符号自动回退").flex_1())
+                    .child(label("只列出本机已安装的等宽字体；缺的字自动回退").flex_1())
                     .child(secondary("reset-text", "恢复文字默认值").on_click(
                         // Only the type: the cursor and split choices stay as they were.
                         cx.listener(|this, _, _, cx| {
