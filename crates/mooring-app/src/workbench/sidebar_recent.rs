@@ -3,6 +3,7 @@
 //! host said what state they are in.
 use super::sidebar_list::{End, Listed, RecentOrder, recent_order, split_today};
 use super::sidebar_machines::RemoteRow;
+use super::sidebar_motion::RowShape;
 use super::sidebar_wasm::{AddRow, Closed};
 use super::*;
 use mooring_core::sidebar::Bucket;
@@ -14,21 +15,44 @@ enum Item<'a> {
 }
 
 impl Workbench {
-    fn history_row(
+    /// A group of what no longer moves, moving with its fold. The session in front stays
+    /// when the group closes.
+    fn history_rows(
         &self,
-        item: Item,
-        open: bool,
+        key: &str,
+        default: bool,
+        items: Vec<Item>,
         current: Option<&str>,
         out: &mut Vec<gpui::AnyElement>,
         cx: &Context<Self>,
     ) {
-        match item {
-            Item::Here(l) if open || current == Some(l.0.id.as_str()) => {
-                out.push(self.session_row(l, current, None, End::State, cx));
+        let open = self.sidebar.open(key, default);
+        let showing = self.sidebar.showing(key, default);
+        let (start, mut shape) = (out.len(), RowShape::default());
+        for item in items {
+            let stays = match item {
+                Item::Here(l) => current == Some(l.0.id.as_str()),
+                Item::There(r) => r.shown,
+            };
+            if !showing && !stays {
+                continue;
             }
-            Item::There(r) if open || r.shown => out.push(self.remote_row(r, cx)),
-            _ => {}
+            if !open && stays {
+                shape.keep.push(out.len());
+            }
+            let tall = match item {
+                Item::Here(l) => self.row_is_tall(&l, false),
+                Item::There(r) => r.is_tall(),
+            };
+            if tall {
+                shape.tall.push(out.len());
+            }
+            out.push(match item {
+                Item::Here(l) => self.session_row(l, current, None, End::State, cx),
+                Item::There(r) => self.remote_row(r, cx),
+            });
         }
+        self.sidebar.reveal(key, start, &shape, out);
     }
 
     pub(super) fn recent_rows(
@@ -80,22 +104,39 @@ impl Workbench {
             }
             out.push(self.flat_fold(key, title, rows.len(), cx));
             let open = self.sidebar.open(key, true);
+            let showing = self.sidebar.showing(key, true);
+            let (start, mut shape) = (out.len(), RowShape::default());
             for item in rows {
+                let stays = match item {
+                    Item::Here(l) => current == Some(l.0.id.as_str()),
+                    Item::There(r) => r.shown,
+                };
+                if !showing && !stays {
+                    continue;
+                }
+                if !open && stays {
+                    shape.keep.push(out.len());
+                }
                 match item {
                     Item::Here(l) => {
-                        if !open && current != Some(l.0.id.as_str()) {
-                            continue;
-                        }
                         // 等后台 says what it left running, or it reads as plain 等你验收.
                         let asks = l.1.blocked() || l.1 == Status::Background;
                         let d = if lines && asks { second(&l) } else { None };
+                        if self.row_is_tall(&l, d.is_some()) {
+                            shape.tall.push(out.len());
+                        }
                         push(out, l, d, End::State);
                     }
                     // Outside the preset's limit: another machine asking is never hidden.
-                    Item::There(r) if open || r.shown => out.push(self.remote_row(r, cx)),
-                    Item::There(_) => {}
+                    Item::There(r) => {
+                        if r.is_tall() {
+                            shape.tall.push(out.len());
+                        }
+                        out.push(self.remote_row(r, cx));
+                    }
                 }
             }
+            self.sidebar.reveal(key, start, &shape, out);
         }
         // What is no longer moving, open in a tab or closed: today's in full, the
         // rest folded into one line, as flat.html has it. These rows skip the
@@ -115,10 +156,7 @@ impl Workbench {
         let (today, older) = split_today(history, crate::model::time::now());
         if !today.is_empty() {
             out.push(self.flat_fold("recent:today", "今天", today.len(), cx));
-            let open = self.sidebar.open("recent:today", true);
-            for item in today {
-                self.history_row(item, open, current, out, cx);
-            }
+            self.history_rows("recent:today", true, today, current, out, cx);
         }
         // Older ones a module was not handed are still counted, and open in 鸟瞰.
         let unlisted = closed.total.saturating_sub(closed.rows.len());
@@ -133,9 +171,8 @@ impl Workbench {
                 open,
                 cx,
             ));
-            for item in older {
-                self.history_row(item, open, current, out, cx);
-            }
+            let default = self.space_filter().is_some();
+            self.history_rows("recent:older", default, older, current, out, cx);
             if open && unlisted > 0 {
                 out.push(self.flat_closed_more(unlisted, cx));
             }

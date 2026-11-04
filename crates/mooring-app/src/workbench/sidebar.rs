@@ -350,7 +350,7 @@ impl Workbench {
         }
         let listed = sessions.into_iter().map(|(s, g, a, _)| (s, g, a)).collect();
         let (rows, more, owns_closed) = self.session_list(listed, &ended, current.as_deref(), cx);
-        sidebar = sidebar.children(rows);
+        sidebar = sidebar.children(self.moving_rows(rows));
         for (terminal, (note, why, group)) in unread {
             let focused = self.nav.focused.as_deref() == Some(terminal.as_str());
             sidebar = sidebar.child(
@@ -624,7 +624,7 @@ impl Workbench {
             return;
         }
         self.sidebar.space_filter = Some(id.to_owned());
-        self.sidebar.machine_scope = None;
+        self.set_machine_scope(None);
         self.pick_space(id, cx);
     }
     /// A space's two colors on a round dot, as the 鸟瞰 board shows spaces.

@@ -206,8 +206,7 @@ pub(super) fn interrupts(agents: &[(String, Option<Phase>)]) -> bool {
         .iter()
         .any(|(_, p)| matches!(p, Some(Phase::Working | Phase::Waiting)))
 }
-/// How many split panes closing a tab takes down with it; one pane, or a pane or host
-/// close, counts none.
+/// Split panes that closing a tab takes down; one pane, or a pane or host close, counts none.
 pub(super) fn splits_closed(workspace: &Workspace, closing: &Closing) -> usize {
     match closing {
         Closing::Tab(id) => Some(workspace.tab_terminals(id).len())
@@ -264,6 +263,7 @@ mod sidebar_flat;
 mod sidebar_list;
 mod sidebar_machine_views;
 mod sidebar_machines;
+mod sidebar_motion;
 mod sidebar_recent;
 mod sidebar_spaces;
 mod sidebar_subagents;

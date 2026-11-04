@@ -52,6 +52,20 @@ fn next_index(len: usize, at: Option<usize>) -> usize {
 }
 
 /// A machine's square letter: gray so it never reads as a state or a space's color.
+impl RemoteRow {
+    /// What it asks you, the second line of its row.
+    fn asks(&self) -> Option<String> {
+        (self.online && self.status.blocked())
+            .then(|| self.card.approval.as_ref().or(self.card.waiting.as_ref()))
+            .flatten()
+            .and_then(|t| t.lines().find(|l| !l.trim().is_empty()))
+            .map(|t| t.replacen(ASKS, "问：", 1))
+    }
+    pub(super) fn is_tall(&self) -> bool {
+        self.asks().is_some()
+    }
+}
+
 pub(super) fn machine_mark(letter: String, faded: bool) -> gpui::Div {
     const MARK: f32 = 15.;
     div()
@@ -104,7 +118,7 @@ impl Workbench {
     pub(super) fn local_hidden(&self) -> bool {
         self.machine_scope().is_some()
             || (self.machine_layout() == Machines::Sections
-                && !self.sidebar.open("machine:local", true))
+                && !self.sidebar.showing("machine:local", true))
     }
     pub(super) fn machine_host(&self, index: usize) -> Option<String> {
         let view = self.machines.get(index)?.view.lock().unwrap();
@@ -192,11 +206,7 @@ impl Workbench {
     /// row is faded, says 断开 where its time goes, and opens nothing.
     pub(super) fn remote_row(&self, r: &RemoteRow, cx: &Context<Self>) -> gpui::AnyElement {
         let card = &r.card;
-        let asks = (r.online && r.status.blocked())
-            .then(|| card.approval.as_ref().or(card.waiting.as_ref()))
-            .flatten()
-            .and_then(|t| t.lines().find(|l| !l.trim().is_empty()))
-            .map(|t| t.replacen(ASKS, "问：", 1));
+        let asks = r.asks();
         let two = asks.is_some();
         let time = if !r.online {
             "断开".to_owned()
@@ -370,10 +380,10 @@ impl Workbench {
     fn reveal_machine(&mut self, index: Option<usize>) {
         let host = index.and_then(|i| self.machine_host(i));
         match self.machine_layout() {
-            Machines::Rail => self.sidebar.machine_scope = host,
+            Machines::Rail => self.set_machine_scope(host),
             Machines::Mixed => {
                 if self.sidebar.machine_scope != host {
-                    self.sidebar.machine_scope = None;
+                    self.set_machine_scope(None);
                 }
             }
             Machines::Sections => {
@@ -381,7 +391,7 @@ impl Workbench {
                     || "machine:local".to_owned(),
                     |h| Self::machine_section_key(&h),
                 );
-                self.sidebar.toggled.insert(key, true);
+                self.open_sidebar_group(key);
             }
             Machines::Below => {}
         }
@@ -403,7 +413,7 @@ impl Workbench {
         )
     }
     pub fn visual_scope_machine(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
-        self.sidebar.machine_scope = index.and_then(|i| self.machine_host(i));
+        self.set_machine_scope(index.and_then(|i| self.machine_host(i)));
         cx.notify();
     }
     pub fn visual_next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {

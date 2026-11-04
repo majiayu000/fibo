@@ -94,13 +94,20 @@ pub(super) struct SidebarView {
     _watch: gpui::Subscription,
 }
 impl Render for SidebarView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.drawn.set(Instant::now());
         self.asked.set(false);
         #[cfg(feature = "visual-test")]
         FIRED.store(false, std::sync::atomic::Ordering::Relaxed);
+        let view = cx.entity();
         self.workbench
             .update(cx, |w, cx| {
+                // The column's motion draws it again next frame, it alone; once that
+                // settles nothing asks.
+                w.sidebar.motion.settle();
+                if w.sidebar.motion.moving() {
+                    window.on_next_frame(move |_, cx| ask(&view, cx));
+                }
                 let name = w
                     .workspace
                     .spaces
@@ -239,6 +246,15 @@ fn ask(view: &Entity<SidebarView>, cx: &mut gpui::App) {
     });
 }
 
+#[cfg(feature = "visual-test")]
+impl Workbench {
+    /// What a frame of the column's motion asks: the sidebar alone.
+    pub fn visual_motion_frame(&self, cx: &mut gpui::App) {
+        if let Some(r) = self.redraw.as_ref() {
+            ask(&r.sidebar, cx);
+        }
+    }
+}
 #[cfg(feature = "visual-test")]
 static CATCH_UPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 /// A catch-up fired and the sidebar has not drawn since: one set now is set off by it.

@@ -120,6 +120,7 @@ pub(super) struct SidebarPrefs {
     pub space_filter: Option<String>,
     /// The machine (its host in `machines.json`) the column shows alone. Not saved.
     pub machine_scope: Option<String>,
+    pub(super) motion: super::sidebar_motion::SidebarMotion,
 }
 impl SidebarPrefs {
     fn path() -> Option<PathBuf> {
@@ -145,6 +146,7 @@ impl SidebarPrefs {
             view_menu: None,
             space_filter: None,
             machine_scope: None,
+            motion: Default::default(),
         }
     }
     /// Best effort: a choice that cannot be written still holds until quit.
@@ -199,14 +201,11 @@ fn folder_name(cwd: &str) -> String {
 }
 
 impl Workbench {
-    /// Opens a group shown closed, or closes one shown open, and keeps it that way.
-    pub(super) fn toggle_sidebar_group(&mut self, key: &str, open: bool, cx: &mut Context<Self>) {
-        self.sidebar.toggled.insert(key.to_owned(), !open);
-        cx.notify();
-    }
     pub(super) fn choose_sidebar_preset(&mut self, id: &str, cx: &mut Context<Self>) {
         self.sidebar.preset = id.to_owned();
         self.sidebar.toggled.clear();
+        self.sidebar.motion.clear_folds();
+        self.sidebar.motion.arrive_plain();
         self.sidebar.save();
         cx.notify();
     }
@@ -749,7 +748,7 @@ impl Workbench {
             .id(gpui::SharedString::from(format!("sidebar-group-{key}")))
             .cursor_pointer()
             // At the line's right end, level with the rows' times below it.
-            .child(div().ml_auto().child(super::sidebar_flat::fold_mark(open)))
+            .child(div().ml_auto().child(self.sidebar.fold_mark(&key, open)))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
             .into_any_element()
     }

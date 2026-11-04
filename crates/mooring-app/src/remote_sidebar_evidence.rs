@@ -127,6 +127,83 @@ pub(super) fn start(
         let peek = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
         assert!(peek.is_none(), "coming back left the other machine's peek open");
 
+        // The column's motion, each moment held still and looked at. It moves nothing right
+        // of the column, and once it ends the column is what it was and nothing is asked.
+        handle
+            .update(cx, |v, _, cx| v.visual_choose_preset("machine-fold", cx))
+            .unwrap();
+        wait(800).await;
+        let hold = |ms: Option<u64>, cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_hold_motion(ms)).unwrap();
+        };
+        let moving = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_motion_moving()).unwrap()
+        };
+        let ask = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, cx| v.visual_motion_frame(cx)).unwrap();
+        };
+        let local = "machine:local";
+        hold(Some(0), cx);
+        let rest = shoot("motion-rest.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_toggle_group(local, cx)).unwrap();
+        for (ms, name) in [(40, "close-40"), (90, "close-90")] {
+            hold(Some(ms), cx);
+            ask(cx);
+            let shot = shoot(&format!("motion-{name}.png"), cx);
+            assert!(moving(cx), "{name} should still be moving");
+            assert!(shot == rest, "{name} moved something right of the column");
+        }
+        hold(Some(1000), cx);
+        ask(cx);
+        let shut = shoot("motion-closed.png", cx);
+        assert!(!moving(cx), "closing never ended");
+        assert!(shut == rest, "closed moved something right of the column");
+        handle.update(cx, |v, _, cx| v.visual_toggle_group(local, cx)).unwrap();
+        for (ms, name) in [(1060, "open-60"), (1110, "open-110"), (1170, "open-170")] {
+            hold(Some(ms), cx);
+            ask(cx);
+            let shot = shoot(&format!("motion-{name}.png"), cx);
+            assert!(moving(cx), "{name} should still be moving");
+            assert!(shot == rest, "{name} moved something right of the column");
+        }
+        // A section moves as one block: done with its one row, not at the longest stagger.
+        hold(Some(1200), cx);
+        ask(cx);
+        shoot("motion-open-200.png", cx);
+        assert!(!moving(cx), "the section kept asking for frames after it had opened");
+        hold(Some(3000), cx);
+        ask(cx);
+        shoot("motion-opened.png", cx);
+        assert!(!moving(cx), "opening never ended");
+        // Compared with the same view drawn before any of it, the whole window included.
+        let whole = |name: &str| {
+            let read = |n: &str| std::fs::read(directory.join(n)).unwrap();
+            read(name) == read("motion-rest.png")
+        };
+        assert!(whole("motion-opened.png"), "the column did not come back to rest as it was");
+
+        handle
+            .update(cx, |v, _, cx| v.visual_choose_preset("machine-rail", cx))
+            .unwrap();
+        hold(Some(10_000), cx);
+        ask(cx);
+        let rail = shoot("motion-rail-rest.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_scope_machine(Some(0), cx)).unwrap();
+        for (ms, name) in [(10_060, "rail-60"), (10_130, "rail-130"), (10_210, "rail-210")] {
+            hold(Some(ms), cx);
+            ask(cx);
+            let shot = shoot(&format!("motion-{name}.png"), cx);
+            assert!(shot == rail, "{name} moved something right of the column");
+        }
+        hold(Some(11_000), cx);
+        ask(cx);
+        shoot("motion-rail-end.png", cx);
+        assert!(!moving(cx), "the rail's motion never ended");
+        handle.update(cx, |v, _, cx| v.visual_scope_machine(None, cx)).unwrap();
+        hold(Some(12_000), cx);
+        ask(cx);
+        hold(None, cx);
+
         // The other machine drops off: its row stays, faded, and it counts as down.
         handle
             .update(cx, |v, _, cx| v.visual_choose_preset("recent", cx))

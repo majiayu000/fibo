@@ -237,7 +237,7 @@ impl Workbench {
             .text_color(ink(F::third()))
             .child(flat_state(Status::Stale, false))
             .child(div().flex_1().min_w_0().truncate().child(text))
-            .child(fold_mark(open))
+            .child(self.sidebar.fold_mark(&key, open))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
             .into_any_element()
     }

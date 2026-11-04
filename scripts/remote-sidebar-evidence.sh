@@ -9,6 +9,8 @@ set -u
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-rs}
 rm -rf $R; mkdir -p $R/home/.config/mooring $R/home/.codex/sessions $R/claude $R/shots $R/bin $R/farhome/.codex/sessions $R/farhome/.claude/projects
+# A blinking cursor would read as something changing right of the column.
+printf '{"cursor_blink": false}\n' > $R/home/.config/mooring/terminal-text.json
 mkdir -m 700 $R/far $R/rt
 cat > $R/bin/ssh <<'SH'
 #!/bin/sh

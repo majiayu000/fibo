@@ -15,6 +15,12 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   sidebar drawn each frame);
 - terminal output must not draw the sidebar again (it drew the whole sidebar each
   frame once: 7x the instructions);
+- a frame of the left column's motion (scripts' frames-motion: 今天 opening, held midway)
+  must stay within BUDGET too: the column's motion draws the sidebar each display frame
+  for a third of a second a click;
+- so must the same motion in the layouts that need a machine: frames-section (本机's whole
+  section folding under 按机器), frames-rail and frames-railrest (the rail with its list
+  arriving, and at rest; a rail beside the column instead of over it cost 129 M at rest);
 - a frame drawn without refreshing must match one drawn with a full refresh, pixel for
   pixel, after each step of redraw-check;
 - with nothing happening, one catch-up must not schedule the next (a loop drew the whole
@@ -29,8 +35,10 @@ SHARE_BUDGET = 2.0
 FIXTURE = [sys.executable, str(ROOT / 'scripts/perf-fixture.py')]
 
 
-def probe(bindir, out, plan, catch_up):
+def probe(bindir, out, plan, catch_up, machine=False):
     env = {**os.environ, 'NORUN': '1'}
+    if machine:
+        env['MACHINE'] = '1'
     env.pop('MOORING_NO_CATCH_UP', None)
     if not catch_up:
         env['MOORING_NO_CATCH_UP'] = '1'
@@ -48,15 +56,21 @@ def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
     fails = []
-    text = probe(bindir, out / 'frames', 'frames-pane,frames-main,redraw-check', catch_up=False)
+    text = probe(bindir, out / 'frames', 'frames-pane,frames-main,frames-motion,frames-arrive,redraw-check', catch_up=False)
     measured = {k: float(v) for k, v in re.findall(r'(frames-\w+): [^\n]*?([\d.]+) M instructions', text)}
     ms = {k: float(v) for k, v in re.findall(r'(frames-\w+): ([\d.]+) ms CPU', text)}
-    if set(measured) != {'frames-pane', 'frames-main'} or set(ms) != set(measured):
+    if set(measured) != {'frames-pane', 'frames-main', 'frames-motion', 'frames-arrive'} or set(ms) != set(measured):
         fails.append(f'no frame numbers in the probe output: {measured} {ms}')
         ms = {'frames-pane': 1, 'frames-main': 1}
     share = ms['frames-pane'] / ms['frames-main']
     # MOORING_PERF_NO_COUNTER=1 takes the runner's path on real hardware, to test it.
     counted = all(v > 0 for v in measured.values()) and not os.environ.get('MOORING_PERF_NO_COUNTER')
+    # 按机器 and the rail need a machine configured, which changes the column for the rest.
+    with_machine = probe(bindir, out / 'machine', 'frames-section,frames-rail', catch_up=False, machine=True)
+    found = {k: float(v) for k, v in re.findall(r'(frames-\w+): [^\n;]*?([\d.]+) M instructions', with_machine)}
+    if set(found) != {'frames-section', 'frames-rail', 'frames-railrest'}:
+        fails.append(f'no machine layout numbers in the probe output: {found}')
+    measured.update(found)
     redraw = next((l for l in text.splitlines() if 'redraw-check:' in l), '')
     for step, verdict in re.findall(r'([\w-]+): (same|DIFF[^;]*)', redraw):
         if verdict != 'same':

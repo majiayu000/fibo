@@ -4,6 +4,12 @@
 //!   Anything that asks for a frame per vsync costs this times the display rate.
 //! - `frames-pane`: the frame terminal output asks for: only the shown pane notifies,
 //!   so cached views elsewhere may be reused. Drawn 300 times.
+//! - `frames-motion`: a frame of the left column's motion, held midway through opening
+//!   今天: the sidebar draws, panes are reused. Drawn 300 times.
+//! - `frames-arrive`: a frame of the list arriving after the machine it shows changed.
+//! - `frames-section`: a frame of 本机's whole section folding under 按机器. Needs a machine in
+//!   machines.json, so the gate does not run it: `perf-fixture.py` with MACHINE=1 at prepare.
+//! - `frames-rail`: the same machine's rail layout, at rest and with the list arriving.
 //! - `redraw-check`: not a cost but a check that caching hides nothing: after each of a
 //!   few clicks and a host change, a plain frame must match a refreshed one pixel for
 //!   pixel (run with `MOORING_NO_CATCH_UP=1`), and the sidebar's catch-up must not
@@ -36,6 +42,208 @@ fn instructions() -> u64 {
     let ok =
         unsafe { libc::proc_pid_rusage(std::process::id() as i32, libc::RUSAGE_INFO_V4, buffer) };
     if ok == 0 { info.ri_instructions } else { 0 }
+}
+
+/// One click's motion, frame by frame: the clock held midway, so every frame draws all of
+/// the group's rows moving, and what the whole click costs at the fastest display rate.
+async fn motion_frames(
+    handle: WindowHandle<workbench::Workbench>,
+    cx: &mut gpui::AsyncApp,
+) -> String {
+    const KEY: &str = "recent:today";
+    let draw = |cx: &mut gpui::AsyncApp| {
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    };
+    let hold = |ms, cx: &mut gpui::AsyncApp| {
+        handle
+            .update(cx, |v, _, _| v.visual_hold_motion(ms))
+            .unwrap();
+    };
+    hold(Some(0), cx);
+    handle
+        .update(cx, |v, _, cx| v.visual_toggle_group(KEY, cx))
+        .unwrap();
+    draw(cx);
+    hold(Some(5000), cx);
+    handle
+        .update(cx, |v, _, cx| v.visual_motion_frame(cx))
+        .unwrap();
+    draw(cx);
+    assert!(
+        !handle
+            .update(cx, |v, _, _| v.visual_motion_moving())
+            .unwrap()
+    );
+    handle
+        .update(cx, |v, _, cx| v.visual_toggle_group(KEY, cx))
+        .unwrap();
+    hold(Some(5120), cx);
+    assert!(
+        handle
+            .update(cx, |v, _, _| v.visual_motion_moving())
+            .unwrap()
+    );
+    cx.background_executor()
+        .timer(Duration::from_millis(500))
+        .await;
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..300 {
+        handle
+            .update(cx, |v, _, cx| v.visual_motion_frame(cx))
+            .unwrap();
+        draw(cx);
+    }
+    let used = (cpu_secs() - cpu) / 300. * 1000.;
+    let ins = (instructions() - ins) as f64 / 300. / 1e6;
+    // At rest again: nothing moving, nothing asked for.
+    hold(Some(10_000), cx);
+    handle
+        .update(cx, |v, _, cx| v.visual_motion_frame(cx))
+        .unwrap();
+    draw(cx);
+    assert!(
+        !handle
+            .update(cx, |v, _, _| v.visual_motion_moving())
+            .unwrap()
+    );
+    hold(None, cx);
+    let longest = workbench::Workbench::visual_motion_longest() as f64;
+    let frames = longest * 120. / 1000.;
+    format!(
+        "frames-motion: {used:.2} ms CPU per motion frame, {ins:.2} M instructions; the longest click ({longest:.0} ms) at 120 Hz: {frames:.0} frames, {:.0} ms CPU, {:.0} M instructions",
+        used * frames,
+        ins * frames
+    )
+}
+
+async fn arrive_frames(
+    handle: WindowHandle<workbench::Workbench>,
+    cx: &mut gpui::AsyncApp,
+) -> String {
+    let hold = |ms, cx: &mut gpui::AsyncApp| {
+        handle
+            .update(cx, |v, _, _| v.visual_hold_motion(ms))
+            .unwrap();
+    };
+    hold(Some(0), cx);
+    handle.update(cx, |v, _, cx| v.visual_arrive(cx)).unwrap();
+    hold(Some(90), cx);
+    cx.background_executor()
+        .timer(Duration::from_millis(500))
+        .await;
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..300 {
+        handle
+            .update(cx, |v, _, cx| v.visual_motion_frame(cx))
+            .unwrap();
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    }
+    let used = (cpu_secs() - cpu) / 300. * 1000.;
+    let ins = (instructions() - ins) as f64 / 300. / 1e6;
+    hold(Some(5000), cx);
+    handle
+        .update(cx, |v, _, cx| v.visual_motion_frame(cx))
+        .unwrap();
+    cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+        .unwrap();
+    assert!(
+        !handle
+            .update(cx, |v, _, _| v.visual_motion_moving())
+            .unwrap()
+    );
+    hold(None, cx);
+    format!("frames-arrive: {used:.2} ms CPU per arriving frame, {ins:.2} M instructions")
+}
+
+async fn section_frames(
+    handle: WindowHandle<workbench::Workbench>,
+    cx: &mut gpui::AsyncApp,
+) -> String {
+    const KEY: &str = "machine:local";
+    let hold = |ms, cx: &mut gpui::AsyncApp| {
+        handle
+            .update(cx, |v, _, _| v.visual_hold_motion(ms))
+            .unwrap();
+    };
+    let frame = |cx: &mut gpui::AsyncApp| {
+        handle
+            .update(cx, |v, _, cx| v.visual_motion_frame(cx))
+            .unwrap();
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    };
+    handle
+        .update(cx, |v, _, cx| v.visual_choose_preset("machine-fold", cx))
+        .unwrap();
+    hold(Some(0), cx);
+    frame(cx);
+    hold(Some(1000), cx);
+    frame(cx);
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..300 {
+        frame(cx);
+    }
+    let rest_ms = (cpu_secs() - cpu) / 300. * 1000.;
+    let rest = (instructions() - ins) as f64 / 300. / 1e6;
+    handle
+        .update(cx, |v, _, cx| v.visual_toggle_group(KEY, cx))
+        .unwrap();
+    hold(Some(1060), cx);
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..300 {
+        frame(cx);
+    }
+    let used = (cpu_secs() - cpu) / 300. * 1000.;
+    let ins = (instructions() - ins) as f64 / 300. / 1e6;
+    hold(None, cx);
+    format!(
+        "frames-section: {used:.2} ms CPU per folding frame, {ins:.2} M instructions; at rest {rest_ms:.2} ms, {rest:.2} M"
+    )
+}
+
+async fn rail_frames(
+    handle: WindowHandle<workbench::Workbench>,
+    cx: &mut gpui::AsyncApp,
+) -> String {
+    let hold = |ms, cx: &mut gpui::AsyncApp| {
+        handle
+            .update(cx, |v, _, _| v.visual_hold_motion(ms))
+            .unwrap();
+    };
+    let frame = |cx: &mut gpui::AsyncApp| {
+        handle
+            .update(cx, |v, _, cx| v.visual_motion_frame(cx))
+            .unwrap();
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    };
+    handle
+        .update(cx, |v, _, cx| v.visual_choose_preset("machine-rail", cx))
+        .unwrap();
+    hold(Some(0), cx);
+    frame(cx);
+    hold(Some(1000), cx);
+    frame(cx);
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..300 {
+        frame(cx);
+    }
+    let rest_ms = (cpu_secs() - cpu) / 300. * 1000.;
+    let rest = (instructions() - ins) as f64 / 300. / 1e6;
+    handle.update(cx, |v, _, cx| v.visual_arrive(cx)).unwrap();
+    hold(Some(1090), cx);
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..300 {
+        frame(cx);
+    }
+    let used = (cpu_secs() - cpu) / 300. * 1000.;
+    let ins = (instructions() - ins) as f64 / 300. / 1e6;
+    hold(None, cx);
+    format!(
+        "frames-rail: {used:.2} ms CPU arriving, {ins:.2} M instructions; frames-railrest: {rest_ms:.2} ms CPU at rest, {rest:.2} M instructions"
+    )
 }
 
 pub(super) fn start(
@@ -81,6 +289,14 @@ pub(super) fn start(
                     at.elapsed().as_secs_f64() / 300. * 1000.,
                     used / 300. * 60. * 100.
                 )
+            } else if name == "frames-motion" {
+                motion_frames(handle, cx).await
+            } else if name == "frames-arrive" {
+                arrive_frames(handle, cx).await
+            } else if name == "frames-section" {
+                section_frames(handle, cx).await
+            } else if name == "frames-rail" {
+                rail_frames(handle, cx).await
             } else if let Some(view) = name.strip_prefix("frames-") {
                 let overview = view == "overview";
                 handle

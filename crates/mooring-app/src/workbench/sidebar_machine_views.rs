@@ -1,13 +1,16 @@
 //! The three layouts around other machines' rows, as the preset says: machine chips over
 //! one mixed list, a rail that picks one machine, or a folding section per machine. The
 //! column keeps its width in all three, so nothing right of it moves.
-use super::sidebar_flat::fold_mark;
 use super::sidebar_list::{recent_order, split_today};
 use super::sidebar_machines::{RemoteRow, machine_label, machine_letter, machine_mark};
+use super::sidebar_motion::RowShape;
 use super::*;
 use crate::machines::Link;
 use crate::ui::theme::Flat as F;
 use mooring_core::sidebar::{Bucket, Machines};
+
+const RAIL: f32 = 44.;
+const RAIL_BUTTON: f32 = 32.;
 
 fn need_badge(need: usize) -> gpui::Div {
     div()
@@ -50,9 +53,10 @@ impl Workbench {
             (Machines::Sections, _) => {
                 let open = self.sidebar.open("machine:local", true);
                 let mut out = vec![self.local_section_heading(open, cx)];
-                if open {
+                if self.sidebar.showing("machine:local", true) {
                     out.extend(self.space_tiles(cx));
                 }
+                self.sidebar.reveal_block("machine:local", 0, 1, &mut out);
                 out
             }
             (Machines::Mixed, _) => {
@@ -100,7 +104,10 @@ impl Workbench {
                 .when(on, |d| d.bg(T::color(F::chip_on())))
                 .cursor_pointer()
                 .hover(|s| s.border_color(T::color(F::chip_on_line())))
-                .child(machine_mark(machine_letter(&name), !online))
+                .child(
+                    machine_mark(machine_letter(&name), !online)
+                        .when_some(self.machine_breath(index, cx), |d, lit| d.opacity(lit)),
+                )
                 .child(
                     div()
                         .min_w_0()
@@ -129,7 +136,7 @@ impl Workbench {
                 ]))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     let again = this.sidebar.machine_scope.as_deref() == Some(host.as_str());
-                    this.sidebar.machine_scope = (!again).then(|| host.clone());
+                    this.set_machine_scope((!again).then(|| host.clone()));
                     this.sidebar.space_filter = None;
                     cx.notify();
                 }))
@@ -204,6 +211,7 @@ impl Workbench {
             add,
         } = h;
         let toggle = key.clone();
+        let key_for_mark = key.clone();
         div()
             .id(gpui::SharedString::from(format!("section-{key}")))
             .role(gpui::accesskit::Role::Button)
@@ -229,7 +237,7 @@ impl Workbench {
             .bg(T::color(F::hover()))
             .cursor_pointer()
             .font_family(T::UI_FONT)
-            .child(fold_mark(open))
+            .child(self.sidebar.fold_mark(&key_for_mark, open))
             .children(mark)
             .child(
                 div()
@@ -314,19 +322,24 @@ impl Workbench {
             Link::Connecting => "连接中…".to_owned(),
             Link::Offline(why) => format!("断开：{why}"),
         };
-        let mut out = vec![self.section_heading(
-            Heading {
-                key: key.clone(),
-                mark: Some(machine_mark(machine_letter(&name), !online)),
-                name,
-                note,
-                need: self.remote_needs(index),
-                open,
-                add: (online && self.machine_manages(index)).then_some(index),
-            },
-            cx,
-        )];
-        if !open {
+        let mut out = vec![
+            self.section_heading(
+                Heading {
+                    key: key.clone(),
+                    mark: Some(
+                        machine_mark(machine_letter(&name), !online)
+                            .when_some(self.machine_breath(index, cx), |d, lit| d.opacity(lit)),
+                    ),
+                    name,
+                    note,
+                    need: self.remote_needs(index),
+                    open,
+                    add: (online && self.machine_manages(index)).then_some(index),
+                },
+                cx,
+            ),
+        ];
+        if !self.sidebar.showing(&key, online) {
             return out;
         }
         let keyed: Vec<(&RemoteRow, Bucket, u64)> =
@@ -348,12 +361,21 @@ impl Workbench {
             let part = format!("{key}:{part}");
             if !rows.is_empty() {
                 out.push(self.flat_fold(&part, title, rows.len(), cx));
-                let open = self.sidebar.open(&part, true);
-                for r in rows.into_iter().filter(|r| open || r.shown) {
+                let showing = self.sidebar.showing(&part, true);
+                let (start, mut shape) = (out.len(), RowShape::default());
+                for r in rows.into_iter().filter(|r| showing || r.shown) {
+                    if r.shown && !self.sidebar.open(&part, true) {
+                        shape.keep.push(out.len());
+                    }
+                    if r.is_tall() {
+                        shape.tall.push(out.len());
+                    }
                     out.push(self.remote_row(r, cx));
                 }
+                self.sidebar.reveal(&part, start, &shape, &mut out);
             }
         }
+        self.sidebar.reveal_block(&key, 0, 1, &mut out);
         out
     }
     /// What follows this machine's list.
@@ -373,12 +395,13 @@ impl Workbench {
 
     /// The rail's button for this machine (`None`) or another.
     fn rail_button(&self, index: Option<usize>, cx: &Context<Self>) -> gpui::AnyElement {
-        const BUTTON: f32 = 32.;
         let view = index.and_then(|i| Some(self.machines.get(i)?.view.lock().unwrap().clone()));
         let online = view.as_ref().is_none_or(|v| v.link == Link::Online);
         let host = view.as_ref().map(|v| v.spec.host.clone());
         let name = host.as_deref().map_or("本机", machine_label).to_owned();
+        // While the mark slides to it the mark says so.
         let on = self.machine_scope() == index;
+        let lit = on && self.sidebar.motion.rail_at().is_none();
         let need = index.map_or_else(|| self.needs_you().len(), |i| self.remote_needs(i));
         let face = match index {
             None => gpui::svg()
@@ -412,7 +435,7 @@ impl Workbench {
             .role(gpui::accesskit::Role::Button)
             .aria_label(label.clone())
             .relative()
-            .size(px(BUTTON))
+            .size(px(RAIL_BUTTON))
             .flex_shrink_0()
             .flex()
             .items_center()
@@ -420,15 +443,18 @@ impl Workbench {
             .rounded(px(T::S8))
             .border(px(T::BORDER_WIDTH))
             .when(!online, |d| d.border_dashed())
-            .border_color(T::color(if on {
+            .border_color(T::color(if lit {
                 F::chip_on_line()
             } else {
                 F::chip_line()
             }))
-            .when(on, |d| d.bg(T::color(F::selected())))
+            .when(lit, |d| d.bg(T::color(F::selected())))
             .cursor_pointer()
             .hover(|s| s.bg(T::color(F::hover())))
             .child(face)
+            .when_some(index.and_then(|i| self.machine_breath(i, cx)), |d, lit| {
+                d.opacity(lit)
+            })
             .when(need > 0, |d| {
                 d.child(
                     div()
@@ -445,14 +471,14 @@ impl Workbench {
                 },
             ]))
             .on_click(cx.listener(move |this, _, _, cx| {
-                this.sidebar.machine_scope = host.clone();
+                this.set_machine_scope(host.clone());
                 this.sidebar.space_filter = None;
                 cx.notify();
             }))
             .into_any_element()
     }
     fn machine_rail(&self, cx: &Context<Self>) -> gpui::Div {
-        const RAIL: f32 = 44.;
+        const GAP: f32 = T::S10;
         div()
             .w(px(RAIL))
             .flex_shrink_0()
@@ -460,10 +486,23 @@ impl Workbench {
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(T::S10))
+            .gap(px(GAP))
             .border_r(px(T::BORDER_WIDTH))
             .border_t(px(T::BORDER_WIDTH))
             .border_color(T::color(F::line()))
+            .when_some(self.sidebar.motion.rail_at(), |d, slot| {
+                d.child(
+                    div()
+                        .absolute()
+                        .left(px((RAIL - T::BORDER_WIDTH - RAIL_BUTTON) / 2.))
+                        .top(px(T::S6 + slot * (RAIL_BUTTON + GAP)))
+                        .size(px(RAIL_BUTTON))
+                        .rounded(px(T::S8))
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(T::color(F::chip_on_line()))
+                        .bg(T::color(F::selected())),
+                )
+            })
             .child(self.rail_button(None, cx))
             .children((0..self.machines.len()).map(|i| self.rail_button(Some(i), cx)))
     }
@@ -485,10 +524,18 @@ impl Workbench {
             .child(list)
             .child(self.flat_keys(cx))
             .child(self.flat_foot(listed, cx));
-        // Only a rail needs the row: inside one, taffy measures the whole list's content
-        // to size it (the column's full redraw went from 67 to 117 M instructions).
+        // The rail lies over the left of the column rather than beside it: in a row, taffy
+        // measures the whole list's content to size it (117 M instructions a redraw).
         let body = match (self.machine_layout() == Machines::Rail).then(|| self.machine_rail(cx)) {
-            Some(rail) => div().flex_1().min_h_0().flex().child(rail).child(column),
+            Some(rail) => div()
+                .relative()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .pl(px(RAIL))
+                .child(column)
+                .child(rail.absolute().left_0().top_0().bottom_0()),
             None => column,
         };
         div()

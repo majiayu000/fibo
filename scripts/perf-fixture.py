@@ -13,7 +13,7 @@ mooring-app/visual-test`; BIN_DIR is where those binaries are.
 
 The probe quits the host it used: prepare again before each probe. MOORING_NO_CATCH_UP=1
 is passed through for redraw-check; NORUN=1 at prepare leaves no turn running, so no
-clock ticks the sidebar.
+clock ticks the sidebar. MACHINE=1 at prepare configures a machine that never connects.
 """
 import json, os, pathlib, shlex, socket, struct, subprocess, sys, tempfile, time
 STATE = pathlib.Path.home() / 'Library/Caches/MooringPerf/state.json'
@@ -77,6 +77,9 @@ if cmd == 'prepare':
         r = rpc(root, {'Hook': {'runtime': 'Codex', 'pid': t['pid'], 'cli_session_id': f'perf-{n}', 'transcript': str(logs / f'perf-{n}.jsonl'), 'ended': False, 'event': None}}); assert 'Error' not in r, r
     w = rpc(root, 'Workspace')['Workspace']
     bound = sum(1 for s in w['agent_sessions'] if s.get('terminal'))
+    if os.environ.get('MACHINE'):  # a machine that never connects, for the column's layouts
+        config = home / '.config/mooring'; config.mkdir(parents=True, exist_ok=True)
+        (config / 'machines.json').write_text('[{"host": "mooring-perf-nowhere.invalid"}]')
     state = {'root': str(root), 'home': str(home), 'host': host.pid}; STATE.write_text(json.dumps(state))
     print('bound', bound)
     print(state, len(w['agent_sessions']), 'sessions', len(w['terminals']), 'terminals', len(w['tabs']), 'tabs')
