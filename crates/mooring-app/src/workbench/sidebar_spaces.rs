@@ -1,4 +1,5 @@
-//! 会话优先's space chips, which narrow the list below them to one space.
+//! The space chips, which narrow the list below them to one space, and the line above a
+//! plugin's flat list or a dense list that keeps to one space.
 use super::*;
 
 /// 「新空间」, or 「新空间 2」 and on when that name is taken.
@@ -12,6 +13,24 @@ pub(super) fn new_space_name(spaces: &[Space]) -> String {
         .unwrap_or_default()
 }
 impl Workbench {
+    /// `-spaces`: every other sample terminal moves to the second space, so a list over
+    /// every space has two to show; `-onespace` then narrows it to the second.
+    #[cfg(feature = "visual-test")]
+    pub(super) fn visual_spread_spaces(&mut self, flag: Option<&str>) {
+        if !matches!(flag, Some("spaces" | "onespace")) {
+            return;
+        }
+        let Some(other) = self.workspace.spaces.get(1).map(|s| s.id.clone()) else {
+            return;
+        };
+        let moved: Vec<String> = (0..20).step_by(2).map(|i| format!("dense-t{i}")).collect();
+        for t in &mut self.workspace.terminals {
+            if moved.contains(&t.id) {
+                t.space = other.clone();
+            }
+        }
+        self.sidebar.space_filter = (flag == Some("onespace")).then_some(other);
+    }
     pub(super) fn first_agent(&self) -> Agent {
         self.tasks
             .last_agent
@@ -89,6 +108,126 @@ impl Workbench {
             );
         }
         rows
+    }
+    /// With `all_spaces` the chips above say all of that, so only the todos stay here.
+    /// The dense presets' top line: the space shown, `▾` opening the space menu (switch,
+    /// add, rename, folder, remove), a badge when another space needs you, and the
+    /// space's todos as a small `待办 3` that unfolds them below.
+    pub(super) fn space_line(&self, all_spaces: bool, cx: &Context<Self>) -> gpui::Div {
+        let shown = if self.nav.overview {
+            self.overview.filter_space.clone()
+        } else {
+            Some(self.nav.space.clone())
+        };
+        let space = shown
+            .as_ref()
+            .and_then(|id| self.workspace.spaces.iter().find(|s| &s.id == id));
+        let line = div()
+            .flex()
+            .items_center()
+            .gap(px(T::S4))
+            .pb(px(T::S4))
+            .font_family(T::UI_FONT);
+        if let Some((_, field, _)) = self.layout.renaming_space.as_ref().filter(|_| !all_spaces) {
+            return line.child(
+                div()
+                    .flex_1()
+                    .h(px(T::ROW))
+                    .px(px(T::S8 - T::BORDER_WIDTH))
+                    .rounded(px(T::CONTROL_RADIUS))
+                    .bg(T::color(T::raised()))
+                    .border(px(T::BORDER_WIDTH))
+                    .border_color(T::color(T::focus()))
+                    .text_size(px(T::SMALL))
+                    .child(field.clone()),
+            );
+        }
+        let elsewhere = self
+            .workspace
+            .spaces
+            .iter()
+            .filter(|s| shown.as_deref() != Some(s.id.as_str()))
+            .map(|s| self.space_counts(&s.id))
+            .map(|c| c.waiting + c.errors)
+            .sum::<usize>();
+        let name = space.map_or_else(|| "全部空间".to_owned(), |s| s.name.clone());
+        let todos = self
+            .workspace
+            .tasks
+            .iter()
+            .filter(|t| t.space == self.nav.space)
+            .count();
+        let open = self.tasks.todos_open;
+        line.when(!all_spaces, |line| {
+            line.child(
+                button("space-switch", "")
+                    .aria_label(format!("空间 {name}，点开切换或新建"))
+                    .min_w_0()
+                    .px(px(T::S8))
+                    .gap(px(T::S6))
+                    .justify_start()
+                    .border_0()
+                    .child(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(T::color(T::primary()))
+                            .child(name),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .text_size(px(T::CHIP_SIZE))
+                            .text_color(T::color(T::muted()))
+                            .child("▾"),
+                    )
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
+                            this.layout.space_menu = Some((this.nav.space.clone(), event.position));
+                            this.layout.space_switch = true;
+                            this.layout.space_removing = false;
+                            cx.stop_propagation();
+                            cx.notify();
+                        }),
+                    ),
+            )
+        })
+        .when(!all_spaces && elsewhere > 0, |d| {
+            d.child(
+                badge(Status::Error, elsewhere)
+                    .flex_shrink_0()
+                    .font_family(T::mono(cx).family),
+            )
+        })
+        .child(div().flex_1())
+        .child(
+            button("todos-toggle", format!("待办 {todos}"))
+                .aria_label(if open { "收起待办" } else { "展开待办" })
+                .flex_shrink_0()
+                .h(px(T::ICON_HEIGHT))
+                .px(px(T::S6))
+                .border_0()
+                .text_size(px(T::CHIP_SIZE))
+                .text_color(T::color(if open { T::primary() } else { T::secondary() }))
+                .when(open, |d| d.bg(T::color(T::raised())))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.tasks.todos_open = !this.tasks.todos_open;
+                    cx.notify();
+                })),
+        )
+        .child(
+            button("sidebar-new-task", "＋")
+                .aria_label("新待办")
+                .flex_shrink_0()
+                .h(px(T::ICON_HEIGHT))
+                .px(px(T::S6))
+                .border_0()
+                .text_size(px(T::CHIP_SIZE))
+                .text_color(T::color(T::link()))
+                .on_click(cx.listener(|this, _, window, cx| this.show_quick_task(window, cx))),
+        )
     }
     pub(super) fn space_tiles(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         use crate::ui::theme::Flat as F;

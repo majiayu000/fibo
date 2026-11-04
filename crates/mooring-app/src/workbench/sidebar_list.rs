@@ -1,4 +1,4 @@
-//! The sessions part of the left column, arranged by the chosen preset: 经典, 状态, 目录
+//! The sessions part of the left column, arranged by the chosen preset: 会话优先, 目录
 //! or a plugin's (`mooring_core::sidebar`). Every preset reads the same `session_status`,
 //! so what needs you is the same row in all of them.
 use super::*;
@@ -166,7 +166,7 @@ impl SidebarPrefs {
     pub fn preset(&self) -> &'static Preset {
         presets::find(&self.preset)
     }
-    /// Every preset but a flat list (经典) uses the denser look of sidebar-density.html:
+    /// Every preset but a plugin's flat list uses the denser look of sidebar-density.html:
     /// the spaces fold into one line, rows carry a state symbol and a time.
     pub fn dense(&self) -> bool {
         self.preset().group != Grouping::Flat

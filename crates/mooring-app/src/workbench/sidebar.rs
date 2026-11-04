@@ -26,20 +26,24 @@ pub(super) fn closed_recently(w: &Workspace, s: &AgentSession) -> bool {
 
 /// A space's row figures: its open sessions, those waiting on you and those failed, and
 /// the state its dot shows.
-struct SpaceCounts {
+pub(super) struct SpaceCounts {
     count: usize,
-    waiting: usize,
-    errors: usize,
+    pub(super) waiting: usize,
+    pub(super) errors: usize,
     group: Status,
 }
 
 impl Workbench {
-    /// 鸟瞰 narrowed to this space's closed sessions, ready to resume.
+    /// 鸟瞰 narrowed to the closed sessions the column counted, ready to resume.
     pub(super) fn show_closed(&mut self, cx: &mut Context<Self>) {
         self.show_overview(cx);
         self.overview.closed_only = true;
         self.overview.changed_only = false;
-        self.overview.filter_space = Some(self.nav.space.clone());
+        self.overview.filter_space = if self.sidebar.preset().all_spaces() {
+            self.space_filter().map(str::to_owned)
+        } else {
+            Some(self.nav.space.clone())
+        };
     }
     pub(super) fn sidebar_view(
         &self,
@@ -54,6 +58,7 @@ impl Workbench {
         // 会话优先, the default: the spaces as lettered tiles on top, then every space's
         // sessions in one list, each row naming its space.
         let recent = self.sidebar.preset().group == mooring_core::sidebar::Grouping::Recent;
+        let all_spaces = self.sidebar.preset().all_spaces();
         let mut sidebar = div()
             .id("sidebar-content")
             .flex_1()
@@ -71,7 +76,12 @@ impl Workbench {
         if recent {
             sidebar = sidebar.children(self.column_top(cx));
         } else if dense {
-            sidebar = sidebar.child(self.space_line(cx));
+            // The chips' own margins are the flat column's, which has no padding of its own.
+            sidebar = sidebar
+                .when(all_spaces, |d| {
+                    d.child(div().mx(px(-T::S8)).children(self.space_tiles(cx)))
+                })
+                .child(self.space_line(all_spaces, cx));
         } else {
             sidebar = sidebar.child(
                 div()
@@ -232,7 +242,7 @@ impl Workbench {
             .filter(|(_, s)| {
                 !local_hidden
                     && self.session_hidden(s).is_none()
-                    && match (recent, self.space_filter()) {
+                    && match (all_spaces, self.space_filter()) {
                         (true, None) => true,
                         (true, Some(only)) => session_space(&self.workspace, s) == Some(only),
                         (false, _) => {
@@ -309,10 +319,13 @@ impl Workbench {
             .filter(|terminal| {
                 !local_hidden
                     && self.workspace.current_agent(terminal).is_none()
-                    && self
-                        .workspace
-                        .terminal_tab(terminal)
-                        .is_some_and(|tab| tab.space == self.nav.space)
+                    && self.workspace.terminal_tab(terminal).is_some_and(|tab| {
+                        match (all_spaces, self.space_filter()) {
+                            (true, None) => true,
+                            (true, Some(only)) => tab.space == only,
+                            (false, _) => tab.space == self.nav.space,
+                        }
+                    })
             })
             .map(|terminal| {
                 let report = recognition
@@ -671,7 +684,7 @@ impl Workbench {
         }
     }
     /// A space's open sessions, how many wait on you or failed, and the state its dot shows.
-    fn space_counts(&self, id: &str) -> SpaceCounts {
+    pub(super) fn space_counts(&self, id: &str) -> SpaceCounts {
         let sessions: Vec<_> = self
             .workspace
             .agent_sessions
@@ -726,123 +739,6 @@ impl Workbench {
             .map(|t| t.id.clone());
         self.sync_panes(cx);
         cx.notify();
-    }
-    /// The dense presets' top line: the space shown, `▾` opening the space menu (switch,
-    /// add, rename, folder, remove), a badge when another space needs you, and the
-    /// space's todos as a small `待办 3` that unfolds them below.
-    fn space_line(&self, cx: &Context<Self>) -> gpui::Div {
-        let shown = if self.nav.overview {
-            self.overview.filter_space.clone()
-        } else {
-            Some(self.nav.space.clone())
-        };
-        let space = shown
-            .as_ref()
-            .and_then(|id| self.workspace.spaces.iter().find(|s| &s.id == id));
-        let line = div()
-            .flex()
-            .items_center()
-            .gap(px(T::S4))
-            .pb(px(T::S4))
-            .font_family(T::UI_FONT);
-        if let Some((_, field, _)) = &self.layout.renaming_space {
-            return line.child(
-                div()
-                    .flex_1()
-                    .h(px(T::ROW))
-                    .px(px(T::S8 - T::BORDER_WIDTH))
-                    .rounded(px(T::CONTROL_RADIUS))
-                    .bg(T::color(T::raised()))
-                    .border(px(T::BORDER_WIDTH))
-                    .border_color(T::color(T::focus()))
-                    .text_size(px(T::SMALL))
-                    .child(field.clone()),
-            );
-        }
-        let elsewhere = self
-            .workspace
-            .spaces
-            .iter()
-            .filter(|s| shown.as_deref() != Some(s.id.as_str()))
-            .map(|s| self.space_counts(&s.id))
-            .map(|c| c.waiting + c.errors)
-            .sum::<usize>();
-        let name = space.map_or_else(|| "全部空间".to_owned(), |s| s.name.clone());
-        let todos = self
-            .workspace
-            .tasks
-            .iter()
-            .filter(|t| t.space == self.nav.space)
-            .count();
-        let open = self.tasks.todos_open;
-        line.child(
-            button("space-switch", "")
-                .aria_label(format!("空间 {name}，点开切换或新建"))
-                .min_w_0()
-                .px(px(T::S8))
-                .gap(px(T::S6))
-                .justify_start()
-                .border_0()
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(T::color(T::primary()))
-                        .child(name),
-                )
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .text_size(px(T::CHIP_SIZE))
-                        .text_color(T::color(T::muted()))
-                        .child("▾"),
-                )
-                .on_mouse_down(
-                    gpui::MouseButton::Left,
-                    cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                        this.layout.space_menu = Some((this.nav.space.clone(), event.position));
-                        this.layout.space_switch = true;
-                        this.layout.space_removing = false;
-                        cx.stop_propagation();
-                        cx.notify();
-                    }),
-                ),
-        )
-        .when(elsewhere > 0, |d| {
-            d.child(
-                badge(Status::Error, elsewhere)
-                    .flex_shrink_0()
-                    .font_family(T::mono(cx).family),
-            )
-        })
-        .child(div().flex_1())
-        .child(
-            button("todos-toggle", format!("待办 {todos}"))
-                .aria_label(if open { "收起待办" } else { "展开待办" })
-                .flex_shrink_0()
-                .h(px(T::ICON_HEIGHT))
-                .px(px(T::S6))
-                .border_0()
-                .text_size(px(T::CHIP_SIZE))
-                .text_color(T::color(if open { T::primary() } else { T::secondary() }))
-                .when(open, |d| d.bg(T::color(T::raised())))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.tasks.todos_open = !this.tasks.todos_open;
-                    cx.notify();
-                })),
-        )
-        .child(
-            button("sidebar-new-task", "＋")
-                .aria_label("新待办")
-                .flex_shrink_0()
-                .h(px(T::ICON_HEIGHT))
-                .px(px(T::S6))
-                .border_0()
-                .text_size(px(T::CHIP_SIZE))
-                .text_color(T::color(T::link()))
-                .on_click(cx.listener(|this, _, window, cx| this.show_quick_task(window, cx))),
-        )
     }
     /// The folded column: a way back, and how many sessions in this space need you.
     /// The space's todos: what is still to be handed to an Agent, above what is running.

@@ -23,7 +23,7 @@ pub(super) enum Hit {
     /// A plugin action, by its index in `mooring_core::action::all()`, run for the
     /// focused pane.
     Action(usize),
-    /// A left-column view (经典, 状态, a plugin's), by preset id: picking it switches.
+    /// A left-column view (目录, a plugin's), by preset id: picking it switches.
     View(String),
     /// 本机诊断: opens the CPU / GPU panel, otherwise only reachable from the sidebar foot.
     Diagnostics,

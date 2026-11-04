@@ -386,7 +386,7 @@ impl Workbench {
             Err(why) => {
                 out.push(
                     label(format!(
-                        "左栏「{}」没能排出来，先按经典显示：{why}",
+                        "左栏「{}」没能排出来，先排成一列显示：{why}",
                         preset.name
                     ))
                     .px(px(T::S8))

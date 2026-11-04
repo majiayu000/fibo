@@ -3,7 +3,7 @@
 //! row shows its second line and how many rows come before 鸟瞰. Every preset reads the
 //! same status judgement, so "needs you" means the same thing in all of them.
 //!
-//! The four built-in presets (会话优先 / 经典 / 状态 / 目录) are written in this format too; plugins
+//! The built-in presets (会话优先 / 机器栏 / 按机器 / 目录) are written in this format too; plugins
 //! add presets beside them and never replace one.
 use crate::agent::Loaded;
 use crate::status::Status;
@@ -132,6 +132,14 @@ impl Preset {
     pub fn folds(&self, b: Bucket) -> bool {
         self.fold.contains(&b)
     }
+    /// Lists every space's sessions, with chips to narrow to one. A flat list keeps one
+    /// space (its column lists the spaces to pick from), and a module gets what it always got.
+    pub fn all_spaces(&self) -> bool {
+        matches!(
+            self.group,
+            Grouping::Recent | Grouping::Status | Grouping::Directory
+        )
+    }
     /// A layout that means nothing with no other machine, so it is not offered then.
     pub fn only_with_machines(&self) -> bool {
         matches!(self.machines, Machines::Rail | Machines::Sections)
@@ -145,7 +153,7 @@ struct File {
     presets: Vec<Preset>,
 }
 
-/// 经典, 状态 and 目录, in the order the switch shows them.
+/// The built-in presets, in the order the switch shows them.
 pub fn builtin() -> Vec<Preset> {
     let p = |id: &str, name: &str, group, fold: &[Bucket], detail| Preset {
         id: id.into(),
@@ -166,21 +174,17 @@ pub fn builtin() -> Vec<Preset> {
         recent("recent", "会话优先", Machines::Mixed),
         recent("machine-rail", "机器栏", Machines::Rail),
         recent("machine-fold", "按机器", Machines::Sections),
-        p("classic", "经典", Grouping::Flat, &[], Detail::Never),
-        p(
-            "status",
-            "状态",
-            Grouping::Status,
-            &[Bucket::Done, Bucket::Stopped, Bucket::Fresh, Bucket::Stale],
-            Detail::Attention,
-        ),
-        p(
-            "directory",
-            "目录",
-            Grouping::Directory,
-            &[Bucket::Done, Bucket::Stopped, Bucket::Fresh, Bucket::Stale],
-            Detail::Attention,
-        ),
+        // Every folder's sessions stay reachable here: no rows hand off to 鸟瞰.
+        Preset {
+            limit: 100,
+            ..p(
+                "directory",
+                "目录",
+                Grouping::Directory,
+                &[Bucket::Done, Bucket::Stopped, Bucket::Fresh, Bucket::Stale],
+                Detail::Attention,
+            )
+        },
     ]
 }
 
@@ -299,7 +303,8 @@ pub fn all() -> &'static [Preset] {
         None => BUILTIN.get_or_init(builtin),
     }
 }
-/// The preset with this id, or 经典 when it is gone (a removed plugin's choice).
+/// The preset with this id, or the default when it is gone: a removed plugin's choice, or
+/// the 经典 and 状态 that were once built in.
 pub fn find(id: &str) -> &'static Preset {
     let all = all();
     all.iter().find(|p| p.id == id).unwrap_or(&all[0])
@@ -328,7 +333,7 @@ mod tests {
         );
         let dup = write(
             "b.json",
-            r#"{"api":1,"presets":[{"id":"status","name":"又一个","group":"flat"}]}"#,
+            r#"{"api":1,"presets":[{"id":"directory","name":"又一个","group":"flat"}]}"#,
         );
         let attention = write(
             "c.json",
@@ -345,14 +350,12 @@ mod tests {
                 "recent",
                 "machine-rail",
                 "machine-fold",
-                "classic",
-                "status",
                 "directory",
                 "quiet"
             ]
         );
-        assert_eq!(presets[6].limit, 8);
-        assert!(presets[6].folds(Bucket::Running));
+        assert_eq!(presets[4].limit, 8);
+        assert!(presets[4].folds(Bucket::Running));
         assert_eq!(report[0].result, Ok("安静".into()));
         assert!(report[1].result.as_ref().unwrap_err().contains("重名"));
         assert!(
@@ -417,11 +420,31 @@ mod tests {
     }
 
     #[test]
+    fn a_choice_of_a_retired_layout_opens_the_default() {
+        assert_eq!(find("classic").id, "recent");
+        assert_eq!(find("status").id, "recent");
+    }
+
+    #[test]
+    fn only_a_flat_list_or_a_module_keeps_to_one_space() {
+        let with = |group| Preset {
+            group,
+            ..find("recent").clone()
+        };
+        for group in [Grouping::Recent, Grouping::Status, Grouping::Directory] {
+            assert!(with(group).all_spaces(), "{group:?}");
+        }
+        for group in [Grouping::Flat, Grouping::Wasm] {
+            assert!(!with(group).all_spaces(), "{group:?}");
+        }
+    }
+
+    #[test]
     fn a_preset_says_where_other_machines_go() {
         assert_eq!(find("recent").machines, Machines::Mixed);
         assert_eq!(find("machine-rail").machines, Machines::Rail);
         assert_eq!(find("machine-fold").machines, Machines::Sections);
-        assert_eq!(find("classic").machines, Machines::Below);
+        assert_eq!(find("directory").machines, Machines::Below);
         assert!(!find("recent").only_with_machines());
         assert!(find("machine-rail").only_with_machines());
         let d = std::env::temp_dir().join(format!("kl-sidebar-machines-{}", std::process::id()));

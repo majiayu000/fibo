@@ -911,15 +911,13 @@ impl Workbench {
                 self.layout.icon_menu = Some(gpui::point(px(T::TRAFFIC_LIGHT_INSET), px(T::TOP)));
             }
             // The left column's presets, set in memory so the evidence run writes no choice.
-            "SidebarClassic" | "SidebarStatus" | "SidebarStatusOpen" | "SidebarDirectory"
-            | "SidebarRail" | "SidebarWasm" | "SidebarWasmOpen" | "SidebarWasmClosed"
-            | "SidebarViewMenu" => {
+            "SidebarDirectory" | "SidebarRail" | "SidebarWasm" | "SidebarWasmOpen"
+            | "SidebarWasmClosed" | "SidebarViewMenu" => {
                 self.sidebar.preset = match name {
-                    "SidebarStatus" | "SidebarStatusOpen" => "status",
                     "SidebarDirectory" => "directory",
                     // The example WebAssembly plugin, installed into the scratch config.
                     "SidebarWasm" | "SidebarWasmOpen" | "SidebarWasmClosed" => "wasm-status",
-                    _ => "classic",
+                    _ => "recent",
                 }
                 .into();
                 self.sidebar.collapsed = name == "SidebarRail";
@@ -927,9 +925,6 @@ impl Workbench {
                 // The ≑ beside 会话 with its menu open, as a click on it leaves it.
                 self.sidebar.view_menu = (name == "SidebarViewMenu")
                     .then(|| gpui::point(px(T::SIDEBAR - 24.), px(T::TOP + 170.)));
-                if name == "SidebarStatusOpen" {
-                    self.sidebar.toggled.insert("status:rest".into(), true);
-                }
                 if name == "SidebarWasmOpen" || name == "SidebarWasmClosed" {
                     for section in ["rest", "closed"] {
                         self.sidebar
@@ -1010,7 +1005,7 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
-            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall]`:
+            // `Dense-{directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall]`:
             // the denser presets over sessions shaped like sidebar-density.html's; `-bg`
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
             // the status bar's 工作中 popover beside the column.
@@ -1027,6 +1022,7 @@ impl Workbench {
                 .into();
                 self.sidebar.collapsed = false;
                 self.sidebar.toggled.clear();
+                self.visual_spread_spaces(parts.get(4).copied());
                 if parts.get(4) == Some(&"open") {
                     for key in ["status:rest", "wasm:wasm-status:rest"] {
                         self.sidebar.toggled.insert(key.into(), true);

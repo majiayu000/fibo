@@ -124,7 +124,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 }
 ```
 
-- `group`：`flat`（一列，需要你的在前）、`status`（按状态分段）、`directory`（需要你的置顶，其余按目录分）。
+- `group`：`flat`（当前空间一列，需要你的在前）、`status`（所有空间，按状态分段）、`directory`（所有空间，需要你的置顶，其余按目录分）。`status` 和 `directory` 顶上有空间标签，点一个只看这个空间；`wasm` 只拿到当前空间的会话。
 - `fold`：哪些段收成一行，点开才展开。可选 `running` `stopped` `fresh` `stale`；`attention`（要你处理，等你验收也算在里面）不能收。旧插件写的 `done` 仍能读，但已经没有这一段了。
 - `detail`：会话行什么时候显示第二行：`never`（默认）、`attention`（需要你的和选中的）、`always`。
 - `limit`：左栏最多列几行，剩下的进鸟瞰，默认 12。
