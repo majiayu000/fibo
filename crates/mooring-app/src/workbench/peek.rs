@@ -107,7 +107,7 @@ impl Workbench {
                 .nav
                 .focused
                 .as_ref()
-                .and_then(|id| self.workspace.current_agent(id))
+                .and_then(|id| self.current_agent(id))
                 .is_some_and(|s| s.id == session)
     }
     /// The approval question the peeked session's screen shows, if any.

@@ -253,13 +253,10 @@ impl Render for Workbench {
             let active = page.is_none() && Some(&id) == self.nav.tab.as_ref();
             let ids = self.workspace.tab_terminals(&id);
             let needs: Vec<_> = self
-                .workspace
-                .agent_sessions
-                .iter()
+                .current_on(&ids)
+                .into_iter()
                 .filter(|s| {
-                    s.current
-                        && s.terminal.as_ref().is_some_and(|id| ids.contains(id))
-                        && s.outcome.needs_review(now())
+                    s.outcome.needs_review(now())
                         && matches!(
                             status_of(&self.workspace, s),
                             Status::Waiting | Status::Error
@@ -1060,18 +1057,9 @@ impl Workbench {
     /// into 鸟瞰. Zero counts are left out.
     fn status_glyphs(&self, cx: &Context<Self>) -> gpui::Div {
         // This machine's sessions in Mooring's terminals, of those the top bar's 需要你 counts.
-        let mut counts = [self.needs_you().len(), 0, 0];
+        let facts = self.facts();
+        let counts = [self.needs_you().len(), facts.working, facts.review];
         const SHOWN: [Status; 3] = [Status::Error, Status::Running, Status::Review];
-        for s in &self.workspace.agent_sessions {
-            if !s.managed() || !s.outcome.needs_review(now()) || self.session_hidden(s).is_some() {
-                continue;
-            }
-            match status_of(&self.workspace, s) {
-                g if g.working() => counts[1] += 1,
-                Status::Review => counts[2] += 1,
-                _ => {}
-            }
-        }
         let mut row = div()
             .flex_shrink_0()
             .flex()
@@ -1176,12 +1164,7 @@ struct TabTip {
 }
 impl Workbench {
     fn tab_tip(&self, title: &str, ids: &[String]) -> TabTip {
-        let sessions: Vec<_> = self
-            .workspace
-            .agent_sessions
-            .iter()
-            .filter(|s| s.current && s.terminal.as_ref().is_some_and(|id| ids.contains(id)))
-            .collect();
+        let sessions = self.current_on(ids);
         let (status, reason) = sessions
             .iter()
             .map(|s| {

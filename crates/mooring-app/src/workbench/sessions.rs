@@ -84,13 +84,6 @@ impl Workbench {
     pub(super) fn session_title(&self, s: &AgentSession) -> String {
         self.workspace.session_title(s)
     }
-    /// The sessions the window lists: open in a tab and not hidden, in every space.
-    pub(super) fn listed_sessions(&self) -> impl Iterator<Item = &AgentSession> {
-        self.workspace
-            .agent_sessions
-            .iter()
-            .filter(|s| self.session_hidden(s).is_none() && self.session_open(s))
-    }
     /// What hovering a conversation's row shows: where its name comes from, what it
     /// was first and last asked, and where it runs.
     pub(super) fn session_tip(&self, s: &AgentSession) -> Vec<String> {
@@ -667,17 +660,10 @@ impl Workbench {
     }
     /// Its terminal is running in a tab: the sidebar lists only these.
     pub(super) fn session_open(&self, s: &AgentSession) -> bool {
-        live_terminal(&self.workspace, s)
-            .or_else(|| resume_terminal(&self.workspace, &self.resuming.resumed, s))
-            .is_some_and(|t| self.workspace.terminal_tab(&t.id).is_some())
+        session_open_in(&self.workspace, &self.resuming.resumed, s)
     }
     pub(super) fn session_hidden(&self, s: &AgentSession) -> Option<&str> {
-        match self.workspace.content.get(&s.id) {
-            Some(c) => c.hidden_for(s),
-            // A hook can bind a new conversation before its first prompt writes anything.
-            None if s.current && s.binding.is_some() => None,
-            None => Some("缺少交互入口证据"),
-        }
+        session_hidden_in(&self.workspace, s)
     }
     pub(super) fn enter_card(
         &mut self,
@@ -825,15 +811,6 @@ impl Workbench {
             self.pending_route = Some((id, page));
         }
     }
-    /// Only Mooring's own terminals ask for attention; scanned-only sessions stay in the overview.
-    pub(super) fn needs_you(&self) -> Vec<&AgentSession> {
-        let now = now();
-        self.workspace
-            .agent_sessions
-            .iter()
-            .filter(|s| self.workspace.needs_you(s, now))
-            .collect()
-    }
 }
 /// The card's receipts by kind: commands that exited 0, file changes, and failures.
 /// Test and commit receipts repeat their command's, so they are not counted again.
@@ -877,4 +854,21 @@ pub(super) fn done_items(
         }
     }
     items
+}
+pub(super) fn session_open_in(
+    w: &Workspace,
+    resumed: &HashMap<String, String>,
+    s: &AgentSession,
+) -> bool {
+    live_terminal(w, s)
+        .or_else(|| resume_terminal(w, resumed, s))
+        .is_some_and(|t| w.terminal_tab(&t.id).is_some())
+}
+pub(super) fn session_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
+    match w.content.get(&s.id) {
+        Some(c) => c.hidden_for(s),
+        // A hook can bind a new conversation before its first prompt writes anything.
+        None if s.current && s.binding.is_some() => None,
+        None => Some("缺少交互入口证据"),
+    }
 }

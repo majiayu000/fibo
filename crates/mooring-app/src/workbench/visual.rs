@@ -1028,12 +1028,7 @@ impl Workbench {
                     });
                 }
             }
-            // Two sessions whose terminal is gone, as after closing their panes.
-            "Closed" => {
-                for s in self.workspace.agent_sessions.iter_mut().take(2) {
-                    s.terminal = Some("closed-visual".into());
-                }
-            }
+            "Closed" => self.visual_close_two_sessions(),
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),

@@ -23,6 +23,7 @@ pub struct Workbench {
     search: Search,
     store: Store,
     workspace: Workspace,
+    facts: frame_facts::FactsCache,
     /// A press on the top bar's empty space that has not moved the window yet.
     title_drag: bool,
     error: Option<String>,
@@ -238,6 +239,7 @@ mod diagnostics;
 mod divergence;
 mod filters;
 mod forms;
+mod frame_facts;
 mod layout;
 mod machines;
 use layout::LayoutState;
@@ -385,6 +387,7 @@ impl Workbench {
             search,
             store,
             workspace,
+            facts: Default::default(),
             title_drag: false,
             error: None,
             unsure: None,
@@ -558,28 +561,6 @@ impl Workbench {
         track_unseen(&mut self.attention.phases, &mut self.attention.unseen, live);
         self.mark_pane_agents(cx);
     }
-    /// Which Agent each pane holds, for its tint. One the host sees but cannot read (a
-    /// shared-daemon Codex, a Claude that saves no transcript) still counts: the host says
-    /// which Agent is behind each terminal note.
-    fn mark_pane_agents(&mut self, cx: &mut Context<Self>) {
-        for (id, pane) in &self.layout.panes {
-            let agent = self
-                .workspace
-                .current_agent(id)
-                .map(|s| s.runtime)
-                .or_else(|| self.store.recognition().terminal_agents.get(id).copied());
-            // What its conversation was asked, for pinning the turn's ask.
-            let asks: Vec<String> = self
-                .pane_session(id)
-                .and_then(|s| self.workspace.content.get(&s.id))
-                .map(|c| c.asks.iter().map(|q| q.text.clone()).collect())
-                .unwrap_or_default();
-            pane.update(cx, |p, cx| {
-                p.agent = agent;
-                p.set_asks(asks, cx);
-            });
-        }
-    }
     /// Takes a snapshot unless a newer one already arrived by another reply.
     fn apply_workspace(&mut self, w: Workspace, cx: &mut Context<Self>) {
         if w.revision < self.workspace.revision {
@@ -602,6 +583,7 @@ impl Workbench {
             }
         }
         self.workspace = w;
+        self.facts.forget();
         if let Some(view) = &self.settings {
             view.update(cx, |v, cx| {
                 v.values = self.workspace.settings.clone();
@@ -728,7 +710,7 @@ impl Workbench {
                     .iter()
                     .any(|t| &t.id == id && t.state == ProcessState::Running)
             })
-            .filter_map(|id| self.workspace.current_agent(&id))
+            .filter_map(|id| self.current_agent(&id))
             .map(|s| {
                 (
                     self.workspace.session_title(s),

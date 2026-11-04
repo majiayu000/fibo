@@ -302,7 +302,7 @@ impl Workbench {
                 .nav
                 .focused
                 .as_ref()
-                .and_then(|id| self.workspace.current_agent(id))
+                .and_then(|id| self.current_agent(id))
                 .map(|s| s.id.clone()),
         };
         // Agents running in a tab here that no evidence has tied to a conversation yet:
@@ -318,7 +318,7 @@ impl Workbench {
             .into_iter()
             .filter(|terminal| {
                 !local_hidden
-                    && self.workspace.current_agent(terminal).is_none()
+                    && self.current_agent(terminal).is_none()
                     && self.workspace.terminal_tab(terminal).is_some_and(|tab| {
                         match (all_spaces, self.space_filter()) {
                             (true, None) => true,

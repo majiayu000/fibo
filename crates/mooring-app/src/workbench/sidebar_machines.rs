@@ -440,7 +440,7 @@ impl Workbench {
                 .nav
                 .focused
                 .as_ref()
-                .and_then(|id| self.workspace.current_agent(id))
+                .and_then(|id| self.current_agent(id))
                 .map(|s| s.id.clone())
                 .or_else(|| self.overview.here.clone()),
         };

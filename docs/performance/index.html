@@ -63,7 +63,7 @@
 <p>测试工作区：2000 个会话、8 个空间、60 个终端都绑了会话、侧栏约 45 行（<code>scripts/perf-fixture.py</code>，接近长期使用的真实安装）。单位是每帧退休指令数。</p>
 <table>
   <tr><th>帧</th><th>11-03 前</th><th>现在</th><th>说明</th></tr>
-  <tr><td>终端输出帧（只有窗格变了）</td><td>7430 万</td><td><b>约 830–900 万</b></td><td>最常见的帧：Agent 输出时每帧都是它</td></tr>
+  <tr><td>终端输出帧（只有窗格变了）</td><td>7430 万</td><td><b>约 630–700 万</b></td><td>最常见的帧：Agent 输出时每帧都是它</td></tr>
   <tr><td>整窗重画（强制刷新）</td><td>约 7500 万</td><td><b>约 7570 万</b></td><td>切主题、开鸟瞰、改窗口大小时发生，次数少</td></tr>
   <tr><td>真实窗口 CPU（Agent 输出时）</td><td>14–32%</td><td>采样 0–10%</td><td>各时段输出量不同，只作粗对比</td></tr>
 </table>
@@ -108,7 +108,7 @@
 <span class="bad">不要写</span> <code>cx.observe(&amp;pane, |_, _, cx| cx.notify())</code>：终端每输出一次，侧栏就整个重排一次（终端帧会涨到 7 倍）。</div>
 <div class="card rule"><b>R2 侧栏要显示的状态，改动时要让工作台 notify。</b>侧栏是缓存视图（<code>workbench/redraw.rs</code> 的 <code>SidebarView</code>），只在工作台 notify 时重画；其他途径的变化最多晚 1 秒由补画追上。在 render 里改的状态（如 <code>open_pending_route</code>）通知不到侧栏，要在下一帧调 <code>ask</code>。</div>
 <div class="card rule"><b>R3 补画触发的那一帧必须设 <code>asked</code>。</b>否则补画会自己排下一次补画，空闲时也会每秒整窗重画好几次（坏版本 5 秒 15 次）。</div>
-<div class="card rule"><b>R4 每帧都要的派生值不要在 render 里扫全部会话。</b>按「工作区 revision + 当前秒」缓存，参照 <code>redraw::quotas</code>（额度）和 <code>redraw::tab_name</code>（标签名）。代价是数据最多晚 1 秒。缓存键要覆盖所有输入：标签名的键包含整个 <code>Tab</code>，因为改名时会传入清空标题的标签。</div>
+<div class="card rule"><b>R4 每帧都要的派生值不要在 render 里扫全部会话。</b>按「工作区 revision + 当前秒」缓存，参照 <code>workbench/frame_facts.rs</code>（会话查找和各种计数，调试版每次取用都重算核对）、<code>redraw::quotas</code>（额度）和 <code>redraw::tab_name</code>（标签名）。代价是数据最多晚 1 秒。缓存键要覆盖所有输入：标签名的键包含整个 <code>Tab</code>，因为改名时会传入清空标题的标签。</div>
 <div class="card rule"><b>R5 大列表不要放进横向 flex。</b>横向容器要先量子元素的内容尺寸，taffy 会把整张会话列表（含文字折行）多量一遍。只有确实需要并排（机器竖栏）时才套横向容器。</div>
 <div class="card rule"><b>R6 每帧按 id 查的表用 FxHash。</b><code>Workspace.content</code> 是 <code>FxHashMap</code>；SipHash 曾占终端帧约一成。键来自本机日志，不是网络对端挑的。</div>
 <div class="card rule"><b>R7 动了渲染要跑门禁。</b>本机：<code>python3 scripts/perf-gate.py target/release</code>（先编探针版）。性能确实变了且是有意的，用 <code>MOORING_PERF_UPDATE=1</code> 重写基线并在提交说明里写原因；只能在真机写，虚拟机写不了。</div>
@@ -118,14 +118,14 @@
 <table>
   <tr><th>检查</th><th>失败条件</th><th>拦的是什么</th></tr>
   <tr><td>终端帧、整窗重画的指令数</td><td>超基线 15%</td><td>任何变慢（真机）</td></tr>
-  <tr><td>pane-share：终端帧 CPU ÷ 整窗 CPU</td><td>超基线 2 倍（仅在读不到指令数时）</td><td>CI 虚拟机上的退路。两个数同一进程前后量，机器快慢基本抵消：本机 0.17，CI 约 0.2，侧栏每帧重画时 0.96</td></tr>
+  <tr><td>pane-share：终端帧 CPU ÷ 整窗 CPU</td><td>超基线 2 倍（仅在读不到指令数时）</td><td>CI 虚拟机上的退路。两个数同一进程前后量，机器快慢基本抵消：本机 0.11（frame_facts 之前 0.17，那时 CI 约 0.2），侧栏每帧重画时 0.96</td></tr>
   <tr><td>逐像素重画</td><td>任何一步有差异</td><td>侧栏或其他缓存视图漏刷新</td></tr>
   <tr><td>终端输出时侧栏保留上次绘制</td><td>侧栏重画了</td><td>违反 R1</td></tr>
   <tr><td>补画自己那一帧又排的补画</td><td>&gt;0</td><td>违反 R3。不数补画总数：CI 机器有屏幕会自己出帧，正常版本 5 秒也有 9–15 次补画</td></tr>
 </table>
 <p><b>门禁自己也测过：</b>三个故意做坏的版本都被拦下。通知整个工作台（指令数 +666%，侧栏每帧重画）；侧栏不跟着刷新（筛选、取消筛选、改名三步有像素差异）；补画循环（15 次自我触发）。改门禁时要重做这类坏版本测试，确认还能拦住。</p>
 <p class="muted">比对前探针会先画一帧、等 50 ms：标签栏的溢出提示是按上一帧排版算的，16 ms 后补一帧（<code>tab_overflow</code>），这是设计内的晚一帧，不能当差异。</p>
-<p class="muted">终端帧指令数是双峰的（约 8.3 M 和 8.9 M），基线取高的那个，避免误报。</p>
+<p class="muted">终端帧指令数是双峰的（约 6.3 M 和 7.0 M），基线取高的那个，避免误报。</p>
 <p><b>后台：</b><code>managed_session</code> 的 <code>four_agents…</code> 按每行日志的退休指令数断言（≤100 万）；读不到指令数（虚拟机）时退回「增量 CPU ≤ 2% 一核」。</p>
 
 <h2 id="triage">6. 门禁报警的排查流程</h2>
@@ -176,8 +176,8 @@
 <ul>
   <li><span class="tag">未查</span> 开启补画时，开头那帧顶栏「＋」附近有 803 px 差异；新 main（11-04）才出现，门禁目前只比对关闭补画的那轮，不拦。</li>
   <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>
-  <li><span class="tag">可做</span> 终端帧剩下的大头：状态栏「本机 · N 个会话」每帧数全部会话（还依赖界面里「正在恢复」的状态，不能简单按 revision 缓存）；<code>current_agent</code> 按终端逐个查找会话。</li>
-  <li><span class="tag">待定</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%；要么 store 改 NORMAL，要么重新设计 revision 怎么持久化，需要用户决定。</li>
+  <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
+  <li><span class="tag">不改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：主库存的是用户操作（待办、完成状态），<code>synchronous=FULL</code> 保留；日志索引本来就是 NORMAL。</li>
   <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试；窗口进程约 756 MB 内存没查。</li>
 </ul>
 </main>

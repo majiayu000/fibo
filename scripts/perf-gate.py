@@ -11,7 +11,7 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   MOORING_PERF_UPDATE=1 writes the measured numbers there (only for a change you mean).
   A virtual machine (the CI runner) counts no instructions; there a terminal frame's CPU
   time as a share of a full redraw's, measured back to back in one process, must stay
-  within SHARE_BUDGET of `pane-share` (0.18 here, 0.19 on the runner; 1.0 with the
+  within SHARE_BUDGET of `pane-share` (0.11 here; 1.0 with the
   sidebar drawn each frame);
 - terminal output must not draw the sidebar again (it drew the whole sidebar each
   frame once: 7x the instructions);

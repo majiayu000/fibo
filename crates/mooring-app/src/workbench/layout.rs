@@ -892,7 +892,7 @@ impl Workbench {
             }
             "停止 Agent" => self.request_close(Closing::Agent(id.into()), cx),
             "取消关联" => {
-                if let Some(session) = self.workspace.current_agent(id) {
+                if let Some(session) = self.current_agent(id) {
                     self.edit(
                         Edit::AssignTask {
                             id: session.id.clone(),
@@ -1079,7 +1079,7 @@ impl Workbench {
         window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
-        let session = self.workspace.current_agent(&menu.terminal);
+        let session = self.current_agent(&menu.terminal);
         let task = self
             .workspace
             .terminal_tab(&menu.terminal)
@@ -1693,16 +1693,6 @@ static BRANCHES: std::sync::LazyLock<std::sync::Mutex<Branches>> =
     std::sync::LazyLock::new(Default::default);
 const BRANCH_TTL: Duration = Duration::from_secs(10);
 impl Workbench {
-    /// The conversation a pane shows: its current one, else the latest it ran.
-    pub(super) fn pane_session(&self, id: &str) -> Option<&AgentSession> {
-        self.workspace.current_agent(id).or_else(|| {
-            self.workspace
-                .agent_sessions
-                .iter()
-                .filter(|s| s.terminal.as_deref() == Some(id))
-                .max_by_key(|s| self.workspace.session_updated(s))
-        })
-    }
     /// A pane's status as the sidebar shows it, and whether it asks for attention; a
     /// conversation already closed out and no longer live shows none.
     pub(super) fn pane_status(&self, id: &str) -> Option<(Status, bool)> {

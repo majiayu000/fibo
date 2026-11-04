@@ -1,8 +1,8 @@
-frames-arrive 45.08
-frames-main 73.51
-frames-motion 54.76
-frames-pane 8.95
-frames-rail 48.47
-frames-railrest 81.45
-frames-section 57.66
-pane-share 0.17
+frames-arrive 43.12
+frames-main 73.78
+frames-motion 52.80
+frames-pane 6.96
+frames-rail 46.49
+frames-railrest 79.47
+frames-section 55.41
+pane-share 0.11

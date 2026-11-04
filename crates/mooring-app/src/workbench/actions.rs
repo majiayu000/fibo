@@ -8,7 +8,7 @@ impl Workbench {
     /// transcript, task and Agent when it has them.
     /// `cx` reads the pane's live directory; without it the directory it started in.
     pub(super) fn action_context(&self, terminal: &str, cx: Option<&gpui::App>) -> ActionContext {
-        let session = self.workspace.current_agent(terminal);
+        let session = self.current_agent(terminal);
         let cwd = cx
             .and_then(|cx| {
                 self.layout

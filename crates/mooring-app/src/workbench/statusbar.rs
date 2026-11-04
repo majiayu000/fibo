@@ -29,7 +29,7 @@ impl Workbench {
         let detail = self.store.recognition().detail.clone();
         // 「本机 · 11 个会话」: this machine and how many sessions it lists. What needs you
         // is the title row's 要你处理 alone; a click here still lists what works or waits.
-        let listed = self.listed_sessions().count();
+        let listed = self.facts().listed;
         let host = item("status-host", open == Some(StatusPop::Sessions))
             .aria_label(format!("本机，{listed} 个会话"))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Sessions, cx)))

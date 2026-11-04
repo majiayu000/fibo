@@ -29,6 +29,7 @@ impl Workbench {
                 t.space = other.clone();
             }
         }
+        self.facts.forget();
         self.sidebar.space_filter = (flag == Some("onespace")).then_some(other);
     }
     pub(super) fn first_agent(&self) -> Agent {

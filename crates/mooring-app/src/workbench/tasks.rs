@@ -34,7 +34,6 @@ impl Workbench {
         use crate::terminal::pane::HandoffState;
         let terminal = terminal.to_owned();
         let agent = self
-            .workspace
             .current_agent(&terminal)
             .map(|s| s.runtime)
             .unwrap_or(task.agent);
@@ -97,10 +96,10 @@ impl Workbench {
                     }
                 })
             }))
-            .when(self.workspace.current_agent(&terminal).is_none(), |d| {
+            .when(self.current_agent(&terminal).is_none(), |d| {
                 d.child(button("handoff-unlink", "不关联待办").on_click(cx.listener(
                     move |this, _, _, cx| {
-                        if this.workspace.current_agent(&terminal).is_none() {
+                        if this.current_agent(&terminal).is_none() {
                             this.edit(
                                 Edit::SetPendingTask {
                                     terminal: terminal.clone(),
