@@ -55,8 +55,8 @@
       "files": [
         {
           "path": "actions.json",
-          "sha256": "0bb29842ca49f006572217d9cb8d4fad26c1c3d860e97c1f718189abeea0c268",
-          "size": 693
+          "sha256": "0e5a8e20bc7e2b6493dc53764610b3fa9fa6c75d80ee632cc1c57bc02e58b411",
+          "size": 765
         },
         {
           "path": "plugin.json",
