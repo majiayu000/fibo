@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { pair } from '@/remote/hub';
-import { escape, parseLink } from '@/remote/link';
+import { escape, type Link, parseLink } from '@/remote/link';
 import { useTheme } from '@/ui/theme';
 
 export default function Pair() {
@@ -16,16 +16,22 @@ export default function Pair() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const done = useRef(false);
+  // A scanned or opened link waits here until the person says yes (plan stage 4): a
+  // link someone else sent never pairs this phone on its own.
+  const [candidate, setCandidate] = useState<Link | null>(null);
 
-  async function use(linkText: string) {
-    if (done.current || busy) return;
-    let link;
+  function use(linkText: string) {
+    if (done.current || busy || candidate) return;
     try {
-      link = parseLink(linkText);
+      setCandidate(parseLink(linkText));
+      setError('');
     } catch (e) {
       setError(`这不是 Mooring 的配对链接（${(e as Error).message}）`);
-      return;
     }
+  }
+
+  async function confirm(link: Link) {
+    if (done.current || busy) return;
     done.current = true;
     setBusy(true);
     try {
@@ -33,7 +39,8 @@ export default function Pair() {
       router.dismissTo('/');
     } catch (e) {
       done.current = false;
-      setError((e as Error).message);
+      setCandidate(null);
+      setError(`没配上：${(e as Error).message}`);
     } finally {
       setBusy(false);
     }
@@ -49,6 +56,30 @@ export default function Pair() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.code, params.key]);
+
+  if (candidate) {
+    const relay = candidate.relay.replace(/^\w+:\/\//, '');
+    return (
+      <View style={[s.page, { backgroundColor: t.bg }]}>
+        <Text style={{ color: t.text, fontSize: 18 }}>
+          和「{candidate.name || '这台电脑'}」配对？
+        </Text>
+        <Text style={[s.hint, { color: t.dim }]}>
+          经过中继 {relay}。只在你刚在自己电脑的 Mooring 里点了「配对新手机」时才确认；别人发来的链接不要配。
+        </Text>
+        <Pressable
+          disabled={busy}
+          onPress={() => confirm(candidate)}
+          style={[s.button, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}
+        >
+          <Text style={{ color: t.onAccent, fontSize: 16 }}>{busy ? '正在连接…' : '配对'}</Text>
+        </Pressable>
+        <Pressable disabled={busy} onPress={() => setCandidate(null)} style={s.button}>
+          <Text style={{ color: t.accent, fontSize: 16 }}>取消</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={[s.page, { backgroundColor: t.bg }]}>
@@ -87,7 +118,7 @@ export default function Pair() {
         onPress={() => use(text)}
         style={[s.button, { backgroundColor: t.accent, opacity: !text || busy ? 0.5 : 1 }]}
       >
-        <Text style={{ color: t.onAccent, fontSize: 16 }}>{busy ? '正在连接…' : '配对'}</Text>
+        <Text style={{ color: t.onAccent, fontSize: 16 }}>下一步</Text>
       </Pressable>
       {!!error && <Text style={{ color: t.danger }}>{error}</Text>}
     </View>

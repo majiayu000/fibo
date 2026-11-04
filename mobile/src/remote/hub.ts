@@ -190,7 +190,10 @@ export async function start() {
   });
 }
 
+/** Pairs with `link`: kept only once its machine answered this phone's handshake. */
 export async function pair(link: Link) {
+  const probe = await Remote.connect(link);
+  probe.close();
   await saveMachine(link);
   const id = machineId(link);
   remotes.get(id)?.close();
