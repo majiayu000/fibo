@@ -121,6 +121,12 @@ impl Workbench {
                         }),
                 )
                 .when(need > 0, |d| d.child(need_badge(need)))
+                .tooltip(super::diagnostics::tip(vec![
+                    match self.machine_limit(index) {
+                        Some(limit) => format!("{name} · {limit}"),
+                        None => name.clone(),
+                    },
+                ]))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     let again = this.sidebar.machine_scope.as_deref() == Some(host.as_str());
                     this.sidebar.machine_scope = (!again).then(|| host.clone());
@@ -301,7 +307,10 @@ impl Workbench {
         let open = self.sidebar.open(&key, online);
         let name = machine_label(&host).to_owned();
         let note = match &link {
-            Link::Online => format!("{} 个会话", rows.len()),
+            Link::Online => match self.machine_limit(index) {
+                Some(limit) => format!("{} 个会话 · {limit}", rows.len()),
+                None => format!("{} 个会话", rows.len()),
+            },
             Link::Connecting => "连接中…".to_owned(),
             Link::Offline(why) => format!("断开：{why}"),
         };
@@ -429,7 +438,12 @@ impl Workbench {
                         .child(need_badge(need)),
                 )
             })
-            .tooltip(super::diagnostics::tip(vec![label]))
+            .tooltip(super::diagnostics::tip(vec![
+                match index.and_then(|i| self.machine_limit(i)) {
+                    Some(limit) => format!("{label} · {limit}"),
+                    None => label,
+                },
+            ]))
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.sidebar.machine_scope = host.clone();
                 this.sidebar.space_filter = None;

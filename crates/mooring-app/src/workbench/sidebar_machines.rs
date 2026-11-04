@@ -110,6 +110,16 @@ impl Workbench {
         let view = self.machines.get(index)?.view.lock().unwrap();
         Some(view.spec.host.clone())
     }
+    /// What a host older than this window cannot do yet, in the user's words.
+    pub(super) fn machine_limit(&self, index: usize) -> Option<&'static str> {
+        let slot = self.machines.get(index)?.slot();
+        let linked = slot.lock().unwrap();
+        match linked.as_ref()? {
+            l if !l.typing => Some("旧版，只能看"),
+            l if !l.managing => Some("旧版，不能开关终端"),
+            _ => None,
+        }
+    }
     pub(super) fn machine_section_key(host: &str) -> String {
         format!("machine:{host}")
     }
