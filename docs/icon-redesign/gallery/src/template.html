@@ -22,6 +22,7 @@ dialog{border:0;border-radius:16px;padding:0;background:var(--ca);color:var(--fg
 .bigbars{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.bigbars .b{height:24px;justify-content:space-between;padding:0 8px;font-size:12px}.navs{display:flex;gap:6px;margin-top:12px}.btn{border:1px solid var(--li);background:var(--chip);border-radius:8px;padding:3px 11px}
 .pulse img{animation:p 3.6s ease-in-out infinite}@keyframes p{0%,100%{filter:brightness(.88)}50%{filter:brightness(1.08)}}@media (prefers-reduced-motion:reduce){.pulse img{animation:none}}
 #picked{margin-left:auto;font-size:13px}#copied{color:var(--mu);font-size:12px}
+.grid.wide{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
 @media (max-width:720px){header{padding:12px 16px 8px;position:static}main{padding:8px 16px 60px}.grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}.dlg{grid-template-columns:1fr}.dlg .big{max-width:240px;margin:auto}input[type=search]{width:100%}#picked{margin-left:0}}
 </style></head><body>
 <header><div class="wrap"><h1>Mooring 图标全集</h1><p class="sub" id="sub"></p>
@@ -35,7 +36,8 @@ const load=()=>{try{return new Set(JSON.parse(localStorage.getItem('mooring-icon
 const likes=load();const save=()=>{try{localStorage.setItem('mooring-icon-likes',JSON.stringify([...likes]))}catch(e){}};
 let view='all',batch='all',q='',shown=[];
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const VIEWS=[['all','全部'],['liked','我喜欢的'],['rec','Claude 看好'],['codex','Codex 的点子'],['fail','翻车的']];
+const VIEWS=[['all','全部'],['liked','我喜欢的'],['rec','Claude 看好'],['codex','Codex 的点子'],['fail','翻车的'],['ring','圆环加一点']];
+const RING=['1-current','4-bay','13-cradle','7-fly','9-br3'];
 function chips(){
   document.getElementById('views').innerHTML=VIEWS.map(([k,l])=>`<button class="chip" data-v="${k}" aria-pressed="${view===k}">${l}</button>`).join('')+'<input type="search" id="q" placeholder="搜名字或想法" aria-label="搜索" value="'+esc(q)+'"><span id="picked"></span>';
   const ks=Object.keys(batches).sort((a,b)=>b-a);
@@ -44,14 +46,16 @@ function chips(){
 }
 function match(i){
   if(batch!=='all'&&String(i.batch)!==batch)return false;
-  if(view==='liked'&&!likes.has(i.id))return false;if(view==='rec'&&i.status!=='rec')return false;if(view==='fail'&&i.status!=='fail')return false;if(view==='codex'&&i.by!=='Codex')return false;
+  if(view==='liked'&&!likes.has(i.id))return false;if(view==='rec'&&i.status!=='rec')return false;if(view==='fail'&&i.status!=='fail')return false;if(view==='codex'&&i.by!=='Codex')return false;if(view==='ring'&&!RING.includes(i.id))return false;
   return !q||(i.name+i.idea+i.risk).toLowerCase().includes(q.toLowerCase());
 }
-const card=i=>`<div class="card ${i.status}${i.anim?' pulse':''}">${i.status==='rec'?'<span class="tag rec">看好</span>':i.status==='fail'?'<span class="tag fail">翻车</span>':''}<button class="heart" data-l="${i.id}" aria-pressed="${likes.has(i.id)}" aria-label="喜欢 ${esc(i.name)}">${likes.has(i.id)?'♥':'♡'}</button><button class="open" data-o="${i.id}" aria-label="放大 ${esc(i.name)}"><img loading="lazy" src="${i.img}" alt="${esc(i.name)}"><div class="name">${esc(i.name)}</div></button>${i.on?`<div class="bars"><div class="b light">${i.on}</div><div class="b dark">${i.on}</div></div>`:''}</div>`;
+const card=i=>`<div class="card ${i.status}${i.anim?' pulse':''}">${i.status==='rec'?'<span class="tag rec">看好</span>':i.status==='fail'?'<span class="tag fail">翻车</span>':''}<button class="heart" data-l="${i.id}" aria-pressed="${likes.has(i.id)}" aria-label="喜欢 ${esc(i.name)}">${likes.has(i.id)?'♥':'♡'}</button><button class="open" data-o="${i.id}" aria-label="放大 ${esc(i.name)}"><img loading="lazy" src="${i.img}" alt="${esc(i.name)}"><div class="name">${esc(i.name)}</div></button>${i.on?`<div class="bars"><div class="b light">${i.on}</div><div class="b dark">${i.on}</div></div>`:''}${view==='ring'?`<div class="sizes" style="justify-content:center">${[64,32,16].map(n=>`<img src="${i.img}" width="${n}" height="${n}" alt="">`).join('')}</div><div class="bars"><div class="b light">${i.need}3</div><div class="b dark">${i.off||i.on}</div></div><p class="mu" style="margin:6px 0 0;text-align:left">${esc(i.idea)}</p>`:''}</div>`;
 function render(){
   shown=items.filter(match);let h='';
+  if(view==='ring'){shown=RING.map(id=>shown.find(i=>i.id===id)).filter(Boolean);h='<h2>圆环或弧线，加一个点</h2><div class="grid wide">'+shown.map(card).join('')+'</div>'}else{
   const ks=[...new Set(shown.map(i=>i.batch))].sort((a,b)=>b-a);
   for(const b of ks){h+=`<h2>${batches[b]}</h2>`;const inB=shown.filter(i=>i.batch===b);for(const g of new Set(inB.map(i=>i.group))){h+=`<h3>${esc(g)}</h3><div class="grid">`+inB.filter(i=>i.group===g).map(card).join('')+'</div>'}}
+  }
   document.getElementById('out').innerHTML=h||'<p class="mu" style="margin-top:32px">这里还没有东西。在任意一张图的右上角点 ♡，它就会出现在“我喜欢的”。</p>';
   document.getElementById('sub').textContent=`一共 ${items.length} 张，现在显示 ${shown.length} 张。全部是草图，应用里什么都没换。点图放大，点 ♡ 标记喜欢。`;
   const p=document.getElementById('picked');if(p)p.innerHTML=likes.size?`已选 ${likes.size} 个 <button class="btn" id="copy">复制名单</button> <span id="copied"></span>`:'';
@@ -75,5 +79,6 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{if(!dlg.open)return;if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const k=shown.findIndex(i=>i.id===dlg.dataset.id);const n=shown[(k+(e.key==='ArrowRight'?1:-1)+shown.length)%shown.length];if(n)open_(n.id)}});
 chips();render();
-const m=location.hash.match(/^#(?:open=(.+))?/);if(m&&m[1])open_(m[1]);
+if(location.hash==='#ring'){view='ring';chips();render()}
+const m=location.hash.match(/^#open=(.+)/);if(m)open_(m[1]);
 </script></body></html>
