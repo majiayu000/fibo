@@ -932,11 +932,6 @@ impl Workbench {
                 );
                 left.push(status_pill(group).into_any_element());
             }
-            (Column::Running, None) => {
-                let (dot, ink, _) = status_of(&self.workspace, session).colors();
-                left.push(pill(when.clone(), dot.opacity(0.42), Some(dot), ink).into_any_element());
-                left.extend(branch_pill.map(|p| p.into_any_element()));
-            }
             (Column::Stale, None) => left.push(status_pill(Status::Stale).into_any_element()),
             (Column::Review, None) if status_of(&self.workspace, session) == Status::Paused => {
                 left.push(status_pill(Status::Paused).into_any_element());
