@@ -443,7 +443,7 @@ impl Workbench {
         } else {
             format!("{name}，断开")
         };
-        div()
+        let button = div()
             .id(gpui::SharedString::from(format!(
                 "rail-{}",
                 index.map_or_else(|| "local".to_owned(), |i| i.to_string())
@@ -468,18 +468,6 @@ impl Workbench {
             .cursor_pointer()
             .hover(|s| s.bg(T::color(F::hover())))
             .child(face)
-            .when_some(index.and_then(|i| self.machine_breath(i, cx)), |d, lit| {
-                d.opacity(lit)
-            })
-            .when(need > 0, |d| {
-                d.child(
-                    div()
-                        .absolute()
-                        .top(px(-T::S4))
-                        .right(px(-T::S4))
-                        .child(need_badge(need)),
-                )
-            })
             .tooltip(super::diagnostics::tip(vec![
                 match index.and_then(|i| self.machine_limit(i)) {
                     Some(limit) => format!("{label} · {limit}"),
@@ -490,7 +478,26 @@ impl Workbench {
                 this.set_machine_scope(host.clone());
                 this.sidebar.space_filter = None;
                 cx.notify();
-            }))
+            }));
+        // The badge lies beside the button, not in it: a div paints its border after its
+        // children, so the button's corner would cross the digits.
+        div()
+            .relative()
+            .size(px(RAIL_BUTTON))
+            .flex_shrink_0()
+            .when_some(index.and_then(|i| self.machine_breath(i, cx)), |d, lit| {
+                d.opacity(lit)
+            })
+            .child(button)
+            .when(need > 0, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(px(-T::S4))
+                        .right(px(-T::S4))
+                        .child(need_badge(need)),
+                )
+            })
             .into_any_element()
     }
     fn machine_rail(&self, cx: &Context<Self>) -> gpui::Div {
