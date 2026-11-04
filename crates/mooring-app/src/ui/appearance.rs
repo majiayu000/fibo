@@ -80,7 +80,7 @@ impl Appearance {
         }
         out
     }
-    fn save(&self) -> Result<(), String> {
+    pub(super) fn save(&self) -> Result<(), String> {
         let dir = super::status_colors::config_dir().ok_or("找不到配置目录")?;
         let write = |name: &str, text: &str| {
             super::status_colors::write_atomic(&dir.join(name), text.as_bytes())

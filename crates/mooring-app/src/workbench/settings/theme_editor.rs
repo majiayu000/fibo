@@ -82,6 +82,8 @@ impl Tab {
                     item("tone", "ok", "语气：正常"),
                     item("tone", "warn", "语气：警告"),
                     item("tone", "danger", "语气：危险"),
+                    item("seen", "title", "看过的会话标题"),
+                    item("seen", "status", "看过的会话状态"),
                 ])
                 .collect(),
         }
@@ -116,6 +118,8 @@ impl Item {
                 .iter()
                 .find(|s| s.key() == key)
                 .map_or(p.muted, |s| s.hue()),
+            ("seen", "title") => crate::ui::status_colors::seen_title(),
+            ("seen", "status") => crate::ui::status_colors::seen_status(),
             ("tone", key) => Tone::ALL
                 .iter()
                 .find(|t| t.key() == key)
@@ -787,6 +791,7 @@ mod tests {
                 + UI_TOKENS.len()
                 + Status::ALL.len()
                 + Tone::ALL.len()
+                + mooring_core::theme::SEEN_NAMES.len()
         );
     }
 }

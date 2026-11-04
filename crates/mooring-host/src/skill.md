@@ -126,6 +126,7 @@ mooring close "$tests"
   "ui": { "sidebar": "#0b1522", "border": "#23344d", "accent": "#7cc4ff" },
   "status": { "running": "#e5b83b", "review": "#3fb27f" },
   "tone": { "ok": "#4cc38a", "warn": "#e5b83b", "danger": "#e5534b" },
+  "seen": { "title": "#b9b7b4", "status": "#7d7c7a", "dot": "ring" },
   "space_gradients": [["#f59e6b", "#d9467a"]],
   "window": { "opacity": 0.85, "blur": true },
   "background": { "image": "images/sea.jpg", "mode": "fill", "strength": 0.2 }
@@ -134,4 +135,4 @@ mooring close "$tests"
 
 `window.opacity` 是 0.3–1，文字始终不透明，只有窗口的底变透。`background.image` 写绝对路径，或相对主题文件夹的路径；`mode` 是 `fill`、`fit`、`stretch`、`tile`，`strength` 是 0.05–1。字体、光标形状、最低对比度、边距这些属于用户习惯，不跟主题走，在设置 › 终端里改（`terminal-text.json`）。某个空间单独用一套主题：右键空间 › 主题。想把主题分享出去：做成只含数据的插件，`provides` 写 `["themes"]`，主题放在插件的 `themes/*.json`（见 `mooring --skill plugins`）。
 
-写错或不认识的项会跳过，并显示在设置 › 外观里。文字对比度低于 4.5:1 时告诉用户可能看不清。可写的 `ui` 名字在设置 › 外观 › 调整当前主题里能看到，全部名字以 `crates/mooring-app/src/ui/palette.rs` 的 `ui_tokens!` 为准。用户手上有 iTerm2 的 `.itermcolors` 时，让用户在同一页点「导入」。
+写错或不认识的项会跳过，并显示在设置 › 外观里。写完跑 `mooring themes`：它按 App 同样的规则检查主题文件夹（或 `mooring themes 某个文件`），列出不认识的键、找不到的图和对比度过低的主题，有问题时以 1 退出；`mooring themes names` 列出全部可写的键。用户手上有 iTerm2 的 `.itermcolors` 时，让用户在同一页点「导入」。

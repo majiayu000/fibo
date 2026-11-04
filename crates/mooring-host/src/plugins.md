@@ -7,7 +7,7 @@
 配置目录是 `${XDG_CONFIG_HOME:-$HOME/.config}/mooring`，下面简称 `<配置>`。
 
 - 插件：`<配置>/plugins/<id>/`，一个目录一个插件。
-- 状态颜色：`<配置>/colors.json`。
+- 状态颜色：写在主题里（`mooring --skill` 的「主题」）。
 - 快捷键、终端字体、完成动画、钉住提问这些在 App 的「设置」里改，别手改它们的文件。
 
 ## 规矩
@@ -228,16 +228,9 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 
 这类最复杂：声明 CLI 的可执行文件、启动和恢复命令，以及怎么从它的会话记录（JSONL 或 SQLite）里读出回合状态。用户要接一个新 CLI 时才写。先找一个现成的例子照着改（Mooring 源码里的 `plugins/opencode/agent.json`），写完同样用 `mooring plugins` 检查。
 
-## 状态颜色（`<配置>/colors.json`）
+## 状态颜色
 
-```json
-{
-  "status": {"working": "#e8c547", "done": "#4cc38a"},
-  "seen": {"title": "#b9b7b4", "status": "#7d7c7a", "dot": "ring"}
-}
-```
-
-`status` 的键：`waiting` `error` `review` `paused` `running` `stale` `working` `done` `ready`；`seen` 是看过的会话行，`dot` 取 `ring` `fill` `fade`。缺的、读不了的保持默认。改了要重开 Mooring 才生效。
+写在主题文件的 `status`、`tone`、`seen` 里，见 `mooring --skill` 的「主题」。以前的 `<配置>/colors.json` 会在第一次启动时并入主题，原文件留成 `colors.json.migrated`，不要再写它。
 
 ## 例子
 

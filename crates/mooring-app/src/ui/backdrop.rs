@@ -116,12 +116,11 @@ impl Backdrop {
     }
 }
 /// A relative path is in the themes folder, so a theme and its picture move together.
+pub fn base() -> PathBuf {
+    config_dir().map_or_else(PathBuf::new, |config| config.join("themes"))
+}
 pub fn resolve(path: &str) -> PathBuf {
-    let path = Path::new(path);
-    match config_dir() {
-        Some(config) if path.is_relative() => config.join("themes").join(path),
-        _ => path.to_owned(),
-    }
+    base().join(path)
 }
 fn decode(path: &Path) -> Result<Arc<RenderImage>, String> {
     let picture = image::ImageReader::open(path)

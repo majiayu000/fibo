@@ -192,7 +192,7 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
   "window": { "opacity": 0.92, "blur": true },
   "background": { "image": "images/sea.png", "mode": "fill", "strength": 0.3 }
 }</pre>
-<p style="margin-top:10px" class="sub"><code>colors.json</code> 现有的状态色覆盖继续生效，放在主题之上；等编辑器上线后，第一次打开时把它转成「我的主题」的一部分，避免同一颜色长期有两个来源。</p>
+<p style="margin-top:10px" class="sub">以前的 <code>colors.json</code> 在第一次启动时并入主题：用户自己的主题文件直接写入，内置主题存成「我的状态色」副本，原文件留作 <code>colors.json.migrated</code>。状态色从此只有主题一个来源。</p>
 
 <h2>开放的路线</h2>
 <div class="wrap"><table>

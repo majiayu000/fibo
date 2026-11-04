@@ -46,7 +46,7 @@ impl Status {
         Self::Deferred,
         Self::Closed,
     ];
-    /// The name in `colors.json`, the plugin protocol and logs.
+    /// The name in a theme file, the plugin protocol and logs.
     pub fn key(self) -> &'static str {
         match self {
             Self::Waiting => "waiting",

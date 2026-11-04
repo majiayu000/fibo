@@ -355,11 +355,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
         "Agent Hook",
         "hook hooks claude settings.json 过期 重新安装 对上对话",
     ),
-    (
-        Page::About,
-        "偏好文件",
-        "配置 config colors.json 状态颜色 访达",
-    ),
+    (Page::About, "偏好文件", "配置 config 访达"),
 ];
 pub(super) enum SettingsAction {
     Close,
@@ -1760,10 +1756,6 @@ impl SettingsView {
         }
         if self.shows(Page::About, "偏好文件", cx) {
             data.push(self.path_row(data.is_empty(), "偏好文件", config.clone(), cx));
-            let colors = config.map(|dir| dir.join("colors.json"));
-            if colors.as_ref().is_some_and(|p| p.is_file()) {
-                data.push(self.path_row(false, "状态颜色 colors.json", colors, cx));
-            }
         }
         if self.shows(Page::About, "Agent Hook", cx) {
             data.extend(self.hook_rows(data.is_empty(), cx));

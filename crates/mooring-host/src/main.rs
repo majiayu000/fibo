@@ -3,6 +3,7 @@ mod hooks_cmd;
 mod plugins_cmd;
 mod relay;
 mod remote;
+mod themes_cmd;
 
 fn main() {
     let code = match run() {
@@ -111,6 +112,7 @@ fn run() -> std::io::Result<()> {
         "hook" => hook(args),
         "hooks" => hooks_cmd::run(args),
         "plugins" => plugins_cmd::run(args),
+        "themes" => themes_cmd::run(args),
         "--skill" => {
             match args.next().as_deref() {
                 None => print!("{}", control::SKILL),

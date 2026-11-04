@@ -331,6 +331,25 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
+        // A colors.json from before themes: its colors move in once, and still show.
+        if phase == "migrate" {
+            use crate::ui::{status_colors, theme::{StatusStyle, Status}, tone::Tone};
+            let config = status_colors::config_dir().unwrap();
+            assert!(!config.join("colors.json").exists(), "moved at start");
+            assert!(config.join("colors.json.migrated").is_file(), "kept aside");
+            assert_eq!(Status::Running.hue(), 0x112233);
+            assert_eq!(Tone::Ok.hue(), 0x223344);
+            assert_eq!(status_colors::seen_title(), 0x445566);
+            assert_eq!(status_colors::seen_dot(), status_colors::SeenDot::Fade);
+            let chosen = cx.update(|a| a.global::<crate::ui::appearance::Appearance>().clone());
+            assert!(chosen.dark.starts_with("file:"), "{chosen:?}");
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            wait(300).await;
+            shot("migrated", cx);
+            eprintln!("settings migrate PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         if phase == "editor" {
             use crate::ui::{appearance::{self, Mode}, theme::Theme as T, themes::{self, Themes}};
             let term = || T::term();

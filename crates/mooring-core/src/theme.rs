@@ -34,7 +34,66 @@ pub const TERMINAL_NAMES: [&str; 8] = [
     "underline",
     "cursor_guide",
 ];
-const SECTIONS: [&str; 5] = ["terminal", "ansi", "ui", "status", "tone"];
+const SECTIONS: [&str; 6] = ["terminal", "ansi", "ui", "status", "tone", "seen"];
+/// The file format this build writes. Written into every theme, so a later Mooring can
+/// tell an old file; a newer one still loads here, what is unknown being skipped.
+pub const FORMAT: u64 = 1;
+/// Meaning colors for everything that is not a session.
+pub const TONE_NAMES: [&str; 3] = ["ok", "warn", "danger"];
+/// Colors of a session row you have looked at; `dot` sets how its status dot is drawn.
+pub const SEEN_NAMES: [&str; 2] = ["title", "status"];
+/// Every window color a theme can replace, and what 主题编辑器 calls it, handed to `$then`:
+/// the window turns this list into its palette's fields, and core checks files against it
+/// without knowing those. The names are a public contract: rename one and old files lose it.
+#[macro_export]
+macro_rules! with_ui_tokens {
+    ($then:ident) => {
+        $then!(
+            app "窗口外框", sidebar "侧栏", panel "面板", pane "窗格", header "窗格标题",
+            todo "待办底色", raised "凸起面", border "分隔线", card_border "卡片边线",
+            control "控件边线", field_edge "输入框边线", button "按钮", button_hover "按钮悬停",
+            primary "主要文字", body "正文", secondary "次要文字", muted "弱文字",
+            accent "强调色", on_accent "强调色上的文字", focus "焦点", link "界面链接",
+            selection "界面选区", chip "标签底色", popover "浮层", palette_row "命令面板选中行",
+            matched "搜索命中", series_other "图表其他", hatch "图表阴影线", chart_grid "图表网格",
+            chart_ref "图表参考线",
+            sidebar_line "侧栏分隔线", sidebar_field_line "侧栏搜索框边线",
+            sidebar_chip_line "空间标签边线", sidebar_chip_on "选中空间底色",
+            sidebar_chip_on_line "选中空间边线", sidebar_hover "会话行悬停",
+            sidebar_selected "选中会话底色", sidebar_selected_line "选中会话边线",
+            sidebar_bright "品牌和选中文字", sidebar_title "会话标题", sidebar_quiet "停着的标题",
+            sidebar_second "侧栏次要文字", sidebar_third "侧栏弱文字", sidebar_done "做完的 ✓",
+            sidebar_idle "停着的圆圈", sidebar_scope "空间筛选条", sidebar_key_line "按键提示边线",
+        );
+    };
+}
+macro_rules! ui_names {
+    ($($field:ident $label:literal),* $(,)?) => {
+        /// `ui` keys, with what 主题编辑器 calls each.
+        pub const UI_NAMES: &[(&str, &str)] = &[$((stringify!($field), $label)),*];
+    };
+}
+with_ui_tokens!(ui_names);
+/// How the dot of a session you have looked at is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SeenDot {
+    /// An outline in the status hue: still says what it is doing, without shouting.
+    #[default]
+    Ring,
+    Fill,
+    /// The filled dot washed toward the panel.
+    Fade,
+}
+impl SeenDot {
+    pub const ALL: [Self; 3] = [Self::Ring, Self::Fill, Self::Fade];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ring => "ring",
+            Self::Fill => "fill",
+            Self::Fade => "fade",
+        }
+    }
+}
 
 /// How a picture fills a terminal.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -93,11 +152,11 @@ pub struct ThemeFile {
     pub name: String,
     pub bg: u32,
     pub fg: u32,
-    /// Section → key → color. `ui`, `status` and `tone` keys are checked by the window,
-    /// which owns those names; `terminal` and `ansi` here.
+    /// Section → key → color.
     pub colors: BTreeMap<String, BTreeMap<String, u32>>,
     pub space_gradients: Vec<[u32; 2]>,
     pub material: Material,
+    pub seen_dot: Option<SeenDot>,
     /// What was skipped while reading, for 设置 to show.
     pub problems: Vec<String>,
 }
@@ -154,6 +213,15 @@ impl ThemeFile {
         for (key, value) in root {
             match key.as_str() {
                 "name" | "bg" | "fg" => {}
+                "format" => match value.as_u64() {
+                    Some(format) if format <= FORMAT => {}
+                    Some(format) => out.problems.push(format!(
+                        "这个主题是为更新的 Mooring 写的（格式 {format}），不认识的部分已跳过"
+                    )),
+                    None => out
+                        .problems
+                        .push(format!("format 应是一个数字，写的是 {value}，已跳过")),
+                },
                 "space_gradients" => out.read_gradients(value),
                 "window" => out.read_window(value),
                 "background" => out.read_background(value),
@@ -170,11 +238,19 @@ impl ThemeFile {
             return;
         };
         for (key, value) in keys {
-            let known = match section {
-                "ansi" => ANSI_NAMES.contains(&key.as_str()),
-                "terminal" => TERMINAL_NAMES.contains(&key.as_str()),
-                _ => true,
-            };
+            if section == "seen" && key == "dot" {
+                let named = SeenDot::ALL
+                    .into_iter()
+                    .find(|dot| value.as_str() == Some(dot.name()));
+                match named {
+                    Some(dot) => self.seen_dot = Some(dot),
+                    None => self.problems.push(format!(
+                        "seen.dot 应是 ring、fill 或 fade，写的是 {value}，已跳过"
+                    )),
+                }
+                continue;
+            }
+            let known = known_key(section, key);
             if !known {
                 self.problems
                     .push(format!("不认识 {section}.{key}，已跳过"));
@@ -267,6 +343,7 @@ impl ThemeFile {
     /// The file form, with only what the theme sets.
     pub fn to_json(&self) -> String {
         let mut root = serde_json::Map::new();
+        root.insert("format".into(), FORMAT.into());
         root.insert("name".into(), self.name.clone().into());
         root.insert("bg".into(), hex(self.bg).into());
         root.insert("fg".into(), hex(self.fg).into());
@@ -284,6 +361,14 @@ impl ThemeFile {
                 .map(|[a, b]| vec![hex(*a), hex(*b)].into())
                 .collect();
             root.insert("space_gradients".into(), pairs.into());
+        }
+        if let Some(dot) = self.seen_dot {
+            let seen = root
+                .entry("seen")
+                .or_insert_with(|| serde_json::Map::new().into());
+            if let Some(seen) = seen.as_object_mut() {
+                seen.insert("dot".into(), dot.name().into());
+            }
         }
         let material = &self.material;
         if material.opacity != 100 || material.blur {
@@ -339,8 +424,15 @@ impl ThemeFile {
         Ok(out)
     }
 }
-/// A plugin's theme files, for `mooring plugins check`. The window checks them again with
-/// the names of its own colors.
+/// Where a theme's relative picture is looked for: the plugin it ships in, else beside it.
+pub fn base_of(file: &std::path::Path) -> std::path::PathBuf {
+    let beside = file.parent().unwrap_or(std::path::Path::new("."));
+    match beside.parent() {
+        Some(plugin) if plugin.join("plugin.json").is_file() => plugin.to_owned(),
+        _ => beside.to_owned(),
+    }
+}
+/// A plugin's theme files, for `mooring plugins`.
 pub fn load(files: Vec<std::path::PathBuf>) -> Vec<crate::agent::Loaded> {
     files
         .into_iter()
@@ -360,6 +452,48 @@ pub fn load(files: Vec<std::path::PathBuf>) -> Vec<crate::agent::Loaded> {
             crate::agent::Loaded { file, result }
         })
         .collect()
+}
+fn known_key(section: &str, key: &str) -> bool {
+    match section {
+        "ansi" => ANSI_NAMES.contains(&key),
+        "terminal" => TERMINAL_NAMES.contains(&key),
+        "ui" => UI_NAMES.iter().any(|(name, _)| *name == key),
+        "status" => crate::status::Status::ALL.iter().any(|s| s.key() == key),
+        "tone" => TONE_NAMES.contains(&key),
+        "seen" => SEEN_NAMES.contains(&key),
+        _ => false,
+    }
+}
+/// Past what parsing skipped: what a theme can only get wrong against the disk or the eye.
+/// A relative picture is looked for under `base`.
+pub struct Check {
+    pub theme: ThemeFile,
+    /// Worth telling the author; the theme still works.
+    pub warnings: Vec<String>,
+}
+const READABLE: f32 = 4.5;
+pub fn check_file(path: &std::path::Path, base: &std::path::Path) -> Result<Check, String> {
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let mut theme = ThemeFile::parse(&text, &stem)?;
+    if let Some(problem) = theme.missing_image(base) {
+        theme.problems.push(problem);
+    }
+    let contrast = crate::scheme::contrast(theme.fg, theme.bg);
+    let warnings = (contrast < READABLE)
+        .then(|| {
+            format!("前景和背景的对比度只有 {contrast:.1}:1，低于 {READABLE}:1，文字可能看不清")
+        })
+        .into_iter()
+        .collect();
+    Ok(Check { theme, warnings })
+}
+impl ThemeFile {
+    /// Why its picture cannot be found, if it names one.
+    pub fn missing_image(&self, base: &std::path::Path) -> Option<String> {
+        let image = self.material.image.as_ref()?;
+        (!base.join(&image.path).is_file()).then(|| format!("找不到背景图 {}", image.path))
+    }
 }
 pub fn hex(color: u32) -> String {
     format!("#{color:06x}")
@@ -439,6 +573,53 @@ mod tests {
         assert_eq!(t.problems.len(), 4, "{:?}", t.problems);
     }
     #[test]
+    fn core_knows_every_name_the_window_does() {
+        let t = ThemeFile::parse(
+            r##"{"bg":"#000000","fg":"#ffffff",
+                "ui":{"sidebar":"#111111","wobble":"#000000"},
+                "status":{"running":"#222222","nope":"#000000"},
+                "tone":{"ok":"#333333","good":"#000000"},
+                "seen":{"title":"#444444","dot":"fade","colour":"#000000"}}"##,
+            "x",
+        )
+        .unwrap();
+        assert_eq!(t.color("ui", "sidebar"), Some(0x111111));
+        assert_eq!(t.color("status", "running"), Some(0x222222));
+        assert_eq!(t.color("tone", "ok"), Some(0x333333));
+        assert_eq!(t.color("seen", "title"), Some(0x444444));
+        assert_eq!(t.seen_dot, Some(SeenDot::Fade));
+        assert_eq!(t.problems.len(), 4, "{:?}", t.problems);
+        assert!(UI_NAMES.iter().any(|(name, _)| *name == "sidebar_key_line"));
+    }
+    #[test]
+    fn a_newer_format_still_loads_and_says_so() {
+        let t = ThemeFile::parse(r##"{"format":1,"bg":"#000000","fg":"#ffffff"}"##, "x").unwrap();
+        assert!(t.problems.is_empty());
+        assert!(t.to_json().contains("\"format\": 1"));
+        let later =
+            ThemeFile::parse(r##"{"format":99,"bg":"#000000","fg":"#ffffff"}"##, "x").unwrap();
+        assert_eq!((later.bg, later.problems.len()), (0, 1));
+        let odd = ThemeFile::parse(r##"{"format":"x","bg":"#000000","fg":"#ffffff"}"##, "x");
+        assert_eq!(odd.unwrap().problems.len(), 1);
+    }
+    #[test]
+    fn a_check_finds_what_parsing_cannot() {
+        let dir = std::env::temp_dir().join(format!("mooring-check-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("t.json");
+        std::fs::write(
+            &file,
+            r##"{"bg":"#101010","fg":"#202020","background":{"image":"gone.png"}}"##,
+        )
+        .unwrap();
+        let check = check_file(&file, &dir).unwrap();
+        assert_eq!(check.theme.problems.len(), 1, "{:?}", check.theme.problems);
+        assert_eq!(check.warnings.len(), 1, "{:?}", check.warnings);
+        std::fs::write(dir.join("gone.png"), "x").unwrap();
+        assert!(check_file(&file, &dir).unwrap().theme.problems.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+    #[test]
     fn survives_being_written_and_read_again() {
         let mut t = ThemeFile {
             name: "深海".into(),
@@ -449,6 +630,8 @@ mod tests {
         t.set("ui", "sidebar", Some(0x0b1522));
         t.set("ansi", "red", Some(0xe5534b));
         t.space_gradients = vec![[0x111111, 0x222222]];
+        t.set("seen", "title", Some(0x333333));
+        t.seen_dot = Some(SeenDot::Fill);
         assert_eq!(ThemeFile::parse(&t.to_json(), "x").unwrap(), t);
         t.set("ui", "sidebar", None);
         assert_eq!(t.color("ui", "sidebar"), None);

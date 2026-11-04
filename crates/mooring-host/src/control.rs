@@ -137,6 +137,14 @@ mooring remote --device <设备> --role <view|answer|full>
 mooring remote --revoke <设备编号或名字>   取消一台手机的配对，它正连着的会话一秒内断开",
     },
     Command {
+        name: "themes",
+        valued: &[],
+        switches: &[],
+        usage: "\
+mooring themes [文件或目录]                 按 App 的规则检查主题：跳过了什么、图在不在、对比度够不够
+mooring themes names                       列出主题能写的全部键",
+    },
+    Command {
         name: "plugins",
         valued: &["dir", "event", "cwd", "key", "name"],
         switches: &["json", "remote", "check", "yes", "send", "force"],

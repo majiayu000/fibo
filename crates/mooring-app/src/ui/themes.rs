@@ -88,6 +88,16 @@ impl Themes {
             .filter(|path| path.extension().is_some_and(|e| e == "json"))
             .collect();
         paths.sort();
+        // Folded into themes at start; still here means it could not be read.
+        if dir
+            .and_then(Path::parent)
+            .is_some_and(|config| config.join("colors.json").is_file())
+        {
+            out.problems.push((
+                "colors.json".to_owned(),
+                "内容有误，没能并入主题，里面的颜色没有生效".to_owned(),
+            ));
+        }
         for path in paths {
             let stem = path.file_stem().unwrap_or_default().to_string_lossy();
             let id = format!("file:{stem}");
@@ -125,11 +135,8 @@ impl Themes {
         {
             image.path = dir.join(&image.path).to_string_lossy().into_owned();
         }
-        file.problems.extend(Palette::unknown_keys(&file));
-        if let Some(image) = &file.material.image
-            && !super::backdrop::resolve(&image.path).is_file()
-        {
-            file.problems.push(format!("找不到背景图 {}", image.path));
+        if let Some(problem) = file.missing_image(&super::backdrop::base()) {
+            file.problems.push(problem);
         }
         if !file.problems.is_empty() {
             self.problems
