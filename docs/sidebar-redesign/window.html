@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mooring 整体稿</title><style>
+:root{--ink:#1C1B19;--ink2:#4F4C46;--ink3:#75716A;--line:#E3E1DC;--ask:#D9661F;--askInk:#9A4416;--rev:#2F8F5B;--run:#D9A21F}
+body{margin:0;background:#DEDBD5;font-family:-apple-system,'PingFang SC','Helvetica Neue',sans-serif;color:var(--ink)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+kbd{font:500 10px/1 -apple-system,sans-serif;padding:2px 4px;border-radius:4px;border:1px solid currentColor;opacity:.75}
+header{max-width:1440px;margin:0 auto;padding:24px 16px 14px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+header h1{margin:0;font-size:18px} header p{margin:0;font-size:12px;color:var(--ink2);flex:1 1 360px}
+.sw{display:flex;gap:2px;padding:2px;border-radius:9px;background:#CFCBC4}
+.sw button{padding:6px 12px;border-radius:7px;font-size:13px;color:var(--ink2)} .sw button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.stage{overflow-x:auto;padding:0 16px 48px}
+.win{position:relative;width:1440px;height:900px;margin:0 auto;display:none;border-radius:12px;overflow:hidden;background:#FBFBF9;box-shadow:0 0 0 1px rgba(0,0,0,.12),0 24px 60px rgba(0,0,0,.18)}
+.win.show{display:flex} .shot img{width:1440px;height:900px;object-fit:cover;object-position:left top}
+.lights{position:absolute;left:18px;top:16px;display:flex;gap:8px;z-index:2} .lights i{width:12px;height:12px;border-radius:50%;background:#FF5F57} .lights i:nth-child(2){background:#FEBC2E} .lights i:nth-child(3){background:#28C840}
+.sb>div{height:900px!important}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ask);flex-shrink:0}
+.ring{display:inline-block;width:8px;height:8px;box-sizing:border-box;border-radius:50%;border:1.5px solid var(--rev);flex-shrink:0}
+.idle{display:inline-block;width:8px;height:8px;box-sizing:border-box;border-radius:50%;border:1.5px solid #B5B1A9;flex-shrink:0}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:52px;display:flex;align-items:center;gap:8px;padding:0 12px 0 10px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;align-items:center;gap:2px;min-width:0}
+.tab{display:flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:8px;font-size:13px;color:var(--ink2);white-space:nowrap}
+.tab.on{background:#fff;color:var(--ink);font-weight:500;box-shadow:0 0 0 1px var(--line),0 1px 2px rgba(0,0,0,.04)}
+.tab .x{color:var(--ink3);margin-left:2px}
+.ib{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center}
+.need{display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border-radius:8px;background:#FBEEE4;color:var(--askInk);font-size:13px}
+.ghost{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--ink2)}
+.panes{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px;background:#F3F2EF}
+.col{display:grid;grid-template-rows:1fr 1fr;gap:8px;min-height:0}
+.pane{position:relative;background:#fff;border-radius:10px;box-shadow:0 0 0 1px var(--line);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane.ask{box-shadow:0 0 0 1.5px var(--ask)}
+.ph{height:40px;display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;font-size:13px;border-bottom:1px solid #EFEDE9}
+.ag{width:18px;height:18px;border-radius:5px;background:#ECEAE5;color:var(--ink2);font:600 9px/18px -apple-system,sans-serif;text-align:center}
+.path{font-family:'SF Mono',Menlo,monospace;font-size:12px;color:var(--ink3)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:11px;font-size:12px}
+.pill.ask{background:#FBEEE4;color:var(--askInk)} .pill.rev{background:#E8F3EC;color:#226B44}
+.pill i{width:7px;height:7px}
+.rb{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 12px;font-size:12px;color:var(--ink2);border-bottom:1px solid #EFEDE9;background:#FAFAF8}
+.rb b{color:#226B44;font-weight:600} .sep{margin:0 6px;color:var(--ink3)}
+.btn{height:26px;padding:0 10px;border-radius:7px;font-size:12px;box-shadow:0 0 0 1px #D6D3CC;background:#fff}
+.btn.dark{background:var(--ink);color:#fff;box-shadow:none;font-weight:500}
+.term{flex:1;font-family:'SF Mono',Menlo,monospace;font-size:13px;line-height:1.7;padding:12px 16px;color:var(--ink);overflow:hidden}
+.ask-card{margin:0 12px 12px;padding:12px;border-radius:10px;background:#FDF6F0;box-shadow:0 0 0 1px #F0D9C6;display:flex;flex-direction:column;gap:4px}
+.ask-card .q{font-size:13px;font-weight:600;color:var(--askInk);margin-bottom:4px}
+.opt{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:7px;font-size:13px;color:var(--ink2)}
+.opt.sel{background:#fff;color:var(--ink);box-shadow:0 0 0 1px #F0D9C6}
+.opt kbd{color:var(--ink3)} .opt .tag{margin-left:auto;font-size:11px;color:var(--askInk)}
+.status{height:30px;display:flex;align-items:center;gap:6px;padding:0 14px;font-size:12px;color:var(--ink2);border-top:1px solid var(--line)}
+.status .live{width:6px;height:6px;border-radius:50%;background:var(--rev);margin-right:2px}
+.status .q{color:var(--ink2)} .status button{color:var(--ink2);margin-left:10px} .status kbd{color:var(--ink3)}
+.bar{width:34px;height:4px;border-radius:2px;background:#E3E1DC;overflow:hidden} .bar i{display:block;height:100%;background:#6E6A63}
+.vsep{width:1px;height:14px;background:var(--line);margin:0 8px}
+</style></head><body>
+<header><h1>Mooring 整体稿</h1><p>同一套主区，换三种侧栏。主区：标签带状态点，等你回答的窗格把问题做成可选卡片，验收条把「看改动 / 退回 / 标记完成」放在一起，底栏额度分 Agent。终端字体不动。<a href="index.html">只看侧栏对照</a></p><div class="sw"><button data-k="A" class=on>A · 安静列表</button><button data-k="B">B · 按空间分组</button><button data-k="C">C · 空间图标轨</button><button data-k="now">现在</button></div></header>
+<div class="stage"><div class="win" data-v="A"><div class="lights"><i></i><i></i><i></i></div><div class="sb">
+
+<div style="width: 280px; height: 820px; box-sizing: border-box; background: #F3F2EF; border-right: 1px solid #E3E1DC; font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; color: #1C1B19; display: flex; flex-direction: column">
+  <div style="height: 38px"></div>
+  <div style="display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px">
+    <button style="flex: 1; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; font-size: 13px; font-weight: 600">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, #7C6CF2, #E46FB0)"></span>
+      <span>全部空间</span>
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+    </button>
+    <button aria-label="新会话" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+  </div>
+  <div style="padding: 8px 12px 4px">
+    <button style="width: 100%; height: 30px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 8px; background: #E9E7E2; font-size: 12px; color: #75716A">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#75716A" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg>
+      <span style="flex: 1">搜索或跳转</span>
+      <span style="font-size: 11px">⌘K</span>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: baseline; gap: 6px; padding: 16px 20px 6px; font-size: 11px; font-weight: 600; color: #75716A; letter-spacing: 0.02em">要你处理<span style="font-weight: 500">3</span></div>
+  <div style="display: flex; flex-direction: column; gap: 1px; padding: 0 8px">
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px; background: #FFFFFF; box-shadow: 0 0 0 1px #E3E1DC, 0 1px 2px rgba(0,0,0,0.04)">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A; font-weight: 400">1分</span></span>
+        <span style="font-size: 12px; color: #B4501A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">问你：退出后标签名要不要保留？</span>
+        <span style="font-size: 11px; color: #75716A">工作空间 · Codex</span>
+      </span>
+    </button>
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px">
+      <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">查 tab_name 从哪来</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2分</span></span>
+        <span style="font-size: 12px; color: #4F4C46">等你验收 · 改了 1 个文件</span>
+        <span style="font-size: 11px; color: #75716A">工作空间 · Codex</span>
+      </span>
+    </button>
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px">
+      <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Skill 收录情况</span><span style="font-size: 11px; color: #75716A; font-weight: 400">34分</span></span>
+        <span style="font-size: 12px; color: #4F4C46">等你验收 · <span style="font-family: 'SF Mono', Menlo, monospace; font-size: 11px">+128 −14</span></span>
+        <span style="font-size: 11px; color: #75716A">mooring · Claude Code</span>
+      </span>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: baseline; gap: 6px; padding: 18px 20px 6px; font-size: 11px; font-weight: 600; color: #75716A; letter-spacing: 0.02em">在跑<span style="font-weight: 500">1</span></div>
+  <div style="display: flex; flex-direction: column; gap: 1px; padding: 0 8px">
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px">
+      <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #D9A21F; border-top-color: transparent; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">插件系统与市场</span><span style="font-size: 11px; color: #75716A; font-weight: 400">12分</span></span>
+        <span style="font-size: 12px; color: #4F4C46">在跑 cargo test</span>
+        <span style="font-size: 11px; color: #75716A">mooring · Claude Code</span>
+      </span>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: baseline; gap: 6px; padding: 18px 20px 4px; font-size: 11px; font-weight: 600; color: #75716A; letter-spacing: 0.02em">停着<span style="font-weight: 500">4</span></div>
+  <div style="display: flex; flex-direction: column; padding: 0 8px">
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: #3A3935"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">库中 UI 组件现状</span><span style="font-size: 11px; color: #75716A">4时</span></button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: #3A3935"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">任务完成判定</span><span style="font-size: 11px; color: #75716A">5时</span></button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: #75716A"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#9A968E" stroke-width="1.5" style="flex-shrink: 0" aria-hidden="true"><path d="M1 4.2l2 2L7 1.8"></path></svg><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">聊天记录与多终端</span><span style="font-size: 11px">7时</span></button>
+    <button style="height: 28px; padding: 0 12px 0 30px; font-size: 12px; color: #75716A">另 4 个 · 在鸟瞰里看</button>
+  </div>
+
+  <div style="flex: 1"></div>
+  <div style="display: flex; align-items: center; gap: 4px; padding: 10px 10px 12px 20px; border-top: 1px solid #E3E1DC">
+    <span style="width: 6px; height: 6px; border-radius: 50%; background: #2F8F5B"></span>
+    <span style="flex: 1; margin-left: 6px; font-size: 12px; color: #4F4C46">本机 · 8 个会话</span>
+    <button aria-label="连接手机或其他电脑" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"></rect><path d="M7 12.2h2"></path></svg></button>
+    <button aria-label="设置" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"></path><circle cx="10.5" cy="4.5" r="1.5"></circle><circle cx="5.5" cy="11.5" r="1.5"></circle></svg></button>
+  </div>
+</div>
+</div>
+<div class="main">
+  <div class="top">
+    <div class="tabs">
+      <button class="tab on"><i class="dot"></i>标签命名依旧有问题<span class="x">×</span></button>
+      <button class="tab"><i class="ring"></i>查 tab_name 从哪来</button>
+      <button class="tab"><i class="ring"></i>核对标签测试</button>
+      <button class="tab"><i class="idle"></i>健身</button>
+      <button class="ib" aria-label="新标签"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+    </div>
+    <span style="flex:1"></span>
+    <button class="need"><i class="dot"></i>要你处理 <b>3</b><kbd>⌘J</kbd></button>
+    <button class="ghost"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg>鸟瞰</button>
+  </div>
+  <div class="panes">
+    <section class="pane focus ask">
+      <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill ask"><i class="dot"></i>等你回答 · 1 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+      <div class="term"><div>› 修标签命名</div><div>&nbsp;</div><div>• 已读取项目上下文</div><div>• 找到两处会改写标签名的地方：tabs.rs 和 sessions.rs</div><div>&nbsp;</div><div>退出后重新打开，标签名要不要沿用上次的？</div></div>
+      <div class="ask-card">
+        <div class="q">退出后标签名要不要保留？</div>
+        <button class="opt sel"><kbd>1</kbd>保留，重开时沿用上次的名字<span class="tag">我倾向</span></button>
+        <button class="opt"><kbd>2</kbd>不保留，每次按第一句话重新起名</button>
+        <button class="opt"><kbd>3</kbd>自己写…</button>
+      </div>
+    </section>
+    <div class="col">
+      <section class="pane">
+        <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill rev"><i class="ring"></i>等你验收 · 2 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+        <div class="rb"><span><b>这一轮改了 1 个文件</b><span class="sep">·</span>验收标准 0/3</span><span style="flex:1"></span><button class="btn">看改动</button><button class="btn">退回</button><button class="btn dark">标记完成</button></div>
+        <div class="term"><div>› 查 tab_name 从哪来</div><div>&nbsp;</div><div>• 已读取项目上下文</div><div>• tab_name 来自 sessions.rs 的 first_prompt()</div><div>• 改成优先用用户改过的名字</div><div>&nbsp;</div><div>✓ 已完成，等你验收。</div></div>
+      </section>
+      <section class="pane">
+        <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill rev"><i class="ring"></i>等你验收 · 3 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+        <div class="rb"><span><b>这一轮做完了</b><span class="sep">·</span>验收标准 0/3</span><span style="flex:1"></span><button class="btn">看改动</button><button class="btn">退回</button><button class="btn dark">标记完成</button></div>
+        <div class="term"><div>› 核对标签测试</div><div>&nbsp;</div><div>• cargo test -p mooring-app tabs</div><div>  test result: ok. 14 passed</div><div>&nbsp;</div><div>✓ 已完成，请核对。</div></div>
+      </section>
+    </div>
+  </div>
+  <div class="status">
+    
+    <span style="flex:1"></span>
+    <span class="q">Codex</span><span class="q">5h</span><span class="bar"><i style="width:42%"></i></span><span class="q">42%</span><span class="q">周</span><span class="bar"><i style="width:31%"></i></span><span class="q">31%</span>
+    <span class="vsep"></span>
+    <span class="q">Claude</span><span class="q">5h</span><span class="bar"><i style="width:12%"></i></span><span class="q">12%</span><span class="q">周</span><span class="bar"><i style="width:64%"></i></span><span class="q">64%</span>
+    <span class="vsep"></span>
+    <button>本机诊断</button><button><kbd>⌘P</kbd> 命令</button>
+  </div>
+</div>
+</div><div class="win" data-v="B"><div class="lights"><i></i><i></i><i></i></div><div class="sb">
+
+<div style="width: 280px; height: 820px; box-sizing: border-box; background: #F3F2EF; border-right: 1px solid #E3E1DC; font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; color: #1C1B19; display: flex; flex-direction: column">
+  <div style="height: 38px"></div>
+  <div style="display: flex; align-items: center; gap: 4px; padding: 0 10px 0 20px">
+    <span style="flex: 1; font-size: 14px; font-weight: 650; letter-spacing: -0.01em">Mooring</span>
+    <button aria-label="搜索" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 7px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg></button>
+    <button aria-label="新会话" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 7px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+  </div>
+
+  <div style="margin: 12px 10px 4px; padding: 10px 6px 6px; border-radius: 10px; background: #FBF1E9">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 0 8px 6px; font-size: 11px; font-weight: 600; color: #9A4416">等你回答<span style="min-width: 16px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 8px; background: #D9661F; color: #fff; font-size: 10px; display: inline-flex; align-items: center; justify-content: center">2</span></div>
+    <button style="width: 100%; display: flex; gap: 9px; padding: 6px 8px; border-radius: 7px; background: #FFFFFF">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A; font-weight: 400">1分</span></span><span style="font-size: 12px; color: #9A4416; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">退出后标签名要不要保留？</span></span>
+    </button>
+    <button style="width: 100%; display: flex; gap: 9px; padding: 6px 8px; border-radius: 7px">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">网站可借鉴之处</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2分</span></span><span style="font-size: 12px; color: #9A4416; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">侧栏参考哪两家？</span></span>
+    </button>
+  </div>
+
+  <div style="display: flex; flex-direction: column; padding: 10px 8px 0">
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; font-size: 13px; font-weight: 600">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #7C6CF2, #E46FB0)"></span>
+      <span style="flex: 1">工作空间</span><span style="font-size: 11px; color: #75716A; font-weight: 400">3</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px; background: #E6E4DF"><span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A">1分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">查 tab_name 从哪来</span><span style="font-size: 11px; color: #75716A">2分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">核对标签测试</span><span style="font-size: 11px; color: #75716A">3分</span></button>
+
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; margin-top: 8px; font-size: 13px; font-weight: 600">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #4AA3F0, #5B5BD6)"></span>
+      <span style="flex: 1">mooring</span><span style="font-size: 11px; color: #75716A; font-weight: 400">3</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #D9A21F; border-top-color: transparent; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">插件系统与市场</span><span style="font-size: 11px; color: #75716A">12分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Skill 收录情况</span><span style="font-size: 11px; color: #75716A">34分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px; color: #4F4C46"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">库中 UI 组件现状</span><span style="font-size: 11px; color: #75716A">4时</span></button>
+
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; margin-top: 8px; font-size: 13px; font-weight: 600">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #2BB3A6, #3D7BEA)"></span>
+      <span style="flex: 1">code</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">网站可借鉴之处</span><span style="font-size: 11px; color: #75716A">2分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px; color: #75716A"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#9A968E" stroke-width="1.5" style="flex-shrink: 0" aria-hidden="true"><path d="M1 4.2l2 2L7 1.8"></path></svg><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">聊天记录与多终端</span><span style="font-size: 11px">7时</span></button>
+
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; margin-top: 8px; font-size: 13px; font-weight: 600; color: #4F4C46">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M4 2.5l2.5 2.5L4 7.5"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #F08A4B, #F2C14E)"></span>
+      <span style="flex: 1">模型上线 work</span><span style="font-size: 11px; color: #75716A; font-weight: 400">0</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; font-size: 13px; font-weight: 600; color: #4F4C46">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M4 2.5l2.5 2.5L4 7.5"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: #C9C5BD"></span>
+      <span style="flex: 1">新空间</span><span style="font-size: 11px; color: #A33A1A; font-weight: 400">目录不在了</span>
+    </button>
+  </div>
+
+  <div style="flex: 1"></div>
+  <div style="display: flex; align-items: center; gap: 4px; padding: 10px 10px 12px 20px; border-top: 1px solid #E3E1DC">
+    <span style="width: 6px; height: 6px; border-radius: 50%; background: #2F8F5B"></span>
+    <span style="flex: 1; margin-left: 6px; font-size: 12px; color: #4F4C46">本机 · 8 个会话</span>
+    <button aria-label="连接手机或其他电脑" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"></rect><path d="M7 12.2h2"></path></svg></button>
+    <button aria-label="设置" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"></path><circle cx="10.5" cy="4.5" r="1.5"></circle><circle cx="5.5" cy="11.5" r="1.5"></circle></svg></button>
+  </div>
+</div>
+</div>
+<div class="main">
+  <div class="top">
+    <div class="tabs">
+      <button class="tab on"><i class="dot"></i>标签命名依旧有问题<span class="x">×</span></button>
+      <button class="tab"><i class="ring"></i>查 tab_name 从哪来</button>
+      <button class="tab"><i class="ring"></i>核对标签测试</button>
+      <button class="tab"><i class="idle"></i>健身</button>
+      <button class="ib" aria-label="新标签"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+    </div>
+    <span style="flex:1"></span>
+    <button class="need"><i class="dot"></i>要你处理 <b>3</b><kbd>⌘J</kbd></button>
+    <button class="ghost"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg>鸟瞰</button>
+  </div>
+  <div class="panes">
+    <section class="pane focus ask">
+      <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill ask"><i class="dot"></i>等你回答 · 1 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+      <div class="term"><div>› 修标签命名</div><div>&nbsp;</div><div>• 已读取项目上下文</div><div>• 找到两处会改写标签名的地方：tabs.rs 和 sessions.rs</div><div>&nbsp;</div><div>退出后重新打开，标签名要不要沿用上次的？</div></div>
+      <div class="ask-card">
+        <div class="q">退出后标签名要不要保留？</div>
+        <button class="opt sel"><kbd>1</kbd>保留，重开时沿用上次的名字<span class="tag">我倾向</span></button>
+        <button class="opt"><kbd>2</kbd>不保留，每次按第一句话重新起名</button>
+        <button class="opt"><kbd>3</kbd>自己写…</button>
+      </div>
+    </section>
+    <div class="col">
+      <section class="pane">
+        <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill rev"><i class="ring"></i>等你验收 · 2 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+        <div class="rb"><span><b>这一轮改了 1 个文件</b><span class="sep">·</span>验收标准 0/3</span><span style="flex:1"></span><button class="btn">看改动</button><button class="btn">退回</button><button class="btn dark">标记完成</button></div>
+        <div class="term"><div>› 查 tab_name 从哪来</div><div>&nbsp;</div><div>• 已读取项目上下文</div><div>• tab_name 来自 sessions.rs 的 first_prompt()</div><div>• 改成优先用用户改过的名字</div><div>&nbsp;</div><div>✓ 已完成，等你验收。</div></div>
+      </section>
+      <section class="pane">
+        <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill rev"><i class="ring"></i>等你验收 · 3 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+        <div class="rb"><span><b>这一轮做完了</b><span class="sep">·</span>验收标准 0/3</span><span style="flex:1"></span><button class="btn">看改动</button><button class="btn">退回</button><button class="btn dark">标记完成</button></div>
+        <div class="term"><div>› 核对标签测试</div><div>&nbsp;</div><div>• cargo test -p mooring-app tabs</div><div>  test result: ok. 14 passed</div><div>&nbsp;</div><div>✓ 已完成，请核对。</div></div>
+      </section>
+    </div>
+  </div>
+  <div class="status">
+    
+    <span style="flex:1"></span>
+    <span class="q">Codex</span><span class="q">5h</span><span class="bar"><i style="width:42%"></i></span><span class="q">42%</span><span class="q">周</span><span class="bar"><i style="width:31%"></i></span><span class="q">31%</span>
+    <span class="vsep"></span>
+    <span class="q">Claude</span><span class="q">5h</span><span class="bar"><i style="width:12%"></i></span><span class="q">12%</span><span class="q">周</span><span class="bar"><i style="width:64%"></i></span><span class="q">64%</span>
+    <span class="vsep"></span>
+    <button>本机诊断</button><button><kbd>⌘P</kbd> 命令</button>
+  </div>
+</div>
+</div><div class="win" data-v="C"><div class="lights"><i></i><i></i><i></i></div><div class="sb">
+
+<div style="width: 300px; height: 820px; box-sizing: border-box; font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; color: #1C1B19; display: flex; border-right: 1px solid #E3E1DC">
+  <div style="width: 60px; background: #EAE8E3; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 44px; border-right: 1px solid #DEDBD5">
+    <button aria-label="全部空间" style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #4F4C46"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2"></rect><rect x="9" y="2" width="5" height="5" rx="1.2"></rect><rect x="2" y="9" width="5" height="5" rx="1.2"></rect><rect x="9" y="9" width="5" height="5" rx="1.2"></rect></svg></button>
+    <span style="width: 24px; height: 1px; background: #D6D3CC"></span>
+    <button aria-label="工作空间" style="position: relative; width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg, #7C6CF2, #E46FB0); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #EAE8E3, 0 0 0 4px #1C1B19">工<span style="position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: #D9661F; border: 2px solid #EAE8E3; color: #fff; font-size: 9px; display: flex; align-items: center; justify-content: center">1</span></button>
+    <button aria-label="mooring" style="position: relative; width: 36px; height: 36px; border-radius: 18px; background: linear-gradient(135deg, #4AA3F0, #5B5BD6); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">M<span style="position: absolute; bottom: -1px; right: -1px; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #E9B949; border: 2px solid #EAE8E3"></span></button>
+    <button aria-label="code" style="position: relative; width: 36px; height: 36px; border-radius: 18px; background: linear-gradient(135deg, #2BB3A6, #3D7BEA); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">C<span style="position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: #D9661F; border: 2px solid #EAE8E3; color: #fff; font-size: 9px; display: flex; align-items: center; justify-content: center">1</span></button>
+    <button aria-label="模型上线 work" style="width: 36px; height: 36px; border-radius: 18px; background: linear-gradient(135deg, #F08A4B, #F2C14E); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">模</button>
+    <button aria-label="新空间（目录不在了）" style="width: 36px; height: 36px; border-radius: 18px; background: #D6D3CC; color: #75716A; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; opacity: 0.8">新</button>
+    <button aria-label="添加空间" style="width: 36px; height: 36px; border-radius: 18px; border: 1.5px dashed #B5B1A9; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#75716A" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+    <div style="flex: 1"></div>
+    <button aria-label="连接手机或其他电脑" style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"></rect><path d="M7 12.2h2"></path></svg></button>
+    <button aria-label="设置" style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"></path><circle cx="10.5" cy="4.5" r="1.5"></circle><circle cx="5.5" cy="11.5" r="1.5"></circle></svg></button>
+  </div>
+
+  <div style="flex: 1; min-width: 0; background: #F3F2EF; display: flex; flex-direction: column">
+    <div style="padding: 44px 14px 0 16px; display: flex; flex-direction: column; gap: 2px">
+      <div style="display: flex; align-items: center"><span style="flex: 1; font-size: 15px; font-weight: 650">工作空间</span><button aria-label="新会话" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button></div>
+      <span style="font-family: 'SF Mono', Menlo, monospace; font-size: 11px; color: #75716A">~/projects/工作空间 · main</span>
+    </div>
+    <div style="display: flex; gap: 2px; margin: 14px 12px 8px; padding: 2px; border-radius: 8px; background: #E6E4DF; font-size: 12px">
+      <button style="flex: 1; height: 24px; border-radius: 6px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.06); text-align: center; font-weight: 500">全部 4</button>
+      <button style="flex: 1; height: 24px; border-radius: 6px; text-align: center; color: #4F4C46">要你处理 3</button>
+      <button style="flex: 1; height: 24px; border-radius: 6px; text-align: center; color: #4F4C46">停着 1</button>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px">
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px; background: #FFFFFF; box-shadow: 0 0 0 1px #E3E1DC">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A; font-weight: 400">1分</span></span>
+          <span style="font-size: 12px; color: #9A4416; line-height: 1.45">问你：退出后标签名要不要保留？我倾向保留</span>
+          <span style="font-size: 11px; color: #75716A">Codex · 等你回答</span>
+        </span>
+      </button>
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px">
+        <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">查 tab_name 从哪来</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2分</span></span>
+          <span style="font-size: 12px; color: #4F4C46; line-height: 1.45">已找到 tab_name 的来源，改了 1 个文件</span>
+          <span style="font-size: 11px; color: #75716A">Codex · 等你验收 · 验收标准 0/3</span>
+        </span>
+      </button>
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px">
+        <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">核对标签测试</span><span style="font-size: 11px; color: #75716A; font-weight: 400">3分</span></span>
+          <span style="font-size: 12px; color: #4F4C46; line-height: 1.45">已完成，请核对</span>
+          <span style="font-size: 11px; color: #75716A">Codex · 等你验收</span>
+        </span>
+      </button>
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px; color: #4F4C46">
+        <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">健身</span><span style="font-size: 11px; color: #75716A">1天</span></span>
+          <span style="font-size: 11px; color: #75716A">Claude Code · 停着</span>
+        </span>
+      </button>
+    </div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 12px 16px 16px; font-size: 12px; color: #4F4C46"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2F8F5B"></span>本机 · 8 个会话</div>
+  </div>
+</div>
+</div>
+<div class="main">
+  <div class="top">
+    <div class="tabs">
+      <button class="tab on"><i class="dot"></i>标签命名依旧有问题<span class="x">×</span></button>
+      <button class="tab"><i class="ring"></i>查 tab_name 从哪来</button>
+      <button class="tab"><i class="ring"></i>核对标签测试</button>
+      <button class="tab"><i class="idle"></i>健身</button>
+      <button class="ib" aria-label="新标签"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+    </div>
+    <span style="flex:1"></span>
+    <button class="need"><i class="dot"></i>要你处理 <b>3</b><kbd>⌘J</kbd></button>
+    <button class="ghost"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg>鸟瞰</button>
+  </div>
+  <div class="panes">
+    <section class="pane focus ask">
+      <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill ask"><i class="dot"></i>等你回答 · 1 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+      <div class="term"><div>› 修标签命名</div><div>&nbsp;</div><div>• 已读取项目上下文</div><div>• 找到两处会改写标签名的地方：tabs.rs 和 sessions.rs</div><div>&nbsp;</div><div>退出后重新打开，标签名要不要沿用上次的？</div></div>
+      <div class="ask-card">
+        <div class="q">退出后标签名要不要保留？</div>
+        <button class="opt sel"><kbd>1</kbd>保留，重开时沿用上次的名字<span class="tag">我倾向</span></button>
+        <button class="opt"><kbd>2</kbd>不保留，每次按第一句话重新起名</button>
+        <button class="opt"><kbd>3</kbd>自己写…</button>
+      </div>
+    </section>
+    <div class="col">
+      <section class="pane">
+        <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill rev"><i class="ring"></i>等你验收 · 2 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+        <div class="rb"><span><b>这一轮改了 1 个文件</b><span class="sep">·</span>验收标准 0/3</span><span style="flex:1"></span><button class="btn">看改动</button><button class="btn">退回</button><button class="btn dark">标记完成</button></div>
+        <div class="term"><div>› 查 tab_name 从哪来</div><div>&nbsp;</div><div>• 已读取项目上下文</div><div>• tab_name 来自 sessions.rs 的 first_prompt()</div><div>• 改成优先用用户改过的名字</div><div>&nbsp;</div><div>✓ 已完成，等你验收。</div></div>
+      </section>
+      <section class="pane">
+        <div class="ph"><span class="ag">Co</span><b>Codex</b><span class="path">~/…/projects/工作空间</span><span style="flex:1"></span><span class="pill rev"><i class="ring"></i>等你验收 · 3 分钟</span><button class="ib" aria-label="更多"><svg width="14" height="14" viewBox="0 0 16 16" fill="#75716A" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg></button></div>
+        <div class="rb"><span><b>这一轮做完了</b><span class="sep">·</span>验收标准 0/3</span><span style="flex:1"></span><button class="btn">看改动</button><button class="btn">退回</button><button class="btn dark">标记完成</button></div>
+        <div class="term"><div>› 核对标签测试</div><div>&nbsp;</div><div>• cargo test -p mooring-app tabs</div><div>  test result: ok. 14 passed</div><div>&nbsp;</div><div>✓ 已完成，请核对。</div></div>
+      </section>
+    </div>
+  </div>
+  <div class="status">
+    
+    <span style="flex:1"></span>
+    <span class="q">Codex</span><span class="q">5h</span><span class="bar"><i style="width:42%"></i></span><span class="q">42%</span><span class="q">周</span><span class="bar"><i style="width:31%"></i></span><span class="q">31%</span>
+    <span class="vsep"></span>
+    <span class="q">Claude</span><span class="q">5h</span><span class="bar"><i style="width:12%"></i></span><span class="q">12%</span><span class="q">周</span><span class="bar"><i style="width:64%"></i></span><span class="q">64%</span>
+    <span class="vsep"></span>
+    <button>本机诊断</button><button><kbd>⌘P</kbd> 命令</button>
+  </div>
+</div>
+</div><div class="win shot" data-v="now"><img src="../ui-v3/after-main.png" alt="现在的主界面截图"></div></div>
+<script>
+const btns=document.querySelectorAll('.sw button'),wins=document.querySelectorAll('.win');
+function pick(k){btns.forEach(b=>b.classList.toggle('on',b.dataset.k===k));wins.forEach(w=>w.classList.toggle('show',w.dataset.v===k));try{localStorage.setItem('mooring-win',k)}catch(e){}}
+btns.forEach(b=>b.onclick=()=>pick(b.dataset.k));
+let k='A';try{k=localStorage.getItem('mooring-win')||'A'}catch(e){}
+pick(new URLSearchParams(location.search).get('v')||k);
+</script></body></html>

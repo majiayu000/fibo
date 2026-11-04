@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mooring 侧栏改版</title>
+<style>
+body{margin:0;background:#E9E7E2;font-family:-apple-system,'PingFang SC',sans-serif;color:#1C1B19}
+header{padding:28px 32px 8px} header h1{margin:0;font-size:20px} header p{margin:6px 0 0;color:#4F4C46;font-size:13px}
+main{display:flex;gap:32px;padding:20px 32px 40px;overflow-x:auto;align-items:flex-start}
+section{flex-shrink:0;width:300px} h2{font-size:15px;margin:0 0 4px} section>p{font-size:12px;color:#4F4C46;margin:0 0 12px;line-height:1.5;min-height:54px}
+.frame{border-radius:10px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.12);width:max-content;background:#F3F2EF}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+</style></head><body>
+<header><h1>侧栏：现在 vs 三个方向</h1><p>状态色沿用现有规则：橙实心＝等你回答，绿空心＝等你验收，黄缺口＝在跑，灰＝停着，✓＝做完了。数据取自现有截图。</p></header>
+<main><section><h2>现在</h2><p>空间是一排彩色方块，会话标题里重复「工作空间 ·」，状态靠 ◆◇ 区分，底部两行纯文字。</p><div class="frame">
+
+<div style="width: 280px; height: 820px; box-sizing: border-box; background: #F4F4F2; border-right: 1px solid #E2E1DD; font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; color: #1C1B19; display: flex; flex-direction: column">
+  <div style="height: 52px; display: flex; align-items: center; padding: 0 16px; gap: 12px">
+    <div style="flex: 1; text-align: center; font-size: 15px; font-weight: 600">Mooring</div>
+    <button aria-label="搜索" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg></button>
+    <button aria-label="收起侧栏" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2"></rect><path d="M6 2.5v11"></path></svg></button>
+  </div>
+  <div style="display: flex; align-items: center; padding: 10px 16px 6px; font-size: 12px; color: #6B6862"><span style="flex: 1">空间</span><span>待办 3</span><span style="margin-left: 14px; font-size: 15px">+</span></div>
+  <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px">
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 6px; background: #E6E5E2; font-size: 13px"><span style="width: 16px; height: 16px; border-radius: 4px; background: #7B5CE6; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center">工</span>工作空间</button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; font-size: 13px"><span style="width: 16px; height: 16px; border-radius: 4px; background: #3B8DE0; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center">S</span>sys</button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; font-size: 13px"><span style="width: 16px; height: 16px; border-radius: 4px; background: #2E9E5B; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center">模</span>模型上线 work</button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; font-size: 13px"><span style="width: 16px; height: 16px; border-radius: 4px; background: #A04BC8; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center">M</span>mooring</button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; font-size: 13px"><span style="width: 16px; height: 16px; border-radius: 4px; background: #4F6BE8; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center">C</span>codex-mall</button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; font-size: 13px"><span style="width: 16px; height: 16px; border-radius: 4px; background: #9A6A1E; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center">新</span><span style="flex: 1">新空间</span><span style="font-size: 12px; color: #A33A1A">目录不在了</span></button>
+  </div>
+  <div style="display: flex; align-items: center; padding: 18px 16px 6px; font-size: 12px; color: #6B6862"><span style="flex: 1">会话</span><span>会话优先 ▾</span></div>
+  <div style="padding: 10px 16px 4px; font-size: 12px; color: #3A3935; font-weight: 600">要你处理 <span style="font-weight: 400; color: #6B6862">3</span></div>
+  <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px">
+    <button style="display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border-radius: 6px; background: #E6E5E2"><span style="display: flex; gap: 8px; font-size: 13px; width: 100%"><span style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">工作空间 · 标签命名依旧有问题</span><span style="font-size: 11px; color: #6B6862">1m</span><span style="color: #B5541A; font-size: 10px">◆</span></span><span style="font-size: 12px; color: #6B6862; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 240px">标签名在退出后要不要保留？我倾向保留，等你…</span></button>
+    <button style="display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border-radius: 6px"><span style="display: flex; gap: 8px; font-size: 13px; width: 100%"><span style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">工作空间 · 标签命名依旧有问题</span><span style="font-size: 11px; color: #6B6862">2m</span><span style="color: #6B6862; font-size: 10px">◇</span></span><span style="font-size: 12px; color: #6B6862; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 240px">改了 1 个文件 · 等你验收 · 已找到 tab_name…</span></button>
+    <button style="display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border-radius: 6px"><span style="display: flex; gap: 8px; font-size: 13px; width: 100%"><span style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">工作空间 · 标签命名依旧有问题</span><span style="font-size: 11px; color: #6B6862">3m</span><span style="color: #6B6862; font-size: 10px">◇</span></span><span style="font-size: 12px; color: #6B6862">等你验收 · 已完成，请核对。</span></button>
+  </div>
+  <div style="flex: 1"></div>
+  <div style="border-top: 1px solid #E2E1DD; padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #3A3935">
+    <button>设置</button>
+    <button>+ 连接手机或其他电脑</button>
+  </div>
+</div>
+</div></section><section><h2>A · 安静列表</h2><p>空间收进顶部切换器；会话按 要你处理 / 在跑 / 停着 分组，三行：标题、这一轮在等什么、空间 · Agent。彩色只留给状态圈。</p><div class="frame">
+
+<div style="width: 280px; height: 820px; box-sizing: border-box; background: #F3F2EF; border-right: 1px solid #E3E1DC; font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; color: #1C1B19; display: flex; flex-direction: column">
+  <div style="height: 38px"></div>
+  <div style="display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px">
+    <button style="flex: 1; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; font-size: 13px; font-weight: 600">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, #7C6CF2, #E46FB0)"></span>
+      <span>全部空间</span>
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+    </button>
+    <button aria-label="新会话" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+  </div>
+  <div style="padding: 8px 12px 4px">
+    <button style="width: 100%; height: 30px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 8px; background: #E9E7E2; font-size: 12px; color: #75716A">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#75716A" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg>
+      <span style="flex: 1">搜索或跳转</span>
+      <span style="font-size: 11px">⌘K</span>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: baseline; gap: 6px; padding: 16px 20px 6px; font-size: 11px; font-weight: 600; color: #75716A; letter-spacing: 0.02em">要你处理<span style="font-weight: 500">3</span></div>
+  <div style="display: flex; flex-direction: column; gap: 1px; padding: 0 8px">
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px; background: #FFFFFF; box-shadow: 0 0 0 1px #E3E1DC, 0 1px 2px rgba(0,0,0,0.04)">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A; font-weight: 400">1分</span></span>
+        <span style="font-size: 12px; color: #B4501A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">问你：退出后标签名要不要保留？</span>
+        <span style="font-size: 11px; color: #75716A">工作空间 · Codex</span>
+      </span>
+    </button>
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px">
+      <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">查 tab_name 从哪来</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2分</span></span>
+        <span style="font-size: 12px; color: #4F4C46">等你验收 · 改了 1 个文件</span>
+        <span style="font-size: 11px; color: #75716A">工作空间 · Codex</span>
+      </span>
+    </button>
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px">
+      <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Skill 收录情况</span><span style="font-size: 11px; color: #75716A; font-weight: 400">34分</span></span>
+        <span style="font-size: 12px; color: #4F4C46">等你验收 · <span style="font-family: 'SF Mono', Menlo, monospace; font-size: 11px">+128 −14</span></span>
+        <span style="font-size: 11px; color: #75716A">mooring · Claude Code</span>
+      </span>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: baseline; gap: 6px; padding: 18px 20px 6px; font-size: 11px; font-weight: 600; color: #75716A; letter-spacing: 0.02em">在跑<span style="font-weight: 500">1</span></div>
+  <div style="display: flex; flex-direction: column; gap: 1px; padding: 0 8px">
+    <button style="display: flex; gap: 10px; padding: 8px 12px; border-radius: 8px">
+      <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #D9A21F; border-top-color: transparent; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="display: flex; gap: 8px; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">插件系统与市场</span><span style="font-size: 11px; color: #75716A; font-weight: 400">12分</span></span>
+        <span style="font-size: 12px; color: #4F4C46">在跑 cargo test</span>
+        <span style="font-size: 11px; color: #75716A">mooring · Claude Code</span>
+      </span>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: baseline; gap: 6px; padding: 18px 20px 4px; font-size: 11px; font-weight: 600; color: #75716A; letter-spacing: 0.02em">停着<span style="font-weight: 500">4</span></div>
+  <div style="display: flex; flex-direction: column; padding: 0 8px">
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: #3A3935"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">库中 UI 组件现状</span><span style="font-size: 11px; color: #75716A">4时</span></button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: #3A3935"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">任务完成判定</span><span style="font-size: 11px; color: #75716A">5时</span></button>
+    <button style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: #75716A"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#9A968E" stroke-width="1.5" style="flex-shrink: 0" aria-hidden="true"><path d="M1 4.2l2 2L7 1.8"></path></svg><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">聊天记录与多终端</span><span style="font-size: 11px">7时</span></button>
+    <button style="height: 28px; padding: 0 12px 0 30px; font-size: 12px; color: #75716A">另 4 个 · 在鸟瞰里看</button>
+  </div>
+
+  <div style="flex: 1"></div>
+  <div style="display: flex; align-items: center; gap: 4px; padding: 10px 10px 12px 20px; border-top: 1px solid #E3E1DC">
+    <span style="width: 6px; height: 6px; border-radius: 50%; background: #2F8F5B"></span>
+    <span style="flex: 1; margin-left: 6px; font-size: 12px; color: #4F4C46">本机 · 8 个会话</span>
+    <button aria-label="连接手机或其他电脑" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"></rect><path d="M7 12.2h2"></path></svg></button>
+    <button aria-label="设置" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"></path><circle cx="10.5" cy="4.5" r="1.5"></circle><circle cx="5.5" cy="11.5" r="1.5"></circle></svg></button>
+  </div>
+</div>
+</div></section><section><h2>B · 按空间分组</h2><p>顶部一块浅橙「等你回答」把要回答的提出来；下面空间可折叠，会话挂在空间下面，单行更紧凑。</p><div class="frame">
+
+<div style="width: 280px; height: 820px; box-sizing: border-box; background: #F3F2EF; border-right: 1px solid #E3E1DC; font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; color: #1C1B19; display: flex; flex-direction: column">
+  <div style="height: 38px"></div>
+  <div style="display: flex; align-items: center; gap: 4px; padding: 0 10px 0 20px">
+    <span style="flex: 1; font-size: 14px; font-weight: 650; letter-spacing: -0.01em">Mooring</span>
+    <button aria-label="搜索" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 7px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg></button>
+    <button aria-label="新会话" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 7px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+  </div>
+
+  <div style="margin: 12px 10px 4px; padding: 10px 6px 6px; border-radius: 10px; background: #FBF1E9">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 0 8px 6px; font-size: 11px; font-weight: 600; color: #9A4416">等你回答<span style="min-width: 16px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 8px; background: #D9661F; color: #fff; font-size: 10px; display: inline-flex; align-items: center; justify-content: center">2</span></div>
+    <button style="width: 100%; display: flex; gap: 9px; padding: 6px 8px; border-radius: 7px; background: #FFFFFF">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A; font-weight: 400">1分</span></span><span style="font-size: 12px; color: #9A4416; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">退出后标签名要不要保留？</span></span>
+    </button>
+    <button style="width: 100%; display: flex; gap: 9px; padding: 6px 8px; border-radius: 7px">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">网站可借鉴之处</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2分</span></span><span style="font-size: 12px; color: #9A4416; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">侧栏参考哪两家？</span></span>
+    </button>
+  </div>
+
+  <div style="display: flex; flex-direction: column; padding: 10px 8px 0">
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; font-size: 13px; font-weight: 600">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #7C6CF2, #E46FB0)"></span>
+      <span style="flex: 1">工作空间</span><span style="font-size: 11px; color: #75716A; font-weight: 400">3</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px; background: #E6E4DF"><span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A">1分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">查 tab_name 从哪来</span><span style="font-size: 11px; color: #75716A">2分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">核对标签测试</span><span style="font-size: 11px; color: #75716A">3分</span></button>
+
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; margin-top: 8px; font-size: 13px; font-weight: 600">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #4AA3F0, #5B5BD6)"></span>
+      <span style="flex: 1">mooring</span><span style="font-size: 11px; color: #75716A; font-weight: 400">3</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #D9A21F; border-top-color: transparent; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">插件系统与市场</span><span style="font-size: 11px; color: #75716A">12分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Skill 收录情况</span><span style="font-size: 11px; color: #75716A">34分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px; color: #4F4C46"><span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">库中 UI 组件现状</span><span style="font-size: 11px; color: #75716A">4时</span></button>
+
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; margin-top: 8px; font-size: 13px; font-weight: 600">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #2BB3A6, #3D7BEA)"></span>
+      <span style="flex: 1">code</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; flex-shrink: 0"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">网站可借鉴之处</span><span style="font-size: 11px; color: #75716A">2分</span></button>
+    <button style="display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 10px 0 30px; border-radius: 7px; font-size: 13px; color: #75716A"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#9A968E" stroke-width="1.5" style="flex-shrink: 0" aria-hidden="true"><path d="M1 4.2l2 2L7 1.8"></path></svg><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">聊天记录与多终端</span><span style="font-size: 11px">7时</span></button>
+
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; margin-top: 8px; font-size: 13px; font-weight: 600; color: #4F4C46">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M4 2.5l2.5 2.5L4 7.5"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #F08A4B, #F2C14E)"></span>
+      <span style="flex: 1">模型上线 work</span><span style="font-size: 11px; color: #75716A; font-weight: 400">0</span>
+    </button>
+    <button style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; font-size: 13px; font-weight: 600; color: #4F4C46">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#75716A" stroke-width="1.4" aria-hidden="true"><path d="M4 2.5l2.5 2.5L4 7.5"></path></svg>
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: #C9C5BD"></span>
+      <span style="flex: 1">新空间</span><span style="font-size: 11px; color: #A33A1A; font-weight: 400">目录不在了</span>
+    </button>
+  </div>
+
+  <div style="flex: 1"></div>
+  <div style="display: flex; align-items: center; gap: 4px; padding: 10px 10px 12px 20px; border-top: 1px solid #E3E1DC">
+    <span style="width: 6px; height: 6px; border-radius: 50%; background: #2F8F5B"></span>
+    <span style="flex: 1; margin-left: 6px; font-size: 12px; color: #4F4C46">本机 · 8 个会话</span>
+    <button aria-label="连接手机或其他电脑" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"></rect><path d="M7 12.2h2"></path></svg></button>
+    <button aria-label="设置" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"></path><circle cx="10.5" cy="4.5" r="1.5"></circle><circle cx="5.5" cy="11.5" r="1.5"></circle></svg></button>
+  </div>
+</div>
+</div></section><section><h2>C · 空间图标轨</h2><p>左侧 60px 图标轨放空间（渐变圆，角标是要你回答的数量），右侧只看当前空间的会话，可按状态筛。</p><div class="frame">
+
+<div style="width: 300px; height: 820px; box-sizing: border-box; font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; color: #1C1B19; display: flex; border-right: 1px solid #E3E1DC">
+  <div style="width: 60px; background: #EAE8E3; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 44px; border-right: 1px solid #DEDBD5">
+    <button aria-label="全部空间" style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #4F4C46"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2"></rect><rect x="9" y="2" width="5" height="5" rx="1.2"></rect><rect x="2" y="9" width="5" height="5" rx="1.2"></rect><rect x="9" y="9" width="5" height="5" rx="1.2"></rect></svg></button>
+    <span style="width: 24px; height: 1px; background: #D6D3CC"></span>
+    <button aria-label="工作空间" style="position: relative; width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg, #7C6CF2, #E46FB0); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #EAE8E3, 0 0 0 4px #1C1B19">工<span style="position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: #D9661F; border: 2px solid #EAE8E3; color: #fff; font-size: 9px; display: flex; align-items: center; justify-content: center">1</span></button>
+    <button aria-label="mooring" style="position: relative; width: 36px; height: 36px; border-radius: 18px; background: linear-gradient(135deg, #4AA3F0, #5B5BD6); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">M<span style="position: absolute; bottom: -1px; right: -1px; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #E9B949; border: 2px solid #EAE8E3"></span></button>
+    <button aria-label="code" style="position: relative; width: 36px; height: 36px; border-radius: 18px; background: linear-gradient(135deg, #2BB3A6, #3D7BEA); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">C<span style="position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: #D9661F; border: 2px solid #EAE8E3; color: #fff; font-size: 9px; display: flex; align-items: center; justify-content: center">1</span></button>
+    <button aria-label="模型上线 work" style="width: 36px; height: 36px; border-radius: 18px; background: linear-gradient(135deg, #F08A4B, #F2C14E); color: #fff; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">模</button>
+    <button aria-label="新空间（目录不在了）" style="width: 36px; height: 36px; border-radius: 18px; background: #D6D3CC; color: #75716A; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; opacity: 0.8">新</button>
+    <button aria-label="添加空间" style="width: 36px; height: 36px; border-radius: 18px; border: 1.5px dashed #B5B1A9; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#75716A" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+    <div style="flex: 1"></div>
+    <button aria-label="连接手机或其他电脑" style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"></rect><path d="M7 12.2h2"></path></svg></button>
+    <button aria-label="设置" style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#4F4C46" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"></path><circle cx="10.5" cy="4.5" r="1.5"></circle><circle cx="5.5" cy="11.5" r="1.5"></circle></svg></button>
+  </div>
+
+  <div style="flex: 1; min-width: 0; background: #F3F2EF; display: flex; flex-direction: column">
+    <div style="padding: 44px 14px 0 16px; display: flex; flex-direction: column; gap: 2px">
+      <div style="display: flex; align-items: center"><span style="flex: 1; font-size: 15px; font-weight: 650">工作空间</span><button aria-label="新会话" style="width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#3A3935" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button></div>
+      <span style="font-family: 'SF Mono', Menlo, monospace; font-size: 11px; color: #75716A">~/projects/工作空间 · main</span>
+    </div>
+    <div style="display: flex; gap: 2px; margin: 14px 12px 8px; padding: 2px; border-radius: 8px; background: #E6E4DF; font-size: 12px">
+      <button style="flex: 1; height: 24px; border-radius: 6px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.06); text-align: center; font-weight: 500">全部 4</button>
+      <button style="flex: 1; height: 24px; border-radius: 6px; text-align: center; color: #4F4C46">要你处理 3</button>
+      <button style="flex: 1; height: 24px; border-radius: 6px; text-align: center; color: #4F4C46">停着 1</button>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px">
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px; background: #FFFFFF; box-shadow: 0 0 0 1px #E3E1DC">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #D9661F; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">标签命名依旧有问题</span><span style="font-size: 11px; color: #75716A; font-weight: 400">1分</span></span>
+          <span style="font-size: 12px; color: #9A4416; line-height: 1.45">问你：退出后标签名要不要保留？我倾向保留</span>
+          <span style="font-size: 11px; color: #75716A">Codex · 等你回答</span>
+        </span>
+      </button>
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px">
+        <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">查 tab_name 从哪来</span><span style="font-size: 11px; color: #75716A; font-weight: 400">2分</span></span>
+          <span style="font-size: 12px; color: #4F4C46; line-height: 1.45">已找到 tab_name 的来源，改了 1 个文件</span>
+          <span style="font-size: 11px; color: #75716A">Codex · 等你验收 · 验收标准 0/3</span>
+        </span>
+      </button>
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px">
+        <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #2F8F5B; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px; font-weight: 500"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">核对标签测试</span><span style="font-size: 11px; color: #75716A; font-weight: 400">3分</span></span>
+          <span style="font-size: 12px; color: #4F4C46; line-height: 1.45">已完成，请核对</span>
+          <span style="font-size: 11px; color: #75716A">Codex · 等你验收</span>
+        </span>
+      </button>
+      <button style="display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px; color: #4F4C46">
+        <span style="width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #B5B1A9; margin-top: 5px; flex-shrink: 0"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+          <span style="display: flex; font-size: 13px"><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">健身</span><span style="font-size: 11px; color: #75716A">1天</span></span>
+          <span style="font-size: 11px; color: #75716A">Claude Code · 停着</span>
+        </span>
+      </button>
+    </div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 12px 16px 16px; font-size: 12px; color: #4F4C46"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2F8F5B"></span>本机 · 8 个会话</div>
+  </div>
+</div>
+</div></section></main></body></html>

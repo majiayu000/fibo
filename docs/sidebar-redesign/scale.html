@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mooring 几十个会话</title>
+<style>
+:root{--ask:#E8732C;--rev:#3FB27F;--run:#E5B83B;--bg:#08080A;--sb:#0C0C0F;--line:#1C1C21;--t1:#ECECEE;--t2:#A2A2AA;--t3:#7E7E87}
+body{margin:0;background:#C9C6BF;font-family:-apple-system,'PingFang SC','Helvetica Neue',sans-serif}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.mono{font-family:'JetBrains Mono','SF Mono',Menlo,monospace}
+header.page{max-width:1440px;margin:0 auto;padding:24px 16px 14px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+header.page h1{margin:0;font-size:18px;color:#1C1B19}
+header.page p{margin:0;font-size:12px;color:#3A3935;flex:1 1 360px;line-height:1.5}
+.sw{display:flex;gap:2px;padding:2px;border-radius:9px;background:#B5B1A9}
+.sw button{padding:6px 12px;border-radius:7px;font-size:13px;color:#2A2926}
+.sw button.on{background:#fff;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.stage{overflow-x:auto;padding:0 16px 48px}
+.win{position:relative;width:1440px;height:900px;margin:0 auto;display:none;border-radius:12px;overflow:hidden;background:var(--bg);color:var(--t1);box-shadow:0 0 0 1px rgba(0,0,0,.25),0 30px 70px rgba(0,0,0,.28)}
+.win.show{display:flex}
+.lights{position:absolute;left:18px;top:16px;display:flex;gap:8px;z-index:5}
+.lights i{width:12px;height:12px;border-radius:50%;background:#FF5F57}
+.lights i:nth-child(2){background:#FEBC2E}.lights i:nth-child(3){background:#28C840}
+
+/* status glyphs */
+.st{display:inline-block;width:8px;height:8px;border-radius:50%;box-sizing:border-box;flex-shrink:0}
+.st.a{background:var(--ask);box-shadow:0 0 8px rgba(232,115,44,.75)}
+.st.r{border:1.5px solid var(--rev)}
+.st.u{border:1.5px solid var(--run);border-top-color:transparent}
+.st.i{border:1.5px solid #45454D}
+.st.d{width:9px;height:9px;border-radius:0;background:none;position:relative}
+.st.d::after{content:"";position:absolute;left:1px;top:0;width:3px;height:6px;border:solid #6A6A72;border-width:0 1.5px 1.5px 0;transform:rotate(40deg)}
+
+/* shared sidebar bits */
+.sb{flex-shrink:0;background:var(--sb);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.brand{display:flex;align-items:center;gap:8px;padding:44px 14px 0 18px;font-size:11px;letter-spacing:.18em;color:var(--t3)}
+.brand b{color:var(--t1);font-weight:600}
+.brand .host{margin-left:auto;letter-spacing:0;display:flex;align-items:center;gap:6px}
+.brand .host i{width:6px;height:6px;border-radius:50%;background:var(--rev);box-shadow:0 0 8px var(--rev)}
+.ib{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--t2)}
+.search{margin:12px 12px 0;height:30px;border-radius:8px;border:1px solid #1F1F25;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;color:var(--t3);box-sizing:border-box}
+.search kbd{margin-left:auto;font:11px 'SF Mono',Menlo,monospace;color:var(--t3)}
+.seg3{display:flex;gap:2px;margin:10px 12px 0;padding:2px;border-radius:8px;background:#141418}
+.seg3 button{flex:1;height:24px;border-radius:6px;font-size:12px;color:var(--t2);text-align:center}
+.seg3 button.on{background:#24242A;color:#fff}
+.seg3 b{font-weight:500;margin-left:3px;color:var(--t3)} .seg3 .on b{color:var(--t2)}
+.scroll{flex:1;min-height:0;overflow:hidden;position:relative}
+.scroll::after{content:"";position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(transparent,var(--sb));pointer-events:none}
+.foot{display:flex;align-items:center;gap:4px;padding:8px 10px 10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--t2)}
+.foot span{margin-right:auto}
+.ttl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm{font-size:11px;color:var(--t3);flex-shrink:0}
+.minibar{display:flex;height:4px;border-radius:2px;overflow:hidden;background:#1E1E23}
+.minibar i{display:block;height:100%}
+
+/* ---------- A 空间分区 ---------- */
+.A .sb{width:300px}
+.A .sp{margin-top:6px}
+.A .sph{display:flex;align-items:center;gap:8px;height:30px;padding:0 12px 0 10px;margin:0 6px;border-radius:7px;width:calc(100% - 12px);box-sizing:border-box;font-size:13px}
+.A .sph .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.A .sph .nm{font-weight:600}
+.A .sph .minibar{width:44px;margin-left:auto}
+.A .sph .cnt{font-size:11px;color:var(--t3);width:20px;text-align:right}
+.A .chev{width:10px;color:var(--t3);font-size:9px;flex-shrink:0}
+.A .row{display:flex;align-items:center;gap:9px;height:26px;padding:0 12px 0 30px;margin:0 6px;border-radius:6px;width:calc(100% - 12px);box-sizing:border-box;font-size:12.5px;color:#D4D4D8}
+.A .row .ttl{flex:1}
+.A .row.sel{background:#17171C;box-shadow:inset 0 0 0 1px #2A2A31;color:#fff}
+.A .row.more{color:var(--t3);font-size:12px}
+.A .row.q{height:auto;padding-top:5px;padding-bottom:5px;align-items:flex-start}
+.A .row.q .st{margin-top:4px}
+.A .row.q .ttl small{display:block;color:#F29A61;font-size:11.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.A .sp.quiet .sph{color:var(--t2)} .A .sp.quiet .nm{font-weight:500}
+
+/* ---------- B 双栏 ---------- */
+.B .sb{width:430px;flex-direction:row}
+.B .c1{width:166px;border-right:1px solid var(--line);display:flex;flex-direction:column;background:#09090B}
+.B .c2{flex:1;min-width:0;display:flex;flex-direction:column}
+.B .spr{display:flex;gap:9px;align-items:center;margin:0 6px;padding:7px 8px;border-radius:8px;width:calc(100% - 12px);box-sizing:border-box}
+.B .spr .orb{width:22px;height:22px;border-radius:7px;flex-shrink:0;box-shadow:inset 0 1px 1px rgba(255,255,255,.35)}
+.B .spr .nm{font-size:12.5px;font-weight:500;display:block}
+.B .spr .ct{display:flex;gap:7px;font-size:10.5px;color:var(--t3);margin-top:2px}
+.B .spr .ct span{display:flex;align-items:center;gap:3px}
+.B .spr .ct .st{width:6px;height:6px}
+.B .spr.on{background:#18181D;box-shadow:inset 0 0 0 1px #2A2A31}
+.B .spr.all .orb{background:conic-gradient(#8B7BFF,#F06CB4,#FF8A4C,#FFC94D,#2CC3B0,#4FB0FF,#8B7BFF)}
+.B .c1 .lab{padding:14px 14px 6px;font-size:11px;color:var(--t3);letter-spacing:.08em}
+.B .hd{padding:44px 14px 0}
+.B .hd b{font-size:16px;font-weight:650;display:flex;align-items:center;gap:8px}
+.B .hd b .dot{width:10px;height:10px;border-radius:50%}
+.B .hd span{font-size:11px;color:var(--t3)}
+.B .grp{display:flex;align-items:center;gap:6px;padding:12px 14px 4px;font-size:11px;color:var(--t3);letter-spacing:.06em}
+.B .grp b{font-weight:500;color:var(--t2)}
+.B .rw{display:flex;gap:9px;align-items:flex-start;margin:0 6px;padding:6px 8px;border-radius:7px;width:calc(100% - 12px);box-sizing:border-box}
+.B .rw .st{margin-top:4px}
+.B .rw .x{flex:1;min-width:0}
+.B .rw .t{display:flex;gap:6px;font-size:12.5px;color:#E4E4E7}
+.B .rw .t .ttl{flex:1}
+.B .rw .s{font-size:11.5px;color:var(--t3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.B .rw .s.q{color:#F29A61}
+.B .rw.sel{background:#17171C;box-shadow:inset 0 0 0 1px #2A2A31}
+.B .rw.one{align-items:center;padding:4px 8px}
+.B .rw.one .st{margin-top:0}
+.B .rw.one .t{color:var(--t2)}
+
+/* ---------- C 点阵 ---------- */
+.C .sb{width:316px}
+.C .map{margin:12px 12px 0;padding:10px 10px 8px;border:1px solid #1F1F25;border-radius:12px;background:#0F0F12}
+.C .map .lab{display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:6px}
+.C .mr{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center;padding:4px 4px;border-radius:6px;width:100%;box-sizing:border-box}
+.C .mr .nm{display:flex;align-items:center;gap:6px;font-size:12px;color:#D4D4D8;white-space:nowrap;overflow:hidden;min-width:0}.C .mr .nm b{font-weight:400;overflow:hidden;text-overflow:ellipsis}
+.C .mr .nm i{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.C .mr.on{background:#18181D}
+.C .cells{display:flex;flex-wrap:wrap;gap:3px}
+.C .cl{width:11px;height:11px;border-radius:3px;box-sizing:border-box}
+.C .cl.a{background:var(--ask);box-shadow:0 0 6px rgba(232,115,44,.7)}
+.C .cl.r{border:1.5px solid var(--rev)}
+.C .cl.u{background:var(--run)}
+.C .cl.i{background:#26262C}
+.C .cl.d{background:#151518;border:1px solid #26262C}
+.C .cl.sel{outline:1.5px solid #fff;outline-offset:1.5px}
+.C .legend{display:flex;gap:10px;margin-top:8px;padding:0 4px;font-size:10.5px;color:var(--t3)}
+.C .legend span{display:flex;align-items:center;gap:4px}
+.C .legend .cl{width:8px;height:8px;border-radius:2px}
+.C .grp{display:flex;align-items:center;gap:6px;padding:14px 18px 6px;font-size:11px;color:var(--t3);letter-spacing:.06em}
+.C .grp b{color:var(--t2);font-weight:500}
+.C .grp .r{margin-left:auto;letter-spacing:0}
+.C .in{display:flex;gap:9px;align-items:flex-start;margin:0 8px;padding:7px 10px;border-radius:8px;width:calc(100% - 16px);box-sizing:border-box}
+.C .in .st{margin-top:4px}
+.C .in .x{flex:1;min-width:0}
+.C .in .t{display:flex;gap:6px;font-size:12.5px;color:#E4E4E7}
+.C .in .t .ttl{flex:1}
+.C .in .s{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--t3);margin-top:2px;white-space:nowrap;overflow:hidden}
+.C .in .s i{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.C .in .s .q{color:#F29A61;overflow:hidden;text-overflow:ellipsis}
+.C .in.sel{background:#17171C;box-shadow:inset 0 0 0 1px #2A2A31}
+.C .in.one{align-items:center;padding:5px 10px}
+.C .in.one .st{margin-top:0}
+
+/* ---------- main (shared) ---------- */
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:52px;display:flex;align-items:center;gap:4px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tab{height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:7px;font-size:12.5px;color:var(--t3);white-space:nowrap}
+.tab .sd{width:8px;height:8px;border-radius:50%}
+.tab.on{color:#fff;background:#141418;box-shadow:inset 0 0 0 1px #26262D}
+.need{margin-left:auto;height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:7px;font-size:12.5px;color:#F6B48A;background:rgba(232,115,44,.12);box-shadow:inset 0 0 0 1px rgba(232,115,44,.35);white-space:nowrap}
+.need kbd{font:11px 'SF Mono',Menlo,monospace;color:#C9875D}
+.ghost{height:30px;padding:0 10px;font-size:12.5px;color:var(--t2);white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t3);margin-right:6px;white-space:nowrap}
+.crumb i{width:8px;height:8px;border-radius:50%}
+.panes{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+.col{display:grid;grid-template-rows:1fr 1fr;gap:10px;min-height:0}
+.pane{background:#0E0E11;border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane.ask{border-color:rgba(232,115,44,.7);box-shadow:0 0 0 1px rgba(232,115,44,.25),0 0 40px rgba(232,115,44,.12)}
+.ph{height:42px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #1A1A1F;font-size:12.5px;white-space:nowrap}
+.ph .p{color:var(--t3);font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.tagx{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11.5px;height:22px;padding:0 8px;border-radius:6px;flex-shrink:0}
+.tagx.a{color:#F6B48A;background:rgba(232,115,44,.14)} .tagx.r{color:#8FE0B8;background:rgba(63,178,127,.13)}
+.rb{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #1A1A1F;font-size:12px;color:var(--t2);white-space:nowrap}
+.rb b{color:#8FE0B8;font-weight:500}
+.rb .bt{height:26px;padding:0 10px;border-radius:6px;border:1px solid #2A2A31;color:#D4D4D8;font-size:12px}
+.rb .bt.p{background:#ECECEE;color:#08080A;border-color:#ECECEE;font-weight:600}
+.term{flex:1;padding:14px 16px;font-size:13px;line-height:1.75;color:#D4D4D8;overflow:hidden}
+.term .c{color:var(--t3)}
+.qa{margin:0 12px 12px;border-radius:10px;border:1px solid rgba(232,115,44,.35);background:linear-gradient(180deg,rgba(232,115,44,.09),rgba(232,115,44,.03));padding:12px}
+.qa .h{font-size:13px;color:#F6B48A;margin-bottom:8px;display:flex;justify-content:space-between}
+.qa .h span{color:var(--t3);font-size:11px}
+.opt{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:7px;font-size:13px;color:#C9C9CF;width:100%;box-sizing:border-box}
+.opt kbd{width:18px;height:18px;border-radius:4px;border:1px solid #3A3A42;font:11px/16px 'SF Mono',Menlo,monospace;text-align:center;color:var(--t2);box-sizing:border-box}
+.opt.on{background:rgba(232,115,44,.14);color:#fff}
+.opt.on kbd{border-color:var(--ask);color:#F6B48A}
+.opt em{margin-left:auto;font-style:normal;font-size:11px;color:#C9875D}
+.status{height:30px;display:flex;align-items:center;gap:14px;padding:0 14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--t3);white-space:nowrap}
+.meter{display:flex;align-items:center;gap:6px}
+.blk{display:flex;gap:2px}
+.blk i{width:4px;height:10px;border-radius:1px;background:#26262C}
+.blk i.f{background:var(--t2)} .blk i.w{background:var(--run)}
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Mooring · 几十个会话、空间不丢</h1>
+  <p>同一份数据：7 个空间、44 个会话（5 个等你回答、7 个等你验收、5 个在跑、其余停着或做完了）。三种侧栏结构，主区共用。视觉沿用鸟瞰看板的深色，换成浅色不影响结构。</p>
+  <div class="sw"><button data-k="A" class="on">A · 空间分区</button><button data-k="B">B · 空间列＋会话列</button><button data-k="C">C · 点阵总览＋收件箱</button></div>
+</header>
+<div class="stage" id="stage"></div>
+
+<template id="main">
+  <main>
+    <div class="top">
+      <span class="crumb"><i class="g1"></i>工作空间 /</span>
+      <button class="tab on"><span class="st a"></span>标签命名依旧有问题<span style="color:#77777F">×</span></button>
+      <button class="tab"><span class="st r"></span>查 tab_name 从哪来</button>
+      <button class="tab"><span class="st r"></span>核对标签测试</button>
+      <button class="tab">+</button>
+      <button class="need">要你处理 <b class="mono">12</b><kbd>⌘J 下一个</kbd></button>
+      <button class="ghost">鸟瞰</button>
+    </div>
+    <div class="panes">
+      <section class="pane ask">
+        <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx a"><span class="st a" style="width:6px;height:6px"></span>等你回答 · 1m</span></div>
+        <div class="term mono"><div>› 修标签命名</div><div>&nbsp;</div><div class="c">• 已读取项目上下文</div><div class="c">• 找到两处会改写标签名：tabs.rs、sessions.rs</div><div>&nbsp;</div><div>退出后重新打开，标签名要不要沿用上次的？</div></div>
+        <div class="qa">
+          <div class="h">退出后标签名要不要保留？<span class="mono">↑↓ 选 · ↵ 发送</span></div>
+          <button class="opt on"><kbd>1</kbd>保留，重开时沿用上次的名字<em>我倾向</em></button>
+          <button class="opt"><kbd>2</kbd>不保留，每次按第一句话重新起名</button>
+          <button class="opt"><kbd>3</kbd>自己写…</button>
+        </div>
+      </section>
+      <div class="col">
+        <section class="pane">
+          <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx r">等你验收 · 2m</span></div>
+          <div class="rb"><b>改了 1 个文件</b><span>· 验收标准 0/3</span><span style="flex:1"></span><button class="bt">看改动</button><button class="bt">退回</button><button class="bt p">标记完成</button></div>
+          <div class="term mono"><div>› 查 tab_name 从哪来</div><div>&nbsp;</div><div class="c">• tab_name 来自 sessions.rs 的 first_prompt()</div><div class="c">• 改成优先用用户改过的名字</div><div>&nbsp;</div><div>✓ 已完成，等你验收。</div></div>
+        </section>
+        <section class="pane">
+          <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx r">等你验收 · 3m</span></div>
+          <div class="rb"><b>这一轮做完了</b><span>· 验收标准 0/3</span><span style="flex:1"></span><button class="bt">看改动</button><button class="bt">退回</button><button class="bt p">标记完成</button></div>
+          <div class="term mono"><div>› 核对标签测试</div><div>&nbsp;</div><div class="c">• cargo test -p mooring-app tabs</div><div class="c">  test result: ok. 14 passed</div><div>&nbsp;</div><div>✓ 已完成，请核对。</div></div>
+        </section>
+      </div>
+    </div>
+    <div class="status mono">
+      <span style="margin-right:auto">⌘P 命令</span>
+      <span class="meter">CODEX 5h<span class="blk"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i><i></i><i></i></span>42%</span>
+      <span class="meter">周<span class="blk"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>31%</span>
+      <span class="meter">CLAUDE 5h<span class="blk"><i class="f"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>12%</span>
+      <span class="meter">周<span class="blk"><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i></i><i></i><i></i><i></i></span>64%</span>
+      <span>本机诊断</span>
+    </div>
+  </main>
+</template>
+
+<script>
+const G={
+  g1:'linear-gradient(135deg,#8B7BFF,#F06CB4)', g2:'linear-gradient(135deg,#4FB0FF,#5E5BE0)',
+  g3:'linear-gradient(135deg,#2CC3B0,#3E7CF0)', g4:'linear-gradient(135deg,#FF8A4C,#FFC94D)',
+  g5:'linear-gradient(135deg,#7BD86A,#1FA37A)', g6:'linear-gradient(135deg,#9AA3B5,#5D6779)',
+  g7:'linear-gradient(135deg,#FF7A8A,#FFB36B)'
+};
+// [title, status, age, note]
+const SPACES=[
+ {n:'工作空间',g:'g1',p:'~/projects/工作空间',s:[
+  ['标签命名依旧有问题','a','1m','退出后标签名要不要保留？'],['查 tab_name 从哪来','r','2m','改了 1 个文件 · 0/3'],['核对标签测试','r','3m','这一轮做完了'],
+  ['健身计划表','i','1d'],['发票整理脚本','i','3d'],['读书笔记归档','i','5d'],['周报模板','d','2d'],['旅行清单','d','6d']]},
+ {n:'mooring',g:'g2',p:'~/AI/tools/mooring',s:[
+  ['窄窗格标题栏','a','6m','截断时优先保留哪段？'],['手机配对重连','u','3m','在跑 cargo test'],['插件系统与市场','u','12m','在跑 cargo test'],['Skill 收录情况','r','34m','+128 −14'],
+  ['库中 UI 组件现状','i','4h'],['任务完成判定','i','5h'],['额度条摆放','i','1d'],['中继鉴权','i','2d'],['右键菜单置顶','d','6h'],['PTY 停顿压测','d','8h'],['汉字宽度回退','d','1d'],['鸟瞰五列','d','2d']]},
+ {n:'code',g:'g3',p:'~/code',s:[
+  ['网站可借鉴之处','a','2m','侧栏参考哪两家？'],['SSH 执行异常','a','10m','退出码 255，要不要换 key？'],['迁移旧会话表','u','40m','第 2 步'],['订单导出 CSV','r','1h','3/3 通过'],
+  ['灰度比例 20%','i','1d'],['聊天记录与多终端','d','7h']]},
+ {n:'模型上线 work',g:'g4',p:'~/work/model-launch',s:[
+  ['推送前确认 PR 标题','a','3m','改动已完成，是否允许推送？'],['反馈接口限流','u','25m','压测中'],['空状态文案改写','r','50m','2/3'],['回滚演练','i','2d'],['监控面板','i','3d']]},
+ {n:'codex-mall',g:'g5',p:'~/code/codex-mall',s:[
+  ['商品详情页缓存','u','1m','0:41'],['支付回调幂等','r','2h','改了 4 个文件'],['购物车并发','i','1d'],['优惠券过期','i','2d'],['图片 CDN','i','4d'],['搜索排序','d','3d']]},
+ {n:'lib',g:'g7',p:'~/code/lib',s:[
+  ['偷看时左栏同时标两处','r','2h','4/4'],['日志分级','i','2d'],['按 rustfmt 折行','d','1h']]},
+ {n:'sys',g:'g6',p:'~/sys',s:[
+  ['清理旧扫描轮询','i','1d'],['给 CLI 加离线模式','i','2d'],['Windows 路径兼容','i','3d'],['磁盘告警','d','4d']]},
+];
+const SEL='标签命名依旧有问题';
+const ORDER={a:0,r:1,u:2,i:3,d:4};
+const all=SPACES.flatMap(sp=>sp.s.map(s=>({sp,t:s[0],k:s[1],age:s[2],note:s[3]})));
+const cnt=(arr,k)=>arr.filter(x=>x[1]===k).length;
+const dotStyle=g=>`background:${G[g]}`;
+const st=k=>`<span class="st ${k}"></span>`;
+const ICON={
+ plus:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>',
+ search:'<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>',
+ phone:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"/><path d="M7 12.2h2"/></svg>',
+ gear:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"/><circle cx="10.5" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg>'
+};
+const brand=`<div class="brand"><b>MOORING</b><span class="host"><i></i>本机</span><button class="ib" aria-label="新会话">${ICON.plus}</button></div>`;
+const search=`<button class="search">${ICON.search}跳到会话、空间或原话<kbd>⌘K</kbd></button>`;
+const foot=`<div class="foot"><span>7 个空间 · 44 个会话</span><button class="ib" aria-label="连接手机">${ICON.phone}</button><button class="ib" aria-label="设置">${ICON.gear}</button></div>`;
+function minibar(s){
+  const n=s.length, seg=(k,c)=>{const v=cnt(s,k);return v?`<i style="width:${v/n*100}%;background:${c}"></i>`:''};
+  return `<span class="minibar">${seg('a','#E8732C')}${seg('r','#3FB27F')}${seg('u','#E5B83B')}${seg('i','#3A3A42')}</span>`;
+}
+
+/* ---------- A ---------- */
+function sideA(){
+  let h=`<aside class="sb">${brand}${search}
+  <div class="seg3"><button>全部<b>44</b></button><button class="on">要你处理<b>12</b></button><button>在跑<b>5</b></button></div>
+  <div class="scroll" style="padding-top:6px">`;
+  SPACES.forEach(sp=>{
+    const act=sp.s.filter(s=>'aru'.includes(s[1])).sort((a,b)=>ORDER[a[1]]-ORDER[b[1]]);
+    const rest=sp.s.length-act.length;
+    const quiet=!act.length;
+    h+=`<div class="sp${quiet?' quiet':''}"><button class="sph"><span class="chev">${quiet?'▸':'▾'}</span><span class="dot" style="${dotStyle(sp.g)}"></span><span class="nm">${sp.n}</span>${minibar(sp.s)}<span class="cnt mono">${sp.s.length}</span></button>`;
+    if(!quiet){
+      act.forEach(s=>{
+        const sel=s[0]===SEL?' sel':'';
+        if(s[1]==='a') h+=`<button class="row q${sel}">${st('a')}<span class="ttl">${s[0]}<small>${s[3]}</small></span><span class="tm mono">${s[2]}</span></button>`;
+        else h+=`<button class="row${sel}">${st(s[1])}<span class="ttl">${s[0]}</span><span class="tm mono">${s[2]}</span></button>`;
+      });
+      if(rest) h+=`<button class="row more">${st('i')}<span class="ttl">另 ${rest} 个停着或做完了</span></button>`;
+    }
+    h+=`</div>`;
+  });
+  return h+`</div>${foot}</aside>`;
+}
+
+/* ---------- B ---------- */
+function sideB(){
+  const curr=SPACES[0];
+  let c1=`<div class="c1"><div style="height:44px"></div><div class="lab">空间</div>
+   <button class="spr all"><span class="orb"></span><span><span class="nm">全部</span><span class="ct"><span>${st('a')}5</span><span>${st('r')}7</span><span>${st('u')}5</span></span></span></button>`;
+  SPACES.forEach(sp=>{
+    const a=cnt(sp.s,'a'),r=cnt(sp.s,'r'),u=cnt(sp.s,'u'),idle=sp.s.length-a-r-u;
+    const parts=[a&&`<span>${st('a')}${a}</span>`,r&&`<span>${st('r')}${r}</span>`,u&&`<span>${st('u')}${u}</span>`,`<span>${idle} 停</span>`].filter(Boolean).join('');
+    c1+=`<button class="spr${sp===curr?' on':''}"><span class="orb" style="${dotStyle(sp.g)}"></span><span style="min-width:0"><span class="nm ttl">${sp.n}</span><span class="ct">${parts}</span></span></button>`;
+  });
+  c1+=`<button class="spr" style="color:var(--t3);font-size:12px"><span class="orb" style="border:1px dashed #3A3A42;display:flex;align-items:center;justify-content:center">${ICON.plus}</span>新空间</button>
+   <div style="flex:1"></div><div class="foot" style="padding-left:12px"><span></span><button class="ib" aria-label="连接手机">${ICON.phone}</button><button class="ib" aria-label="设置">${ICON.gear}</button></div></div>`;
+  const s=curr.s;
+  let c2=`<div class="c2"><div class="hd"><b><span class="dot" style="${dotStyle(curr.g)}"></span>${curr.n}<span style="margin-left:auto" class="ib">${ICON.plus}</span></b><span class="mono">${curr.p} · main</span></div>${search.replace('跳到会话、空间或原话','在工作空间里找')}`;
+  const grp=(label,ks)=>{const items=s.filter(x=>ks.includes(x[1]));return items.length?{label,items}:null};
+  [grp('要你处理','ar'),grp('在跑','u'),grp('停着','i'),grp('做完了','d')].filter(Boolean).forEach(g=>{
+    c2+=`<div class="grp"><b>${g.label}</b>${g.items.length}</div>`;
+    g.items.forEach(x=>{
+      const sel=x[0]===SEL?' sel':'';
+      if('ar'.includes(x[1])) c2+=`<button class="rw${sel}">${st(x[1])}<span class="x"><span class="t"><span class="ttl">${x[0]}</span><span class="tm mono">${x[2]}</span></span><span class="s${x[1]==='a'?' q':''}" style="display:block">${x[3]}</span></span></button>`;
+      else c2+=`<button class="rw one">${st(x[1])}<span class="x"><span class="t"><span class="ttl">${x[0]}</span><span class="tm mono">${x[2]}</span></span></span></button>`;
+    });
+  });
+  c2+=`<div style="flex:1"></div><div class="grp" style="padding-bottom:12px">别的空间还有 4 个等你回答 · ⌘J</div></div>`;
+  return `<aside class="sb">${c1}${c2}</aside>`;
+}
+
+/* ---------- C ---------- */
+function sideC(){
+  let h=`<aside class="sb">${brand}${search}<div class="map"><div class="lab"><span>空间 · 一格一个会话</span><span>按最近排序</span></div>`;
+  SPACES.forEach((sp,i)=>{
+    const cells=[...sp.s].sort((a,b)=>ORDER[a[1]]-ORDER[b[1]]).map(s=>`<i class="cl ${s[1]}${s[0]===SEL?' sel':''}" title="${s[0]}"></i>`).join('');
+    h+=`<button class="mr${i===0?' on':''}"><span class="nm"><i style="${dotStyle(sp.g)}"></i><b>${sp.n}</b></span><span class="cells">${cells}</span></button>`;
+  });
+  h+=`<div class="legend"><span><i class="cl a"></i>回答</span><span><i class="cl r"></i>验收</span><span><i class="cl u"></i>在跑</span><span><i class="cl i"></i>停着</span><span><i class="cl d"></i>做完</span></div></div>
+  <div class="scroll">`;
+  const asks=all.filter(x=>x.k==='a'), revs=all.filter(x=>x.k==='r'), runs=all.filter(x=>x.k==='u');
+  h+=`<div class="grp"><b>等你回答</b>${asks.length}<span class="r">全部空间</span></div>`;
+  asks.forEach(x=>{h+=`<button class="in${x.t===SEL?' sel':''}">${st('a')}<span class="x"><span class="t"><span class="ttl">${x.t}</span><span class="tm mono">${x.age}</span></span><span class="s"><i style="${dotStyle(x.sp.g)}"></i>${x.sp.n} ·<span class="q">${x.note}</span></span></span></button>`});
+  h+=`<div class="grp"><b>等你验收</b>${revs.length}</div>`;
+  revs.forEach(x=>{h+=`<button class="in one">${st('r')}<span class="x"><span class="t"><span class="ttl">${x.t}</span><span class="s" style="margin:0;flex-shrink:0"><i style="${dotStyle(x.sp.g)}"></i></span><span class="tm mono">${x.age}</span></span></span></button>`});
+  h+=`<div class="grp"><b>在跑</b>${runs.length}</div>`;
+  runs.forEach(x=>{h+=`<button class="in one">${st('u')}<span class="x"><span class="t"><span class="ttl">${x.t}</span><span class="tm mono">${x.age}</span></span></span></button>`});
+  return h+`</div>${foot}</aside>`;
+}
+
+const stage=document.getElementById('stage'), mainHTML=document.getElementById('main').innerHTML;
+[['A',sideA],['B',sideB],['C',sideC]].forEach(([k,fn])=>{
+  const w=document.createElement('div');w.className='win '+k;w.dataset.v=k;
+  w.innerHTML=`<div class="lights"><i></i><i></i><i></i></div>${fn()}${mainHTML}`;
+  stage.appendChild(w);
+});
+document.querySelectorAll('.crumb i, .g1').forEach(e=>e.style.background=G.g1);
+const btns=document.querySelectorAll('.sw button'),wins=document.querySelectorAll('.win');
+function pick(k){btns.forEach(b=>b.classList.toggle('on',b.dataset.k===k));wins.forEach(w=>w.classList.toggle('show',w.dataset.v===k));try{localStorage.setItem('mooring-scale',k)}catch(e){}}
+btns.forEach(b=>b.onclick=()=>pick(b.dataset.k));
+let k0='A';try{k0=localStorage.getItem('mooring-scale')||'A'}catch(e){}
+pick(new URLSearchParams(location.search).get('v')||k0);
+</script>
+</body>
+</html>

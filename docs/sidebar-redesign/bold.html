@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mooring 大胆三版</title>
+<style>
+:root{--ask:#E8732C;--rev:#3FB27F;--run:#E5B83B}
+body{margin:0;background:#C9C6BF;font-family:-apple-system,'PingFang SC','Helvetica Neue',sans-serif}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.mono{font-family:'JetBrains Mono','SF Mono',Menlo,monospace}
+header.page{max-width:1440px;margin:0 auto;padding:24px 16px 14px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+header.page h1{margin:0;font-size:18px;color:#1C1B19}
+header.page p{margin:0;font-size:12px;color:#3A3935;flex:1 1 360px;line-height:1.5}
+.sw{display:flex;gap:2px;padding:2px;border-radius:9px;background:#B5B1A9}
+.sw button{padding:6px 12px;border-radius:7px;font-size:13px;color:#2A2926}
+.sw button.on{background:#fff;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.stage{overflow-x:auto;padding:0 16px 48px}
+.win{position:relative;width:1440px;height:900px;margin:0 auto;display:none;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 30px 70px rgba(0,0,0,.28)}
+.win.show{display:flex}
+.lights{position:absolute;left:18px;top:16px;display:flex;gap:8px;z-index:5}
+.lights i{width:12px;height:12px;border-radius:50%;background:#FF5F57}
+.lights i:nth-child(2){background:#FEBC2E}.lights i:nth-child(3){background:#28C840}
+.g1{background:linear-gradient(135deg,#8B7BFF,#F06CB4)}
+.g2{background:linear-gradient(135deg,#4FB0FF,#5E5BE0)}
+.g3{background:linear-gradient(135deg,#2CC3B0,#3E7CF0)}
+.g4{background:linear-gradient(135deg,#FF8A4C,#FFC94D)}
+.g5{background:#55545A}
+
+/* ============ 1 · 控制台 ============ */
+.d1{background:#08080A;color:#ECECEE}
+.d1 .sb{width:276px;flex-shrink:0;border-right:1px solid #1C1C21;display:flex;flex-direction:column;background:#0B0B0E}
+.d1 .brand{display:flex;align-items:center;gap:8px;padding:46px 18px 0;font-size:11px;letter-spacing:.18em;color:#8B8B93}
+.d1 .brand b{color:#ECECEE;font-weight:600}
+.d1 .brand .host{margin-left:auto;letter-spacing:0;display:flex;align-items:center;gap:6px}
+.d1 .brand .host i{width:6px;height:6px;border-radius:50%;background:var(--rev);box-shadow:0 0 8px var(--rev)}
+.d1 .counter{margin:16px 12px 0;padding:14px 14px 12px;border:1px solid #1F1F25;border-radius:12px;background:radial-gradient(120% 140% at 0% 0%,rgba(232,115,44,.16),transparent 60%),#0F0F12}
+.d1 .counter .lbl{font-size:12px;color:#B5B5BC;display:flex;justify-content:space-between}
+.d1 .counter .big{font-size:56px;line-height:1;font-weight:500;letter-spacing:-.04em;margin:6px 0 12px}
+.d1 .seg{display:flex;gap:3px;height:6px}
+.d1 .seg i{flex:1;border-radius:2px}
+.d1 .seg .o{background:var(--ask);box-shadow:0 0 10px rgba(232,115,44,.55)}
+.d1 .seg .g{background:var(--rev)} .d1 .seg .y{background:transparent;border:1px solid var(--run)} .d1 .seg .k{background:#26262C}
+.d1 .legend{display:flex;gap:12px;margin-top:10px;font-size:11px;color:#A2A2AA}
+.d1 .legend span{display:flex;align-items:center;gap:5px}
+.d1 .legend i{width:6px;height:6px;border-radius:50%}
+.d1 .search{margin:12px 12px 4px;height:32px;border-radius:8px;border:1px solid #1F1F25;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;color:#8B8B93}
+.d1 .search kbd{margin-left:auto;font:11px 'SF Mono',Menlo,monospace;color:#8B8B93}
+.d1 .sec{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 6px;font-size:11px;color:#8B8B93;letter-spacing:.08em}
+.d1 .row{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:start;margin:0 8px;padding:8px 10px;border-radius:8px;border:1px solid transparent}
+.d1 .row.sel{background:#141418;border-color:#26262D}
+.d1 .row .t{font-size:13px;color:#E4E4E7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d1 .row .s{font-size:12px;color:#8B8B93;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d1 .row .s.q{color:#F29A61}
+.d1 .row .tm{font-size:11px;color:#77777F;padding-top:2px}
+.d1 .st{width:8px;height:8px;border-radius:50%;margin-top:5px;box-sizing:border-box}
+.d1 .st.a{background:var(--ask);box-shadow:0 0 8px rgba(232,115,44,.8)}
+.d1 .st.r{border:1.5px solid var(--rev)} .d1 .st.u{border:1.5px solid var(--run);border-top-color:transparent} .d1 .st.i{border:1.5px solid #4A4A52}
+.d1 .row.dim .t{color:#8B8B93}
+.d1 .spaces{display:flex;flex-wrap:wrap;gap:6px;padding:2px 14px}
+.d1 .chip{display:flex;align-items:center;gap:6px;height:26px;padding:0 9px 0 6px;border-radius:13px;border:1px solid #1F1F25;font-size:12px;color:#C9C9CF}
+.d1 .chip i{width:12px;height:12px;border-radius:50%}
+.d1 .chip.on{border-color:#3A3A42;background:#151519;color:#fff}
+.d1 .chip .n{color:#77777F;font-size:11px}
+.d1 .foot{margin-top:auto;display:flex;gap:4px;padding:10px 12px 12px;border-top:1px solid #1C1C21}
+.d1 .foot button{height:30px;padding:0 10px;border-radius:7px;font-size:12px;color:#A2A2AA;display:flex;align-items:center;gap:6px}
+.d1 main{flex:1;min-width:0;display:flex;flex-direction:column}
+.d1 .top{height:52px;display:flex;align-items:center;gap:4px;padding:0 12px;border-bottom:1px solid #1C1C21}
+.d1 .tab{height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:7px;font-size:12.5px;color:#8B8B93}
+.d1 .tab.on{color:#fff;background:#141418;box-shadow:inset 0 0 0 1px #26262D}
+.d1 .need{margin-left:auto;height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:7px;font-size:12.5px;color:#F6B48A;background:rgba(232,115,44,.12);box-shadow:inset 0 0 0 1px rgba(232,115,44,.35)}
+.d1 .need kbd{font:11px 'SF Mono',Menlo,monospace;color:#C9875D}
+.d1 .ghost{height:30px;padding:0 10px;font-size:12.5px;color:#A2A2AA}
+.d1 .panes{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+.d1 .col{display:grid;grid-template-rows:1fr 1fr;gap:10px;min-height:0}
+.d1 .pane{background:#0E0E11;border:1px solid #1C1C21;border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.d1 .pane.ask{border-color:rgba(232,115,44,.7);box-shadow:0 0 0 1px rgba(232,115,44,.25),0 0 40px rgba(232,115,44,.12)}
+.d1 .ph{height:42px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #1A1A1F;font-size:12.5px}
+.d1 .ph b{font-weight:600}
+.d1 .ph .p{color:#77777F;font-size:12px}
+.d1 .tagx{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11.5px;height:22px;padding:0 8px;border-radius:6px}
+.d1 .tagx.a{color:#F6B48A;background:rgba(232,115,44,.14)} .d1 .tagx.r{color:#8FE0B8;background:rgba(63,178,127,.13)}
+.d1 .rb{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #1A1A1F;font-size:12px;color:#A2A2AA}
+.d1 .rb b{color:#8FE0B8;font-weight:500}
+.d1 .rb .bt{height:26px;padding:0 10px;border-radius:6px;border:1px solid #2A2A31;color:#D4D4D8;font-size:12px}
+.d1 .rb .bt.p{background:#ECECEE;color:#08080A;border-color:#ECECEE;font-weight:600}
+.d1 .term{flex:1;padding:14px 16px;font-size:13px;line-height:1.75;color:#D4D4D8;overflow:hidden}
+.d1 .term .c{color:#77777F}
+.d1 .qa{margin:0 12px 12px;border-radius:10px;border:1px solid rgba(232,115,44,.35);background:linear-gradient(180deg,rgba(232,115,44,.09),rgba(232,115,44,.03));padding:12px}
+.d1 .qa .h{font-size:13px;color:#F6B48A;margin-bottom:8px;display:flex;justify-content:space-between}
+.d1 .qa .h span{color:#77777F;font-size:11px}
+.d1 .opt{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:7px;font-size:13px;color:#C9C9CF;width:100%;box-sizing:border-box}
+.d1 .opt kbd{width:18px;height:18px;border-radius:4px;border:1px solid #3A3A42;font:11px/16px 'SF Mono',Menlo,monospace;text-align:center;color:#A2A2AA;box-sizing:border-box}
+.d1 .opt.on{background:rgba(232,115,44,.14);color:#fff}
+.d1 .opt.on kbd{border-color:var(--ask);color:#F6B48A}
+.d1 .opt em{margin-left:auto;font-style:normal;font-size:11px;color:#C9875D}
+.d1 .status{height:30px;display:flex;align-items:center;gap:14px;padding:0 14px;border-top:1px solid #1C1C21;font-size:11.5px;color:#8B8B93}
+.d1 .meter{display:flex;align-items:center;gap:6px}
+.d1 .meter .blk{display:flex;gap:2px}
+.d1 .meter .blk i{width:4px;height:10px;border-radius:1px;background:#26262C}
+.d1 .meter .blk i.f{background:#A2A2AA}
+.d1 .meter .blk i.w{background:var(--run)}
+
+/* ============ 2 · 编辑 ============ */
+.d2{background:#FFFFFF;color:#0A0A0A}
+.d2 .serif{font-family:'Songti SC','STSong','Noto Serif SC',serif}
+.d2 .sb{width:304px;flex-shrink:0;border-right:1.5px solid #0A0A0A;display:flex;flex-direction:column;background:#FAF8F3}
+.d2 .mast{padding:48px 22px 14px;border-bottom:2px solid #0A0A0A}
+.d2 .mast h2{margin:0;font-size:30px;font-weight:900;letter-spacing:-.01em}
+.d2 .mast p{margin:4px 0 0;font-size:12px;color:#55524C}
+.d2 .lead{display:flex;align-items:flex-end;justify-content:space-between;padding:14px 22px 12px;border-bottom:1px solid #0A0A0A}
+.d2 .lead b{display:block;font-size:13px}
+.d2 .lead span{font-size:12px;color:#55524C}
+.d2 .lead .num{font-size:64px;line-height:.85;font-weight:900;color:#B04A14}
+.d2 .item{display:grid;grid-template-columns:30px 1fr;gap:4px 10px;padding:11px 22px 11px 18px;border-bottom:1px solid #D9D5CC;width:100%;box-sizing:border-box}
+.d2 .item .no{font-size:18px;font-weight:700;color:#A8A39A;line-height:1.1}
+.d2 .item .t{font-size:14px;font-weight:600;display:flex;gap:8px}
+.d2 .item .t span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d2 .item .t small{font-size:11px;font-weight:400;color:#6F6B63}
+.d2 .item .m{grid-column:2;font-size:12px;color:#55524C;display:flex;gap:8px;align-items:center}
+.d2 .tg{font-size:10.5px;padding:1px 6px;font-weight:600;letter-spacing:.04em}
+.d2 .tg.a{background:#B04A14;color:#fff} .d2 .tg.r{border:1.2px solid #1F6E46;color:#1F6E46} .d2 .tg.u{border:1.2px solid #8A6A0F;color:#7A5C08} .d2 .tg.i{color:#6F6B63;border:1.2px solid #BDB8AE}
+.d2 .item.sel{background:#0A0A0A;color:#fff;border-bottom-color:#0A0A0A}
+.d2 .item.sel .no{color:#FF9A5C} .d2 .item.sel .m,.d2 .item.sel .t small{color:#CFCBC3}
+.d2 .item.sel .tg.a{background:#FF8A4C;color:#0A0A0A}
+.d2 .sp{padding:14px 22px 0}
+.d2 .sp h3{margin:0 0 6px;font-size:11px;letter-spacing:.14em;color:#55524C;font-weight:600}
+.d2 .sp button{display:flex;align-items:center;gap:8px;height:26px;font-size:13px;width:100%}
+.d2 .sp button i{width:10px;height:10px;border-radius:50%}
+.d2 .sp button small{margin-left:auto;color:#6F6B63;font-size:12px}
+.d2 .sp button.on{font-weight:700}
+.d2 .foot{margin-top:auto;border-top:2px solid #0A0A0A;display:flex;align-items:center;gap:14px;padding:10px 22px 12px;font-size:12px}
+.d2 .foot span{margin-right:auto;color:#55524C}
+.d2 main{flex:1;min-width:0;display:flex;flex-direction:column}
+.d2 .top{height:54px;display:flex;align-items:stretch;gap:22px;padding:0 20px;border-bottom:1.5px solid #0A0A0A}
+.d2 .tab{display:flex;align-items:center;font-size:13px;color:#6F6B63;border-bottom:3px solid transparent;margin-bottom:-1.5px}
+.d2 .tab.on{color:#0A0A0A;font-weight:700;border-bottom-color:#0A0A0A}
+.d2 .need{margin:12px 0 12px auto;display:flex;align-items:center;gap:8px;padding:0 12px;background:#0A0A0A;color:#fff;font-size:12.5px;font-weight:600}
+.d2 .need b{color:#FF9A5C}
+.d2 .ghost{display:flex;align-items:center;font-size:13px;font-weight:600}
+.d2 .panes{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr}
+.d2 .col{display:grid;grid-template-rows:1fr 1fr;min-height:0;border-left:1.5px solid #0A0A0A}
+.d2 .col .pane+.pane{border-top:1.5px solid #0A0A0A}
+.d2 .pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.d2 .ph{padding:16px 20px 10px;display:flex;flex-direction:column;gap:4px}
+.d2 .ph h4{margin:0;font-size:21px;font-weight:900;display:flex;align-items:center;gap:10px}
+.d2 .ph .p{font-size:12px;color:#6F6B63}
+.d2 .rb{display:flex;align-items:center;gap:0;margin:0 20px;border:1.5px solid #0A0A0A}
+.d2 .rb .info{flex:1;padding:0 12px;font-size:12.5px}
+.d2 .rb .info b{color:#1F6E46}
+.d2 .rb button{height:32px;padding:0 14px;font-size:12.5px;border-left:1.5px solid #0A0A0A;font-weight:600}
+.d2 .rb button.p{background:#0A0A0A;color:#fff}
+.d2 .term{flex:1;padding:14px 20px;font-size:13px;line-height:1.75;color:#1C1B19;overflow:hidden}
+.d2 .term .c{color:#8A867E}
+.d2 .qa{border-top:1.5px solid #0A0A0A;background:#FFF4EC;padding:16px 20px 14px}
+.d2 .qa .k{font-size:11px;letter-spacing:.14em;color:#B04A14;font-weight:700}
+.d2 .qa h5{margin:4px 0 10px;font-size:24px;font-weight:900}
+.d2 .opt{display:flex;align-items:center;gap:14px;height:38px;border-top:1px solid #E8CDB9;width:100%;font-size:14px}
+.d2 .opt .n{font-size:20px;font-weight:900;color:#B04A14;width:18px}
+.d2 .opt em{margin-left:auto;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.08em;color:#B04A14}
+.d2 .opt.on{font-weight:700}
+.d2 .status{height:30px;display:flex;align-items:center;gap:18px;padding:0 20px;background:#0A0A0A;color:#E9E6DF;font-size:11.5px}
+.d2 .status b{color:#fff}
+.d2 .status .w{color:#FFC94D}
+
+/* ============ 3 · 极光玻璃 ============ */
+.d3{color:#F3F2F7;background:
+  radial-gradient(60% 70% at 4% 0%,rgba(139,123,255,.55),transparent 60%),
+  radial-gradient(50% 60% at 30% 110%,rgba(240,108,180,.38),transparent 60%),
+  radial-gradient(55% 60% at 100% 10%,rgba(79,176,255,.32),transparent 60%),
+  #0C0D14;padding:8px;box-sizing:border-box;gap:8px}
+.d3 .glass{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);backdrop-filter:blur(30px) saturate(140%);-webkit-backdrop-filter:blur(30px) saturate(140%)}
+.d3 .sb{width:284px;flex-shrink:0;border-radius:16px;display:flex;flex-direction:column}
+.d3 .hero{padding:44px 16px 14px;display:flex;align-items:center;gap:12px}
+.d3 .orb{width:42px;height:42px;border-radius:50%;box-shadow:0 6px 24px rgba(139,123,255,.55),inset 0 1px 1px rgba(255,255,255,.5)}
+.d3 .hero b{display:block;font-size:17px;font-weight:650}
+.d3 .hero span{font-size:11.5px;color:rgba(243,242,247,.62)}
+.d3 .orbs{display:flex;gap:8px;padding:0 16px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
+.d3 .orbs button{position:relative;width:30px;height:30px;border-radius:50%;box-shadow:inset 0 1px 1px rgba(255,255,255,.4)}
+.d3 .orbs button.add{background:none;border:1px dashed rgba(255,255,255,.3);box-shadow:none;color:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-size:16px}
+.d3 .orbs .bd{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:var(--ask);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px;box-sizing:border-box;box-shadow:0 0 0 2px #2A2340}
+.d3 .orbs .bu{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:var(--run);box-shadow:0 0 0 2px #2A2340}
+.d3 .sec{display:flex;justify-content:space-between;padding:14px 18px 8px;font-size:11.5px;color:rgba(243,242,247,.6)}
+.d3 .card{margin:0 10px 6px;padding:10px 12px;border-radius:12px;display:flex;gap:10px;width:calc(100% - 20px);box-sizing:border-box}
+.d3 .card.ask{background:linear-gradient(135deg,rgba(232,115,44,.28),rgba(232,115,44,.08));border:1px solid rgba(255,160,100,.35);box-shadow:0 8px 30px rgba(232,115,44,.18)}
+.d3 .card.sel{outline:1.5px solid rgba(255,255,255,.75);outline-offset:-1px}
+.d3 .card .x{flex:1;min-width:0}
+.d3 .card .t{font-size:13px;font-weight:550;display:flex}
+.d3 .card .t span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d3 .card .t small{font-size:11px;font-weight:400;color:rgba(243,242,247,.6)}
+.d3 .card .s{font-size:12px;color:rgba(255,214,190,.95);margin-top:3px}
+.d3 .card .w{font-size:11px;color:rgba(243,242,247,.55);margin-top:3px;display:flex;align-items:center;gap:5px}
+.d3 .card .w i{width:8px;height:8px;border-radius:50%}
+.d3 .st{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;box-sizing:border-box}
+.d3 .st.a{background:var(--ask);box-shadow:0 0 10px var(--ask)} .d3 .st.r{border:1.5px solid var(--rev)} .d3 .st.u{border:1.5px solid var(--run);border-top-color:transparent} .d3 .st.i{border:1.5px solid rgba(255,255,255,.35)}
+.d3 .li{display:flex;align-items:center;gap:10px;margin:0 10px;padding:0 12px;height:32px;border-radius:9px;font-size:13px;width:calc(100% - 20px);box-sizing:border-box}
+.d3 .li span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d3 .li small{font-size:11px;color:rgba(243,242,247,.55)}
+.d3 .li .st{margin-top:0}
+.d3 .foot{margin-top:auto;display:flex;align-items:center;gap:6px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:rgba(243,242,247,.7)}
+.d3 .foot i{width:6px;height:6px;border-radius:50%;background:var(--rev);box-shadow:0 0 8px var(--rev)}
+.d3 .foot span{margin-right:auto}
+.d3 .foot button{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.d3 main{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.d3 .top{height:46px;border-radius:14px;display:flex;align-items:center;gap:4px;padding:0 8px}
+.d3 .tab{height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:9px;font-size:12.5px;color:rgba(243,242,247,.7)}
+.d3 .tab.on{background:rgba(255,255,255,.14);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
+.d3 .need{margin-left:auto;height:30px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:9px;font-size:12.5px;background:linear-gradient(135deg,#F07A35,#E0582A);box-shadow:0 4px 16px rgba(232,115,44,.4);font-weight:600}
+.d3 .ghost{height:30px;padding:0 10px;font-size:12.5px;color:rgba(243,242,247,.8)}
+.d3 .panes{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.d3 .col{display:grid;grid-template-rows:1fr 1fr;gap:8px;min-height:0}
+.d3 .pane{border-radius:14px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.d3 .pane.ask{border-color:rgba(255,160,100,.55);box-shadow:0 0 0 1px rgba(255,160,100,.25),0 10px 40px rgba(232,115,44,.18)}
+.d3 .ph{height:44px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,.07);font-size:12.5px}
+.d3 .ph .p{color:rgba(243,242,247,.55);font-size:12px}
+.d3 .tagx{margin-left:auto;font-size:11.5px;height:22px;display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:11px}
+.d3 .tagx.a{background:rgba(232,115,44,.22);color:#FFD2B5} .d3 .tagx.r{background:rgba(63,178,127,.2);color:#B5F0D2}
+.d3 .rb{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px;color:rgba(243,242,247,.7);border-bottom:1px solid rgba(255,255,255,.07)}
+.d3 .rb b{color:#B5F0D2;font-weight:500}
+.d3 .rb .bt{height:26px;padding:0 11px;border-radius:8px;background:rgba(255,255,255,.08);font-size:12px}
+.d3 .rb .bt.p{background:#fff;color:#141320;font-weight:600}
+.d3 .term{flex:1;padding:14px 16px;font-size:13px;line-height:1.75;color:rgba(243,242,247,.88);overflow:hidden}
+.d3 .term .c{color:rgba(243,242,247,.5)}
+.d3 .qa{margin:0 12px 12px;padding:12px;border-radius:12px;background:rgba(232,115,44,.12);border:1px solid rgba(255,160,100,.3)}
+.d3 .qa .h{font-size:13.5px;font-weight:600;color:#FFD2B5;margin-bottom:8px}
+.d3 .opt{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;font-size:13px;width:100%;box-sizing:border-box;color:rgba(243,242,247,.8)}
+.d3 .opt kbd{width:18px;height:18px;border-radius:5px;background:rgba(255,255,255,.1);font:11px/18px 'SF Mono',Menlo,monospace;text-align:center}
+.d3 .opt.on{background:rgba(255,255,255,.14);color:#fff}
+.d3 .opt em{margin-left:auto;font-style:normal;font-size:11px;color:#FFD2B5}
+.d3 .status{height:34px;border-radius:12px;display:flex;align-items:center;gap:14px;padding:0 14px;font-size:11.5px;color:rgba(243,242,247,.7)}
+.d3 .bar{width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;display:inline-block;vertical-align:middle}
+.d3 .bar i{display:block;height:100%;background:linear-gradient(90deg,#8B7BFF,#F06CB4)}
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Mooring 大胆三版</h1>
+  <p>同一份数据，三种完全不同的气质。状态色不变：橙＝等你回答，绿＝等你验收，黄缺口＝在跑，灰＝停着。终端字体不动，稿里的等宽字只是占位。</p>
+  <div class="sw"><button data-k="1" class="on">1 · 控制台</button><button data-k="2">2 · 编辑</button><button data-k="3">3 · 极光玻璃</button></div>
+</header>
+<div class="stage">
+
+<!-- ================= 1 控制台 ================= -->
+<div class="win d1" data-v="1">
+  <div class="lights"><i></i><i></i><i></i></div>
+  <aside class="sb">
+    <div class="brand"><b>MOORING</b><span class="host"><i></i>本机 · 8</span></div>
+    <div class="counter">
+      <div class="lbl"><span>要你处理</span><span class="mono">11:58</span></div>
+      <div class="big mono">05</div>
+      <div class="seg"><i class="o"></i><i class="o"></i><i class="g"></i><i class="g"></i><i class="g"></i><i class="y"></i><i class="k"></i><i class="k"></i></div>
+      <div class="legend"><span><i style="background:var(--ask)"></i>回答 2</span><span><i style="background:var(--rev)"></i>验收 3</span><span><i style="border:1px solid var(--run);box-sizing:border-box"></i>在跑 1</span><span>停着 2</span></div>
+    </div>
+    <button class="search"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#8B8B93" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>跳到会话或原话<kbd>⌘K</kbd></button>
+    <div class="sec"><span>会话</span><span class="mono">按状态</span></div>
+    <button class="row sel"><i class="st a"></i><span><div class="t">标签命名依旧有问题</div><div class="s q">问：退出后标签名要不要保留？</div></span><span class="tm mono">1m</span></button>
+    <button class="row"><i class="st a"></i><span><div class="t">网站可借鉴之处</div><div class="s q">问：侧栏参考哪两家？</div></span><span class="tm mono">2m</span></button>
+    <button class="row"><i class="st r"></i><span><div class="t">查 tab_name 从哪来</div><div class="s">改了 1 个文件 · 0/3</div></span><span class="tm mono">2m</span></button>
+    <button class="row"><i class="st r"></i><span><div class="t">核对标签测试</div><div class="s">已完成，请核对</div></span><span class="tm mono">3m</span></button>
+    <button class="row"><i class="st r"></i><span><div class="t">Skill 收录情况</div><div class="s mono">+128 −14 · mooring</div></span><span class="tm mono">34m</span></button>
+    <button class="row"><i class="st u"></i><span><div class="t">插件系统与市场</div><div class="s mono">cargo test · mooring</div></span><span class="tm mono">12m</span></button>
+    <button class="row dim"><i class="st i"></i><span><div class="t">库中 UI 组件现状</div></span><span class="tm mono">4h</span></button>
+    <div class="sec"><span>空间</span><span>+</span></div>
+    <div class="spaces">
+      <button class="chip on"><i class="g1"></i>工作空间<span class="n mono">3</span></button>
+      <button class="chip"><i class="g2"></i>mooring<span class="n mono">3</span></button>
+      <button class="chip"><i class="g3"></i>code<span class="n mono">2</span></button>
+      <button class="chip"><i class="g4"></i>模型上线</button>
+    </div>
+    <div class="foot"><button>⌁ 连接手机</button><button>设置</button></div>
+  </aside>
+  <main>
+    <div class="top">
+      <button class="tab on"><i class="st a" style="margin:0"></i>标签命名依旧有问题<span style="color:#77777F">×</span></button>
+      <button class="tab"><i class="st r" style="margin:0"></i>查 tab_name 从哪来</button>
+      <button class="tab"><i class="st r" style="margin:0"></i>核对标签测试</button>
+      <button class="tab">+</button>
+      <button class="need">要你处理 <b class="mono">05</b><kbd>⌘J</kbd></button>
+      <button class="ghost">鸟瞰</button>
+    </div>
+    <div class="panes">
+      <section class="pane ask">
+        <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx a"><i class="st a" style="margin:0;width:6px;height:6px"></i>等你回答 · 1m</span></div>
+        <div class="term mono"><div>› 修标签命名</div><div>&nbsp;</div><div class="c">• 已读取项目上下文</div><div class="c">• 找到两处会改写标签名：tabs.rs、sessions.rs</div><div>&nbsp;</div><div>退出后重新打开，标签名要不要沿用上次的？</div></div>
+        <div class="qa">
+          <div class="h">退出后标签名要不要保留？<span class="mono">↑↓ 选 · ↵ 发送</span></div>
+          <button class="opt on"><kbd>1</kbd>保留，重开时沿用上次的名字<em>我倾向</em></button>
+          <button class="opt"><kbd>2</kbd>不保留，每次按第一句话重新起名</button>
+          <button class="opt"><kbd>3</kbd>自己写…</button>
+        </div>
+      </section>
+      <div class="col">
+        <section class="pane">
+          <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx r">等你验收 · 2m</span></div>
+          <div class="rb"><b>改了 1 个文件</b><span>· 验收标准 0/3</span><span style="flex:1"></span><button class="bt">看改动</button><button class="bt">退回</button><button class="bt p">标记完成</button></div>
+          <div class="term mono"><div>› 查 tab_name 从哪来</div><div>&nbsp;</div><div class="c">• tab_name 来自 sessions.rs 的 first_prompt()</div><div class="c">• 改成优先用用户改过的名字</div><div>&nbsp;</div><div>✓ 已完成，等你验收。</div></div>
+        </section>
+        <section class="pane">
+          <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx r">等你验收 · 3m</span></div>
+          <div class="rb"><b>这一轮做完了</b><span>· 验收标准 0/3</span><span style="flex:1"></span><button class="bt">看改动</button><button class="bt">退回</button><button class="bt p">标记完成</button></div>
+          <div class="term mono"><div>› 核对标签测试</div><div>&nbsp;</div><div class="c">• cargo test -p mooring-app tabs</div><div class="c">  test result: ok. 14 passed</div><div>&nbsp;</div><div>✓ 已完成，请核对。</div></div>
+        </section>
+      </div>
+    </div>
+    <div class="status mono">
+      <span style="margin-right:auto">⌘P 命令</span>
+      <span class="meter">CODEX 5h<span class="blk"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i><i></i><i></i></span>42%</span>
+      <span class="meter">周<span class="blk"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>31%</span>
+      <span class="meter">CLAUDE 5h<span class="blk"><i class="f"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>12%</span>
+      <span class="meter">周<span class="blk"><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i></i><i></i><i></i><i></i></span>64%</span>
+      <span>本机诊断</span>
+    </div>
+  </main>
+</div>
+
+<!-- ================= 2 编辑 ================= -->
+<div class="win d2" data-v="2">
+  <div class="lights"><i></i><i></i><i></i></div>
+  <aside class="sb">
+    <div class="mast"><h2 class="serif">Mooring</h2><p>周二 11 月 3 日 · 本机 8 个会话</p></div>
+    <div class="lead"><div><b>要你处理</b><span>2 个等你回答 · 3 个等你验收</span></div><div class="num serif">5</div></div>
+    <button class="item sel"><span class="no serif">01</span><span class="t"><span>标签命名依旧有问题</span><small>1分</small></span><span class="m"><span class="tg a">等你回答</span>工作空间 · Codex</span></button>
+    <button class="item"><span class="no serif">02</span><span class="t"><span>网站可借鉴之处</span><small>2分</small></span><span class="m"><span class="tg a">等你回答</span>code · Codex</span></button>
+    <button class="item"><span class="no serif">03</span><span class="t"><span>查 tab_name 从哪来</span><small>2分</small></span><span class="m"><span class="tg r">等你验收</span>改了 1 个文件</span></button>
+    <button class="item"><span class="no serif">04</span><span class="t"><span>核对标签测试</span><small>3分</small></span><span class="m"><span class="tg r">等你验收</span>工作空间</span></button>
+    <button class="item"><span class="no serif">05</span><span class="t"><span>Skill 收录情况</span><small>34分</small></span><span class="m"><span class="tg r">等你验收</span>+128 −14</span></button>
+    <button class="item"><span class="no serif">06</span><span class="t"><span>插件系统与市场</span><small>12分</small></span><span class="m"><span class="tg u">在跑</span>cargo test</span></button>
+    <div class="sp">
+      <h3>空间</h3>
+      <button class="on"><i class="g1"></i>工作空间<small>3</small></button>
+      <button><i class="g2"></i>mooring<small>3</small></button>
+      <button><i class="g3"></i>code<small>2</small></button>
+      <button><i class="g4"></i>模型上线 work<small>0</small></button>
+      <button><i class="g5"></i>新空间<small style="color:#A33A1A">目录不在了</small></button>
+    </div>
+    <div class="foot"><span>停着 2 · 做完了 1</span><button>连接手机</button><button>设置</button></div>
+  </aside>
+  <main>
+    <div class="top">
+      <button class="tab on" style="padding-left:0">标签命名依旧有问题</button>
+      <button class="tab">查 tab_name 从哪来</button>
+      <button class="tab">核对标签测试</button>
+      <button class="tab">＋</button>
+      <button class="need">要你处理 <b>5</b> ⌘J</button>
+      <button class="ghost">鸟瞰 →</button>
+    </div>
+    <div class="panes">
+      <section class="pane">
+        <div class="ph"><h4 class="serif">标签命名依旧有问题 <span class="tg a" style="font-family:-apple-system,'PingFang SC',sans-serif">等你回答 · 1分</span></h4><span class="p">Codex · ~/…/projects/工作空间</span></div>
+        <div class="term mono"><div>› 修标签命名</div><div>&nbsp;</div><div class="c">• 已读取项目上下文</div><div class="c">• 找到两处会改写标签名：tabs.rs、sessions.rs</div><div>&nbsp;</div><div>退出后重新打开，标签名要不要沿用上次的？</div></div>
+        <div class="qa">
+          <div class="k">CODEX 问你</div>
+          <h5 class="serif">退出后标签名要不要保留？</h5>
+          <button class="opt on"><span class="n serif">1</span>保留，重开时沿用上次的名字<em>我倾向</em></button>
+          <button class="opt"><span class="n serif">2</span>不保留，每次按第一句话重新起名</button>
+          <button class="opt"><span class="n serif">3</span>自己写…</button>
+        </div>
+      </section>
+      <div class="col">
+        <section class="pane">
+          <div class="ph"><h4 class="serif">查 tab_name 从哪来 <span class="tg r" style="font-family:-apple-system,'PingFang SC',sans-serif">等你验收 · 2分</span></h4><span class="p">Codex · ~/…/projects/工作空间</span></div>
+          <div class="rb"><span class="info"><b>改了 1 个文件</b> · 验收标准 0/3</span><button>看改动</button><button>退回</button><button class="p">标记完成</button></div>
+          <div class="term mono"><div class="c">• tab_name 来自 sessions.rs 的 first_prompt()</div><div class="c">• 改成优先用用户改过的名字</div><div>&nbsp;</div><div>✓ 已完成，等你验收。</div></div>
+        </section>
+        <section class="pane">
+          <div class="ph"><h4 class="serif">核对标签测试 <span class="tg r" style="font-family:-apple-system,'PingFang SC',sans-serif">等你验收 · 3分</span></h4><span class="p">Codex · ~/…/projects/工作空间</span></div>
+          <div class="rb"><span class="info"><b>这一轮做完了</b> · 验收标准 0/3</span><button>看改动</button><button>退回</button><button class="p">标记完成</button></div>
+          <div class="term mono"><div class="c">• cargo test -p mooring-app tabs</div><div class="c">  test result: ok. 14 passed</div><div>&nbsp;</div><div>✓ 已完成，请核对。</div></div>
+        </section>
+      </div>
+    </div>
+    <div class="status"><span style="margin-right:auto">⌘P 命令</span><span>Codex <b>42%</b> / 周 31%</span><span>Claude <b>12%</b> / 周 <b class="w">64%</b></span><span>本机诊断</span></div>
+  </main>
+</div>
+
+<!-- ================= 3 极光玻璃 ================= -->
+<div class="win d3" data-v="3">
+  <div class="lights" style="left:26px;top:24px"><i></i><i></i><i></i></div>
+  <aside class="sb glass">
+    <div class="hero" style="padding-top:52px"><span class="orb g1"></span><span><b>工作空间</b><span class="mono">~/projects/工作空间 · main</span></span></div>
+    <div class="orbs">
+      <button class="g1" aria-label="工作空间" style="outline:2px solid #fff;outline-offset:2px"><span class="bd">1</span></button>
+      <button class="g2" aria-label="mooring"><span class="bu"></span></button>
+      <button class="g3" aria-label="code"><span class="bd">1</span></button>
+      <button class="g4" aria-label="模型上线 work"></button>
+      <button class="g5" aria-label="新空间" style="opacity:.6"></button>
+      <button class="add" aria-label="添加空间">+</button>
+    </div>
+    <div class="sec"><span>要你处理 · 3</span><span>全部空间 ▾</span></div>
+    <button class="card ask sel glass"><i class="st a"></i><span class="x"><span class="t"><span>标签命名依旧有问题</span><small>1分</small></span><span class="s" style="display:block">退出后标签名要不要保留？</span><span class="w"><i class="g1"></i>工作空间 · Codex</span></span></button>
+    <button class="card ask glass"><i class="st a"></i><span class="x"><span class="t"><span>网站可借鉴之处</span><small>2分</small></span><span class="s" style="display:block">侧栏参考哪两家？</span><span class="w"><i class="g3"></i>code · Codex</span></span></button>
+    <button class="card glass"><i class="st r"></i><span class="x"><span class="t"><span>查 tab_name 从哪来</span><small>2分</small></span><span class="w"><i class="g1"></i>改了 1 个文件 · 等你验收</span></span></button>
+    <div class="sec"><span>其他</span></div>
+    <button class="li"><i class="st r"></i><span>核对标签测试</span><small>3分</small></button>
+    <button class="li"><i class="st r"></i><span>Skill 收录情况</span><small>34分</small></button>
+    <button class="li"><i class="st u"></i><span>插件系统与市场</span><small>12分</small></button>
+    <button class="li" style="color:rgba(243,242,247,.6)"><i class="st i"></i><span>库中 UI 组件现状</span><small>4时</small></button>
+    <div class="foot"><i></i><span>本机 · 8 个会话</span><button aria-label="连接手机"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="rgba(243,242,247,.8)" stroke-width="1.4" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="1.6"/><path d="M7 12.2h2"/></svg></button><button aria-label="设置"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="rgba(243,242,247,.8)" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"/><circle cx="10.5" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg></button></div>
+  </aside>
+  <main>
+    <div class="top glass">
+      <button class="tab on"><i class="st a" style="margin:0"></i>标签命名依旧有问题</button>
+      <button class="tab"><i class="st r" style="margin:0"></i>查 tab_name 从哪来</button>
+      <button class="tab"><i class="st r" style="margin:0"></i>核对标签测试</button>
+      <button class="tab">+</button>
+      <button class="need">要你处理 3 · ⌘J</button>
+      <button class="ghost">鸟瞰</button>
+    </div>
+    <div class="panes">
+      <section class="pane ask glass">
+        <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx a">● 等你回答 · 1 分钟</span></div>
+        <div class="term mono"><div>› 修标签命名</div><div>&nbsp;</div><div class="c">• 已读取项目上下文</div><div class="c">• 找到两处会改写标签名：tabs.rs、sessions.rs</div><div>&nbsp;</div><div>退出后重新打开，标签名要不要沿用上次的？</div></div>
+        <div class="qa">
+          <div class="h">退出后标签名要不要保留？</div>
+          <button class="opt on"><kbd>1</kbd>保留，重开时沿用上次的名字<em>我倾向</em></button>
+          <button class="opt"><kbd>2</kbd>不保留，每次按第一句话重新起名</button>
+          <button class="opt"><kbd>3</kbd>自己写…</button>
+        </div>
+      </section>
+      <div class="col">
+        <section class="pane glass">
+          <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx r">○ 等你验收 · 2 分钟</span></div>
+          <div class="rb"><b>改了 1 个文件</b><span>· 验收标准 0/3</span><span style="flex:1"></span><button class="bt">看改动</button><button class="bt">退回</button><button class="bt p">标记完成</button></div>
+          <div class="term mono"><div>› 查 tab_name 从哪来</div><div>&nbsp;</div><div class="c">• tab_name 来自 sessions.rs 的 first_prompt()</div><div class="c">• 改成优先用用户改过的名字</div><div>&nbsp;</div><div>✓ 已完成，等你验收。</div></div>
+        </section>
+        <section class="pane glass">
+          <div class="ph"><b>Codex</b><span class="p mono">~/…/projects/工作空间</span><span class="tagx r">○ 等你验收 · 3 分钟</span></div>
+          <div class="rb"><b>这一轮做完了</b><span>· 验收标准 0/3</span><span style="flex:1"></span><button class="bt">看改动</button><button class="bt">退回</button><button class="bt p">标记完成</button></div>
+          <div class="term mono"><div>› 核对标签测试</div><div>&nbsp;</div><div class="c">• cargo test -p mooring-app tabs</div><div class="c">  test result: ok. 14 passed</div><div>&nbsp;</div><div>✓ 已完成，请核对。</div></div>
+        </section>
+      </div>
+    </div>
+    <div class="status glass"><span style="margin-right:auto">⌘P 命令</span><span>Codex 5h <span class="bar"><i style="width:42%"></i></span> 42% · 周 31%</span><span>Claude 5h <span class="bar"><i style="width:12%"></i></span> 12% · 周 64%</span><span>本机诊断</span></div>
+  </main>
+</div>
+
+</div>
+<script>
+const btns=document.querySelectorAll('.sw button'),wins=document.querySelectorAll('.win');
+function pick(k){btns.forEach(b=>b.classList.toggle('on',b.dataset.k===k));wins.forEach(w=>w.classList.toggle('show',w.dataset.v===k));try{localStorage.setItem('mooring-bold',k)}catch(e){}}
+btns.forEach(b=>b.onclick=()=>pick(b.dataset.k));
+let k='1';try{k=localStorage.getItem('mooring-bold')||'1'}catch(e){}
+pick(new URLSearchParams(location.search).get('v')||k);
+</script>
+</body>
+</html>
