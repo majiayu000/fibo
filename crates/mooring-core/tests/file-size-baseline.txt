@@ -22,7 +22,7 @@ crates/mooring-core/src/content.rs	1023
 crates/mooring-core/src/model.rs	1901
 crates/mooring-host/src/content/mod.rs	2055
 crates/mooring-host/src/control.rs	1247
-crates/mooring-host/src/host/mod.rs	1100
+crates/mooring-host/src/host/mod.rs	1098
 crates/mooring-host/src/log_index.rs	2063
 crates/mooring-host/src/recognition.rs	1791
 crates/mooring-host/src/relay.rs	939
