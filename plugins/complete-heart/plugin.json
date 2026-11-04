@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-heart",
+  "name": "完成动画：比心",
+  "version": "0.1.0",
+  "description": "一颗小心飘向 -_-，它脸红了，笑起来，满屏小心往上飘",
+  "provides": ["effects"]
+}

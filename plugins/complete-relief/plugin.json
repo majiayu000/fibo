@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-relief",
+  "name": "完成动画：松口气",
+  "version": "0.1.0",
+  "description": "-_- 深吸一口气、长长呼出来，汗珠滑落，舒展成笑脸，说一声辛苦啦",
+  "provides": ["effects"]
+}

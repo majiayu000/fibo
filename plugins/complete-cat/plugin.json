@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-cat",
+  "name": "完成动画：小猫",
+  "version": "0.1.0",
+  "description": "困困的小猫 -ω-，耳朵一只只竖起来，笑着招招手，留下一串爪印走进侧栏",
+  "provides": ["effects"]
+}

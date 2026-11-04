@@ -107,16 +107,16 @@ pub fn start(
                     let style: mooring_core::effect::Style = serde_json::from_value(serde_json::json!(style)).expect("style");
                     let effect = mooring_core::effect::Complete::of(style);
                     shot("0-review.png", cx);
-                    for t in [0.1f32, 0.32, 0.45, 0.6, 0.8, 0.9, 0.95] {
+                    let times = handle.update(cx, |v, w, _| v.visual_complete_times(w)).unwrap(); for &t in &times {
                         handle.update(cx, |v, _, a| {
-                            if v.visual_completable(tid).2 && t == 0.1 {
+                            if t == times[0] {
                                 v.visual_complete_with(tid, effect, Some(t), a);
                             } else {
                                 v.visual_pin_completing(tid, Some(t), a);
                             }
                         }).unwrap();
                         wait(150).await;
-                        shot(&format!("{style:?}-t{:03}.png", (t * 100.) as u32), cx);
+                        shot(&format!("{style:?}-t{:03}.png", (t * 100.).round() as u32), cx);
                     }
                     handle.update(cx, |v, _, a| v.visual_keep_completed(tid, a)).unwrap();
                     let _ = handle.update(cx, |v, _, _| v.visual_take_paints());

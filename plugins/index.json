@@ -66,6 +66,27 @@
       ]
     },
     {
+      "id": "complete-cat",
+      "name": "完成动画：小猫",
+      "version": "0.1.0",
+      "description": "困困的小猫 -ω-，耳朵一只只竖起来，笑着招招手，留下一串爪印走进侧栏",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "70cf8bdd94bf8e1e55dec2f59f4694fc428db9b2d3fa35547cfff6062d736390",
+          "size": 89
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "575025a8cd200fff23fd4de0d3c889d0324c3219e300b941c0d84847c2f9b7e4",
+          "size": 242
+        }
+      ]
+    },
+    {
       "id": "complete-dissolve",
       "name": "完成动画：化进侧栏",
       "version": "0.1.0",
@@ -83,6 +104,69 @@
           "path": "plugin.json",
           "sha256": "64f1e472c89736dceaa71a67a552dacd05f01ac0f50d7090a0692ba488996547",
           "size": 242
+        }
+      ]
+    },
+    {
+      "id": "complete-heart",
+      "name": "完成动画：比心",
+      "version": "0.1.0",
+      "description": "一颗小心飘向 -_-，它脸红了，笑起来，满屏小心往上飘",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "9cf2859cf61ecb84e21670d65b59a22890c089a5c8190eedd211e799f0676b00",
+          "size": 91
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "905074b2af9d3f2aab1159fd1e4eba8d0fea7a5174d74af68fa3c1d5f7c29e57",
+          "size": 219
+        }
+      ]
+    },
+    {
+      "id": "complete-hop",
+      "name": "完成动画：蹦回家",
+      "version": "0.1.0",
+      "description": "-_- 忽然高兴起来，一蹦一跳一路蹦回侧栏那一行",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "9ed1a17072d66a61dea89cc73b5bde4208fb067de927913ece4d3aa0186a131d",
+          "size": 89
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "07f3330bdf5e7a2c075f096a00cb028e64525c6899ba644f635302213c7654e0",
+          "size": 211
+        }
+      ]
+    },
+    {
+      "id": "complete-relief",
+      "name": "完成动画：松口气",
+      "version": "0.1.0",
+      "description": "-_- 深吸一口气、长长呼出来，汗珠滑落，舒展成笑脸，说一声辛苦啦",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "787c4a6229bd07a49e939cee0d87ea2ace3b9f0997b1fd17aad28098f14d090c",
+          "size": 92
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "9ca1a5c19832cb7d8e167b8694515df8cdf4e3865458bbe3b13d294846583748",
+          "size": 241
         }
       ]
     },
@@ -108,6 +192,27 @@
       ]
     },
     {
+      "id": "complete-sunrise",
+      "name": "完成动画：小太阳",
+      "version": "0.1.0",
+      "description": "-_- 从地平线慢慢升起，光芒散开、天色变暖，升到顶时笑了",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "600afc630edca144478c2dce1238745f4033f1ee66d3b309ff16aef12c9d76be",
+          "size": 93
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "8c7d6ede1eabc4955a1f96fe51e81145984958a78ffaee717349b76e4eb3b78f",
+          "size": 230
+        }
+      ]
+    },
+    {
       "id": "complete-sweep",
       "name": "完成动画：扫光合上",
       "version": "0.1.0",
@@ -125,6 +230,48 @@
           "path": "plugin.json",
           "sha256": "8c81153db6083cb14bfa2acf729ce8e0df3c7871da70d25b29d839496d998490",
           "size": 257
+        }
+      ]
+    },
+    {
+      "id": "complete-tea",
+      "name": "完成动画：一杯热茶",
+      "version": "0.1.0",
+      "description": "杯子上的 -_- 被热气捂暖，笑了，头顶冒出一颗心",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "7c4984ce29a1af9d13d6544368a9f75df11806560e567a26dd9d503abcb1434b",
+          "size": 89
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "77b072de9f730af979ef9263e9b9b96f10c629f35da55cb9dab97956ce7d251e",
+          "size": 215
+        }
+      ]
+    },
+    {
+      "id": "complete-wake",
+      "name": "完成动画：睡醒了",
+      "version": "0.1.0",
+      "description": "-_- 打着呼噜冒 Z，先睁一只眼、再睁另一只，伸个懒腰笑起来",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "172544829e91ce9c5025fbe537b7882798da6ec8bbe57360efbf79d47c519b18",
+          "size": 90
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "3eeb626e6c2d004d27656b334c9571615754015b9fc4d077613a51031b89c94d",
+          "size": 229
         }
       ]
     },

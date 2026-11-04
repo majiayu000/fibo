@@ -181,7 +181,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 {"api": 1, "complete": {"style": "stamp", "duration_ms": 2400, "land": "sidebar"}}
 ```
 
-- `style`：`seal`（印章，默认）、`stamp`（落印）、`sweep`（扫光合上）、`dissolve`（化进侧栏）、`fade`（只淡出）。
+- `style`：`seal`（印章，默认）、`stamp`（落印）、`sweep`（扫光合上）、`dissolve`（化进侧栏）、`fade`（只淡出），以及从 `-_-` 变笑脸的 `relief`（松口气）、`wake`（睡醒了）、`sunrise`（小太阳）、`heart`（比心）、`cat`（小猫）、`tea`（一杯热茶）、`hop`（蹦回家）。
 - `duration_ms` 在 600–4000 之间；`land`：`sidebar`（落到侧栏那一行）或 `none`。
 - 装上或打开动画插件就换成它的动画，在 设置 › 插件 › 完成动画 里能换回；卸载或停用正在播的那个退回印章。系统开了「减弱动态效果」时一律只淡出。
 

@@ -278,7 +278,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
     (
         Page::Look,
         "标记完成动画",
-        "动效 动画 完成 印章 落印 扫光 化进侧栏 淡出 试播 effects",
+        "动效 动画 完成 印章 落印 扫光 化进侧栏 淡出 笑脸 松口气 睡醒 小太阳 比心 小猫 热茶 蹦回家 试播 effects",
     ),
     (
         Page::Look,

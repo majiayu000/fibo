@@ -1,7 +1,8 @@
 //! How the app plays 标记完成 (`effects.json`). A plugin names one of the animations the
 //! app draws and tunes it; it never draws anything itself, so every style follows the
 //! theme and the status colors. Without plugins settings offers only the seal and the
-//! fade; 落印, 扫光合上 and 化进侧栏 come with their plugins. Installing or turning on an
+//! fade; 落印, 扫光合上, 化进侧栏 and the faces that turn from `-_-` to a smile come with
+//! their plugins. Installing or turning on an
 //! effects plugin makes it the animation at once; uninstalling or turning off the one
 //! playing goes back to the seal. What settings picks (`~/.config/mooring/complete`: a
 //! style name, or `plugin:<id>`) applies at once; nothing ever picked plays the last
@@ -39,16 +40,38 @@ pub enum Style {
     Dissolve,
     /// Only a short fade; also what reduced motion plays.
     Fade,
+    /// Every face below starts as a tired `-_-` and ends smiling. This one takes a deep
+    /// breath, sighs it out, and its sweat drop falls off.
+    Relief,
+    /// Dozes under its Z's, opens one eye, then the other, stretches.
+    Wake,
+    /// Rises over the horizon like the sun, and the sky warms.
+    Sunrise,
+    /// A heart floats up to it; it blushes, and hearts rise around it.
+    Heart,
+    /// A sleepy cat: its ears perk up one by one, it waves, and leaves paw prints.
+    Cat,
+    /// A cup of hot tea warms up and smiles, a heart over its steam.
+    Tea,
+    /// Cheers up and hops all the way to its sidebar row.
+    Hop,
 }
 impl Style {
     /// What settings offers without any plugin installed.
     pub const BUILTIN: [Self; 2] = [Self::Seal, Self::Fade];
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 12] = [
         Self::Seal,
         Self::Stamp,
         Self::Sweep,
         Self::Dissolve,
         Self::Fade,
+        Self::Relief,
+        Self::Wake,
+        Self::Sunrise,
+        Self::Heart,
+        Self::Cat,
+        Self::Tea,
+        Self::Hop,
     ];
     /// The name `effects.json` and the settings file write.
     pub fn name(self) -> &'static str {
@@ -58,6 +81,13 @@ impl Style {
             Self::Sweep => "sweep",
             Self::Dissolve => "dissolve",
             Self::Fade => "fade",
+            Self::Relief => "relief",
+            Self::Wake => "wake",
+            Self::Sunrise => "sunrise",
+            Self::Heart => "heart",
+            Self::Cat => "cat",
+            Self::Tea => "tea",
+            Self::Hop => "hop",
         }
     }
     pub fn parse(text: &str) -> Option<Self> {
@@ -70,6 +100,26 @@ impl Style {
             Self::Sweep => "扫光合上",
             Self::Dissolve => "化进侧栏",
             Self::Fade => "只淡出",
+            Self::Relief => "松口气",
+            Self::Wake => "睡醒了",
+            Self::Sunrise => "小太阳",
+            Self::Heart => "比心",
+            Self::Cat => "小猫",
+            Self::Tea => "一杯热茶",
+            Self::Hop => "蹦回家",
+        }
+    }
+    /// What the face styles say after 做完了.
+    pub fn greeting(self) -> Option<&'static str> {
+        match self {
+            Self::Relief => Some("辛苦啦"),
+            Self::Wake => Some("起来活动一下吧"),
+            Self::Sunrise => Some("今天也很棒"),
+            Self::Heart => Some("比个心"),
+            Self::Cat => Some("喵～"),
+            Self::Tea => Some("歇一会儿吧"),
+            Self::Hop => Some("回家啦"),
+            _ => None,
         }
     }
     pub fn default_ms(self) -> u64 {
@@ -79,11 +129,14 @@ impl Style {
             Self::Sweep => 2_200,
             Self::Dissolve => 2_800,
             Self::Fade => 600,
+            Self::Relief | Self::Heart | Self::Hop => 3_000,
+            Self::Sunrise | Self::Cat => 3_200,
+            Self::Wake | Self::Tea => 3_400,
         }
     }
     /// Whether the style ends by flying into the session's sidebar row unless told not to.
     pub fn lands_by_default(self) -> bool {
-        matches!(self, Self::Stamp | Self::Sweep | Self::Dissolve)
+        !matches!(self, Self::Seal | Self::Fade)
     }
 }
 

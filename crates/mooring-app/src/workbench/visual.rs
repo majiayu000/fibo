@@ -56,6 +56,29 @@ impl Workbench {
         self.complete_pane_with(terminal.to_owned(), session, effect, cx);
         self.pin_completing(terminal, pin);
     }
+    /// Where a run is held for screenshots: `MOORING_COMPLETE_TS` as `from,to,step`. The
+    /// window takes `MOORING_COMPLETE_WINDOW` (`width,height`) first, to try a small pane.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_complete_times(&self, window: &mut Window) -> Vec<f32> {
+        if let Ok(asked) = std::env::var("MOORING_COMPLETE_WINDOW")
+            && let Some((w, h)) = asked.split_once(',')
+        {
+            let parse = |x: &str| px(x.parse().expect("window size"));
+            window.resize(gpui::size(parse(w), parse(h)));
+        }
+        let asked: Vec<f32> = std::env::var("MOORING_COMPLETE_TS")
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|x| x.parse().ok())
+            .collect();
+        match asked[..] {
+            [from, to, step] => (0..)
+                .map(|i| from + step * i as f32)
+                .take_while(|t| *t <= to + 1e-4)
+                .collect(),
+            _ => vec![0.1, 0.32, 0.45, 0.6, 0.8, 0.9, 0.95],
+        }
+    }
     #[cfg(feature = "visual-test")]
     pub fn visual_specks(&self) -> usize {
         super::complete::SPECKS.load(std::sync::atomic::Ordering::Relaxed)

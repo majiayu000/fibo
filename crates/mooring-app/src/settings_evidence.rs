@@ -587,7 +587,7 @@ pub(super) fn start(
                 click(preview.0, preview.1, cx); wait(300).await;
                 assert!(handle.update(cx, |v, w, a| v.visual_settings(w, a)).unwrap().is_none(), "试播 closes 设置");
                 shot("complete-preview-mid", cx);
-                wait(1200).await;
+                wait(3700).await; // Past the longest animation, 3.4 seconds.
                 shot("complete-preview-after", cx);
                 assert!(handle.update(cx, |v, _, _| v.visual_shown_pane_alive()).unwrap(), "试播 keeps the pane");
             }

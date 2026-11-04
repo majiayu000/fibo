@@ -3,6 +3,7 @@
 //! and, when asked, a remote index. Changes apply at once (`plugin::reload` here, then
 //! `SettingsAction::PluginsChanged` for the workbench and the host).
 use super::*;
+use mooring_core::effect::Complete;
 use mooring_core::market::{self, Offer};
 use mooring_core::plugin::{self, Kind};
 
@@ -70,6 +71,14 @@ fn kinds(provides: &[Kind]) -> String {
 /// An animation plugin's name inside 完成动画, without the 「完成动画：」 its name starts with.
 fn short_name(name: &str) -> String {
     name.strip_prefix("完成动画：").unwrap_or(name).to_owned()
+}
+
+/// 试播: plays an animation on the shown pane without marking anything. Shipped animation
+/// plugins are named `complete-<style>`, so they can be tried before they are installed.
+fn try_button(key: &str, complete: Complete, cx: &Context<SettingsView>) -> impl IntoElement {
+    secondary(format!("complete-try-{key}"), "试播").on_click(
+        cx.listener(move |_, _, _, cx| cx.emit(SettingsAction::PreviewComplete(Some(complete)))),
+    )
 }
 
 impl SettingsView {
@@ -228,7 +237,7 @@ impl SettingsView {
         busy: bool,
         cx: &Context<Self>,
     ) -> Vec<gpui::AnyElement> {
-        use mooring_core::effect::{self, Complete, Pick, Style};
+        use mooring_core::effect::{self, Pick, Style};
         let picked = effect::picked();
         let presets = effect::presets();
         // A picked plugin since turned off or removed plays the seal.
@@ -277,11 +286,7 @@ impl SettingsView {
                         .child("● 正在用"),
                 );
             }
-            controls = controls.child(secondary(format!("complete-try-{key}"), "试播").on_click(
-                cx.listener(move |_, _, _, cx| {
-                    cx.emit(SettingsAction::PreviewComplete(Some(complete)))
-                }),
-            ));
+            controls = controls.child(try_button(&key, complete, cx));
             if !on {
                 controls =
                     controls.child(secondary(format!("complete-use-{key}"), "用这个").on_click(
@@ -343,15 +348,23 @@ impl SettingsView {
                     .child("正在安装…")
             } else {
                 let offer = o.clone();
-                div().child(
-                    secondary(format!("complete-install-{}", e.id), "安装")
-                        .when(busy, |b| b.opacity(0.5))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.market.working.is_none() {
-                                this.install_offer(offer.clone(), cx);
-                            }
-                        })),
-                )
+                let style = e.id.strip_prefix("complete-").and_then(Style::parse);
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(T::S8))
+                    .when_some(style, |d, s| {
+                        d.child(try_button(&e.id, Complete::of(s), cx))
+                    })
+                    .child(
+                        secondary(format!("complete-install-{}", e.id), "安装")
+                            .when(busy, |b| b.opacity(0.5))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if this.market.working.is_none() {
+                                    this.install_offer(offer.clone(), cx);
+                                }
+                            })),
+                    )
             };
             rows.push(
                 self.row(rows.is_empty(), &title, &note, control)
