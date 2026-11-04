@@ -143,17 +143,7 @@ impl Phase {
     }
 }
 
-/// A terminal with no conversation whose program reports its own state (OSC 7501):
-/// working, blocked, error, done or idle, read as the same states sessions use.
-pub fn of_program(state: &str) -> Status {
-    match state {
-        "working" => Status::Running,
-        "blocked" => Status::Waiting,
-        "error" => Status::Error,
-        "done" => Status::Review,
-        _ => Status::Paused,
-    }
-}
+pub use crate::program_state::of_program;
 
 /// The running Mooring terminal whose current conversation this is.
 pub fn live_terminal<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a Terminal> {

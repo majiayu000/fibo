@@ -5,7 +5,7 @@ field background	crates/mooring-app/src/terminal/screen.rs	3
 field background	crates/mooring-app/src/terminal/screen_extras.rs	1
 field background	crates/mooring-app/src/ui/theme.rs	1
 field background	crates/mooring-app/src/workbench/sidebar_list.rs	1
-field background	crates/mooring-host/src/host/mod.rs	2
+field background	crates/mooring-host/src/host/mod.rs	1
 field background	crates/mooring-host/src/host/report_back.rs	1
 field background	crates/mooring-host/src/host/shell_watch.rs	2
 field content-name	crates/mooring-host/src/control.rs	1
@@ -35,7 +35,7 @@ field turn	crates/mooring-app/src/workbench/board/remote.rs	1
 field turn	crates/mooring-host/examples/claim_scan.rs	1
 field turn	crates/mooring-host/src/control.rs	2
 field turn	crates/mooring-host/src/host/client.rs	1
-field turn	crates/mooring-host/src/host/mod.rs	8
+field turn	crates/mooring-host/src/host/mod.rs	6
 field turn	crates/mooring-host/src/host/report_back.rs	2
 field turn	crates/mooring-host/src/host/status.rs	1
 field turn	crates/mooring-host/src/plugin_hooks.rs	1
@@ -50,7 +50,7 @@ field turn_started	crates/mooring-app/src/workbench/sidebar_list.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_recent.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_wasm.rs	2
 field turn_started	crates/mooring-host/src/host/association.rs	1
-field turn_started	crates/mooring-host/src/host/mod.rs	2
+field turn_started	crates/mooring-host/src/host/mod.rs	1
 field turn_started	crates/mooring-host/src/host/report_back.rs	3
 field turn_started	crates/mooring-host/src/plugin_hooks.rs	3
 keycap	crates/mooring-app/src/terminal/open_path.rs	7
