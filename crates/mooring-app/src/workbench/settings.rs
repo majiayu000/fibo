@@ -6,13 +6,14 @@ use super::*;
 use crate::keymap::{self, Action, Chord, Keymap, Section};
 use crate::ui::{
     app_icon::{AppIcon, Chosen},
-    appearance::Appearance,
     terminal_text::{self, Editor, OptionKey, TerminalText, UnfocusedCursor},
-    theme::{Scheme, mix},
+    theme::mix,
 };
 use std::path::PathBuf;
 
+mod look;
 mod plugins;
+mod theme_editor;
 
 /// The chord button keeps one width, recording or not.
 const KEY_WIDTH: f32 = T::HERE_LABEL + T::S20;
@@ -23,7 +24,6 @@ const PANEL_HEIGHT: f32 = T::HERE_HEIGHT + T::CLEANUP_ACTION_HEIGHT;
 const SEGMENT_HEIGHT: f32 = 26.;
 const SWITCH_WIDTH: f32 = 36.;
 const SWITCH_HEIGHT: f32 = 20.;
-const TILE_PREVIEW: f32 = 84.;
 const ICON_PREVIEW: f32 = 44.;
 /// Monospace faces offered when installed; empty is the bundled JetBrains Mono.
 const MONO_FACES: [&str; 15] = [
@@ -173,53 +173,6 @@ fn keycap(text: impl Into<gpui::SharedString>, muted: bool) -> gpui::Div {
         .text_color(T::color(if muted { T::muted() } else { T::primary() }))
         .child(text.into())
 }
-/// A small window drawn in one scheme's colors, for the theme tiles.
-fn window_sketch(scheme: Scheme) -> gpui::Div {
-    let (bg, fg) = (scheme.bg(), scheme.fg());
-    let line = |share: u32, width: f32| {
-        div()
-            .h(px(T::S4))
-            .w(px(width))
-            .rounded_full()
-            .bg(T::color(mix(bg, fg, share)))
-    };
-    div()
-        .flex_1()
-        .h_full()
-        .flex()
-        .bg(T::color(bg))
-        .child(
-            div()
-                .w(px(T::S20 + T::S4))
-                .h_full()
-                .p(px(T::S6))
-                .flex()
-                .flex_col()
-                .gap(px(T::S4))
-                .bg(T::color(mix(bg, fg, 45)))
-                .child(line(400, T::S12))
-                .child(line(250, T::S10))
-                .child(line(250, T::S12)),
-        )
-        .child(
-            div()
-                .flex_1()
-                .p(px(T::S8))
-                .flex()
-                .flex_col()
-                .gap(px(T::S6))
-                .child(line(650, T::S20 * 2.))
-                .child(line(300, T::S20 * 3.))
-                .child(line(300, T::S20 * 2.5))
-                .child(
-                    div()
-                        .h(px(T::S6))
-                        .w(px(T::S20))
-                        .rounded_full()
-                        .bg(Tone::Ok.dot()),
-                ),
-        )
-}
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Page {
     General,
@@ -269,7 +222,7 @@ impl Page {
     fn description(self) -> &'static str {
         match self {
             Self::General => "新会话用哪个 Agent，以及侧栏怎样整理旧会话。",
-            Self::Look => "窗口明暗与应用图标，选中即生效。",
+            Self::Look => "明暗、主题与应用图标，选中即生效；任何主题都能调整。",
             Self::Terminal => "终端文字、光标与分屏，上方实时预览。",
             Self::Keys => "点击组合键重新录制，Esc 取消。",
             Self::Notifications => "Agent 需要你的时候，用系统通知或提示音叫你回来。",
@@ -313,7 +266,11 @@ const ENTRIES: [(Page, &str, &str); 28] = [
         "偷看浮层",
         "peek 浮层 预览 侧栏 点开 会话 审批",
     ),
-    (Page::Look, "主题", "跟随系统 亮色 暗色 明暗 dark light"),
+    (
+        Page::Look,
+        "主题",
+        "跟随系统 亮色 暗色 明暗 dark light 曜黑 纸白 蓝灰 石墨 暖灰 松绿 紫灰 配色 导入 itermcolors 编辑器",
+    ),
     (Page::Look, "界面样式", "样式 标准 终端原生 tmux 等宽 style"),
     (Page::Look, "应用图标", "dock 图标 水墨 吉祥物 icon"),
     (
@@ -425,6 +382,8 @@ pub(super) struct SettingsView {
     machines_error: Option<String>,
     /// 插件: the catalog and what the last install did.
     market: plugins::Market,
+    /// 主题编辑器, open over 外观.
+    editor: Option<theme_editor::Editor>,
 }
 impl gpui::EventEmitter<SettingsAction> for SettingsView {}
 impl SettingsView {
@@ -459,6 +418,13 @@ impl SettingsView {
                 .placeholder("搜索设置")
         });
         cx.observe(&query, |_, _, cx| cx.notify()).detach();
+        // Closing 设置 mid-edit puts the saved theme back.
+        cx.on_release(|this, cx| {
+            if this.editor.is_some() {
+                crate::ui::appearance::preview(None, cx);
+            }
+        })
+        .detach();
         cx.subscribe(&query, |_, _, event, cx| {
             if matches!(event, crate::ui::field::FieldEvent::Cancel) {
                 cx.emit(SettingsAction::Close);
@@ -488,6 +454,7 @@ impl SettingsView {
             machine_field,
             machines_error: None,
             market: plugins::Market::read(),
+            editor: None,
         }
     }
     /// Installs `agent`'s hooks first when given (only ever from a click), then reads every
@@ -804,246 +771,6 @@ impl SettingsView {
         self.cards(vec![("启动", start), ("会话整理", tidy), ("侧栏", sidebar)])
     }
     /// A selectable tile: a picture above, its name below.
-    fn tile(
-        &self,
-        id: impl Into<gpui::ElementId>,
-        name: &'static str,
-        on: bool,
-        picture: impl IntoElement,
-    ) -> gpui::Stateful<gpui::Div> {
-        div()
-            .id(id)
-            .role(gpui::accesskit::Role::RadioButton)
-            .aria_label(name)
-            .flex_1()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(T::S8))
-            .cursor_pointer()
-            .child(
-                div()
-                    .w_full()
-                    .h(px(TILE_PREVIEW))
-                    .flex()
-                    .overflow_hidden()
-                    .rounded(px(T::CONTROL_RADIUS + T::S2))
-                    .border(px(T::FOCUS_RING))
-                    .border_color(T::color(if on { T::accent() } else { T::border() }))
-                    .child(picture),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(T::S6))
-                    .text_size(px(T::SMALL))
-                    .text_color(T::color(if on { T::primary() } else { T::secondary() }))
-                    .when(on, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
-                    .child(
-                        div()
-                            .size(px(T::DOT + T::S4))
-                            .rounded_full()
-                            .border(px(if on { T::S4 } else { T::BORDER_WIDTH }))
-                            .border_color(T::color(if on { T::accent() } else { T::control() })),
-                    )
-                    .child(name),
-            )
-    }
-    fn look_page(&self, cx: &Context<Self>) -> gpui::Div {
-        let mut theme = Vec::new();
-        if self.shows(Page::Look, "主题", cx) {
-            let chosen = cx.try_global::<Appearance>().copied().unwrap_or_default();
-            // System, light and dark on one row; the lifted darks on a second, so all
-            // fit the page width.
-            let row = || div().flex().gap(px(T::S16)).px(px(T::S16)).pt(px(T::S16));
-            let (mut tiles, mut lifted) = (row(), row().pb(px(T::S16)));
-            for (i, look) in Appearance::ALL.into_iter().enumerate() {
-                let picture = match look {
-                    Appearance::Light => div().flex_1().flex().child(window_sketch(Scheme::Light)),
-                    Appearance::Dark => div().flex_1().flex().child(window_sketch(Scheme::Dark)),
-                    Appearance::Lifted(scheme) => {
-                        div().flex_1().flex().child(window_sketch(scheme))
-                    }
-                    Appearance::System => div()
-                        .flex_1()
-                        .flex()
-                        .child(window_sketch(Scheme::Light))
-                        .child(window_sketch(Scheme::Dark)),
-                };
-                let tile = self
-                    .tile(format!("look-{i}"), look.label(), look == chosen, picture)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.text_error = crate::ui::appearance::choose(look, cx).err();
-                        crate::set_menus(cx);
-                        cx.notify();
-                    }));
-                if matches!(look, Appearance::Lifted(_)) {
-                    lifted = lifted.child(tile);
-                } else {
-                    tiles = tiles.child(tile);
-                }
-            }
-            theme.push(tiles.into_any_element());
-            theme.push(lifted.into_any_element());
-            theme.push(
-                div()
-                    .px(px(T::S16))
-                    .pb(px(T::S12))
-                    .child(label(
-                        if crate::ui::style::current(cx) == crate::ui::style::Style::Terminal {
-                            "窗口与终端一起切换；终端原生样式下跟随系统按暗色显示"
-                        } else {
-                            "窗口与终端一起切换；跟随系统时随 macOS 自动变换"
-                        },
-                    ))
-                    .into_any_element(),
-            );
-        }
-        let mut style = Vec::new();
-        if self.shows(Page::Look, "界面样式", cx) {
-            use crate::ui::style::{self, Style};
-            let chosen = style::current(cx);
-            let mut choices = segments();
-            for (i, look) in Style::ALL.into_iter().enumerate() {
-                choices = choices.child(
-                    segment(format!("style-{i}"), look.label(), look == chosen).on_click(
-                        cx.listener(move |this, _, _, cx| {
-                            this.text_error = style::choose(look, cx).err();
-                            cx.notify();
-                        }),
-                    ),
-                );
-            }
-            style.push(
-                self.row(
-                    true,
-                    "界面样式",
-                    "标准：现在的布局去掉重复；终端原生：外壳退成细线，等宽字，标签在底部",
-                    choices,
-                )
-                .into_any_element(),
-            );
-        }
-        let mut icon = Vec::new();
-        if self.shows(Page::Look, "应用图标", cx) {
-            let current = cx.global::<Chosen>().icon;
-            let mut tiles = div().flex().gap(px(T::S16)).p(px(T::S16));
-            for choice in AppIcon::ALL {
-                let picture = div()
-                    .flex_1()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(T::color(T::raised()))
-                    .child(gpui::img(choice.title_image()).size(px(ICON_PREVIEW)));
-                tiles = tiles.child(
-                    self.tile(
-                        format!("icon-{}", choice.label()),
-                        choice.label(),
-                        choice == current,
-                        picture,
-                    )
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        layout::choose_icon(choice, cx);
-                        cx.refresh_windows();
-                        cx.notify();
-                    })),
-                );
-            }
-            // Keep the two tiles the width of the three theme tiles.
-            icon.push(tiles.child(div().flex_1()).into_any_element());
-            icon.push(
-                div()
-                    .px(px(T::S16))
-                    .pb(px(T::S12))
-                    .child(label("标题栏和程序坞一起更换，下次启动仍保留"))
-                    .into_any_element(),
-            );
-        }
-        let mut motion = Vec::new();
-        if self.shows(Page::Look, "标记完成动画", cx) {
-            use mooring_core::effect;
-            let note = if effect::reduce_motion() {
-                "系统开了「减弱动态效果」，现在不管选哪种都只淡出"
-            } else {
-                "在 插件 › 完成动画 里试播、换一个或装新的；试播在当前窗格播一次，不会标记完成"
-            };
-            let now = effect::picked_label(effect::picked().as_ref(), effect::presets());
-            motion.push(
-                self.row(
-                    true,
-                    "标记完成动画",
-                    note,
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(T::S8))
-                        .child(
-                            div()
-                                .text_size(px(T::SMALL))
-                                .text_color(T::color(T::primary()))
-                                .child(now),
-                        )
-                        .child(secondary("complete-preview", "试播").on_click(cx.listener(
-                            |_, _, _, cx| cx.emit(SettingsAction::PreviewComplete(None)),
-                        )))
-                        .child(secondary("complete-change", "换一个").on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.show_page(Page::Plugins, cx);
-                            },
-                        ))),
-                )
-                .into_any_element(),
-            );
-        }
-        let mut asks = Vec::new();
-        if self.shows(Page::Look, "钉住这一轮的提问", cx) {
-            use crate::ui::pinned_ask::{self, PinnedAsk};
-            let chosen = pinned_ask::current(cx);
-            type Way = fn(&mut PinnedAsk) -> &mut bool;
-            let ways: [(&str, &str, Way); 3] = [
-                ("pinned-ask-bar", "终端顶部钉一条", |c| &mut c.bar),
-                ("pinned-ask-float", "往回翻时浮出", |c| &mut c.float),
-                ("pinned-ask-button", "标题栏「↑ 你问」", |c| {
-                    &mut c.button
-                }),
-            ];
-            let mut choices = segments();
-            for (id, name, field) in ways {
-                let mut on = chosen;
-                let selected = *field(&mut on);
-                choices = choices.child(segment(id, name, selected).on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        let mut next = pinned_ask::current(cx);
-                        let f = field(&mut next);
-                        *f = !*f;
-                        this.text_error = pinned_ask::choose(next, cx).err();
-                        cx.refresh_windows();
-                        cx.notify();
-                    },
-                )));
-            }
-            let note = if !chosen.any() {
-                "都没选：回答再长也不钉提问"
-            } else if chosen.bar && chosen.button {
-                "可多选；顶部条和标题栏按钮同时开时只显示顶部条。自己会钉提问的 Agent（Codex）不画"
-            } else {
-                "可多选；提问还在屏幕上时不画，自己会钉提问的 Agent（Codex）也不画"
-            };
-            asks.push(
-                self.row(true, "钉住这一轮的提问", note, choices)
-                    .into_any_element(),
-            );
-        }
-        self.cards(vec![
-            ("主题", theme),
-            ("界面样式", style),
-            ("应用图标", icon),
-            ("动效", motion),
-            ("对话", asks),
-        ])
-    }
     fn set_text(&mut self, text: TerminalText, cx: &mut Context<Self>) {
         self.text_error = terminal_text::update(text).err();
         cx.refresh_windows();
@@ -2144,7 +1871,10 @@ impl SettingsView {
     fn content(&self, page: Page, cx: &Context<Self>) -> gpui::Div {
         match page {
             Page::General => self.general_page(cx),
-            Page::Look => self.look_page(cx),
+            Page::Look => match self.editor {
+                Some(_) => self.editor_page(cx),
+                None => self.look_page(cx),
+            },
             Page::Terminal => self.terminal_page(cx),
             Page::Keys => self.keys_page(cx),
             Page::Notifications => self.notifications_page(cx),

@@ -17,113 +17,22 @@ use std::{
     },
 };
 
-/// Default colors of every terminal. The display paints unset cells with them, and
-/// programs read the same values back through OSC 10/11/12 (Codex tints its input
-/// box from the background, so an unanswered query leaves it flat).
-pub const DEFAULT_FG: u32 = 0xd4d4d8;
-pub const DEFAULT_BG: u32 = 0x0e0e11;
-/// The light scheme's defaults, the window's light theme being derived from them.
-pub const LIGHT_FG: u32 = 0x1f1e1c;
-/// White as in the v3 design: panes and the chrome around them are white, the sidebar
-/// alone a step gray.
-pub const LIGHT_BG: u32 = 0xffffff;
-/// ANSI 0-15 for the light scheme: Ghostty's built-in palette is tuned for a dark
-/// background, where its white and yellow would vanish on this one. The grays (0, 7,
-/// 8, 15) lean warm like the background so the chrome and terminal share one neutral.
-const LIGHT_ANSI: [u32; 16] = [
-    0x2a2825, 0xcf222e, 0x116329, 0x8a5a00, 0x0969da, 0x8250df, 0x1b7c83, 0x6f6a64, 0x57534e,
-    0xa40e26, 0x1a7f37, 0x9a6700, 0x218bff, 0xa475f9, 0x3192aa, 0x8c8680,
-];
+pub use crate::scheme::*;
 
-/// Which defaults a terminal paints with and reports through OSC 10/11/12 and
-/// CSI ? 996 n; programs such as Codex pick their own tints from them.
-///
-/// Past dark and light, each scheme is a lifted dark: a ground a few steps above black
-/// under slightly softened text (about 10:1), for displays where near-black under
-/// neutral white reads as glare. The window's colors all follow from `fg` and `bg`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Scheme {
-    #[default]
-    Dark,
-    Light,
-    /// Blue-gray.
-    Slate,
-    /// Neutral gray.
-    Graphite,
-    /// Warm gray, like dark paper.
-    Warm,
-    /// Green-gray.
-    Pine,
-    /// Violet-gray.
-    Plum,
-}
-impl Scheme {
-    pub const ALL: [Self; 7] = [
-        Self::Dark,
-        Self::Light,
-        Self::Slate,
-        Self::Graphite,
-        Self::Warm,
-        Self::Pine,
-        Self::Plum,
-    ];
-    pub const fn is_light(self) -> bool {
-        matches!(self, Self::Light)
-    }
-    /// A dark scheme on a lifted ground rather than near-black.
-    pub const fn is_lifted(self) -> bool {
-        !matches!(self, Self::Dark | Self::Light)
-    }
-    /// Kept in `~/.config/mooring/appearance`.
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Dark => "dark",
-            Self::Light => "light",
-            Self::Slate => "slate",
-            Self::Graphite => "graphite",
-            Self::Warm => "warm",
-            Self::Pine => "pine",
-            Self::Plum => "plum",
+/// ANSI 0-15 as the terminal has them when no theme says otherwise.
+pub fn builtin_ansi() -> &'static [u32; 16] {
+    static COLORS: std::sync::OnceLock<[u32; 16]> = std::sync::OnceLock::new();
+    COLORS.get_or_init(|| {
+        let mut out = [0; 16];
+        if let Ok(vt) = Vt::new(1, 1)
+            && let Ok(palette) = vt.0.default_color_palette()
+        {
+            for (slot, c) in out.iter_mut().zip(palette.0) {
+                *slot = u32::from(c.r) << 16 | u32::from(c.g) << 8 | u32::from(c.b);
+            }
         }
-    }
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Dark => "暗色",
-            Self::Light => "亮色",
-            Self::Slate => "蓝灰",
-            Self::Graphite => "石墨",
-            Self::Warm => "暖灰",
-            Self::Pine => "松绿",
-            Self::Plum => "紫灰",
-        }
-    }
-    /// `COLORFGBG` for a program started under this scheme ("fg;bg" in ANSI numbers),
-    /// which some read before they query the terminal.
-    pub const fn colorfgbg(self) -> &'static str {
-        if self.is_light() { "0;15" } else { "15;0" }
-    }
-    /// (foreground, background).
-    const fn colors(self) -> (u32, u32) {
-        match self {
-            Self::Dark => (DEFAULT_FG, DEFAULT_BG),
-            Self::Light => (LIGHT_FG, LIGHT_BG),
-            Self::Slate => (0xcad3e1, 0x21252c),
-            Self::Graphite => (0xd2d2d6, 0x232326),
-            Self::Warm => (0xddd5c8, 0x262320),
-            Self::Pine => (0xcbd9d2, 0x1d2624),
-            Self::Plum => (0xd6cfe2, 0x25222c),
-        }
-    }
-    pub const fn fg(self) -> u32 {
-        self.colors().0
-    }
-    pub const fn bg(self) -> u32 {
-        self.colors().1
-    }
-    /// GitHub's Ghostty themes: a blue that reads as the cursor on either background.
-    pub const fn cursor(self) -> u32 {
-        if self.is_light() { 0x0969da } else { 0x2f81f7 }
-    }
+        out
+    })
 }
 /// Reported for XTVERSION (CSI > q), like "ghostty 1.2.3".
 pub const XTVERSION: &str = concat!("mooring ", env!("CARGO_PKG_VERSION"));
@@ -462,18 +371,25 @@ impl Vt {
     }
     /// Switch the defaults; colors a program set itself (OSC, explicit SGR) are kept.
     pub fn set_scheme(&mut self, scheme: Scheme) -> io::Result<()> {
-        // Back to the built-in palette first, so the light one only replaces ANSI 0-15.
+        self.set_colors(scheme.colors())
+    }
+    /// The same for any colors, a user's theme included.
+    pub fn set_colors(&mut self, colors: TermColors) -> io::Result<()> {
+        // Back to the built-in palette first, so a theme only replaces ANSI 0-15.
         let t = self
             .0
-            .set_default_fg_color(Some(rgb(scheme.fg())))
-            .and_then(|t| t.set_default_bg_color(Some(rgb(scheme.bg()))))
-            .and_then(|t| t.set_default_cursor_color(Some(rgb(scheme.cursor()))))
+            .set_default_fg_color(Some(rgb(colors.fg)))
+            .and_then(|t| t.set_default_bg_color(Some(rgb(colors.bg))))
+            .and_then(|t| t.set_default_cursor_color(Some(rgb(colors.cursor))))
             .and_then(|t| t.set_default_color_palette(None))
             .map_err(io::Error::other)?;
-        if scheme == Scheme::Light {
+        let ansi = colors.ansi();
+        if ansi.iter().any(Option::is_some) {
             let mut palette = t.default_color_palette().map_err(io::Error::other)?;
-            for (slot, color) in palette.0.iter_mut().zip(LIGHT_ANSI) {
-                *slot = rgb(color);
+            for (slot, color) in palette.0.iter_mut().zip(ansi) {
+                if let Some(color) = color {
+                    *slot = rgb(color);
+                }
             }
             t.set_default_color_palette(Some(palette))
                 .map_err(io::Error::other)?;
@@ -861,13 +777,46 @@ mod tests {
         let bg = vt.terminal().bg_color().unwrap().unwrap();
         assert_eq!(rgb(LIGHT_BG), bg);
         let white = vt.terminal().color_palette().unwrap().0[7];
-        assert_eq!(rgb(LIGHT_ANSI[7]), white);
+        assert_eq!(rgb(Scheme::Light.colors().ansi()[7].unwrap()), white);
         vt.feed(b"\x1b[?996n");
         assert_eq!(replies.lock().unwrap().as_slice(), b"\x1b[?997;2n");
         vt.set_scheme(Scheme::Dark).unwrap();
         let restored = Vt::restore(&vt.snapshot().unwrap()).unwrap();
         let bg = restored.terminal().bg_color().unwrap().unwrap();
         assert_eq!(rgb(DEFAULT_BG), bg);
+    }
+    #[test]
+    fn a_themes_colors_are_what_programs_read_back() {
+        let mut ansi = [None; 16];
+        ansi[1] = Some(0xff4040);
+        let colors = TermColors::new(0xd5dfef, 0x0f1c2e, Some(0xff00aa), ansi);
+        let mut vt = Vt::new(80, 24).unwrap();
+        vt.set_colors(colors).unwrap();
+        let replies = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = replies.clone();
+        vt.on_reply(move |bytes| captured.lock().unwrap().extend_from_slice(bytes))
+            .unwrap();
+        vt.feed(b"\x1b]11;?\x07\x1b]10;?\x07\x1b]4;1;?\x07\x1b]4;2;?\x07");
+        let text = String::from_utf8(replies.lock().unwrap().clone()).unwrap();
+        assert!(text.contains("11;rgb:0f0f/1c1c/2e2e"), "{text:?}");
+        assert!(text.contains("10;rgb:d5d5/dfdf/efef"), "{text:?}");
+        assert!(text.contains("4;1;rgb:ffff/4040/4040"), "{text:?}");
+        // What it leaves out stays the terminal's own.
+        let [r, g, b] = [16, 8, 0].map(|s| (builtin_ansi()[2] >> s) & 255);
+        let own = format!("4;2;rgb:{r:02x}{r:02x}/{g:02x}{g:02x}/{b:02x}{b:02x}");
+        assert!(text.contains(&own), "{text:?} {own}");
+        // Switching back leaves nothing of the theme behind.
+        vt.set_scheme(Scheme::Dark).unwrap();
+        replies.lock().unwrap().clear();
+        vt.feed(b"\x1b]4;1;?\x07");
+        let [r, g, b] = [16, 8, 0].map(|s| (builtin_ansi()[1] >> s) & 255);
+        let text = String::from_utf8(replies.lock().unwrap().clone()).unwrap();
+        assert!(
+            text.contains(&format!(
+                "4;1;rgb:{r:02x}{r:02x}/{g:02x}{g:02x}/{b:02x}{b:02x}"
+            )),
+            "{text:?}"
+        );
     }
     #[test]
     fn display_copies_keep_default_colors() {

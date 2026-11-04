@@ -1015,7 +1015,7 @@ impl Workbench {
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
             // the status bar's 工作中 popover beside the column.
             dense if dense.starts_with("Dense-") => {
-                use crate::ui::{appearance::Appearance, style::Style};
+                use crate::ui::{appearance::Mode, style::Style};
                 let parts: Vec<&str> = dense.split('-').collect();
                 self.visual_dense_fixture();
                 self.sidebar.preset = match parts[1] {
@@ -1043,11 +1043,11 @@ impl Workbench {
                 } else {
                     Style::Standard
                 });
-                let _ = crate::ui::appearance::choose(
+                let _ = crate::ui::appearance::set_mode(
                     if parts[3] == "dark" {
-                        Appearance::Dark
+                        Mode::Dark
                     } else {
-                        Appearance::Light
+                        Mode::Light
                     },
                     cx,
                 );

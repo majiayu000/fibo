@@ -150,6 +150,7 @@ impl Host {
             cols: 80,
             rows: 24,
             scheme: Default::default(),
+            colors: None,
         }
     }
     fn attach(&self, id: &str, takeover: bool) -> (UnixStream, Vt, bool) {
@@ -460,6 +461,76 @@ fn reconnect_input_resize_and_takeover_are_real_pty_operations() {
     .unwrap();
     assert!(matches!(ack(&mut again), Reply::Ok));
     assert_eq!(h.workspace().terminals[0].state, ProcessState::Running);
+}
+/// A user's theme reaches the host: at launch, and again when it changes while running.
+#[test]
+fn a_programs_queries_answer_with_the_theme_it_runs_under() {
+    const PROBE: &str = r#"exec python3 -c '
+import os, select, tty
+tty.setraw(0)
+os.write(1, b"FGBG " + os.environ["COLORFGBG"].encode() + b" END\r\n")
+for _ in range(2):
+    while os.read(0, 1) != b"?":
+        pass
+    os.write(1, b"\x1b]11;?\x07\x1b]4;1;?\x07")
+    got = b""
+    while select.select([0], [], [], 0.5)[0]:
+        got += os.read(0, 4096)
+    os.write(1, b"GOT " + got.hex().encode() + b" END\r\n")
+'"#;
+    let mut ansi = [None; 16];
+    ansi[1] = Some(0xff4040);
+    let first = mooring_core::terminal::TermColors::new(0x202020, 0xf0f0e0, None, ansi);
+    let second = mooring_core::terminal::TermColors::new(0xd5dfef, 0x0f1c2e, None, [None; 16]);
+    let h = Host::start();
+    h.setup();
+    let mut launch = h.launch("probe", PROBE);
+    if let Request::Launch { colors, .. } = &mut launch {
+        *colors = Some(first);
+    }
+    h.call(launch).unwrap();
+    let (mut owner, _, writable) = h.attach("probe", false);
+    assert!(writable);
+    let printed = |marks: usize| {
+        let until = Instant::now() + Duration::from_secs(15);
+        loop {
+            let (_, vt, _) = h.attach("probe", false);
+            // The hex wraps across full rows; joined rows give the lines back.
+            let text = vt.tail_text(30).unwrap().replace('\n', "");
+            if text.matches(" END").count() >= marks {
+                return text;
+            }
+            assert!(Instant::now() < until, "probe printed: {text}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    };
+    let ask = |owner: &mut UnixStream| {
+        let bytes = b"?".to_vec();
+        send(
+            owner,
+            CONTROL,
+            &Request::Input {
+                bytes,
+                lossy: false,
+            },
+        )
+        .unwrap();
+        assert!(matches!(ack(owner), Reply::Ok));
+    };
+    let hex = |s: &str| s.bytes().map(|b| format!("{b:02x}")).collect::<String>();
+    printed(1);
+    ask(&mut owner);
+    let got = printed(2);
+    assert!(got.contains("FGBG 0;15"), "a light theme says so: {got}");
+    assert!(got.contains(&hex("11;rgb:f0f0/f0f0/e0e0")), "{got}");
+    assert!(got.contains(&hex("4;1;rgb:ffff/4040/4040")), "{got}");
+    send(&mut owner, CONTROL, &Request::Colors(second)).unwrap();
+    assert!(matches!(ack(&mut owner), Reply::Ok));
+    ask(&mut owner);
+    let got = printed(3);
+    let last = got.rsplit("GOT ").next().unwrap();
+    assert!(last.contains(&hex("11;rgb:0f0f/1c1c/2e2e")), "{got}");
+    assert!(!last.contains(&hex("4;1;rgb:ffff/4040/4040")), "{got}");
 }
 #[test]
 fn programs_get_answers_to_terminal_queries_and_pixel_size() {
@@ -4042,6 +4113,7 @@ fn real_claude_hooks_bind_at_startup_before_any_prompt() {
         cols: 120,
         rows: 40,
         scheme: Default::default(),
+        colors: None,
     })
     .unwrap();
     let (cli_id, binding) = wait_bound(&h, "real", 30);

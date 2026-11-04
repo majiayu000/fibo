@@ -380,7 +380,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             cols,
             rows,
             scheme,
+            colors,
         } => {
+            let colors = colors.unwrap_or(scheme.colors());
             geometry(cols, rows)?;
             let mut host = lock(shared)?;
             if let Some(existing) = host.workspace.terminals.iter().find(|s| s.id == id) {
@@ -405,7 +407,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 return Err(io::Error::other("space not found"));
             }
             let mut vt = Vt::new(cols, rows)?;
-            vt.set_scheme(scheme)?;
+            vt.set_colors(colors)?;
             let replies = Arc::new(Mutex::new(Vec::new()));
             let out = Arc::clone(&replies);
             vt.on_reply(move |bytes| {
@@ -428,7 +430,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             });
             host.commit(next)?;
             let (mut child, master) =
-                match pty::spawn(&argv, Path::new(&cwd), cols, rows, &id, scheme) {
+                match pty::spawn(&argv, Path::new(&cwd), cols, rows, &id, colors.colorfgbg()) {
                     Ok(result) => result,
                     Err(error) => {
                         let mut next = host.workspace.clone();

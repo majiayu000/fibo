@@ -154,7 +154,7 @@ pub fn spawn(
     cols: u16,
     rows: u16,
     terminal: &str,
-    scheme: mooring_core::terminal::Scheme,
+    colorfgbg: &str,
 ) -> io::Result<(Child, File)> {
     let mut master = -1;
     let mut slave = -1;
@@ -199,7 +199,7 @@ pub fn spawn(
         .envs(baseline_env(std::env::vars_os()))
         .env("TERM", "xterm-256color")
         .env("COLORTERM", "truecolor")
-        .env("COLORFGBG", scheme.colorfgbg())
+        .env("COLORFGBG", colorfgbg)
         .envs(shell_env)
         .envs(host_env(terminal, HOST.get()))
         .env_remove("COLUMNS")
@@ -396,14 +396,16 @@ mod env_tests {
         use std::io::Read;
         std::env::set_var("CLAUDE_CODE_CHILD_SESSION", "1");
         let argv = ["/usr/bin/env".to_owned()];
-        let scheme = mooring_core::terminal::Scheme::default();
+        let colorfgbg = mooring_core::terminal::Scheme::default()
+            .colors()
+            .colorfgbg();
         let (mut child, mut out) = super::spawn(
             &argv,
             std::path::Path::new("/"),
             80,
             24,
             "scheme-test",
-            scheme,
+            colorfgbg,
         )
         .unwrap();
         // Read while it runs: macOS holds a closing terminal open until its output is read.

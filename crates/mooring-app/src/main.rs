@@ -55,13 +55,33 @@ gpui::actions!(mooring, [Quit, ShowMenuPanel, ShowSettings]);
 #[action(namespace = mooring, no_json)]
 pub(crate) struct ChooseAppearance(pub usize);
 pub(crate) fn set_menus(cx: &mut App) {
-    use ui::appearance::Appearance;
-    let chosen = cx.try_global::<Appearance>().copied().unwrap_or_default();
-    let looks = Appearance::ALL
+    use ui::appearance::{Appearance, Mode};
+    let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
+    let mut looks = Mode::ALL
         .iter()
         .enumerate()
-        .map(|(i, a)| gpui::MenuItem::action(a.label(), ChooseAppearance(i)).checked(*a == chosen))
+        .map(|(i, m)| {
+            gpui::MenuItem::action(m.label(), ChooseAppearance(i)).checked(*m == chosen.mode)
+        })
         .collect::<Vec<_>>();
+    // Past the modes, an entry's place in `Themes`: each side has its own check mark.
+    if let Some(themes) = cx.try_global::<ui::themes::Themes>() {
+        for light in [true, false] {
+            let on = chosen.entry(themes, light).map(|entry| entry.id.as_str());
+            looks.push(gpui::MenuItem::separator());
+            for (i, entry) in themes.entries.iter().enumerate() {
+                if entry.light() == light {
+                    looks.push(
+                        gpui::MenuItem::action(
+                            entry.name.as_str(),
+                            ChooseAppearance(Mode::ALL.len() + i),
+                        )
+                        .checked(on == Some(entry.id.as_str())),
+                    );
+                }
+            }
+        }
+    }
     cx.set_menus([gpui::Menu::new("Mooring").items([
         gpui::MenuItem::action("设置…", ShowSettings),
         gpui::MenuItem::action("菜单栏面板", ShowMenuPanel),
@@ -354,10 +374,18 @@ fn run() -> io::Result<()> {
         cx.on_action(|_: &ShowMenuPanel, _| desktop::show());
         cx.bind_keys([gpui::KeyBinding::new("cmd-q", Quit, None)]);
         cx.on_action(|choice: &ChooseAppearance, cx| {
-            let Some(&appearance) = ui::appearance::Appearance::ALL.get(choice.0) else {
-                return;
+            use ui::appearance::{self, Mode};
+            let done = if let Some(&mode) = Mode::ALL.get(choice.0) {
+                appearance::set_mode(mode, cx)
+            } else {
+                let entry = cx
+                    .try_global::<ui::themes::Themes>()
+                    .and_then(|t| t.entries.get(choice.0 - Mode::ALL.len()))
+                    .map(|e| (e.id.clone(), e.light()));
+                let Some((id, light)) = entry else { return };
+                appearance::set_theme(&id, light, true, cx)
             };
-            if let Err(error) = ui::appearance::choose(appearance, cx) {
+            if let Err(error) = done {
                 cx.set_global(desktop::Status(error));
             }
             set_menus(cx);
@@ -374,6 +402,7 @@ fn run() -> io::Result<()> {
             }
         });
         cx.set_global(ui::appearance::Appearance::load());
+        ui::themes::start(cx);
         cx.set_global(ui::style::Style::load());
         cx.set_global(ui::peek::PeekChoice::load());
         cx.set_global(ui::pinned_ask::PinnedAsk::load());

@@ -227,6 +227,7 @@ fn layout_changes_from_two_hands_all_stay() {
             cols: 160,
             rows: 48,
             scheme: Default::default(),
+            colors: None,
         };
         rpc(&socket, &launch).unwrap();
     }
@@ -323,6 +324,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
         cols: 80,
         rows: 24,
         scheme: Default::default(),
+        colors: None,
     };
     rpc(&root.join("workbench.sock"), &launch).unwrap();
     std::thread::sleep(Duration::from_millis(300));

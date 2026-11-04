@@ -136,7 +136,7 @@ pub struct Pane {
     /// The scheme this pane first painted its live program with. Agents such as Codex
     /// tint their own bands from the background they saw at start, which a later switch
     /// cannot repaint, so the pane says so until dismissed.
-    started_under: Option<mooring_core::terminal::Scheme>,
+    started_under: Option<mooring_core::terminal::TermColors>,
     tint_note_dismissed: bool,
     /// What this terminal's conversation was asked, oldest first, as the workbench last
     /// saw it, and where each sits in history once found.
@@ -2173,7 +2173,7 @@ impl Pane {
     /// Repaint this terminal's defaults after a theme switch. The display copy changes
     /// here; the host's copy, which programs query, only from the writing pane.
     fn sync_scheme(&mut self) {
-        let scheme = T::scheme();
+        let scheme = T::term();
         let writable = {
             let Ok(mut state) = self.connection.state.lock() else {
                 return;
@@ -2184,7 +2184,7 @@ impl Pane {
             let Some(vt) = state.vt.as_mut() else {
                 return;
             };
-            if let Err(e) = vt.set_scheme(scheme) {
+            if let Err(e) = vt.set_colors(scheme) {
                 self.local_error = Some(e.to_string());
                 return;
             }
@@ -2192,7 +2192,7 @@ impl Pane {
             state.writable && !state.ended
         };
         if writable {
-            let _ = self.connection.send(Request::Scheme(scheme));
+            let _ = self.connection.send(crate::lifecycle::scheme_request());
         }
     }
 }
@@ -2246,12 +2246,12 @@ impl Render for Pane {
             .or(state.error.clone())
             .filter(|_| !state.dropped && self.reconnect_delay == 0);
         if self.started_under.is_none() && state.vt.is_some() && !state.ended {
-            self.started_under = Some(T::scheme());
+            self.started_under = Some(T::term());
         }
         let tint_stale = self.agent.is_some()
             && !state.ended
             && !self.tint_note_dismissed
-            && self.started_under.is_some_and(|s| s != T::scheme());
+            && self.started_under.is_some_and(|s| s != T::term());
         let status = if state.ended {
             "进程已退出"
         } else if state.dropped || self.reconnect_delay > 0 {
@@ -2451,7 +2451,7 @@ impl Render for Pane {
                                     metrics.height,
                                 ),
                             ),
-                            T::color(T::focus()).opacity(0.25),
+                            T::terminal_selection(),
                         ));
                     }
                     // Ghostty's unfocused-split-opacity: the program's own cursor (Claude

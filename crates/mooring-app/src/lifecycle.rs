@@ -98,6 +98,19 @@ pub fn stale_build() -> Option<mooring_core::protocol::Build> {
 pub fn stale_host() -> bool {
     stale_build().is_some()
 }
+/// What to tell a starting terminal past its built-in scheme: an older host reads only
+/// that, and neither a built-in nor such a host needs more.
+pub fn host_colors() -> Option<mooring_core::terminal::TermColors> {
+    let term = crate::ui::theme::Theme::term();
+    (mooring_core::terminal::Scheme::of(&term).is_none() && !stale_host()).then_some(term)
+}
+/// What tells a running terminal's host about the colors.
+pub fn scheme_request() -> mooring_core::protocol::Request {
+    match host_colors() {
+        Some(colors) => mooring_core::protocol::Request::Colors(colors),
+        None => mooring_core::protocol::Request::Scheme(crate::ui::theme::Theme::scheme()),
+    }
+}
 fn set_stale_host(build: Option<mooring_core::protocol::Build>) {
     if let Ok(mut stale) = STALE_HOST.lock() {
         *stale = build;

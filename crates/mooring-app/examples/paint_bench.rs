@@ -19,12 +19,18 @@ mod theme;
 mod terminal {
     pub(crate) use super::screen;
 }
+#[path = "../src/ui/palette.rs"]
+#[allow(dead_code)]
+mod palette;
 #[path = "../src/ui/status_colors.rs"]
 #[allow(dead_code)]
 mod status_colors;
 #[path = "../src/ui/terminal_text.rs"]
 #[allow(dead_code)]
 mod terminal_text;
+#[path = "../src/ui/tone.rs"]
+#[allow(dead_code)]
+mod tone;
 mod ui {
     pub(crate) use super::terminal_text;
     pub(crate) use super::theme;

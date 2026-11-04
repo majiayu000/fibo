@@ -629,7 +629,7 @@ impl Workbench {
     }
     /// A space's two colors on a round dot, as the 鸟瞰 board shows spaces.
     pub(super) fn space_dot(&self, id: &str, size: f32) -> gpui::Div {
-        let [from, to] = T::SPACE_TILES[self.space_mesh(id) % T::SPACE_TILES.len()];
+        let [from, to] = T::space_tile(self.space_mesh(id));
         div()
             .size(px(size))
             .flex_shrink_0()

@@ -43,6 +43,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         cols: 100,
         rows: 30,
         scheme: Default::default(),
+        colors: None,
     };
     rpc(socket, &launch)?;
     if !w.tabs.iter().any(|t| t.id == tab) {

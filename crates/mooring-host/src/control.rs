@@ -1143,6 +1143,7 @@ fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<
             cols,
             rows,
             scheme: Default::default(),
+            colors: None,
         },
     )? {
         Reply::Workspace(_) => (),

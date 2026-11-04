@@ -8,6 +8,9 @@
 #[path = "../src/model/mod.rs"]
 #[allow(dead_code)]
 mod model;
+#[path = "../src/ui/palette.rs"]
+#[allow(dead_code)]
+mod palette;
 #[path = "../src/terminal/screen.rs"]
 #[allow(dead_code)]
 mod screen;
@@ -17,6 +20,9 @@ mod status_colors;
 #[path = "../src/ui/theme.rs"]
 #[allow(dead_code)]
 mod theme;
+#[path = "../src/ui/tone.rs"]
+#[allow(dead_code)]
+mod tone;
 // The shared files name each other by their paths in the app crate.
 #[allow(unused_imports)]
 mod terminal {

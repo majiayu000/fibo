@@ -39,8 +39,8 @@ pub(super) fn start(
         let values = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_settings_values()).unwrap();
         // Every page in light and dark, for looking at the layout; changes nothing saved.
         if phase == "tour" {
-            for (scheme, look) in [("light", crate::ui::appearance::Appearance::Light), ("dark", crate::ui::appearance::Appearance::Dark)] {
-                cx.update(|a| crate::ui::appearance::choose(look, a).unwrap());
+            for (scheme, look) in [("light", crate::ui::appearance::Mode::Light), ("dark", crate::ui::appearance::Mode::Dark)] {
+                cx.update(|a| crate::ui::appearance::set_mode(look, a).unwrap());
                 for (i, page) in workbench::Workbench::visual_settings_pages().into_iter().enumerate() {
                     handle.update(cx, |v, _, a| v.visual_settings_show(page, a)).unwrap();
                     wait(300).await;
@@ -53,22 +53,146 @@ pub(super) fn start(
         }
         // Every fixed appearance: its 外观 page, then the workbench behind it.
         if phase == "themes" {
-            for look in crate::ui::appearance::Appearance::ALL {
-                if look == crate::ui::appearance::Appearance::System {
-                    continue;
-                }
-                cx.update(|a| crate::ui::appearance::choose(look, a).unwrap());
+            let themes: Vec<_> = cx.update(|a| a.global::<crate::ui::themes::Themes>().entries.iter().map(|e| (e.id.clone(), e.name.clone(), e.light())).collect());
+            for (id, name, light) in themes {
+                cx.update(|a| crate::ui::appearance::set_theme(&id, light, true, a).unwrap());
                 if !handle.update(cx, |v, _, _| v.visual_settings_open()).unwrap() {
                     handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
                 }
                 handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
                 wait(300).await;
-                shot(&format!("themes-{}-look", look.label()), cx);
+                shot(&format!("themes-{name}-look"), cx);
                 handle.update(cx, |v, _, a| v.visual_settings_close(a)).unwrap();
                 wait(300).await;
-                shot(&format!("themes-{}-workbench", look.label()), cx);
+                shot(&format!("themes-{name}-workbench"), cx);
             }
             eprintln!("settings themes PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
+        // 主题: the two groups, the editor end to end, and files dropped into the folder.
+        if phase == "editor" {
+            use crate::ui::{appearance::{self, Mode}, theme::Theme as T, themes::{self, Themes}};
+            let term = || T::term();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            wait(300).await;
+            shot("theme-dark-mode", cx);
+            cx.update(|a| appearance::set_mode(Mode::Light, a).unwrap());
+            wait(300).await;
+            assert_eq!(term().bg, 0xffffff);
+            shot("theme-light-mode", cx);
+            cx.update(|a| appearance::set_mode(Mode::System, a).unwrap());
+            wait(300).await;
+            shot("theme-system-mode", cx);
+            cx.update(|a| appearance::set_mode(Mode::Dark, a).unwrap());
+            wait(300).await;
+            // A draft shows everywhere and goes away with 取消.
+            handle.update(cx, |v, _, a| v.visual_editor_open(a)).unwrap();
+            wait(300).await;
+            shot("editor-base", cx);
+            handle.update(cx, |v, _, a| v.visual_editor_set("bg", 0x0f1c2e, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_editor_set("fg", 0xd5dfef, a)).unwrap();
+            wait(300).await;
+            assert_eq!((term().bg, term().fg), (0x0f1c2e, 0xd5dfef));
+            assert_eq!(T::sidebar(), crate::ui::palette::Palette::new(term(), false).sidebar);
+            shot("editor-draft", cx);
+            handle.update(cx, |v, _, a| v.visual_editor_cancel(a)).unwrap();
+            wait(300).await;
+            assert_eq!(term().bg, 0x0e0e11, "取消 puts the saved theme back");
+            // Closing 设置 mid-edit does the same.
+            handle.update(cx, |v, _, a| v.visual_editor_open(a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_editor_set("bg", 0x123456, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_close(a)).unwrap();
+            wait(500).await;
+            assert_eq!(term().bg, 0x0e0e11, "closing 设置 puts the saved theme back");
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            wait(300).await;
+            // A theme from every tab, saved over a copy of the built-in.
+            handle.update(cx, |v, _, a| {
+                v.visual_editor_open(a);
+                v.visual_editor_set("bg", 0x0f1c2e, a);
+                v.visual_editor_set("fg", 0xd5dfef, a);
+                v.visual_editor_tab(1, a);
+                v.visual_editor_set("cursor", 0xff00aa, a);
+                v.visual_editor_set("selection", 0x00ff88, a);
+                v.visual_editor_set("bold", 0xffcc00, a);
+                v.visual_editor_set("underline", 0x00e5ff, a);
+                v.visual_editor_tab(2, a);
+                v.visual_editor_set("red", 0xff4040, a);
+                v.visual_editor_tab(3, a);
+                v.visual_editor_set("accent", 0x7cc4ff, a);
+                v.visual_editor_set("border", 0x3a5a8c, a);
+                v.visual_editor_reset("border", a);
+                v.visual_editor_tab(4, a);
+                v.visual_editor_set("sidebar", 0x0b1522, a);
+                v.visual_editor_tab(5, a);
+                v.visual_editor_set("running", 0xb07cff, a);
+            }).unwrap();
+            wait(300).await;
+            shot("editor-status-tab", cx);
+            handle.update(cx, |v, _, a| v.visual_editor_tab(3, a)).unwrap();
+            wait(300).await;
+            shot("editor-ui-tab", cx);
+            // The sliders, with the real mouse; coordinates are the panel's.
+            let before = term().bg;
+            handle.update(cx, |v, _, a| v.visual_editor_tab(0, a)).unwrap();
+            wait(300).await;
+            let hsv = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
+            click(689., 222., cx);
+            wait(300).await;
+            let moved = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
+            assert_ne!(hsv[0], moved[0], "clicking the hue slider moves the hue");
+            assert_ne!(term().bg, before, "and the window follows");
+            shot("editor-slid", cx);
+            handle.update(cx, |v, _, a| v.visual_editor_set("bg", 0x0f1c2e, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_editor_save("深海", a)).unwrap();
+            wait(300).await;
+            let dir = themes::dir().unwrap();
+            let saved = std::fs::read_to_string(dir.join("深海.json")).unwrap();
+            eprintln!("{saved}");
+            assert!(saved.contains("#ff00aa") && saved.contains("#b07cff") && !saved.contains("#3a5a8c"));
+            assert_eq!(term().bg, 0x0f1c2e);
+            assert_eq!(term().cursor, 0xff00aa);
+            assert_eq!(term().ansi()[1], Some(0xff4040));
+            assert_eq!(T::accent(), 0x7cc4ff);
+            shot("theme-saved-look", cx);
+            handle.update(cx, |v, _, a| v.visual_settings_close(a)).unwrap();
+            wait(600).await;
+            shot("theme-saved-workbench", cx);
+            // Files dropped in: picked up without a restart, bad ones named.
+            std::fs::write(dir.join("day.json"), r##"{"name":"白日","bg":"#fdfbf4","fg":"#26231d"}"##).unwrap();
+            std::fs::write(dir.join("oops.json"), r##"{"bg":"#000"}"##).unwrap();
+            let preset = dir.parent().unwrap().join("Sea.itermcolors");
+            let entry = |k: &str, r: f64, g: f64, b: f64| format!("<key>{k}</key><dict><key>Blue Component</key><real>{b}</real><key>Green Component</key><real>{g}</real><key>Red Component</key><real>{r}</real></dict>");
+            std::fs::write(&preset, format!("<plist><dict>{}{}{}</dict></plist>", entry("Background Color", 0.05, 0.1, 0.1), entry("Foreground Color", 0.9, 0.95, 0.9), entry("Ansi 1 Color", 1., 0.3, 0.3))).unwrap();
+            themes::save(&themes::import(&preset).unwrap(), None).unwrap();
+            wait(4000).await;
+            let (names, problems) = cx.update(|a| {
+                let t = a.global::<Themes>();
+                (t.entries.iter().map(|e| e.name.clone()).collect::<Vec<_>>(), t.problems.clone())
+            });
+            assert!(names.iter().any(|n| n == "白日") && names.iter().any(|n| n == "Sea"), "{names:?}");
+            assert_eq!(problems.len(), 1, "{problems:?}");
+            cx.update(|a| {
+                let t = a.global::<Themes>();
+                let id = t.entries.iter().find(|e| e.name == "白日").unwrap().id.clone();
+                appearance::set_theme(&id, true, true, a).unwrap();
+            });
+            wait(300).await;
+            assert_eq!(term().bg, 0xfdfbf4);
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            wait(300).await;
+            shot("theme-file-light", cx);
+            // Deleting the theme in use falls back to its side's default.
+            handle.update(cx, |v, _, a| { v.visual_editor_open(a); }).unwrap();
+            handle.update(cx, |v, _, a| v.visual_editor_delete(a)).unwrap();
+            wait(300).await;
+            assert_eq!(term().bg, 0xffffff);
+            assert!(!dir.join("day.json").exists());
+            shot("theme-deleted", cx);
+            eprintln!("settings editor PASS");
             cx.update(|a| a.quit());
             return;
         }
@@ -96,8 +220,8 @@ pub(super) fn start(
         // changes and its last error. The scratch config's plugins are installed beforehand.
         if phase == "plugin-options" {
             use gpui::InputEvent as _;
-            for (scheme, look) in [("light", crate::ui::appearance::Appearance::Light), ("dark", crate::ui::appearance::Appearance::Dark)] {
-                cx.update(|a| crate::ui::appearance::choose(look, a).unwrap());
+            for (scheme, look) in [("light", crate::ui::appearance::Mode::Light), ("dark", crate::ui::appearance::Mode::Dark)] {
+                cx.update(|a| crate::ui::appearance::set_mode(look, a).unwrap());
                 handle.update(cx, |v, _, a| v.visual_settings_show("插件", a)).unwrap();
                 wait(300).await;
                 cx.update_window(handle.into(), |_, w, a| {
@@ -219,7 +343,7 @@ pub(super) fn start(
         assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "外观");
         shot("appearance", cx);
         if phase == "1" {
-            click(792., 176., cx); wait(200).await;
+            click(865., 147., cx); wait(200).await;
             assert_eq!(crate::ui::theme::Theme::scheme(), crate::ui::theme::Scheme::Dark);
             click(60., 186., cx); wait(200).await;
             assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "终端");
