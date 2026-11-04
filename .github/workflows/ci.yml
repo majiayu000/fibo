@@ -103,3 +103,31 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+  relay-image:
+    name: Relay image for self-hosting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The image docs/relay/self-host.md tells people to build; built here, not pushed.
+      - name: Build the relay image
+        run: docker build -f crates/mooring-relay/Dockerfile -t mooring-relay:ci .
+
+      - name: The image starts and passes its own health check
+        run: |
+          docker run --rm mooring-relay:ci --version
+          docker run -d --name relay -p 127.0.0.1:8787:8787 mooring-relay:ci
+          for i in $(seq 20); do curl -fs 127.0.0.1:8787/healthz && break; sleep 1; done
+          curl -fs 127.0.0.1:8787/healthz | grep -q '"ok":true'
+          docker exec relay mooring-relay --check
+
+      - name: Take the binary out of the image
+        run: |
+          docker create --name out mooring-relay:ci
+          docker cp out:/usr/local/bin/mooring-relay mooring-relay-linux-x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mooring-relay-linux-x86_64
+          path: mooring-relay-linux-x86_64

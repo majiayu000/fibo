@@ -6,6 +6,17 @@ use sha2::{Digest, Sha256};
 /// The newest tunnel protocol spoken here. From 3 a machine's phones reach it only by
 /// their own route tokens (`routes`), never by the token it registers with.
 pub const PROTOCOL: u32 = 3;
+/// The oldest relay a machine stays on: an older one routes phones by the machine's
+/// token, which pairing links no longer carry, so no phone could reach it.
+pub const MIN_RELAY: u32 = 3;
+
+/// Why a machine leaves a relay that agreed on `proto` (`None`: a relay too old to say).
+pub fn relay_too_old(proto: Option<u32>) -> Option<String> {
+    let proto = proto.unwrap_or(1);
+    (proto < MIN_RELAY).then(|| {
+        format!("中继版本太旧（协议 {proto}，这台 Mooring 要 {MIN_RELAY} 以上）：请升级中继")
+    })
+}
 /// Phones a machine may list in `routes`, and revoked ones in `revoked`.
 pub const MAX_ROUTES: usize = 256;
 /// Old tokens a machine lists as retired; a relay keeps at most this many per machine.
@@ -161,6 +172,13 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_relay_older_than_route_codes_is_named_as_too_old() {
+        assert!(relay_too_old(None).unwrap().contains("协议 1"));
+        assert!(relay_too_old(Some(2)).unwrap().contains("请升级中继"));
+        assert_eq!(relay_too_old(Some(PROTOCOL)), None);
+    }
 
     #[test]
     fn frames_match_the_alma_relay_shapes() {
