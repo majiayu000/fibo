@@ -11,9 +11,8 @@
 use super::sidebar_list::SidebarPrefs;
 use super::*;
 use crate::machines::Link;
-use crate::ui::theme::Flat as F;
 use mooring_core::sidebar::Machines;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -30,18 +29,6 @@ const SLIDE: f32 = 8.;
 const BREATH: Duration = Duration::from_millis(1600);
 /// Five draws a second: a slow pulse needs no more, and it lasts only while connecting.
 const BREATH_STEP: Duration = Duration::from_millis(200);
-/// A row's height at rest (`flat_row`): one line, or a second under it.
-const ONE_LINE: f32 = F::ONE_PAD_Y * 2. + F::LINE_TEXT;
-const TWO_LINES: f32 = F::ROW_PAD_Y * 2. + F::LINE_TEXT + T::S4 + F::LINE_SMALL;
-/// What the rows of a folding group are like, by their place in the list.
-#[derive(Default)]
-pub(super) struct RowShape {
-    /// Stays when the group closes (the session you are in).
-    pub keep: Vec<usize>,
-    /// Has a second line.
-    pub tall: Vec<usize>,
-}
-
 fn ease_out(t: f32) -> f32 {
     1. - (1. - t).powi(3)
 }
@@ -92,8 +79,8 @@ struct Fold {
     key: String,
     way: Way,
     started: Instant,
-    /// A whole section's blocks as drawn (`reveal_block`); 0 until they have been.
-    measured: Rc<[Cell<f32>; 2]>,
+    /// What moves here, as tall as it was drawn, by its place in the fold.
+    heights: Rc<RefCell<HashMap<usize, f32>>>,
     /// How many rows start late, once drawn: frames past the last row's end would redraw
     /// the column to show nothing moving.
     late: Cell<usize>,
@@ -104,6 +91,56 @@ impl Fold {
             now.saturating_duration_since(self.started).as_secs_f32() * 1000.,
             self.way.total(),
         )
+    }
+    /// `rows` shown `t` of their height. The first frame measures them and later ones use
+    /// that, so nothing is estimated and nothing jumps at the end: a wrapper of unknown
+    /// height has taffy measure its text again each frame (111 M instructions a frame for
+    /// a group and 127 M, 8 ms, for a whole section, against 55 M and 58 M).
+    fn clipped(&self, place: usize, t: f32, mut rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
+        let height = self.heights.borrow().get(&place).copied();
+        let outer = div().flex_shrink_0().overflow_hidden().opacity(t);
+        let Some(height) = height else {
+            let heights = self.heights.clone();
+            let measure =
+                move |bounds: gpui::Bounds<gpui::Pixels>, _: &mut Window, _: &mut gpui::App| {
+                    heights
+                        .borrow_mut()
+                        .insert(place, f32::from(bounds.size.height));
+                };
+            // Its first frame, where opening shows nothing and closing all.
+            return outer
+                .when(self.way.opening, |d| d.h(px(0.)))
+                .child(
+                    div()
+                        .relative()
+                        .w_full()
+                        .flex()
+                        .flex_col()
+                        .flex_shrink_0()
+                        .children(rows)
+                        .child(
+                            gpui::canvas(measure, |_, _, _, _| ())
+                                .absolute()
+                                .size_full(),
+                        ),
+                )
+                .into_any_element();
+        };
+        // Measured: nothing but the clip, each frame of a long list adds a node per row.
+        let outer = outer.h(px(height * t));
+        if rows.len() == 1 {
+            return outer.children(rows.pop()).into_any_element();
+        }
+        outer
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .flex_shrink_0()
+                    .children(rows),
+            )
+            .into_any_element()
     }
     fn ended(&self, now: Instant) -> bool {
         let last = if self.way.opening {
@@ -160,7 +197,7 @@ impl SidebarMotion {
             key: key.to_owned(),
             way,
             started,
-            measured: Rc::default(),
+            heights: Rc::default(),
             late: Cell::new(STAGGERED),
         });
     }
@@ -228,15 +265,13 @@ impl SidebarPrefs {
             }
         }
     }
-    /// The rows from `start` on, clipped and faded while group `key` moves, top first. Each
-    /// row gets the height it has at rest, so nothing measures it: a wrapper of unknown
-    /// height made taffy measure each row's text again (111 M instructions a frame against
-    /// 55 M), more than a whole redraw.
+    /// The rows from `start` on, clipped and faded while group `key` moves, top first.
+    /// `keep` are the positions in `out` that stay when it closes (the session you are in).
     pub(super) fn reveal(
         &self,
         key: &str,
         start: usize,
-        shape: &RowShape,
+        keep: &[usize],
         out: &mut Vec<gpui::AnyElement>,
     ) {
         let Some(fold) = self.motion.folding(key) else {
@@ -246,35 +281,18 @@ impl SidebarPrefs {
         let mut moved = 0;
         let rows = out.split_off(start.min(out.len()));
         for (i, row) in rows.into_iter().enumerate() {
-            let at = start + i;
-            if shape.keep.contains(&at) {
+            if keep.contains(&(start + i)) {
                 out.push(row);
                 continue;
             }
-            let height = if shape.tall.contains(&at) {
-                TWO_LINES
-            } else {
-                ONE_LINE
-            };
             let t = fold.way.row(moved, done);
+            out.push(fold.clipped(moved, t, vec![row]));
             moved += 1;
-            out.push(
-                div()
-                    .flex_shrink_0()
-                    .h(px(height * t))
-                    .overflow_hidden()
-                    .opacity(t)
-                    .child(row)
-                    .into_any_element(),
-            );
         }
         fold.late.set(moved.saturating_sub(1).min(STAGGERED));
     }
-    /// A whole section moving as one block, wiped from the top: headings and rows of every
-    /// height, so its height comes from drawing it. The first frame measures and later ones
-    /// use that: a wrapper of unknown height measures all of it each frame (127 M
-    /// instructions a frame, 8 ms, over a 120 Hz display's budget). `part` tells two blocks
-    /// of one section apart.
+    /// A whole section moving as one block, wiped from the top. `part` tells two blocks of
+    /// one section apart.
     pub(super) fn reveal_block(
         &self,
         key: &str,
@@ -288,36 +306,7 @@ impl SidebarPrefs {
         let rows = out.split_off(start.min(out.len()));
         fold.late.set(0);
         let t = fold.way.row(0, fold.done(clock()));
-        let measured = fold.measured.clone();
-        let height = measured[part].get();
-        let measure =
-            move |bounds: gpui::Bounds<gpui::Pixels>, _: &mut Window, _: &mut gpui::App| {
-                measured[part].set(f32::from(bounds.size.height));
-            };
-        out.push(
-            div()
-                .flex_shrink_0()
-                .overflow_hidden()
-                .opacity(t)
-                // Not measured yet: at its start, where opening shows nothing and closing all.
-                .when(height > 0., |d| d.h(px(height * t)))
-                .when(height <= 0. && fold.way.opening, |d| d.h(px(0.)))
-                .child(
-                    div()
-                        .relative()
-                        .w_full()
-                        .flex()
-                        .flex_col()
-                        .flex_shrink_0()
-                        .children(rows)
-                        .child(
-                            gpui::canvas(measure, |_, _, _, _| ())
-                                .absolute()
-                                .size_full(),
-                        ),
-                )
-                .into_any_element(),
-        );
+        out.push(fold.clipped(usize::MAX - part, t, rows));
     }
     /// The list arriving after the machine it shows changed.
     fn arrive(&self, rows: Vec<gpui::AnyElement>) -> Vec<gpui::AnyElement> {
@@ -369,6 +358,31 @@ impl Workbench {
         }
         self.sidebar.toggled.insert(key, true);
     }
+    /// A 会话优先 section's heading that folds its rows away and opens them again.
+    pub(super) fn flat_fold(
+        &self,
+        key: &str,
+        title: &str,
+        count: usize,
+        cx: &Context<Self>,
+    ) -> gpui::AnyElement {
+        let open = self.sidebar.open(key, true);
+        let key = key.to_owned();
+        Self::flat_group(title, count)
+            .id(gpui::SharedString::from(format!("sidebar-group-{key}")))
+            .cursor_pointer()
+            // At the line's right end, level with the rows' times below it.
+            .child(div().ml_auto().child(self.sidebar.fold_mark(&key, open)))
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
+            .into_any_element()
+    }
+    /// Lists one of the shown machine's spaces alone, or all of them again.
+    pub(super) fn toggle_machine_space(&mut self, id: &str, cx: &mut Context<Self>) {
+        let again = self.sidebar.machine_space.as_deref() == Some(id);
+        self.sidebar.machine_space = (!again).then(|| id.to_owned());
+        self.sidebar.motion.arrive_plain();
+        cx.notify();
+    }
     /// The machine the column shows. The list comes from the side you went: down the rail
     /// from below, along the chips from the right.
     pub(super) fn set_machine_scope(&mut self, host: Option<String>) {
@@ -391,21 +405,12 @@ impl Workbench {
         };
         self.sidebar.motion.switched(side, rail, clock());
         self.sidebar.machine_scope = host;
+        self.sidebar.machine_space = None;
     }
     /// The local rows for the list: the local section's fold and the list's arrival.
     pub(super) fn moving_rows(&self, mut rows: Vec<gpui::AnyElement>) -> Vec<gpui::AnyElement> {
         self.sidebar.reveal_block("machine:local", 1, 0, &mut rows);
         self.sidebar.arrive(rows)
-    }
-    /// Whether a session's row has a second line, as `flat_row` decides.
-    pub(super) fn row_is_tall(&self, l: &super::sidebar_list::Listed, detail: bool) -> bool {
-        let unfolded =
-            l.1 == Status::Closed && self.layout.done_open.as_deref() == Some(l.0.id.as_str());
-        let subs = self.workspace.content.get(&l.0.id).is_some_and(|c| {
-            !c.subagents.is_empty()
-                && self.row_bucket(l) != mooring_core::sidebar::Bucket::Attention
-        });
-        detail || unfolded || subs
     }
     /// How lit a machine's mark is while it connects, slowly; `None` once it has settled.
     pub(super) fn machine_breath(&self, index: usize, cx: &Context<Self>) -> Option<f32> {
@@ -435,6 +440,9 @@ impl Workbench {
     pub fn visual_toggle_group(&mut self, key: &str, cx: &mut Context<Self>) {
         let open = self.sidebar.open(key, true);
         self.toggle_sidebar_group(key, open, cx);
+    }
+    pub fn visual_machine_space(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.toggle_machine_space(id, cx);
     }
     pub fn visual_arrive(&mut self, cx: &mut Context<Self>) {
         self.sidebar.motion.arrive_plain();
@@ -501,7 +509,7 @@ mod tests {
             key: "k".into(),
             way: Way { opening: false },
             started: now - Duration::from_millis(65),
-            measured: Rc::default(),
+            heights: Rc::default(),
             late: Cell::new(STAGGERED),
         });
         m.fold("k", true, now);
@@ -543,7 +551,7 @@ mod tests {
             key: "k".into(),
             way: Way { opening: true },
             started: now - Duration::from_millis(200),
-            measured: Rc::default(),
+            heights: Rc::default(),
             late: Cell::new(1),
         };
         assert!(fold.ended(now), "two rows are done by 196 ms");

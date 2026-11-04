@@ -57,6 +57,10 @@ pub(super) fn start(
         );
         wait(800).await;
 
+        // Both machines' waiting counts in the title row, which says the same in every layout.
+        let wants = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_wants()).unwrap();
+        assert_eq!(wants(cx), 2, "the title row counts this machine's and the other's");
+
         // A: every machine in one list; a chip shows one alone.
         assert_eq!(column(cx), (1, None, false), "A lists both machines");
         let base = shoot("a-mixed.png", cx);
@@ -199,10 +203,45 @@ pub(super) fn start(
         ask(cx);
         shoot("motion-rail-end.png", cx);
         assert!(!moving(cx), "the rail's motion never ended");
+        // The machine's spaces narrow the list: the empty one to nothing, its own to its row.
+        let ids = handle.update(cx, |v, _, _| v.visual_machine_space_ids(0)).unwrap();
+        assert_eq!(ids.len(), 2, "the other machine has two spaces: {ids:?}");
+        let empty = ids.iter().find(|i| *i == "empty").unwrap().clone();
+        let own = ids.iter().find(|i| *i != "empty").unwrap().clone();
+        let settle = |at, cx: &mut gpui::AsyncApp| {
+            hold(Some(at), cx);
+            ask(cx);
+        };
+        handle.update(cx, |v, _, cx| v.visual_machine_space(&empty, cx)).unwrap();
+        settle(13_000, cx);
+        shoot("space-empty.png", cx);
+        assert_eq!(column(cx).0, 0, "the empty space still lists the row");
+        handle.update(cx, |v, _, cx| v.visual_machine_space(&own, cx)).unwrap();
+        settle(14_000, cx);
+        let on_own = shoot("space-own.png", cx);
+        assert_eq!(column(cx).0, 1, "its own space lost the row");
+        assert!(on_own == rail, "a machine's space moved something right of the column");
+        handle.update(cx, |v, _, cx| v.visual_machine_space(&own, cx)).unwrap();
+        settle(15_000, cx);
+        assert_eq!(column(cx).0, 1, "all spaces again");
+        // Going to another machine forgets it.
+        handle.update(cx, |v, _, cx| v.visual_machine_space(&empty, cx)).unwrap();
         handle.update(cx, |v, _, cx| v.visual_scope_machine(None, cx)).unwrap();
-        hold(Some(12_000), cx);
-        ask(cx);
+        settle(16_000, cx);
+        handle.update(cx, |v, _, cx| v.visual_scope_machine(Some(0), cx)).unwrap();
+        settle(17_000, cx);
+        assert_eq!(column(cx).0, 1, "the space stayed picked after leaving the machine");
+        handle.update(cx, |v, _, cx| v.visual_scope_machine(None, cx)).unwrap();
+        settle(18_000, cx);
         hold(None, cx);
+
+        // The rail's foot opens the page where computers are added.
+        handle.update(cx, |v, w, cx| v.visual_rail_add(w, cx)).unwrap();
+        let page = handle.update(cx, |v, _, cx| v.visual_settings_page_name(cx)).unwrap();
+        assert_eq!(page, "手机与远程", "the rail's + opened another page");
+        handle.update(cx, |v, _, cx| v.visual_settings_close(cx)).unwrap();
+        wait(200).await;
+
 
         // The other machine drops off: its row stays, faded, and it counts as down.
         handle
@@ -222,6 +261,7 @@ pub(super) fn start(
             }
         }
         assert!(down, "the stopped machine still reads as connected");
+        assert_eq!(wants(cx), 1, "a machine that dropped off still counts in the title row");
         assert_eq!(column(cx).0, 1, "its last row left the list");
         shoot("a-dropped.png", cx);
         handle

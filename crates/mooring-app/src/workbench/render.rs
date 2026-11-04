@@ -162,7 +162,7 @@ impl Render for Workbench {
                 .into_any_element(),
             );
         }
-        if !self.needs_you().is_empty() {
+        if self.anything_waits() {
             tail.push(self.next_waiting_chip(cx).into_any_element());
         }
         // A toggle: the same spot goes into the overview and back out of it. Standard
@@ -1059,7 +1059,7 @@ impl Workbench {
     /// The terminal style's right end of the status line: `✕ 2  ◐ 1  ✓ 3`, each a way
     /// into 鸟瞰. Zero counts are left out.
     fn status_glyphs(&self, cx: &Context<Self>) -> gpui::Div {
-        // The same sessions the top bar's 需要你 counts: those in Mooring's terminals.
+        // This machine's sessions in Mooring's terminals, of those the top bar's 需要你 counts.
         let mut counts = [self.needs_you().len(), 0, 0];
         const SHOWN: [Status; 3] = [Status::Error, Status::Running, Status::Review];
         for s in &self.workspace.agent_sessions {
@@ -1099,53 +1099,6 @@ impl Workbench {
             );
         }
         row
-    }
-    /// 下一个要你的: every session 要你处理 counts; the chip takes the color of the most
-    /// urgent kind it holds (asking, then failed, then finished for you to check).
-    fn next_waiting_chip(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
-        let needs = self.needs_you();
-        let count = needs.len();
-        let has = |want: Status| needs.iter().any(|s| status_of(&self.workspace, s) == want);
-        // One count for everything that needs you; the color says the most urgent kind.
-        let group = if has(Status::Waiting) {
-            Status::Waiting
-        } else if has(Status::Error) {
-            Status::Error
-        } else {
-            Status::Review
-        };
-        let text = mooring_core::status::NEEDS_YOU;
-        let (dot_color, ink, wash) = group.colors();
-        let key = crate::keymap::current(cx)
-            .chords(crate::keymap::Action::NextWaiting)
-            .first()
-            .map(|c| c.display());
-        button("next-waiting", "")
-            .aria_label(format!("{text}，共 {count} 个"))
-            .h(px(T::NEXT_CHIP))
-            .pl(px(T::S8))
-            .pr(px(T::S10))
-            .gap(px(T::S6))
-            .bg(wash)
-            .text_color(ink)
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .child(div().size(px(T::DOT)).rounded_full().bg(dot_color))
-            .child(text)
-            .child(div().font_features(T::tabular()).child(count.to_string()))
-            .when_some(key, |d, key| {
-                d.child(
-                    div()
-                        .px(px(T::S4))
-                        .rounded(px(T::CHIP_RADIUS))
-                        .border(px(T::BORDER_WIDTH))
-                        .border_color(ink)
-                        .opacity(T::KBD_OPACITY)
-                        .text_size(px(T::KBD_SIZE))
-                        .font_weight(gpui::FontWeight::NORMAL)
-                        .child(key),
-                )
-            })
-            .on_click(cx.listener(|this, _, window, cx| this.next_waiting(window, cx)))
     }
     /// The sidebar button beside the traffic lights: on the sidebar's top row while it is
     /// open, on the main title row once it is folded away, so it never moves.

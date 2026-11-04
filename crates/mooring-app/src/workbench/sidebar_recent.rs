@@ -3,7 +3,6 @@
 //! host said what state they are in.
 use super::sidebar_list::{End, Listed, RecentOrder, recent_order, split_today};
 use super::sidebar_machines::RemoteRow;
-use super::sidebar_motion::RowShape;
 use super::sidebar_wasm::{AddRow, Closed};
 use super::*;
 use mooring_core::sidebar::Bucket;
@@ -28,7 +27,7 @@ impl Workbench {
     ) {
         let open = self.sidebar.open(key, default);
         let showing = self.sidebar.showing(key, default);
-        let (start, mut shape) = (out.len(), RowShape::default());
+        let (start, mut keep) = (out.len(), Vec::new());
         for item in items {
             let stays = match item {
                 Item::Here(l) => current == Some(l.0.id.as_str()),
@@ -38,21 +37,14 @@ impl Workbench {
                 continue;
             }
             if !open && stays {
-                shape.keep.push(out.len());
-            }
-            let tall = match item {
-                Item::Here(l) => self.row_is_tall(&l, false),
-                Item::There(r) => r.is_tall(),
-            };
-            if tall {
-                shape.tall.push(out.len());
+                keep.push(out.len());
             }
             out.push(match item {
                 Item::Here(l) => self.session_row(l, current, None, End::State, cx),
                 Item::There(r) => self.remote_row(r, cx),
             });
         }
-        self.sidebar.reveal(key, start, &shape, out);
+        self.sidebar.reveal(key, start, &keep, out);
     }
 
     pub(super) fn recent_rows(
@@ -105,7 +97,7 @@ impl Workbench {
             out.push(self.flat_fold(key, title, rows.len(), cx));
             let open = self.sidebar.open(key, true);
             let showing = self.sidebar.showing(key, true);
-            let (start, mut shape) = (out.len(), RowShape::default());
+            let (start, mut keep) = (out.len(), Vec::new());
             for item in rows {
                 let stays = match item {
                     Item::Here(l) => current == Some(l.0.id.as_str()),
@@ -115,28 +107,20 @@ impl Workbench {
                     continue;
                 }
                 if !open && stays {
-                    shape.keep.push(out.len());
+                    keep.push(out.len());
                 }
                 match item {
                     Item::Here(l) => {
                         // 等后台 says what it left running, or it reads as plain 等你验收.
                         let asks = l.1.blocked() || l.1 == Status::Background;
                         let d = if lines && asks { second(&l) } else { None };
-                        if self.row_is_tall(&l, d.is_some()) {
-                            shape.tall.push(out.len());
-                        }
                         push(out, l, d, End::State);
                     }
                     // Outside the preset's limit: another machine asking is never hidden.
-                    Item::There(r) => {
-                        if r.is_tall() {
-                            shape.tall.push(out.len());
-                        }
-                        out.push(self.remote_row(r, cx));
-                    }
+                    Item::There(r) => out.push(self.remote_row(r, cx)),
                 }
             }
-            self.sidebar.reveal(key, start, &shape, out);
+            self.sidebar.reveal(key, start, &keep, out);
         }
         // What is no longer moving, open in a tab or closed: today's in full, the
         // rest folded into one line, as flat.html has it. These rows skip the

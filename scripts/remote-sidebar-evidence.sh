@@ -11,6 +11,11 @@ R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-rs}
 rm -rf $R; mkdir -p $R/home/.config/mooring $R/home/.codex/sessions $R/claude $R/shots $R/bin $R/farhome/.codex/sessions $R/farhome/.claude/projects
 # A blinking cursor would read as something changing right of the column.
 printf '{"cursor_blink": false}\n' > $R/home/.config/mooring/terminal-text.json
+# MOORING_EVIDENCE_THEME=<mode>:<theme id> looks at everything in that theme, e.g. light:paper.
+if [ -n "${MOORING_EVIDENCE_THEME:-}" ]; then
+  printf '%s' "${MOORING_EVIDENCE_THEME%%:*}" > $R/home/.config/mooring/appearance
+  printf '%s' "${MOORING_EVIDENCE_THEME#*:}" > $R/home/.config/mooring/theme-${MOORING_EVIDENCE_THEME%%:*}
+fi
 mkdir -m 700 $R/far $R/rt
 cat > $R/bin/ssh <<'SH'
 #!/bin/sh
@@ -59,6 +64,7 @@ def setup(sock, home, name, term, say):
                (now - 60, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已整理好，请核对。'})]
     open(log, 'w').write(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in records))
     rpc({'Edit': {'edit': {'AddSpace': {'id': 's', 'name': name, 'cwd': '/tmp'}}}})
+    rpc({'Edit': {'edit': {'AddSpace': {'id': 'empty', 'name': '空的', 'cwd': '/tmp'}}}})
     script = 'exec 3<' + log + '; printf "%s\\n" "› ' + say + '" "已整理好，请核对。"; while IFS= read -r l; do :; done'
     rpc({'Launch': {'id': term, 'space': 's', 'argv': [R + '/codex', '-c', script], 'cwd': '/tmp', 'cols': 100, 'rows': 30}})
     rpc({'Edit': {'edit': {'CreateTab': {'tab': {'id': 't', 'space': 's', 'title': '', 'default_task': None, 'layout': {'Leaf': term}}}}}})

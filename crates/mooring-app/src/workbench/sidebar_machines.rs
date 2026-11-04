@@ -52,6 +52,12 @@ fn next_index(len: usize, at: Option<usize>) -> usize {
 }
 
 /// A machine's square letter: gray so it never reads as a state or a space's color.
+/// Whether a machine's terminal is a row: an Agent with no conversation tied to it is
+/// listed too, as at home.
+fn listed_card(c: &Card) -> bool {
+    (c.phase != Phase::Shell || c.note.is_some()) && c.outcome.as_deref() != Some("abandoned")
+}
+
 impl RemoteRow {
     /// What it asks you, the second line of its row.
     fn asks(&self) -> Option<String> {
@@ -60,9 +66,6 @@ impl RemoteRow {
             .flatten()
             .and_then(|t| t.lines().find(|l| !l.trim().is_empty()))
             .map(|t| t.replacen(ASKS, "问：", 1))
-    }
-    pub(super) fn is_tall(&self) -> bool {
-        self.asks().is_some()
     }
 }
 
@@ -157,9 +160,7 @@ impl Workbench {
         };
         view.terminals
             .iter()
-            // An Agent with no conversation tied to it is listed too, as at home.
-            .filter(|c| c.phase != Phase::Shell || c.note.is_some())
-            .filter(|c| c.outcome.as_deref() != Some("abandoned"))
+            .filter(|c| listed_card(c))
             .map(|card| {
                 let status = card
                     .status
@@ -186,7 +187,15 @@ impl Workbench {
     /// The other machines' rows that go in 会话优先's own list.
     pub(super) fn listed_remote_rows(&self) -> Vec<RemoteRow> {
         match (self.machine_scope(), self.machine_layout()) {
-            (Some(index), _) => self.remote_rows_of(index),
+            (Some(index), _) => {
+                let spaces = self.machines[index].view.lock().unwrap().spaces.clone();
+                // A space that has since gone lists everything rather than nothing.
+                let only = (self.sidebar.machine_space.as_ref())
+                    .filter(|id| spaces.iter().any(|s| &s.id == *id));
+                let mut rows = self.remote_rows_of(index);
+                rows.retain(|r| only.is_none_or(|id| &r.card.space == id));
+                rows
+            }
             (None, Machines::Mixed) if self.space_filter().is_none() => (0..self.machines.len())
                 .flat_map(|i| self.remote_rows_of(i))
                 .collect(),
@@ -328,6 +337,83 @@ impl Workbench {
     }
 
     /// ⌘J: the next session that needs you, on any machine; the column follows it there.
+    /// What needs you on the other machines: the count and whether any of it asks or
+    /// failed. The title row draws on every terminal frame, so this copies nothing.
+    fn remote_wants(&self) -> (usize, bool, bool) {
+        let (mut count, mut asks, mut failed) = (0, false, false);
+        for machine in &self.machines {
+            let view = machine.view.lock().unwrap();
+            if view.link != Link::Online {
+                continue;
+            }
+            for card in view
+                .terminals
+                .iter()
+                .filter(|c| c.needs_you && listed_card(c))
+            {
+                count += 1;
+                match card.status.as_deref().and_then(Status::from_key) {
+                    Some(Status::Waiting) => asks = true,
+                    Some(Status::Error) => failed = true,
+                    _ => {}
+                }
+            }
+        }
+        (count, asks, failed)
+    }
+    /// Whether the title row shows 下一个要你的.
+    pub(super) fn anything_waits(&self) -> bool {
+        !self.needs_you().is_empty() || self.remote_wants().0 > 0
+    }
+    /// 下一个要你的: every session 要你处理 counts, on every machine, since the key goes to
+    /// all of them. The chip takes the color of the most urgent kind it holds (asking, then
+    /// failed, then finished for you to check).
+    pub(super) fn next_waiting_chip(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
+        let needs = self.needs_you();
+        let (there, asks, failed) = self.remote_wants();
+        let count = needs.len() + there;
+        let has = |want: Status| needs.iter().any(|s| status_of(&self.workspace, s) == want);
+        // One count for everything that needs you; the color says the most urgent kind.
+        let group = if asks || has(Status::Waiting) {
+            Status::Waiting
+        } else if failed || has(Status::Error) {
+            Status::Error
+        } else {
+            Status::Review
+        };
+        let text = mooring_core::status::NEEDS_YOU;
+        let (dot_color, ink, wash) = group.colors();
+        let key = crate::keymap::current(cx)
+            .chords(crate::keymap::Action::NextWaiting)
+            .first()
+            .map(|c| c.display());
+        button("next-waiting", "")
+            .aria_label(format!("{text}，共 {count} 个"))
+            .h(px(T::NEXT_CHIP))
+            .pl(px(T::S8))
+            .pr(px(T::S10))
+            .gap(px(T::S6))
+            .bg(wash)
+            .text_color(ink)
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .child(div().size(px(T::DOT)).rounded_full().bg(dot_color))
+            .child(text)
+            .child(div().font_features(T::tabular()).child(count.to_string()))
+            .when_some(key, |d, key| {
+                d.child(
+                    div()
+                        .px(px(T::S4))
+                        .rounded(px(T::CHIP_RADIUS))
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(ink)
+                        .opacity(T::KBD_OPACITY)
+                        .text_size(px(T::KBD_SIZE))
+                        .font_weight(gpui::FontWeight::NORMAL)
+                        .child(key),
+                )
+            })
+            .on_click(cx.listener(|this, _, window, cx| this.next_waiting(window, cx)))
+    }
     pub(super) fn next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         enum Next {
             Here(AgentSession),
@@ -378,6 +464,7 @@ impl Workbench {
     }
     /// Makes sure the row ⌘J went to is on the list.
     fn reveal_machine(&mut self, index: Option<usize>) {
+        self.sidebar.machine_space = None;
         let host = index.and_then(|i| self.machine_host(i));
         match self.machine_layout() {
             Machines::Rail => self.set_machine_scope(host),
@@ -418,6 +505,16 @@ impl Workbench {
     }
     pub fn visual_next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.next_waiting(window, cx);
+    }
+    pub fn visual_wants(&self) -> usize {
+        self.needs_you().len() + self.remote_wants().0
+    }
+    pub fn visual_rail_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.show_settings_page(settings::Page::Phones, window, cx);
+    }
+    pub fn visual_machine_space_ids(&self, index: usize) -> Vec<String> {
+        let view = self.machines[index].view.lock().unwrap();
+        view.spaces.iter().map(|s| s.id.clone()).collect()
     }
     pub fn visual_machine_online(&self, index: usize) -> Option<bool> {
         let view = self.machines.get(index)?.view.lock().unwrap();

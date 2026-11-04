@@ -120,6 +120,8 @@ pub(super) struct SidebarPrefs {
     pub space_filter: Option<String>,
     /// The machine (its host in `machines.json`) the column shows alone. Not saved.
     pub machine_scope: Option<String>,
+    /// That machine's space shown alone; its host owns the ids, so it is not `space_filter`.
+    pub machine_space: Option<String>,
     pub(super) motion: super::sidebar_motion::SidebarMotion,
 }
 impl SidebarPrefs {
@@ -146,6 +148,7 @@ impl SidebarPrefs {
             view_menu: None,
             space_filter: None,
             machine_scope: None,
+            machine_space: None,
             motion: Default::default(),
         }
     }
@@ -732,25 +735,6 @@ impl Workbench {
             .mb(px(T::S2))
             .child(label(title).flex_1().text_size(px(T::CHIP_SIZE)))
             .child(label(count.to_string()).text_size(px(T::CHIP_SIZE)))
-    }
-    /// A 会话优先 section's heading that folds its rows away and opens them again:
-    /// `要你处理 3 ⌄`. Every section starts open.
-    pub(super) fn flat_fold(
-        &self,
-        key: &str,
-        title: &str,
-        count: usize,
-        cx: &Context<Self>,
-    ) -> gpui::AnyElement {
-        let open = self.sidebar.open(key, true);
-        let key = key.to_owned();
-        Self::flat_group(title, count)
-            .id(gpui::SharedString::from(format!("sidebar-group-{key}")))
-            .cursor_pointer()
-            // At the line's right end, level with the rows' times below it.
-            .child(div().ml_auto().child(self.sidebar.fold_mark(&key, open)))
-            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
-            .into_any_element()
     }
     /// A group's heading in the chosen preset's look.
     pub(super) fn heading(&self, title: String, count: usize, cx: &Context<Self>) -> gpui::Div {

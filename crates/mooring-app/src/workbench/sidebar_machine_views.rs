@@ -3,7 +3,6 @@
 //! column keeps its width in all three, so nothing right of it moves.
 use super::sidebar_list::{recent_order, split_today};
 use super::sidebar_machines::{RemoteRow, machine_label, machine_letter, machine_mark};
-use super::sidebar_motion::RowShape;
 use super::*;
 use crate::machines::Link;
 use crate::ui::theme::Flat as F;
@@ -48,7 +47,7 @@ impl Workbench {
     pub(super) fn column_top(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         match (self.machine_layout(), self.machine_scope()) {
             (Machines::Rail, Some(index)) => {
-                vec![self.remote_space_chips(index).into_any_element()]
+                vec![self.remote_space_chips(index, cx).into_any_element()]
             }
             (Machines::Sections, _) => {
                 let open = self.sidebar.open("machine:local", true);
@@ -154,7 +153,7 @@ impl Workbench {
             .children(chips)
     }
     /// That machine's spaces, in the chips' look; they only name what is there.
-    fn remote_space_chips(&self, index: usize) -> gpui::Div {
+    fn remote_space_chips(&self, index: usize, cx: &Context<Self>) -> gpui::Div {
         let rows = self.remote_rows_of(index);
         let spaces = self
             .machines
@@ -165,7 +164,19 @@ impl Workbench {
                 .iter()
                 .filter(|r| r.online && r.card.needs_you && r.card.space == space.id)
                 .count();
+            let on = self.sidebar.machine_space.as_deref() == Some(space.id.as_str());
+            let pick = space.id.clone();
             div()
+                .id(gpui::SharedString::from(format!(
+                    "machine-space-{}",
+                    space.id
+                )))
+                .role(gpui::accesskit::Role::Button)
+                .aria_label(if on {
+                    format!("{}，点一下看全部空间", space.name)
+                } else {
+                    format!("只看 {}", space.name)
+                })
                 .h(px(F::CHIP))
                 .max_w_full()
                 .pl(px(T::S6))
@@ -175,7 +186,14 @@ impl Workbench {
                 .gap(px(F::CHIP_GAP))
                 .rounded(px(F::CHIP / 2.))
                 .border(px(T::BORDER_WIDTH))
-                .border_color(T::color(F::chip_line()))
+                .border_color(T::color(if on {
+                    F::chip_on_line()
+                } else {
+                    F::chip_line()
+                }))
+                .when(on, |d| d.bg(T::color(F::chip_on())))
+                .cursor_pointer()
+                .hover(|s| s.border_color(T::color(F::chip_on_line())))
                 .child(self.space_dot(&space.id, F::CHIP_DOT))
                 .child(
                     div()
@@ -183,10 +201,11 @@ impl Workbench {
                         .truncate()
                         .text_size(px(F::CHIP_TEXT))
                         .line_height(px(F::LINE_SMALL))
-                        .text_color(T::color(F::quiet()))
+                        .text_color(T::color(if on { F::bright() } else { F::quiet() }))
                         .child(space.name),
                 )
                 .when(need > 0, |d| d.child(need_badge(need)))
+                .on_click(cx.listener(move |this, _, _, cx| this.toggle_machine_space(&pick, cx)))
         });
         div()
             .flex()
@@ -362,17 +381,14 @@ impl Workbench {
             if !rows.is_empty() {
                 out.push(self.flat_fold(&part, title, rows.len(), cx));
                 let showing = self.sidebar.showing(&part, true);
-                let (start, mut shape) = (out.len(), RowShape::default());
+                let (start, mut keep) = (out.len(), Vec::new());
                 for r in rows.into_iter().filter(|r| showing || r.shown) {
                     if r.shown && !self.sidebar.open(&part, true) {
-                        shape.keep.push(out.len());
-                    }
-                    if r.is_tall() {
-                        shape.tall.push(out.len());
+                        keep.push(out.len());
                     }
                     out.push(self.remote_row(r, cx));
                 }
-                self.sidebar.reveal(&part, start, &shape, &mut out);
+                self.sidebar.reveal(&part, start, &keep, &mut out);
             }
         }
         self.sidebar.reveal_block(&key, 0, 1, &mut out);
@@ -505,6 +521,33 @@ impl Workbench {
             })
             .child(self.rail_button(None, cx))
             .children((0..self.machines.len()).map(|i| self.rail_button(Some(i), cx)))
+            .child(div().flex_1())
+            .child(self.rail_add(cx))
+    }
+    /// At the rail's foot: another computer, added where they all are, in settings.
+    fn rail_add(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
+        div()
+            .id("rail-add")
+            .role(gpui::accesskit::Role::Button)
+            .aria_label("添加一台电脑")
+            .size(px(RAIL_BUTTON))
+            .mb(px(T::S10))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(T::S8))
+            .border(px(T::BORDER_WIDTH))
+            .border_dashed()
+            .border_color(T::color(F::chip_line()))
+            .text_color(T::color(F::third()))
+            .cursor_pointer()
+            .hover(|s| s.bg(T::color(F::hover())))
+            .tooltip(super::diagnostics::tip(vec!["添加一台电脑".to_owned()]))
+            .child("+")
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.show_settings_page(settings::Page::Phones, window, cx);
+            }))
     }
     /// 会话优先's column at its usual width, with the rail inside it when the layout has one.
     pub(super) fn flat_column(
