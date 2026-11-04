@@ -18,6 +18,12 @@ const FIELDS: &[(&str, &str)] = &[
     ("content-name", r"\b(c|content|card)\.name\b"),
     ("tab-title", r"\btab\.title\b"),
     ("session-updated", r"\b(s|session)\.updated\b"),
+    // A large surface painted solid hides a see-through theme's desktop: a page or column
+    // takes `T::surface`, and only what floats above them (a dialog, a card) stays solid.
+    (
+        "solid-surface",
+        r"\.bg\(T::color\((T|F)::(app|pane|panel|sidebar|header|bg)\(\)\)\)",
+    ),
 ];
 /// State words written by hand, and the variants they drifted to (出错 for 出错了,
 /// 工作中 / 干活中 for 在跑, 已完成 for 做完了, 空闲, 需要你 for 要你处理).
@@ -189,7 +195,8 @@ fn no_new_second_owner() {
     assert!(
         changes.is_empty(),
         "raw reads or hand-written state words changed (read the owner in core instead — \
-         status::of, session_title, session_updated, Status::label; if a change is right, \
+         status::of, session_title, session_updated, Status::label; a solid-surface is a large \
+         surface that should take T::surface; if a change is right, \
          rewrite the baseline with MOORING_GUARD_UPDATE=1):\n{}",
         changes.join("\n")
     );
