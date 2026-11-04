@@ -132,7 +132,7 @@ pub(super) fn publisher_of(
         None => Publisher::Unsigned,
     };
     if url == DEFAULT_REMOTE && publisher != Publisher::Official {
-        return Err("官方目录没有官方的签名，没有使用".to_owned());
+        return Err("拿不到官方目录的有效签名，这次没有使用：刚发布时可能还没传到，过一会儿再试；一直这样就要当它被改过".to_owned());
     }
     Ok(publisher)
 }
