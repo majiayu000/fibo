@@ -11,6 +11,11 @@ def rd(p): return p.read_text() if p.exists() else ''
 def add(batch,group,k,name,idea,risk,src,on='',off='',need='',status='',anim=False,by='Claude'):
     id=f'{batch}-{k}';Items.append(dict(id=id,batch=batch,group=group,name=name,idea=idea,risk=risk.strip(),img=thumb(src,id),on=on,off=off,need=need or on,status=status,anim=anim,by=by))
 slice_=lambda t,a,b:t[t.index(a):t.index(b)]
+# Rounds 10-12
+v=S/'v10';notes={'boomA':'细化过头：瘦得像弯刀或鹰嘴，不如第 9 轮结实。','boomB':'镖太瘦，这圈虚线倒是好看。','boomC':'镖太瘦，像一根象牙。','keyA':'实心翼长得像发芽，不像钥匙了。','keyB':'实心翼长得像发芽，不像钥匙了。','crab':'画出来像一架雪橇。','snap':'画出来看不出是手。','dog':'画出来太生硬，看不出是狗。','sew':'画出来像字母 T。','wheel':'画出来更像船舵或雪花。','drum':'画出来也有点像相机。','boatPix':'单色之后像吃豆人。','boatGrad':'单色之后像饼图。','boatGlass':'单色之后像饼图。','boatLine':'单色之后像饼图。','boatNeon':'单色之后像饼图。','boomNeon':'两头能看到接缝，这版没画好。','boomLine':'两头能看到接缝，这版没画好。','kiteNeon':'线和风筝接头处有接缝，这版没画好。','kiteLine':'线和风筝接头处有接缝，这版没画好。','boomClay':'立体之后发糊，比平面版差。','kiteClay':'立体之后发糊，比平面版差。','boatClay':'立体之后发糊，比平面版差。'}
+fails10=set(notes)-{'boomB','drum'};recs10={'boomD','kiteA','kiteB','kiteC','boatA','boatB','stretch','wrench','wood','dial','kitePix','kitePaper','boomPaper'}
+for e in json.load(open(v/'svg/meta.json')):
+    n=e['k'];add(e['round'],e['group'].replace('（Codex）',''),n,e['name'],e['idea'],e['risk']+notes.get(n,''),v/f'render/{n}-512.png',rd(v/f'svg/{n}-tray.svg'),rd(v/f'svg/{n}-off.svg'),status='fail' if n in fails10 else 'rec' if n in recs10 else '',by=e['by'])
 # Batch 9
 v=S/'v9';fails={'key':'画出来像一把剪刀。','boom2':'两色之后像巨嘴鸟的嘴。','p7':'画出来很像吃豆人的幽灵，也和 Ghostty 撞了。','p8':'和方块边那张一样像幽灵。','p9':'和方块边那张一样像幽灵。','top':'画出来更像一片叶子。','yoyo':'画出来像唱片或拉绳开关。','br1':'放进 Dock 太克制，灯几乎看不见。','g4':'小尺寸只剩一个圆，也像按钮。'}
 recs={'boom','k1','k2','br3','b3','s5','g2','g1','p6'}
@@ -59,7 +64,7 @@ add(1,'最早的三个方向和 Codex 的两个','A','绕桩','绳眼套在桩�
 add(1,'最早的三个方向和 Codex 的两个','C','一笔 M','一笔写成 M，右脚落在浮标上。','脚下的点读起来像感叹号，平时也像在报警。',v/'render/C-512.png',T('<path d="M2.6 15.2V3L8.2 9.6L13.8 3V9.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="13.8" cy="13.6" r="1.9"/>'),T('<path d="M2.6 15.2V3L8.2 9.6L13.8 3V9.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'),status='fail')
 add(1,'最早的三个方向和 Codex 的两个','D','系缆桩','Codex 的第一个方向：一个立住的桩。','渲染出来像工字钢和文本光标。',v/'render/D-512.png',T('<path d="M2 4H16V6H13L10 9V13H14V15H4V13H8V9L5 6H2Z"/>'),T('<path d="M2 4H16V6H13L10 9V10H8V9L5 6H2Z"/><path d="M4 13H14V15H4Z"/>'),status='fail',by='Codex')
 add(1,'最早的三个方向和 Codex 的两个','E','双桩横缆','Codex 的第二个方向：两根桩一根横缆。','读起来像字母 HT。',v/'render/E-512.png',T('<path d="M1 3H8V5H6V10H12V8H10V6H17V8H15V15H12V12H6V15H3V5H1Z"/>'),T('<path d="M1 3H8V5H6V15H3V5H1Z"/><path d="M10 6H17V8H15V15H12V8H10Z"/>'),status='fail',by='Codex')
-Batches={9:'第 9 轮：继续发展',8:'第 8 轮：创意墙二',7:'第 7 轮：创意墙一',6:'第 6 轮：信号黄',5:'第 5 轮：一个形状',4:'第 4 轮：废稿',3:'第 3 轮：七个发散',2:'第 2 轮：重画',1:'第 1 轮：最早'}
+Batches={12:'第 12 轮：换画法',11:'第 11 轮：新点子',10:'第 10 轮：细化',9:'第 9 轮：继续发展',8:'第 8 轮：创意墙二',7:'第 7 轮：创意墙一',6:'第 6 轮：信号黄',5:'第 5 轮：一个形状',4:'第 4 轮：废稿',3:'第 3 轮：七个发散',2:'第 2 轮：重画',1:'第 1 轮：最早'}
 data=json.dumps(dict(items=Items,batches=Batches),ensure_ascii=False).replace('</','<\\/')
 tpl=(G/'src/template.html').read_text()
 (G/'index.html').write_text(tpl.replace('__DATA__',data))
