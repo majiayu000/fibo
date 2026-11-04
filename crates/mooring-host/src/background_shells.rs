@@ -6,8 +6,11 @@
 //! on a chosen TCP port is a server; so is one running longer than [`JOB_LIMIT`], which
 //! covers what listens on nothing (`tail -f`, a watcher). A port the system handed out
 //! (bound to 0, so in the ephemeral range) does not count: that is a tool talking to its
-//! own helper, like a renderer serving a page to its headless browser. Shells are found
-//! among the agent's child processes by the command the Stop hook listed.
+//! own helper, like a renderer serving a page to its headless browser. Neither does a
+//! port another process of the same tree connects to: that server is a part of the
+//! script, and ends with it. Shells are found among the agent's child processes by the
+//! command the Stop hook listed. The rules and the real cases behind them:
+//! docs/decisions/2026-11-04-background-shell-own-client.md.
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::process::Command;
@@ -21,37 +24,58 @@ pub const EVERY: u64 = 5;
 /// to port 0; a server meant to be visited is put on a port below it.
 const EPHEMERAL: u16 = 49152;
 
-/// What one look found for a shell: its process tree listens on a port, and how long
-/// it has run. `None` from [`look`] when no child process runs the command.
+/// What one look found for a shell: its process tree listens on a port, another process
+/// of the tree is connected to that port, something in the tree still works beside the
+/// listeners (a leaf that listens on nothing), and how long it has run. `None` from
+/// [`look`] when no child process runs the command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Seen {
     pub listening: bool,
+    pub own_client: bool,
+    pub worker: bool,
     pub age: u64,
 }
 
 /// The judgment carried between looks. A shell changes sides only after two looks in a
-/// row disagree with it, so a test that starts a server for a moment stays a job.
+/// row disagree with it, so a test that starts a server for a moment stays a job. The
+/// exception is its own client: one sighting settles it at once, and it stays settled
+/// while a worker is left, because such a connection comes and goes between requests.
+/// Once only the server and the shells waiting on it remain, the work is over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Judged {
     pub job: bool,
     against: u8,
+    own_client: bool,
 }
 pub fn judge(before: Option<Judged>, seen: Option<Seen>) -> Judged {
-    let now = seen.is_some_and(|s| !s.listening && s.age < JOB_LIMIT);
+    // Too old to be a job, whatever else it shows: no second look needed.
+    if seen.is_some_and(|s| s.age >= JOB_LIMIT) {
+        return Judged {
+            job: false,
+            against: 0,
+            own_client: false,
+        };
+    }
+    if seen.is_some_and(|s| s.own_client) {
+        return Judged {
+            job: true,
+            against: 0,
+            own_client: true,
+        };
+    }
+    let own_client = before.is_some_and(|b| b.own_client);
+    let now = seen.is_some_and(|s| !s.listening || (own_client && s.worker));
     match before {
         None => Judged {
             job: now,
             against: 0,
-        },
-        // Too old to be a job: no second look needed.
-        Some(_) if seen.is_some_and(|s| s.age >= JOB_LIMIT) => Judged {
-            job: false,
-            against: 0,
+            own_client,
         },
         Some(b) if b.job == now => Judged { against: 0, ..b },
         Some(b) if b.against >= 1 => Judged {
             job: now,
             against: 0,
+            own_client,
         },
         Some(b) => Judged {
             against: b.against + 1,
@@ -86,12 +110,16 @@ pub fn look(targets: &[(u32, Vec<(String, String)>)]) -> io::Result<HashMap<Stri
         .iter()
         .flat_map(|(_, _, t)| t.iter().copied())
         .collect();
-    let listening = listeners(&all)?;
+    let sockets = sockets(&all)?;
     Ok(found
         .into_iter()
         .map(|(id, pid, tree)| {
             let seen = Seen {
-                listening: tree.iter().any(|p| listening.contains(p)),
+                listening: tree.iter().any(|p| sockets.listening.contains_key(p)),
+                own_client: sockets.own_client(&tree),
+                worker: tree
+                    .iter()
+                    .any(|p| !sockets.listening.contains_key(p) && children(*p).is_empty()),
                 age: started(pid).map_or(0, |at| now.saturating_sub(at)),
             };
             (id, seen)
@@ -155,10 +183,32 @@ fn started(pid: u32) -> Option<u64> {
     };
     (n == size).then_some(info.pbi_start_tvsec)
 }
-/// The pids among `pids` listening on a chosen (not ephemeral) TCP port.
-fn listeners(pids: &[u32]) -> io::Result<HashSet<u32>> {
+/// The TCP sockets of some processes that say what a shell is.
+#[derive(Debug, Default)]
+struct Sockets {
+    /// Pid -> the chosen (not ephemeral) ports it listens on.
+    listening: HashMap<u32, HashSet<u16>>,
+    /// (pid, port): a connection from that pid to a port on this machine.
+    dialing: Vec<(u32, u16)>,
+}
+impl Sockets {
+    /// Whether a process of `tree` is connected to a port another process of it listens on.
+    fn own_client(&self, tree: &[u32]) -> bool {
+        self.dialing.iter().any(|(client, port)| {
+            tree.contains(client)
+                && tree.iter().any(|server| {
+                    server != client
+                        && self
+                            .listening
+                            .get(server)
+                            .is_some_and(|ports| ports.contains(port))
+                })
+        })
+    }
+}
+fn sockets(pids: &[u32]) -> io::Result<Sockets> {
     if pids.is_empty() {
-        return Ok(HashSet::new());
+        return Ok(Sockets::default());
     }
     let list = pids
         .iter()
@@ -167,23 +217,36 @@ fn listeners(pids: &[u32]) -> io::Result<HashSet<u32>> {
         .join(",");
     crate::recognition::LSOF_SPAWNS.fetch_add(1, Ordering::Relaxed);
     let out = Command::new("/usr/sbin/lsof")
-        .args(["-nP", "-a", "-p", &list, "-iTCP", "-sTCP:LISTEN", "-Fpn"])
+        .args([
+            "-nP",
+            "-a",
+            "-p",
+            &list,
+            "-iTCP",
+            "-sTCP:LISTEN,ESTABLISHED",
+            "-Fpn",
+        ])
         .output()?;
-    // Exit 1 with no rows is "none listening".
-    Ok(chosen_ports(&String::from_utf8_lossy(&out.stdout)))
+    // Exit 1 with no rows is "none".
+    Ok(parse_sockets(&String::from_utf8_lossy(&out.stdout)))
 }
-/// From `lsof -Fpn` rows (`p<pid>` then one `n<addr>:<port>` per socket), the pids with
-/// at least one socket on a port below [`EPHEMERAL`].
-fn chosen_ports(rows: &str) -> HashSet<u32> {
-    let mut out = HashSet::new();
+/// From `lsof -Fpn` rows: `p<pid>`, then one `n<addr>:<port>` per listening socket or
+/// `n<addr>:<port>-><addr>:<port>` per connection.
+fn parse_sockets(rows: &str) -> Sockets {
+    let port = |addr: &str| addr.rsplit(':').next().and_then(|n| n.parse::<u16>().ok());
+    let mut out = Sockets::default();
     let mut pid = None;
     for line in rows.lines() {
         if let Some(p) = line.strip_prefix('p') {
             pid = p.parse().ok();
-        } else if let (Some(addr), Some(p)) = (line.strip_prefix('n'), pid) {
-            let port = addr.rsplit(':').next().and_then(|n| n.parse::<u16>().ok());
-            if port.is_some_and(|n| n < EPHEMERAL) {
-                out.insert(p);
+        } else if let (Some(name), Some(p)) = (line.strip_prefix('n'), pid) {
+            if let Some((_, remote)) = name.split_once("->") {
+                let here = remote.starts_with("127.") || remote.starts_with("[::1]");
+                if let (true, Some(n)) = (here, port(remote)) {
+                    out.dialing.push((p, n));
+                }
+            } else if let Some(n) = port(name).filter(|n| *n < EPHEMERAL) {
+                out.listening.entry(p).or_default().insert(n);
             }
         }
     }
@@ -195,12 +258,105 @@ mod tests {
     use super::*;
     const YOUNG: Seen = Seen {
         listening: false,
+        own_client: false,
+        worker: true,
         age: 60,
     };
     const SERVER: Seen = Seen {
         listening: true,
+        own_client: false,
+        worker: false,
         age: 60,
     };
+    /// A script's own server with its client connected at this look.
+    const OWN: Seen = Seen {
+        listening: true,
+        own_client: true,
+        worker: true,
+        age: 60,
+    };
+    /// The same script between requests: not connected, but a worker is alive.
+    const BETWEEN: Seen = Seen {
+        listening: true,
+        own_client: false,
+        worker: true,
+        age: 60,
+    };
+    const OLD: Seen = Seen {
+        listening: false,
+        own_client: false,
+        worker: true,
+        age: JOB_LIMIT,
+    };
+    /// The judgment after these looks, in order.
+    fn after(looks: &[Option<Seen>]) -> Judged {
+        let mut judged = None;
+        for seen in looks {
+            judged = Some(judge(judged, *seen));
+        }
+        judged.unwrap()
+    }
+    /// Every shell that was once judged wrong or argued over, with the answer agreed.
+    /// A new mistake gets a row here and in the decision record this module names.
+    #[test]
+    fn known_cases() {
+        let cases: &[(&str, &[Option<Seen>], bool)] = &[
+            (
+                "tests or a build: no port",
+                &[Some(YOUNG), Some(YOUNG)],
+                true,
+            ),
+            (
+                "http.server or a relay left running",
+                &[Some(SERVER), Some(SERVER)],
+                false,
+            ),
+            (
+                "a test that starts a server for a moment",
+                &[Some(YOUNG), Some(SERVER), Some(YOUNG)],
+                true,
+            ),
+            (
+                "a script with its own relay, 2026-11-04",
+                &[Some(OWN), Some(BETWEEN), Some(BETWEEN), Some(BETWEEN)],
+                true,
+            ),
+            (
+                "the same script, seen before its client connects",
+                &[Some(BETWEEN), Some(BETWEEN), Some(OWN), Some(BETWEEN)],
+                true,
+            ),
+            (
+                "clients gone, a `wait` stuck on the relay, 2026-11-04",
+                &[Some(OWN), Some(BETWEEN), Some(SERVER), Some(SERVER)],
+                false,
+            ),
+            (
+                "own server still up past the limit: does not spin for ever",
+                &[
+                    Some(OWN),
+                    Some(Seen {
+                        age: JOB_LIMIT,
+                        ..OWN
+                    }),
+                ],
+                false,
+            ),
+            (
+                "tail -f: no port, past the limit",
+                &[Some(YOUNG), Some(OLD)],
+                false,
+            ),
+            (
+                "the script ended and its agent has not woken for two looks",
+                &[Some(OWN), None, None],
+                false,
+            ),
+        ];
+        for (name, looks, job) in cases {
+            assert_eq!(after(looks).job, *job, "{name}");
+        }
+    }
     #[test]
     fn a_shell_is_a_job_until_two_looks_in_a_row_find_it_listening() {
         let first = judge(None, Some(YOUNG));
@@ -214,11 +370,7 @@ mod tests {
     }
     #[test]
     fn an_old_shell_or_one_not_found_is_no_job() {
-        let old = Seen {
-            listening: false,
-            age: JOB_LIMIT,
-        };
-        assert!(!judge(Some(judge(None, Some(YOUNG))), Some(old)).job);
+        assert!(!judge(Some(judge(None, Some(YOUNG))), Some(OLD)).job);
         assert!(!judge(None, None).job, "no process runs the command");
         let job = judge(None, Some(YOUNG));
         assert!(
@@ -229,9 +381,26 @@ mod tests {
     #[test]
     fn only_a_chosen_port_makes_a_server() {
         let rows = "p100\nf12\nn127.0.0.1:51174\np200\nf3\nn*:8000\np300\nf4\nn[::1]:5173\nf5\nn[::1]:60000\n";
-        let got = chosen_ports(rows);
-        assert!(!got.contains(&100), "a renderer's own ephemeral port");
-        assert!(got.contains(&200) && got.contains(&300), "{got:?}");
+        let got = parse_sockets(rows).listening;
+        assert!(!got.contains_key(&100), "a renderer's own ephemeral port");
+        assert!(got.contains_key(&200) && got.contains_key(&300), "{got:?}");
+    }
+    #[test]
+    fn a_client_counts_only_from_another_process_of_the_tree_on_this_machine() {
+        // Rows as lsof printed them for the Crouton script: the relay and its Python client.
+        let rows = "p28079\nf5\nn*:8898\nf6\nn127.0.0.1:8898->127.0.0.1:49848\n\
+                    p28382\nf4\nn127.0.0.1:49848->127.0.0.1:8898\n\
+                    p500\nf4\nn[::1]:49900->[::1]:8898\n\
+                    p600\nf4\nn10.0.0.2:49901->10.0.0.9:8898\n";
+        let got = parse_sockets(rows);
+        assert!(got.own_client(&[28079, 28382]), "its client in the tree");
+        assert!(got.own_client(&[28079, 500]), "over IPv6 too");
+        assert!(!got.own_client(&[28079]), "a client outside the tree");
+        assert!(!got.own_client(&[28079, 600]), "another machine's 8898");
+        assert!(
+            !got.own_client(&[28382]),
+            "a client whose server is elsewhere"
+        );
     }
     #[test]
     fn a_command_is_found_in_the_shell_that_evals_it() {
@@ -294,5 +463,72 @@ s.listen(); time.sleep(30)' # srv-7f3a"#;
             "{again:?}"
         );
         assert!(!seen.contains_key("gone"));
+    }
+    /// A real script with its own fixed-port server and client, beside a server whose
+    /// client is outside its tree. Undoing the own-client check fails this.
+    #[test]
+    fn a_real_script_using_its_own_port_differs_from_a_server_with_an_outside_client() {
+        let bind = "import socket,subprocess,sys,time
+for p in range({from}, {to}):
+    s = socket.socket()
+    try:
+        s.bind((\"127.0.0.1\", p)); break
+    except OSError:
+        pass
+s.listen()
+print(p, flush=True)
+{client}
+c, _ = s.accept(); time.sleep(20)";
+        let own_client = "subprocess.Popen([sys.executable, \"-c\", \"import socket,sys,time; c = socket.create_connection((sys.argv[1], int(sys.argv[2]))); time.sleep(20)\", \"127.0.0.1\", str(p)])";
+        let script = bind
+            .replace("{from}", "41300")
+            .replace("{to}", "41400")
+            .replace("{client}", own_client);
+        let server = bind
+            .replace("{from}", "41400")
+            .replace("{to}", "41500")
+            .replace("{client}", "");
+        let own = format!(": own-8c1d; python3 -c '{script}'");
+        let alone = format!(": srv-8c1d; python3 -c '{server}'");
+        let spawn = |command: &str| {
+            std::process::Command::new("/bin/sh")
+                .args(["-c", &format!("eval '{}'", command.replace('\'', "'\\''"))])
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .unwrap()
+        };
+        let mut own_child = spawn(&own);
+        let mut alone_child = spawn(&alone);
+        let mut line = String::new();
+        std::io::BufRead::read_line(
+            &mut std::io::BufReader::new(alone_child.stdout.as_mut().unwrap()),
+            &mut line,
+        )
+        .unwrap();
+        let port: u16 = line.trim().parse().unwrap();
+        // This test process is the outside client.
+        let _outside = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let tasks = vec![("o".to_owned(), own), ("a".to_owned(), alone)];
+        let mut seen = HashMap::new();
+        for _ in 0..50 {
+            seen = look(&[(std::process::id(), tasks.clone())]).unwrap();
+            if seen.get("o").is_some_and(|s| s.own_client) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let again = look(&[(std::process::id(), tasks.clone())]).unwrap();
+        own_child.kill().unwrap();
+        alone_child.kill().unwrap();
+        let _ = own_child.wait();
+        let _ = alone_child.wait();
+        assert!(seen["o"].listening && seen["o"].own_client, "{seen:?}");
+        assert!(again["a"].listening, "{again:?}");
+        assert!(!again["a"].own_client, "{again:?}");
+        assert!(
+            seen["o"].worker,
+            "its client is a leaf listening on nothing"
+        );
+        assert!(!again["a"].worker, "the server is the only leaf");
     }
 }
