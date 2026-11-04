@@ -53,11 +53,12 @@ table{width:100%;border-collapse:collapse;margin-top:10px;background:var(--card)
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{font-weight:600;background:#e4e2dc}tr:last-child td{border-bottom:0}
 .wrap{overflow-x:auto}
 .chip{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:6px;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+a{color:inherit}.field{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0}.field input{width:44px;height:26px;padding:0;border:1px solid var(--line);border-radius:5px;background:none}
 ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
-@media (max-width:760px){.compare{grid-template-columns:1fr}.g4,.g6{grid-template-columns:repeat(3,1fr)}#stage{padding:12px}.panel{padding:16px}}
+@media (max-width:760px){#editor{grid-template-columns:1fr!important}.compare{grid-template-columns:1fr}.g4,.g6{grid-template-columns:repeat(3,1fr)}#stage{padding:12px}.panel{padding:16px}}
 </style></head><body><main>
 
-<h1>把主题拆成「明暗」和「深色配色」</h1>
+<h1>把主题拆成「明暗」和「主题」，并为开放自定义留好位置</h1>
 <p class="sub">要定的事：外观页用哪个方向。推荐方向 A。下面的外观页可以直接点，整块面板会跟着换色。配色小图的颜色取自 <code>mooring-core/src/terminal.rs</code> 和 <code>ui/theme.rs</code>；面板自身的卡片层次是近似值，以实现时的原生截图为准。</p>
 
 <h2>现在哪里不对</h2>
@@ -80,56 +81,104 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 <h2>和现在并排看（方向 A）</h2>
 <div class="compare">
 <figure><img src="current.png" alt="现在的外观设置页，原生截图"><figcaption><b>现在</b>：原生截图的主题区，暗色主题。</figcaption></figure>
-<figure><div id="stage2" style="border-radius:8px;padding:14px"><div class="panel" style="padding:18px"><div class="sec">主题</div><div id="ui2"></div></div></div><figcaption><b>方向 A</b>：相同配色、暗色模式下的主题区。</figcaption></figure>
+<figure><div id="stage2" style="border-radius:8px;padding:14px"><div class="panel" style="padding:18px"><div class="sec">主题</div><div id="ui2"></div></div></div><figcaption><b>方向 A</b>：同一主题、暗色模式下的主题区。</figcaption></figure>
 </div>
 
 <h2>方向 A 的完整规则</h2>
 <div class="wrap"><table>
-<tr><th>明暗</th><th>macOS</th><th>窗口颜色</th><th>配色区的提示</th><th>点配色时</th></tr>
-<tr><td>跟随系统</td><td>深色</td><td>选中的配色</td><td>macOS 现在是深色，正在用「蓝灰」</td><td>立即换色</td></tr>
-<tr><td>跟随系统</td><td>浅色</td><td>亮色</td><td>macOS 转深色时用「蓝灰」</td><td>只记下，窗口不变</td></tr>
-<tr><td>亮色</td><td>不看</td><td>亮色</td><td>亮色没有配色；点一套会切到暗色</td><td>明暗切到暗色并换色</td></tr>
-<tr><td>暗色</td><td>不看</td><td>选中的配色</td><td>无</td><td>立即换色</td></tr>
-<tr><td>终端原生样式 + 跟随系统</td><td>不看</td><td>选中的配色</td><td>终端原生样式下跟随系统按暗色显示</td><td>立即换色</td></tr>
+<tr><th>明暗</th><th>macOS</th><th>窗口颜色</th><th>下面显示</th><th>点主题时</th></tr>
+<tr><td>跟随系统</td><td>深色</td><td>暗色组选中的主题</td><td>亮色、暗色两组，暗色组标「正在用」</td><td>点暗色组立即换色，点亮色组只记下</td></tr>
+<tr><td>跟随系统</td><td>浅色</td><td>亮色组选中的主题</td><td>亮色、暗色两组，亮色组标「正在用」</td><td>点亮色组立即换色，点暗色组只记下</td></tr>
+<tr><td>亮色</td><td>不看</td><td>亮色组选中的主题</td><td>只有亮色组</td><td>立即换色</td></tr>
+<tr><td>暗色</td><td>不看</td><td>暗色组选中的主题</td><td>只有暗色组</td><td>立即换色</td></tr>
+<tr><td>终端原生样式 + 跟随系统</td><td>不看</td><td>暗色组选中的主题</td><td>两组，暗色组标「正在用」</td><td>同上，只看暗色组</td></tr>
 </table></div>
 <ul>
-<li><b>名字：</b>近黑那套叫「曜黑」，排第一位，也是新装默认。「暗色」只留给明暗模式。</li>
-<li><b>菜单栏：</b>Mooring › 外观：跟随系统、亮色、暗色，分隔线，「深色配色」六项。两组各有一个勾，亮色模式下配色的勾也保留，说明下次暗色用哪套。</li>
-<li><b>搜索：</b>设置里搜曜黑、蓝灰等都能定位到主题区。</li>
+<li><b>名字：</b>近黑那套叫「曜黑」，唯一的亮色主题叫「纸白」。「亮色」「暗色」只表示明暗模式，不再和主题重名。</li>
+<li><b>菜单栏：</b>Mooring › 外观：跟随系统、亮色、暗色，分隔线，亮色主题，分隔线，暗色主题。每组一个勾。</li>
+<li><b>搜索：</b>设置里搜曜黑、纸白、蓝灰等都能定位到主题区。</li>
 <li><b>预览小图：</b>和窗口共用同一份取色：侧栏比主区暗，主区是亮起的一块。不再单独写一套混色。</li>
 </ul>
 
 <h2>存储和迁移</h2>
 <div class="wrap"><table>
-<tr><th><code>appearance</code> 旧值</th><th>升级后的明暗</th><th>升级后的配色</th></tr>
-<tr><td><code>system</code></td><td>跟随系统</td><td>曜黑</td></tr><tr><td><code>light</code></td><td>亮色</td><td>曜黑</td></tr><tr><td><code>dark</code></td><td>暗色</td><td>曜黑（看到的颜色不变）</td></tr>
-<tr><td><code>slate</code> <code>graphite</code> <code>warm</code> <code>pine</code> <code>plum</code></td><td>暗色</td><td>对应那套（看到的颜色不变）</td></tr>
+<tr><th><code>appearance</code> 旧值</th><th>升级后的明暗</th><th>亮色主题</th><th>暗色主题</th></tr>
+<tr><td><code>system</code></td><td>跟随系统</td><td>纸白</td><td>曜黑</td></tr><tr><td><code>light</code></td><td>亮色</td><td>纸白</td><td>曜黑</td></tr><tr><td><code>dark</code></td><td>暗色</td><td>纸白</td><td>曜黑（看到的颜色不变）</td></tr>
+<tr><td><code>slate</code> <code>graphite</code> <code>warm</code> <code>pine</code> <code>plum</code></td><td>暗色</td><td>纸白</td><td>对应那套（看到的颜色不变）</td></tr>
 </table></div>
-<p style="margin-top:10px"><code>appearance</code> 以后只存 <code>system|light|dark</code>，配色另存 <code>dark-scheme</code>。任何旧值升级后看到的颜色都不变；退回旧版本时，明暗读得懂，配色回到近黑。</p>
+<p style="margin-top:10px"><code>appearance</code> 以后只存 <code>system|light|dark</code>；两组的选择存在 <code>theme-light</code>、<code>theme-dark</code>，内容是主题 id 字符串，不是枚举序号，这样以后用户主题不用再迁移一次。退回旧版本时，明暗读得懂，主题回到默认。</p>
 
-<h2>实现范围</h2>
+<h2>这次要做的范围</h2>
 <ul>
-<li><code>mooring-core/src/terminal.rs</code>：<code>Scheme::Dark</code> 的显示名改为曜黑，内部名不动，不影响终端颜色和 OSC 回报。</li>
-<li><code>ui/appearance.rs</code>：<code>Appearance</code> 拆成明暗和配色，负责迁移和判定；保留测试并补迁移、跟随系统两组。</li>
+<li><code>mooring-core/src/terminal.rs</code>：<code>Scheme::Dark</code>、<code>Scheme::Light</code> 的显示名改为曜黑、纸白，内部名不动，不影响终端颜色和 OSC 回报。</li>
+<li><code>ui/appearance.rs</code>：<code>Appearance</code> 拆成明暗和两组主题，负责迁移和判定；保留测试并补迁移、跟随系统两组。</li>
 <li><code>workbench/settings.rs</code>：主题卡片重画，预览小图改取真实颜色，搜索词更新。</li>
-<li><code>main.rs</code>：菜单分两组，<code>ChooseAppearance</code> 随之拆开。<code>settings_evidence.rs</code>：<code>themes</code> 场景走新结构，加跟随系统和亮色模式的截图。</li>
+<li><code>main.rs</code>：菜单分三组，<code>ChooseAppearance</code> 随之拆开。<code>settings_evidence.rs</code>：<code>themes</code> 场景走新结构，加跟随系统和亮色模式的截图。</li>
 </ul>
+
+<h2>Warp 怎么做</h2>
+<p class="sub">依据是 <a href="https://github.com/warpdotdev/warp">Warp 客户端源码</a>（主体 AGPL，这里只参考设计，不搬代码）、<a href="https://docs.warp.dev/terminal/appearance/custom-themes">自定义主题文档</a>、<a href="https://docs.warp.dev/terminal/appearance/themes">主题选择文档</a>和<a href="https://github.com/warpdotdev/themes">社区主题仓库</a>。</p>
+<div class="wrap"><table>
+<tr><th>环节</th><th>Warp 的做法</th><th>Mooring 怎么办</th></tr>
+<tr><td>设置模型</td><td>三个值：当前主题、是否跟随系统、亮暗各一个主题（<code>app/src/settings/theme.rs</code>）</td><td><b>学，</b>方向 A 因此改成亮暗各记一套</td></tr>
+<tr><td>主题文件</td><td><code>~/.warp/themes/*.yaml</code>：名字、背景、前景、强调色、可选光标、明暗、16 色 ANSI</td><td><b>学思路，</b>字段更少，用 JSON，和插件格式一致</td></tr>
+<tr><td>界面其他颜色</td><td>由这几个颜色推导：<code>surface_1..3</code>、<code>outline</code>、各级文字色都是函数</td><td><b>已有，</b><code>Palette::new</code> 就是从 <code>bg</code>、<code>fg</code> 推导</td></tr>
+<tr><td>强调色</td><td>每套主题一个，可以是彩色或渐变</td><td><b>不学，</b>Mooring 的彩色留给状态；状态色继续由 <code>colors.json</code> 管</td></tr>
+<tr><td>预览</td><td>选择时先设临时主题，确认才保存，取消就恢复（<code>set_transient_theme</code>）</td><td><b>学</b></td></tr>
+<tr><td>从图片生成</td><td>取主色 5 个（Lab 空间 k-means），用户选背景；前景黑白二选一；强调色取色差最大的；ANSI 用固定预设；背景图透明度 30</td><td><b>以后再看</b></td></tr>
+<tr><td>编辑</td><td>应用内只有从图片生成；调色要手写 YAML，文档写应用内创建和分享尚未提供</td><td><b>做得比它多，</b>见下面的调整器和 Agent 写主题</td></tr>
+<tr><td>分发</td><td>独立的社区 GitHub 仓库，手动放进目录</td><td><b>走插件市场，</b>新增只含数据的主题类型</td></tr>
+<tr><td>出错兜底</td><td>主题找不到就回默认暗色</td><td><b>学，</b>并在设置里报出哪个文件有问题</td></tr>
+<tr><td>例外</td><td>自家旗舰主题 Phenomenon 另有一套专用颜色，不走公开格式（<code>phenomenon.rs</code>）</td><td><b>警惕，</b>曜黑的侧栏 <code>#0c0c0f</code> 也是这种特例，开放前要收进推导规则或单独说明</td></tr>
+</table></div>
+<p style="margin-top:10px" class="sub">文档和代码有出入：文档写背景图只支持 JPEG，生成器的代码提示写的是 .png、.jpg。这里以代码为准，没有实际跑过 Warp。</p>
+
+<h2>试一下：调两三个颜色够不够</h2>
+<p>下面用和 Mooring 相同的混色规则，由背景和前景推导整个窗口。明暗按背景亮度自动判断，不用另写字段，也就不会写错。</p>
+<div id="editor" style="display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:16px;margin-top:12px">
+<div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px">
+<label class="field">背景 <input type="color" id="e-bg" value="#0f1c2e"></label>
+<label class="field">前景 <input type="color" id="e-fg" value="#d5dfef"></label>
+<label class="field">光标 <input type="color" id="e-cur" value="#2f81f7"></label>
+<p id="e-read" style="margin:10px 0 8px;font-size:13px"></p>
+<pre id="e-json" style="margin:0;font:12px/1.5 ui-monospace,Menlo,monospace;background:#e0ded7;padding:8px;border-radius:5px;overflow-x:auto"></pre>
+</div>
+<div id="e-win" style="border-radius:8px;overflow:hidden;display:flex;min-height:230px;font-size:13px"></div>
+</div>
+
+<h2>开放给用户的路线</h2>
+<div class="wrap"><table>
+<tr><th>阶段</th><th>用户得到什么</th><th>要动什么</th><th>放弃或停下的条件</th></tr>
+<tr><td><b>0 现在</b></td><td>方向 A</td><td>上面的范围。主题存 id 字符串</td><td>无</td></tr>
+<tr><td><b>1 地基和主题文件</b></td><td>放一个 JSON 进 <code>~/.config/mooring/themes/</code>，几秒内出现在选择器里；能让 Agent 写一套（<code>mooring --skill</code> 加说明）</td><td>颜色从编译时的固定表改成运行时生成：<code>Scheme</code> 枚举、<code>PALETTES</code>、<code>AtomicU8</code>；协议 <code>Request::Scheme</code> 改为传颜色值；ANSI 可选</td><td>如果切换主题时的重绘或每帧开销用 CPU 探针量出明显上升，先修再往下做</td></tr>
+<tr><td><b>2 应用内调整</b></td><td>「复制并调整」任何主题：背景、前景、光标，实时预览，确认才保存；对比度不足时提示但不拦</td><td>设置页加调整器，临时主题机制</td><td>如果阶段 1 上线后几乎没人建主题，就不做</td></tr>
+<tr><td><b>3 分享</b></td><td>市场里装主题，装完可以马上试</td><td>插件新增 <code>themes</code> 类型，只含数据，不跑命令；升 <code>LEVEL</code></td><td>同上</td></tr>
+<tr><td><b>4 图片和背景图</b></td><td>从图片取色；终端背后放图</td><td>取色便宜；背景图要改终端绘制和透明度</td><td>背景图若让终端 CPU 明显上升，或状态色和文字读不清，只做取色</td></tr>
+</table></div>
+<p style="margin-top:10px">主题文件的样子，只有 <code>bg</code> 和 <code>fg</code> 必填；名字不写就用文件名，ANSI 不写就按明暗用默认：</p>
+<pre style="background:#e0ded7;padding:10px 12px;border-radius:6px;font:12.5px/1.6 ui-monospace,Menlo,monospace;overflow-x:auto;margin:0">{
+  "name": "深海",
+  "bg": "#0f1c2e",
+  "fg": "#d5dfef",
+  "cursor": "#2f81f7",
+  "ansi": { "red": "#e5534b", "bright_red": "#ff7b72" }
+}</pre>
 
 <h2>验收和放弃条件</h2>
 <ul>
 <li>每种旧配置升级后，窗口截图和升级前逐像素一致。</li>
-<li>每套配色的预览小图和实际窗口的明暗层次一致：侧栏暗、主区亮。</li>
-<li>切 macOS 深浅色时，跟随系统模式换到选中的配色，不再固定近黑。</li>
-<li><b>放弃条件：</b>做出来后，如果「暗色」和「曜黑」的关系仍要解释才看得懂，或者亮色模式下配色区仍然让人迷惑，就退回方向 C。</li>
+<li>每套主题的预览小图和实际窗口的明暗层次一致：侧栏暗、主区亮。</li>
+<li>切 macOS 深浅色时，跟随系统模式换到对应组选中的主题，不再固定近黑。</li>
+<li><b>放弃条件：</b>做出来后，如果「暗色」和「曜黑」的关系仍要解释才看得懂，就重新设计命名。方向 C 只在确定不开放自定义主题时才考虑。</li>
 </ul>
 
 <h2>决定</h2>
-<p><b>待验证</b>：推荐方向 A，等你选定后实现。</p>
+<ul><li><b>待验证：</b>现在实现修订后的方向 A，等你确认。</li><li><b>采用：</b>Warp 的亮暗两组模型、由少数颜色推导界面、先预览后保存。</li><li><b>否定：</b>每套主题一个彩色强调色，彩色留给状态。</li><li><b>待验证：</b>阶段 2 到 4 是否值得做，看阶段 1 的实际使用。</li></ul>
 </main>
 <script>
 const S={ink:['曜黑',0xd4d4d8,0x0e0e11],slate:['蓝灰',0xcad3e1,0x21252c],graphite:['石墨',0xd2d2d6,0x232326],warm:['暖灰',0xddd5c8,0x262320],pine:['松绿',0xcbd9d2,0x1d2624],plum:['紫灰',0xd6cfe2,0x25222c]},LIGHT=['亮色',0x1f1e1c,0xffffff];
-const DIRS={A:['A 两层分开（推荐）','明暗一行，配色六张。跟随系统也能用任何配色。'],B:['B 一层平铺','亮色加六套共七张，「跟随 macOS」是一个开关。层次少，但开关开着时要同时看懂两张标记。'],C:['C 只挪位置（最小改动）','「暗色」改名曜黑挪到下排。改动最小，但跟随系统仍只能用曜黑。']};
-const st=Object.assign({d:'A',mode:'dark',pal:'ink',mac:'dark',flat:'ink',follow:false},Object.fromEntries(new URLSearchParams(location.hash.slice(1))));
+const DIRS={A:['A 两层分开（推荐）','明暗一行，下面亮暗各记一套主题。跟随系统也能用任何主题，自定义主题直接加进对应的组。'],B:['B 一层平铺','亮色加六套共七张，「跟随 macOS」是一个开关。层次少，但开关开着时要同时看懂两张标记。'],C:['C 只挪位置（最小改动）','「暗色」改名曜黑挪到下排。改动最小，但跟随系统仍只能用曜黑，开放自定义时要重做。']};
+const st=Object.assign({d:'A',mode:'dark',pal:'ink',lightpal:'light',mac:'dark',flat:'ink',follow:false},Object.fromEntries(new URLSearchParams(location.hash.slice(1))));
 st.follow=st.follow===true||st.follow==='true';
 const mix=(a,b,s)=>[16,8,0].reduce((o,k)=>o|(Math.floor((((a>>k)&255)*(1000-s)+((b>>k)&255)*s+500)/1000)<<k),0),hex=n=>'#'+n.toString(16).padStart(6,'0');
 // Same layers as Theme: the sidebar a step below the pane, except on light.
@@ -141,24 +190,36 @@ function effective(){if(st.d==='A')return st.mode==='light'||(st.mode==='system'
 if(st.d==='B')return st.flat==='light'||(st.follow&&st.mac==='light')?'light':st.flat;
 return st.flat==='system'?(st.mac==='light'?'light':'ink'):st.flat}
 const tile=(id,attr,name,on,tag='')=>`<button class="tile" role="radio" aria-checked="${on}" ${attr}="${id}">${id==='system'?`<div class="pic">${body('light')}${body('ink')}</div>`:sketch(id)}<div class="name"><span class="radio"></span>${name}${tag?`<span class="tag">${tag}</span>`:''}</div></button>`;
-function renderA(){const name=S[st.pal][0];let hint='';
-if(st.mode==='light')hint='亮色没有配色；点一套会切到暗色。';
-else if(st.mode==='system')hint=st.mac==='light'?`macOS 转深色时用「${name}」。`:`macOS 现在是深色，正在用「${name}」。`;
-return `<div class="box"><div class="row"><div><b>明暗</b></div><div class="seg" role="radiogroup" aria-label="明暗">${[['system','跟随系统'],['light','亮色'],['dark','暗色']].map(([k,n])=>`<button role="radio" aria-checked="${st.mode===k}" data-mode="${k}">${n}</button>`).join('')}</div></div><div class="divider"></div><div class="row" style="margin-bottom:10px"><b>深色配色</b></div><div class="grid g3" role="radiogroup" aria-label="深色配色">${Object.keys(S).map(k=>tile(k,'data-pal',S[k][0],st.pal===k)).join('')}</div>${hint?`<p class="hint">${hint}</p>`:''}</div>`}
+function renderA(){const sys=st.mode==='system',lit=st.mac==='light',name=S[st.pal][0];
+const group=(title,tag,inner)=>`<div class="row" style="margin-bottom:10px"><b>${title}${tag?` <span class="tag">${tag}</span>`:''}</b></div>${inner}`;
+const lightG=group('亮色主题',sys&&lit?'正在用':'',`<div class="grid g3" role="radiogroup" aria-label="亮色主题">${tile('light','data-lightpal','纸白',true)}</div>`);
+const darkG=group('暗色主题',sys&&!lit?'正在用':'',`<div class="grid g3" role="radiogroup" aria-label="暗色主题">${Object.keys(S).map(k=>tile(k,'data-pal',S[k][0],st.pal===k)).join('')}</div>`);
+const hint=sys?(lit?`macOS 转深色时用「${name}」。`:`macOS 转浅色时用「纸白」。`):'';
+return `<div class="box"><div class="row"><div><b>明暗</b></div><div class="seg" role="radiogroup" aria-label="明暗">${[['system','跟随系统'],['light','亮色'],['dark','暗色']].map(([k,n])=>`<button role="radio" aria-checked="${st.mode===k}" data-mode="${k}">${n}</button>`).join('')}</div></div><div class="divider"></div>${st.mode==='light'?lightG:st.mode==='dark'?darkG:lightG+'<div style="height:14px"></div>'+darkG}${hint?`<p class="hint">${hint}</p>`:''}</div>`}
 function renderB(){const on=st.follow,f=st.flat==='light'?'ink':st.flat;return `<div class="box"><div class="row" style="margin-bottom:14px"><div><b>跟随 macOS 明暗</b><small>打开后，macOS 浅色时用亮色，深色时用选中的配色</small></div><button class="switch" role="switch" aria-checked="${on}" aria-label="跟随 macOS 明暗" data-follow="1"><i></i></button></div><div class="grid g4" role="radiogroup" aria-label="主题">${tile('light','data-flat','亮色',!on&&st.flat==='light',on?'浅色时':'')}${Object.keys(S).map(k=>tile(k,'data-flat',S[k][0],on?f===k:st.flat===k,on&&f===k?'深色时':'')).join('')}</div></div>`}
 function renderC(){return `<div class="box"><div class="grid g2" role="radiogroup" aria-label="主题" style="margin-bottom:14px">${tile('system','data-flat','跟随系统',st.flat==='system')}${tile('light','data-flat','亮色',st.flat==='light')}</div><div class="grid g6">${Object.keys(S).map(k=>tile(k,'data-flat',S[k][0],st.flat===k)).join('')}</div><p class="hint">跟随系统时，深色固定用曜黑。</p></div>`}
 function vars(el,key){const l=layers(key),{fg,bg,light}=l,set=(k,v)=>el.style.setProperty(k,hex(v));set('--app',l.app);set('--panel',light?bg:mix(bg,fg,18));set('--card2',light?mix(bg,fg,18):mix(bg,fg,30));set('--cardline',mix(bg,fg,light?140:100));set('--fg',fg);set('--muted',mix(bg,fg,light?640:580));set('--ctl',mix(bg,fg,light?70:70));set('--accent',light?mix(bg,fg,760):0xeeeeef<<0)}
 function render(){const key=effective();vars(document.documentElement,key);
 document.getElementById('dirs').innerHTML=Object.entries(DIRS).map(([k,[t,d]])=>`<button aria-pressed="${st.d===k}" data-d="${k}"><b>${t}</b><span>${d}</span></button>`).join('');
 document.querySelectorAll('[data-mac]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mac===st.mac));
-document.getElementById('now').textContent='窗口现在显示：'+(key==='light'?'亮色':S[key][0]);
+document.getElementById('now').textContent='窗口现在显示：'+(key==='light'?'纸白':S[key][0]);
 document.getElementById('ui').innerHTML='<div class="sec">主题</div>'+({A:renderA,B:renderB,C:renderC})[st.d]();
 const stage2=document.getElementById('stage2');stage2.style.background=hex(layers('ink').app);vars(stage2,'ink');
 const keep={...st};st.d='A';st.mode='dark';st.pal='ink';document.getElementById('ui2').innerHTML=renderA().replace(/data-(mode|pal)=/g,'data-x-$1=').replace(/<button/g,'<button tabindex="-1"');Object.assign(st,keep)}
 document.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const d=t.dataset;
 if(d.d){st.d=d.d;if(d.d==='B'&&st.flat==='system'){st.flat='ink';st.follow=true}}
 else if(d.mac)st.mac=d.mac;else if(d.mode)st.mode=d.mode;
-else if(d.pal){st.pal=d.pal;if(st.mode==='light')st.mode='dark'}
+else if(d.pal)st.pal=d.pal;else if(d.lightpal)st.lightpal=d.lightpal;
 else if(d.flat)st.flat=d.flat;else if(d.follow){st.follow=!st.follow;if(st.follow&&st.flat==='light')st.flat='ink'}else return;render()});
 render();
+// The tuner: same shares as Palette::new, the mode read from the ground's luminance.
+const num=h=>parseInt(h.slice(1),16),lum=n=>[16,8,0].map((k,i)=>{const c=((n>>k)&255)/255;return (c<=.03928?c/12.92:((c+.055)/1.055)**2.4)*[.2126,.7152,.0722][i]}).reduce((a,b)=>a+b),ratio=(a,b)=>{const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p);return (x+.05)/(y+.05)};
+function tune(){const bg=num(document.getElementById('e-bg').value),fg=num(document.getElementById('e-fg').value),cur=document.getElementById('e-cur').value,light=lum(bg)>.4,r=ratio(bg,fg);
+const by=(l,d)=>light?l:d,side=light?mix(bg,fg,45):mix(bg,0,330),app=mix(bg,0,by(70,430)),line=mix(bg,fg,by(170,90)),muted=mix(bg,fg,by(640,420)),sec=mix(bg,fg,by(720,580));
+const rows=['修复登录问题','整理发布说明','跑一遍回归'].map((t,i)=>`<div style="padding:5px 0;color:${i?hex(sec):hex(fg)}">${t}</div>`).join('');
+document.getElementById('e-win').style.background=hex(app);
+document.getElementById('e-win').innerHTML=`<div style="width:34%;min-width:110px;background:${hex(side)};padding:12px;border-right:1px solid ${hex(line)}"><div style="font-size:11px;font-weight:600;letter-spacing:2px;color:${hex(fg)};margin-bottom:10px">MOORING</div>${rows}<div style="color:${hex(muted)};font-size:12px;margin-top:10px">⌘J 下一个要你的</div></div><div style="flex:1;margin:8px;background:${hex(bg)};border:1px solid ${hex(line)};border-radius:6px;padding:12px;font-family:ui-monospace,Menlo,monospace;color:${hex(fg)};min-width:0"><div style="color:${hex(muted)};margin-bottom:8px">终端 /…/mooring</div>$ cargo test<br><span style="color:${hex(sec)}">running 214 tests</span><br>$ <span style="display:inline-block;width:8px;height:15px;background:${cur};vertical-align:-2px"></span></div>`;
+const ok=r>=4.5;document.getElementById('e-read').innerHTML=`判定为${light?'亮色':'暗色'}主题，对比度 <b>${r.toFixed(1)}:1</b>${ok?'':'，<b style="color:#a33a1a">低于 4.5:1，文字可能看不清</b>'}`;
+document.getElementById('e-json').textContent=JSON.stringify({name:'我的主题',bg:hex(bg),fg:hex(fg),cursor:cur},null,2)}
+document.getElementById('editor').addEventListener('input',tune);tune();
 </script></body></html>
