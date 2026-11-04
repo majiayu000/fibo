@@ -58,7 +58,17 @@ impl Workbench {
                 .collect();
             let shells = view.terminals.len() - sessions.len();
             let (note, bad) = match &view.link {
-                Link::Online => (format!("{} 个会话", sessions.len()), false),
+                // A host older than this window still lists; say what it cannot do yet.
+                Link::Online => match remote.slot().lock().unwrap().as_ref() {
+                    Some(l) if !l.typing => {
+                        (format!("{} 个会话 · 旧版，只能看", sessions.len()), false)
+                    }
+                    Some(l) if !l.managing => (
+                        format!("{} 个会话 · 旧版，不能开关终端", sessions.len()),
+                        false,
+                    ),
+                    _ => (format!("{} 个会话", sessions.len()), false),
+                },
                 Link::Connecting => ("连接中…".to_owned(), false),
                 Link::Offline(why) => (format!("没连上：{why}"), true),
             };
