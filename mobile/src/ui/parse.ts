@@ -161,3 +161,10 @@ export function trail(path: string, home: string): { label: string; path: string
   }
   return out;
 }
+
+/** What a computer's part of the quota page shows, given what is known about it. */
+export function quotaView(online: boolean, asks: boolean, saved: unknown[] | null) {
+  if (!online) return saved ? 'gone' : 'never';
+  if (!asks) return 'unsupported';
+  return saved ? 'live' : 'loading';
+}

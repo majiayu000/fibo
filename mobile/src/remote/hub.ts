@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { forgetMachine, loadMachines, machineId, saveMachine } from '../store/machines';
+import { forgetQuota } from '../store/quota';
 import { HEARTBEAT_MS, Remote, type RemoteError } from './client';
 import { named } from './named';
 import { closeOutcome } from './close';
@@ -259,6 +260,7 @@ export async function forget(id: string) {
   if (r?.timer) clearTimeout(r.timer);
   retry.delete(id);
   await forgetMachine(id);
+  await forgetQuota(id);
   state = { ...state, machines: state.machines.filter((m) => m.id !== id) };
   listeners.forEach((l) => l());
 }

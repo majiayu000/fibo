@@ -1,15 +1,14 @@
-// How much of each Agent's limits is used, as the computer last read it: one card per
-// Agent, a striped gauge per window, orange past 80%.
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { NOT_YET, remote, supports, useHub } from '@/remote/hub';
+// How much of each Agent's limits is used, computer by computer and never added up: two
+// computers may share an account or not, and only each one's own readings say anything.
+// One card per Agent, a striped gauge per window, orange past 80%.
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { type Machine, NOT_YET, remote, supports, useHub } from '@/remote/hub';
+import { type QuotaReading as Reading, quotaStore } from '@/store/quota';
 import { Nav, Notice, useBottom } from '@/ui/kit';
-import { level, resetText, windowName } from '@/ui/parse';
+import { level, quotaView, resetText, windowName } from '@/ui/parse';
 import { agentName } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
-
-type Window = { minutes: number; used: number; resets_at: number };
-type Reading = { agent: string; plan?: string; at: number; windows: Window[] };
 
 const STRIPES = 20;
 
@@ -52,26 +51,23 @@ function AgentCard({ r, t }: { r: Reading; t: Theme }) {
   );
 }
 
-export default function Quota() {
-  const t = useTheme();
-  const bottom = useBottom();
-  const { machines } = useHub();
-  const able = machines.filter((m) => supports(m, 'quota'));
-  const [pick, setPick] = useState<string | null>(null);
-  const m = able.find((x) => x.id === pick) ?? able[0];
-  const [data, setData] = useState<{ machine: string; agents: Reading[] } | null>(null);
+/** One computer's readings: live while it is on, what it last said once it is off. */
+function MachineQuota({ m, named, t }: { m: Machine; named: boolean; t: Theme }) {
+  const store = quotaStore(m.id);
+  const saved = useSyncExternalStore(store.subscribe, store.get).agents;
   const [error, setError] = useState('');
+  const able = supports(m, 'quota');
 
   useEffect(() => {
-    const r = m ? remote(m.id) : null;
-    if (!r || !m) return;
+    const r = able ? remote(m.id) : null;
+    if (!r) return;
     let live = true;
     const load = () =>
       r
         .request('quota', {})
         .then((q) => {
           if (!live) return;
-          setData({ machine: m.id, agents: q.agents ?? [] });
+          store.set({ agents: q.agents ?? [] });
           setError('');
         })
         .catch((e) => live && setError((e as Error).message));
@@ -81,40 +77,48 @@ export default function Quota() {
       live = false;
       clearInterval(timer);
     };
-  }, [m?.id]);
+  }, [able, m.id, store]);
 
-  const agents = data?.machine === m?.id ? data?.agents : undefined;
-  const newest = agents?.reduce((n, a) => Math.max(n, a.at), 0);
-  const online = machines.some((x) => x.status === 'online');
+  const view = quotaView(m.status === 'online', m.ops.includes('quota'), saved);
+  const newest = saved?.reduce((n, a) => Math.max(n, a.at), 0);
+  const when = newest ? ago(newest) : '';
+  const line = view === 'gone' ? `断开前${when ? ` · ${when}的读数` : ''}` : when ? `${when}更新` : '';
+
+  return (
+    <View style={{ gap: 14 }}>
+      {named && (
+        <View style={s.row}>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: t.text }}>{m.name}</Text>
+          {!!line && <Text style={{ fontSize: 13, color: t.dim }}>{line}</Text>}
+        </View>
+      )}
+      {!named && view === 'gone' && <Text style={{ fontSize: 13, color: t.dim }}>{line}</Text>}
+      {view === 'unsupported' && <Notice text={NOT_YET} />}
+      {view === 'never' && <Notice text="电脑没连上，也还没读到过" />}
+      {view !== 'never' && view !== 'unsupported' && !!error && <Notice text={error} />}
+      {view === 'loading' && !error && <ActivityIndicator style={{ marginTop: 24 }} />}
+      {(view === 'live' || view === 'gone') && saved?.length === 0 && <Notice text="这一周电脑上的 Agent 都没报过额度" />}
+      {(view === 'live' || view === 'gone') && saved?.map((a) => <AgentCard key={a.agent} r={a} t={t} />)}
+    </View>
+  );
+}
+
+export default function Quota() {
+  const t = useTheme();
+  const bottom = useBottom();
+  const { machines } = useHub();
+  const named = machines.length > 1;
+  const only = named ? undefined : machines[0];
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Nav big title="额度" sub={m ? `来自 ${m.name}${newest ? ` · ${ago(newest)}更新` : ''}` : undefined} />
-      {able.length > 1 && (
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 18, paddingBottom: 6 }}>
-          {able.map((x) => (
-            <Pressable key={x.id} onPress={() => setPick(x.id)} style={[s.chip, { borderColor: x.id === m?.id ? t.text : t.line }]}>
-              <Text style={{ fontSize: 13, color: t.text }}>{x.name}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-      {!online ? (
-        <Notice text="电脑没连上" />
-      ) : !m ? (
-        <Notice text={NOT_YET} />
-      ) : error ? (
-        <Notice text={error} />
-      ) : !agents ? (
-        <ActivityIndicator style={{ marginTop: 40 }} />
-      ) : (
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 14, paddingBottom: bottom + 16 }}>
-          {agents.length === 0 && <Notice text="这一周电脑上的 Agent 都没报过额度" />}
-          {agents.map((a) => (
-            <AgentCard key={a.agent} r={a} t={t} />
-          ))}
-        </ScrollView>
-      )}
+      <Nav big title="额度" sub={only ? `来自 ${only.name}` : undefined} />
+      {machines.length === 0 && <Notice text="还没有配对电脑" />}
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 24, paddingBottom: bottom + 24 }}>
+        {machines.map((m) => (
+          <MachineQuota key={m.id} m={m} named={named} t={t} />
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -124,5 +128,4 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
   gauge: { flexDirection: 'row', gap: 2, height: 10 },
   stripe: { flex: 1, borderRadius: 1 },
-  chip: { height: 32, borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, justifyContent: 'center' },
 });

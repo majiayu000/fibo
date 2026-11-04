@@ -2,7 +2,7 @@
 // options, a patch's lines, quota words, the relay's place, breadcrumbs, dangerous commands.
 import { describe, expect, test } from 'bun:test';
 import { Close, closeOutcome } from '../src/remote/close';
-import { choices, dangerous, diffLines, level, questionText, readAsk, relayPlace, resetText, trail, windowName } from '../src/ui/parse';
+import { choices, dangerous, diffLines, level, questionText, quotaView, readAsk, relayPlace, resetText, trail, windowName } from '../src/ui/parse';
 
 const BOX = `╭──────────╮
 │ Bash command                    │
@@ -94,4 +94,19 @@ test('a relay too old says so whatever its close code', () => {
   const o = closeOutcome(Close.MACHINE_GONE, '中继版本太旧（协议 2，这台 Mooring 要 3 以上）：请升级中继');
   expect(o.text).toContain('中继版本太旧');
   expect(closeOutcome(Close.MACHINE_GONE).text).toContain('不在线');
+});
+
+describe('quotaView', () => {
+  test('an offline computer shows what it last said, or says it never did', () => {
+    expect(quotaView(false, false, [{}])).toBe('gone');
+    expect(quotaView(false, false, [])).toBe('gone');
+    expect(quotaView(false, false, null)).toBe('never');
+  });
+  test('an online computer that cannot answer says so even with an old reading', () => {
+    expect(quotaView(true, false, [{}])).toBe('unsupported');
+  });
+  test('an online computer shows readings, or waits for the first', () => {
+    expect(quotaView(true, true, [{}])).toBe('live');
+    expect(quotaView(true, true, null)).toBe('loading');
+  });
 });

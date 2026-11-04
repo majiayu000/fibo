@@ -8,7 +8,7 @@ import { cardTitle } from '@/ui/format';
 import { Icon, SpaceDot } from '@/ui/icons';
 import { Nav, Notice, mono, useBottom } from '@/ui/kit';
 import { spaceName } from '@/ui/row';
-import { agentName, needsYou, statusKey, statusWord, tilde } from '@/ui/status';
+import { agentName, needsYou, statusColor, statusKey, statusWord, tilde } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
 
 type Column = 'you' | 'run' | 'review' | 'todo' | 'done' | 'stale';
@@ -127,7 +127,7 @@ export default function Board() {
                     <Text style={{ fontSize: 13, color: t.dim }}>{c.updated ? ago(c.updated) : ''}</Text>
                   </View>
                   {col === 'you' ? (
-                    <Text numberOfLines={1} style={{ fontSize: 14, color: t.wait }}>
+                    <Text numberOfLines={1} style={{ fontSize: 14, color: statusColor(c, t) }}>
                       {c.approval ? '等你审批' : (c.waiting || statusWord(c)).split('\n')[0]}
                     </Text>
                   ) : (
