@@ -1,11 +1,13 @@
 //! 设置 › 插件: what is installed (switch, update, uninstall, and per-item choices such as
 //! each right-click action), and what can be installed: the catalog shipped with the app
 //! and, when asked, a remote index. Changes apply at once (`plugin::reload` here, then
-//! `SettingsAction::PluginsChanged` for the workbench and the host); only Agent plugins
-//! wait for the host's next start.
+//! `SettingsAction::PluginsChanged` for the workbench and the host).
 use super::*;
+use mooring_core::effect::Complete;
 use mooring_core::market::{self, Offer};
 use mooring_core::plugin::{self, Kind};
+
+mod actions;
 
 /// The catalog as the page last read it.
 #[derive(Default)]
@@ -16,12 +18,16 @@ pub(in crate::workbench) struct Market {
     /// The remote index once fetched: its offers or why it failed.
     remote: Option<Result<Vec<Offer>, String>>,
     fetching: bool,
-    /// The offer whose install waits for「确认安装」: it may run commands.
-    confirm: Option<String>,
+    /// A package fetched and checked, waiting for「确认安装」: what it would add to what
+    /// runs on this computer comes from the package itself.
+    confirm: Option<market::Prepared>,
     /// The plugin being installed, updated or removed.
     working: Option<String>,
     /// What the last install, update or removal did.
     done: Option<Result<String, String>>,
+    /// A plugin that would not go because its teardown failed: (id, name, whether removing
+    /// or only turning off). You may overrule that; it may have left something behind.
+    stuck: Option<(String, String, bool)>,
     /// A plugin setting being typed: plugin id, key, the field and its Enter/Esc events.
     editing: Option<(
         String,
@@ -67,6 +73,14 @@ fn short_name(name: &str) -> String {
     name.strip_prefix("完成动画：").unwrap_or(name).to_owned()
 }
 
+/// 试播: plays an animation on the shown pane without marking anything. Shipped animation
+/// plugins are named `complete-<style>`, so they can be tried before they are installed.
+fn try_button(key: &str, complete: Complete, cx: &Context<SettingsView>) -> impl IntoElement {
+    secondary(format!("complete-try-{key}"), "试播").on_click(
+        cx.listener(move |_, _, _, cx| cx.emit(SettingsAction::PreviewComplete(Some(complete)))),
+    )
+}
+
 impl SettingsView {
     /// Reads the plugins again and tells the workbench and the host.
     pub(super) fn plugins_changed(&mut self, cx: &mut Context<Self>) {
@@ -91,28 +105,6 @@ impl SettingsView {
         })
         .detach();
     }
-    fn install_offer(&mut self, offer: Offer, cx: &mut Context<Self>) {
-        let id = offer.entry.id.clone();
-        self.market.confirm = None;
-        self.market.working = Some(id.clone());
-        self.market.done = None;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let name = offer.entry.name.clone();
-            let version = offer.entry.version.clone();
-            let result = cx.background_spawn(async move { offer.install() }).await;
-            let _ = this.update(cx, |this, cx| {
-                this.market.working = None;
-                this.market.done = Some(
-                    result
-                        .map(|_| format!("装好了「{name}」v{version}，已经生效"))
-                        .map_err(|e| format!("没装上「{name}」：{e}")),
-                );
-                this.plugins_changed(cx);
-            });
-        })
-        .detach();
-    }
     /// One plugin setting under its plugin.
     fn option_row(
         &self,
@@ -122,7 +114,12 @@ impl SettingsView {
         cx: &Context<Self>,
     ) -> gpui::Div {
         use mooring_core::plugin_context::{Opt, OptKind};
-        let note = o.description.clone().unwrap_or_default();
+        let note = if o.secret {
+            let said = o.description.as_deref().unwrap_or_default();
+            format!("{said}（存在钥匙串里，不写进文件）")
+        } else {
+            o.description.clone().unwrap_or_default()
+        };
         let title = format!("　└ {}", o.title);
         let (pid, key) = (id.to_owned(), o.key.clone());
         let save = move |this: &mut Self, value: serde_json::Value, cx: &mut Context<Self>| {
@@ -198,7 +195,16 @@ impl SettingsView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let field = cx.new(|cx| crate::ui::field::Field::new(&opt.title, current, cx).compact());
+        // A secret is never shown back: you can only type a new one.
+        let (start, masked) = if opt.secret {
+            ("", true)
+        } else {
+            (current, false)
+        };
+        let field = cx.new(|cx| {
+            let field = crate::ui::field::Field::new(&opt.title, start, cx).compact();
+            if masked { field.masked() } else { field }
+        });
         window.focus(&field.focus_handle(cx), cx);
         let key = opt.key.clone();
         let opt = opt.clone();
@@ -222,46 +228,6 @@ impl SettingsView {
         self.market.editing = Some((id.to_owned(), key, field, events));
         cx.notify();
     }
-    /// Off the UI thread: the plugin's `teardown` runs first and may take seconds.
-    fn uninstall(&mut self, id: String, name: String, cx: &mut Context<Self>) {
-        self.market.working = Some(id.clone());
-        self.market.done = None;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_spawn(async move { plugin::uninstall(&id) })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.market.working = None;
-                this.market.done = Some(
-                    result
-                        .map(|()| format!("卸载了「{name}」"))
-                        .map_err(|e| format!("没卸掉「{name}」：{e}")),
-                );
-                this.plugins_changed(cx);
-            });
-        })
-        .detach();
-    }
-    /// Off the UI thread, like `uninstall`: turning one on or off runs its setup or teardown.
-    fn switch_plugin(&mut self, id: String, on: bool, cx: &mut Context<Self>) {
-        self.market.working = Some(id.clone());
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_spawn(async move { plugin::set_enabled(&id, on) })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.market.working = None;
-                if let Err(e) = result {
-                    this.text_error = Some(format!("没能切换插件：{e}"));
-                }
-                this.plugins_changed(cx);
-            });
-        })
-        .detach();
-    }
-
     /// 完成动画: every animation 标记完成 can play, one row each: the one playing marked
     /// 正在用, the others 用这个, each with 试播; animation plugins not installed yet
     /// offer 安装, which also makes them the one playing.
@@ -271,7 +237,7 @@ impl SettingsView {
         busy: bool,
         cx: &Context<Self>,
     ) -> Vec<gpui::AnyElement> {
-        use mooring_core::effect::{self, Complete, Pick, Style};
+        use mooring_core::effect::{self, Pick, Style};
         let picked = effect::picked();
         let presets = effect::presets();
         // A picked plugin since turned off or removed plays the seal.
@@ -320,11 +286,7 @@ impl SettingsView {
                         .child("● 正在用"),
                 );
             }
-            controls = controls.child(secondary(format!("complete-try-{key}"), "试播").on_click(
-                cx.listener(move |_, _, _, cx| {
-                    cx.emit(SettingsAction::PreviewComplete(Some(complete)))
-                }),
-            ));
+            controls = controls.child(try_button(&key, complete, cx));
             if !on {
                 controls =
                     controls.child(secondary(format!("complete-use-{key}"), "用这个").on_click(
@@ -355,7 +317,7 @@ impl SettingsView {
                     secondary(format!("complete-enable-{}", p.id), "打开并用这个").on_click(
                         cx.listener(move |this, _, _, cx| {
                             if this.market.working.is_none() {
-                                this.switch_plugin(id.clone(), true, cx);
+                                this.switch_plugin(id.clone(), true, false, cx);
                             }
                         }),
                     ),
@@ -375,22 +337,34 @@ impl SettingsView {
                 "未安装 · {}",
                 e.description.as_deref().unwrap_or("装上就换成它")
             );
-            let control = if working {
+            let asked = self.confirming(o, cx);
+            let note = asked.as_ref().map_or(note.clone(), |(n, _)| n.clone());
+            let control = if let Some((_, buttons)) = asked {
+                buttons
+            } else if working {
                 div()
                     .text_size(px(T::SMALL))
                     .text_color(T::color(T::secondary()))
                     .child("正在安装…")
             } else {
                 let offer = o.clone();
-                div().child(
-                    secondary(format!("complete-install-{}", e.id), "安装")
-                        .when(busy, |b| b.opacity(0.5))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.market.working.is_none() {
-                                this.install_offer(offer.clone(), cx);
-                            }
-                        })),
-                )
+                let style = e.id.strip_prefix("complete-").and_then(Style::parse);
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(T::S8))
+                    .when_some(style, |d, s| {
+                        d.child(try_button(&e.id, Complete::of(s), cx))
+                    })
+                    .child(
+                        secondary(format!("complete-install-{}", e.id), "安装")
+                            .when(busy, |b| b.opacity(0.5))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if this.market.working.is_none() {
+                                    this.install_offer(offer.clone(), cx);
+                                }
+                            })),
+                    )
             };
             rows.push(
                 self.row(rows.is_empty(), &title, &note, control)
@@ -444,6 +418,34 @@ impl SettingsView {
                     .into_any_element(),
             );
         }
+        // The teardown failed and it is still running: leave the decision to whoever reads why.
+        if let Some((id, name, removing)) = self.market.stuck.clone() {
+            let verb = if removing {
+                "仍然卸载"
+            } else {
+                "仍然停用"
+            };
+            installed.push(
+                self.row(
+                    installed.is_empty(),
+                    verb,
+                    "它撤回失败了，继续的话，它改过的东西可能会留下来",
+                    secondary(format!("plugin-force-{id}"), verb).on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            if this.market.working.is_some() {
+                                return;
+                            }
+                            if removing {
+                                this.uninstall(id.clone(), name.clone(), true, cx);
+                            } else {
+                                this.switch_plugin(id.clone(), false, true, cx);
+                            }
+                        },
+                    )),
+                )
+                .into_any_element(),
+            );
+        }
         let found = plugin::report();
         if found.is_empty() {
             installed.push(
@@ -463,12 +465,26 @@ impl SettingsView {
                     .dir
                     .file_name()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                // It cannot be turned off or updated, but it can always be taken away.
+                let (dir_name, shown) = (name.clone(), name.clone());
+                let remove = secondary(format!("plugin-remove-broken-{name}"), "移除")
+                    .when(busy, |b| b.opacity(0.5))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if this.market.working.is_none() {
+                            this.uninstall(dir_name.clone(), shown.clone(), false, cx);
+                        }
+                    }));
                 installed.push(
                     self.row(
                         first,
                         &name,
                         f.result.as_ref().err().map_or("", String::as_str),
-                        status(false, "没有加载".into()),
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(T::S8))
+                            .child(status(false, "没有加载".into()))
+                            .child(remove),
                     )
                     .into_any_element(),
                 );
@@ -505,20 +521,27 @@ impl SettingsView {
                 note.push(format!("改了别的程序的文件：{}", p.touches.join("、")));
             }
             note.extend(p.warnings.iter().cloned());
-            if let Some(last) = plugin::config()
+            let runs = plugin::config()
                 .map(|c| mooring_core::plugin_context::runs(&plugin::dir(c), &p.id))
-                .and_then(|runs| runs.last().cloned())
-                .filter(|r| !r.ok && mooring_core::content::now().saturating_sub(r.at) < 7 * 86_400)
+                .unwrap_or_default();
+            let now = mooring_core::content::now();
+            for r in mooring_core::plugin_context::failing(&runs)
+                .into_iter()
+                .filter(|r| now.saturating_sub(r.at) < 7 * 86_400)
             {
                 note.push(format!(
                     "上次运行失败（{}）：{}；终端里 mooring plugins log {} 看全部",
-                    last.what, last.detail, p.id
+                    r.what, r.detail, p.id
                 ));
             }
             let on = p.enabled;
             let (id, name) = (p.id.clone(), p.name.clone());
             let mut controls = div().flex().items_center().gap(px(T::S8));
-            if let Some(u) = update.cloned() {
+            let asked = update.and_then(|u| self.confirming(u, cx));
+            if let Some((question, buttons)) = asked {
+                note.push(question);
+                controls = controls.child(buttons);
+            } else if let Some(u) = update.cloned() {
                 controls = controls.child(
                     secondary(format!("plugin-update-{}", p.id), "更新")
                         .when(busy, |b| b.opacity(0.5))
@@ -540,7 +563,7 @@ impl SettingsView {
                         .when(busy, |b| b.opacity(0.5))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if this.market.working.is_none() {
-                                this.uninstall(id.clone(), name.clone(), cx);
+                                this.uninstall(id.clone(), name.clone(), false, cx);
                             }
                         })),
                 );
@@ -556,7 +579,7 @@ impl SettingsView {
             controls = controls.child(switch(format!("plugin-switch-{}", p.id), on).on_click(
                 cx.listener(move |this, _, _, cx| {
                     if this.market.working.is_none() {
-                        this.switch_plugin(id.clone(), !on, cx);
+                        this.switch_plugin(id.clone(), !on, false, cx);
                     }
                 }),
             ));
@@ -624,7 +647,6 @@ impl SettingsView {
         for o in offers.iter().filter(|o| !have(&o.entry.id)) {
             let e = &o.entry;
             let first = available.is_empty();
-            let confirming = self.market.confirm.as_deref() == Some(e.id.as_str());
             let working = self.market.working.as_deref() == Some(e.id.as_str());
             let mut note = vec![format!(
                 "v{} · {} · {}",
@@ -637,47 +659,16 @@ impl SettingsView {
             }
             let control = if working {
                 div().child(status(true, "正在安装…".into()))
-            } else if confirming {
-                note = vec![format!(
-                    "装上后它会：{}。确认吗？",
-                    e.disclosure().join("；")
-                )];
-                let offer = o.clone();
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(T::S8))
-                    .child(
-                        secondary(format!("plugin-cancel-{}", e.id), "取消").on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.market.confirm = None;
-                                cx.notify();
-                            },
-                        )),
-                    )
-                    .child(
-                        secondary(format!("plugin-confirm-{}", e.id), "确认安装").on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                if this.market.working.is_none() {
-                                    this.install_offer(offer.clone(), cx);
-                                }
-                            }),
-                        ),
-                    )
+            } else if let Some((question, buttons)) = self.confirming(o, cx) {
+                note = vec![question];
+                buttons
             } else {
                 let offer = o.clone();
-                let ask = market::runs_commands(&e.provides);
                 div().child(
                     secondary(format!("plugin-install-{}", e.id), "安装")
                         .when(busy, |b| b.opacity(0.5))
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.market.working.is_some() {
-                                return;
-                            }
-                            if ask {
-                                this.market.confirm = Some(offer.entry.id.clone());
-                                cx.notify();
-                            } else {
+                            if this.market.working.is_none() {
                                 this.install_offer(offer.clone(), cx);
                             }
                         })),
@@ -759,7 +750,7 @@ impl SettingsView {
             format!("这些命令算跑过验证：{t}")
         }));
         detail.extend(report(mooring_core::hook::report(), |t| {
-            format!("会话状态变化时由后台调用：{t}；结果写在后台日志里")
+            format!("会话状态变化时由后台调用：{t}；终端里 mooring plugins log 看运行记录")
         }));
         detail.extend(report(mooring_core::sidebar::report(), |t| {
             format!("左栏顶部多了：{t}")

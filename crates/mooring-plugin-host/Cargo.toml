@@ -9,3 +9,6 @@ publish = false
 # nothing but the memory it is given.
 wasmtime = { version = "50", default-features = false, features = ["cranelift", "runtime", "std", "parallel-compilation"] }
 serde_json.workspace = true
+
+[dev-dependencies]
+wat = "1"

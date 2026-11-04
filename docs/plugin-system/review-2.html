@@ -36,6 +36,23 @@ ol li,ul li{margin:4px 0}
 <p class="lead">2026-11-04 · 基于 main <code>01d9a5b</code>。Claude 和 Codex 各自独立读代码，再把两边的结果合并，高严重度的条目和有分歧的条目都实跑核对过。上一轮的审视和已做的决定见 <a href="index.html">插件机制审视</a>。</p>
 
 <div class="box">
+<h3>实施结果（2026-11-04，已全部做完）</h3>
+<p>你看完后要求 F01–F31 全部做，并且把下面原本定为「不做」的五项也做上：发布者签名、多版本索引、Agent 热重载、公平调度、钥匙串。以下决定以这一节为准。</p>
+<div class="wrap"><table>
+<tr><th>内容</th><th>现在怎样</th><th>亲眼看到的结果</th></tr>
+<tr><td>第一批</td><td>安装拆成 prepare 和 commit，确认内容来自包；文档示例和矛盾修掉</td><td>V1 载荷不再执行；V2 坏包报错、旧版还在；V6 Codex 显示 77；原生场景 <code>plugin-guard</code> 两个入口都先问</td></tr>
+<tr><td>第二批</td><td><code>plugin_command</code> 是唯一跑插件命令的地方；登录 PATH；<code>mooring plugins run</code></td><td>T4 从 6053 ms 到 276 ms；T5 子进程被停；干净环境 <code>node -v</code> 输出 v25.9.0；P3 留下 40 条</td></tr>
+<tr><td>第三批</td><td>setup 失败不算装好；仍然卸载；坏插件可移除；来源记录；CLI 通知运行中的进程；hook 和装饰 id 插件内唯一</td><td>V3 外部文件撤回；V4 显示已关闭；T9 先问；原生场景 <code>plugin-stuck</code> 通过；真实 zsh 下运行中增删 hook</td></tr>
+<tr><td>第四批</td><td>WASM 判定、后台编译、回复上限、熔断；装饰代际；镜像游标</td><td>单元测试；后台编译和熔断没在真 App 里单独看</td></tr>
+<tr><td>签名和多版本</td><td>ed25519 签 <code>index.json</code>；官方地址只认内置公钥；旧版本放 <code>versions/</code></td><td>新密钥要问、改一字节拒绝、换密钥和去签名都要问</td></tr>
+<tr><td>公平调度</td><td>每插件最多 2 个并发、排队 16、轮流；丢弃进运行记录</td><td>慢插件 21 条事件时，另一个插件 900 ms 内跑到，溢出 3 条进记录</td></tr>
+<tr><td>Agent 热重载</td><td>注册表、适配器、转写目录、SQLite 镜像都能运行时换</td><td>真实后台里装上即绑定、卸载后不再绑定，连跑 8 次</td></tr>
+<tr><td>钥匙串</td><td><code>"secret": true</code>，只经 <code>/usr/bin/security</code>，文件只记有没有设置</td><td>临时真实钥匙串往返；输入遮罩只读了代码，没截图看</td></tr>
+</table></div>
+<p class="note">实施中改过的判断：登录 shell 解析实测 0.93 秒，超过原定 500 ms，按放弃条件放到第一条命令的后台线程，代价是每个进程多加载一次 <code>.zshrc</code>。F28 里「未知事件只跳过」让写错事件名的 hook 能装上却不触发，所以安装时拒绝这种包，宽容只留给已装好的插件。钥匙串用 <code>-U</code> 更新会弹系统授权框，改成先删再写。官方私钥在 <code>~/.config/mooring/publisher.key</code>，换机器要自己带上，丢了就得换内置公钥。</p>
+</div>
+
+<div class="box">
 <h3>这页要支撑的决定</h3>
 <p>插件系统下一批改什么，哪些明确不做。<b>放弃条件</b>：说不出具体失败场景或用户价值的条目不列；已经被实测否定的猜想直接删掉。</p>
 </div>
@@ -141,7 +158,7 @@ ol li,ul li{margin:4px 0}
 </table></div>
 <p class="note">核对中撤回的猜想：Claude 原以为 <code>curl</code> 能被重定向降级到 http，手册写明 <code>--proto</code> 拒绝的协议重定向时也不放行，已删除。Claude 原以为 <code>mooring plugins</code> 会报 id 冲突，实跑发现它全绿，问题反而更严重（F21）。</p>
 
-<h2>明确不做</h2>
+<h2>当时定的「明确不做」（前两条之外的五项已被上面的实施结果推翻）</h2>
 <ul>
 <li><b>发布者签名、人工审核、多版本带 engines 的索引。</b>没有第三方作者，也没有过不兼容版本。上一轮记下的「多版本索引」改成<span class="d n">否定</span>；出现第二个外部市场，或第一次真遇到版本不兼容时再议。来源记录和确认（F02–F05）已经覆盖现在的风险。</li>
 <li><b>进程内 JS、全面 WASM 化、开放终端和状态判定。</b>解决不了上面任何一条，还会扩大边界。</li>

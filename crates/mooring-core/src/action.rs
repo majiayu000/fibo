@@ -2,8 +2,10 @@
 //!
 //! An action is a command template run for one pane: `{cwd}`, `{session_id}`,
 //! `{transcript}`, `{task}` and `{agent}` stand for that pane's directory, its Agent
-//! session, transcript file, the tab's task and the Agent's name. Every value is shell-quoted
-//! where it lands, so a title or path can never become part of the command.
+//! session, transcript file, the tab's task and the Agent's name; `{plugin_dir}` and
+//! `{plugin_data}` for the plugin's directory (the scripts it ships) and its data directory.
+//! Every value is shell-quoted where it lands, so a title or path can never become part of
+//! the command.
 use crate::agent::Loaded;
 use crate::model::shell_quote;
 use serde::Deserialize;
@@ -12,7 +14,15 @@ use std::path::{Path, PathBuf};
 /// The `actions.json` format's major version.
 pub const API: u32 = 1;
 
-const VARS: [&str; 5] = ["cwd", "session_id", "transcript", "task", "agent"];
+const VARS: [&str; 7] = [
+    "cwd",
+    "session_id",
+    "transcript",
+    "task",
+    "agent",
+    "plugin_dir",
+    "plugin_data",
+];
 
 /// How the command runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -51,6 +61,10 @@ pub struct Action {
     pub run: Run,
     #[serde(default)]
     pub when: When,
+    /// Only in panes of this Agent (its executable or name): a command that means one CLI
+    /// must not be offered in another's pane.
+    #[serde(default)]
+    pub agent: Option<String>,
     /// The file it came from, for the settings page.
     #[serde(skip)]
     pub file: PathBuf,
@@ -88,11 +102,33 @@ impl Context {
 impl Action {
     /// Whether the action is offered for a pane with this context.
     pub fn offered(&self, ctx: &Context) -> bool {
-        match self.when {
+        let when = match self.when {
             When::Always => true,
             When::Agent => ctx.session_id.is_some(),
             When::Shell => ctx.session_id.is_none(),
             When::Task => ctx.task.is_some(),
+        };
+        when && self.agent.as_deref().is_none_or(|want| {
+            ctx.agent.as_deref().is_some_and(|name| {
+                let this = crate::agent::Agent::all()
+                    .into_iter()
+                    .find(|a| a.name() == name);
+                name.eq_ignore_ascii_case(want)
+                    || this.is_some_and(|a| {
+                        a.executable() == want || a.key().eq_ignore_ascii_case(want)
+                    })
+            })
+        })
+    }
+    /// `{plugin_dir}` and `{plugin_data}`: the plugin it came from.
+    fn plugin_var(&self, name: &str) -> Option<String> {
+        let dir = self.file.parent()?;
+        let env = || crate::plugin_context::env(dir);
+        let var = |key: &str| env().into_iter().find(|(k, _)| k == key).map(|(_, v)| v);
+        match name {
+            "plugin_dir" => var("MOORING_PLUGIN_DIR"),
+            "plugin_data" => var("MOORING_PLUGIN_DATA"),
+            _ => None,
         }
     }
     /// The command for one pane, each value single-quoted for where it stands: bare, it
@@ -110,8 +146,10 @@ impl Action {
             match after.find('}') {
                 Some(end) if VARS.contains(&&after[..end]) => {
                     let name = &after[..end];
-                    let value = ctx
-                        .var(name)
+                    let own = self.plugin_var(name);
+                    let value = own
+                        .as_deref()
+                        .or_else(|| ctx.var(name))
                         .ok_or_else(|| format!("这个画面没有 {{{name}}}"))?;
                     out.push_str(&match quote {
                         Quote::None => shell_quote(value),
@@ -164,7 +202,7 @@ impl Quote {
 /// Reads one `actions.json`: every action, or why none of it loads.
 fn read(file: &Path) -> Result<Vec<Action>, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let f: File = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
         return Err(format!("动作格式是 api {}，这个版本只认 api {API}", f.api));
     }
@@ -310,6 +348,7 @@ mod tests {
             command: "codex exec --cd {cwd} \"看看 {task}\" {unknown}".into(),
             run: Run::Split,
             when: When::Always,
+            agent: None,
             file: PathBuf::new(),
         };
         let ctx = Context {
@@ -339,6 +378,7 @@ mod tests {
             command: "x".into(),
             run: Run::Paste,
             when,
+            agent: None,
             file: PathBuf::new(),
         };
         let shell = Context::default();
@@ -411,6 +451,7 @@ mod tests {
                 command: template.into(),
                 run: Run::Split,
                 when: When::Always,
+                agent: None,
                 file: PathBuf::new(),
             };
             let ctx = Context {
@@ -431,5 +472,62 @@ mod tests {
                 "{template}: {shown:?} from {command}"
             );
         }
+    }
+
+    /// A command meant for one CLI stays out of another's pane.
+    #[test]
+    fn an_action_for_one_agent_is_not_offered_in_anothers_pane() {
+        let action: Action = serde_json::from_str(
+            r#"{"id":"r","title":"t","command":"claude --resume {session_id}","when":"agent","agent":"claude"}"#,
+        )
+        .unwrap();
+        let pane = |agent: &str| Context {
+            cwd: "/".into(),
+            session_id: Some("s".into()),
+            agent: Some(agent.into()),
+            ..Default::default()
+        };
+        assert!(action.offered(&pane("Claude Code")));
+        assert!(!action.offered(&pane("Codex")));
+        assert!(!action.offered(&Context {
+            cwd: "/".into(),
+            ..Default::default()
+        }));
+    }
+
+    /// An action finds the script its plugin ships, wherever the plugin is installed.
+    #[test]
+    fn an_action_reaches_its_plugins_directory_and_data() {
+        let root = std::env::temp_dir().join(format!("kl-action-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("plugins/with space");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"api":1,"id":"p","name":"p","provides":["actions"]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("actions.json"),
+            r#"{"api":1,"actions":[{"id":"x","title":"t","command":"sh {plugin_dir}/run.sh {plugin_data}"}]}"#,
+        )
+        .unwrap();
+        let (actions, report) = load(vec![dir.join("actions.json")]);
+        assert!(report[0].result.is_ok(), "{report:?}");
+        let cmd = actions[0]
+            .command(&Context {
+                cwd: "/".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            cmd,
+            format!(
+                "sh {}/run.sh {}",
+                shell_quote(&dir.display().to_string()),
+                shell_quote(&root.join("plugin-data/p").display().to_string())
+            )
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

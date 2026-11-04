@@ -13,14 +13,32 @@
 //!   "files": [{"path": "plugin.json", "sha256": "…", "size": 312}]}]}
 //! ```
 //!
-//! Installing copies exactly the listed files, each checked against its sha256, into a
-//! staging directory, checks it as a plugin, then swaps it in as `plugins/<id>`. Copying
-//! runs nothing; once it is in place a plugin with `setup.json` runs its `setup`. What a
-//! plugin may run is stated up front (`permissions`).
+//! **Who published it.** A catalog may carry `index.sig` beside `index.json`: an ed25519
+//! signature over the index's exact bytes, whose file hashes in turn pin every file. So a
+//! valid signature says one key published this whole catalog. This repository's key is built
+//! in (`OFFICIAL_KEY`) and its catalog must be signed by it; another catalog's key is shown
+//! the first time and remembered with what was installed, so a change of publisher is asked
+//! about; a catalog with no signature is allowed and says so; a bad signature is refused.
+//!
+//! **Versions.** An entry may list older versions (`versions`, each with its own `dir`), so
+//! a build too old for the newest still gets the newest it can run.
+//!
+//! Installing is two steps, so what you are asked comes from the package itself: `prepare`
+//! copies exactly the listed files, each checked against its sha256, into a staging
+//! directory and reads them with the loaders the app uses (`Prepared` says what it will run
+//! and what it adds over the installed version); `commit` swaps it in as `plugins/<id>` and,
+//! when it has one, runs its `setup`. Copying and checking run nothing.
 use crate::plugin::{self, Kind, Plugin};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path, PathBuf};
+
+#[path = "market_install.rs"]
+mod install;
+#[path = "market_sign.rs"]
+mod sign;
+pub use install::*;
+pub use sign::*;
 
 /// The index format's major version.
 pub const API: u32 = 1;
@@ -29,6 +47,9 @@ pub const DEFAULT_REMOTE: &str =
     "https://raw.githubusercontent.com/majiayu000/mooring/main/plugins/index.json";
 /// No plugin file is this large; a bigger one is refused, not written.
 const MAX_FILE: u64 = 16 << 20;
+/// The public half of the key this repository's catalog is signed with; the private half is
+/// `publisher.key` on the maintainer's machine, never in the repository.
+pub const OFFICIAL_KEY: &str = "e88de1d56240c9dbf6f150dfdc58347a967d78ed88dc07218cb116c976aa8988";
 
 /// Fields a newer Mooring adds to the index are ignored, and kinds it does not know are
 /// dropped from `provides`, so an older build still lists what it can install.
@@ -56,6 +77,13 @@ pub struct Entry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<bool>,
     pub files: Vec<FileEntry>,
+    /// Where its files are under `<id>/`, for an older version kept beside the newest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+    /// Older versions, newest first, each a complete entry: what a build too old for this
+    /// one installs instead. A build from before these existed ignores them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub versions: Vec<Entry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +107,7 @@ pub enum Source {
 pub struct Offer {
     pub entry: Entry,
     pub source: Source,
+    pub publisher: Publisher,
 }
 
 /// What a plugin's kinds may do once installed, in words for the install confirmation.
@@ -204,8 +233,40 @@ pub fn disclosure(provides: &[Kind], touches: &[String], network: Option<bool>) 
 }
 
 impl Entry {
-    pub fn disclosure(&self) -> Vec<String> {
-        disclosure(&self.provides, &self.touches, self.network)
+    /// Whether this build can run this version.
+    pub fn compatible(&self) -> bool {
+        self.mooring.is_none_or(|l| l <= plugin::LEVEL)
+    }
+    /// This version and every older one, newest first; each without its own `versions`.
+    fn all_versions(&self) -> Vec<Entry> {
+        let mut own = self.clone();
+        own.versions = vec![];
+        let mut all = vec![own];
+        all.extend(self.versions.iter().cloned());
+        all.sort_by(|a, b| {
+            if newer(&a.version, &b.version) {
+                std::cmp::Ordering::Less
+            } else if newer(&b.version, &a.version) {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+        all
+    }
+    /// The newest version this build can run, carrying the rest for `Offer::pick`. With none
+    /// it stays the newest, for `check` to say that Mooring needs updating.
+    fn for_this_build(&self) -> Entry {
+        let all = self.all_versions();
+        let chosen = all.iter().find(|e| e.compatible()).unwrap_or(&all[0]);
+        Entry {
+            versions: all
+                .iter()
+                .filter(|e| e.version != chosen.version)
+                .cloned()
+                .collect(),
+            ..chosen.clone()
+        }
     }
     /// Refuses an entry that could not be installed safely, before fetching anything.
     pub fn check(&self) -> Result<(), String> {
@@ -218,6 +279,9 @@ impl Entry {
                 self.id,
                 plugin::LEVEL
             ));
+        }
+        if let Some(dir) = self.dir.as_deref().filter(|d| !safe_path(d)) {
+            return Err(format!("{} 的目录 \"{dir}\" 不安全", self.id));
         }
         if !self.files.iter().any(|f| f.path == "plugin.json") {
             return Err(format!("{} 的文件里没有 plugin.json", self.id));
@@ -290,19 +354,72 @@ pub fn index_of(dir: &Path) -> Result<Index, String> {
                 size: bytes.len() as u64,
             });
         }
-        plugins.push(Entry {
-            id: p.id,
-            name: p.name,
-            version: p.version.unwrap_or_else(|| "0.0.0".into()),
-            description: p.description,
-            provides: p.provides,
-            mooring: (p.level > 1).then_some(p.level),
-            touches: p.touches,
-            network: p.network,
-            files,
-        });
+        let mut entry = entry_of(p, files);
+        entry.versions = older_versions(&found.dir, &entry.id)?;
+        plugins.push(entry);
     }
     Ok(Index { api: API, plugins })
+}
+
+fn entry_of(p: Plugin, files: Vec<FileEntry>) -> Entry {
+    Entry {
+        id: p.id,
+        name: p.name,
+        version: p.version.unwrap_or_else(|| "0.0.0".into()),
+        description: p.description,
+        provides: p.provides,
+        mooring: (p.level > 1).then_some(p.level),
+        touches: p.touches,
+        network: p.network,
+        files,
+        dir: None,
+        versions: vec![],
+    }
+}
+
+/// The versions kept under `<plugin>/versions/<version>/`, newest first: each a complete
+/// plugin directory, listed like the newest one.
+fn older_versions(dir: &Path, id: &str) -> Result<Vec<Entry>, String> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir.join("versions"))
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !e.path().is_dir() || name.starts_with('.') {
+            continue;
+        }
+        let p = plugin::check(&e.path()).map_err(|why| format!("{}：{why}", e.path().display()))?;
+        if p.id != id {
+            return Err(format!("{}：id 要和插件一样（{id}）", e.path().display()));
+        }
+        let mut files = Vec::new();
+        for file in shipped_files(&p) {
+            let bytes =
+                std::fs::read(&file).map_err(|err| format!("读不了 {}：{err}", file.display()))?;
+            files.push(FileEntry {
+                path: file
+                    .strip_prefix(&p.dir)
+                    .map_err(|_| format!("{} 不在插件目录里", file.display()))?
+                    .to_string_lossy()
+                    .into_owned(),
+                sha256: sha256(&bytes),
+                size: bytes.len() as u64,
+            });
+        }
+        let mut entry = entry_of(p, files);
+        entry.dir = Some(format!("versions/{name}"));
+        out.push(entry);
+    }
+    out.sort_by(|a: &Entry, b: &Entry| {
+        if newer(&a.version, &b.version) {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Greater
+        }
+    });
+    Ok(out)
 }
 
 /// The index as `index.json` holds it: pretty, one trailing newline.
@@ -354,8 +471,10 @@ pub fn bundled() -> Result<Vec<Offer>, String> {
         .plugins
         .into_iter()
         .map(|entry| Offer {
-            entry,
+            entry: entry.for_this_build(),
             source: Source::Bundled(dir.clone()),
+            // It came inside the app: as trusted as the app itself.
+            publisher: Publisher::Official,
         })
         .collect())
 }
@@ -403,13 +522,19 @@ pub fn fetch_remote(url: &str) -> Result<Vec<Offer>, String> {
         .rsplit_once('/')
         .map(|(b, _)| b.to_owned())
         .ok_or_else(|| format!("{url} 不是一个地址"))?;
-    let index = parse(&curl(url)?)?;
+    let bytes = curl(url)?;
+    // Any failure to get a signature is no signature; this repository's address and the
+    // pin on what is installed are what make that matter.
+    let signature = curl(&format!("{base}/index.sig")).ok();
+    let publisher = publisher_of(url, &bytes, signature.as_deref())?;
+    let index = parse(&bytes)?;
     Ok(index
         .plugins
         .into_iter()
         .map(|entry| Offer {
-            entry,
+            entry: entry.for_this_build(),
             source: Source::Remote(base.clone()),
+            publisher: publisher.clone(),
         })
         .collect())
 }
@@ -420,7 +545,13 @@ pub fn merge(bundled: Vec<Offer>, remote: Vec<Offer>) -> Vec<Offer> {
     let mut out = bundled;
     for r in remote {
         match out.iter_mut().find(|o| o.entry.id == r.entry.id) {
-            Some(o) if newer(&r.entry.version, &o.entry.version) => *o = r,
+            // A newer version this build cannot run does not push out one it can.
+            Some(o)
+                if newer(&r.entry.version, &o.entry.version)
+                    && (r.entry.compatible() || !o.entry.compatible()) =>
+            {
+                *o = r
+            }
             Some(_) => {}
             None => out.push(r),
         }
@@ -432,10 +563,41 @@ impl Offer {
     fn fetch(&self, path: &str) -> Result<Vec<u8>, String> {
         match &self.source {
             Source::Bundled(dir) => {
-                let file = dir.join(&self.entry.id).join(path);
+                let mut file = dir.join(&self.entry.id);
+                if let Some(version) = &self.entry.dir {
+                    file.push(version);
+                }
+                file.push(path);
                 std::fs::read(&file).map_err(|e| format!("读不了 {}：{e}", file.display()))
             }
-            Source::Remote(base) => curl(&format!("{base}/{}/{path}", self.entry.id)),
+            Source::Remote(base) => {
+                let id = &self.entry.id;
+                curl(&match &self.entry.dir {
+                    Some(dir) => format!("{base}/{id}/{dir}/{path}"),
+                    None => format!("{base}/{id}/{path}"),
+                })
+            }
+        }
+    }
+    /// This offer at a named version, if the catalog has it.
+    pub fn pick(&self, version: &str) -> Option<Offer> {
+        let entry = self
+            .entry
+            .all_versions()
+            .into_iter()
+            .find(|e| e.version == version)?;
+        Some(Offer {
+            entry,
+            ..self.clone()
+        })
+    }
+    /// Who it comes from, for comparing with what is installed: its publisher when signed,
+    /// so a move to another address is no change; its address when not.
+    fn origin_key(&self) -> String {
+        match (&self.publisher, &self.source) {
+            (Publisher::Unsigned, Source::Remote(base)) => base.clone(),
+            (Publisher::Unsigned, Source::Bundled(_)) => OFFICIAL.to_owned(),
+            (publisher, _) => publisher.said(),
         }
     }
     /// Where it comes from, in words.
@@ -445,97 +607,106 @@ impl Offer {
             Source::Remote(_) => "远程目录",
         }
     }
-    /// Installs it as `<plugins>/<id>`, replacing an installed copy of the same id
-    /// (wherever that one's directory is). Nothing is left half-written: a bad file or
-    /// a plugin that does not check out leaves the old copy as it was.
-    pub fn install_into(&self, plugins: &Path) -> Result<PathBuf, String> {
+    /// Fetches and checks it into a staging directory without touching what is installed.
+    /// A package that says more than its listing, or whose files the loaders refuse, stops
+    /// here: an update can never replace a working plugin with one that does not load.
+    pub fn prepare(&self, plugins: &Path) -> Result<Prepared, String> {
         let e = &self.entry;
         e.check()?;
         std::fs::create_dir_all(plugins).map_err(|err| format!("建不了插件目录：{err}"))?;
-        let stage = plugins.join(format!(".installing-{}-{}", e.id, std::process::id()));
-        let _ = std::fs::remove_dir_all(&stage);
-        let staged = (|| {
-            for f in &e.files {
-                let bytes = self.fetch(&f.path)?;
-                if bytes.len() as u64 != f.size || sha256(&bytes) != f.sha256 {
-                    return Err(format!(
-                        "{} 的 {} 和目录里登记的不一致（大小或 sha256 不对），没有安装",
-                        e.id, f.path
-                    ));
-                }
-                let to = stage.join(&f.path);
-                if let Some(parent) = to.parent() {
-                    std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-                }
-                std::fs::write(&to, bytes).map_err(|err| err.to_string())?;
-            }
-            let p = plugin::check(&stage)?;
-            if p.id != e.id {
-                return Err(format!(
-                    "plugin.json 里的 id 是 {}，目录里登记的是 {}",
-                    p.id, e.id
-                ));
-            }
-            // What you were asked to confirm comes from the listing: the package may
-            // not do more than it says.
-            if let Some(k) = p.provides.iter().find(|k| !e.provides.contains(k)) {
-                return Err(format!(
-                    "{} 的 plugin.json 声明了 {}，目录里没有登记，没有安装",
-                    e.id,
-                    k.label()
-                ));
-            }
-            Ok(())
-        })();
-        if let Err(err) = staged {
-            let _ = std::fs::remove_dir_all(&stage);
-            return Err(err);
-        }
-        // Replace whichever directory holds this id now, else take `<id>`.
-        let target = plugin::discover(plugins)
-            .into_iter()
-            .find(|f| f.result.as_ref().is_ok_and(|p| p.id == e.id))
-            .map(|f| f.dir)
-            .filter(|d| d.parent() == Some(plugins));
-        let target = match target {
-            Some(dir) => dir,
-            // `<id>` may hold another plugin (an example copied and renamed) or a broken
-            // one someone is writing: never delete it to make room.
-            None if plugins.join(&e.id).exists() => {
-                let _ = std::fs::remove_dir_all(&stage);
-                return Err(format!(
-                    "{} 已被别的东西占用（不是插件 {}），没有安装；把它移走或改名后再装",
-                    plugins.join(&e.id).display(),
-                    e.id
-                ));
-            }
-            None => plugins.join(&e.id),
+        static STAGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = STAGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let stage = plugins.join(format!(".installing-{}-{}-{n}", e.id, std::process::id()));
+        // Dropped on every way out below: a refused package leaves nothing behind.
+        let mut prepared = Prepared {
+            stage: Some(stage.clone()),
+            plugins: plugins.to_owned(),
+            source: InstalledFrom {
+                from: self.origin_key(),
+                files: e.files.iter().map(|f| f.path.clone()).collect(),
+                key: self.publisher.key(),
+            },
+            id: e.id.clone(),
+            disclosure: vec![],
+            added: vec![],
+            replacing: vec![],
+            must_ask: false,
         };
-        let old = plugins.join(format!(".replaced-{}-{}", e.id, std::process::id()));
-        let _ = std::fs::remove_dir_all(&old);
-        let had = target.exists();
-        if had {
-            std::fs::rename(&target, &old).map_err(|err| {
-                let _ = std::fs::remove_dir_all(&stage);
-                format!("换不掉旧的 {}：{err}", target.display())
-            })?;
-        }
-        if let Err(err) = std::fs::rename(&stage, &target) {
-            if had {
-                let _ = std::fs::rename(&old, &target);
+        for f in &e.files {
+            let bytes = self.fetch(&f.path)?;
+            if bytes.len() as u64 != f.size || sha256(&bytes) != f.sha256 {
+                return Err(format!(
+                    "{} 的 {} 和目录里登记的不一致（大小或 sha256 不对），没有安装",
+                    e.id, f.path
+                ));
             }
-            let _ = std::fs::remove_dir_all(&stage);
-            return Err(format!("装不进 {}：{err}", target.display()));
+            let to = stage.join(&f.path);
+            if let Some(parent) = to.parent() {
+                std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+            }
+            std::fs::write(&to, bytes).map_err(|err| err.to_string())?;
         }
-        let _ = std::fs::remove_dir_all(&old);
-        // Installed or updated: it does what it sets up now (again, after an update),
-        // unless it was turned off.
-        if !plugin::turned_off(plugins, &e.id) {
-            crate::setup::run(plugins, &target, crate::setup::Phase::Setup).map_err(|err| {
-                format!("装好了，但 {err}；修好后在 设置 › 插件 里停用再打开可以重试")
-            })?;
+        let p = plugin::check(&stage)?;
+        if p.id != e.id {
+            return Err(format!(
+                "plugin.json 里的 id 是 {}，目录里登记的是 {}",
+                p.id, e.id
+            ));
         }
-        Ok(target)
+        // What you are shown may never be less than what the package says of itself.
+        if let Some(k) = p.provides.iter().find(|k| !e.provides.contains(k)) {
+            return Err(format!(
+                "{} 的 plugin.json 声明了 {}，目录里没有登记，没有安装",
+                e.id,
+                k.label()
+            ));
+        }
+        if let Some(t) = p.touches.iter().find(|t| !e.touches.contains(t)) {
+            return Err(format!(
+                "{} 的 plugin.json 说会改 {t}，目录里没有登记，没有安装",
+                e.id
+            ));
+        }
+        if p.network == Some(true) && e.network != Some(true) {
+            return Err(format!(
+                "{} 的 plugin.json 说会联网，目录里没有登记，没有安装",
+                e.id
+            ));
+        }
+        loadable(&p)?;
+        no_conflict(plugins, &p)?;
+        let old = plugin::discover(plugins)
+            .into_iter()
+            .find_map(|f| f.result.ok().filter(|o| o.id == e.id));
+        prepared.disclosure = disclosure_of(&p);
+        prepared.added = old.as_ref().map(|o| added(o, &p)).unwrap_or_default();
+        prepared.replacing = old
+            .as_ref()
+            .map(|o| replacing(plugins, o, &p, e, self))
+            .unwrap_or_default();
+        // Nothing vouches for a first install from outside: say who it is, or that nobody says.
+        if old.is_none() {
+            prepared.replacing.extend(match &self.publisher {
+                Publisher::Official => None,
+                Publisher::Signed { .. } => Some(format!(
+                    "发布者：{}，第一次见到这个密钥，以后换了会问你",
+                    self.publisher.said()
+                )),
+                Publisher::Unsigned => Some("这个目录没有签名，不能确认文件是谁发的".to_owned()),
+            });
+        }
+        prepared.must_ask = !prepared.replacing.is_empty()
+            || match &old {
+                None => runs_commands(&p.provides),
+                Some(_) => !prepared.added.is_empty(),
+            };
+        Ok(prepared)
+    }
+    /// Installs it as `<plugins>/<id>`, replacing an installed copy of the same id
+    /// (wherever that one's directory is), without asking. Nothing is left half-written: a
+    /// bad file or a plugin that does not check out leaves the old copy as it was.
+    pub fn install_into(&self, plugins: &Path) -> Result<PathBuf, String> {
+        self.prepare(plugins)?.commit()
     }
     /// Installs it into this process's plugins directory (after `plugin::install`).
     pub fn install(&self) -> Result<PathBuf, String> {
@@ -544,6 +715,9 @@ impl Offer {
     }
 }
 
+#[cfg(test)]
+#[path = "market_install_tests.rs"]
+mod install_tests;
 #[cfg(test)]
 #[path = "market_tests.rs"]
 mod tests;

@@ -192,7 +192,7 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
   "window": { "opacity": 0.92, "blur": true },
   "background": { "image": "images/sea.png", "mode": "fill", "strength": 0.3 }
 }</pre>
-<p style="margin-top:10px" class="sub"><code>colors.json</code> 现有的状态色覆盖继续生效，放在主题之上；等编辑器上线后，第一次打开时把它转成「我的主题」的一部分，避免同一颜色长期有两个来源。</p>
+<p style="margin-top:10px" class="sub">以前的 <code>colors.json</code> 在第一次启动时并入主题：用户自己的主题文件直接写入，内置主题存成「我的状态色」副本，原文件留作 <code>colors.json.migrated</code>。状态色从此只有主题一个来源。</p>
 
 <h2>开放的路线</h2>
 <div class="wrap"><table>
@@ -218,6 +218,7 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 <li><b>采用并已实现（阶段 0 到 2）：</b>方向 A、全部颜色进主题文件、导入 <code>.itermcolors</code>、Agent 写主题、应用内编辑器。</li>
 <li><b>性能结果：</b>主题只在切换时计算一次（517 纳秒），绘制只读结果。2000 个会话、60 个终端的工作台，终端帧约 973 万条指令、整窗约 7100 万条，新旧版本和自定义主题下都相同。文件夹每 3 秒扫描一次，50 个文件约 146 微秒，且不在窗口线程上。</li>
 <li><b>采用并已实现（阶段 3 到 5，2026-11-04）：</b>终端细节、窗口透明和模糊、背景图、只含数据的主题插件、按空间主题、终端边距。</li>
+<li><b>采用并已实现（架构整理，2026-11-04）：</b>显示哪套主题只由 <code>appearance::resolve</code> 决定（草稿、空间、外观依次优先）；键名和格式版本归 core，<code>mooring themes</code> 按同样规则检查；<code>colors.json</code> 并入主题；图片只留最近两张的内存和 GPU 副本；大面板涂实色进守卫，主题场景进 CI。</li>
 <li><b>否定：</b>状态栏换位置（要动整个外框布局，没人要求，换来的只是位置）；变暗「只影响文字」；光标移动动画（动画期间每帧都要重绘，和保证性能冲突）；背景图轮播（没人要求，还要常驻定时器）。</li>
 <li><b>待验证：</b>透明和模糊下合成器的开销：探针只量 App 主线程，量不到 WindowServer 和 GPU。</li>
 </ul>

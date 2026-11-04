@@ -20,6 +20,10 @@ const ICONS: &[(&str, &[u8])] = &[
         include_bytes!("../../assets/icons/state-done.svg"),
     ),
     (
+        "icons/state-stopped.svg",
+        include_bytes!("../../assets/icons/state-stopped.svg"),
+    ),
+    (
         "icons/chevron-down.svg",
         include_bytes!("../../assets/icons/chevron-down.svg"),
     ),

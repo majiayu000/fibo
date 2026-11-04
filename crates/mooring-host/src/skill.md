@@ -46,7 +46,7 @@ Mooring 以前叫 Keepline：旧的 `keepline` / `keeplined` 命令和 `KEEPLINE
 
 | 命令 | 做什么 |
 |---|---|
-| `mooring plugins [--dir 目录] [--json]` | 检查插件能不能装上；`mooring plugins available [--remote]`、`install <id> [--remote] [--yes]`、`uninstall <id>`、`index <目录> [--check]` 管插件市场；会跑命令的插件要你先把它会做的事告诉用户，用户同意后再加 `--yes`。`log <id>` 看插件的运行和出错，`set <id> <key> <值>` 改插件设置项。写插件看 `mooring --skill plugins` |
+| `mooring plugins [--dir 目录] [--json]` | 检查插件能不能装上；`mooring plugins available [--remote]`、`install <id> [--remote] [--yes]`、`uninstall <id> [--force]`、`disable|enable <id> [--force]`、`index <目录> [--check] [--key 私钥文件]`、`keygen [--name 发布者] [--key 私钥文件]` 管插件市场，`install` 也能写 `<id>@版本`；会跑命令的插件要你先把它会做的事告诉用户，用户同意后再加 `--yes`。`log <id>` 看插件的运行和出错，`set <id> <key> <值>` 改插件设置项。写插件看 `mooring --skill plugins`；`mooring plugins run <id> <声明 id> [--event 事件] [--cwd 目录] [--send]` 用和 App 一样的环境试跑一条 hook、装饰或额度命令 |
 | `mooring hooks install\|uninstall\|status [--agent <cli>] [--json] [--outdated-only]` | 把 Mooring 的 hook 写进或移出 Agent CLI 的设置，或看装了没有（`--json` `--outdated-only` 只对 status）。会改用户的设置文件，用户要求才 install / uninstall |
 | `mooring hook --agent <cli>` | Agent CLI 的 hook 自己调用的入口，别手动跑 |
 | `mooring remote --stdio` / `--relay <地址> [--relay-key <密钥>] [--report]` / `--pair [--name 名字] [--role view\|answer\|full] [--new-code]` / `--enable` / `--disable` / `--status` / `--devices` / `--device <设备> --role <权限>` / `--kick <设备>` / `--revoke <设备>` | 手机和别的机器连过来。配对、改权限、断开、取消配对都是用户的决定，别自己做；细节看 `mooring remote --help` |
@@ -126,6 +126,7 @@ mooring close "$tests"
   "ui": { "sidebar": "#0b1522", "border": "#23344d", "accent": "#7cc4ff" },
   "status": { "running": "#e5b83b", "review": "#3fb27f" },
   "tone": { "ok": "#4cc38a", "warn": "#e5b83b", "danger": "#e5534b" },
+  "seen": { "title": "#b9b7b4", "status": "#7d7c7a", "dot": "ring" },
   "space_gradients": [["#f59e6b", "#d9467a"]],
   "window": { "opacity": 0.85, "blur": true },
   "background": { "image": "images/sea.jpg", "mode": "fill", "strength": 0.2 }
@@ -134,4 +135,4 @@ mooring close "$tests"
 
 `window.opacity` 是 0.3–1，文字始终不透明，只有窗口的底变透。`background.image` 写绝对路径，或相对主题文件夹的路径；`mode` 是 `fill`、`fit`、`stretch`、`tile`，`strength` 是 0.05–1。字体、光标形状、最低对比度、边距这些属于用户习惯，不跟主题走，在设置 › 终端里改（`terminal-text.json`）。某个空间单独用一套主题：右键空间 › 主题。想把主题分享出去：做成只含数据的插件，`provides` 写 `["themes"]`，主题放在插件的 `themes/*.json`（见 `mooring --skill plugins`）。
 
-写错或不认识的项会跳过，并显示在设置 › 外观里。文字对比度低于 4.5:1 时告诉用户可能看不清。可写的 `ui` 名字在设置 › 外观 › 调整当前主题里能看到，全部名字以 `crates/mooring-app/src/ui/palette.rs` 的 `ui_tokens!` 为准。用户手上有 iTerm2 的 `.itermcolors` 时，让用户在同一页点「导入」。
+写错或不认识的项会跳过，并显示在设置 › 外观里。写完跑 `mooring themes`：它按 App 同样的规则检查主题文件夹（或 `mooring themes 某个文件`），列出不认识的键、找不到的图和对比度过低的主题，有问题时以 1 退出；`mooring themes names` 列出全部可写的键。用户手上有 iTerm2 的 `.itermcolors` 时，让用户在同一页点「导入」。

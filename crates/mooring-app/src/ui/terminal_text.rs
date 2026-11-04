@@ -216,13 +216,9 @@ pub fn update(value: TerminalText) -> Result<(), String> {
     let path = path().ok_or("找不到配置目录")?;
     let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     let value = TerminalText::parse(&text)?;
-    let write = || -> std::io::Result<()> {
-        std::fs::create_dir_all(path.parent().unwrap())?;
-        let temporary = path.with_extension("json.tmp");
-        std::fs::write(&temporary, text)?;
-        std::fs::rename(temporary, &path)
-    };
-    write().map_err(|e| format!("无法保存 {}：{e}", path.display()))?;
+    std::fs::create_dir_all(path.parent().unwrap())
+        .and_then(|()| super::status_colors::write_atomic(&path, text.as_bytes()))
+        .map_err(|e| format!("无法保存 {}：{e}", path.display()))?;
     *state().write().unwrap() = value;
     GENERATION.fetch_add(1, Ordering::Relaxed);
     Ok(())

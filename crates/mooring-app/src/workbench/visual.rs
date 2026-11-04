@@ -1,5 +1,8 @@
 //! Fixture-driven layouts and pages for native visual evidence.
 use super::*;
+#[cfg(feature = "visual-test")]
+#[path = "subagent_sample_tests.rs"]
+mod subagent_samples;
 
 /// The space menu's state, the rename field's text and focus, each space's name and cwd.
 #[cfg(feature = "visual-test")]
@@ -52,6 +55,29 @@ impl Workbench {
         let session = self.pane_session(terminal).expect("no session").id.clone();
         self.complete_pane_with(terminal.to_owned(), session, effect, cx);
         self.pin_completing(terminal, pin);
+    }
+    /// Where a run is held for screenshots: `MOORING_COMPLETE_TS` as `from,to,step`. The
+    /// window takes `MOORING_COMPLETE_WINDOW` (`width,height`) first, to try a small pane.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_complete_times(&self, window: &mut Window) -> Vec<f32> {
+        if let Ok(asked) = std::env::var("MOORING_COMPLETE_WINDOW")
+            && let Some((w, h)) = asked.split_once(',')
+        {
+            let parse = |x: &str| px(x.parse().expect("window size"));
+            window.resize(gpui::size(parse(w), parse(h)));
+        }
+        let asked: Vec<f32> = std::env::var("MOORING_COMPLETE_TS")
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|x| x.parse().ok())
+            .collect();
+        match asked[..] {
+            [from, to, step] => (0..)
+                .map(|i| from + step * i as f32)
+                .take_while(|t| *t <= to + 1e-4)
+                .collect(),
+            _ => vec![0.1, 0.32, 0.45, 0.6, 0.8, 0.9, 0.95],
+        }
     }
     #[cfg(feature = "visual-test")]
     pub fn visual_specks(&self) -> usize {
@@ -660,6 +686,12 @@ impl Workbench {
     pub fn visual_restart_host(&mut self, cx: &mut Context<Self>) {
         self.close_now(Closing::Host, cx);
     }
+    /// The terminal in focus and the one floating over it, for evidence scripts.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_nav(&self) -> (Option<String>, Option<String>) {
+        let peek = self.peek.as_ref().map(|p| p.terminal.clone());
+        (self.nav.focused.clone(), peek)
+    }
     #[cfg(feature = "visual-test")]
     pub fn visual_page(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.tasks.form = None;
@@ -911,15 +943,13 @@ impl Workbench {
                 self.layout.icon_menu = Some(gpui::point(px(T::TRAFFIC_LIGHT_INSET), px(T::TOP)));
             }
             // The left column's presets, set in memory so the evidence run writes no choice.
-            "SidebarClassic" | "SidebarStatus" | "SidebarStatusOpen" | "SidebarDirectory"
-            | "SidebarRail" | "SidebarWasm" | "SidebarWasmOpen" | "SidebarWasmClosed"
-            | "SidebarViewMenu" => {
+            "SidebarDirectory" | "SidebarRail" | "SidebarWasm" | "SidebarWasmOpen"
+            | "SidebarWasmClosed" | "SidebarViewMenu" => {
                 self.sidebar.preset = match name {
-                    "SidebarStatus" | "SidebarStatusOpen" => "status",
                     "SidebarDirectory" => "directory",
                     // The example WebAssembly plugin, installed into the scratch config.
                     "SidebarWasm" | "SidebarWasmOpen" | "SidebarWasmClosed" => "wasm-status",
-                    _ => "classic",
+                    _ => "recent",
                 }
                 .into();
                 self.sidebar.collapsed = name == "SidebarRail";
@@ -927,9 +957,6 @@ impl Workbench {
                 // The ≑ beside 会话 with its menu open, as a click on it leaves it.
                 self.sidebar.view_menu = (name == "SidebarViewMenu")
                     .then(|| gpui::point(px(T::SIDEBAR - 24.), px(T::TOP + 170.)));
-                if name == "SidebarStatusOpen" {
-                    self.sidebar.toggled.insert("status:rest".into(), true);
-                }
                 if name == "SidebarWasmOpen" || name == "SidebarWasmClosed" {
                     for section in ["rest", "closed"] {
                         self.sidebar
@@ -1010,7 +1037,7 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
-            // `Dense-{status|directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall]`:
+            // `Dense-{directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall]`:
             // the denser presets over sessions shaped like sidebar-density.html's; `-bg`
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
             // the status bar's 工作中 popover beside the column.
@@ -1027,6 +1054,7 @@ impl Workbench {
                 .into();
                 self.sidebar.collapsed = false;
                 self.sidebar.toggled.clear();
+                self.visual_spread_spaces(parts.get(4).copied());
                 if parts.get(4) == Some(&"open") {
                     for key in ["status:rest", "wasm:wasm-status:rest"] {
                         self.sidebar.toggled.insert(key.into(), true);
@@ -1072,65 +1100,8 @@ impl Workbench {
                         ..Default::default()
                     });
                 }
-                // `-sub`: four subagents under the session you are in (one ended, its
-                // list open) and two under 标签命名依旧有问题, whose turn ended with one
-                // still running, which keeps it 在跑. `-many`: twenty-three under the
-                // one you are in; `-manyall` with all of them listed.
-                if let Some(v @ ("sub" | "many" | "manyall")) = parts.get(4).copied() {
-                    use mooring_core::content::{Background, Subagent, Turn};
-                    let now = mooring_core::content::now();
-                    // A subagent a name, ten seconds apart; every `every`-th has ended.
-                    let subs = |names: &str, every: usize| -> Vec<Subagent> {
-                        let ended = |i: usize| (i % every == 0).then(|| now - 120 + i as u64);
-                        let at = |i: usize| now - 400 + 10 * i as u64;
-                        names
-                            .split(',')
-                            .enumerate()
-                            .map(|(i, name)| Subagent {
-                                name: name.into(),
-                                started: at(i),
-                                ended: ended(i),
-                            })
-                            .collect()
-                    };
-                    let many = "tasks,spaces,shortcuts,plugins,market,phone link,relay,quota,file events,marks,handoff,legacy,CLI,board,sidebar,overview,palette,settings,keymap,statusbar,tabs,peek,cleanup"
-                        .split(',')
-                        .map(|a| format!("Audit {a} drift"))
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    for c in self.workspace.content.values_mut() {
-                        match c.title.as_str() {
-                            "这个诊断的 ui 感觉很丑啊" if v == "sub" => {
-                                c.subagents = subs(
-                                    "Check IME/keyboard charters,Check PTY/process lifecycle charters,Check agent status/hook charters,Check remote/phone & render charters",
-                                    4,
-                                )
-                            }
-                            "这个诊断的 ui 感觉很丑啊" => c.subagents = subs(&many, 8),
-                            "标签命名依旧有问题" if v == "sub" => {
-                                c.turn = Turn::Completed;
-                                c.completed_claim = false;
-                                c.background = Some(Background {
-                                    agents: 1,
-                                    ..Default::default()
-                                });
-                                c.subagents = subs(
-                                    "Explore tab naming paths,Audit phone link protocol drift",
-                                    2,
-                                );
-                            }
-                            _ => (),
-                        }
-                    }
-                    if v == "manyall"
-                        && let Some(s) = self
-                            .workspace
-                            .agent_sessions
-                            .iter()
-                            .find(|s| s.terminal.as_deref() == Some("dense-t2"))
-                    {
-                        self.layout.subagents_all.insert(s.id.clone());
-                    }
+                if let Some(v @ ("sub" | "many" | "manyall" | "marks")) = parts.get(4).copied() {
+                    self.sample_subagents(v);
                 }
                 self.nav.focused = Some("dense-t2".into());
                 // `-peek`: the first session floats over the focused one.

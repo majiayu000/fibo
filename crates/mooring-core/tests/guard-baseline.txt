@@ -19,6 +19,16 @@ field session-updated	crates/mooring-app/src/model/session_state.rs	1
 field session-updated	crates/mooring-app/src/workbench/layout.rs	2
 field session-updated	crates/mooring-host/src/host/association.rs	3
 field session-updated	crates/mooring-host/src/host/mod.rs	1
+field solid-surface	crates/mooring-app/src/main.rs	1
+field solid-surface	crates/mooring-app/src/terminal/pane.rs	1
+field solid-surface	crates/mooring-app/src/ui/field.rs	1
+field solid-surface	crates/mooring-app/src/workbench/board_drawer.rs	1
+field solid-surface	crates/mooring-app/src/workbench/cleanup.rs	1
+field solid-surface	crates/mooring-app/src/workbench/forms.rs	4
+field solid-surface	crates/mooring-app/src/workbench/layout.rs	1
+field solid-surface	crates/mooring-app/src/workbench/peek.rs	2
+field solid-surface	crates/mooring-app/src/workbench/settings.rs	2
+field solid-surface	crates/mooring-app/src/workbench/task_detail.rs	2
 field tab-title	crates/mooring-app/src/workbench/diagnostics.rs	1
 field tab-title	crates/mooring-app/src/workbench/tabs.rs	2
 field turn	crates/mooring-app/src/workbench/board/remote.rs	1

@@ -1,7 +1,6 @@
 //! Meaning colors for everything that is not a session: a form error, a used-up quota,
 //! the host link, a phone's connection, a plugin's line. They never borrow a session
 //! status color, so recoloring 在跑 or 等你回答 leaves them alone (specs/status-model).
-use super::status_colors::StatusColors;
 use super::theme::{Theme, hsla, tone_of};
 use gpui::Hsla;
 
@@ -25,7 +24,7 @@ impl Tone {
     }
     /// The raw hue, for drawings that are not text or chrome (a preview's window buttons).
     pub fn hue(self) -> u32 {
-        Theme::palette().tones[self as usize].unwrap_or_else(|| StatusColors::get().tone(self))
+        super::status_colors::tone(self)
     }
     /// Dot, ink and wash, by the same formula as the status colors.
     pub fn colors(self) -> (Hsla, Hsla, Hsla) {

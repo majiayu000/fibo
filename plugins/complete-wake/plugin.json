@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-wake",
+  "name": "完成动画：睡醒了",
+  "version": "0.1.0",
+  "description": "-_- 打着呼噜冒 Z，先睁一只眼、再睁另一只，伸个懒腰笑起来",
+  "provides": ["effects"]
+}

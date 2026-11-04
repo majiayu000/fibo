@@ -35,9 +35,12 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Lines before the file's inline test module; a `tests.rs` file is all test.
+/// Lines before the file's inline test module; a `tests.rs` or `*_tests.rs` file is all test.
 fn production(path: &Path, source: &str) -> Vec<(usize, String)> {
-    if path.file_name().is_some_and(|n| n == "tests.rs") {
+    if path
+        .file_name()
+        .is_some_and(|n| n.to_string_lossy().ends_with("tests.rs"))
+    {
         return vec![];
     }
     let lines: Vec<&str> = source.lines().collect();

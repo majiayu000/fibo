@@ -54,7 +54,7 @@ pub const BUNDLED_MONO: [&[u8]; 4] = [
     include_bytes!("../../assets/JetBrainsMono-Italic.ttf"),
     include_bytes!("../../assets/JetBrainsMono-BoldItalic.ttf"),
 ];
-/// A status's colors: one hue per state from `colors.json` or the default, its ink and
+/// A status's colors: one hue per state from the theme or the default, its ink and
 /// wash derived from it and the terminal. Status colors are for sessions only; anything
 /// else that is fine, a warning or a failure takes a [`Tone`](super::tone::Tone).
 pub trait StatusStyle: Copy {
@@ -64,8 +64,7 @@ pub trait StatusStyle: Copy {
 }
 impl StatusStyle for Status {
     fn hue(self) -> u32 {
-        let colors = super::status_colors::StatusColors::get();
-        Theme::palette().status[colors.index_of(self)].unwrap_or_else(|| colors.hue(self))
+        super::status_colors::hue(self)
     }
     fn colors(self) -> (Hsla, Hsla, Hsla) {
         let (dot, ink, bg) = status_colors_in(self, Theme::palette());

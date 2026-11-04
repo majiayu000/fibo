@@ -80,10 +80,10 @@ impl Appearance {
         }
         out
     }
-    fn save(&self) -> Result<(), String> {
+    pub(super) fn save(&self) -> Result<(), String> {
         let dir = super::status_colors::config_dir().ok_or("找不到配置目录")?;
         let write = |name: &str, text: &str| {
-            std::fs::write(dir.join(name), text)
+            super::status_colors::write_atomic(&dir.join(name), text.as_bytes())
                 .map_err(|e| format!("无法保存 {}：{e}", dir.join(name).display()))
         };
         std::fs::create_dir_all(&dir).map_err(|e| format!("无法保存 {}：{e}", dir.display()))?;
@@ -118,6 +118,55 @@ impl Appearance {
 /// A draft being edited: shown everywhere, saved nowhere, until 主题编辑器 says.
 struct Preview(Option<Palette>);
 impl Global for Preview {}
+/// Why the window shows what it shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    Draft,
+    /// The current space has its own theme, so what 外观 chooses shows in other spaces.
+    Space,
+    Chosen,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct Shown<'a> {
+    pub source: Source,
+    pub palette: Palette,
+    /// The saved theme behind it; a draft has none.
+    pub entry: Option<&'a Entry>,
+}
+/// The one place that decides what shows: a draft, then the space's theme, then 外观.
+pub fn resolve<'a>(
+    draft: Option<Palette>,
+    space: Option<&'a Entry>,
+    chosen: Option<&'a Entry>,
+) -> Option<Shown<'a>> {
+    match (draft, space, chosen) {
+        (Some(palette), ..) => Some(Shown {
+            source: Source::Draft,
+            palette,
+            entry: None,
+        }),
+        (None, Some(entry), _) => Some(Shown {
+            source: Source::Space,
+            palette: entry.palette,
+            entry: Some(entry),
+        }),
+        (None, None, Some(entry)) => Some(Shown {
+            source: Source::Chosen,
+            palette: entry.palette,
+            entry: Some(entry),
+        }),
+        (None, None, None) => None,
+    }
+}
+/// What the window should show now.
+pub fn shown(cx: &App) -> Option<Shown<'_>> {
+    let draft = cx.try_global::<Preview>().and_then(|p| p.0);
+    let chosen = cx.try_global::<Appearance>().and_then(|chosen| {
+        let light = chosen.shows_light(cx.window_appearance(), super::style::current(cx));
+        chosen.entry(cx.try_global::<Themes>()?, light)
+    });
+    resolve(draft, super::space_themes::entry(cx), chosen)
+}
 pub fn preview(file: Option<&ThemeFile>, cx: &mut App) {
     cx.set_global(Preview(file.map(Palette::of_file)));
     apply(cx);
@@ -125,14 +174,7 @@ pub fn preview(file: Option<&ThemeFile>, cx: &mut App) {
 }
 /// Re-read the choice against the system appearance and repaint every window.
 pub fn apply(cx: &mut App) {
-    let shown = |cx: &App| super::space_themes::shown(cx).map(|entry| entry.palette);
-    let draft = cx.try_global::<Preview>().and_then(|p| p.0);
-    let wanted = draft.or_else(|| shown(cx)).or_else(|| {
-        let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
-        let light = chosen.shows_light(cx.window_appearance(), super::style::current(cx));
-        let themes = cx.try_global::<Themes>()?;
-        chosen.entry(themes, light).map(|entry| entry.palette)
-    });
+    let wanted = shown(cx).map(|shown| shown.palette);
     if let Some(palette) = wanted
         && Theme::install(palette)
     {
@@ -176,6 +218,23 @@ mod tests {
             mode,
             ..Appearance::default()
         }
+    }
+    #[test]
+    fn a_draft_beats_a_space_and_a_space_beats_what_is_chosen() {
+        let themes = Themes::read(None);
+        let (space, chosen) = (themes.get("slate"), themes.get("pine"));
+        let draft = Palette::of_scheme(Scheme::Warm);
+        let all = resolve(Some(draft), space, chosen).unwrap();
+        assert_eq!((all.source, all.palette), (Source::Draft, draft));
+        assert!(all.entry.is_none());
+        let on_space = resolve(None, space, chosen).unwrap();
+        assert_eq!(on_space.source, Source::Space);
+        assert_eq!(on_space.entry.unwrap().id, "slate");
+        // A space whose theme is gone arrives here as no entry, and 外观 shows.
+        let plain = resolve(None, None, chosen).unwrap();
+        assert_eq!(plain.source, Source::Chosen);
+        assert_eq!(plain.entry.unwrap().id, "pine");
+        assert!(resolve(None, None, None).is_none());
     }
     #[test]
     fn every_older_choice_keeps_its_colors() {

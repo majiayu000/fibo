@@ -3,7 +3,7 @@
 use super::theme::{Status, mix};
 use mooring_core::{
     terminal::{Scheme, TermColors},
-    theme::ThemeFile,
+    theme::{SeenDot, ThemeFile},
 };
 
 const BLACK: u32 = 0x000000;
@@ -42,9 +42,12 @@ pub struct Palette {
     pub term_underline: Option<u32>,
     pub term_selected_text: Option<u32>,
     pub term_cursor_guide: Option<u32>,
-    /// A theme's status and tone hues, when `colors.json` does not set them.
+    /// A theme's status and tone hues; `None` takes the default.
     pub status: [Option<u32>; Status::ALL.len()],
     pub tones: [Option<u32>; 3],
+    pub seen_title: Option<u32>,
+    pub seen_status: Option<u32>,
+    pub seen_dot: SeenDot,
     pub space_tiles: [[u32; 2]; 6],
     /// How much of the window's ground is painted, in percent.
     pub opacity: u8,
@@ -152,6 +155,9 @@ impl Palette {
             term_cursor_guide: None,
             status: [None; Status::ALL.len()],
             tones: [None; 3],
+            seen_title: None,
+            seen_status: None,
+            seen_dot: SeenDot::Ring,
             space_tiles: SPACE_TILES,
             opacity: 100,
             blur: false,
@@ -231,8 +237,7 @@ impl Palette {
     pub const fn of_scheme(scheme: Scheme) -> Self {
         Self::new(scheme.colors(), matches!(scheme, Scheme::Dark))
     }
-    /// A theme file over what its `bg` and `fg` derive. `explicit` says which hues
-    /// `colors.json` already sets: that file stays on top of any theme.
+    /// A theme file over what its `bg` and `fg` derive.
     pub fn of_file(file: &ThemeFile) -> Self {
         let term = file.term_colors();
         let mut out = Self::new(term, Scheme::of(&term) == Some(Scheme::Dark));
@@ -250,20 +255,19 @@ impl Palette {
         out.term_selected_text = terminal("selected_text");
         out.term_cursor_guide = terminal("cursor_guide");
         for (i, status) in Status::ALL.iter().enumerate() {
-            out.status[i] = file
-                .color("status", status.key())
-                .filter(|_| !super::status_colors::StatusColors::get().sets_status(*status));
+            out.status[i] = file.color("status", status.key());
         }
         for tone in super::tone::Tone::ALL {
-            out.tones[tone as usize] = file
-                .color("tone", tone.key())
-                .filter(|_| !super::status_colors::StatusColors::get().sets_tone(tone));
+            out.tones[tone as usize] = file.color("tone", tone.key());
         }
         if !file.space_gradients.is_empty() {
             for (i, slot) in out.space_tiles.iter_mut().enumerate() {
                 *slot = file.space_gradients[i % file.space_gradients.len()];
             }
         }
+        out.seen_title = file.color("seen", "title");
+        out.seen_status = file.color("seen", "status");
+        out.seen_dot = file.seen_dot.unwrap_or_default();
         out.opacity = file.material.opacity;
         out.blur = file.material.blur;
         out.backdrop = file
@@ -271,23 +275,6 @@ impl Palette {
             .image
             .as_ref()
             .map(super::backdrop::Backdrop::of);
-        out
-    }
-    /// Names in a file's `ui`, `status` and `tone` no window color answers to.
-    pub fn unknown_keys(file: &ThemeFile) -> Vec<String> {
-        let mut out = vec![];
-        let mut check = |section: &str, known: &dyn Fn(&str) -> bool| {
-            for key in file.colors.get(section).into_iter().flat_map(|k| k.keys()) {
-                if !known(key) {
-                    out.push(format!("不认识 {section}.{key}，已跳过"));
-                }
-            }
-        };
-        check("ui", &|key| UI_TOKENS.iter().any(|(name, _)| *name == key));
-        check("status", &|key| Status::ALL.iter().any(|s| s.key() == key));
-        check("tone", &|key| {
-            super::tone::Tone::ALL.iter().any(|t| t.key() == key)
-        });
         out
     }
 }
@@ -331,11 +318,10 @@ pub const SPACE_TILES: [[u32; 2]; 6] = [
     [0x3d62c9, 0x7b8cf0],
     [0x8a6a2a, 0xb38a3a],
 ];
-/// Every window color a theme can replace: the file key, its field, and what 主题编辑器
-/// calls it. The keys are a public contract: rename one and old theme files lose it.
+/// Every window color a theme can replace, as fields of the palette. Core owns the list.
 macro_rules! ui_tokens {
     ($($field:ident $label:literal),* $(,)?) => {
-        pub const UI_TOKENS: &[(&str, &str)] = &[$((stringify!($field), $label)),*];
+        pub const UI_TOKENS: &[(&str, &str)] = mooring_core::theme::UI_NAMES;
         impl Palette {
             pub fn ui(&self, key: &str) -> Option<u32> {
                 match key {
@@ -356,23 +342,7 @@ macro_rules! ui_tokens {
         }
     };
 }
-ui_tokens!(
-    app "窗口外框", sidebar "侧栏", panel "面板", pane "窗格", header "窗格标题",
-    todo "待办底色", raised "凸起面", border "分隔线", card_border "卡片边线",
-    control "控件边线", field_edge "输入框边线", button "按钮", button_hover "按钮悬停",
-    primary "主要文字", body "正文", secondary "次要文字", muted "弱文字",
-    accent "强调色", on_accent "强调色上的文字", focus "焦点", link "界面链接",
-    selection "界面选区", chip "标签底色", popover "浮层", palette_row "命令面板选中行",
-    matched "搜索命中", series_other "图表其他", hatch "图表阴影线", chart_grid "图表网格",
-    chart_ref "图表参考线",
-    sidebar_line "侧栏分隔线", sidebar_field_line "侧栏搜索框边线",
-    sidebar_chip_line "空间标签边线", sidebar_chip_on "选中空间底色",
-    sidebar_chip_on_line "选中空间边线", sidebar_hover "会话行悬停",
-    sidebar_selected "选中会话底色", sidebar_selected_line "选中会话边线",
-    sidebar_bright "品牌和选中文字", sidebar_title "会话标题", sidebar_quiet "停着的标题",
-    sidebar_second "侧栏次要文字", sidebar_third "侧栏弱文字", sidebar_done "做完的 ✓",
-    sidebar_idle "停着的圆圈", sidebar_scope "空间筛选条", sidebar_key_line "按键提示边线",
-);
+mooring_core::with_ui_tokens!(ui_tokens);
 
 #[cfg(test)]
 mod tests {
@@ -410,17 +380,24 @@ mod tests {
         }
     }
     #[test]
-    fn unknown_names_are_reported() {
-        let mut file = ThemeFile {
+    fn the_window_paints_every_name_core_accepts() {
+        let plain = Palette::of_file(&ThemeFile {
             bg: 0,
             fg: 0xffffff,
             ..ThemeFile::default()
-        };
-        file.set("ui", "sidebar", Some(1));
-        file.set("ui", "wobble", Some(1));
-        file.set("status", "running", Some(1));
-        file.set("tone", "good", Some(1));
-        assert_eq!(Palette::unknown_keys(&file).len(), 2);
+        });
+        for (name, _) in UI_TOKENS {
+            assert!(plain.ui(name).is_some(), "{name}");
+        }
+        let (status, tone) = (Status::ALL.map(|s| s.key()), super::super::tone::Tone::ALL);
+        for key in status {
+            assert!(
+                mooring_core::status::Status::ALL
+                    .iter()
+                    .any(|s| s.key() == key)
+            );
+        }
+        assert_eq!(tone.map(|t| t.key()), mooring_core::theme::TONE_NAMES);
     }
     #[test]
     fn every_token_can_be_read_and_replaced() {

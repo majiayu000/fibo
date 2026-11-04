@@ -13,8 +13,9 @@ use std::path::{Path, PathBuf};
 /// The package format's major version; a plugin of another is refused, not guessed at.
 pub const API: u32 = 1;
 /// What this build's plugin support adds up to, raised whenever a kind or a manifest field
-/// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`, 3 `themes`. A plugin needing a
-/// higher level says so in `mooring`, and is refused with "update Mooring".
+/// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`, 3 `themes`,
+/// an action's `agent` and a secret setting. A plugin needing a higher level says so in
+/// `mooring`, and is refused with "update Mooring".
 pub const LEVEL: u32 = 3;
 
 /// What a plugin can extend. The file each kind reads is fixed, so a manifest only says
@@ -77,7 +78,7 @@ impl Kind {
             Self::Sidebar => Some("在左栏顶部切换排法"),
             Self::Actions => Some("在窗格右键菜单和 ⌘P 里"),
             Self::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
-            Self::Agent => Some("Agent 类要等 Mooring 后台下次启动（更新 App 或重启电脑）才生效"),
+            Self::Agent => Some("新开窗格的 Agent 列表里就有；已经开着的会话不受影响"),
             Self::Quota => Some("显示在状态栏的额度里"),
             Self::Themes => Some("在设置 › 外观里选"),
             Self::Hooks | Self::Rules | Self::Setup => None,
@@ -279,7 +280,13 @@ static CONFIG: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// until `reload`.
 pub fn install(config: &Path) -> &'static [Found] {
     let _ = CONFIG.set(config.to_owned());
-    INSTALLED.get_or_init(|| discover(&dir(config)))
+    INSTALLED.get_or_init(|| {
+        let plugins = dir(config);
+        if plugins.is_dir() {
+            crate::market::recover(&plugins);
+        }
+        discover(&plugins)
+    })
 }
 
 /// The config directory `install` was given.
@@ -287,14 +294,14 @@ pub fn config() -> Option<&'static Path> {
     CONFIG.get().map(PathBuf::as_path)
 }
 
-/// Discovers the plugins again and reloads every kind a running process can swap:
-/// actions, sidebar presets, decorations, effects, rules and hooks. Agents stay as they
-/// were registered at start (`needs_restart`). Does nothing before `install`.
+/// Discovers the plugins again and reloads every kind. Does nothing before `install`.
 pub fn reload() {
     let Some(config) = CONFIG.get() else {
         return;
     };
     INSTALLED.set(discover(&dir(config)));
+    // First: the others name Agents.
+    crate::agent::reload();
     crate::action::reload();
     crate::sidebar::reload();
     crate::decoration::reload();
@@ -302,11 +309,6 @@ pub fn reload() {
     crate::rule::reload();
     crate::hook::reload();
     crate::quota::reload();
-}
-
-/// Kinds a running app cannot swap in: the agent registry is fixed at start.
-pub fn needs_restart(kind: Kind) -> bool {
-    kind == Kind::Agent
 }
 
 /// The installed plugin with this id, if one loaded.
@@ -317,43 +319,135 @@ pub fn installed(id: &str) -> Option<&'static Plugin> {
         .find(|p| p.id == id)
 }
 
-/// Removes an installed plugin's directory and its switch. Only a directory directly
-/// under the plugins folder whose `plugin.json` names this id is removed.
-pub fn uninstall(id: &str) -> Result<(), String> {
-    if !valid_id(id) {
-        return Err(format!("id \"{id}\" 不合法"));
+/// Held while plugins are installed, removed or switched: the app and a `mooring plugins` in
+/// a terminal must not swap the same directory at once. Released when dropped.
+pub(crate) fn lock(plugins: &Path) -> Result<std::fs::File, String> {
+    use std::os::fd::AsRawFd;
+    std::fs::create_dir_all(plugins).map_err(|e| format!("建不了插件目录：{e}"))?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(plugins.join(".lock"))
+        .map_err(|e| format!("打不开插件锁：{e}"))?;
+    // SAFETY: flock on a file this function just opened and returns.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(format!("拿不到插件锁：{}", std::io::Error::last_os_error()));
     }
+    Ok(file)
+}
+
+/// Removes an installed plugin's directory and its switch; on success, anything you should
+/// know about what is left. A plugin that does not load can be removed too, by its directory
+/// name, since nothing else could ever remove it; its teardown cannot run, and that is said.
+/// With `force`, a failing teardown no longer keeps it, and that is said too.
+pub fn uninstall(id: &str, force: bool) -> Result<Option<String>, String> {
     let plugins = dir(CONFIG.get().ok_or("找不到配置目录")?);
-    let found = discover(&plugins)
-        .into_iter()
-        .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
-        .ok_or_else(|| format!("没有装叫 {id} 的插件"))?;
-    if found.dir.parent() != Some(plugins.as_path()) {
-        return Err(format!("{} 不在插件目录里，没有删", found.dir.display()));
+    uninstall_in(&plugins, id, force)
+}
+
+pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<String>, String> {
+    let _held = lock(plugins)?;
+    let mut warnings = Vec::new();
+    let found = discover(plugins);
+    let loaded = found
+        .iter()
+        .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id));
+    let (target, data_id) = match loaded {
+        Some(f) => {
+            if f.dir.parent() != Some(plugins) {
+                return Err(format!("{} 不在插件目录里，没有删", f.dir.display()));
+            }
+            // What it set up is undone first; when that fails it stays, since what it
+            // changed may still need its files (a status line pointing at its script).
+            let p = f.result.as_ref().map_err(Clone::clone)?;
+            if p.enabled
+                && let Err(why) = crate::setup::run(plugins, &f.dir, crate::setup::Phase::Teardown)
+            {
+                if !force {
+                    return Err(format!("没有卸载：{why}"));
+                }
+                warnings.push(left_behind(&why, &p.touches));
+            }
+            (f.dir.clone(), id.to_owned())
+        }
+        None => {
+            // Not loading: only an exact directory of the plugins folder, by name.
+            let named = crate::market::safe_path(id)
+                .then(|| {
+                    found
+                        .iter()
+                        .find(|f| f.dir == plugins.join(id) && f.result.is_err())
+                })
+                .flatten();
+            let Some(f) = named else {
+                return Err(format!("没有装叫 {id} 的插件"));
+            };
+            if f.dir.join("setup.json").is_file() {
+                warnings
+                    .push("它加载不了，teardown 没有跑；它改过的别的程序的设置可能还在".to_owned());
+            }
+            (
+                f.dir.clone(),
+                declared_id(&f.dir).unwrap_or_else(|| id.to_owned()),
+            )
+        }
+    };
+    let secrets = secret_keys(&target);
+    std::fs::remove_dir_all(&target).map_err(|e| format!("删不掉 {}：{e}", target.display()))?;
+    for key in secrets {
+        crate::secret::delete(&data_id, &key);
     }
-    // What it set up is undone first; when that fails it stays, since what it changed
-    // may still need its files (a status line pointing at its script).
-    if found.result.as_ref().is_ok_and(|p| p.enabled) {
-        crate::setup::run(&plugins, &found.dir, crate::setup::Phase::Teardown)
-            .map_err(|e| format!("没有卸载：{e}"))?;
-    }
-    std::fs::remove_dir_all(&found.dir)
-        .map_err(|e| format!("删不掉 {}：{e}", found.dir.display()))?;
     // What it kept is gone with it; teardown has already put back what needed putting.
-    let data = crate::setup::data_dir(&plugins, id);
-    if data.is_dir() {
-        let _ = std::fs::remove_dir_all(&data);
+    let data = crate::setup::data_dir(plugins, &data_id);
+    if data.is_dir()
+        && let Err(e) = std::fs::remove_dir_all(&data)
+    {
+        warnings.push(format!("它的数据目录 {} 没删掉：{e}", data.display()));
     }
-    let mut off = disabled(&plugins);
-    if off.iter().any(|d| d == id) {
-        off.retain(|d| d != id);
-        std::fs::write(
-            switches(&plugins),
-            serde_json::to_vec_pretty(&off).unwrap_or_default(),
-        )
-        .map_err(|e| format!("没能更新插件开关：{e}"))?;
+    let mut off = disabled(plugins);
+    if off.contains(&data_id) {
+        off.retain(|d| *d != data_id);
+        write_switches(plugins, &off).map_err(|e| format!("没能更新插件开关：{e}"))?;
     }
-    Ok(())
+    Ok((!warnings.is_empty()).then(|| warnings.join("；")))
+}
+
+/// What a forced removal leaves: why teardown failed and what it says it had changed.
+fn left_behind(why: &str, touches: &[String]) -> String {
+    if touches.is_empty() {
+        format!("{why}，它改过的东西可能还在")
+    } else {
+        format!("{why}，这些文件可能还留着它的改动：{}", touches.join("、"))
+    }
+}
+
+/// The secret settings a manifest names, read loosely: a plugin that does not load may still
+/// have left them in the keychain.
+fn secret_keys(dir: &Path) -> Vec<String> {
+    let Some(value) = std::fs::read(dir.join("plugin.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+    else {
+        return vec![];
+    };
+    value["options"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|o| o["secret"] == true)
+        .filter_map(|o| o["key"].as_str().map(str::to_owned))
+        .collect()
+}
+
+/// The id a manifest names, read loosely: for a plugin that does not load.
+fn declared_id(dir: &Path) -> Option<String> {
+    let bytes = std::fs::read(dir.join("plugin.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value["id"]
+        .as_str()
+        .filter(|id| valid_id(id))
+        .map(str::to_owned)
 }
 
 /// `plugins/disabled.json`: the ids turned off in settings, as a JSON list.
@@ -376,31 +470,66 @@ pub fn enabled_next_start(id: &str) -> bool {
         .get()
         .is_none_or(|c| !disabled(&dir(c)).iter().any(|d| d == id))
 }
-/// Turns a plugin on or off; `reload` applies it to the running process.
-pub fn set_enabled(id: &str, on: bool) -> std::io::Result<()> {
-    let plugins = dir(CONFIG
-        .get()
-        .ok_or_else(|| std::io::Error::other("找不到配置目录"))?);
-    let mut off = disabled(&plugins);
+/// Turns a plugin on or off; `reload` applies it to the running process. A plugin whose
+/// setup fails stays off, with what it managed undone as far as its teardown can. A failing
+/// teardown keeps it on unless `force`: on, it still runs, so you must be able to stop it.
+pub fn set_enabled(id: &str, on: bool, force: bool) -> Result<Option<String>, String> {
+    let plugins = dir(CONFIG.get().ok_or("找不到配置目录")?);
+    set_enabled_in(&plugins, id, on, force)
+}
+
+pub fn set_enabled_in(
+    plugins: &Path,
+    id: &str,
+    on: bool,
+    force: bool,
+) -> Result<Option<String>, String> {
+    use crate::setup::Phase;
+    let _held = lock(plugins)?;
+    let mut off = disabled(plugins);
     let was_on = !off.iter().any(|d| d == id);
+    let mut warning = None;
     if was_on != on
-        && let Some(found) = discover(&plugins)
+        && let Some(f) = discover(plugins)
             .into_iter()
             .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
     {
-        let phase = if on {
-            crate::setup::Phase::Setup
-        } else {
-            crate::setup::Phase::Teardown
-        };
-        crate::setup::run(&plugins, &found.dir, phase).map_err(std::io::Error::other)?;
+        if on {
+            if let Err(why) = crate::setup::run(plugins, &f.dir, Phase::Setup) {
+                let _ = crate::setup::run(plugins, &f.dir, Phase::Teardown);
+                return Err(why);
+            }
+        } else if let Err(why) = crate::setup::run(plugins, &f.dir, Phase::Teardown) {
+            if !force {
+                return Err(why);
+            }
+            let touches = f.result.as_ref().map_or(&[][..], |p| p.touches.as_slice());
+            warning = Some(left_behind(&why, touches));
+        }
     }
     off.retain(|d| d != id);
     if !on {
         off.push(id.to_owned());
     }
-    std::fs::create_dir_all(&plugins)?;
-    std::fs::write(switches(&plugins), serde_json::to_vec_pretty(&off)?)
+    write_switches(plugins, &off).map_err(|e| format!("没能更新插件开关：{e}"))?;
+    Ok(warning)
+}
+
+/// Marks it off without running anything: its setup just failed, so its teardown has had
+/// its chance and turning it on later runs the setup again.
+pub(crate) fn mark_off(plugins: &Path, id: &str) -> std::io::Result<()> {
+    let mut off = disabled(plugins);
+    if !off.iter().any(|d| d == id) {
+        off.push(id.to_owned());
+    }
+    write_switches(plugins, &off)
+}
+
+fn write_switches(plugins: &Path, off: &[String]) -> std::io::Result<()> {
+    std::fs::create_dir_all(plugins)?;
+    let tmp = plugins.join(".disabled.json.tmp");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(off)?)?;
+    std::fs::rename(tmp, switches(plugins))
 }
 
 /// Every plugin directory's outcome since `install`; empty before it.
@@ -415,6 +544,33 @@ pub fn files(kind: Kind) -> Vec<PathBuf> {
         .filter_map(|f| f.result.as_ref().ok())
         .flat_map(|p| p.files(kind))
         .collect()
+}
+
+/// Why a declaration file does not parse. A field or value this build has never heard of
+/// may be a typo or may be from a newer Mooring: say both.
+pub fn bad_format(e: &serde_json::Error) -> String {
+    let text = e.to_string();
+    if text.contains("unknown field") || text.contains("unknown variant") {
+        format!("格式不对：{text}（写错了，或者要更新 Mooring 才认识）")
+    } else {
+        format!("格式不对：{text}")
+    }
+}
+
+/// One kind's files through the loader a running process reads them with.
+pub fn load_kind(kind: Kind, files: Vec<PathBuf>, home: &Path) -> Vec<crate::agent::Loaded> {
+    match kind {
+        Kind::Agent => crate::agent::load_files(files, home).1,
+        Kind::Actions => crate::action::load(files).1,
+        Kind::Rules => crate::rule::load(files).1,
+        Kind::Sidebar => crate::sidebar::load(files).1,
+        Kind::Hooks => crate::hook::load(files).1,
+        Kind::Decorations => crate::decoration::load(files).1,
+        Kind::Effects => crate::effect::load(files).1,
+        Kind::Setup => crate::setup::load(files),
+        Kind::Quota => crate::quota::load(files).1,
+        Kind::Themes => crate::theme::load(files),
+    }
 }
 
 /// `<config_dir>/plugins`, the directory the settings page tells people to use.
@@ -509,6 +665,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         .iter()
         .map(|k| k.level())
         .chain((!m.files.is_empty() || !m.options.is_empty()).then_some(2))
+        .chain(m.options.iter().any(|o| o.secret).then_some(3))
         .max()
         .unwrap_or(1);
     let level = m.mooring.unwrap_or(needed).max(needed);
@@ -569,186 +726,5 @@ pub fn valid_id(id: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("kl-plugin-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        d
-    }
-    fn plugin(root: &Path, dir: &str, manifest: &str, files: &[(&str, &str)]) {
-        let d = root.join(dir);
-        std::fs::create_dir_all(&d).unwrap();
-        std::fs::write(d.join("plugin.json"), manifest).unwrap();
-        for (f, body) in files {
-            let p = d.join(f);
-            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
-            std::fs::write(p, body).unwrap();
-        }
-    }
-
-    #[test]
-    fn a_bad_plugin_is_reported_and_the_rest_load() {
-        let root = tmp("discover");
-        plugin(
-            &root,
-            "a-aider",
-            r#"{"api":1,"id":"aider","name":"Aider","provides":["agent"]}"#,
-            &[("agent.json", "{}"), ("agents/extra.json", "{}")],
-        );
-        plugin(&root, "b-broken", "{not json", &[]);
-        plugin(
-            &root,
-            "c-future",
-            r#"{"api":2,"id":"future","name":"F","provides":["agent"]}"#,
-            &[("agent.json", "{}")],
-        );
-        plugin(
-            &root,
-            "d-empty",
-            r#"{"api":1,"id":"empty","name":"E","provides":["agent"]}"#,
-            &[],
-        );
-        plugin(
-            &root,
-            "e-dup",
-            r#"{"api":1,"id":"aider","name":"Again","provides":["agent"]}"#,
-            &[("agent.json", "{}")],
-        );
-        std::fs::create_dir_all(root.join("f-nomanifest")).unwrap();
-        let found = discover(&root);
-        let results: Vec<_> = found
-            .iter()
-            .map(|f| f.result.as_ref().map(|p| p.id.clone()))
-            .collect();
-        assert_eq!(results[0], Ok("aider".into()));
-        assert!(results[1].as_ref().unwrap_err().contains("格式不对"));
-        assert!(results[2].as_ref().unwrap_err().contains("api 2"));
-        assert!(results[3].as_ref().unwrap_err().contains("没有它的文件"));
-        assert!(results[4].as_ref().unwrap_err().contains("重名"));
-        assert!(
-            results[5]
-                .as_ref()
-                .unwrap_err()
-                .contains("缺少 plugin.json")
-        );
-        let aider = found[0].result.as_ref().unwrap();
-        let files = aider.files(Kind::Agent);
-        assert_eq!(files.len(), 2);
-        assert!(files[0].ends_with("agent.json"), "agent.json loads first");
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn shipped_example_plugins_load() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
-        let found = discover(&root);
-        assert!(found.len() >= 3);
-        for f in &found {
-            let p = f.result.as_ref().unwrap_or_else(|e| panic!("{e}: {f:?}"));
-            let (_, actions) = crate::action::load(p.files(Kind::Actions));
-            let (_, rules) = crate::rule::load(p.files(Kind::Rules));
-            let (_, sidebar) = crate::sidebar::load(p.files(Kind::Sidebar));
-            let (_, hooks) = crate::hook::load(p.files(Kind::Hooks));
-            let (_, decorations) = crate::decoration::load(p.files(Kind::Decorations));
-            let (_, effects) = crate::effect::load(p.files(Kind::Effects));
-            let (_, quota) = crate::quota::load(p.files(Kind::Quota));
-            let setup = crate::setup::load(p.files(Kind::Setup));
-            for loaded in actions
-                .iter()
-                .chain(&rules)
-                .chain(&sidebar)
-                .chain(&hooks)
-                .chain(&decorations)
-                .chain(&effects)
-                .chain(&quota)
-                .chain(&setup)
-            {
-                assert!(loaded.result.is_ok(), "{loaded:?}");
-            }
-        }
-    }
-
-    #[test]
-    fn a_turned_off_plugin_is_listed_but_loads_nothing() {
-        let root = tmp("switch");
-        plugin(
-            &root,
-            "a-aider",
-            r#"{"api":1,"id":"aider","name":"Aider","provides":["agent"]}"#,
-            &[("agent.json", "{}")],
-        );
-        std::fs::write(root.join("disabled.json"), r#"["aider"]"#).unwrap();
-        let found = discover(&root);
-        assert_eq!(found.len(), 1, "the switch file is not a plugin");
-        let p = found[0].result.as_ref().unwrap();
-        assert!(!p.enabled);
-        assert!(p.files(Kind::Agent).is_empty());
-        std::fs::write(root.join("disabled.json"), "not json").unwrap();
-        assert!(discover(&root)[0].result.as_ref().unwrap().enabled);
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn no_plugins_directory_is_no_plugins() {
-        assert!(discover(Path::new("/nonexistent/mooring/plugins")).is_empty());
-    }
-
-    #[test]
-    fn a_plugin_for_a_newer_mooring_loads_what_this_one_knows() {
-        let root = tmp("newer");
-        plugin(
-            &root,
-            "a-mixed",
-            r#"{"api":1,"id":"mixed","name":"M","provides":["actions","canvas"],"homepage":"x"}"#,
-            &[("actions.json", "{}")],
-        );
-        plugin(
-            &root,
-            "b-only-new",
-            r#"{"api":1,"id":"only-new","name":"N","provides":["canvas"]}"#,
-            &[],
-        );
-        plugin(
-            &root,
-            "c-level",
-            r#"{"api":1,"id":"level","name":"L","provides":["actions"],"mooring":99}"#,
-            &[("actions.json", "{}")],
-        );
-        plugin(
-            &root,
-            "d-quota",
-            r#"{"api":1,"id":"quota","name":"Q","provides":["quota"]}"#,
-            &[("quota.json", "{}")],
-        );
-        let found = discover(&root);
-        let mixed = found[0].result.as_ref().unwrap();
-        assert_eq!(mixed.provides, [Kind::Actions]);
-        assert_eq!(mixed.warnings.len(), 2, "{:?}", mixed.warnings);
-        assert!(mixed.warnings[0].contains("canvas"));
-        assert!(mixed.warnings[1].contains("homepage"));
-        assert_eq!(mixed.level, 1);
-        assert!(
-            found[1]
-                .result
-                .as_ref()
-                .unwrap_err()
-                .contains("更新 Mooring")
-        );
-        assert!(
-            found[2]
-                .result
-                .as_ref()
-                .unwrap_err()
-                .contains("插件级别 99")
-        );
-        assert_eq!(
-            found[3].result.as_ref().unwrap().level,
-            2,
-            "quota came in level 2"
-        );
-        let _ = std::fs::remove_dir_all(&root);
-    }
-}
+#[path = "plugin_tests.rs"]
+mod tests;

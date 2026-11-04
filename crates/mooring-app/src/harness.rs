@@ -14,6 +14,8 @@ mod phones_evidence;
 mod remote_typing_evidence;
 #[path = "settings_evidence.rs"]
 mod settings_evidence;
+#[path = "subagent_evidence.rs"]
+mod subagent_evidence;
 
 /// Runs the evidence script the environment asks for against the opened workbench.
 pub fn start(
@@ -26,6 +28,7 @@ pub fn start(
         || remote_typing_evidence::start(handle, evidence.clone(), cx)
         || cpu_probe_evidence::start(handle, evidence.clone(), cx)
         || pane_drag_evidence::start(handle, evidence.clone(), cx)
+        || subagent_evidence::start(handle, evidence.clone(), cx)
     {
         return;
     }
@@ -104,16 +107,16 @@ pub fn start(
                     let style: mooring_core::effect::Style = serde_json::from_value(serde_json::json!(style)).expect("style");
                     let effect = mooring_core::effect::Complete::of(style);
                     shot("0-review.png", cx);
-                    for t in [0.1f32, 0.32, 0.45, 0.6, 0.8, 0.9, 0.95] {
+                    let times = handle.update(cx, |v, w, _| v.visual_complete_times(w)).unwrap(); for &t in &times {
                         handle.update(cx, |v, _, a| {
-                            if v.visual_completable(tid).2 && t == 0.1 {
+                            if t == times[0] {
                                 v.visual_complete_with(tid, effect, Some(t), a);
                             } else {
                                 v.visual_pin_completing(tid, Some(t), a);
                             }
                         }).unwrap();
                         wait(150).await;
-                        shot(&format!("{style:?}-t{:03}.png", (t * 100.) as u32), cx);
+                        shot(&format!("{style:?}-t{:03}.png", (t * 100.).round() as u32), cx);
                     }
                     handle.update(cx, |v, _, a| v.visual_keep_completed(tid, a)).unwrap();
                     let _ = handle.update(cx, |v, _, _| v.visual_take_paints());
@@ -3076,18 +3079,12 @@ pub fn start(
                 if name == "HereTyped" {
                     use gpui::InputEvent;
                     // A plain keystroke into the terminal folds the card over it.
-                    cx.update_window(handle.into(), |_, w, a| {
-                        w.dispatch_event(
-                            gpui::KeyDownEvent {
-                                keystroke: gpui::Keystroke::parse("x").unwrap(),
-                                is_held: false,
-                                prefer_character_input: false,
-                            }
-                            .to_platform_input(),
-                            a,
-                        );
-                    })
-                    .unwrap();
+                    let key = gpui::KeyDownEvent {
+                        keystroke: gpui::Keystroke::parse("x").unwrap(),
+                        is_held: false,
+                        prefer_character_input: false,
+                    };
+                    pane_drag_evidence::send(handle, cx, key.to_platform_input());
                     let open = handle.update(cx, |v, _, _| v.visual_here_open()).unwrap();
                     assert!(!open, "typing into the pane folds its 你在这里 card");
                     eprintln!("HereTyped: card folded after a keystroke");

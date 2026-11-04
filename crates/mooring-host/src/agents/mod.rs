@@ -10,7 +10,6 @@ use mooring_core::{content::Source, model::Agent, model::AgentSession};
 use serde_json::Value;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 pub(crate) mod claude;
 pub(crate) mod codex;
@@ -212,15 +211,49 @@ pub fn adapter(agent: Agent) -> &'static dyn Adapter {
     }
 }
 
-/// Every registered CLI that is not built in, read from its declaration once.
+/// Every registered CLI that is not built in, read from its declaration; again whenever
+/// the registry was replaced. A replaced set stays alive for whoever still holds an adapter.
 fn declared() -> &'static [declared::Declared] {
-    static DECLARED: OnceLock<Vec<declared::Declared>> = OnceLock::new();
-    DECLARED.get_or_init(|| {
+    static DECLARED: mooring_core::plugin::Slot<(u64, Vec<declared::Declared>)> =
+        mooring_core::plugin::Slot::new();
+    let now = mooring_core::agent::generation();
+    if let Some((at, set)) = DECLARED.get() {
+        if *at == now {
+            return set;
+        }
+    }
+    let set = Agent::all()
+        .into_iter()
+        .filter_map(declared::Declared::new)
+        .collect();
+    &DECLARED.set((now, set)).1
+}
+
+/// `roots` after plugins changed: the built-ins' as they are (a fixture chooses its own),
+/// and each declared CLI's as its declaration says now; one no longer declared has none.
+pub fn roots_after_reload(
+    roots: &[(Agent, std::path::PathBuf)],
+    home: &Path,
+) -> Vec<(Agent, std::path::PathBuf)> {
+    let declared_now = |a: &Agent| a.spec().is_some_and(|s| s.file.is_some());
+    let mut out: Vec<_> = roots
+        .iter()
+        .filter(|(a, _)| a.spec().is_some() && !declared_now(a))
+        .cloned()
+        .collect();
+    out.extend(
         Agent::all()
             .into_iter()
-            .filter_map(declared::Declared::new)
-            .collect()
-    })
+            .filter(declared_now)
+            .map(|a| (a, adapter(a).root(home)))
+            .filter(|(_, root)| !root.as_os_str().is_empty())
+            // As the index keeps roots: file events name the real path, not a symlink's.
+            .map(|(a, root)| {
+                let real = crate::file_events::normalized(&root).unwrap_or(root);
+                (a, real)
+            }),
+    );
+    out
 }
 
 /// Each CLI's transcript root under `home`; a CLI that writes none has no root.

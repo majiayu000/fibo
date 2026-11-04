@@ -36,7 +36,7 @@ impl SpaceThemes {
         let dir = config_dir().ok_or("找不到配置目录")?;
         let text = serde_json::to_string_pretty(&self.chosen).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&dir).map_err(|e| format!("无法保存 {}：{e}", dir.display()))?;
-        std::fs::write(dir.join(FILE), text)
+        super::status_colors::write_atomic(&dir.join(FILE), text.as_bytes())
             .map_err(|e| format!("无法保存 {}：{e}", dir.join(FILE).display()))
     }
     pub fn of(&self, space: &str) -> Option<&str> {
@@ -44,7 +44,7 @@ impl SpaceThemes {
     }
 }
 /// The current space's theme, when it has one that still exists.
-pub fn shown(cx: &App) -> Option<&Entry> {
+pub fn entry(cx: &App) -> Option<&Entry> {
     let spaces = cx.try_global::<SpaceThemes>()?;
     let id = spaces.of(spaces.current.as_deref()?)?;
     cx.try_global::<Themes>()?.get(id)
@@ -60,6 +60,7 @@ pub fn follow(space: &str, cx: &mut App) {
     spaces.current = Some(space.to_owned());
     cx.set_global(spaces);
     super::appearance::apply(cx);
+    crate::set_menus(cx);
 }
 /// Give a space a theme, or `None` to have it follow 外观 again.
 pub fn set(space: &str, theme: Option<&str>, cx: &mut App) -> Result<(), String> {
@@ -72,23 +73,24 @@ pub fn set(space: &str, theme: Option<&str>, cx: &mut App) -> Result<(), String>
     spaces.save()?;
     cx.set_global(spaces);
     super::appearance::apply(cx);
+    crate::set_menus(cx);
     cx.refresh_windows();
     Ok(())
 }
-/// A theme the editor just saved, from a copy of what the current space wears: the space
-/// keeps wearing it.
-pub fn saved_as(id: &str, cx: &mut App) {
-    let Some(mut spaces) = cx.try_global::<SpaceThemes>().cloned() else {
-        return;
-    };
-    let Some(space) = spaces.current.clone().filter(|s| spaces.of(s).is_some()) else {
-        return;
-    };
-    spaces.chosen.insert(space, id.to_owned());
-    if let Err(error) = spaces.save() {
-        eprintln!("mooring: {error}");
-    }
-    cx.set_global(spaces);
+/// The current space follows 外观 again.
+pub fn release_current(cx: &mut App) -> Result<(), String> {
+    let current = cx
+        .try_global::<SpaceThemes>()
+        .and_then(|s| s.current.clone());
+    current.map_or(Ok(()), |space| set(&space, None, cx))
+}
+/// A theme the editor just saved, from what the current space wears: this space alone
+/// wears the result, and what 外观 chose stays as it was.
+pub fn saved_as(id: &str, cx: &mut App) -> Result<(), String> {
+    let current = cx
+        .try_global::<SpaceThemes>()
+        .and_then(|s| s.current.clone());
+    current.map_or(Ok(()), |space| set(&space, Some(id), cx))
 }
 pub fn toggle_menu(cx: &mut App) {
     let mut spaces = cx.try_global::<SpaceThemes>().cloned().unwrap_or_default();

@@ -278,7 +278,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
     (
         Page::Look,
         "标记完成动画",
-        "动效 动画 完成 印章 落印 扫光 化进侧栏 淡出 试播 effects",
+        "动效 动画 完成 印章 落印 扫光 化进侧栏 淡出 笑脸 松口气 睡醒 小太阳 比心 小猫 热茶 蹦回家 试播 effects",
     ),
     (
         Page::Look,
@@ -355,11 +355,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
         "Agent Hook",
         "hook hooks claude settings.json 过期 重新安装 对上对话",
     ),
-    (
-        Page::About,
-        "偏好文件",
-        "配置 config colors.json 状态颜色 访达",
-    ),
+    (Page::About, "偏好文件", "配置 config 访达"),
 ];
 pub(super) enum SettingsAction {
     Close,
@@ -1760,10 +1756,6 @@ impl SettingsView {
         }
         if self.shows(Page::About, "偏好文件", cx) {
             data.push(self.path_row(data.is_empty(), "偏好文件", config.clone(), cx));
-            let colors = config.map(|dir| dir.join("colors.json"));
-            if colors.as_ref().is_some_and(|p| p.is_file()) {
-                data.push(self.path_row(false, "状态颜色 colors.json", colors, cx));
-            }
         }
         if self.shows(Page::About, "Agent Hook", cx) {
             data.extend(self.hook_rows(data.is_empty(), cx));
@@ -2029,11 +2021,8 @@ impl Workbench {
                 cx.notify();
             }
             SettingsAction::PluginsChanged => {
-                // Decorations and WASM sidebars cache by position and file: start afresh.
-                decorations::forget();
-                this.sidebar.wasm = Default::default();
+                this.plugins_read_again(cx);
                 this.request(Request::ReloadPlugins, cx);
-                cx.refresh_windows();
                 cx.notify();
             }
             SettingsAction::PreviewComplete(effect) => {

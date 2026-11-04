@@ -279,6 +279,25 @@ impl SettingsView {
             "macOS 变换时，在下面两组之间切换"
         };
         rows.push(self.row(true, "明暗", note, modes).into_any_element());
+        if let Some(shown) = appearance::shown(cx)
+            && shown.source == appearance::Source::Space
+            && let Some(entry) = shown.entry
+        {
+            rows.push(
+                self.row(
+                    false,
+                    &format!("当前空间单独用着「{}」", entry.name),
+                    "下面选的主题在其他空间生效；右键空间也能换",
+                    secondary("space-theme-release", "让这个空间跟随外观").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.text_error = crate::ui::space_themes::release_current(cx).err();
+                            cx.notify();
+                        },
+                    )),
+                )
+                .into_any_element(),
+            );
+        }
         let shows_light = chosen.shows_light(cx.window_appearance(), crate::ui::style::current(cx));
         let sides: &[bool] = match chosen.mode {
             Mode::System => &[true, false],

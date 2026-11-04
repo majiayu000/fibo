@@ -6,7 +6,7 @@
 //! ones, and answers with sections of session, folder and note rows. Mooring draws the answer in its own style; a session the
 //! module names that the column does not list is ignored, and any failure falls back to
 //! the classic list with the reason shown.
-use super::sidebar_list::{End, Listed, bucket};
+use super::sidebar_list::{End, Listed};
 use super::*;
 use mooring_core::sidebar::{Bucket, Preset};
 use mooring_plugin_host as host;
@@ -115,14 +115,57 @@ enum Trailing {
     },
 }
 
-/// One module, loaded on first use, and its last answer: an unchanged state is not
-/// asked again, so redraws cost a byte comparison.
+/// One module, compiled off the UI thread on first use, and its last answer: an unchanged
+/// state is not asked again, so redraws cost a byte comparison.
 pub(super) struct Loaded {
-    plugin: Result<host::Plugin, String>,
+    module: Result<host::Module, String>,
+    /// None between a failed call and the next: what it left in its memory is not reused.
+    plugin: Option<host::Plugin>,
     last: Option<(Vec<u8>, Result<Reply, String>)>,
+    /// Calls that failed in a row, and when it may be asked again after too many.
+    failures: u32,
+    paused_until: Option<std::time::Instant>,
 }
-#[derive(Default)]
-pub(super) struct Views(RefCell<HashMap<String, Loaded>>);
+/// What is shown while a module compiles: the classic list, with no message.
+const COMPILING: &str = "正在加载";
+/// Calls that fail in a row before the module is left alone for `PAUSE`: each costs the UI
+/// thread up to its deadline, on every state change.
+const FAILURES: u32 = 3;
+const PAUSE: std::time::Duration = std::time::Duration::from_secs(30);
+/// Sections and rows taken from a reply. The bytes are capped by the host; this caps what
+/// turns into elements, on the UI thread, outside the call's deadline.
+const MAX_SECTIONS: usize = 100;
+const MAX_ROWS: usize = 2000;
+
+/// `Default` makes a new set after a reload; a compile that was going for the old set finds
+/// its id gone and drops what it made.
+pub(super) struct Views {
+    modules: RefCell<HashMap<String, Loaded>>,
+    compiling: RefCell<std::collections::HashSet<String>>,
+    id: u64,
+}
+impl Default for Views {
+    fn default() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        Self {
+            modules: Default::default(),
+            compiling: Default::default(),
+            id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        }
+    }
+}
+
+/// A reply the sidebar will draw, or why not.
+fn accept(reply: Reply) -> Result<Reply, String> {
+    let rows: usize = reply.sections.iter().map(|s| s.rows.len()).sum();
+    if reply.sections.len() > MAX_SECTIONS || rows > MAX_ROWS {
+        return Err(format!(
+            "回复太多（{} 段 {rows} 行，最多 {MAX_SECTIONS} 段 {MAX_ROWS} 行）",
+            reply.sections.len()
+        ));
+    }
+    Ok(reply)
+}
 
 fn engine() -> Result<&'static host::Engine, String> {
     static ENGINE: OnceLock<Result<host::Engine, String>> = OnceLock::new();
@@ -136,12 +179,14 @@ fn engine() -> Result<&'static host::Engine, String> {
         .map_err(Clone::clone)
 }
 
-fn load(preset: &Preset) -> Result<host::Plugin, String> {
+/// Reads and compiles it. Slow: never on the UI thread.
+fn compile(preset: &Preset) -> Result<host::Module, String> {
     let path = preset.wasm_path().ok_or("没有 wasm 文件")?;
     let bytes = std::fs::read(&path).map_err(|e| format!("读不了 {}：{e}", path.display()))?;
-    let engine = engine()?;
-    let module = host::module(engine, &bytes).map_err(|e| format!("不是可用的 wasm：{e}"))?;
-    host::Plugin::new(engine, &module).map_err(|e| format!("加载失败：{e}"))
+    host::module(engine()?, &bytes).map_err(|e| format!("不是可用的 wasm：{e}"))
+}
+fn instantiate(module: &host::Module) -> Result<host::Plugin, String> {
+    host::Plugin::new(engine()?, module).map_err(|e| format!("加载失败：{e}"))
 }
 
 /// The state string a session's group goes by, the same coarse words as the spec.
@@ -186,9 +231,11 @@ impl Workbench {
                 .iter()
                 .map(|l| (l, false))
                 .chain(closed.rows.iter().map(|l| (l, true)))
-                .map(|((s, g, _), closed)| {
+                .map(|(listed, closed)| {
+                    let (s, g, _) = listed;
                     let content = self.workspace.content.get(&s.id);
-                    let b = bucket(*g);
+                    // The sidebar's own answer, so 要你处理 means the same in both.
+                    let b = self.row_bucket(listed);
                     StateSession {
                         id: &s.id,
                         title: self.session_title(s),
@@ -209,8 +256,9 @@ impl Workbench {
                             Bucket::Stopped => content.and_then(|c| first(&c.last_reply)),
                             _ => None,
                         },
+                        // Finished for you to check: 要你处理 now, but still the last word.
                         done: content
-                            .filter(|_| b == Bucket::Done)
+                            .filter(|_| *g == Status::Review)
                             .and_then(|c| first(&c.last_reply)),
                         needs_you: b == Bucket::Attention,
                         closed,
@@ -225,33 +273,94 @@ impl Workbench {
         serde_json::to_vec(&state).unwrap_or_default()
     }
     /// The module's sections for this state, from its last answer when nothing changed.
+    /// The first ask starts its compile and shows the classic list until that lands.
     fn wasm_reply(
         &self,
         preset: &Preset,
         open: &[Listed],
         closed: &Closed,
         current: Option<&str>,
+        cx: &Context<Self>,
     ) -> Result<Reply, String> {
         let state = self.wasm_state(open, closed, current);
-        let mut views = self.sidebar.wasm.0.borrow_mut();
-        let view = views.entry(preset.id.clone()).or_insert_with(|| Loaded {
-            plugin: load(preset),
-            last: None,
-        });
+        let mut views = self.sidebar.wasm.modules.borrow_mut();
+        let Some(view) = views.get_mut(&preset.id) else {
+            self.start_compile(preset, cx);
+            return Err(COMPILING.to_owned());
+        };
         if let Some((input, reply)) = &view.last
             && *input == state
         {
             return reply.clone();
         }
-        let plugin = view.plugin.as_mut().map_err(|e| e.clone())?;
+        let module = view.module.as_ref().map_err(|e| e.clone())?;
+        if let Some(until) = view.paused_until {
+            if std::time::Instant::now() < until {
+                return view
+                    .last
+                    .as_ref()
+                    .map_or(Err("连续失败，稍后再试".to_owned()), |(_, r)| {
+                        r.clone()
+                    });
+            }
+            view.paused_until = None;
+        }
+        let plugin = match view.plugin.take() {
+            Some(p) => p,
+            None => instantiate(module)?,
+        };
+        let mut plugin = plugin;
         let reply = plugin
             .render(&state)
             .map_err(|e| format!("调用出错：{e}"))
             .and_then(|bytes| {
                 serde_json::from_slice::<Reply>(&bytes).map_err(|e| format!("回复格式不对：{e}"))
-            });
+            })
+            .and_then(accept);
+        if reply.is_ok() {
+            view.failures = 0;
+            view.plugin = Some(plugin);
+        } else {
+            // Its instance is dropped: the next call starts clean.
+            view.failures += 1;
+            if view.failures >= FAILURES {
+                view.failures = 0;
+                view.paused_until = Some(std::time::Instant::now() + PAUSE);
+            }
+        }
         view.last = Some((state, reply.clone()));
         reply
+    }
+    /// Compiles a preset's module on a background thread, once, and redraws when it lands.
+    fn start_compile(&self, preset: &Preset, cx: &Context<Self>) {
+        let views = &self.sidebar.wasm;
+        if !views.compiling.borrow_mut().insert(preset.id.clone()) {
+            return;
+        }
+        let (preset, id) = (preset.clone(), views.id);
+        cx.spawn(async move |this, cx| {
+            let key = preset.id.clone();
+            let module = cx.background_spawn(async move { compile(&preset) }).await;
+            let _ = this.update(cx, |this, cx| {
+                let views = &this.sidebar.wasm;
+                if views.id != id {
+                    return;
+                }
+                views.compiling.borrow_mut().remove(&key);
+                views.modules.borrow_mut().insert(
+                    key,
+                    Loaded {
+                        module,
+                        plugin: None,
+                        last: None,
+                        failures: 0,
+                        paused_until: None,
+                    },
+                );
+                cx.notify();
+            });
+        })
+        .detach();
     }
     /// The rows for a `wasm` preset, or the classic list under the reason it failed.
     /// Returns whether the module's answer is shown: it then owns the closed sessions too.
@@ -266,12 +375,18 @@ impl Workbench {
         out: &mut Vec<gpui::AnyElement>,
         cx: &Context<Self>,
     ) -> bool {
-        let reply = match self.wasm_reply(preset, &sessions, closed, current) {
+        let reply = match self.wasm_reply(preset, &sessions, closed, current, cx) {
             Ok(r) => r,
+            Err(why) if why == COMPILING => {
+                for l in sessions {
+                    push(out, l, None, End::State);
+                }
+                return false;
+            }
             Err(why) => {
                 out.push(
                     label(format!(
-                        "左栏「{}」没能排出来，先按经典显示：{why}",
+                        "左栏「{}」没能排出来，先排成一列显示：{why}",
                         preset.name
                     ))
                     .px(px(T::S8))
@@ -461,271 +576,5 @@ impl Workbench {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn session<'a>(id: &'a str, group: &'static str) -> StateSession<'a> {
-        StateSession {
-            id,
-            title: format!("会话 {id}"),
-            agent: "codex",
-            short: "AB12".into(),
-            group,
-            cwd: "/project",
-            updated: 10,
-            running_since: (group == "running").then_some(5),
-            line: Some("在改 sidebar.rs".into()),
-            stopped: (group == "waiting").then(|| "要不要推送".into()),
-            done: (group == "review").then(|| "改好了".into()),
-            needs_you: group == "waiting",
-            closed: false,
-            selected: false,
-        }
-    }
-
-    #[test]
-    fn the_shipped_wasm_preset_sorts_sessions_into_sections() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/sidebar-status");
-        let (presets, report) = mooring_core::sidebar::load(vec![dir.join("sidebar.json")]);
-        assert!(report[0].result.is_ok(), "{report:?}");
-        let mut plugin = load(presets.last().unwrap()).unwrap();
-        let mut gone = session("z", "paused");
-        gone.closed = true;
-        let mut elsewhere = session("d", "paused");
-        elsewhere.cwd = "/other";
-        let state = State {
-            sessions: vec![
-                session("a", "waiting"),
-                session("b", "running"),
-                session("c", "review"),
-                elsewhere,
-                gone,
-            ],
-            closed_total: 9,
-            now: 100,
-        };
-        let bytes = plugin.render(&serde_json::to_vec(&state).unwrap()).unwrap();
-        let reply: Reply = serde_json::from_slice(&bytes).unwrap();
-        let section = |id: &str| reply.sections.iter().find(|s| s.id == id).unwrap();
-        let ids = |id: &str| -> Vec<String> {
-            section(id)
-                .rows
-                .iter()
-                .filter_map(|r| match r {
-                    Row::Session { id, .. } => Some(id.clone()),
-                    _ => None,
-                })
-                .collect()
-        };
-        assert_eq!(ids("need"), ["a"]);
-        assert_eq!(ids("running"), ["b"]);
-        assert_eq!(ids("rest"), ["c", "d"]);
-        assert_eq!(ids("closed"), ["z"]);
-        assert!(matches!(
-            &section("running").rows[0],
-            Row::Session {
-                trailing: Trailing::Elapsed,
-                ..
-            }
-        ));
-        let rest = section("rest");
-        assert!(rest.folded_default);
-        assert!(matches!(&rest.rows[0], Row::Note { action: Some(a), .. } if a == "toggle"));
-        let folders: Vec<&str> = rest
-            .rows
-            .iter()
-            .filter_map(|r| match r {
-                Row::Folder { cwd, .. } => Some(cwd.as_str()),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(folders, ["/project", "/other"]);
-        // More closed than it lists: the last row points at the rest in 鸟瞰.
-        assert!(matches!(
-            section("closed").rows.last(),
-            Some(Row::Note { action: Some(a), text }) if a == "closed" && text.contains('9')
-        ));
-    }
-
-    #[test]
-    fn row_ends_are_a_few_known_words_or_a_text() {
-        let row = |end: &str| {
-            serde_json::from_str::<Row>(&format!(r#"{{"kind":"Session","id":"a"{end}}}"#)).map(
-                |r| match r {
-                    Row::Session { trailing, .. } => trailing,
-                    _ => unreachable!(),
-                },
-            )
-        };
-        assert_eq!(row("").unwrap(), Trailing::State);
-        assert_eq!(row(r#","trailing":"elapsed""#).unwrap(), Trailing::Elapsed);
-        assert_eq!(row(r#","trailing":"none""#).unwrap(), Trailing::None);
-        assert_eq!(
-            row(r#","trailing":{"text":"PR #12"}"#).unwrap(),
-            Trailing::Text {
-                text: "PR #12".into()
-            }
-        );
-        assert!(row(r#","trailing":"clock""#).is_err());
-    }
-
-    #[test]
-    fn a_module_that_is_not_wasm_is_refused_with_a_reason() {
-        let d = std::env::temp_dir().join(format!("kl-wasm-bad-{}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
-        std::fs::write(d.join("bad.wasm"), b"not wasm").unwrap();
-        std::fs::write(
-            d.join("sidebar.json"),
-            r#"{"api":1,"presets":[{"id":"bad","name":"坏","group":"wasm","wasm":"bad.wasm"}]}"#,
-        )
-        .unwrap();
-        let (presets, _) = mooring_core::sidebar::load(vec![d.join("sidebar.json")]);
-        let err = load(presets.last().unwrap()).err().unwrap();
-        assert!(err.contains("不是可用的 wasm"), "{err}");
-        let _ = std::fs::remove_dir_all(&d);
-    }
-
-    /// What one left-column draw spends on a real workspace, step by step, for the
-    /// "is incremental input worth it" question in specs/plugins/plugin-system.md.
-    /// `MOORING_WS_JSON=<Workspace JSON> cargo test --release -p mooring-app
-    /// sidebar_cost_on_a_real_workspace -- --ignored --nocapture`
-    #[test]
-    #[ignore]
-    fn sidebar_cost_on_a_real_workspace() {
-        use crate::model::session_state::{live_terminal, session_space, session_status};
-        use std::collections::HashSet;
-        use std::time::Instant;
-        let path = std::env::var("MOORING_WS_JSON").expect("MOORING_WS_JSON");
-        let w: Workspace = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-        let space = w.spaces[0].id.clone();
-        let unseen = HashSet::new();
-        let wasm = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../plugins/sidebar-status/sidebar_status.wasm");
-        let engine = engine().unwrap();
-        let mut plugin = host::Plugin::new(
-            engine,
-            &host::module(engine, &std::fs::read(wasm).unwrap()).unwrap(),
-        )
-        .unwrap();
-        let open_of = |s: &AgentSession| {
-            live_terminal(&w, s).is_some_and(|t| w.terminal_tab(&t.id).is_some())
-        };
-        // (in_space, closed pass, open pass, state json, plugin call) per draw, in µs.
-        let mut runs: Vec<[f64; 5]> = Vec::new();
-        let mut sizes = (0, 0, 0, 0);
-        for _ in 0..200 {
-            let mut t = Instant::now();
-            let lap = |t: &mut Instant| {
-                let us = t.elapsed().as_secs_f64() * 1e6;
-                *t = Instant::now();
-                us
-            };
-            let in_space: Vec<&AgentSession> = w
-                .agent_sessions
-                .iter()
-                .filter(|s| {
-                    let hidden = match w.content.get(&s.id) {
-                        Some(c) => c.hidden_for(s).is_some(),
-                        None => !(s.current && s.binding.is_some()),
-                    };
-                    !hidden && session_space(&w, s) == Some(space.as_str())
-                })
-                .collect();
-            let a = lap(&mut t);
-            let mut ended: Vec<_> = in_space
-                .iter()
-                .filter(|s| s.terminal.is_some() && !open_of(s))
-                .map(|s| (*s, session_status(&w, &unseen, s).0))
-                .collect();
-            ended.sort_by_key(|(s, _)| {
-                std::cmp::Reverse(w.content.get(&s.id).map_or(s.updated, |c| c.updated))
-            });
-            let total = ended.len();
-            ended.truncate(CLOSED_SHOWN);
-            let b = lap(&mut t);
-            let open: Vec<_> = in_space
-                .iter()
-                .filter(|s| open_of(s))
-                .map(|s| (*s, session_status(&w, &unseen, s).0))
-                .collect();
-            let c = lap(&mut t);
-            let state = State {
-                sessions: open
-                    .iter()
-                    .map(|l| (l, false))
-                    .chain(ended.iter().map(|l| (l, true)))
-                    .map(|((s, g), closed)| {
-                        let content = w.content.get(&s.id);
-                        let mut row = session(&s.id, group_name(*g));
-                        row.title = content.map(|c| c.title.clone()).unwrap_or_default();
-                        row.short = short_id(&s.cli_session_id);
-                        row.cwd = &s.cwd;
-                        row.line =
-                            content.map(|c| mooring_core::content::short(&c.headline(), 100));
-                        row.done = content.map(|c| c.last_reply.chars().take(80).collect());
-                        row.closed = closed;
-                        row
-                    })
-                    .collect(),
-                closed_total: total,
-                now: 0,
-            };
-            let bytes = serde_json::to_vec(&state).unwrap();
-            let d = lap(&mut t);
-            let reply = plugin.render(&bytes).unwrap();
-            let _: Reply = serde_json::from_slice(&reply).unwrap();
-            let e = lap(&mut t);
-            sizes = (in_space.len(), total, open.len(), bytes.len());
-            runs.push([a, b, c, d, e]);
-        }
-        let names = [
-            "筛本空间",
-            "已关闭全量算状态+排序",
-            "打开的算状态",
-            "生成输入 JSON",
-            "调插件+解析回复",
-        ];
-        eprintln!(
-            "本空间 {} 个会话，已关闭 {} 个，打开 {} 个，输入 {} 字节",
-            sizes.0, sizes.1, sizes.2, sizes.3
-        );
-        let mut totals: Vec<f64> = runs.iter().map(|r| r.iter().sum()).collect();
-        for (i, name) in names.iter().enumerate() {
-            let mut v: Vec<f64> = runs.iter().map(|r| r[i]).collect();
-            v.sort_by(f64::total_cmp);
-            eprintln!("{name}: p50 {:.0} µs, p95 {:.0} µs", v[100], v[190]);
-        }
-        totals.sort_by(f64::total_cmp);
-        eprintln!("合计: p50 {:.0} µs, p95 {:.0} µs", totals[100], totals[190]);
-    }
-
-    /// The words a module can see are the table in specs/plugins/plugin-system.md; a new
-    /// one belongs there too.
-    #[test]
-    fn modules_see_only_the_documented_group_words() {
-        let all = [
-            Status::Waiting,
-            Status::Error,
-            Status::Review,
-            Status::Paused,
-            Status::Running,
-            Status::Stale,
-            Status::Running,
-            Status::Review,
-            Status::Review,
-            Status::Fresh,
-            Status::Background,
-            Status::Closed,
-        ];
-        let documented = [
-            "waiting", "error", "running", "review", "paused", "fresh", "stale",
-        ];
-        for g in all {
-            assert!(documented.contains(&group_name(g)), "{}", group_name(g));
-            assert_eq!(
-                bucket(g) == Bucket::Attention,
-                matches!(group_name(g), "waiting" | "error" | "review")
-            );
-        }
-    }
-}
+#[path = "sidebar_wasm_tests.rs"]
+mod tests;

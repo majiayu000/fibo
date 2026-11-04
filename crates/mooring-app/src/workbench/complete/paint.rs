@@ -24,9 +24,14 @@ pub(super) struct Painter<'a> {
     pub(super) quads: usize,
     pub(super) green: Hsla,
     pub(super) on_accent: Hsla,
+    /// The face styles' warm tones, from the theme: the skin and the sun, cheeks and
+    /// hearts, and what is neither (steam, breath, a sleeper's Z).
+    pub(super) warm: Hsla,
+    pub(super) rose: Hsla,
+    pub(super) soft: Hsla,
 }
 impl Painter<'_> {
-    fn disc(&mut self, at: Point<Pixels>, r: f32, color: Hsla) {
+    pub(super) fn disc(&mut self, at: Point<Pixels>, r: f32, color: Hsla) {
         if r <= 0.05 || color.a <= 0.003 {
             return;
         }
@@ -53,7 +58,7 @@ impl Painter<'_> {
             self.disc(at, r + grow * strength, self.green.opacity(a * strength));
         }
     }
-    fn ring(&mut self, at: Point<Pixels>, r: f32, width: f32, color: Hsla) {
+    pub(super) fn ring(&mut self, at: Point<Pixels>, r: f32, width: f32, color: Hsla) {
         if r <= 0. || color.a <= 0.003 {
             return;
         }
@@ -71,11 +76,11 @@ impl Painter<'_> {
             Default::default(),
         ));
     }
-    fn rect(&mut self, b: Bounds<Pixels>, color: impl Into<gpui::Background>) {
+    pub(super) fn rect(&mut self, b: Bounds<Pixels>, color: impl Into<gpui::Background>) {
         self.quads += 1;
         self.window.paint_quad(gpui::fill(b, color));
     }
-    fn stroke(&mut self, points: &[Point<Pixels>], width: f32, color: Hsla) {
+    pub(super) fn stroke(&mut self, points: &[Point<Pixels>], width: f32, color: Hsla) {
         if points.len() < 2 || color.a <= 0.003 {
             return;
         }
@@ -151,6 +156,13 @@ impl Painter<'_> {
                 }
             }
             Style::Fade => {}
+            Style::Relief
+            | Style::Wake
+            | Style::Sunrise
+            | Style::Heart
+            | Style::Cat
+            | Style::Tea
+            | Style::Hop => self.cozy(style, t, body, target),
             Style::Stamp => {
                 let drop = sl(t, 0.12, 0.3);
                 let settle = sl(t, 0.3, 0.4);
@@ -399,7 +411,7 @@ impl Painter<'_> {
     ) -> (f32, Point<Pixels>) {
         self.flight_at(eio(sl(t, from, to)), start, target, bend)
     }
-    fn flight_at(
+    pub(super) fn flight_at(
         &self,
         k: f32,
         start: Point<Pixels>,

@@ -19,8 +19,18 @@ static SHOWN: LazyLock<Mutex<HashMap<(usize, DecoratedPane), Shown>>> =
 const FORGET: Duration = Duration::from_secs(600);
 const KEEP: usize = 256;
 
+/// Bumped by `forget`: a run that started before it reports a decoration that may no longer
+/// be at its index, so what it finds is dropped.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Whether a run started in generation `started` may still write its line.
+fn current(started: u64) -> bool {
+    GENERATION.load(std::sync::atomic::Ordering::SeqCst) == started
+}
+
 /// Drops every cached line: the decorations were reloaded and their indexes moved.
 pub(super) fn forget() {
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     if let Ok(mut shown) = SHOWN.lock() {
         shown.clear();
     }
@@ -34,6 +44,22 @@ pub(super) struct Lines {
 }
 
 impl Workbench {
+    /// Plugins were read again: decorations and WASM sidebars cache by position and file, and
+    /// which Agents exist may have changed, so all of that starts afresh.
+    pub(super) fn plugins_read_again(&mut self, cx: &mut Context<Self>) {
+        forget();
+        self.sidebar.wasm = Default::default();
+        self.tasks.found = None;
+        cx.refresh_windows();
+    }
+    /// Plugins changed from a terminal or another window: the host said so, read them here.
+    pub(super) fn follow_plugins(&mut self, revision: u64, cx: &mut Context<Self>) {
+        let before = self.store.recognition().plugins_revision;
+        if revision != before && before != 0 {
+            mooring_core::plugin::reload();
+            self.plugins_read_again(cx);
+        }
+    }
     pub(super) fn pane_decorations(&self, terminal: &str, cx: &Context<Self>) -> Lines {
         let mut lines = Lines::default();
         if decoration::all().is_empty() {
@@ -95,6 +121,7 @@ impl Workbench {
             },
         );
         drop(shown);
+        let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
         cx.spawn(async move |this, cx| {
             let pane = key.1.clone();
             let line = cx
@@ -105,6 +132,9 @@ impl Workbench {
                     })
                 })
                 .await;
+            if !current(generation) {
+                return;
+            }
             let changed = SHOWN.lock().is_ok_and(|mut shown| {
                 let before = shown.insert(
                     key,
@@ -125,5 +155,19 @@ impl Workbench {
         })
         .detach();
         old
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A run still going when plugins reload finds its generation gone and writes nothing.
+    #[test]
+    fn a_run_from_before_a_reload_may_not_write_its_line() {
+        let started = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(current(started));
+        forget();
+        assert!(!current(started));
     }
 }

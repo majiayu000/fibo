@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>界面性能 · 测量、规则与门禁</title>
+<style>
+  :root {
+    --bg: #111113; --panel: #1c1c1e; --sunk: #232325; --line: #333335;
+    --text: #ecebe9; --sec: #a3a2a0; --muted: #8a8988;
+    --ok: #199e70; --warn: #c98500; --bad: #e5534b; --accent: #3987e5;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14.5px/1.65 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    font-variant-numeric: tabular-nums; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 28px; font-size: 13px; }
+  h2 { font-size: 18px; margin: 40px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 22px 0 6px; }
+  p, li { color: var(--text); }
+  .muted { color: var(--sec); }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+  pre { font-family: var(--mono); font-size: 12.5px; background: var(--sunk); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--sec); font-weight: 500; font-size: 12.5px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin: 14px 0; }
+  .card.rule { border-left: 3px solid var(--accent); }
+  .card.warn { border-left: 3px solid var(--warn); }
+  .tag { display: inline-block; font-size: 11.5px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--sec); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .warnc { color: var(--warn); }
+  nav { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 18px; font-size: 13.5px; }
+  nav ol { margin: 6px 0; padding-left: 20px; columns: 2; }
+  a { color: #7fb0f0; }
+  @media (max-width: 640px) { nav ol { columns: 1; } table { font-size: 12.5px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>界面性能：测量、规则与门禁</h1>
+<p class="sub">Mooring 窗口进程（mooring-app）和后台（mooring serve）的性能指南。来源：2026-11-03 至 11-04 的优化与门禁工作。改界面、加视图、碰窗格观察或排版前先读「规则」；门禁报警时读「排查流程」。</p>
+
+<nav><b>目录</b>
+<ol>
+  <li><a href="#now">现状一览</a></li>
+  <li><a href="#measure">怎么量</a></li>
+  <li><a href="#gpui">GPUI 重画机制要点</a></li>
+  <li><a href="#rules">规则（写代码时）</a></li>
+  <li><a href="#gate">性能门禁</a></li>
+  <li><a href="#triage">门禁报警的排查流程</a></li>
+  <li><a href="#history">历次发现与修复</a></li>
+  <li><a href="#pitfalls">踩过的坑</a></li>
+  <li><a href="#ref">外部参考</a></li>
+  <li><a href="#open">未解问题与下一步</a></li>
+</ol></nav>
+
+<h2 id="now">1. 现状一览</h2>
+<p>测试工作区：2000 个会话、8 个空间、60 个终端都绑了会话、侧栏约 45 行（<code>scripts/perf-fixture.py</code>，接近长期使用的真实安装）。单位是每帧退休指令数。</p>
+<table>
+  <tr><th>帧</th><th>11-03 前</th><th>现在</th><th>说明</th></tr>
+  <tr><td>终端输出帧（只有窗格变了）</td><td>7430 万</td><td><b>约 830–900 万</b></td><td>最常见的帧：Agent 输出时每帧都是它</td></tr>
+  <tr><td>整窗重画（强制刷新）</td><td>约 7500 万</td><td><b>约 7570 万</b></td><td>切主题、开鸟瞰、改窗口大小时发生，次数少</td></tr>
+  <tr><td>真实窗口 CPU（Agent 输出时）</td><td>14–32%</td><td>采样 0–10%</td><td>各时段输出量不同，只作粗对比</td></tr>
+</table>
+<p class="muted">后台：<code>four_agents</code> 用例每行日志约 65 万条指令（预算 100 万）；40 个空闲终端 &lt;0.5% CPU、零磁盘读写。</p>
+
+<h2 id="measure">2. 怎么量</h2>
+<h3>指标：退休指令数，不是 CPU 时间</h3>
+<p>同一个版本，在机器负载 6 和 40 时，CPU 时间能差 2.5 倍；退休指令数差不到 1%。所以对照实验、门禁基线都用指令数（<code>proc_pid_rusage(RUSAGE_INFO_V4).ri_instructions</code>）。新旧版本交替跑，至少各两次。</p>
+<div class="card warn"><b>虚拟机读不到指令数。</b>GitHub 的 macOS 机器是虚拟机，<code>ri_instructions</code> 恒为 0。任何按指令数的断言在 CI 上都必须有退路，否则等于永远通过（见 <a href="#gate">门禁</a>）。</div>
+
+<h3>工具</h3>
+<table>
+  <tr><th>工具</th><th>用途</th></tr>
+  <tr><td><code>scripts/perf-fixture.py prepare BIN [N] [T] [SPIN]</code></td><td>造隔离的测试工作区（不调模型、不碰用户数据）。<code>NORUN=1</code> 不留在跑的回合，时钟不会触发侧栏</td></tr>
+  <tr><td><code>perf-fixture.py probe BIN OUT 阶段</code></td><td>跑窗口 CPU 探针。需要 <code>cargo build --release -p mooring-host -p mooring-app --features mooring-app/visual-test</code></td></tr>
+  <tr><td>探针阶段 <code>frames-pane</code></td><td>只通知窗格的帧 ×300（终端输出的真实情况）</td></tr>
+  <tr><td>探针阶段 <code>frames-main</code> / <code>frames-overview</code></td><td>强制整窗重画 ×300</td></tr>
+  <tr><td>探针阶段 <code>redraw-check</code></td><td>每步「不刷新的一帧」对「强制刷新的一帧」逐像素比对；终端输出时侧栏是否保留上次的绘制；补画是否自我触发</td></tr>
+  <tr><td><code>scripts/perf-gate.py BIN [OUT]</code></td><td>门禁：以上全部 + 对基线比较</td></tr>
+  <tr><td><code>sample PID 8 -file x.txt</code> + rustfilt</td><td>找热点。把探针循环临时改成几千次，让采样有足够时间</td></tr>
+</table>
+
+<h3>找大头的两种办法</h3>
+<ul>
+  <li><b>去掉一块量一次</b>：临时让某块界面不画（例如 <code>sidebar_view</code> 返回 None），看指令数掉多少。侧栏占 88%、348d005 的侧栏 +50 M，都是这样量出来的。比猜可靠。</li>
+  <li><b>二分提交</b>：门禁报警后在单独的 worktree 里逐个提交编译、跑探针，几轮就能定位（348d005 就是这样找到的）。</li>
+</ul>
+<p class="muted">sample 的自身时间如果集中在 <code>taffy::compute_flexbox_layout</code>、<code>line_wrapper</code>，问题在排版（元素太多或嵌套导致反复测量）；集中在 <code>Workbench::render</code> 下的业务函数和 <code>SipHash</code>，问题在每帧重复计算。</p>
+
+<h2 id="gpui">3. GPUI 重画机制要点</h2>
+<ul>
+  <li>根视图每次 draw 都渲染。<code>cx.notify()</code> 把这个实体<b>和它所有祖先</b>标脏。</li>
+  <li><code>AnyView::cached(style)</code>：视图没被标脏、且边界/内容遮罩/文字样式不变时，直接复用上一帧的 prepaint/paint。</li>
+  <li><code>window.refresh()</code> / <code>refresh_windows()</code> 无视缓存，整窗重画。切外观、样式、快捷键时用的是它。</li>
+  <li>同一次 flush 里的 Notify 会去重，所以不能用「数通知次数」来区分谁通知的。</li>
+  <li>draw 过程中发出的 notify 只进失效集合，下一次 draw 开始时才生效，不会自己请求新帧。</li>
+  <li><code>window.on_next_frame</code> 在窗口不在屏幕上（锁屏、离屏探针）时永远不会触发；设置 <code>GPUI_PAUSE_IDLE_DISPLAY_LINK=1</code> 时空闲不出帧。</li>
+</ul>
+
+<h2 id="rules">4. 规则（写代码时）</h2>
+<div class="card rule"><b>R1 窗格变化不要通知工作台。</b>新建窗格用 <code>Workbench::adopt_pane</code>，或在观察回调里调 <code>pane_changed</code>（它通知一个空的子视图 <code>Tick</code>，工作台照样重画标题栏和标签，但侧栏不重画）。<br>
+<span class="bad">不要写</span> <code>cx.observe(&amp;pane, |_, _, cx| cx.notify())</code>：终端每输出一次，侧栏就整个重排一次（终端帧会涨到 7 倍）。</div>
+<div class="card rule"><b>R2 侧栏要显示的状态，改动时要让工作台 notify。</b>侧栏是缓存视图（<code>workbench/redraw.rs</code> 的 <code>SidebarView</code>），只在工作台 notify 时重画；其他途径的变化最多晚 1 秒由补画追上。在 render 里改的状态（如 <code>open_pending_route</code>）通知不到侧栏，要在下一帧调 <code>ask</code>。</div>
+<div class="card rule"><b>R3 补画触发的那一帧必须设 <code>asked</code>。</b>否则补画会自己排下一次补画，空闲时也会每秒整窗重画好几次（坏版本 5 秒 15 次）。</div>
+<div class="card rule"><b>R4 每帧都要的派生值不要在 render 里扫全部会话。</b>按「工作区 revision + 当前秒」缓存，参照 <code>redraw::quotas</code>（额度）和 <code>redraw::tab_name</code>（标签名）。代价是数据最多晚 1 秒。缓存键要覆盖所有输入：标签名的键包含整个 <code>Tab</code>，因为改名时会传入清空标题的标签。</div>
+<div class="card rule"><b>R5 大列表不要放进横向 flex。</b>横向容器要先量子元素的内容尺寸，taffy 会把整张会话列表（含文字折行）多量一遍。只有确实需要并排（机器竖栏）时才套横向容器。</div>
+<div class="card rule"><b>R6 每帧按 id 查的表用 FxHash。</b><code>Workspace.content</code> 是 <code>FxHashMap</code>；SipHash 曾占终端帧约一成。键来自本机日志，不是网络对端挑的。</div>
+<div class="card rule"><b>R7 动了渲染要跑门禁。</b>本机：<code>python3 scripts/perf-gate.py target/release</code>（先编探针版）。性能确实变了且是有意的，用 <code>MOORING_PERF_UPDATE=1</code> 重写基线并在提交说明里写原因；只能在真机写，虚拟机写不了。</div>
+
+<h2 id="gate">5. 性能门禁</h2>
+<p>CI 任务「Window performance gate」（<code>.github/workflows/ci.yml</code>），和 Rust 检查并行跑，单独编一份探针版 release，约 8 分钟。脚本 <code>scripts/perf-gate.py</code>，基线 <code>crates/mooring-app/perf-baseline.txt</code>。</p>
+<table>
+  <tr><th>检查</th><th>失败条件</th><th>拦的是什么</th></tr>
+  <tr><td>终端帧、整窗重画的指令数</td><td>超基线 15%</td><td>任何变慢（真机）</td></tr>
+  <tr><td>pane-share：终端帧 CPU ÷ 整窗 CPU</td><td>超基线 2 倍（仅在读不到指令数时）</td><td>CI 虚拟机上的退路。两个数同一进程前后量，机器快慢基本抵消：本机 0.17，CI 约 0.2，侧栏每帧重画时 0.96</td></tr>
+  <tr><td>逐像素重画</td><td>任何一步有差异</td><td>侧栏或其他缓存视图漏刷新</td></tr>
+  <tr><td>终端输出时侧栏保留上次绘制</td><td>侧栏重画了</td><td>违反 R1</td></tr>
+  <tr><td>补画自己那一帧又排的补画</td><td>&gt;0</td><td>违反 R3。不数补画总数：CI 机器有屏幕会自己出帧，正常版本 5 秒也有 9–15 次补画</td></tr>
+</table>
+<p><b>门禁自己也测过：</b>三个故意做坏的版本都被拦下。通知整个工作台（指令数 +666%，侧栏每帧重画）；侧栏不跟着刷新（筛选、取消筛选、改名三步有像素差异）；补画循环（15 次自我触发）。改门禁时要重做这类坏版本测试，确认还能拦住。</p>
+<p class="muted">比对前探针会先画一帧、等 50 ms：标签栏的溢出提示是按上一帧排版算的，16 ms 后补一帧（<code>tab_overflow</code>），这是设计内的晚一帧，不能当差异。</p>
+<p class="muted">终端帧指令数是双峰的（约 8.3 M 和 8.9 M），基线取高的那个，避免误报。</p>
+<p><b>后台：</b><code>managed_session</code> 的 <code>four_agents…</code> 按每行日志的退休指令数断言（≤100 万）；读不到指令数（虚拟机）时退回「增量 CPU ≤ 2% 一核」。</p>
+
+<h2 id="triage">6. 门禁报警的排查流程</h2>
+<ol>
+  <li>看是哪项：指令数、pane-share、像素、侧栏重画、补画自我触发。像素差异的两张图在 CI 产物 <code>perf-gate</code> 里。</li>
+  <li>本机先复现：编探针版，跑 <code>perf-gate.py</code> 两三次，排除双峰和噪声。</li>
+  <li>指令数涨了：二分提交（每个点只跑 <code>probe … frames-main</code> 或 <code>frames-pane</code>），定位到提交后再用「去掉一块量一次」缩小到具体视图，最后用 sample 看是排版还是计算。</li>
+  <li>像素差异：先判断是不是设计内的晚一帧（标签栏溢出）；否则检查新状态有没有在改动时让对应视图 notify（R2）。</li>
+  <li>修完：门禁本机过、像素一致，再推。有意的变化才改基线。</li>
+</ol>
+
+<h2 id="history">7. 历次发现与修复</h2>
+<table>
+  <tr><th>提交</th><th>问题</th><th>做法</th><th>效果</th></tr>
+  <tr><td>4f10c41</td><td>侧栏空间标签每个空间都扫一遍全部会话算「要你处理」</td><td>一次遍历 <code>needs_by_space</code></td><td>每次渲染 10 ms → 0.02 ms</td></tr>
+  <tr><td>cc821f5</td><td><code>needs_you</code> 先查内容表再看会话自己的字段</td><td>便宜的字段先判断；每帧只取一次时间</td><td>−3.5%</td></tr>
+  <tr><td>b1438ae</td><td>终端每次输出都让整个侧栏重新排版（占终端帧 88%）</td><td>侧栏成为缓存视图，窗格变化走 <code>Tick</code></td><td>终端帧 7430 万 → 1030 万</td></tr>
+  <tr><td>e338a63</td><td>每个窗格标题每帧都按全部会话找额度，还要读插件文件</td><td><code>redraw::quotas</code> 每秒算一次</td><td>−10%</td></tr>
+  <tr><td>fe150bf</td><td>内容表的 SipHash</td><td>FxHash</td><td>−3.5%</td></tr>
+  <tr><td>cc717a9</td><td>每帧给每个标签起名都要翻一遍会话、处理名字文本</td><td><code>redraw::tab_name</code> 每秒算一次</td><td>−12%</td></tr>
+  <tr><td>e0661af</td><td>348d005 把侧栏列套进横向 flex（门禁抓到）</td><td>没有竖栏时不套</td><td>整窗 1.30 亿 → 7570 万</td></tr>
+  <tr><td>8678054</td><td>门禁数补画总数，在有屏幕的 CI 上误报</td><td>改数「补画自己那一帧又排的补画」</td><td>正常 0，坏版本 15</td></tr>
+</table>
+
+<h2 id="pitfalls">8. 踩过的坑</h2>
+<ul>
+  <li><b>用 CPU 时间做对照</b>：同版本能差 2.5 倍，得出的结论不可信。改用指令数。</li>
+  <li><b>测试数据太假</b>：最早的测试工作区没有会话绑定终端，侧栏是空的，量不出问题。测试数据要接近真实：会话绑定终端、日志里有额度读数。</li>
+  <li><b>屏幕锁了</b>：没有显示链接，<code>on_next_frame</code> 不触发，真实窗口量不到 CPU；离屏探针才可靠。</li>
+  <li><b>门禁在 CI 上空转</b>：虚拟机指令数为 0，比较全是 −100%，「通过」是假的。读数为 0 必须当作「无法测量」处理，走退路。</li>
+  <li><b>数总数而不是数因果</b>：补画总数受「窗口会不会自己出帧」影响；要数的是 bug 的直接特征（补画帧又排补画）。</li>
+  <li><b>把设计内的晚一帧当差异</b>：标签栏溢出提示本就晚一帧，比对前要先让那一帧画出来。</li>
+  <li><b>整理提交时 <code>git reset --soft main</code></b>：如果 main 已被其他会话推进，工作区相对新 main 会显得在撤销别人的改动。正确做法是 <code>git rebase main</code>，或从原起点导出自己的补丁再套用。</li>
+  <li><b>测试文件超过 800 行</b>：VibeGuard 只允许变短；改断言时要同时压缩周围代码。</li>
+</ul>
+
+<h2 id="ref">9. 外部参考：大项目怎么做性能回归</h2>
+<table>
+  <tr><th>项目</th><th>做法</th><th>拦 PR 吗</th></tr>
+  <tr><td>pandas</td><td>asv 基准套件在专用机器上对每个合入的提交跑，事后用阶跃检测找变慢的提交并提醒</td><td>不拦。官方说明同代码同机器结果也差得明显</td></tr>
+  <tr><td>uv / ruff</td><td>CodSpeed：专用物理机量墙钟时间 + Valgrind 模拟模式（与机器负载无关），结果作为评论和检查贴回 PR（uv 的 <code>.github/workflows/bench.yml</code>，<code>crates/uv-bench</code>）</td><td>可以</td></tr>
+  <tr><td>Rust 编译器（rustc-perf）</td><td>默认指标 <code>instructions:u</code>，约 0.3% 的变化可稳定看出；每周人工看曲线判断</td><td>人工判断</td></tr>
+  <tr><td>Zed（GPUI 来源）</td><td>CI 只编译 benchmark crate，没看到性能门禁</td><td>—</td></tr>
+</table>
+<p class="muted">共同点：要拦 PR，就要用与机器负载无关的指标（指令数、模拟执行）；用墙钟时间只能事后提醒。Mooring 门禁按这个思路：真机用指令数，CI 虚拟机用同进程内的比例。</p>
+
+<h2 id="open">10. 未解问题与下一步</h2>
+<ul>
+  <li><span class="tag">未查</span> 开启补画时，开头那帧顶栏「＋」附近有 803 px 差异；新 main（11-04）才出现，门禁目前只比对关闭补画的那轮，不拦。</li>
+  <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>
+  <li><span class="tag">可做</span> 终端帧剩下的大头：状态栏「本机 · N 个会话」每帧数全部会话（还依赖界面里「正在恢复」的状态，不能简单按 revision 缓存）；<code>current_agent</code> 按终端逐个查找会话。</li>
+  <li><span class="tag">待定</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%；要么 store 改 NORMAL，要么重新设计 revision 怎么持久化，需要用户决定。</li>
+  <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试；窗口进程约 756 MB 内存没查。</li>
+</ul>
+</main>
+</body>
+</html>

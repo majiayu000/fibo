@@ -3,6 +3,7 @@ mod hooks_cmd;
 mod plugins_cmd;
 mod relay;
 mod remote;
+mod themes_cmd;
 
 fn main() {
     let code = match run() {
@@ -91,6 +92,7 @@ fn run() -> std::io::Result<()> {
                 }
             }
             let runtime = runtime_dir(remaining.into_iter())?;
+            mooring_core::plugin_context::set_runtime(std::path::Path::new(&runtime));
             let serve = if takeover {
                 mooring_host::serve_taking_over
             } else {
@@ -110,6 +112,7 @@ fn run() -> std::io::Result<()> {
         "hook" => hook(args),
         "hooks" => hooks_cmd::run(args),
         "plugins" => plugins_cmd::run(args),
+        "themes" => themes_cmd::run(args),
         "--skill" => {
             match args.next().as_deref() {
                 None => print!("{}", control::SKILL),

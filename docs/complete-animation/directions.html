@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>完成动画候选</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0c0e;--card:#141519;--line:#2a2c32;--ink:#e4e6ea;--dim:#9297a0;--green:#3dbb85;--warm:#e0b35a}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,"PingFang SC",sans-serif}
+main{max-width:1240px;margin:0 auto;padding:36px 16px 64px}
+h1{font-size:24px;line-height:1.3;margin:0 0 8px;font-weight:650}
+header p{margin:0;color:var(--dim);max-width:72ch}
+.bar{display:flex;gap:12px;align-items:center;margin:20px 0 24px;flex-wrap:wrap}
+button{font:inherit;color:var(--ink);background:#22242a;border:1px solid var(--line);border-radius:7px;padding:5px 12px;cursor:pointer}
+button:hover{background:#2c2f36}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,370px),1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+canvas{display:block;width:100%;aspect-ratio:520/320;background:#0f1012}
+.txt{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px;flex:1}
+.top{display:flex;align-items:baseline;gap:8px}
+.num{color:var(--dim);font-variant-numeric:tabular-nums}
+h2{font-size:16px;margin:0;font-weight:650}
+.rec{margin-left:auto;font-size:12px;color:var(--green)}
+.txt p{margin:0;color:var(--dim)}
+.cost{font-size:12.5px;color:var(--dim);border-top:1px solid var(--line);padding-top:7px;margin-top:auto}
+.cost b{color:var(--ink);font-weight:550}
+.ctl{display:flex;align-items:center;gap:10px;margin-top:4px}
+input[type=range]{flex:1;min-width:0;accent-color:var(--green)}
+.note{margin-top:28px;color:var(--dim);max-width:78ch}
+.note h3{color:var(--ink);font-size:15px;margin:0 0 4px}
+.note ul{margin:0;padding-left:18px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>完成动画候选</h1>
+  <p>要决定的事：选哪 1–2 个写进 App，做成插件。每个候选都按真实时长循环播放，拖滑块可以逐帧看。</p>
+</header>
+<div class="bar"><button id="all">全部从头播</button><span class="num" id="hint"></span></div>
+<div class="grid" id="grid"></div>
+<section class="note">
+  <h3>放弃条件和说明</h3>
+  <ul>
+    <li>写进 App 后，如果掉帧明显，或结尾留下残影，就换方案或放弃。性能结论要在 App 里量过才算数。</li>
+    <li>预览里的颜色和字号是近似值，窗格、文字和侧栏都是假画面。App 里会跟随主题。</li>
+    <li>开了「减弱动态效果」时，所有动画都退回「只淡出」。</li>
+  </ul>
+</section>
+</main>
+<script>
+const C={app:'#0f1012',side:'#0b0c0e',line:'#26282d',ink:'#d7d9dd',dim:'#7f848d',faint:'#55585f',green:'#3dbb85',light:'#d9f5e8',warm:'#d9b676',ok:'#9fd4ba'};
+const W=520,H=320,P={x:118,y:8,w:394,h:304},HEAD=26,BODY={x:118,y:34,w:394,h:278},ROW={x:6,y:46,w:106,h:24},DOT={x:17,y:58};
+const CW=6.5,LH=14.5,FONT='11px Menlo,Consolas,monospace';
+const LINES=[['› 修好登录页的报错',C.dim],['⏺ 我先复现一下，然后看 token 刷新的逻辑',C.ink],['  Read src/auth/session.rs',C.dim],['  Edit src/auth/session.rs  +12 -3',C.dim],['⏺ 过期时间算反了，已经改好，再跑测试',C.ink],['  $ cargo test auth',C.dim],['  test auth::expired_token_refreshes ... ok',C.ok],['  test auth::logout_clears_session ... ok',C.ok],['  test auth::retries_after_expiry ... ok',C.ok],['  test login::shows_error_once ... ok',C.ok],['  test result: ok. 4 passed; 0 failed',C.ok],['⏺ 都过了。改动：',C.ink],['  1. 过期判断从 < 改成 >=',C.ink],['  2. 刷新失败时只报一次错',C.ink],['  3. 补了两个用例',C.ink],['  已完成，等你验收。',C.ink]];
+const wide=c=>c.charCodeAt(0)>0x2e7f;
+const CHARS=[];LINES.forEach(([s,col],r)=>{let x=BODY.x+12;for(const ch of s){const w=wide(ch)?2:1;if(ch!==' ')CHARS.push({ch,x:x+CW*w/2,y:44+r*LH,col,w});x+=CW*w}});
+const sl=(t,a,b)=>Math.min(1,Math.max(0,(t-a)/(b-a)));
+const eo=x=>1-Math.pow(1-x,4);
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const back=x=>{const c=1.70158;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+const lerp=(a,b,k)=>a+(b-a)*k;
+function rng(s){return()=>{s=(s+0x6D2B79F5)|0;let t=Math.imul(s^s>>>15,1|s);t=(t+Math.imul(t^t>>>7,61|t))^t;return((t^t>>>14)>>>0)/4294967296}}
+const bez=(a,c,b,k)=>{const m=1-k;return{x:a.x*m*m+c.x*2*m*k+b.x*k*k,y:a.y*m*m+c.y*2*m*k+b.y*k*k}};
+const alpha=(hex,a)=>{const n=parseInt(hex.slice(1),16);return`rgba(${n>>16},${n>>8&255},${n&255},${a})`};
+const mixHex=(a,b,k)=>{const p=parseInt(a.slice(1),16),q=parseInt(b.slice(1),16);const f=s=>Math.round(lerp(p>>s&255,q>>s&255,k));return`rgb(${f(16)},${f(8)},${f(0)})`};
+
+function rr(c,x,y,w,h,r){c.beginPath();c.roundRect(x,y,w,h,r)}
+function disc(c,x,y,r,col){if(r<=.05)return;c.fillStyle=col;c.beginPath();c.arc(x,y,r,0,7);c.fill()}
+function glow(c,x,y,r,s){for(const[g,a]of[[16,.08],[10,.12],[5,.18]])disc(c,x,y,r+g*s,alpha(C.green,a*s))}
+function check(c,x,y,s,p,col,w){if(p<=0)return;const pts=[[-.24,.02],[-.07,.19],[.26,-.17]].map(([a,b])=>[x+a*s,y+b*s]);c.strokeStyle=col;c.lineWidth=w;c.lineCap='round';c.lineJoin='round';c.beginPath();c.moveTo(...pts[0]);if(p<.34)c.lineTo(lerp(pts[0][0],pts[1][0],p/.34),lerp(pts[0][1],pts[1][1],p/.34));else{c.lineTo(...pts[1]);const k=(p-.34)/.66;c.lineTo(lerp(pts[1][0],pts[2][0],k),lerp(pts[1][1],pts[2][1],k))}c.stroke()}
+
+function chrome(){const o=document.createElement('canvas');o.width=W*3;o.height=H*3;const c=o.getContext('2d');c.scale(3,3);
+  c.fillStyle=C.app;c.fillRect(0,0,W,H);c.fillStyle=C.side;c.fillRect(0,0,114,H);c.fillStyle=C.line;c.fillRect(114,0,1,H);
+  c.fillStyle=C.ink;c.font='600 8px -apple-system,sans-serif';c.fillText('M O O R I N G',10,18);c.fillStyle=C.faint;c.font='9px -apple-system,"PingFang SC",sans-serif';c.fillText('今天',10,39);
+  c.fillStyle=C.dim;c.fillText('改导出按钮',26,91);disc(c,DOT.x,88,2.5,C.faint);c.fillText('补文档',26,115);disc(c,DOT.x,112,2.5,C.faint);
+  return o}
+function paneLayer(withText){const o=document.createElement('canvas');o.width=W*3;o.height=H*3;const c=o.getContext('2d');c.scale(3,3);
+  rr(c,P.x,P.y,P.w,P.h,8);c.fillStyle=C.app;c.fill();c.strokeStyle=C.line;c.lineWidth=1;c.stroke();
+  c.fillStyle=C.ink;c.font='600 10px -apple-system,sans-serif';c.fillText('Claude Code',P.x+11,P.y+17);c.fillStyle=C.faint;c.font='9.5px Menlo,monospace';c.fillText('~/app',P.x+78,P.y+17);
+  c.fillStyle=C.line;c.fillRect(P.x,P.y+HEAD,P.w,1);
+  if(withText){c.font=FONT;c.textAlign='center';c.textBaseline='middle';for(const g of CHARS){c.fillStyle=g.col;c.fillText(g.ch,g.x,g.y)}}
+  return o}
+const CHROME=chrome(),PANE_TEXT=paneLayer(true),PANE_EMPTY=paneLayer(false);
+
+function row(c,t,at){const done=t>=at;
+  rr(c,ROW.x,ROW.y,ROW.w,ROW.h,6);c.fillStyle='#17191d';c.fill();
+  c.font='10px -apple-system,"PingFang SC",sans-serif';c.textAlign='left';c.textBaseline='alphabetic';c.fillStyle=C.ink;c.fillText('修登录页',26,62);
+  if(done)check(c,DOT.x,DOT.y,11,1,C.dim,1.3);else disc(c,DOT.x,DOT.y,3,C.green)}
+function landed(c,t,at){if(t<at)return;const k=sl(t,at,1);rr(c,ROW.x,ROW.y,ROW.w,ROW.h,6);c.fillStyle=alpha(C.green,.2*(1-k));c.fill();
+  for(const[d,m]of[[0,18],[.25,12]]){const e=eo(sl(k,d,1));if(e>0&&e<1){c.strokeStyle=alpha(C.green,.7*(1-e));c.lineWidth=1.5;c.beginPath();c.arc(DOT.x,DOT.y,3.5+m*e,0,7);c.stroke()}}}
+function button(c,t,end,fade){const x=P.x+P.w-62,y=P.y+5,w=54,h=16,fill=eo(sl(t,0,end)),turned=sl(t,end*.45,end);c.globalAlpha=fade;
+  rr(c,x,y,w,h,4);c.fillStyle='#24262b';c.fill();c.save();rr(c,x,y,w,h,4);c.clip();c.fillStyle=C.green;c.fillRect(x,y,w*fill,h);c.restore();
+  c.font='600 9px -apple-system,"PingFang SC",sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillStyle=turned>.5?'#07130e':C.ink;c.fillText(turned>.5?'✓ 做完了':'标记完成',x+w/2,y+h/2+.5);c.globalAlpha=1}
+function cover(c,k){if(k<=0)return;c.fillStyle=alpha(C.app,k);c.fillRect(P.x-1,P.y-1,P.w+2,P.h+2)}
+function clearBody(c,a=1){c.fillStyle=alpha(C.app,a);c.fillRect(BODY.x+1,BODY.y+1,BODY.w-2,BODY.h-2)}
+const CENTER={x:BODY.x+BODY.w/2,y:BODY.y+BODY.h/2-8};
+const toRow=(from,k,bx=-120,by=0)=>bez(from,{x:(from.x+DOT.x)/2+bx,y:(from.y+DOT.y)/2+by-60},DOT,k);
+const ctxChar=c=>{c.font=FONT;c.textAlign='center';c.textBaseline='middle'};
+
+const S={
+moor(c,t){ // 靠岸：抛缆绳，卡片被拉回侧栏
+  const land=.87;row(c,t,land);c.drawImage(PANE_TEXT,0,0,W,H);button(c,t,.12,1);
+  clearBody(c,.86*eo(sl(t,.1,.3)));
+  const k=eio(sl(t,.38,.82));const small={x:DOT.x+6,y:DOT.y-7,w:22,h:14};
+  cover(c,sl(t,.34,.4));
+  const r={x:lerp(P.x+P.w*.1,small.x,k),y:lerp(P.y+P.h*.12,small.y,k),w:lerp(P.w*.8,small.w,k),h:lerp(P.h*.76,small.h,k)};
+  const bob=Math.sin(t*38)*2.6*sl(t,.4,.5)*(1-sl(t,.74,.84));r.y+=bob;
+  const show=sl(t,.33,.4)*(1-sl(t,.82,land));
+  const fix={x:lerp(P.x,r.x,sl(t,.33,.4)),y:lerp(P.y+P.h/2,r.y+r.h/2,sl(t,.33,.4))};
+  const shot=eo(sl(t,.1,.26));
+  const end=t<.34?{x:lerp(DOT.x,P.x+1,shot),y:lerp(DOT.y,P.y+P.h/2,shot)}:{x:r.x,y:r.y+r.h/2};
+  if(t>.1&&t<land){const sag=lerp(46,3,eo(sl(t,.26,.46)))*(1-.5*k)+Math.sin(t*30)*2*(1-sl(t,.26,.5));
+    c.strokeStyle=alpha(C.warm,.95);c.lineWidth=1.4;c.lineCap='round';c.beginPath();c.moveTo(DOT.x,DOT.y);c.quadraticCurveTo((DOT.x+end.x)/2,(DOT.y+end.y)/2+sag,end.x,end.y);c.stroke();
+    disc(c,end.x,end.y,2.4,C.warm);disc(c,DOT.x,DOT.y,3,C.warm)}
+  if(show>0){c.globalAlpha=show;
+    for(let i=1;i<=2;i++){const wk=(t*5+i*.5)%1;if(k>.03){c.strokeStyle=alpha(C.warm,.28*(1-wk));c.lineWidth=1;rr(c,r.x-wk*10*i,r.y-wk*7,r.w+wk*14*i,r.h+wk*14,8);c.stroke()}}
+    rr(c,r.x,r.y,r.w,r.h,lerp(8,3,k));c.fillStyle='#16181c';c.fill();c.strokeStyle=C.green;c.lineWidth=1.2;c.stroke();
+    const n=7,lh=r.h/(n+2);c.fillStyle=alpha(C.dim,.55);for(let i=1;i<=n;i++)c.fillRect(r.x+r.w*.08,r.y+lh*i,r.w*(.55+.3*((i*37)%10)/10),Math.max(.6,lh*.32));
+    const w=lerp(30,8,k);check(c,r.x+r.w/2,r.y+r.h/2,w,sl(t,.42,.52),C.green,lerp(3,1.2,k));
+    c.globalAlpha=1}
+  landed(c,t,land)},
+
+gravity(c,t){ // 字往下掉，堆在底部再流走
+  const land=.86;row(c,t,land);c.drawImage(PANE_EMPTY,0,0,W,H);button(c,t,.12,1-sl(t,.78,.9));
+  const floor=BODY.y+BODY.h-8;const{pile}=gravityPlan;ctxChar(c);
+  let arrived=0;
+  CHARS.forEach((g,i)=>{const p=pile[i],start=.13+(1-(g.y-BODY.y)/BODY.h)*.2+p.j*.05,tau=sl(t,start,start+.17);const drain=.6+p.ord*.13,go=sl(t,drain,drain+.13);
+    if(go>=1){arrived++;return}
+    if(go>0){const m=eio(go),q=bez({x:p.x,y:p.y},{x:lerp(p.x,DOT.x,.4),y:p.y-120-p.j*50},DOT,m);disc(c,q.x,q.y,1.5,alpha(C.green,.92*(1-sl(go,.9,1))));return}
+    let y=g.y,x=g.x;
+    if(tau>0){const f=Math.min(1,tau*tau*1.7);y=lerp(g.y,p.y,f);x=lerp(g.x,p.x,tau);if(tau*tau*1.7>1){const b=(tau-Math.sqrt(1/1.7))/(1-Math.sqrt(1/1.7));y=p.y-Math.abs(Math.sin(b*Math.PI*2))*(1-b)*9}}
+    c.fillStyle=tau>0?mixHex(g.col.length===7?g.col:C.ink,C.green,sl(t,.45,.62)*.75):g.col;c.fillText(g.ch,x,y)});
+  const f=arrived/CHARS.length;if(f>0){const l=1-sl(t,.93,1);glow(c,DOT.x,DOT.y,3.5,f*l);disc(c,DOT.x,DOT.y,3.5+1.5*f,alpha(C.green,(.25+.75*f)*l))}
+  cover(c,sl(t,.78,.9));landed(c,t,land)},
+
+swirl(c,t){ // 漩涡：字卷成一颗球再飞走
+  const land=.88;row(c,t,land);c.drawImage(PANE_EMPTY,0,0,W,H);button(c,t,.12,1-sl(t,.76,.88));ctxChar(c);
+  let inb=0;
+  CHARS.forEach((g,i)=>{const p=gravityPlan.pile[i],start=.1+p.d*.26+p.j*.05,tau=sl(t,start,start+.32);
+    if(tau>=1){inb++;return}
+    if(tau<=0){c.fillStyle=g.col;c.fillText(g.ch,g.x,g.y);return}
+    const e=eio(tau),rad=p.r*(1-e),ang=p.a+e*e*7,x=CENTER.x+Math.cos(ang)*rad,y=CENTER.y+Math.sin(ang)*rad*.92;
+    if(tau<.55){c.fillStyle=mixHex(g.col,C.green,sl(tau,.15,.5));c.fillText(g.ch,x,y)}else disc(c,x,y,lerp(1.8,1,tau),alpha(C.green,.9))});
+  const f=inb/CHARS.length;const pop=back(sl(t,.54,.64));const fly=eio(sl(t,.72,.86));const pos=toRow(CENTER,fly,-150,20);
+  const r=lerp(lerp(3,24,Math.max(f*.6,pop>0?pop*.97:0)),3.5,eo(sl(t,.72,.84)));
+  if(f>0&&t<.86){glow(c,pos.x,pos.y,r,.8);disc(c,pos.x,pos.y,r,C.green);check(c,pos.x,pos.y,r*1.6,sl(t,.58,.68),'#07130e',Math.max(1.2,r/8))}
+  if(fly>0&&fly<1)for(let i=1;i<=5;i++){const q=toRow(CENTER,Math.max(0,fly-i*.04),-150,20);disc(c,q.x,q.y,Math.max(1,r*(1-i/7)),alpha(C.green,.3*(1-i/6)))}
+  cover(c,sl(t,.76,.88));landed(c,t,land)},
+
+backspace(c,t){ // 退格收工：光标把字一路删回去，敲下「做完了」
+  const land=.9;row(c,t,land);c.drawImage(PANE_EMPTY,0,0,W,H);button(c,t,.12,1-sl(t,.8,.92));ctxChar(c);
+  const k=Math.pow(sl(t,.12,.54),1.5),n=Math.round(CHARS.length*(1-k));
+  for(let i=0;i<n;i++){const g=CHARS[i];c.fillStyle=g.col;c.fillText(g.ch,g.x,g.y)}
+  const msg='✓ 做完了 · 修好登录页的报错';let cx,cy;
+  if(t<.54){const g=CHARS[Math.max(0,n-1)];cx=g.x+CW*g.w/2+1;cy=g.y}
+  else{const m=Array.from(msg),typed=Math.round(m.length*sl(t,.57,.72));let x=BODY.x+12;for(let i=0;i<typed;i++){const w=wide(m[i])?2:1;c.fillStyle=i<1?C.green:C.ink;c.fillText(m[i],x+CW*w/2,44);x+=CW*w}cx=x+1;cy=44}
+  const fly=eio(sl(t,.78,.9));
+  if(fly<=0){const blink=t>.72&&Math.sin(t*60)<0;if(!blink){c.fillStyle=C.green;c.fillRect(cx,cy-6.5,6.5,13)}}
+  cover(c,sl(t,.8,.92));
+  if(fly>0&&fly<1){const q=toRow({x:cx+3,y:cy},fly,-40,30);for(let i=1;i<=4;i++){const b=toRow({x:cx+3,y:cy},Math.max(0,fly-i*.05),-40,30);disc(c,b.x,b.y,3-i*.4,alpha(C.green,.3*(1-i/5)))}c.fillStyle=C.green;c.fillRect(q.x-3,q.y-lerp(6,3,fly),6,lerp(12,6,fly))}
+  landed(c,t,land)},
+
+crt(c,t){ // 老显示器关机
+  const land=.76;row(c,t,land);c.drawImage(PANE_TEXT,0,0,W,H);button(c,t,.12,1-sl(t,.62,.74));
+  const flash=sl(t,.12,.16)*(1-sl(t,.16,.26));if(flash>0){c.fillStyle=`rgba(225,245,235,${.32*flash})`;c.fillRect(BODY.x,BODY.y,BODY.w,BODY.h)}
+  const lid=eio(sl(t,.16,.42));const my=BODY.y+BODY.h/2;
+  if(lid>0){c.fillStyle=C.app;c.fillRect(BODY.x+1,BODY.y+1,BODY.w-2,BODY.h/2*lid);c.fillRect(BODY.x+1,BODY.y+BODY.h-BODY.h/2*lid-1,BODY.w-2,BODY.h/2*lid)}
+  const shrink=eio(sl(t,.42,.56)),width=lerp(BODY.w-2,3,shrink),fade=1-sl(t,.6,.62);
+  const fly=eio(sl(t,.6,.76));
+  if(lid>.1&&fade>0){const th=lerp(BODY.h*(1-lid),2.2,sl(lid,.5,1)),cx=BODY.x+BODY.w/2;
+    if(sl(lid,.5,1)>0){for(const[g,a]of[[8,.08],[4,.16]]){c.fillStyle=alpha(C.green,a);c.fillRect(cx-width/2-g,my-th/2-g,width+g*2,th+g*2)}
+    c.fillStyle=C.light;c.fillRect(cx-width/2,my-th/2,width,th)}}
+  cover(c,sl(t,.62,.74));
+  const from={x:BODY.x+BODY.w/2,y:my};
+  if(t>=.56&&fly<1){const q=toRow(from,fly,-110,0);const pulse=1+.6*Math.sin(sl(t,.56,.6)*Math.PI);glow(c,q.x,q.y,3,1);disc(c,q.x,q.y,3.5*pulse,C.light)}
+  landed(c,t,land)},
+
+confetti(c,t){ // 彩纸：印章一落，彩纸炸开
+  const land=.88;row(c,t,land);c.drawImage(PANE_TEXT,0,0,W,H);button(c,t,.12,1-sl(t,.74,.86));
+  clearBody(c,.86*eo(sl(t,.08,.26)));
+  const hit=.26,tau=sl(t,hit,.82);
+  if(tau>0&&tau<1)CONF.forEach(p=>{const s=tau*2.35;const x=CENTER.x+p.vx*(1-Math.exp(-s*2.2))/2.2,y=CENTER.y+p.vy*(1-Math.exp(-s*2.2))/2.2+64*s*s;
+    const flip=Math.abs(Math.cos(s*p.spin+p.a));const a=1-sl(tau,.72,1);if(y>BODY.y+BODY.h+6)return;c.fillStyle=alpha(p.col,a);c.fillRect(x-p.w/2,y-p.h*flip/2,p.w,Math.max(.8,p.h*flip))});
+  const drop=sl(t,.12,hit),settle=sl(t,hit,.34);let r=lerp(48,27,eo(drop))*(1-.07*Math.sin(Math.PI*settle));
+  const fly=eio(sl(t,.74,.88));const pos=toRow(CENTER,fly,-150,0);if(t>.74)r=lerp(r,3.5,eo(sl(t,.74,.86)));
+  const a=sl(t,.12,.2);
+  cover(c,sl(t,.74,.86));
+  if(t<.88&&a>0){c.globalAlpha=a;if(t<.5)glow(c,pos.x,pos.y,r,1-eo(sl(t,hit,.5))*.7);disc(c,pos.x,pos.y,r,C.green);check(c,pos.x,pos.y,r*1.6,sl(t,.24,.36),'#07130e',Math.max(1.2,r/9));c.globalAlpha=1}
+  landed(c,t,land)}
+};
+
+const rand=rng(42);
+const gravityPlan={pile:(()=>{const heights={};const floor=BODY.y+BODY.h-9;return CHARS.map(g=>{const col=Math.round(g.x/CW);const j=rand();const nx=g.x+(rand()-.5)*32;const key=Math.round(nx/7);heights[key]=(heights[key]||0)+1;const dx=g.x-CENTER.x,dy=g.y-CENTER.y;const r=Math.hypot(dx,dy);return{x:nx,y:floor-(heights[key]-1)*8.5,j,ord:Math.min(1,(nx-BODY.x)/BODY.w),d:Math.min(1,r/210),r,a:Math.atan2(dy,dx)}})})()};
+const CONF=(()=>{const r=rng(7),cols=[C.green,'#f2c14e','#ec7c7c','#6fa8ff','#b58cff',C.light];return Array.from({length:110},()=>{const a=r()*Math.PI*2,sp=170+r()*360;return{vx:Math.cos(a)*sp,vy:Math.sin(a)*sp*.9-170,w:3+r()*2.6,h:5+r()*3.6,spin:5+r()*9,a:r()*6,col:cols[Math.floor(r()*cols.length)]}})})();
+
+const LIST=[
+ {id:'moor',name:'靠岸',ms:3000,rec:'推荐：和产品名最搭',d:'侧栏抛出一根缆绳勾住窗格，窗格缩成卡片，晃晃悠悠被拉回侧栏那一行。',cost:'<b>中等。</b>整个窗格不能真缩放，缩的是一张示意卡片（线和方块）。'},
+ {id:'gravity',name:'字往下掉',ms:3000,rec:'推荐：最好玩',d:'字一行行掉下来，弹一下堆在窗格底部，再从左到右变成光点流进侧栏。',cost:'<b>中等，要试。</b>每帧要单独画几百个字，帧率要在 App 里量。'},
+ {id:'swirl',name:'漩涡',ms:2800,d:'字绕着中心卷进去，越转越快，聚成一颗对勾，再飞进侧栏。',cost:'<b>中等，要试。</b>和「字往下掉」一样要画单个字；后半段只画光点，能轻一些。'},
+ {id:'backspace',name:'退格收工',ms:2800,rec:'推荐：最终端味、最省',d:'绿色光标从最后一个字一路删回开头，敲下「✓ 做完了」，然后光标飞进侧栏。',cost:'<b>最低。</b>只用已有的擦除和光标方块，几乎不增加绘制负担。'},
+ {id:'crt',name:'老显示器关机',ms:2000,d:'屏幕闪一下白光，压成一条亮线，再缩成亮点飞走。',cost:'<b>低。</b>和「扫光合上」有点像，但更短更猛。'},
+ {id:'confetti',name:'彩纸',ms:2800,d:'印章落下时彩纸炸开，翻滚着落下。庆祝感最强，也最闹。',cost:'<b>低到中等。</b>翻转靠改高度模拟。彩纸不是状态色，要定一下配色是否跟主题。'}
+];
+const grid=document.getElementById('grid');
+const pin=new URLSearchParams(location.search).get('t');
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cards=LIST.map((m,i)=>{
+  const el=document.createElement('article');el.className='card';
+  el.innerHTML=`<canvas width="${W*2}" height="${H*2}" aria-label="${m.name}动画预览"></canvas><div class="txt"><div class="top"><span class="num">${i+1}</span><h2>${m.name}</h2>${m.rec?`<span class="rec">${m.rec}</span>`:''}</div><p>${m.d}</p><div class="cost">${m.cost}</div><div class="ctl"><button type="button">播放</button><input type="range" min="0" max="1000" value="0" aria-label="${m.name}进度"><span class="num">${(m.ms/1000).toFixed(1)}s</span></div></div>`;
+  grid.append(el);
+  const cv=el.querySelector('canvas'),c=cv.getContext('2d');c.scale(2,2);
+  const st={m,c,range:el.querySelector('input'),btn:el.querySelector('button'),start:null,hold:pin?+pin:(reduce?0:null),visible:true};
+  st.btn.onclick=()=>{st.hold=null;st.start=performance.now()};
+  st.range.oninput=()=>{st.hold=st.range.value/1000};
+  return st});
+const REST=900;
+function paint(st,t){const c=st.c;c.save();c.clearRect(0,0,W,H);c.drawImage(CHROME,0,0,W,H);S[st.m.id](c,t);c.restore()}
+if(!pin&&!reduce)cards.forEach((st,i)=>st.start=performance.now()+i*260);
+const io=new IntersectionObserver(es=>es.forEach(e=>{const st=cards.find(s=>s.c.canvas===e.target);if(st)st.visible=e.isIntersecting}));cards.forEach(s=>io.observe(s.c.canvas));
+function tick(now){for(const st of cards){if(!st.visible)continue;let t;
+    if(st.hold!==null)t=st.hold;
+    else if(st.start===null)t=0;
+    else{const el=now-st.start;if(el<0)t=0;else{if(el>st.m.ms+REST){st.start=reduce?null:now}t=Math.min(1,el/st.m.ms)}st.range.value=Math.round(t*1000)}
+    paint(st,t)}
+  requestAnimationFrame(tick)}
+document.getElementById('all').onclick=()=>{const n=performance.now();cards.forEach(s=>{s.hold=null;s.start=n})};
+document.getElementById('hint').textContent=reduce?'系统开了减弱动态效果，不会自动播放，点「播放」或拖滑块。':'自动循环；拖滑块可以停在任意一帧，点「播放」恢复。';
+if(pin)cards.forEach(s=>paint(s,+pin));
+else requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 pub mod app_icon;
 pub mod appearance;
 pub mod backdrop;
+pub mod color_migration;
 pub mod field;
 pub mod icons;
 pub mod palette;

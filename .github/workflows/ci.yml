@@ -68,12 +68,18 @@ jobs:
       - name: Window performance gate
         run: python3 scripts/perf-gate.py target/release target/perf-gate
 
+      # Each theme scene in a real window: clicks, saved files, pixels it asserts on.
+      - name: Theme scenes
+        run: python3 scripts/theme-scenes.py target/release target/theme-scenes
+
       - name: Keep the gate's pictures
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: perf-gate
-          path: target/perf-gate
+          path: |
+            target/perf-gate
+            target/theme-scenes
 
   mobile:
     name: Phone app tests and typecheck

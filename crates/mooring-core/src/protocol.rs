@@ -523,6 +523,10 @@ pub struct RecognitionStatus {
     #[serde(default)]
     pub terminal_reports: std::collections::HashMap<String, ProgramReport>,
     pub workspace_revision: u64,
+    /// Bumped whenever the host reloads plugins: a `mooring plugins` in a terminal changed
+    /// them, or a window did, and every window has to read them again.
+    #[serde(default)]
+    pub plugins_revision: u64,
     /// CLI -> why its official status query failed last; absent once one succeeds. The
     /// status rules then fall back to logs, hooks and the screen.
     #[serde(default)]
@@ -545,6 +549,7 @@ impl Default for RecognitionStatus {
             terminal_commands: Default::default(),
             terminal_reports: Default::default(),
             workspace_revision: 0,
+            plugins_revision: 0,
             official: Default::default(),
             remote: Default::default(),
         }

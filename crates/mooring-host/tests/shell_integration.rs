@@ -62,6 +62,8 @@ impl Host {
             .env("HOME", &home)
             .env_remove("XDG_CONFIG_HOME")
             .env_remove("MOORING_NO_SHELL_INTEGRATION")
+            // These tests count how often a shell's startup files load.
+            .env("MOORING_NO_LOGIN_PATH", "1")
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
             .spawn()
@@ -340,6 +342,66 @@ fn modern_bash() -> Option<String> {
                 })
         })
         .map(String::from)
+}
+
+/// A plugin added or removed while the host runs, as `mooring plugins` does it: on
+/// `ReloadPlugins` a new hook hears the next command, and a removed one stops at once.
+#[test]
+fn hooks_change_with_a_reload_and_a_removed_one_stops() {
+    let h = Host::start();
+    let mut s = Session::launch(&h, "/bin/zsh");
+    let home = h.home();
+    let plugin = home.join(".config/mooring/plugins/late");
+    fs::create_dir_all(&plugin).unwrap();
+    fs::write(
+        plugin.join("plugin.json"),
+        r#"{"api":1,"id":"late","name":"后来的","provides":["hooks"]}"#,
+    )
+    .unwrap();
+    // Named like the first plugin's hook: two plugins may share a hook id.
+    fs::write(
+        plugin.join("hooks.json"),
+        serde_json::json!({"api": 1, "hooks": [{
+            "id": "all",
+            "on": ["command_done"],
+            "command": format!("(cat; echo) >> '{}'", h.root.join("late").display()),
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    s.type_line("true");
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(h.recorded("late").is_empty(), "not read until reloaded");
+    assert!(matches!(h.call(Request::ReloadPlugins).unwrap(), Reply::Ok));
+    s.type_line("true");
+    assert!(
+        s.read_until(
+            Duration::from_secs(10),
+            |_, _| !h.recorded("late").is_empty(),
+            &home
+        ),
+        "the new hook never heard a command"
+    );
+    let before = h.recorded("commands").len();
+    assert!(before > 0, "the first plugin still hears them");
+    fs::remove_dir_all(&plugin).unwrap();
+    assert!(matches!(h.call(Request::ReloadPlugins).unwrap(), Reply::Ok));
+    let heard = h.recorded("late").len();
+    s.type_line("true");
+    assert!(
+        s.read_until(
+            Duration::from_secs(10),
+            |_, _| h.recorded("commands").len() > before,
+            &home
+        ),
+        "the first plugin stopped hearing"
+    );
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        h.recorded("late").len(),
+        heard,
+        "a removed hook kept running"
+    );
 }
 
 #[test]

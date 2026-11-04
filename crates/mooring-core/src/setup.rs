@@ -9,9 +9,7 @@
 //! and reinstalls (`<config>/plugin-data/<id>`): the place to keep what `teardown` needs.
 //! `setup` must be safe to run again on an installed plugin: an update runs it once more.
 use serde::Deserialize;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// The `setup.json` format's major version.
@@ -40,7 +38,7 @@ pub enum Phase {
 
 pub fn read(file: &Path) -> Result<Setup, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let s: Setup = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    let s: Setup = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if s.api != API {
         return Err(format!(
             "安装步骤格式是 api {}，这个版本只认 api {API}",
@@ -108,64 +106,43 @@ pub fn run(plugins: &Path, dir: &Path, phase: Phase) -> Result<(), String> {
 }
 
 fn run_command(dir: &Path, s: &Setup, phase: Phase) -> Result<(), String> {
+    use crate::plugin_command::{Failed, Leftovers, Run};
     let (name, command) = match phase {
         Phase::Setup => ("setup", &s.setup),
         Phase::Teardown => ("teardown", &s.teardown),
     };
-    let mut child = Command::new("/bin/sh")
-        .arg("-c")
-        .arg(command)
-        .current_dir(dir)
-        .envs(crate::plugin_context::env(dir))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("{name} 启动不了：{e}"))?;
-    let drain = |pipe: Option<Box<dyn Read + Send>>| {
-        std::thread::spawn(move || {
-            let mut out = Vec::new();
-            if let Some(mut pipe) = pipe {
-                let _ = pipe.by_ref().take(16 * 1024).read_to_end(&mut out);
-            }
-            out
-        })
-    };
-    let stdout = drain(child.stdout.take().map(|p| Box::new(p) as _));
-    let stderr = drain(child.stderr.take().map(|p| Box::new(p) as _));
-    let deadline = Instant::now() + Duration::from_millis(s.timeout_ms);
-    let status = loop {
-        match child.try_wait().map_err(|e| e.to_string())? {
-            Some(status) => break status,
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!("{name} 超过 {} ms，已停止", s.timeout_ms));
-            }
-            None => std::thread::sleep(Duration::from_millis(10)),
-        }
-    };
-    let out = [stderr.join(), stdout.join()]
+    let done = crate::plugin_command::run(Run {
+        cwd: Some(dir),
+        env: crate::plugin_context::env(dir),
+        keep: 16 * 1024,
+        // A setup may mean to start something; it just may not make anyone wait for it.
+        ..Run::shell(
+            command,
+            Duration::from_millis(s.timeout_ms),
+            Leftovers::Keep,
+        )
+    })
+    .map_err(|e| match e {
+        Failed::Start(why) => format!("{name} 启动不了：{why}"),
+        Failed::TimedOut => format!("{name} 超过 {} ms，已停止", s.timeout_ms),
+    })?;
+    if done.status.success() {
+        return Ok(());
+    }
+    let out = [&done.stderr, &done.stdout]
         .into_iter()
-        .flatten()
-        .map(|b| String::from_utf8_lossy(&b).trim().to_owned())
+        .map(|b| String::from_utf8_lossy(b).trim().to_owned())
         .find(|s| !s.is_empty())
         .unwrap_or_default();
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "{name} 失败（{}）{}",
-            status
-                .code()
-                .map_or("被信号停止".into(), |c| format!("退出码 {c}")),
-            if out.is_empty() {
-                String::new()
-            } else {
-                format!("：{}", crate::content::short(&out, 300))
-            }
-        ))
-    }
+    Err(format!(
+        "{name} 失败（{}）{}",
+        done.how(),
+        if out.is_empty() {
+            String::new()
+        } else {
+            format!("：{}", crate::content::short(&out, 300))
+        }
+    ))
 }
 
 #[cfg(test)]
@@ -211,6 +188,39 @@ mod tests {
         let f = root.join("setup.json");
         std::fs::write(&f, r#"{"api":1,"setup":"true","teardown":" "}"#).unwrap();
         assert!(read(&f).unwrap_err().contains("撤回"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The setup's limit holds whatever it leaves behind: returns at once for a background
+    /// child, and ends what it started at the limit.
+    #[test]
+    fn the_time_limit_holds_a_setup_with_children() {
+        let root = std::env::temp_dir().join(format!("kl-setup-bg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let plugins = root.join("plugins");
+        let dir = plugins.join("bg");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"api":1,"id":"bg","name":"B","provides":["setup"]}"#,
+        )
+        .unwrap();
+        let mark = root.join("survived");
+        std::fs::write(
+            dir.join("setup.json"),
+            format!(
+                r#"{{"api":1,"setup":"sleep 6 & echo started","teardown":"(sleep 1; touch {}) & wait","timeout_ms":200}}"#,
+                mark.display()
+            ),
+        )
+        .unwrap();
+        let at = Instant::now();
+        run(&plugins, &dir, Phase::Setup).unwrap();
+        assert!(at.elapsed() < Duration::from_secs(2), "{:?}", at.elapsed());
+        let err = run(&plugins, &dir, Phase::Teardown).unwrap_err();
+        assert!(err.contains("200 ms"), "{err}");
+        std::thread::sleep(Duration::from_millis(1200));
+        assert!(!mark.exists(), "what it started ended at the limit");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

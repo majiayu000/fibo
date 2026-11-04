@@ -41,6 +41,9 @@ pub struct Opt {
     /// The values a `choice` takes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub choices: Vec<String>,
+    /// Kept in the keychain, never in a file; a `string` with an empty default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub secret: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -127,6 +130,12 @@ pub fn check_options(options: &[Opt]) -> Result<(), String> {
         if !o.accepts(&o.default) {
             return Err(format!("设置项 {} 的 default 和 type 对不上", o.key));
         }
+        if o.secret && (o.kind != OptKind::String || o.default != Value::String(String::new())) {
+            return Err(format!(
+                "设置项 {} 是 secret，type 要是 string，default 要是空的",
+                o.key
+            ));
+        }
     }
     Ok(())
 }
@@ -142,8 +151,12 @@ fn options_file(plugins: &Path, id: &str) -> PathBuf {
     crate::setup::data_dir(plugins, id).join("options.json")
 }
 
+/// What `options.json` holds for a secret that has a value: that it has one, and not what.
+pub const SECRET_SET: &str = "已设置";
+
 /// Each setting's current value: what the user set, else the default. A stored value
 /// that no longer fits (the plugin changed the setting's type) gives way to the default.
+/// For a secret this says only `SECRET_SET` or empty, and asks no keychain: settings draw this.
 pub fn values(plugins: &Path, plugin: &crate::plugin::Plugin) -> Vec<(Opt, Value)> {
     let stored: HashMap<String, Value> = std::fs::read(options_file(plugins, &plugin.id))
         .ok()
@@ -182,7 +195,16 @@ pub fn set(plugins: &Path, id: &str, key: &str, value: Value) -> Result<(), Stri
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
-    if value == opt.default {
+    if opt.secret {
+        let text = value.as_str().unwrap_or_default();
+        if text.is_empty() {
+            crate::secret::delete(id, key);
+            stored.remove(key);
+        } else {
+            crate::secret::set(id, key, text)?;
+            stored.insert(key.to_owned(), SECRET_SET.into());
+        }
+    } else if value == opt.default {
         stored.remove(key);
     } else {
         stored.insert(key.to_owned(), value);
@@ -207,10 +229,19 @@ pub fn bin() -> Option<PathBuf> {
     sibling.is_file().then_some(sibling)
 }
 
+/// The runtime this process actually opened, when it was told one (`--runtime`).
+static RUNTIME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+/// Says which runtime this process opened, so its plugins' `mooring` reaches that host.
+pub fn set_runtime(dir: &Path) {
+    let _ = RUNTIME.set(dir.to_owned());
+}
+
 /// The host's runtime directory as this process knows it.
 pub fn runtime() -> Option<PathBuf> {
-    std::env::var_os(crate::protocol::RUNTIME_ENV)
-        .map(PathBuf::from)
+    RUNTIME
+        .get()
+        .cloned()
+        .or_else(|| std::env::var_os(crate::protocol::RUNTIME_ENV).map(PathBuf::from))
         .or_else(|| std::env::var_os("HOME").map(|h| crate::legacy::runtime_dir(Path::new(&h))))
 }
 
@@ -223,9 +254,14 @@ pub fn env(dir: &Path) -> Vec<(String, String)> {
         out.push(("MOORING_PLUGIN_ID".into(), p.id.clone()));
         out.push(("MOORING_PLUGIN_DATA".into(), data.display().to_string()));
         for (o, v) in values(&plugins, &p) {
+            let text = if o.secret && v.as_str() == Some(SECRET_SET) {
+                crate::secret::get(&p.id, &o.key).unwrap_or_default()
+            } else {
+                Opt::text(&v)
+            };
             out.push((
                 format!("MOORING_OPTION_{}", o.key.to_ascii_uppercase()),
-                Opt::text(&v),
+                text,
             ));
         }
     }
@@ -273,6 +309,7 @@ pub fn record(dir: &Path, what: &str, result: &Result<(), String>, ms: u64, on_c
         return;
     };
     let data = crate::setup::data_dir(&plugins, &p.id);
+    let result = &redacted(&plugins, &p, result);
     if on_change {
         let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
         let last = last.get_or_insert_with(HashMap::new);
@@ -297,8 +334,41 @@ pub fn record(dir: &Path, what: &str, result: &Result<(), String>, ms: u64, on_c
     let _ = append(&data, &run);
 }
 
+/// Adds a run, keeping the last `KEPT`. The host's hooks, several at once, and the app's
+/// decorations write here: a lock around read-trim-replace keeps every run.
+/// A command's output is kept and shown: a secret it echoed must not be kept with it.
+fn redacted(
+    plugins: &Path,
+    p: &crate::plugin::Plugin,
+    result: &Result<(), String>,
+) -> Result<(), String> {
+    let Err(why) = result else {
+        return Ok(());
+    };
+    let mut why = why.clone();
+    for (o, v) in values(plugins, p) {
+        if o.secret
+            && v.as_str() == Some(SECRET_SET)
+            && let Some(secret) = crate::secret::get(&p.id, &o.key).filter(|s| !s.is_empty())
+        {
+            why = why.replace(&secret, "••••");
+        }
+    }
+    Err(why)
+}
+
 fn append(data: &Path, run: &Run) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
     create_private_dir(data)?;
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(data.join("runs.lock"))?;
+    // SAFETY: flock on a file this function holds open; released when it closes.
+    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
     let file = data.join("runs.jsonl");
     let mut lines: Vec<String> = std::fs::read_to_string(&file)
         .unwrap_or_default()
@@ -310,6 +380,20 @@ fn append(data: &Path, run: &Run) -> std::io::Result<()> {
     let tmp = file.with_extension("jsonl.tmp");
     std::fs::write(&tmp, lines[from..].join("\n") + "\n")?;
     std::fs::rename(tmp, file)
+}
+
+/// Each command's latest run where that run failed: what is broken now. A success of one
+/// command does not hide another's failure.
+pub fn failing(runs: &[Run]) -> Vec<&Run> {
+    let mut latest: Vec<&Run> = Vec::new();
+    for r in runs {
+        match latest.iter_mut().find(|l| l.what == r.what) {
+            Some(l) => *l = r,
+            None => latest.push(r),
+        }
+    }
+    latest.retain(|r| !r.ok);
+    latest
 }
 
 /// The plugin's kept runs, oldest first.
@@ -416,5 +500,96 @@ mod tests {
         assert!(check_options(&ok).is_ok());
         assert_eq!(ok[0].parse("60").unwrap(), serde_json::json!(60.0));
         assert!(ok[0].parse("abc").is_err());
+    }
+
+    /// Hooks finish together, in the host and the app at once: no run is lost.
+    #[test]
+    fn runs_from_many_threads_are_all_kept() {
+        let (root, dir) = plugin_dir(
+            "conc",
+            r#"{"api":1,"id":"conc","name":"C","provides":["hooks"]}"#,
+        );
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let dir = dir.clone();
+                std::thread::spawn(move || {
+                    for i in 0..5 {
+                        record(&dir, &format!("hooks/t{t}-{i}"), &Ok(()), 1, false);
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert_eq!(runs(&root.join("plugins"), "conc").len(), 40);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn another_commands_success_does_not_hide_a_failure() {
+        let run = |what: &str, ok| Run {
+            at: 1,
+            what: what.into(),
+            ok,
+            detail: String::new(),
+            ms: 1,
+        };
+        let all = [
+            run("a", false),
+            run("b", true),
+            run("c", false),
+            run("c", true),
+        ];
+        let broken: Vec<&str> = failing(&all).iter().map(|r| r.what.as_str()).collect();
+        assert_eq!(broken, ["a"]);
+    }
+
+    /// A secret reaches the command and nothing else: not the file, not the settings page,
+    /// not the run log even when the command prints it.
+    #[test]
+    fn a_secret_reaches_the_command_and_stays_out_of_files_and_logs() {
+        let (root, dir) = plugin_dir(
+            "sec",
+            r#"{"api":1,"id":"sec","name":"S","provides":["hooks"],"options":[
+              {"key":"token","title":"密钥","type":"string","default":"","secret":true}]}"#,
+        );
+        let plugins = root.join("plugins");
+        let get = |k: &str| env(&dir).into_iter().find(|(n, _)| n == k).map(|(_, v)| v);
+        assert_eq!(get("MOORING_OPTION_TOKEN").as_deref(), Some(""));
+        set(&plugins, "sec", "token", "sk-very-secret".into()).unwrap();
+        assert_eq!(
+            get("MOORING_OPTION_TOKEN").as_deref(),
+            Some("sk-very-secret")
+        );
+        let stored = std::fs::read_to_string(root.join("plugin-data/sec/options.json")).unwrap();
+        assert!(!stored.contains("sk-very"), "{stored}");
+        let p = crate::plugin::check(&dir).unwrap();
+        assert_eq!(values(&plugins, &p)[0].1, Value::String(SECRET_SET.into()));
+        record(
+            &dir,
+            "hooks/h",
+            &Err("认证失败 sk-very-secret 不对".into()),
+            1,
+            false,
+        );
+        let log = std::fs::read_to_string(root.join("plugin-data/sec/runs.jsonl")).unwrap();
+        assert!(!log.contains("sk-very") && log.contains("••••"), "{log}");
+        // Empty takes it away.
+        set(&plugins, "sec", "token", "".into()).unwrap();
+        assert_eq!(get("MOORING_OPTION_TOKEN").as_deref(), Some(""));
+        assert_eq!(crate::secret::get("sec", "token"), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_secret_must_be_an_empty_string_setting() {
+        let opt = |json: &str| -> Vec<Opt> { serde_json::from_str(json).unwrap() };
+        for bad in [
+            r#"[{"key":"k","title":"t","type":"boolean","default":false,"secret":true}]"#,
+            r#"[{"key":"k","title":"t","type":"string","default":"x","secret":true}]"#,
+        ] {
+            assert!(check_options(&opt(bad)).unwrap_err().contains("secret"));
+        }
     }
 }

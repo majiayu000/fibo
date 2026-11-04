@@ -387,7 +387,7 @@ impl Workbench {
                     .when_some(subs, |d, subs| {
                         d.child(self.subagent_line(&session.id, subs, subs_live, subs_open, cx))
                             .when(subs_open, |d| {
-                                d.child(self.subagent_tree(&session.id, subs, subs_live, cx))
+                                d.child(self.subagent_tree(session, done, subs, subs_live, cx))
                             })
                     })
                     .when(unfolded, |d| d.child(self.done_card(session, cx))),
@@ -427,23 +427,33 @@ impl Workbench {
                         this.rename_session(&open.id, window, cx);
                         return;
                     }
-                    // Done with: a click unfolds what it ended with instead of resuming it.
-                    if done {
-                        let id = Some(open.id.clone());
-                        this.layout.done_open = if this.layout.done_open == id {
-                            None
-                        } else {
-                            id
-                        };
-                        cx.notify();
-                        return;
-                    }
-                    // Any other row folds the unfolded ✓ away.
-                    this.layout.done_open = None;
-                    this.peek_or_open(&open, window, cx)
+                    this.click_row(&open, done, window, cx);
                 }),
             )
             .into_any_element()
+    }
+    /// A row's click, or a click on a branch under it.
+    pub(super) fn click_row(
+        &mut self,
+        session: &AgentSession,
+        done: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Done with: a click unfolds what it ended with instead of resuming it.
+        if done {
+            let id = Some(session.id.clone());
+            self.layout.done_open = if self.layout.done_open == id {
+                None
+            } else {
+                id
+            };
+            cx.notify();
+            return;
+        }
+        // Any other row folds the unfolded ✓ away.
+        self.layout.done_open = None;
+        self.peek_or_open(session, window, cx)
     }
     /// Under an unfolded ✓ row: the first line it ended with, and the two ways back in.
     fn done_card(&self, session: &AgentSession, cx: &Context<Self>) -> gpui::Div {

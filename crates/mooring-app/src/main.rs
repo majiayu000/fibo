@@ -64,6 +64,17 @@ pub(crate) fn set_menus(cx: &mut App) {
             gpui::MenuItem::action(m.label(), ChooseAppearance(i)).checked(*m == chosen.mode)
         })
         .collect::<Vec<_>>();
+    // Choosing below would change nothing in this space, so the menu says why.
+    if let Some(shown) = ui::appearance::shown(cx)
+        && shown.source == ui::appearance::Source::Space
+        && let Some(entry) = shown.entry
+    {
+        looks.push(gpui::MenuItem::separator());
+        looks.push(gpui::MenuItem::action(
+            format!("当前空间单独用着「{}」", entry.name),
+            ShowSettings,
+        ));
+    }
     // Past the modes, an entry's place in `Themes`: each side has its own check mark.
     if let Some(themes) = cx.try_global::<ui::themes::Themes>() {
         for light in [true, false] {
@@ -336,6 +347,7 @@ fn run() -> io::Result<()> {
             std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
         ))
     };
+    mooring_core::plugin_context::set_runtime(&root);
     let instance_dir = PathBuf::from(
         std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
     )
@@ -404,6 +416,7 @@ fn run() -> io::Result<()> {
         });
         cx.set_global(ui::appearance::Appearance::load());
         ui::themes::start(cx);
+        ui::color_migration::run(cx);
         cx.set_global(ui::space_themes::SpaceThemes::load());
         cx.set_global(ui::style::Style::load());
         cx.set_global(ui::peek::PeekChoice::load());

@@ -12,8 +12,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
 
+mod cozy;
+mod face;
 mod paint;
+mod timing;
 use paint::Painter;
+use timing::*;
 
 /// The most specks the dissolve sends; a fuller screen sends one from every n-th cell,
 /// though the wipe still clears every row.
@@ -101,90 +105,6 @@ pub(super) fn spot(
     .size_full()
 }
 
-/// `t`'s progress through `from..to` of the whole run, clamped to 0..=1.
-fn sl(t: f32, from: f32, to: f32) -> f32 {
-    ((t - from) / (to - from)).clamp(0., 1.)
-}
-fn eo(x: f32) -> f32 {
-    1. - (1. - x).powi(4)
-}
-fn eio(x: f32) -> f32 {
-    if x < 0.5 {
-        4. * x * x * x
-    } else {
-        1. - (-2. * x + 2.).powi(3) / 2.
-    }
-}
-/// Overshoots a little before settling, like a stamp pressed down.
-fn back_out(x: f32) -> f32 {
-    let (c1, c3) = (1.70158, 2.70158);
-    1. + c3 * (x - 1.).powi(3) + c1 * (x - 1.).powi(2)
-}
-fn lerp(a: f32, b: f32, k: f32) -> f32 {
-    a + (b - a) * k
-}
-fn bez(a: Point<Pixels>, c: Point<Pixels>, b: Point<Pixels>, k: f32) -> Point<Pixels> {
-    let m = 1. - k;
-    point(
-        a.x * (m * m) + c.x * (2. * m * k) + b.x * (k * k),
-        a.y * (m * m) + c.y * (2. * m * k) + b.y * (k * k),
-    )
-}
-/// A small deterministic random sequence, so the same `t` is always the same frame.
-fn rng(mut seed: u32) -> impl FnMut() -> f32 {
-    move || {
-        seed = seed.wrapping_add(0x6D2B_79F5);
-        let mut t = (seed ^ (seed >> 15)).wrapping_mul(1 | seed);
-        t = (t.wrapping_add((t ^ (t >> 7)).wrapping_mul(61 | t))) ^ t;
-        ((t ^ (t >> 14)) as f32) / 4_294_967_296.
-    }
-}
-
-/// Per style, the slices of the run each part plays in.
-struct Timing {
-    /// Where the button has filled and turned into ✓ 做完了 (`Status::Closed.label()`).
-    button: f32,
-    /// The words in, and out (0 when they stay).
-    words: (f32, f32, f32, f32),
-    /// Where the pane starts and finishes fading out.
-    fade: (f32, f32),
-    /// Where the finished session reaches its sidebar row.
-    land: f32,
-}
-fn timing(style: Style) -> Timing {
-    match style {
-        Style::Seal => Timing {
-            button: 0.25,
-            words: (0.3, 0.5, 0., 0.),
-            fade: (0.85, 1.),
-            land: 1.,
-        },
-        Style::Stamp => Timing {
-            button: 0.14,
-            words: (0.36, 0.52, 0.7, 0.78),
-            fade: (0.74, 0.86),
-            land: 0.88,
-        },
-        Style::Sweep => Timing {
-            button: 0.12,
-            words: (0.52, 0.64, 0.62, 0.7),
-            fade: (0.88, 0.98),
-            land: 0.9,
-        },
-        Style::Dissolve => Timing {
-            button: 0.12,
-            words: (0.3, 0.42, 0.66, 0.74),
-            fade: (0.76, 0.9),
-            land: 0.88,
-        },
-        Style::Fade => Timing {
-            button: 0.12,
-            words: (2., 2., 0., 0.),
-            fade: (0.15, 1.),
-            land: 2.,
-        },
-    }
-}
 /// How far the dissolve's wipe has come along the row `down` the pane (0 at the top, 1 at
 /// the bottom), as a fraction of the pane's width.
 fn wipe_edge(t: f32, down: f32) -> f32 {
@@ -512,6 +432,7 @@ impl Workbench {
             Style::Sweep => 0.8,
             Style::Dissolve => 0.25 * sl(t, 0.05, 0.2) + 0.65 * sl(t, 0.35, 0.65),
             Style::Fade => 0.,
+            _ => 0.88 * eo(sl(t, 0.05, 0.2)),
         };
         let veil_width = if style == Style::Sweep {
             sweep_at(t).clamp(0., 1.)
@@ -542,7 +463,10 @@ impl Workbench {
                     .text_size(px(T::BODY_SIZE))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(ink)
-                    .child(Status::Closed.label()),
+                    .child(style.greeting().map_or_else(
+                        || Status::Closed.label().to_owned(),
+                        |g| format!("{}，{g}", Status::Closed.label()),
+                    )),
             )
             .child(
                 div()
@@ -675,6 +599,11 @@ impl Workbench {
         let spots = self.layout.spots.clone();
         let (green, _, _) = Tone::Ok.colors();
         let on_accent = T::color(T::on_accent());
+        let (warm, rose, soft) = (
+            Tone::Warn.dot(),
+            Tone::Danger.dot(),
+            T::color(T::secondary()),
+        );
         Some(
             gpui::canvas(
                 |_, _, _| (),
@@ -699,6 +628,9 @@ impl Workbench {
                             quads: 0,
                             green,
                             on_accent,
+                            warm,
+                            rose,
+                            soft,
                         };
                         p.frame(f.effect.style, f.t, pane, target, &f.glyphs);
                         if let (Some(r), Some(at)) = (row.filter(|_| f.effect.land), target) {
@@ -740,13 +672,7 @@ mod tests {
 
     #[test]
     fn every_style_ends_with_the_pane_gone() {
-        for style in [
-            Style::Seal,
-            Style::Stamp,
-            Style::Sweep,
-            Style::Dissolve,
-            Style::Fade,
-        ] {
+        for style in Style::ALL {
             assert_eq!(
                 Workbench::completing_opacity(style, 0.),
                 1.,

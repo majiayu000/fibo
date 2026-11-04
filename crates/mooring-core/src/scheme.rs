@@ -185,6 +185,11 @@ impl TermColors {
 }
 
 /// WCAG relative luminance.
+/// WCAG contrast of two colors, 1 to 21.
+pub fn contrast(a: u32, b: u32) -> f32 {
+    let (a, b) = (luminance(a), luminance(b));
+    (a.max(b) + 0.05) / (a.min(b) + 0.05)
+}
 pub fn luminance(c: u32) -> f32 {
     let channel = |shift: u32| {
         let v = ((c >> shift) & 255) as f32 / 255.;

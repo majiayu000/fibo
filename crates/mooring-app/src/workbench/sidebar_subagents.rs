@@ -3,9 +3,12 @@
 //! with its clock, [`SHOWN`] at most before the rest fold into one line that opens them
 //! all. Open by default on the session you are in. The marks stay still: the clocks
 //! already tick each second, and spinning rings would redraw the column every frame.
+//! 在跑 yellow, 跑完 a grey ✓, 中断 (failed or stopped) a red ✕; 前台 marks one the turn
+//! waits on. A branch's click does what its session row's click does.
 use super::layout::turn_clock;
 use super::*;
 use crate::ui::theme::Flat as F;
+use crate::ui::tone::Tone;
 use mooring_core::content::Subagent;
 
 fn ink(v: u32) -> gpui::Hsla {
@@ -15,17 +18,49 @@ const SHOWN: usize = 4;
 const PIPS: usize = 8;
 const LEAF: f32 = F::SUB_LEAF;
 const HAIR: f32 = T::BORDER_WIDTH;
+const MARK_PAD: f32 = 3.;
+const MARK_LINE: f32 = 12.;
 
 /// Running only while its session runs: one that stopped leaves its unfinished
 /// subagents on disk, and those read as ended.
 fn runs(s: &Subagent, live: bool) -> bool {
     live && s.running()
 }
-/// "3 在跑 · 1 完成", or with `each` = "个" and `done` = "已完成" for the fold line.
-fn tally(running: usize, ended: usize, each: &str, done: &str) -> String {
-    let run = (running > 0).then(|| format!("{running} {each}{}", Status::Running.label()));
-    let end = (ended > 0).then(|| format!("{ended} {each}{done}"));
-    run.into_iter().chain(end).collect::<Vec<_>>().join(" · ")
+/// The counts a list reads as.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Counts {
+    running: usize,
+    stopped: usize,
+    ended: usize,
+}
+impl Counts {
+    fn of<'a>(subs: impl IntoIterator<Item = &'a Subagent>, live: bool) -> Self {
+        let mut n = Self::default();
+        for s in subs {
+            match (runs(s, live), s.stopped) {
+                (true, _) => n.running += 1,
+                (false, true) => n.stopped += 1,
+                (false, false) => n.ended += 1,
+            }
+        }
+        n
+    }
+    fn any(self) -> bool {
+        self != Self::default()
+    }
+}
+/// "3 在跑 · 1 中断 · 1 完成", or with `each` = "个" and `done` = "已完成" for the fold line.
+fn tally(n: Counts, each: &str, done: &str) -> String {
+    [
+        (n.running, Status::Running.label()),
+        (n.stopped, "中断"),
+        (n.ended, done),
+    ]
+    .into_iter()
+    .filter(|(count, _)| *count > 0)
+    .map(|(count, word)| format!("{count} {each}{word}"))
+    .collect::<Vec<_>>()
+    .join(" · ")
 }
 fn flip(set: &mut HashSet<String>, id: &str) {
     if !set.remove(id) {
@@ -38,34 +73,31 @@ fn opened(chosen: &HashMap<String, bool>, session: &str, current: bool) -> bool 
     chosen.get(session).copied().unwrap_or(current)
 }
 
-/// The branches listed, in start order, and how many running and ended fold away. All
-/// of them when asked or when only one would fold; otherwise the running ones that have
-/// run longest, then those that ended last.
+/// The branches listed, in start order, and what folds away. All of them when asked or
+/// when only one would fold; otherwise the running ones that have run longest, then those
+/// that did not finish, then those that ended last.
 struct Shown<'a> {
     list: Vec<&'a Subagent>,
-    running: usize,
-    ended: usize,
+    folded: Counts,
 }
 fn shown(subs: &[Subagent], live: bool, all: bool) -> Shown<'_> {
     let mut list: Vec<&Subagent> = subs.iter().collect();
     if all || list.len() <= SHOWN + 1 {
         return Shown {
             list,
-            running: 0,
-            ended: 0,
+            folded: Counts::default(),
         };
     }
-    list.sort_by_key(|s| match runs(s, live) {
-        true => (0, s.started),
-        false => (1, u64::MAX - s.ended.unwrap_or(s.started)),
+    list.sort_by_key(|s| match (runs(s, live), s.stopped) {
+        (true, _) => (0, s.started),
+        (false, true) => (1, u64::MAX - s.ended.unwrap_or(s.started)),
+        (false, false) => (2, u64::MAX - s.ended.unwrap_or(s.started)),
     });
     let rest = list.split_off(SHOWN);
     list.sort_by_key(|s| s.started);
-    let running = rest.iter().filter(|s| runs(s, live)).count();
     Shown {
         list,
-        running,
-        ended: rest.len() - running,
+        folded: Counts::of(rest, live),
     }
 }
 
@@ -84,21 +116,22 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let (run, quiet) = (Status::Running.colors().0, ink(F::third()));
-        let running = subs.iter().filter(|s| runs(s, live)).count();
-        let ended = subs.len() - running;
+        let danger = Tone::Danger.dot();
+        let counts = Counts::of(subs, live);
         let marks = if subs.len() <= PIPS {
             div()
                 .flex()
                 .gap(px(F::SUB_PIP_GAP))
                 .children(subs.iter().map(|s| {
                     let pip = div().size(px(F::SUB_PIP)).rounded_full();
-                    match runs(s, live) {
-                        true => pip.bg(run),
-                        false => pip.border(px(HAIR)).border_color(quiet),
+                    match (runs(s, live), s.stopped) {
+                        (true, _) => pip.bg(run),
+                        (false, true) => pip.bg(danger),
+                        (false, false) => pip.border(px(HAIR)).border_color(quiet),
                     }
                 }))
         } else {
-            // Ended on the left, running on the right, in proportion.
+            // Ended on the left, then stopped, running on the right, in proportion.
             let share = |n: usize| px(F::SUB_BAR * n as f32 / subs.len() as f32);
             div()
                 .w(px(F::SUB_BAR))
@@ -106,8 +139,9 @@ impl Workbench {
                 .flex()
                 .rounded_full()
                 .overflow_hidden()
-                .child(div().w(share(ended)).bg(quiet))
-                .child(div().w(share(running)).bg(run))
+                .child(div().w(share(counts.ended)).bg(quiet))
+                .child(div().w(share(counts.stopped)).bg(danger))
+                .child(div().w(share(counts.running)).bg(run))
         };
         let id = session.to_owned();
         div()
@@ -126,8 +160,8 @@ impl Workbench {
                 div()
                     .flex_1()
                     .truncate()
-                    .text_color(if running > 0 { run } else { quiet })
-                    .child(tally(running, ended, "", "完成")),
+                    .text_color(if counts.running > 0 { run } else { quiet })
+                    .child(tally(counts, "", "完成")),
             )
             .child(super::sidebar_flat::fold_mark(open))
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -138,22 +172,21 @@ impl Workbench {
             .into_any_element()
     }
     /// The opened list: a branch per subagent hung from under the row's state mark, a
-    /// gap ring and its time so far while it runs, a ✓ and how long it took once ended;
-    /// then what folds away, or 收起 once the whole list is open.
+    /// gap ring and its time so far while it runs, a ✓ or ✕ and how long it took once
+    /// ended; then what folds away, or 收起 once the whole list is open.
     pub(super) fn subagent_tree(
         &self,
-        session: &str,
+        row: &AgentSession,
+        done: bool,
         subs: &[Subagent],
         live: bool,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
+        let session = row.id.as_str();
         let whole = self.layout.subagents_all.contains(session);
         let shown = shown(subs, live, whole);
-        let fold = if shown.running + shown.ended > 0 {
-            Some(format!(
-                "还有 {}",
-                tally(shown.running, shown.ended, "个", "已完成")
-            ))
+        let fold = if shown.folded.any() {
+            Some(format!("还有 {}", tally(shown.folded, "个", "已完成")))
         } else {
             (whole && subs.len() > SHOWN + 1).then(|| "收起".to_owned())
         };
@@ -204,20 +237,20 @@ impl Workbench {
             .map(|(i, s)| {
                 let on = runs(s, live);
                 running |= on;
-                let (path, color, clock) = match (on, s.ended) {
-                    (true, _) => (
-                        "icons/state-run.svg",
-                        run,
-                        turn_clock(now.saturating_sub(s.started)),
-                    ),
-                    (false, Some(end)) => (
-                        "icons/state-done.svg",
-                        ink(F::done()),
-                        turn_clock(end.saturating_sub(s.started)),
-                    ),
-                    (false, None) => ("icons/state-done.svg", ink(F::done()), String::new()),
+                let (path, color) = match (on, s.stopped) {
+                    (true, _) => ("icons/state-run.svg", run),
+                    (false, true) => ("icons/state-stopped.svg", Tone::Danger.dot()),
+                    (false, false) => ("icons/state-done.svg", ink(F::done())),
                 };
+                let clock = match (on, s.ended) {
+                    (true, _) => turn_clock(now.saturating_sub(s.started)),
+                    (false, Some(end)) => turn_clock(end.saturating_sub(s.started)),
+                    (false, None) => String::new(),
+                };
+                let open = row.clone();
                 leaf(i)
+                    .id(gpui::SharedString::from(format!("subagent-{session}-{i}")))
+                    .cursor_pointer()
                     .child(
                         gpui::svg()
                             .path(path)
@@ -232,6 +265,20 @@ impl Workbench {
                             .text_color(ink(if on { F::second() } else { F::third() }))
                             .child(s.name.clone()),
                     )
+                    .when(s.foreground && on, |d| {
+                        d.child(
+                            div()
+                                .flex_shrink_0()
+                                .px(px(MARK_PAD))
+                                .rounded(px(MARK_PAD))
+                                .border(px(HAIR))
+                                .border_color(run.opacity(0.45))
+                                .text_size(px(F::TAG - 1.))
+                                .line_height(px(MARK_LINE))
+                                .text_color(run)
+                                .child("前台"),
+                        )
+                    })
                     .child(
                         div()
                             .min_w(px(F::TIME_WIDTH))
@@ -242,6 +289,10 @@ impl Workbench {
                             .text_color(ink(F::third()))
                             .child(clock),
                     )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.click_row(&open, done, window, cx);
+                    }))
             })
             .collect::<Vec<_>>();
         if running {
@@ -297,6 +348,7 @@ mod tests {
             name: format!("a{started}"),
             started,
             ended,
+            ..Default::default()
         }
     }
     fn names<'a>(s: &Shown<'a>) -> Vec<&'a str> {
@@ -314,7 +366,12 @@ mod tests {
         ];
         let s = shown(&subs, true, false);
         assert_eq!(names(&s), ["a2", "a3", "a5", "a6"]);
-        assert_eq!((s.running, s.ended), (0, 2));
+        let counts = |running, stopped, ended| Counts {
+            running,
+            stopped,
+            ended,
+        };
+        assert_eq!(s.folded, counts(0, 0, 2));
         assert_eq!(shown(&subs, true, true).list.len(), 6);
         // One more than fits shows whole.
         assert_eq!(shown(&subs[..5], true, false).list.len(), 5);
@@ -322,9 +379,21 @@ mod tests {
         let many: Vec<_> = (1..=20).map(|i| sub(i, None)).collect();
         let s = shown(&many, true, false);
         assert_eq!(names(&s), ["a1", "a2", "a3", "a4"]);
-        assert_eq!((s.running, s.ended), (16, 0));
+        assert_eq!(s.folded, counts(16, 0, 0));
         // Once the session stopped, unfinished ones count as ended.
-        assert_eq!(shown(&many, false, false).ended, 16);
-        assert_eq!(tally(2, 1, "", "完成"), "2 在跑 · 1 完成");
+        assert_eq!(shown(&many, false, false).folded, counts(0, 0, 16));
+        assert_eq!(tally(counts(2, 0, 1), "", "完成"), "2 在跑 · 1 完成");
+        assert_eq!(
+            tally(counts(1, 2, 3), "个", "已完成"),
+            "1 个在跑 · 2 个中断 · 3 个已完成"
+        );
+    }
+    #[test]
+    fn what_did_not_finish_stays_listed_before_what_ended_later() {
+        let mut subs: Vec<_> = (1..=6).map(|i| sub(i, Some(100 + i))).collect();
+        subs[0].stopped = true;
+        let s = shown(&subs, true, false);
+        assert_eq!(names(&s), ["a1", "a4", "a5", "a6"]);
+        assert_eq!(Counts::of(&subs, true).stopped, 1);
     }
 }

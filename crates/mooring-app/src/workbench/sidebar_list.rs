@@ -1,4 +1,4 @@
-//! The sessions part of the left column, arranged by the chosen preset: 经典, 状态, 目录
+//! The sessions part of the left column, arranged by the chosen preset: 会话优先, 目录
 //! or a plugin's (`mooring_core::sidebar`). Every preset reads the same `session_status`,
 //! so what needs you is the same row in all of them.
 use super::*;
@@ -168,7 +168,7 @@ impl SidebarPrefs {
     pub fn preset(&self) -> &'static Preset {
         presets::find(&self.preset)
     }
-    /// Every preset but a flat list (经典) uses the denser look of sidebar-density.html:
+    /// Every preset but a plugin's flat list uses the denser look of sidebar-density.html:
     /// the spaces fold into one line, rows carry a state symbol and a time.
     pub fn dense(&self) -> bool {
         self.preset().group != Grouping::Flat
@@ -295,7 +295,7 @@ impl Workbench {
             return self.dense_row((session, g, attention), current, detail, end, cx);
         }
         let open = session.clone();
-        let seen = crate::ui::status_colors::StatusColors::get();
+        use crate::ui::status_colors as seen;
         // Every row and tab shows its CLI's mark, in its own color (v3 mock).
         let marks = true;
         let title = match self
@@ -314,7 +314,7 @@ impl Workbench {
                 .min_w_0()
                 .truncate()
                 .text_size(px(T::MONO_SIZE))
-                .when(!attention, |d| d.text_color(T::color(seen.seen_title())))
+                .when(!attention, |d| d.text_color(T::color(seen::seen_title())))
                 .child(self.session_title(session)),
         };
         // Rows that all wait for your next step tell apart by how long they have.
@@ -331,7 +331,7 @@ impl Workbench {
         .text_color(if attention {
             g.colors().1
         } else {
-            T::color(seen.seen_status())
+            T::color(seen::seen_status())
         });
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))
@@ -518,7 +518,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let open = session.clone();
-        let seen = crate::ui::status_colors::StatusColors::get();
+        use crate::ui::status_colors as seen;
         let selected = current == Some(session.id.as_str());
         let mono = T::mono(cx).family;
         // Every row and tab shows its CLI's mark, in its own color (v3 mock).
@@ -539,7 +539,7 @@ impl Workbench {
                 .text_color(if attention || selected {
                     T::color(T::primary())
                 } else {
-                    T::color(seen.seen_title())
+                    T::color(seen::seen_title())
                 })
                 .child(self.session_title(session)),
         };

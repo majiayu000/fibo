@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-tea",
+  "name": "完成动画：一杯热茶",
+  "version": "0.1.0",
+  "description": "杯子上的 -_- 被热气捂暖，笑了，头顶冒出一颗心",
+  "provides": ["effects"]
+}

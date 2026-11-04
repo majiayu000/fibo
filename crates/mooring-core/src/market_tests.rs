@@ -6,6 +6,13 @@ fn tmp(name: &str) -> PathBuf {
     std::fs::create_dir_all(&d).unwrap();
     d
 }
+/// What is in the plugins directory but the lock.
+fn entries(plugins: &Path) -> usize {
+    std::fs::read_dir(plugins)
+        .unwrap()
+        .filter(|e| e.as_ref().unwrap().file_name() != ".lock")
+        .count()
+}
 fn plugin(root: &Path, id: &str, version: &str) {
     let d = root.join(id);
     std::fs::create_dir_all(&d).unwrap();
@@ -34,6 +41,12 @@ fn the_shipped_index_is_current() {
         want == have,
         "plugins/index.json 过期了：运行 cargo run -p mooring-host -- plugins index plugins"
     );
+    let signature = std::fs::read(dir.join("index.sig")).unwrap_or_default();
+    assert_eq!(
+        verify_index(have.as_bytes(), &signature),
+        Ok(Publisher::Official),
+        "plugins/index.sig 过期了：在有官方私钥的机器上运行 mooring plugins index plugins"
+    );
 }
 
 #[test]
@@ -53,6 +66,7 @@ fn installs_only_listed_files_checked_and_replaces_in_place() {
     let offer = Offer {
         entry: index.plugins[0].clone(),
         source: Source::Bundled(catalog.clone()),
+        publisher: Publisher::Official,
     };
     let plugins = tmp("plugins");
     // A hand-placed copy under another directory name is replaced where it is.
@@ -62,18 +76,14 @@ fn installs_only_listed_files_checked_and_replaces_in_place() {
     assert_eq!(at, plugins.join("mine"));
     assert!(!at.join("build.sh").exists());
     assert!(plugin::check(&at).unwrap().version.as_deref() == Some("1.0.0"));
-    assert_eq!(
-        std::fs::read_dir(&plugins).unwrap().count(),
-        1,
-        "no staging left behind"
-    );
+    assert_eq!(entries(&plugins), 1, "no staging left behind");
 
     // A tampered file is refused and the installed copy stays.
     std::fs::write(catalog.join("quick-sweep/effects.json"), "{}").unwrap();
     let err = offer.install_into(&plugins).unwrap_err();
     assert!(err.contains("不一致"), "{err}");
     assert!(plugin::check(&at).is_ok());
-    assert_eq!(std::fs::read_dir(&plugins).unwrap().count(), 1);
+    assert_eq!(entries(&plugins), 1);
     let _ = std::fs::remove_dir_all(&catalog);
     let _ = std::fs::remove_dir_all(&plugins);
 }
@@ -95,6 +105,8 @@ fn unsafe_entries_are_refused_before_fetching() {
         touches: vec![],
         network: None,
         files,
+        dir: None,
+        versions: vec![],
     };
     assert!(
         entry("ok", vec![file("plugin.json"), file("a/b.json")])
@@ -147,12 +159,15 @@ fn remote_offers_replace_bundled_only_when_newer() {
             touches: vec![],
             network: None,
             files: vec![],
+            dir: None,
+            versions: vec![],
         },
         source: if remote {
             Source::Remote("https://x".into())
         } else {
             Source::Bundled(PathBuf::new())
         },
+        publisher: Publisher::Official,
     };
     let merged = merge(
         vec![offer("a", "0.2.0", false), offer("b", "0.1.0", false)],
@@ -241,13 +256,14 @@ fn install_keeps_another_plugin_living_in_the_id_directory() {
     let offer = Offer {
         entry: index_of(&catalog).unwrap().plugins[0].clone(),
         source: Source::Bundled(catalog.clone()),
+        publisher: Publisher::Official,
     };
     let plugins = tmp("other-plugins");
     plugin(&plugins, "other", "0.1.0");
     std::fs::rename(plugins.join("other"), plugins.join("quick-sweep")).unwrap();
     let err = offer.install_into(&plugins).unwrap_err();
     let kept = plugin::check(&plugins.join("quick-sweep")).map(|p| p.id);
-    let entries = std::fs::read_dir(&plugins).unwrap().count();
+    let entries = entries(&plugins);
     let _ = std::fs::remove_dir_all(&catalog);
     let _ = std::fs::remove_dir_all(&plugins);
     assert!(err.contains("占用"), "{err}");
@@ -273,6 +289,7 @@ fn install_refuses_a_package_that_provides_more_than_listed() {
     let offer = Offer {
         entry,
         source: Source::Bundled(catalog.clone()),
+        publisher: Publisher::Official,
     };
     let plugins = tmp("provides-into");
     let result = offer.install_into(&plugins);

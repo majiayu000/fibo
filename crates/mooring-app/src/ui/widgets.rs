@@ -139,14 +139,14 @@ pub fn dot(group: Status) -> gpui::Div {
         .bg(group.colors().0)
 }
 /// Running work keeps its filled status color even after it has been viewed.
-/// Other seen rows follow `colors.json`'s `seen.dot` style.
+/// Other seen rows follow the theme's `seen.dot` style.
 pub fn seen_dot(group: Status) -> gpui::Div {
-    use super::status_colors::{SeenDot, StatusColors};
+    use super::status_colors::{SeenDot, seen_dot};
     if group.working() {
         return dot(group);
     }
     let hue = group.colors().0;
-    match StatusColors::get().seen_dot {
+    match seen_dot() {
         SeenDot::Fill => dot(group),
         SeenDot::Fade => dot(group).bg(hue.opacity(0.45)),
         SeenDot::Ring => div()

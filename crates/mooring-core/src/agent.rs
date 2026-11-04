@@ -365,13 +365,37 @@ pub struct Registry {
     report: Vec<Loaded>,
 }
 
-static REGISTRY: OnceLock<Registry> = OnceLock::new();
+static REGISTRY: crate::plugin::Slot<Registry> = crate::plugin::Slot::new();
+/// Where this process registered from, once it did: what `reload` reads again.
+static FROM: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
+/// Bumped when the registry is replaced, for whatever is built from it.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn registry() -> &'static Registry {
     REGISTRY.get_or_init(|| Registry {
         specs: builtin(),
         report: vec![],
     })
+}
+
+/// How many times the registry has been replaced: compare to know a copy of it is stale.
+pub fn generation() -> u64 {
+    GENERATION.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Reads the declarations again after plugins changed (`plugin::reload`). An Agent that went
+/// away keeps its `Agent` value in stored sessions, with no spec, as one read back from a
+/// database always could; one that arrived is known from now on. Does nothing in a process
+/// that never registered.
+pub(crate) fn reload() {
+    let Some((dir, home)) = FROM.get() else {
+        return;
+    };
+    let mut files = json_files(dir);
+    files.extend(crate::plugin::files(crate::plugin::Kind::Agent));
+    let (specs, report) = load_files(files, home);
+    REGISTRY.set(Registry { specs, report });
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Each declaration file's outcome since `install`; empty before it or without files.
@@ -461,12 +485,22 @@ pub fn install() -> bool {
     let mut files = json_files(&dir.join("agents"));
     files.extend(crate::plugin::files(crate::plugin::Kind::Agent));
     let (specs, report) = load_files(files, Path::new(&home));
-    REGISTRY.set(Registry { specs, report }).is_ok()
+    if REGISTRY.get().is_some() {
+        return false;
+    }
+    let _ = FROM.set((dir.join("agents"), PathBuf::from(home)));
+    REGISTRY.set(Registry { specs, report });
+    true
 }
 
 pub fn install_from(dir: &Path, home: &Path) -> bool {
     let (specs, report) = load(dir, home);
-    REGISTRY.set(Registry { specs, report }).is_ok()
+    if REGISTRY.get().is_some() {
+        return false;
+    }
+    let _ = FROM.set((dir.to_owned(), home.to_owned()));
+    REGISTRY.set(Registry { specs, report });
+    true
 }
 
 /// Each `*.json` in `dir`, by file name.
@@ -701,186 +735,5 @@ fn intern_declared(id: &str) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "mooring-agents-{name}-{}-{}",
-            std::process::id(),
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-    const AIDER: &str = r#"{"api":1,"id":"aider","name":"Aider","executable":"aider",
-        "start":"aider","resume":"aider --restore {id}",
-        "transcripts":{"root":"~/.aider/s","session":"/sid","cwd":"/cwd","role":"/role","text":"/content"}}"#;
-
-    #[test]
-    fn built_in_keys_and_commands_are_what_was_stored_before() {
-        assert_eq!(serde_json::to_string(&Agent::Claude).unwrap(), "\"Claude\"");
-        assert_eq!(
-            serde_json::from_str::<Agent>("\"Grok\"").unwrap(),
-            Agent::Grok
-        );
-        assert_eq!(format!("{:?}", Agent::Codex), "Codex");
-        assert_eq!(Agent::Codex.command(), "codex");
-        assert_eq!(
-            Agent::Claude.resume_command("x", &[]),
-            "claude --resume 'x'"
-        );
-        let launch = ["-c", "model_reasoning_effort=\"high\"", "-m", "gpt-5"].map(String::from);
-        assert_eq!(
-            Agent::Codex.resume_command("id", &launch),
-            "command codex -c 'model_reasoning_effort=\"high\"' -m gpt-5 resume 'id'"
-        );
-        assert_eq!(
-            Agent::Claude.resume_command("id", &["--dangerously-skip-permissions".into()]),
-            "command claude --dangerously-skip-permissions --resume 'id'"
-        );
-        assert_eq!(Agent::Claude.command(), "claude");
-    }
-
-    #[test]
-    fn a_key_no_longer_registered_reads_back_as_itself() {
-        let gone: Agent = serde_json::from_str("\"removed-cli\"").unwrap();
-        assert_eq!(gone.key(), "removed-cli");
-        assert_eq!(gone.name(), "removed-cli");
-        assert!(gone.spec().is_none());
-        assert_eq!(gone, Agent::from_key("removed-cli"));
-    }
-
-    #[test]
-    fn a_declaration_registers_after_the_built_ins() {
-        let d = dir("ok");
-        std::fs::write(d.join("aider.json"), AIDER).unwrap();
-        let (specs, report) = load(&d, Path::new("/home/u"));
-        assert_eq!(
-            specs.iter().map(|s| s.key).collect::<Vec<_>>(),
-            ["Codex", "Claude", "Grok", "Cursor", "Qoder", "aider"]
-        );
-        let aider = &specs[builtin().len()];
-        assert_eq!(
-            aider.transcripts.as_ref().unwrap().root,
-            Path::new("/home/u/.aider/s")
-        );
-        assert_eq!(render(&aider.resume, Some("a b")), "aider --restore 'a b'");
-        assert_eq!(report[0].result, Ok("aider".into()));
-    }
-
-    #[test]
-    fn a_later_file_replaces_an_earlier_one_with_the_same_id() {
-        let d = dir("override");
-        std::fs::write(d.join("a.json"), AIDER).unwrap();
-        std::fs::write(
-            d.join("b.json"),
-            AIDER.replace("\"Aider\"", "\"Aider (mine)\""),
-        )
-        .unwrap();
-        let (specs, report) = load(&d, Path::new("/h"));
-        assert_eq!(specs.len(), builtin().len() + 1);
-        assert_eq!(specs[builtin().len()].name, "Aider (mine)");
-        assert!(report[0].result.as_ref().unwrap_err().contains("b.json"));
-        assert_eq!(report[1].result, Ok("aider".into()));
-    }
-
-    #[test]
-    fn unusable_declarations_are_reported_and_the_rest_still_load() {
-        let d = dir("bad");
-        let cases = [
-            ("1.json", "not json".to_owned()),
-            ("2.json", AIDER.replace("\"api\":1", "\"api\":3")),
-            (
-                "3.json",
-                AIDER.replace("\"id\":\"aider\"", "\"id\":\"claude\""),
-            ),
-            (
-                "4.json",
-                AIDER.replace("\"executable\":\"aider\"", "\"executable\":\"codex\""),
-            ),
-            (
-                "5.json",
-                AIDER.replace("\"id\":\"aider\"", "\"id\":\"Bad Id\""),
-            ),
-            ("6.json", AIDER.replace("\"/sid\"", "\"sid\"")),
-            ("7.json", AIDER.replace("\"~/.aider/s\"", "\"rel/s\"")),
-            (
-                "8.json",
-                AIDER.replace("\"api\":1,", "\"api\":1,\"extra\":true,"),
-            ),
-            ("9.json", AIDER.to_owned()),
-        ];
-        for (name, body) in &cases {
-            std::fs::write(d.join(name), body).unwrap();
-        }
-        let (specs, report) = load(&d, Path::new("/h"));
-        assert_eq!(
-            specs.len(),
-            builtin().len() + 1,
-            "only the good one registers"
-        );
-        let refused = report.iter().filter(|r| r.result.is_err()).count();
-        assert_eq!(refused, 8, "{report:#?}");
-        assert!(report[1].result.as_ref().unwrap_err().contains("api 3"));
-        assert!(
-            report[2]
-                .result
-                .as_ref()
-                .unwrap_err()
-                .contains("Claude Code")
-        );
-    }
-
-    #[test]
-    fn api_2_events_load_and_are_checked() {
-        let d = dir("events");
-        let base = |api: u32, events: &str| {
-            format!(
-                r#"{{"api":{api},"id":"gemini","name":"Gemini","executable":"gemini","start":"gemini","resume":"gemini --resume {{id}}",
-                "transcripts":{{"root":"/tmp/c","session":"/s","cwd":"/c","events":{events}}}}}"#
-            )
-        };
-        let ok = r#"[{"when":{"/type":"turn_end"},"turn":"completed"},
-            {"when":{"/type":"tool_call"},"tool":{"id":"/id","name":"/n","kind":"command","command":"/cmd"}}]"#;
-        std::fs::write(d.join("a.json"), base(2, ok)).unwrap();
-        let (specs, report) = load(&d, Path::new("/h"));
-        assert!(report[0].result.is_ok(), "{report:?}");
-        let events = &specs.last().unwrap().transcripts.as_ref().unwrap().events;
-        assert_eq!(events.len(), 2);
-        assert!(events[0].matches(&serde_json::json!({"type": "turn_end"})));
-        assert!(!events[0].matches(&serde_json::json!({"type": "turn_start"})));
-        for (body, why) in [
-            (base(1, ok), "需要 api 2"),
-            (base(3, ok), "只认 api 1 到 2"),
-            (
-                base(2, r#"[{"when":{},"turn":"completed"}]"#),
-                "when 不能为空",
-            ),
-            (base(2, r#"[{"when":{"/t":"x"}}]"#), "turn、tool 或 result"),
-            (
-                base(
-                    2,
-                    r#"[{"when":{"/t":"x"},"tool":{"id":"/i","name":"/n","kind":"command"}}]"#,
-                ),
-                "command 指针",
-            ),
-            (
-                base(2, r#"[{"when":{"t":"x"},"turn":"running"}]"#),
-                "JSON 指针",
-            ),
-        ] {
-            std::fs::write(d.join("a.json"), &body).unwrap();
-            let (_, report) = load(&d, Path::new("/h"));
-            let err = report[0].result.as_ref().unwrap_err();
-            assert!(err.contains(why), "{why}: {err}");
-        }
-    }
-
-    #[test]
-    fn no_directory_means_built_ins_only() {
-        let (specs, report) = load(Path::new("/nonexistent/mooring/agents"), Path::new("/h"));
-        assert_eq!(specs.len(), builtin().len());
-        assert!(report.is_empty());
-    }
-}
+#[path = "agent_tests.rs"]
+mod tests;

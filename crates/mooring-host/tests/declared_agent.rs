@@ -17,13 +17,22 @@ struct Host {
 impl Host {
     /// A daemon whose config holds `declaration` as `agents/fake.json`.
     fn start(declaration: impl FnOnce(&Path) -> String) -> Self {
+        Self::start_with(Some(declaration))
+    }
+    /// A daemon that knows only the built-ins until a plugin says otherwise.
+    fn start_bare() -> Self {
+        Self::start_with(None::<fn(&Path) -> String>)
+    }
+    fn start_with(declaration: Option<impl FnOnce(&Path) -> String>) -> Self {
         let root = std::env::temp_dir().join(format!("kl-{}", uuid::Uuid::new_v4().simple()));
         fs::create_dir_all(root.join("agents")).unwrap();
         // The daemon only serves from a private runtime directory.
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         fs::create_dir_all(root.join("logs/fake")).unwrap();
-        fs::write(root.join("agents/fake.json"), declaration(&root)).unwrap();
+        if let Some(declaration) = declaration {
+            fs::write(root.join("agents/fake.json"), declaration(&root)).unwrap();
+        }
         let child = Command::new(std::env::current_exe().unwrap())
             .args(["--ignored", "--exact", "daemon_fixture", "--nocapture"])
             .env("MOORING_FIXTURE_RUNTIME", &root)
@@ -151,9 +160,15 @@ fn daemon_fixture() {
         &root.join("agents"),
         &root
     ));
+    // Plugins live under the same directory, so a reload can read new ones.
+    mooring_core::plugin::install(&root);
     let fake = Agent::from_key("fake");
-    assert!(fake.spec().is_some(), "{:?}", mooring_core::agent::report());
-    let mut roots = vec![(fake, root.join("logs/fake"))];
+    let declared = fake.spec().is_some();
+    let mut roots = if declared {
+        vec![(fake, root.join("logs/fake"))]
+    } else {
+        vec![]
+    };
     // The built-ins keep roots of their own here, so nothing of the user's is read.
     for agent in Agent::all().into_iter().filter(|a| *a != fake) {
         roots.push((agent, root.join("logs").join(agent.key())));
@@ -225,6 +240,63 @@ fn a_declared_cli_binds_its_transcript_and_stop_agent_ends_only_it() {
         .query_row("SELECT runtime FROM agent_sessions", [], |r| r.get(0))
         .unwrap();
     assert_eq!(runtime, "fake");
+}
+
+/// No restart: a plugin that declares a CLI takes effect on `ReloadPlugins`, and its
+/// transcripts are read and bound; taken away the same way, a new one no longer is.
+#[test]
+fn an_agent_plugin_takes_effect_and_leaves_without_a_restart() {
+    let h = Host::start_bare();
+    let before = h.recognition().plugins_revision;
+    let row =
+        |sid: &str| serde_json::json!({"sid":sid,"cwd":"/tmp","role":"user","content":"热重载"});
+    let writes = |log: &Path, sid: &str| {
+        format!(
+            "exec 3>>{}; echo {} >&3; read -r line",
+            shell_quote(&log.to_string_lossy()),
+            shell_quote(&row(sid).to_string()),
+        )
+    };
+    let plugin = h.root.join("plugins/fake");
+    fs::create_dir_all(&plugin).unwrap();
+    fs::write(
+        plugin.join("plugin.json"),
+        r#"{"api":1,"id":"fake","name":"Fake","provides":["agent"]}"#,
+    )
+    .unwrap();
+    fs::write(plugin.join("agent.json"), declaration(true)(&h.root)).unwrap();
+    assert!(matches!(h.call(Request::ReloadPlugins).unwrap(), Reply::Ok));
+    assert!(
+        h.recognition().plugins_revision > before,
+        "windows are told"
+    );
+
+    h.run_cli(
+        "pane",
+        &writes(&h.root.join("logs/fake/one.jsonl"), "fake-1"),
+    );
+    h.wait("a plugin's CLI was not bound without a restart", |h| {
+        h.workspace()
+            .current_agent("pane")
+            .is_some_and(|s| s.runtime.key() == "fake" && s.cli_session_id == "fake-1")
+    });
+    fs::remove_dir_all(&plugin).unwrap();
+    assert!(matches!(h.call(Request::ReloadPlugins).unwrap(), Reply::Ok));
+    h.run_cli(
+        "gone",
+        &writes(&h.root.join("logs/fake/two.jsonl"), "fake-2"),
+    );
+    std::thread::sleep(Duration::from_secs(3));
+    let w = h.workspace();
+    assert!(
+        w.current_agent("gone").is_none(),
+        "no longer declared, not bound"
+    );
+    // The session it already had reads back, as any Agent no longer declared does.
+    assert_eq!(
+        w.current_agent("pane").map(|s| s.runtime.key()),
+        Some("fake")
+    );
 }
 
 #[test]

@@ -276,7 +276,6 @@ use tasks::TaskUi;
 #[cfg(test)]
 mod tests;
 mod visual;
-
 impl Workbench {
     pub fn new(
         socket: PathBuf,
@@ -303,6 +302,7 @@ impl Workbench {
                     .update(cx, |this, cx| {
                         let revision = status.workspace_revision;
                         let interrupted = status.phase == RecognitionPhase::Interrupted;
+                        this.follow_plugins(status.plugins_revision, cx);
                         if let Some(view) = &this.settings {
                             let remote = status.remote.clone();
                             view.update(cx, |v, cx| {
