@@ -455,6 +455,9 @@ pub struct Dirs {
     pub dirs: Vec<Dir>,
     /// Terminal directories in use now, most recent first.
     pub recent: Vec<String>,
+    /// A `query` ran out of its second of walking: there may be more.
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

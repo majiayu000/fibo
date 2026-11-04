@@ -200,7 +200,10 @@ fn remote_dirs_lists_finds_and_makes_folders_for_the_full_role_only() {
         "target",
         "Notes",
         "deep/a/b/match-me",
-        "deep/a/b/c/match-too-deep",
+        "deep/a/b/c/match-five",
+        "deep/a/b/c/d/match-six",
+        "deep/a/b/c/d/e/match-too-deep",
+        "Desktop/code/AI/tools/mooring",
         "Library/match-in-library",
     ] {
         fs::create_dir_all(home.join(d)).unwrap();
@@ -232,7 +235,7 @@ fn remote_dirs_lists_finds_and_makes_folders_for_the_full_role_only() {
     // Where a terminal works first, then repositories, then by name; hidden and build trees left out.
     assert_eq!(
         names,
-        ["Notes", "proj", "proj-wt", "deep", "Library"],
+        ["Notes", "proj", "proj-wt", "deep", "Desktop", "Library"],
         "{l}"
     );
     let dir = |name: &str| {
@@ -262,16 +265,29 @@ fn remote_dirs_lists_finds_and_makes_folders_for_the_full_role_only() {
     assert_eq!(inside["dirs"][0]["name"], "a");
 
     let found = r.ok(json!({ "op": "dirs", "query": "MATCH" }));
-    let paths: Vec<&str> = found["dirs"]
-        .as_array()
-        .unwrap()
-        .iter()
+    let paths: Vec<&str> = (found["dirs"].as_array().unwrap().iter())
         .map(|d| d["path"].as_str().unwrap())
         .collect();
+    let wanted = [
+        "deep/a/b/c/match-five",
+        "deep/a/b/match-me",
+        "deep/a/b/c/d/match-six",
+    ];
     assert_eq!(
         paths,
-        [home.join("deep/a/b/match-me").to_string_lossy()],
-        "depth 4 at most, Library skipped"
+        wanted.map(|p| home.join(p).to_string_lossy().into_owned()),
+        "by name, six levels at most, Library skipped"
+    );
+    assert_eq!(found["truncated"], false);
+    assert_eq!(found["path"], "");
+    // Five levels down, where this project's user keeps the folder they open most.
+    let found = r.ok(json!({ "op": "dirs", "query": "mooring" }));
+    assert_eq!(found["dirs"].as_array().unwrap().len(), 1, "{found}");
+    assert_eq!(
+        found["dirs"][0]["path"],
+        home.join("Desktop/code/AI/tools/mooring")
+            .to_string_lossy()
+            .as_ref()
     );
     let e = r.error(json!({ "op": "dirs", "path": "relative/path" }));
     assert!(e.contains("/ 或 ~"), "{e}");

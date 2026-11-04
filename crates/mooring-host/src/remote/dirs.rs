@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 const SKIPPED: &[&str] = &["node_modules", ".git", "target"];
 const FOUND: usize = 50;
-const DEPTH: usize = 4;
+const DEPTH: usize = 6;
 /// How long a `query` walks before it answers with what it found.
 const WALK: Duration = Duration::from_secs(1);
 /// How long counting changes in all listed repositories may take; slower ones say none.
@@ -52,8 +52,13 @@ pub(super) fn dirs(socket: &Path, request: &Value) -> io::Result<Value> {
         .as_str()
         .map(str::trim)
         .filter(|q| !q.is_empty());
+    let mut truncated = false;
     let (path, parent, found) = match query {
-        Some(q) => (String::new(), None, find(&home, q)),
+        Some(q) => {
+            let (found, cut) = find(&home, q, WALK);
+            truncated = cut;
+            (String::new(), None, found)
+        }
         None => {
             let path = match request["path"].as_str().filter(|p| !p.trim().is_empty()) {
                 Some(p) => expand(p)?,
@@ -79,6 +84,7 @@ pub(super) fn dirs(socket: &Path, request: &Value) -> io::Result<Value> {
         home: home.to_string_lossy().into_owned(),
         dirs,
         recent: live.recent,
+        truncated,
     }))
 }
 
@@ -96,14 +102,18 @@ fn children(dir: &Path) -> io::Result<Vec<PathBuf>> {
     out.sort();
     Ok(out)
 }
-/// Folders under `home` whose name holds `query`, nearest first, within `WALK`.
-fn find(home: &Path, query: &str) -> Vec<PathBuf> {
-    let (query, until) = (query.to_lowercase(), Instant::now() + WALK);
+/// Folders under `home` whose name holds `query`, nearest first, and whether `walk` ran
+/// out with folders still unread.
+fn find(home: &Path, query: &str, walk: Duration) -> (Vec<PathBuf>, bool) {
+    let (query, until) = (query.to_lowercase(), Instant::now() + walk);
     let mut queue = VecDeque::from([(home.to_owned(), 0)]);
     let mut found = Vec::new();
     while let Some((dir, depth)) = queue.pop_front() {
-        if Instant::now() >= until || found.len() >= FOUND {
+        if found.len() >= FOUND {
             break;
+        }
+        if Instant::now() >= until {
+            return (found, true);
         }
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
@@ -129,7 +139,7 @@ fn find(home: &Path, query: &str) -> Vec<PathBuf> {
             }
         }
     }
-    found
+    (found, false)
 }
 
 /// What the workspace says about folders: live conversations' directories, and the
@@ -288,4 +298,21 @@ fn count(bytes: &[u8]) -> u32 {
         }
     }
     n
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A walk out of time says so, for the phone's 「没搜完」.
+    #[test]
+    fn a_walk_out_of_time_says_it_did_not_finish() {
+        let home = std::env::temp_dir().join(format!("kl-find-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(home.join("sub/wanted")).unwrap();
+        let (found, cut) = find(&home, "wanted", Duration::ZERO);
+        assert!(cut && found.is_empty(), "{found:?}");
+        let (found, cut) = find(&home, "wanted", Duration::from_secs(30));
+        assert!(!cut && found == [home.join("sub/wanted")], "{found:?}");
+        std::fs::remove_dir_all(home).unwrap();
+    }
 }
