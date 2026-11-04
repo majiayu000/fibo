@@ -32,6 +32,22 @@ pub enum Grouping {
     Wasm,
 }
 
+/// Where other machines' sessions go in the column. Only 会话优先's list can hold them;
+/// every other arrangement keeps them under this machine's list.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Machines {
+    /// Under this machine's list, a heading per machine.
+    #[default]
+    Below,
+    /// One list with every machine's rows; a chip shows one machine alone.
+    Mixed,
+    /// A rail picks the one machine the whole column shows.
+    Rail,
+    /// A folding section per machine.
+    Sections,
+}
+
 /// Coarse states a preset can name. The host maps its finer states onto these.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -98,6 +114,9 @@ pub struct Preset {
     /// With `"group": "wasm"`: the module beside `sidebar.json` that arranges the list.
     #[serde(default)]
     pub wasm: Option<String>,
+    /// Where other machines' sessions go.
+    #[serde(default)]
+    pub machines: Machines,
     #[serde(skip)]
     pub file: PathBuf,
 }
@@ -112,6 +131,10 @@ impl Preset {
     }
     pub fn folds(&self, b: Bucket) -> bool {
         self.fold.contains(&b)
+    }
+    /// A layout that means nothing with no other machine, so it is not offered then.
+    pub fn only_with_machines(&self) -> bool {
+        matches!(self.machines, Machines::Rail | Machines::Sections)
     }
 }
 
@@ -132,16 +155,17 @@ pub fn builtin() -> Vec<Preset> {
         detail,
         limit: default_limit(),
         wasm: None,
+        machines: Machines::Below,
         file: PathBuf::new(),
     };
+    let recent = |id: &str, name: &str, machines| Preset {
+        machines,
+        ..p(id, name, Grouping::Recent, &[Bucket::Stale], Detail::Always)
+    };
     vec![
-        p(
-            "recent",
-            "会话优先",
-            Grouping::Recent,
-            &[Bucket::Stale],
-            Detail::Always,
-        ),
+        recent("recent", "会话优先", Machines::Mixed),
+        recent("machine-rail", "机器栏", Machines::Rail),
+        recent("machine-fold", "按机器", Machines::Sections),
         p("classic", "经典", Grouping::Flat, &[], Detail::Never),
         p(
             "status",
@@ -194,6 +218,12 @@ fn read(file: &Path, taken: &[Preset]) -> Result<Vec<Preset>, String> {
         }
         if !(1..=100).contains(&p.limit) {
             return Err(format!("左栏 {} 的 limit 要在 1 到 100 之间", p.id));
+        }
+        if p.machines != Machines::Below && p.group != Grouping::Recent {
+            return Err(format!(
+                "左栏 {} 写了 machines，group 要写 \"recent\"",
+                p.id
+            ));
         }
         match (p.group, p.wasm.as_deref()) {
             (Grouping::Wasm, Some(name)) => {
@@ -311,10 +341,18 @@ mod tests {
         let (presets, report) = load(vec![good, dup, attention, unknown]);
         assert_eq!(
             presets.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
-            ["recent", "classic", "status", "directory", "quiet"]
+            [
+                "recent",
+                "machine-rail",
+                "machine-fold",
+                "classic",
+                "status",
+                "directory",
+                "quiet"
+            ]
         );
-        assert_eq!(presets[4].limit, 8);
-        assert!(presets[4].folds(Bucket::Running));
+        assert_eq!(presets[6].limit, 8);
+        assert!(presets[6].folds(Bucket::Running));
         assert_eq!(report[0].result, Ok("安静".into()));
         assert!(report[1].result.as_ref().unwrap_err().contains("重名"));
         assert!(
@@ -375,6 +413,36 @@ mod tests {
                 .contains("不在插件目录里")
         );
         assert!(report[3].result.as_ref().unwrap_err().contains("group"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_preset_says_where_other_machines_go() {
+        assert_eq!(find("recent").machines, Machines::Mixed);
+        assert_eq!(find("machine-rail").machines, Machines::Rail);
+        assert_eq!(find("machine-fold").machines, Machines::Sections);
+        assert_eq!(find("classic").machines, Machines::Below);
+        assert!(!find("recent").only_with_machines());
+        assert!(find("machine-rail").only_with_machines());
+        let d = std::env::temp_dir().join(format!("kl-sidebar-machines-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let write = |name: &str, body: &str| {
+            let p = d.join(name);
+            std::fs::write(&p, body).unwrap();
+            p
+        };
+        let good = write(
+            "a.json",
+            r#"{"api":1,"presets":[{"id":"mine","name":"我的","group":"recent","machines":"rail","limit":6}]}"#,
+        );
+        let bad = write(
+            "b.json",
+            r#"{"api":1,"presets":[{"id":"nope","name":"不行","group":"flat","machines":"sections"}]}"#,
+        );
+        let (presets, report) = load(vec![good, bad]);
+        assert_eq!(presets.last().unwrap().machines, Machines::Rail);
+        assert!(report[1].result.as_ref().unwrap_err().contains("machines"));
         let _ = std::fs::remove_dir_all(&d);
     }
 

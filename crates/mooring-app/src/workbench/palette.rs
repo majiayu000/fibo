@@ -284,8 +284,8 @@ impl Workbench {
             })
             .collect();
         // 「视图」 or 「左栏」 lists every view; a view's own name finds it too.
-        let views: Vec<Hit> = presets::all()
-            .iter()
+        let views: Vec<Hit> = self
+            .sidebar_presets()
             .filter(|p| contains(&format!("左栏 侧栏 视图 {}", p.name), query))
             .map(|p| Hit::View(p.id.clone()))
             .collect();

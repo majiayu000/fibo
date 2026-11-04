@@ -1,0 +1,144 @@
+//! 会话优先's list: what needs you, what runs, then 今天 and 更早. With other machines
+//! configured their rows sort into the same sections by the same rule; each machine's own
+//! host said what state they are in.
+use super::sidebar_list::{End, Listed, RecentOrder, recent_order, split_today};
+use super::sidebar_machines::RemoteRow;
+use super::sidebar_wasm::{AddRow, Closed};
+use super::*;
+use mooring_core::sidebar::Bucket;
+
+#[derive(Clone, Copy)]
+enum Item<'a> {
+    Here(Listed<'a>),
+    There(&'a RemoteRow),
+}
+
+impl Workbench {
+    fn history_row(
+        &self,
+        item: Item,
+        open: bool,
+        current: Option<&str>,
+        out: &mut Vec<gpui::AnyElement>,
+        cx: &Context<Self>,
+    ) {
+        match item {
+            Item::Here(l) if open || current == Some(l.0.id.as_str()) => {
+                out.push(self.session_row(l, current, None, End::State, cx));
+            }
+            Item::There(r) if open || r.shown => out.push(self.remote_row(r, cx)),
+            _ => {}
+        }
+    }
+
+    pub(super) fn recent_rows(
+        &self,
+        sessions: Vec<Listed>,
+        closed: &Closed,
+        current: Option<&str>,
+        push: &mut AddRow,
+        out: &mut Vec<gpui::AnyElement>,
+        cx: &Context<Self>,
+    ) {
+        let remote = self.listed_remote_rows();
+        let when = |l: &Listed| match self.row_bucket(l) {
+            Bucket::Running => self
+                .turn_started(l.0)
+                .unwrap_or_else(|| self.session_updated(l.0)),
+            _ => self.session_updated(l.0),
+        };
+        let rows: Vec<(Item, Bucket, u64)> = sessions
+            .iter()
+            .map(|l| (Item::Here(*l), self.row_bucket(l), when(l)))
+            .chain(remote.iter().map(|r| (Item::There(r), r.bucket, r.when)))
+            .collect();
+        let RecentOrder {
+            need,
+            running,
+            stopped,
+            quiet,
+        } = recent_order(&rows);
+        // What it asks or why it failed; with neither to show, what it is at now.
+        let second = |l: &Listed| {
+            self.row_detail(l.0, l.1).or_else(|| {
+                self.workspace
+                    .content
+                    .get(&l.0.id)
+                    .map(|c| mooring_core::content::short(&c.headline(), 100))
+                    .filter(|h| !h.trim().is_empty())
+            })
+        };
+        // Only what asks you or failed gets a second line: the question is what you
+        // act on. A finished turn or a running one reads from its state mark alone,
+        // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
+        for (key, title, rows, lines) in [
+            ("recent:need", mooring_core::status::NEEDS_YOU, need, true),
+            ("recent:running", Status::Running.label(), running, false),
+        ] {
+            if rows.is_empty() {
+                continue;
+            }
+            out.push(self.flat_fold(key, title, rows.len(), cx));
+            let open = self.sidebar.open(key, true);
+            for item in rows {
+                match item {
+                    Item::Here(l) => {
+                        if !open && current != Some(l.0.id.as_str()) {
+                            continue;
+                        }
+                        // 等后台 says what it left running, or it reads as plain 等你验收.
+                        let asks = l.1.blocked() || l.1 == Status::Background;
+                        let d = if lines && asks { second(&l) } else { None };
+                        push(out, l, d, End::State);
+                    }
+                    // Outside the preset's limit: another machine asking is never hidden.
+                    Item::There(r) if open || r.shown => out.push(self.remote_row(r, cx)),
+                    Item::There(_) => {}
+                }
+            }
+        }
+        // What is no longer moving, open in a tab or closed: today's in full, the
+        // rest folded into one line, as flat.html has it. These rows skip the
+        // preset's limit, which is there to keep 要你处理 and 在跑 on one screen.
+        let history: Vec<(Item, u64)> = stopped
+            .into_iter()
+            .chain(quiet)
+            .chain(closed.rows.iter().copied().map(Item::Here))
+            .map(|item| {
+                let at = match item {
+                    Item::Here(l) => self.session_updated(l.0),
+                    Item::There(r) => r.when,
+                };
+                (item, at)
+            })
+            .collect();
+        let (today, older) = split_today(history, crate::model::time::now());
+        if !today.is_empty() {
+            out.push(self.flat_fold("recent:today", "今天", today.len(), cx));
+            let open = self.sidebar.open("recent:today", true);
+            for item in today {
+                self.history_row(item, open, current, out, cx);
+            }
+        }
+        // Older ones a module was not handed are still counted, and open in 鸟瞰.
+        let unlisted = closed.total.saturating_sub(closed.rows.len());
+        if !older.is_empty() || unlisted > 0 {
+            // Narrowed to one space the list is short, so it opens by itself.
+            let open = self
+                .sidebar
+                .open("recent:older", self.space_filter().is_some());
+            out.push(self.flat_more(
+                "recent:older",
+                format!("更早 {} 个 · 停着或做完了", older.len() + unlisted),
+                open,
+                cx,
+            ));
+            for item in older {
+                self.history_row(item, open, current, out, cx);
+            }
+            if open && unlisted > 0 {
+                out.push(self.flat_closed_more(unlisted, cx));
+            }
+        }
+    }
+}

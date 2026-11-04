@@ -834,24 +834,6 @@ impl Workbench {
             .filter(|s| self.workspace.needs_you(s, now))
             .collect()
     }
-    pub(super) fn next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let needs = self.needs_you();
-        let current = self
-            .nav
-            .focused
-            .as_ref()
-            .and_then(|id| self.workspace.current_agent(id))
-            .map(|s| s.id.as_str())
-            .or(self.overview.here.as_deref());
-        if !needs.is_empty() {
-            let index = needs
-                .iter()
-                .position(|s| Some(s.id.as_str()) == current)
-                .map_or(0, |i| (i + 1) % needs.len());
-            let session = needs[index].clone();
-            self.enter_card(&session, window, cx);
-        }
-    }
 }
 /// The card's receipts by kind: commands that exited 0, file changes, and failures.
 /// Test and commit receipts repeat their command's, so they are not counted again.

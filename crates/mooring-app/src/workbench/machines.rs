@@ -222,7 +222,12 @@ impl Workbench {
 impl Workbench {
     /// 「＋」 on a machine's heading: a shell in a new tab there, in its first space's
     /// folder, then that shell in the peek. Named, so a resend opens one.
-    fn open_remote_shell(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_remote_shell(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(remote) = self.machines.get(index) else {
             return;
         };
@@ -308,7 +313,7 @@ impl Workbench {
 }
 
 /// A peek's key for another machine's terminal: never equal to a terminal of this one.
-fn remote_key(view: &crate::machines::View, terminal: &str) -> String {
+pub(super) fn remote_key(view: &crate::machines::View, terminal: &str) -> String {
     let machine = view
         .machine
         .as_ref()

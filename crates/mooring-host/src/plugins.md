@@ -113,7 +113,8 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 - `fold`：哪些段收成一行，点开才展开。可选 `running` `done`（等你验收）`stopped` `fresh` `stale`；`attention`（需要你）不能收。
 - `detail`：会话行什么时候显示第二行：`never`（默认）、`attention`（需要你的和选中的）、`always`。
 - `limit`：左栏最多列几行，剩下的进鸟瞰，默认 12。
-- 新排法出现在左栏顶部的切换里，和内置的「经典 / 状态 / 目录」并列，不会替换它们。
+- `machines`：另外几台电脑的会话放哪，只有 `"group": "recent"` 能写：`mixed`（和本机混在一列，内置「会话优先」）、`rail`（一条竖栏选一台，内置「机器栏」）、`sections`（每台一个可折叠的区，内置「按机器」）；不写是 `below`（接在本机列表后面）。竖栏和断开机器的灰色行由 Mooring 画，插件改不了。
+- 新排法出现在左栏底部的「选择视图」和命令面板里，和内置的并列，不会替换它们。`rail`、`sections` 只在配了其他电脑时出现。
 - 还有 `"group": "wasm"` 加 `"wasm": "<文件>.wasm"`，用沙盒里的 WebAssembly 自由排；要用 Rust 编译，没被要求就别用。
 
 ## decorations：窗格上显示一小段命令输出（`decorations.json`）

@@ -99,7 +99,7 @@ mod tests {
     /// from that session, not from a named status.
     #[test]
     fn named_status_colors_stay_where_sessions_are_drawn() {
-        const DRAWS_SESSIONS: [&str; 9] = [
+        const DRAWS_SESSIONS: [&str; 11] = [
             // A session's subagents under its sidebar row: each one an agent at work.
             "workbench/sidebar_subagents.rs",
             // Column icons, the 在跑 sweep and 做完了 marks on the board.
@@ -114,6 +114,9 @@ mod tests {
             "workbench/statusbar.rs",
             // The sidebar's 很久没动 summary row.
             "workbench/sidebar.rs",
+            // The count of what needs you on a space's or a machine's chip.
+            "workbench/sidebar_spaces.rs",
+            "workbench/sidebar_machine_views.rs",
             "ui/theme.rs",
             "ui/status_colors.rs",
         ];

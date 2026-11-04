@@ -68,57 +68,53 @@ pub(super) fn flat_state(g: Status, unseen: bool) -> gpui::AnyElement {
 
 impl Workbench {
     /// The column's top: the traffic lights' strip with the fold button at its right end
-    /// (folded, the window keeps it beside the lights, on the same line), then MOORING
-    /// and 本机.
-    pub(super) fn flat_head(&self, cx: &Context<Self>) -> gpui::Div {
-        let letters = "MOORING".chars().map(|ch| div().child(ch.to_string()));
+    /// (folded, the window keeps it beside the lights, on the same line).
+    pub(super) fn flat_lights(&self, cx: &Context<Self>) -> gpui::Div {
         div()
             .flex_shrink_0()
+            .h(px(T::TOP))
+            .pr(px(T::S12))
             .flex()
-            .flex_col()
+            .items_center()
+            .child(self.title_drag_area(cx))
+            .child(self.sidebar_toggle(cx))
+    }
+    /// MOORING and the machine the column shows.
+    pub(super) fn flat_brand(&self) -> gpui::Div {
+        let letters = "MOORING".chars().map(|ch| div().child(ch.to_string()));
+        let (machine, up) = self.column_machine();
+        div()
+            .flex_shrink_0()
+            .h(px(F::BRAND_ROW))
+            .pl(px(F::EDGE))
+            .pr(px(T::S12))
+            .flex()
+            .items_center()
+            .gap(px(T::S8))
+            .font_family(T::UI_FONT)
+            .text_size(px(F::BRAND_TEXT))
+            .line_height(px(F::LINE_SMALL))
             .child(
                 div()
-                    .h(px(T::TOP))
-                    .pr(px(T::S12))
                     .flex()
-                    .items_center()
-                    .child(self.title_drag_area(cx))
-                    .child(self.sidebar_toggle(cx)),
+                    .gap(px(F::BRAND_TRACK))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(ink(F::bright()))
+                    .children(letters),
             )
+            .child(div().flex_1())
             .child(
                 div()
-                    .h(px(F::BRAND_ROW))
-                    .pl(px(F::EDGE))
-                    .pr(px(T::S12))
                     .flex()
                     .items_center()
-                    .gap(px(T::S8))
-                    .font_family(T::UI_FONT)
-                    .text_size(px(F::BRAND_TEXT))
-                    .line_height(px(F::LINE_SMALL))
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(F::BRAND_TRACK))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(ink(F::bright()))
-                            .children(letters),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(T::S6))
-                            .text_color(ink(F::third()))
-                            .child(
-                                div()
-                                    .size(px(F::HOST_DOT))
-                                    .rounded_full()
-                                    .bg(Tone::Ok.dot()),
-                            )
-                            .child("本机"),
-                    ),
+                    .gap(px(T::S6))
+                    .text_color(ink(F::third()))
+                    .child(div().size(px(F::HOST_DOT)).rounded_full().bg(if up {
+                        Tone::Ok.dot()
+                    } else {
+                        ink(F::idle())
+                    }))
+                    .child(machine),
             )
     }
     /// A quiet 26 px icon button.
@@ -574,10 +570,13 @@ impl Workbench {
             .text_size(px(F::FOOT_TEXT))
             .line_height(px(F::LINE_TEXT))
             .text_color(ink(F::second()))
-            .child(div().flex_1().min_w_0().truncate().child(format!(
-                "本机 · {} 个空间 · {sessions} 个会话",
-                self.workspace.spaces.len()
-            )))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .child(self.column_foot(sessions)),
+            )
             .child(
                 div()
                     .id("todos-toggle")

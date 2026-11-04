@@ -118,6 +118,8 @@ pub(super) struct SidebarPrefs {
     /// 会话优先 narrowed to one space's sessions by clicking its chip; None lists every
     /// space. Not saved: a new launch starts on everything.
     pub space_filter: Option<String>,
+    /// The machine (its host in `machines.json`) the column shows alone. Not saved.
+    pub machine_scope: Option<String>,
 }
 impl SidebarPrefs {
     fn path() -> Option<PathBuf> {
@@ -142,6 +144,7 @@ impl SidebarPrefs {
                 .collect(),
             view_menu: None,
             space_filter: None,
+            machine_scope: None,
         }
     }
     /// Best effort: a choice that cannot be written still holds until quit.
@@ -278,7 +281,7 @@ impl Workbench {
             })
             .max(1)
     }
-    fn session_row(
+    pub(super) fn session_row(
         &self,
         (session, g, attention): Listed,
         current: Option<&str>,
@@ -733,7 +736,7 @@ impl Workbench {
     }
     /// A 会话优先 section's heading that folds its rows away and opens them again:
     /// `要你处理 3 ⌄`. Every section starts open.
-    fn flat_fold(
+    pub(super) fn flat_fold(
         &self,
         key: &str,
         title: &str,
@@ -959,95 +962,7 @@ impl Workbench {
                 }
             }
             Grouping::Recent => {
-                let when = |l: &Listed| match self.row_bucket(l) {
-                    Bucket::Running => self
-                        .turn_started(l.0)
-                        .unwrap_or_else(|| self.session_updated(l.0)),
-                    _ => self.session_updated(l.0),
-                };
-                let rows: Vec<(Listed, Bucket, u64)> = sessions
-                    .iter()
-                    .map(|l| (*l, self.row_bucket(l), when(l)))
-                    .collect();
-                let RecentOrder {
-                    need,
-                    running,
-                    stopped,
-                    quiet,
-                } = recent_order(&rows);
-                // What it asks or why it failed; with neither to show, what it is at now.
-                let second = |l: &Listed| {
-                    self.row_detail(l.0, l.1).or_else(|| {
-                        self.workspace
-                            .content
-                            .get(&l.0.id)
-                            .map(|c| mooring_core::content::short(&c.headline(), 100))
-                            .filter(|h| !h.trim().is_empty())
-                    })
-                };
-                // Only what asks you or failed gets a second line: the question is what you
-                // act on. A finished turn or a running one reads from its state mark alone,
-                // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
-                for (key, title, rows, lines) in [
-                    ("recent:need", "要你处理", need, true),
-                    ("recent:running", "在跑", running, false),
-                ] {
-                    if rows.is_empty() {
-                        continue;
-                    }
-                    out.push(self.flat_fold(key, title, rows.len(), cx));
-                    let open = self.sidebar.open(key, true);
-                    for l in rows {
-                        if !open && current != Some(l.0.id.as_str()) {
-                            continue;
-                        }
-                        // 等后台 says what it left running, or it reads as plain 等你验收.
-                        let asks = l.1.blocked() || l.1 == Status::Background;
-                        let d = if lines && asks { second(&l) } else { None };
-                        push(&mut out, l, d, End::State);
-                    }
-                }
-                // What is no longer moving, open in a tab or closed: today's in full, the
-                // rest folded into one line, as flat.html has it. These rows skip the
-                // preset's limit, which is there to keep 要你处理 and 在跑 on one screen.
-                let history: Vec<(Listed, u64)> = stopped
-                    .into_iter()
-                    .chain(quiet)
-                    .chain(closed.rows.iter().copied())
-                    .map(|l| (l, self.session_updated(l.0)))
-                    .collect();
-                let (today, older) = split_today(history, crate::model::time::now());
-                if !today.is_empty() {
-                    out.push(self.flat_fold("recent:today", "今天", today.len(), cx));
-                    let open = self.sidebar.open("recent:today", true);
-                    for l in today {
-                        if open || current == Some(l.0.id.as_str()) {
-                            out.push(self.session_row(l, current, None, End::State, cx));
-                        }
-                    }
-                }
-                // Older ones a module was not handed are still counted, and open in 鸟瞰.
-                let unlisted = closed.total.saturating_sub(closed.rows.len());
-                if !older.is_empty() || unlisted > 0 {
-                    // Narrowed to one space the list is short, so it opens by itself.
-                    let open = self
-                        .sidebar
-                        .open("recent:older", self.space_filter().is_some());
-                    out.push(self.flat_more(
-                        "recent:older",
-                        format!("更早 {} 个 · 停着或做完了", older.len() + unlisted),
-                        open,
-                        cx,
-                    ));
-                    for l in older {
-                        if open || current == Some(l.0.id.as_str()) {
-                            out.push(self.session_row(l, current, None, End::State, cx));
-                        }
-                    }
-                    if open && unlisted > 0 {
-                        out.push(self.flat_closed_more(unlisted, cx));
-                    }
-                }
+                self.recent_rows(sessions, closed, current, &mut push, &mut out, cx);
                 owns_closed = true;
             }
             Grouping::Wasm => {
@@ -1299,8 +1214,8 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let chosen = self.sidebar.preset().id.clone();
-        let entries = presets::all()
-            .iter()
+        let entries = self
+            .sidebar_presets()
             .map(|p| {
                 let id = p.id.clone();
                 let on = p.id == chosen;

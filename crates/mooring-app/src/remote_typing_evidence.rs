@@ -7,6 +7,8 @@ use gpui::WindowHandle;
 use std::time::Duration;
 #[path = "remote_board_evidence.rs"]
 mod board;
+#[path = "remote_sidebar_evidence.rs"]
+mod sidebar;
 
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
@@ -18,6 +20,9 @@ pub(super) fn start(
     };
     if std::env::var_os("MOORING_REMOTE_BOARD_EVIDENCE").is_some() {
         return board::start(handle, directory, cx);
+    }
+    if std::env::var_os("MOORING_REMOTE_SIDEBAR_EVIDENCE").is_some() {
+        return sidebar::start(handle, directory, cx);
     }
     if std::env::var_os("MOORING_REMOTE_TYPING_EVIDENCE").is_none() {
         return false;
