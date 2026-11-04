@@ -17,6 +17,7 @@ Mooring: a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt).
 - New worktrees: symlink `.deps` from the main checkout; set `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
 - Window performance: rules, how to measure and the CI gate (`scripts/perf-gate.py`) are in `docs/performance/index.html`; read it before touching pane observers, the sidebar view or per-frame work.
 - One owner per fact (docs/plan.md principle 7): a session's state, name, 要你处理, time, folder and state words come from core (`status::of`, `session_title`, `status::needs_you`, `session_updated`, `terminal_cwd`, `Status::label`). `crates/mooring-core/tests/guard.rs` counts raw-field reads and hand-written state words per file; rewrite `tests/guard-baseline.txt` (`MOORING_GUARD_UPDATE=1`) only for a use you mean to keep.
+- File size: no source file grows past 800 lines, however it was written (`crates/mooring-core/tests/file_size.rs`). Put new code in a new file. Files in `tests/file-size-baseline.txt` can only get shorter; `MOORING_GUARD_UPDATE=1` lowers their numbers and never raises one.
 
 ## Compatibility with Keepline installs
 
