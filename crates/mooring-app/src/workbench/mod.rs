@@ -276,7 +276,6 @@ use tasks::TaskUi;
 #[cfg(test)]
 mod tests;
 mod visual;
-
 impl Workbench {
     pub fn new(
         socket: PathBuf,
