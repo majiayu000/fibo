@@ -151,6 +151,12 @@ pub fn lost_session_runs_in<'a>(
     let s = interrupted_session(w, lost)?;
     live_terminal(w, s).or_else(|| resume_terminal(w, resumed, s))
 }
+/// Whether you already closed the conversation a lost pane was running (completed,
+/// abandoned, or its todo closed): nothing may start it again unless you ask.
+pub fn lost_session_settled(w: &Workspace, lost: &str, at: u64) -> bool {
+    interrupted_session(w, lost)
+        .is_some_and(|s| mooring_core::status::of(w, s, at) == Status::Closed)
+}
 pub fn attachable_ids(workspace: &Workspace, ids: Vec<String>) -> Vec<String> {
     ids.into_iter()
         .filter(|id| !interrupted(workspace, id))

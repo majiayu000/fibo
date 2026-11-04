@@ -2,7 +2,9 @@
 //! real. Each step saves a picture and is checked against the host's workspace:
 //! 1. clicking a conversation whose pane was lost reopens it in that tab, no new tab;
 //! 2. showing a lost pane whose conversation already runs elsewhere removes the pane and
-//!    moves to where it runs, starting nothing.
+//!    moves to where it runs, starting nothing;
+//! 3. showing a lost pane whose conversation you marked done removes it, starting nothing;
+//! 4. clicking such a conversation's row is you asking: it resumes in the pane's tab.
 //!
 //! Run with PATH=/usr/bin:/bin and a scratch HOME: the resumes find no `claude` and stay
 //! in their shell.
@@ -110,19 +112,39 @@ pub(super) fn start(
             })
             .unwrap();
         };
-        let (one, two) = (session(1), session(2));
+        let (one, two, three, four) = (session(1), session(2), session(3), session(4));
         launch("shell", None);
         launch("click", Some(&one));
         launch("show", Some(&two));
+        launch("asked", Some(&four));
+        launch("done", Some(&three));
         wait(500).await;
         handle.update(cx, |v, _, a| v.visual_peek_show_tab("shell", a)).unwrap();
         for _ in 0..120 {
-            if bound(&one, "click") && bound(&two, "show") {
+            if bound(&one, "click")
+                && bound(&two, "show")
+                && bound(&three, "done")
+                && bound(&four, "asked")
+            {
                 break;
             }
             wait(500).await;
         }
+        assert!(bound(&three, "done") && bound(&four, "asked"), "stand-ins never bound");
         assert!(bound(&one, "click") && bound(&two, "show"), "stand-ins never bound");
+        // Marked done while they ran, as the 标记完成 of a pane that then stays behind is.
+        for cli in [&three, &four] {
+            let w = workspace();
+            let s = w.agent_sessions.iter().find(|s| &s.cli_session_id == cli).unwrap();
+            call(Request::Edit {
+                request: None,
+                edit: Edit::SetOutcome {
+                    seen: None,
+                    id: s.id.clone(),
+                    outcome: Outcome::Completed,
+                },
+            });
+        }
 
         // The host dies for real; the app restarts it and the panes come back lost.
         let killed = std::process::Command::new("/usr/bin/pkill")
@@ -165,7 +187,7 @@ pub(super) fn start(
                 );
             }
             back = handle
-                .update(cx, |v, _, _| v.visual_panes_lost(&["click", "show"], "tab-shell", "shell"))
+                .update(cx, |v, _, _| v.visual_panes_lost(&["click", "show", "done", "asked"], "tab-shell", "shell"))
                 .unwrap();
             if back {
                 break;
@@ -227,6 +249,41 @@ pub(super) fn start(
         assert!(bound(&two, "again"), "the running conversation lost its terminal");
         shot("3-dead-tab-gone.png", cx);
         eprintln!("resume native: lost pane of a running session goes away PASS");
+
+        // 3. Marked done: showing its lost pane must not bring it back.
+        handle.update(cx, |v, _, a| v.visual_peek_show_tab("done", a)).unwrap();
+        for _ in 0..40 {
+            wait(250).await;
+            if !workspace().tabs.iter().any(|t| t.id == "tab-done") {
+                break;
+            }
+        }
+        wait(1500).await;
+        let w = workspace();
+        assert!(resumes(&w, &three).is_empty(), "started a conversation marked done");
+        assert!(!w.tabs.iter().any(|t| t.id == "tab-done"), "the dead tab stayed behind");
+        assert_eq!(handle.update(cx, |v, _, _| v.visual_shown_tab()).unwrap().as_deref(), Some("tab-again"));
+        shot("4-done-tab-gone.png", cx);
+        eprintln!("resume native: lost pane of a done session goes away PASS");
+
+        // 4. Its row clicked: you asked, so it resumes in place.
+        let before = workspace().tabs.len();
+        handle.update(cx, |v, w, a| v.visual_open_cli_session(&four, w, a)).unwrap();
+        for _ in 0..40 {
+            wait(250).await;
+            if !resumes(&workspace(), &four).is_empty() {
+                break;
+            }
+        }
+        wait(500).await;
+        let w = workspace();
+        let started = resumes(&w, &four);
+        assert_eq!(started.len(), 1, "expected one resume of the clicked done session: {started:?}");
+        assert_eq!(w.tabs.len(), before, "the click opened another tab");
+        assert_eq!(w.tab_terminals("tab-asked"), started, "resumed outside its own tab");
+        assert_eq!(handle.update(cx, |v, _, _| v.visual_shown_tab()).unwrap().as_deref(), Some("tab-asked"));
+        shot("5-done-clicked-resumed.png", cx);
+        eprintln!("resume native: clicking a done session resumes it in place PASS");
         cx.update(|cx| cx.quit());
     })
     .detach();

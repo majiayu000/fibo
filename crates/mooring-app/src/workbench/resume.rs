@@ -29,6 +29,13 @@ impl Workbench {
             // Its old tab comes back as it shows (`sync_panes`); a click retries a failed try.
             if let Some(lost) = interrupted_pane(&self.workspace, &session.id) {
                 let lost = lost.id.clone();
+                // Showing a closed conversation's pane removes it; this click asked for it.
+                if lost_session_settled(&self.workspace, &lost, now()) {
+                    self.layout.reopened.insert(lost.clone());
+                    self.focus_terminal(&lost, window, cx);
+                    self.reopen(lost, cx);
+                    return;
+                }
                 self.layout.reopened.remove(&lost);
                 self.focus_terminal(&lost, window, cx);
                 return;
@@ -58,9 +65,23 @@ impl Workbench {
             self.edit(Edit::CreateTab { tab }, cx);
         }
     }
+    /// What showing a lost pane does before it comes back by itself: true when the pane
+    /// went away, because its conversation runs elsewhere or you already closed it.
+    pub(super) fn drop_lost_pane(&mut self, lost: &str, cx: &mut Context<Self>) -> bool {
+        if self.drop_pane_running_elsewhere(lost, cx) {
+            return true;
+        }
+        if !lost_session_settled(&self.workspace, lost, now()) {
+            return false;
+        }
+        self.layout.reopened.insert(lost.to_owned());
+        self.close_now(Closing::Pane(lost.to_owned()), cx);
+        self.sync_panes(cx);
+        true
+    }
     /// A lost pane whose conversation already runs elsewhere goes away instead of starting
     /// it again; alone in the shown tab, the view moves to where it runs. True when it did.
-    pub(super) fn drop_lost_pane(&mut self, lost: &str, cx: &mut Context<Self>) -> bool {
+    fn drop_pane_running_elsewhere(&mut self, lost: &str, cx: &mut Context<Self>) -> bool {
         let Some(running) = lost_session_runs_in(&self.workspace, &self.resuming.resumed, lost)
             .map(|t| t.id.clone())
         else {
@@ -79,9 +100,10 @@ impl Workbench {
         self.sync_panes(cx);
         true
     }
-    /// Reopens a lost terminal in place, resuming the conversation it was running.
+    /// Reopens a lost terminal in place, resuming the conversation it was running, even one
+    /// you closed: this is you asking (the pane's button, its row), or a still open one.
     pub(super) fn reopen(&mut self, id: String, cx: &mut Context<Self>) {
-        if self.drop_lost_pane(&id, cx) {
+        if self.drop_pane_running_elsewhere(&id, cx) {
             return;
         }
         if let Some(s) = interrupted_session(&self.workspace, &id) {

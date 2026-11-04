@@ -552,6 +552,28 @@ fn a_lost_pane_stays_lost_while_its_session_runs_elsewhere() {
     assert!(lost_session_runs_in(&w, &resumed, "t1").is_none());
 }
 #[test]
+fn a_lost_pane_of_a_closed_conversation_does_not_come_back_by_itself() {
+    let mut w = fixture();
+    lost_in_t1(&mut w);
+    let at = 1_000;
+    for (outcome, settled) in [
+        (Outcome::Completed, true),
+        (Outcome::Abandoned, true),
+        (Outcome::Open, false),
+    ] {
+        let s = w.agent_sessions.iter_mut().find(|s| s.id == "lost");
+        s.unwrap().outcome = outcome;
+        assert_eq!(lost_session_settled(&w, "t1", at), settled);
+    }
+    // A click still finds the pane, so a closed conversation resumes in its own tab.
+    let s = w.agent_sessions.iter_mut().find(|s| s.id == "lost");
+    s.unwrap().outcome = Outcome::Completed;
+    assert_eq!(interrupted_pane(&w, "lost").unwrap().id, "t1");
+    // A pane that ran no conversation stays a shell to bring back.
+    w.lost_agents.insert("t1".into(), None);
+    assert!(!lost_session_settled(&w, "t1", at));
+}
+#[test]
 fn a_resume_is_the_new_shells_first_command_not_typed_later() {
     assert_eq!(launch_argv("/bin/zsh".into(), None), ["/bin/zsh", "-l"]);
     let command = Agent::Claude.resume_command("it's-1", &[]);
