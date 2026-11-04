@@ -508,6 +508,49 @@ fn a_reopened_pane_resumes_its_latest_open_conversation() {
     w.lost_agents.insert("t1".into(), None);
     assert!(interrupted_session(&w, "t1").is_none());
 }
+/// A conversation lost in `t1` of the fixture, open and recorded by the host.
+fn lost_in_t1(w: &mut Workspace) -> AgentSession {
+    let lost = AgentSession {
+        id: "lost".into(),
+        outcome: Outcome::Open,
+        ..w.agent_sessions[0].clone()
+    };
+    w.agent_sessions.push(lost.clone());
+    w.lost_agents.insert("t1".into(), Some("lost".into()));
+    lost
+}
+#[test]
+fn resuming_a_session_finds_the_lost_pane_it_left() {
+    let mut w = fixture();
+    lost_in_t1(&mut w);
+    assert_eq!(interrupted_pane(&w, "lost").unwrap().id, "t1");
+    assert!(interrupted_pane(&w, "other").is_none());
+    // Its tab is gone: nothing to come back to, the resume opens a tab.
+    w.edit(Edit::ClosePane {
+        terminal: "t1".into(),
+    })
+    .unwrap();
+    assert!(interrupted_pane(&w, "lost").is_none());
+}
+#[test]
+fn a_lost_pane_stays_lost_while_its_session_runs_elsewhere() {
+    let mut w = fixture();
+    let lost = lost_in_t1(&mut w);
+    let mut resumed = HashMap::new();
+    assert!(lost_session_runs_in(&w, &resumed, "t1").is_none());
+    // Being resumed, not bound yet: the launch would otherwise start it a second time.
+    resumed.insert("lost".to_owned(), "t3".to_owned());
+    assert_eq!(lost_session_runs_in(&w, &resumed, "t1").unwrap().id, "t3");
+    resumed.clear();
+    // Bound to a running terminal.
+    let s = w.agent_sessions.iter_mut().find(|s| s.id == lost.id);
+    let s = s.unwrap();
+    (s.terminal, s.current) = (Some("t2".into()), true);
+    assert_eq!(lost_session_runs_in(&w, &resumed, "t1").unwrap().id, "t2");
+    // A pane that ran no conversation has nothing to be running elsewhere.
+    w.lost_agents.insert("t1".into(), None);
+    assert!(lost_session_runs_in(&w, &resumed, "t1").is_none());
+}
 #[test]
 fn a_resume_is_the_new_shells_first_command_not_typed_later() {
     assert_eq!(launch_argv("/bin/zsh".into(), None), ["/bin/zsh", "-l"]);

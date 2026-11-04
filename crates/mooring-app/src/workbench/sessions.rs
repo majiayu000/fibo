@@ -20,44 +20,6 @@ pub(super) struct Resuming {
     pub(super) resumed: HashMap<String, String>,
 }
 impl Workbench {
-    pub(super) fn open_session(
-        &mut self,
-        session: &AgentSession,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.search.hide();
-        self.nav.task_detail = None;
-        self.overview.here = None;
-        self.nav.zoomed = None;
-        let Some(terminal) = live_terminal(&self.workspace, session)
-            .or_else(|| resume_terminal(&self.workspace, &self.resuming.resumed, session))
-        else {
-            if let Some(space) = session_space(&self.workspace, session) {
-                self.nav.space = space.into();
-            }
-            self.resuming.resume = Some((
-                self.workspace.resume_command(session),
-                session.cwd.clone(),
-                session.id.clone(),
-            ));
-            self.launch(false, session.task.clone(), cx);
-            return;
-        };
-        let terminal_id = terminal.id.clone();
-        if !self.focus_terminal(&terminal_id, window, cx) {
-            let tab = Tab {
-                id: id(),
-                space: self.nav.space.clone(),
-                default_task: session.task.clone(),
-                title: String::new(),
-                layout: Some(Layout::Leaf(terminal_id.clone())),
-            };
-            self.nav.tab = Some(tab.id.clone());
-            self.nav.overview = false;
-            self.edit(Edit::CreateTab { tab }, cx);
-        }
-    }
     /// Shows the tab holding `terminal_id` and focuses its pane; false when no tab holds it.
     pub(super) fn focus_terminal(
         &mut self,

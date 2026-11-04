@@ -190,17 +190,6 @@ fn short_place(path: &str) -> String {
     }
     format!("{root}…/{}", parts[parts.len() - 2..].join("/"))
 }
-/// The first shown pane whose terminal the host lost and that has not been tried yet.
-pub(super) fn reopen_candidate(
-    w: &Workspace,
-    shown: &[String],
-    tried: &HashSet<String>,
-) -> Option<String> {
-    shown
-        .iter()
-        .find(|id| interrupted(w, id) && !tried.contains(*id))
-        .cloned()
-}
 /// Whether closing these Agents would break into a turn or leave a question unanswered.
 pub(super) fn interrupts(agents: &[(String, Option<Phase>)]) -> bool {
     agents
@@ -256,6 +245,8 @@ mod phones;
 mod redraw;
 mod render;
 mod requests;
+mod resume;
+use resume::reopen_candidate;
 mod sessions;
 mod settings;
 use sessions::{Attention, Resuming};
@@ -520,6 +511,9 @@ impl Workbench {
             && let Some(id) = reopen_candidate(&self.workspace, &ids, &self.layout.reopened)
         {
             self.layout.reopened.insert(id.clone());
+            if self.drop_lost_pane(&id, cx) {
+                return;
+            }
             self.reopen(id, cx);
         }
         let ids = attachable_ids(&self.workspace, ids);
@@ -824,19 +818,6 @@ impl Workbench {
             self.sync_panes(cx);
         }
         self.edit(edit, cx);
-    }
-    /// Reopens a lost terminal in place, resuming the conversation it was running.
-    pub(super) fn reopen(&mut self, id: String, cx: &mut Context<Self>) {
-        if let Some(s) = interrupted_session(&self.workspace, &id) {
-            self.resuming.resume = Some((
-                self.workspace.resume_command(s),
-                s.cwd.clone(),
-                s.id.clone(),
-            ));
-        }
-        self.launch_in_slot(true, None, Some(id), cx);
-        // Taken unless the launch bailed early; a leftover would hijack the next launch.
-        self.resuming.resume = None;
     }
     pub(super) fn launch_in_slot(
         &mut self,

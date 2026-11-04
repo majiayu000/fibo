@@ -133,6 +133,24 @@ pub fn interrupted_session<'a>(w: &'a Workspace, terminal: &str) -> Option<&'a A
             .max_by_key(|s| w.session_updated(s)),
     }
 }
+/// The lost pane still holding this conversation, if a tab shows one: picking it up
+/// belongs there, or the old tab stays behind as a nameless shell.
+pub fn interrupted_pane<'a>(w: &'a Workspace, session: &str) -> Option<&'a Terminal> {
+    w.terminals
+        .iter()
+        .filter(|t| t.state == ProcessState::Interrupted && w.terminal_tab(&t.id).is_some())
+        .find(|t| interrupted_session(w, &t.id).is_some_and(|s| s.id == session))
+}
+/// Where the conversation a lost pane was running already runs again, or is being resumed.
+/// Reopening the pane too would run it twice over one transcript.
+pub fn lost_session_runs_in<'a>(
+    w: &'a Workspace,
+    resumed: &HashMap<String, String>,
+    lost: &str,
+) -> Option<&'a Terminal> {
+    let s = interrupted_session(w, lost)?;
+    live_terminal(w, s).or_else(|| resume_terminal(w, resumed, s))
+}
 pub fn attachable_ids(workspace: &Workspace, ids: Vec<String>) -> Vec<String> {
     ids.into_iter()
         .filter(|id| !interrupted(workspace, id))

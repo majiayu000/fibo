@@ -14,6 +14,8 @@ mod phones_evidence;
 mod pinned_ask_evidence;
 #[path = "remote_typing_evidence.rs"]
 mod remote_typing_evidence;
+#[path = "resume_evidence.rs"]
+mod resume_evidence;
 #[path = "settings_evidence.rs"]
 mod settings_evidence;
 #[path = "subagent_evidence.rs"]
@@ -30,6 +32,7 @@ pub fn start(
         || remote_typing_evidence::start(handle, evidence.clone(), cx)
         || cpu_probe_evidence::start(handle, evidence.clone(), cx)
         || pane_drag_evidence::start(handle, evidence.clone(), cx)
+        || resume_evidence::start(handle, evidence.clone(), cx)
         || subagent_evidence::start(handle, evidence.clone(), cx)
         || pinned_ask_evidence::start(handle, evidence.clone(), cx)
     {
@@ -521,10 +524,7 @@ pub fn start(
         let handle = *handle;
         cx.spawn(async move |cx| {
             let shot = |name: &str, cx: &mut gpui::AsyncApp| {
-                cx.update_window(handle.into(), |_, window, app| {
-                    window.refresh(); window.draw(app).clear(app);
-                    window.render_to_image().unwrap().save(directory.join(name)).unwrap();
-                }).unwrap();
+                cx.update_window(handle.into(), |_, window, app| { window.refresh(); window.draw(app).clear(app); window.render_to_image().unwrap().save(directory.join(name)).unwrap(); }).unwrap();
             };
             cx.background_executor().timer(Duration::from_secs(2)).await;
             std::fs::create_dir_all(&directory).unwrap();
@@ -532,9 +532,7 @@ pub fn start(
             shot("connected.png", cx);
             let socket = handle.update(cx, |view, _, _| view.visual_socket()).unwrap();
             let runtime = socket.parent().unwrap().display().to_string();
-            let killed = std::process::Command::new("/usr/bin/pkill")
-                .args(["-9", "-f", &format!("mooring serve --runtime {runtime}")])
-                .status().unwrap();
+            let killed = std::process::Command::new("/usr/bin/pkill").args(["-9", "-f", &format!("mooring serve --runtime {runtime}")]).status().unwrap();
             assert!(killed.success(), "no host to kill");
             cx.background_executor().timer(Duration::from_secs(1)).await;
             assert!(!handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap(), "strip before the grace period");
