@@ -6,7 +6,7 @@
 //! ones, and answers with sections of session, folder and note rows. Mooring draws the answer in its own style; a session the
 //! module names that the column does not list is ignored, and any failure falls back to
 //! the classic list with the reason shown.
-use super::sidebar_list::{End, Listed, bucket};
+use super::sidebar_list::{End, Listed};
 use super::*;
 use mooring_core::sidebar::{Bucket, Preset};
 use mooring_plugin_host as host;
@@ -879,7 +879,7 @@ mod tests {
         for g in all {
             assert!(documented.contains(&group_name(g)), "{}", group_name(g));
             assert_eq!(
-                bucket(g) == Bucket::Attention,
+                super::super::sidebar_list::bucket(g) == Bucket::Attention,
                 matches!(group_name(g), "waiting" | "error" | "review")
             );
         }

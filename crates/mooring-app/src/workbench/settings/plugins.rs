@@ -214,7 +214,12 @@ impl SettingsView {
         cx: &Context<Self>,
     ) -> gpui::Div {
         use mooring_core::plugin_context::{Opt, OptKind};
-        let note = o.description.clone().unwrap_or_default();
+        let note = if o.secret {
+            let said = o.description.as_deref().unwrap_or_default();
+            format!("{said}（存在钥匙串里，不写进文件）")
+        } else {
+            o.description.clone().unwrap_or_default()
+        };
         let title = format!("　└ {}", o.title);
         let (pid, key) = (id.to_owned(), o.key.clone());
         let save = move |this: &mut Self, value: serde_json::Value, cx: &mut Context<Self>| {
@@ -290,7 +295,16 @@ impl SettingsView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let field = cx.new(|cx| crate::ui::field::Field::new(&opt.title, current, cx).compact());
+        // A secret is never shown back: you can only type a new one.
+        let (start, masked) = if opt.secret {
+            ("", true)
+        } else {
+            (current, false)
+        };
+        let field = cx.new(|cx| {
+            let field = crate::ui::field::Field::new(&opt.title, start, cx).compact();
+            if masked { field.masked() } else { field }
+        });
         window.focus(&field.focus_handle(cx), cx);
         let key = opt.key.clone();
         let opt = opt.clone();

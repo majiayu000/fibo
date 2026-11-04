@@ -20,6 +20,7 @@ pub mod rule;
 #[doc(hidden)]
 pub mod sample;
 pub mod scheme;
+pub mod secret;
 pub mod setup;
 pub mod sidebar;
 pub mod status;

@@ -372,7 +372,11 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                         println!(
                             "{} = {}    {}{}",
                             o.key,
-                            mooring_core::plugin_context::Opt::text(&v),
+                            if o.secret && v == serde_json::Value::String(String::new()) {
+                                "未设置".to_owned()
+                            } else {
+                                mooring_core::plugin_context::Opt::text(&v)
+                            },
                             o.title,
                             o.description.map(|d| format!("：{d}")).unwrap_or_default()
                         );
@@ -384,10 +388,32 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                         p.options.iter().find(|o| &o.key == key).ok_or_else(|| {
                             io::Error::other(format!("{id} 没有叫 {key} 的设置项"))
                         })?;
-                    let v = opt.parse(value).map_err(io::Error::other)?;
+                    // A command line is in the shell's history and in `ps`: a secret comes on
+                    // standard input, and is never printed back.
+                    let (v, shown) = if opt.secret {
+                        if value != "-" {
+                            return Err(io::Error::other(format!(
+                                "{key} 是密钥，别写在命令行里：printf %s 值 | mooring plugins set {id} {key} -"
+                            )));
+                        }
+                        let mut text = String::new();
+                        io::Read::read_to_string(&mut io::stdin(), &mut text)?;
+                        let text = text.trim_end_matches(['\n', '\r']).to_owned();
+                        let said = if text.is_empty() {
+                            "清空了"
+                        } else {
+                            "存进了钥匙串"
+                        };
+                        (serde_json::Value::String(text), said.to_owned())
+                    } else {
+                        (
+                            opt.parse(value).map_err(io::Error::other)?,
+                            format!("改成了 {value}"),
+                        )
+                    };
                     mooring_core::plugin_context::set(&dir, id, key, v)
                         .map_err(io::Error::other)?;
-                    println!("{id} 的 {key} 改成了 {value}，下次运行就用");
+                    println!("{id} 的 {key} {shown}，下次运行就用");
                     Ok(())
                 }
                 _ => Err(io::Error::other(USAGE)),

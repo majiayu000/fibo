@@ -20,6 +20,9 @@ pub struct Field {
     /// Grey text shown while empty in place of the label.
     placeholder: Option<String>,
     compact: bool,
+    /// Drawn as stars and not copyable: a secret being typed. One star per byte, so every
+    /// offset the caret and selection use stays the same.
+    masked: bool,
     bare: bool,
     inline: bool,
     /// The caret sits at the selection's start, as after Shift+Left.
@@ -46,6 +49,7 @@ impl Field {
             marked: None,
             label: label.into(),
             placeholder: None,
+            masked: false,
             compact: false,
             bare: false,
             inline: false,
@@ -64,6 +68,10 @@ impl Field {
     pub fn inline(mut self) -> Self {
         self.compact = true;
         self.inline = true;
+        self
+    }
+    pub fn masked(mut self) -> Self {
+        self.masked = true;
         self
     }
     pub fn placeholder(mut self, text: &str) -> Self {
@@ -249,6 +257,9 @@ impl Field {
                 if self.selection.is_empty() {
                     return;
                 }
+                if self.masked {
+                    return;
+                }
                 let text = self.text[self.selection.clone()].to_owned();
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
                 if event.keystroke.key == "x" {
@@ -367,6 +378,8 @@ impl Render for Field {
                 None if self.compact => self.label.clone(),
                 None => " ".to_owned(),
             }
+        } else if self.masked {
+            "*".repeat(self.text.len())
         } else {
             self.text.clone()
         };

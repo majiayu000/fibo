@@ -89,6 +89,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 - `type`：`string`、`number`、`boolean`、`choice`（要写 `choices`）。`key` 只用小写字母、数字和 `_`，最多 20 个。
 - 用户在 设置 › 插件 里每个插件下面改，或者 `mooring plugins set <id> <key> <值>`；值存在数据目录的 `options.json`，下次运行就用。
 - 值只以环境变量传给命令，不会拼进命令文字里：脚本里读 `"$MOORING_OPTION_SOUND"`，不要让值变成命令的一部分。
+- API key 这类写 `"secret": true`（`type` 是 `string`，`default` 是 `""`，需要插件级别 3）：值存进 macOS 钥匙串，不进文件，设置页和 `mooring plugins set` 只显示有没有设置，输出里出现时运行记录会遮掉，卸载时一起删。命令行用标准输入给值：`printf %s 值 | mooring plugins set <id> <key> -`。别让用户把密钥写进插件文件或命令文字。
 - 凡是用户可能想要不同值的参数都做成设置项，不要写死在脚本里。
 
 ## 运行记录

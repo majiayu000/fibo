@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 pub const API: u32 = 1;
 /// What this build's plugin support adds up to, raised whenever a kind or a manifest field
 /// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`, 3 an
-/// action's `agent`. A plugin needing a higher level says so in `mooring`, and is refused
+/// action's `agent` and a secret setting. A plugin needing a higher level says so in `mooring`, and is refused
 /// with "update Mooring".
 pub const LEVEL: u32 = 3;
 
@@ -364,7 +364,11 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
             )
         }
     };
+    let secrets = secret_keys(&target);
     std::fs::remove_dir_all(&target).map_err(|e| format!("删不掉 {}：{e}", target.display()))?;
+    for key in secrets {
+        crate::secret::delete(&data_id, &key);
+    }
     // What it kept is gone with it; teardown has already put back what needed putting.
     let data = crate::setup::data_dir(plugins, &data_id);
     if data.is_dir()
@@ -390,6 +394,24 @@ fn left_behind(why: &str, touches: &[String]) -> String {
             touches.join("、")
         )
     }
+}
+
+/// The secret settings a manifest names, read loosely: a plugin that does not load may still
+/// have left them in the keychain.
+fn secret_keys(dir: &Path) -> Vec<String> {
+    let Some(value) = std::fs::read(dir.join("plugin.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+    else {
+        return vec![];
+    };
+    value["options"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|o| o["secret"] == true)
+        .filter_map(|o| o["key"].as_str().map(str::to_owned))
+        .collect()
 }
 
 /// The id a manifest names, read loosely: for a plugin that does not load.
@@ -616,6 +638,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         .iter()
         .map(|k| k.level())
         .chain((!m.files.is_empty() || !m.options.is_empty()).then_some(2))
+        .chain(m.options.iter().any(|o| o.secret).then_some(3))
         .max()
         .unwrap_or(1);
     let level = m.mooring.unwrap_or(needed).max(needed);
@@ -946,6 +969,29 @@ mod tests {
         );
         assert!(turned_off(&plugins, "p"));
         assert!(mark.exists());
+        let _ = std::fs::remove_dir_all(&config);
+    }
+
+    /// Taking a plugin away takes its secrets out of the keychain too.
+    #[test]
+    fn uninstalling_removes_its_secrets() {
+        let config = tmp("secret-gone");
+        let plugins = dir(&config);
+        plugin(
+            &plugins,
+            "s",
+            r#"{"api":1,"id":"s","name":"S","provides":["hooks"],"options":[
+              {"key":"token","title":"t","type":"string","default":"","secret":true}]}"#,
+            &[(
+                "hooks.json",
+                r#"{"api":1,"hooks":[{"id":"h","on":["done"],"command":"true"}]}"#,
+            )],
+        );
+        crate::plugin_context::set(&plugins, "s", "token", "abc".into()).unwrap();
+        assert_eq!(crate::secret::get("s", "token").as_deref(), Some("abc"));
+        assert!(check(&plugins.join("s")).unwrap().level >= 3);
+        uninstall_in(&plugins, "s", false).unwrap();
+        assert_eq!(crate::secret::get("s", "token"), None);
         let _ = std::fs::remove_dir_all(&config);
     }
 }
