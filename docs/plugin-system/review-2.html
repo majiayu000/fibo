@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件系统第二轮审视</title>
+<style>
+:root{--bg:#fbfaf7;--ink:#1d1d1f;--mute:#6b6b72;--line:#e3e1db;--card:#fff;--hi:#c2410c;--mid:#a16207;--lo:#6b7280;--ok:#15803d;--code:#f2f0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#0e0e10;--ink:#e8e8ea;--mute:#9a9aa2;--line:#2a2a2f;--card:#16161a;--hi:#fb923c;--mid:#e5b83b;--lo:#9ca3af;--ok:#4cc38a;--code:#1f1f24}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC",sans-serif}
+main{max-width:1120px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:19px;margin:44px 0 8px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:15px;margin:24px 0 8px}
+p.lead{color:var(--mute);margin:0 0 20px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0}
+.box h3{margin:0 0 8px}
+.note{color:var(--mute);font-size:13.5px}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--mute);font-size:12.5px;background:var(--code);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+code{font:12px ui-monospace,Menlo,monospace;background:var(--code);padding:1px 4px;border-radius:4px;word-break:break-all}
+.n{white-space:nowrap;font-weight:600}
+.s{font-weight:600;white-space:nowrap}.s.h{color:var(--hi)}.s.m{color:var(--mid)}.s.l{color:var(--lo)}
+.d{white-space:nowrap;font-weight:600}.d.y{color:var(--ok)}.d.w{color:var(--mid)}.d.n{color:var(--lo)}
+.e{white-space:nowrap;font-size:12.5px}.e.run{color:var(--ok);font-weight:600}.e.src{color:var(--mute)}
+ol li,ul li{margin:4px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>插件系统第二轮审视</h1>
+<p class="lead">2026-11-04 · 基于 main <code>01d9a5b</code>。Claude 和 Codex 各自独立读代码，再把两边的结果合并，高严重度的条目和有分歧的条目都实跑核对过。上一轮的审视和已做的决定见 <a href="index.html">插件机制审视</a>。</p>
+
+<div class="box">
+<h3>这页要支撑的决定</h3>
+<p>插件系统下一批改什么，哪些明确不做。<b>放弃条件</b>：说不出具体失败场景或用户价值的条目不列；已经被实测否定的猜想直接删掉。</p>
+</div>
+
+<div class="box">
+<h3>结论</h3>
+<ol>
+<li><b>方向不用改，不加新类型，先修「它说的和实际做的不一致」。</b>「JSON 声明 + 子进程 + 少量 WASM」这条路线两边都认可。问题集中在失败路径上：安装说成功但旧版已被坏包替换、setup 失败却显示 ✓、检查全绿而运行时丢了插件、命令找不到却记成正常。</li>
+<li><b>最该马上修的是 4 件事，改动都不大。</b>写给 Agent 的通知示例能被事件文字注入并执行 shell 命令；「更新」和完成动画里的「安装」绕过确认；坏包能替换掉好的旧版；文档和实现有 6 处矛盾。</li>
+<li><b>最值得做的一次重构是统一「跑一条插件命令」。</b>setup、quota、hook、装饰现在各写了一份子进程逻辑，修复只落在其中一部分（上次只修了 hook 和装饰），所以 setup 和 quota 的超时至今管不住。这正好违反项目的「一个事实一个所有者」。合成一份后，超时、进程组、错误记录、PATH 只用改一处。</li>
+<li><b>优先级按真实用法排。</b>这台机器只装了 3 个插件（claude-quota 和两个完成动画），没有第三方作者，主要入口是用户让 Agent 写插件。所以 Agent 写出来能不能跑、坏了看不看得见，排在市场和分发之前。签名、多版本索引现在不做。</li>
+</ol>
+</div>
+
+<h2>决定：下一步分四批</h2>
+<div class="wrap"><table>
+<tr><th>批次</th><th>内容</th><th>验收（亲眼看到）</th><th>放弃条件</th></tr>
+<tr><td class="n">第一批<br>不骗人、不伤人</td><td>F01 换掉注入示例；F02、F03、F05 所有安装和更新入口共用一次确认，内容以包为准；F06 暂存包过真实加载器再替换；F22 quota 缓存；F26、F27 修文档和示例</td><td>V1 的载荷不再执行；更新新增 setup 时界面先问；V2 的坏包报错且旧版还在；V6 里 Codex 显示 77；T2 文档与实现一致</td><td>无，都是小改</td></tr>
+<tr><td class="n">第二批<br>一份命令执行</td><td>把 F13、F14、F15、F17、F18 收进 core 的一个执行函数；F16 登录 shell 的 PATH；F19 actions 拿到插件目录；F20 上下文用真实 runtime；F31 <code>mooring plugins run</code> 试跑</td><td>T4 在 200 ms 附近返回；T5 的子进程被停；P2 记成失败并带上 <code>not found</code>；P3 留下 40 条；用干净环境启动的 App 里 <code>node -v</code> 装饰能显示</td><td>登录 shell 解析超过 500 ms 就改成后台解析，超时退回系统 PATH；解析不可靠就只做「找不到命令」的提示</td></tr>
+<tr><td class="n">第三批<br>生命周期与隔离</td><td>F07、F08 setup 失败和更新撤回；F09、F10 关得掉、卸得掉；F11 CLI 改完通知运行中的进程；F12；F21 子 id 冲突；F04 来源记录</td><td>V4 不再显示 ✓；V3 的外部文件被撤回；T6、T7 能处理掉；T1 两个插件都生效；T9 替换前提示「来源不同」</td><td>不承诺任意脚本的事务回滚，只保证保住撤回路径</td></tr>
+<tr><td class="n">第四批<br>边角</td><td>F24 WASM 状态；F25 WASM 边界（先测）；F23；F29 OpenCode 游标</td><td>恢复中的旧会话在 WASM 和内置列表分组一致；超大回复的测试不卡界面</td><td>F25 测不出可感知的卡顿就只限制大小</td></tr>
+</table></div>
+<p class="note">每批内部的条目可以单独提交。第一批和第二批互不依赖；第三批的 F07 用到第二批的执行函数，放在其后。F28 不排批次：下次提升 <code>plugin::LEVEL</code> 或给类型文件加字段时一起处理。</p>
+
+<h2>全部发现</h2>
+<p class="note">依据：<span class="e run">实跑</span> 是这次亲眼复现（探针编号见文末）；<span class="e src">源码</span> 是追到调用方、确认没有别处兜底，但没有在真实 App 里跑。来源：C 是 Claude 先发现，X 是 Codex 先发现，C+X 是两边都发现。</p>
+
+<h3>确认与信任</h3>
+<div class="wrap"><table>
+<tr><th>编号</th><th>问题和触发场景</th><th>位置</th><th>依据</th><th>严重度</th><th>改法</th><th>量</th><th>来源</th></tr>
+<tr><td class="n">F01</td><td><b>文档的通知示例把事件文字拼进 AppleScript。</b>Agent 照抄后，一段出现在 Agent 回复里的文字（比如网页内容经 Agent 转述）就能执行任意 shell 命令。随附的 notify-macos 用 <code>on run argv</code>，是安全的，只有文档示例有问题，而文档正是写给 Agent 抄的。</td><td><code>plugins.md:143</code></td><td class="e run">实跑 V1</td><td class="s h">高</td><td>示例换成 argv 写法，加一句「事件文字不要拼进别的语言的源码」</td><td>小</td><td>X</td></tr>
+<tr><td class="n">F02</td><td><b>两个入口绕过确认。</b>「更新」直接安装，新版本新增的 hooks、setup 随即生效；完成动画区的「安装」不看 <code>runs_commands</code>，同时带 setup 的动画插件不问就跑。</td><td><code>settings/plugins.rs:533</code>、<code>:397</code></td><td class="e src">源码</td><td class="s h">高</td><td>所有入口走同一个确认；更新时列出比旧版多出来的能力</td><td>小</td><td>C+X</td></tr>
+<tr><td class="n">F03</td><td><b>确认内容来自目录，不是包。</b>目录写「不联网、不改文件」，包里写 <code>"network":true,"touches":["~/.ssh/config"]</code>，照样安装，提示还写「声明不联网」。上次只核对了 <code>provides</code>。</td><td><code>market.rs:480</code></td><td class="e run">实跑 T8</td><td class="s m">中</td><td><code>touches</code>、<code>network</code> 和 <code>provides</code> 一起核对，不一致就拒</td><td>小</td><td>C</td></tr>
+<tr><td class="n">F04</td><td><b>不记来源，同 id 的插件直接被替换。</b>手写的 <code>mine</code> 显示「可更新」，更新后换成别人的同名插件，手写的文件也没了；effects 类连确认都没有。自定义市场也能这样顶替。</td><td><code>market.rs:418</code>、<code>:494</code></td><td class="e run">实跑 T9</td><td class="s m">中</td><td>安装时记下来源；来源变了、或目录里有未登记的文件时明确提示。不做签名</td><td>中</td><td>C+X</td></tr>
+<tr><td class="n">F05</td><td><b>确认只说类别，不说具体内容。</b>hook 的 webhook 会把会话标题和回复首行发到外部，确认里只有「发 webhook」，没有地址；<code>network</code> 没写时什么都不提。</td><td><code>market.rs:86</code>、<code>:189</code></td><td class="e src">源码</td><td class="s m">中</td><td>从声明推导：列出 webhook 地址和要跑的命令，有 webhook 就算联网。放进第一批的共用确认</td><td>中</td><td>C</td></tr>
+</table></div>
+
+<h3>生命周期</h3>
+<div class="wrap"><table>
+<tr><th>编号</th><th>问题和触发场景</th><th>位置</th><th>依据</th><th>严重度</th><th>改法</th><th>量</th><th>来源</th></tr>
+<tr><td class="n">F06</td><td><b>坏包能替换掉好的旧版。</b>哈希都对、<code>hooks.json</code> 内容不合法的更新包，安装退出码 0，说「装好了」，原来能用的 hook 从此失效。</td><td><code>market.rs:471</code></td><td class="e run">实跑 V2</td><td class="s h">高</td><td>暂存包跑一遍真实加载器，通过才替换</td><td>中</td><td>X</td></tr>
+<tr><td class="n">F07</td><td><b>setup 失败仍算生效。</b>全新安装 setup 退出 9 或超时后，<code>mooring plugins</code> 显示 ✓，其 hooks 也会加载，重启不会重试。</td><td><code>market.rs:533</code></td><td class="e run">实跑 V4、T5</td><td class="s h">高</td><td>setup 失败就记成停用并说明原因</td><td>中</td><td>X</td></tr>
+<tr><td class="n">F08</td><td><b>更新去掉 setup，撤回能力就没了。</b>v1 改了外部文件，v2 不再带 setup：更新不跑旧 teardown，之后卸载也不跑，外部文件一直留着。对 claude-quota 这类插件，就是状态栏指向已删除的脚本。</td><td><code>market.rs:529</code></td><td class="e run">实跑 V3</td><td class="s h">高</td><td>新版没有 setup 时，先成功跑旧 teardown 再替换</td><td>中</td><td>X</td></tr>
+<tr><td class="n">F09</td><td><b>teardown 失败后，插件既卸不掉也关不掉。</b>两条路径都在失败时提前返回，没有强制选项，这个插件的 hook 会继续跑，只能手动删目录。</td><td><code>plugin.rs:308</code>、<code>:367</code></td><td class="e run">实跑 T6</td><td class="s h">高</td><td>界面和 CLI 加「仍然停用 / 卸载」，并列出 <code>touches</code> 里可能残留的文件</td><td>小</td><td>C</td></tr>
+<tr><td class="n">F10</td><td><b>加载不了的插件卸不掉。</b>级别过高或 <code>plugin.json</code> 坏了，CLI 报「没有装」，设置页那一行也没有按钮。</td><td><code>plugin.rs:298</code>、<code>settings/plugins.rs:473</code></td><td class="e run">实跑 T7</td><td class="s m">中</td><td>按目录名也能移除，跑不了 teardown 时说明</td><td>小</td><td>C</td></tr>
+<tr><td class="n">F11</td><td><b>CLI 改完，运行中的进程不知道。</b>Agent 用 <code>mooring plugins uninstall</code> 卸掉后，后台内存里的 hook 还在继续触发，直到有人点「重新读取」或重启；卸载的输出也没提这件事。</td><td><code>plugins_cmd.rs:209</code>、<code>:216</code></td><td class="e src">源码</td><td class="s m">中</td><td>CLI 改完发 <code>ReloadPlugins</code>，由后台转告 App。也省掉让用户手动点的一步</td><td>中</td><td>C</td></tr>
+<tr><td class="n">F12</td><td>数据目录删除失败时仍报告「卸载了」，options 和备份留在原处。</td><td><code>plugin.rs:316</code></td><td class="e src">源码</td><td class="s l">低</td><td>说明残留路径</td><td>小</td><td>X</td></tr>
+</table></div>
+
+<h3>跑命令</h3>
+<div class="wrap"><table>
+<tr><th>编号</th><th>问题和触发场景</th><th>位置</th><th>依据</th><th>严重度</th><th>改法</th><th>量</th><th>来源</th></tr>
+<tr><td class="n">F13</td><td><b>后台子进程让超时失效。</b><code>timeout_ms: 200</code> 的 setup 留一个 <code>sleep 6 &amp;</code>，安装卡了 6053 ms。读输出的线程在等管道关闭，那一步没有时限。quota 同样写法，会让它的刷新循环停住。</td><td><code>setup.rs:148</code>、<code>quota.rs:228</code></td><td class="e run">setup 实跑 T4</td><td class="s h">高</td><td>统一执行函数：进程组 + 读取有时限</td><td>中</td><td>C+X</td></tr>
+<tr><td class="n">F14</td><td><b>超时只杀 shell。</b>setup 超时后子进程继续跑，7 秒后还把文件写出来了。quota 同样。hook 和装饰已经改好（上次的 <code>b8a816c</code>）。</td><td><code>setup.rs:141</code>、<code>quota.rs:221</code></td><td class="e run">setup 实跑 T5</td><td class="s h">高</td><td>同 F13</td><td>—</td><td>C+X</td></tr>
+<tr><td class="n">F15</td><td><b>命令找不到被当成「主动不显示」。</b>装饰退出码非 0 都算脚本主动退出，包括 127；stderr 也丢了。结果是显示为空，运行记录 0 条，作者无从查起。</td><td><code>decoration.rs:197</code>、<code>:169</code></td><td class="e run">实跑 P2</td><td class="s m">中</td><td>126、127 算失败，保留 stderr 的尾部</td><td>小</td><td>C</td></tr>
+<tr><td class="n">F16</td><td><b>文档自己的 <code>node -v</code> 示例在 App 里跑不起来。</b>正在运行的 App 和后台，PATH 都只有 <code>/usr/bin:/bin:/usr/sbin:/sbin</code>，这个 PATH 下 node、gh、claude、codex、brew、bun 都找不到。Agent 在终端里测是好的，装进 App 就不显示，再加上 F15，什么线索都没有。这就是上一轮 G7 要找的证据。</td><td><code>plugins.md:125</code>、<code>pty.rs:336</code></td><td class="e run">实测进程环境</td><td class="s m">中高</td><td>用登录 shell 解析一次 PATH 传给插件命令（<code>forms.rs</code> 的 <code>login_commands</code> 已有类似做法），文档写明</td><td>中</td><td>C</td></tr>
+<tr><td class="n">F17</td><td><b>一个慢 hook 能挤掉所有插件的事件。</b>全局只有 8 个槽位，满了就丢，只写 stderr，运行记录里没有。</td><td><code>plugin_hooks.rs:143</code></td><td class="e src">源码</td><td class="s m">中</td><td>只把丢弃记进运行记录；有真实丢失再谈公平调度</td><td>小</td><td>C+X</td></tr>
+<tr><td class="n">F18</td><td><b>运行记录并发写入会丢。</b>8 个线程共写 40 条，只读回 9 条。设置页又只看最后一条，一条成功就盖住了另一个命令的失败。</td><td><code>plugin_context.rs:300</code>、<code>settings/plugins.rs:520</code></td><td class="e run">实跑 P3</td><td class="s m">中</td><td>追加写加文件锁；页面按命令显示未恢复的失败</td><td>小</td><td>C+X</td></tr>
+<tr><td class="n">F19</td><td><b>actions 找不到自己的脚本。</b>文档说 <code>files</code> 用来带脚本，但 actions 在终端里跑，拿不到插件目录，写 <code>{plugin_dir}</code> 会被拒。</td><td><code>action.rs:15</code></td><td class="e run">实跑 P5</td><td class="s m">中</td><td>加 <code>{plugin_dir}</code>、<code>{plugin_data}</code></td><td>小</td><td>C</td></tr>
+<tr><td class="n">F20</td><td>用 <code>--runtime</code> 启动时，插件拿到的 <code>MOORING_RUNTIME</code> 是从 HOME 推出来的默认目录，插件里的 <code>"$MOORING_BIN" list</code> 可能连到另一个工作台。只影响隔离运行。</td><td><code>plugin_context.rs:211</code></td><td class="e src">源码</td><td class="s l">中低</td><td>用进程实际打开的 runtime</td><td>小</td><td>X</td></tr>
+<tr><td class="n">F31</td><td><b>没有办法试跑。</b><code>mooring plugins</code> 只校验 JSON。要测一个 hook，得等真事件发生，而且环境和 App 不同。</td><td><code>plugins_cmd.rs</code></td><td class="e src">缺能力</td><td class="s m">中</td><td><code>mooring plugins run &lt;id&gt; &lt;声明 id&gt; [--event done]</code>：用样例事件和 App 同样的环境跑一次，打印退出码和输出。建在统一执行函数上</td><td>小</td><td>C</td></tr>
+</table></div>
+
+<h3>插件之间的隔离和缓存</h3>
+<div class="wrap"><table>
+<tr><th>编号</th><th>问题和触发场景</th><th>位置</th><th>依据</th><th>严重度</th><th>改法</th><th>量</th><th>来源</th></tr>
+<tr><td class="n">F21</td><td><b>装上一个插件，会让另一个正常的插件失效，而检查显示全绿。</b>子 id 全局唯一，又按目录名顺序加载：<code>a-other</code> 和 <code>b-notify</code> 都用 hook id <code>notify</code>，真实加载器拒掉后者，<code>mooring plugins</code> 却两个都是 ✓，因为它逐个单独检查。</td><td><code>hook.rs:211</code>、<code>decoration.rs:264</code>、<code>plugins_cmd.rs:367</code></td><td class="e run">实跑 P1、T1</td><td class="s h">高</td><td>hook 和装饰的 id 改成插件内唯一（没有持久化引用，不用迁移）；actions、左栏的 id 有持久化引用，保持全局并在安装时报冲突；检查改成按运行时的方式整体加载</td><td>中</td><td>C+X</td></tr>
+<tr><td class="n">F22</td><td><b>quota 缓存只按路径和修改时间。</b>同一文件两个 source，Codex 显示了 Claude 的 11（应为 77）；改了指针、点重新读取，仍是旧值。</td><td><code>quota.rs:367</code></td><td class="e run">实跑 V6</td><td class="s m">中</td><td>缓存原始 JSON，再按 source 取值</td><td>小</td><td>X</td></tr>
+<tr><td class="n">F23</td><td>慢装饰运行中重载了插件，它结束后按旧下标写回缓存，旧文字可能短暂显示在别的装饰上。</td><td><code>decorations.rs:108</code></td><td class="e src">源码，时序未跑</td><td class="s l">低</td><td>带上重载代际，过期结果丢掉</td><td>小</td><td>X</td></tr>
+</table></div>
+
+<h3>WASM 左栏</h3>
+<div class="wrap"><table>
+<tr><th>编号</th><th>问题和触发场景</th><th>位置</th><th>依据</th><th>严重度</th><th>改法</th><th>量</th><th>来源</th></tr>
+<tr><td class="n">F24</td><td><b><code>needs_you</code> 绕过唯一判定。</b>WASM 输入用 <code>bucket()</code>，内置列表用 <code>row_bucket()</code>（内部问 <code>status::needs_you</code>）。还没接上的恢复会话，内置列表放在「停下了」，WASM 插件会把它顶到「要你处理」。</td><td><code>sidebar_wasm.rs:215</code>、<code>sidebar_list.rs:68</code></td><td class="e src">源码</td><td class="s m">中</td><td>改用 <code>row_bucket</code>，并加进 <code>guard.rs</code> 的守卫</td><td>小</td><td>X</td></tr>
+<tr><td class="n">F25</td><td><b>限时只管 WASM 内部。</b>首次编译在绘制路径上同步进行（规格里的磁盘缓存没接进 App）；合法但巨大的回复（上限 64 MB）会在主线程解析并建元素；出错后继续复用同一个实例，没有熔断，每次状态变化最多再耗约 50 ms。</td><td><code>sidebar_wasm.rs:139</code>、<code>:235</code>、<code>plugin-host/lib.rs:88</code></td><td class="e src">源码，卡顿未测</td><td class="s m">待验证</td><td>先写边界测试量一下；再限制回复的字节数和行数、编译移到后台、出错后换新实例或熔断</td><td>中</td><td>C+X</td></tr>
+</table></div>
+
+<h3>对外契约</h3>
+<div class="wrap"><table>
+<tr><th>编号</th><th>问题和触发场景</th><th>位置</th><th>依据</th><th>严重度</th><th>改法</th><th>量</th><th>来源</th></tr>
+<tr><td class="n">F26</td><td><b>文档和实现的矛盾：</b>
+<ol>
+<li>说 <code>command</code> 和 <code>webhook</code>「二选一或都写」，都写会被拒（实跑 T2）；</li>
+<li>manifest 未知字段同一页说了「整份拒绝」和「跳过并警告」，实现是后者；</li>
+<li>说装上动画「不会自动换掉用户选的」，实现是装上就切换（<code>settings/plugins.rs:73</code>）；</li>
+<li>只说 Agent 类要等后台重启，其实 App 的注册表也在启动时固定，App 同样要重开；</li>
+<li><code>fold</code> 的 <code>done</code>（等你验收）已经不起作用：处理和验收合并后 <code>bucket()</code> 不再产生 <code>Bucket::Done</code>，等你验收归入不能折叠的要你处理；WASM 的 <code>done</code> 字段也一直为空。focus-sidebar 还写着它；</li>
+<li><code>plugins_cmd.rs</code> 开头还写着「只读」，设置页还写着 hook 结果「写在后台日志里」。</li>
+</ol></td><td><code>plugins.md:45</code>、<code>:149</code>、<code>:113</code>、<code>:169</code>、<code>:18</code>；<code>plugins_cmd.rs:3</code>；<code>settings/plugins.rs:774</code></td><td class="e run">1 实跑，其余源码</td><td class="s m">中</td><td>按现行行为改文档；删掉 <code>Bucket::Done</code> 这条死路或说明 <code>done</code> 已废弃（保留解析，不报错）</td><td>小</td><td>C+X</td></tr>
+<tr><td class="n">F27</td><td>common-actions 的「接着这个 Claude 会话」写的是 <code>when: agent</code>，在 Codex 窗格也会出现，把 Codex 的会话 id 传给 <code>claude --resume</code>。<code>when</code> 不能按 Agent 区分。</td><td><code>plugins/common-actions/actions.json:7</code></td><td class="e src">源码</td><td class="s l">低</td><td>加 <code>when_agent</code> 或换成通用写法</td><td>小</td><td>X</td></tr>
+<tr><td class="n">F28</td><td><b>向前兼容只做到了 manifest。</b>类型文件里的新字段、新事件名让旧版整份拒绝（<code>subagent_done</code>、<code>retry</code> 都实测过），<code>LEVEL</code> 也不会因此自动升高。较新但不兼容的远程版本还会遮住兼容的附带版本。</td><td><code>hook.rs:48</code>、<code>market.rs:418</code></td><td class="e run">实跑 T3</td><td class="s m">待验证</td><td>下次加字段或提升级别时一起处理，未知事件跳过并警告</td><td>小</td><td>C+X</td></tr>
+<tr><td class="n">F29</td><td>OpenCode 插件的会话游标用 <code>time_updated &gt; ?</code>，同一毫秒后写入的会话会漏掉，直到它再次更新。</td><td><code>plugins/opencode/agent.json:10</code></td><td class="e src">SQL 简化复现，App 未跑</td><td class="s m">中</td><td>重读边界时间，用消息游标去重。这台机器没装这个插件，所以排在后面</td><td>中</td><td>X</td></tr>
+</table></div>
+
+<h2>两边的分歧，以及怎么定的</h2>
+<div class="wrap"><table>
+<tr><th>问题</th><th>Codex</th><th>Claude</th><th>决定</th></tr>
+<tr><td>登录 shell 的 PATH</td><td>不建议现在做：示例没证明这是阻塞问题</td><td>建议做：运行中的 App 的 PATH 确实只有系统目录，文档自己的 <code>node -v</code> 示例在这个 PATH 下找不到命令，而且完全没有提示</td><td><span class="d y">采用</span>。Codex 是只读沙箱，看不到运行中进程的环境，这是新证据。解析不可靠时退到只做 F15 的提示</td></tr>
+<tr><td>子 id 冲突</td><td>让检查和运行时一致，暂不引入命名空间</td><td>光一致还不够，装上 A 仍会弄坏 B</td><td><span class="d y">折中</span>：hook 和装饰没有持久化引用，直接改成插件内唯一；actions、左栏保持全局，安装时报冲突</td></tr>
+<tr><td>hook 公平调度</td><td>先让丢弃看得见</td><td>最初想做按插件限额</td><td><span class="d n">听 Codex</span>：没有丢失的真实数据，只记录</td></tr>
+<tr><td>manifest 和 options 重复读文件</td><td>没量过，不建议先改</td><td>量了：每条命令约 24 µs，而起一个 <code>sh</code> 要几毫秒</td><td><span class="d n">不做</span>，这次有数字了</td></tr>
+</table></div>
+<p class="note">核对中撤回的猜想：Claude 原以为 <code>curl</code> 能被重定向降级到 http，手册写明 <code>--proto</code> 拒绝的协议重定向时也不放行，已删除。Claude 原以为 <code>mooring plugins</code> 会报 id 冲突，实跑发现它全绿，问题反而更严重（F21）。</p>
+
+<h2>明确不做</h2>
+<ul>
+<li><b>发布者签名、人工审核、多版本带 engines 的索引。</b>没有第三方作者，也没有过不兼容版本。上一轮记下的「多版本索引」改成<span class="d n">否定</span>；出现第二个外部市场，或第一次真遇到版本不兼容时再议。来源记录和确认（F02–F05）已经覆盖现在的风险。</li>
+<li><b>进程内 JS、全面 WASM 化、开放终端和状态判定。</b>解决不了上面任何一条，还会扩大边界。</li>
+<li><b>Agent 类热重载。</b>维持上一轮的决定，只把需要重开什么说准确（F26）。</li>
+<li><b>持久化 hook 队列、公平调度、推送总线、增量左栏协议、通用注册框架。</b>都是局部修复能解决的。结构上只合并「跑命令」这一处；新增一种类型要改 5 个文件，但类型很少增加，不值得为此建框架。</li>
+<li><b>options 进钥匙串。</b>现在没有哪个插件要存密钥。第一个要存的插件出现时再做。</li>
+</ul>
+
+<h2>验证记录</h2>
+<div class="box">
+<p><b>已验：</b>下面的探针都在临时 HOME、配置目录和 runtime 里跑，用的是 <code>target/release/mooring</code>（构建晚于这些插件代码的最后一次改动 <code>e0742f2</code>），或直接链接 <code>mooring-core</code> 调真实加载器。所有输出都亲眼看过。</p>
+<p><b>没验：</b>标了「源码」的条目没有在真实 App 里点过，包括 F02 的两个按钮和 F11 的后台行为；F25 的卡顿程度没量；App 和 CLI 同时装卸、替换目录时崩溃，都没做故障注入；真实 webhook 没发过。Codex 也没有跑当前 HEAD 的端到端，它的条目都由 Claude 复核，复核方式见依据列。</p>
+<p><b>相邻情况：</b>hook 和装饰的进程组、quota 的代际已确认没问题，所以没有重复报。setup 的 F13、F14 是实跑；quota 同样的写法只读了源码，没跑。</p>
+</div>
+<div class="wrap"><table>
+<tr><th>探针</th><th>做了什么</th><th>看到什么</th></tr>
+<tr><td class="n">V1</td><td>从 <code>plugins.md</code> 取出 hook 示例原样执行，<code>MOORING_DETAIL</code> 带 AppleScript 载荷</td><td>标记文件被创建，事件文字里的 shell 命令执行了</td></tr>
+<tr><td class="n">V2</td><td>v1 正常，v2 哈希正确但事件名不合法</td><td>安装退出码 0，之后 <code>✗ Hooks hooks.json：unknown variant</code>，旧版已经没了</td></tr>
+<tr><td class="n">V3</td><td>v1 的 setup 写外部文件，v2 去掉 setup，再卸载</td><td>两步之后外部文件都还在</td></tr>
+<tr><td class="n">V4</td><td>全新安装，setup 退出 9</td><td>报错退出，但 <code>mooring plugins</code> 显示 <code>✓ f</code></td></tr>
+<tr><td class="n">V6</td><td>同一文件两个 quota source；改指针后重载</td><td><code>Codex used=11</code>（应为 77）；改指针后仍是 11</td></tr>
+<tr><td class="n">T1 / P1</td><td>两个插件同用 hook id；分别走 CLI 检查和真实加载器</td><td>CLI 两个 ✓；加载器 <code>b-notify =&gt; Err("和前面的插件重名")</code>，只加载 1 个</td></tr>
+<tr><td class="n">T2</td><td>hook 同时写 command 和 webhook</td><td><code>✗ 要写 command 或 webhook 其中一个</code></td></tr>
+<tr><td class="n">T3</td><td>类型文件里加新字段、新事件名</td><td>两种都是整份 <code>✗</code></td></tr>
+<tr><td class="n">T4</td><td><code>timeout_ms:200</code> 的 setup 带 <code>sleep 6 &amp;</code></td><td>耗时 6053 ms，退出码 0</td></tr>
+<tr><td class="n">T5</td><td>setup 超时，子进程 7 秒后写文件</td><td>超时报错，文件仍被写出；插件显示 ✓</td></tr>
+<tr><td class="n">T6</td><td>teardown 退出 3，再卸载</td><td><code>没有卸载：teardown 失败</code>，目录还在</td></tr>
+<tr><td class="n">T7</td><td><code>mooring: 99</code> 的插件，卸载</td><td><code>没有装叫 broken 的插件</code></td></tr>
+<tr><td class="n">T8</td><td>目录写不联网，包写联网和 <code>~/.ssh/config</code></td><td>安装成功，提示「声明不联网」</td></tr>
+<tr><td class="n">T9</td><td>同 id 的手写插件和目录版本</td><td>显示可更新，无确认替换，<code>NOTES.md</code> 没了，名字换成别人的</td></tr>
+<tr><td class="n">P2</td><td>装饰命令不存在</td><td><code>Ok(None)</code>，运行记录 0 条</td></tr>
+<tr><td class="n">P3</td><td>8 线程写 40 条运行记录</td><td>读回 9 条</td></tr>
+<tr><td class="n">P4</td><td><code>plugin_context::env</code> 跑 1000 次</td><td>每次约 23.9 µs</td></tr>
+<tr><td class="n">P5</td><td>action 用 <code>{plugin_dir}</code></td><td>被拒，提示只能用 5 个变量</td></tr>
+<tr><td class="n">环境</td><td><code>ps eww</code> 看运行中的 Mooring.app 和后台</td><td>两者都是 <code>PATH=/usr/bin:/bin:/usr/sbin:/sbin</code>；这个 PATH 下 node、gh、claude、codex、brew、bun 找不到</td></tr>
+</table></div>
+<p class="note">Codex：codex-cli 0.166.0，默认模型，只读沙箱，单次运行。用量：输入 4,633,187（其中缓存 4,425,984）、输出 21,651（推理 8,520）。独立读代码那一轮没有把 Claude 的判断告诉它。</p>
+</main>
+</body>
+</html>
