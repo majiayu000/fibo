@@ -1,0 +1,313 @@
+//! A demo machine with everything the phone's new fields show, for looking at the app:
+//! `cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`
+//! then paste the printed link into `cd mobile && bunx expo start --web`. Fake Agents, real
+//! host, real relay on 127.0.0.1:8790, and a `HOME` of its own with real git repositories.
+#[path = "remote_v2/common.rs"]
+mod common;
+use common::*;
+use mooring_core::{model::*, protocol::*};
+use serde_json::{json, Value};
+use std::fs;
+use std::process::{Command, Stdio};
+
+fn user(cwd: &str, text: &str) -> Value {
+    json!({"type":"user","uuid":uuid::Uuid::new_v4().to_string(),"cwd":cwd,"entrypoint":"cli","userType":"external","permissionMode":"default","message":{"content":text}})
+}
+fn timed(mut v: Value, at: u64) -> Value {
+    v["timestamp"] = chrono::DateTime::from_timestamp(at as i64, 0)
+        .unwrap()
+        .to_rfc3339()
+        .into();
+    v
+}
+fn call(id: &str, name: &str, input: Value) -> Value {
+    json!({"type":"assistant","uuid":format!("a-{id}"),"message":{"model":"claude-opus-5-5","content":[{"type":"tool_use","id":id,"name":name,"input":input}]}})
+}
+fn result(id: &str, text: &str) -> Value {
+    json!({"type":"user","uuid":format!("r-{id}"),"toolUseResult":{},"message":{"content":[{"type":"tool_result","tool_use_id":id,"content":text}]}})
+}
+fn said(text: &str, last: bool) -> Value {
+    let stop = if last { "end_turn" } else { "tool_use" };
+    json!({"type":"assistant","uuid":uuid::Uuid::new_v4().to_string(),"message":{"model":"claude-opus-5-5","stop_reason":stop,"content":[{"type":"text","text":text}]}})
+}
+
+#[test]
+#[ignore = "manual: a demo machine for the phone app"]
+fn phone_gaps_demo() {
+    let h = Host::start();
+    let home = scratch(&h, "home");
+    let repo = home.join("code/mooring");
+    fs::create_dir_all(repo.join("src/app")).unwrap();
+    fs::create_dir_all(home.join("code/blog")).unwrap();
+    fs::create_dir_all(home.join("code/scratch")).unwrap();
+    git(&repo, &["init", "-q"]);
+    let chat_tsx = "export const a = 1;\nexport const b = 2;\n";
+    fs::write(repo.join("src/app/chat.tsx"), chat_tsx).unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-qm", "one"]);
+    let wt = |name: &str, branch: &str| {
+        let dir = home.join(format!("code/{name}"));
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                branch,
+                &dir.to_string_lossy(),
+            ],
+        );
+        dir.to_string_lossy().into_owned()
+    };
+    let (stripes, pty) = (
+        wt("mooring-quota", "feat/quota-stripes"),
+        wt("mooring-pty", "fix/pty-ci"),
+    );
+    git(&home.join("code/blog"), &["init", "-q"]);
+    fs::write(
+        repo.join("src/app/chat.tsx"),
+        "export const a = 1;\n// Android draws edge to edge.\nexport const b = 3;\n",
+    )
+    .unwrap();
+    let main = repo.to_string_lossy().into_owned();
+    let blog = home.join("code/blog").to_string_lossy().into_owned();
+    let now = mooring_core::content::now();
+    let space = |id: &str, name: &str, cwd: &str| {
+        let edit = Edit::AddSpace(Space {
+            id: id.into(),
+            name: name.into(),
+            cwd: cwd.into(),
+        });
+        h.call(Request::Edit {
+            request: None,
+            edit,
+        })
+        .unwrap();
+    };
+    // What `Host::start` made holds every fake Agent below (`Host::launch`).
+    let edit = Edit::UpdateSpace(Space {
+        id: "s".into(),
+        name: "mooring".into(),
+        cwd: main.clone(),
+    });
+    h.call(Request::Edit {
+        request: None,
+        edit,
+    })
+    .unwrap();
+    space("s-blog", "blog", &blog);
+
+    // A conversation that ended, for 「接着上次的对话」.
+    let notes = home.join("code/notes");
+    fs::create_dir_all(&notes).unwrap();
+    git(&notes, &["init", "-q"]);
+    let notes_dir = notes.to_string_lossy().into_owned();
+    h.claude(
+        "ended",
+        &notes,
+        &[
+            timed(user(&notes_dir, "把审批框换成等宽字体"), now - 7200),
+            timed(said("换好了。", true), now - 7100),
+        ],
+        "sleep 60",
+    );
+    h.call(Request::Stop { id: "ended".into() }).unwrap();
+    // The approval.
+    h.claude(
+        "approve",
+        &repo,
+        &[timed(user(&main, "把 main 推到远端"), now - 120), timed(said("本地检查都过了，准备推送。", false), now - 110)],
+        "sleep 2; printf '%s\\n' 'Bash command' '  git push origin main' 'Do you want to proceed?' '> 1. Yes' '  2. No'; read -r answer; printf '\\033[2J\\033[Hpushed\\n'; sleep 3600",
+    );
+    // Asking through its question tool.
+    h.claude(
+        "ask",
+        std::path::Path::new(&stripes),
+        &[
+            timed(user(&stripes, "侧栏额度条换成竖条纹"), now - 400),
+            call("q1", "AskUserQuestion", json!({"questions":[{"question":"诊断页也一起换吗？","options":[{"label":"都换"},{"label":"只换侧栏"}]}]})),
+        ],
+        "sleep 3600",
+    );
+    // Stopped on an error.
+    h.claude(
+        "failed",
+        std::path::Path::new(&pty),
+        &[
+            timed(user(&pty, "cargo test 失败 3 个用例"), now - 900),
+            json!({"type":"assistant","isApiErrorMessage":true,"message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error: 500"}]}}),
+        ],
+        "sleep 3600",
+    );
+    // In the middle of a long turn: its tools, a test run after the edit, an idle waiter for send.
+    let echo = "while read -r line; do :; done";
+    h.claude(
+        "running",
+        &repo,
+        &[
+            json!({"type":"permission-mode","permissionMode":"default"}),
+            timed(user(&main, "手机端键盘挡住输入框"), now - 720),
+            timed(
+                call("b1", "Bash", json!({"command":"./gradlew assembleRelease"})),
+                now - 700,
+            ),
+            timed(result("b1", "BUILD SUCCESSFUL"), now - 500),
+        ],
+        echo,
+    );
+    h.claude(
+        "writing",
+        std::path::Path::new(&blog),
+        &[
+            json!({"type":"permission-mode","permissionMode":"bypassPermissions"}),
+            timed(user(&blog, "整理十月的周报草稿"), now - 1560),
+        ],
+        echo,
+    );
+    // Finished: the tool line, the diff's test result.
+    h.claude(
+        "review",
+        &repo,
+        &[
+            json!({"type":"permission-mode","permissionMode":"acceptEdits"}),
+            timed(user(&main, "安卓上键盘弹出来把输入框挡住了，看不到自己在打什么"), now - 300),
+            timed(call("c1", "Bash", json!({"command":"bun test"})), now - 290),
+            timed(result("c1", "8 pass 0 fail"), now - 280),
+            timed(call("e1", "Edit", json!({"file_path":"src/app/chat.tsx","old_string":"x","new_string":"y\nz\nw\nv\nu\nt"})), now - 270),
+            timed(result("e1", "ok"), now - 260),
+            timed(call("c2", "Bash", json!({"command":"bunx tsc --noEmit"})), now - 200),
+            timed(result("c2", "ok"), now - 195),
+            timed(call("c3", "Bash", json!({"command":"cargo test -p mooring-host"})), now - 190),
+            timed(result("c3", "test result: ok. 8 passed; 0 failed"), now - 185),
+            timed(said("RN 0.88 在 Android 上强制全屏绘制，键盘弹出时窗口不再缩小。改了两处。\n\n类型检查通过。要我重新打包装到手机上吗？", true), now - 180),
+        ],
+        echo,
+    );
+
+    // In tabs, as the window keeps them: only those count as 要你处理.
+    for t in ["approve", "ask", "failed", "running", "writing", "review"] {
+        let edit = Edit::CreateTab {
+            tab: Tab {
+                id: format!("tab-{t}"),
+                space: "s".into(),
+                default_task: None,
+                title: String::new(),
+                layout: Some(mooring_core::layout::Layout::Leaf(t.into())),
+            },
+        };
+        h.call(Request::Edit {
+            request: None,
+            edit,
+        })
+        .unwrap();
+    }
+    let todo = |id: &str, space: &str, title: &str, agent| {
+        let edit = Edit::AddTask(Task {
+            id: id.into(),
+            space: space.into(),
+            title: title.into(),
+            description: String::new(),
+            acceptance: vec![],
+            agent,
+        });
+        h.call(Request::Edit {
+            request: None,
+            edit,
+        })
+        .unwrap();
+    };
+    todo("t1", "s", "把看板待办接到手机", Agent::Claude);
+    todo("t2", "s", "审批详情补后果说明", Agent::Codex);
+    todo("t3", "s-blog", "写十一月的周报", Agent::Claude);
+
+    // Today's tokens, as each CLI logs them; what `open` runs, a fake on PATH.
+    let usage = |dir: &str, name: &str, lines: Vec<String>| {
+        let dir = h.root.join(dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(name), lines.join("\n") + "\n").unwrap();
+    };
+    let at = timed(json!({}), now - 60)["timestamp"].clone();
+    usage(
+        "claude-home/projects/p",
+        "a.jsonl",
+        (0..40)
+            .map(|i| json!({"type":"assistant","timestamp":at,"message":{"id":format!("m{i}"),"usage":{"input_tokens":120,"cache_creation_input_tokens":12000,"cache_read_input_tokens":900000,"output_tokens":8000}}}).to_string())
+            .collect(),
+    );
+    usage(
+        "codex-home/sessions/2026/11/05",
+        "r.jsonl",
+        vec![json!({"timestamp":at,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":3400000},"last_token_usage":{"input_tokens":3300000,"cached_input_tokens":2400000,"output_tokens":100000}}}}).to_string()],
+    );
+    let bin = scratch(&h, "bin");
+    let claude = bin.join("claude");
+    fs::write(
+        &claude,
+        "#!/bin/sh\necho \"fake claude: $*\"\nexec sleep 3600\n",
+    )
+    .unwrap();
+    let shell = bin.join("fake-shell");
+    fs::write(
+        &shell,
+        format!(
+            "#!/bin/sh\nwhile [ \"$1\" = -l ] || [ \"$1\" = -i ]; do shift; done\nPATH={}:$PATH exec /bin/sh \"$@\"\n",
+            shell_quote(&bin.to_string_lossy())
+        ),
+    )
+    .unwrap();
+    for f in [&claude, &shell] {
+        Command::new("chmod").arg("+x").arg(f).status().unwrap();
+    }
+
+    let (ready, bound) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:8790")
+                .await
+                .unwrap();
+            ready.send(()).unwrap();
+            let _ = mooring_relay::server::serve(listener, Default::default()).await;
+        });
+    });
+    bound.recv().unwrap();
+    let base = "ws://127.0.0.1:8790";
+    let root = h.root.to_string_lossy().into_owned();
+    let paired = Command::new(env!("CARGO_BIN_EXE_mooring"))
+        .args([
+            "remote",
+            "--pair",
+            "--relay",
+            base,
+            "--name",
+            "演示手机",
+            "--role",
+            "full",
+            "--runtime",
+            &root,
+        ])
+        .output()
+        .unwrap();
+    let printed = String::from_utf8(paired.stdout).unwrap();
+    let link = printed
+        .lines()
+        .find(|l| l.starts_with("mooring://pair?"))
+        .expect("pairing link");
+    let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
+        .args(["remote", "--relay", base, "--runtime", &root])
+        .env("HOME", &home)
+        .env("SHELL", &shell)
+        .env("CLAUDE_CONFIG_DIR", h.root.join("claude-home"))
+        .env("CODEX_HOME", h.root.join("codex-home"))
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    println!("PAIRING LINK: {link}");
+    println!("RUNTIME: {root}");
+    println!("HOME: {}", home.display());
+    machine.wait().ok();
+}

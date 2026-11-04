@@ -15,9 +15,9 @@ import { cardTitle } from '@/ui/format';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
 import { choices, questionText } from '@/ui/parse';
-import { spaceName } from '@/ui/row';
+import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
-import { agentName, statusColor, statusWord } from '@/ui/status';
+import { agentName, statusColor } from '@/ui/status';
 import { useTheme } from '@/ui/theme';
 
 type Pending = { text: string; at: number };
@@ -204,10 +204,17 @@ export default function Chat() {
         rule
         title={card ? cardTitle(card) : '对话'}
         sub={
-          <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim }}>
-            {[m && card ? spaceName(m, card) : '', m?.name].filter(Boolean).join(' · ')}
-            {card && online && <Text style={{ color: statusColor(card, t) }}>{` · ${statusWord(card)}`}</Text>}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim, flexShrink: 1 }}>
+              {[m && card ? spaceName(m, card) : '', machines.length > 1 ? m?.name : '', card?.branch].filter(Boolean).join(' · ')}
+            </Text>
+            {card && online && (
+              <>
+                <Text style={{ fontSize: 12, color: t.dim }}> · </Text>
+                <RunningWord c={card} color={statusColor(card, t)} style={{ fontSize: 12, flexShrink: 0 }} />
+              </>
+            )}
+          </View>
         }
         right={
           <Pill
@@ -280,6 +287,8 @@ export default function Chat() {
       ) : (
         <Composer
           agent={agent}
+          model={card?.model}
+          permission={card?.permission}
           running={!!running}
           canStop={supports(m, 'stop')}
           canContinue={online && card?.phase === 'idle'}

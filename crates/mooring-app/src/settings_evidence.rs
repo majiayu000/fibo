@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "settings_evidence/faces.rs"]
 mod faces;
+#[path = "settings_evidence/icons.rs"]
+mod icons;
 #[path = "settings_evidence/plugin_page.rs"]
 mod plugin_page;
 
@@ -48,6 +50,10 @@ pub(super) fn start(
             click(60., 119. + 34. * row, cx);
         };
         let values = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_settings_values()).unwrap();
+        if phase == "icons" {
+            icons::run(handle, &directory, cx).await;
+            return;
+        }
         // Every page in light and dark, for looking at the layout; changes nothing saved.
         if phase == "tour" {
             for (scheme, look) in [("light", crate::ui::appearance::Mode::Light), ("dark", crate::ui::appearance::Mode::Dark)] {

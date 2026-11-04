@@ -7,10 +7,11 @@ import { Icon } from './icons';
 import { mono } from './kit';
 import { Markdown } from './markdown';
 import { readable } from './md/parse';
+import { span } from './parse';
 import { SelectSheet } from './sheets';
 import { clock, useTheme } from './theme';
 
-export type Tools = { commands?: number; files?: { path: string; added: number; removed: number }[] };
+export type Tools = { commands?: number; files?: { path: string; added: number; removed: number }[]; took?: number };
 export type Message = { seq: number; at: number; role: 'user' | 'agent'; text: string; tools?: Tools | null };
 
 const NOTE_MS = 3000;
@@ -72,20 +73,24 @@ export const Mine = memo(function Mine({ text, at, note, tone, copyable }: { tex
   );
 });
 
-/** 「跑了 3 个命令 · 改了 chat.tsx +6 −2」, opening the diff. */
+/** A stretch this long says so even with no command or edit to show: it read and thought. */
+const LONG_S = 60;
+
+/** 「干了 2 分钟 · 跑了 3 个命令 · 改了 chat.tsx +6 −2」, opening the diff. */
 export const Worked = memo(function Worked({ tools, onPress }: { tools: Tools; onPress?: () => void }) {
   const t = useTheme();
   const files = tools.files ?? [];
   const commands = tools.commands ?? 0;
-  if (!commands && !files.length) return null;
+  const took = tools.took ?? 0;
+  if (!commands && !files.length && took < LONG_S) return null;
   const added = files.reduce((n, f) => n + f.added, 0);
   const removed = files.reduce((n, f) => n + f.removed, 0);
   const name = files.length === 1 ? files[0].path.split('/').pop() : `${files.length} 个文件`;
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={[s.worked, { borderColor: t.sep }]}>
       <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13, flex: 1 }}>
-        {commands > 0 && `跑了 ${commands} 个命令`}
-        {commands > 0 && files.length > 0 && ' · '}
+        {[took > 0 ? `干了 ${span(took)}` : '', commands > 0 ? `跑了 ${commands} 个命令` : ''].filter(Boolean).join(' · ')}
+        {(took > 0 || commands > 0) && files.length > 0 && ' · '}
         {files.length > 0 && '改了 '}
         {files.length > 0 && (
           <Text style={{ fontFamily: mono, color: t.ok }}>

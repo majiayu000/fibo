@@ -3418,6 +3418,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "libc",
+ "memchr",
  "mooring-core",
  "mooring-relay",
  "mooring-remote",
