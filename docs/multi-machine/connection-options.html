@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>连接方式调研</title>
+<style>
+  :root { --bg:#0e0f12; --panel:#15171b; --line:#2a2f37; --text:#d6dbe3; --muted:#8a93a1;
+    --blue:#6aa3ff; --green:#4fbf7a; --amber:#e0b341; --red:#e0645c; --chip:#1b2740; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#08090b; color:var(--text); font:14px/1.65 -apple-system,"PingFang SC",sans-serif; }
+  main { max-width:1080px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 6px; } h2 { font-size:17px; margin:40px 0 8px; } h3 { font-size:15px; margin:22px 0 4px; }
+  .muted { color:var(--muted); }
+  .lead { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:14px 0; }
+  table { border-collapse:collapse; width:100%; margin-top:8px; font-size:13px; }
+  th,td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; white-space:nowrap; }
+  a { color:var(--blue); }
+  code { background:#1b1e24; padding:1px 5px; border-radius:4px; font-size:12px; }
+  .y { color:var(--green); } .n { color:var(--red); } .q { color:var(--amber); }
+  .mock { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; max-width:520px; margin:12px 0; }
+  .opt { display:flex; gap:10px; align-items:flex-start; padding:9px 10px; border-radius:8px; border:1px solid transparent; }
+  .opt.on { border-color:#3a4a6a; background:var(--chip); }
+  .radio { width:14px; height:14px; border-radius:50%; border:2px solid var(--muted); margin-top:3px; flex-shrink:0; }
+  .on .radio { border-color:var(--blue); background:radial-gradient(var(--blue) 40%, transparent 45%); }
+  .opt b { display:block; font-weight:600; }
+  .opt small { color:var(--muted); font-size:12px; }
+  .field { margin:4px 0 0 24px; display:flex; gap:6px; }
+  .field span { flex:1; border:1px solid var(--line); border-radius:6px; padding:3px 8px; font-size:12px; color:var(--muted); }
+  .route { margin-top:10px; font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:8px; }
+  .route b { color:var(--amber); font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>连接方式：同类产品怎么做，Mooring 怎么选</h1>
+  <p class="muted">2026-11-04。15 个候选，深挖 8 个，全部只读了官方文档和 README，没装上实测。正文和事实核验在 <code>docs/multi-machine/peerscope/rounds/20261104-s1/</code>。</p>
+
+  <div class="lead">
+    <b>结论</b>：自己有服务器的同类产品，常见做法是「官方服务器默认、设置里能换成自建、能直连就不走服务器」，RustDesk、Syncthing、iroh 三点都写明了；抽查的 5 家都写明中继看不到内容。<br>
+    Mooring 建议一个「连接方式」设置，四个选项：<b>自动（默认）</b>、官方中继、自建中继、只走 ssh/Tailscale。<br>
+    最先做的是<b>显示当前走哪条路、一个来回多久</b>——今天 apple 那条 Tailscale 路 400 ms，界面上看不出来。
+  </div>
+
+  <h2>1 各家怎么连</h2>
+  <table>
+    <tr><th>产品</th><th>官方服务器</th><th>自建</th><th>直连 / 打洞</th><th>服务器看得到内容？</th><th>用户在哪改</th></tr>
+    <tr><td><a href="https://github.com/rustdesk/rustdesk">RustDesk</a><br><span class="muted">远程桌面 · 12.8 万★</span></td><td class="y">有，默认</td><td class="y">有（hbbs/hbbr）</td><td class="y">先打洞，不通才中继</td><td class="muted">自建要填公钥</td><td>⋮ → 网络：ID 服务器、中继服务器、Key</td></tr>
+    <tr><td><a href="https://tailscale.com/kb/1232/derp-servers">Tailscale</a><br><span class="muted">组网</span></td><td class="y">DERP，兜底</td><td class="y">自建 DERP（少见）、Headscale 自建控制面</td><td class="y">大多直连 → tailnet 里自己配的 peer relay → DERP</td><td class="y">看不到（WireGuard）</td><td>一般不用改</td></tr>
+    <tr><td><a href="https://docs.syncthing.net/users/relaying.html">Syncthing</a><br><span class="muted">文件同步 · 9 万★</span></td><td class="y">公共中继池，默认开</td><td class="y">有</td><td class="y">直连优先；走中继时继续试直连</td><td class="y">看不到；明说能看到 IP、设备 ID、流量大小</td><td>监听地址写 <code>relay://…</code></td></tr>
+    <tr><td><a href="https://docs.iroh.computer/concepts/relays">iroh</a><br><span class="muted">Rust P2P 库 · 1.3 万★</span></td><td class="q">公共中继，限速、只适合开发</td><td class="y">开源中继 / 付费独享</td><td class="y">约九成能直连（自述）</td><td class="y">看不到</td><td>代码里配置</td></tr>
+    <tr><td><a href="https://happy.engineering/docs/guides/self-hosting">Happy</a><br><span class="muted">手机遥控 Claude · 2.4 万★</span></td><td class="y">有（桌面端默认）</td><td class="y">有</td><td class="n">查过没有提到</td><td class="y">看不到（只存加密数据）</td><td>App 登录前齿轮 → Server → Server URL；CLI 用 <code>HAPPY_SERVER_URL</code>（<a href="https://github.com/slopus/happy-server">加密说明</a>）</td></tr>
+    <tr><td><a href="https://github.com/getpaseo/paseo">Paseo</a><br><span class="muted">多端遥控 Agent · 2.3 万★</span></td><td class="q">有官方中继仓库，是否托管没写</td><td class="q">未写</td><td class="y">TCP / Tailscale / VPN 直连</td><td class="y">中继端到端加密</td><td>首次启动时问开不开中继</td></tr>
+    <tr><td><a href="https://code.visualstudio.com/docs/remote/tunnels">VS Code 隧道</a></td><td class="y">只有微软 dev tunnels</td><td class="n">文档没提</td><td class="n">没提</td><td class="y">隧道里套 SSH</td><td>要登录 GitHub/微软账号；另有 Remote-SSH</td></tr>
+    <tr><td><a href="https://code.claude.com/docs/en/remote-control">Claude Remote Control</a></td><td class="y">只有 Anthropic</td><td class="n">没有</td><td class="n">没有</td><td class="q">只写了 TLS，全文没有「端到端」</td><td>不能改</td></tr>
+    <tr><td><a href="https://github.com/owenthereal/upterm">upterm</a> / <a href="https://github.com/ekzhang/sshx">sshx</a></td><td class="y">默认官方</td><td>upterm 有 <code>--server</code>；sshx 不支持</td><td class="n">没有</td><td>sshx 端到端；upterm 未写</td><td>命令行参数</td></tr>
+  </table>
+
+  <h2>2 四种做法</h2>
+  <table>
+    <tr><th>做法</th><th>谁</th></tr>
+    <tr><td>官方默认 + 可换自建 + 尽量直连</td><td>RustDesk、Syncthing、iroh、Tailscale</td></tr>
+    <tr><td>官方默认 + 自建，不直连</td><td>Happy、upterm</td></tr>
+    <tr><td>只有官方</td><td>VS Code 隧道、Claude Remote Control、sshx</td></tr>
+    <tr><td>不给服务器，自己组网</td><td>frp、Paseo 不开中继时、<b>Mooring 现在</b></td></tr>
+  </table>
+
+  <h2>3 Mooring 的设置长这样（草图）</h2>
+  <div class="mock">
+    <div style="font-weight:600;margin-bottom:6px">连接 apple 的方式</div>
+    <div class="opt on"><i class="radio"></i><div><b>自动（推荐）</b><small>先直连（局域网、Tailscale），不通走 Mooring 官方中继；走中继时每分钟再试直连</small></div></div>
+    <div class="opt"><i class="radio"></i><div><b>Mooring 官方中继</b><small>看不到内容；能看到两端 IP、路由码的哈希、连接时间和流量大小</small></div></div>
+    <div class="opt"><i class="radio"></i><div><b>自建中继</b><small>经过你自己的服务器</small><div class="field"><span>https://relay.example.com</span><span>注册 key（可选）</span></div></div></div>
+    <div class="opt"><i class="radio"></i><div><b>只走 ssh / Tailscale</b><small>现在的方式：ssh apple</small></div></div>
+    <div class="route">现在走：<b>Tailscale · 一个来回 400 ms</b>（示例）</div>
+  </div>
+
+  <h2>4 要做的事，按顺序</h2>
+  <table>
+    <tr><th>#</th><th>事</th><th>大小</th></tr>
+    <tr><td>1</td><td>显示当前走哪条路、一个来回多久（参照 sshx 的延迟估计）</td><td>小，马上能做</td></tr>
+    <tr><td>2</td><td>桌面连桌面也能走中继（多机第 5 步），复用第 4 阶段的设备配对</td><td>中</td></tr>
+    <tr><td>3</td><td>「自动」：先试已知的局域网 / Tailscale 地址；以后可换 iroh 打洞</td><td>简单版小，iroh 版大</td></tr>
+    <tr><td>4</td><td>官方中继：部署 mooring-relay（机房、域名、限速、带宽费用要先定；不加账号）</td><td>要你授权和机器</td></tr>
+    <tr><td>5</td><td>自建中继说明：一条 docker run + 设置里填两个值</td><td>小</td></tr>
+  </table>
+  <p class="muted">不建议做：自建 Tailscale DERP/Headscale（那是 Tailscale 的事）；账号体系（配对码 + 路由码已够，这比 VS Code、Claude 都轻）。</p>
+
+  <h2>5 待你决定</h2>
+  <ul>
+    <li>默认是不是「自动」。</li>
+    <li>直连不通时默认就走官方中继，还是像 Paseo 那样第一次先问你——前者省事，后者不会在你不知情时把流量交给第三方服务器。</li>
+    <li>官方中继放在哪（国内节点？）、什么域名、谁出机器。</li>
+    <li>直连先做简单版（试已知地址），还是做打洞：iroh、把 Tailscale 嵌进 App、局域网 mDNS 发现，还没比较。</li>
+  </ul>
+
+  <h2>没做到</h2>
+  <p class="muted">只读了文档没实测；没读源码核对加密实现；Paseo 默认开不开中继、Happy 手机端默认用哪台服务器没核实；tmate 官网没打开，ZeroTier、frp 没细看；没看用户评论。</p>
+</main>
+</body>
+</html>

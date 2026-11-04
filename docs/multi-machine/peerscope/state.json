@@ -1,0 +1,29 @@
+{
+  "name": "Mooring 连接方式",
+  "premise": {
+    "product": "Mooring 连接方式",
+    "from_scratch": null,
+    "baseline": "",
+    "scope": "",
+    "out_of_scope": "",
+    "intent": "",
+    "known_peers": [],
+    "resources": "",
+    "confirmed": false,
+    "confirmed_by": ""
+  },
+  "peers": [],
+  "rubric": {
+    "version": 1,
+    "dimensions": []
+  },
+  "rules": [],
+  "available_skills": [],
+  "rounds": [
+    "20261104-s1"
+  ],
+  "stage": 1,
+  "tiers": {
+    "20261104-s1": "standard"
+  }
+}
