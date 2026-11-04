@@ -47,9 +47,9 @@
   <div class="lead">
     <b>读完源码，结论变了三处：</b>
     <ol>
-      <li><b>和 Mooring 最像的 Rex（Ghostty 作者的新终端）没有自己的中继</b>：把 Tailscale 直接嵌进服务端，身份就是 Tailscale 账号。「Tailscale」选项应该学它内置，而不是让你自己配 ssh。</li>
-      <li><b>官方中继默认开不开，同类分两派</b>：Happy、RustDesk 默认开；Paseo 新装默认关。</li>
-      <li><b>最该先补的是断线续传</b>：Rex 按「已收到多少字节」补发，不重新要整屏。Mooring 每次都要整屏，这也是打开远程画面慢的原因之一。</li>
+      <li><b>和 Mooring 最像的 Rex（Ghostty 作者的新终端）没有自己的中继</b>（官方文档）。按它的第三方兼容服务端，服务端内置 Tailscale、按 Tailscale 账号放行。「Tailscale」选项可以学它内置：被连的电脑不用装 Tailscale，去连的设备仍要装。</li>
+      <li><b>官方中继默认开不开，同类分两派</b>：Happy、RustDesk、Syncthing、upterm、sshx 默认用官方；Paseo 新装默认关。</li>
+      <li><b>值得补断线续传</b>：按兼容实现，Rex 重连时按「已收到多少字节」补发，不重新要整屏。它只省重连，第一次打开仍要整屏，救不了今天的首屏慢（那是网络 400 ms）。</li>
     </ol>
   </div>
 
@@ -74,13 +74,13 @@
     <rect class="box" x="30" y="84" width="80" height="40" rx="6"/><text x="46" y="108">手机</text>
     <rect class="box" x="130" y="84" width="90" height="60" rx="6"/><text x="140" y="108">服务器</text><text class="m" x="140" y="126">数据库</text>
     <rect class="box" x="240" y="84" width="80" height="40" rx="6"/><text x="256" y="108">电脑</text>
-    <text class="m" x="26" y="174">· 离线也能看历史、多设备同步</text>
+    <text class="m" x="26" y="174">· Happy：服务器存消息，多设备同步</text>
     <text class="m" x="26" y="192">· 内容加密，但时间戳、会话 id 等明文</text>
     <text class="m" x="26" y="210">· 永远经服务器，没有直连</text>
 
     <rect class="box" x="360" y="20" width="330" height="260" rx="10"/>
     <text class="t" x="376" y="44">B 无状态转发（看不到内容）</text>
-    <text class="m" x="376" y="64">Paseo、Syncthing、iroh、DERP、RustDesk hbbr、Mooring</text>
+    <text class="m" x="376" y="64">Paseo、Syncthing、iroh、DERP、Mooring（RustDesk 有明文退路）</text>
     <rect class="box" x="380" y="84" width="80" height="40" rx="6"/><text x="396" y="108">手机</text>
     <rect class="box" x="480" y="84" width="90" height="40" rx="6"/><text x="492" y="108">中继</text>
     <rect class="box" x="590" y="84" width="80" height="40" rx="6"/><text x="606" y="108">电脑</text>
@@ -95,9 +95,9 @@
     <rect class="box" x="730" y="84" width="80" height="40" rx="6"/><text x="746" y="108">客户端</text>
     <rect class="box" x="830" y="84" width="100" height="40" rx="6"/><text x="842" y="108">tailnet</text>
     <rect class="box" x="950" y="84" width="80" height="40" rx="6"/><text x="958" y="108">服务端</text>
-    <text class="m" x="726" y="174">· 身份就是 Tailscale 账号，不用配对码</text>
+    <text class="m" x="726" y="174">· 身份是 Tailscale 账号（兼容实现），不用配对码</text>
     <text class="m" x="726" y="192">· 打洞、换路都由 Tailscale 做</text>
-    <text class="m" x="726" y="210">· 要求用户有 Tailscale 账号</text>
+    <text class="m" x="726" y="210">· 两端都要有 Tailscale（被连端可内置）</text>
   </svg>
   </div>
   <table>
@@ -121,7 +121,7 @@
     <tr><td>Paseo</td><td><b>新装中继默认关</b>，只听本机；开了才走 <code>relay.paseo.sh</code></td><td class="q">没找到自动切换</td></tr>
     <tr><td>Syncthing</td><td>公共中继池默认开</td><td class="y">会：局域网 TCP &gt; QUIC &gt; 公网 &gt; 中继，有更好的就换</td></tr>
     <tr><td>iroh</td><td>4 个区域官方中继</td><td class="y">会：每 60 秒检查，同一连接里换路不断线</td></tr>
-    <tr><td>Tailscale</td><td>直连优先，DERP 兜底</td><td class="y">会：有流量时每 3 秒心跳，已直连也每分钟再试</td></tr>
+    <tr><td>Tailscale</td><td>直连优先，DERP 兜底</td><td class="y">会：不是直连就持续探测；已直连也每分钟再试，延迟足够低就不试</td></tr>
     <tr><td>Rex</td><td>没有服务器，默认只听本机</td><td>交给 Tailscale</td></tr>
   </table>
   <p class="muted">第一版只看文档时写错的：Paseo「首次启动会问」→ 实际新装默认关；sshx「不能自建」→ 代码里有 <code>--server</code>；upterm「没写」→ 能读内容；RustDesk「一律加密」→ 有明文退路；iroh「约九成能直连」→ 只是文档说法，源码里没有。</p>
@@ -129,7 +129,7 @@
   <h2>4 Mooring 的设置长这样（草图）</h2>
   <div class="mock">
     <div style="font-weight:600;margin-bottom:6px">连接 apple 的方式</div>
-    <div class="opt on"><i class="radio"></i><div><b>Tailscale（内置）</b><small>Mooring 作为一台设备加入你的 tailnet，只放你自己的账号；不用配 ssh</small></div></div>
+    <div class="opt on"><i class="radio"></i><div><b>Tailscale（内置）</b><small>Mooring 作为一台设备加入你的 tailnet，只放你自己的账号；不用配 ssh。去连的设备要装 Tailscale；开 HTTPS 证书会让设备名进公开日志</small></div></div>
     <div class="opt"><i class="radio"></i><div><b>Mooring 官方中继</b><small>看不到内容；能看到两端 IP、路由码哈希、时间和流量大小</small></div></div>
     <div class="opt"><i class="radio"></i><div><b>自建中继</b><small>填你自己的中继地址和可选的注册 key</small></div></div>
     <div class="opt"><i class="radio"></i><div><b>ssh</b><small>现在的方式：ssh apple</small></div></div>
@@ -139,13 +139,13 @@
   <h2>5 要做的事，按顺序</h2>
   <table>
     <tr><th>#</th><th>事</th><th>学谁</th><th>大小</th></tr>
-    <tr><td>1</td><td>显示走哪条路、一个来回多久</td><td>sshx</td><td>小</td></tr>
-    <tr><td>2</td><td>断线续传：按已收到的字节补发，不重新要整屏；打开时先显示上次画面</td><td>Rex</td><td>中</td></tr>
+    <tr><td>1</td><td>显示走哪条路、一个来回多久</td><td>—</td><td>小</td></tr>
+    <tr><td>2</td><td>断线续传：重连时按已收到的字节补发（只省重连）；首屏慢靠「打开时先显示上次画面」</td><td>Rex（兼容实现）</td><td>中</td></tr>
     <tr><td>3</td><td>桌面连桌面也能走中继（多机第 5 步）</td><td>—</td><td>中</td></tr>
-    <tr><td>4</td><td>Tailscale 内置：tsnet 作为独立设备，按账号放行（Go 库，要做可行性试验）</td><td>Rex</td><td>中到大</td></tr>
+    <tr><td>4</td><td>Tailscale 内置：tsnet 作为独立设备，按账号放行（Go 库，要做可行性试验）</td><td>Rex（兼容实现）</td><td>中到大</td></tr>
     <tr><td>5</td><td>走中继时每分钟试一次直连地址，通了就换</td><td>Syncthing、Tailscale</td><td>小</td></tr>
     <tr><td>6</td><td>官方中继：部署 mooring-relay（机房、域名、限速、费用先定；不加账号）</td><td>Happy、Paseo</td><td>要你授权和机器</td></tr>
-    <tr><td>7</td><td>自建中继说明：一条 docker run + 两个设置</td><td>RustDesk、upterm</td><td>小</td></tr>
+    <tr><td>7</td><td>自建中继说明：一条 docker run + 两个设置</td><td>—</td><td>小</td></tr>
   </table>
   <p class="muted">不建议做：自己写打洞（用 Tailscale 或 iroh）；中继退回明文或解开内容（RustDesk、upterm 的反面例子）；另做账号体系。</p>
 

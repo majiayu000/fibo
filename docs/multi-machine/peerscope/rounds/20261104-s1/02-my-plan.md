@@ -9,15 +9,15 @@
 |---|---|---|
 | 走法 | 只有 ssh（用户自己保证能连，比如 Tailscale） | 只有自建中继 `mooring-relay`，配对链接带中继地址 |
 | 加密 | ssh | Noise 端到端（和 Paseo 同类做法）；每台手机独立路由码 |
-| 断线后 | 重新 `watch`，整屏重发（今天打开一次要 1.1–1.3 秒） | 同左 |
+| 断线后 | 重新 `watch`，整屏重发（11-04 经 ssh 到 apple 实测，打开到第一屏 1.1–1.3 秒，其中网络一个来回约 400 ms） | 同左 |
 | 官方服务器 | 没有 | 没部署 |
 
 ## 源码看下来，改变了什么
 
-1. **最像 Mooring 的 Rex 没有自己的中继**，把 Tailscale 直接嵌进服务端（tsnet），身份就是 Tailscale 账号，默认只放主人。这说明「Tailscale 选项」可以做得比「让用户自己配 ssh」好得多：不用装 Tailscale 客户端、不用配 ssh、不用配对码。
-2. **官方中继默认开不开，同类分两派**：Happy、RustDesk 默认开；Paseo 新装默认关、要 `--relay`。
-3. **断线续传比加快首屏更值钱**：Rex 按「已收到多少字节」补发，60 秒内不用重新要整屏。Mooring 现在每次重连都要整屏。
-4. **好的中继都在连上后继续找直连**（Tailscale 3 秒心跳、iroh 每 60 秒、Syncthing 按优先级），而且换路时连接不断（iroh 在同一个 QUIC 连接里换）。
+1. **最像 Mooring 的 Rex 没有自己的中继**（官方文档）；按它的第三方兼容服务端，服务端用 tsnet 内置 Tailscale、按 Tailscale 账号放行、默认只放主人。这说明「Tailscale 选项」可以比「让用户自己配 ssh」省事：被连的电脑不用装 Tailscale、不用配 ssh、不用配对码；但去连它的手机或电脑仍要装 Tailscale 并登录。
+2. **官方中继默认开不开，同类分两派**：Happy、RustDesk、Syncthing、upterm、sshx 默认用官方；Paseo 新装默认关、要 `--relay`。
+3. **断线续传**：按兼容实现，Rex 重连时按「已收到多少字节」补发，60 秒内不用重新要整屏。Mooring 现在每次重连都要整屏。它只省重连，第一次打开仍要整屏，所以救不了首屏慢。
+4. **好的实现会在连上后继续找更好的路**（iroh 每 60 秒检查；Syncthing 只拨比当前更好的方式；Tailscale 已直连时每分钟再试，延迟足够低就不试），而且换路时连接不断（iroh 在同一个 QUIC 连接里换）。
 5. **反面例子**：upterm 的服务器会解开 SSH、能读内容；RustDesk 验签失败会退回明文。Mooring 的中继要保持「解不开」，握手失败就断开，不退回明文。
 
 ## 建议：连接方式四选一
@@ -26,7 +26,7 @@
 
 | 选项 | 做什么 | 参照 | 谁能看到什么 |
 |---|---|---|---|
-| **Tailscale（推荐给已有 Tailscale 的人）** | Mooring 后台用 tsnet 作为一台独立设备加入你的 tailnet；对方按 Tailscale 账号放行，默认只放你自己 | Rex | Tailscale 的 DERP 只看到公钥和 WireGuard 密文 |
+| **Tailscale（推荐给已有 Tailscale 的人）** | Mooring 后台用 tsnet 作为一台独立设备加入你的 tailnet；对方按 Tailscale 账号放行，默认只放你自己；去连的设备要装 Tailscale | Rex（兼容实现） | Tailscale 的 DERP 只看到公钥和 WireGuard 密文；若开 HTTPS 证书，设备名会进公开的证书透明日志 |
 | **Mooring 官方中继** | 走你部署的 `mooring-relay`；配对码 + 路由码，不用账号 | Happy、Paseo | 看不到内容；能看到两端 IP、路由码哈希、时间、字节数 |
 | **自建中继** | 同上，换成你自己的地址和可选的注册 key | RustDesk、Happy、sshx | 同上，只是服务器是你的 |
 | **ssh**（现在的方式） | `ssh 主机 mooring remote --stdio` | Paseo 的 remoteSsh、VS Code Remote-SSH | 由 ssh 决定 |
@@ -36,7 +36,7 @@
 ## 要做的事，按顺序
 
 1. **显示走哪条路、一个来回多久**：侧栏机器标题写「Tailscale · 400 ms」「官方中继 · 60 ms」。小，马上能做。
-2. **断线续传**（学 Rex）：`watch` 带上「已收到多少字节」，后台在一段时间、一定字节内补发，不重新要整屏。打开偷看窗也可以先显示上次的画面（之前方向稿的 A）。
+2. **断线续传**（学 Rex 的兼容实现）：`watch` 带上「已收到多少字节」，后台在一段时间、一定字节内补发，不重新要整屏。只省重连；首屏慢要靠另一件事：打开偷看窗时先显示上次的画面（之前方向稿的 A）。
 3. **桌面连桌面也走中继**（多机第 5 步）：复用第 4 阶段的设备配对。
 4. **Tailscale 选项用 tsnet**：后台作为独立 tailnet 设备，按 WhoIs 账号放行。tsnet 是 Go 库，Mooring 是 Rust，要么嵌一个小 Go 辅助进程，要么用 libtailscale 的 C 接口；先做一个可行性试验，量体积和启动时间。
 5. **连上后继续找更好的路**：走中继时每分钟试一次已知的局域网 / Tailscale 地址，通了就换（学 Syncthing、Tailscale）。完整打洞（iroh）等前面做完再评估。
