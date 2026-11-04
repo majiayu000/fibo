@@ -594,7 +594,7 @@ impl Prepared {
             let _ = std::fs::remove_dir_all(&stage);
             err
         };
-        let _held = plugin::lock(&plugins).map_err(&discard)?;
+        let _held = plugin::lock(&plugins).map_err(discard)?;
         let target = plugin::discover(&plugins)
             .into_iter()
             .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))

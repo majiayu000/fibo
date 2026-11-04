@@ -115,14 +115,57 @@ enum Trailing {
     },
 }
 
-/// One module, loaded on first use, and its last answer: an unchanged state is not
-/// asked again, so redraws cost a byte comparison.
+/// One module, compiled off the UI thread on first use, and its last answer: an unchanged
+/// state is not asked again, so redraws cost a byte comparison.
 pub(super) struct Loaded {
-    plugin: Result<host::Plugin, String>,
+    module: Result<host::Module, String>,
+    /// None between a failed call and the next: what it left in its memory is not reused.
+    plugin: Option<host::Plugin>,
     last: Option<(Vec<u8>, Result<Reply, String>)>,
+    /// Calls that failed in a row, and when it may be asked again after too many.
+    failures: u32,
+    paused_until: Option<std::time::Instant>,
 }
-#[derive(Default)]
-pub(super) struct Views(RefCell<HashMap<String, Loaded>>);
+/// What is shown while a module compiles: the classic list, with no message.
+const COMPILING: &str = "正在加载";
+/// Calls that fail in a row before the module is left alone for `PAUSE`: each costs the UI
+/// thread up to its deadline, on every state change.
+const FAILURES: u32 = 3;
+const PAUSE: std::time::Duration = std::time::Duration::from_secs(30);
+/// Sections and rows taken from a reply. The bytes are capped by the host; this caps what
+/// turns into elements, on the UI thread, outside the call's deadline.
+const MAX_SECTIONS: usize = 100;
+const MAX_ROWS: usize = 2000;
+
+/// `Default` makes a new set after a reload; a compile that was going for the old set finds
+/// its id gone and drops what it made.
+pub(super) struct Views {
+    modules: RefCell<HashMap<String, Loaded>>,
+    compiling: RefCell<std::collections::HashSet<String>>,
+    id: u64,
+}
+impl Default for Views {
+    fn default() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        Self {
+            modules: Default::default(),
+            compiling: Default::default(),
+            id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        }
+    }
+}
+
+/// A reply the sidebar will draw, or why not.
+fn accept(reply: Reply) -> Result<Reply, String> {
+    let rows: usize = reply.sections.iter().map(|s| s.rows.len()).sum();
+    if reply.sections.len() > MAX_SECTIONS || rows > MAX_ROWS {
+        return Err(format!(
+            "回复太多（{} 段 {rows} 行，最多 {MAX_SECTIONS} 段 {MAX_ROWS} 行）",
+            reply.sections.len()
+        ));
+    }
+    Ok(reply)
+}
 
 fn engine() -> Result<&'static host::Engine, String> {
     static ENGINE: OnceLock<Result<host::Engine, String>> = OnceLock::new();
@@ -136,12 +179,18 @@ fn engine() -> Result<&'static host::Engine, String> {
         .map_err(Clone::clone)
 }
 
-fn load(preset: &Preset) -> Result<host::Plugin, String> {
+/// Reads and compiles it. Slow: never on the UI thread.
+fn compile(preset: &Preset) -> Result<host::Module, String> {
     let path = preset.wasm_path().ok_or("没有 wasm 文件")?;
     let bytes = std::fs::read(&path).map_err(|e| format!("读不了 {}：{e}", path.display()))?;
-    let engine = engine()?;
-    let module = host::module(engine, &bytes).map_err(|e| format!("不是可用的 wasm：{e}"))?;
-    host::Plugin::new(engine, &module).map_err(|e| format!("加载失败：{e}"))
+    host::module(engine()?, &bytes).map_err(|e| format!("不是可用的 wasm：{e}"))
+}
+fn instantiate(module: &host::Module) -> Result<host::Plugin, String> {
+    host::Plugin::new(engine()?, module).map_err(|e| format!("加载失败：{e}"))
+}
+#[cfg(test)]
+fn load(preset: &Preset) -> Result<host::Plugin, String> {
+    instantiate(&compile(preset)?)
 }
 
 /// The state string a session's group goes by, the same coarse words as the spec.
@@ -186,9 +235,11 @@ impl Workbench {
                 .iter()
                 .map(|l| (l, false))
                 .chain(closed.rows.iter().map(|l| (l, true)))
-                .map(|((s, g, _), closed)| {
+                .map(|(listed, closed)| {
+                    let (s, g, _) = listed;
                     let content = self.workspace.content.get(&s.id);
-                    let b = bucket(*g);
+                    // The sidebar's own answer, so 要你处理 means the same in both.
+                    let b = self.row_bucket(listed);
                     StateSession {
                         id: &s.id,
                         title: self.session_title(s),
@@ -209,8 +260,9 @@ impl Workbench {
                             Bucket::Stopped => content.and_then(|c| first(&c.last_reply)),
                             _ => None,
                         },
+                        // Finished for you to check: 要你处理 now, but still the last word.
                         done: content
-                            .filter(|_| b == Bucket::Done)
+                            .filter(|_| *g == Status::Review)
                             .and_then(|c| first(&c.last_reply)),
                         needs_you: b == Bucket::Attention,
                         closed,
@@ -225,33 +277,94 @@ impl Workbench {
         serde_json::to_vec(&state).unwrap_or_default()
     }
     /// The module's sections for this state, from its last answer when nothing changed.
+    /// The first ask starts its compile and shows the classic list until that lands.
     fn wasm_reply(
         &self,
         preset: &Preset,
         open: &[Listed],
         closed: &Closed,
         current: Option<&str>,
+        cx: &Context<Self>,
     ) -> Result<Reply, String> {
         let state = self.wasm_state(open, closed, current);
-        let mut views = self.sidebar.wasm.0.borrow_mut();
-        let view = views.entry(preset.id.clone()).or_insert_with(|| Loaded {
-            plugin: load(preset),
-            last: None,
-        });
+        let mut views = self.sidebar.wasm.modules.borrow_mut();
+        let Some(view) = views.get_mut(&preset.id) else {
+            self.start_compile(preset, cx);
+            return Err(COMPILING.to_owned());
+        };
         if let Some((input, reply)) = &view.last
             && *input == state
         {
             return reply.clone();
         }
-        let plugin = view.plugin.as_mut().map_err(|e| e.clone())?;
+        let module = view.module.as_ref().map_err(|e| e.clone())?;
+        if let Some(until) = view.paused_until {
+            if std::time::Instant::now() < until {
+                return view
+                    .last
+                    .as_ref()
+                    .map_or(Err("连续出错，稍后再试".to_owned()), |(_, r)| {
+                        r.clone()
+                    });
+            }
+            view.paused_until = None;
+        }
+        let plugin = match view.plugin.take() {
+            Some(p) => p,
+            None => instantiate(module)?,
+        };
+        let mut plugin = plugin;
         let reply = plugin
             .render(&state)
             .map_err(|e| format!("调用出错：{e}"))
             .and_then(|bytes| {
                 serde_json::from_slice::<Reply>(&bytes).map_err(|e| format!("回复格式不对：{e}"))
-            });
+            })
+            .and_then(accept);
+        if reply.is_ok() {
+            view.failures = 0;
+            view.plugin = Some(plugin);
+        } else {
+            // Its instance is dropped: the next call starts clean.
+            view.failures += 1;
+            if view.failures >= FAILURES {
+                view.failures = 0;
+                view.paused_until = Some(std::time::Instant::now() + PAUSE);
+            }
+        }
         view.last = Some((state, reply.clone()));
         reply
+    }
+    /// Compiles a preset's module on a background thread, once, and redraws when it lands.
+    fn start_compile(&self, preset: &Preset, cx: &Context<Self>) {
+        let views = &self.sidebar.wasm;
+        if !views.compiling.borrow_mut().insert(preset.id.clone()) {
+            return;
+        }
+        let (preset, id) = (preset.clone(), views.id);
+        cx.spawn(async move |this, cx| {
+            let key = preset.id.clone();
+            let module = cx.background_spawn(async move { compile(&preset) }).await;
+            let _ = this.update(cx, |this, cx| {
+                let views = &this.sidebar.wasm;
+                if views.id != id {
+                    return;
+                }
+                views.compiling.borrow_mut().remove(&key);
+                views.modules.borrow_mut().insert(
+                    key,
+                    Loaded {
+                        module,
+                        plugin: None,
+                        last: None,
+                        failures: 0,
+                        paused_until: None,
+                    },
+                );
+                cx.notify();
+            });
+        })
+        .detach();
     }
     /// The rows for a `wasm` preset, or the classic list under the reason it failed.
     /// Returns whether the module's answer is shown: it then owns the closed sessions too.
@@ -266,8 +379,14 @@ impl Workbench {
         out: &mut Vec<gpui::AnyElement>,
         cx: &Context<Self>,
     ) -> bool {
-        let reply = match self.wasm_reply(preset, &sessions, closed, current) {
+        let reply = match self.wasm_reply(preset, &sessions, closed, current, cx) {
             Ok(r) => r,
+            Err(why) if why == COMPILING => {
+                for l in sessions {
+                    push(out, l, None, End::State);
+                }
+                return false;
+            }
             Err(why) => {
                 out.push(
                     label(format!(
@@ -583,6 +702,43 @@ mod tests {
         let err = load(presets.last().unwrap()).err().unwrap();
         assert!(err.contains("不是可用的 wasm"), "{err}");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// 要你处理 has one owner: what a module is told must come from the sidebar's answer, not
+    /// from the state's raw bucket, or a resume not taken yet would be pinned on top for it.
+    #[test]
+    fn modules_are_told_needs_you_by_the_sidebars_own_answer() {
+        let source = include_str!("sidebar_wasm.rs");
+        let raw = ["let b = ", "bucket(*g)"].concat();
+        assert!(!source.contains(&raw));
+        assert!(source.contains(&["let b = ", "self.row_bucket(listed)"].concat()));
+    }
+
+    #[test]
+    fn a_reply_too_big_to_draw_is_refused() {
+        let section = |rows: usize| Section {
+            id: "s".into(),
+            title: None,
+            count: None,
+            folded_default: false,
+            rows: (0..rows)
+                .map(|_| serde_json::from_str(r#"{"kind":"Note","text":"x"}"#).unwrap())
+                .collect(),
+        };
+        assert!(
+            accept(Reply {
+                sections: vec![section(MAX_ROWS)]
+            })
+            .is_ok()
+        );
+        let err = accept(Reply {
+            sections: vec![section(MAX_ROWS + 1)],
+        })
+        .err()
+        .unwrap();
+        assert!(err.contains("太多"), "{err}");
+        let many = (0..=MAX_SECTIONS).map(|_| section(0)).collect();
+        assert!(accept(Reply { sections: many }).is_err());
     }
 
     /// What one left-column draw spends on a real workspace, step by step, for the

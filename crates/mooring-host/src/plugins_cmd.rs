@@ -210,9 +210,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
             use std::io::IsTerminal;
             if prepared.must_ask && !yes {
                 if !std::io::stdin().is_terminal() {
-                    return Err(io::Error::other(
-                        "它会在这台电脑上运行命令：确认上面这些后加 --yes 再装",
-                    ));
+                    return Err(io::Error::other("先确认上面这些，再加 --yes 安装"));
                 }
                 eprint!("确认安装？[y/N] ");
                 let mut answer = String::new();

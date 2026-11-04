@@ -378,7 +378,7 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
         warnings.push(format!("它的数据目录 {} 没删掉：{e}", data.display()));
     }
     let mut off = disabled(plugins);
-    if off.iter().any(|d| *d == data_id) {
+    if off.contains(&data_id) {
         off.retain(|d| *d != data_id);
         write_switches(plugins, &off).map_err(|e| format!("没能更新插件开关：{e}"))?;
     }

@@ -104,23 +104,34 @@ impl Mirror {
             return Ok(());
         }
         std::fs::create_dir_all(&self.dir)?;
+        let mut moved = false;
         for (session, cwd, t, title) in changed {
-            self.write_session(conn, source, &session, &cwd)?;
+            moved |= self.write_session(conn, source, &session, &cwd)?;
             if let Some(title) = title.filter(|t| self.cursors.titles.get(&session) != Some(t)) {
                 let record =
                     serde_json::json!({"_t": t, "_session": session, "_cwd": cwd, "_title": title});
                 self.append(&session, format!("{record}\n").as_bytes())?;
                 self.cursors.titles.insert(session.clone(), title);
+                moved = true;
             }
+            moved |= t > self.cursors.sessions;
             self.cursors.sessions = self.cursors.sessions.max(t);
         }
-        self.save()
+        // The boundary is read again on every poll: only something new is worth a write.
+        if moved {
+            self.save()
+        } else {
+            Ok(())
+        }
     }
 
     fn changed(&self, conn: &Connection, source: &RecordSource) -> rusqlite::Result<Vec<Changed>> {
         let mut stmt = conn.prepare_cached(&source.sessions)?;
         let has_title = stmt.column_names().contains(&"_title");
-        let rows = stmt.query_map([self.cursors.sessions], |r| {
+        // Sessions are asked for by `updated > cursor`, in the CLI's own clock: another write in
+        // the very moment the cursor stands on would never come up again. So that moment is
+        // always read once more; the row cursors keep what was written from being repeated.
+        let rows = stmt.query_map([self.cursors.sessions.saturating_sub(1)], |r| {
             Ok((
                 r.get::<_, String>("_session")?,
                 r.get::<_, String>("_cwd")?,
@@ -141,7 +152,7 @@ impl Mirror {
         source: &RecordSource,
         session: &str,
         cwd: &str,
-    ) -> io::Result<()> {
+    ) -> io::Result<bool> {
         let (mut t, mut id) = self
             .cursors
             .rows
@@ -175,11 +186,11 @@ impl Mirror {
             }
         }
         if lines.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
         self.append(session, &lines)?;
         self.cursors.rows.insert(session.to_owned(), (t, id));
-        Ok(())
+        Ok(true)
     }
 
     /// One write per batch: the watcher never sees half a row.
@@ -261,6 +272,60 @@ mod tests {
             .lines()
             .map(|l| serde_json::from_str(l).unwrap())
             .collect()
+    }
+
+    /// A session written in the same instant the cursor already reached still comes up, and
+    /// reading that instant again repeats nothing and saves nothing.
+    #[test]
+    fn a_write_in_the_cursors_own_instant_is_not_lost() {
+        let root = std::env::temp_dir().join(format!("kl-mirror-same-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let (source, writer) = fixture(&root);
+        let out = root.join("out");
+        writer
+            .execute_batch(
+                "INSERT INTO session VALUES('a','/w',100);
+                 INSERT INTO part VALUES('1','a',1,'user','{}');",
+            )
+            .unwrap();
+        let mut mirror = Mirror::open(&out);
+        let mut db = None;
+        mirror.poll(&source, &mut db).unwrap();
+        writer
+            .execute_batch(
+                "INSERT INTO session VALUES('b','/w',100);
+                 INSERT INTO part VALUES('2','b',1,'user','{}');
+                 INSERT INTO part VALUES('3','a',2,'assistant','{}');",
+            )
+            .unwrap();
+        mirror.poll(&source, &mut db).unwrap();
+        assert_eq!(
+            lines(&out.join("b.jsonl")).len(),
+            1,
+            "the new session came up"
+        );
+        assert_eq!(
+            lines(&out.join("a.jsonl")).len(),
+            2,
+            "and the old one's new row, once"
+        );
+        let saved = std::fs::metadata(out.join(".cursors.json"))
+            .unwrap()
+            .modified()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        mirror.poll(&source, &mut db).unwrap();
+        assert_eq!(lines(&out.join("a.jsonl")).len(), 2);
+        assert_eq!(
+            std::fs::metadata(out.join(".cursors.json"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            saved,
+            "nothing new, nothing saved"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

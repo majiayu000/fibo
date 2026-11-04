@@ -12,6 +12,9 @@ pub const TICK: Duration = Duration::from_millis(10);
 const DEADLINE_TICKS: u64 = 5;
 /// Linear memory a plugin may grow to.
 const MEMORY_LIMIT: usize = 64 << 20;
+/// The largest reply taken. A left column is rows of short text: past this it is a plugin
+/// misbehaving, and reading it would happen on the UI thread, outside the call's deadline.
+pub const REPLY_LIMIT: usize = 1 << 20;
 
 pub fn engine() -> Result<Engine> {
     let mut config = Config::new();
@@ -85,8 +88,8 @@ impl Plugin {
         let mut header = [0u8; 4];
         self.memory.read(&self.store, out as usize, &mut header)?;
         let n = u32::from_le_bytes(header) as usize;
-        if n > MEMORY_LIMIT {
-            bail!("reply of {n} bytes");
+        if n > REPLY_LIMIT {
+            bail!("回复太大（{n} 字节，最多 {REPLY_LIMIT}）");
         }
         let mut reply = vec![0u8; n];
         self.memory
@@ -114,4 +117,60 @@ pub fn start_ticker(engine: &Engine) {
             engine.increment_epoch();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A module whose `render` returns a pointer to a reply it claims is `claimed` bytes, or
+    /// loops forever when `spin` is set after the first `call`.
+    fn module_text(claimed: u32, body: &str) -> Vec<u8> {
+        wat::parse_str(format!(
+            r#"(module
+              (memory (export "memory") 2)
+              (global $calls (mut i32) (i32.const 0))
+              (func (export "alloc") (param i32) (result i32) (i32.const 1024))
+              (func (export "dealloc") (param i32 i32))
+              (data (i32.const 2048) "{{}}")
+              (func (export "render") (param i32 i32) (result i32)
+                (global.set $calls (i32.add (global.get $calls) (i32.const 1)))
+                {body}
+                (i32.store (i32.const 2044) (i32.const {claimed}))
+                (i32.const 2044)))"#
+        ))
+        .unwrap()
+    }
+
+    fn plugin(engine: &Engine, wasm: &[u8]) -> Plugin {
+        Plugin::new(engine, &module(engine, wasm).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_reply_claiming_too_much_is_refused_before_it_is_read() {
+        let engine = engine().unwrap();
+        let mut ok = plugin(&engine, &module_text(2, ""));
+        assert_eq!(ok.render(b"{}").unwrap(), b"{}");
+        let mut big = plugin(&engine, &module_text(REPLY_LIMIT as u32 + 1, ""));
+        assert!(big.render(b"{}").unwrap_err().to_string().contains("太大"));
+    }
+
+    /// A runaway call is interrupted; the module itself is still good for a new instance.
+    #[test]
+    fn a_runaway_call_is_stopped_and_a_new_instance_answers() {
+        let engine = engine().unwrap();
+        start_ticker(&engine);
+        // Loops on its first call in any instance... unless told by input length not to.
+        let wasm = module_text(
+            2,
+            "(if (i32.eq (local.get 1) (i32.const 1)) (then (loop $l (br $l))))",
+        );
+        let compiled = module(&engine, &wasm).unwrap();
+        let mut first = Plugin::new(&engine, &compiled).unwrap();
+        let at = std::time::Instant::now();
+        assert!(first.render(b"x").is_err());
+        assert!(at.elapsed() < Duration::from_secs(1), "{:?}", at.elapsed());
+        let mut second = Plugin::new(&engine, &compiled).unwrap();
+        assert_eq!(second.render(b"{}").unwrap(), b"{}");
+    }
 }
