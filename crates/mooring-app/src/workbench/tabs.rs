@@ -71,10 +71,12 @@ impl Workbench {
     /// Program titles come from the daemon, which reads every terminal, so tabs in
     /// the back keep theirs. The focused pane's title wins over its siblings'.
     pub(super) fn tab_name(&self, tab: &Tab, _cx: &gpui::App) -> String {
-        self.workspace.tab_title(
+        super::redraw::tab_name(
+            &self.workspace,
             tab,
             &self.store.recognition().terminal_titles,
             self.nav.focused.as_deref(),
+            now(),
         )
     }
     /// Double-click names a tab; an empty name hands it back to its contents.

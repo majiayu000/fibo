@@ -34,6 +34,42 @@ pub(super) fn quotas(w: &Workspace, now: u64) -> Rc<[(Agent, Quota)]> {
     })
 }
 
+/// Tab names, worked out at most once a second per workspace revision, terminal titles
+/// and focus: every frame names every tab, and naming one looks at every session.
+pub(super) fn tab_name(
+    w: &Workspace,
+    tab: &Tab,
+    titles: &std::collections::HashMap<String, String>,
+    focused: Option<&str>,
+    now: u64,
+) -> String {
+    type Key = (
+        u64,
+        u64,
+        Option<String>,
+        std::collections::HashMap<String, String>,
+    );
+    type Seen = Option<(Key, Vec<(Tab, String)>)>;
+    thread_local!(static SEEN: std::cell::RefCell<Seen> = const { std::cell::RefCell::new(None) });
+    SEEN.with_borrow_mut(|seen| {
+        let fresh = seen.as_ref().is_some_and(|((r, t, f, ts), _)| {
+            *r == w.revision && *t == now && f.as_deref() == focused && ts == titles
+        });
+        if !fresh {
+            let key = (w.revision, now, focused.map(str::to_owned), titles.clone());
+            *seen = Some((key, Default::default()));
+        }
+        // A rename asks with the title cleared, so the whole tab is the key.
+        let names = &mut seen.as_mut().expect("set above").1;
+        if let Some((_, name)) = names.iter().find(|(t, _)| t == tab) {
+            return name.clone();
+        }
+        let name = w.tab_title(tab, titles, focused);
+        names.push((tab.clone(), name.clone()));
+        name
+    })
+}
+
 pub(super) struct Redraw {
     sidebar: Entity<SidebarView>,
     /// An empty view inside the workbench: notifying it redraws the workbench (its
@@ -262,6 +298,27 @@ mod tests {
     use mooring_core::content::Content;
     use mooring_core::model::{AgentSession, Outcome, Workspace};
     use mooring_core::quota::{Quota, Window};
+
+    #[test]
+    fn tab_names_follow_the_title_and_revision() {
+        use mooring_core::model::Tab;
+        let mut w = Workspace::default();
+        let tab = |title: &str| Tab {
+            id: "t".into(),
+            space: "s".into(),
+            default_task: None,
+            title: title.into(),
+            layout: None,
+        };
+        let titles = std::collections::HashMap::new();
+        let name = |w: &Workspace, t: &Tab| super::tab_name(w, t, &titles, None, 5);
+        assert_eq!(name(&w, &tab("甲")), "甲");
+        // Renaming shows the automatic name with the title cleared, in the same second.
+        assert_eq!(name(&w, &tab("")), w.tab_title(&tab(""), &titles, None));
+        assert_eq!(name(&w, &tab("乙")), "乙");
+        w.revision += 1;
+        assert_eq!(name(&w, &tab("甲")), "甲");
+    }
 
     #[test]
     fn quotas_show_a_new_reading_by_the_next_second_or_revision() {
