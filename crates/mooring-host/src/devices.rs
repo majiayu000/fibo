@@ -4,6 +4,7 @@
 //! - `remote-log.jsonl`: connections, refusals, and every send, keys and answer.
 //! - `remote-code`: the machine's code its phones find it by on a relay.
 //! - `remote-code-retired`: token hashes of the codes `--new-code` replaced.
+//! - `remote-routes-revoked`: route hashes of phones unpaired, newest last.
 //! - `machine-id`: this machine's id, the same across restarts.
 use mooring_remote::{link::Link, protocol::Machine, secure::Code, wire};
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,15 @@ pub struct Device {
     /// Unix milliseconds of the last "disconnect now": sessions opened before it end.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub kicked: u64,
+    /// This phone's own route code, which its pairing link carries: the relay passes
+    /// only these on to the machine (stage 4). Empty for a phone paired before them,
+    /// which has to pair again.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    route: String,
 }
+
+/// How long a phone "disconnected" from the computer stays out (plan stage 4).
+pub const KICK_COOLDOWN_MS: u64 = 5 * 60 * 1000;
 
 fn is_zero(n: &u64) -> bool {
     *n == 0
@@ -45,6 +54,60 @@ impl Device {
     pub fn key(&self) -> Option<Code> {
         Code::parse(&self.key)
     }
+    pub fn route(&self) -> Option<Code> {
+        Code::parse(&self.route)
+    }
+    /// The hash the relay knows this phone's route by.
+    pub fn route_hash(&self) -> Option<String> {
+        self.route().map(|r| wire::token_hash(&r.token()))
+    }
+    /// Whether a "disconnect now" at `kicked` still keeps it out at `now_ms`.
+    pub fn cooling(&self, now_ms: u64) -> bool {
+        self.kicked != 0 && now_ms < self.kicked + KICK_COOLDOWN_MS
+    }
+}
+
+/// The route hashes of the paired phones, for the relay.
+pub fn routes(devices: &[Device]) -> Vec<String> {
+    let mut all: Vec<String> = devices.iter().filter_map(Device::route_hash).collect();
+    all.truncate(wire::MAX_ROUTES);
+    all
+}
+
+fn revoked_file(socket: &Path) -> PathBuf {
+    socket.with_file_name("remote-routes-revoked")
+}
+
+/// Route hashes of the phones unpaired lately, newest last, at most [`wire::MAX_ROUTES`].
+pub fn revoked(socket: &Path) -> Vec<String> {
+    std::fs::read_to_string(revoked_file(socket))
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| wire::is_token_hash(l))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn revoke(socket: &Path, gone: &Device) -> io::Result<()> {
+    let Some(hash) = gone.route_hash() else {
+        return Ok(());
+    };
+    let mut list = revoked(socket);
+    list.push(hash);
+    let start = list.len().saturating_sub(wire::MAX_ROUTES);
+    write_private(&revoked_file(socket), &(list[start..].join("\n") + "\n"))
+}
+
+fn write_private(path: &Path, text: &str) -> io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    let _ = std::fs::remove_file(&tmp);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&tmp)?
+        .write_all(text.as_bytes())?;
+    std::fs::rename(&tmp, path)
 }
 
 fn file(socket: &Path) -> PathBuf {
@@ -77,7 +140,9 @@ fn save(socket: &Path, devices: &[Device]) -> io::Result<()> {
 
 pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> {
     let key = Code::generate()?;
+    let route = Code::generate()?;
     let device = Device {
+        route: route.text(),
         id: uuid::Uuid::new_v4().simple().to_string()[..12].to_owned(),
         name: name.to_owned(),
         key: key.text(),
@@ -111,6 +176,7 @@ pub fn remove(socket: &Path, needle: &str) -> io::Result<Device> {
     let mut devices = load(socket);
     let gone = devices.remove(find(&devices, needle)?);
     save(socket, &devices)?;
+    revoke(socket, &gone)?;
     Ok(gone)
 }
 
@@ -281,12 +347,13 @@ pub fn pair_link(
     role: Role,
 ) -> io::Result<(Device, String)> {
     Link::websocket_base(relay).map_err(io::Error::other)?;
-    let code = machine_code(socket, false)?;
+    // Made now so the machine has one to register with; the phone never sees it.
+    machine_code(socket, false)?;
     let machine = machine(socket);
     let (device, key) = add(socket, name, role)?;
     let link = Link {
         relay: relay.to_owned(),
-        code,
+        code: device.route().expect("a new device has a route"),
         device: device.id.clone(),
         key,
         machine: machine.id,
@@ -320,7 +387,11 @@ mod tests {
             Role::Answer
         );
         assert_eq!(load(&socket)[1].role, Role::Answer);
+        assert_ne!(a.route_hash(), b.route_hash(), "each phone its own route");
+        assert_eq!(routes(&load(&socket)).len(), 2);
         assert_eq!(remove(&socket, &b.id[..6]).unwrap().name, "iPad");
+        assert_eq!(revoked(&socket), [b.route_hash().unwrap()]);
+        assert_eq!(routes(&load(&socket)), [a.route_hash().unwrap()]);
         assert_eq!(remove(&socket, "iPhone").unwrap().id, a.id);
         assert!(load(&socket).is_empty());
 

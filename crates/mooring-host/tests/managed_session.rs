@@ -5490,10 +5490,8 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     let root = h.root.to_string_lossy().into_owned();
     let full = pair(&root, &base, "全权", "full");
     let viewer = pair(&root, &base, "只看的平板", "view");
-    assert_eq!(
-        full.code, viewer.code,
-        "one machine code, one key per phone"
-    );
+    // Stage 4: each phone its own route and key; none carries the machine's code.
+    assert_ne!(full.code, viewer.code, "one route per phone");
     assert_ne!(full.key, viewer.key);
     let machine = || {
         Command::new(env!("CARGO_BIN_EXE_mooring"))
@@ -5636,6 +5634,62 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     eprintln!("unpaired → session dropped in {took:?}");
     assert!(took < Duration::from_secs(3), "{took:?}");
     assert_eq!(Phone::try_connect(&viewer).err(), Some(Some(4401)));
+
+    // Stage 4's acceptance: the unpaired phone, registering on the relay as a machine with
+    // everything it was given, takes nothing from this one; the other phone carries on.
+    let impostor = {
+        use futures_util::SinkExt;
+        let rt = Phone::rt();
+        let hash = mooring_remote::wire::token_hash(&viewer.code.token());
+        let url = format!("{base}/agent?th={hash}");
+        let mut ws = rt
+            .block_on(tokio_tungstenite::connect_async(url))
+            .unwrap()
+            .0;
+        let register = mooring_remote::wire::Frame::Register {
+            token_hash: hash,
+            name: None,
+            ver: None,
+            key: None,
+            proto: Some(3),
+            retired: vec![],
+            routes: vec![],
+            revoked: vec![],
+        };
+        let text = tokio_tungstenite::tungstenite::Message::text(register.to_text());
+        rt.block_on(ws.send(text)).unwrap();
+        (rt, ws)
+    };
+    std::thread::sleep(Duration::from_millis(300));
+    let mut still = Phone::connect(&full);
+    still.say(json!({ "id": 1, "op": "hello" }));
+    assert_eq!(still.next(|v| v["id"] == 1)["ok"]["role"], "full");
+    drop((still, impostor));
+
+    // A phone paired while the machine is on gets in once its route reaches the relay;
+    // 「断开」 keeps it out for five minutes.
+    let late = pair(&root, &base, "后来的", "view");
+    let mut l = Phone::connect(&late);
+    l.say(json!({ "id": 1, "op": "hello" }));
+    l.next(|v| v["id"] == 1);
+    let out = Command::new(env!("CARGO_BIN_EXE_mooring"))
+        .args(["remote", "--kick", "后来的", "--runtime", &root])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        l.closed(Duration::from_secs(5)),
+        Some(mooring_remote::close::KICKED)
+    );
+    assert_eq!(
+        Phone::try_connect(&late).err(),
+        Some(Some(mooring_remote::close::KICKED)),
+        "back at once after 断开"
+    );
     let listed = Command::new(env!("CARGO_BIN_EXE_mooring"))
         .args(["remote", "--devices", "--runtime", &root])
         .output()
@@ -5876,6 +5930,17 @@ fn the_host_keeps_phones_on_a_relay_and_shows_the_app_who_is_on() {
     until("gone", &|s| {
         s.live.online.is_empty() && s.devices.len() == 1
     });
+    // Stage 4: it stays out for five minutes, then may come back.
+    assert_eq!(
+        Phone::try_connect(&link).err(),
+        Some(Some(mooring_remote::close::KICKED))
+    );
+    let file = h.root.join("remote-devices.json");
+    let mut devices: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+    let kicked = devices[0]["kicked"].as_u64().unwrap();
+    devices[0]["kicked"] = json!(kicked - mooring_host::devices::KICK_COOLDOWN_MS - 1);
+    fs::write(&file, devices.to_string()).unwrap();
     let mut phone = Phone::connect(&link);
     phone.say(json!({ "id": 1, "op": "hello" }));
     phone.next(|v| v["id"] == 1);

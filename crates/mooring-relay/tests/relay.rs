@@ -35,6 +35,8 @@ async fn machine_retiring(base: &str, token: &str, key: Option<&str>, retired: &
         key: key.map(Into::into),
         proto: Some(2),
         retired: retired.iter().map(|t| wire::token_hash(t)).collect(),
+        routes: vec![],
+        revoked: vec![],
     };
     ws.send(Message::text(register.to_text())).await.unwrap();
     ws
@@ -169,7 +171,7 @@ async fn a_phone_reaches_its_machine_both_ways_and_closes_reach_the_other_side()
     };
     assert_eq!(health["ok"], true);
     assert_eq!(health["agents"], 1);
-    assert_eq!(health["protocol"], 2);
+    assert_eq!(health["protocol"], wire::PROTOCOL);
 }
 
 #[tokio::test]
@@ -204,6 +206,8 @@ async fn unknown_tokens_bad_keys_and_bad_hashes_are_refused() {
         key: Some("k".into()),
         proto: None,
         retired: vec![],
+        routes: vec![],
+        revoked: vec![],
     };
     m.send(Message::text(bad.to_text())).await.unwrap();
     assert!(matches!(frame(&mut m).await, Frame::Error { .. }));
@@ -355,4 +359,81 @@ async fn a_phone_that_stops_answering_pings_is_closed_and_its_machine_told() {
             }
         }
     }
+}
+
+/// Stage 4: on protocol 3 each phone reaches its machine only by its own route. The
+/// token the machine registers with routes no phone, so no phone can take its place;
+/// an unpaired phone is told so and the others carry on.
+#[tokio::test]
+async fn phones_reach_a_machine_only_by_their_own_routes() {
+    const A: &str = "phone-a-route-token-0123456789ab";
+    const B: &str = "phone-b-route-token-0123456789ab";
+    let base = relay(Config::default()).await;
+    let hash = wire::token_hash(TOKEN);
+    let (mut m, _) = connect_async(format!("{base}/agent?th={hash}"))
+        .await
+        .unwrap();
+    let register = Frame::Register {
+        token_hash: hash,
+        name: None,
+        ver: None,
+        key: None,
+        proto: Some(3),
+        retired: vec![],
+        routes: vec![wire::token_hash(A), wire::token_hash(B)],
+        revoked: vec![],
+    };
+    m.send(Message::text(register.to_text())).await.unwrap();
+    assert_eq!(frame(&mut m).await, Frame::Registered { proto: Some(3) });
+
+    // The machine's own token is no way in for a phone.
+    assert!(connect_async(format!("{base}/c/{TOKEN}/keepline"))
+        .await
+        .is_err());
+    let _a = phone(&base, A).await;
+    assert!(matches!(frame(&mut m).await, Frame::Wopen { .. }));
+
+    // Phone A unpaired: the machine sends its new list.
+    let routes = Frame::Routes {
+        routes: vec![wire::token_hash(B)],
+        revoked: vec![wire::token_hash(A)],
+    };
+    m.send(Message::text(routes.to_text())).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let mut again = phone(&base, A).await;
+    assert_eq!(closed(&mut again).await, close::UNPAIRED);
+
+    // A registering as a machine with what it knows takes nothing from the real one.
+    let mut fake = registered(&base, A).await;
+    let _b = phone(&base, B).await;
+    assert!(
+        matches!(frame(&mut m).await, Frame::Wopen { .. }),
+        "B still reaches it"
+    );
+    let quiet = tokio::time::timeout(Duration::from_millis(300), fake.next()).await;
+    assert!(quiet.is_err(), "nothing reaches the impostor: {quiet:?}");
+}
+
+/// A machine that never answers `wopened` does not hold a phone open forever.
+#[tokio::test]
+async fn a_phone_the_machine_never_opens_is_closed() {
+    let base = relay(Config {
+        register_timeout: Duration::from_millis(300),
+        ..Config::default()
+    })
+    .await;
+    let mut m = registered(&base, TOKEN).await;
+    let mut p = phone(&base, TOKEN).await;
+    let Frame::Wopen { id, .. } = frame(&mut m).await else {
+        panic!()
+    };
+    assert_eq!(closed(&mut p).await, 1013);
+    assert_eq!(
+        frame(&mut m).await,
+        Frame::Wclose {
+            id,
+            code: Some(1013),
+            reason: None
+        }
+    );
 }

@@ -38,7 +38,7 @@ export function closeOutcome(code?: number): Outcome {
     case Close.UNKNOWN_MACHINE:
       return { status: 'refused', retry: 'never', text: '电脑换了配对码，需要重新配对' };
     case Close.KICKED:
-      return { status: 'offline', retry: 'later', text: '电脑那边断开了这台手机，稍后自动重连' };
+      return { status: 'offline', retry: 'later', text: '电脑那边断开了这台手机，5 分钟后才能再连' };
     case Close.ROLE_CHANGED:
       return { status: 'offline', retry: 'now', text: '这台手机的权限改了，正在按新权限重连' };
     case Close.MACHINE_GONE:

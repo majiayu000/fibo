@@ -392,7 +392,15 @@ async fn connect(
         Err(_) => return (Ended::Lost("连接超时".into()), false),
     };
     let (mut sink, mut stream) = ws.split();
+    let mut paired = Paired::default();
+    // Each phone reaches this machine by its own route; the list goes again on change.
+    let mut sent = (
+        devices::routes(paired.load(socket)),
+        devices::revoked(socket),
+    );
     let register = Frame::Register {
+        routes: sent.0.clone(),
+        revoked: sent.1.clone(),
         token_hash: hash,
         name: Some(name.into()),
         ver: Some(format!("mooring/{}", env!("CARGO_PKG_VERSION"))),
@@ -450,15 +458,20 @@ async fn connect(
     let mut sessions: HashMap<String, Session> = HashMap::new();
     let log = devices::log_file(socket);
     let mut recheck = tokio::time::interval(RECHECK);
-    let mut paired = Paired::default();
     let ended = loop {
         let deadline = tokio::time::Instant::now() + SILENCE;
-        let open = !sessions.is_empty();
         let m = tokio::select! {
             m = tokio::time::timeout_at(deadline, stream.next()) => m,
-            // Only while a phone is on: an unpaired one is dropped within RECHECK, and one
-            // that never finishes its handshake within HANDSHAKE_LIMIT.
-            _ = recheck.tick(), if open => {
+            // A phone paired or unpaired since is told to the relay; an unpaired one on
+            // now is dropped within RECHECK, and one that never finishes its handshake
+            // within HANDSHAKE_LIMIT.
+            _ = recheck.tick() => {
+                let routes = (devices::routes(paired.load(socket)), devices::revoked(socket));
+                if routes != sent {
+                    sent = routes;
+                    let (routes, revoked) = sent.clone();
+                    let _ = out.send(Message::text(Frame::Routes { routes, revoked }.to_text())).await;
+                }
                 let now = paired.load(socket);
                 let gone: Vec<(String, Dropped)> = sessions
                     .iter()
@@ -515,6 +528,11 @@ async fn connect(
             let next = match sessions.remove(&id) {
                 Some(Session::Pairing(device, _)) => {
                     let known = paired.load(socket).iter().find(|d| d.id == device).cloned();
+                    // Disconnected from the computer: stays out for KICK_COOLDOWN_MS.
+                    if known.as_ref().is_some_and(|d| d.cooling(devices::now_ms())) {
+                        close(&out, &id, close::KICKED, "disconnected; try in 5 minutes").await;
+                        continue;
+                    }
                     let answered = known.as_ref().and_then(|d| {
                         let key = d.key()?;
                         secure::respond(&key, payload).ok().map(|r| (d, r))
@@ -921,48 +939,4 @@ fn pump(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn device(id: &str, role: Role, kicked: u64) -> Device {
-        serde_json::from_value(json!({
-            "id": id, "name": id, "key": "", "role": role, "paired": 0, "kicked": kicked,
-        }))
-        .unwrap()
-    }
-
-    #[test]
-    fn each_reason_a_session_ends_has_its_own_close_code() {
-        let since = 1_000;
-        let now = [device("a", Role::Full, 0), device("b", Role::View, 0)];
-        assert_eq!(dropped(&now, "a", Role::Full, since), None);
-
-        // Unpaired: the phone must pair again.
-        assert_eq!(
-            dropped(&now, "gone", Role::Full, since),
-            Some(Dropped::Unpaired)
-        );
-        assert_eq!(Dropped::Unpaired.close().0, close::UNPAIRED);
-
-        // "Disconnect" after the session opened ends it; one from before does not.
-        let kicked = [device("a", Role::Full, since + 1)];
-        assert_eq!(
-            dropped(&kicked, "a", Role::Full, since),
-            Some(Dropped::Kicked)
-        );
-        assert_eq!(Dropped::Kicked.close().0, close::KICKED);
-        let earlier = [device("a", Role::Full, since - 1)];
-        assert_eq!(dropped(&earlier, "a", Role::Full, since), None);
-
-        // A new role: reconnect to get it.
-        assert_eq!(
-            dropped(&now, "b", Role::Full, since),
-            Some(Dropped::RoleChanged)
-        );
-        assert_eq!(Dropped::RoleChanged.close().0, close::ROLE_CHANGED);
-
-        // Three different codes; only unpairing is the "refused" one.
-        let codes = [Dropped::Unpaired, Dropped::Kicked, Dropped::RoleChanged].map(|d| d.close().0);
-        assert_eq!(codes, [4401, 4410, 4411]);
-    }
-}
+mod tests;
