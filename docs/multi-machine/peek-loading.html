@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>远程画面打开慢</title>
+<style>
+  :root { --bg:#0e0f12; --panel:#15171b; --pane:#0b0c0e; --line:#262a31; --text:#d6dbe3; --muted:#8a93a1;
+    --green:#4fbf7a; --amber:#e0b341; --band:#e1e2e5; --red:#e0645c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#08090b; color:var(--text); font:14px/1.65 -apple-system,"PingFang SC",sans-serif; }
+  main { max-width:1000px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 6px; } h2 { font-size:17px; margin:40px 0 8px; }
+  .muted { color:var(--muted); }
+  .rec { font-size:12px; padding:1px 8px; border-radius:10px; background:#1f3a2a; color:var(--green); margin-left:8px; vertical-align:2px; }
+  table { border-collapse:collapse; width:100%; margin-top:8px; font-size:13px; }
+  th,td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  td.n { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .bad { color:var(--red); } .ok { color:var(--green); }
+  .timeline { display:flex; height:28px; border-radius:6px; overflow:hidden; margin:10px 0 4px; font-size:11px; }
+  .timeline div { display:flex; align-items:center; justify-content:center; color:#0b0c0e; }
+  .peek { border:1px solid #3a3f48; border-radius:8px; overflow:hidden; margin:12px 0; background:var(--pane); }
+  .band { background:var(--band); color:#111; font-size:12px; padding:5px 12px; }
+  .band span { opacity:.7; }
+  .bar { display:flex; gap:8px; align-items:center; padding:7px 12px; border-bottom:1px solid var(--line); background:var(--panel); font-size:12px; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--green); }
+  .status { font-size:12px; color:var(--muted); padding:5px 12px; background:var(--panel); border-bottom:1px solid var(--line); }
+  .term { height:120px; padding:8px 12px; font:12px/1.5 Menlo,monospace; color:#c9ced6; position:relative; }
+  .stale { opacity:.55; }
+  .chip { position:absolute; right:10px; top:8px; font:11px -apple-system,sans-serif; color:var(--amber); border:1px solid #5a4a20; border-radius:9px; padding:0 8px; }
+  code { background:#1b1e24; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>远程画面打开要等一秒多：为什么，怎么改</h1>
+  <p class="muted">2026-11-04 实测。「正在恢复终端…」的意思是：偷看窗已经打开，正在等那台电脑把这个终端当前的整屏画面发过来；画面到了才显示。这句话是给本机「后台重启后重新接上终端」写的，用在远程上不准确。</p>
+
+  <h2>慢在哪：网络，不在 Mooring</h2>
+  <table>
+    <tr><th>同一个操作（打开 apple 上「w你好」的画面）</th><th>回复</th><th>第一屏到达</th></tr>
+    <tr><td>本机电脑经 ssh 连 apple（就是 App 走的路）</td><td class="n bad">474 ms</td><td class="n bad">1.1–1.3 秒</td></tr>
+    <tr><td>在 apple 上直接问 apple 的后台（不经网络）</td><td class="n ok">0–1 ms</td><td class="n ok">1 ms</td></tr>
+    <tr><td>本机后台（对照，画面 500 KB）</td><td class="n ok">1 ms</td><td class="n ok">5 ms</td></tr>
+  </table>
+  <p>经 ssh 到 apple 的一个来回现在是 <b>385–829 ms（中位 398 ms）</b>，打开画面要三个来回左右，所以一秒多。今天凌晨测按键回显时同一条路是 15–46 ms。</p>
+  <div class="timeline">
+    <div style="flex:398;background:#e0645c">来回 1</div><div style="flex:398;background:#e0b341">来回 2</div><div style="flex:398;background:#e0b341">来回 3</div><div style="flex:10;background:#4fbf7a"></div>
+  </div>
+  <p class="muted" style="font-size:12px">每格约 400 ms；绿色那一点是两台电脑实际干活的时间。</p>
+  <ul>
+    <li>ssh 里的 <code>apple</code> 指向 <code>100.113.31.23</code>，是 Tailscale 地址，现在这条路每个来回约 400 ms，像是没走直连、在绕中转。</li>
+    <li>直接 <code>ping apple</code> 显示 0.3 ms 是假象：解析出来的 <code>198.18.8.125</code> 是 Clash fake-ip 网段，回包的是本机 Clash，不是 apple。</li>
+    <li>所以先要查的是网络：Tailscale 为什么不直连（<code>tailscale ping</code> 看是不是 DERP），以及 Clash 的 TUN 有没有把 <code>100.64.0.0/10</code> 也接过去绕了代理。这一步我没改你的网络和 ssh 配置。</li>
+  </ul>
+
+  <h2>App 这边可以怎么改（三个方向）</h2>
+
+  <h3>A 先显示上次的画面，再换成最新的<span class="rec">推荐</span></h3>
+  <p>同一个远程终端第二次打开时，立刻显示上次看到的整屏（变暗、右上角写「12 秒前的画面 · 正在更新」），新画面到了就替换。第一次打开仍要等，但状态行写清在等谁。</p>
+  <div class="peek">
+    <div class="band">正在偷看 appledeMacBook-Pro.local 上的终端 <span>· 打的字会发到那台电脑 · Esc 关闭</span></div>
+    <div class="bar"><span class="dot"></span><b>w你好</b><span style="color:var(--green)">等你验收</span></div>
+    <div class="term"><div class="stale">› w你好<br>● 你好！有什么想聊的？<br><br>›</div><span class="chip">12 秒前的画面 · 正在更新</span></div>
+  </div>
+
+  <h3>B 后台一直接着要你处理的远程终端</h3>
+  <p>侧栏里「要你处理」的远程会话，后台就先接上它的画面，点开就是现成的。代价：每个都占一条流、一直传输出；那台电脑会话多时流量不小。</p>
+
+  <h3>C 只改说法，标出网络有多慢</h3>
+  <p>不改机制，状态行改成「正在从 apple 取画面… 网络一个来回 400 ms」，慢的时候你知道是网络。最省事，但还是要等。</p>
+  <div class="peek">
+    <div class="band">正在偷看 appledeMacBook-Pro.local 上的终端 <span>· 打的字会发到那台电脑 · Esc 关闭</span></div>
+    <div class="bar"><span class="dot"></span><b>w你好</b><span style="color:var(--green)">等你验收</span></div>
+    <div class="status">正在从 apple 取画面… 网络一个来回 400 ms</div>
+    <div class="term"></div>
+  </div>
+
+  <h2>三个方向都会做的</h2>
+  <table>
+    <tr><th>地方</th><th>做法</th></tr>
+    <tr><td>「正在恢复终端…」</td><td>远程时改成「正在从 &lt;机器&gt; 取画面…」；本机重连仍叫「恢复」。</td></tr>
+    <tr><td>网络慢的提示</td><td>侧栏机器标题在来回超过 200 ms 时写「网络慢 · 400 ms」，和「旧版，只能看」放在同一处。</td></tr>
+  </table>
+</main>
+</body>
+</html>
