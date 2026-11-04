@@ -1039,6 +1039,7 @@ impl Workbench {
             cols: 100,
             rows: 30,
             scheme: crate::ui::theme::Theme::scheme(),
+            colors: crate::lifecycle::host_colors(),
         };
         let tab_id = tab.id.clone();
         self.begin_busy(None, cx);

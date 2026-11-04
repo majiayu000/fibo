@@ -21,7 +21,7 @@ pub struct State {
     /// viewer that falls behind a burst of output. Attaching again restores it.
     pub dropped: bool,
     /// The scheme `vt` was last repainted with; a fresh screen from the host has none.
-    pub scheme: Option<mooring_core::terminal::Scheme>,
+    pub scheme: Option<mooring_core::terminal::TermColors>,
 }
 pub struct Connection {
     pub state: Arc<Mutex<State>>,

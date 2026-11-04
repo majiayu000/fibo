@@ -34,6 +34,9 @@ pub struct StatusColors {
     seen_title: Option<u32>,
     seen_status: Option<u32>,
     pub seen_dot: SeenDot,
+    /// What the file itself sets: it stays on top of any theme.
+    set_hues: [bool; Status::ALL.len()],
+    set_tones: [bool; Tone::ALL.len()],
 }
 fn index(status: Status) -> usize {
     Status::ALL
@@ -79,6 +82,8 @@ impl Default for StatusColors {
             seen_title: None,
             seen_status: None,
             seen_dot: SeenDot::Ring,
+            set_hues: [false; Status::ALL.len()],
+            set_tones: [false; Tone::ALL.len()],
         }
     }
 }
@@ -97,6 +102,15 @@ impl StatusColors {
                 Err(_) => Self::default(),
             }
         })
+    }
+    pub fn index_of(&self, status: Status) -> usize {
+        index(status)
+    }
+    pub fn sets_status(&self, status: Status) -> bool {
+        self.set_hues[index(status)]
+    }
+    pub fn sets_tone(&self, tone: Tone) -> bool {
+        self.set_tones[tone as usize]
     }
     pub fn hue(&self, status: Status) -> u32 {
         self.hues[index(status)].unwrap_or_else(Theme::muted)
@@ -124,6 +138,7 @@ impl StatusColors {
                     .or_else(|| legacy(key))
                     .ok_or_else(|| format!("unknown status \"{key}\""))?;
                 out.hues[index(at)] = Some(color(value)?);
+                out.set_hues[index(at)] = true;
             }
         }
         if let Some(tone) = root.get("tone").and_then(|v| v.as_object()) {
@@ -134,6 +149,7 @@ impl StatusColors {
                     .find(|t| t.key() == key)
                     .ok_or_else(|| format!("unknown tone \"{key}\""))?;
                 out.tones[at as usize] = color(value)?;
+                out.set_tones[at as usize] = true;
             }
         }
         if let Some(seen) = root.get("seen").and_then(|v| v.as_object()) {

@@ -25,11 +25,11 @@ impl Tone {
     }
     /// The raw hue, for drawings that are not text or chrome (a preview's window buttons).
     pub fn hue(self) -> u32 {
-        StatusColors::get().tone(self)
+        Theme::palette().tones[self as usize].unwrap_or_else(|| StatusColors::get().tone(self))
     }
     /// Dot, ink and wash, by the same formula as the status colors.
     pub fn colors(self) -> (Hsla, Hsla, Hsla) {
-        let (dot, ink, wash) = tone_of(StatusColors::get().tone(self), Theme::palette());
+        let (dot, ink, wash) = tone_of(self.hue(), Theme::palette());
         (hsla(dot), hsla(ink), hsla(wash))
     }
     pub fn dot(self) -> Hsla {

@@ -111,3 +111,23 @@ tests=$(mooring split "$MOORING_TERMINAL" --down --size 0.35 -- "cargo test 2>&1
 mooring read "$tests" --lines 40
 mooring close "$tests"
 ```
+
+## 主题
+
+用户要改配色时，把一个 JSON 文件写进 `~/.config/mooring/themes/`（设了 `XDG_CONFIG_HOME` 时在它下面的 `mooring/themes/`），几秒内出现在设置 › 外观里，不用重启。只有 `bg` 和 `fg` 必填，其余不写就由这两个颜色推导；明暗按 `bg` 判断。颜色一律写 `#rrggbb`：
+
+```json
+{
+  "name": "深海",
+  "bg": "#0f1c2e",
+  "fg": "#d5dfef",
+  "terminal": { "cursor": "#2f81f7", "cursor_text": "#0f1c2e", "selection": "#2a4a70", "bold": "#ffffff", "link": "#7cc4ff", "underline": "#7cc4ff" },
+  "ansi": { "red": "#e5534b", "bright_red": "#ff7b72" },
+  "ui": { "sidebar": "#0b1522", "border": "#23344d", "accent": "#7cc4ff" },
+  "status": { "running": "#e5b83b", "review": "#3fb27f" },
+  "tone": { "ok": "#4cc38a", "warn": "#e5b83b", "danger": "#e5534b" },
+  "space_gradients": [["#f59e6b", "#d9467a"]]
+}
+```
+
+写错或不认识的项会跳过，并显示在设置 › 外观里。文字对比度低于 4.5:1 时告诉用户可能看不清。可写的 `ui` 名字在设置 › 外观 › 调整当前主题里能看到，全部名字以 `crates/mooring-app/src/ui/palette.rs` 的 `ui_tokens!` 为准。用户手上有 iTerm2 的 `.itermcolors` 时，让用户在同一页点「导入」。

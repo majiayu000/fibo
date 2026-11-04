@@ -85,6 +85,7 @@ impl Host {
             cols: 80,
             rows: 24,
             scheme: Default::default(),
+            colors: None,
         })
         .unwrap();
     }

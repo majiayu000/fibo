@@ -1,9 +1,17 @@
 //! Design tokens from specs/terminal-workbench/design/README.md.
 //! UI dimensions live here; terminal cell colors remain owned by the VT.
+pub use super::palette::Palette;
 pub use crate::model::session_state::Status;
 use gpui::{App, Font, Hsla, Rgba, font};
-pub use mooring_core::terminal::Scheme;
-use std::sync::atomic::{AtomicU8, Ordering};
+pub use mooring_core::terminal::{Scheme, TermColors};
+use std::sync::{
+    Mutex,
+    atomic::{AtomicPtr, Ordering},
+};
+
+static DARK: Palette = Palette::of_scheme(Scheme::Dark);
+static CURRENT: AtomicPtr<Palette> = AtomicPtr::new(std::ptr::addr_of!(DARK).cast_mut());
+static KEPT: Mutex<Vec<&'static Palette>> = Mutex::new(Vec::new());
 
 pub fn hsla(c: u32) -> Hsla {
     Rgba {
@@ -56,7 +64,8 @@ pub trait StatusStyle: Copy {
 }
 impl StatusStyle for Status {
     fn hue(self) -> u32 {
-        super::status_colors::StatusColors::get().hue(self)
+        let colors = super::status_colors::StatusColors::get();
+        Theme::palette().status[colors.index_of(self)].unwrap_or_else(|| colors.hue(self))
     }
     fn colors(self) -> (Hsla, Hsla, Hsla) {
         let (dot, ink, bg) = status_colors_in(self, Theme::palette());
@@ -119,182 +128,6 @@ pub const fn mix(from: u32, to: u32, share: u32) -> u32 {
         shift += 8;
     }
     out
-}
-/// Chrome colors for one terminal scheme. Every surface and text tone is a mix of the
-/// terminal's default colors (plus black or white), so the window reads as one surface
-/// with the terminal in either scheme.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Palette {
-    pub terminal_bg: u32,
-    pub terminal_fg: u32,
-    /// White on dark, black on light: past the text, for ink and the one solid control.
-    vivid: u32,
-    ink_share: u32,
-    wash_share: u32,
-    /// Top bar, panes and headers share the terminal's background and are told apart by
-    /// hairlines; the sidebar alone sits one gray step below, as the v3 design has it.
-    pub app: u32,
-    pub sidebar: u32,
-    pub panel: u32,
-    pub pane: u32,
-    pub header: u32,
-    pub todo: u32,
-    pub raised: u32,
-    pub border: u32,
-    pub card_border: u32,
-    pub control: u32,
-    /// Text field outlines: 3:1 against the pane so an empty field is still findable.
-    pub field_edge: u32,
-    /// A quiet fill for ordinary buttons; they carry no outline.
-    pub button: u32,
-    pub button_hover: u32,
-    pub primary: u32,
-    pub body: u32,
-    pub secondary: u32,
-    pub muted: u32,
-    /// The one solid control per view: near-white with dark text on dark, the reverse
-    /// on light; color is left to status.
-    pub accent: u32,
-    pub on_accent: u32,
-    pub focus: u32,
-    pub link: u32,
-    /// Selected text in a field.
-    pub selection: u32,
-    pub chip: u32,
-    /// In-window popovers (「你在这里」, cleanup): one step above the pane on dark; on
-    /// light the pane is already white, so they are white too and float on their shadow.
-    pub popover: u32,
-    pub palette_row: u32,
-    /// Matched text in search results: a quiet amber wash, the text keeps its own color.
-    pub matched: u32,
-    /// Dims the workbench behind the palette, as rgba.
-    pub scrim: u32,
-    /// Data charts only (the diagnostics panel): app identity, never status. Validated as
-    /// adjacent pairs for color-vision deficiency on the popover in each scheme.
-    pub series: [u32; 5],
-    /// Everything ranked past the colored apps.
-    pub series_other: u32,
-    /// Busy time no app accounts for, drawn as a hatch.
-    pub hatch: u32,
-    pub chart_grid: u32,
-    /// A meaningful threshold on an axis, such as one full core.
-    pub chart_ref: u32,
-}
-impl Palette {
-    /// Light shares are set against the contrast floors (text 4.5:1, focus and field edges
-    /// 3:1) and a surface ladder whose steps stay visible; dark keeps its tuned values.
-    const fn new(scheme: Scheme) -> Self {
-        let bg = scheme.bg();
-        let fg = scheme.fg();
-        let light = matches!(scheme, Scheme::Light);
-        let vivid = if light { Theme::BLACK } else { Theme::WHITE };
-        let primary = mix(fg, vivid, 300);
-        let border = mix(bg, fg, by(light, 170, 90));
-        let control = mix(bg, fg, by(light, 300, 150));
-        // Popovers sit one step above the pane: on light that is white, like the pane.
-        let popover = if light {
-            mix(bg, Theme::WHITE, 700)
-        } else {
-            mix(bg, fg, 55)
-        };
-        Self {
-            terminal_bg: bg,
-            terminal_fg: fg,
-            vivid,
-            ink_share: if light { 450 } else { 620 },
-            wash_share: if light { 150 } else { 220 },
-            // On dark the window around the panes is near black (#08080A), as flat.html has it.
-            app: mix(bg, Theme::BLACK, by(light, 70, 430)),
-            panel: bg,
-            // On dark the column sits a step below the terminal's ground, near black
-            // (docs/sidebar-redesign/flat.html), so the panes read as the lit surface.
-            sidebar: if light {
-                mix(bg, fg, 45)
-            } else if scheme.is_lifted() {
-                // A lifted ground's column is a softer step down, so the ground still reads.
-                mix(bg, Theme::BLACK, 330)
-            } else {
-                mix(bg, Theme::BLACK, 450)
-            },
-            pane: bg,
-            header: bg,
-            todo: mix(bg, fg, by(light, 45, 30)),
-            raised: mix(bg, fg, by(light, 105, 70)),
-            border,
-            card_border: mix(bg, fg, by(light, 260, 100)),
-            control,
-            field_edge: mix(bg, fg, by(light, 490, 150)),
-            button: mix(bg, fg, by(light, 90, 60)),
-            button_hover: mix(bg, fg, by(light, 180, 120)),
-            primary,
-            body: fg,
-            secondary: mix(bg, fg, by(light, 720, 580)),
-            muted: mix(bg, fg, by(light, 640, 420)),
-            accent: primary,
-            on_accent: bg,
-            focus: mix(bg, fg, by(light, 760, 380)),
-            link: mix(bg, fg, 860),
-            selection: mix(bg, fg, by(light, 180, 260)),
-            chip: mix(bg, fg, by(light, 120, 80)),
-            popover,
-            palette_row: mix(popover, fg, by(light, 110, 75)),
-            matched: mix(popover, 0xe8a33a, by(light, 350, 280)),
-            scrim: if light { 0x0000_0040 } else { 0x0000_0099 },
-            series: if light {
-                [0x2a78d6, 0xeb6834, 0x1baf7a, 0xeda100, 0xe87ba4]
-            } else {
-                [0x3987e5, 0xd95926, 0x199e70, 0xc98500, 0xd55181]
-            },
-            series_other: mix(bg, fg, by(light, 300, 380)),
-            hatch: mix(bg, fg, by(light, 260, 240)),
-            chart_grid: mix(popover, fg, by(light, 90, 70)),
-            chart_ref: mix(bg, fg, by(light, 450, 420)),
-        }
-    }
-}
-const fn by(light: bool, on_light: u32, on_dark: u32) -> u32 {
-    if light { on_light } else { on_dark }
-}
-const DARK: Palette = Palette::new(Scheme::Dark);
-#[cfg(test)]
-const LIGHT: Palette = Palette::new(Scheme::Light);
-/// One palette per scheme, in `Scheme::ALL` order.
-const PALETTES: [Palette; Scheme::ALL.len()] = {
-    let mut out = [DARK; Scheme::ALL.len()];
-    let mut i = 0;
-    while i < out.len() {
-        out[i] = Palette::new(Scheme::ALL[i]);
-        i += 1;
-    }
-    out
-};
-/// Index into `Scheme::ALL`.
-static SCHEME: AtomicU8 = AtomicU8::new(0);
-/// The sidebar's own dark grays are tuned against the dark terminal; on a lifted scheme
-/// each keeps its place on the ladder below, between or above that terminal's colors,
-/// taken onto the scheme's.
-fn ink(dark: u32) -> u32 {
-    let scheme = Theme::scheme();
-    if scheme.is_lifted() {
-        restate(dark, scheme)
-    } else {
-        dark
-    }
-}
-const fn gray(c: u32) -> u32 {
-    (((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)) / 3
-}
-const fn restate(dark: u32, to: Scheme) -> u32 {
-    let (bg, fg) = (Scheme::Dark.bg(), Scheme::Dark.fg());
-    let (to_bg, to_fg) = (to.bg(), to.fg());
-    let (v, b, f) = (gray(dark), gray(bg), gray(fg));
-    if v <= b {
-        mix(to_bg, Theme::BLACK, (b - v) * 1000 / b)
-    } else if v <= f {
-        mix(to_bg, to_fg, (v - b) * 1000 / (f - b))
-    } else {
-        mix(to_fg, Theme::WHITE, (v - f) * 1000 / (255 - f))
-    }
 }
 macro_rules! tokens {
     ($($name:ident),* $(,)?) => {
@@ -392,158 +225,116 @@ impl Flat {
     pub const SUB_BRANCH: f32 = 14.;
     pub const SUB_TRUNK: f32 = 3.;
     pub const SUB_LEAF: f32 = 20.;
-    fn dark() -> bool {
-        Theme::scheme() != Scheme::Light
-    }
     pub fn bg() -> u32 {
-        if Theme::scheme().is_lifted() {
-            Theme::sidebar()
-        } else if Self::dark() {
-            0x0c0c0f
-        } else {
-            Theme::sidebar()
-        }
+        Theme::palette().sidebar_bg
     }
     pub fn line() -> u32 {
-        if Self::dark() {
-            ink(0x1c1c21)
-        } else {
-            Theme::border()
-        }
+        Theme::palette().sidebar_line
     }
     pub fn field_line() -> u32 {
-        if Self::dark() {
-            ink(0x1f1f25)
-        } else {
-            Theme::border()
-        }
+        Theme::palette().sidebar_field_line
     }
     pub fn chip_line() -> u32 {
-        if Self::dark() {
-            ink(0x23232a)
-        } else {
-            Theme::border()
-        }
+        Theme::palette().sidebar_chip_line
     }
     pub fn chip_on() -> u32 {
-        if Self::dark() {
-            ink(0x1c1c22)
-        } else {
-            Theme::raised()
-        }
+        Theme::palette().sidebar_chip_on
     }
     pub fn chip_on_line() -> u32 {
-        if Self::dark() {
-            ink(0x4a4a54)
-        } else {
-            Theme::control()
-        }
+        Theme::palette().sidebar_chip_on_line
     }
     pub fn hover() -> u32 {
-        if Self::dark() {
-            ink(0x131317)
-        } else {
-            Theme::raised()
-        }
+        Theme::palette().sidebar_hover
     }
     pub fn selected() -> u32 {
-        if Self::dark() {
-            ink(0x17171c)
-        } else {
-            Theme::raised()
-        }
+        Theme::palette().sidebar_selected
     }
     pub fn selected_line() -> u32 {
-        if Self::dark() {
-            ink(0x2a2a31)
-        } else {
-            Theme::control()
-        }
+        Theme::palette().sidebar_selected_line
     }
     /// MOORING and a chosen chip's name.
     pub fn bright() -> u32 {
-        if Self::dark() {
-            ink(0xececee)
-        } else {
-            Theme::primary()
-        }
+        Theme::palette().sidebar_bright
     }
     /// A title that needs you, is running or is being checked.
     pub fn title() -> u32 {
-        if Self::dark() {
-            ink(0xe4e4e7)
-        } else {
-            Theme::primary()
-        }
+        Theme::palette().sidebar_title
     }
     /// A stopped session's title and a chip's name.
     pub fn quiet() -> u32 {
-        if Self::dark() {
-            ink(0xc9c9cf)
-        } else {
-            Theme::body()
-        }
+        Theme::palette().sidebar_quiet
     }
     pub fn second() -> u32 {
-        if Self::dark() {
-            ink(0xa2a2aa)
-        } else {
-            Theme::secondary()
-        }
+        Theme::palette().sidebar_second
     }
     pub fn third() -> u32 {
-        if Self::dark() {
-            ink(0x7e7e87)
-        } else {
-            Theme::muted()
-        }
+        Theme::palette().sidebar_third
     }
     /// The ✓ of a session you marked complete (flat.html `.st.d`).
     pub fn done() -> u32 {
-        if Self::dark() {
-            ink(0x6a6a72)
-        } else {
-            Theme::muted()
-        }
+        Theme::palette().sidebar_done
     }
     /// A stopped session's ring.
     pub fn idle() -> u32 {
-        if Self::dark() {
-            ink(0x45454d)
-        } else {
-            Theme::control()
-        }
+        Theme::palette().sidebar_idle
     }
     /// The bar naming the one space the list is narrowed to.
     pub fn scope() -> u32 {
-        if Self::dark() {
-            ink(0x121216)
-        } else {
-            Theme::raised()
-        }
+        Theme::palette().sidebar_scope
     }
     pub fn key_line() -> u32 {
-        if Self::dark() {
-            ink(0x2a2a31)
-        } else {
-            Theme::control()
-        }
+        Theme::palette().sidebar_key_line
     }
 }
 #[allow(dead_code)] // The complete design palette also covers the deferred components.
 impl Theme {
     pub const WHITE: u32 = 0xffffff;
     const BLACK: u32 = 0x000000;
-    /// The scheme the window and its terminals paint with; read on every render.
+    /// The colors the window paints with; read on every render, so one atomic load.
+    pub fn palette() -> &'static Palette {
+        // SAFETY: CURRENT only ever holds a static or a leaked (never freed) palette.
+        unsafe { &*CURRENT.load(Ordering::Acquire) }
+    }
+    /// A space's gradient, by the space's number.
+    pub fn space_tile(n: usize) -> [u32; 2] {
+        let tiles = &Self::palette().space_tiles;
+        tiles[n % tiles.len()]
+    }
+    /// What terminals paint with.
+    pub fn term() -> TermColors {
+        Self::palette().term
+    }
+    /// Over a terminal's selected cells.
+    pub fn terminal_selection() -> Hsla {
+        Self::palette()
+            .term_selection
+            .map_or(Self::color(Self::focus()).opacity(0.25), |c| {
+                Self::color(c).opacity(0.45)
+            })
+    }
+    /// The nearest built-in scheme.
     pub fn scheme() -> Scheme {
-        Scheme::ALL[SCHEME.load(Ordering::Relaxed) as usize]
+        Self::term().base()
+    }
+    /// Make these the window's colors, reporting whether anything changed. Palettes are
+    /// kept for the life of the process, one per distinct set of colors: a reference to
+    /// one may outlive the switch, and there are only as many as colors were tried.
+    pub fn install(palette: Palette) -> bool {
+        if *Self::palette() == palette {
+            return false;
+        }
+        let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
+        let found = kept.iter().copied().find(|p| **p == palette);
+        let current = found.unwrap_or_else(|| {
+            let leaked: &'static Palette = Box::leak(Box::new(palette));
+            kept.push(leaked);
+            leaked
+        });
+        CURRENT.store(std::ptr::from_ref(current).cast_mut(), Ordering::Release);
+        true
     }
     pub fn set_scheme(scheme: Scheme) {
-        let index = Scheme::ALL.iter().position(|s| *s == scheme).unwrap_or(0);
-        SCHEME.store(index as u8, Ordering::Relaxed);
-    }
-    pub fn palette() -> &'static Palette {
-        &PALETTES[SCHEME.load(Ordering::Relaxed) as usize]
+        Self::install(Palette::of_scheme(scheme));
     }
     /// Search matches drawn over terminal text, in either scheme: the hue of `matched`.
     pub const SEARCH_HIT: u32 = 0xe8a33a;
@@ -591,17 +382,6 @@ impl Theme {
     pub const TAB_SHORT: f32 = 160.;
     /// A space's letter tile in the sidebar.
     pub const SPACE_TILE: f32 = 18.;
-    /// The space tiles' gradients, first color to second, picked in sidebar order so
-    /// the first six never share one. Deep enough for a white letter; no pure red or
-    /// orange, which belong to 出错 and 等你回答.
-    pub const SPACE_TILES: [[u32; 2]; 6] = [
-        [0xf59e6b, 0xd9467a],
-        [0x5ab0f0, 0x4b4fd6],
-        [0x7bd389, 0x2f9e66],
-        [0xc04f9c, 0x8a5ad8],
-        [0x3d62c9, 0x7b8cf0],
-        [0x8a6a2a, 0xb38a3a],
-    ];
     pub const FOOTER: f32 = 26.;
     /// The window's bottom bar, its popovers and the bar's quota gauges.
     pub const STATUSBAR: f32 = 28.;
@@ -984,21 +764,23 @@ mod tests {
 
     #[test]
     fn lifted_schemes_keep_the_dark_sidebar_ladder_on_their_own_colors() {
-        use super::{PALETTES, restate};
-        for (i, scheme) in Scheme::ALL.into_iter().enumerate() {
-            assert_eq!(PALETTES[i].terminal_bg, scheme.bg());
-            if !scheme.is_lifted() {
+        use crate::ui::palette::{Palette, restate};
+        for scheme in Scheme::ALL {
+            assert_eq!(Palette::of_scheme(scheme).terminal_bg, scheme.bg());
+            if scheme.is_light() || scheme == Scheme::Dark {
                 continue;
             }
-            assert_eq!(restate(Scheme::Dark.bg(), scheme), scheme.bg());
-            assert_eq!(restate(Scheme::Dark.fg(), scheme), scheme.fg());
+            let restate = |dark| restate(dark, scheme.bg(), scheme.fg());
+            assert_eq!(restate(Scheme::Dark.bg()), scheme.bg());
+            assert_eq!(restate(Scheme::Dark.fg()), scheme.fg());
             // The sidebar's grays keep their order from ground to bright text.
             let ladder = [
                 0x0c0c0f, 0x121216, 0x1c1c21, 0x45454d, 0x7e7e87, 0xc9c9cf, 0xececee,
             ];
             for pair in ladder.windows(2) {
                 assert!(
-                    super::gray(restate(pair[0], scheme)) < super::gray(restate(pair[1], scheme))
+                    crate::ui::palette::gray(restate(pair[0]))
+                        < crate::ui::palette::gray(restate(pair[1]))
                 );
             }
             // Text stays readable on the ground: about 10:1, never below 7:1.
@@ -1023,9 +805,10 @@ mod tests {
 
     #[test]
     fn light_scheme_swaps_every_surface() {
-        use super::{DARK, LIGHT};
+        use super::{DARK, Palette};
+        const LIGHT: Palette = Palette::of_scheme(Scheme::Light);
         assert_eq!(LIGHT.terminal_bg, Scheme::Light.bg());
-        const { assert!(LIGHT.app < LIGHT.pane && DARK.app < DARK.pane) };
+        assert!(LIGHT.app < LIGHT.pane && DARK.app < DARK.pane);
         // Text stays far from its background in both schemes.
         for p in [DARK, LIGHT] {
             let gap = |a: u32, b: u32| ((a & 255) as i32 - (b & 255) as i32).abs();
@@ -1039,8 +822,8 @@ mod tests {
     /// dots 3:1 even for the pale yellow and green hues; its surfaces step visibly.
     #[test]
     fn light_scheme_meets_contrast_floors() {
-        use super::{LIGHT, Status, contrast, status_colors_in};
-        let p = LIGHT;
+        use super::{Palette, Status, contrast, status_colors_in};
+        let p = Palette::of_scheme(Scheme::Light);
         for (name, text) in [
             ("body", p.body),
             ("secondary", p.secondary),

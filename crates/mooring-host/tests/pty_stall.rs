@@ -532,6 +532,7 @@ fn pty_read_stall_under_load() {
                 cols: 120,
                 rows: 40,
                 scheme: Default::default(),
+                colors: None,
             })
             .unwrap();
         assert!(!matches!(reply, Reply::Error(_)), "{reply:?}");

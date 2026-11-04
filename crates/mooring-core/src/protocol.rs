@@ -90,6 +90,9 @@ pub enum Request {
         /// Hosts before it start every terminal dark.
         #[serde(default)]
         scheme: crate::terminal::Scheme,
+        /// A user's theme; hosts before it read `scheme`, the nearest built-in.
+        #[serde(default)]
+        colors: Option<crate::terminal::TermColors>,
     },
     Attach {
         id: String,
@@ -117,6 +120,9 @@ pub enum Request {
     },
     /// The window switched between light and dark: repaint this terminal's defaults.
     Scheme(crate::terminal::Scheme),
+    /// The same for a user's theme. Sent only to a host of this build: one before it
+    /// would drop the connection on a request it cannot read.
+    Colors(crate::terminal::TermColors),
     /// Cmd+K: drop scrollback and the rows above the cursor (no-op in the alternate screen).
     ClearHistory,
     TerminalCwd {

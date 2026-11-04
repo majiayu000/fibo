@@ -49,7 +49,7 @@ pub(super) fn start(
                 cwd: "/tmp".into(),
                 cols: 100,
                 rows: 30,
-                scheme: Default::default(),
+                scheme: Default::default(), colors: None,
             });
             call(Request::Edit {
                 request: None,
@@ -119,10 +119,10 @@ pub(super) fn start(
         let both = async |name: &str, cx: &mut gpui::AsyncApp| {
             wait(300).await;
             shot(&format!("{name}-light.png"), cx);
-            cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Dark, a).unwrap());
+            cx.update(|a| crate::ui::appearance::set_mode(crate::ui::appearance::Mode::Dark, a).unwrap());
             wait(300).await;
             shot(&format!("{name}-dark.png"), cx);
-            cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Light, a).unwrap());
+            cx.update(|a| crate::ui::appearance::set_mode(crate::ui::appearance::Mode::Light, a).unwrap());
         };
         shot("0-button.png", cx);
         handle.update(cx, |v, _, a| v.visual_phones(true, None, a)).unwrap();

@@ -18,10 +18,12 @@ pub mod reason;
 pub mod rule;
 #[doc(hidden)]
 pub mod sample;
+pub mod scheme;
 pub mod setup;
 pub mod sidebar;
 pub mod status;
 pub mod terminal;
+pub mod theme;
 pub mod time;
 
 pub mod content;

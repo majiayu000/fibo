@@ -143,6 +143,7 @@ impl Session {
             cols: 100,
             rows: 30,
             scheme: Default::default(),
+            colors: None,
         })
         .unwrap();
         let mut stream = UnixStream::connect(h.root.join("workbench.sock")).unwrap();

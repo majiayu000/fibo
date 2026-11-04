@@ -566,6 +566,7 @@ pub(super) fn attach(
                     }
                 }
                 Request::Scheme(scheme) => live.vt.set_scheme(scheme)?,
+                Request::Colors(colors) => live.vt.set_colors(colors)?,
                 Request::ClearHistory => {
                     let clear = mooring_core::terminal::clear_history(live.vt.terminal())?;
                     if !clear.is_empty() {

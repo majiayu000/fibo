@@ -66,7 +66,7 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 </style></head><body><main>
 
 <h1>主题：默认好看，想改什么都能改</h1>
-<p class="sub">要定的事：外观页用哪个方向，以及按什么顺序把外观全部开放给用户。推荐方向 A。下面的外观页可以直接点，整块面板会跟着换色。配色小图的颜色取自 <code>mooring-core/src/terminal.rs</code> 和 <code>ui/theme.rs</code>；面板自身的卡片层次是近似值，以实现时的原生截图为准。</p>
+<p class="sub">阶段 0 到 2 已实现，本页留作设计依据。当时要定的事：外观页用哪个方向，以及按什么顺序把外观全部开放给用户。推荐方向 A。下面的外观页可以直接点，整块面板会跟着换色。配色小图的颜色取自 <code>mooring-core/src/terminal.rs</code> 和 <code>ui/theme.rs</code>；面板自身的卡片层次是近似值，以实现时的原生截图为准。</p>
 
 <h2>现在哪里不对</h2>
 <ul>
@@ -214,7 +214,11 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 </ul>
 
 <h2>决定</h2>
-<ul><li><b>待验证：</b>现在实现修订后的方向 A，等你确认。</li><li><b>采用：</b>Warp 的亮暗两组模型、由少数颜色推导界面、先预览后保存。</li><li><b>采用：</b>能改的尽量都开放，对照 iTerm2 列全，并多开放 Mooring 独有的侧栏和状态色。</li><li><b>改变：</b>之前否定的彩色强调色改为可覆盖，默认仍然不用。</li><li><b>待验证：</b>连字、背景图和按空间主题，看性能和可读性再定。</li></ul>
+<ul>
+<li><b>采用并已实现（阶段 0 到 2）：</b>方向 A、全部颜色进主题文件、导入 <code>.itermcolors</code>、Agent 写主题、应用内编辑器。</li>
+<li><b>性能结果：</b>主题只在切换时计算一次（517 纳秒），绘制只读结果。2000 个会话、60 个终端的工作台，终端帧约 973 万条指令、整窗约 7100 万条，新旧版本和自定义主题下都相同。文件夹每 3 秒扫描一次，50 个文件约 146 微秒，且不在窗口线程上。</li>
+<li><b>待验证：</b>阶段 3 到 5（连字、透明、背景图、分享、按空间主题），先量性能和可读性再定。</li>
+</ul>
 </main>
 <script>
 const S={ink:['曜黑',0xd4d4d8,0x0e0e11],slate:['蓝灰',0xcad3e1,0x21252c],graphite:['石墨',0xd2d2d6,0x232326],warm:['暖灰',0xddd5c8,0x262320],pine:['松绿',0xcbd9d2,0x1d2624],plum:['紫灰',0xd6cfe2,0x25222c]},LIGHT=['亮色',0x1f1e1c,0xffffff];

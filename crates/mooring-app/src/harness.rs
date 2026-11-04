@@ -69,7 +69,7 @@ pub fn start(
                 let fill = if std::env::var_os("MOORING_COMPLETE_FRAMES").is_some() { "i=0; while [ $i -lt 40 ]; do printf '%s\\n' \"  test auth::timeout::retries_after_expiry ... ok   刷新 token 后重新计时 $i 行 0123456789 abcdefghij\"; i=$((i+1)); done; " } else { "" };
                 let script = format!("cat '{}' > '{}'; {fill}printf '%s\\n' '⏺ 已完成，测试全过。'; sleep 600", seed.display(), logs.join(format!("{id}.jsonl")).display());
                 let argv = vec!["/bin/sh".into(), "-c".into(), format!("exec '{}' -c \"$0\" fixture --session-id {id}", claude.display()), script];
-                call(Request::Launch { id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+                call(Request::Launch { colors: None, id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
                 call(Request::Edit { request: None, edit: Edit::CreateTab { tab: Tab { id: format!("tab-{tid}"), space: space.clone(), default_task: None, title: tid.into(), layout: Some(Layout::Leaf(tid.into())) } } });
             };
             let shot = |name: &str, cx: &mut gpui::AsyncApp| {
@@ -248,6 +248,7 @@ pub fn start(
                     cols: 80,
                     rows: 20,
                     scheme: Default::default(),
+                    colors: None,
                 });
             }
             let leaf = |id: &str| Layout::Leaf(id.into());
@@ -365,6 +366,7 @@ pub fn start(
                     cols: 90,
                     rows: 24,
                     scheme: Default::default(),
+                    colors: None,
                 });
             }
             let layout = Layout::Split {
@@ -538,7 +540,7 @@ pub fn start(
                     "s".into()
                 }
             };
-            call(Request::Launch { id: "base".into(), space: space.clone(), argv: vec!["/bin/sh".into(), "-c".into(), "printf '~/mooring $ 我在这块打字\\n'; exec /bin/sh -i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+            call(Request::Launch { colors: None, id: "base".into(), space: space.clone(), argv: vec!["/bin/sh".into(), "-c".into(), "printf '~/mooring $ 我在这块打字\\n'; exec /bin/sh -i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
             call(Request::Edit { request: None, edit: Edit::CreateTab { tab: Tab { id: "tab-base".into(), space, default_task: None, title: "base".into(), layout: Some(Layout::Leaf("base".into())) } } });
             wait(500).await;
             handle.update(cx, |v, _, a| v.visual_peek_show_tab("base", a)).unwrap();
@@ -634,7 +636,7 @@ pub fn start(
             shown_after(cx, 4).await;
             let full = (vec!["base".to_owned(), c, a, b], ());
             // A tab that is not shown gets its pane without the shown tab changing.
-            call(Request::Launch { id: "hidden".into(), space: workspace().spaces[0].id.clone(), argv: vec!["/bin/sh".into(), "-i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+            call(Request::Launch { colors: None, id: "hidden".into(), space: workspace().spaces[0].id.clone(), argv: vec!["/bin/sh".into(), "-i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
             call(Request::Edit { request: None, edit: Edit::CreateTab { tab: Tab { id: "tab-other".into(), space: workspace().spaces[0].id.clone(), default_task: None, title: "other".into(), layout: Some(Layout::Leaf("hidden".into())) } } });
             wait(500).await;
             ok(run(args(&["split", "hidden", "--", "echo pane-hidden"])).await);
@@ -1543,10 +1545,10 @@ pub fn start(
                 assert!(!file.exists(), "a fresh config starts on the defaults");
                 assert!(opens_tab("cmd-t", cx).await, "default ⌘T opens a tab");
                 open_settings(cx).await;
-                cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Dark, a).unwrap());
+                cx.update(|a| crate::ui::appearance::set_mode(crate::ui::appearance::Mode::Dark, a).unwrap());
                 wait(300).await;
                 shot("settings-dark", cx);
-                cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Light, a).unwrap());
+                cx.update(|a| crate::ui::appearance::set_mode(crate::ui::appearance::Mode::Light, a).unwrap());
                 wait(300).await;
                 shot("settings-light", cx);
                 // A taken chord waits for 仍然使用 instead of moving silently.
@@ -1572,7 +1574,7 @@ pub fn start(
                 let saved = std::fs::read_to_string(&file).expect("keys.json written");
                 eprintln!("keys.json after rebind: {}", saved.replace('\n', " "));
                 assert!(saved.contains("new_tab") && saved.contains("cmd-shift-t"));
-                cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Dark, a).unwrap());
+                cx.update(|a| crate::ui::appearance::set_mode(crate::ui::appearance::Mode::Dark, a).unwrap());
                 wait(300).await;
                 shot("settings-rebound-dark", cx);
                 close_settings(cx).await;
@@ -2796,7 +2798,7 @@ pub fn start(
                 seed.display(), logs.join(format!("{id}.jsonl")).display()
             );
             let launch = |tid: &str, argv: Vec<String>| {
-                call(Request::Launch { id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+                call(Request::Launch { colors: None, id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
                 call(Request::Edit { request: None, edit: Edit::CreateTab { tab: Tab { id: format!("tab-{tid}"), space: space.clone(), default_task: None, title: tid.into(), layout: Some(Layout::Leaf(tid.into())) } } });
             };
             launch("agent", vec!["/bin/sh".into(), "-c".into(), format!("exec '{}' -c \"$0\" fixture --session-id {id}", claude.display()), script]);
@@ -2823,10 +2825,10 @@ pub fn start(
             };
             wait(300).await;
             shot("1-peek-light.png", cx);
-            cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Dark, a).unwrap());
+            cx.update(|a| crate::ui::appearance::set_mode(crate::ui::appearance::Mode::Dark, a).unwrap());
             wait(300).await;
             shot("1-peek-dark.png", cx);
-            cx.update(|a| crate::ui::appearance::choose(crate::ui::appearance::Appearance::Light, a).unwrap());
+            cx.update(|a| crate::ui::appearance::set_mode(crate::ui::appearance::Mode::Light, a).unwrap());
             let screen = || match call(Request::ReadScreen { id: "agent".into(), rows: 30 }) { Reply::Text(t) => t, x => panic!("{x:?}") };
             handle.update(cx, |v, _, a| v.visual_peek_answer(true, a)).unwrap();
             let mut answered = false;
