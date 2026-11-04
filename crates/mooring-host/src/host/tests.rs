@@ -1,5 +1,5 @@
 use super::*;
-fn fixture() -> (Host, std::path::PathBuf) {
+pub(super) fn fixture() -> (Host, std::path::PathBuf) {
     let root = std::env::temp_dir().join(format!("kl-snapshot-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
     let (store, _) = Store::open(&root).unwrap();
@@ -36,7 +36,12 @@ fn fixture() -> (Host, std::path::PathBuf) {
     };
     (host, root)
 }
-fn session(id: &str, updated: u64, terminal: Option<&str>, current: bool) -> AgentSession {
+pub(super) fn session(
+    id: &str,
+    updated: u64,
+    terminal: Option<&str>,
+    current: bool,
+) -> AgentSession {
     AgentSession {
         id: id.into(),
         runtime: Agent::Codex,

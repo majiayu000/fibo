@@ -9,7 +9,8 @@
 //! own helper, like a renderer serving a page to its headless browser. Neither does a
 //! port another process of the same tree connects to: that server is a part of the
 //! script, and ends with it. Shells are found among the agent's child processes by the
-//! command the Stop hook listed. The rules and the real cases behind them:
+//! command the Stop hook listed, or after a host restart by what the agent's log says it
+//! ran. The rules and the real cases behind them:
 //! docs/decisions/2026-11-04-background-shell-own-client.md.
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -125,6 +126,53 @@ pub fn look(targets: &[(u32, Vec<(String, String)>)]) -> io::Result<HashMap<Stri
             (id, seen)
         })
         .collect())
+}
+
+/// `(task id, command)` for each of `ids` that this Claude Code log started. A host that
+/// restarted has lost the commands its last Stop hooks listed, and that hook will not
+/// run again while the shell works. The log keeps them, so nothing new is stored.
+pub fn commands_in_log(log: &std::path::Path, ids: &[String]) -> io::Result<Vec<(String, String)>> {
+    let mut reader = io::BufReader::new(std::fs::File::open(log)?);
+    let mut commands: HashMap<String, String> = HashMap::new();
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut line = Vec::new();
+    while io::BufRead::read_until(&mut reader, b'\n', &mut line)? > 0 {
+        // Most lines are neither: don't parse them.
+        let used = contains(&line, b"\"name\":\"Bash\"");
+        let started = contains(&line, b"with ID: ");
+        if used || started {
+            let value: serde_json::Value = serde_json::from_slice(&line).unwrap_or_default();
+            let blocks = value.pointer("/message/content").and_then(|c| c.as_array());
+            for block in blocks.into_iter().flatten() {
+                if let (Some(id), Some(command)) = (
+                    block["id"].as_str(),
+                    block.pointer("/input/command").and_then(|c| c.as_str()),
+                ) {
+                    commands.insert(id.to_owned(), command.to_owned());
+                }
+                let Some(used_by) = block["tool_use_id"].as_str() else {
+                    continue;
+                };
+                let text = block["content"].to_string();
+                let task = ids.iter().find(|id| {
+                    text.split("with ID: ")
+                        .skip(1)
+                        .any(|rest| rest.starts_with(id.as_str()))
+                });
+                // The first mention is the start; later ones are output quoting the id.
+                if let (Some(task), Some(command)) = (task, commands.get(used_by)) {
+                    if !out.iter().any(|(id, _)| id == task) {
+                        out.push((task.clone(), command.clone()));
+                    }
+                }
+            }
+        }
+        line.clear();
+    }
+    Ok(out)
+}
+fn contains(line: &[u8], needle: &[u8]) -> bool {
+    line.windows(needle.len()).any(|w| w == needle)
 }
 
 /// Whether a shell's argv runs `command`. Claude Code passes it as `eval '<command>'`,
@@ -343,6 +391,11 @@ mod tests {
                 false,
             ),
             (
+                "polling loop first seen after the host restarted, 2026-11-05",
+                &[Some(YOUNG)],
+                true,
+            ),
+            (
                 "tail -f: no port, past the limit",
                 &[Some(YOUNG), Some(OLD)],
                 false,
@@ -463,6 +516,35 @@ s.listen(); time.sleep(30)' # srv-7f3a"#;
             "{again:?}"
         );
         assert!(!seen.contains_key("gone"));
+    }
+    #[test]
+    fn a_log_gives_back_the_command_of_each_background_task() {
+        // Shaped as Claude Code 2.1.318 writes them, including a shell moved to the
+        // background by hand and a task another session started.
+        let rows = [
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"sleep 1; echo 'one'","run_in_background":true}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"tool_use_id":"t1","type":"tool_result","content":"Command running in background with ID: aaa. Output is being written to: /x"}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"cargo test"}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"tool_use_id":"t2","type":"tool_result","content":[{"type":"text","text":"Command was manually backgrounded with ID: bbb"}]}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t3","name":"Bash","input":{"command":"not asked for"}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"tool_use_id":"t3","type":"tool_result","content":"Command running in background with ID: ccc."}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t4","name":"Bash","input":{"command":"grep aaa log"}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"tool_use_id":"t4","type":"tool_result","content":"log: running in background with ID: aaa."}]}}"#,
+            "not json with ID: aaa",
+        ];
+        let dir = std::env::temp_dir().join(format!("kl-shells-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("s.jsonl");
+        std::fs::write(&log, rows.join("\n")).unwrap();
+        let got = commands_in_log(&log, &["aaa".to_owned(), "bbb".to_owned()]).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(
+            got,
+            [
+                ("aaa".to_owned(), "sleep 1; echo 'one'".to_owned()),
+                ("bbb".to_owned(), "cargo test".to_owned()),
+            ]
+        );
     }
     /// A real script with its own fixed-port server and client, beside a server whose
     /// client is outside its tree. Undoing the own-client check fails this.
