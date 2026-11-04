@@ -1,4 +1,4 @@
-<!-- 从老仓库 keepline/specs/plugins/plugin-system.md 搬来（2026-11-03），保留原文作为插件系统的历史规格；其中 keepline / keeplined / next/ 是改名前的路径。现状和下一步见同目录 index.html。 -->
+<!-- 从老仓库 keepline/specs/plugins/plugin-system.md 搬来（2026-11-03），保留原文作为插件系统的历史规格；其中 keepline / keeplined / next/ 是改名前的路径；`specs/` 开头的路径都在老仓库里，只有 `specs/complete-animation/directions.html` 已迁到本仓库 `docs/complete-animation/directions.html`。现状和下一步见同目录 index.html。 -->
 
 # Keepline 插件系统规格
 

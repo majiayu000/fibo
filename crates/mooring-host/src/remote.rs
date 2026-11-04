@@ -3,7 +3,8 @@
 //! (`ssh host mooring remote --stdio`); a later transport carries the same lines.
 //! Requests run one after another in the order sent, so text then Enter arrive in that
 //! order; `events` and `watch` are streams that run beside them until closed.
-//! The message shapes are in `specs/extensions/remote-protocol.md`.
+//! The message shapes are in the Keepline repo's `specs/extensions/remote-protocol.md`
+//! (not moved here).
 use crate::control::{self, Args, Phase};
 use base64::Engine;
 use mooring_core::{model::*, protocol::*, terminal::Vt};

@@ -1,4 +1,4 @@
-//! 手机: the title bar's phone button and its panel (direction B in
+//! 手机: the title bar's phone button and its panel (direction B in the Keepline repo's
 //! `specs/extensions/design/phone-pairing.html`). The button shows once phones are on or
 //! paired: green with a count while any is connected, so a phone typing here is never
 //! out of sight. The panel lists the paired phones, what each connected one watches and

@@ -1,8 +1,8 @@
-//! 鸟瞰 as a board (specs/overview-kanban/kanban.html): one column per thing you might do
-//! next, left to right in the order work moves; what waits on you or failed has its own
-//! column, 要你处理 (decided 11-02: five columns, the inbox variant is not done). Each card
-//! carries one colored mark, its space's gradient; everything else stays neutral so the
-//! status colors read first.
+//! 鸟瞰 as a board (Keepline repo, specs/overview-kanban/kanban.html): one column per
+//! thing you might do next, left to right in the order work moves; what waits on you or
+//! failed has its own column, 要你处理 (decided 11-02: five columns, the inbox variant is
+//! not done). Each card carries one colored mark, its space's gradient; everything else
+//! stays neutral so the status colors read first.
 use super::*;
 use crate::ui::icons::agent_icon;
 use gpui::{
