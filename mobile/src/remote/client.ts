@@ -15,6 +15,7 @@ export class RemoteError extends Error {
   constructor(
     message: string,
     readonly code?: number,
+    readonly reason?: string,
   ) {
     super(message);
   }
@@ -72,7 +73,7 @@ export class Remote {
       };
       ws.onclose = (ev) => {
         clearTimeout(timer);
-        reject(new RemoteError(closeText(ev.code), ev.code));
+        reject(new RemoteError(closeOutcome(ev.code, ev.reason).text, ev.code, ev.reason));
       };
       ws.onerror = () => undefined;
     });
@@ -172,7 +173,7 @@ export class Remote {
   private end(e: Ended) {
     if (this.ended) return;
     this.ended = e;
-    for (const p of this.pending.values()) p.reject(new RemoteError(closeText(e.code)));
+    for (const p of this.pending.values()) p.reject(new RemoteError(closeOutcome(e.code, e.reason).text));
     this.pending.clear();
     for (const h of this.streams.values()) h({ type: 'end', reason: e.reason || String(e.code) });
     this.streams.clear();

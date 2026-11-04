@@ -1,0 +1,79 @@
+// What a tap does when it changes something on the computer, with the checks this phone
+// adds first: a second confirmation for dangerous commands and Face ID / fingerprint when
+// settings ask. The computer checks permissions itself; these only guard the phone.
+import * as LocalAuthentication from 'expo-local-authentication';
+import { Alert, Platform } from 'react-native';
+import { type Card, NOT_YET, refresh, write } from './remote/hub';
+import { settings } from './store/settings';
+import { dangerous } from './ui/parse';
+
+/** Yes or no from the person, as a system dialog. */
+export function confirm(title: string, detail: string, ok: string, destructive = false): Promise<boolean> {
+  if (Platform.OS === 'web') return Promise.resolve(!!globalThis.confirm?.(`${title}\n${detail}`));
+  return new Promise((done) =>
+    Alert.alert(title, detail, [
+      { text: '取消', style: 'cancel', onPress: () => done(false) },
+      { text: ok, style: destructive ? 'destructive' : 'default', onPress: () => done(true) },
+    ]),
+  );
+}
+
+/** Face ID / fingerprint (or the passcode) when the lock setting is on; true when it is off. */
+export async function verify(reason: string): Promise<boolean> {
+  if (!settings.get().lock || Platform.OS === 'web') return true;
+  try {
+    if (!(await LocalAuthentication.hasHardwareAsync())) return true;
+    const r = await LocalAuthentication.authenticateAsync({ promptMessage: reason, cancelLabel: '取消' });
+    return r.success;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Allows the approval `card` shows. `subject` is the command it asks about, for the
+ * second confirmation; `always` picks the screen's "don't ask again" option.
+ */
+export async function approve(machine: string, card: Card, subject: string, always = false): Promise<boolean> {
+  if (settings.get().confirmDanger && dangerous(subject)) {
+    const sure = await confirm('确定允许？', subject, '允许');
+    if (!sure) return false;
+  }
+  if (!(await verify(`允许 ${subject}`))) return false;
+  await write(machine, 'answer', {
+    terminal: card.id,
+    question: card.approval,
+    allow: true,
+    ...(always ? { always: true } : {}),
+  });
+  setTimeout(() => refresh(machine), 300);
+  return true;
+}
+
+export async function deny(machine: string, card: Card) {
+  await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false });
+  setTimeout(() => refresh(machine), 300);
+}
+
+/** Settles a conversation: 已处理 is `done`, 稍后提醒 `deferred`, back to the inbox `open`. */
+export async function settle(machine: string, card: Card, outcome: 'done' | 'deferred' | 'open') {
+  if (!card.session) throw new Error('这个终端里没有 Agent 对话');
+  try {
+    await write(machine, 'outcome', {
+      session: card.session,
+      outcome,
+      ...(card.turn && outcome !== 'open' ? { turn: card.turn } : {}),
+    });
+  } catch (e) {
+    // A host that only knows done, abandoned and open names what it refused.
+    if (outcome === 'deferred' && /只能是|deferred/.test((e as Error).message)) throw new Error(`稍后提醒：${NOT_YET}`);
+    throw e;
+  }
+  setTimeout(() => refresh(machine), 200);
+}
+
+/** Shows an error the way the platform does. */
+export function oops(text: string) {
+  if (Platform.OS === 'web') globalThis.alert?.(text);
+  else Alert.alert(text);
+}

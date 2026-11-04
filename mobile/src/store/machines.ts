@@ -2,25 +2,11 @@
 // in the Keychain / Keystore (expo-secure-store), one entry per machine to stay under the
 // ~2 KB some iOS versions accept per value. On web, used only to try the UI in a browser,
 // it falls back to localStorage.
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { type Link, linkText, parseLink } from '../remote/link';
+import { kv as store } from './kv';
 
 const INDEX = 'mooring.machines';
 const entry = (id: string) => `mooring.machine.${id.replace(/[^A-Za-z0-9._-]/g, '_')}`;
-
-const store =
-  Platform.OS === 'web'
-    ? {
-        get: async (k: string) => globalThis.localStorage?.getItem(k) ?? null,
-        set: async (k: string, v: string) => globalThis.localStorage?.setItem(k, v),
-        del: async (k: string) => globalThis.localStorage?.removeItem(k),
-      }
-    : {
-        get: (k: string) => SecureStore.getItemAsync(k),
-        set: (k: string, v: string) => SecureStore.setItemAsync(k, v),
-        del: (k: string) => SecureStore.deleteItemAsync(k),
-      };
 
 /** A machine is known by its id; a link without one (older machines) by its device. */
 export const machineId = (l: Link) => l.machine || `device-${l.device}`;
