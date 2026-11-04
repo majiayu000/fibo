@@ -267,6 +267,8 @@ pub(super) fn start(
         let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
         let mut rows = Vec::new();
         for phase in plan.split(',') {
+            // Each time: the setting is read off the main thread at start, however slowly.
+            mooring_core::effect::set_reduce_motion(false);
             let (name, secs) = match phase.split_once(':') {
                 Some((n, s)) => (n, s.parse::<u64>().unwrap_or(15)),
                 None => (phase, 15),

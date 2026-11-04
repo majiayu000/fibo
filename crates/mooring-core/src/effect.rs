@@ -495,6 +495,11 @@ pub fn pick(choice: Option<Pick>) -> Result<(), String> {
 pub fn reduce_motion() -> bool {
     REDUCE_MOTION.load(Ordering::Relaxed)
 }
+/// For the window's performance probe, which measures motion whatever the machine asks:
+/// GitHub's macOS runners ask for reduced motion.
+pub fn set_reduce_motion(on: bool) {
+    REDUCE_MOTION.store(on, Ordering::Relaxed);
+}
 /// The animation chosen, before reduced motion: a built-in style as the app tunes it, a
 /// plugin's preset while that plugin is installed, else the built-in seal.
 pub fn chosen(picked: Option<&Pick>, presets: &[Preset]) -> Complete {
