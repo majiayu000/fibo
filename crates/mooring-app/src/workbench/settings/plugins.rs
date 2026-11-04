@@ -599,14 +599,17 @@ impl SettingsView {
                 note.push(format!("改了别的程序的文件：{}", p.touches.join("、")));
             }
             note.extend(p.warnings.iter().cloned());
-            if let Some(last) = plugin::config()
+            let runs = plugin::config()
                 .map(|c| mooring_core::plugin_context::runs(&plugin::dir(c), &p.id))
-                .and_then(|runs| runs.last().cloned())
-                .filter(|r| !r.ok && mooring_core::content::now().saturating_sub(r.at) < 7 * 86_400)
+                .unwrap_or_default();
+            let now = mooring_core::content::now();
+            for r in mooring_core::plugin_context::failing(&runs)
+                .into_iter()
+                .filter(|r| now.saturating_sub(r.at) < 7 * 86_400)
             {
                 note.push(format!(
                     "上次运行失败（{}）：{}；终端里 mooring plugins log {} 看全部",
-                    last.what, last.detail, p.id
+                    r.what, r.detail, p.id
                 ));
             }
             let on = p.enabled;

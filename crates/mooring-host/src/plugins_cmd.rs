@@ -14,6 +14,9 @@ pub const USAGE: &str = "用法：mooring plugins [--dir 插件目录] [--json]
       mooring plugins index <目录> [--check]  为插件目录生成 index.json（--check 只检查是否最新）
       mooring plugins log <id>                这个插件最近的运行：setup、hook、出过错的装饰和额度命令
       mooring plugins set <id> [<key> <值>]   看或改插件的设置项；值写 true/false、数字或文字
+      mooring plugins run <id> <声明 id> [--event 事件] [--cwd 目录]
+                                              用和 App 一样的环境试跑一条 hook、装饰或额度命令，打印输出；
+                                              webhook 只显示会发什么，加 --send 才真发
 
 检查插件能不能装上：逐个读 plugin.json 和它提供的文件，说哪个生效、哪个为什么没生效。
 默认目录是 ${XDG_CONFIG_HOME:-$HOME/.config}/mooring/plugins。有问题时以 1 退出。
@@ -123,11 +126,16 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
     let mut remote = false;
     let mut check_only = false;
     let mut yes = false;
-    for a in args.by_ref() {
+    let mut send = false;
+    let (mut event, mut cwd) = (None, None);
+    while let Some(a) = args.next() {
         match a.as_str() {
             "--remote" => remote = true,
             "--yes" | "-y" => yes = true,
             "--check" => check_only = true,
+            "--send" => send = true,
+            "--event" => event = args.next(),
+            "--cwd" => cwd = args.next(),
             _ => rest.push(a),
         }
     }
@@ -221,6 +229,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
             println!("卸载了 {id}");
             Ok(())
         }
+        ("run", [id, declaration]) => try_run(id, declaration, event, cwd, send),
         ("log", [id]) => {
             let runs = mooring_core::plugin_context::runs(&plugins_dir()?, id);
             if runs.is_empty() {
@@ -279,6 +288,116 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
     }
 }
 
+/// Runs one declared command as the app or the host would, and shows everything about how
+/// it went: `mooring plugins` only says that a file reads, this says the command works.
+fn try_run(
+    id: &str,
+    declaration: &str,
+    event: Option<String>,
+    cwd: Option<String>,
+    send: bool,
+) -> io::Result<()> {
+    use mooring_core::plugin_command::{self, Failed};
+    use mooring_core::{decoration, hook, quota};
+    let p = plugin::discover(&plugins_dir()?)
+        .into_iter()
+        .find_map(|f| f.result.ok().filter(|p| p.id == id))
+        .ok_or_else(|| io::Error::other(format!("没有装叫 {id} 的插件")))?;
+    let files = |kind: Kind| kind.files(&p.dir);
+    let cwd = match cwd {
+        Some(dir) => dir,
+        None => std::env::current_dir()?.display().to_string(),
+    };
+    let (hooks, decorations, sources) = (
+        hook::load(files(Kind::Hooks)).0,
+        decoration::load(files(Kind::Decorations)).0,
+        quota::load(files(Kind::Quota)).0,
+    );
+    let pane = decoration::Pane {
+        cwd: cwd.clone(),
+        ..Default::default()
+    };
+    let spec = if let Some(h) = hooks.iter().find(|h| h.id == declaration) {
+        let on = match event {
+            Some(name) => serde_json::from_value(serde_json::Value::String(name.clone()))
+                .map_err(|_| io::Error::other(format!("没有 {name} 这个事件")))?,
+            None => *h.on.first().unwrap_or(&hook::Event::Done),
+        };
+        let payload = hook::Payload {
+            event: on,
+            session: "试跑的会话".into(),
+            agent: "Claude Code".into(),
+            title: "试跑".into(),
+            cwd: cwd.clone(),
+            space: Some("试跑".into()),
+            detail: "这是 mooring plugins run 发的样例事件".into(),
+            at: mooring_core::content::now(),
+            terminal: None,
+            exit_code: on
+                .is_command()
+                .then_some(if on == hook::Event::CommandFailed {
+                    1
+                } else {
+                    0
+                }),
+            duration_ms: on.is_command().then_some(1200),
+        };
+        println!(
+            "事件：{}",
+            serde_json::to_string(&payload).map_err(io::Error::other)?
+        );
+        if let (Some(url), false) = (&h.webhook, send) {
+            println!("会 POST 到 {url}，没有真的发：加 --send 才发");
+            return Ok(());
+        }
+        mooring_host::plugin_hooks::command_for(h, &payload).map_err(io::Error::other)?
+    } else if let Some(d) = decorations.iter().find(|d| d.id == declaration) {
+        d.spec(&pane)
+    } else if let Some(s) = sources.iter().find(|s| s.agent == declaration) {
+        if s.command.is_none() {
+            return Err(io::Error::other(format!(
+                "{declaration} 的额度来自文件 {}，没有命令可跑",
+                s.file.as_deref().unwrap_or_default()
+            )));
+        }
+        s.spec()
+    } else {
+        let known: Vec<String> = hooks
+            .iter()
+            .map(|h| h.id.clone())
+            .chain(decorations.iter().map(|d| d.id.clone()))
+            .chain(sources.iter().map(|s| s.agent.clone()))
+            .collect();
+        return Err(io::Error::other(format!(
+            "{id} 没有叫 {declaration} 的 hook、装饰或额度命令；有：{}",
+            known.join("、")
+        )));
+    };
+    println!("PATH：{}", plugin_command::path());
+    let started = std::time::Instant::now();
+    let done = plugin_command::run(spec).map_err(|e| {
+        io::Error::other(match e {
+            Failed::Start(why) => format!("启动不了：{why}"),
+            Failed::TimedOut => {
+                format!("超时，已停止（用了 {} ms）", started.elapsed().as_millis())
+            }
+        })
+    })?;
+    println!("{}，用了 {} ms", done.how(), started.elapsed().as_millis());
+    for (name, bytes) in [("输出", &done.stdout), ("错误输出", &done.stderr)] {
+        let text = String::from_utf8_lossy(bytes);
+        if !text.trim().is_empty() {
+            println!("{name}：\n{}", text.trim_end());
+        }
+    }
+    if done.not_runnable() {
+        return Err(io::Error::other(
+            "命令跑不起来：在 App 里也一样；检查命令名和上面的 PATH",
+        ));
+    }
+    Ok(())
+}
+
 pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
     let mut args = args.by_ref().peekable();
     if let Some(command) = args
@@ -286,7 +405,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
         .filter(|a| {
             matches!(
                 a.as_str(),
-                "index" | "available" | "install" | "uninstall" | "log" | "set"
+                "index" | "available" | "install" | "uninstall" | "log" | "set" | "run"
             )
         })
         .cloned()
@@ -612,6 +731,33 @@ mod tests {
         std::fs::remove_dir_all(&bin).unwrap();
         assert!(!script.is_empty());
         assert!(!script.contains("do shell script"), "{script}");
+    }
+
+    /// `plugins run` finds a declaration across kinds and names what is there when it cannot.
+    #[test]
+    fn trying_a_declaration_it_does_not_have_says_what_there_is() {
+        let root = std::env::temp_dir().join(format!("kl-try-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let d = root.join("mooring/plugins/x");
+        write(
+            &d.join("plugin.json"),
+            r#"{"api":1,"id":"x","name":"X","provides":["hooks"]}"#,
+        );
+        write(
+            &d.join("hooks.json"),
+            r#"{"api":1,"hooks":[{"id":"say","on":["done"],"command":"true"}]}"#,
+        );
+        // SAFETY: only this test reads XDG_CONFIG_HOME through plugins_dir in this binary's
+        // other tests, which pass their directories explicitly.
+        unsafe { std::env::set_var("XDG_CONFIG_HOME", &root) };
+        let err = try_run("x", "nope", None, None, false)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("say"), "{err}");
+        assert!(try_run("x", "say", Some("nonsense".into()), None, false).is_err());
+        assert!(try_run("x", "say", None, None, false).is_ok());
+        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// The plugins shipped in the repo are the guide's examples: they must all check out.

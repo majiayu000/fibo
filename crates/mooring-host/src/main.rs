@@ -91,6 +91,7 @@ fn run() -> std::io::Result<()> {
                 }
             }
             let runtime = runtime_dir(remaining.into_iter())?;
+            mooring_core::plugin_context::set_runtime(std::path::Path::new(&runtime));
             let serve = if takeover {
                 mooring_host::serve_taking_over
             } else {

@@ -207,10 +207,19 @@ pub fn bin() -> Option<PathBuf> {
     sibling.is_file().then_some(sibling)
 }
 
+/// The runtime this process actually opened, when it was told one (`--runtime`).
+static RUNTIME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+/// Says which runtime this process opened, so its plugins' `mooring` reaches that host.
+pub fn set_runtime(dir: &Path) {
+    let _ = RUNTIME.set(dir.to_owned());
+}
+
 /// The host's runtime directory as this process knows it.
 pub fn runtime() -> Option<PathBuf> {
-    std::env::var_os(crate::protocol::RUNTIME_ENV)
-        .map(PathBuf::from)
+    RUNTIME
+        .get()
+        .cloned()
+        .or_else(|| std::env::var_os(crate::protocol::RUNTIME_ENV).map(PathBuf::from))
         .or_else(|| std::env::var_os("HOME").map(|h| crate::legacy::runtime_dir(Path::new(&h))))
 }
 
@@ -297,8 +306,20 @@ pub fn record(dir: &Path, what: &str, result: &Result<(), String>, ms: u64, on_c
     let _ = append(&data, &run);
 }
 
+/// Adds a run, keeping the last `KEPT`. The host's hooks, several at once, and the app's
+/// decorations write here: a lock around read-trim-replace keeps every run.
 fn append(data: &Path, run: &Run) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
     create_private_dir(data)?;
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(data.join("runs.lock"))?;
+    // SAFETY: flock on a file this function holds open; released when it closes.
+    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
     let file = data.join("runs.jsonl");
     let mut lines: Vec<String> = std::fs::read_to_string(&file)
         .unwrap_or_default()
@@ -310,6 +331,20 @@ fn append(data: &Path, run: &Run) -> std::io::Result<()> {
     let tmp = file.with_extension("jsonl.tmp");
     std::fs::write(&tmp, lines[from..].join("\n") + "\n")?;
     std::fs::rename(tmp, file)
+}
+
+/// Each command's latest run where that run failed: what is broken now. A success of one
+/// command does not hide another's failure.
+pub fn failing(runs: &[Run]) -> Vec<&Run> {
+    let mut latest: Vec<&Run> = Vec::new();
+    for r in runs {
+        match latest.iter_mut().find(|l| l.what == r.what) {
+            Some(l) => *l = r,
+            None => latest.push(r),
+        }
+    }
+    latest.retain(|r| !r.ok);
+    latest
 }
 
 /// The plugin's kept runs, oldest first.
@@ -416,5 +451,48 @@ mod tests {
         assert!(check_options(&ok).is_ok());
         assert_eq!(ok[0].parse("60").unwrap(), serde_json::json!(60.0));
         assert!(ok[0].parse("abc").is_err());
+    }
+
+    /// Hooks finish together, in the host and the app at once: no run is lost.
+    #[test]
+    fn runs_from_many_threads_are_all_kept() {
+        let (root, dir) = plugin_dir(
+            "conc",
+            r#"{"api":1,"id":"conc","name":"C","provides":["hooks"]}"#,
+        );
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let dir = dir.clone();
+                std::thread::spawn(move || {
+                    for i in 0..5 {
+                        record(&dir, &format!("hooks/t{t}-{i}"), &Ok(()), 1, false);
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert_eq!(runs(&root.join("plugins"), "conc").len(), 40);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn another_commands_success_does_not_hide_a_failure() {
+        let run = |what: &str, ok| Run {
+            at: 1,
+            what: what.into(),
+            ok,
+            detail: String::new(),
+            ms: 1,
+        };
+        let all = [
+            run("a", false),
+            run("b", true),
+            run("c", false),
+            run("c", true),
+        ];
+        let broken: Vec<&str> = failing(&all).iter().map(|r| r.what.as_str()).collect();
+        assert_eq!(broken, ["a"]);
     }
 }

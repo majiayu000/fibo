@@ -46,7 +46,7 @@ Mooring 以前叫 Keepline：旧的 `keepline` / `keeplined` 命令和 `KEEPLINE
 
 | 命令 | 做什么 |
 |---|---|
-| `mooring plugins [--dir 目录] [--json]` | 检查插件能不能装上；`mooring plugins available [--remote]`、`install <id> [--remote] [--yes]`、`uninstall <id>`、`index <目录> [--check]` 管插件市场；会跑命令的插件要你先把它会做的事告诉用户，用户同意后再加 `--yes`。`log <id>` 看插件的运行和出错，`set <id> <key> <值>` 改插件设置项。写插件看 `mooring --skill plugins` |
+| `mooring plugins [--dir 目录] [--json]` | 检查插件能不能装上；`mooring plugins available [--remote]`、`install <id> [--remote] [--yes]`、`uninstall <id>`、`index <目录> [--check]` 管插件市场；会跑命令的插件要你先把它会做的事告诉用户，用户同意后再加 `--yes`。`log <id>` 看插件的运行和出错，`set <id> <key> <值>` 改插件设置项。写插件看 `mooring --skill plugins`；`mooring plugins run <id> <声明 id> [--event 事件] [--cwd 目录] [--send]` 用和 App 一样的环境试跑一条 hook、装饰或额度命令 |
 | `mooring hooks install\|uninstall\|status [--agent <cli>] [--json] [--outdated-only]` | 把 Mooring 的 hook 写进或移出 Agent CLI 的设置，或看装了没有（`--json` `--outdated-only` 只对 status）。会改用户的设置文件，用户要求才 install / uninstall |
 | `mooring hook --agent <cli>` | Agent CLI 的 hook 自己调用的入口，别手动跑 |
 | `mooring remote --stdio` / `--relay <地址> [--relay-key <密钥>] [--report]` / `--pair [--name 名字] [--role view\|answer\|full] [--new-code]` / `--enable` / `--disable` / `--status` / `--devices` / `--device <设备> --role <权限>` / `--kick <设备>` / `--revoke <设备>` | 手机和别的机器连过来。配对、改权限、断开、取消配对都是用户的决定，别自己做；细节看 `mooring remote --help` |

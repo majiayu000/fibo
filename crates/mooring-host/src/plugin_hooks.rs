@@ -1,21 +1,107 @@
 //! Runs the plugins' hooks (`mooring_core::hook`) when a session in a Mooring terminal
 //! enters a state, or a command typed in one finishes. The host calls `observe` after every
 //! commit and `command` when a terminal's shell marks a command finished; with no hook
-//! installed both return at once. Each hook runs on its own thread under its timeout, so a slow or broken
-//! hook costs the host nothing; outcomes go to the host log.
+//! installed both return at once. Each hook runs on its own thread under its timeout, so a
+//! slow or broken hook costs the host nothing, and plugins take turns for the slots
+//! (`Scheduler`), so it costs other plugins nothing either; outcomes go to the plugin's runs.
 use mooring_core::content::{now, short, Turn};
 use mooring_core::hook::{self, Event, Hook, Payload};
 use mooring_core::model::Workspace;
+use mooring_core::plugin_command::{Failed, Leftovers, Run};
 use mooring_core::status::{self, Status};
 use std::collections::HashMap;
-use std::io::Write;
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// Hooks still running; past this, new events are dropped and logged, not queued.
+/// Hooks running at once, in all.
 const MAX_IN_FLIGHT: usize = 8;
-static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+/// Hooks of one plugin running at once: a plugin with slow hooks waits on itself and leaves
+/// the rest of the slots to the others.
+const MAX_PER_PLUGIN: usize = 2;
+/// Events waiting per plugin; past this its oldest is dropped, and that goes to its runs.
+const MAX_QUEUED: usize = 16;
+
+/// Who runs next. Each plugin has its own line and they take turns, so no plugin's burst or
+/// slow hook holds up another's.
+struct Scheduler<J> {
+    plugins: Vec<Line<J>>,
+    /// The plugin whose turn comes next.
+    turn: usize,
+    running: usize,
+}
+struct Line<J> {
+    plugin: PathBuf,
+    waiting: VecDeque<J>,
+    running: usize,
+}
+impl<J> Scheduler<J> {
+    const fn new() -> Self {
+        Self {
+            plugins: Vec::new(),
+            turn: 0,
+            running: 0,
+        }
+    }
+    /// Queues a job; the plugin's oldest waiting job, when its line was full.
+    fn submit(&mut self, plugin: &Path, job: J) -> Option<J> {
+        let at = match self.plugins.iter().position(|l| l.plugin == plugin) {
+            Some(at) => at,
+            None => {
+                self.plugins.push(Line {
+                    plugin: plugin.to_owned(),
+                    waiting: VecDeque::new(),
+                    running: 0,
+                });
+                self.plugins.len() - 1
+            }
+        };
+        let line = &mut self.plugins[at];
+        line.waiting.push_back(job);
+        (line.waiting.len() > MAX_QUEUED)
+            .then(|| line.waiting.pop_front())
+            .flatten()
+    }
+    /// The next job to start, if a slot is free and anyone may run; the caller must call
+    /// `finished` when it ends.
+    fn next(&mut self) -> Option<(PathBuf, J)> {
+        if self.running >= MAX_IN_FLIGHT {
+            return None;
+        }
+        let n = self.plugins.len();
+        for i in 0..n {
+            let at = (self.turn + i) % n;
+            let line = &mut self.plugins[at];
+            if line.running >= MAX_PER_PLUGIN {
+                continue;
+            }
+            if let Some(job) = line.waiting.pop_front() {
+                line.running += 1;
+                self.running += 1;
+                self.turn = (at + 1) % n;
+                return Some((line.plugin.clone(), job));
+            }
+        }
+        None
+    }
+    fn finished(&mut self, plugin: &Path) {
+        if let Some(line) = self.plugins.iter_mut().find(|l| l.plugin == plugin) {
+            line.running = line.running.saturating_sub(1);
+        }
+        self.running = self.running.saturating_sub(1);
+        // A plugin with nothing left gives up its line; plugins come and go with reloads.
+        self.plugins
+            .retain(|l| l.running > 0 || !l.waiting.is_empty());
+        self.turn = if self.plugins.is_empty() {
+            0
+        } else {
+            self.turn % self.plugins.len()
+        };
+    }
+}
+
+static SCHEDULER: Mutex<Scheduler<(Hook, Payload)>> = Mutex::new(Scheduler::new());
 
 /// The state each session was last seen in, so a hook fires on entering it, once.
 #[derive(Default)]
@@ -139,105 +225,120 @@ pub fn command(p: Payload) {
     }
 }
 
+/// Queues a hook for its plugin's turn. A hook with no plugin (tests) has a line of its own.
 fn spawn(h: &Hook, p: Payload) {
-    if IN_FLIGHT.fetch_add(1, Ordering::SeqCst) >= MAX_IN_FLIGHT {
-        IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+    let plugin = h.file.parent().unwrap_or(Path::new("")).to_owned();
+    let dropped = SCHEDULER
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .submit(&plugin, (h.clone(), p));
+    if let Some((old, event)) = dropped {
         eprintln!(
-            "mooring: hook {} skipped: {MAX_IN_FLIGHT} hooks still running",
-            h.id
+            "mooring: hook {} ({}) dropped: {MAX_QUEUED} events already waiting",
+            old.id,
+            event.event.name()
         );
-        return;
+        let why = format!(
+            "事件太多（已有 {MAX_QUEUED} 条在等），丢了这条 {}",
+            event.event.name()
+        );
+        mooring_core::plugin_context::record(
+            &plugin,
+            &format!("hooks/{}", old.id),
+            &Err(why),
+            0,
+            false,
+        );
     }
-    let h = h.clone();
-    std::thread::spawn(move || {
-        let started = Instant::now();
-        let result = run(&h, &p);
-        if let Some(dir) = h.file.parent() {
-            mooring_core::plugin_context::record(
-                dir,
-                &format!("hooks/{}", h.id),
-                &result,
-                started.elapsed().as_millis() as u64,
-                false,
-            );
-        }
-        IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
-        if let Err(e) = result {
-            eprintln!("mooring: hook {} ({}) failed: {e}", h.id, p.event.name());
-        }
-    });
+    pump();
 }
 
-/// Runs one hook to completion or its timeout, the event on stdin.
-pub fn run(h: &Hook, p: &Payload) -> Result<(), String> {
-    let body = serde_json::to_vec(p).map_err(|e| e.to_string())?;
-    let mut cmd = match (&h.command, &h.webhook) {
-        (Some(c), _) => {
-            let mut cmd = Command::new("/bin/sh");
-            cmd.arg("-c").arg(c);
+/// Starts whatever may start now.
+fn pump() {
+    loop {
+        let next = SCHEDULER.lock().unwrap_or_else(|e| e.into_inner()).next();
+        let Some((plugin, (h, p))) = next else {
+            return;
+        };
+        std::thread::spawn(move || {
+            let started = Instant::now();
+            let result = run(&h, &p);
             if let Some(dir) = h.file.parent() {
-                cmd.envs(mooring_core::plugin_context::env(dir));
+                mooring_core::plugin_context::record(
+                    dir,
+                    &format!("hooks/{}", h.id),
+                    &result,
+                    started.elapsed().as_millis() as u64,
+                    false,
+                );
             }
-            cmd.envs(p.env());
-            cmd
+            if let Err(e) = result {
+                eprintln!("mooring: hook {} ({}) failed: {e}", h.id, p.event.name());
+            }
+            SCHEDULER
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .finished(&plugin);
+            pump();
+        });
+    }
+}
+
+/// What runs for a hook: its command with the plugin's and the event's variables, or curl
+/// posting to its webhook. The event goes on stdin either way.
+pub fn command_for<'a>(h: &Hook, p: &Payload) -> Result<Run<'a>, String> {
+    let body = serde_json::to_vec(p).map_err(|e| e.to_string())?;
+    let timeout = Duration::from_millis(h.timeout_ms);
+    let mut run = match (&h.command, &h.webhook) {
+        (Some(c), _) => {
+            let mut run = Run::shell(c, timeout, Leftovers::Keep);
+            if let Some(dir) = h.file.parent() {
+                run.env = mooring_core::plugin_context::env(dir);
+            }
+            run.env.extend(p.env());
+            run
         }
         (None, Some(url)) => {
             // curl ships with macOS; its own limit backs up ours.
             let secs = h.timeout_ms.div_ceil(1000).to_string();
-            let mut cmd = Command::new("/usr/bin/curl");
-            cmd.args(["-sS", "-f", "-m", &secs, "-X", "POST"])
-                .args([
-                    "-H",
-                    "Content-Type: application/json",
-                    "--data-binary",
-                    "@-",
-                ])
-                .arg(url);
-            cmd
+            let mut args: Vec<std::ffi::OsString> = Vec::new();
+            for a in [
+                "-sS",
+                "-f",
+                "-m",
+                &secs,
+                "-X",
+                "POST",
+                "-H",
+                "Content-Type: application/json",
+                "--data-binary",
+                "@-",
+                url,
+            ] {
+                args.push(a.into());
+            }
+            Run {
+                program: "/usr/bin/curl".into(),
+                args,
+                ..Run::shell("", timeout, Leftovers::Keep)
+            }
         }
         (None, None) => return Err("没有 command 也没有 webhook".into()),
     };
-    // Its own group, so a timed-out hook's children end with it.
-    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
-    let mut child = cmd
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("启动不了：{e}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        // A hook that ignores stdin closes it early; that is not a failure.
-        let _ = stdin.write_all(&body);
-    }
-    // Read on its own thread: a child left in the background may hold stderr open.
-    let (said, heard) = std::sync::mpsc::channel();
-    if let Some(mut e) = child.stderr.take() {
-        std::thread::spawn(move || {
-            let mut err = String::new();
-            let _ = std::io::Read::read_to_string(
-                &mut std::io::Read::take(&mut e, 64 * 1024),
-                &mut err,
-            );
-            let _ = said.send(err);
-        });
-    }
-    let deadline = Instant::now() + Duration::from_millis(h.timeout_ms);
-    loop {
-        match child.try_wait().map_err(|e| e.to_string())? {
-            Some(status) if status.success() => return Ok(()),
-            Some(status) => {
-                let err = heard
-                    .recv_timeout(Duration::from_millis(200))
-                    .unwrap_or_default();
-                return Err(format!("{status} {}", short(err.trim(), 200)));
-            }
-            None if Instant::now() >= deadline => {
-                mooring_core::process::kill_group(&child);
-                let _ = child.wait();
-                return Err(format!("超过 {} ms，已停止", h.timeout_ms));
-            }
-            None => std::thread::sleep(Duration::from_millis(20)),
-        }
+    run.stdin = Some(body);
+    Ok(run)
+}
+
+/// Runs one hook to completion or its timeout, the event on stdin.
+pub fn run(h: &Hook, p: &Payload) -> Result<(), String> {
+    let done = mooring_core::plugin_command::run(command_for(h, p)?).map_err(|e| match e {
+        Failed::Start(why) => format!("启动不了：{why}"),
+        Failed::TimedOut => format!("超过 {} ms，已停止", h.timeout_ms),
+    })?;
+    if done.status.success() {
+        Ok(())
+    } else {
+        Err(format!("{} {}", done.how(), done.said()))
     }
 }
 
@@ -256,9 +357,100 @@ mod tests {
         }
     }
     use super::*;
-    use std::path::PathBuf;
+
+    /// A plugin with a burst of slow hooks: the other plugin's event runs straight away
+    /// though eight of the first are ahead of it.
+    #[test]
+    fn a_plugin_with_a_burst_does_not_hold_up_another() {
+        let (a, b) = (Path::new("/p/a"), Path::new("/p/b"));
+        let mut s = Scheduler::new();
+        for i in 0..8 {
+            assert!(s.submit(a, i).is_none());
+        }
+        assert!(s.submit(b, 100).is_none());
+        let first = s.next().unwrap();
+        let second = s.next().unwrap();
+        assert_eq!(first, (a.to_owned(), 0));
+        assert_eq!(second, (b.to_owned(), 100), "the other plugin's turn");
+        assert_eq!(s.next().unwrap(), (a.to_owned(), 1));
+        assert_eq!(s.next(), None, "a has its two running, b has nothing");
+        s.finished(a);
+        assert_eq!(s.next().unwrap(), (a.to_owned(), 2), "in order");
+    }
+
+    #[test]
+    fn all_slots_are_shared_and_a_full_line_drops_its_oldest() {
+        let mut s = Scheduler::new();
+        let names: Vec<PathBuf> = (0..6).map(|i| PathBuf::from(format!("/p/{i}"))).collect();
+        for n in &names {
+            s.submit(n, 0);
+            s.submit(n, 1);
+        }
+        let mut started = 0;
+        while s.next().is_some() {
+            started += 1;
+        }
+        assert_eq!(started, MAX_IN_FLIGHT);
+        s.finished(&names[0]);
+        assert!(s.next().is_some(), "a slot freed is taken again");
+
+        let mut s = Scheduler::new();
+        let p = Path::new("/p/full");
+        for i in 0..MAX_QUEUED {
+            assert_eq!(s.submit(p, i), None);
+        }
+        assert_eq!(s.submit(p, MAX_QUEUED), Some(0), "the oldest goes");
+    }
+
+    /// Through the real runner: plugin a's hooks all sleep, plugin b's still fires at once,
+    /// and a's overflow shows in its runs.
+    #[test]
+    fn a_slow_plugins_hooks_leave_room_for_others_and_overflow_is_reported() {
+        let root = std::env::temp_dir().join(format!("kl-fair-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let plugin = |id: &str, command: String| {
+            let dir = root.join("plugins").join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join("plugin.json"),
+                format!(r#"{{"api":1,"id":"{id}","name":"x","provides":["hooks"]}}"#),
+            )
+            .unwrap();
+            std::fs::write(dir.join("hooks.json"), "{}").unwrap();
+            Hook {
+                id: "h".into(),
+                file: dir.join("hooks.json"),
+                ..hook(&command, 2_000)
+            }
+        };
+        let mark = root.join("b-ran");
+        let slow = plugin("a", "sleep 1".into());
+        let quick = plugin("b", format!("touch {}", mark.display()));
+        for _ in 0..(MAX_PER_PLUGIN + MAX_QUEUED + 3) {
+            spawn(&slow, payload());
+        }
+        let started = Instant::now();
+        spawn(&quick, payload());
+        while !mark.exists() && started.elapsed() < Duration::from_millis(900) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(mark.exists(), "b waited on a");
+        let plugins = root.join("plugins");
+        let runs = mooring_core::plugin_context::runs(&plugins, "a");
+        assert_eq!(
+            runs.iter()
+                .filter(|r| r.detail.contains("事件太多"))
+                .count(),
+            3,
+            "{runs:?}"
+        );
+        // Let a's queue drain enough not to outlive the directory it logs to.
+        std::thread::sleep(Duration::from_millis(100));
+    }
 
     fn hook(command: &str, timeout_ms: u64) -> Hook {
+        // These limits are about the hook, not a second spent in this machine's profile.
+        std::env::set_var("MOORING_NO_LOGIN_PATH", "1");
         Hook {
             id: "t".into(),
             on: vec![Event::Waiting],

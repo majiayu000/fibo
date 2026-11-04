@@ -26,7 +26,10 @@ d="${XDG_CONFIG_HOME:-$HOME/.config}/mooring/plugins/git-tools"
 mkdir -p "$d"
 # 写 $d/plugin.json 和它提供的文件（见下）
 mooring plugins            # 检查；有问题以 1 退出
+mooring plugins run git-tools <声明 id>   # hook、装饰、额度命令：用和 App 一样的环境真跑一次
 ```
+
+`mooring plugins` 只说文件读得懂；写了 hook、装饰或额度命令的，一定再用 `mooring plugins run` 跑一次，看到输出才算跑通。hook 可以加 `--event waiting` 选事件；webhook 默认只显示会发什么，加 `--send` 才真发；`--cwd` 指定目录。
 
 ## plugin.json
 
@@ -59,6 +62,8 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 - `MOORING_PLUGIN_DATA`：插件自己的数据目录，更新时保留，卸载时删除。
 - `MOORING_BIN`、`MOORING_RUNTIME`：`mooring` 命令和它连的后台，插件里 `"$MOORING_BIN" list` 和在 Mooring 终端里一样能用。
 - `MOORING_OPTION_<KEY>`：插件的每个设置项（见下）。开关是 `1` / `0`。
+
+`PATH` 是登录 shell 里的（`node`、`gh` 这些找得到），每次启动问一次；问不到时只有系统目录。
 
 ## 设置项（`plugin.json` 的 `options`）
 
@@ -94,7 +99,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 }
 ```
 
-- `command` 里能用 `{cwd}` `{session_id}` `{transcript}` `{task}` `{agent}`，代入时会自动加引号，别自己再包引号。
+- `command` 里能用 `{cwd}` `{session_id}` `{transcript}` `{task}` `{agent}`，还有 `{plugin_dir}`（插件目录，跑 `files` 里带的脚本）、`{plugin_data}`（插件的数据目录），代入时会自动加引号，别自己再包引号。
 - `run`：`split`（默认，在旁边开一块分屏跑）、`tab`（新标签）、`paste`（打进当前终端但不回车，让用户看了再发）。
 - `when`：`always`（默认）、`agent`（窗格里有 Agent 会话）、`shell`（只是 shell）、`task`（标签挂着待办）。
 - `agent` 可选：只在这个 Agent 的窗格里出现，写可执行文件名或名字（`"agent": "claude"`）。命令只对某个 CLI 有意义时一定要写，否则会把 Codex 的会话号传给 `claude --resume`。
@@ -130,7 +135,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 }
 ```
 
-- `command` 用 `sh -c` 在窗格目录里跑，显示输出的第一行；退出码不是 0 或没输出就什么都不显示，所以不适用的目录让它安静失败。
+- `command` 用 `sh -c` 在窗格目录里跑，显示输出的第一行；退出码不是 0 或没输出就什么都不显示，所以不适用的目录让它安静失败。退出码 126、127（命令跑不起来）不算安静失败，会进运行记录。
 - 能读到 `MOORING_CWD` `MOORING_AGENT` `MOORING_SESSION`，以及 shell 上一条命令的 `MOORING_LAST_EXIT` `MOORING_LAST_DURATION_MS`（还没有时为空）。
 - `place`：`title`（默认，窗格标题栏）或 `tip`（悬停标题时的卡片里单独一行）。
 - `tone`（只对标题栏）：`muted`（默认）、`ok`、`warn`、`error`，跟着状态颜色。
@@ -150,7 +155,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 - `on`：`started` `waiting` `error` `done`（会话），`command_done` `command_failed`（shell 里敲的命令跑完）。
 - **事件里的文字来自 Agent 的对话，可能带有任何内容，别把它拼进别的语言的源码**：上面的 `osascript` 用 `on run argv` 收参数；不要写成 `-e "display notification \"$MOORING_DETAIL\""`，那样对话里的一段文字就能执行命令。`python -c`、`node -e`、`sqlite3` 同理。
 - `command`（`sh -c`）和 `webhook`（POST 一个 JSON）写其中一个。事件以 JSON 从标准输入给，也有环境变量：`MOORING_EVENT` `MOORING_SESSION` `MOORING_AGENT` `MOORING_TITLE` `MOORING_CWD` `MOORING_SPACE` `MOORING_DETAIL` `MOORING_TERMINAL`，命令事件还有 `MOORING_EXIT_CODE` `MOORING_DURATION_MS`。
-- `timeout_ms` 默认 5000，最多 30000；`min_ms` 只对命令事件，跑得比它快的不报。
+- `timeout_ms` 默认 5000，最多 30000；`min_ms` 只对命令事件，跑得比它快的不报。每个插件最多同时跑 2 个 hook，各插件轮流；事件来得太多时，一个插件最多排队 16 个，再多丢最旧的，丢了会进运行记录。
 - hook 只能知道，不能改会话；拿不到对话原文，也拿不到命令行本身。Mooring 没开时后台也会跑 hook。
 
 ## rules：哪些命令算跑过验证（`rules.json`）

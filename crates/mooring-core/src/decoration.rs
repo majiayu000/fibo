@@ -8,9 +8,7 @@
 //! directories it does not apply to.
 use crate::agent::Loaded;
 use serde::Deserialize;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// The `decorations.json` format's major version.
@@ -129,74 +127,67 @@ impl Decoration {
         }
         result
     }
-    fn run_once(&self, pane: &Pane) -> Result<Option<String>, String> {
-        use std::os::unix::process::CommandExt;
-        let mut child = Command::new("/bin/sh")
-            .arg("-c")
-            .arg(&self.command)
-            .current_dir(&pane.cwd)
-            .envs(
-                self.file
-                    .parent()
-                    .map(crate::plugin_context::env)
+    /// What its command runs with for `pane`: the plugin's variables and the pane's.
+    pub fn env_for(&self, pane: &Pane) -> Vec<(String, String)> {
+        let mut env = self
+            .file
+            .parent()
+            .map(crate::plugin_context::env)
+            .unwrap_or_default();
+        // Plugins written for Keepline read the old names too.
+        env.extend(crate::legacy::with_old_names(vec![
+            ("MOORING_CWD".to_owned(), pane.cwd.clone()),
+            (
+                "MOORING_AGENT".to_owned(),
+                pane.agent.clone().unwrap_or_default(),
+            ),
+            (
+                "MOORING_SESSION".to_owned(),
+                pane.session.clone().unwrap_or_default(),
+            ),
+            (
+                "MOORING_LAST_EXIT".to_owned(),
+                pane.last
+                    .and_then(|l| l.exit)
+                    .map(|e| e.to_string())
                     .unwrap_or_default(),
+            ),
+            (
+                "MOORING_LAST_DURATION_MS".to_owned(),
+                pane.last.map(|l| l.took_ms.to_string()).unwrap_or_default(),
+            ),
+        ]));
+        env
+    }
+    /// What runs for `pane`. A line is one shot: whatever it left in the background would
+    /// run unseen, so it ends with the command.
+    pub fn spec<'a>(&self, pane: &'a Pane) -> crate::plugin_command::Run<'a> {
+        use crate::plugin_command::{Leftovers, Run};
+        Run {
+            cwd: Some(Path::new(&pane.cwd)),
+            env: self.env_for(pane),
+            ..Run::shell(
+                &self.command,
+                Duration::from_millis(self.timeout_ms),
+                Leftovers::End,
             )
-            // Plugins written for Keepline read the old names too.
-            .envs(crate::legacy::with_old_names(vec![
-                ("MOORING_CWD".to_owned(), pane.cwd.clone()),
-                (
-                    "MOORING_AGENT".to_owned(),
-                    pane.agent.clone().unwrap_or_default(),
-                ),
-                (
-                    "MOORING_SESSION".to_owned(),
-                    pane.session.clone().unwrap_or_default(),
-                ),
-                (
-                    "MOORING_LAST_EXIT".to_owned(),
-                    pane.last
-                        .and_then(|l| l.exit)
-                        .map(|e| e.to_string())
-                        .unwrap_or_default(),
-                ),
-                (
-                    "MOORING_LAST_DURATION_MS".to_owned(),
-                    pane.last.map(|l| l.took_ms.to_string()).unwrap_or_default(),
-                ),
-            ]))
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            // Its own group, so what it leaves running can be ended with it.
-            .process_group(0)
-            .spawn()
-            .map_err(|e| format!("启动不了：{e}"))?;
-        // Read on its own thread, so a command that fills the pipe still ends.
-        let mut stdout = child.stdout.take().expect("piped");
-        let reader = std::thread::spawn(move || {
-            let mut out = Vec::new();
-            let _ = stdout.by_ref().take(64 * 1024).read_to_end(&mut out);
-            out
-        });
-        let deadline = Instant::now() + Duration::from_millis(self.timeout_ms);
-        let status = loop {
-            match child.try_wait().map_err(|e| e.to_string())? {
-                Some(status) => break status,
-                None if Instant::now() >= deadline => {
-                    crate::process::kill_group(&child);
-                    let _ = child.wait();
-                    return Err(format!("超过 {} ms，已停止", self.timeout_ms));
-                }
-                None => std::thread::sleep(Duration::from_millis(10)),
-            }
-        };
-        // A line is one shot: whatever it left in the background would hold the pipe
-        // open past the timeout and run unseen, so it ends with the command.
-        crate::process::kill_group(&child);
-        let out = reader.join().unwrap_or_default();
-        if !status.success() {
+        }
+    }
+    fn run_once(&self, pane: &Pane) -> Result<Option<String>, String> {
+        use crate::plugin_command::Failed;
+        let done = crate::plugin_command::run(self.spec(pane)).map_err(|e| match e {
+            Failed::Start(why) => format!("启动不了：{why}"),
+            Failed::TimedOut => format!("超过 {} ms，已停止", self.timeout_ms),
+        })?;
+        // A script opting out exits non-zero; one the shell cannot even run has not opted
+        // out of anything, and its author needs to hear why.
+        if done.not_runnable() {
+            return Err(format!("{}：{}", done.how(), done.said()));
+        }
+        if !done.status.success() {
             return Ok(None);
         }
+        let out = done.stdout;
         let limit = match self.place {
             Place::Title => TITLE_CHARS,
             Place::Tip => TIP_CHARS,
@@ -484,5 +475,35 @@ mod tests {
             "{:?}",
             start.elapsed()
         );
+    }
+
+    /// A script opting out stays quiet. A command that does not exist is not opting out:
+    /// it is reported, with what the shell said, and goes to the plugin's runs.
+    #[test]
+    fn a_command_that_cannot_run_is_a_failure_not_an_opt_out() {
+        let root = std::env::temp_dir().join(format!("kl-deco-127-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("plugins/d");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"api":1,"id":"d","name":"d","provides":["decorations"]}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("decorations.json"), "{}").unwrap();
+        let mut d = decoration("[ -d / ] && no-such-tool-xyz -v", Place::Title, 2_000);
+        d.file = dir.join("decorations.json");
+        let cwd = std::env::temp_dir();
+        let err = d.run(&pane(&cwd)).unwrap_err();
+        assert!(
+            err.contains("退出码 127") && err.contains("no-such-tool-xyz"),
+            "{err}"
+        );
+        let runs = crate::plugin_context::runs(&root.join("plugins"), "d");
+        assert_eq!(runs.len(), 1);
+        assert!(!runs[0].ok && runs[0].detail.contains("127"), "{runs:?}");
+        d.command = "exit 1".into();
+        assert_eq!(d.run(&pane(&cwd)), Ok(None));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

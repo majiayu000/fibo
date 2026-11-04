@@ -194,42 +194,31 @@ impl Source {
             windows,
         })
     }
-    fn run(&self) -> Result<Value, String> {
-        use std::io::Read;
-        use std::process::{Command, Stdio};
-        let mut child = Command::new("/bin/sh")
-            .arg("-c")
-            .arg(self.command.as_deref().unwrap_or_default())
-            .current_dir(&self.dir)
-            .envs(crate::plugin_context::env(&self.dir))
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        let mut stdout = child.stdout.take().expect("piped");
-        let reader = std::thread::spawn(move || {
-            let mut out = Vec::new();
-            let _ = stdout.by_ref().take(1024 * 1024).read_to_end(&mut out);
-            out
-        });
-        let deadline = Instant::now() + COMMAND_TIMEOUT;
-        let status = loop {
-            match child.try_wait().map_err(|e| e.to_string())? {
-                Some(status) => break status,
-                None if Instant::now() >= deadline => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err("超时".into());
-                }
-                None => std::thread::sleep(Duration::from_millis(50)),
-            }
-        };
-        let out = reader.join().unwrap_or_default();
-        if !status.success() {
-            return Err(format!("退出码 {:?}", status.code()));
+    /// What runs for a command source. It was asked for one document; nothing it started
+    /// has to outlive that.
+    pub fn spec(&self) -> crate::plugin_command::Run<'_> {
+        use crate::plugin_command::{Leftovers, Run};
+        Run {
+            cwd: Some(&self.dir),
+            env: crate::plugin_context::env(&self.dir),
+            keep: 1024 * 1024,
+            ..Run::shell(
+                self.command.as_deref().unwrap_or_default(),
+                COMMAND_TIMEOUT,
+                Leftovers::End,
+            )
         }
-        serde_json::from_slice(&out).map_err(|e| e.to_string())
+    }
+    fn run(&self) -> Result<Value, String> {
+        use crate::plugin_command::Failed;
+        let done = crate::plugin_command::run(self.spec()).map_err(|e| match e {
+            Failed::Start(why) => why,
+            Failed::TimedOut => "超时".to_owned(),
+        })?;
+        if !done.status.success() {
+            return Err(format!("{}：{}", done.how(), done.said()));
+        }
+        serde_json::from_slice(&done.stdout).map_err(|e| e.to_string())
     }
 }
 

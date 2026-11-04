@@ -335,6 +335,7 @@ fn run() -> io::Result<()> {
             std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
         ))
     };
+    mooring_core::plugin_context::set_runtime(&root);
     let instance_dir = PathBuf::from(
         std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
     )
