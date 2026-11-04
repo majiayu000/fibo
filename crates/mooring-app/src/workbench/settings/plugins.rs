@@ -12,7 +12,10 @@ mod catalog;
 mod detail;
 mod face_editor;
 mod gallery;
+mod player;
 mod showcase;
+#[cfg(feature = "visual-test")]
+mod visual;
 use catalog::Item;
 use gallery::Tab;
 
@@ -46,6 +49,9 @@ pub(in crate::workbench) struct Market {
     back_to: gpui::Point<gpui::Pixels>,
     /// The card or stage being pointed at, and since when: it is the one that plays.
     hover: Option<(String, std::time::Instant)>,
+    /// What is playing over the page, once settings has made it.
+    player: Option<Entity<crate::workbench::complete::Player>>,
+    spot: crate::workbench::complete::StageSpot,
     /// 声明文件明细, unfolded.
     files_open: bool,
     /// 发现's search, and the page's scroll so opening a plugin starts at its top.
@@ -69,8 +75,15 @@ impl Market {
                 .placeholder("搜索插件")
         });
         cx.observe(&search, |_, _, cx| cx.notify()).detach();
+        let spot = crate::workbench::complete::StageSpot::default();
+        let player = cx.new(|_| crate::workbench::complete::Player {
+            now: None,
+            spot: spot.clone(),
+        });
         let mut market = Self {
             search: Some(search),
+            player: Some(player),
+            spot,
             ..Self::default()
         };
         market.read_catalog();
@@ -83,6 +96,13 @@ impl Market {
             Err(e) => (vec![], Some(e)),
         };
         self.showcase = showcase::read_all(&self.bundled);
+    }
+    /// The plugin whose stage plays.
+    fn play_id(&self) -> Option<&str> {
+        self.hover
+            .as_ref()
+            .map(|(id, _)| id.as_str())
+            .or(self.open.as_deref())
     }
     fn search_field(&self, _: &Context<SettingsView>) -> Option<Entity<crate::ui::field::Field>> {
         self.search.clone()
@@ -449,10 +469,10 @@ impl SettingsView {
                     .is_some_and(|(i, _)| *i == hover_id);
                 if *hovered && !was {
                     this.market.hover = Some((hover_id.clone(), std::time::Instant::now()));
-                    cx.notify();
+                    this.sync_player(cx);
                 } else if !*hovered && was {
                     this.market.hover = None;
-                    cx.notify();
+                    this.sync_player(cx);
                 }
             }))
             .on_click(cx.listener(move |this, _, _, cx| this.open_item(opened.clone(), cx)))

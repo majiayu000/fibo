@@ -3,7 +3,7 @@
 use super::catalog::{Item, playing};
 use super::showcase::ThemeLook;
 use super::*;
-use crate::workbench::complete::{Play, stage};
+use crate::workbench::complete::stage;
 use mooring_core::plugin_category::Category;
 use std::time::Instant;
 
@@ -124,6 +124,7 @@ impl SettingsView {
             segment(id, text, tab == which).on_click(cx.listener(move |this, _, _, cx| {
                 this.market.tab = which;
                 this.market.open = None;
+                this.sync_player(cx);
                 this.market.scroll.set_offset(gpui::Point::default());
                 cx.notify();
             }))
@@ -265,11 +266,9 @@ impl SettingsView {
     }
     /// A stage that plays while pointed at, and the item's name for the click to open.
     pub(super) fn item_stage(&self, item: &Item, complete: Complete) -> impl IntoElement {
-        let play = match &self.market.hover {
-            Some((id, from)) if *id == item.id => Play::Loop(*from),
-            _ => Play::Still,
-        };
-        stage(complete, play)
+        let spot =
+            (self.market.play_id() == Some(item.id.as_str())).then(|| self.market.spot.clone());
+        stage(complete, spot)
     }
     fn item_card(&self, item: &Item, looks: &[ThemeLook], cx: &Context<Self>) -> gpui::AnyElement {
         let id = item.id.clone();
@@ -301,10 +300,10 @@ impl SettingsView {
                     .is_some_and(|(i, _)| *i == hover_id);
                 if *hovered && !was {
                     this.market.hover = Some((hover_id.clone(), Instant::now()));
-                    cx.notify();
+                    this.sync_player(cx);
                 } else if !*hovered && was {
                     this.market.hover = None;
-                    cx.notify();
+                    this.sync_player(cx);
                 }
             }))
             .on_click(cx.listener(move |this, _, _, cx| this.open_item(id.clone(), cx)))

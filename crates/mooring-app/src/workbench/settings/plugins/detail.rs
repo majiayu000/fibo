@@ -3,7 +3,7 @@
 use super::catalog::{Item, playing};
 use super::gallery::{Tab, theme_sample};
 use super::*;
-use crate::workbench::complete::{Play, stage};
+use crate::workbench::complete::stage;
 use mooring_core::plugin_category::Category;
 use std::time::Instant;
 
@@ -48,14 +48,14 @@ impl SettingsView {
         // What the last install did belongs to that plugin, not the next one opened.
         self.market.done = None;
         self.market.scroll.set_offset(gpui::Point::default());
-        cx.notify();
+        self.sync_player(cx);
     }
     pub(super) fn close_item(&mut self, cx: &mut Context<Self>) {
         self.market.open = None;
         self.market.confirm = None;
         self.market.done = None;
         self.market.scroll.set_offset(self.market.back_to);
-        cx.notify();
+        self.sync_player(cx);
     }
     /// The picture, or the closest honest thing: its own files, or a labelled sketch.
     fn item_preview(&self, item: &Item, cx: &Context<Self>) -> gpui::AnyElement {
@@ -87,11 +87,8 @@ impl SettingsView {
                 .into_any_element()
         };
         if let Some(complete) = item.complete {
-            let play = match &self.market.hover {
-                Some((id, from)) if *id == item.id => Play::Loop(*from),
-                _ => self.market.opened.map_or(Play::Still, Play::Once),
-            };
-            return stage(complete, play).into_any_element();
+            let spot = self.market.spot.clone();
+            return stage(complete, Some(spot)).into_any_element();
         }
         if !show.themes.is_empty() {
             return div()
@@ -338,7 +335,7 @@ impl SettingsView {
                         let id = item.id.clone();
                         cx.listener(move |this, hovered: &bool, _, cx| {
                             this.market.hover = hovered.then(|| (id.clone(), Instant::now()));
-                            cx.notify();
+                            this.sync_player(cx);
                         })
                     })
                     .child(self.item_preview(item, cx)),

@@ -10,6 +10,8 @@
 //! - `frames-section`: a frame of 本机's whole section folding under 按机器. Needs a machine in
 //!   machines.json, so the gate does not run it: `perf-fixture.py` with MACHINE=1 at prepare.
 //! - `frames-rail`: the same machine's rail layout, at rest and with the list arriving.
+//! - `frames-plugins`: 设置 › 插件 and the themes with a picture or a see-through window, in
+//!   `cpu_probe_evidence/plugins.rs`.
 //! - `redraw-check`: not a cost but a check that caching hides nothing: after each of a
 //!   few clicks and a host change, a plain frame must match a refreshed one pixel for
 //!   pixel (run with `MOORING_NO_CATCH_UP=1`), and the sidebar's catch-up must not
@@ -24,6 +26,8 @@
 //! real frames are not measured, only the cost of each.
 use super::*;
 use gpui::WindowHandle;
+#[path = "cpu_probe_evidence/plugins.rs"]
+mod plugins;
 use std::time::{Duration, Instant};
 
 fn cpu_secs() -> f64 {
@@ -299,6 +303,8 @@ pub(super) fn start(
                 section_frames(handle, cx).await
             } else if name == "frames-rail" {
                 rail_frames(handle, cx).await
+            } else if name == "frames-plugins" {
+                plugins::run(handle, &pane, &directory, cx).await
             } else if let Some(view) = name.strip_prefix("frames-") {
                 let overview = view == "overview";
                 handle

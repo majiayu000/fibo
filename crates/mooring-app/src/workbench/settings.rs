@@ -12,6 +12,7 @@ use crate::ui::{
 use std::path::PathBuf;
 
 mod look;
+mod overlay;
 mod plugins;
 mod terminal_look;
 mod theme_editor;
@@ -2068,34 +2069,6 @@ impl Workbench {
                 cx.notify();
             });
         }
-    }
-    pub(super) fn settings_overlay(
-        &self,
-        view: Entity<SettingsView>,
-        cx: &Context<Self>,
-    ) -> gpui::AnyElement {
-        gpui::deferred(
-            div()
-                .absolute()
-                .inset_0()
-                .occlude()
-                .flex()
-                .justify_center()
-                .items_center()
-                .p(px(T::S20))
-                .bg(gpui::rgba(T::scrim()))
-                .on_mouse_down(
-                    gpui::MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.settings = None;
-                        this.nav.pending_focus = true;
-                        cx.notify();
-                    }),
-                )
-                .child(view),
-        )
-        .with_priority(2)
-        .into_any_element()
     }
 }
 

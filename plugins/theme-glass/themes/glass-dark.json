@@ -4,5 +4,5 @@
   "fg": "#e4e7ec",
   "terminal": { "cursor": "#8fc7ff", "selection": "#34506e", "selected_text": "#ffffff", "cursor_guide": "#8fc7ff" },
   "ansi": { "red": "#f0807a", "green": "#7fd69a", "yellow": "#ecc76e", "blue": "#8fc7ff", "magenta": "#cda8ef", "cyan": "#78d4dc" },
-  "window": { "opacity": 0.8, "blur": true }
+  "window": { "opacity": 0.9, "blur": true }
 }

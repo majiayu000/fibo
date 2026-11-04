@@ -20,7 +20,9 @@ mod stage;
 mod timing;
 use paint::Painter;
 use snapshot::Snapshot;
-pub(super) use stage::{Play, stage};
+#[cfg(feature = "visual-test")]
+pub(super) use stage::probe as stage_probe;
+pub(super) use stage::{Play, Player, StageSpot, stage};
 use timing::*;
 
 /// The most specks the dissolve sends; a fuller screen sends one from every n-th cell,

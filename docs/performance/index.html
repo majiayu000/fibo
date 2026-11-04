@@ -81,6 +81,8 @@
   <tr><td><code>perf-fixture.py probe BIN OUT 阶段</code></td><td>跑窗口 CPU 探针。需要 <code>cargo build --release -p mooring-host -p mooring-app --features mooring-app/visual-test</code></td></tr>
   <tr><td>探针阶段 <code>frames-pane</code></td><td>只通知窗格的帧 ×300（终端输出的真实情况）</td></tr>
   <tr><td>探针阶段 <code>frames-main</code> / <code>frames-overview</code></td><td>强制整窗重画 ×300</td></tr>
+  <tr><td>探针阶段 <code>frames-plugins</code></td><td>设置 › 插件：打开设置、动画卡片静止和播放（16 个动画各走完整个过程，取最贵的）；背景图和半透明主题下的终端帧；播放时复用的页面和重画的页面逐像素比对；静止时有没有请求下一帧</td></tr>
+  <tr><td><code>scripts/theme-live.py BIN [秒] [轮] [截图目录]</code></td><td>真实窗口里各主题交替跑几轮，报 App CPU 和全机 GPU。门禁的窗口不上屏，量不到系统合成半透明的开销，只能手动跑，要屏幕解锁且机器空闲</td></tr>
   <tr><td>探针阶段 <code>redraw-check</code></td><td>每步「不刷新的一帧」对「强制刷新的一帧」逐像素比对；终端输出时侧栏是否保留上次的绘制；补画是否自我触发</td></tr>
   <tr><td><code>scripts/perf-gate.py BIN [OUT]</code></td><td>门禁：以上全部 + 对基线比较</td></tr>
   <tr><td><code>sample PID 8 -file x.txt</code> + rustfilt</td><td>找热点。把探针循环临时改成几千次，让采样有足够时间</td></tr>
@@ -113,6 +115,8 @@
 <div class="card rule"><b>R6 每帧按 id 查的表用 FxHash。</b><code>Workspace.content</code> 是 <code>FxHashMap</code>；SipHash 曾占终端帧约一成。键来自本机日志，不是网络对端挑的。</div>
 <div class="card rule"><b>R7 动了渲染要跑门禁。</b>本机：<code>python3 scripts/perf-gate.py target/release</code>（先编探针版）。性能确实变了且是有意的，用 <code>MOORING_PERF_UPDATE=1</code> 重写基线并在提交说明里写原因；只能在真机写，虚拟机写不了。</div>
 
+<div class="card rule"><b>R8 一小块要连续动时，不要让整页跟着重排。</b><code>request_animation_frame</code> 通知的是当前视图和它所有祖先，整页会每帧重新排版。把动的部分放进单独的小视图画在上层，播放期间让页面当缓存视图（<code>workbench/complete/stage.rs</code> 的 <code>Player</code>，<code>settings/overlay.rs</code>）。动画卡片这样从每帧 79 M 降到 12 M。</div>
+
 <h2 id="gate">5. 性能门禁</h2>
 <p>CI 任务「Window performance gate」（<code>.github/workflows/ci.yml</code>），和 Rust 检查并行跑，单独编一份探针版 release，约 8 分钟。脚本 <code>scripts/perf-gate.py</code>，基线 <code>crates/mooring-app/perf-baseline.txt</code>。</p>
 <table>
@@ -120,6 +124,9 @@
   <tr><td>终端帧、整窗重画的指令数</td><td>超基线 15%</td><td>任何变慢（真机）</td></tr>
   <tr><td>pane-share：终端帧 CPU ÷ 整窗 CPU</td><td>超基线 2 倍（仅在读不到指令数时）</td><td>CI 虚拟机上的退路。两个数同一进程前后量，机器快慢基本抵消：本机 0.11（frame_facts 之前 0.17，那时 CI 约 0.2），侧栏每帧重画时 0.96</td></tr>
   <tr><td>逐像素重画</td><td>任何一步有差异</td><td>侧栏或其他缓存视图漏刷新</td></tr>
+  <tr><td>插件页：卡片播放、打开设置、背景图和半透明主题下的终端帧</td><td>指令数超基线 15%；读不到指令数时，<code>cardplay-share</code>、<code>theme-share</code> 超基线 2 倍</td><td>违反 R8；主题拖慢终端帧</td></tr>
+  <tr><td>插件页：静止时请求下一帧</td><td>&gt;0</td><td>页面停着还在一直重画</td></tr>
+  <tr><td>插件页：复用的页面对重画的页面；动画真的在动；16 个动画都播了；3 个主题都生效</td><td>有差异，或任何一项没发生</td><td>缓存盖住了变化；门禁量的是静止画面而空转</td></tr>
   <tr><td>终端输出时侧栏保留上次绘制</td><td>侧栏重画了</td><td>违反 R1</td></tr>
   <tr><td>补画自己那一帧又排的补画</td><td>&gt;0</td><td>违反 R3。不数补画总数：CI 机器有屏幕会自己出帧，正常版本 5 秒也有 9–15 次补画</td></tr>
 </table>
@@ -127,6 +134,8 @@
 <p class="muted">比对前探针会先画一帧、等 50 ms：标签栏的溢出提示是按上一帧排版算的，16 ms 后补一帧（<code>tab_overflow</code>），这是设计内的晚一帧，不能当差异。</p>
 <p class="muted">终端帧指令数是双峰的（约 6.3 M 和 7.0 M），基线取高的那个，避免误报。</p>
 <p><b>后台：</b><code>managed_session</code> 的 <code>four_agents…</code> 按每行日志的退休指令数断言（≤100 万）；读不到指令数（虚拟机）时退回「增量 CPU ≤ 2% 一核」。</p>
+
+<p>插件页这组也做过坏版本测试：不复用页面（+544%，虚拟机上 share 0.93）；不画播放层（「没播」和「没在动」都报）；静止也请求下一帧（480 次）；卡片变慢一倍（+99%）。<b>缺口：</b>变慢一倍在虚拟机模式下会漏过（share 正好没超 2 倍），只有真机指令数拦得住，所以动了渲染要按 R7 在本机跑。</p>
 
 <h2 id="triage">6. 门禁报警的排查流程</h2>
 <ol>
@@ -147,6 +156,7 @@
   <tr><td>fe150bf</td><td>内容表的 SipHash</td><td>FxHash</td><td>−3.5%</td></tr>
   <tr><td>cc717a9</td><td>每帧给每个标签起名都要翻一遍会话、处理名字文本</td><td><code>redraw::tab_name</code> 每秒算一次</td><td>−12%</td></tr>
   <tr><td>e0661af</td><td>348d005 把侧栏列套进横向 flex（门禁抓到）</td><td>没有竖栏时不套</td><td>整窗 1.30 亿 → 7570 万</td></tr>
+  <tr><td>本提交</td><td>指着一张动画卡片时，整页 16 张卡片每帧重排，占这一帧的 80%</td><td>只重画播放的那张（Player），页面当缓存视图（R8）</td><td>每帧 78.8 M → 12.4 M，约 6 ms → 0.9 ms</td></tr>
   <tr><td>8678054</td><td>门禁数补画总数，在有屏幕的 CI 上误报</td><td>改数「补画自己那一帧又排的补画」</td><td>正常 0，坏版本 15</td></tr>
 </table>
 
@@ -164,6 +174,8 @@
   <li><strong>一堆 8192K 的「owned unmapped (graphics)」不是我们的缓存</strong>：进程第一次用渲染通道，Metal 驱动分配 28 块 8 MB；第一次用 blit，再加 20 块。一个几十行的最小 Metal 程序也一样，<code>MTLDevice.currentAllocatedSize</code> 不计入，和窗口大小、会话数无关。所以正常帧不能用 blit 编码器，<code>crates/mooring-core/tests/gpui_present.rs</code> 守着。</li>
 </ul>
 
+<p><b>防门禁空转要写成断言。</b>插件页门禁第一次跑就报「旧纸主题没生效」：探针把浅色主题设到了深色一侧，主题根本没换，数字却很好看。背景图的 CPU 开销本来就小（一张贴图），光看数字分不出来。凡是「数字很好」的测量，都要断言被测的东西确实发生了。</p>
+
 <h2 id="ref">9. 外部参考：大项目怎么做性能回归</h2>
 <table>
   <tr><th>项目</th><th>做法</th><th>拦 PR 吗</th></tr>
@@ -175,6 +187,7 @@
 <p class="muted">共同点：要拦 PR，就要用与机器负载无关的指标（指令数、模拟执行）；用墙钟时间只能事后提醒。Mooring 门禁按这个思路：真机用指令数，CI 虚拟机用同进程内的比例。</p>
 
 <h2 id="open">10. 未解问题与下一步</h2>
+<p><b>没测准</b> 背景图和半透明主题的显卡开销：11-04 跑了 3 轮真实窗口（<code>theme-live.py</code>），App CPU 中位数都在 6.5–7.3%（默认 6.5%），看不出差异；但当时机器有人在用，全机 GPU 在 34–51% 之间来回跳，两轮窗口被别的窗口挡住（CPU 0.1%、0.7%），分不出主题的影响。要在空闲机器、窗口保持在前台时重跑。</p>
 <ul>
   <li><span class="tag">未查</span> 开启补画时，开头那帧顶栏「＋」附近有 803 px 差异；新 main（11-04）才出现，门禁目前只比对关闭补画的那轮，不拦。</li>
   <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>

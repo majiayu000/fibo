@@ -36,8 +36,6 @@ const REST: Duration = Duration::from_millis(700);
 /// Where a stage is in its run.
 #[derive(Clone, Copy)]
 pub(in crate::workbench) enum Play {
-    /// The one moment that says the most about it.
-    Still,
     /// Started at this time and stops at its end.
     Once(Instant),
     /// Started at this time and goes round for as long as it is drawn this way.
@@ -62,14 +60,36 @@ fn pose(style: Style) -> f32 {
     }
 }
 
+/// For the performance probe: the moment every playing stage shows, so the same frames are
+/// measured each run, and how many times a stage has asked for another frame.
+#[cfg(feature = "visual-test")]
+pub(in crate::workbench) mod probe {
+    use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+    const FREE: u32 = u32::MAX;
+    static HELD: AtomicU32 = AtomicU32::new(FREE);
+    pub(in crate::workbench) static ASKED: AtomicUsize = AtomicUsize::new(0);
+    pub(in crate::workbench) fn hold(t: Option<f32>) {
+        HELD.store(t.map_or(FREE, f32::to_bits), Ordering::Relaxed);
+    }
+    pub(super) fn held() -> Option<f32> {
+        match HELD.load(Ordering::Relaxed) {
+            FREE => None,
+            bits => Some(f32::from_bits(bits)),
+        }
+    }
+}
+
 /// `t`, and whether another frame is wanted after this one.
 fn moment(style: Style, run: Duration, play: Play) -> (f32, bool) {
+    #[cfg(feature = "visual-test")]
+    if let Some(t) = probe::held() {
+        return (t, true);
+    }
     let progress = |since: Duration| since.as_secs_f32() / run.as_secs_f32().max(f32::EPSILON);
     if mooring_core::effect::reduce_motion() {
         return (pose(style), false);
     }
     match play {
-        Play::Still => (pose(style), false),
         Play::Once(from) if from.elapsed() >= run => (pose(style), false),
         Play::Once(from) => (progress(from.elapsed()), true),
         Play::Loop(from) => {
@@ -85,21 +105,60 @@ thread_local! {
     static FACES: (std::cell::Cell<Pixels>, Faces) = Default::default();
 }
 
-/// The stage, as wide as its parent and as tall as it is given.
-pub(in crate::workbench) fn stage(complete: Complete, play: Play) -> impl IntoElement {
+/// Where the card to play is on screen and what it may draw in, as the page last laid it out.
+pub(in crate::workbench) type StageSpot =
+    Rc<std::cell::Cell<Option<(Bounds<Pixels>, Bounds<Pixels>)>>>;
+
+/// A stopped stage, as wide as its parent and as tall as it is given. With `spot` it also
+/// says where it is, for the `Player` drawing over it.
+pub(in crate::workbench) fn stage(complete: Complete, spot: Option<StageSpot>) -> impl IntoElement {
     gpui::canvas(
-        |_, _, _| (),
+        move |bounds, window, _| {
+            if let Some(spot) = &spot {
+                spot.set(Some((bounds, window.content_mask().bounds)));
+            }
+        },
         move |bounds, _, window, cx| {
-            let (t, more) = moment(complete.style, complete.duration, play);
+            let t = pose(complete.style);
             window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
                 paint(complete, t, bounds, window, cx);
             });
-            if more {
-                window.request_animation_frame();
-            }
         },
     )
     .size_full()
+}
+
+/// The one stage playing, drawn over the page instead of inside it. Notifying this view
+/// redraws it and the workbench, while settings, its layout included, is reused: laying
+/// out a page of cards every frame was 62 M instructions, 80% of such a frame.
+pub(in crate::workbench) struct Player {
+    pub(in crate::workbench) now: Option<(Complete, Play)>,
+    pub(in crate::workbench) spot: StageSpot,
+}
+impl Render for Player {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let (now, spot) = (self.now, self.spot.clone());
+        gpui::canvas(
+            |_, _, _| (),
+            move |_, _, window, cx| {
+                let (Some((complete, play)), Some((bounds, clip))) = (now, spot.get()) else {
+                    return;
+                };
+                let (t, more) = moment(complete.style, complete.duration, play);
+                let shown = bounds.intersect(&clip);
+                window.with_content_mask(Some(gpui::ContentMask { bounds: shown }), |window| {
+                    paint(complete, t, bounds, window, cx);
+                });
+                if more {
+                    #[cfg(feature = "visual-test")]
+                    probe::ASKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    window.request_animation_frame();
+                }
+            },
+        )
+        .absolute()
+        .size_full()
+    }
 }
 
 fn cells_of(grid: Bounds<Pixels>, metrics: CellMetrics, color: Hsla) -> Vec<TextCell> {

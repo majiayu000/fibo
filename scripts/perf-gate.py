@@ -21,6 +21,14 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
 - so must the same motion in the layouts that need a machine: frames-section (本机's whole
   section folding under 按机器), frames-rail and frames-railrest (the rail with its list
   arriving, and at rest; a rail beside the column instead of over it cost 129 M at rest);
+- 设置 › 插件 (scripts' frames-plugins): a frame with one animation card playing, opening
+  settings, and a terminal's frame under themes with a picture or a see-through window must
+  stay within BUDGET (or, without a counter, within SHARE_BUDGET of a full redraw or a plain
+  terminal frame in the same process). Pointing at a card once drew 79 M a frame, the whole
+  page laid out again. A stopped page must ask for no frames, a reused page must match a
+  fresh one pixel for pixel, and every animation and theme must really have played or
+  applied: a gate over a static picture passes whatever the code does. What the compositor
+  spends on a see-through window is not here: see scripts/theme-live.py;
 - a frame drawn without refreshing must match one drawn with a full refresh, pixel for
   pixel, after each step of redraw-check;
 - with nothing happening, one catch-up must not schedule the next (a loop drew the whole
@@ -52,6 +60,14 @@ def probe(bindir, out, plan, catch_up, machine=False):
     return r.stdout
 
 
+def plugin_shares(ms):
+    """Costs a machine without a counter can compare: within one process, against a frame
+    the same process drew, so the machine's speed cancels out."""
+    full, pane = ms.get('frames-probefull', 1), ms.get('frames-probepane', 1)
+    worst = max(ms.get(k, 0) for k in ('frames-themeimage', 'frames-themepaper', 'frames-themeglass'))
+    return {'cardplay-share': ms.get('frames-cardplay', 0) / full, 'theme-share': worst / pane}
+
+
 def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
@@ -71,6 +87,31 @@ def main():
     if set(found) != {'frames-section', 'frames-rail', 'frames-railrest'}:
         fails.append(f'no machine layout numbers in the probe output: {found}')
     measured.update(found)
+    plugin_text = probe(bindir, out / 'plugins', 'frames-plugins', catch_up=False)
+    costs = dict(re.findall(r'^(frames-\w+|settings-open): [^\n]*?([\d.]+) M instructions', plugin_text, re.M))
+    plugin_ms = {k: float(v) for k, v in re.findall(r'^(frames-\w+): ([\d.]+) ms CPU', plugin_text, re.M)}
+    wanted = {'frames-cardplay', 'frames-cardrest', 'settings-open', 'frames-themeimage', 'frames-themepaper', 'frames-themeglass'}
+    if not wanted <= set(costs) or not {'frames-probefull', 'frames-probepane', 'frames-cardplay'} <= set(plugin_ms):
+        fails.append(f'no plugin page numbers in the probe output: {sorted(costs)}')
+    measured.update({k: float(costs[k]) for k in wanted & set(costs)})
+    played = re.search(r'the costliest of (\d+):', plugin_text)
+    if not played or int(played.group(1)) < 16:
+        fails.append(f'animation cards did not play: {played.group(0) if played else "no count"}')
+    asks = re.search(r'stage-asks: at rest (\d+), pointing (\d+), after leaving (\d+)', plugin_text)
+    if not asks:
+        fails.append('no stage-asks line in the probe output')
+    else:
+        rest, pointing, after = map(int, asks.groups())
+        if rest or after:
+            fails.append(f'a stopped plugin page asked for frames: {rest} at rest, {after} after leaving')
+        if not pointing:
+            fails.append('a card pointed at asked for no frames: the gate measured nothing')
+    if 'player-pixels: same; moves yes' not in plugin_text:
+        line = next((l for l in plugin_text.splitlines() if 'player-pixels' in l), 'no player-pixels line')
+        fails.append(f'plugin page reuse: {line}')
+    not_applied = re.findall(r'theme-applied (\S+): NO', plugin_text)
+    if not_applied or plugin_text.count('theme-applied') != 3:
+        fails.append(f'themes not in force while measured: {not_applied or plugin_text.count("theme-applied")}')
     redraw = next((l for l in text.splitlines() if 'redraw-check:' in l), '')
     for step, verdict in re.findall(r'([\w-]+): (same|DIFF[^;]*)', redraw):
         if verdict != 'same':
@@ -92,7 +133,8 @@ def main():
 
     if os.environ.get('MOORING_PERF_UPDATE'):
         assert counted, 'no instruction counter here: update the baseline on real hardware'
-        BASELINE.write_text(''.join(f'{k} {v:.2f}\n' for k, v in sorted({**measured, 'pane-share': share}.items())))
+        shares = plugin_shares(plugin_ms)
+        BASELINE.write_text(''.join(f'{k} {v:.2f}\n' for k, v in sorted({**measured, 'pane-share': share, **shares}.items())))
         print(f'perf-gate: wrote {BASELINE.relative_to(ROOT)}')
     else:
         base = {k: float(v) for k, v in (l.split() for l in BASELINE.read_text().splitlines() if l.strip())}
@@ -102,9 +144,13 @@ def main():
             print('perf-gate: no instruction counter (virtual machine): gating the share only')
             if s > b * SHARE_BUDGET:
                 fails.append(f'pane-share: {s:.2f}, over {SHARE_BUDGET}x the baseline {b:.2f}')
+            for k, v in plugin_shares(plugin_ms).items():
+                print(f'perf-gate: {k} {v:.2f}, baseline {base[k]:.2f}')
+                if v > base[k] * SHARE_BUDGET:
+                    fails.append(f'{k}: {v:.2f}, over {SHARE_BUDGET}x the baseline {base[k]:.2f}')
         for k, b in sorted(base.items()):
             v = measured.get(k)
-            if v is None or not counted:
+            if k.endswith('-share') or v is None or not counted:
                 continue
             change = (v - b) / b
             print(f'perf-gate: {k} {v:.2f} M instructions, baseline {b:.2f} ({change:+.1%})')
