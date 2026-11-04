@@ -55,10 +55,16 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 .pop button{width:100%;padding:6px 8px;display:flex;align-items:center;gap:8px;border-radius:6px;font-size:13px;color:var(--text)}
 .pop button:hover{background:var(--raised)}
 .pop .tick{flex:none;width:12px;color:var(--green)}
-.list{flex:1;min-height:0;overflow:auto;padding-bottom:8px}
+.list{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;scrollbar-gutter:stable;padding-bottom:8px}
+.list::-webkit-scrollbar,.scroll::-webkit-scrollbar{width:6px;height:6px}
+.list::-webkit-scrollbar-track,.list::-webkit-scrollbar-corner,.scroll::-webkit-scrollbar-track,.scroll::-webkit-scrollbar-corner{background:transparent}
+.list::-webkit-scrollbar-thumb,.scroll::-webkit-scrollbar-thumb{background:transparent;border-radius:3px}
+.list:hover::-webkit-scrollbar-thumb,.scroll:hover::-webkit-scrollbar-thumb{background:#3a404a}
+.list::-webkit-scrollbar-thumb:hover,.scroll::-webkit-scrollbar-thumb:hover{background:#565c67}
+@supports not selector(::-webkit-scrollbar){.list,.scroll{scrollbar-width:thin;scrollbar-color:#3a404a transparent}}
 .grp{padding:12px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:var(--mut)}
 .grp b{font-weight:500;color:var(--sec)}
-.row{width:300px;margin:0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:var(--text)}
+.row{width:calc(100% - 10px);margin:0 2px 0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:var(--text)}
 .row:hover{background:var(--band)}
 .row.sel{background:var(--raised)}
 .row.off{color:var(--mut)}
