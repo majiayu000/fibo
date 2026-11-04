@@ -1,6 +1,6 @@
 // How a conversation's state reads and what colour it takes. The host decides the state
-// (`status::of` on the desktop, `status` and `status_label` on each card); the fallbacks
-// only serve hosts from before 11-03.
+// (`status::of` on the desktop, `status` and `status_label` on each card) and spells it;
+// a phone only pairs with hosts new enough to send both.
 import type { Card } from '../remote/hub';
 import type { Theme } from './theme';
 
@@ -16,17 +16,7 @@ export function statusKey(c: Card): string {
 
 export function statusWord(c: Card): string {
   if (c.approval) return '等你审批';
-  if (c.status_label) return c.status_label;
-  switch (statusKey(c)) {
-    case 'waiting':
-      return '等你回答';
-    case 'running':
-      return '在跑';
-    case 'shell':
-      return '终端';
-    default:
-      return '等你验收';
-  }
+  return c.status_label ?? (c.phase === 'shell' ? '终端' : '');
 }
 
 export function statusColor(c: Card, t: Theme): string {

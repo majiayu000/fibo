@@ -65,11 +65,11 @@ export default function SettingsScreen() {
           <Item t={t} title="等你回答" sub="Agent 问你问题停下来时">
             <Switch label="等你回答" on={v.notify.waiting} onChange={notify('waiting')} />
           </Item>
-          <Item t={t} title="出错" sub="命令失败或 Agent 报错">
-            <Switch label="出错" on={v.notify.error} onChange={notify('error')} />
+          <Item t={t} title="出错了" sub="命令失败或 Agent 报错">
+            <Switch label="出错了" on={v.notify.error} onChange={notify('error')} />
           </Item>
-          <Item t={t} title="做完了" sub="一个任务跑完、等你验收" last>
-            <Switch label="做完了" on={v.notify.done} onChange={notify('done')} />
+          <Item t={t} title="等你验收" sub="一轮跑完，等你看结果" last>
+            <Switch label="等你验收" on={v.notify.done} onChange={notify('done')} />
           </Item>
         </View>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>

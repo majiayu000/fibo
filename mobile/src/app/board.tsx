@@ -1,4 +1,4 @@
-// The board: the desktop's five columns, one at a time — 要你处理, 在跑, 待核对, 待办
+// The board: the desktop's five columns, one at a time — 要你处理, 在跑, 停下了, 待办, 做完了, 很久没动
 // (desktop only for now), 今天完成 — conversations grouped by space within each.
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -11,27 +11,30 @@ import { spaceName } from '@/ui/row';
 import { agentName, needsYou, statusKey, statusWord, tilde } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
 
-type Column = 'you' | 'run' | 'review' | 'todo' | 'done';
+type Column = 'you' | 'run' | 'review' | 'todo' | 'done' | 'stale';
 const COLUMNS: { key: Column; label: string }[] = [
   { key: 'you', label: '要你处理' },
   { key: 'run', label: '在跑' },
-  { key: 'review', label: '待核对' },
+  { key: 'review', label: '停下了' },
   { key: 'todo', label: '待办' },
-  { key: 'done', label: '今天完成' },
+  { key: 'done', label: '做完了' },
+  { key: 'stale', label: '很久没动' },
 ];
 
-const today = (at?: number | null) => !!at && new Date(at * 1000).toDateString() === new Date().toDateString();
-
+/** The column a card goes in: the same reading of what the host said as the desktop's
+ *  `remote_column`. */
 function column(c: Card): Column | null {
-  if (c.outcome === 'done') return today(c.updated) ? 'done' : null;
-  if (needsYou(c) || c.approval) return 'you';
+  if (!c.session) return null;
+  if (c.outcome === 'done') return 'done';
+  if (c.outcome === 'abandoned' || c.outcome === 'deferred') return null;
   const k = statusKey(c);
-  if (k === 'running' || k === 'background') return 'run';
-  if (k === 'review' || k === 'fresh' || k === 'paused' || k === 'stale' || k === 'deferred') return 'review';
-  return null;
+  if (k === 'fresh' || k === 'closed' || k === 'deferred') return null;
+  if (k === 'running') return 'run';
+  if (needsYou(c) || c.approval) return 'you';
+  return k === 'stale' ? 'stale' : 'review';
 }
 
-const colour = (k: Column, t: Theme) => ({ you: t.wait, run: t.run, review: t.ok, todo: t.dim, done: t.dim })[k];
+const colour = (k: Column, t: Theme) => ({ you: t.wait, run: t.run, review: t.dim, todo: t.dim, done: t.dim, stale: t.dim })[k];
 
 type Item = { m: Machine; c: Card };
 
@@ -42,7 +45,7 @@ export default function Board() {
   const [only, setOnly] = useState<string | null>(null);
   const [col, setCol] = useState<Column>('you');
   const shown = machines.filter((m) => !only || m.id === only);
-  const cols: Record<Column, Item[]> = { you: [], run: [], review: [], todo: [], done: [] };
+  const cols: Record<Column, Item[]> = { you: [], run: [], review: [], todo: [], done: [], stale: [] };
   for (const m of shown) for (const c of m.cards) {
     if (!c.agent || c.phase === 'shell') continue;
     const k = column(c);

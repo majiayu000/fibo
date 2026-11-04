@@ -122,7 +122,7 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
-    /// `done`, `abandoned` or `open` for a conversation; with the card's `turn`, refused
+    /// `done`, `deferred`, `abandoned` or `open` for a conversation; with the card's `turn`, refused
     /// once the Agent began another.
     Outcome {
         session: String,

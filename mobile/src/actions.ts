@@ -55,7 +55,7 @@ export async function deny(machine: string, card: Card) {
   setTimeout(() => refresh(machine), 300);
 }
 
-/** Settles a conversation: 已处理 is `done`, 稍后提醒 `deferred`, back to the inbox `open`. */
+/** Settles a conversation: 已处理 is `done`, 稍后提醒 `deferred` (the machine brings it back in an hour), back to the inbox `open`. */
 export async function settle(machine: string, card: Card, outcome: 'done' | 'deferred' | 'open') {
   if (!card.session) throw new Error('这个终端里没有 Agent 对话');
   try {

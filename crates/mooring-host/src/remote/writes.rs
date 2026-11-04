@@ -148,17 +148,24 @@ pub(super) fn end(socket: &Path, request: &Value, client: Option<&str>) -> io::R
     edit_once(socket, request, client, edit)
 }
 
-/// `outcome`: `done`, `abandoned` or `open` for a conversation. With the `turn` the
-/// client saw (a card's `turn`), refused once the Agent began another turn.
+/// How long a conversation put off from a client stays out of the way.
+const DEFERRED_FOR: u64 = 3600;
+
+/// `outcome`: `done`, `deferred` (back in an hour), `abandoned` or `open` for a
+/// conversation. With the `turn` the client saw (a card's `turn`), refused once the Agent began another turn.
 pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
     let id = text(request, "session")?.to_owned();
     let outcome = match text(request, "outcome")? {
         "done" => Outcome::Completed,
+        "deferred" => Outcome::Deferred {
+            reason: "在手机上选了稍后提醒".into(),
+            until: mooring_core::time::now() + DEFERRED_FOR,
+        },
         "abandoned" => Outcome::Abandoned,
         "open" => Outcome::Open,
         other => {
             return Err(io::Error::other(format!(
-                "outcome 只能是 done、abandoned 或 open，不是 {other}"
+                "outcome 只能是 done、deferred、abandoned 或 open，不是 {other}"
             )))
         }
     };
