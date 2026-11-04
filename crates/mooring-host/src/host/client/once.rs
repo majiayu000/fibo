@@ -1,7 +1,7 @@
 //! `Request::Once`: typing, keys or an approval answer that a resend must not repeat.
 //! Its outcome goes in the same table as named edits' (`store/requests.rs`). Unlike an
-//! edit it changes nothing stored, so the record follows the act: a host killed between
-//! the two would type a resend again.
+//! edit it changes nothing stored, so it is marked begun before it acts and settled
+//! after: a host killed in between answers a resend 「不确定」 instead of typing again.
 use super::*;
 use mooring_core::protocol::RequestId;
 
@@ -25,6 +25,7 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
     if let Some(first) = lock(shared)?.store.settled(&request)? {
         return first.map(|()| Reply::Ok).map_err(io::Error::other);
     }
+    lock(shared)?.store.started(&request)?;
     let result = dispatch(shared, inner);
     let mut host = lock(shared)?;
     match &result {
