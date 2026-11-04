@@ -32,21 +32,28 @@ fn plugin(root: &Path, id: &str, version: &str) {
     std::fs::write(d.join("build.sh"), "echo hi").unwrap();
 }
 
+/// `index.json` may lag the plugins until CI signs it after a push, but it must never leave
+/// its signature behind: the app refuses the whole official catalog when they disagree.
 #[test]
-fn the_shipped_index_is_current() {
+fn the_shipped_index_matches_its_signature() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
-    let want = render(&index_of(&dir).unwrap());
-    let have = std::fs::read_to_string(dir.join("index.json")).unwrap_or_default();
-    assert!(
-        want == have,
-        "plugins/index.json 过期了：运行 cargo run -p mooring-host -- plugins index plugins"
-    );
+    let index = std::fs::read(dir.join("index.json")).unwrap_or_default();
     let signature = std::fs::read(dir.join("index.sig")).unwrap_or_default();
     assert_eq!(
-        verify_index(have.as_bytes(), &signature),
+        verify_index(&index, &signature),
         Ok(Publisher::Official),
-        "plugins/index.sig 过期了：在有官方私钥的机器上运行 mooring plugins index plugins"
+        "plugins/index.json 和 index.sig 对不上：别提交本地生成的 index.json（git checkout plugins/index.json plugins/index.sig），推送后 CI 会生成并签名"
     );
+}
+
+/// A typo here would lock every app out once the catalog moved to that key.
+#[test]
+fn the_official_keys_are_real_and_different() {
+    for key in OFFICIAL_KEYS {
+        let bytes = sign::from_hex::<32>(key).unwrap();
+        assert!(ed25519_dalek::VerifyingKey::from_bytes(&bytes).is_ok());
+    }
+    assert_ne!(OFFICIAL_KEYS[0], OFFICIAL_KEYS[1]);
 }
 
 #[test]

@@ -255,7 +255,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                 }
                 None if sig_path.exists() && !same => {
                     eprintln!(
-                        "注意：没有私钥，{} 已经和新的目录对不上",
+                        "注意：没有私钥，{} 已经和新的目录对不上；这是本仓库的 plugins/ 的话别提交这两个文件，推送后 CI 会生成并签名",
                         sig_path.display()
                     );
                 }

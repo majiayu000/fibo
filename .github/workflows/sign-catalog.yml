@@ -1,0 +1,87 @@
+name: Sign plugin catalog
+
+# After a push that changes the plugins or the index format, regenerates plugins/index.json,
+# signs it and commits both to main. Its own push does not start another run, because pushes
+# with GITHUB_TOKEN start no workflows.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - plugins/**
+      - crates/mooring-core/src/market*.rs
+      - crates/mooring-host/src/plugins_cmd.rs
+      - scripts/publish-catalog.sh
+      - .github/workflows/sign-catalog.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sign-catalog
+  cancel-in-progress: false
+
+jobs:
+  # Compiling runs third-party build scripts, so this job holds no secret and cannot push.
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    env:
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95.0
+        with:
+          toolchain: 1.95.0
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.16.0
+
+      - name: Prepare pinned native dependencies
+        run: sh bootstrap.sh
+
+      - name: Build
+        run: cargo build --locked -p mooring-host --bin mooring
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mooring
+          path: target/debug/mooring
+          retention-days: 1
+
+  # Holds the key and can push, and compiles nothing.
+  sign:
+    needs: build
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mooring
+          path: ${{ runner.temp }}/bin
+
+      - name: Sign and publish
+        env:
+          # To retire this key, change the name to MOORING_PUBLISHER_KEY_SPARE, then build the
+          # next pair into OFFICIAL_KEYS and ship an app that has it.
+          PUBLISHER_KEY: ${{ secrets.MOORING_PUBLISHER_KEY }}
+          BIN: ${{ runner.temp }}/bin/mooring
+          KEY_FILE: ${{ runner.temp }}/publisher.key
+        run: |
+          chmod +x "$BIN"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          (umask 077 && printf '%s' "$PUBLISHER_KEY" > "$KEY_FILE")
+          sh scripts/publish-catalog.sh "$BIN" "$KEY_FILE"

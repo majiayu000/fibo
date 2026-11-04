@@ -415,6 +415,37 @@ fn the_official_address_accepts_only_the_official_key() {
     assert!(publisher_of(elsewhere, b"changed", Some(sig.as_bytes())).is_err());
 }
 
+/// Installed under the official key that has since been retired: the next official version
+/// is no change of publisher, while anyone else's still is.
+#[test]
+fn moving_between_official_keys_is_not_a_new_publisher() {
+    let catalog = tmp("official-keys");
+    let plugins = tmp("official-keys-into");
+    const EFFECT: &str = r#"{"api":1,"complete":{"style":"sweep"}}"#;
+    let offer = offer_of(
+        &catalog,
+        r#"{"api":1,"id":"k","name":"K","version":"1.0.0","provides":["effects"]}"#,
+        &[("effects.json", EFFECT)],
+    );
+    assert_eq!(offer.publisher, Publisher::Official);
+    offer.install_into(&plugins).unwrap();
+    let record = crate::setup::data_dir(&plugins, "k").join(install::SOURCE_FILE);
+    let mut was: InstalledFrom = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+    was.key = Some(OFFICIAL_KEYS[1].to_owned());
+    std::fs::write(&record, serde_json::to_vec(&was).unwrap()).unwrap();
+    let official = offer.replacing_for_test(&plugins);
+    let mut stranger = offer.clone();
+    stranger.publisher = Publisher::Signed {
+        name: "别人".into(),
+        key: "ab".repeat(32),
+    };
+    let other = stranger.replacing_for_test(&plugins);
+    let _ = std::fs::remove_dir_all(&catalog);
+    let _ = std::fs::remove_dir_all(&plugins);
+    assert!(official.is_empty(), "{official:?}");
+    assert!(other.iter().any(|l| l.contains("发布者变了")), "{other:?}");
+}
+
 /// Installed from one key: the next version signed by another, or not signed at all, is
 /// asked about even for an animation. The same key from a new address is not.
 #[test]

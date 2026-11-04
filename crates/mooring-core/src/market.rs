@@ -16,7 +16,7 @@
 //! **Who published it.** A catalog may carry `index.sig` beside `index.json`: an ed25519
 //! signature over the index's exact bytes, whose file hashes in turn pin every file. So a
 //! valid signature says one key published this whole catalog. This repository's key is built
-//! in (`OFFICIAL_KEY`) and its catalog must be signed by it; another catalog's key is shown
+//! in (`OFFICIAL_KEYS`) and its catalog must be signed by one of them; another catalog's key is shown
 //! the first time and remembered with what was installed, so a change of publisher is asked
 //! about; a catalog with no signature is allowed and says so; a bad signature is refused.
 //!
@@ -47,9 +47,14 @@ pub const DEFAULT_REMOTE: &str =
     "https://raw.githubusercontent.com/majiayu000/mooring/main/plugins/index.json";
 /// No plugin file is this large; a bigger one is refused, not written.
 const MAX_FILE: u64 = 16 << 20;
-/// The public half of the key this repository's catalog is signed with; the private half is
-/// `publisher.key` on the maintainer's machine, never in the repository.
-pub const OFFICIAL_KEY: &str = "e88de1d56240c9dbf6f150dfdc58347a967d78ed88dc07218cb116c976aa8988";
+/// The public halves of the keys this repository's catalog may be signed with. The private
+/// halves are GitHub secrets, used only by `.github/workflows/sign-catalog.yml`. The first
+/// signs today; the second is built in unused, so apps already out there keep trusting the
+/// catalog if the first ever has to be retired.
+pub const OFFICIAL_KEYS: [&str; 2] = [
+    "e88de1d56240c9dbf6f150dfdc58347a967d78ed88dc07218cb116c976aa8988",
+    "c4382767802055283d1ce6b2729adb5f5adf8517290cea36852a4e389279ccd5",
+];
 
 /// Fields a newer Mooring adds to the index are ignored, and kinds it does not know are
 /// dropped from `provides`, so an older build still lists what it can install.

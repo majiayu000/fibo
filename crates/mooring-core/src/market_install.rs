@@ -132,7 +132,7 @@ pub struct InstalledFrom {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
 }
-const SOURCE_FILE: &str = "source.json";
+pub(super) const SOURCE_FILE: &str = "source.json";
 /// This repository's catalog, whichever way it arrived: shipped with the app or fetched.
 pub(super) const OFFICIAL: &str = "官方目录";
 
@@ -174,9 +174,12 @@ pub(super) fn replacing(
             .and_then(|b| serde_json::from_slice(&b).ok());
     let mut out = Vec::new();
     if let Some(r) = &recorded {
+        // Moving between the official keys is the same publisher.
+        let still_official = offer.publisher == Publisher::Official
+            && r.key.as_deref().is_some_and(|k| OFFICIAL_KEYS.contains(&k));
         match (&r.key, offer.publisher.key()) {
             // The serious one, whatever the address says.
-            (Some(was), now) if now.as_ref() != Some(was) => out.push(format!(
+            (Some(was), now) if now.as_ref() != Some(was) && !still_official => out.push(format!(
                 "发布者变了：原来的密钥是 {}，这次{}",
                 Publisher::fingerprint(was),
                 now.map_or("没有签名".to_owned(), |k| format!(

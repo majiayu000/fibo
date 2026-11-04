@@ -8,7 +8,7 @@ Mooring: a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt).
 - `crates/mooring-host`: the background host (`mooring serve`) and the `mooring` command Agents use inside its terminals (`mooring --skill`, `mooring --skill plugins`).
 - `crates/mooring-core`: model, protocol, status rules and plugin formats shared by both.
 - `crates/mooring-remote`, `crates/mooring-relay`: the phone link and its relay. `mobile/`: the phone app (Expo).
-- `plugins/`: example plugins. `eval/`: terminal rendering and protocol checks.
+- `plugins/`: example plugins. Don't commit `plugins/index.json` or `index.sig` by hand: after a push, `.github/workflows/sign-catalog.yml` regenerates and signs them. `eval/`: terminal rendering and protocol checks.
 
 ## Build and check
 

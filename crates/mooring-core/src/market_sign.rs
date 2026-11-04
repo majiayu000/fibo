@@ -4,7 +4,7 @@ use super::*;
 /// Who a catalog's signature says published it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Publisher {
-    /// This repository: signed by `OFFICIAL_KEY`, or shipped inside the app itself.
+    /// This repository: signed by one of `OFFICIAL_KEYS`, or shipped inside the app itself.
     Official,
     /// Another key, valid for this index.
     Signed { name: String, key: String },
@@ -15,7 +15,7 @@ impl Publisher {
     /// The key to remember with what was installed.
     pub(super) fn key(&self) -> Option<String> {
         match self {
-            Self::Official => Some(OFFICIAL_KEY.to_owned()),
+            Self::Official => Some(OFFICIAL_KEYS[0].to_owned()),
             Self::Signed { key, .. } => Some(key.clone()),
             Self::Unsigned => None,
         }
@@ -54,7 +54,7 @@ struct SecretKey {
 fn to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
-fn from_hex<const N: usize>(text: &str) -> Option<[u8; N]> {
+pub(super) fn from_hex<const N: usize>(text: &str) -> Option<[u8; N]> {
     if text.len() != N * 2 || !text.is_ascii() {
         return None;
     }
@@ -110,7 +110,7 @@ pub fn verify_index(index: &[u8], signature: &[u8]) -> Result<Publisher, String>
     let sig = from_hex::<64>(&s.sig).ok_or("index.sig 的签名格式不对")?;
     key.verify(index, &ed25519_dalek::Signature::from_bytes(&sig))
         .map_err(|_| "index.json 和它的签名对不上：可能被改过，没有使用".to_owned())?;
-    Ok(if s.key == OFFICIAL_KEY {
+    Ok(if OFFICIAL_KEYS.contains(&s.key.as_str()) {
         Publisher::Official
     } else {
         Publisher::Signed {
