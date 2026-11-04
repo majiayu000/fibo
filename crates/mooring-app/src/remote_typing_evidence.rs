@@ -5,6 +5,8 @@
 use super::*;
 use gpui::WindowHandle;
 use std::time::Duration;
+#[path = "remote_board_evidence.rs"]
+mod board;
 
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
@@ -14,6 +16,9 @@ pub(super) fn start(
     let (Some(handle), Some(directory)) = (handle, evidence) else {
         return false;
     };
+    if std::env::var_os("MOORING_REMOTE_BOARD_EVIDENCE").is_some() {
+        return board::start(handle, directory, cx);
+    }
     if std::env::var_os("MOORING_REMOTE_TYPING_EVIDENCE").is_none() {
         return false;
     }

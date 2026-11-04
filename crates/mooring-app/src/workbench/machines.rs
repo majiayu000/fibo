@@ -88,6 +88,27 @@ impl Workbench {
                                 T::color(T::muted())
                             }),
                     )
+                    .child(div().flex_1())
+                    .when(
+                        view.link == Link::Online && self.machine_manages(index),
+                        |d| {
+                            d.child(
+                                button(
+                                    gpui::SharedString::from(format!("machine-open-{index}")),
+                                    "＋",
+                                )
+                                .aria_label(format!("在 {name} 上开一个新终端"))
+                                .h(px(T::SEGMENT_HEIGHT))
+                                .px(px(T::S6))
+                                .text_color(T::color(T::secondary()))
+                                .on_click(cx.listener(
+                                    move |this, _, window, cx| {
+                                        this.open_remote_shell(index, window, cx)
+                                    },
+                                )),
+                            )
+                        },
+                    )
                     .into_any_element(),
             );
             if view.link != Link::Online {
@@ -180,6 +201,7 @@ impl Workbench {
                 pane,
                 answering: false,
                 note: None,
+                confirm_end: false,
                 remote: Some(RemoteTitle {
                     title: format!("{name} · {title}"),
                     status: card.status.as_deref().and_then(Status::from_key),
@@ -196,6 +218,94 @@ impl Workbench {
     }
 }
 
+impl Workbench {
+    /// 「＋」 on a machine's heading: a shell in a new tab there, in its first space's
+    /// folder, then that shell in the peek. Named, so a resend opens one.
+    fn open_remote_shell(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(remote) = self.machines.get(index) else {
+            return;
+        };
+        let Some(linked) = remote.slot().lock().unwrap().clone() else {
+            return;
+        };
+        let name = {
+            let view = remote.view.lock().unwrap();
+            (view.machine.as_ref()).map_or_else(|| view.spec.host.clone(), |m| m.name.clone())
+        };
+        let op = mooring_remote::protocol::Op::Open {
+            cwd: None,
+            request: Some(mooring_core::protocol::RequestId::fresh().id),
+        };
+        let sent = cx.background_spawn(async move {
+            linked
+                .client
+                .request(op, std::time::Duration::from_secs(15))
+        });
+        let window = window.window_handle();
+        cx.spawn(async move |this, cx| {
+            let opened = sent.await;
+            let _ = window.update(cx, |_, window, cx| {
+                let _ = this.update(cx, |this, cx| match opened {
+                    Ok(reply) => {
+                        let terminal = reply["terminal"].as_str().unwrap_or_default();
+                        let card: Card = serde_json::from_value(serde_json::json!({
+                            "id": terminal, "space": "", "tab": "", "phase": "shell",
+                            "cwd": "新终端",
+                        }))
+                        .expect("a card needs only these");
+                        this.open_remote_peek(index, card, &name, window, cx);
+                    }
+                    Err(e) => {
+                        this.error = Some(format!("没能在 {name} 上开终端：{e}"));
+                        cx.notify();
+                    }
+                });
+            });
+        })
+        .detach();
+    }
+
+    /// 「关闭终端」 in a remote peek, once confirmed: ends that terminal there and closes
+    /// the peek; a refusal stays in the peek's title bar.
+    pub(super) fn end_remote(&mut self, cx: &mut Context<Self>) {
+        let Some(r) = self.peek.as_ref().and_then(|p| p.remote.as_ref()) else {
+            return;
+        };
+        let Some(linked) = r.slot.lock().unwrap().clone().filter(|l| l.managing) else {
+            return;
+        };
+        let op = mooring_remote::protocol::Op::End {
+            terminal: r.terminal.clone(),
+            request: Some(mooring_core::protocol::RequestId::fresh().id),
+        };
+        let key = self.peek.as_ref().map(|p| p.terminal.clone());
+        let sent = cx.background_spawn(async move {
+            linked
+                .client
+                .request(op, std::time::Duration::from_secs(10))
+        });
+        cx.spawn(async move |this, cx| {
+            let ended = sent.await;
+            let _ = this.update(cx, |this, cx| {
+                if this.peek.as_ref().map(|p| p.terminal.clone()) != key {
+                    return;
+                }
+                match ended {
+                    Ok(_) => this.close_peek(cx),
+                    Err(e) => {
+                        if let Some(p) = &mut this.peek {
+                            p.confirm_end = false;
+                            p.note = Some(format!("没关掉：{e}"));
+                        }
+                        cx.notify();
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+}
+
 /// A peek's key for another machine's terminal: never equal to a terminal of this one.
 fn remote_key(view: &crate::machines::View, terminal: &str) -> String {
     let machine = view
@@ -207,7 +317,7 @@ fn remote_key(view: &crate::machines::View, terminal: &str) -> String {
 
 /// The name that machine's host gave the session (its `session_title`), else what it says
 /// about an Agent it cannot read, else the folder.
-fn shown_title(card: &Card) -> String {
+pub(super) fn shown_title(card: &Card) -> String {
     card.title
         .clone()
         .or_else(|| card.note.clone())
@@ -277,6 +387,64 @@ impl Workbench {
         };
         self.open_remote_peek(index, card, &name, window, cx);
         true
+    }
+    /// Other machines' cards on the board now: terminal id and column.
+    pub fn visual_remote_columns(&self) -> Vec<(String, &'static str)> {
+        (self.remote_cards().into_iter())
+            .map(|r| (r.card.id, r.column.id()))
+            .collect()
+    }
+    /// Opens the board, as 鸟瞰 does.
+    pub fn visual_show_board(&mut self, cx: &mut Context<Self>) {
+        self.show_overview(cx);
+    }
+    /// Drops machine `index`'s card for `terminal` on 做完了 (or back on 要你处理), as a
+    /// drag does once the board accepted it.
+    pub fn visual_settle_remote(
+        &mut self,
+        index: usize,
+        terminal: &str,
+        done: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(r) = self
+            .remote_cards()
+            .into_iter()
+            .find(|r| r.index == index && r.card.id == terminal)
+        else {
+            return;
+        };
+        let card = super::board_drawer::DraggedCard {
+            id: super::board::remote::remote_id(index, terminal),
+            title: shown_title(&r.card),
+            from: r.column,
+        };
+        let to = if done {
+            super::board::Column::Done
+        } else {
+            super::board::Column::Needs
+        };
+        self.settle_remote(&card, to, cx);
+    }
+    /// The sidebar's 「＋」 on machine `index`'s heading.
+    pub fn visual_open_remote_shell(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_remote_shell(index, window, cx);
+    }
+    /// The open peek's terminal key, `remote:<machine>:<terminal>` for another machine's.
+    pub fn visual_peek_key(&self) -> Option<String> {
+        self.peek.as_ref().map(|p| p.terminal.clone())
+    }
+    /// 「关闭终端」 then 「关闭」 in a remote peek.
+    pub fn visual_end_remote(&mut self, cx: &mut Context<Self>) {
+        if let Some(p) = &mut self.peek {
+            p.confirm_end = true;
+        }
+        self.end_remote(cx);
     }
     /// The open peek's pane, and whether its title bar says 只读.
     pub fn visual_peek_pane(&self) -> Option<(Entity<Pane>, bool)> {
