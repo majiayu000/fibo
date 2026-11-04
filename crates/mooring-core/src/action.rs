@@ -95,10 +95,10 @@ impl Action {
             When::Task => ctx.task.is_some(),
         }
     }
-    /// The command for one pane, each value quoted for where it stands: bare, inside
-    /// `"…"` or inside `'…'` (plugins.md says not to add quotes, and some do anyway; a
-    /// single-quoted value inside double quotes would still run `$(…)`). A value the
-    /// pane lacks is an error naming it, never an empty argument.
+    /// The command for one pane, each value single-quoted for where it stands: bare, it
+    /// is quoted; inside `"…"` the double quotes close around it; inside `'…'` its own
+    /// quotes become `'\''` (plugins.md says not to add quotes, and some do anyway). A
+    /// value the pane lacks is an error naming it, never an empty argument.
     pub fn command(&self, ctx: &Context) -> Result<String, String> {
         let mut out = String::new();
         let mut rest = self.command.as_str();
@@ -115,13 +115,9 @@ impl Action {
                         .ok_or_else(|| format!("这个画面没有 {{{name}}}"))?;
                     out.push_str(&match quote {
                         Quote::None => shell_quote(value),
-                        Quote::Double => value
-                            .chars()
-                            .flat_map(|c| {
-                                let escape = matches!(c, '\\' | '$' | '`' | '"');
-                                escape.then_some('\\').into_iter().chain([c])
-                            })
-                            .collect(),
+                        // Out of the double quotes, the value in single ones, and back:
+                        // only single-quote escaping, everywhere (plan stage 4).
+                        Quote::Double => format!("\"{}\"", shell_quote(value)),
                         Quote::Single => value.replace('\'', "'\\''"),
                     });
                     rest = &after[end + 1..];
@@ -323,7 +319,7 @@ mod tests {
         };
         assert_eq!(
             a.command(&ctx).unwrap(),
-            "codex exec --cd '/tmp/my dir' \"看看 修 bug; rm -rf /\" {unknown}"
+            "codex exec --cd '/tmp/my dir' \"看看 \"'修 bug; rm -rf /'\"\" {unknown}"
         );
         let needs = Action {
             command: "claude --resume {session_id}".into(),

@@ -3,8 +3,11 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// The newest tunnel protocol spoken here.
-pub const PROTOCOL: u32 = 2;
+/// The newest tunnel protocol spoken here. From 3 a machine's phones reach it only by
+/// their own route tokens (`routes`), never by the token it registers with.
+pub const PROTOCOL: u32 = 3;
+/// Phones a machine may list in `routes`, and revoked ones in `revoked`.
+pub const MAX_ROUTES: usize = 256;
 /// Old tokens a machine lists as retired; a relay keeps at most this many per machine.
 pub const MAX_RETIRED: usize = 8;
 /// Where a machine registers.
@@ -41,6 +44,21 @@ pub enum Frame {
         /// finding nothing. A relay that does not know the field ignores it.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         retired: Vec<String>,
+        /// Protocol 3: `sha256_hex(token)` of each paired phone's own route token. Only
+        /// these reach this machine, so a phone never learns the token it registers with
+        /// and cannot take its place on the relay.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        routes: Vec<String>,
+        /// Route hashes of phones it unpaired: told so with 4401 instead of finding nothing.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        revoked: Vec<String>,
+    },
+    /// Machine → relay, any time after registering: the whole new list of routes, when a
+    /// phone was paired or unpaired.
+    Routes {
+        routes: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        revoked: Vec<String>,
     },
     Registered {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -153,6 +171,8 @@ mod tests {
             key: None,
             proto: Some(2),
             retired: vec![],
+            routes: vec![],
+            revoked: vec![],
         };
         assert_eq!(
             f.to_text(),

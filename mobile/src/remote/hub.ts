@@ -6,7 +6,8 @@
 import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { forgetMachine, loadMachines, machineId, saveMachine } from '../store/machines';
-import { Remote, type RemoteError } from './client';
+import { HEARTBEAT_MS, Remote, type RemoteError } from './client';
+import { named } from './named';
 import { closeOutcome } from './close';
 import type { Link } from './link';
 
@@ -99,7 +100,13 @@ async function connect(id: string) {
     ended(id, e.code);
   });
   try {
-    const hello = await r.request('hello', { version: 1 });
+    // The device id names this phone for the request ids its writes carry.
+    const hello = await r.request('hello', { version: 1, client: m.link.device });
+    const beat = setInterval(() => {
+      if (r.ended) clearInterval(beat);
+      else r.request('ping').catch(() => undefined);
+    }, HEARTBEAT_MS);
+    r.onEnded(() => clearInterval(beat));
     retry.delete(id);
     set(id, {
       status: 'online',
@@ -183,7 +190,10 @@ export async function start() {
   });
 }
 
+/** Pairs with `link`: kept only once its machine answered this phone's handshake. */
 export async function pair(link: Link) {
+  const probe = await Remote.connect(link);
+  probe.close();
   await saveMachine(link);
   const id = machineId(link);
   remotes.get(id)?.close();
@@ -228,4 +238,9 @@ export function useHub(): State {
     },
     () => state,
   );
+}
+
+/** A write named by a request id, sent again under it after a reconnect (`named.ts`). */
+export function write(machine: string, op: string, fields: Record<string, unknown>) {
+  return named(() => remotes.get(machine), op, fields);
 }

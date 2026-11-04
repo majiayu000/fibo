@@ -217,6 +217,9 @@ pub fn serve(
                 let access = access.clone();
                 thread::spawn(move || stream(id, &request, &socket, &out, &streams, &access));
             }
+            "ping" => {
+                let _ = out.send(json!({ "id": id, "ok": {} }));
+            }
             "resize" => match resize(&streams, &request) {
                 Ok(()) => {
                     let _ = out.send(json!({ "id": id, "ok": {} }));

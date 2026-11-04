@@ -27,8 +27,10 @@ export const closeText = (code: number) => closeOutcome(code).text;
 const own = (b: Uint8Array) => b as Uint8Array<ArrayBuffer>;
 
 type Pending = { resolve: (ok: any) => void; reject: (e: Error) => void };
-/** How long a request may go unanswered before the link counts as dead. */
-export const REQUEST_TIMEOUT_MS = 20_000;
+/** How long a request may go unanswered before the link counts as dead (plan stage 4). */
+export const REQUEST_TIMEOUT_MS = 10_000;
+/** How often a quiet connection asks `ping`, so a dead link shows within a heartbeat. */
+export const HEARTBEAT_MS = 15_000;
 type StreamHandler = (message: any) => void;
 
 export class Remote {

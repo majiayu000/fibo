@@ -182,3 +182,37 @@ fn a_program_report_outranks_screen_guesses_and_ends_with_its_program() {
     drop(host);
     fs::remove_dir_all(root).unwrap();
 }
+
+/// Stage 4: `/new` in a terminal puts another conversation there; subscribers hear
+/// `session_switched` naming the new one and, as `detail`, the one before, once.
+#[test]
+fn a_terminal_that_moves_to_another_conversation_says_so_once() {
+    let mut w = Workspace::default();
+    w.terminals.push(Terminal {
+        id: "t".into(),
+        space: "s".into(),
+        argv: vec![],
+        cwd: "/tmp".into(),
+        pid: Some(1),
+        state: ProcessState::Running,
+        exit_code: None,
+        error: None,
+    });
+    w.agent_sessions = vec![session("old", 0, Some("t"), true)];
+    let mut tracker = events::Tracker::default();
+    tracker.seed(&w);
+    let switched = |n: &Vec<mooring_core::hook::Notice>| {
+        n.iter()
+            .filter(|n| n.event == "session_switched")
+            .map(|n| (n.session.clone(), n.detail.clone(), n.terminal.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert!(switched(&tracker.changes(&w)).is_empty());
+    w.agent_sessions[0].current = false;
+    w.agent_sessions.push(session("new", 1, Some("t"), true));
+    assert_eq!(
+        switched(&tracker.changes(&w)),
+        [("new".into(), "old".into(), Some("t".into()))]
+    );
+    assert!(switched(&tracker.changes(&w)).is_empty(), "said once");
+}

@@ -10,8 +10,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub(super) const TABLE: &str = "CREATE TABLE IF NOT EXISTS requests (client TEXT NOT NULL, id TEXT NOT NULL, at INTEGER NOT NULL, error TEXT, PRIMARY KEY(client,id));
     CREATE INDEX IF NOT EXISTS requests_at ON requests(at);";
 
+/// Stands in the error column while a named act runs: found later, the host stopped in
+/// the middle and cannot tell whether the act happened.
+const STARTED: &str = "\u{0}started";
+pub const UNSURE: &str =
+    "电脑上的 Mooring 在执行这一步时停了，不确定执行了没有；看一眼屏幕再决定要不要重发";
+
 impl Store {
-    /// The outcome recorded for `request`: applied (`Ok`) or refused with its error.
+    /// The outcome recorded for `request`: applied (`Ok`) or refused with its error; one
+    /// that started and never finished is reported as [`UNSURE`], never run again.
     pub fn settled(&self, request: &RequestId) -> io::Result<Option<Result<(), String>>> {
         let error = self
             .0
@@ -22,7 +29,15 @@ impl Store {
             )
             .optional()
             .map_err(db_error)?;
-        Ok(error.map(|e| e.map_or(Ok(()), Err)))
+        Ok(error.map(|e| match e {
+            None => Ok(()),
+            Some(e) if e == STARTED => Err(UNSURE.to_owned()),
+            Some(e) => Err(e),
+        }))
+    }
+    /// Marks a named act as begun, before it touches anything (typing into a terminal).
+    pub fn started(&mut self, request: &RequestId) -> io::Result<()> {
+        record(&self.0, request, Some(STARTED))
     }
     /// Records a request that changed nothing stored here (typing into a terminal).
     pub fn applied(&mut self, request: &RequestId) -> io::Result<()> {
@@ -43,7 +58,7 @@ pub(super) fn record(db: &Connection, request: &RequestId, error: Option<&str>) 
     db.execute("DELETE FROM requests WHERE at < ?1", [now - kept])
         .map_err(db_error)?;
     db.execute(
-        "INSERT INTO requests VALUES(?1,?2,?3,?4)",
+        "INSERT OR REPLACE INTO requests VALUES(?1,?2,?3,?4)",
         params![request.client, request.id, now, error],
     )
     .map_err(db_error)?;
@@ -72,6 +87,14 @@ mod tests {
         assert_eq!(store.settled(&id("old")).unwrap(), None);
         assert_eq!(store.settled(&id("new")).unwrap(), Some(Err("不行".into())));
         assert_eq!(store.settled(&id("other")).unwrap(), None);
+        // Begun and never finished: unsure, so a resend does not act again.
+        store.started(&id("typing")).unwrap();
+        assert_eq!(
+            store.settled(&id("typing")).unwrap(),
+            Some(Err(UNSURE.into()))
+        );
+        store.applied(&id("typing")).unwrap();
+        assert_eq!(store.settled(&id("typing")).unwrap(), Some(Ok(())));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

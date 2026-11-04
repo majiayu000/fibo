@@ -14,6 +14,16 @@ pub(super) struct Tracker {
     /// Session -> the approval question its screen shows.
     approvals: HashMap<String, String>,
     running: HashSet<String>,
+    /// Running terminal -> the conversation current in it, to say when it changes.
+    sessions: HashMap<String, String>,
+}
+/// The conversation each running terminal shows now.
+fn sessions(w: &Workspace) -> HashMap<String, String> {
+    w.terminals
+        .iter()
+        .filter(|t| t.state == ProcessState::Running)
+        .filter_map(|t| Some((t.id.clone(), w.current_agent(&t.id)?.id.clone())))
+        .collect()
 }
 fn approvals(w: &Workspace) -> HashMap<String, String> {
     w.agent_sessions
@@ -71,6 +81,7 @@ impl Tracker {
         self.states.changes(w);
         self.approvals = approvals(w);
         self.running = running(w);
+        self.sessions = sessions(w);
     }
     /// The state now: every running terminal, every session in a state a hook would
     /// name, and every approval on screen.
@@ -130,6 +141,21 @@ impl Tracker {
                 .iter()
                 .map(|(id, q)| session_notice("approval", w, id, q, at)),
         );
+        // A terminal now on another conversation (`/new`, `/clear`, an Agent started in a
+        // shell): a phone showing it follows (plan stage 4); `detail` is the one before.
+        let now_sessions = sessions(w);
+        let mut switched: Vec<_> = now_sessions
+            .iter()
+            .filter(|(t, s)| self.sessions.get(*t) != Some(*s))
+            .map(|(t, s)| (s.clone(), self.sessions.get(t).cloned().unwrap_or_default()))
+            .collect();
+        switched.sort();
+        out.extend(
+            switched
+                .iter()
+                .map(|(s, before)| session_notice("session_switched", w, s, before, at)),
+        );
+        self.sessions = now_sessions;
         let mut ended: Vec<_> = self.running.difference(&now_running).cloned().collect();
         ended.sort();
         out.extend(

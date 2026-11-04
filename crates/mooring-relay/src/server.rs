@@ -80,6 +80,8 @@ pub async fn serve(listener: TcpListener, config: Config) -> io::Result<()> {
         config,
         agents: Mutex::default(),
         retired: Mutex::default(),
+        routes: Mutex::default(),
+        revoked: Mutex::default(),
     });
     let app = Router::new()
         .route("/healthz", get(health))
@@ -95,6 +97,38 @@ struct Relay {
     /// Token hashes a registered machine said it no longer uses, to the hash it uses now;
     /// kept only while that machine is on.
     retired: Mutex<HashMap<String, String>>,
+    /// Protocol 3: each phone's route hash to the machine it reaches, as that machine
+    /// listed them; kept only while that machine is on.
+    routes: Mutex<HashMap<String, String>>,
+    /// Route hashes of phones a machine unpaired, to that machine.
+    revoked: Mutex<HashMap<String, String>>,
+}
+
+impl Relay {
+    /// `owner`'s whole list of routes and revoked routes, replacing what it sent before.
+    /// A route another machine already listed stays with that one.
+    fn set_routes(&self, owner: &str, routes: Vec<String>, revoked: Vec<String>) {
+        for (map, list) in [(&self.routes, routes), (&self.revoked, revoked)] {
+            let mut map = map.lock().unwrap_or_else(|e| e.into_inner());
+            map.retain(|_, o| o != owner);
+            for h in (list.into_iter())
+                .filter(|h| wire::is_token_hash(h) && h != owner)
+                .take(wire::MAX_ROUTES)
+            {
+                map.entry(h).or_insert_with(|| owner.to_owned());
+            }
+        }
+    }
+    /// The machine a phone's token reaches: by its own route on protocol 3, by the
+    /// machine's token on older machines.
+    fn reach(&self, hash: &str) -> Option<Arc<Agent>> {
+        let agents = self.agents.lock().ok()?;
+        let routed = (self.routes.lock().ok()?.get(hash)).and_then(|owner| agents.get(owner));
+        match routed {
+            Some(a) => Some(a.clone()),
+            None => agents.get(hash).filter(|a| a.proto < 3).cloned(),
+        }
+    }
 }
 
 struct Agent {
@@ -186,26 +220,22 @@ async fn phone(
     let Some((token, rest)) = wire::client_path(target) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let found = relay
-        .agents
-        .lock()
-        .ok()
-        .and_then(|a| a.get(&wire::token_hash(token)).cloned());
-    let Some(agent) = found else {
-        // A token its machine replaced: say so with a close code, which a phone's
-        // WebSocket reports where an HTTP status before the upgrade is lost.
-        let retired = relay
-            .retired
-            .lock()
-            .is_ok_and(|r| r.contains_key(&wire::token_hash(token)));
-        if retired {
-            return ws.on_upgrade(|mut socket| async move {
-                let _ = socket
-                    .send(close(
-                        close::UNKNOWN_MACHINE,
-                        "Machine has a new code; pair again",
-                    ))
-                    .await;
+    let hash = wire::token_hash(token);
+    let Some(agent) = relay.reach(&hash) else {
+        // A token its machine replaced or unpaired: say so with a close code, which a
+        // phone's WebSocket reports where an HTTP status before the upgrade is lost.
+        let known =
+            |m: &Mutex<HashMap<String, String>>| m.lock().is_ok_and(|r| r.contains_key(&hash));
+        let refusal = if known(&relay.revoked) {
+            Some((close::UNPAIRED, "Unpaired by its machine"))
+        } else if known(&relay.retired) {
+            Some((close::UNKNOWN_MACHINE, "Machine has a new code; pair again"))
+        } else {
+            None
+        };
+        if let Some((code, why)) = refusal {
+            return ws.on_upgrade(move |mut socket| async move {
+                let _ = socket.send(close(code, why)).await;
             });
         }
         // Not registered: the machine may just be offline.
@@ -230,12 +260,14 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
         }
         None
     });
-    let (token_hash, proto, retired) = match register.await {
+    let (token_hash, proto, retired, routes) = match register.await {
         Ok(Some(Frame::Register {
             token_hash,
             key,
             proto,
             retired,
+            routes,
+            revoked,
             ..
         })) => {
             let refuse = if config.key.as_ref().is_some_and(|k| key.as_ref() != Some(k)) {
@@ -266,6 +298,7 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
                     .filter(|&p| p >= 2)
                     .map_or(1, |p| p.min(wire::PROTOCOL)),
                 retired,
+                (routes, revoked),
             )
         }
         _ => return,
@@ -296,6 +329,9 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
         for old in retired {
             r.insert(old, token_hash.clone());
         }
+    }
+    if proto >= 3 {
+        relay.set_routes(&token_hash, routes.0, routes.1);
     }
     agent.send(&Frame::Registered { proto: Some(proto) });
 
@@ -373,6 +409,9 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
                         }
                     }
                 }
+                Ok(Frame::Routes { routes, revoked }) if proto >= 3 => {
+                    relay.set_routes(&token_hash, routes, revoked)
+                }
                 Ok(Frame::Werr { id, .. }) => {
                     agent.close_phone(&id, 1011, "Machine could not open the socket".into())
                 }
@@ -410,6 +449,7 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .retain(|_, owner| *owner != token_hash);
+            relay.set_routes(&token_hash, vec![], vec![]);
         }
     }
     // Phones redial instead of talking into a dead tunnel.
@@ -441,6 +481,24 @@ async fn run_phone(relay: Arc<Relay>, agent: Arc<Agent>, path: String, socket: W
         id: id.clone(),
         path,
     });
+    // A machine that never answers `wopened` does not hold the phone's slot forever.
+    {
+        let (agent, id, limit) = (agent.clone(), id.clone(), relay.config.register_timeout);
+        tokio::spawn(async move {
+            tokio::time::sleep(limit).await;
+            let mut sockets = agent.sockets();
+            if sockets.get(&id).is_some_and(|b| !b.opened) {
+                let b = sockets.remove(&id).expect("present");
+                drop(sockets);
+                let _ = b.cut.send(Some((1013, "Machine did not answer".into())));
+                agent.send(&Frame::Wclose {
+                    id,
+                    code: Some(1013),
+                    reason: None,
+                });
+            }
+        });
+    }
     let (mut sink, mut stream) = socket.split();
     let mut writer_cut = cut_rx.clone();
     // A phone gone without a close (battery out, NAT dropped) answers no ping: after two
