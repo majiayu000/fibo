@@ -77,9 +77,27 @@ pub fn is_prompt_row(row: &str, key: &str, prompt: &PromptLine) -> bool {
     full || (!whole && rest.chars().count() >= MIN_PARTIAL && key.starts_with(&rest))
 }
 
+/// Whether `row`, unmarked and indented, is the line of the ask whose key is `key`: how an
+/// ask typed under a paste looks, since the mark goes on the paste's first row and the
+/// transcript's ask holds only the typed words.
+fn is_typed_row(row: &str, key: &str) -> bool {
+    if !row.starts_with(char::is_whitespace) {
+        return false;
+    }
+    let rest = plain(row);
+    if key.chars().count() < KEY_CHARS {
+        rest == key
+    } else {
+        rest.starts_with(key)
+    }
+}
+
 /// Each ask's history row, newest ask first found from the bottom up: an ask is looked
 /// for only above the newer one found, so two asks with the same words land on their own
-/// rows. `rows` yields (row, text) from the bottom of history upward.
+/// rows. An ask typed under a paste is found on its words and placed on the marked row
+/// that opens the paste; a marked row that is itself a known ask means those words were an
+/// answer quoting the ask, not the ask. `rows` yields (row, text) from the bottom of
+/// history upward.
 pub fn locate(
     keys: &[Option<String>],
     prompt: &PromptLine,
@@ -88,6 +106,8 @@ pub fn locate(
     let mut found = vec![None; keys.len()];
     // Asks at or above this index are still being looked for.
     let mut want = keys.len();
+    // The ask whose typed words were seen, waiting for the marked row above them.
+    let mut typed: Option<usize> = None;
     for (y, text) in rows {
         if want == 0 {
             break;
@@ -100,9 +120,29 @@ pub fn locate(
         if let Some(i) = hit {
             found[i] = Some(y);
             want = i;
+            typed = None;
+        } else if is_marked(&text, prompt) {
+            if let Some(i) = typed.take() {
+                found[i] = Some(y);
+                want = i;
+            }
+        } else if typed.is_none() && !prompt.markers.is_empty() {
+            typed = (0..want)
+                .rev()
+                .find(|&i| keys[i].as_deref().is_some_and(|k| is_typed_row(&text, k)));
         }
     }
     found
+}
+
+/// Whether `row` starts with one of the CLI's marks and holds something after it.
+fn is_marked(row: &str, prompt: &PromptLine) -> bool {
+    let row = row.trim_start();
+    prompt
+        .markers
+        .iter()
+        .find_map(|m| row.strip_prefix(m.as_str()))
+        .is_some_and(|rest| !plain(rest).is_empty())
 }
 
 /// What the pane draws for the asks it knows, given where they are.
@@ -236,6 +276,51 @@ mod tests {
         ];
         let rows = screen.iter().rev().map(|(y, t)| (*y, t.to_string()));
         assert_eq!(locate(&keys, &claude(), rows), vec![Some(5), None]);
+    }
+
+    #[test]
+    fn an_ask_typed_under_a_paste_is_placed_where_the_paste_opens() {
+        let keys = vec![key("修一下登录"), key("这些能都加回来吗")];
+        let screen = [
+            (5, "❯ 修一下登录"),
+            (9, "⏺ 好的"),
+            (30, "❯ │ 前台标记 │ 删了 │"),
+            (31, "    ├────────┼──────┤"),
+            (32, "    │ 红 ✕ │ 没做 │"),
+            (34, "  这些能都加回来吗"),
+            (36, "⏺ 能，三个都加回来。"),
+            (90, "❯ "),
+        ];
+        let rows = screen.iter().rev().map(|(y, t)| (*y, t.to_string()));
+        let found = locate(&keys, &claude(), rows);
+        assert_eq!(found, vec![Some(5), Some(30)]);
+        // Reading up through the answer the ask stays pinned, not only at the live bottom.
+        assert_eq!(pinned(&found, (50, 100, 40)).latest, Some((1, Some(30))));
+        assert_eq!(pinned(&found, (60, 100, 40)).latest, Some((1, Some(30))));
+    }
+
+    #[test]
+    fn an_answer_quoting_an_ask_is_not_the_ask() {
+        // The older ask's answer repeats the newest ask's words; the newest was not sent
+        // on screen, so it stays unfound rather than taking the older ask's row.
+        let keys = vec![key("修一下登录"), key("这些能都加回来吗")];
+        let screen = [
+            (5, "❯ 修一下登录"),
+            (9, "⏺ 你也可能会问："),
+            (10, "  这些能都加回来吗"),
+            (20, "❯ "),
+        ];
+        let rows = screen.iter().rev().map(|(y, t)| (*y, t.to_string()));
+        assert_eq!(locate(&keys, &claude(), rows), vec![Some(5), None]);
+        // Flush with the left edge is never a typed row, whatever is above it.
+        assert!(!is_typed_row("这些能都加回来吗", "这些能都加回来吗"));
+        // A short ask must be the whole row; a long one may run on past the key.
+        assert!(!is_typed_row(
+            "  这些能都加回来吗？好的",
+            "这些能都加回来吗"
+        ));
+        let long = key("你帮我看看代码再说啊然后提交").unwrap();
+        assert!(is_typed_row("  你帮我看看代码再说啊然后提交", &long));
     }
 
     #[test]
