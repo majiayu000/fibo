@@ -380,13 +380,22 @@ fn task_outcome_and_pending_override_survive_reopen() {
     let (store, read) = Store::open(&root).unwrap();
     assert_eq!(read.agent_sessions[0].name, "");
     assert_eq!(read.tasks, w.tasks);
-    assert!(
-        criterion_evidence(Some("source:42".into())).is_empty(),
-        "an old bare reference reads as none"
-    );
     assert_eq!(read.task_outcomes, w.task_outcomes);
     assert_eq!(read.outcome_history, w.outcome_history);
     assert_eq!(read.pending_tasks, w.pending_tasks);
     drop(store);
+    // Evidence that no longer parses fails the load instead of reading as none, which
+    // would quietly take a criterion back from proven to open.
+    Connection::open(root.join("workbench.sqlite"))
+        .unwrap()
+        .execute(
+            "UPDATE task_criteria SET evidence='[{\"session\":' WHERE id='c'",
+            [],
+        )
+        .unwrap();
+    let error = Store::open(&root)
+        .err()
+        .expect("broken evidence must not load");
+    assert!(error.to_string().contains("证据"), "{error}");
     std::fs::remove_dir_all(root).unwrap();
 }
