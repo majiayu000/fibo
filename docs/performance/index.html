@@ -161,6 +161,7 @@
   <li><b>把设计内的晚一帧当差异</b>：标签栏溢出提示本就晚一帧，比对前要先让那一帧画出来。</li>
   <li><b>整理提交时 <code>git reset --soft main</code></b>：如果 main 已被其他会话推进，工作区相对新 main 会显得在撤销别人的改动。正确做法是 <code>git rebase main</code>，或从原起点导出自己的补丁再套用。</li>
   <li><b>测试文件超过 800 行</b>：VibeGuard 只允许变短；改断言时要同时压缩周围代码。</li>
+  <li><strong>一堆 8192K 的「owned unmapped (graphics)」不是我们的缓存</strong>：进程第一次用渲染通道，Metal 驱动分配 28 块 8 MB；第一次用 blit，再加 20 块。一个几十行的最小 Metal 程序也一样，<code>MTLDevice.currentAllocatedSize</code> 不计入，和窗口大小、会话数无关。所以正常帧不能用 blit 编码器，<code>crates/mooring-core/tests/gpui_present.rs</code> 守着。</li>
 </ul>
 
 <h2 id="ref">9. 外部参考：大项目怎么做性能回归</h2>
@@ -179,7 +180,8 @@
   <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>
   <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
   <li><span class="tag">不改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：主库存的是用户操作（待办、完成状态），<code>synchronous=FULL</code> 保留；日志索引本来就是 NORMAL。</li>
-  <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试；窗口进程约 756 MB 内存没查。</li>
+  <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试。</li>
+  <li><span class="tag">已查</span> 窗口进程约 759 MB（M3 Max，真实使用 4.5 小时）：Metal 驱动池 384 MB，Rust 堆约 177 MB，三个 drawable 约 92 MB，其他图形内存约 49 MB（含后台缓冲 31 MB），其余约 55 MB。驱动池里 blit 占的 160 MB 已省掉，渲染占的 224 MB 只要窗口在画就省不掉；Rust 堆没细查。GPU 空闲约 2 秒后驱动收回整个池，下次提交重新分配，最小程序里耗时 7–24 ms（平时 0.4 ms），真实窗口没量。</li>
 </ul>
 </main>
 </body>

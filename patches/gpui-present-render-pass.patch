@@ -1,0 +1,116 @@
+diff --git a/crates/gpui_apple/src/metal_renderer.rs b/crates/gpui_apple/src/metal_renderer.rs
+index 07ae30d..ca7c989 100644
+--- a/crates/gpui_apple/src/metal_renderer.rs
++++ b/crates/gpui_apple/src/metal_renderer.rs
+@@ -123,6 +123,7 @@ pub struct MetalRenderer {
+     monochrome_sprites_pipeline_state: metal::RenderPipelineState,
+     polychrome_sprites_pipeline_state: metal::RenderPipelineState,
+     surfaces_pipeline_state: metal::RenderPipelineState,
++    present_pipeline_state: metal::RenderPipelineState,
+     unit_vertices: metal::Buffer,
+     #[allow(clippy::arc_with_non_send_sync)]
+     instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
+@@ -185,10 +186,6 @@ impl MetalRenderer {
+         // https://developer.apple.com/documentation/metal/managing-your-game-window-for-metal-in-macos
+         layer.set_opaque(!transparent);
+         layer.set_maximum_drawable_count(3);
+-        // The retained back buffer is copied into the drawable by a blit.
+-        if retained_enabled() {
+-            layer.set_framebuffer_only(false);
+-        }
+         // Allow texture reading for visual tests and UI automation screenshots
+         // (captures without ScreenCaptureKit). Only debug builds pay the
+         // presentation cost, even when `test-support` is compiled in.
+@@ -368,6 +365,8 @@ impl MetalRenderer {
+             MTLPixelFormat::BGRA8Unorm,
+         );
+ 
++        let present_pipeline_state = build_present_pipeline_state(&device, &library);
++
+         let command_queue = device.new_command_queue();
+         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
+         let sprite_atlas = Arc::new(MetalAtlas::new(device.clone(), supports_shared_storage));
+@@ -390,6 +389,7 @@ impl MetalRenderer {
+             monochrome_sprites_pipeline_state,
+             polychrome_sprites_pipeline_state,
+             surfaces_pipeline_state,
++            present_pipeline_state,
+             unit_vertices,
+             instance_buffer_pool,
+             sprite_atlas,
+@@ -583,15 +583,18 @@ impl MetalRenderer {
+                 return;
+             }
+         };
+-        let blit = command_buffer.new_blit_command_encoder();
+-        let size = metal::MTLSize {
+-            width: w as u64,
+-            height: h as u64,
+-            depth: 1,
+-        };
+-        let origin = metal::MTLOrigin { x: 0, y: 0, z: 0 };
+-        blit.copy_from_texture(&back, 0, 0, origin, size, drawable.texture(), 0, 0, origin);
+-        blit.end_encoding();
++        // A render pass, not a blit: the first blit in a process makes the Metal driver
++        // hold another 160 MB (M3 Max) for as long as frames keep coming.
++        let pass = metal::RenderPassDescriptor::new();
++        let attachment = pass.color_attachments().object_at(0).unwrap();
++        attachment.set_texture(Some(drawable.texture()));
++        attachment.set_load_action(metal::MTLLoadAction::DontCare);
++        attachment.set_store_action(metal::MTLStoreAction::Store);
++        let encoder = command_buffer.new_render_command_encoder(pass);
++        encoder.set_render_pipeline_state(&self.present_pipeline_state);
++        encoder.set_fragment_texture(0, Some(&back));
++        encoder.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 3);
++        encoder.end_encoding();
+         if self.presents_with_transaction {
+             command_buffer.commit();
+             command_buffer.wait_until_scheduled();
+@@ -1593,6 +1596,28 @@ fn build_pipeline_state(
+         .expect("could not create render pipeline state")
+ }
+ 
++fn build_present_pipeline_state(
++    device: &metal::DeviceRef,
++    library: &metal::LibraryRef,
++) -> metal::RenderPipelineState {
++    let vertex_fn = library
++        .get_function("present_vertex", None)
++        .expect("error locating vertex function");
++    let fragment_fn = library
++        .get_function("present_fragment", None)
++        .expect("error locating fragment function");
++    let descriptor = metal::RenderPipelineDescriptor::new();
++    descriptor.set_label("present");
++    descriptor.set_vertex_function(Some(vertex_fn.as_ref()));
++    descriptor.set_fragment_function(Some(fragment_fn.as_ref()));
++    let color_attachment = descriptor.color_attachments().object_at(0).unwrap();
++    color_attachment.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
++    color_attachment.set_blending_enabled(false);
++    device
++        .new_render_pipeline_state(&descriptor)
++        .expect("could not create render pipeline state")
++}
++
+ fn build_path_sprite_pipeline_state(
+     device: &metal::DeviceRef,
+     library: &metal::LibraryRef,
+diff --git a/crates/gpui_apple/src/shaders.metal b/crates/gpui_apple/src/shaders.metal
+index 2b52bb9..656b41f 100644
+--- a/crates/gpui_apple/src/shaders.metal
++++ b/crates/gpui_apple/src/shaders.metal
+@@ -1277,3 +1277,14 @@ float4 fill_color(Background background,
+ 
+   return color;
+ }
++
++// Copies the retained back buffer into the drawable, pixel for pixel.
++vertex float4 present_vertex(uint vertex_id [[vertex_id]]) {
++  float2 corners[3] = {float2(-1., -1.), float2(3., -1.), float2(-1., 3.)};
++  return float4(corners[vertex_id], 0., 1.);
++}
++
++fragment float4 present_fragment(float4 position [[position]],
++                                 texture2d<float, access::read> source [[texture(0)]]) {
++  return source.read(uint2(position.xy));
++}
