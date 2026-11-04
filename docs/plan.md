@@ -71,7 +71,8 @@
 
 ### 第 4 阶段 · 手机和外来输入（I25–I37）
 
-- 每台手机独立路由 token；关闭码 4401 撤销 / 4403 改角色 / 4429 踢出（5 分钟冷却）。
+- 每台手机独立路由 token；关闭码 4401 撤销 / 4411 改角色 / 4410 踢出（5 分钟冷却）。（原稿写的 4403 / 4429；代码和手机早已用 4410 / 4411，以代码为准。）
+- 11-04 完成，见下面「进度」。
 - 手机请求 10 秒超时 + 幂等 id；心跳 15 秒；events 流断了自动重订；终端里换了对话时推 `session_switched`。
 - 配对链接先确认再保存；握手前的连接 10 秒超时；动作模板只做单引号转义；在不可信目录里跑 git 时关掉 fsmonitor。
 
@@ -94,3 +95,9 @@
 
 - 11-03 第 0 步已完成：CI 能分到机器（偶发排队）；主题 token 检查转绿；hook 新旧变量都认；OSC 7501 按规范对齐（单测 9 条 + 真终端集成，探测回复写回终端已验）；侧栏默认「会话优先」并带短编号（隔离 40 会话截图对照方向稿 A，Agent 标记在行首、状态在行尾，与稿不同处沿用全局行样式）；状态栏按宽度收缩（1100 / 760 / 620 截图核对），深色版检查已正常。新增 `scripts/visual-fixture.py` 和页面名 `@宽度` 截图。遗留：窄窗格标题栏重叠（PTY 压测见下一行；11-03 已换包，交接 8 个终端进程号不变）。
 - 2026-11-03 PTY 压测：20 个终端 + 日志每 100ms 一批 + 真 `mooring hook` 每秒 50 个，输出写进 PTY 到 attach 的客户端收到，最大停顿 168ms～5.1s（三次，p99 16～920ms），超过 16ms；只有终端时最大 19～58ms、p99 1～3ms，不经过宿主的裸 PTY 对照最大 35ms（本机底噪，最大值不适合当验收，p99.9 才分得开）；Hook 降到每秒 15 个，四段最大 9～21ms、p99 ≤ 1.2ms。停顿不是全局锁造成的：每个 Hook 在锁外跑一次 `/bin/ps -p <全部终端 pid>`（20 个 pid 约 50ms，系统级串行，每秒最多约 20 个），每秒 50 个时积压近千个 ps、Hook 全部 10 秒超时，整机被拖住；采样里 pump 等锁约 0.4%。第 3 阶段怎么定待议：按规则该上「状态线程 + 写库线程」，但先要去掉每个 Hook 的 ps 再复测。复现：`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer cargo test --release -p mooring-host --test pty_stall -- --ignored --nocapture --test-threads 1`（报告在 target/tmp/pty-*-report.txt）。
+- 2026-11-04 第 4 阶段：
+  - 每台手机独立路由：配对链接不再带电脑的注册码；中继协议 3 只按电脑列出的手机路由转发，配对、取消配对时电脑把新名单发给中继；被取消的手机回 4401。验收（`a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read`）：取消平板后，平板拿着它知道的一切去中继注册，另一台手机照常连上、电脑不掉线；变异（链接里放回电脑的码）会被抓到。「断开」后 5 分钟内重连回 4410（`the_host_keeps_phones_on_a_relay_and_shows_the_app_who_is_on`）。中继对迟迟不答 wopened 的手机 10 秒后关掉。
+  - 手机请求 10 秒超时、每 15 秒 `ping`；`hello` 带设备 id，写操作带请求 id，断线连回后用同一个 id 重发。验收（JS 手机经真中继，`the_js_phone_client_chats_through_a_real_relay`）：换一条连接用同一个 id 再发，对面只打一次字；去掉 client 的变异会打两次。
+  - 终端里换了对话推 `session_switched`（单测 `a_terminal_that_moves_to_another_conversation_says_so_once`）；手机收到事件就重新拉列表，聊天页跟着换会话。
+  - 配对先确认、握手成功才保存；动作模板只用单引号转义；内置的 git 动作带 `core.fsmonitor=false`（用配了 fsmonitor 钩子的仓库验证过：不带会跑，带了不跑）。
+  - 没验：手机真机上的确认页和断线重发（只跑了 JS 客户端和类型检查）；「终端里 /new 后手机 5 秒内切过去」没在真机和真 Claude 上走过，只验了事件；中继协议 3 没部署到任何公网中继，用户本机现在没开中继。
