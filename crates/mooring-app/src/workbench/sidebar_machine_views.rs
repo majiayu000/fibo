@@ -474,7 +474,23 @@ impl Workbench {
         listed: usize,
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
-        let rail = (self.machine_layout() == Machines::Rail).then(|| self.machine_rail(cx));
+        let column = div()
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .child(self.flat_brand())
+            .child(self.flat_search(cx))
+            .child(list)
+            .child(self.flat_keys(cx))
+            .child(self.flat_foot(listed, cx));
+        // Only a rail needs the row: inside one, taffy measures the whole list's content
+        // to size it (the column's full redraw went from 67 to 117 M instructions).
+        let body = match (self.machine_layout() == Machines::Rail).then(|| self.machine_rail(cx)) {
+            Some(rail) => div().flex_1().min_h_0().flex().child(rail).child(column),
+            None => column,
+        };
         div()
             .id("sidebar")
             .w(px(F::WIDTH))
@@ -488,21 +504,7 @@ impl Workbench {
             .border_r(px(T::BORDER_WIDTH))
             .border_color(T::color(F::line()))
             .child(self.flat_lights(cx))
-            .child(
-                div().flex_1().min_h_0().flex().children(rail).child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .min_h_0()
-                        .flex()
-                        .flex_col()
-                        .child(self.flat_brand())
-                        .child(self.flat_search(cx))
-                        .child(list)
-                        .child(self.flat_keys(cx))
-                        .child(self.flat_foot(listed, cx)),
-                ),
-            )
+            .child(body)
     }
     /// What the brand row names: this machine, or the one shown alone, and whether it is up.
     pub(super) fn column_machine(&self) -> (String, bool) {
