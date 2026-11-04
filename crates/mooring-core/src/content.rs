@@ -1,8 +1,10 @@
 //! Small, sourced projections. The transcript and mechanical receipts remain distinct.
+mod plain;
 use crate::model::AgentSession;
 #[cfg(test)]
 use crate::model::Workspace;
 pub use crate::subagents::Subagent;
+pub use plain::plain_line;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -242,35 +244,6 @@ pub fn short(text: &str, limit: usize) -> String {
         s.push('…');
     }
     s
-}
-/// Agent prose as one readable line: Markdown emphasis, headings, quotes, list
-/// bullets and table rules go; table cells read as `a · b`.
-pub fn plain_line(text: &str) -> String {
-    text.lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.chars().all(|c| "|-: ".contains(c)))
-        .map(|l| {
-            let l = l
-                .trim_start_matches('#')
-                .trim_start_matches('>')
-                .trim_start();
-            let l = ["- ", "* ", "+ "]
-                .iter()
-                .find_map(|b| l.strip_prefix(b))
-                .unwrap_or(l);
-            let l = l.replace("**", "").replace("__", "").replace('`', "");
-            l.trim_matches('|')
-                .split('|')
-                .map(str::trim)
-                .filter(|c| !c.is_empty())
-                .collect::<Vec<_>>()
-                .join(" · ")
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 /// A first ask as a name: the polite lead-in most asks share ("你帮我看看") goes,
 /// so tabs and rows start with what differs. Runs of spaces, as in a pasted table
@@ -825,15 +798,6 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(c.headline(), "修复登录跳转");
-    }
-    #[test]
-    fn plain_line_drops_markdown() {
-        assert_eq!(
-            plain_line(
-                "## 结论\n**建议都接收**，见 `a.rs`\n\n| 投稿 | 建议处理 |\n|---|:-:|\n- 第一条"
-            ),
-            "结论 建议都接收，见 a.rs 投稿 · 建议处理 第一条"
-        );
     }
 }
 
