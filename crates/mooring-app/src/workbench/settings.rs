@@ -268,7 +268,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
         "跟随系统 亮色 暗色 明暗 dark light 曜黑 纸白 蓝灰 石墨 暖灰 松绿 紫灰 配色 导入 itermcolors 编辑器",
     ),
     (Page::Look, "界面样式", "样式 标准 终端原生 tmux 等宽 style"),
-    (Page::Look, "应用图标", "dock 图标 水墨 吉祥物 icon"),
+    (Page::Look, "应用图标", "dock 图标 二次元 吉祥物 icon"),
     (
         Page::Look,
         "标记完成动画",

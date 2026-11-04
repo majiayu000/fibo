@@ -1,4 +1,4 @@
-//! The app's looks, the mooring ring, ink ring and mascot: the title-bar image and the Dock tile.
+//! The app's three looks, the mooring ring, anime portrait and mascot: the title-bar image and the Dock tile.
 //! The choice belongs to this machine's client, not to the workspace.
 use gpui::{Global, Image, ImageFormat};
 use std::{
@@ -9,14 +9,14 @@ use std::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppIcon {
     Ring,
-    Ink,
+    Anime,
     Mascot,
 }
 
 static RING: LazyLock<Arc<Image>> =
     LazyLock::new(|| png(include_bytes!("../../assets/title-ring.png")));
-static INK: LazyLock<Arc<Image>> =
-    LazyLock::new(|| png(include_bytes!("../../assets/title-ink.png")));
+static ANIME: LazyLock<Arc<Image>> =
+    LazyLock::new(|| png(include_bytes!("../../assets/title-anime.png")));
 static MASCOT: LazyLock<Arc<Image>> =
     LazyLock::new(|| png(include_bytes!("../../assets/title-mascot.png")));
 
@@ -25,35 +25,35 @@ fn png(bytes: &[u8]) -> Arc<Image> {
 }
 
 impl AppIcon {
-    pub const ALL: [Self; 3] = [Self::Ring, Self::Ink, Self::Mascot];
+    pub const ALL: [Self; 3] = [Self::Ring, Self::Anime, Self::Mascot];
     pub fn label(self) -> &'static str {
         match self {
             Self::Ring => "系泊环",
-            Self::Ink => "水墨",
             Self::Mascot => "吉祥物",
+            Self::Anime => "二次元",
         }
     }
     fn key(self) -> &'static str {
         match self {
             Self::Ring => "ring",
-            Self::Ink => "ink",
             Self::Mascot => "mascot",
+            Self::Anime => "anime",
         }
     }
     /// The small image beside the traffic lights, decoded once.
     pub fn title_image(self) -> Arc<Image> {
         match self {
             Self::Ring => RING.clone(),
-            Self::Ink => INK.clone(),
             Self::Mascot => MASCOT.clone(),
+            Self::Anime => ANIME.clone(),
         }
     }
     /// The Dock tile, drawn on Apple's icon grid so the system does not frame it.
     pub fn dock_png(self) -> &'static [u8] {
         match self {
             Self::Ring => include_bytes!("../../assets/dock-ring.png"),
-            Self::Ink => include_bytes!("../../assets/dock-ink.png"),
             Self::Mascot => include_bytes!("../../assets/dock-mascot.png"),
+            Self::Anime => include_bytes!("../../assets/dock-anime.png"),
         }
     }
     /// The saved choice; the ring when none was made or the file is unreadable.
@@ -90,8 +90,11 @@ mod tests {
         assert_eq!(AppIcon::load(&file), AppIcon::Mascot);
         std::fs::write(&file, "something else").unwrap();
         assert_eq!(AppIcon::load(&file), AppIcon::Ring);
-        AppIcon::Ink.save(&file).unwrap();
-        assert_eq!(AppIcon::load(&file), AppIcon::Ink);
+        // The retired ink look comes back as the ring.
+        std::fs::write(&file, "ink").unwrap();
+        assert_eq!(AppIcon::load(&file), AppIcon::Ring);
+        AppIcon::Anime.save(&file).unwrap();
+        assert_eq!(AppIcon::load(&file), AppIcon::Anime);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

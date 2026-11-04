@@ -552,12 +552,12 @@
         },
         {
           "path": "themes/glass-dark.json",
-          "sha256": "9ab663b51b96ccb95d6da2eec92bc4e32a3163b24f233acff13b3d5d4098b91d",
+          "sha256": "02b7f1653266700358684da972c209170184f3eb5f0e56a5ff598a68d55343b1",
           "size": 361
         },
         {
           "path": "themes/glass-light.json",
-          "sha256": "763692ea5be15196dff8ac27276776cbdafd23bad17c69a9c4ad612e3f141ba8",
+          "sha256": "b5cece30a20bd6feea43159c3910d50357183e901a898418e331a157bceca42f",
           "size": 307
         }
       ]
@@ -574,8 +574,8 @@
       "files": [
         {
           "path": "images/harbor.png",
-          "sha256": "67d7aa087cba11c64a17e6e26aa4114e4fb6901f1d87cdc9a984a692b296ba5b",
-          "size": 76273
+          "sha256": "860a0fc6dbce95a7940aad587d6966dbd7966e45bee89f31211d834344cfdbe6",
+          "size": 81791
         },
         {
           "path": "plugin.json",
