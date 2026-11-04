@@ -168,6 +168,44 @@ impl super::Pane {
             )
         })
     }
+    /// The first line of an ask, as a pane shows it.
+    pub(super) fn ask_first_line(&self, i: usize) -> Option<String> {
+        self.asks
+            .get(i)
+            .and_then(|a| a.lines().map(str::trim).find(|l| !l.is_empty()))
+            .map(|l| mooring_core::content::short(l, 200))
+    }
+    /// The bar's words and the row they scroll back to, when the bar is showing.
+    pub(super) fn ask_bar_line(&self, cx: &gpui::App) -> Option<(String, Option<usize>)> {
+        self.pinned
+            .latest
+            .filter(|_| crate::ui::pinned_ask::current(cx).bar)
+            .and_then(|(i, row)| Some((self.ask_first_line(i)?, row)))
+    }
+    /// The mark the bar puts before an ask, as the CLI marks a sent one.
+    pub(super) fn ask_mark(&self) -> String {
+        self.prompt_line()
+            .and_then(|p| p.markers.first())
+            .map_or("›".to_owned(), Clone::clone)
+    }
+    /// The bar along the terminal's top, for what takes over from it when the text moves.
+    pub fn ask_bar(&self, cx: &gpui::App) -> Option<super::super::glyph::AskBar> {
+        let (text, row) = self.ask_bar_line(cx)?;
+        let (grid, m) = (self.bounds?, self.metrics?);
+        let margin = px(if self.peek { 0. } else { padding_of().max(0.) });
+        Some(super::super::glyph::AskBar {
+            area: Bounds::new(
+                grid.origin - gpui::point(margin, margin),
+                gpui::size(
+                    grid.size.width + margin * 2. - px(super::SCROLLBAR_HIT),
+                    m.height,
+                ),
+            ),
+            mark: self.ask_mark(),
+            text,
+            back: row.is_some(),
+        })
+    }
     /// The cell's size and offsets, for drawing a character as the grid does.
     pub fn cell_metrics(&self) -> Option<CellMetrics> {
         self.metrics

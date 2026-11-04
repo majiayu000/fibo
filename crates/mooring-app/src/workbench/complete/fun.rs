@@ -208,6 +208,7 @@ impl Painter<'_> {
             return;
         };
         let g = self.green;
+        let letters = s.letters(self.window);
         let height = f32::from(body.size.height).max(1.);
         let width = f32::from(s.grid.size.width).max(1.);
         let drain_of =
@@ -215,7 +216,8 @@ impl Painter<'_> {
         let tint = sl(t, 0.45, 0.62) * 0.75;
         in_pane(self.window, body, |window| {
             window.with_glyph_dilation(None, |window| {
-                for l in &s.letters {
+                s.fade_rest(t, window);
+                for l in letters {
                     if t >= drain_of(l) {
                         continue;
                     }
@@ -245,7 +247,7 @@ impl Painter<'_> {
         let to = target.unwrap_or(point(body.center().x, body.top() - px(SPECK_RISE)));
         let mut arrived = 0usize;
         let mut specks = Vec::new();
-        for l in &s.letters {
+        for l in letters {
             let drain = drain_of(l);
             let go = sl(t, drain, drain + 0.13);
             if go >= 1. {
@@ -265,9 +267,9 @@ impl Painter<'_> {
         }
         self.specks(&specks);
         if let Some(at) = target
-            && !s.letters.is_empty()
+            && !letters.is_empty()
         {
-            let f = arrived as f32 / s.letters.len() as f32;
+            let f = arrived as f32 / letters.len() as f32;
             let left = 1. - sl(t, 0.93, 1.);
             if f > 0. {
                 self.glow(at, 3.5, f * left);
@@ -292,11 +294,13 @@ impl Painter<'_> {
         let mut inside = 0usize;
         let mut total = 0usize;
         if let Some(s) = text.filter(|_| t >= LIFT) {
-            total = s.letters.len();
+            let letters = s.letters(self.window);
+            total = letters.len();
             let mut specks = Vec::new();
             in_pane(self.window, body, |window| {
                 window.with_glyph_dilation(None, |window| {
-                    for l in &s.letters {
+                    s.fade_rest(t, window);
+                    for l in letters {
                         let mid = s.middle(l, l.at);
                         let (dx, dy) = (f32::from(mid.x - center.x), f32::from(mid.y - center.y));
                         let r = dx.hypot(dy);

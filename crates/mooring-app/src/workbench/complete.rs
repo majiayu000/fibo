@@ -250,10 +250,7 @@ impl Workbench {
             Snapshot::of(effect.style, pane.read(cx), title.as_deref(), cx).map(Rc::new)
         });
         #[cfg(feature = "visual-test")]
-        SPECKS.store(
-            text.as_ref().map_or(glyphs.len(), |s| s.letters.len()),
-            std::sync::atomic::Ordering::Relaxed,
-        );
+        SPECKS.store(glyphs.len(), std::sync::atomic::Ordering::Relaxed);
         let holds_turn_bar = matches!(self.pane_status(&terminal), Some((Status::Review, _)))
             && self
                 .pane_session(&terminal)

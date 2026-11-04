@@ -62,14 +62,14 @@ pub fn start(
             let _ = std::os::unix::fs::symlink("/bin/sh", &claude);
             let launch = |tid: &str, n: u32, ask: &str| {
                 let id = format!("{:08x}-0000-4000-8000-00000000000{n}", std::process::id());
-                let at = mooring_core::content::now();
+                let at = mooring_core::content::now(); let ask = std::env::var("MOORING_COMPLETE_ASK").unwrap_or(ask.into());
                 let user = serde_json::json!({"type":"user","sessionId":id,"uuid":"u0","cwd":"/tmp","entrypoint":"cli","userType":"external","timestamp":at,"message":{"content":ask}});
                 let reply = serde_json::json!({"type":"assistant","sessionId":id,"uuid":"a0","parentUuid":"u0","cwd":"/tmp","timestamp":at,"message":{"role":"assistant","model":"claude-test","stop_reason":"end_turn","content":[{"type":"text","text":"已完成，测试全过。"}]}});
                 let end = serde_json::json!({"type":"system","subtype":"turn_duration","sessionId":id,"uuid":"s0","parentUuid":"a0","cwd":"/tmp","timestamp":at});
                 let seed = root.join(format!("seed-{tid}"));
                 std::fs::write(&seed, format!("{user}\n{reply}\n{end}\n")).unwrap();
                 // A full screen of text when measuring, so the dissolve sends its most specks.
-                let fill = if std::env::var_os("MOORING_COMPLETE_FRAMES").is_some() { "i=0; while [ $i -lt 40 ]; do printf '%s\\n' \"  test auth::timeout::retries_after_expiry ... ok   刷新 token 后重新计时 $i 行 0123456789 abcdefghij\"; i=$((i+1)); done; " } else { "" };
+                let fill = if std::env::var_os("MOORING_COMPLETE_FRAMES").is_some() { format!("printf '%s\\n' '❯ {ask}'; i=0; while [ $i -lt 40 ]; do printf '%s\\n' \"{}\"; i=$((i+1)); done; ", std::env::var("MOORING_COMPLETE_FILL").unwrap_or("  test auth::timeout::retries_after_expiry ... ok   刷新 token 后重新计时 $i 行 0123456789 abcdefghij".into())) } else { String::new() };
                 let script = format!("cat '{}' > '{}'; {fill}printf '%s\\n' '⏺ 已完成，测试全过。'; sleep 600", seed.display(), logs.join(format!("{id}.jsonl")).display());
                 let argv = vec!["/bin/sh".into(), "-c".into(), format!("exec '{}' -c \"$0\" fixture --session-id {id}", claude.display()), script];
                 call(Request::Launch { colors: None, id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
@@ -119,7 +119,7 @@ pub fn start(
                         shot(&format!("{style:?}-t{:03}.png", (t * 100.).round() as u32), cx);
                     }
                     handle.update(cx, |v, _, a| v.visual_keep_completed(tid, a)).unwrap();
-                    let _ = handle.update(cx, |v, _, _| v.visual_take_paints());
+                    let _ = handle.update(cx, |v, w, a| { if std::env::var_os("MOORING_COMPLETE_ACTIVATE").is_some() { w.activate_window(); a.activate(true); } v.visual_take_paints() }); wait(200).await; let _ = handle.update(cx, |v, _, _| v.visual_take_paints());
                     handle.update(cx, |v, _, a| v.visual_complete_with(tid, effect, None, a)).unwrap();
                     let mut closed = false;
                     for _ in 0..60 {
@@ -134,7 +134,7 @@ pub fn start(
                         format!("n={} p50={:.2} p95={:.2} max={:.2}", v.len(), at(0.5), at(0.95), at(1.))
                     };
                     let specks = handle.update(cx, |v, _, _| v.visual_specks()).unwrap();
-                    eprintln!("FRAMES {style:?}: specks={specks} gap_ms {} | overlay_paint_ms {}", stat(gaps), stat(paints));
+                    let active = handle.update(cx, |_, w, _| w.is_window_active()).unwrap(); eprintln!("FRAMES {style:?}: active={active} specks={specks} gap_ms {} | overlay_paint_ms {}", stat(gaps), stat(paints));
                     wait(300).await;
                     shot(&format!("{style:?}-closed.png"), cx);
                 } else if tid == "done" && let Ok(at) = std::env::var("MOORING_COMPLETE_CARD") {

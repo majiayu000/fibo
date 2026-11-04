@@ -1186,28 +1186,16 @@ impl Pane {
     /// is being read in history; each as the settings choose.
     fn ask_overlays(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
         let choice = crate::ui::pinned_ask::current(cx);
-        let first_line = |i: usize| {
-            self.asks
-                .get(i)
-                .and_then(|a| a.lines().map(str::trim).find(|l| !l.is_empty()))
-                .map(|l| mooring_core::content::short(l, 200))
-        };
+        let first_line = |i: usize| self.ask_first_line(i);
         let mut out = Vec::new();
-        let bar = self
-            .pinned
-            .latest
-            .filter(|_| choice.bar)
-            .and_then(|(i, row)| Some((first_line(i)?, row)));
+        let bar = self.ask_bar_line(cx);
         let bar_shown = bar.is_some();
         // Exactly the terminal's first row, marked as the CLI marks a sent ask.
         let row_height = self
             .metrics
             .map_or(px(T::MONO_SIZE * T::LINE_HEIGHT), |m| m.height);
         if let Some((text, row)) = bar {
-            let mark = self
-                .prompt_line()
-                .and_then(|p| p.markers.first())
-                .map_or("›".to_owned(), Clone::clone);
+            let mark = self.ask_mark();
             out.push(
                 div()
                     .id("pinned-ask")
@@ -1244,7 +1232,7 @@ impl Pane {
                                     .flex_shrink_0()
                                     .text_size(px(T::META))
                                     .text_color(T::color(T::muted()))
-                                    .child("回到这句 ↑"),
+                                    .child(super::glyph::ASK_BACK),
                             )
                             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
                                 cx.stop_propagation()

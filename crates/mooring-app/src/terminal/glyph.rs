@@ -1,7 +1,7 @@
 //! One character of a terminal drawn outside its grid, exactly as the grid draws it, for
 //! the completion styles that move the text themselves.
 use super::screen::{Attrs, CellMetrics, Run, run_font, shape_cell, sprites, text_color};
-use gpui::{Font, FontId, GlyphId, Hsla, Pixels, Point, Window, point, px};
+use gpui::{Bounds, Font, FontId, GlyphId, Hsla, Pixels, Point, TextRun, Window, point, px};
 
 /// One character on screen.
 pub struct TextCell {
@@ -11,6 +11,26 @@ pub struct TextCell {
     pub cols: u16,
     pub color: Hsla,
     pub attrs: Attrs,
+}
+
+/// What the pinned ask's bar offers at its right end.
+pub const ASK_BACK: &str = "回到这句 ↑";
+
+/// The pinned ask along the terminal's top, as it is laid out over the grid.
+pub struct AskBar {
+    pub area: Bounds<Pixels>,
+    pub mark: String,
+    pub text: String,
+    /// It offers a way back to the ask.
+    pub back: bool,
+}
+
+/// One glyph of a line of text that is not in the grid.
+pub struct LineGlyph {
+    pub ch: char,
+    /// From the line's left.
+    pub x: Pixels,
+    pub face: Face,
 }
 
 /// How one character is drawn, shaped once and reused for every frame.
@@ -82,6 +102,53 @@ pub fn face_of(
     })
 }
 
+/// A line of text shaped as a text element shapes it, centered in a row of `height`, and
+/// how wide it is.
+pub fn line_glyphs(
+    text: &str,
+    font: &Font,
+    size: Pixels,
+    height: Pixels,
+    window: &Window,
+) -> (Vec<LineGlyph>, Pixels) {
+    let run = TextRun {
+        len: text.len(),
+        font: font.clone(),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let line = window
+        .text_system()
+        .shape_line(text.to_owned().into(), size, &[run], None);
+    let baseline = (height - line.ascent - line.descent) / 2. + line.ascent;
+    let mut glyphs = Vec::new();
+    for shaped in &line.runs {
+        for g in &shaped.glyphs {
+            let Some(ch) = text.get(g.index..).and_then(|rest| rest.chars().next()) else {
+                continue;
+            };
+            if ch.is_whitespace() {
+                continue;
+            }
+            glyphs.push(LineGlyph {
+                ch,
+                x: g.position.x,
+                face: Face {
+                    font: shaped.font_id,
+                    glyph: g.id,
+                    size: line.font_size,
+                    emoji: g.is_emoji,
+                    baseline,
+                    offset: px(0.),
+                },
+            });
+        }
+    }
+    (glyphs, line.width)
+}
+
 /// Paints a character with its cell's top left at `at`. Box-drawing characters the grid
 /// draws as sprites stay sprites, so nothing changes when one leaves the grid. The caller
 /// has turned glyph dilation off, as the grid does.
@@ -107,9 +174,13 @@ pub fn paint(
     {
         return;
     }
-    let Some(f) = face else {
-        return;
-    };
+    if let Some(f) = face {
+        paint_face(f, at, color, window);
+    }
+}
+
+/// Paints a shaped character with its cell's top left at `at`.
+pub fn paint_face(f: Face, at: Point<Pixels>, color: Hsla, window: &mut Window) {
     let origin = point(at.x + f.offset, at.y + f.baseline);
     let _ = if f.emoji {
         window.paint_emoji(origin, f.font, f.glyph, f.size)
