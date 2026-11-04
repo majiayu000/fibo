@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>远程终端进标签</title>
+<style>
+  :root { --bg:#0e0f12; --panel:#15171b; --pane:#101114; --line:#262a31; --text:#d6dbe3; --muted:#8a93a1;
+    --green:#4fbf7a; --chip:#2a3140; --blue:#6aa3ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#08090b; color:var(--text); font:14px/1.6 -apple-system,"PingFang SC",sans-serif; }
+  main { max-width:1060px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 6px; } h2 { font-size:17px; margin:44px 0 6px; }
+  .muted { color:var(--muted); }
+  .rec { font-size:12px; padding:1px 8px; border-radius:10px; background:#1f3a2a; color:var(--green); margin-left:8px; vertical-align:2px; }
+  .win { height:260px; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--bg); margin:12px 0; }
+  .tabs { height:32px; display:flex; align-items:center; gap:4px; padding:0 10px; border-bottom:1px solid var(--line); background:var(--panel); font-size:12px; }
+  .t { padding:2px 10px; border-radius:6px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .t.on { background:#1f2329; color:var(--text); }
+  .m { font-size:10px; padding:0 6px; border-radius:8px; background:var(--chip); color:var(--blue); }
+  .grid { flex:1; display:flex; gap:6px; padding:6px; }
+  .p { flex:1; border:1px solid var(--line); border-radius:6px; background:var(--pane); display:flex; flex-direction:column; overflow:hidden; }
+  .ph { height:24px; padding:0 8px; display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); border-bottom:1px solid var(--line); }
+  .pb { padding:6px 8px; font:11px/1.5 Menlo,monospace; color:#9aa1ab; }
+  .r { border-color:#3a4a6a; }
+  .peek { margin:8px 0; font-size:12px; }
+  .btn { border:1px solid var(--line); border-radius:6px; padding:1px 8px; color:var(--text); font-size:11px; }
+  table { border-collapse:collapse; width:100%; margin-top:8px; font-size:13px; }
+  th,td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>远程终端进标签：三个方向</h1>
+  <p class="muted">现在另一台电脑的终端只能在偷看窗里看：一次一个、关掉就没了、不能和本机终端并排。下面三种做法都让它常驻在标签里；区别在能不能和本机终端混在一个标签、以及标签归谁管。侧栏怎么摆是另一份稿（sidebar-layouts.html），这里不动侧栏。</p>
+
+  <h2>A 和本机终端一样，能混排分屏<span class="rec">推荐</span></h2>
+  <p>偷看窗标题栏加「放进标签」，或者从侧栏把远程会话拖进分屏。远程窗格和本机窗格并排，窗格标题和标签上带机器名小标。标签存在本机，退出重开还在；那台电脑断开时窗格显示「断开，重连中」。</p>
+  <div class="win">
+    <div class="tabs"><span class="t on">部署 <span class="m">apple</span></span><span class="t">zsh</span><span class="t">+</span></div>
+    <div class="grid">
+      <div class="p"><div class="ph">● 本机 · 库版本与 issue</div><div class="pb">› cargo test …</div></div>
+      <div class="p r"><div class="ph"><span class="m">apple</span>● 你好啊 · 等你验收</div><div class="pb">› 你好啊<br>● 你好！有什么需要帮忙的吗？</div></div>
+    </div>
+  </div>
+  <ul><li>好处：最像「另一台电脑的终端就在手边」；本机和远程对照着看最方便。</li>
+      <li>代价：最大的一块。本机宿主要认得「远程终端」这种画面（只记位置，不管进程）；分屏、拖动、关标签都要处理远程的那一格。</li></ul>
+
+  <h2>B 每台电脑一个标签，照搬那边的布局</h2>
+  <p>点侧栏里那台电脑的标题，打开一个专属标签「apple」，里面按 apple 自己的标签和分屏摆好它的终端。不能和本机窗格混在一起。</p>
+  <div class="win">
+    <div class="tabs"><span class="t">部署</span><span class="t">zsh</span><span class="t on"><span class="m">apple</span> 你好啊 · w你好</span><span class="t">+</span></div>
+    <div class="grid">
+      <div class="p r"><div class="ph">● 你好啊</div><div class="pb">› 你好啊</div></div>
+      <div class="p r"><div class="ph">● w你好</div><div class="pb">› w你好</div></div>
+    </div>
+  </div>
+  <ul><li>好处：本机的标签和分屏代码几乎不用动；那台电脑上分好的屏这里直接就有。</li>
+      <li>代价：不能一边本机一边远程地对照；那边改布局这边跟着变。</li></ul>
+
+  <h2>C 偷看窗可以「钉住」，钉住的单独成标签</h2>
+  <p>偷看窗标题栏加「📌 钉成标签」，钉住后它变成一个只有这个远程终端的标签，可以开好几个；不能分屏。</p>
+  <div class="win">
+    <div class="tabs"><span class="t">部署</span><span class="t on"><span class="m">apple</span> 你好啊</span><span class="t"><span class="m">apple</span> w你好</span><span class="t">+</span></div>
+    <div class="grid"><div class="p r"><div class="ph">● 你好啊 · 等你验收</div><div class="pb">› 你好啊<br>● 你好！有什么需要帮忙的吗？</div></div></div>
+  </div>
+  <ul><li>好处：改动最小、最快能用；一个远程终端一个标签，清楚。</li>
+      <li>代价：不能并排；以后要分屏还得再做 A。</li></ul>
+
+  <h2>共用</h2>
+  <table>
+    <tr><th>地方</th><th>做法</th></tr>
+    <tr><td>打字</td><td>和偷看窗一样：开始打字就接管那边的终端，尺寸跟着本机窗格。</td></tr>
+    <tr><td>断开</td><td>窗格变灰写「断开，重连中」，连回后自动接上，不用重新打开。</td></tr>
+    <tr><td>关掉</td><td>关窗格只是不再在这里看；要停掉那边的终端用「关闭终端」，先确认。</td></tr>
+  </table>
+</main>
+</body>
+</html>
