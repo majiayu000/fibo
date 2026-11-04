@@ -53,13 +53,20 @@ table{width:100%;border-collapse:collapse;margin-top:10px;background:var(--card)
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{font-weight:600;background:#e4e2dc}tr:last-child td{border-bottom:0}
 .wrap{overflow-x:auto}
 .chip{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:6px;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
-a{color:inherit}.field{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0}.field input{width:44px;height:26px;padding:0;border:1px solid var(--line);border-radius:5px;background:none}
+a{color:inherit}.ed{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:16px;margin-top:12px;align-items:start}
+.ed-left{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}
+.ed-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}.ed-tabs button{font:inherit;font-size:13px;background:none;border:0;border-radius:5px;padding:4px 9px;cursor:pointer;color:var(--sub)}.ed-tabs button[aria-selected=true]{background:var(--ink);color:#fff}
+.ed-row{display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:13px;min-height:36px}.ed-row label{flex:1;min-width:0}.ed-row .st{font-size:11.5px;color:var(--sub);white-space:nowrap}.ed-row .st.on{color:#a33a1a}
+.ed-row input[type=color]{width:38px;height:24px;padding:0;border:1px solid var(--line);border-radius:4px;background:none;cursor:pointer}.ed-row input[type=range]{width:120px}
+.ed-row button{font:inherit;font-size:11.5px;border:0;background:none;color:var(--sub);text-decoration:underline;cursor:pointer;padding:2px}
+#e-desk{border-radius:8px;padding:16px;background:linear-gradient(135deg,#d97c54,#5b4fb5 55%,#1f7a78)}#e-win{border-radius:8px;overflow:hidden;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+#e-json,.code{margin:0;font:12px/1.55 ui-monospace,Menlo,monospace;background:#e0ded7;padding:10px;border-radius:6px;overflow-x:auto;white-space:pre}
 ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
-@media (max-width:760px){#editor{grid-template-columns:1fr!important}.compare{grid-template-columns:1fr}.g4,.g6{grid-template-columns:repeat(3,1fr)}#stage{padding:12px}.panel{padding:16px}}
+@media (max-width:760px){.ed{grid-template-columns:1fr}.compare{grid-template-columns:1fr}.g4,.g6{grid-template-columns:repeat(3,1fr)}#stage{padding:12px}.panel{padding:16px}}
 </style></head><body><main>
 
-<h1>把主题拆成「明暗」和「主题」，并为开放自定义留好位置</h1>
-<p class="sub">要定的事：外观页用哪个方向。推荐方向 A。下面的外观页可以直接点，整块面板会跟着换色。配色小图的颜色取自 <code>mooring-core/src/terminal.rs</code> 和 <code>ui/theme.rs</code>；面板自身的卡片层次是近似值，以实现时的原生截图为准。</p>
+<h1>主题：默认好看，想改什么都能改</h1>
+<p class="sub">要定的事：外观页用哪个方向，以及按什么顺序把外观全部开放给用户。推荐方向 A。下面的外观页可以直接点，整块面板会跟着换色。配色小图的颜色取自 <code>mooring-core/src/terminal.rs</code> 和 <code>ui/theme.rs</code>；面板自身的卡片层次是近似值，以实现时的原生截图为准。</p>
 
 <h2>现在哪里不对</h2>
 <ul>
@@ -123,46 +130,80 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 <tr><td>设置模型</td><td>三个值：当前主题、是否跟随系统、亮暗各一个主题（<code>app/src/settings/theme.rs</code>）</td><td><b>学，</b>方向 A 因此改成亮暗各记一套</td></tr>
 <tr><td>主题文件</td><td><code>~/.warp/themes/*.yaml</code>：名字、背景、前景、强调色、可选光标、明暗、16 色 ANSI</td><td><b>学思路，</b>字段更少，用 JSON，和插件格式一致</td></tr>
 <tr><td>界面其他颜色</td><td>由这几个颜色推导：<code>surface_1..3</code>、<code>outline</code>、各级文字色都是函数</td><td><b>已有，</b><code>Palette::new</code> 就是从 <code>bg</code>、<code>fg</code> 推导</td></tr>
-<tr><td>强调色</td><td>每套主题一个，可以是彩色或渐变</td><td><b>不学，</b>Mooring 的彩色留给状态；状态色继续由 <code>colors.json</code> 管</td></tr>
+<tr><td>强调色</td><td>每套主题一个，可以是彩色或渐变</td><td><b>默认不用，但开放：</b>默认的强调色保持近白，彩色留给状态；用户想要彩色就能覆盖</td></tr>
 <tr><td>预览</td><td>选择时先设临时主题，确认才保存，取消就恢复（<code>set_transient_theme</code>）</td><td><b>学</b></td></tr>
 <tr><td>从图片生成</td><td>取主色 5 个（Lab 空间 k-means），用户选背景；前景黑白二选一；强调色取色差最大的；ANSI 用固定预设；背景图透明度 30</td><td><b>以后再看</b></td></tr>
-<tr><td>编辑</td><td>应用内只有从图片生成；调色要手写 YAML，文档写应用内创建和分享尚未提供</td><td><b>做得比它多，</b>见下面的调整器和 Agent 写主题</td></tr>
+<tr><td>编辑</td><td>应用内只有从图片生成；调色要手写 YAML，文档写应用内创建和分享尚未提供</td><td><b>做得比它多，</b>见下面的编辑器和 Agent 写主题</td></tr>
 <tr><td>分发</td><td>独立的社区 GitHub 仓库，手动放进目录</td><td><b>走插件市场，</b>新增只含数据的主题类型</td></tr>
 <tr><td>出错兜底</td><td>主题找不到就回默认暗色</td><td><b>学，</b>并在设置里报出哪个文件有问题</td></tr>
 <tr><td>例外</td><td>自家旗舰主题 Phenomenon 另有一套专用颜色，不走公开格式（<code>phenomenon.rs</code>）</td><td><b>警惕，</b>曜黑的侧栏 <code>#0c0c0f</code> 也是这种特例，开放前要收进推导规则或单独说明</td></tr>
 </table></div>
 <p style="margin-top:10px" class="sub">文档和代码有出入：文档写背景图只支持 JPEG，生成器的代码提示写的是 .png、.jpg。这里以代码为准，没有实际跑过 Warp。</p>
 
-<h2>试一下：调两三个颜色够不够</h2>
-<p>下面用和 Mooring 相同的混色规则，由背景和前景推导整个窗口。明暗按背景亮度自动判断，不用另写字段，也就不会写错。</p>
-<div id="editor" style="display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:16px;margin-top:12px">
-<div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px">
-<label class="field">背景 <input type="color" id="e-bg" value="#0f1c2e"></label>
-<label class="field">前景 <input type="color" id="e-fg" value="#d5dfef"></label>
-<label class="field">光标 <input type="color" id="e-cur" value="#2f81f7"></label>
-<p id="e-read" style="margin:10px 0 8px;font-size:13px"></p>
-<pre id="e-json" style="margin:0;font:12px/1.5 ui-monospace,Menlo,monospace;background:#e0ded7;padding:8px;border-radius:5px;overflow-x:auto"></pre>
-</div>
-<div id="e-win" style="border-radius:8px;overflow:hidden;display:flex;min-height:230px;font-size:13px"></div>
+<h2>对照 iTerm2：把能改的列全</h2>
+<p class="sub">依据是 iTerm2 的<a href="https://iterm2.com/documentation-preferences-profiles-colors.html">颜色</a>、<a href="https://iterm2.com/documentation-preferences-profiles-window.html">窗口</a>、<a href="https://iterm2.com/documentation-preferences-profiles-text.html">文字</a>和<a href="https://iterm2.com/documentation-preferences-appearance.html">外观</a>文档，以及 Mooring 现有代码。阶段见下一节。</p>
+<div class="wrap"><table>
+<tr><th>类别</th><th>iTerm2 能改</th><th>Mooring 现状</th><th>计划</th></tr>
+<tr><td>基础颜色</td><td>前景、背景、光标、光标文字、粗体、链接、下划线</td><td>只能选七套内置主题</td><td>全部开放，阶段 1</td></tr>
+<tr><td>选区</td><td>选区颜色、选中文字颜色</td><td>由主题推导</td><td>开放，阶段 1</td></tr>
+<tr><td>16 色 ANSI</td><td>全部可调</td><td>只有亮色有自定义表</td><td>开放，阶段 1</td></tr>
+<tr><td>明暗分开</td><td>同一配置亮暗各一套颜色</td><td>只能跟系统切亮和近黑</td><td>方向 A，阶段 0</td></tr>
+<tr><td>预设</td><td>导入和导出 <code>.itermcolors</code>，有在线图库</td><td>无</td><td>导入 <code>.itermcolors</code>，阶段 1；<b>这样直接接上现成配色生态</b></td></tr>
+<tr><td>对比和弱化</td><td>最低对比度、弱化文字透明度</td><td>弱化固定 0.5（<code>screen.rs:1152</code>）</td><td>开放，阶段 3</td></tr>
+<tr><td>光标</td><td>形状、闪烁、柔和闪烁、十字辅助线、移动动画</td><td>闪烁、未聚焦样式可调；能画四种形状，但只听程序的</td><td>默认形状和辅助线，阶段 3；动画以后再看</td></tr>
+<tr><td>字体</td><td>主字体、非 ASCII 字体、连字、粗体、斜体、细笔画</td><td>字体、字号、行距；连字关闭</td><td>非 ASCII 字体和连字，阶段 3（连字要量性能）</td></tr>
+<tr><td>窗口材质</td><td>透明度、模糊</td><td>无，但 GPUI 已支持透明和模糊窗口</td><td>开放，阶段 4</td></tr>
+<tr><td>背景图</td><td>单图或轮播，四种缩放，混合强度，每个窗格单独</td><td>无</td><td>单图、四种缩放和混合强度，阶段 4；轮播以后再看</td></tr>
+<tr><td>变暗</td><td>变暗强度，非当前分屏和后台窗口，可只影响文字</td><td>非当前分屏可调</td><td>后台窗口和「只影响文字」，阶段 3</td></tr>
+<tr><td>布局</td><td>标签位置、状态栏位置、窗格标题、边距</td><td>标准和终端原生两种样式；终端原生标签在底部</td><td>边距、标签位置，阶段 5，要逐个评估</td></tr>
+<tr><td>分会话</td><td>每个配置一套外观，标签可单独着色</td><td>全窗口一套</td><td>每个空间单独主题，阶段 5</td></tr>
+<tr><td><b>iTerm2 没有的</b></td><td>无</td><td>侧栏、状态色、标签芯片、空间渐变</td><td>全部开放，这是 Mooring 独有的部分</td></tr>
+</table></div>
+
+<h2>怎样做到能改很多，又不乱</h2>
+<ul>
+<li><b>三层，每层都能停：</b>只选一套主题；或者只改背景和前景，其余自动推导；或者展开逐项覆盖。没覆盖的项继续跟着基础色变。</li>
+<li><b>内置主题只读：</b>点「调整」就复制成「我的主题」，随时能回到原样，每一项都有「重置」。</li>
+<li><b>主题和个人习惯分开：</b>颜色和材质跟主题走；字体、字号、行距和光标形状留在终端设置，换主题不会动你的字体。</li>
+<li><b>提示但不拦：</b>对比度不足时明确提示，用户仍然可以保存。</li>
+<li><b>名字是公开约定：</b>每个可改项有稳定英文名，文件里未知的项忽略，缺的项走推导，改名要保留旧名。</li>
+</ul>
+
+<h2>试一下：主题编辑器原型</h2>
+<p>改一个颜色，右边整个窗口立刻变。没改过的项标「推导」，会跟着背景和前景走；改过的标「已改」，可以重置。原型只放了每组有代表性的项，默认状态色和亮色 ANSI 取自代码，暗色 ANSI 是示例值。</p>
+<div id="editor" class="ed">
+<div class="ed-left"><div class="ed-tabs" id="e-tabs" role="tablist"></div><div id="e-rows"></div></div>
+<div class="ed-right"><div id="e-desk"><div id="e-win"></div></div><p id="e-read" style="margin:10px 0 8px;font-size:13px"></p><pre id="e-json"></pre></div>
 </div>
 
-<h2>开放给用户的路线</h2>
-<div class="wrap"><table>
-<tr><th>阶段</th><th>用户得到什么</th><th>要动什么</th><th>放弃或停下的条件</th></tr>
-<tr><td><b>0 现在</b></td><td>方向 A</td><td>上面的范围。主题存 id 字符串</td><td>无</td></tr>
-<tr><td><b>1 地基和主题文件</b></td><td>放一个 JSON 进 <code>~/.config/mooring/themes/</code>，几秒内出现在选择器里；能让 Agent 写一套（<code>mooring --skill</code> 加说明）</td><td>颜色从编译时的固定表改成运行时生成：<code>Scheme</code> 枚举、<code>PALETTES</code>、<code>AtomicU8</code>；协议 <code>Request::Scheme</code> 改为传颜色值；ANSI 可选</td><td>如果切换主题时的重绘或每帧开销用 CPU 探针量出明显上升，先修再往下做</td></tr>
-<tr><td><b>2 应用内调整</b></td><td>「复制并调整」任何主题：背景、前景、光标，实时预览，确认才保存；对比度不足时提示但不拦</td><td>设置页加调整器，临时主题机制</td><td>如果阶段 1 上线后几乎没人建主题，就不做</td></tr>
-<tr><td><b>3 分享</b></td><td>市场里装主题，装完可以马上试</td><td>插件新增 <code>themes</code> 类型，只含数据，不跑命令；升 <code>LEVEL</code></td><td>同上</td></tr>
-<tr><td><b>4 图片和背景图</b></td><td>从图片取色；终端背后放图</td><td>取色便宜；背景图要改终端绘制和透明度</td><td>背景图若让终端 CPU 明显上升，或状态色和文字读不清，只做取色</td></tr>
-</table></div>
-<p style="margin-top:10px">主题文件的样子，只有 <code>bg</code> 和 <code>fg</code> 必填；名字不写就用文件名，ANSI 不写就按明暗用默认：</p>
-<pre style="background:#e0ded7;padding:10px 12px;border-radius:6px;font:12.5px/1.6 ui-monospace,Menlo,monospace;overflow-x:auto;margin:0">{
+<h2>主题文件</h2>
+<p>只有 <code>bg</code> 和 <code>fg</code> 必填，其余都可选。下面是完整结构的节选：</p>
+<pre class="code">{
   "name": "深海",
   "bg": "#0f1c2e",
   "fg": "#d5dfef",
-  "cursor": "#2f81f7",
-  "ansi": { "red": "#e5534b", "bright_red": "#ff7b72" }
+  "terminal": { "cursor": "#2f81f7", "cursor_text": "#0f1c2e", "selection": "#2a4a70",
+                "selected_text": "#ffffff", "bold": "#ffffff", "link": "#7cc4ff", "underline": "#7cc4ff" },
+  "ansi": { "red": "#e5534b", "bright_red": "#ff7b72" },
+  "ui": { "sidebar": "#0b1522", "border": "#23344d", "accent": "#7cc4ff", "muted": "#7f8ea3" },
+  "status": { "running": "#e5b83b", "review": "#3fb27f" },
+  "tone": { "ok": "#4cc38a", "warn": "#e5b83b", "danger": "#e5534b" },
+  "space_gradients": [["#f59e6b", "#d9467a"]],
+  "window": { "opacity": 0.92, "blur": 20,
+              "image": { "path": "sea.png", "mode": "fill", "blend": 0.3 } }
 }</pre>
+<p style="margin-top:10px" class="sub"><code>colors.json</code> 现有的状态色覆盖继续生效，放在主题之上；等编辑器上线后，第一次打开时把它转成「我的主题」的一部分，避免同一颜色长期有两个来源。</p>
+
+<h2>开放的路线</h2>
+<div class="wrap"><table>
+<tr><th>阶段</th><th>用户得到什么</th><th>要动什么</th><th>放弃或停下的条件</th></tr>
+<tr><td><b>0 现在</b></td><td>方向 A</td><td>上面的范围。主题存 id 字符串</td><td>无</td></tr>
+<tr><td><b>1 所有颜色</b></td><td>主题文件能覆盖全部颜色，几秒内生效；能导入 <code>.itermcolors</code>；能让 Agent 写主题</td><td>颜色改为运行时生成；公开约 90 项：界面 33、侧栏 18、ANSI 16、终端细节 7、状态和语气、空间渐变；后台协议传颜色值；把曜黑的特例改成覆盖项</td><td>切换或每帧开销用 CPU 探针量出明显上升，先修再往下做</td></tr>
+<tr><td><b>2 应用内编辑器</b></td><td>上面原型的完整版，导入导出，先预览后保存</td><td>设置页，临时主题机制</td><td>无。这是你要的核心能力</td></tr>
+<tr><td><b>3 终端细节</b></td><td>默认光标形状和辅助线、非 ASCII 字体、连字、最低对比度、弱化强度</td><td><code>screen.rs</code> 和 <code>terminal_text.rs</code></td><td>连字让终端 CPU 明显上升就默认关闭，只作选项；还不行就不做</td></tr>
+<tr><td><b>4 材质</b></td><td>透明、模糊、背景图</td><td>窗口外观和终端底色绘制</td><td>状态色和文字读不清，或终端 CPU 明显上升，就只保留透明度</td></tr>
+<tr><td><b>5 分享和按空间</b></td><td>市场装主题，每个空间一套，部分布局项</td><td>插件 <code>themes</code> 类型；主题从全局变成按窗格解析</td><td>按空间的主题若拖慢每帧绘制就放弃，保留全局</td></tr>
+</table></div>
 
 <h2>验收和放弃条件</h2>
 <ul>
@@ -173,7 +214,7 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 </ul>
 
 <h2>决定</h2>
-<ul><li><b>待验证：</b>现在实现修订后的方向 A，等你确认。</li><li><b>采用：</b>Warp 的亮暗两组模型、由少数颜色推导界面、先预览后保存。</li><li><b>否定：</b>每套主题一个彩色强调色，彩色留给状态。</li><li><b>待验证：</b>阶段 2 到 4 是否值得做，看阶段 1 的实际使用。</li></ul>
+<ul><li><b>待验证：</b>现在实现修订后的方向 A，等你确认。</li><li><b>采用：</b>Warp 的亮暗两组模型、由少数颜色推导界面、先预览后保存。</li><li><b>采用：</b>能改的尽量都开放，对照 iTerm2 列全，并多开放 Mooring 独有的侧栏和状态色。</li><li><b>改变：</b>之前否定的彩色强调色改为可覆盖，默认仍然不用。</li><li><b>待验证：</b>连字、背景图和按空间主题，看性能和可读性再定。</li></ul>
 </main>
 <script>
 const S={ink:['曜黑',0xd4d4d8,0x0e0e11],slate:['蓝灰',0xcad3e1,0x21252c],graphite:['石墨',0xd2d2d6,0x232326],warm:['暖灰',0xddd5c8,0x262320],pine:['松绿',0xcbd9d2,0x1d2624],plum:['紫灰',0xd6cfe2,0x25222c]},LIGHT=['亮色',0x1f1e1c,0xffffff];
@@ -212,14 +253,37 @@ else if(d.mac)st.mac=d.mac;else if(d.mode)st.mode=d.mode;
 else if(d.pal)st.pal=d.pal;else if(d.lightpal)st.lightpal=d.lightpal;
 else if(d.flat)st.flat=d.flat;else if(d.follow){st.follow=!st.follow;if(st.follow&&st.flat==='light')st.flat='ink'}else return;render()});
 render();
-// The tuner: same shares as Palette::new, the mode read from the ground's luminance.
+// The theme editor: same shares as Palette::new; an override wins, everything else follows bg and fg.
 const num=h=>parseInt(h.slice(1),16),lum=n=>[16,8,0].map((k,i)=>{const c=((n>>k)&255)/255;return (c<=.03928?c/12.92:((c+.055)/1.055)**2.4)*[.2126,.7152,.0722][i]}).reduce((a,b)=>a+b),ratio=(a,b)=>{const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p);return (x+.05)/(y+.05)};
-function tune(){const bg=num(document.getElementById('e-bg').value),fg=num(document.getElementById('e-fg').value),cur=document.getElementById('e-cur').value,light=lum(bg)>.4,r=ratio(bg,fg);
-const by=(l,d)=>light?l:d,side=light?mix(bg,fg,45):mix(bg,0,330),app=mix(bg,0,by(70,430)),line=mix(bg,fg,by(170,90)),muted=mix(bg,fg,by(640,420)),sec=mix(bg,fg,by(720,580));
-const rows=['修复登录问题','整理发布说明','跑一遍回归'].map((t,i)=>`<div style="padding:5px 0;color:${i?hex(sec):hex(fg)}">${t}</div>`).join('');
-document.getElementById('e-win').style.background=hex(app);
-document.getElementById('e-win').innerHTML=`<div style="width:34%;min-width:110px;background:${hex(side)};padding:12px;border-right:1px solid ${hex(line)}"><div style="font-size:11px;font-weight:600;letter-spacing:2px;color:${hex(fg)};margin-bottom:10px">MOORING</div>${rows}<div style="color:${hex(muted)};font-size:12px;margin-top:10px">⌘J 下一个要你的</div></div><div style="flex:1;margin:8px;background:${hex(bg)};border:1px solid ${hex(line)};border-radius:6px;padding:12px;font-family:ui-monospace,Menlo,monospace;color:${hex(fg)};min-width:0"><div style="color:${hex(muted)};margin-bottom:8px">终端 /…/mooring</div>$ cargo test<br><span style="color:${hex(sec)}">running 214 tests</span><br>$ <span style="display:inline-block;width:8px;height:15px;background:${cur};vertical-align:-2px"></span></div>`;
-const ok=r>=4.5;document.getElementById('e-read').innerHTML=`判定为${light?'亮色':'暗色'}主题，对比度 <b>${r.toFixed(1)}:1</b>${ok?'':'，<b style="color:#a33a1a">低于 4.5:1，文字可能看不清</b>'}`;
-document.getElementById('e-json').textContent=JSON.stringify({name:'我的主题',bg:hex(bg),fg:hex(fg),cursor:cur},null,2)}
-document.getElementById('editor').addEventListener('input',tune);tune();
+const ANSI_D=['#1d1f21','#cc6666','#7fb069','#e5b83b','#5f9bd8','#b294bb','#5fb3b3','#c5c8c6','#666a70','#e5787a','#9ece84','#f0c674','#81b5e8','#c9a7d2','#7fcfcf','#eaeaea'],ANSI_L=['#2a2825','#cf222e','#116329','#8a5a00','#0969da','#8250df','#1b7c83','#6f6a64','#57534e','#a40e26','#1a7f37','#9a6700','#218bff','#a475f9','#3192aa','#8c8680'],AN=['black','red','green','yellow','blue','magenta','cyan','white'];
+const base={bg:'#0f1c2e',fg:'#d5dfef'},over={},mat={opacity:100,blur:0};
+const isL=()=>lum(num(val('bg')))>.4,sh=(l,d)=>isL()?l:d,m=(s)=>hex(mix(num(val('bg')),num(val('fg')),s));
+const TOK={基础:[['bg','背景',()=>base.bg],['fg','前景',()=>base.fg]],
+终端:[['cursor','光标',()=>isL()?'#0969da':'#2f81f7'],['cursor_text','光标文字',()=>val('bg')],['selection','选区',()=>m(sh(180,260))],['selected_text','选中文字',()=>val('fg')],['bold','粗体',()=>val('fg')],['link','链接',()=>m(860)],['underline','下划线',()=>val('fg')]],
+ANSI:AN.flatMap((c,i)=>[[c,c,()=>(isL()?ANSI_L:ANSI_D)[i]],['bright_'+c,'bright '+c,()=>(isL()?ANSI_L:ANSI_D)[i+8]]]),
+界面:[['app','窗口外框',()=>hex(mix(num(val('bg')),0,sh(70,430)))],['sidebar','侧栏',()=>isL()?m(45):hex(mix(num(val('bg')),0,330))],['border','分隔线',()=>m(sh(170,90))],['secondary','次要文字',()=>m(sh(720,580))],['muted','弱文字',()=>m(sh(640,420))],['accent','强调色',()=>hex(mix(num(val('fg')),isL()?0:0xffffff,300))],['chip','标签底色',()=>m(sh(120,80))]],
+状态:[['ask','等你回答',()=>'#e8732c'],['review','等你验收',()=>'#3fb27f'],['running','在跑',()=>'#e5b83b'],['ok','语气：正常',()=>'#4cc38a'],['warn','语气：警告',()=>'#e5b83b'],['danger','语气：危险',()=>'#e5534b']],
+材质:[]};
+const all=Object.values(TOK).flat(),byK=Object.fromEntries(all.map(t=>[t[0],t]));
+function val(k){return over[k]||(k==='bg'||k==='fg'?base[k]:byK[k][2]())}
+let tab='基础';
+function rows(){const box=document.getElementById('e-rows');
+if(tab==='材质'){box.innerHTML=`<div class="ed-row"><label for="e-op">不透明度</label><span class="st" id="e-opv"></span><input id="e-op" type="range" min="40" max="100" value="${mat.opacity}"></div><div class="ed-row"><label for="e-bl">背景模糊</label><span class="st" id="e-blv"></span><input id="e-bl" type="range" min="0" max="30" value="${mat.blur}"></div><p class="sub" style="font-size:12.5px;margin:6px 4px">背景图同理：选图、缩放方式、混合强度。这里只示意透明和模糊。</p>`}
+else box.innerHTML=TOK[tab].map(([k,n])=>`<div class="ed-row"><label for="e-${k}">${n}</label><span class="st" data-st="${k}"></span><button data-reset="${k}" aria-label="重置${n}">重置</button><input id="e-${k}" data-tok="${k}" type="color"></div>`).join('');paint()}
+function paint(){document.querySelectorAll('[data-tok]').forEach(i=>{const k=i.dataset.tok;i.value=val(k)});
+document.querySelectorAll('[data-st]').forEach(e=>{const k=e.dataset.st,mine=!!over[k];e.textContent=mine?'已改':k==='bg'||k==='fg'?'基础':'推导';e.className='st'+(mine?' on':'')});
+document.querySelectorAll('[data-reset]').forEach(b=>b.style.visibility=over[b.dataset.reset]?'visible':'hidden');
+const op=document.getElementById('e-opv');if(op){op.textContent=mat.opacity+'%';document.getElementById('e-blv').textContent=mat.blur+' px'}
+const a=mat.opacity/100,al=h=>{const n=num(h);return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`},v=val,ses=[['ask','标签 0','问：要不要继续？'],['review','修复登录问题',''],['running','整理发布说明','']];
+const w=document.getElementById('e-win');w.style.backdropFilter=mat.blur?`blur(${mat.blur}px)`:'none';w.style.webkitBackdropFilter=w.style.backdropFilter;w.style.background=al(v('app'));w.style.color=v('fg');
+w.innerHTML=`<div style="display:flex;min-height:286px"><div style="width:36%;min-width:124px;background:${al(v('sidebar'))};border-right:1px solid ${v('border')};padding:12px"><div style="font-size:11px;font-weight:600;letter-spacing:2px;margin-bottom:8px;color:${v('fg')}">MOORING</div><span style="display:inline-block;background:${v('chip')};color:${v('secondary')};border-radius:10px;padding:0 8px;font-size:12px;margin-bottom:8px">工作空间</span>${ses.map(([k,t,q])=>`<div style="padding:5px 0;color:${v('fg')}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${v(k)};margin-right:6px"></span>${t}${q?`<div style="font-size:12px;color:${v(k)};padding-left:14px">${q}</div>`:''}</div>`).join('')}<div style="color:${v('muted')};font-size:12px;margin-top:8px">⌘J 下一个要你的</div><span data-accent style="display:inline-block;margin-top:10px;background:${v('accent')};color:${v('bg')};border-radius:6px;padding:2px 10px;font-size:12px;font-weight:600">标记完成</span></div>
+<div style="flex:1;min-width:0;margin:8px;background:${al(v('bg'))};border:1px solid ${v('border')};border-radius:6px;padding:10px;font:12px/1.6 ui-monospace,Menlo,monospace;overflow:hidden"><div style="color:${v('muted')};margin-bottom:6px">终端 /…/mooring</div>$ <b style="color:${v('bold')}">cargo test</b><br><span style="color:${v('green')}">ok</span> 214 passed · <span style="color:${v('red')}">1 failed</span> · <span style="color:${v('yellow')}">2 warnings</span><br><span style="color:${v('blue')}">src/theme.rs</span> <span style="color:${v('magenta')}">fn</span> <span style="color:${v('cyan')}">mix</span><br><span style="background:${v('selection')};color:${v('selected_text')}">选中的文字</span> <span style="color:${v('link')};text-decoration:underline;text-decoration-color:${v('underline')}">docs/plan.md</span><br>$ <span style="display:inline-block;background:${v('cursor')};color:${v('cursor_text')};width:8px;height:14px;vertical-align:-2px"></span></div></div>`;
+const r=ratio(num(v('bg')),num(v('fg'))),low=Object.entries({文字:r,状态:Math.min(...['ask','review','running'].map(k=>ratio(num(v('sidebar')),num(v(k)))))}).filter(([n,x])=>x<(n==='文字'?4.5:3)).map(([n])=>n);
+document.getElementById('e-read').innerHTML=`判定为${isL()?'亮色':'暗色'}主题，文字对比度 <b>${r.toFixed(1)}:1</b>${low.length?`，<b style="color:#a33a1a">${low.join('、')}对比度不足，可能看不清</b>`:''}`;
+const out={name:'我的主题',bg:v('bg'),fg:v('fg')},grp={terminal:TOK.终端,ansi:TOK.ANSI,ui:TOK.界面,status:TOK.状态};for(const g in grp){const o={};grp[g].forEach(([k])=>{if(over[k])o[k]=over[k]});if(Object.keys(o).length)out[g]=o}
+if(mat.opacity<100||mat.blur)out.window={opacity:mat.opacity/100,blur:mat.blur};document.getElementById('e-json').textContent=JSON.stringify(out,null,2)}
+document.getElementById('e-tabs').innerHTML=Object.keys(TOK).map(t=>`<button role="tab" data-tab="${t}" aria-selected="${t===tab}">${t}</button>`).join('');
+document.getElementById('editor').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.tab){tab=b.dataset.tab;document.querySelectorAll('[data-tab]').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab===tab));rows()}else if(b.dataset.reset){delete over[b.dataset.reset];paint()}});
+document.getElementById('editor').addEventListener('input',e=>{const t=e.target;if(t.dataset.tok){if(t.dataset.tok==='bg'||t.dataset.tok==='fg')base[t.dataset.tok]=t.value;else over[t.dataset.tok]=t.value;paint()}else if(t.id==='e-op'){mat.opacity=+t.value;paint()}else if(t.id==='e-bl'){mat.blur=+t.value;paint()}});
+rows();
 </script></body></html>
