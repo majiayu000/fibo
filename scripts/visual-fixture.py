@@ -11,11 +11,15 @@ credentials or user data. Needs a debug build with visual tests:
   python3 scripts/visual-fixture.py stop
 
 Pages are the harness's names, e.g. MOORING_PAGE_LIST=Dense-first-standard-light,Main.
+MOORING_VISUAL_BIN picks the build directory (default target/debug).
+MOORING_FIXTURE_BOARD=1 at prepare fills the board's worst cases: a live running turn, three
+done sessions, and a long branch on every project.
 """
 import json, os, pathlib, shlex, socket, struct, subprocess, sys, tempfile, time
 
 BASE = pathlib.Path(__file__).resolve().parents[1]
 STATE = pathlib.Path.home() / 'Library/Caches/MooringVisual/state.json'
+BIN = pathlib.Path(os.environ.get('MOORING_VISUAL_BIN', BASE / 'target/debug'))
 
 
 def read(s, n):
@@ -103,7 +107,7 @@ if sys.argv[1] == 'prepare':
         elif group != 4: records.append((stamp, 'event_msg', {'type': 'turn_aborted'}))
         (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in records))
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
-    host = subprocess.Popen([str(BASE / 'target/debug/mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
+    host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 30
     while not (root / 'runtime/workbench.sock').exists():
         assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
@@ -131,6 +135,21 @@ if sys.argv[1] == 'prepare':
         r = rpc(root, {'Hook': {'runtime': 'Codex', 'pid': t['pid'], 'cli_session_id': f'visual-{n}', 'transcript': str(logs / f'visual-{n}.jsonl'), 'ended': False, 'event': None}}); assert 'Error' not in r, r
         session = next(s for s in rpc(root, 'Workspace')['Workspace']['agent_sessions'] if s['cli_session_id'] == f'visual-{n}')
         edit(root, {'AssignTask': {'id': session['id'], 'task': 'task0'}})
+    if os.environ.get('MOORING_FIXTURE_BOARD'):
+        for project in (root / 'projects').iterdir():
+            subprocess.run(['git', '-C', str(project), 'init', '-q', '-b', 'feat/consolidate-local-sessions-and-more'], check=True)
+        # A turn with no end, held by a live terminal: only that reaches the running column.
+        script = 'exec 3<' + shlex.quote(str(logs / 'visual-4.jsonl')) + '; while IFS= read -r line; do printf "%s\\n" "$line"; done'
+        r = rpc(root, {'Launch': {'id': 'p4', 'space': 's0', 'argv': [str(root / 'codex'), '-c', script], 'cwd': str(root / 'projects/工作空间'), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
+        while True:
+            t = next(t for t in rpc(root, 'Workspace')['Workspace']['terminals'] if t['id'] == 'p4')
+            if t.get('pid'): break
+            assert time.monotonic() < deadline + 30, 'terminal timeout'; time.sleep(.1)
+        time.sleep(1)
+        r = rpc(root, {'Hook': {'runtime': 'Codex', 'pid': t['pid'], 'cli_session_id': 'visual-4', 'transcript': str(logs / 'visual-4.jsonl'), 'ended': False, 'event': None}}); assert 'Error' not in r, r
+        for s in rpc(root, 'Workspace')['Workspace']['agent_sessions']:
+            if s['cli_session_id'] in ('visual-9', 'visual-17', 'visual-25'):
+                edit(root, {'SetOutcome': {'id': s['id'], 'outcome': 'Completed', 'seen': None}})
     state = {'root': str(root), 'home': str(home), 'host': host.pid}; STATE.write_text(json.dumps(state)); print(state)
 else:
     s = json.loads(STATE.read_text()); root = pathlib.Path(s['root']); home = pathlib.Path(s['home'])
@@ -138,7 +157,7 @@ else:
         directory = pathlib.Path(sys.argv[2]).resolve(); directory.mkdir(parents=True, exist_ok=True)
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8', 'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', 'MOORING_PAGE_EVIDENCE': '1',
                'MOORING_PAGE_LIST': os.environ.get('MOORING_PAGE_LIST', 'TodoNew,TodoNewBare,TodoNewChecks,TodoDetail,TodoDetailAttach,TodoDetailFull,TodoDetailDone')}
-        result = subprocess.run([str(BASE / 'target/debug/mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        result = subprocess.run([str(BIN / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
         (directory / 'native-render.log').write_bytes(result.stdout); assert result.returncode == 0, result.stdout.decode()[-4000:]
         print('native captures', sorted(p.name for p in directory.glob('*-native.png')))
     elif sys.argv[1] == 'readback':
