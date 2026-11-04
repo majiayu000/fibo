@@ -85,11 +85,30 @@ static NSButton *text_button(NSString *title,NSColor *ink,CGFloat size,BOOL unde
     button.attributedTitle=[[NSAttributedString alloc]initWithString:title attributes:attributes];
     return button;
 }
-/// The offline badge: a hollow ring before the K, drawn in the menu bar's own ink.
-static NSImage *offline_mark(void) {
-    NSImage *image=[NSImage imageWithSize:NSMakeSize(9,9) flipped:NO drawingHandler:^BOOL(NSRect rect){
-        NSBezierPath *ring=[NSBezierPath bezierPathWithOvalInRect:NSInsetRect(rect,1.25,1.25)];ring.lineWidth=1.5;
-        [NSColor.blackColor setStroke];[ring stroke];return YES;
+/// The menu bar mark: the C-shaped ring with its post in the gap, in the bar's own ink.
+/// Offline drops the post; the count stays plain text beside it. `assets/Mooring.icon` is the same mark.
+static NSImage *tray_mark(BOOL offline) {
+    NSImage *image=[NSImage imageWithSize:NSMakeSize(18,18) flipped:YES drawingHandler:^BOOL(NSRect rect){
+        NSBezierPath *ring=[NSBezierPath bezierPath];
+        const int steps=48;
+        for(int i=0;i<=steps;i++) {
+            CGFloat a=(15.31+(254.69-15.31)*i/steps)*M_PI/180;
+            NSPoint p=NSMakePoint(8.448+7*cos(a),9.552+7*sin(a));
+            if(i==0) [ring moveToPoint:p]; else [ring lineToPoint:p];
+        }
+        for(int i=0;i<=steps;i++) {
+            CGFloat a=(-103.77+(-346.23+103.77)*i/steps)*M_PI/180;
+            [ring lineToPoint:NSMakePoint(8.524+4.3*cos(a),9.476+4.3*sin(a))];
+        }
+        [ring closePath];
+        [NSColor.blackColor setFill];[ring fill];
+        if(!offline) {
+            NSBezierPath *post=[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(-2.3,-2.3,4.6,4.6) xRadius:1.2 yRadius:1.2];
+            NSAffineTransform *place=[NSAffineTransform transform];
+            [place translateXBy:13.4 yBy:4.6];[place rotateByDegrees:-42];
+            [post transformUsingAffineTransform:place];[post fill];
+        }
+        return YES;
     }];
     image.template=YES;return image;
 }
@@ -326,7 +345,7 @@ static NSImage *offline_mark(void) {
 void kl_desktop_install(KLCallback callback) {
     desktop=[KLDesktop new];desktop.callback=callback;
     desktop.item=[[NSStatusBar systemStatusBar]statusItemWithLength:NSVariableStatusItemLength];
-    desktop.item.button.title=@"K";desktop.item.button.toolTip=@"Mooring";
+    desktop.item.button.title=@"";desktop.item.button.image=tray_mark(NO);desktop.item.button.imagePosition=NSImageOnly;desktop.item.button.toolTip=@"Mooring";
     desktop.item.button.target=desktop;desktop.item.button.action=@selector(show:);
     desktop.popover=[NSPopover new];desktop.popover.behavior=NSPopoverBehaviorTransient;
     // An open panel repaints when the system switches between light and dark.
@@ -338,9 +357,9 @@ void kl_desktop_update(const char *json) {
     NSData *bytes=[[NSString stringWithUTF8String:json]dataUsingEncoding:NSUTF8StringEncoding];
     NSError *error=nil;NSDictionary *data=[NSJSONSerialization JSONObjectWithData:bytes options:0 error:&error];
     if(!data) {[desktop route:[@"error:" stringByAppendingString:error.localizedDescription]];return;}
-    desktop.data=data;desktop.item.button.title=data[@"badge"]?:@"K";
+    desktop.data=data;NSString *badge=data[@"badge"]?:@"";desktop.item.button.title=badge;
     BOOL offline=[data[@"connection"][@"error"] isKindOfClass:NSString.class];
-    desktop.item.button.image=offline?offline_mark():nil;desktop.item.button.imagePosition=NSImageLeft;
+    desktop.item.button.image=tray_mark(offline);desktop.item.button.imagePosition=badge.length?NSImageLeft:NSImageOnly;
     desktop.item.button.toolTip=offline?@"Mooring · 连不上后台":@"Mooring";
     if(desktop.popover.shown) [desktop rebuild];
 }

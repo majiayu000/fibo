@@ -300,7 +300,7 @@ fn panel(w: &Workspace, link: &Link) -> String {
         ("很久没动", Some(stale), "外部会话在鸟瞰里看")
     };
     json!({
-        "badge": if offline || total == 0 { "K".into() } else { format!("K {total}") },
+        "badge": if offline || total == 0 { String::new() } else { total.to_string() },
         "heading": heading,
         "when": when,
         "needs": total,
@@ -576,7 +576,7 @@ mod tests {
             serde_json::from_str(&panel(&scanned, &Link::fresh(RecognitionPhase::Healthy)))
                 .unwrap();
         assert!(value["rows"].as_array().unwrap().is_empty());
-        assert_eq!(value["badge"], "K");
+        assert_eq!(value["badge"], "");
     }
     /// A managed session in space "工作空间" whose content is `turn`, updated `ago` seconds ago.
     fn session(w: &mut Workspace, id: &str, turn: mooring_core::content::Turn, ago: u64) {
@@ -685,7 +685,7 @@ mod tests {
         let v = value(needs, link);
         assert_eq!(v["heading"], "3 项要你处理");
         assert_eq!(v["when"], "刚刚更新");
-        assert_eq!(v["badge"], "K 3");
+        assert_eq!(v["badge"], "3");
         assert_eq!(v["needs"], 3);
         let counts = &v["counts"];
         assert_eq!(
@@ -730,7 +730,7 @@ mod tests {
         let (_, none, link) = &samples[1];
         let v = value(none, link);
         assert_eq!(v["heading"], "没有要你处理的");
-        assert_eq!(v["badge"], "K");
+        assert_eq!(v["badge"], "");
         assert!(v["rows"].as_array().unwrap().is_empty());
         assert_eq!(v["empty"]["title"], "在跑的 2 个停下来要你时，会发系统通知");
         assert_eq!(v["empty"]["note"], "通知已开 · 你正看着的画面不会再弹");
@@ -750,7 +750,7 @@ mod tests {
         assert_eq!(v["when"], format!("数据停在 {stopped}"));
         assert_eq!(v["section"], format!("{stopped} 时要你处理"));
         assert_eq!(v["section_note"], "可能已经变了");
-        assert_eq!(v["badge"], "K", "the offline badge carries no count");
+        assert_eq!(v["badge"], "", "the offline badge carries no count");
         assert_eq!(v["rows"].as_array().unwrap().len(), 3);
         let c = &v["connection"];
         assert_eq!(c["phase"], "interrupted");

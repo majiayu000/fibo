@@ -154,8 +154,7 @@ impl SettingsView {
                     })),
                 );
             }
-            // Keep the two tiles the width of the three theme tiles.
-            icon.push(tiles.child(div().flex_1()).into_any_element());
+            icon.push(tiles.into_any_element());
             icon.push(
                 div()
                     .px(px(T::S16))
