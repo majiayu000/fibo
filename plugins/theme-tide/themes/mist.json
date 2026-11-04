@@ -1,0 +1,7 @@
+{
+  "name": "晨雾",
+  "bg": "#f4f7f8",
+  "fg": "#22333b",
+  "terminal": { "cursor": "#1f7a8c", "selection": "#bcdde3" },
+  "ansi": { "red": "#b3403c", "green": "#2f7d4f", "yellow": "#8a6a12", "blue": "#2563a8", "magenta": "#7c4aa8", "cyan": "#1f7a8c" }
+}

@@ -121,13 +121,17 @@ mooring close "$tests"
   "name": "深海",
   "bg": "#0f1c2e",
   "fg": "#d5dfef",
-  "terminal": { "cursor": "#2f81f7", "cursor_text": "#0f1c2e", "selection": "#2a4a70", "bold": "#ffffff", "link": "#7cc4ff", "underline": "#7cc4ff" },
+  "terminal": { "cursor": "#2f81f7", "cursor_text": "#0f1c2e", "selection": "#2a4a70", "selected_text": "#ffffff", "cursor_guide": "#2f81f7", "bold": "#ffffff", "link": "#7cc4ff", "underline": "#7cc4ff" },
   "ansi": { "red": "#e5534b", "bright_red": "#ff7b72" },
   "ui": { "sidebar": "#0b1522", "border": "#23344d", "accent": "#7cc4ff" },
   "status": { "running": "#e5b83b", "review": "#3fb27f" },
   "tone": { "ok": "#4cc38a", "warn": "#e5b83b", "danger": "#e5534b" },
-  "space_gradients": [["#f59e6b", "#d9467a"]]
+  "space_gradients": [["#f59e6b", "#d9467a"]],
+  "window": { "opacity": 0.85, "blur": true },
+  "background": { "image": "images/sea.jpg", "mode": "fill", "strength": 0.2 }
 }
 ```
+
+`window.opacity` 是 0.3–1，文字始终不透明，只有窗口的底变透。`background.image` 写绝对路径，或相对主题文件夹的路径；`mode` 是 `fill`、`fit`、`stretch`、`tile`，`strength` 是 0.05–1。字体、光标形状、最低对比度、边距这些属于用户习惯，不跟主题走，在设置 › 终端里改（`terminal-text.json`）。某个空间单独用一套主题：右键空间 › 主题。想把主题分享出去：做成只含数据的插件，`provides` 写 `["themes"]`，主题放在插件的 `themes/*.json`（见 `mooring --skill plugins`）。
 
 写错或不认识的项会跳过，并显示在设置 › 外观里。文字对比度低于 4.5:1 时告诉用户可能看不清。可写的 `ui` 名字在设置 › 外观 › 调整当前主题里能看到，全部名字以 `crates/mooring-app/src/ui/palette.rs` 的 `ui_tokens!` 为准。用户手上有 iTerm2 的 `.itermcolors` 时，让用户在同一页点「导入」。

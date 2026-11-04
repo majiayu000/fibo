@@ -19,6 +19,9 @@ mod theme;
 mod terminal {
     pub(crate) use super::screen;
 }
+#[path = "../src/ui/backdrop.rs"]
+#[allow(dead_code)]
+mod backdrop;
 #[path = "../src/ui/palette.rs"]
 #[allow(dead_code)]
 mod palette;
@@ -32,6 +35,7 @@ mod terminal_text;
 #[allow(dead_code)]
 mod tone;
 mod ui {
+    pub(crate) use super::backdrop;
     pub(crate) use super::terminal_text;
     pub(crate) use super::theme;
 }

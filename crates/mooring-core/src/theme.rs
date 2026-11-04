@@ -24,15 +24,69 @@ pub const ANSI_NAMES: [&str; 16] = [
     "bright_white",
 ];
 /// Terminal colors past the defaults, painted by the window.
-pub const TERMINAL_NAMES: [&str; 6] = [
+pub const TERMINAL_NAMES: [&str; 8] = [
     "cursor",
     "cursor_text",
     "selection",
+    "selected_text",
     "bold",
     "link",
     "underline",
+    "cursor_guide",
 ];
 const SECTIONS: [&str; 5] = ["terminal", "ansi", "ui", "status", "tone"];
+
+/// How a picture fills a terminal.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ImageMode {
+    /// Covers the pane, cropped to its shape.
+    #[default]
+    Fill,
+    /// All of it shows, with the terminal's ground beside it.
+    Fit,
+    Stretch,
+    /// Repeated at its own size.
+    Tile,
+}
+impl ImageMode {
+    pub const ALL: [Self; 4] = [Self::Fill, Self::Fit, Self::Stretch, Self::Tile];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Fill => "fill",
+            Self::Fit => "fit",
+            Self::Stretch => "stretch",
+            Self::Tile => "tile",
+        }
+    }
+}
+/// A picture behind a theme's terminals.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackgroundImage {
+    /// Absolute, or relative to the themes folder.
+    pub path: String,
+    pub mode: ImageMode,
+    /// How much of it shows through the terminal's ground, in percent.
+    pub strength: u8,
+}
+pub const DEFAULT_IMAGE_STRENGTH: u8 = 20;
+/// The window's material: what a theme sets past its colors.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Material {
+    /// How much of the window's ground is painted, in percent; 100 hides what is behind.
+    pub opacity: u8,
+    /// What shows behind a window that is not fully opaque is blurred.
+    pub blur: bool,
+    pub image: Option<BackgroundImage>,
+}
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            opacity: 100,
+            blur: false,
+            image: None,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ThemeFile {
@@ -43,6 +97,7 @@ pub struct ThemeFile {
     /// which owns those names; `terminal` and `ansi` here.
     pub colors: BTreeMap<String, BTreeMap<String, u32>>,
     pub space_gradients: Vec<[u32; 2]>,
+    pub material: Material,
     /// What was skipped while reading, for 设置 to show.
     pub problems: Vec<String>,
 }
@@ -100,6 +155,8 @@ impl ThemeFile {
             match key.as_str() {
                 "name" | "bg" | "fg" => {}
                 "space_gradients" => out.read_gradients(value),
+                "window" => out.read_window(value),
+                "background" => out.read_background(value),
                 section if SECTIONS.contains(&section) => out.read_section(section, value),
                 other => out.problems.push(format!("不认识 {other}，已跳过")),
             }
@@ -143,6 +200,70 @@ impl ThemeFile {
                 .push("space_gradients 应是若干对颜色，已跳过".to_owned()),
         }
     }
+    fn read_window(&mut self, value: &serde_json::Value) {
+        let Some(keys) = value.as_object() else {
+            self.problems.push("window 应是一个对象，已跳过".to_owned());
+            return;
+        };
+        for (key, value) in keys {
+            match (key.as_str(), value) {
+                ("opacity", value) => match value.as_f64().filter(|v| (0.3..=1.).contains(v)) {
+                    Some(v) => self.material.opacity = (v * 100.).round() as u8,
+                    None => self
+                        .problems
+                        .push(format!("window.opacity 应在 0.3–1，写的是 {value}，已跳过")),
+                },
+                ("blur", serde_json::Value::Bool(blur)) => self.material.blur = *blur,
+                ("blur", value) => self.problems.push(format!(
+                    "window.blur 应是 true 或 false，写的是 {value}，已跳过"
+                )),
+                (other, _) => self.problems.push(format!("不认识 window.{other}，已跳过")),
+            }
+        }
+    }
+    fn read_background(&mut self, value: &serde_json::Value) {
+        let Some(keys) = value.as_object() else {
+            self.problems
+                .push("background 应是一个对象，已跳过".to_owned());
+            return;
+        };
+        let Some(path) = keys.get("image").and_then(|v| v.as_str()) else {
+            self.problems
+                .push("background 缺少 image，已跳过".to_owned());
+            return;
+        };
+        let mut image = BackgroundImage {
+            path: path.to_owned(),
+            mode: ImageMode::default(),
+            strength: DEFAULT_IMAGE_STRENGTH,
+        };
+        for (key, value) in keys {
+            match key.as_str() {
+                "image" => {}
+                "mode" => {
+                    let named = ImageMode::ALL
+                        .into_iter()
+                        .find(|m| value.as_str() == Some(m.name()));
+                    match named {
+                        Some(mode) => image.mode = mode,
+                        None => self.problems.push(format!(
+                            "background.mode 应是 fill、fit、stretch 或 tile，写的是 {value}，已跳过"
+                        )),
+                    }
+                }
+                "strength" => match value.as_f64().filter(|v| (0.05..=1.).contains(v)) {
+                    Some(v) => image.strength = (v * 100.).round() as u8,
+                    None => self.problems.push(format!(
+                        "background.strength 应在 0.05–1，写的是 {value}，已跳过"
+                    )),
+                },
+                other => self
+                    .problems
+                    .push(format!("不认识 background.{other}，已跳过")),
+            }
+        }
+        self.material.image = Some(image);
+    }
     /// The file form, with only what the theme sets.
     pub fn to_json(&self) -> String {
         let mut root = serde_json::Map::new();
@@ -163,6 +284,27 @@ impl ThemeFile {
                 .map(|[a, b]| vec![hex(*a), hex(*b)].into())
                 .collect();
             root.insert("space_gradients".into(), pairs.into());
+        }
+        let material = &self.material;
+        if material.opacity != 100 || material.blur {
+            let mut window = serde_json::Map::new();
+            if material.opacity != 100 {
+                window.insert(
+                    "opacity".into(),
+                    (f64::from(material.opacity) / 100.).into(),
+                );
+            }
+            if material.blur {
+                window.insert("blur".into(), true.into());
+            }
+            root.insert("window".into(), window.into());
+        }
+        if let Some(image) = &material.image {
+            let mut background = serde_json::Map::new();
+            background.insert("image".into(), image.path.clone().into());
+            background.insert("mode".into(), image.mode.name().into());
+            background.insert("strength".into(), (f64::from(image.strength) / 100.).into());
+            root.insert("background".into(), background.into());
         }
         serde_json::to_string_pretty(&serde_json::Value::Object(root)).unwrap_or_default()
     }
@@ -186,6 +328,8 @@ impl ThemeFile {
             ("Cursor Color", "cursor"),
             ("Cursor Text Color", "cursor_text"),
             ("Selection Color", "selection"),
+            ("Selected Text Color", "selected_text"),
+            ("Cursor Guide Color", "cursor_guide"),
             ("Bold Color", "bold"),
             ("Link Color", "link"),
             ("Underline Color", "underline"),
@@ -194,6 +338,28 @@ impl ThemeFile {
         }
         Ok(out)
     }
+}
+/// A plugin's theme files, for `mooring plugins check`. The window checks them again with
+/// the names of its own colors.
+pub fn load(files: Vec<std::path::PathBuf>) -> Vec<crate::agent::Loaded> {
+    files
+        .into_iter()
+        .map(|file| {
+            let stem = file
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            let result = std::fs::read_to_string(&file)
+                .map_err(|e| e.to_string())
+                .and_then(|text| ThemeFile::parse(&text, &stem))
+                .and_then(|theme| match theme.problems.is_empty() {
+                    true => Ok(theme.name),
+                    false => Err(theme.problems.join("；")),
+                });
+            crate::agent::Loaded { file, result }
+        })
+        .collect()
 }
 pub fn hex(color: u32) -> String {
     format!("#{color:06x}")
@@ -287,6 +453,38 @@ mod tests {
         t.set("ui", "sidebar", None);
         assert_eq!(t.color("ui", "sidebar"), None);
         assert!(!t.colors.contains_key("ui"));
+    }
+    #[test]
+    fn a_material_survives_and_what_is_out_of_range_is_named() {
+        let t = ThemeFile::parse(
+            r##"{"bg":"#000000","fg":"#ffffff","window":{"opacity":0.85,"blur":true},
+                "background":{"image":"images/sea.jpg","mode":"tile","strength":0.4}}"##,
+            "x",
+        )
+        .unwrap();
+        assert!(t.problems.is_empty(), "{:?}", t.problems);
+        assert_eq!((t.material.opacity, t.material.blur), (85, true));
+        let image = t.material.image.as_ref().unwrap();
+        assert_eq!(
+            (image.path.as_str(), image.mode, image.strength),
+            ("images/sea.jpg", ImageMode::Tile, 40)
+        );
+        assert_eq!(ThemeFile::parse(&t.to_json(), "x").unwrap(), t);
+        let bad = ThemeFile::parse(
+            r##"{"bg":"#000000","fg":"#ffffff","window":{"opacity":0.1,"glow":1},
+                "background":{"image":"a.png","mode":"zoom","strength":3}}"##,
+            "x",
+        )
+        .unwrap();
+        assert_eq!(bad.material.opacity, 100);
+        let image = bad.material.image.unwrap();
+        assert_eq!(
+            (image.mode, image.strength),
+            (ImageMode::Fill, DEFAULT_IMAGE_STRENGTH)
+        );
+        assert_eq!(bad.problems.len(), 4, "{:?}", bad.problems);
+        let none = ThemeFile::parse(r##"{"bg":"#000000","fg":"#ffffff"}"##, "x").unwrap();
+        assert!(!none.to_json().contains("window") && !none.to_json().contains("background"));
     }
     #[test]
     fn colors_reach_the_terminal() {

@@ -40,10 +40,17 @@ pub struct Palette {
     pub term_bold: Option<u32>,
     pub term_link: Option<u32>,
     pub term_underline: Option<u32>,
+    pub term_selected_text: Option<u32>,
+    pub term_cursor_guide: Option<u32>,
     /// A theme's status and tone hues, when `colors.json` does not set them.
     pub status: [Option<u32>; Status::ALL.len()],
     pub tones: [Option<u32>; 3],
     pub space_tiles: [[u32; 2]; 6],
+    /// How much of the window's ground is painted, in percent.
+    pub opacity: u8,
+    pub blur: bool,
+    /// The picture behind terminals, already resolved so drawing only reads it.
+    pub backdrop: Option<super::backdrop::Backdrop>,
 
     pub terminal_bg: u32,
     pub terminal_fg: u32,
@@ -141,9 +148,14 @@ impl Palette {
             term_bold: None,
             term_link: None,
             term_underline: None,
+            term_selected_text: None,
+            term_cursor_guide: None,
             status: [None; Status::ALL.len()],
             tones: [None; 3],
             space_tiles: SPACE_TILES,
+            opacity: 100,
+            blur: false,
+            backdrop: None,
             terminal_bg: bg,
             terminal_fg: fg,
             vivid,
@@ -235,6 +247,8 @@ impl Palette {
         out.term_bold = terminal("bold");
         out.term_link = terminal("link");
         out.term_underline = terminal("underline");
+        out.term_selected_text = terminal("selected_text");
+        out.term_cursor_guide = terminal("cursor_guide");
         for (i, status) in Status::ALL.iter().enumerate() {
             out.status[i] = file
                 .color("status", status.key())
@@ -250,6 +264,13 @@ impl Palette {
                 *slot = file.space_gradients[i % file.space_gradients.len()];
             }
         }
+        out.opacity = file.material.opacity;
+        out.blur = file.material.blur;
+        out.backdrop = file
+            .material
+            .image
+            .as_ref()
+            .map(super::backdrop::Backdrop::of);
         out
     }
     /// Names in a file's `ui`, `status` and `tone` no window color answers to.

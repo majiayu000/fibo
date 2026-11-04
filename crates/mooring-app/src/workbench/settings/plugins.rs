@@ -6,6 +6,8 @@ use super::*;
 use mooring_core::market::{self, Offer};
 use mooring_core::plugin::{self, Kind};
 
+mod actions;
+
 /// The catalog as the page last read it.
 #[derive(Default)]
 pub(in crate::workbench) struct Market {
@@ -70,23 +72,11 @@ fn short_name(name: &str) -> String {
     name.strip_prefix("完成动画：").unwrap_or(name).to_owned()
 }
 
-/// Where a kind's choices live once installed.
-fn where_to_find(kind: Kind) -> Option<&'static str> {
-    match kind {
-        Kind::Effects => Some("装上或打开就换成它，在上面「完成动画」里能换回"),
-        Kind::Sidebar => Some("在左栏顶部切换排法"),
-        Kind::Actions => Some("在窗格右键菜单和 ⌘P 里"),
-        Kind::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
-        Kind::Agent => Some("新开窗格的 Agent 列表里就有；已经开着的会话不受影响"),
-        Kind::Quota => Some("显示在状态栏的额度里"),
-        Kind::Hooks | Kind::Rules | Kind::Setup => None,
-    }
-}
-
 impl SettingsView {
     /// Reads the plugins again and tells the workbench and the host.
     pub(super) fn plugins_changed(&mut self, cx: &mut Context<Self>) {
         plugin::reload();
+        crate::ui::themes::reload(cx);
         cx.emit(SettingsAction::PluginsChanged);
         cx.notify();
     }
@@ -105,105 +95,6 @@ impl SettingsView {
             });
         })
         .detach();
-    }
-    /// Every way to install or update starts here: fetch it, read what it does, and ask
-    /// when that runs commands (or an update adds to what runs). Nothing changes until then.
-    fn install_offer(&mut self, offer: Offer, cx: &mut Context<Self>) {
-        let id = offer.entry.id.clone();
-        self.market.confirm = None;
-        self.market.working = Some(id);
-        self.market.done = None;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let name = offer.entry.name.clone();
-            let version = offer.entry.version.clone();
-            let prepared = cx
-                .background_spawn(async move {
-                    let config = plugin::config().ok_or("找不到配置目录".to_owned())?;
-                    offer.prepare(&plugin::dir(config))
-                })
-                .await;
-            let _ = this.update(cx, |this, cx| match prepared {
-                Ok(p) if p.must_ask => {
-                    this.market.working = None;
-                    this.market.confirm = Some(p);
-                    cx.notify();
-                }
-                Ok(p) => this.commit_install(p, name, version, cx),
-                Err(e) => {
-                    this.market.working = None;
-                    this.market.done = Some(Err(format!("没装上「{name}」：{e}")));
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
-    }
-    /// Swaps a checked package in, off the UI thread: its setup may take seconds.
-    fn commit_install(
-        &mut self,
-        prepared: market::Prepared,
-        name: String,
-        version: String,
-        cx: &mut Context<Self>,
-    ) {
-        self.market.confirm = None;
-        self.market.working = Some(prepared.id.clone());
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let result = cx.background_spawn(async move { prepared.commit() }).await;
-            let _ = this.update(cx, |this, cx| {
-                this.market.working = None;
-                this.market.done = Some(
-                    result
-                        .map(|_| format!("装好了「{name}」v{version}，已经生效"))
-                        .map_err(|e| format!("没装上「{name}」：{e}")),
-                );
-                this.plugins_changed(cx);
-            });
-        })
-        .detach();
-    }
-    /// The question for a package waiting on this offer, if one is: what to say and the
-    /// two buttons, for whichever row started it.
-    fn confirming(&self, offer: &Offer, cx: &Context<Self>) -> Option<(String, gpui::Div)> {
-        let waiting = self.market.confirm.as_ref()?;
-        if waiting.id != offer.entry.id {
-            return None;
-        }
-        let e = &offer.entry;
-        let lead = if waiting.added.is_empty() {
-            "装上后它会："
-        } else {
-            ""
-        };
-        let note = format!("{lead}{}。确认吗？", waiting.lines().join("；"));
-        let (name, version) = (e.name.clone(), e.version.clone());
-        let controls = div()
-            .flex()
-            .items_center()
-            .gap(px(T::S8))
-            .child(
-                secondary(format!("plugin-cancel-{}", e.id), "取消").on_click(cx.listener(
-                    |this, _, _, cx| {
-                        // Dropping it discards the staged copy.
-                        this.market.confirm = None;
-                        cx.notify();
-                    },
-                )),
-            )
-            .child(
-                secondary(format!("plugin-confirm-{}", e.id), "确认安装").on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        if this.market.working.is_none()
-                            && let Some(p) = this.market.confirm.take()
-                        {
-                            this.commit_install(p, name.clone(), version.clone(), cx);
-                        }
-                    },
-                )),
-            );
-        Some((note, controls))
     }
     /// One plugin setting under its plugin.
     fn option_row(
@@ -328,60 +219,6 @@ impl SettingsView {
         self.market.editing = Some((id.to_owned(), key, field, events));
         cx.notify();
     }
-    /// Off the UI thread: the plugin's `teardown` runs first and may take seconds.
-    fn uninstall(&mut self, id: String, name: String, force: bool, cx: &mut Context<Self>) {
-        self.market.working = Some(id.clone());
-        self.market.done = None;
-        self.market.stuck = None;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let which = id.clone();
-            let result = cx
-                .background_spawn(async move { plugin::uninstall(&which, force) })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.market.working = None;
-                if result.is_err() {
-                    this.market.stuck = Some((id, name.clone(), true));
-                }
-                this.market.done = Some(match result {
-                    Ok(None) => Ok(format!("卸载了「{name}」")),
-                    Ok(Some(w)) => Ok(format!("卸载了「{name}」。注意：{w}")),
-                    Err(e) => Err(format!("没卸掉「{name}」：{e}")),
-                });
-                this.plugins_changed(cx);
-            });
-        })
-        .detach();
-    }
-    /// Off the UI thread, like `uninstall`: turning one on or off runs its setup or teardown.
-    fn switch_plugin(&mut self, id: String, on: bool, force: bool, cx: &mut Context<Self>) {
-        self.market.working = Some(id.clone());
-        self.market.stuck = None;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let which = id.clone();
-            let result = cx
-                .background_spawn(async move { plugin::set_enabled(&which, on, force) })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.market.working = None;
-                match result {
-                    Ok(None) => {}
-                    Ok(Some(w)) => this.market.done = Some(Ok(format!("停用了。注意：{w}"))),
-                    Err(e) if on => this.text_error = Some(format!("没能打开插件：{e}")),
-                    Err(e) => {
-                        let name = plugin::installed(&id).map_or(id.clone(), |p| p.name.clone());
-                        this.market.done = Some(Err(format!("没能停用「{name}」：{e}")));
-                        this.market.stuck = Some((id, name, false));
-                    }
-                }
-                this.plugins_changed(cx);
-            });
-        })
-        .detach();
-    }
-
     /// 完成动画: every animation 标记完成 can play, one row each: the one playing marked
     /// 正在用, the others 用这个, each with 试播; animation plugins not installed yet
     /// offer 安装, which also makes them the one playing.
@@ -660,7 +497,7 @@ impl SettingsView {
                 note.extend(
                     p.provides
                         .iter()
-                        .filter_map(|k| where_to_find(*k))
+                        .filter_map(|k| k.where_it_shows())
                         .map(str::to_owned),
                 );
             }

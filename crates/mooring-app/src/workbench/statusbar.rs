@@ -74,7 +74,7 @@ impl Workbench {
             .px(px(T::S6))
             .border_t(px(T::BORDER_WIDTH))
             .border_color(T::color(T::border()))
-            .bg(T::color(T::panel()))
+            .bg(T::surface(T::panel()))
             .text_size(px(T::CHIP_SIZE))
             .font_features(T::tabular())
             .whitespace_nowrap()

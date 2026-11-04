@@ -57,9 +57,9 @@ mooring plugins run git-tools <声明 id>   # hook、装饰、额度命令：用
 - `files` 可选：插件还要带上的其他文件（命令要跑的脚本），相对插件目录写。不写进来的文件从插件目录安装时不会被带上。
 - `touches` 可选：setup 会改的别的程序的文件，如 `["~/.claude/settings.json"]`；`network` 可选：命令会不会联网。安装确认里照写给用户看，Mooring 不拦截，所以要如实写。
 - 命令行安装会跑命令的插件时先列出这些，交互终端里问 y/N，非交互（Agent、脚本）要加 `--yes`。
-- `mooring` 可选：插件需要的插件级别（现在是 3：`setup`、`quota`、`files`、`options` 是 2 级加的，动作的 `agent` 是 3 级加的）。不写时按 `plugin.json` 里用到的类型和字段自动算；用了 2 级以后加的类型文件字段（比如动作的 `agent`）要自己写上。级别不够的 Mooring 会拒绝它并提示更新。
+- `mooring` 可选：插件需要的插件级别（现在是 3：`setup`、`quota`、`files`、`options` 是 2 级加的，`themes` 和动作的 `agent`、设置项的 `secret` 是 3 级加的）。不写时按 `plugin.json` 里用到的类型和字段自动算；用了 2 级以后加的类型文件字段（比如动作的 `agent`）要自己写上。级别不够的 Mooring 会拒绝它并提示更新。
 - `plugin.json` 里新版本才有的类型和字段，旧版本会跳过并在设置页写一条警告，其余照常加载；只有一类都不认识时才整个不加载。hooks 的 `on` 里不认识的事件也只跳过这个事件。
-- `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `setup` `quota` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。
+- `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `setup` `quota` `themes` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。
 - 每个类型文件里也都写 `"api": 1`（`agent.json` 除外，见最后）。类型文件里不认识的字段会让这一份文件不生效，这样写错字段名能马上看到。
 
 ## 所有插件命令都拿得到的环境变量
@@ -200,6 +200,10 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 - 新版本不再带 `setup` 时，更新前会先跑旧版的 `teardown`，跑不成功就不更新。
 - 卸载成功后 `MOORING_PLUGIN_DATA` 整个删除；`teardown` 要用的东西（原来的设置）只在卸载前读。
 - 例子：`plugins/claude-quota`（接上 Claude Code 的状态栏，原来的状态栏照常显示）。
+
+## themes：主题（`themes/*.json`）
+
+只有数据，不运行任何东西。每个文件就是一套主题，格式见 `mooring --skill` 的「主题」。装上后出现在 设置 › 外观，停用或卸载就消失；正在用它时回到默认主题。用户点「调整」时存成自己的副本，不写回插件。背景图的相对路径从插件目录算，图片要写进 `plugin.json` 的 `files`。例子：`plugins/theme-tide`。
 
 ## quota：某个 Agent 的额度（`quota.json`）
 

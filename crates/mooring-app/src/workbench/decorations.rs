@@ -44,6 +44,22 @@ pub(super) struct Lines {
 }
 
 impl Workbench {
+    /// Plugins were read again: decorations and WASM sidebars cache by position and file, and
+    /// which Agents exist may have changed, so all of that starts afresh.
+    pub(super) fn plugins_read_again(&mut self, cx: &mut Context<Self>) {
+        forget();
+        self.sidebar.wasm = Default::default();
+        self.tasks.found = None;
+        cx.refresh_windows();
+    }
+    /// Plugins changed from a terminal or another window: the host said so, read them here.
+    pub(super) fn follow_plugins(&mut self, revision: u64, cx: &mut Context<Self>) {
+        let before = self.store.recognition().plugins_revision;
+        if revision != before && before != 0 {
+            mooring_core::plugin::reload();
+            self.plugins_read_again(cx);
+        }
+    }
     pub(super) fn pane_decorations(&self, terminal: &str, cx: &Context<Self>) -> Lines {
         let mut lines = Lines::default();
         if decoration::all().is_empty() {

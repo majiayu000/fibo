@@ -437,7 +437,7 @@ impl Workbench {
                 .flex()
                 .flex_col()
                 .overflow_hidden()
-                .bg(T::color(T::sidebar()))
+                .bg(T::surface(T::sidebar()))
                 .border_r(px(T::BORDER_WIDTH))
                 .border_color(T::color(T::border()))
                 // The window's top edge: the traffic lights and the name, then search
@@ -1017,16 +1017,6 @@ impl Workbench {
         sidebar
     }
 }
-/// 「新空间」, or 「新空间 2」 and on when that name is taken.
-pub(super) fn new_space_name(spaces: &[Space]) -> String {
-    (1..)
-        .map(|i| match i {
-            1 => "新空间".to_owned(),
-            i => format!("新空间 {i}"),
-        })
-        .find(|name| !spaces.iter().any(|s| &s.name == name))
-        .unwrap_or_default()
-}
 impl Workbench {
     /// Turns the space's name in the sidebar into a field: Enter or a click elsewhere
     /// keeps it, Esc puts the old name back.
@@ -1076,7 +1066,7 @@ impl Workbench {
         self.layout.space_menu = None;
         let space = Space {
             id: id(),
-            name: new_space_name(&self.workspace.spaces),
+            name: super::sidebar_spaces::new_space_name(&self.workspace.spaces),
             cwd: String::new(),
         };
         self.edit(Edit::AddSpace(space.clone()), cx);
@@ -1324,6 +1314,7 @@ impl Workbench {
             }))
             .into_any_element(),
         ]);
+        entries.extend(self.space_theme_rows(id, cx));
         self.popup(position, entries, window, cx, |this| {
             this.layout.space_menu = None
         })

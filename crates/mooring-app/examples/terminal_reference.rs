@@ -5,6 +5,9 @@
 //! cargo run -p mooring-app --features visual-test --example terminal_reference -- \
 //!     --cols 100 --rows 30 --out out/mooring fixtures/*.vt
 //! KL_REF_FONT=Menlo overrides Theme::mono when Ghostty cannot load the same family.
+#[path = "../src/ui/backdrop.rs"]
+#[allow(dead_code)]
+mod backdrop;
 #[path = "../src/model/mod.rs"]
 #[allow(dead_code)]
 mod model;
@@ -32,6 +35,7 @@ mod terminal {
 #[allow(dead_code)]
 mod terminal_text;
 mod ui {
+    pub(crate) use super::backdrop;
     pub(crate) use super::terminal_text;
     pub(crate) use super::theme;
 }

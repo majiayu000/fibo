@@ -1,5 +1,10 @@
+#[path = "screen_extras.rs"]
+mod extras;
 #[path = "sprites.rs"]
 mod sprites;
+use extras::paint_decorations;
+#[allow(unused_imports)]
+pub use extras::{paint_guide, paint_selected_text};
 #[derive(Clone, Debug, PartialEq)]
 pub struct Run {
     pub col: u16,
@@ -393,7 +398,7 @@ pub struct Capture {
     cells: CellIterator<'static>,
     dimensions: (u16, u16),
     colors: Option<libghostty_vt::render::Colors>,
-    defaults: Option<(u32, u32, Option<u32>)>,
+    defaults: Option<(u32, u32, Option<u32>, u32)>,
 }
 impl Capture {
     pub fn new() -> Result<Self, libghostty_vt::Error> {
@@ -428,8 +433,11 @@ impl Capture {
             .unwrap_or_else(crate::ui::theme::Theme::terminal_bg);
         // A theme's bold color is decided here, with the runs, so drawing stays a plain read.
         let bold_fg = crate::ui::theme::Theme::palette().term_bold;
-        full |= self.defaults != Some((def_fg, def_bg, bold_fg));
-        self.defaults = Some((def_fg, def_bg, bold_fg));
+        let min_contrast = crate::ui::terminal_text::min_contrast();
+        let defaults = (def_fg, def_bg, bold_fg, min_contrast.to_bits());
+        full |= self.defaults != Some(defaults);
+        self.defaults = Some(defaults);
+        let mut readable = extras::Readable::new(min_contrast);
         self.colors = Some(colors.clone());
         let palette = colors.palette;
         let mut rows = self.rows.update(&snap)?;
@@ -505,6 +513,7 @@ impl Capture {
                         },
                     };
                 }
+                fg = readable.fg(fg, bg.unwrap_or(def_bg));
                 let width = if matches!(wide, CellWide::Wide) { 2 } else { 1 };
                 if raw.has_hyperlink()? {
                     let grid = vt
@@ -926,22 +935,37 @@ impl AsciiGlyphs {
         }
     }
 }
+fn run_font(run: &Run, f: &Font) -> Font {
+    let mut font = if run.text.is_ascii() {
+        f.clone()
+    } else {
+        crate::ui::terminal_text::non_ascii_face(f)
+    };
+    if run.attrs.bold {
+        font.weight = FontWeight::BOLD;
+    }
+    if run.attrs.italic {
+        font.style = FontStyle::Italic;
+    }
+    font
+}
 fn printable_cells(run: &Run) -> bool {
     run.text.len() == run.cols as usize && run.text.bytes().all(|b| (b' '..=b'~').contains(&b))
 }
 /// Current viewport only: no history of strings from a long-running terminal.
 #[derive(Default)]
 pub struct LayoutCache {
-    key: Option<(Font, CellMetrics)>,
+    key: Option<(Font, CellMetrics, u64)>,
     rows: Vec<Vec<(Run, ShapedLine, Pixels)>>,
     ascii: [Option<Option<AsciiGlyphs>>; 4],
 }
 impl LayoutCache {
     fn prepare(&mut self, font: &Font, metrics: CellMetrics, rows: usize) {
-        if self.key.as_ref() != Some(&(font.clone(), metrics)) {
+        let generation = crate::ui::terminal_text::generation();
+        if self.key.as_ref() != Some(&(font.clone(), metrics, generation)) {
             self.rows.clear();
             self.ascii = Default::default();
-            self.key = Some((font.clone(), metrics));
+            self.key = Some((font.clone(), metrics, generation));
         }
         self.rows.resize_with(rows, Vec::new);
     }
@@ -974,9 +998,10 @@ pub fn paint_cached(
     // Glyph strokes thicken by luminance as the rest of the UI's text does (Ghostty's
     // font-thicken = true): left as drawn, light thin strokes on the dark grid read
     // as blur on a lower-density display.
+    let ground = extras::paint_ground(sc, bounds, window);
     window.paint_layer(bounds, |window| {
         window.with_glyph_dilation(None, |window| {
-            paint_grid(sc, f, bounds, metrics, cache, window, cx)
+            paint_grid(sc, f, bounds, metrics, ground, cache, window, cx)
         })
     });
     // Cursor and later overlays stay outside the layer so they still draw over glyphs.
@@ -1044,16 +1069,20 @@ pub fn paint_cached(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_grid(
     sc: &Screen,
     f: &Font,
     bounds: Bounds<Pixels>,
     metrics: CellMetrics,
+    ground: f32,
     cache: &mut LayoutCache,
     window: &mut Window,
     cx: &mut App,
 ) {
-    window.paint_quad(fill(bounds, hsla(sc.background)));
+    if ground > 0. {
+        window.paint_quad(fill(bounds, hsla(sc.background).opacity(ground)));
+    }
     let cw = metrics.width;
     let lh = metrics.height;
     cache.prepare(f, metrics, sc.rows.len());
@@ -1110,14 +1139,7 @@ fn paint_grid(
                 continue;
             }
             if cached.get(index).is_none_or(|(old, _, _)| old != run) {
-                let mut font = f.clone();
-                if run.attrs.bold {
-                    font.weight = FontWeight::BOLD;
-                }
-                if run.attrs.italic {
-                    font.style = FontStyle::Italic;
-                }
-                let (line, offset) = shape_cell(run, font, metrics, window);
+                let (line, offset) = shape_cell(run, run_font(run, f), metrics, window);
                 let entry = (run.clone(), line, offset);
                 if index < cached.len() {
                     cached[index] = entry;
@@ -1158,68 +1180,11 @@ fn paint_grid(
 }
 
 fn text_color(run: &Run) -> Hsla {
-    // Ghostty's faint-opacity default.
-    hsla(run.fg).opacity(if run.attrs.faint { 0.5 } else { 1. })
-}
-
-/// Underline, strikethrough and overline drawn on the cell grid, like Ghostty's sprites,
-/// so adjacent runs join and every SGR 4 variant has its own shape.
-fn paint_decorations(run: &Run, origin: gpui::Point<Pixels>, m: CellMetrics, window: &mut Window) {
-    let a = run.attrs;
-    let w = m.width * run.cols as f32;
-    let t = m.stroke;
-    let color = text_color(run);
-    let mut line = |y: Pixels, x: Pixels, len: Pixels, color: Hsla| {
-        window.paint_quad(fill(
-            Bounds::new(point(origin.x + x, origin.y + y), size(len, t)),
-            color,
-        ));
-    };
-    if a.underline != Underline::None {
-        let color = a
-            .underline_color
-            .or(crate::ui::theme::Theme::palette().term_underline)
-            .map(|c| hsla(c).opacity(color.a))
-            .unwrap_or(color);
-        // Halfway between the baseline and the cell bottom, clear of descenders.
-        let y = (m.baseline + (m.height - m.baseline) / 2. - t / 2.).min(m.height - t);
-        match a.underline {
-            Underline::Single => line(y, px(0.), w, color),
-            Underline::Double => {
-                let y = (y - t).max(m.baseline);
-                line(y, px(0.), w, color);
-                line(y + t * 2., px(0.), w, color);
-            }
-            Underline::Dotted | Underline::Dashed => {
-                let (on, period) = if a.underline == Underline::Dotted {
-                    (t, t * 2.)
-                } else {
-                    (m.width / 2., m.width)
-                };
-                let mut x = px(0.);
-                while x < w {
-                    line(y, x, on.min(w - x), color);
-                    x += period;
-                }
-            }
-            Underline::Curly => {
-                let amp = (m.height - y - t).max(t) / 2.;
-                let steps = (f32::from(w) / f32::from(t)).ceil() as usize;
-                for i in 0..steps {
-                    let x = t * i as f32;
-                    let phase = f32::from(x) / f32::from(m.width) * std::f32::consts::TAU;
-                    line(y + amp * phase.sin(), x, t.min(w - x), color);
-                }
-            }
-            Underline::None => {}
-        }
-    }
-    if a.strikethrough {
-        line(m.baseline - m.x_height / 2. - t / 2., px(0.), w, color);
-    }
-    if a.overline {
-        line(px(0.), px(0.), w, color);
-    }
+    hsla(run.fg).opacity(if run.attrs.faint {
+        crate::ui::terminal_text::faint()
+    } else {
+        1.
+    })
 }
 
 #[cfg(test)]

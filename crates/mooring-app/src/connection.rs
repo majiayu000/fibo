@@ -22,6 +22,8 @@ pub struct State {
     pub dropped: bool,
     /// The scheme `vt` was last repainted with; a fresh screen from the host has none.
     pub scheme: Option<mooring_core::terminal::TermColors>,
+    /// The cursor shape `vt` was last given; a fresh screen from the host has none.
+    pub cursor_shape: Option<crate::ui::terminal_text::CursorDefault>,
 }
 pub struct Connection {
     pub state: Arc<Mutex<State>>,
@@ -59,6 +61,7 @@ impl Connection {
             ended: false,
             dropped: false,
             scheme: None,
+            cursor_shape: None,
         }));
         let dirty = Arc::new(AtomicBool::new(false));
         let bells = Arc::new(AtomicU64::new(0));
@@ -153,6 +156,7 @@ impl Connection {
                             })?;
                             state.vt = Some(vt);
                             state.scheme = None;
+                            state.cursor_shape = None;
                             snapshot.clear();
                             snapshot.shrink_to_fit();
                         }
@@ -239,6 +243,7 @@ impl Connection {
             ended: false,
             dropped: false,
             scheme: None,
+            cursor_shape: None,
         }));
         let dirty = Arc::new(AtomicBool::new(false));
         let (sender, typed) = sync_channel(128);
@@ -269,6 +274,7 @@ impl Connection {
                             fresh.feed(&bytes);
                             s.vt = Some(fresh);
                             s.scheme = None;
+                            s.cursor_shape = None;
                             s.cols = cols;
                             s.rows = rows;
                             Ok(())

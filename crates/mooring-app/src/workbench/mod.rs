@@ -303,16 +303,7 @@ impl Workbench {
                     .update(cx, |this, cx| {
                         let revision = status.workspace_revision;
                         let interrupted = status.phase == RecognitionPhase::Interrupted;
-                        // Changed from a terminal or another window: read them again here.
-                        let plugins = status.plugins_revision;
-                        let before = this.store.recognition().plugins_revision;
-                        if plugins != before && before != 0 {
-                            mooring_core::plugin::reload();
-                            decorations::forget();
-                            this.sidebar.wasm = Default::default();
-                            this.tasks.found = None;
-                            cx.refresh_windows();
-                        }
+                        this.follow_plugins(status.plugins_revision, cx);
                         if let Some(view) = &this.settings {
                             let remote = status.remote.clone();
                             view.update(cx, |v, cx| {

@@ -58,6 +58,8 @@ impl Tab {
                 item("terminal", "cursor", "光标"),
                 item("terminal", "cursor_text", "光标上的文字"),
                 item("terminal", "selection", "选区"),
+                item("terminal", "selected_text", "选中的文字"),
+                item("terminal", "cursor_guide", "光标行"),
                 item("terminal", "bold", "粗体"),
                 item("terminal", "link", "链接"),
                 item("terminal", "underline", "下划线"),
@@ -101,6 +103,8 @@ impl Item {
             ("terminal", "cursor") => p.term.cursor,
             ("terminal", "cursor_text") => p.term_cursor_text.unwrap_or(p.term.bg),
             ("terminal", "selection") => p.term_selection.unwrap_or(p.focus),
+            ("terminal", "selected_text") => p.term_selected_text.unwrap_or(p.term.fg),
+            ("terminal", "cursor_guide") => p.term_cursor_guide.unwrap_or(p.term.cursor),
             ("terminal", "bold") => p.term_bold.unwrap_or(p.term.fg),
             ("terminal", "link") => p.term_link.unwrap_or(p.term.fg),
             ("terminal", "underline") => p.term_underline.unwrap_or(p.term.fg),
@@ -124,7 +128,7 @@ impl Item {
     }
 }
 pub(super) struct Editor {
-    draft: ThemeFile,
+    pub(super) draft: ThemeFile,
     /// The theme's own file; a built-in gets a new one on saving.
     over: Option<PathBuf>,
     tab: Tab,
@@ -135,19 +139,20 @@ pub(super) struct Editor {
     name: Entity<Field>,
     hex: Entity<Field>,
     _hex_changed: Subscription,
-    error: Option<String>,
+    pub(super) error: Option<String>,
 }
 impl SettingsView {
     pub(super) fn open_editor(&mut self, cx: &mut Context<Self>) {
         let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
         let light = chosen.shows_light(cx.window_appearance(), crate::ui::style::current(cx));
-        let Some(entry) = cx
-            .try_global::<Themes>()
-            .and_then(|themes| chosen.entry(themes, light))
-        else {
+        let shown = crate::ui::space_themes::shown(cx);
+        let Some(entry) = shown.or_else(|| {
+            cx.try_global::<Themes>()
+                .and_then(|themes| chosen.entry(themes, light))
+        }) else {
             return;
         };
-        let (draft, over) = (entry.as_file(), entry.file.as_ref().map(|f| f.0.clone()));
+        let (draft, over) = (entry.as_file(), entry.own_file());
         let picked = Tab::Base.items()[0];
         let start = picked.value(&draft);
         let name = cx.new(|cx| Field::new("主题名称", &draft.name, cx).compact());
@@ -248,6 +253,7 @@ impl SettingsView {
                 self.editor = None;
                 appearance::preview(None, cx);
                 themes::reload(cx);
+                crate::ui::space_themes::saved_as(&id, cx);
                 self.text_error = appearance::set_theme(&id, light, true, cx).err();
                 crate::set_menus(cx);
                 cx.notify();
@@ -300,6 +306,9 @@ impl SettingsView {
             .gap(px(T::S12))
             .child(self.editor_header(editor, cx))
             .child(tabs)
+            .when(editor.tab == Tab::Base, |d| {
+                d.child(self.material_rows(editor, cx))
+            })
             .child(
                 div()
                     .flex()
@@ -744,7 +753,11 @@ mod tests {
         assert!(Tab::ALL.iter().all(|t| !t.items().is_empty()));
         assert_eq!(
             count,
-            2 + 6 + ANSI_NAMES.len() + UI_TOKENS.len() + Status::ALL.len() + Tone::ALL.len()
+            2 + mooring_core::theme::TERMINAL_NAMES.len()
+                + ANSI_NAMES.len()
+                + UI_TOKENS.len()
+                + Status::ALL.len()
+                + Tone::ALL.len()
         );
     }
 }

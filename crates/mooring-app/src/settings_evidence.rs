@@ -71,6 +71,217 @@ pub(super) fn start(
             return;
         }
         // 主题: the two groups, the editor end to end, and files dropped into the folder.
+        // Everything 设置 › 终端 added past the type: each one saved, and seen in a real pane.
+        if phase == "details" {
+            use crate::ui::terminal_text::{self, CursorDefault};
+            use crate::terminal::screen::CursorShape;
+            let set = |change: &dyn Fn(&mut terminal_text::TerminalText)| {
+                let mut text = terminal_text::current();
+                change(&mut text);
+                terminal_text::update(text).unwrap();
+            };
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, a| p.visual_type("clear; printf 'plain text => != === -> 0O\\n\\033[2mfaint words\\033[0m\\n\\033[38;5;236mlowcontrast\\033[0m on dark\\n中文输入与等宽文字 汉字\\n'\r", a));
+            wait(800).await;
+            let redraw = |cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                })
+                .unwrap();
+            };
+            shot("details-default", cx);
+            // A program's own shape wins, and a reset goes back to the setting.
+            set(&|t| t.cursor_shape = CursorDefault::Bar); redraw(cx); wait(400).await;
+            let shape = |cx: &mut gpui::AsyncApp, pane: &gpui::Entity<crate::terminal::pane::Pane>| pane.read_with(cx, |p, _| p.visual_cursor_shape());
+            assert_eq!(shape(cx, &pane), CursorShape::Bar, "default takes hold in a running terminal");
+            shot("details-cursor-bar", cx);
+            pane.update(cx, |p, a| p.visual_type("printf '\\033[2 q'\r", a)); wait(500).await; redraw(cx);
+            assert_eq!(shape(cx, &pane), CursorShape::Block, "the program asked for a block");
+            pane.update(cx, |p, a| p.visual_type("printf '\\033[0 q'\r", a)); wait(500).await; redraw(cx);
+            assert_eq!(shape(cx, &pane), CursorShape::Bar, "a reset returns to the setting");
+            set(&|t| t.cursor_shape = CursorDefault::Underline); redraw(cx); wait(400).await;
+            assert_eq!(shape(cx, &pane), CursorShape::Underline);
+            set(&|t| { t.cursor_shape = CursorDefault::Block; t.cursor_guide = true; }); redraw(cx); wait(400).await;
+            shot("details-guide", cx);
+            set(&|t| t.cursor_guide = false);
+            // The contrast floor reaches the text and comes off again.
+            let low = pane.read_with(cx, |p, _| p.visual_run_fg("lowcontrast")).unwrap();
+            assert_eq!(low, 0x303030);
+            set(&|t| t.min_contrast = 7.); redraw(cx); wait(400).await;
+            let raised = pane.read_with(cx, |p, _| p.visual_run_fg("lowcontrast")).unwrap();
+            assert_ne!(raised, low);
+            shot("details-contrast", cx);
+            set(&|t| t.min_contrast = 1.); redraw(cx); wait(400).await;
+            assert_eq!(pane.read_with(cx, |p, _| p.visual_run_fg("lowcontrast")).unwrap(), low);
+            set(&|t| t.faint = 0.9); redraw(cx); wait(300).await;
+            shot("details-faint", cx);
+            set(&|t| { t.faint = 0.5; t.ligatures = true; }); redraw(cx); wait(400).await;
+            shot("details-ligatures", cx);
+            set(&|t| { t.ligatures = false; t.non_ascii_family = "Kaiti SC".into(); }); redraw(cx); wait(400).await;
+            shot("details-non-ascii", cx);
+            set(&|t| t.non_ascii_family = String::new());
+            let before = pane.read_with(cx, |p, _| p.visual_bounds()).unwrap();
+            set(&|t| t.padding = 16.); redraw(cx); wait(600).await;
+            let after = pane.read_with(cx, |p, _| p.visual_bounds()).unwrap();
+            assert_eq!(f32::from(after.origin.x - before.origin.x), 16., "cells start past the margin");
+            assert_eq!(f32::from(before.size.width - after.size.width), 32.);
+            shot("details-padding", cx);
+            set(&|t| t.padding = 0.); redraw(cx); wait(400).await;
+            // A theme's selected-text color, on ASCII and on Chinese.
+            let dir = crate::ui::themes::dir().unwrap();
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("sel.json"), r##"{"bg":"#101820","fg":"#d0d8e0","terminal":{"selected_text":"#ffcc00","selection":"#205080","cursor_guide":"#00ff88"}}"##).unwrap();
+            cx.update(crate::ui::themes::reload);
+            cx.update(|a| crate::ui::appearance::set_theme("file:sel", false, true, a).unwrap());
+            wait(400).await;
+            let from = pane.read_with(cx, |p, _| p.visual_cell(0, 0)).unwrap();
+            let to = pane.read_with(cx, |p, _| p.visual_cell(3, 12)).unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                use gpui::InputEvent;
+                w.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: from, modifiers: Default::default(), click_count: 1, first_mouse: false }.to_platform_input(), a);
+                w.dispatch_event(gpui::MouseMoveEvent { position: to, pressed_button: Some(gpui::MouseButton::Left), modifiers: Default::default() }.to_platform_input(), a);
+                w.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: to, modifiers: Default::default(), click_count: 1 }.to_platform_input(), a);
+            }).unwrap();
+            wait(400).await;
+            shot("details-selected-text", cx);
+            set(&|t| t.cursor_guide = true); redraw(cx); wait(300).await;
+            shot("details-theme-guide", cx);
+            // The page itself.
+            set(&|t| t.cursor_guide = false);
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("终端", a)).unwrap();
+            wait(400).await;
+            shot("details-page", cx);
+            // Each new row, found by the search that also lists it.
+            let query = handle.update(cx, |v, _, a| v.visual_settings_query(a)).unwrap();
+            for (name, words) in [("cursor", "光标"), ("reading", "对比度"), ("faces", "连字"), ("chinese", "中文"), ("margin", "边距")] {
+                query.update(cx, |f, cx| { f.set_text(words); cx.notify(); });
+                wait(300).await;
+                shot(&format!("details-row-{name}"), cx);
+            }
+            eprintln!("settings details PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
+        // A theme's material: see-through, blurred, a picture in each mode, then back to none.
+        if phase == "material" {
+            use crate::ui::{appearance, theme::Theme as T, themes};
+            use gpui::WindowBackgroundAppearance as W;
+            let dir = themes::dir().unwrap();
+            std::fs::create_dir_all(dir.join("images")).unwrap();
+            let picture = image::RgbaImage::from_fn(600, 400, |x, y| {
+                let edge = x < 12 || y < 12 || x >= 588 || y >= 388;
+                if edge { image::Rgba([255, 200, 0, 255]) } else { image::Rgba([(x * 255 / 600) as u8, (y * 255 / 400) as u8, 150, 255]) }
+            });
+            picture.save(dir.join("images/grad.png")).unwrap();
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, a| p.visual_type("clear; printf 'over the picture\\n\\033[41m red cells keep their color \\033[0m\\n中文输入与等宽文字\\n'\r", a));
+            wait(800).await;
+            let theme = |name: &str, body: &str, cx: &mut gpui::AsyncApp| {
+                std::fs::write(dir.join(format!("{name}.json")), format!(r##"{{"bg":"#0f1c2e","fg":"#d5dfef",{body}}}"##)).unwrap();
+                cx.update(themes::reload);
+                cx.update(|a| appearance::set_theme(&format!("file:{name}"), false, true, a).unwrap());
+            };
+            let backing = |cx: &mut gpui::AsyncApp| cx.update(|_| crate::ui::backdrop::window_background());
+            theme("glass", r##""window":{"opacity":0.7}"##, cx); wait(400).await;
+            assert_eq!(backing(cx), W::Transparent);
+            assert_eq!(T::palette().opacity, 70);
+            shot("material-transparent", cx);
+            theme("frost", r##""window":{"opacity":0.7,"blur":true}"##, cx); wait(400).await;
+            assert_eq!(backing(cx), W::Blurred);
+            shot("material-blur", cx);
+            for mode in ["fill", "fit", "stretch", "tile"] {
+                theme(&format!("pic-{mode}"), &format!(r##""background":{{"image":"images/grad.png","mode":"{mode}","strength":0.5}}"##), cx);
+                wait(700).await;
+                assert_eq!(backing(cx), W::Opaque);
+                assert!(T::palette().backdrop.unwrap().picture.image().is_some(), "{mode}: decoded");
+                shot(&format!("material-{mode}"), cx);
+            }
+            std::fs::write(dir.join("images/bad.png"), "not a picture").unwrap();
+            theme("broken", r##""background":{"image":"images/bad.png"}"##, cx); wait(500).await;
+            assert!(T::palette().backdrop.unwrap().picture.error().is_some());
+            shot("material-broken", cx);
+            theme("gone", r##""background":{"image":"images/nowhere.png"}"##, cx); wait(300).await;
+            assert!(cx.update(|a| a.global::<themes::Themes>().problems.iter().any(|(_, why)| why.contains("找不到背景图"))));
+            cx.update(|a| appearance::set_theme("dark", false, true, a).unwrap()); wait(300).await;
+            assert_eq!(backing(cx), W::Opaque);
+            // The editor's rows, on a theme with a picture.
+            theme("pic-edit", r##""window":{"opacity":0.8},"background":{"image":"images/grad.png"}"##, cx); wait(500).await;
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_editor_open(a)).unwrap();
+            wait(400).await;
+            shot("material-editor", cx);
+            handle.update(cx, |v, _, a| v.visual_editor_cancel(a)).unwrap();
+            eprintln!("settings material PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
+        // Sharing and spaces: themes from a plugin, and a theme per space.
+        if phase == "sharing" {
+            use crate::ui::{appearance, space_themes, theme::Theme as T, themes::{self, Themes}};
+            use mooring_core::plugin;
+            let config = crate::ui::status_colors::config_dir().unwrap();
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            // A plugin's themes come and go with it, and 调整 never writes into it.
+            let dir = config.join("plugins/tide-themes");
+            std::fs::create_dir_all(dir.join("themes")).unwrap();
+            std::fs::write(dir.join("plugin.json"), r#"{"api":1,"id":"tide-themes","name":"潮汐主题","provides":["themes"]}"#).unwrap();
+            std::fs::write(dir.join("themes/tide.json"), r##"{"name":"潮汐","bg":"#0b2530","fg":"#d8ecef","ui":{"sidebar":"#071b23"}}"##).unwrap();
+            cx.update(|a| { plugin::reload(); themes::reload(a); });
+            let id = "plugin:tide-themes/tide";
+            let entry = cx.update(|a| a.global::<Themes>().get(id).cloned()).expect("the plugin's theme is offered");
+            assert!(entry.read_only && entry.own_file().is_none());
+            assert_eq!(entry.as_file().name, "潮汐 副本");
+            cx.update(|a| appearance::set_theme(id, false, true, a).unwrap());
+            wait(300).await;
+            assert_eq!(T::term().bg, 0x0b2530);
+            shot("sharing-plugin-theme", cx);
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            wait(300).await;
+            shot("sharing-look-page", cx);
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            std::fs::remove_dir_all(&dir).unwrap();
+            cx.update(|a| { plugin::reload(); themes::reload(a); });
+            wait(300).await;
+            assert!(cx.update(|a| a.global::<Themes>().get(id).is_none()));
+            assert_eq!(T::term().bg, crate::ui::theme::Scheme::Dark.bg(), "uninstalled: back to the side's default");
+            // One space wears a theme; the other follows 外观; the window changes on switching.
+            handle.update(cx, |v, _, a| v.visual_add_space("other", "", a)).unwrap();
+            wait(600).await;
+            let spaces = handle.update(cx, |v, _, _| v.visual_spaces()).unwrap();
+            eprintln!("spaces: {spaces:?}");
+            let first = "default".to_owned();
+            cx.update(|a| space_themes::set("other", Some("pine"), a).unwrap());
+            handle.update(cx, |v, _, a| v.visual_pick_space("other", a)).unwrap();
+            wait(300).await; shot("sharing-space-other", cx); wait(300).await;
+            assert_eq!(T::scheme(), crate::ui::theme::Scheme::Pine, "the space's theme");
+            shot("sharing-space-other", cx);
+            handle.update(cx, |v, _, a| v.visual_pick_space(&first, a)).unwrap();
+            wait(300).await; shot("sharing-space-first", cx); wait(300).await;
+            assert_eq!(T::scheme(), crate::ui::theme::Scheme::Dark, "a space without one follows 外观");
+            shot("sharing-space-first", cx);
+            let saved = std::fs::read_to_string(config.join("space-themes.json")).unwrap();
+            assert!(saved.contains("pine"), "{saved}");
+            // The menu, folded and open, and picking from it with a real click.
+            handle.update(cx, |v, _, a| v.visual_open_space_menu("other", a)).unwrap();
+            wait(200).await; shot("sharing-menu", cx);
+            let row = handle.update(cx, |v, _, _| v.visual_space_menu_point(3)).unwrap();
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, row, gpui::MouseButton::Left)).unwrap();
+            wait(200).await; shot("sharing-menu-open", cx);
+            let graphite = handle.update(cx, |v, _, _| v.visual_space_menu_point(4 + 1 + 2)).unwrap();
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, graphite, gpui::MouseButton::Left)).unwrap();
+            wait(300).await; shot("sharing-picked", cx);
+            eprintln!("picked: {:?}", std::fs::read_to_string(config.join("space-themes.json")).unwrap());
+            cx.update(|a| space_themes::set("other", None, a).unwrap());
+            eprintln!("settings sharing PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         if phase == "editor" {
             use crate::ui::{appearance::{self, Mode}, theme::Theme as T, themes::{self, Themes}};
             let term = || T::term();
@@ -139,7 +350,7 @@ pub(super) fn start(
             handle.update(cx, |v, _, a| v.visual_editor_tab(0, a)).unwrap();
             wait(300).await;
             let hsv = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
-            click(689., 222., cx);
+            click(689., 358., cx);
             wait(300).await;
             let moved = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
             assert_ne!(hsv[0], moved[0], "clicking the hue slider moves the hue");
