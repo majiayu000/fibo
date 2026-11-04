@@ -43,6 +43,38 @@ jobs:
       - name: Cargo test
         run: sh ci-test.sh
 
+  window-perf:
+    name: Window performance gate
+    runs-on: macos-latest
+    env:
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.16.0
+
+      - name: Prepare pinned native dependencies
+        run: sh bootstrap.sh
+
+      - name: Build the probe
+        run: cargo build --release -p mooring-host -p mooring-app --features mooring-app/visual-test
+
+      # Instructions per frame against crates/mooring-app/perf-baseline.txt, pixel checks
+      # of each redraw, and no catch-up loop (see the script's header).
+      - name: Window performance gate
+        run: python3 scripts/perf-gate.py target/release target/perf-gate
+
+      - name: Keep the gate's pictures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-gate
+          path: target/perf-gate
+
   mobile:
     name: Phone app tests and typecheck
     runs-on: ubuntu-latest

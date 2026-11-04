@@ -178,6 +178,14 @@ async fn redraw_check(
         cx.update_window(handle.into(), |_, w, app| w.draw(app).clear(app))
             .unwrap();
     };
+    // The tab strip reads where its tabs fell in the last layout and draws once more
+    // 16 ms later when that moved them (`tab_overflow`); a display link would draw that
+    // frame, so draw it here before comparing.
+    let settle = |cx: &mut gpui::AsyncApp| {
+        frame(cx);
+        wait(50)
+    };
+    settle(cx).await;
     let mut lines = vec![check("start", cx)];
     frame(cx);
     let drawn = |cx: &mut gpui::AsyncApp| {
@@ -194,6 +202,7 @@ async fn redraw_check(
     lines.push(format!("pane-frames: sidebar kept its draw {kept}"));
     pane.update(cx, |p, cx| p.visual_type("echo redraw-check\r", cx));
     wait(800).await;
+    settle(cx).await;
     lines.push(check("pane-output", cx));
     for step in [
         "collapse",
@@ -220,6 +229,7 @@ async fn redraw_check(
         } else {
             wait(300).await;
         }
+        settle(cx).await;
         lines.push(check(step, cx));
     }
     // Terminal output for 2.5 s: the sidebar catches up about once a second.
