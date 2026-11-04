@@ -184,3 +184,15 @@ impl SettingsView {
         rows
     }
 }
+#[cfg(feature = "visual-test")]
+impl Workbench {
+    pub(crate) fn visual_slider_point(
+        &self,
+        channel: usize,
+        to: f32,
+        cx: &gpui::App,
+    ) -> Option<gpui::Point<gpui::Pixels>> {
+        let view = self.settings.as_ref()?.read(cx);
+        view.visual_slider_point(channel, to)
+    }
+}

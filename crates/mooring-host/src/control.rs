@@ -140,30 +140,13 @@ mooring remote --revoke <设备编号或名字>   取消一台手机的配对，
         name: "themes",
         valued: &[],
         switches: &[],
-        usage: "\
-mooring themes [文件或目录]                 按 App 的规则检查主题：跳过了什么、图在不在、对比度够不够
-mooring themes names                       列出主题能写的全部键",
+        usage: crate::themes_cmd::USAGE,
     },
     Command {
         name: "plugins",
         valued: &["dir", "event", "cwd", "key", "name"],
         switches: &["json", "remote", "check", "yes", "send", "force"],
-        usage: "\
-mooring plugins [--dir 目录] [--json]      检查插件能不能装上：哪个生效、哪个为什么没生效
-mooring plugins available [--remote]       列出可安装的插件（App 附带的，加 --remote 再查远程目录）
-mooring plugins install <id>[@版本] [--remote] [--yes]
-                                             安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
-mooring plugins uninstall <id> [--force]   卸载一个插件；--force 在 teardown 失败时也卸
-mooring plugins disable|enable <id> [--force]
-                                             停用或打开一个插件；--force 在 teardown 失败时也停用
-mooring plugins log <id>                   这个插件最近的运行和出过的错
-mooring plugins set <id> [<key> <值>]      看或改插件的设置项
-mooring plugins run <id> <声明 id> [--event 事件] [--cwd 目录] [--send]
-                                             用和 App 一样的环境试跑一条 hook、装饰或额度命令；webhook 加 --send 才真发
-mooring plugins index <目录> [--check] [--key 私钥文件]
-                                             为插件目录生成 index.json 并签名（--check 只检查是否最新、签名对不对）
-mooring plugins keygen [--name 发布者] [--key 私钥文件]
-                                             生成发布者的签名私钥，默认 <配置>/publisher.key",
+        usage: crate::plugins_cmd::COMMAND_USAGE,
     },
     Command {
         name: "hooks",
