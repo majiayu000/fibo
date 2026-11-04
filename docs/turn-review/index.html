@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>退回功能演示</title>
+<style>
+:root{
+  --page:#ecebe7;--win:#fff;--soft:#f6f6f4;--line:#e4e4e1;--control:#cfcfcb;
+  --ink:#1c1c1e;--ink2:#55555a;--ink3:#86868b;
+  --ok:#1f7a4d;--ok-bg:#e4f3eb;--ok-wash:#f2f9f5;
+  --run:#a97a00;--run-bg:#fbf3d9;
+  --add:#1a7f46;--add-bg:#e9f7ef;--del:#c43d3d;--del-bg:#fcecec;
+  --note:#3b5bdb;--note-bg:#eef1fe;
+  --solid:#141416;--solid-ink:#fff;
+  --mono:"SF Mono","JetBrains Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --page:#0d0d0f;--win:#17171a;--soft:#1f1f23;--line:#2d2d32;--control:#44444a;
+  --ink:#ececee;--ink2:#b2b2b8;--ink3:#7f7f87;
+  --ok:#5fd19a;--ok-bg:#16352a;--ok-wash:#14231d;
+  --run:#e8c25a;--run-bg:#352c10;
+  --add:#6bd79b;--add-bg:#14291e;--del:#f08a8a;--del-bg:#331a1a;
+  --note:#8fa4ff;--note-bg:#1c2240;
+  --solid:#f1f1f3;--solid-ink:#141416;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.55 -apple-system,"PingFang SC",sans-serif}
+button,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.wrap{max-width:1240px;margin:0 auto;padding:28px 24px 56px}
+h1{font-size:22px;margin:0 0 4px}
+.lead{margin:0 0 18px;color:var(--ink2);max-width:760px}
+.fake{color:var(--ink3);font-size:12.5px}
+
+/* 步骤条 */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.step{padding:9px 12px;border-radius:8px;background:var(--soft);border:1px solid var(--line);color:var(--ink3);font-size:13px}
+.step b{display:block;font-weight:600}
+.step.on{background:var(--win);border-color:var(--ink);color:var(--ink)}
+.step.past{color:var(--ink2)}
+.say{min-height:44px;display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:15px;font-weight:600}
+.say .sp{flex:1}
+.link{border:0;background:none;color:var(--ink3);font-size:13px;font-weight:400;text-decoration:underline;padding:0}
+
+/* 窗口 */
+.win{background:var(--win);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;height:600px;box-shadow:0 8px 28px rgba(0,0,0,.08)}
+.head{height:44px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--line)}
+.head .who{font-weight:600}
+.head .where{font-family:var(--mono);font-size:12.5px;color:var(--ink3)}
+.sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:6px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.chip.review{background:var(--ok-bg);color:var(--ok)}
+.chip.run{background:var(--run-bg);color:var(--run)}
+.chip.done{background:var(--soft);color:var(--ink3)}
+.ring{width:8px;height:8px;border-radius:50%;border:1.5px solid currentColor}
+.spin{width:10px;height:10px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+.btn{height:28px;padding:0 11px;border:1px solid var(--control);border-radius:6px;background:transparent;white-space:nowrap;font-size:12.5px}
+.btn:hover{background:var(--soft)}
+.btn.solid{background:var(--solid);border-color:var(--solid);color:var(--solid-ink);font-weight:600}
+.btn.solid:hover{opacity:.88;background:var(--solid)}
+.btn:disabled{opacity:.4;cursor:default}
+.next{box-shadow:0 0 0 3px var(--note);animation:p 1.5s ease-in-out infinite}
+@keyframes p{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--note) 45%,transparent)}}
+@media (prefers-reduced-motion:reduce){.next,.spin{animation:none}}
+.turn{height:40px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 10px 0 14px;background:var(--ok-wash);border-bottom:1px solid var(--line);font-size:12.5px}
+.turn b{color:var(--ok)}
+.n{font-variant-numeric:tabular-nums}
+.a{color:var(--add)}.d{color:var(--del)}
+.muted{color:var(--ink3)}
+
+/* 终端 */
+.term{flex:1;min-height:0;overflow:auto;padding:14px 18px;font-family:var(--mono);font-size:12.5px;line-height:1.7;white-space:pre-wrap}
+.term .me{background:var(--soft);padding:7px 10px;border-radius:5px;margin:8px 0}
+.term .sent{border-left:3px solid var(--note);background:var(--note-bg)}
+.term .sys{color:var(--ink3)}
+
+/* 看改动页 */
+.body{flex:1;min-height:0;display:flex}
+.files{width:206px;flex-shrink:0;border-right:1px solid var(--line);padding:10px 8px;overflow:auto;font-size:12.5px}
+.file{display:flex;width:100%;gap:6px;align-items:center;padding:5px 7px;border:0;border-radius:5px;background:none;text-align:left}
+.file.on{background:var(--soft)}
+.file .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{min-width:16px;height:16px;border-radius:8px;background:var(--note);color:#fff;font-size:10.5px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
+.diff{flex:1;min-width:0;overflow:auto;font-family:var(--mono);font-size:12px;line-height:23px}
+.path{padding:8px 14px;font:600 12.5px -apple-system,"PingFang SC",sans-serif;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--win);z-index:1}
+.dl{display:flex;width:100%;border:0;padding:0;background:none;text-align:left;font:inherit;line-height:inherit;white-space:pre}
+.dl:hover{outline:1px solid var(--note);outline-offset:-1px}
+.dl.add{background:var(--add-bg)}.dl.del{background:var(--del-bg)}
+.dl .no{width:40px;flex-shrink:0;text-align:right;padding-right:10px;color:var(--ink3);user-select:none}
+.dl .mk{width:16px;flex-shrink:0;color:var(--ink3)}
+.dl .tx{flex:1}
+.dl .badge{margin:3px 8px 0 0}
+.edit,.said{margin:0 12px 6px 56px;font-family:-apple-system,"PingFang SC",sans-serif;font-size:13px;line-height:1.5}
+.edit{padding:8px;border:1px solid var(--note);border-radius:7px;background:var(--win)}
+.edit textarea{display:block;width:100%;height:54px;border:0;outline:0;resize:none;background:transparent}
+.edit .row{display:flex;justify-content:flex-end;gap:6px}
+.said{padding:7px 10px;border-radius:7px;background:var(--note-bg)}
+.side{width:318px;flex-shrink:0;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--soft);font-size:12.5px;min-height:0}
+.scroll{flex:1;min-height:0;overflow:auto}
+.sec{padding:11px 14px;border-bottom:1px solid var(--line)}
+.sec h3{margin:0 0 6px;font-size:12.5px}
+.ck{display:flex;gap:7px;align-items:flex-start;padding:2px 0}
+.ck input{margin:3px 0 0}
+.nt{display:flex;gap:8px;padding:8px 10px;margin-top:6px;background:var(--win);border:1px solid var(--line);border-radius:7px}
+.nt .f{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.nt .x{border:0;background:none;color:var(--ink3);padding:0 0 0 4px;align-self:flex-start}
+.nt .main{flex:1;min-width:0;word-break:break-word}
+.gen{width:100%;height:48px;margin-top:8px;padding:6px 8px;border:1px solid var(--control);border-radius:6px;background:var(--win);resize:none;outline:0}
+.pre{white-space:pre-wrap;font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--ink2);max-height:150px;overflow:auto;padding:8px;border:1px dashed var(--control);border-radius:6px}
+.foot{flex-shrink:0;padding:10px 14px;border-top:1px solid var(--line)}
+.foot .btn{width:100%;height:34px}
+.old{opacity:.72}
+.ack{color:var(--ok);font-size:11.5px;margin-top:2px}
+
+/* 说明 */
+h2{font-size:16px;margin:30px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--win);border-radius:8px;overflow:hidden}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;background:var(--soft)}
+td:first-child{width:128px;color:var(--ink2)}
+ul{margin:6px 0;padding-left:20px}
+li{margin:3px 0}
+code{font-family:var(--mono);font-size:12.5px}
+@media (max-width:900px){.wrap{padding:16px}.steps{grid-template-columns:1fr 1fr}.files{display:none}.side{width:250px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>「退回」本来该是什么</h1>
+  <p class="lead">不满意这一轮时，在改动上指出哪里不对，一键把这些意见发回给同一个 Agent，让它接着改。<span class="fake">这是演示：代码和 Agent 的回复都是写死的假数据，没有连接任何真实 Agent，也没有改任何文件。</span></p>
+
+  <div class="steps" id="steps"></div>
+  <div class="say" id="say"></div>
+  <div class="win" id="win"></div>
+
+  <h2>和你现在的做法差在哪</h2>
+  <table>
+    <tr><th></th><th>现在：在终端里打字</th><th>这个功能：批注后退回</th></tr>
+    <tr><td>说清楚位置</td><td>要自己写文件名和行号，或者描述一下</td><td>点那一行就写，位置和原代码自动带上</td></tr>
+    <tr><td>看改动</td><td>只有文件列表和增删行数，diff 要去别处看</td><td>在 Mooring 里直接看这一轮的 diff</td></tr>
+    <tr><td>多条意见</td><td>边看边记，最后一次打完</td><td>攒着，最后一起发</td></tr>
+    <tr><td>验收标准</td><td>没达标的要自己说</td><td>没勾上的自动带进消息</td></tr>
+    <tr><td>代价</td><td>没有，几句话就说完</td><td>多一个页面要点；小问题反而更慢</td></tr>
+  </table>
+
+  <h2>要决定的事</h2>
+  <p>值不值得做这一页。判断方法很简单：回想最近几次验收，<b>你是不是常常要对着代码说「这一行不对」</b>。</p>
+  <ul>
+    <li><b>值得做：</b>经常要指到具体的行，或者一轮要提好几条意见。</li>
+    <li><b>不做：</b>你平时主要看运行结果、看界面，一句话就能说清。那直接在终端打字更快，按钮删掉就是对的。</li>
+  </ul>
+  <p class="muted">演示把稿子里分开的「退回」和「发回 Claude Code」合成了一个按钮；稿子本身没有写清退回做什么，这是这次的理解，不是原定方案。</p>
+</div>
+
+<script>
+const TABS='crates/mooring-app/src/workbench/tabs.rs', TEST='crates/mooring-app/tests/tab_names.rs';
+const TASK='退出后保留标签名，手动改过的不要被覆盖';
+const CRITERIA=['重启 App 后标签名还在','手动改过的名字不被覆盖'];
+const ROUNDS={
+ 1:{add:16,del:2,files:[
+  {path:TABS,add:6,del:2,lines:[
+   [' ',11,'fn restore_tab(saved: &SavedTab) -> Tab {'],
+   ['-',null,'    let name = default_name(&saved.cwd);'],
+   ['+',12,'    // 退出前存下的名字优先'],
+   ['+',13,'    let name = saved.name.clone()'],
+   ['+',14,'        .unwrap_or_else(|| default_name(&saved.cwd));'],
+   [' ',15,'    Tab { id: saved.id.clone(), name, cwd: saved.cwd.clone() }'],
+   [' ',16,'}'],
+   [' ',17,''],
+   [' ',18,'fn on_agent_title(tab: &mut Tab, title: &str) {'],
+   ['-',null,'    tab.name = title.to_owned();'],
+   ['+',19,'    // Agent 改标题时，标签名跟着改'],
+   ['+',20,'    tab.name = short_title(title);'],
+   ['+',21,'    tab.save();'],
+   [' ',22,'}'],
+  ]},
+  {path:TEST,add:10,del:0,lines:[
+   ['+',1,'#[test]'],
+   ['+',2,'fn name_survives_restart() {'],
+   ['+',3,'    let mut tab = new_tab("~/code/app");'],
+   ['+',4,'    tab.name = "修登录".to_owned();'],
+   ['+',5,'    tab.save();'],
+   ['+',6,''],
+   ['+',7,'    let restored = restore_tab(&load_saved(&tab.id));'],
+   ['+',8,'    assert_eq!(restored.name, "修登录");'],
+   ['+',9,'}'],
+   ['+',10,''],
+  ]},
+ ]},
+ 2:{add:12,del:0,files:[
+  {path:TABS,add:4,del:0,lines:[
+   [' ',18,'fn on_agent_title(tab: &mut Tab, title: &str) {'],
+   ['+',19,'    // 手动改过的名字不再跟 Agent 变'],
+   ['+',20,'    if tab.renamed_by_hand {'],
+   ['+',21,'        return;'],
+   ['+',22,'    }'],
+   [' ',23,'    // Agent 改标题时，标签名跟着改'],
+   [' ',24,'    tab.name = short_title(title);'],
+   [' ',25,'    tab.save();'],
+   [' ',26,'}'],
+  ]},
+  {path:TEST,add:8,del:0,lines:[
+   ['+',11,'#[test]'],
+   ['+',12,'fn hand_name_beats_agent_title() {'],
+   ['+',13,'    let mut tab = new_tab("~/code/app");'],
+   ['+',14,'    rename_by_hand(&mut tab, "修登录");'],
+   ['+',15,''],
+   ['+',16,'    on_agent_title(&mut tab, "Fix the login flow");'],
+   ['+',17,'    assert_eq!(tab.name, "修登录");'],
+   ['+',18,'}'],
+  ]},
+ ]},
+};
+const SAMPLES=[
+ {file:0,no:20,text:'这里会把我手动改的名字盖掉。手动改过的就别再跟着 Agent 变了。'},
+ {file:1,no:9,text:'再加一条测试：手动改名后来一个 Agent 标题，名字不变。'},
+];
+const REPLY=['改 tabs.rs：手动改过的名字不再跟着 Agent 变','加测试 hand_name_beats_agent_title','cargo test 通过'];
+
+let timers=[], S;
+function fresh(){return{view:'term',round:1,status:'review',file:0,comments:[],general:'',checks:[true,false],open:null,draft:'',log:[
+ {k:'me',t:TASK},{k:'o',t:'• 读了 tabs.rs 和保存标签的逻辑'},{k:'o',t:'• 恢复时优先用存下的名字，加了一条测试'},{k:'o',t:'• cargo test 通过'},{k:'sys',t:'✻ 这一轮结束'}
+],past:[],sentOnce:false}}
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const short=p=>p.split('/').pop();
+const R=()=>ROUNDS[S.round];
+const count=()=>S.checks.filter(Boolean).length;
+function lineText(file,no){return R().files[file].lines.find(l=>l[1]===no)?.[2]??''}
+
+function message(){
+ const out=[];
+ out.push(S.comments.length?`这一轮我看了，有 ${S.comments.length} 处要改：`:'这一轮我看了，还要再改：');
+ S.comments.forEach((c,i)=>{out.push('',`${i+1}. ${c.path}:${c.no}`,`   ${c.line.trim()}`,`   ${c.text}`)});
+ if(S.general.trim())out.push('','总体：'+S.general.trim());
+ const miss=CRITERIA.filter((_,i)=>!S.checks[i]);
+ if(miss.length)out.push('','还没达标的验收标准：',...miss.map(m=>'- '+m));
+ return out.join('\n');
+}
+function step(){
+ if(S.status==='done')return 4;
+ if(S.status==='run')return 3;
+ if(S.view==='term'&&S.round===1)return 1;
+ if(S.view==='review'&&S.round===1)return 2;
+ return 4;
+}
+function renderSteps(){
+ const names=[['1 这一轮结束','Agent 改完，等你验收'],['2 看改动、写批注','点代码行，说哪里不对'],['3 退回','意见发给同一个 Agent'],['4 再验收','满意才标记完成']];
+ const cur=step();
+ $('#steps').innerHTML=names.map((n,i)=>`<div class="step ${i+1===cur?'on':i+1<cur?'past':''}"><b>${n[0]}</b>${n[1]}</div>`).join('');
+ let say;
+ if(S.status==='done')say=S.round===1?'做完了。你直接通过了这一轮，没有退回。试试点「从头再来」，走一遍退回。':'做完了。意见发回去、改完、再验收，都在同一个会话里。';
+ else if(S.status==='run')say='已经发回去了：Agent 在同一个会话里接着改，状态自动变成「在跑」。';
+ else if(S.round===1&&S.view==='term')say='Agent 改完了，但第二条验收标准没勾上。点「看改动」。';
+ else if(S.round===1&&!S.comments.length)say='点任意一行代码写批注，试试绿色的第 20 行（它会盖掉手动改的名字）。';
+ else if(S.round===1)say='再写几条也行。写好了就点右下角的黑色按钮，看看发出去的是什么。';
+ else if(S.view==='term')say='第二轮回来了，又是「等你验收」。点「看改动」看它改得对不对。';
+ else say='这次改对了：勾上第二条验收标准，再点「标记完成」。';
+ const sample=S.status==='review'&&S.round===1&&S.view==='review'&&!S.comments.length;
+ $('#say').innerHTML=`<span>${say}</span><span class="sp"></span>${sample?'<button class="link" id="sample">懒得写，填两条示例</button>':''}<button class="link" id="reset">从头再来</button>`;
+ $('#reset').onclick=reset;
+ if(sample)$('#sample').onclick=()=>{SAMPLES.forEach(s=>addComment(s.file,s.no,s.text));render()};
+}
+function chip(){
+ if(S.status==='run')return '<span class="chip run"><span class="spin"></span>在跑 · 刚刚</span>';
+ if(S.status==='done')return '<span class="chip done">✓ 做完了</span>';
+ return '<span class="chip review"><span class="ring"></span>等你验收 · 刚刚</span>';
+}
+function counts(a,d){return `<span class="n"><span class="a">+${a}</span> <span class="d">−${d}</span></span>`}
+function renderTerm(){
+ const r=R(), shouldPulse=S.status==='review';
+ const bar=S.status==='review'?`<div class="turn"><b>这一轮改了 ${r.files.length} 个文件</b>${counts(r.add,r.del)}<span class="muted">· 验收标准 ${count()}/${CRITERIA.length}</span><span class="sp"></span>
+   <button class="btn ${shouldPulse?'next':''}" id="open">看改动</button><button class="btn solid" id="finish">标记完成</button></div>`:'';
+ const log=S.log.map(l=>l.k==='me'?`<div class="me">› ${esc(l.t)}</div>`:l.k==='sent'?`<div class="me sent">${esc(l.t)}</div>`:`<div class="${l.k==='sys'?'sys':''}">${esc(l.t)}</div>`).join('');
+ return `<div class="head"><span class="who">Claude Code</span><span class="where">~/…/tools/mooring</span><span class="sp"></span>${chip()}</div>${bar}<div class="term" id="term">${log}${S.status==='done'?'':'<div class="sys">› </div>'}</div>`;
+}
+function renderReview(){
+ const r=R(), f=r.files[S.file];
+ const files=r.files.map((x,i)=>{const n=S.comments.filter(c=>c.file===i).length;return `<button class="file ${i===S.file?'on':''}" data-file="${i}"><span class="t">${short(x.path)}</span>${counts(x.add,x.del)}${n?`<span class="badge">${n}</span>`:''}</button>`}).join('');
+ const lines=f.lines.map(l=>{
+  const[k,no,t]=l, cls=k==='+'?'add':k==='-'?'del':'';
+  const cs=S.comments.filter(c=>c.file===S.file&&c.no===no&&no);
+  const tags=cs.map(c=>`<span class="badge">${S.comments.indexOf(c)+1}</span>`).join('');
+  const said=cs.map(c=>`<div class="said">${esc(c.text)}</div>`).join('');
+  const editor=no&&S.open===no?`<div class="edit"><textarea id="draft" placeholder="这一行哪里不对？">${esc(S.draft)}</textarea><div class="row"><button class="btn" id="cancel">取消</button><button class="btn solid" id="save">加批注</button></div></div>`:'';
+  const hint=S.round===1&&!S.comments.length&&S.file===0&&no===20?'next':'';
+  return `<button class="dl ${cls} ${hint}" ${no?`data-no="${no}"`:'disabled'}><span class="no">${no??''}</span><span class="mk">${k===' '?'':k}</span><span class="tx">${esc(t)}</span>${tags}</button>${said}${editor}`;
+ }).join('');
+ const checks=CRITERIA.map((c,i)=>`<label class="ck"><input type="checkbox" data-check="${i}" ${S.checks[i]?'checked':''}><span>${c}</span></label>`).join('');
+ const notes=S.comments.map((c,i)=>`<div class="nt"><span class="badge">${i+1}</span><div class="main"><div class="f">${short(c.path)}:${c.no}</div>${esc(c.text)}</div><button class="x" data-del="${i}" aria-label="删除这条批注">×</button></div>`).join('');
+ const past=S.past.length?`<div class="sec old"><h3>上一轮你说的</h3>${S.past.map(c=>`<div class="nt"><div class="main"><div class="f">${short(c.path)}:${c.no}</div>${esc(c.text)}<div class="ack">Agent 回复：已改，请你确认</div></div></div>`).join('')}</div>`:'';
+ const can=S.comments.length||S.general.trim();
+ const pulseSend=S.round===1&&S.comments.length>0;
+ const pulseFinish=S.round===2&&count()===CRITERIA.length;
+ return `<div class="head"><button class="btn" id="back">← 回到终端</button><span class="n">${r.files.length} 个文件</span>${counts(r.add,r.del)}<span class="muted">第 ${S.round} 轮</span><span class="sp"></span>${chip()}<button class="btn solid ${pulseFinish?'next':''}" id="finish">标记完成</button></div>
+ <div class="body"><div class="files">${files}</div>
+ <div class="diff" id="diff"><div class="path">${esc(f.path)}</div>${lines}</div>
+ <div class="side"><div class="scroll" id="side">
+  <div class="sec"><h3>验收标准 ${count()}/${CRITERIA.length}</h3>${checks}</div>
+  ${past}
+  <div class="sec"><h3>这一轮的批注 ${S.comments.length} 条</h3>${notes||'<div class="muted">在代码上点一行就能写。</div>'}<textarea class="gen" id="general" placeholder="也可以写一句总评…">${esc(S.general)}</textarea></div>
+  <div class="sec"><h3>将发给 Claude Code 的内容</h3><div class="pre" id="pre">${can?esc(message()):'写了批注这里才有内容。'}</div></div>
+ </div><div class="foot"><button class="btn solid ${pulseSend?'next':''}" id="send" ${can?'':'disabled'}>退回给 Claude Code</button></div></div></div>`;
+}
+function render(keep){
+ const old={diff:$('#diff')?.scrollTop,side:$('#side')?.scrollTop};
+ renderSteps();
+ $('#win').innerHTML=S.view==='term'?renderTerm():renderReview();
+ if(keep!==false){if($('#diff'))$('#diff').scrollTop=old.diff||0;if($('#side'))$('#side').scrollTop=old.side||0}
+ wire();
+ if($('#term'))$('#term').scrollTop=1e6;
+ if($('#draft')){const d=$('#draft');d.focus();d.setSelectionRange(d.value.length,d.value.length)}
+}
+function addComment(file,no,text){
+ const path=R().files[file].path;
+ S.comments.push({file,no,text,path,line:lineText(file,no)});
+ S.comments.sort((a,b)=>a.file-b.file||a.no-b.no);
+}
+function wire(){
+ const on=(id,fn)=>{const e=$(id);if(e)e.onclick=fn};
+ on('#open',()=>{S.view='review';S.file=0;render(false)});
+ on('#back',()=>{S.view='term';render(false)});
+ on('#finish',()=>{clearTimers();S.status='done';S.view='term';S.log.push({k:'sys',t:'✓ 你标记了完成'});render(false)});
+ on('#send',send);
+ on('#cancel',()=>{S.open=null;S.draft='';render()});
+ on('#save',()=>{const t=$('#draft').value.trim();if(t){addComment(S.file,S.open,t);S.open=null;S.draft='';render()}});
+ document.querySelectorAll('[data-file]').forEach(e=>e.onclick=()=>{S.file=+e.dataset.file;S.open=null;S.draft='';render(false)});
+ document.querySelectorAll('.dl[data-no]').forEach(e=>e.onclick=()=>{if(S.status!=='review')return;S.open=+e.dataset.no;S.draft='';render()});
+ document.querySelectorAll('[data-del]').forEach(e=>e.onclick=()=>{S.comments.splice(+e.dataset.del,1);render()});
+ document.querySelectorAll('[data-check]').forEach(e=>e.onchange=()=>{S.checks[+e.dataset.check]=e.checked;render()});
+ const g=$('#general');
+ if(g)g.oninput=()=>{S.general=g.value;const can=S.comments.length||S.general.trim();$('#pre').textContent=can?message():'写了批注这里才有内容。';$('#send').disabled=!can};
+ const d=$('#draft');
+ if(d){d.oninput=()=>{S.draft=d.value};d.onkeydown=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter')$('#save').click()}}
+}
+function clearTimers(){timers.forEach(clearTimeout);timers=[]}
+function send(){
+ S.log.push({k:'sent',t:message()});
+ S.past=S.comments.slice();S.comments=[];S.general='';S.open=null;
+ S.status='run';S.view='term';render(false);
+ const said=S.past.length?`读了 ${S.past.length} 条批注`:'读了你的总评';
+ [said,...REPLY].forEach((t,i)=>timers.push(setTimeout(()=>{S.log.push({k:'o',t:'• '+t});render(false)},900*(i+1))));
+ timers.push(setTimeout(()=>{S.log.push({k:'sys',t:'✻ 这一轮结束'});S.round=2;S.file=0;S.status='review';render(false)},900*(REPLY.length+2)));
+}
+function reset(){clearTimers();S=fresh();render(false)}
+reset();
+</script>
+</body>
+</html>
