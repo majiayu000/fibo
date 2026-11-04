@@ -10,7 +10,10 @@ pub const USAGE: &str = "用法：mooring plugins [--dir 插件目录] [--json]
       mooring plugins available [--remote]   列出可安装的插件（App 附带的，加 --remote 再查远程目录）
       mooring plugins install <id> [--remote] [--yes]
                                               安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
-      mooring plugins uninstall <id>          卸载一个插件
+      mooring plugins uninstall <id> [--force]
+                                              卸载一个插件；--force 在 teardown 失败时也卸（加载不了的按目录名卸）
+      mooring plugins disable|enable <id> [--force]
+                                              停用或打开一个插件；--force 在 teardown 失败时也停用
       mooring plugins index <目录> [--check]  为插件目录生成 index.json（--check 只检查是否最新）
       mooring plugins log <id>                这个插件最近的运行：setup、hook、出过错的装饰和额度命令
       mooring plugins set <id> [<key> <值>]   看或改插件的设置项；值写 true/false、数字或文字
@@ -20,7 +23,7 @@ pub const USAGE: &str = "用法：mooring plugins [--dir 插件目录] [--json]
 
 检查插件能不能装上：逐个读 plugin.json 和它提供的文件，说哪个生效、哪个为什么没生效。
 默认目录是 ${XDG_CONFIG_HOME:-$HOME/.config}/mooring/plugins。有问题时以 1 退出。
-改完在 Mooring 的 设置 › 插件 点「重新读取」就生效（Agent 类要等 Mooring 后台下次启动）。
+手写改了插件目录后，在 Mooring 的 设置 › 插件 点「重新读取」就生效。
 写插件的说明：mooring --skill plugins";
 
 /// The first line of the `AGENTS.md` Mooring writes; a file without it is the user's.
@@ -127,6 +130,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
     let mut check_only = false;
     let mut yes = false;
     let mut send = false;
+    let mut force = false;
     let (mut event, mut cwd) = (None, None);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -134,6 +138,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
             "--yes" | "-y" => yes = true,
             "--check" => check_only = true,
             "--send" => send = true,
+            "--force" => force = true,
             "--event" => event = args.next(),
             "--cwd" => cwd = args.next(),
             _ => rest.push(a),
@@ -216,17 +221,32 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                     return Err(io::Error::other("没有安装"));
                 }
             }
-            let at = prepared.commit().map_err(io::Error::other)?;
+            let result = prepared.commit().map_err(io::Error::other);
+            // Even a failed one may have changed what is installed.
+            let told = tell_running();
+            let at = result?;
             println!("装好了 {id} v{} → {}", offer.entry.version, at.display());
-            println!("在 Mooring 的 设置 › 插件 点「重新读取」就生效");
+            println!("{told}");
             Ok(())
         }
         ("uninstall", [id]) => {
-            let dir = plugins_dir()?;
-            let config = dir.parent().unwrap_or(&dir).to_owned();
-            plugin::install(&config);
-            plugin::uninstall(id).map_err(io::Error::other)?;
+            let warned =
+                plugin::uninstall_in(&plugins_dir()?, id, force).map_err(io::Error::other)?;
             println!("卸载了 {id}");
+            if let Some(w) = warned {
+                println!("注意：{w}");
+            }
+            println!("{}", tell_running());
+            Ok(())
+        }
+        (verb @ ("enable" | "disable"), [id]) => {
+            let warned = plugin::set_enabled_in(&plugins_dir()?, id, verb == "enable", force)
+                .map_err(io::Error::other)?;
+            println!("{}了 {id}", if verb == "enable" { "打开" } else { "停用" });
+            if let Some(w) = warned {
+                println!("注意：{w}");
+            }
+            println!("{}", tell_running());
             Ok(())
         }
         ("run", [id, declaration]) => try_run(id, declaration, event, cwd, send),
@@ -285,6 +305,21 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
             }
         }
         _ => Err(io::Error::other(USAGE)),
+    }
+}
+
+/// Tells a running Mooring what changed, so nobody has to go and press 重新读取: the host
+/// reloads and passes it on to the app. What to tell the user about it.
+fn tell_running() -> String {
+    let told = mooring_core::plugin_context::runtime().map(|r| {
+        mooring_core::protocol::rpc(
+            &r.join("workbench.sock"),
+            &mooring_core::protocol::Request::ReloadPlugins,
+        )
+    });
+    match told {
+        Some(Ok(_)) => "运行中的 Mooring 已经用上了".to_owned(),
+        _ => "Mooring 没在运行，下次打开时生效".to_owned(),
     }
 }
 
@@ -405,7 +440,15 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
         .filter(|a| {
             matches!(
                 a.as_str(),
-                "index" | "available" | "install" | "uninstall" | "log" | "set" | "run"
+                "index"
+                    | "available"
+                    | "install"
+                    | "uninstall"
+                    | "enable"
+                    | "disable"
+                    | "log"
+                    | "set"
+                    | "run"
             )
         })
         .cloned()
@@ -454,8 +497,30 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
     Ok(())
 }
 
+/// Every plugin through the loaders the way a running Mooring reads them: all the enabled
+/// plugins' files of a kind together, so what only shows between two plugins shows here too.
+/// A turned-off plugin is read on its own: it would load if it were on.
 fn check(dir: &Path, home: &Path) -> Vec<Checked> {
-    plugin::discover(dir)
+    let found = plugin::discover(dir);
+    let enabled: Vec<&plugin::Plugin> = found
+        .iter()
+        .filter_map(|f| f.result.as_ref().ok())
+        .filter(|p| p.enabled)
+        .collect();
+    let mut outcomes: std::collections::HashMap<PathBuf, File> = Default::default();
+    for kind in KINDS {
+        let files: Vec<PathBuf> = enabled
+            .iter()
+            .filter(|p| p.provides.contains(&kind))
+            .flat_map(|p| kind.files(&p.dir))
+            .collect();
+        outcomes.extend(
+            load(kind, files, home)
+                .into_iter()
+                .map(|f| (f.file.clone(), f)),
+        );
+    }
+    found
         .into_iter()
         .map(|found| {
             let undeclared = |provides: &[Kind]| {
@@ -480,11 +545,18 @@ fn check(dir: &Path, home: &Path) -> Vec<Checked> {
                 Ok(p) => Checked {
                     unused: undeclared(&p.provides),
                     warnings: p.warnings.clone(),
-                    files: p
-                        .provides
-                        .iter()
-                        .flat_map(|k| load(*k, k.files(&p.dir), home))
-                        .collect(),
+                    files: {
+                        let mut files = Vec::new();
+                        for k in &p.provides {
+                            for f in k.files(&p.dir) {
+                                match outcomes.remove(&f) {
+                                    Some(outcome) => files.push(outcome),
+                                    None => files.extend(load(*k, vec![f], home)),
+                                }
+                            }
+                        }
+                        files
+                    },
                     dir: p.dir,
                     id: Some(p.id),
                     name: Some(p.name),
@@ -731,6 +803,44 @@ mod tests {
         std::fs::remove_dir_all(&bin).unwrap();
         assert!(!script.is_empty());
         assert!(!script.contains("do shell script"), "{script}");
+    }
+
+    /// What `mooring plugins` says is what a running Mooring would do: an action id another
+    /// plugin got first is a failure here too, though each file reads fine alone.
+    #[test]
+    fn the_check_sees_what_only_shows_between_two_plugins() {
+        let root = std::env::temp_dir().join(format!("kl-between-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for id in ["a", "b"] {
+            write(
+                &root.join(id).join("plugin.json"),
+                &format!(r#"{{"api":1,"id":"{id}","name":"{id}","provides":["actions","hooks"]}}"#),
+            );
+            write(
+                &root.join(id).join("actions.json"),
+                r#"{"api":1,"actions":[{"id":"same","title":"t","command":"true"}]}"#,
+            );
+            write(
+                &root.join(id).join("hooks.json"),
+                r#"{"api":1,"hooks":[{"id":"notify","on":["done"],"command":"true"}]}"#,
+            );
+        }
+        let checked = check(&root, &root);
+        let errors = |c: &Checked| {
+            c.files
+                .iter()
+                .filter_map(|f| f.error.clone())
+                .collect::<Vec<_>>()
+        };
+        assert!(errors(&checked[0]).is_empty(), "{:?}", errors(&checked[0]));
+        let second = errors(&checked[1]);
+        assert_eq!(
+            second.len(),
+            1,
+            "hooks may share a name, actions may not: {second:?}"
+        );
+        assert!(second[0].contains("same"), "{second:?}");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// `plugins run` finds a declaration across kinds and names what is there when it cannot.

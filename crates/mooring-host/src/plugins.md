@@ -16,7 +16,7 @@
 - 别改用户已有的插件，也别改 `plugins/disabled.json`（那是设置页的开关），用户明确要求时才动。
 - 改完一定跑 `mooring plugins`，全是 ✓ 才算写好；有 ✗ 就按它说的改，再跑。
 - 写好后让用户在 Mooring 的 设置 › 插件 点「重新读取」，马上生效；Agent 类要重开 Mooring（App 和后台都在启动时读）。设置 › 插件能看到每个插件生效了没有，也能停用、卸载。
-- 现成的插件不用自己写：`mooring plugins available` 列出 App 附带的（加 `--remote` 再查远程目录），`mooring plugins install <id>` 装上。
+- 现成的插件不用自己写：`mooring plugins available` 列出 App 附带的（加 `--remote` 再查远程目录），`mooring plugins install <id>` 装上。用命令行装、卸、开关，运行中的 Mooring 会马上用上，不用再点「重新读取」。
 - 插件只能用下面列的这几类。做不到的（自己画界面、改会话状态、读对话原文）就直说做不到，别改 Mooring 的安装文件。
 
 ## 步骤
@@ -44,7 +44,7 @@ mooring plugins run git-tools <声明 id>   # hook、装饰、额度命令：用
 }
 ```
 
-- `api` 固定写 `1`。`id` 只用小写字母、数字和 `-`，不超过 40 个字，最好和目录名一样；和别的插件重名时后一个不加载。
+- `api` 固定写 `1`。`id` 只用小写字母、数字和 `-`，不超过 40 个字，最好和目录名一样；和别的插件重名时后一个不加载。hook 和装饰的 id 只要在自己的插件里不重复；动作和左栏的 id 要全局不重复（开关和选择按它记），重复的插件装不上。
 - `name` 必填；`version`、`description` 可选；`plugin.json` 里不认识的字段会跳过并写一条警告。
 - `files` 可选：插件还要带上的其他文件（命令要跑的脚本），相对插件目录写。不写进来的文件从插件目录安装时不会被带上。
 - `touches` 可选：setup 会改的别的程序的文件，如 `["~/.claude/settings.json"]`；`network` 可选：命令会不会联网。安装确认里照写给用户看，Mooring 不拦截，所以要如实写。
@@ -184,8 +184,11 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 
 - `setup` 在装上、更新、打开时运行，`teardown` 在停用、卸载时运行；都在插件目录里用 `sh -c` 跑。`MOORING_PLUGIN_DIR` 是插件目录，`MOORING_PLUGIN_DATA` 是插件自己的数据目录（`<配置>/plugin-data/<id>`，更新和重装都保留）。
 - 两条都要写：装上时改了什么，`teardown` 就要能原样改回去。原来的设置存进 `MOORING_PLUGIN_DATA`。
-- `setup` 会在已经装过的情况下再跑（更新时），要能重复运行。
-- 失败（非 0 退出或超时，`timeout_ms` 100–30000，默认 10000）时，打印的内容会显示在设置页；`teardown` 失败时插件不会被卸载或停用。
+- `setup` 会在已经装过的情况下再跑（更新时），要能重复运行。`teardown` 也要能在只做了一半时运行：`setup` 失败时会马上跑一次。
+- 失败（非 0 退出或超时，`timeout_ms` 100–30000，默认 10000）时，打印的内容会显示在设置页。超时连它的子进程一起停。
+- `setup` 失败的插件不算装好：第一次装的留着但不启用，更新的退回旧版。
+- `teardown` 失败时插件不会被卸载或停用，除非用户选「仍然卸载 / 仍然停用」（命令行 `--force`）。
+- 新版本不再带 `setup` 时，更新前会先跑旧版的 `teardown`，跑不成功就不更新。
 - 卸载成功后 `MOORING_PLUGIN_DATA` 整个删除；`teardown` 要用的东西（原来的设置）只在卸载前读。
 - 例子：`plugins/claude-quota`（接上 Claude Code 的状态栏，原来的状态栏照常显示）。
 

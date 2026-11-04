@@ -435,6 +435,16 @@ impl Offer {
             Source::Remote(base) => curl(&format!("{base}/{}/{path}", self.entry.id)),
         }
     }
+    /// Who it comes from, for comparing with what is installed.
+    fn origin_key(&self) -> String {
+        match &self.source {
+            Source::Bundled(_) => OFFICIAL.to_owned(),
+            Source::Remote(base) if DEFAULT_REMOTE.strip_suffix("/index.json") == Some(base) => {
+                OFFICIAL.to_owned()
+            }
+            Source::Remote(base) => base.clone(),
+        }
+    }
     /// Where it comes from, in words.
     pub fn origin(&self) -> &'static str {
         match self.source {
@@ -456,9 +466,14 @@ impl Offer {
         let mut prepared = Prepared {
             stage: Some(stage.clone()),
             plugins: plugins.to_owned(),
+            source: InstalledFrom {
+                from: self.origin_key(),
+                files: e.files.iter().map(|f| f.path.clone()).collect(),
+            },
             id: e.id.clone(),
             disclosure: vec![],
             added: vec![],
+            replacing: vec![],
             must_ask: false,
         };
         for f in &e.files {
@@ -503,15 +518,21 @@ impl Offer {
             ));
         }
         loadable(&p)?;
+        no_conflict(plugins, &p)?;
         let old = plugin::discover(plugins)
             .into_iter()
             .find_map(|f| f.result.ok().filter(|o| o.id == e.id));
         prepared.disclosure = disclosure_of(&p);
         prepared.added = old.as_ref().map(|o| added(o, &p)).unwrap_or_default();
-        prepared.must_ask = match &old {
-            None => runs_commands(&p.provides),
-            Some(_) => !prepared.added.is_empty(),
-        };
+        prepared.replacing = old
+            .as_ref()
+            .map(|o| replacing(plugins, o, &p, e, &prepared.source.from))
+            .unwrap_or_default();
+        prepared.must_ask = !prepared.replacing.is_empty()
+            || match &old {
+                None => runs_commands(&p.provides),
+                Some(_) => !prepared.added.is_empty(),
+            };
         Ok(prepared)
     }
     /// Installs it as `<plugins>/<id>`, replacing an installed copy of the same id
@@ -532,11 +553,14 @@ impl Offer {
 pub struct Prepared {
     stage: Option<PathBuf>,
     plugins: PathBuf,
+    source: InstalledFrom,
     pub id: String,
     /// What it will do once installed, read from the package.
     pub disclosure: Vec<String>,
     /// What it can do that the installed version cannot; empty on a first install.
     pub added: Vec<String>,
+    /// What replacing the installed copy would lose or change hands.
+    pub replacing: Vec<String>,
     /// Whether to confirm first: it runs commands, or an update adds to what it runs.
     pub must_ask: bool,
 }
@@ -550,20 +574,27 @@ impl Drop for Prepared {
 impl Prepared {
     /// What to tell someone before they confirm, one line each.
     pub fn lines(&self) -> Vec<String> {
-        if self.added.is_empty() {
-            self.disclosure.clone()
+        let what = if self.added.is_empty() {
+            &self.disclosure
         } else {
-            self.added.clone()
-        }
+            &self.added
+        };
+        self.replacing.iter().chain(what).cloned().collect()
     }
-    /// Swaps it in as `<plugins>/<id>`, replacing whichever directory holds this id now.
+    /// Swaps it in as `<plugins>/<id>`, replacing whichever directory holds this id now,
+    /// and runs its setup. Only a setup that worked makes it the installed version: when an
+    /// update's fails, the old version comes back; when a first install's fails, it stays
+    /// but off. Either way what the failed setup managed is undone as far as its teardown
+    /// can, and no failure is called installed.
     pub fn commit(mut self) -> Result<PathBuf, String> {
+        use crate::setup::Phase;
         let stage = self.stage.take().ok_or("已经装过了")?;
         let (plugins, id) = (self.plugins.clone(), self.id.clone());
         let discard = |err: String| {
             let _ = std::fs::remove_dir_all(&stage);
             err
         };
+        let _held = plugin::lock(&plugins).map_err(&discard)?;
         let target = plugin::discover(&plugins)
             .into_iter()
             .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
@@ -581,9 +612,21 @@ impl Prepared {
             }
             None => plugins.join(&id),
         };
+        let on = !plugin::turned_off(&plugins, &id);
+        let had = target.exists();
+        let provides_setup =
+            |dir: &Path| plugin::check(dir).is_ok_and(|p| p.provides.contains(&Kind::Setup));
+        let old_setup = had && provides_setup(&target);
+        // The update drops its setup: this is the last time the old teardown exists.
+        if on && old_setup && !provides_setup(&stage) {
+            crate::setup::run(&plugins, &target, Phase::Teardown).map_err(|err| {
+                discard(format!(
+                    "没有更新：新版本不再带安装步骤，要先撤回旧版做的事，但 {err}"
+                ))
+            })?;
+        }
         let old = plugins.join(format!(".replaced-{id}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&old);
-        let had = target.exists();
         if had {
             std::fs::rename(&target, &old)
                 .map_err(|err| discard(format!("换不掉旧的 {}：{err}", target.display())))?;
@@ -594,15 +637,137 @@ impl Prepared {
             }
             return Err(discard(format!("装不进 {}：{err}", target.display())));
         }
-        let _ = std::fs::remove_dir_all(&old);
-        // Installed or updated: it does what it sets up now (again, after an update),
-        // unless it was turned off.
-        if !plugin::turned_off(&plugins, &id) {
-            crate::setup::run(&plugins, &target, crate::setup::Phase::Setup).map_err(|err| {
-                format!("装好了，但 {err}；修好后在 设置 › 插件 里停用再打开可以重试")
-            })?;
+        if on && let Err(err) = crate::setup::run(&plugins, &target, Phase::Setup) {
+            let _ = crate::setup::run(&plugins, &target, Phase::Teardown);
+            if had {
+                let _ = std::fs::remove_dir_all(&target);
+                std::fs::rename(&old, &target)
+                    .map_err(|e| format!("{err}；旧版也没能放回去（{e}）：{}", old.display()))?;
+                if old_setup {
+                    let _ = crate::setup::run(&plugins, &target, Phase::Setup);
+                }
+                return Err(format!("没有更新，旧版还在：{err}"));
+            }
+            plugin::mark_off(&plugins, &id).map_err(|e| format!("{err}；也没能停用它：{e}"))?;
+            return Err(format!(
+                "装上了但没有启用：{err}；修好后在 设置 › 插件 里打开可以重试"
+            ));
         }
+        let _ = std::fs::remove_dir_all(&old);
+        self.save_source();
         Ok(target)
+    }
+    /// Keeps where it came from, for the next time something offers to replace it.
+    fn save_source(&self) {
+        let data = crate::setup::data_dir(&self.plugins, &self.id);
+        let _ = crate::plugin_context::create_private_dir(&data);
+        if let Ok(bytes) = serde_json::to_vec_pretty(&self.source) {
+            let _ = std::fs::write(data.join(SOURCE_FILE), bytes);
+        }
+    }
+}
+
+/// Where an installed plugin came from, kept in its data directory.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstalledFrom {
+    /// `OFFICIAL`, or the catalog's address.
+    pub from: String,
+    /// The files that package listed; anything else in its directory is somebody's own.
+    pub files: Vec<String>,
+}
+const SOURCE_FILE: &str = "source.json";
+/// This repository's catalog, whichever way it arrived: shipped with the app or fetched.
+const OFFICIAL: &str = "官方目录";
+
+/// Every file under `dir`, relative to it; hidden ones are nobody's plugin file.
+fn files_under(dir: &Path) -> Vec<String> {
+    fn walk(root: &Path, at: &Path, out: &mut Vec<String>) {
+        for e in std::fs::read_dir(at).into_iter().flatten().flatten() {
+            let path = e.path();
+            if e.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            if path.is_dir() {
+                walk(root, &path, out);
+            } else if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().into_owned());
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, &mut out);
+    out.sort();
+    out
+}
+
+/// What replacing `old` with this package would lose or change hands: it came from somewhere
+/// else, it is somebody's own under the same id, or its directory has files no package put
+/// there. Each is a reason to ask, whatever the package does.
+fn replacing(plugins: &Path, old: &Plugin, new: &Plugin, entry: &Entry, from: &str) -> Vec<String> {
+    let recorded: Option<InstalledFrom> =
+        std::fs::read(crate::setup::data_dir(plugins, &old.id).join(SOURCE_FILE))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok());
+    let mut out = Vec::new();
+    if let Some(r) = &recorded
+        && r.from != from
+    {
+        out.push(format!("来源变了：原来来自 {}，这次来自 {from}", r.from));
+    }
+    if old.name != new.name {
+        out.push(format!(
+            "这是另一个名字的插件：「{}」换成「{}」",
+            old.name, new.name
+        ));
+    }
+    let keeps = |f: &String| {
+        entry.files.iter().any(|e| &e.path == f)
+            || recorded.as_ref().is_some_and(|r| r.files.contains(f))
+    };
+    let own: Vec<String> = files_under(&old.dir)
+        .into_iter()
+        .filter(|f| !keeps(f))
+        .collect();
+    if !own.is_empty() {
+        out.push(format!(
+            "目录里这些文件不是包里的，换掉后就没了：{}",
+            own.join("、")
+        ));
+    }
+    out
+}
+
+/// Clears what an install interrupted by a crash left: a staged copy is dropped, and a
+/// replaced copy whose plugin never came back is put back.
+pub fn recover(plugins: &Path) {
+    let alive = |pid: &str| {
+        pid.parse::<i32>().is_ok_and(|p| {
+            // SAFETY: signal 0 only asks whether the process exists.
+            p != std::process::id() as i32 && unsafe { libc::kill(p, 0) } == 0
+        })
+    };
+    let Ok(_held) = plugin::lock(plugins) else {
+        return;
+    };
+    for e in std::fs::read_dir(plugins).into_iter().flatten().flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if let Some(rest) = name.strip_prefix(".installing-") {
+            let mut parts = rest.rsplitn(3, '-');
+            let (_n, pid) = (parts.next(), parts.next());
+            if !pid.is_some_and(alive) {
+                let _ = std::fs::remove_dir_all(e.path());
+            }
+        } else if let Some(rest) = name.strip_prefix(".replaced-")
+            && let Some((id, pid)) = rest.rsplit_once('-')
+            && !alive(pid)
+        {
+            let back = plugins.join(id);
+            if back.exists() {
+                let _ = std::fs::remove_dir_all(e.path());
+            } else {
+                let _ = std::fs::rename(e.path(), back);
+            }
+        }
     }
 }
 
@@ -633,6 +798,36 @@ fn loadable(p: &Plugin) -> Result<(), String> {
                 h.id,
                 h.skipped.join("、")
             ));
+        }
+    }
+    Ok(())
+}
+
+/// Actions and sidebar presets are named from elsewhere (a switch's file, the choice of
+/// sidebar), so their ids stay global. A package reusing one is refused here, rather than
+/// breaking whichever plugin happens to load second.
+fn no_conflict(plugins: &Path, p: &Plugin) -> Result<(), String> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    for kind in [Kind::Actions, Kind::Sidebar] {
+        if !p.provides.contains(&kind) {
+            continue;
+        }
+        let mut files: Vec<PathBuf> = plugin::discover(plugins)
+            .into_iter()
+            .filter_map(|f| f.result.ok())
+            .filter(|o| o.id != p.id)
+            .flat_map(|o| o.files(kind))
+            .collect();
+        let own = kind.files(&p.dir);
+        files.extend(own.iter().cloned());
+        for loaded in plugin::load_kind(kind, files, &home) {
+            if own.contains(&loaded.file)
+                && let Err(why) = loaded.result
+            {
+                return Err(format!("{} 和已装的插件冲突，没有安装：{why}", p.id));
+            }
         }
     }
     Ok(())
@@ -760,6 +955,13 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         d
     }
+    /// What is in the plugins directory but the lock.
+    fn entries(plugins: &Path) -> usize {
+        std::fs::read_dir(plugins)
+            .unwrap()
+            .filter(|e| e.as_ref().unwrap().file_name() != ".lock")
+            .count()
+    }
     fn plugin(root: &Path, id: &str, version: &str) {
         let d = root.join(id);
         std::fs::create_dir_all(&d).unwrap();
@@ -816,18 +1018,14 @@ mod tests {
         assert_eq!(at, plugins.join("mine"));
         assert!(!at.join("build.sh").exists());
         assert!(plugin::check(&at).unwrap().version.as_deref() == Some("1.0.0"));
-        assert_eq!(
-            std::fs::read_dir(&plugins).unwrap().count(),
-            1,
-            "no staging left behind"
-        );
+        assert_eq!(entries(&plugins), 1, "no staging left behind");
 
         // A tampered file is refused and the installed copy stays.
         std::fs::write(catalog.join("quick-sweep/effects.json"), "{}").unwrap();
         let err = offer.install_into(&plugins).unwrap_err();
         assert!(err.contains("不一致"), "{err}");
         assert!(plugin::check(&at).is_ok());
-        assert_eq!(std::fs::read_dir(&plugins).unwrap().count(), 1);
+        assert_eq!(entries(&plugins), 1);
         let _ = std::fs::remove_dir_all(&catalog);
         let _ = std::fs::remove_dir_all(&plugins);
     }
@@ -1001,7 +1199,7 @@ mod tests {
         std::fs::rename(plugins.join("other"), plugins.join("quick-sweep")).unwrap();
         let err = offer.install_into(&plugins).unwrap_err();
         let kept = plugin::check(&plugins.join("quick-sweep")).map(|p| p.id);
-        let entries = std::fs::read_dir(&plugins).unwrap().count();
+        let entries = entries(&plugins);
         let _ = std::fs::remove_dir_all(&catalog);
         let _ = std::fs::remove_dir_all(&plugins);
         assert!(err.contains("占用"), "{err}");
@@ -1085,7 +1283,7 @@ mod tests {
         .unwrap_err();
         let kept = plugin::check(&plugins.join("h")).unwrap().version;
         let hooks = std::fs::read_to_string(plugins.join("h/hooks.json")).unwrap();
-        let entries = std::fs::read_dir(&plugins).unwrap().count();
+        let entries = entries(&plugins);
         let _ = std::fs::remove_dir_all(&catalog);
         let _ = std::fs::remove_dir_all(&plugins);
         assert!(err.contains("dne"), "{err}");
@@ -1112,7 +1310,7 @@ mod tests {
         offer.entry.network = Some(false);
         let network = offer.prepare(&plugins).unwrap_err();
         let ok = honest.prepare(&plugins).map(|p| p.disclosure.clone());
-        let entries = std::fs::read_dir(&plugins).unwrap().count();
+        let entries = entries(&plugins);
         let _ = std::fs::remove_dir_all(&catalog);
         let _ = std::fs::remove_dir_all(&plugins);
         assert!(touches.contains("~/.ssh/config"), "{touches}");
@@ -1201,5 +1399,195 @@ mod tests {
             more_added.iter().any(|l| l.contains("evil on")),
             "{more_added:?}"
         );
+    }
+
+    /// An update whose setup fails puts the old version back; a first install's stays off.
+    /// Both undo what the failed setup did, and neither counts as installed.
+    #[test]
+    fn a_setup_that_fails_never_counts_as_installed() {
+        let catalog = tmp("setup-fails");
+        let plugins = tmp("setup-fails-into");
+        let done = catalog.join("undone");
+        const ONE: &str = r#"{"api":1,"id":"f","name":"F","version":"1.0.0","provides":["setup"]}"#;
+        const TWO: &str = r#"{"api":1,"id":"f","name":"F","version":"2.0.0","provides":["setup"]}"#;
+        let fails = format!(
+            r#"{{"api":1,"setup":"exit 9","teardown":"touch {}"}}"#,
+            done.display()
+        );
+        let works = r#"{"api":1,"setup":"true","teardown":"true"}"#;
+        // First install, failing.
+        let err = offer_of(&catalog, ONE, &[("setup.json", &fails)])
+            .install_into(&plugins)
+            .unwrap_err();
+        assert!(
+            err.contains("没有启用") && err.contains("退出码 9"),
+            "{err}"
+        );
+        assert!(plugin::turned_off(&plugins, "f"));
+        assert!(done.exists(), "its teardown ran");
+        // Fixed and turned on; then an update whose setup fails.
+        offer_of(&catalog, ONE, &[("setup.json", works)])
+            .install_into(&plugins)
+            .unwrap();
+        plugin::set_enabled_in(&plugins, "f", true, false).unwrap();
+        let err = offer_of(&catalog, TWO, &[("setup.json", &fails)])
+            .install_into(&plugins)
+            .unwrap_err();
+        assert!(err.contains("旧版还在"), "{err}");
+        let kept = plugin::check(&plugins.join("f")).unwrap();
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert_eq!(kept.version.as_deref(), Some("1.0.0"));
+    }
+
+    /// A version that drops its setup: the old teardown runs before its files are gone, and
+    /// if it cannot, the update does not happen.
+    #[test]
+    fn dropping_setup_in_an_update_undoes_it_first() {
+        let catalog = tmp("drops-setup");
+        let plugins = tmp("drops-setup-into");
+        let wrapped = catalog.join("wrapped");
+        const EFFECT: &str = r#"{"api":1,"complete":{"style":"sweep"}}"#;
+        let v1 = |teardown: String| {
+            format!(
+                r#"{{"api":1,"setup":"touch {}","teardown":"{teardown}"}}"#,
+                wrapped.display()
+            )
+        };
+        const ONE: &str =
+            r#"{"api":1,"id":"w","name":"W","version":"1.0.0","provides":["setup","effects"]}"#;
+        let two = || {
+            offer_of(
+                &catalog,
+                r#"{"api":1,"id":"w","name":"W","version":"2.0.0","provides":["effects"]}"#,
+                &[("effects.json", EFFECT)],
+            )
+        };
+        offer_of(
+            &catalog,
+            ONE,
+            &[
+                ("setup.json", &v1("exit 3".into())),
+                ("effects.json", EFFECT),
+            ],
+        )
+        .install_into(&plugins)
+        .unwrap();
+        let err = two().install_into(&plugins).unwrap_err();
+        assert!(
+            err.contains("没有更新") && err.contains("退出码 3"),
+            "{err}"
+        );
+        assert_eq!(
+            plugin::check(&plugins.join("w"))
+                .unwrap()
+                .version
+                .as_deref(),
+            Some("1.0.0")
+        );
+        offer_of(
+            &catalog,
+            ONE,
+            &[
+                ("setup.json", &v1(format!("rm {}", wrapped.display()))),
+                ("effects.json", EFFECT),
+            ],
+        )
+        .install_into(&plugins)
+        .unwrap();
+        assert!(wrapped.exists());
+        two().install_into(&plugins).unwrap();
+        let (gone, version) = (
+            !wrapped.exists(),
+            plugin::check(&plugins.join("w")).unwrap().version,
+        );
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(gone, "the old teardown ran");
+        assert_eq!(version.as_deref(), Some("2.0.0"));
+    }
+
+    /// Someone's own plugin under the same id, files no package put there, another catalog:
+    /// each is asked about even though an animation alone would not be.
+    #[test]
+    fn replacing_something_of_someone_elses_is_asked_about() {
+        let catalog = tmp("replacing");
+        let plugins = tmp("replacing-into");
+        const EFFECT: &str = r#"{"api":1,"complete":{"style":"sweep"}}"#;
+        // Written by hand, with notes beside it.
+        let mine = plugins.join("m");
+        std::fs::create_dir_all(&mine).unwrap();
+        std::fs::write(
+            mine.join("plugin.json"),
+            r#"{"api":1,"id":"m","name":"我的","version":"0.1.0","provides":["effects"]}"#,
+        )
+        .unwrap();
+        std::fs::write(mine.join("effects.json"), EFFECT).unwrap();
+        std::fs::write(mine.join("NOTES.md"), "notes").unwrap();
+        let offer = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"m","name":"别人的","version":"9.0.0","provides":["effects"]}"#,
+            &[("effects.json", EFFECT)],
+        );
+        let asked = offer.prepare(&plugins).unwrap();
+        let lines = asked.lines().join("\n");
+        assert!(asked.must_ask);
+        assert!(
+            lines.contains("NOTES.md") && lines.contains("别人的"),
+            "{lines}"
+        );
+        asked.commit().unwrap();
+        // Now recorded as from the official catalog; the same from elsewhere is a change.
+        let mut other = offer.clone();
+        other.entry.version = "9.1.0".into();
+        other.source = Source::Remote("https://other.invalid/p".into());
+        let from = other.replacing_for_test(&plugins);
+        let same = offer.prepare(&plugins).unwrap().must_ask;
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(
+            from.iter().any(|l| l.contains("https://other.invalid/p")),
+            "{from:?}"
+        );
+        assert!(
+            !same,
+            "the same package from the same place needs no question"
+        );
+    }
+
+    #[test]
+    fn what_a_crash_left_is_cleared_and_a_lost_plugin_comes_back() {
+        let plugins = tmp("recover");
+        // A pid no process has: the highest possible, far above macOS's limit.
+        let dead = 99_999_999;
+        std::fs::create_dir_all(plugins.join(format!(".installing-a-b-{dead}-0"))).unwrap();
+        std::fs::create_dir_all(plugins.join(format!(".replaced-lost-{dead}"))).unwrap();
+        std::fs::write(plugins.join(format!(".replaced-lost-{dead}/keep")), "x").unwrap();
+        std::fs::create_dir_all(plugins.join(format!(".replaced-here-{dead}"))).unwrap();
+        std::fs::create_dir_all(plugins.join("here")).unwrap();
+        recover(&plugins);
+        let keep = plugins.join("lost/keep").exists();
+        let hidden = std::fs::read_dir(&plugins)
+            .unwrap()
+            .filter(|e| {
+                let n = e.as_ref().unwrap().file_name();
+                let n = n.to_string_lossy();
+                n.starts_with('.') && n != ".lock"
+            })
+            .count();
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(keep);
+        assert_eq!(hidden, 0);
+    }
+
+    impl Offer {
+        /// What `prepare` would say about replacing, without fetching a remote's files.
+        fn replacing_for_test(&self, plugins: &Path) -> Vec<String> {
+            let old = plugin::discover(plugins)
+                .into_iter()
+                .find_map(|f| f.result.ok().filter(|o| o.id == self.entry.id))
+                .unwrap();
+            replacing(plugins, &old, &old, &self.entry, &self.origin_key())
+        }
     }
 }

@@ -205,7 +205,7 @@ struct File {
     hooks: Vec<Hook>,
 }
 
-fn read(file: &Path, taken: &[Hook]) -> Result<Vec<Hook>, String> {
+fn read(file: &Path) -> Result<Vec<Hook>, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
     // An event this build does not know is skipped, not the whole file: a plugin written for
     // a newer Mooring keeps working for the events both know.
@@ -244,8 +244,10 @@ fn read(file: &Path, taken: &[Hook]) -> Result<Vec<Hook>, String> {
                 h.id
             ));
         }
-        if taken.iter().chain(before.iter()).any(|t| t.id == h.id) {
-            return Err(format!("hook id \"{}\" 和前面的插件重名", h.id));
+        // Inside its own plugin only: nothing stores a hook's id, so two plugins' hooks may
+        // share a name, and installing one can never break another.
+        if before.iter().any(|t| t.id == h.id) {
+            return Err(format!("hook id \"{}\" 重名", h.id));
         }
         if h.on.is_empty() && !empty_after_skip[i] {
             return Err(format!("hook {} 的 on 至少写一个事件", h.id));
@@ -280,7 +282,7 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Hook>, Vec<Loaded>) {
     let mut hooks: Vec<Hook> = Vec::new();
     let mut report = Vec::new();
     for file in files {
-        let result = read(&file, &hooks);
+        let result = read(&file);
         report.push(Loaded {
             file: file.clone(),
             result: result
@@ -362,7 +364,7 @@ mod tests {
         );
         let dup = write(
             "e.json",
-            r#"{"api":1,"hooks":[{"id":"say","on":["done"],"command":"true"}]}"#,
+            r#"{"api":1,"hooks":[{"id":"x","on":["done"],"command":"true"},{"id":"x","on":["done"],"command":"true"}]}"#,
         );
         let long = write(
             "f.json",

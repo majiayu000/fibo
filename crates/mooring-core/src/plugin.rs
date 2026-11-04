@@ -251,7 +251,13 @@ static CONFIG: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// until `reload`.
 pub fn install(config: &Path) -> &'static [Found] {
     let _ = CONFIG.set(config.to_owned());
-    INSTALLED.get_or_init(|| discover(&dir(config)))
+    INSTALLED.get_or_init(|| {
+        let plugins = dir(config);
+        if plugins.is_dir() {
+            crate::market::recover(&plugins);
+        }
+        discover(&plugins)
+    })
 }
 
 /// The config directory `install` was given.
@@ -289,43 +295,116 @@ pub fn installed(id: &str) -> Option<&'static Plugin> {
         .find(|p| p.id == id)
 }
 
-/// Removes an installed plugin's directory and its switch. Only a directory directly
-/// under the plugins folder whose `plugin.json` names this id is removed.
-pub fn uninstall(id: &str) -> Result<(), String> {
-    if !valid_id(id) {
-        return Err(format!("id \"{id}\" 不合法"));
+/// Held while plugins are installed, removed or switched: the app and a `mooring plugins` in
+/// a terminal must not swap the same directory at once. Released when dropped.
+pub(crate) fn lock(plugins: &Path) -> Result<std::fs::File, String> {
+    use std::os::fd::AsRawFd;
+    std::fs::create_dir_all(plugins).map_err(|e| format!("建不了插件目录：{e}"))?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(plugins.join(".lock"))
+        .map_err(|e| format!("打不开插件锁：{e}"))?;
+    // SAFETY: flock on a file this function just opened and returns.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(format!("拿不到插件锁：{}", std::io::Error::last_os_error()));
     }
+    Ok(file)
+}
+
+/// Removes an installed plugin's directory and its switch; on success, anything you should
+/// know about what is left. A plugin that does not load can be removed too, by its directory
+/// name, since nothing else could ever remove it; its teardown cannot run, and that is said.
+/// With `force`, a failing teardown no longer keeps it, and that is said too.
+pub fn uninstall(id: &str, force: bool) -> Result<Option<String>, String> {
     let plugins = dir(CONFIG.get().ok_or("找不到配置目录")?);
-    let found = discover(&plugins)
-        .into_iter()
-        .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
-        .ok_or_else(|| format!("没有装叫 {id} 的插件"))?;
-    if found.dir.parent() != Some(plugins.as_path()) {
-        return Err(format!("{} 不在插件目录里，没有删", found.dir.display()));
-    }
-    // What it set up is undone first; when that fails it stays, since what it changed
-    // may still need its files (a status line pointing at its script).
-    if found.result.as_ref().is_ok_and(|p| p.enabled) {
-        crate::setup::run(&plugins, &found.dir, crate::setup::Phase::Teardown)
-            .map_err(|e| format!("没有卸载：{e}"))?;
-    }
-    std::fs::remove_dir_all(&found.dir)
-        .map_err(|e| format!("删不掉 {}：{e}", found.dir.display()))?;
+    uninstall_in(&plugins, id, force)
+}
+
+pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<String>, String> {
+    let _held = lock(plugins)?;
+    let mut warnings = Vec::new();
+    let found = discover(plugins);
+    let loaded = found
+        .iter()
+        .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id));
+    let (target, data_id) = match loaded {
+        Some(f) => {
+            if f.dir.parent() != Some(plugins) {
+                return Err(format!("{} 不在插件目录里，没有删", f.dir.display()));
+            }
+            // What it set up is undone first; when that fails it stays, since what it
+            // changed may still need its files (a status line pointing at its script).
+            let p = f.result.as_ref().map_err(Clone::clone)?;
+            if p.enabled
+                && let Err(why) = crate::setup::run(plugins, &f.dir, crate::setup::Phase::Teardown)
+            {
+                if !force {
+                    return Err(format!("没有卸载：{why}"));
+                }
+                warnings.push(left_behind(&why, &p.touches));
+            }
+            (f.dir.clone(), id.to_owned())
+        }
+        None => {
+            // Not loading: only an exact directory of the plugins folder, by name.
+            let named = crate::market::safe_path(id)
+                .then(|| {
+                    found
+                        .iter()
+                        .find(|f| f.dir == plugins.join(id) && f.result.is_err())
+                })
+                .flatten();
+            let Some(f) = named else {
+                return Err(format!("没有装叫 {id} 的插件"));
+            };
+            if f.dir.join("setup.json").is_file() {
+                warnings
+                    .push("它加载不了，teardown 没有跑；它改过的别的程序的设置可能还在".to_owned());
+            }
+            (
+                f.dir.clone(),
+                declared_id(&f.dir).unwrap_or_else(|| id.to_owned()),
+            )
+        }
+    };
+    std::fs::remove_dir_all(&target).map_err(|e| format!("删不掉 {}：{e}", target.display()))?;
     // What it kept is gone with it; teardown has already put back what needed putting.
-    let data = crate::setup::data_dir(&plugins, id);
-    if data.is_dir() {
-        let _ = std::fs::remove_dir_all(&data);
+    let data = crate::setup::data_dir(plugins, &data_id);
+    if data.is_dir()
+        && let Err(e) = std::fs::remove_dir_all(&data)
+    {
+        warnings.push(format!("它的数据目录 {} 没删掉：{e}", data.display()));
     }
-    let mut off = disabled(&plugins);
-    if off.iter().any(|d| d == id) {
-        off.retain(|d| d != id);
-        std::fs::write(
-            switches(&plugins),
-            serde_json::to_vec_pretty(&off).unwrap_or_default(),
+    let mut off = disabled(plugins);
+    if off.iter().any(|d| *d == data_id) {
+        off.retain(|d| *d != data_id);
+        write_switches(plugins, &off).map_err(|e| format!("没能更新插件开关：{e}"))?;
+    }
+    Ok((!warnings.is_empty()).then(|| warnings.join("；")))
+}
+
+/// What a forced removal leaves: why teardown failed and what it says it had changed.
+fn left_behind(why: &str, touches: &[String]) -> String {
+    if touches.is_empty() {
+        format!("teardown 失败了（{why}），它改过的东西可能还在")
+    } else {
+        format!(
+            "teardown 失败了（{why}），这些文件可能还留着它的改动：{}",
+            touches.join("、")
         )
-        .map_err(|e| format!("没能更新插件开关：{e}"))?;
     }
-    Ok(())
+}
+
+/// The id a manifest names, read loosely: for a plugin that does not load.
+fn declared_id(dir: &Path) -> Option<String> {
+    let bytes = std::fs::read(dir.join("plugin.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value["id"]
+        .as_str()
+        .filter(|id| valid_id(id))
+        .map(str::to_owned)
 }
 
 /// `plugins/disabled.json`: the ids turned off in settings, as a JSON list.
@@ -348,31 +427,66 @@ pub fn enabled_next_start(id: &str) -> bool {
         .get()
         .is_none_or(|c| !disabled(&dir(c)).iter().any(|d| d == id))
 }
-/// Turns a plugin on or off; `reload` applies it to the running process.
-pub fn set_enabled(id: &str, on: bool) -> std::io::Result<()> {
-    let plugins = dir(CONFIG
-        .get()
-        .ok_or_else(|| std::io::Error::other("找不到配置目录"))?);
-    let mut off = disabled(&plugins);
+/// Turns a plugin on or off; `reload` applies it to the running process. A plugin whose
+/// setup fails stays off, with what it managed undone as far as its teardown can. A failing
+/// teardown keeps it on unless `force`: on, it still runs, so you must be able to stop it.
+pub fn set_enabled(id: &str, on: bool, force: bool) -> Result<Option<String>, String> {
+    let plugins = dir(CONFIG.get().ok_or("找不到配置目录")?);
+    set_enabled_in(&plugins, id, on, force)
+}
+
+pub fn set_enabled_in(
+    plugins: &Path,
+    id: &str,
+    on: bool,
+    force: bool,
+) -> Result<Option<String>, String> {
+    use crate::setup::Phase;
+    let _held = lock(plugins)?;
+    let mut off = disabled(plugins);
     let was_on = !off.iter().any(|d| d == id);
+    let mut warning = None;
     if was_on != on
-        && let Some(found) = discover(&plugins)
+        && let Some(f) = discover(plugins)
             .into_iter()
             .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
     {
-        let phase = if on {
-            crate::setup::Phase::Setup
-        } else {
-            crate::setup::Phase::Teardown
-        };
-        crate::setup::run(&plugins, &found.dir, phase).map_err(std::io::Error::other)?;
+        if on {
+            if let Err(why) = crate::setup::run(plugins, &f.dir, Phase::Setup) {
+                let _ = crate::setup::run(plugins, &f.dir, Phase::Teardown);
+                return Err(why);
+            }
+        } else if let Err(why) = crate::setup::run(plugins, &f.dir, Phase::Teardown) {
+            if !force {
+                return Err(why);
+            }
+            let touches = f.result.as_ref().map_or(&[][..], |p| p.touches.as_slice());
+            warning = Some(left_behind(&why, touches));
+        }
     }
     off.retain(|d| d != id);
     if !on {
         off.push(id.to_owned());
     }
-    std::fs::create_dir_all(&plugins)?;
-    std::fs::write(switches(&plugins), serde_json::to_vec_pretty(&off)?)
+    write_switches(plugins, &off).map_err(|e| format!("没能更新插件开关：{e}"))?;
+    Ok(warning)
+}
+
+/// Marks it off without running anything: its setup just failed, so its teardown has had
+/// its chance and turning it on later runs the setup again.
+pub(crate) fn mark_off(plugins: &Path, id: &str) -> std::io::Result<()> {
+    let mut off = disabled(plugins);
+    if !off.iter().any(|d| d == id) {
+        off.push(id.to_owned());
+    }
+    write_switches(plugins, &off)
+}
+
+fn write_switches(plugins: &Path, off: &[String]) -> std::io::Result<()> {
+    std::fs::create_dir_all(plugins)?;
+    let tmp = plugins.join(".disabled.json.tmp");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(off)?)?;
+    std::fs::rename(tmp, switches(plugins))
 }
 
 /// Every plugin directory's outcome since `install`; empty before it.
@@ -748,5 +862,95 @@ mod tests {
             "quota came in level 2"
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn with_setup(root: &Path, id: &str, setup: &str, teardown: &str) {
+        plugin(
+            root,
+            id,
+            &format!(
+                r#"{{"api":1,"id":"{id}","name":"x","provides":["setup"],"touches":["~/.x"]}}"#
+            ),
+            &[(
+                "setup.json",
+                &format!(r#"{{"api":1,"setup":"{setup}","teardown":"{teardown}"}}"#),
+            )],
+        );
+    }
+
+    /// A broken teardown must not trap a plugin: asked plainly it stays and says why, forced
+    /// it goes and says what may be left.
+    #[test]
+    fn a_failing_teardown_can_be_overruled() {
+        let config = tmp("stuck");
+        let plugins = dir(&config);
+        std::fs::create_dir_all(&plugins).unwrap();
+        with_setup(&plugins, "stuck", "true", "exit 3");
+        let err = set_enabled_in(&plugins, "stuck", false, false).unwrap_err();
+        assert!(err.contains("退出码 3"), "{err}");
+        assert!(!turned_off(&plugins, "stuck"));
+        let warned = set_enabled_in(&plugins, "stuck", false, true)
+            .unwrap()
+            .unwrap();
+        assert!(warned.contains("~/.x"), "{warned}");
+        assert!(turned_off(&plugins, "stuck"));
+        // Back on: its setup runs, and uninstalling meets the same teardown.
+        assert_eq!(set_enabled_in(&plugins, "stuck", true, false), Ok(None));
+        assert!(
+            uninstall_in(&plugins, "stuck", false)
+                .unwrap_err()
+                .contains("没有卸载")
+        );
+        assert!(plugins.join("stuck").exists());
+        let warned = uninstall_in(&plugins, "stuck", true).unwrap().unwrap();
+        assert!(warned.contains("~/.x"), "{warned}");
+        assert!(!plugins.join("stuck").exists());
+        let _ = std::fs::remove_dir_all(&config);
+    }
+
+    /// A plugin that does not load has nothing else that could ever remove it.
+    #[test]
+    fn a_plugin_that_does_not_load_can_be_removed_by_its_directory() {
+        let config = tmp("broken-remove");
+        let plugins = dir(&config);
+        plugin(
+            &plugins,
+            "broken",
+            r#"{"api":1,"id":"broken-id","name":"x","provides":["hooks"],"mooring":99}"#,
+            &[("setup.json", "{}")],
+        );
+        let data = crate::setup::data_dir(&plugins, "broken-id");
+        std::fs::create_dir_all(&data).unwrap();
+        for bad in ["../broken", "nothing", ".lock"] {
+            assert!(uninstall_in(&plugins, bad, false).is_err(), "{bad}");
+        }
+        let warned = uninstall_in(&plugins, "broken", false).unwrap().unwrap();
+        assert!(warned.contains("teardown"), "{warned}");
+        assert!(!plugins.join("broken").exists() && !data.exists());
+        let _ = std::fs::remove_dir_all(&config);
+    }
+
+    /// A setup that fails on the way on leaves it off and undoes what it did.
+    #[test]
+    fn a_setup_that_fails_when_turned_on_leaves_it_off() {
+        let config = tmp("on-fails");
+        let plugins = dir(&config);
+        std::fs::create_dir_all(&plugins).unwrap();
+        let mark = config.join("undone");
+        with_setup(
+            &plugins,
+            "p",
+            "exit 9",
+            &format!("touch {}", mark.display()),
+        );
+        std::fs::write(switches(&plugins), r#"["p"]"#).unwrap();
+        assert!(
+            set_enabled_in(&plugins, "p", true, false)
+                .unwrap_err()
+                .contains("退出码 9")
+        );
+        assert!(turned_off(&plugins, "p"));
+        assert!(mark.exists());
+        let _ = std::fs::remove_dir_all(&config);
     }
 }

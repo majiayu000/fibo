@@ -233,7 +233,7 @@ struct File {
     decorations: Vec<Decoration>,
 }
 
-fn read(file: &Path, taken: &[Decoration]) -> Result<Vec<Decoration>, String> {
+fn read(file: &Path) -> Result<Vec<Decoration>, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
     let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
@@ -252,8 +252,10 @@ fn read(file: &Path, taken: &[Decoration]) -> Result<Vec<Decoration>, String> {
                 d.id
             ));
         }
-        if taken.iter().chain(before.iter()).any(|t| t.id == d.id) {
-            return Err(format!("装饰 id \"{}\" 和前面的插件重名", d.id));
+        // Inside its own plugin only: nothing stores a decoration's id (the cache goes by
+        // position), so two plugins may share one and installing one cannot break another.
+        if before.iter().any(|t| t.id == d.id) {
+            return Err(format!("装饰 id \"{}\" 重名", d.id));
         }
         if d.command.trim().is_empty() {
             return Err(format!("装饰 {} 要写 command", d.id));
@@ -276,7 +278,7 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Decoration>, Vec<Loaded>) {
     let mut all: Vec<Decoration> = Vec::new();
     let mut report = Vec::new();
     for file in files {
-        let result = read(&file, &all);
+        let result = read(&file);
         report.push(Loaded {
             file: file.clone(),
             result: result
@@ -436,7 +438,7 @@ mod tests {
         );
         let dup = write(
             "d.json",
-            r#"{"api":1,"decorations":[{"id":"node","command":"true"}]}"#,
+            r#"{"api":1,"decorations":[{"id":"x","command":"true"},{"id":"x","command":"true"}]}"#,
         );
         let (all, report) = load(vec![good, fast, place, dup]);
         assert_eq!(all.len(), 2);

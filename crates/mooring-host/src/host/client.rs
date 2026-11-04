@@ -352,6 +352,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         }
         Request::ReloadPlugins => {
             mooring_core::plugin::reload();
+            let mut host = lock(shared)?;
+            host.recognition.plugins_revision += 1;
+            host.publish_status()?;
             Ok(Reply::Ok)
         }
         Request::ClientLeft { at } => {

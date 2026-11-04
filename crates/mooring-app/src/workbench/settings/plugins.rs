@@ -23,6 +23,9 @@ pub(in crate::workbench) struct Market {
     working: Option<String>,
     /// What the last install, update or removal did.
     done: Option<Result<String, String>>,
+    /// A plugin that would not go because its teardown failed: (id, name, whether removing
+    /// or only turning off). You may overrule that; it may have left something behind.
+    stuck: Option<(String, String, bool)>,
     /// A plugin setting being typed: plugin id, key, the field and its Enter/Esc events.
     editing: Option<(
         String,
@@ -313,38 +316,52 @@ impl SettingsView {
         cx.notify();
     }
     /// Off the UI thread: the plugin's `teardown` runs first and may take seconds.
-    fn uninstall(&mut self, id: String, name: String, cx: &mut Context<Self>) {
+    fn uninstall(&mut self, id: String, name: String, force: bool, cx: &mut Context<Self>) {
         self.market.working = Some(id.clone());
         self.market.done = None;
+        self.market.stuck = None;
         cx.notify();
         cx.spawn(async move |this, cx| {
+            let which = id.clone();
             let result = cx
-                .background_spawn(async move { plugin::uninstall(&id) })
+                .background_spawn(async move { plugin::uninstall(&which, force) })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.market.working = None;
-                this.market.done = Some(
-                    result
-                        .map(|()| format!("卸载了「{name}」"))
-                        .map_err(|e| format!("没卸掉「{name}」：{e}")),
-                );
+                if result.is_err() {
+                    this.market.stuck = Some((id, name.clone(), true));
+                }
+                this.market.done = Some(match result {
+                    Ok(None) => Ok(format!("卸载了「{name}」")),
+                    Ok(Some(w)) => Ok(format!("卸载了「{name}」。注意：{w}")),
+                    Err(e) => Err(format!("没卸掉「{name}」：{e}")),
+                });
                 this.plugins_changed(cx);
             });
         })
         .detach();
     }
     /// Off the UI thread, like `uninstall`: turning one on or off runs its setup or teardown.
-    fn switch_plugin(&mut self, id: String, on: bool, cx: &mut Context<Self>) {
+    fn switch_plugin(&mut self, id: String, on: bool, force: bool, cx: &mut Context<Self>) {
         self.market.working = Some(id.clone());
+        self.market.stuck = None;
         cx.notify();
         cx.spawn(async move |this, cx| {
+            let which = id.clone();
             let result = cx
-                .background_spawn(async move { plugin::set_enabled(&id, on) })
+                .background_spawn(async move { plugin::set_enabled(&which, on, force) })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.market.working = None;
-                if let Err(e) = result {
-                    this.text_error = Some(format!("没能切换插件：{e}"));
+                match result {
+                    Ok(None) => {}
+                    Ok(Some(w)) => this.market.done = Some(Ok(format!("停用了。注意：{w}"))),
+                    Err(e) if on => this.text_error = Some(format!("没能打开插件：{e}")),
+                    Err(e) => {
+                        let name = plugin::installed(&id).map_or(id.clone(), |p| p.name.clone());
+                        this.market.done = Some(Err(format!("没能停用「{name}」：{e}")));
+                        this.market.stuck = Some((id, name, false));
+                    }
                 }
                 this.plugins_changed(cx);
             });
@@ -445,7 +462,7 @@ impl SettingsView {
                     secondary(format!("complete-enable-{}", p.id), "打开并用这个").on_click(
                         cx.listener(move |this, _, _, cx| {
                             if this.market.working.is_none() {
-                                this.switch_plugin(id.clone(), true, cx);
+                                this.switch_plugin(id.clone(), true, false, cx);
                             }
                         }),
                     ),
@@ -538,6 +555,34 @@ impl SettingsView {
                     .into_any_element(),
             );
         }
+        // The teardown failed and it is still running: leave the decision to whoever reads why.
+        if let Some((id, name, removing)) = self.market.stuck.clone() {
+            let verb = if removing {
+                "仍然卸载"
+            } else {
+                "仍然停用"
+            };
+            installed.push(
+                self.row(
+                    installed.is_empty(),
+                    verb,
+                    "它撤回失败了，继续的话，它改过的东西可能会留下来",
+                    secondary(format!("plugin-force-{id}"), verb).on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            if this.market.working.is_some() {
+                                return;
+                            }
+                            if removing {
+                                this.uninstall(id.clone(), name.clone(), true, cx);
+                            } else {
+                                this.switch_plugin(id.clone(), false, true, cx);
+                            }
+                        },
+                    )),
+                )
+                .into_any_element(),
+            );
+        }
         let found = plugin::report();
         if found.is_empty() {
             installed.push(
@@ -557,12 +602,26 @@ impl SettingsView {
                     .dir
                     .file_name()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                // It cannot be turned off or updated, but it can always be taken away.
+                let (dir_name, shown) = (name.clone(), name.clone());
+                let remove = secondary(format!("plugin-remove-broken-{name}"), "移除")
+                    .when(busy, |b| b.opacity(0.5))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if this.market.working.is_none() {
+                            this.uninstall(dir_name.clone(), shown.clone(), false, cx);
+                        }
+                    }));
                 installed.push(
                     self.row(
                         first,
                         &name,
                         f.result.as_ref().err().map_or("", String::as_str),
-                        status(false, "没有加载".into()),
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(T::S8))
+                            .child(status(false, "没有加载".into()))
+                            .child(remove),
                     )
                     .into_any_element(),
                 );
@@ -641,7 +700,7 @@ impl SettingsView {
                         .when(busy, |b| b.opacity(0.5))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if this.market.working.is_none() {
-                                this.uninstall(id.clone(), name.clone(), cx);
+                                this.uninstall(id.clone(), name.clone(), false, cx);
                             }
                         })),
                 );
@@ -657,7 +716,7 @@ impl SettingsView {
             controls = controls.child(switch(format!("plugin-switch-{}", p.id), on).on_click(
                 cx.listener(move |this, _, _, cx| {
                     if this.market.working.is_none() {
-                        this.switch_plugin(id.clone(), !on, cx);
+                        this.switch_plugin(id.clone(), !on, false, cx);
                     }
                 }),
             ));
