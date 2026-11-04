@@ -87,7 +87,7 @@ else:
     s = json.loads(STATE.read_text()); root = pathlib.Path(s['root']); home = pathlib.Path(s['home'])
     if cmd == 'probe':
         bindir = pathlib.Path(sys.argv[2]); out = pathlib.Path(sys.argv[3]).resolve(); out.mkdir(parents=True, exist_ok=True)
-        env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8', 'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', 'MOORING_CPU_PROBE': sys.argv[4], 'PERF_DROP': os.environ.get('PERF_DROP', ''), **({'MOORING_NO_CATCH_UP': '1'} if os.environ.get('MOORING_NO_CATCH_UP') else {})}
+        env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8', 'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', 'MOORING_CPU_PROBE': sys.argv[4], 'PERF_DROP': os.environ.get('PERF_DROP', ''), **({'MOORING_PERF_NO_COUNTER': '1'} if os.environ.get('MOORING_PERF_NO_COUNTER') else {}), **({'MOORING_NO_CATCH_UP': '1'} if os.environ.get('MOORING_NO_CATCH_UP') else {})}
         r = subprocess.run([str(bindir / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(out)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         (out / 'app.log').write_bytes(r.stdout)
         print((out / 'cpu.txt').read_text() if (out / 'cpu.txt').exists() else r.stdout.decode()[-3000:])

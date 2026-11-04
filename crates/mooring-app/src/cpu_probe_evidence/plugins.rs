@@ -186,7 +186,8 @@ pub(super) async fn run(
         };
         if Workbench::visual_stage_asked() > 0 {
             played += 1;
-            if ins > worst.2 {
+            // A virtual machine counts no instructions: then time is all there is to go by.
+            if ins > worst.2 || (ins == worst.2 && ms > worst.1) {
                 worst = (style, ms, ins);
             }
         }

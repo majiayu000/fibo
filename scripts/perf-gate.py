@@ -94,6 +94,8 @@ def main():
     if not wanted <= set(costs) or not {'frames-probefull', 'frames-probepane', 'frames-cardplay'} <= set(plugin_ms):
         fails.append(f'no plugin page numbers in the probe output: {sorted(costs)}')
     measured.update({k: float(costs[k]) for k in wanted & set(costs)})
+    if plugin_ms.get('frames-cardplay', 0) <= 0:
+        fails.append(f"a playing card measured {plugin_ms.get('frames-cardplay')} ms: the gate measured nothing")
     played = re.search(r'the costliest of (\d+):', plugin_text)
     if not played or int(played.group(1)) < 16:
         fails.append(f'animation cards did not play: {played.group(0) if played else "no count"}')

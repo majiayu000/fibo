@@ -40,6 +40,10 @@ fn cpu_secs() -> f64 {
 /// Instructions this process retired: unlike CPU time, the same work counts the same
 /// on a busy machine, on an efficiency core or at a lower clock.
 fn instructions() -> u64 {
+    // The gate's way to take a virtual machine's path on real hardware, all the way down.
+    if std::env::var_os("MOORING_PERF_NO_COUNTER").is_some() {
+        return 0;
+    }
     let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
     let buffer = (&raw mut info).cast::<libc::rusage_info_t>();
     // SAFETY: the kernel writes one rusage_info_v4 into the local handed to it.
