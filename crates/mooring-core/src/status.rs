@@ -16,8 +16,8 @@ pub enum Status {
     Waiting,
     Error,
     Running,
-    /// The turn ended but something it started still runs (a shell, a monitor, a
-    /// scheduled wakeup) and may bring it back. Counts with 在跑.
+    /// The turn ended and only a server, a monitor or a scheduled wakeup it left is still
+    /// alive. Counts with 要你处理 (a shell that will end keeps the session 在跑).
     Background,
     /// The turn ended; whether the work is done is yours to say (2026-11-02).
     Review,
