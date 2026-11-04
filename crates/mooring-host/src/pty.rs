@@ -412,27 +412,30 @@ mod env_tests {
         let mut text = String::new();
         let mut buf = [0u8; 4096];
         let mut deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        let mut exited = false;
+        let (mut exited, mut last) = (None, None);
         loop {
             match out.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => text.push_str(&String::from_utf8_lossy(&buf[..n])),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    // The child can exit before its output reaches the terminal (a slow CI
-                    // runner read nothing): keep reading a moment after it exits.
-                    if !exited && child.try_wait().unwrap().is_some() {
-                        exited = true;
-                        deadline =
-                            std::time::Instant::now() + std::time::Duration::from_millis(500);
+                // A slow CI runner read nothing here: keep reading through errors and a
+                // moment past the child's exit, and say what happened if it still fails.
+                Err(e) => {
+                    last = Some(e);
+                    if exited.is_none() {
+                        exited = child.try_wait().unwrap();
+                        if exited.is_some() {
+                            deadline =
+                                std::time::Instant::now() + std::time::Duration::from_millis(500);
+                        }
                     }
                     if std::time::Instant::now() > deadline {
                         break;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
-                Err(_) => break,
             }
         }
+        let text = format!("{text}\n(exit {exited:?}, last read error {last:?})");
         let _ = child.kill();
         assert!(text.contains("TERM=xterm-256color"), "{text}");
         assert!(

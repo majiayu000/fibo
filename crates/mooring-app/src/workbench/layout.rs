@@ -341,9 +341,8 @@ impl Workbench {
         // The turn bar: what this turn changed and how far its todo's criteria are, with
         // 退回 and the window's one solid button, 标记完成. Only while it waits for you
         // to check it.
-        let turn = review
-            .zip(status)
-            .filter(|(_, g)| *g == Status::Review && completing.is_none())
+        let turn = self
+            .shown_turn_bar(id, session, review, status)
             .map(|(s, g)| self.turn_bar(id, s, g, cx));
         let body =
             div()
@@ -579,8 +578,6 @@ impl Workbench {
                     |s| &mut s.panes,
                 ))
                 .child(self.completing_veil(id, style, t, &title, cx))
-                // The last slice of the run fades the whole pane out before it closes.
-                .opacity(Self::completing_opacity(style, t))
             });
         pane_box.into_any_element()
     }

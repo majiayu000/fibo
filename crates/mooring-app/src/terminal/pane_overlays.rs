@@ -126,3 +126,38 @@ pub(super) fn matches(
         }
     }
 }
+
+/// A shown cell with text: where its middle is in the window and its color.
+pub type Glyph = (gpui::Point<Pixels>, u32);
+
+/// What 标记完成's dissolve reads of the grid.
+impl super::Pane {
+    /// The window point at the middle of each shown cell with text, with its color, row
+    /// by row. For 标记完成's dissolve, which turns the text into specks.
+    pub fn glyph_cells(&self) -> Vec<Glyph> {
+        let (Some(bounds), Some(m)) = (self.bounds, self.metrics) else {
+            return vec![];
+        };
+        let mut cells = Vec::new();
+        for (row, line) in self.screen.cells.iter().enumerate() {
+            let runs = self.screen.rows.get(row).map(Vec::as_slice).unwrap_or(&[]);
+            for &(col, width, ch) in line {
+                if ch.is_whitespace() || ch == '\0' {
+                    continue;
+                }
+                let fg = runs
+                    .iter()
+                    .find(|r| col >= r.col && col < r.col + r.cols)
+                    .map_or(T::inverse(self.screen.background), |r| r.fg);
+                let x = bounds.left() + m.width * (col as f32 + width.max(1) as f32 / 2.);
+                let y = bounds.top() + m.height * (row as f32 + 0.5);
+                cells.push((gpui::point(x, y), fg));
+            }
+        }
+        cells
+    }
+    /// Where the grid was last painted, its row height and its ground.
+    pub fn grid_area(&self) -> Option<(gpui::Bounds<Pixels>, Pixels, u32)> {
+        Some((self.bounds?, self.metrics?.height, self.screen.background))
+    }
+}

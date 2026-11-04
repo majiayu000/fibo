@@ -38,9 +38,6 @@ const ASK_FLOAT_MS: u64 = 1500;
 /// few seconds (history may have dropped its oldest rows, moving the rest up).
 const ASK_LOCATE_MS: u64 = 500;
 const ASK_RELOCATE_MS: u64 = 3000;
-/// A shown cell with text: where its middle is in the window, its color and its width.
-pub type Glyph = (gpui::Point<Pixels>, u32, u16);
-
 pub struct Pane {
     terminal: String,
     socket: std::path::PathBuf,
@@ -615,31 +612,6 @@ impl Pane {
         }
     }
     /// The title the program set (OSC 0/2), e.g. a shell's "user@host: ~/dir" or vim's.
-    /// The window point at the middle of each shown cell with text, with its color and
-    /// width in cells, row by row; and the cell size. For 标记完成's
-    /// dissolve, which turns the text into specks.
-    pub fn glyph_cells(&self) -> (Vec<Glyph>, gpui::Size<Pixels>) {
-        let (Some(bounds), Some(m)) = (self.bounds, self.metrics) else {
-            return (vec![], gpui::size(px(0.), px(0.)));
-        };
-        let mut cells = Vec::new();
-        for (row, line) in self.screen.cells.iter().enumerate() {
-            let runs = self.screen.rows.get(row).map(Vec::as_slice).unwrap_or(&[]);
-            for &(col, width, ch) in line {
-                if ch.is_whitespace() || ch == '\0' {
-                    continue;
-                }
-                let fg = runs
-                    .iter()
-                    .find(|r| col >= r.col && col < r.col + r.cols)
-                    .map_or(T::inverse(self.screen.background), |r| r.fg);
-                let x = bounds.left() + m.width * (col as f32 + width.max(1) as f32 / 2.);
-                let y = bounds.top() + m.height * (row as f32 + 0.5);
-                cells.push((gpui::point(x, y), fg, width.max(1)));
-            }
-        }
-        (cells, gpui::size(m.width, m.height))
-    }
     pub fn program_title(&self) -> Option<String> {
         self.connection.state.lock().ok()?.vt.as_ref()?.title()
     }
