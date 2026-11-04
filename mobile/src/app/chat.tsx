@@ -16,7 +16,8 @@ import {
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { catchUp } from '@/remote/gap';
-import { refresh, remote, useHub } from '@/remote/hub';
+import { refresh, remote, useHub, write } from '@/remote/hub';
+import { UNSURE } from '@/remote/named';
 import { cardTitle } from '@/ui/format';
 import { Markdown } from '@/ui/markdown';
 import { type Theme, ago, useTheme } from '@/ui/theme';
@@ -167,11 +168,12 @@ export default function Chat() {
     setDraft('');
     setPending((p) => [...p, { text, at: Date.now() / 1000 }]);
     try {
-      await r.request('send', { terminal, text, enter: true });
+      await write(machine, 'send', { terminal, text, enter: true });
     } catch (e) {
       setPending((p) => p.filter((x) => x.text !== text));
       setDraft(text);
-      setError(`没发出去：${(e as Error).message}`);
+      const why = (e as Error).message;
+      setError(why === UNSURE ? why : `没发出去：${why}`);
     }
   }
 
@@ -179,7 +181,7 @@ export default function Chat() {
     const r = remote(machine);
     if (!r) return;
     try {
-      await r.request(op, { terminal, ...fields });
+      await write(machine, op, { terminal, ...fields });
       setError('');
       setTimeout(() => refresh(machine), 300);
     } catch (e) {

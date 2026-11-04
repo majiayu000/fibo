@@ -6145,7 +6145,7 @@ fn the_js_phone_client_chats_through_a_real_relay() {
     fs::write(&reply, format!("{}\n", agent("a1", "收到手机的消息"))).unwrap();
     let got = h.root.join("got");
     let script = format!(
-        "cat {seed} > {log}; read -r line; printf '%s' \"$line\" > {got}; cat {reply} >> {log}; read -r end",
+        "cat {seed} > {log}; read -r line; printf '%s' \"$line\" > {got}; cat {reply} >> {log}; while read -r more; do printf '%s' \"$more\" >> {got}; done",
         seed = shell_quote(&seed.to_string_lossy()),
         log = shell_quote(&path.to_string_lossy()),
         got = shell_quote(&got.to_string_lossy()),
@@ -6204,6 +6204,8 @@ fn the_js_phone_client_chats_through_a_real_relay() {
         .as_str()
         .unwrap()
         .contains("terminal 或 session"));
+    assert_eq!(seen["pong"], json!({}));
+    // Sent again under the same request id after a reconnect: typed once.
     assert_eq!(fs::read_to_string(&got).unwrap(), "手机发来的话");
 }
 

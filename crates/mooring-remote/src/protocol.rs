@@ -127,6 +127,8 @@ pub enum Op {
     Close {
         stream: u64,
     },
+    /// Answered `{}` at once: a client's heartbeat, to find a link that died quietly.
+    Ping,
 }
 
 impl Op {
@@ -147,6 +149,7 @@ impl Op {
             Self::End { .. } => "end",
             Self::Outcome { .. } => "outcome",
             Self::Close { .. } => "close",
+            Self::Ping => "ping",
         }
     }
 }
@@ -154,7 +157,7 @@ impl Op {
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
     "hello", "list", "read", "send", "keys", "input", "answer", "chat", "events", "watch",
-    "resize", "open", "end", "outcome", "close",
+    "resize", "open", "end", "outcome", "close", "ping",
 ];
 
 /// A line from the machine.
@@ -220,8 +223,9 @@ pub enum StreamBody {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
     /// started, waiting, error, done, approval, approval_gone, terminal_started,
-    /// terminal_exited, command_done, command_failed, or lagged (events were lost:
-    /// `list` again).
+    /// terminal_exited, session_switched (a terminal now shows another conversation:
+    /// `session` is it, `detail` the one before), command_done, command_failed, or
+    /// lagged (events were lost: `list` again).
     pub event: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal: Option<String>,
