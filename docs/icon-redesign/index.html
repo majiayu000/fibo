@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mooring 图标方向</title>
+<style>
+:root{--bg:#f6f5f2;--fg:#1d2026;--muted:#6b6f78;--line:#dddbd5;--card:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#191c21;--fg:#e9e8e4;--muted:#979ba4;--line:#30343b;--card:#21252c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"PingFang SC",sans-serif}
+main{max-width:1080px;margin:auto;padding:40px 24px 80px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:19px;margin:0}
+p{margin:0}
+.lead{color:var(--muted);max-width:68ch}
+.goal{margin-top:18px;padding:12px 14px;border-left:3px solid #d9482a;background:var(--card);max-width:76ch}
+section{margin-top:28px;padding:24px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.tag{font-size:12px;color:#fff;background:#d9482a;border-radius:4px;padding:0 6px}
+.why{color:var(--muted);margin-top:4px;max-width:76ch}
+.grid{display:grid;grid-template-columns:220px 1fr;gap:28px;margin-top:20px}
+.hero svg,.hero img{width:220px;height:220px;display:block}
+.label{font-size:12px;color:var(--muted);margin:0 0 8px}
+.sizes{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.sizes figure{margin:0;text-align:center}
+.sizes figcaption{font-size:11px;color:var(--muted);margin-top:4px}
+.sizes svg,.sizes img{display:block;margin:auto}
+.bars{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
+.bar{height:24px;border-radius:5px;display:flex;align-items:center;justify-content:flex-end;gap:13px;padding:0 10px;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden}
+.bar.light{background:#ececee;color:#111}
+.bar.dark{background:#2b2d33;color:#fff}
+.bar svg{display:block;flex:none}
+.tray{display:flex;align-items:center;gap:3px}
+.zoom{display:flex;gap:18px;flex-wrap:wrap;margin-top:20px}
+.zoom figure{margin:0}
+.zoom canvas{width:108px;height:108px;image-rendering:pixelated;display:block;border-radius:4px;border:1px solid var(--line)}
+.zoom figcaption{font-size:11px;color:var(--muted);margin-top:4px}
+.note{margin-top:16px;color:var(--muted);font-size:14px;max-width:76ch}
+@media (max-width:720px){main{padding:24px 16px 60px}section{padding:16px}.grid{grid-template-columns:1fr}.hero svg,.hero img{width:160px;height:160px}.bars{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<h1>Mooring 图标方向</h1>
+<p class="lead">三个方向都放到真实尺寸和菜单栏里比较。托盘图是模板图，只有单色，跟着系统明暗变。</p>
+<p class="goal"><b>要定的事：</b>哪个形状同时当 Dock 图标和托盘图标。<br><b>放弃条件：</b>托盘 18pt（一倍屏）认不出，或混在系统图标里找不到。</p>
+
+<div id="out"></div>
+</main>
+<script>
+const INK='#f3ecdd',SEAL='#e5502e',PAPER='#f7f2e8',DARK='#22262d';
+
+// macOS's tile: 824 on a 1024 canvas, continuous corners.
+function squircle(){
+  const c=512,a=412,n=5,pts=[];
+  for(let i=0;i<180;i++){const t=i/180*2*Math.PI,x=Math.cos(t),y=Math.sin(t);
+    pts.push((c+a*Math.sign(x)*Math.abs(x)**(2/n)).toFixed(1)+' '+(c+a*Math.sign(y)*Math.abs(y)**(2/n)).toFixed(1))}
+  return 'M'+pts.join('L')+'Z';
+}
+const TILE=squircle();
+let uid=0;
+
+// Two strands coming in from the left and wrapping a post: a mooring eye, which is also a ">".
+function eyePath(cx,cy,r,px,top,bot){
+  const tan=(py,sign)=>{const dx=px-cx,dy=py-cy,d=Math.hypot(dx,dy),a=Math.atan2(dy,dx)+sign*Math.acos(r/d);return [cx+r*Math.cos(a),cy+r*Math.sin(a)]};
+  const [ax,ay]=tan(top,1),[bx,by]=tan(bot,-1);
+  return `M${px} ${top}L${ax.toFixed(2)} ${ay.toFixed(2)}A${r} ${r} 0 0 1 ${bx.toFixed(2)} ${by.toFixed(2)}L${px} ${bot}`;
+}
+function ringPath(cx,cy,r,from,to){
+  const p=a=>[cx+r*Math.cos(a*Math.PI/180),cy+r*Math.sin(a*Math.PI/180)].map(v=>v.toFixed(2)).join(' ');
+  return `M${p(from)}A${r} ${r} 0 1 1 ${p(to)}`;
+}
+
+const D={
+  eye:{
+    name:'A　绕桩',tag:'推荐',
+    why:'缆绳的绳眼套在系缆桩上，俯视正好是一个 >。一个形状同时说了“系泊”和“终端”。连不上后台时桩消失，状态长在标志里，不用再加符号。代价是新形状要重新认，单看托盘图也可能先被看成一只眼睛。',
+    dock(){const id='g'+uid++;return `<svg viewBox="0 0 1024 1024" WH><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e343f"/><stop offset="1" stop-color="#171b22"/></linearGradient></defs><path d="${TILE}" fill="url(#${id})"/><path d="${eyePath(610,512,150,262,236,788)}" fill="none" stroke="${INK}" stroke-width="80" stroke-linecap="round"/><circle cx="610" cy="512" r="62" fill="${SEAL}"/></svg>`},
+    tray(off){return `<svg viewBox="0 0 18 18" WH fill="none" stroke="currentColor"><path d="${eyePath(11.5,9,4.4,2.4,2.4,15.6)}" stroke-width="1.6" stroke-linecap="round"/>${off?'':'<circle cx="11.5" cy="9" r="1.75" fill="currentColor" stroke="none"/>'}</svg>`},
+  },
+  ring:{
+    name:'B　留墨环',
+    why:'Dock 图保持现在这张，托盘用同一个缺口环加一枚小印，连不上后台时小印消失。改动最小，已经认熟的样子不丢。缺点是形状没说明产品做什么；到了托盘大小更像“刷新/加载中”的转圈，尤其小印消失时。',
+    dockImg:'../../crates/mooring-app/assets/dock-ink.png',
+    tray(off){const a=-46;const x=9+6.6*Math.cos(a*Math.PI/180),y=9+6.6*Math.sin(a*Math.PI/180);return `<svg viewBox="0 0 18 18" WH fill="none" stroke="currentColor"><path d="${ringPath(9,9,6.6,-6,-86)}" stroke-width="1.8" stroke-linecap="round"/>${off?'':`<rect x="${(x-1.6).toFixed(2)}" y="${(y-1.1).toFixed(2)}" width="3.2" height="2.2" rx=".5" transform="rotate(${a} ${x.toFixed(2)} ${y.toFixed(2)})" fill="currentColor" stroke="none"/>`}</svg>`},
+  },
+  m:{
+    name:'C　一笔 M',
+    why:'一根缆绳写成 M，右脚落在一个浮标上。直接替换掉托盘的 K，看名字就对得上，也最容易认；连不上后台时浮标消失。代价是字母图标最多，也和“终端”没关系；更要命的是右脚下的点读起来像感叹号，平时也像在报警。',
+    dock(){return `<svg viewBox="0 0 1024 1024" WH><path d="${TILE}" fill="${PAPER}"/><path d="M272 748V300L496 566L720 300V584" fill="none" stroke="${DARK}" stroke-width="84" stroke-linecap="round" stroke-linejoin="round"/><circle cx="720" cy="716" r="62" fill="${SEAL}"/></svg>`},
+    tray(off){return `<svg viewBox="0 0 18 18" WH fill="none" stroke="currentColor"><path d="M2.6 15.2V3L8.2 9.6L13.8 3V9.6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>${off?'':'<circle cx="13.8" cy="13.6" r="1.9" fill="currentColor" stroke="none"/>'}</svg>`},
+  },
+};
+
+const wh=(s,n)=>s.replace('WH',`width="${n}" height="${n}"`);
+const wifi=`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 6.2a9.5 9.5 0 0 1 13 0M3.9 8.8a6 6 0 0 1 8.2 0M6.2 11.2a2.7 2.7 0 0 1 3.6 0"/></svg>`;
+const batt=`<svg width="25" height="13" viewBox="0 0 25 13"><rect x=".5" y=".5" width="21" height="12" rx="3.2" fill="none" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="15" height="9" rx="1.8" fill="currentColor"/><rect x="23" y="4.5" width="1.6" height="4" rx=".8" fill="currentColor" opacity=".5"/></svg>`;
+const search=`<svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="6.3" cy="6.3" r="4.6"/><path d="M10 10l3.6 3.6"/></svg>`;
+
+function bar(theme,tray){return `<div class="bar ${theme}"><span class="tray">${tray}</span>${search}${wifi}${batt}<span>周三 21:40</span></div>`}
+function bars(mark,offline){
+  const trio=['light','dark'].map(t=>[bar(t,mark),bar(t,mark+'<span>3</span>'),bar(t,offline)]);
+  return `<p class="label">菜单栏：平时 / 3 个要你处理 / 连不上后台</p><div class="bars">${[0,1,2].map(i=>trio[0][i]+trio[1][i]).join('')}</div>`;
+}
+function sizes(tile){
+  return `<p class="label">Dock 与窗口标题栏的真实尺寸（pt）</p><div class="sizes">${[128,64,48,32,20,16].map(n=>`<figure>${tile(n)}<figcaption>${n}</figcaption></figure>`).join('')}</div>`;
+}
+
+let html=`<section><div class="head"><h2>现在</h2></div><p class="why">托盘是文字 K，改名 Mooring 之后已经对不上。连不上后台时，K 前面多一个 9pt 空心圈。</p><div class="grid"><div class="hero"><img src="../../crates/mooring-app/assets/dock-ink.png" alt="现在的 Dock 图标"></div><div>${sizes(n=>`<img src="../../crates/mooring-app/assets/dock-ink.png" width="${n}" height="${n}" alt="">`)}<p class="label">菜单栏：平时 / 3 个要你处理 / 连不上后台</p><div class="bars">${[['K'],['K 3'],['<svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4.5" cy="4.5" r="3.25"/></svg>K']].map(([k])=>bar('light',k)+bar('dark',k)).join('')}</div></div></div></section>`;
+
+const zoomJobs=[];
+for(const [key,d] of Object.entries(D)){
+  const tile=n=>d.dockImg?`<img src="${d.dockImg}" width="${n}" height="${n}" alt="">`:wh(d.dock(),n);
+  const hero=d.dockImg?`<img src="${d.dockImg}" alt="">`:d.dock().replace('WH','');
+  const mark=wh(d.tray(false),18),off=wh(d.tray(true),18);
+  const id=k=>`z-${key}-${k}`;
+  zoomJobs.push([id('on'),d.tray(false),'#ececee','#111'],[id('off'),d.tray(true),'#ececee','#111'],[id('dk'),d.tray(false),'#2b2d33','#fff'],[id('2x'),d.tray(false),'#ececee','#111',2]);
+  html+=`<section><div class="head"><h2>${d.name}</h2>${d.tag?`<span class="tag">${d.tag}</span>`:''}</div><p class="why">${d.why}</p>
+  <div class="grid"><div class="hero">${hero}</div><div>${sizes(tile)}${bars(mark,off)}
+  <div class="zoom"><figure><canvas id="${id('on')}"></canvas><figcaption>18pt 一倍屏，放大 6 倍</figcaption></figure><figure><canvas id="${id('dk')}"></canvas><figcaption>深色菜单栏</figcaption></figure><figure><canvas id="${id('off')}"></canvas><figcaption>连不上后台</figcaption></figure><figure><canvas id="${id('2x')}"></canvas><figcaption>18pt 两倍屏</figcaption></figure></div>
+  </div></div></section>`;
+}
+document.getElementById('out').innerHTML=html;
+
+// Rasterize at the real pixel size, then enlarge without smoothing: what a 1x display actually shows.
+for(const [id,svg,bg,fg,scale=1] of zoomJobs){
+  const c=document.getElementById(id),px=18*scale;c.width=c.height=px;
+  const s=wh(svg,px).replace('<svg ','<svg xmlns="http://www.w3.org/2000/svg" ').replaceAll('currentColor',fg);
+  const img=new Image();
+  img.onload=()=>{const x=c.getContext('2d');x.fillStyle=bg;x.fillRect(0,0,px,px);x.drawImage(img,0,0,px,px)};
+  img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s);
+}
+</script>
+</body>
+</html>
