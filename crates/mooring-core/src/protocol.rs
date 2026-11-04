@@ -144,6 +144,9 @@ pub enum Request {
         #[serde(default)]
         before: Option<i64>,
         limit: usize,
+        /// Each Agent message also carries its [`ChatTools`].
+        #[serde(default)]
+        tools: bool,
     },
     /// Scripts and other Agents: the last `rows` rows of a terminal as plain text.
     ReadScreen {
@@ -171,8 +174,19 @@ pub enum Request {
         question: String,
         allow: bool,
     },
+    /// As `AnswerApproval` allowing, but takes the menu's 「don't ask again」 option
+    /// (this session, this command); refused when the menu shows none.
+    AnswerAlways {
+        id: String,
+        question: String,
+    },
+    /// Ctrl-C, the window's 中断, only while the conversation in the terminal is working:
+    /// what its turn was at that moment decides, not what a client saw earlier.
+    Interrupt {
+        id: String,
+    },
     /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `SendInput`,
-    /// `AnswerApproval`) run
+    /// `AnswerApproval`, `AnswerAlways`, `Interrupt`) run
     /// at most once under `request`: a resend after a lost reply gets the first outcome
     /// back (a phone or another computer that reconnected). Edits name themselves.
     Once {
@@ -375,6 +389,17 @@ pub struct ChatMessage {
     /// The user's words; otherwise the Agent's.
     pub user: bool,
     pub text: String,
+    /// Asked for with `Chat`'s `tools`, on the Agent's messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<ChatTools>,
+}
+
+/// The tool calls logged between an Agent message and the message before it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatTools {
+    pub commands: u32,
+    /// `(path, added, removed)`, in the order first touched.
+    pub files: Vec<(String, u32, u32)>,
 }
 
 /// A running terminal passed from one host to the next.

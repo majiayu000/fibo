@@ -15,13 +15,13 @@ function inline(text: string, t: Theme): ReactNode[] {
     if (m.index! > at) out.push(text.slice(at, m.index));
     const [whole, code, bold, em, link] = m;
     const k = out.length;
-    if (code) out.push(<Text key={k} style={[s.code, { backgroundColor: t.bg }]}>{code.slice(1, -1)}</Text>);
+    if (code) out.push(<Text key={k} style={[s.code, { backgroundColor: t.well }]}>{code.slice(1, -1)}</Text>);
     else if (bold) out.push(<Text key={k} style={{ fontWeight: '700' }}>{bold.slice(2, -2)}</Text>);
     else if (em) out.push(<Text key={k} style={{ fontStyle: 'italic' }}>{em.slice(1, -1)}</Text>);
     else if (link) {
       const [, label, url] = link.match(/^\[([^\]]+)\]\(([^)]+)\)$/)!;
       out.push(
-        <Text key={k} style={{ color: t.accent }} onPress={() => /^https?:/.test(url) && Linking.openURL(url)}>
+        <Text key={k} style={{ color: t.link }} onPress={() => /^https?:/.test(url) && Linking.openURL(url)}>
           {label}
         </Text>,
       );
@@ -33,14 +33,14 @@ function inline(text: string, t: Theme): ReactNode[] {
 }
 
 export function Markdown({ text, t, color }: { text: string; t: Theme; color: string }) {
-  const base = { color, fontSize: 15, lineHeight: 21 };
+  const base = { color, fontSize: 15, lineHeight: 24 };
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 8 }}>
       {blocks(text).map((b, i) => {
         switch (b.kind) {
           case 'code':
             return (
-              <Text key={i} selectable style={[s.block, { color, backgroundColor: t.bg, borderColor: t.line }]}>
+              <Text key={i} selectable style={[s.block, { color, backgroundColor: t.well, borderColor: t.line }]}>
                 {b.text}
               </Text>
             );
@@ -53,7 +53,7 @@ export function Markdown({ text, t, color }: { text: string; t: Theme; color: st
           case 'item':
             return (
               <View key={i} style={{ flexDirection: 'row', paddingLeft: b.depth * 14 }}>
-                <Text style={[base, { width: b.mark === '•' ? 14 : 22 }]}>{b.mark}</Text>
+                <Text style={[base, { width: b.mark === '•' ? 16 : 22 }]}>{b.mark}</Text>
                 <Text selectable style={[base, { flex: 1 }]}>
                   {inline(b.text, t)}
                 </Text>
@@ -81,10 +81,10 @@ export function Markdown({ text, t, color }: { text: string; t: Theme; color: st
   );
 }
 
-const mono = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' });
+const mono = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, Menlo, monospace' });
 
 const s = StyleSheet.create({
-  code: { fontFamily: mono, fontSize: 13 },
+  code: { fontFamily: mono, fontSize: 13, borderRadius: 5 },
   block: {
     fontFamily: mono,
     fontSize: 12,

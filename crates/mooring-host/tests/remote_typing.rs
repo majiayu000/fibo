@@ -273,6 +273,8 @@ fn another_desktop_opens_settles_and_ends() {
     let c = connect(&m.remote());
     let open = || Op::Open {
         cwd: Some("/tmp".into()),
+        agent: None,
+        prompt: None,
         request: Some("o1".into()),
     };
     let first = c.request(open(), T).unwrap();
@@ -355,6 +357,13 @@ fn another_desktop_opens_settles_and_ends() {
     .unwrap();
     c.request(settle("done", None, "s2"), T).unwrap();
     assert_eq!(outcome(workspace()), Outcome::Open);
+    // Put off from a phone: comes back by itself, an hour on.
+    c.request(settle("deferred", None, "s3"), T).unwrap();
+    let Outcome::Deferred { until, .. } = outcome(workspace()) else {
+        panic!("not deferred");
+    };
+    let left = until.saturating_sub(mooring_core::time::now());
+    assert!((3500..=3600).contains(&left), "{left}");
 
     let end = || Op::End {
         terminal: terminal.clone(),

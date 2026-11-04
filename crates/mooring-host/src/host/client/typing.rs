@@ -136,6 +136,21 @@ pub(in crate::host) fn type_input(shared: &Shared, id: &str, bytes: &[u8]) -> io
     }
     typed(shared, id, bytes.contains(&b'\r'))
 }
+/// Ctrl-C (byte 3), the window's 中断, while the terminal's conversation is working. The
+/// Agent stays and can be asked to go on, unlike `StopAgent`, which ends its process.
+pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
+    let w = lock(shared)?.snapshot();
+    let session =
+        (w.current_agent(id)).ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话"))?;
+    let state = mooring_core::status::of(&w, session, mooring_core::content::now());
+    if state.phase() != mooring_core::status::Phase::Working {
+        return Err(io::Error::other(format!(
+            "Agent 现在是「{}」，没有要中断的",
+            state.label()
+        )));
+    }
+    type_input(shared, id, &[3])
+}
 /// Same as typing in the app: the prompt on screen is no longer waiting on the user, and
 /// Enter submits.
 fn typed(shared: &Shared, id: &str, entered: bool) -> io::Result<()> {

@@ -348,6 +348,43 @@ impl Adapter for Codex {
     }
 }
 
+/// The files a Codex `exec` call's script patches: it is JavaScript calling
+/// `tools.apply_patch("…")`, the edits' only trace among the indexed records (its commands
+/// have their own, `CommandExecution`). A patch built at run time cannot be read here.
+pub(crate) fn script_patches(script: &str) -> Vec<(String, u32, u32)> {
+    let mut files = Vec::new();
+    let mut left = script;
+    while let Some(at) = left.find("tools.apply_patch(") {
+        left = &left[at + "tools.apply_patch(".len()..];
+        if let Some((patch, tail)) = string_literal(left) {
+            files.extend(crate::content::patch_lines(&patch));
+            left = tail;
+        }
+    }
+    files
+}
+
+/// The JavaScript string at the start of `text`, unescaped, and what follows it.
+fn string_literal(text: &str) -> Option<(String, &str)> {
+    let text = text.trim_start();
+    let quote = text.chars().next().filter(|c| "\"'`".contains(*c))?;
+    let mut out = String::new();
+    let mut chars = text.char_indices().skip(1);
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '\\' => match chars.next()?.1 {
+                'n' => out.push('\n'),
+                't' => out.push('\t'),
+                'r' => out.push('\r'),
+                other => out.push(other),
+            },
+            c if c == quote => return Some((out, &text[i + c.len_utf8()..])),
+            c => out.push(c),
+        }
+    }
+    None
+}
+
 /// Codex's own title rules: "Action Required" while blocked,
 /// a braille spinner while working, anything else once idle. Status only, never identity.
 /// `token_count`'s `rate_limits`: the account's windows as Codex last heard them from the

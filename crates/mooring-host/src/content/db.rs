@@ -138,3 +138,18 @@ pub fn save_records(db: &Connection, path: &str, parser: &Parser) -> io::Result<
     }
     Ok(())
 }
+/// A tool call's arguments as its `tool_call` record keeps them: whole up to 8 KiB, else
+/// only the fields read later (`kept_input`: paths, the command, line counts), so a long
+/// Write still says which file it wrote and how many lines (the phone's `chat` `tools`).
+/// A long Codex `exec` keeps the files its script patches, read while the script is whole.
+pub(super) fn logged_args(name: &str, args: &Value) -> String {
+    let whole = args.to_string();
+    if whole.chars().count() <= 8192 {
+        return whole;
+    }
+    let mut kept = kept_input(args);
+    if let (true, Some(script)) = (name == "exec", args["input"].as_str()) {
+        kept[PATCHED] = json!(crate::agents::codex::script_patches(script));
+    }
+    kept.to_string()
+}

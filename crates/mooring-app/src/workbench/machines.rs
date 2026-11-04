@@ -250,6 +250,8 @@ impl Workbench {
         };
         let op = mooring_remote::protocol::Op::Open {
             cwd: None,
+            agent: None,
+            prompt: None,
             request: Some(mooring_core::protocol::RequestId::fresh().id),
         };
         let sent = cx.background_spawn(async move {
@@ -367,6 +369,7 @@ pub(super) fn answer_remote(
             terminal,
             question,
             allow,
+            always: false,
             request: Some(mooring_core::protocol::RequestId::fresh().id),
         };
         linked

@@ -30,8 +30,18 @@ export type Outcome = {
   text: string;
 };
 
-/** `code` is absent when the socket never closed with one (a timeout, a bad handshake). */
-export function closeOutcome(code?: number): Outcome {
+/** A relay or machine that names an outdated relay in its close reason. */
+const OLD_RELAY = /太旧|too old|upgrade the relay|升级中继/i;
+
+/**
+ * `code` is absent when the socket never closed with one (a timeout, a bad handshake).
+ * `reason` is the close frame's text: a relay too old for this machine says so there,
+ * which beats the code's usual meaning.
+ */
+export function closeOutcome(code?: number, reason?: string): Outcome {
+  if (reason && OLD_RELAY.test(reason)) {
+    return { status: 'offline', retry: 'later', text: '中继版本太旧：请升级中继，或者换一个新的中继' };
+  }
   switch (code) {
     case Close.UNPAIRED:
       return { status: 'refused', retry: 'never', text: '这台手机没有配对，或者已经被取消；重新扫码配对' };

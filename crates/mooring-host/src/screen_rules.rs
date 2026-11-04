@@ -323,6 +323,30 @@ impl Explained {
                 .any(|(cursor, n, _)| cursor && n == 1)
         })
     }
+    /// The key that takes the menu's 「don't ask again」 option (Claude Code's 「Yes, and
+    /// don't ask again for …」 or 「Yes, and switch to accept edits」, Codex's 「Yes, and
+    /// don't ask again for this command in this session (a)」): its own letter when it
+    /// shows one, else its number. None when the menu has no such option.
+    pub fn always_key(&self) -> Option<String> {
+        let hit = self.found.as_ref().ok()?;
+        hit.evidence
+            .iter()
+            .filter_map(|l| option(l))
+            .find_map(|(_, n, text)| {
+                let lower = text.to_lowercase();
+                let always = ["don't ask again", "during this session", "accept edits"]
+                    .iter()
+                    .any(|s| lower.contains(s));
+                if n == 1 || !lower.starts_with("yes") || !always {
+                    return None;
+                }
+                let letter = (text.strip_suffix(')'))
+                    .and_then(|t| t.rsplit_once('('))
+                    .map(|(_, k)| k)
+                    .filter(|k| k.len() == 1 && k.chars().all(|c| c.is_ascii_alphabetic()));
+                Some(letter.map_or_else(|| n.to_string(), str::to_owned))
+            })
+    }
     pub fn rule(&self) -> Option<&'static Rule> {
         let rules = self.rules;
         self.found.as_ref().ok().map(|h| &rules.rules[h.rule])
@@ -592,5 +616,34 @@ mod tests {
             answered.to_json()["misses"][0]["reason"],
             "output_after_menu"
         );
+    }
+    /// The phone's 「总是允许」 on real menus: Codex's letter, Claude Code's number, and
+    /// nothing on a menu without such an option.
+    #[test]
+    fn always_takes_the_dont_ask_again_option_or_nothing() {
+        let screen = |cli: &str, name: &str| {
+            let path = format!(
+                "{}/tests/fixtures/screens/{cli}/{name}",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            std::fs::read_to_string(path).unwrap()
+        };
+        let codex = explain(
+            bundled(Agent::Codex),
+            &screen("codex", "approval-cargo-test.txt"),
+        );
+        assert_eq!(codex.always_key().as_deref(), Some("a"));
+        let bash = explain(default_rules(), &screen("claude", "approval-bash.txt"));
+        assert_eq!(bash.always_key().as_deref(), Some("2"));
+        let write = explain(default_rules(), &screen("claude", "approval-write-r9.txt"));
+        assert_eq!(write.always_key().as_deref(), Some("2"));
+        let plain = explain(
+            default_rules(),
+            "Do you want to proceed?\n❯ 1. Yes\n  2. No\n",
+        );
+        assert!(plain.approval().is_some());
+        assert_eq!(plain.always_key(), None);
+        let idle = explain(default_rules(), "$ ls\n");
+        assert_eq!(idle.always_key(), None);
     }
 }

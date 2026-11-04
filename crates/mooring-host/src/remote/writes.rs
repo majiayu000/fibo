@@ -1,15 +1,31 @@
 //! Writes that change this machine's workbench for a client elsewhere (multi-machine
-//! step 4): open a terminal, end one, settle a conversation. Each may carry the client's
+//! step 4, phone v2): open a terminal (with an Agent and its first message), end one,
+//! settle a conversation, interrupt an Agent, make a folder. Each may carry the client's
 //! `request` id and then takes effect once, like the window's own edits.
-use super::{named_id, text};
-use mooring_core::{model::*, protocol::*};
+use super::{named, named_id, ok_reply, text};
+use crate::control;
+use mooring_core::{agent::Agent, model::*, protocol::*};
 use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
 
 /// `open`: a shell in a new tab of the space that holds `cwd` (else the first space),
-/// started in `cwd` (else the space's directory). Replies `{terminal, tab}`.
+/// started in `cwd` (else the space's directory). Replies `{terminal, tab}`. With `agent`
+/// the shell runs it, `prompt` its first message, as the window resumes a conversation.
 pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
+    // Named as cards name it (`claude`, `codex`): any CLI the registry knows.
+    let agent = match request["agent"].as_str().filter(|a| !a.is_empty()) {
+        None => None,
+        Some(name) => Some(
+            (Agent::all().into_iter())
+                .find(|a| control::agent_label(*a) == name)
+                .ok_or_else(|| io::Error::other(format!("不认识的 agent {name}")))?,
+        ),
+    };
+    let prompt = request["prompt"].as_str().filter(|p| !p.trim().is_empty());
+    if prompt.is_some() && agent.is_none() {
+        return Err(io::Error::other("prompt 要和 agent 一起"));
+    }
     let w = match rpc(socket, &Request::Workspace)? {
         Reply::Workspace(w) => w,
         other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
@@ -38,7 +54,10 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     let launch = Request::Launch {
         id: terminal.clone(),
         space: space.id.clone(),
-        argv: vec![shell, "-l".into()],
+        argv: agent.map_or_else(
+            || vec![shell.clone(), "-l".into()],
+            |a| agent_argv(&shell, a, prompt),
+        ),
         cwd,
         cols: 100,
         rows: 30,
@@ -73,6 +92,54 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     Ok(json!({ "terminal": terminal, "tab": tab }))
 }
 
+/// The shell running `agent` and then itself, as the window's resume does (`launch_argv`).
+/// The prompt goes as an argument of its own (`$1`), never into the script: nothing in it
+/// is read by the shell.
+fn agent_argv(shell: &str, agent: Agent, prompt: Option<&str>) -> Vec<String> {
+    let then = format!("exec {} -l", shell_quote(shell));
+    let script = match prompt {
+        // `--`: a prompt starting with `-` is not read as a flag.
+        Some(p) if p.starts_with('-') => format!("{} -- \"$1\"; {then}", agent.command()),
+        Some(_) => format!("{} \"$1\"; {then}", agent.command()),
+        None => format!("{}; {then}", agent.command()),
+    };
+    let mut argv = vec![shell.into(), "-l".into(), "-i".into(), "-c".into(), script];
+    if let Some(p) = prompt {
+        argv.extend([shell.to_owned(), p.to_owned()]);
+    }
+    argv
+}
+
+/// `stop`: interrupts the Agent's turn, the window's 中断. The host checks it is working
+/// inside the named act, so a resend gets the first reply even though it has stopped since.
+pub(super) fn stop(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
+    let interrupt = Request::Interrupt {
+        id: text(request, "terminal")?.to_owned(),
+    };
+    ok_reply(rpc(socket, &named(client, request, interrupt))?)
+}
+
+/// `mkdir`: one new folder in an existing one. A folder already there is what was asked
+/// for, so a resend after a lost reply succeeds too.
+pub(super) fn mkdir(request: &Value) -> io::Result<Value> {
+    let path = super::dirs::expand(text(request, "path")?)?;
+    let parent = (path.parent())
+        .filter(|p| p.is_dir())
+        .ok_or_else(|| io::Error::other("上一级文件夹不存在"))?;
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name.is_empty() || name == "." || name == ".." {
+        return Err(io::Error::other("文件夹名不对"));
+    }
+    match std::fs::create_dir(parent.join(name)) {
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists && path.is_dir() => (),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            return Err(io::Error::other("这里已经有同名文件"))
+        }
+        r => r?,
+    }
+    Ok(json!({ "path": path.to_string_lossy() }))
+}
+
 /// `end`: closes a terminal's pane and stops it.
 pub(super) fn end(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
     let edit = Edit::ClosePane {
@@ -81,17 +148,24 @@ pub(super) fn end(socket: &Path, request: &Value, client: Option<&str>) -> io::R
     edit_once(socket, request, client, edit)
 }
 
-/// `outcome`: `done`, `abandoned` or `open` for a conversation. With the `turn` the
-/// client saw (a card's `turn`), refused once the Agent began another turn.
+/// How long a conversation put off from a client stays out of the way.
+const DEFERRED_FOR: u64 = 3600;
+
+/// `outcome`: `done`, `deferred` (back in an hour), `abandoned` or `open` for a
+/// conversation. With the `turn` the client saw (a card's `turn`), refused once the Agent began another turn.
 pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
     let id = text(request, "session")?.to_owned();
     let outcome = match text(request, "outcome")? {
         "done" => Outcome::Completed,
+        "deferred" => Outcome::Deferred {
+            reason: "在手机上选了稍后提醒".into(),
+            until: mooring_core::time::now() + DEFERRED_FOR,
+        },
         "abandoned" => Outcome::Abandoned,
         "open" => Outcome::Open,
         other => {
             return Err(io::Error::other(format!(
-                "outcome 只能是 done、abandoned 或 open，不是 {other}"
+                "outcome 只能是 done、deferred、abandoned 或 open，不是 {other}"
             )))
         }
     };

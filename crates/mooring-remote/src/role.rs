@@ -32,7 +32,9 @@ impl Role {
     }
     pub fn allows(self, op: &str) -> bool {
         match op {
-            "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" => self == Self::Full,
+            // `dirs` shows the machine's folders, so it is no read for a lesser role.
+            "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
+            | "mkdir" | "stop" => self == Self::Full,
             "answer" => self != Self::View,
             _ => true,
         }
@@ -43,7 +45,7 @@ impl Role {
 pub fn acts(op: &str) -> bool {
     matches!(
         op,
-        "send" | "keys" | "input" | "answer" | "open" | "end" | "outcome"
+        "send" | "keys" | "input" | "answer" | "open" | "end" | "outcome" | "mkdir" | "stop"
     )
 }
 
@@ -53,14 +55,20 @@ mod tests {
 
     #[test]
     fn roles_allow_only_what_they_name() {
-        for op in ["hello", "list", "read", "chat", "watch", "events", "close"] {
+        for op in [
+            "hello", "list", "read", "chat", "watch", "events", "close", "diff", "quota",
+        ] {
             assert!(Role::View.allows(op));
+        }
+        for op in ["dirs", "mkdir", "stop", "open"] {
+            assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }
         assert!(!Role::View.allows("answer") && !Role::View.allows("send"));
         assert!(Role::Answer.allows("answer") && !Role::Answer.allows("keys"));
         assert!(Role::Full.allows("send") && Role::Full.allows("keys"));
         assert_eq!(Role::parse("admin"), None);
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
-        assert!(acts("keys") && !acts("watch"));
+        assert!(acts("keys") && acts("mkdir") && acts("stop") && !acts("watch"));
+        assert!(!acts("diff") && !acts("dirs") && !acts("quota"));
     }
 }

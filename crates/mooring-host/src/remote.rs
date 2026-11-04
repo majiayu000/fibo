@@ -17,6 +17,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
+mod chat;
+mod diff;
+mod dirs;
+mod quota;
 mod writes;
 
 const MAX_LINE: u64 = rp::MAX_LINE as u64;
@@ -110,12 +114,13 @@ pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
             format!("mooring remote 要选一种用法：\n{}", cmd.usage),
         ));
     }
-    serve(
-        io::stdin().lock(),
-        io::stdout(),
-        &a.socket,
-        Access::trusted(),
-    )
+    // `--role` narrows what this link may do, as a paired device's role would.
+    let role = a.value("role").map(devices::parse_role).transpose()?;
+    let access = Access {
+        role: role.unwrap_or(Role::Full),
+        ..Access::trusted()
+    };
+    serve(io::stdin().lock(), io::stdout(), &a.socket, access)
 }
 
 /// Serves `input` until it ends, replying on `output`.
@@ -275,6 +280,15 @@ fn hello(socket: &Path, role: Role) -> Value {
             .collect(),
         role,
         requests: true,
+        os: Some(
+            if cfg!(target_os = "macos") {
+                "macos"
+            } else {
+                "linux"
+            }
+            .into()
+        ),
+        app_version: Some(env!("CARGO_PKG_VERSION").into()),
     })
 }
 
@@ -376,65 +390,33 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             ok_reply(rpc(socket, &named(client, request, input))?)
         }
         "answer" => {
-            let answer = Request::AnswerApproval {
-                id: terminal()?,
-                question: text(request, "question")?.to_owned(),
-                allow: request["allow"]
-                    .as_bool()
-                    .ok_or_else(|| io::Error::other("answer 需要 allow: true 或 false"))?,
-            };
+            let (id, question) = (terminal()?, text(request, "question")?.to_owned());
+            let allow = request["allow"].as_bool();
+            let answer = match request["always"].as_bool().unwrap_or(false) {
+                true if allow == Some(false) => {
+                    Err(io::Error::other("always 只能和 allow: true 一起"))
+                }
+                true => Ok(Request::AnswerAlways { id, question }),
+                false => allow
+                    .map(|allow| Request::AnswerApproval {
+                        id,
+                        question,
+                        allow,
+                    })
+                    .ok_or_else(|| io::Error::other("answer 需要 allow: true 或 false")),
+            }?;
             ok_reply(rpc(socket, &named(client, request, answer))?)
         }
-        "chat" => chat(socket, request),
+        "chat" => chat::chat(socket, request),
+        "diff" => diff::diff(socket, request),
+        "dirs" => dirs::dirs(socket, request),
+        "quota" => quota::quota(socket),
+        "mkdir" => writes::mkdir(request),
+        "stop" => writes::stop(socket, request, client),
         "open" => writes::open(socket, request, client),
         "end" => writes::end(socket, request, client),
         "outcome" => writes::outcome(socket, request, client),
         op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
-    }
-}
-
-/// A conversation as chat, named by its terminal or its session id.
-fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
-    let session = match (request["session"].as_str(), request["terminal"].as_str()) {
-        (Some(s), _) => s.to_owned(),
-        (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
-            Reply::Workspace(w) => w
-                .current_agent(t)
-                .map(|s| s.id.clone())
-                .ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话"))?,
-            other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-        },
-        (None, None) => return Err(io::Error::other("chat 需要 terminal 或 session")),
-    };
-    let reply = rpc(
-        socket,
-        &Request::Chat {
-            session: session.clone(),
-            after: request["after"].as_i64(),
-            before: request["before"].as_i64(),
-            limit: request["limit"].as_u64().unwrap_or(50).clamp(1, 500) as usize,
-        },
-    )?;
-    match reply {
-        Reply::Chat { messages, more } => Ok(json!(rp::Chat {
-            session,
-            messages: messages
-                .into_iter()
-                .map(|m| rp::Message {
-                    seq: m.seq,
-                    at: m.at,
-                    role: if m.user {
-                        rp::Speaker::User
-                    } else {
-                        rp::Speaker::Agent
-                    },
-                    text: m.text,
-                })
-                .collect(),
-            more,
-        })),
-        Reply::Error(e) => Err(io::Error::other(e)),
-        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }
 

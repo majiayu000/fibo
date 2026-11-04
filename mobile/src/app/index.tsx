@@ -1,168 +1,213 @@
-// Every paired machine and its conversations, the ones waiting on you first.
-import { Link, Stack, router } from 'expo-router';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { type Card, type Machine, forget, reconnect, useHub } from '@/remote/hub';
-import { cardTitle } from '@/ui/format';
+// The inbox: every paired computer's conversations as flat rows, what needs you first.
+// Approvals are answered in the row; swipe left for 已处理, right for 稍后提醒. What you
+// wrote while a computer was away waits under 「未发送」.
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { approve, deny, oops, settle } from '@/actions';
+import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/hub';
+import { useAsk } from '@/remote/useAsk';
+import { drop, useOutbox } from '@/store/outbox';
+import { SpaceMark } from '@/ui/icons';
+import { Btn, Group, Pill, Round, TITLE_WEIGHT, Wide, mono, useBottom, useTop } from '@/ui/kit';
+import { Row, rowStyles, spaceName } from '@/ui/row';
+import { rank } from '@/ui/status';
+import { Swipe, justSwiped } from '@/ui/swipe';
 import { type Theme, useTheme } from '@/ui/theme';
 
-/** Removes a machine from this phone after asking; the computer keeps its own pairing list. */
-function askForget(m: Machine) {
-  const title = `从手机上移除「${m.name || '电脑'}」？`;
-  const detail = '要再连这台电脑得重新扫码配对。电脑那边的配对记录不受影响。';
-  if (Platform.OS === 'web') {
-    if (globalThis.confirm?.(`${title}\n${detail}`)) forget(m.id);
-    return;
+const open = (m: Machine, c: Card) => {
+  if (!justSwiped()) router.push({ pathname: '/chat', params: { machine: m.id, terminal: c.id } });
+};
+
+type Item = { m: Machine; c: Card };
+
+/** Conversations sorted into the inbox, 稍后提醒 and 已处理. */
+function sort(machines: Machine[]) {
+  const inbox: Item[] = [];
+  const later: Item[] = [];
+  const done: Item[] = [];
+  for (const m of machines) {
+    for (const c of m.cards) {
+      if (!c.agent || c.phase === 'shell') continue;
+      const item = { m, c };
+      // Something new to answer brings a settled conversation back.
+      const asks = Boolean(c.approval || c.phase === 'waiting');
+      if (c.outcome === 'done' && !asks) done.push(item);
+      else if (c.outcome === 'deferred' && !asks) later.push(item);
+      else inbox.push(item);
+    }
   }
-  Alert.alert(title, detail, [
-    { text: '取消', style: 'cancel' },
-    { text: '移除', style: 'destructive', onPress: () => forget(m.id) },
-  ]);
+  const newest = (a: Item, b: Item) => (b.c.updated ?? 0) - (a.c.updated ?? 0);
+  inbox.sort((a, b) => rank(a.c) - rank(b.c) || newest(a, b));
+  later.sort(newest);
+  done.sort(newest);
+  return { inbox, later, done };
 }
 
-// What needs you first, then what runs. The host decides both (`status::needs_you`,
-// `Status::label`); the fallbacks only serve hosts from before 11-03.
-const needsYou = (c: Card) => c.needs_you ?? Boolean(c.approval || c.phase === 'waiting');
-const rank = (c: Card) => (needsYou(c) ? 0 : c.phase === 'working' ? 1 : 2);
-
-function status(c: Card): string {
-  if (c.status_label) return c.status_label;
-  if (c.phase === 'waiting') return '等你回答';
-  if (c.phase === 'working') return '在跑';
-  return c.phase === 'shell' ? '终端' : '等你验收';
+function run(p: Promise<unknown>) {
+  p.catch((e) => oops((e as Error).message));
 }
 
-function Row({ m, c, t }: { m: Machine; c: Card; t: Theme }) {
-  // Not online: what the machine last said, which may no longer hold.
-  const stale = m.status !== 'online';
-  const waiting = !stale && rank(c) === 0;
+function ApprovalRow({ m, c, t }: Item & { t: Theme }) {
+  const online = m.status === 'online';
+  const ask = useAsk(m.id, c, online);
+  const can = supports(m, 'answer');
   return (
-    <Pressable
-      onPress={() => router.push({ pathname: '/chat', params: { machine: m.id, terminal: c.id } })}
-      style={({ pressed }) => [
-        s.row,
-        { backgroundColor: waiting ? t.waitingBg : t.card, borderColor: t.line },
-        stale && { opacity: 0.6 },
-        pressed && { opacity: 0.7 },
-      ]}
-    >
-      <View style={s.rowTop}>
-        <Text style={[s.title, { color: t.text }]} numberOfLines={1}>
-          {cardTitle(c)}
-        </Text>
-        <Text
-          style={[
-            s.badge,
-            { color: waiting ? t.waiting : !stale && c.phase === 'working' ? t.running : t.dim },
-          ]}
-        >
-          {stale ? `断开前：${status(c)}` : status(c)}
-        </Text>
-      </View>
-      <Text style={[s.meta, { color: t.dim }]} numberOfLines={1}>
-        {[c.agent, m.spaces[c.space] ?? c.space, c.cwd].filter(Boolean).join(' · ')}
+    <Row m={m} c={c} onPress={() => open(m, c)}>
+      <Text numberOfLines={3} style={[s.cmd, { backgroundColor: t.well, color: t.text }]}>
+        {ask.subject}
       </Text>
-      {(c.approval || c.waiting) && (
-        <Text style={[s.ask, { color: t.text }]} numberOfLines={3}>
-          {c.approval || c.waiting}
-        </Text>
-      )}
+      <View style={s.act}>
+        {can && (
+          <>
+            <Btn primary icon="face" label="允许" onPress={() => run(approve(m.id, c, ask.subject))} />
+            <Btn label="拒绝" onPress={() => run(deny(m.id, c))} />
+          </>
+        )}
+        <Btn
+          label="详情"
+          onPress={() => router.push({ pathname: '/approve', params: { machine: m.id, terminal: c.id } })}
+        />
+      </View>
+    </Row>
+  );
+}
+
+function Swiped({ m, c, t, last }: Item & { t: Theme; last?: boolean }) {
+  const can = supports(m, 'outcome') && !!c.session;
+  const body = c.approval && m.status === 'online' ? <ApprovalRow m={m} c={c} t={t} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
+  if (!can) return body;
+  return (
+    <Swipe
+      left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => run(settle(m.id, c, 'done')) }}
+      right={{ label: '稍后提醒', color: t.waitBg, fg: t.wait, run: () => run(settle(m.id, c, 'deferred')) }}
+    >
+      {body}
+    </Swipe>
+  );
+}
+
+function Offline({ m, t }: { m: Machine; t: Theme }) {
+  return (
+    <Pressable onPress={() => reconnect(m.id)} style={[s.offline, { borderColor: t.sep }]}>
+      <View style={[s.dotSmall, { backgroundColor: m.status === 'refused' ? t.err : t.dim }]} />
+      <Text style={{ color: t.text, fontSize: 13 }}>{m.name || '电脑'}</Text>
+      <Text numberOfLines={2} style={{ color: m.status === 'refused' ? t.err : t.dim, fontSize: 13, flex: 1 }}>
+        {m.status === 'connecting' ? '正在连接…' : `${m.error ?? '没连上'} · 点这里重试`}
+      </Text>
     </Pressable>
   );
 }
 
-function MachineSection({ m, t }: { m: Machine; t: Theme }) {
-  const cards = m.cards.filter((c) => c.agent).sort((a, b) => rank(a) - rank(b));
-  const shells = m.cards.length - cards.length;
+export default function Inbox() {
+  const t = useTheme();
+  const top = useTop();
+  const bottom = useBottom();
+  const { loaded, machines } = useHub();
+  const unsent = useOutbox();
+  const [showLater, setShowLater] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+  const { inbox, later, done } = sort(machines);
+  const where = (id: string, terminal: string) => {
+    const m = machines.find((x) => x.id === id);
+    const c = m?.cards.find((x) => x.id === terminal);
+    return { m, c };
+  };
+
   return (
-    <View style={s.section}>
-      <View style={s.sectionHead}>
-        <View
-          style={[
-            s.dot,
-            { backgroundColor: m.status === 'online' ? t.ok : m.status === 'refused' ? t.danger : t.dim },
-          ]}
-        />
-        <Text style={[s.machine, { color: t.text }]}>{m.name || '电脑'}</Text>
-        {m.role && m.role !== 'full' && (
-          <Text style={[s.meta, { color: t.dim }]}>{m.role === 'view' ? '只看' : '能答审批'}</Text>
-        )}
-      </View>
-      {m.status !== 'online' && (
-        <View style={s.offline}>
-          <Pressable style={{ flex: 1 }} onPress={() => reconnect(m.id)}>
-            <Text style={[s.meta, { color: m.status === 'refused' ? t.danger : t.dim }]}>
-              {m.status === 'connecting' ? '正在连接…' : `${m.error ?? '没连上'}（点这里重试）`}
-            </Text>
-          </Pressable>
-          {m.status !== 'connecting' && (
-            <Pressable hitSlop={8} onPress={() => askForget(m)}>
-              <Text style={[s.meta, { color: t.accent }]}>移除</Text>
-            </Pressable>
-          )}
+    <View style={{ flex: 1, backgroundColor: t.bg }}>
+      <View style={[s.hd, { paddingTop: top + 9 }]}>
+        <Text style={[s.brand, { color: t.text }]} numberOfLines={1}>
+          Mooring
+          {machines.length > 0 && <Text style={[s.count, { color: t.dim }]}>{`  ${machines.length} 台电脑`}</Text>}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pill
+            items={[
+              { icon: 'board', label: '看板', onPress: () => router.push('/board'), width: 36 },
+              { icon: 'computer', label: '电脑', onPress: () => router.push('/machines'), width: 36 },
+              { icon: 'quota', label: '额度', onPress: () => router.push('/quota'), width: 36 },
+              { icon: 'gear', label: '设置', onPress: () => router.push('/settings'), width: 36 },
+            ]}
+          />
+          <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
         </View>
-      )}
-      {cards.map((c) => (
-        <Row key={c.id} m={m} c={c} t={t} />
-      ))}
-      {m.status === 'online' && cards.length === 0 && (
-        <Text style={[s.meta, { color: t.dim }]}>没有正在运行的 Agent 对话</Text>
-      )}
-      {shells > 0 && <Text style={[s.meta, { color: t.dim }]}>另有 {shells} 个普通终端</Text>}
+      </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: bottom + 16 }}>
+        {loaded && machines.length === 0 && (
+          <View style={s.empty}>
+            <Text style={[s.emptyTitle, { color: t.text }]}>还没有配对电脑</Text>
+            <Text style={[s.emptyText, { color: t.dim }]}>
+              在电脑的 Mooring 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。
+            </Text>
+            <View style={{ alignSelf: 'stretch' }}>
+              <Wide label="扫码配对" onPress={() => router.push('/pair')} />
+            </View>
+          </View>
+        )}
+        {machines.filter((m) => m.status !== 'online').map((m) => (
+          <Offline key={m.id} m={m} t={t} />
+        ))}
+        {inbox.map(({ m, c }, i) => (
+          <Swiped key={`${m.id}/${c.id}`} m={m} c={c} t={t} last={i === inbox.length - 1 && !unsent.length} />
+        ))}
+        {loaded && machines.some((m) => m.status === 'online') && inbox.length === 0 && (
+          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>没有要处理的事</Text>
+        )}
+        {unsent.length > 0 && <Group label="未发送" />}
+        {unsent.map((u, i) => {
+          const { m, c } = where(u.machine, u.terminal);
+          const space = m && c ? spaceName(m, c) : '';
+          return (
+            <Swipe key={u.id} left={{ label: '删除', color: t.errBg, fg: t.err, run: () => drop(u.id) }}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/chat', params: { machine: u.machine, terminal: u.terminal } })}
+                style={[s.unsent, { borderColor: t.sep, backgroundColor: t.bg }, i === unsent.length - 1 && { borderBottomWidth: 0 }]}
+              >
+                <View style={rowStyles.l1}>
+                  <SpaceMark name={space || '?'} id={c?.space || space || u.machine} />
+                  <Text numberOfLines={1} style={[rowStyles.where, { color: t.dim }]}>
+                    {[space, m?.name].filter(Boolean).join(' · ') || '电脑'}
+                  </Text>
+                  <Text style={[rowStyles.state, { color: u.error ? t.err : t.dim }]}>{u.error ? '没发出去' : '重连后发送'}</Text>
+                </View>
+                <Text numberOfLines={2} style={[rowStyles.title, { color: t.dim }]}>
+                  {u.text}
+                </Text>
+                {!!u.error && <Text style={{ color: t.err, fontSize: 12 }}>{u.error}</Text>}
+              </Pressable>
+            </Swipe>
+          );
+        })}
+        {later.length > 0 && <Group label={`稍后提醒 · ${later.length}`} open={showLater} onPress={() => setShowLater(!showLater)} />}
+        {showLater &&
+          later.map(({ m, c }) => (
+            <Swipe key={`${m.id}/${c.id}`} left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => run(settle(m.id, c, 'done')) }}>
+              <Row m={m} c={c} dim right={{ text: '稍后提醒' }} onPress={() => open(m, c)} />
+            </Swipe>
+          ))}
+        {done.length > 0 && <Group label={`已处理 · ${done.length}`} open={showDone} onPress={() => setShowDone(!showDone)} />}
+        {showDone &&
+          done.map(({ m, c }) => (
+            <Swipe key={`${m.id}/${c.id}`} right={{ label: '放回收件箱', color: t.well, fg: t.text, run: () => run(settle(m.id, c, 'open')) }}>
+              <Row m={m} c={c} dim right={{ text: '已处理' }} onPress={() => open(m, c)} />
+            </Swipe>
+          ))}
+      </ScrollView>
     </View>
   );
 }
 
-export default function Sessions() {
-  const t = useTheme();
-  const { loaded, machines } = useHub();
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Link href="/pair" style={{ color: t.accent, fontSize: 16, paddingHorizontal: 12 }}>
-              配对
-            </Link>
-          ),
-        }}
-      />
-      <ScrollView contentContainerStyle={s.page}>
-        {loaded && machines.length === 0 && (
-          <View style={s.empty}>
-            <Text style={[s.emptyTitle, { color: t.text }]}>还没有配对电脑</Text>
-            <Text style={[s.meta, { color: t.dim, textAlign: 'center' }]}>
-              在电脑的 Mooring 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。
-            </Text>
-            <Pressable
-              onPress={() => router.push('/pair')}
-              style={[s.button, { backgroundColor: t.accent }]}
-            >
-              <Text style={{ color: t.onAccent, fontSize: 16 }}>扫码配对</Text>
-            </Pressable>
-          </View>
-        )}
-        {machines.map((m) => (
-          <MachineSection key={m.id} m={m} t={t} />
-        ))}
-      </ScrollView>
-    </>
-  );
-}
-
 const s = StyleSheet.create({
-  page: { padding: 16, gap: 20 },
-  section: { gap: 8 },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  machine: { fontSize: 15, fontWeight: '600' },
-  row: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, gap: 4 },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 16, fontWeight: '500' },
-  badge: { fontSize: 13 },
-  meta: { fontSize: 13 },
-  offline: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  ask: { fontSize: 14, marginTop: 4 },
+  hd: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 8, gap: 8 },
+  brand: { fontSize: 22, fontWeight: '500', letterSpacing: -0.2, flexShrink: 1 },
+  count: { fontSize: 10, letterSpacing: 1.2, fontWeight: '400' },
+  cmd: { fontFamily: mono, fontSize: 13, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 11, marginTop: 6, overflow: 'hidden' },
+  act: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  offline: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 10, borderBottomWidth: 1 },
+  dotSmall: { width: 8, height: 8, borderRadius: 4 },
+  unsent: { gap: 3, paddingVertical: 12, paddingHorizontal: 18, borderBottomWidth: 1 },
   empty: { alignItems: 'center', gap: 12, paddingTop: 80, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: 18, fontWeight: '600' },
-  button: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, marginTop: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: TITLE_WEIGHT },
+  emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 });

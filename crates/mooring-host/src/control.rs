@@ -118,7 +118,7 @@ mooring close <终端>                       关掉这块分屏并结束里面�
             "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report",
         ],
         usage: "\
-mooring remote --stdio                     给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
+mooring remote --stdio [--role view|answer|full]  给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
                                              答审批、事件），经 ssh 连过来：ssh 主机 mooring remote --stdio
 mooring remote --relay <中继地址> [--relay-key <密钥>] [--report]
                                              连上中继并一直挂着，配对过的手机在哪都能连过来；内容端到端加密，
