@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-confetti",
+  "name": "完成动画：彩纸",
+  "version": "0.1.0",
+  "description": "印章落下时彩纸炸开，配色跟随主题，最后飞进侧栏",
+  "provides": ["effects"]
+}

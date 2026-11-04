@@ -105,7 +105,7 @@ pub fn start(
                     // A plugin's animation, held at points of the run for comparison with
                     // specs/complete-animation/directions.html, then played for real.
                     let style: mooring_core::effect::Style = serde_json::from_value(serde_json::json!(style)).expect("style");
-                    let effect = mooring_core::effect::Complete::of(style);
+                    let effect = mooring_core::effect::Complete { land: std::env::var_os("MOORING_COMPLETE_NO_LAND").is_none(), ..mooring_core::effect::Complete::of(style) };
                     shot("0-review.png", cx);
                     let times = handle.update(cx, |v, w, _| v.visual_complete_times(w)).unwrap(); for &t in &times {
                         handle.update(cx, |v, _, a| {

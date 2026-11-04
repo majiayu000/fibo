@@ -156,6 +156,22 @@ impl super::Pane {
         }
         cells
     }
+    /// Every character on screen in reading order, for the styles that move the text.
+    pub fn text_cells(&self) -> Vec<super::super::glyph::TextCell> {
+        let (Some(bounds), Some(m)) = (self.bounds, self.metrics) else {
+            return vec![];
+        };
+        super::super::glyph::cells_of(&self.screen.rows, |col, row| {
+            gpui::point(
+                bounds.left() + m.width * col as f32,
+                bounds.top() + m.height * row as f32,
+            )
+        })
+    }
+    /// The cell's size and offsets, for drawing a character as the grid does.
+    pub fn cell_metrics(&self) -> Option<CellMetrics> {
+        self.metrics
+    }
     /// Where the grid was last painted, its row height and its ground.
     pub fn grid_area(&self) -> Option<(gpui::Bounds<Pixels>, Pixels, u32)> {
         Some((self.bounds?, self.metrics?.height, self.screen.background))

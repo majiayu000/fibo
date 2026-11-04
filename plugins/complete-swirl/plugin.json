@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-swirl",
+  "name": "完成动画：漩涡",
+  "version": "0.1.0",
+  "description": "终端里的字绕着中心卷进去，聚成一颗对勾，再飞进侧栏",
+  "provides": ["effects"]
+}

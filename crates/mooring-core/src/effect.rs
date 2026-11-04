@@ -55,11 +55,23 @@ pub enum Style {
     Tea,
     /// Cheers up and hops all the way to its sidebar row.
     Hop,
+    /// A rope from the sidebar row hooks the pane and hauls it home as a little card.
+    Moor,
+    /// The terminal's characters fall, bounce, pile up, and drain into the sidebar.
+    Gravity,
+    /// The characters spiral into a ball that becomes the check.
+    Swirl,
+    /// A cursor deletes the screen back to its start and types the session's end.
+    Backspace,
+    /// An old monitor switching off: a flash, a line, a dot that flies away.
+    Crt,
+    /// The seal comes down and confetti in the theme's colors bursts out.
+    Confetti,
 }
 impl Style {
     /// What settings offers without any plugin installed.
     pub const BUILTIN: [Self; 2] = [Self::Seal, Self::Fade];
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 18] = [
         Self::Seal,
         Self::Stamp,
         Self::Sweep,
@@ -72,6 +84,12 @@ impl Style {
         Self::Cat,
         Self::Tea,
         Self::Hop,
+        Self::Moor,
+        Self::Gravity,
+        Self::Swirl,
+        Self::Backspace,
+        Self::Crt,
+        Self::Confetti,
     ];
     /// The name `effects.json` and the settings file write.
     pub fn name(self) -> &'static str {
@@ -88,6 +106,12 @@ impl Style {
             Self::Cat => "cat",
             Self::Tea => "tea",
             Self::Hop => "hop",
+            Self::Moor => "moor",
+            Self::Gravity => "gravity",
+            Self::Swirl => "swirl",
+            Self::Backspace => "backspace",
+            Self::Crt => "crt",
+            Self::Confetti => "confetti",
         }
     }
     pub fn parse(text: &str) -> Option<Self> {
@@ -107,6 +131,12 @@ impl Style {
             Self::Cat => "小猫",
             Self::Tea => "一杯热茶",
             Self::Hop => "蹦回家",
+            Self::Moor => "靠岸",
+            Self::Gravity => "字往下掉",
+            Self::Swirl => "漩涡",
+            Self::Backspace => "退格收工",
+            Self::Crt => "老显示器关机",
+            Self::Confetti => "彩纸",
         }
     }
     /// What the face styles say after 做完了.
@@ -127,9 +157,10 @@ impl Style {
             Self::Seal => 1_600,
             Self::Stamp => 2_400,
             Self::Sweep => 2_200,
-            Self::Dissolve => 2_800,
+            Self::Crt => 2_000,
+            Self::Dissolve | Self::Swirl | Self::Backspace | Self::Confetti => 2_800,
             Self::Fade => 600,
-            Self::Relief | Self::Heart | Self::Hop => 3_000,
+            Self::Relief | Self::Heart | Self::Hop | Self::Moor | Self::Gravity => 3_000,
             Self::Sunrise | Self::Cat => 3_200,
             Self::Wake | Self::Tea => 3_400,
         }
@@ -470,7 +501,7 @@ mod tests {
             "c.json",
             r#"{"api":1,"complete":{"style":"fade","duration_ms":9000}}"#,
         );
-        let odd = write("d.json", r#"{"api":1,"complete":{"style":"confetti"}}"#);
+        let odd = write("d.json", r#"{"api":1,"complete":{"style":"fireworks"}}"#);
         let empty = write("e.json", r#"{"api":1}"#);
 
         // All in one directory: one plugin, so only its first preset is offered.

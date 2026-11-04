@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-gravity",
+  "name": "完成动画：字往下掉",
+  "version": "0.1.0",
+  "description": "终端里的字一行行掉下来，弹一下堆在底部，再变成光点流进侧栏",
+  "provides": ["effects"]
+}

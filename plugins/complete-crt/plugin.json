@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-crt",
+  "name": "完成动画：老显示器关机",
+  "version": "0.1.0",
+  "description": "屏幕闪一下白光，压成一条亮线，再缩成亮点飞进侧栏",
+  "provides": ["effects"]
+}

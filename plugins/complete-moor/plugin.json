@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-moor",
+  "name": "完成动画：靠岸",
+  "version": "0.1.0",
+  "description": "侧栏抛出缆绳勾住窗格，窗格缩成一张卡片，晃着被拉回侧栏那一行",
+  "provides": ["effects"]
+}

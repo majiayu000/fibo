@@ -66,6 +66,27 @@
       ]
     },
     {
+      "id": "complete-backspace",
+      "name": "完成动画：退格收工",
+      "version": "0.1.0",
+      "description": "绿色光标把屏幕上的字一路删回开头，敲下做完了，然后飞进侧栏",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "cb1011489b1c0094405e8e865672c48ce589ce791a856dbfcd2cd08583c33fa4",
+          "size": 95
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "6abac66a53d92b41f46aa63cceaccc77f89ecbd54daa7a1f06e108554bc5ae32",
+          "size": 243
+        }
+      ]
+    },
+    {
       "id": "complete-cat",
       "name": "完成动画：小猫",
       "version": "0.1.0",
@@ -87,6 +108,48 @@
       ]
     },
     {
+      "id": "complete-confetti",
+      "name": "完成动画：彩纸",
+      "version": "0.1.0",
+      "description": "印章落下时彩纸炸开，配色跟随主题，最后飞进侧栏",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "4c36608a5e4e7f3d204567336e180c44a8dfe5068b2e535fe8262f15b4c3b931",
+          "size": 94
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "01263a68b5babaad99c3715e9abe7847402b103fa92577cd8ad32212de97e053",
+          "size": 218
+        }
+      ]
+    },
+    {
+      "id": "complete-crt",
+      "name": "完成动画：老显示器关机",
+      "version": "0.1.0",
+      "description": "屏幕闪一下白光，压成一条亮线，再缩成亮点飞进侧栏",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "c2e234a456cac22a46ba8803fdb746ea02999232f9807b35a4c2e30021385496",
+          "size": 89
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "07c69e62516eec4907cc4ab1bbeab329fef9c41be26ed7c790f1d6f933bb9b2b",
+          "size": 228
+        }
+      ]
+    },
+    {
       "id": "complete-dissolve",
       "name": "完成动画：化进侧栏",
       "version": "0.1.0",
@@ -104,6 +167,27 @@
           "path": "plugin.json",
           "sha256": "64f1e472c89736dceaa71a67a552dacd05f01ac0f50d7090a0692ba488996547",
           "size": 242
+        }
+      ]
+    },
+    {
+      "id": "complete-gravity",
+      "name": "完成动画：字往下掉",
+      "version": "0.1.0",
+      "description": "终端里的字一行行掉下来，弹一下堆在底部，再变成光点流进侧栏",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "044c35970ac78b97b81c175e304115306bd6aedb5e8b3f5e1a267455c0ba7489",
+          "size": 93
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "ee097c15c3b6595108f4a344e2f5d39ee20d3bb470d8462cc5854667c1f47596",
+          "size": 241
         }
       ]
     },
@@ -146,6 +230,27 @@
           "path": "plugin.json",
           "sha256": "5ae8754a4b4928dd76e78cbc65632e9495076a3493f664baca65f62254263c7b",
           "size": 222
+        }
+      ]
+    },
+    {
+      "id": "complete-moor",
+      "name": "完成动画：靠岸",
+      "version": "0.1.0",
+      "description": "侧栏抛出缆绳勾住窗格，窗格缩成一张卡片，晃着被拉回侧栏那一行",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "3bbe07201b6190506ced6f278d52c723a82232eb438df72219ce02ef3269d3ae",
+          "size": 90
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "9f754fd6e57491dd7279409fa152f788679003598e6b0f4412363c4e00ba9c08",
+          "size": 235
         }
       ]
     },
@@ -230,6 +335,27 @@
           "path": "plugin.json",
           "sha256": "8c81153db6083cb14bfa2acf729ce8e0df3c7871da70d25b29d839496d998490",
           "size": 257
+        }
+      ]
+    },
+    {
+      "id": "complete-swirl",
+      "name": "完成动画：漩涡",
+      "version": "0.1.0",
+      "description": "终端里的字绕着中心卷进去，聚成一颗对勾，再飞进侧栏",
+      "provides": [
+        "effects"
+      ],
+      "files": [
+        {
+          "path": "effects.json",
+          "sha256": "86351b0903a97057e8d3217fa8e4a2206e60422b2e0fd6c17099f8402415d7cb",
+          "size": 91
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "bd5048be685dc0e8d213a451dca116ebd822d20b62edb9483013c4a5bd4ca26c",
+          "size": 221
         }
       ]
     },

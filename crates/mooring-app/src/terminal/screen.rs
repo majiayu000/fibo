@@ -1,7 +1,7 @@
 #[path = "screen_extras.rs"]
 mod extras;
 #[path = "sprites.rs"]
-mod sprites;
+pub(super) mod sprites;
 use extras::paint_decorations;
 #[allow(unused_imports)]
 pub use extras::{paint_guide, paint_selected_text};
@@ -785,7 +785,7 @@ fn utf16_byte_offset(text: &str, offset: usize) -> usize {
     text.len()
 }
 
-fn shape_cell(
+pub(super) fn shape_cell(
     run: &Run,
     font: Font,
     metrics: CellMetrics,
@@ -935,7 +935,7 @@ impl AsciiGlyphs {
         }
     }
 }
-fn run_font(run: &Run, f: &Font) -> Font {
+pub(super) fn run_font(run: &Run, f: &Font) -> Font {
     let mut font = if run.text.is_ascii() {
         f.clone()
     } else {
@@ -1179,7 +1179,7 @@ fn paint_grid(
     }
 }
 
-fn text_color(run: &Run) -> Hsla {
+pub(super) fn text_color(run: &Run) -> Hsla {
     hsla(run.fg).opacity(if run.attrs.faint {
         crate::ui::terminal_text::faint()
     } else {

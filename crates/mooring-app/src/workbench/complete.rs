@@ -13,9 +13,12 @@ use std::rc::Rc;
 use std::time::Instant;
 
 mod cozy;
+mod fun;
 mod paint;
+mod snapshot;
 mod timing;
 use paint::Painter;
+use snapshot::Snapshot;
 use timing::*;
 
 /// The most specks the dissolve sends; a fuller screen sends one from every n-th cell,
@@ -45,6 +48,8 @@ pub(super) struct Run {
     /// Where the dissolve's specks set off, and their colors. Shared with each frame's
     /// overlay rather than copied every frame.
     glyphs: Rc<[Glyph]>,
+    /// The text itself, for the styles that move or erase it.
+    text: Option<Rc<Snapshot>>,
     /// The session was in review under its turn bar when the run started.
     holds_turn_bar: bool,
     /// Held at one point of the run for screenshots.
@@ -240,8 +245,15 @@ impl Workbench {
             .step_by(step)
             .map(|(p, c)| (p, T::color(c)))
             .collect();
+        let text = self.layout.panes.get(&terminal).and_then(|pane| {
+            let title = self.pane_session(&terminal).map(|s| self.session_title(s));
+            Snapshot::of(effect.style, pane.read(cx), title.as_deref(), cx).map(Rc::new)
+        });
         #[cfg(feature = "visual-test")]
-        SPECKS.store(glyphs.len(), std::sync::atomic::Ordering::Relaxed);
+        SPECKS.store(
+            text.as_ref().map_or(glyphs.len(), |s| s.letters.len()),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let holds_turn_bar = matches!(self.pane_status(&terminal), Some((Status::Review, _)))
             && self
                 .pane_session(&terminal)
@@ -254,6 +266,7 @@ impl Workbench {
                 effect,
                 session: session.clone(),
                 glyphs: glyphs.into(),
+                text,
                 holds_turn_bar,
                 pinned: None,
             },
@@ -430,7 +443,9 @@ impl Workbench {
             Style::Stamp => 0.86 * eo(sl(t, 0.06, 0.28)),
             Style::Sweep => 0.8,
             Style::Dissolve => 0.25 * sl(t, 0.05, 0.2) + 0.65 * sl(t, 0.35, 0.65),
-            Style::Fade => 0.,
+            Style::Fade | Style::Gravity | Style::Swirl | Style::Backspace | Style::Crt => 0.,
+            Style::Moor => 0.86 * eo(sl(t, 0.08, 0.28)),
+            Style::Confetti => 0.86 * eo(sl(t, 0.08, 0.26)),
             _ => 0.88 * eo(sl(t, 0.05, 0.2)),
         };
         let veil_width = if style == Style::Sweep {
@@ -438,10 +453,10 @@ impl Workbench {
         } else {
             1.
         };
-        let lids = if style == Style::Sweep {
-            eio(sl(t, 0.66, 0.84))
-        } else {
-            0.
+        let lids = match style {
+            Style::Sweep => eio(sl(t, 0.66, 0.84)),
+            Style::Crt => fun::crt_lids(t),
+            _ => 0.,
         };
         let countdown = (t / tm.fade.0).min(1.);
         let words = div()
@@ -449,32 +464,37 @@ impl Workbench {
             .left_0()
             .right_0()
             .top(gpui::relative(0.5))
-            .mt(px(
-                if style == Style::Sweep { 34. } else { 42. } + T::S8 * (1. - shown)
-            ))
+            .mt(px(if matches!(style, Style::Sweep | Style::Crt) {
+                34.
+            } else {
+                42.
+            } + T::S8 * (1. - shown)))
             .flex()
             .flex_col()
             .items_center()
             .gap(px(T::S4))
             .opacity(shown)
-            .child(
-                div()
-                    .text_size(px(T::BODY_SIZE))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(ink)
-                    .child(style.greeting().map_or_else(
-                        || Status::Closed.label().to_owned(),
-                        |g| format!("{}，{g}", Status::Closed.label()),
-                    )),
-            )
-            .child(
-                div()
-                    .max_w(px(SEAL_TITLE_MAX_W))
-                    .truncate()
-                    .text_size(px(T::META))
-                    .text_color(T::color(T::secondary()))
-                    .child(title.to_owned()),
-            )
+            // 退格收工 types these words on the terminal's first line itself.
+            .when(style != Style::Backspace, |d| {
+                d.child(
+                    div()
+                        .text_size(px(T::BODY_SIZE))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(ink)
+                        .child(style.greeting().map_or_else(
+                            || Status::Closed.label().to_owned(),
+                            |g| format!("{}，{g}", Status::Closed.label()),
+                        )),
+                )
+                .child(
+                    div()
+                        .max_w(px(SEAL_TITLE_MAX_W))
+                        .truncate()
+                        .text_size(px(T::META))
+                        .text_color(T::color(T::secondary()))
+                        .child(title.to_owned()),
+                )
+            })
             .child(
                 button(
                     gpui::SharedString::from(format!("keep-pane-{id}")),
@@ -502,6 +522,14 @@ impl Workbench {
                     .filter(|_| style == Style::Dissolve)
                     .cloned(),
                 |d, pane| d.child(dissolve_wipe(pane, t)),
+            )
+            .when_some(
+                self.layout
+                    .panes
+                    .get(id)
+                    .cloned()
+                    .zip(self.layout.completing.get(id).and_then(|r| r.text.clone())),
+                |d, (pane, text)| d.child(snapshot::text_wipe(pane, style, t, text)),
             )
             .child(
                 div()
@@ -582,6 +610,7 @@ impl Workbench {
             effect: Complete,
             t: f32,
             glyphs: Rc<[Glyph]>,
+            text: Option<Rc<Snapshot>>,
         }
         let frames: Vec<Frame> = self
             .layout
@@ -593,6 +622,7 @@ impl Workbench {
                 effect: r.effect,
                 t: r.t(),
                 glyphs: r.glyphs.clone(),
+                text: r.text.clone(),
             })
             .collect();
         let spots = self.layout.spots.clone();
@@ -637,7 +667,14 @@ impl Workbench {
                             rose,
                             soft,
                         };
-                        p.frame(f.effect.style, f.t, pane, target, &f.glyphs);
+                        p.frame(
+                            f.effect.style,
+                            f.t,
+                            pane,
+                            target,
+                            &f.glyphs,
+                            f.text.as_deref(),
+                        );
                         if let (Some(r), Some(at)) = (row.filter(|_| f.effect.land), target) {
                             p.landed(f.t, timing(f.effect.style).land, r, at);
                         }

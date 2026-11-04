@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "complete-backspace",
+  "name": "完成动画：退格收工",
+  "version": "0.1.0",
+  "description": "绿色光标把屏幕上的字一路删回开头，敲下做完了，然后飞进侧栏",
+  "provides": ["effects"]
+}

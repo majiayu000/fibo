@@ -56,7 +56,7 @@ impl Painter<'_> {
         ));
     }
     /// A soft halo: a few wider, fainter discs under the real one.
-    fn glow(&mut self, at: Point<Pixels>, r: f32, strength: f32) {
+    pub(super) fn glow(&mut self, at: Point<Pixels>, r: f32, strength: f32) {
         if strength <= 0. {
             return;
         }
@@ -101,7 +101,14 @@ impl Painter<'_> {
         }
     }
     /// The check mark drawn `progress` of the way along its two strokes.
-    fn check(&mut self, at: Point<Pixels>, s: f32, progress: f32, color: Hsla, width: f32) {
+    pub(super) fn check(
+        &mut self,
+        at: Point<Pixels>,
+        s: f32,
+        progress: f32,
+        color: Hsla,
+        width: f32,
+    ) {
         if progress <= 0. || s <= 0. {
             return;
         }
@@ -144,6 +151,7 @@ impl Painter<'_> {
         pane: Bounds<Pixels>,
         target: Option<Point<Pixels>>,
         glyphs: &[Glyph],
+        text: Option<&Snapshot>,
     ) {
         let body = Bounds::new(
             point(pane.left(), pane.top() + px(T::PANE_HEADER)),
@@ -162,6 +170,12 @@ impl Painter<'_> {
                 }
             }
             Style::Fade => {}
+            Style::Moor => self.moor(t, pane, body, target, text),
+            Style::Gravity => self.gravity(t, body, target, text),
+            Style::Swirl => self.swirl(t, body, target, text),
+            Style::Backspace => self.backspace(t, target, text),
+            Style::Crt => self.crt(t, body, target),
+            Style::Confetti => self.confetti(t, body, target),
             Style::Relief
             | Style::Wake
             | Style::Sunrise
@@ -406,7 +420,7 @@ impl Painter<'_> {
         }
     }
     /// Progress of the flight between `from` and `to` of the run, and where it is.
-    fn flight(
+    pub(super) fn flight(
         &self,
         t: f32,
         from: f32,
