@@ -17,6 +17,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from './icons';
 import { type Theme, useTheme } from './theme';
 
+/** Chinese titles are regular weight: PingFang's medium reads heavier than the design wants. */
+export const TITLE_WEIGHT = '400' as const;
+
 export const mono = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, Menlo, monospace' });
 
 /** Web draws a focus ring round inputs; the design's fields show focus by their border. */
@@ -286,8 +289,8 @@ const s = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 22, height: 44, paddingHorizontal: 4 },
   pillItem: { height: 40, alignItems: 'center', justifyContent: 'center' },
   nav: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingBottom: 8 },
-  navTitle: { fontSize: 15, fontWeight: '600' },
-  navBig: { fontSize: 18, fontWeight: '600' },
+  navTitle: { fontSize: 15, fontWeight: TITLE_WEIGHT },
+  navBig: { fontSize: 18, fontWeight: TITLE_WEIGHT },
   navSub: { fontSize: 12 },
   btn: {
     height: 36,

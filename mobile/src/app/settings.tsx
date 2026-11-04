@@ -7,14 +7,14 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { oops } from '@/actions';
 import { type Settings, settings, useSettings } from '@/store/settings';
 import { Icon } from '@/ui/icons';
-import { Label, Nav, Switch, useBottom } from '@/ui/kit';
+import { Label, Nav, Switch, TITLE_WEIGHT, useBottom } from '@/ui/kit';
 import { type Theme, useTheme } from '@/ui/theme';
 
 function Item({ t, title, sub, children, last, onPress }: { t: Theme; title: string; sub?: string; children?: ReactNode; last?: boolean; onPress?: () => void }) {
   const body = (
     <>
       <View style={{ flex: 1, gap: 3 }}>
-        <Text style={{ fontSize: 16, color: t.text, fontWeight: '500' }}>{title}</Text>
+        <Text style={{ fontSize: 16, color: t.text, fontWeight: TITLE_WEIGHT }}>{title}</Text>
         {!!sub && <Text style={{ fontSize: 13, color: t.dim }}>{sub}</Text>}
       </View>
       {children}

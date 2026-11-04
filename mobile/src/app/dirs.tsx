@@ -14,16 +14,24 @@ import { SayDialog } from '@/ui/sheets';
 import { tilde } from '@/ui/status';
 import { type Theme, useTheme } from '@/ui/theme';
 
-type Dir = { name: string; path: string; git?: { branch: string; changes: number; worktree: boolean } | null; sessions?: number; recent?: boolean };
-type Listing = { path: string; parent?: string | null; home: string; dirs: Dir[]; recent?: string[] };
+type Dir = { name: string; path: string; git?: { branch: string; changes?: number | null; worktree: boolean } | null; sessions?: number; recent?: boolean };
+type Listing = { path: string; parent?: string | null; home: string; dirs: Dir[]; recent?: string[]; truncated?: boolean };
+
+/** A worktree is said to be one; otherwise its count, when counting did not time out. */
+function changes(g: NonNullable<Dir['git']>): string {
+  if (g.worktree) return '工作树';
+  if (g.changes === undefined || g.changes === null) return '';
+  return g.changes ? `${g.changes} 个改动` : '没有改动';
+}
 
 function about(d: Dir): string {
-  const parts: string[] = [];
-  if (d.git) {
-    parts.push(d.git.branch || 'git');
-    parts.push(d.git.worktree ? '工作树' : d.git.changes ? `${d.git.changes} 个改动` : '没有改动');
-  } else parts.push('普通文件夹');
-  return parts.join(' · ');
+  return d.git ? [d.git.branch || 'git', changes(d.git)].filter(Boolean).join(' · ') : '普通文件夹';
+}
+
+/** Why a search may have missed some: it ran out of time, or hit the machine's 50. */
+function searchLimit(l: Listing): string {
+  if (l.truncated) return '没搜完，多打几个字再试';
+  return l.dirs.length >= 50 ? '结果太多，只显示前 50 个' : '';
 }
 
 function Mark({ text, query, t }: { text: string; query: string; t: Theme }) {
@@ -52,20 +60,25 @@ export default function Dirs() {
   const [found, setFound] = useState<Dir[] | null>(null);
   const [picked, setPicked] = useState<Dir | null>(null);
   const [error, setError] = useState('');
+  const [cut, setCut] = useState('');
   const [making, setMaking] = useState(false);
+  // Counting changes in a big tree can take the machine about three seconds.
+  const [busy, setBusy] = useState(false);
   const typedPath = /^[~/]/.test(query.trim());
 
   useEffect(() => {
     const r = online && can ? remote(machine) : null;
     if (!r) return;
     let live = true;
+    setBusy(true);
     r.request('dirs', path ? { path } : {})
       .then((l: Listing) => {
         if (!live) return;
         setList(l);
         setError('');
       })
-      .catch((e) => live && setError((e as Error).message));
+      .catch((e) => live && setError((e as Error).message))
+      .finally(() => live && setBusy(false));
     return () => {
       live = false;
     };
@@ -78,9 +91,14 @@ export default function Dirs() {
     const r = online && can ? remote(machine) : null;
     if (!r) return;
     let live = true;
+    setFound(null);
     const timer = setTimeout(() => {
       r.request('dirs', { query: q })
-        .then((l: Listing) => live && setFound(l.dirs))
+        .then((l: Listing) => {
+          if (!live) return;
+          setFound(l.dirs);
+          setCut(searchLimit(l));
+        })
         .catch((e) => live && setError((e as Error).message));
     }, 250);
     return () => {
@@ -173,9 +191,12 @@ export default function Dirs() {
             )}
             {!query && list && (
               <>
-                <Label>
-                  {crumbs.at(-1)?.label ?? '~'} 里的文件夹 · {list.dirs.length}
-                </Label>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Label>
+                    {crumbs.at(-1)?.label ?? '~'} 里的文件夹 · {list.dirs.length}
+                  </Label>
+                  {busy && <ActivityIndicator size="small" />}
+                </View>
                 <View style={[s.list, { borderColor: t.line, backgroundColor: t.card }]}>
                   {list.dirs.length === 0 && <Notice text="这里没有子文件夹" />}
                   {list.dirs.map((d, i) => {
@@ -192,7 +213,7 @@ export default function Dirs() {
                               {d.git ? (
                                 <>
                                   <Text style={{ fontFamily: mono }}>{d.git.branch || 'git'}</Text>
-                                  {` · ${d.git.worktree ? '工作树' : d.git.changes ? `${d.git.changes} 个改动` : '没有改动'}`}
+                                  {changes(d.git) ? ` · ${changes(d.git)}` : ''}
                                 </>
                               ) : (
                                 '普通文件夹'
@@ -238,6 +259,7 @@ export default function Dirs() {
                     ))}
                   </View>
                 )}
+                {!!found && !!cut && <Notice text={cut} />}
               </>
             )}
             {!!query && typedPath && (

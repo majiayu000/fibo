@@ -143,7 +143,7 @@ async function connect(id: string) {
       ops: hello.ops ?? [],
       name: hello.machine?.name || m.name,
       os: typeof hello.os === 'string' ? hello.os : undefined,
-      appVersion: typeof hello.app_version === 'string' ? hello.app_version : typeof hello.version === 'string' ? hello.version : undefined,
+      appVersion: typeof hello.app_version === 'string' ? hello.app_version : undefined,
       seen: Date.now() / 1000,
     });
     ping(id, r);

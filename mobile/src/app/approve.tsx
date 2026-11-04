@@ -1,5 +1,5 @@
 // One approval, large: what it wants to run in big mono type, what it said just before,
-// 拒绝 and 允许 (Face ID when settings ask), 「这个会话里都允许」 when the screen offers it,
+// 拒绝 and 允许 (Face ID when settings ask), 「以后不再询问」 (the machine says no when the menu lacks it),
 // and 「拒绝，并告诉它…」.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -10,8 +10,7 @@ import { useAsk } from '@/remote/useAsk';
 import { useSettings } from '@/store/settings';
 import { cardTitle } from '@/ui/format';
 import { SpaceMark } from '@/ui/icons';
-import { Nav, Notice, Wide, mono, useBottom } from '@/ui/kit';
-import { commandHead } from '@/ui/parse';
+import { Nav, Notice, TITLE_WEIGHT, Wide, mono, useBottom } from '@/ui/kit';
 import { spaceName } from '@/ui/row';
 import { agentName } from '@/ui/status';
 import { SayDialog } from '@/ui/sheets';
@@ -118,11 +117,11 @@ export default function Approve() {
         )}
         {card?.approval && can && (
           <View style={{ gap: 8 }}>
-            {ask.always && speaksV2(m) && (
+            {speaksV2(m) && (
               <Wide
                 kind="outline"
                 height={46}
-                label={`这个会话里都允许 ${commandHead(ask.subject)}`}
+                label="以后不再询问"
                 disabled={busy}
                 onPress={() => run(() => approve(machine, card, ask.subject, true))}
                 textStyle={{ fontSize: 15, fontWeight: '500' }}
@@ -158,7 +157,7 @@ export default function Approve() {
 
 const s = StyleSheet.create({
   head: { flexDirection: 'row', gap: 14, alignItems: 'center' },
-  title: { fontSize: 19, fontWeight: '600' },
+  title: { fontSize: 19, fontWeight: TITLE_WEIGHT },
   box: { borderWidth: 1.5, borderRadius: 22, padding: 16, gap: 14 },
   cmd: { fontFamily: mono, fontSize: 20, lineHeight: 29, borderRadius: 14, padding: 14, overflow: 'hidden' },
 });

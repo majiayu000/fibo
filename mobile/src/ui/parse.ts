@@ -11,8 +11,6 @@ export type Ask = {
   subject: string;
   /** Its kind as the prompt titles it: "Bash command", "Edit file". */
   kind: string;
-  /** The screen offers "don't ask again" for this session. */
-  always: boolean;
 };
 
 /**
@@ -21,26 +19,18 @@ export type Ask = {
  */
 export function readAsk(screen: string, question: string): Ask {
   const lines = screen.split('\n').map(unbox);
-  const always = lines.some((l) => /don.t ask again|不再询问|always allow/i.test(l));
   const title = lines.findIndex((l) => /^\s*(Bash( command)?|Run|Edit( file)?|Write( file)?|Create( file)?|Read( file)?|Fetch|WebFetch|MCP|Tool use|Command)\b.*$/i.test(l.trim()) && l.trim().length < 40);
   if (title >= 0) {
     const rest = lines.slice(title + 1).filter(filled);
     const subject = rest[0]?.trim();
     if (subject && !/do you want|proceed\?|^❯|^>/i.test(subject)) {
-      return { subject, kind: lines[title].trim(), always };
+      return { subject, kind: lines[title].trim() };
     }
   }
   // No title: the last filled line above the question.
   const q = lines.findIndex((l) => /do you want|proceed\?|allow/i.test(l));
   const above = q > 0 ? lines.slice(0, q).filter(filled) : [];
-  return { subject: above.at(-1)?.trim() || question, kind: '', always };
-}
-
-/** The first words of a command, for 「这个会话里都允许 git push」. */
-export function commandHead(cmd: string): string {
-  const words = cmd.replace(/^\$\s*/, '').trim().split(/\s+/);
-  const tools = /^(git|npm|bun|bunx|pnpm|yarn|cargo|docker|kubectl|go|python3?|pip|make|gh|brew|npx|uv)$/;
-  return tools.test(words[0] ?? '') && words[1] ? `${words[0]} ${words[1]}` : (words[0] ?? cmd);
+  return { subject: above.at(-1)?.trim() || question, kind: '' };
 }
 
 /** Commands worth a second confirmation: pushing, deleting, deploying, publishing. */

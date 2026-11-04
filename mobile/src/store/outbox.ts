@@ -22,5 +22,10 @@ export function mark(id: string, error: string) {
   box.set((v) => ({ items: v.items.map((x) => (x.id === id ? { ...x, error } : x)) }));
 }
 
+/** Tries a failed one again: the pump picks it up once its error is gone. */
+export function retry(id: string) {
+  box.set((v) => ({ items: v.items.map((x) => (x.id === id ? { ...x, error: undefined } : x)) }));
+}
+
 export const unsent = () => box.get().items;
 export const useOutbox = () => useSyncExternalStore(box.subscribe, box.get).items;

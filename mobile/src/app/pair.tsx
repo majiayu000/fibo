@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { pair } from '@/remote/hub';
 import { escape, type Link, parseLink } from '@/remote/link';
-import { Nav, Wide, useBottom } from '@/ui/kit';
+import { Nav, TITLE_WEIGHT, Wide, useBottom } from '@/ui/kit';
 import { useTheme } from '@/ui/theme';
 
 export default function Pair() {
@@ -66,7 +66,7 @@ export default function Pair() {
       <View style={[s.page, { backgroundColor: t.bg }]}>
         <Nav big title="配对电脑" />
         <View style={s.body}>
-          <Text style={{ color: t.text, fontSize: 19, fontWeight: '600' }}>和「{candidate.name || '这台电脑'}」配对？</Text>
+          <Text style={{ color: t.text, fontSize: 19, fontWeight: TITLE_WEIGHT }}>和「{candidate.name || '这台电脑'}」配对？</Text>
           <Text style={[s.hint, { color: t.dim }]}>
             经过中继 {relay}。只在你刚在自己电脑的 Mooring 里点了「配对新手机」时才确认；别人发来的链接不要配。
           </Text>

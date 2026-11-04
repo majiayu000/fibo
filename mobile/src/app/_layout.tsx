@@ -49,7 +49,7 @@ export default function Layout() {
         <Stack.Screen name="pair" />
         <Stack.Screen name="chat" />
         <Stack.Screen name="approve" />
-        <Stack.Screen name="new" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="new" options={{ animation: 'slide_from_bottom' }} />
       </Stack>
       {locked && (
         <View style={{ position: 'absolute', inset: 0, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', gap: 16 }}>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { remote } from '../remote/hub';
-import { Wide, mono, useBottom } from './kit';
+import { Wide, mono, noOutline, useBottom } from './kit';
 import { useTheme } from './theme';
 
 function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -49,7 +49,7 @@ export function SayDialog({
         onChangeText={setText}
         placeholder={placeholder}
         placeholderTextColor={t.dim}
-        style={[s.input, { color: t.text, backgroundColor: t.well }]}
+        style={[s.input, { color: t.text, backgroundColor: t.well }, noOutline]}
       />
       <Wide label={action} disabled={!text.trim()} onPress={() => onSend(text.trim())} />
     </Frame>

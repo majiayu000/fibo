@@ -8,7 +8,7 @@ import { oops } from '@/actions';
 import { NOT_YET, remote, supports, useHub, write } from '@/remote/hub';
 import { useReviewed } from '@/store/reviewed';
 import { Icon } from '@/ui/icons';
-import { Btn, Nav, Notice, mono, useBottom } from '@/ui/kit';
+import { Btn, Nav, Notice, TITLE_WEIGHT, mono, useBottom } from '@/ui/kit';
 import { diffLines } from '@/ui/parse';
 import { SayDialog } from '@/ui/sheets';
 import { type Theme, useTheme } from '@/ui/theme';
@@ -78,6 +78,7 @@ export default function DiffScreen() {
   const [error, setError] = useState('');
   const [openSet, setOpen] = useState<Record<string, boolean>>({});
   const [asking, setAsking] = useState(false);
+  const [sent, setSent] = useState('');
   const reviewed = useReviewed(machine, diff?.cwd ?? '');
 
   useEffect(() => {
@@ -102,7 +103,7 @@ export default function DiffScreen() {
   const seen = files.filter((f) => reviewed.has(f.path, f.patch)).length;
   const say = (text: string) =>
     write(machine, 'send', { terminal, text, enter: true })
-      .then(() => oops('已经发给它了'))
+      .then(() => setSent(text))
       .catch((e) => oops((e as Error).message));
 
   return (
@@ -151,11 +152,11 @@ export default function DiffScreen() {
                   <Icon name="check" size={18} width={2.2} color={seen === files.length ? t.ok : t.dim} />
                 </View>
                 <View style={{ gap: 1, flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: t.text }}>
+                  <Text style={{ fontSize: 16, fontWeight: TITLE_WEIGHT, color: t.text }}>
                     看过 {seen} / {files.length} 个文件
                   </Text>
                   <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim }}>
-                    {diff.cwd}
+                    {sent ? `已发给它：${sent}` : diff.cwd}
                   </Text>
                 </View>
               </View>

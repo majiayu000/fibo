@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Card, Machine } from '../remote/hub';
 import { cardTitle } from './format';
 import { SpaceMark } from './icons';
-import { mono } from './kit';
+import { TITLE_WEIGHT, mono } from './kit';
 import { agentName, base, statusColor, statusWord, tilde } from './status';
 import { useTheme } from './theme';
 
@@ -70,7 +70,7 @@ export const rowStyles = StyleSheet.create({
   l1: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   where: { fontSize: 13, flexShrink: 1 },
   state: { marginLeft: 'auto', fontSize: 13, paddingLeft: 8 },
-  title: { fontSize: 16, fontWeight: '400', lineHeight: 22 },
+  title: { fontSize: 16, fontWeight: TITLE_WEIGHT, lineHeight: 22 },
 });
 
 const s = StyleSheet.create({

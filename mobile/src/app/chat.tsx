@@ -9,7 +9,7 @@ import { catchUp } from '@/remote/gap';
 import { refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { UNSURE } from '@/remote/named';
 import { useAsk } from '@/remote/useAsk';
-import { drop, enqueue, useOutbox } from '@/store/outbox';
+import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { Composer } from '@/ui/composer';
 import { cardTitle } from '@/ui/format';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
@@ -17,7 +17,7 @@ import { type Message, Mine, Theirs } from '@/ui/message';
 import { choices, questionText } from '@/ui/parse';
 import { spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
-import { agentName, statusColor, statusWord, tilde } from '@/ui/status';
+import { agentName, statusColor, statusWord } from '@/ui/status';
 import { useTheme } from '@/ui/theme';
 
 type Pending = { text: string; at: number };
@@ -32,6 +32,7 @@ function merge(have: Message[], got: Message[]): Message[] {
 }
 
 const POLL_MS = 2000;
+const NO_CONVERSATION = /没有 Agent 对话/;
 
 type Line = { kind: 'msg'; m: Message } | { kind: 'pending'; p: Pending } | { kind: 'unsent'; id: string; text: string; error?: string };
 
@@ -87,7 +88,9 @@ export default function Chat() {
         );
         if (live && gap.length && shown.current === page.session) setMessages((have) => merge(have, gap));
       })
-      .catch((e) => live && setError(e.message))
+      // A shell whose Agent has not started has no conversation yet: the empty state says
+      // so, and the card naming a session brings this effect back.
+      .catch((e) => live && !NO_CONVERSATION.test(e.message) && setError(e.message))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
@@ -184,10 +187,8 @@ export default function Chat() {
         title={card ? cardTitle(card) : '对话'}
         sub={
           <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim }}>
-            {[m && card ? spaceName(m, card) : '', m?.name, card ? tilde(card.cwd) : ''].filter(Boolean).join(' · ')}
-            {card && online && (
-              <Text style={{ color: statusColor(card, t) }}>{`  ${statusWord(card)}`}</Text>
-            )}
+            {[m && card ? spaceName(m, card) : '', m?.name].filter(Boolean).join(' · ')}
+            {card && online && <Text style={{ color: statusColor(card, t) }}>{` · ${statusWord(card)}`}</Text>}
           </Text>
         }
         right={
@@ -217,8 +218,8 @@ export default function Chat() {
             ) : l.kind === 'pending' ? (
               <Mine text={l.p.text} note="发送中…" tone="pending" />
             ) : (
-              <Pressable onLongPress={() => drop(l.id)}>
-                <Mine text={l.text} note={l.error ? `没发出去：${l.error}（按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
+              <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
+                <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
               </Pressable>
             )
           }
@@ -227,7 +228,7 @@ export default function Chat() {
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
           ListEmptyComponent={
             <Text style={{ color: t.dim, textAlign: 'center', transform: [{ scaleY: -1 }] }}>
-              {card?.agent ? '这段对话还没有消息' : '这个终端里没有 Agent 对话'}
+              {card?.session ? '这段对话还没有消息' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
         />
@@ -251,18 +252,23 @@ export default function Chat() {
       )}
       {!!waiting && (
         <View style={{ paddingHorizontal: 18, paddingBottom: 10, gap: 8 }}>
-          {options.length > 0 && <Text style={{ color: t.wait, fontSize: 13 }}>{questionText(waiting) || '等你回答'}</Text>}
-          {options.length > 0 && supports(m, 'keys') && (
+          <Text numberOfLines={6} style={{ color: t.wait, fontSize: 13, lineHeight: 19 }}>
+            {questionText(waiting) || '等你回答'}
+          </Text>
+          {supports(m, 'keys') && (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {options.map((o) => (
                 <Btn key={o.key} label={o.label} onPress={() => act('keys', { keys: [o.key] })} />
               ))}
+              <Btn label="Esc" onPress={() => act('keys', { keys: ['esc'] })} />
             </View>
           )}
         </View>
       )}
       {!!error && <Notice tone="danger" text={error} />}
-      {m?.role && m.role !== 'full' && !supports(m, 'send') ? (
+      {online && !card ? (
+        <Notice text="这个终端已经关了" />
+      ) : m?.role && m.role !== 'full' && !supports(m, 'send') ? (
         <Notice text={`这台手机的权限是「${m.role === 'view' ? '只看' : '能答审批'}」，不能发消息`} />
       ) : (
         <Composer

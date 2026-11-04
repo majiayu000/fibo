@@ -53,7 +53,7 @@ export function Markdown({ text, t, color }: { text: string; t: Theme; color: st
           case 'item':
             return (
               <View key={i} style={{ flexDirection: 'row', paddingLeft: b.depth * 14 }}>
-                <Text style={[base, { width: b.mark === '•' ? 14 : 22 }]}>{b.mark}</Text>
+                <Text style={[base, { width: b.mark === '•' ? 16 : 22 }]}>{b.mark}</Text>
                 <Text selectable style={[base, { flex: 1 }]}>
                   {inline(b.text, t)}
                 </Text>
@@ -81,7 +81,7 @@ export function Markdown({ text, t, color }: { text: string; t: Theme; color: st
   );
 }
 
-const mono = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' });
+const mono = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, Menlo, monospace' });
 
 const s = StyleSheet.create({
   code: { fontFamily: mono, fontSize: 13, borderRadius: 5 },

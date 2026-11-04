@@ -134,6 +134,8 @@ function dirs(fields: Record<string, unknown>) {
         { name: 'keep-notes', path: `${HOME}/Documents/keep-notes`, sessions: 0 },
       ].filter((d) => d.name.includes(q)),
       recent: [],
+      // Only this query, so the screen's 「没搜完」 line can be looked at.
+      truncated: q === 'keep',
     };
   }
   const path = String(fields.path ?? `${HOME}/code/AI/tools`);
@@ -170,7 +172,7 @@ function remote(machine: string) {
   const answer = (op: string, f: Record<string, unknown>): unknown => {
     switch (op) {
       case 'hello':
-        return { version: 1, machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name }, ops: ALL_OPS, role: machine === 'dev-linux' ? 'answer' : 'full', requests: true, os: machine === 'dev-linux' ? 'linux' : 'macos' };
+        return { version: 1, machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name }, ops: ALL_OPS, role: machine === 'dev-linux' ? 'answer' : 'full', requests: true, os: machine === 'dev-linux' ? 'linux' : 'macos', app_version: '0.1.0' };
       case 'list':
         return {
           machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name },

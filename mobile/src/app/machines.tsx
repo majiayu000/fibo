@@ -56,7 +56,7 @@ function MachineCard({ m, t }: { m: Machine; t: Theme }) {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Stat t={t} k="对话" v={String(conversations)} />
             <Stat t={t} k="连接" v={place.lan ? '局域网' : '中继'} />
-            <Stat t={t} k="延迟" v={m.latency !== undefined ? String(m.latency) : '—'} unit={m.latency !== undefined ? 'ms' : undefined} />
+            <Stat t={t} k="延迟" v={m.latency === undefined ? '—' : m.latency < 1 ? '<1' : String(m.latency)} unit={m.latency !== undefined ? 'ms' : undefined} />
           </View>
           <Text style={{ fontSize: 13, color: t.dim }} numberOfLines={2}>
             {[...facts, `经 ${place.host}`].join(' · ')}

@@ -1,7 +1,7 @@
 // The composer: a big rounded card with the text on top and a row of small controls
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Icon } from './icons';
 import { noOutline, useBottom } from './kit';
 import { useTheme } from './theme';
@@ -40,6 +40,7 @@ export function Composer({
         placeholder={offline ? '电脑没连上，写的话会在重连后发送' : '回复，或者让它接着做…'}
         placeholderTextColor={t.dim}
         multiline
+        numberOfLines={Platform.OS === 'web' ? 1 : undefined}
         style={[s.input, { color: t.text }, noOutline]}
         accessibilityLabel="给 Agent 发消息"
       />

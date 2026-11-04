@@ -9,7 +9,7 @@ import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/h
 import { useAsk } from '@/remote/useAsk';
 import { drop, useOutbox } from '@/store/outbox';
 import { SpaceMark } from '@/ui/icons';
-import { Btn, Group, Pill, Round, Wide, mono, useBottom, useTop } from '@/ui/kit';
+import { Btn, Group, Pill, Round, TITLE_WEIGHT, Wide, mono, useBottom, useTop } from '@/ui/kit';
 import { Row, rowStyles, spaceName } from '@/ui/row';
 import { rank } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
@@ -208,6 +208,6 @@ const s = StyleSheet.create({
   dotSmall: { width: 8, height: 8, borderRadius: 4 },
   unsent: { gap: 3, paddingVertical: 12, paddingHorizontal: 18, borderBottomWidth: 1 },
   empty: { alignItems: 'center', gap: 12, paddingTop: 80, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: 18, fontWeight: '500' },
+  emptyTitle: { fontSize: 18, fontWeight: TITLE_WEIGHT },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 });
