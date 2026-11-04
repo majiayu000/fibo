@@ -509,6 +509,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             after,
             before,
             limit,
+            tools,
         } => {
             let host = lock(shared)?;
             let s = host
@@ -517,7 +518,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 .iter()
                 .find(|s| s.id == session)
                 .ok_or_else(|| io::Error::other("会话不存在"))?;
-            let (messages, more) = host.index.chat(&s.transcript, after, before, limit)?;
+            let (messages, more) = host
+                .index
+                .chat(&s.transcript, after, before, limit, tools)?;
             Ok(Reply::Chat { messages, more })
         }
         Request::ReadScreen { id, rows } => {
@@ -552,7 +555,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             question,
             allow,
         } => {
-            answer_approval(shared, &id, &question, allow)?;
+            answer_approval(shared, &id, &question, allow, false)?;
+            Ok(Reply::Ok)
+        }
+        Request::AnswerAlways { id, question } => {
+            answer_approval(shared, &id, &question, true, true)?;
             Ok(Reply::Ok)
         }
         Request::SendKeys { id, keys } => {
@@ -561,6 +568,10 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         }
         Request::SendInput { id, bytes } => {
             type_input(shared, &id, &bytes)?;
+            Ok(Reply::Ok)
+        }
+        Request::Interrupt { id } => {
+            interrupt(shared, &id)?;
             Ok(Reply::Ok)
         }
         Request::RemoteConfigure {
@@ -709,6 +720,7 @@ pub(super) fn answer_approval(
     id: &str,
     question: &str,
     allow: bool,
+    always: bool,
 ) -> io::Result<()> {
     let (terminal, rules) = {
         let host = lock(shared)?;
@@ -738,10 +750,15 @@ pub(super) fn answer_approval(
             return Err(io::Error::other("画面上已经没有这个审批了，可能已经答过"));
         }
         // Enter takes whichever option the cursor is on; only the first one is 允许一次.
-        if allow && !seen.cursor_on_first() {
+        let key = if always {
+            let key = seen.always_key();
+            key.ok_or_else(|| io::Error::other("这个审批没有「不再询问」这一项"))?
+        } else if allow && !seen.cursor_on_first() {
             return Err(io::Error::other("光标不在第一个选项上，请打开画面回答"));
-        }
-        pty::write(&mut live.master, if allow { b"\r" } else { b"\x1b" })?;
+        } else {
+            (if allow { "\r" } else { "\x1b" }).to_owned()
+        };
+        pty::write(&mut live.master, key.as_bytes())?;
         live.input_at = Some(Instant::now());
     }
     lock(shared)?.set_screen_wait(id, None)

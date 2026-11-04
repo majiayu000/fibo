@@ -82,8 +82,8 @@ pub(crate) fn edit_lines(input: &Value) -> (u32, u32) {
 /// Each file an apply_patch names, with the `+` and `-` lines of its section.
 /// Where a kept call input holds its edit's line counts and its patch's files, worked out
 /// when the call arrived.
-const LINES: &str = "_lines";
-const PATCHED: &str = "_patch";
+pub(crate) const LINES: &str = "_lines";
+pub(crate) const PATCHED: &str = "_patch";
 /// Fields of a call's input that its result is read against. The rest (a Write's whole
 /// file, an Edit's old and new text) is reduced to line counts up front, so the pending
 /// calls saved after every log line stay small.
@@ -111,7 +111,7 @@ fn kept_input(args: &Value) -> Value {
     }
     Value::Object(kept)
 }
-fn patch_text(input: &Value) -> &str {
+pub(crate) fn patch_text(input: &Value) -> &str {
     input["input"]
         .as_str()
         .or_else(|| input["patch"].as_str())
@@ -401,7 +401,7 @@ impl Parser {
         }
         self.record(
             "tool_call",
-            format!("{name} {}", short(&args.to_string(), 8192)),
+            format!("{name} {}", db::logged_args(name, &args)),
             id,
             None,
             at,

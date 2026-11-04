@@ -63,10 +63,14 @@ pub enum Op {
         request: Option<String>,
     },
     /// Answers the approval asking `question`; refused if it is no longer on screen.
+    /// `always` takes the menu's 「don't ask again」 option instead, refused when it has
+    /// none: never a plain allow in its place.
     Answer {
         terminal: String,
         question: String,
         allow: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        always: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
@@ -84,6 +88,10 @@ pub enum Op {
         before: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<u64>,
+        /// Each Agent message also carries [`Tools`]: the tool calls since the message
+        /// before it.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        tools: bool,
     },
     /// Opens a stream of [`StreamBody::Event`]s, the current state first.
     Events,
@@ -96,9 +104,15 @@ pub enum Op {
         take: bool,
     },
     /// A shell in a new tab, in `cwd` (else its space's directory): `{terminal, tab}`.
+    /// With `agent` (as cards name it: `claude`, `codex`…) the shell runs that Agent,
+    /// `prompt` its first message; the shell stays once it exits.
     Open {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cwd: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
@@ -129,6 +143,36 @@ pub enum Op {
     },
     /// Answered `{}` at once: a client's heartbeat, to find a link that died quietly.
     Ping,
+    /// What changed in a git work tree against HEAD, untracked files included: [`Diff`].
+    /// Names the `terminal` whose directory it is, or the `cwd`. Read only.
+    Diff {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cwd: Option<String>,
+    },
+    /// The folders in `path` (default home, `~` expands), or those under home whose name
+    /// holds `query`: [`Dirs`].
+    Dirs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        query: Option<String>,
+    },
+    /// Makes one folder in an existing one: `{path}`.
+    Mkdir {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
+    /// Interrupts the Agent's turn, as the desktop's 中断 does; refused unless it runs.
+    Stop {
+        terminal: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
+    /// The account limits each Agent last reported, within a week: [`Quotas`].
+    Quota,
 }
 
 impl Op {
@@ -150,6 +194,11 @@ impl Op {
             Self::Outcome { .. } => "outcome",
             Self::Close { .. } => "close",
             Self::Ping => "ping",
+            Self::Diff { .. } => "diff",
+            Self::Dirs { .. } => "dirs",
+            Self::Mkdir { .. } => "mkdir",
+            Self::Stop { .. } => "stop",
+            Self::Quota => "quota",
         }
     }
 }
@@ -157,7 +206,7 @@ impl Op {
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
     "hello", "list", "read", "send", "keys", "input", "answer", "chat", "events", "watch",
-    "resize", "open", "end", "outcome", "close", "ping",
+    "resize", "open", "end", "outcome", "close", "ping", "diff", "dirs", "mkdir", "stop", "quota",
 ];
 
 /// A line from the machine.
@@ -252,6 +301,12 @@ pub struct Hello {
     /// reply back, for a day. Absent from machines before 11-04.
     #[serde(default)]
     pub requests: bool,
+    /// `macos` or `linux`; absent from machines before v2.
+    #[serde(default)]
+    pub os: Option<String>,
+    /// The Mooring build answering, e.g. `0.1.0`; `version` above is the protocol's.
+    #[serde(default)]
+    pub app_version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -341,6 +396,112 @@ pub struct Message {
     pub at: u64,
     pub role: Speaker,
     pub text: String,
+    /// With `chat`'s `tools`, on Agent messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Tools>,
+}
+
+/// The tool calls between an Agent message and the message before it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tools {
+    /// Shell commands run.
+    pub commands: u32,
+    /// Files changed, in the order first touched.
+    pub files: Vec<FileLines>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileLines {
+    pub path: String,
+    pub added: u32,
+    pub removed: u32,
+}
+
+/// The reply to `diff`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Diff {
+    /// The work tree's top.
+    pub cwd: String,
+    /// Empty on a detached HEAD.
+    pub branch: String,
+    pub files: Vec<DiffFile>,
+    pub added: u32,
+    pub removed: u32,
+    /// Some patches were cut or left out: the whole is over 512 KiB.
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffFile {
+    pub path: String,
+    pub added: u32,
+    pub removed: u32,
+    /// `M`, `A`, `D`, `R` or `?` (untracked).
+    pub status: String,
+    /// Unified diff, at most 64 KiB; empty for a binary file.
+    pub patch: String,
+    pub truncated: bool,
+}
+
+/// The reply to `dirs`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Dirs {
+    /// The folder listed; empty for a `query`.
+    pub path: String,
+    /// Its parent; absent at `/` and for a `query`.
+    #[serde(default)]
+    pub parent: Option<String>,
+    pub home: String,
+    pub dirs: Vec<Dir>,
+    /// Terminal directories in use now, most recent first.
+    pub recent: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Dir {
+    pub name: String,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git: Option<GitInfo>,
+    /// Live Agent conversations whose terminal is in it.
+    pub sessions: u32,
+    /// A terminal works in it or below it now.
+    pub recent: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitInfo {
+    pub branch: String,
+    /// Changed and untracked files; absent when counting took too long (a huge tree).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<u32>,
+    /// A linked work tree, not the main checkout.
+    pub worktree: bool,
+}
+
+/// The reply to `quota`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Quotas {
+    pub agents: Vec<AgentQuota>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentQuota {
+    /// `claude`, `codex`… as cards name them.
+    pub agent: String,
+    pub plan: String,
+    /// When the CLI recorded it, Unix seconds.
+    pub at: u64,
+    pub windows: Vec<QuotaWindow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuotaWindow {
+    pub minutes: u32,
+    /// Percent used.
+    pub used: u16,
+    /// Unix seconds; 0 when unknown.
+    pub resets_at: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
