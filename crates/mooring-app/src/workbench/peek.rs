@@ -271,7 +271,15 @@ impl Workbench {
         // A band says what this is: a layer over the tab, whose machine gets the typing
         // (direction C, docs/multi-machine/peek-marker.html, chosen 11-04).
         let (what, how) = match &peek.remote {
-            Some(r) if read_only => (format!("正在偷看 {} 上的终端", r.host), "只读"),
+            Some(r) if read_only => {
+                let linked = r.slot.lock().unwrap().is_some();
+                let why = if linked {
+                    "只读：那边的 Mooring 太旧，更新后才能打字"
+                } else {
+                    "只读：没连上"
+                };
+                (format!("正在偷看 {} 上的终端", r.host), why)
+            }
             Some(r) => (
                 format!("正在偷看 {} 上的终端", r.host),
                 "打的字会发到那台电脑",

@@ -335,6 +335,8 @@ mod tests {
         terminals: Arc<Mutex<Vec<Value>>>,
         /// Pushes an event line into the open events stream.
         events: Arc<Mutex<Option<(u64, UnixStream)>>>,
+        /// The far end of every connection made; shutting one down drops that link.
+        links: Arc<Mutex<Vec<UnixStream>>>,
     }
 
     fn card(id: &str, status: &str) -> Value {
@@ -346,12 +348,15 @@ mod tests {
     fn fake() -> (Fake, impl Fn(&Spec) -> io::Result<Client>) {
         let terminals = Arc::new(Mutex::new(vec![card("a", "running")]));
         let events = Arc::new(Mutex::new(None));
+        let links = Arc::new(Mutex::new(Vec::new()));
         let fake = Fake {
             terminals: Arc::clone(&terminals),
             events: Arc::clone(&events),
+            links: Arc::clone(&links),
         };
         let connect = move |_: &Spec| {
             let (ours, theirs) = UnixStream::pair()?;
+            links.lock().unwrap().push(theirs.try_clone()?);
             let (terminals, events) = (Arc::clone(&terminals), Arc::clone(&events));
             let mut out = theirs.try_clone()?;
             std::thread::spawn(move || {
@@ -419,6 +424,44 @@ mod tests {
             r.view.lock().unwrap().terminals[1].status.as_deref(),
             Some("waiting")
         );
+    }
+
+    /// Step 1's acceptance: a dropped link shows 断开 and comes back by itself within 5
+    /// seconds, keeping the last cards meanwhile (the board fades them).
+    #[test]
+    fn a_dropped_link_comes_back_within_five_seconds() {
+        let (fake, connect) = fake();
+        let (tx, rx) = channel();
+        let spec = Spec {
+            host: "mac2".into(),
+            path: None,
+        };
+        let r = Remote::start(spec, connect, move || {
+            let _ = tx.send(());
+        });
+        wait(&rx, &r.view, |v| v.link == Link::Online);
+        assert!(r.slot().lock().unwrap().is_some());
+        for link in fake.links.lock().unwrap().drain(..) {
+            link.shutdown(std::net::Shutdown::Both).unwrap();
+        }
+        wait(&rx, &r.view, |v| matches!(v.link, Link::Offline(_)));
+        assert_eq!(
+            r.view.lock().unwrap().terminals.len(),
+            1,
+            "cards kept while away"
+        );
+        assert!(
+            r.slot().lock().unwrap().is_none(),
+            "nothing writes over a dead link"
+        );
+        let dropped = std::time::Instant::now();
+        wait(&rx, &r.view, |v| v.link == Link::Online);
+        assert!(
+            dropped.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            dropped.elapsed()
+        );
+        assert!(r.slot().lock().unwrap().is_some());
     }
 
     /// An Agent started in a plain terminal changes no session's state, so no event says so.
