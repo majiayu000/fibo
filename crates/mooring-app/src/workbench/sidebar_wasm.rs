@@ -299,7 +299,7 @@ impl Workbench {
                 return view
                     .last
                     .as_ref()
-                    .map_or(Err("连续出错，稍后再试".to_owned()), |(_, r)| {
+                    .map_or(Err("连续失败，稍后再试".to_owned()), |(_, r)| {
                         r.clone()
                     });
             }
