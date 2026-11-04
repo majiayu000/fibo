@@ -308,10 +308,8 @@ fn another_desktop_opens_settles_and_ends() {
     rpc(&socket, &launch).unwrap();
     let until = Instant::now() + Duration::from_secs(10);
     let pid = loop {
-        if let Ok(p) = std::fs::read_to_string(&pid_file).map(|p| p.trim().parse::<u32>()) {
-            if let Ok(p) = p {
-                break p;
-            }
+        if let Ok(Ok(p)) = std::fs::read_to_string(&pid_file).map(|p| p.trim().parse::<u32>()) {
+            break p;
         }
         assert!(Instant::now() < until, "no pid");
         std::thread::sleep(Duration::from_millis(20));
