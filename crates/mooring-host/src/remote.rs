@@ -206,11 +206,16 @@ pub fn serve(
         };
         match op {
             "hello" => {
-                greeted = true;
                 client = (request["client"].as_str())
                     .filter(|c| !c.is_empty())
                     .map(str::to_owned);
-                let _ = out.send(json!({ "id": id, "ok": hello(socket, access.role) }));
+                match hello(socket, access.role) {
+                    Ok(ok) => {
+                        greeted = true;
+                        let _ = out.send(json!({ "id": id, "ok": ok }));
+                    }
+                    Err(e) => fail(format!("记不住本机标识：{e}")),
+                }
             }
             _ if !greeted => fail("先发 hello".into()),
             _ if !access.role.allows(op) => fail(format!(
@@ -269,10 +274,10 @@ pub fn serve(
 }
 
 pub(crate) use mooring_host::devices::machine;
-fn hello(socket: &Path, role: Role) -> Value {
-    json!(rp::Hello {
+fn hello(socket: &Path, role: Role) -> io::Result<Value> {
+    Ok(json!(rp::Hello {
         version: rp::VERSION,
-        machine: machine(socket),
+        machine: machine(socket)?,
         ops: OPS
             .iter()
             .filter(|op| role.allows(op))
@@ -289,7 +294,7 @@ fn hello(socket: &Path, role: Role) -> Value {
             .into()
         ),
         app_version: Some(env!("CARGO_PKG_VERSION").into()),
-    })
+    }))
 }
 
 /// A write its client named: it runs once however often it comes (`Request::Once`).
@@ -335,7 +340,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
                     Ok(Reply::Recognition(r)) => r,
                     _ => Default::default(),
                 };
-                Ok(list(&w, &seen, socket))
+                list(&w, &seen, socket)
             }
             other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
@@ -421,7 +426,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
 }
 
 /// Spaces and running terminals as cards: what each Agent is doing and what it asks.
-fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
+fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io::Result<Value> {
     let now = mooring_core::content::now();
     let terminals: Vec<_> = w
         .terminals
@@ -479,11 +484,11 @@ fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
             cwd: s.cwd.clone(),
         })
         .collect();
-    json!(rp::List {
-        machine: machine(socket),
+    Ok(json!(rp::List {
+        machine: machine(socket)?,
         spaces,
         terminals,
-    })
+    }))
 }
 
 fn outcome_key(o: &Outcome) -> &'static str {
@@ -684,7 +689,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mooring-cards-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let list: rp::List =
-            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock"))).unwrap();
+            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock")).unwrap())
+                .unwrap();
         let at = mooring_core::content::now();
         assert!(!list.terminals.is_empty());
         for card in &list.terminals {
@@ -735,7 +741,8 @@ mod tests {
         );
         let dir = std::env::temp_dir().join(format!("mooring-unbound-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let list: rp::List = serde_json::from_value(list(&w, &seen, &dir.join("sock"))).unwrap();
+        let list: rp::List =
+            serde_json::from_value(list(&w, &seen, &dir.join("sock")).unwrap()).unwrap();
         let card = list.terminals.iter().find(|c| c.id == shell).unwrap();
         assert_eq!(card.phase, rp::Phase::Shell);
         assert_eq!(card.agent.as_deref(), Some("codex"));
