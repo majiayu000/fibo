@@ -1,0 +1,13 @@
+# 决定记录
+
+一次改动的动机、做法和否掉的方案写在**提交说明**里（`Why:` `Changed:` `Rejected:` `Impact:` `Guarded-by:` `Supersedes:`，见 `AGENTS.md`）。这里只放比一次改动活得久的决定：跨好几处代码的、被推翻过一次的、同一个方案被否掉两次的、照设计稿或惯例看会觉得奇怪的。
+
+文件名 `YYYY-MM-DD-<英文短名>.md`（日期是决定那天；不用顺序编号，并行会话不会抢号）。模板照 [adr-skill](https://github.com/skillrecordings/adr-skill) 的简版：frontmatter 的 `status`（accepted / rejected / superseded by …）、`date`、`decision-makers`，正文 Context、Decision（写清不做什么）、Consequences、Implementation Plan（受影响路径、要避免的写法）、Verification（能直接跑的命令）、Alternatives、More Information（重开条件、来源提交和会话）。推翻时新写一条，旧的改成 `superseded by`，两边互相链接；后来的发现带日期追加，不改原文。
+
+改到某个文件时，提到它的决定会和它最近的 `Rejected:` / `Guarded-by:` 一起贴给 Agent（`~/.config/agent-trace`，只在本机）。
+
+| 日期 | 决定 | 状态 |
+|---|---|---|
+| 2026-11-03 | [鸟瞰看板拖起卡片时倾斜](2026-11-03-tilt-board-cards-while-dragging.md) | 否定 |
+| 2026-11-03 | [后台 shell 一律算等后台](2026-11-03-count-background-shells-as-waiting.md) | 被取代 |
+| 2026-11-03 | [后台 shell 按监听端口分任务和服务](2026-11-03-split-background-shells-by-listening-port.md) | 采用 |
