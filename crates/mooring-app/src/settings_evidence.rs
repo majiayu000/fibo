@@ -71,6 +71,93 @@ pub(super) fn start(
             return;
         }
         // 主题: the two groups, the editor end to end, and files dropped into the folder.
+        // Everything 设置 › 终端 added past the type: each one saved, and seen in a real pane.
+        if phase == "details" {
+            use crate::ui::terminal_text::{self, CursorDefault};
+            use crate::terminal::screen::CursorShape;
+            let set = |change: &dyn Fn(&mut terminal_text::TerminalText)| {
+                let mut text = terminal_text::current();
+                change(&mut text);
+                terminal_text::update(text).unwrap();
+            };
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, a| p.visual_type("clear; printf 'plain text => != === -> 0O\\n\\033[2mfaint words\\033[0m\\n\\033[38;5;236mlowcontrast\\033[0m on dark\\n中文输入与等宽文字 汉字\\n'\r", a));
+            wait(800).await;
+            let redraw = |cx: &mut gpui::AsyncApp| {
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.refresh();
+                    w.draw(a).clear(a);
+                })
+                .unwrap();
+            };
+            shot("details-default", cx);
+            // A program's own shape wins, and a reset goes back to the setting.
+            set(&|t| t.cursor_shape = CursorDefault::Bar); redraw(cx); wait(400).await;
+            let shape = |cx: &mut gpui::AsyncApp, pane: &gpui::Entity<crate::terminal::pane::Pane>| pane.read_with(cx, |p, _| p.visual_cursor_shape());
+            assert_eq!(shape(cx, &pane), CursorShape::Bar, "default takes hold in a running terminal");
+            shot("details-cursor-bar", cx);
+            pane.update(cx, |p, a| p.visual_type("printf '\\033[2 q'\r", a)); wait(500).await; redraw(cx);
+            assert_eq!(shape(cx, &pane), CursorShape::Block, "the program asked for a block");
+            pane.update(cx, |p, a| p.visual_type("printf '\\033[0 q'\r", a)); wait(500).await; redraw(cx);
+            assert_eq!(shape(cx, &pane), CursorShape::Bar, "a reset returns to the setting");
+            set(&|t| t.cursor_shape = CursorDefault::Underline); redraw(cx); wait(400).await;
+            assert_eq!(shape(cx, &pane), CursorShape::Underline);
+            set(&|t| { t.cursor_shape = CursorDefault::Block; t.cursor_guide = true; }); redraw(cx); wait(400).await;
+            shot("details-guide", cx);
+            set(&|t| t.cursor_guide = false);
+            // The contrast floor reaches the text and comes off again.
+            let low = pane.read_with(cx, |p, _| p.visual_run_fg("lowcontrast")).unwrap();
+            assert_eq!(low, 0x303030);
+            set(&|t| t.min_contrast = 7.); redraw(cx); wait(400).await;
+            let raised = pane.read_with(cx, |p, _| p.visual_run_fg("lowcontrast")).unwrap();
+            assert_ne!(raised, low);
+            shot("details-contrast", cx);
+            set(&|t| t.min_contrast = 1.); redraw(cx); wait(400).await;
+            assert_eq!(pane.read_with(cx, |p, _| p.visual_run_fg("lowcontrast")).unwrap(), low);
+            set(&|t| t.faint = 0.9); redraw(cx); wait(300).await;
+            shot("details-faint", cx);
+            set(&|t| { t.faint = 0.5; t.ligatures = true; }); redraw(cx); wait(400).await;
+            shot("details-ligatures", cx);
+            set(&|t| { t.ligatures = false; t.non_ascii_family = "Kaiti SC".into(); }); redraw(cx); wait(400).await;
+            shot("details-non-ascii", cx);
+            set(&|t| t.non_ascii_family = String::new());
+            let before = pane.read_with(cx, |p, _| p.visual_bounds()).unwrap();
+            set(&|t| t.padding = 16.); redraw(cx); wait(600).await;
+            let after = pane.read_with(cx, |p, _| p.visual_bounds()).unwrap();
+            assert_eq!(f32::from(after.origin.x - before.origin.x), 16., "cells start past the margin");
+            assert_eq!(f32::from(before.size.width - after.size.width), 32.);
+            shot("details-padding", cx);
+            set(&|t| t.padding = 0.); redraw(cx); wait(400).await;
+            // A theme's selected-text color, on ASCII and on Chinese.
+            let dir = crate::ui::themes::dir().unwrap();
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("sel.json"), r##"{"bg":"#101820","fg":"#d0d8e0","terminal":{"selected_text":"#ffcc00","selection":"#205080","cursor_guide":"#00ff88"}}"##).unwrap();
+            cx.update(crate::ui::themes::reload);
+            cx.update(|a| crate::ui::appearance::set_theme("file:sel", false, true, a).unwrap());
+            wait(400).await;
+            let from = pane.read_with(cx, |p, _| p.visual_cell(0, 0)).unwrap();
+            let to = pane.read_with(cx, |p, _| p.visual_cell(3, 12)).unwrap();
+            cx.update_window(handle.into(), |_, w, a| {
+                use gpui::InputEvent;
+                w.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: from, modifiers: Default::default(), click_count: 1, first_mouse: false }.to_platform_input(), a);
+                w.dispatch_event(gpui::MouseMoveEvent { position: to, pressed_button: Some(gpui::MouseButton::Left), modifiers: Default::default() }.to_platform_input(), a);
+                w.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: to, modifiers: Default::default(), click_count: 1 }.to_platform_input(), a);
+            }).unwrap();
+            wait(400).await;
+            shot("details-selected-text", cx);
+            set(&|t| t.cursor_guide = true); redraw(cx); wait(300).await;
+            shot("details-theme-guide", cx);
+            // The page itself.
+            set(&|t| t.cursor_guide = false);
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("终端", a)).unwrap();
+            wait(400).await;
+            shot("details-page", cx);
+            eprintln!("settings details PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         if phase == "editor" {
             use crate::ui::{appearance::{self, Mode}, theme::Theme as T, themes::{self, Themes}};
             let term = || T::term();

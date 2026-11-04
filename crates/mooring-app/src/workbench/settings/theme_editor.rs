@@ -58,6 +58,8 @@ impl Tab {
                 item("terminal", "cursor", "光标"),
                 item("terminal", "cursor_text", "光标上的文字"),
                 item("terminal", "selection", "选区"),
+                item("terminal", "selected_text", "选中的文字"),
+                item("terminal", "cursor_guide", "光标行"),
                 item("terminal", "bold", "粗体"),
                 item("terminal", "link", "链接"),
                 item("terminal", "underline", "下划线"),
@@ -101,6 +103,8 @@ impl Item {
             ("terminal", "cursor") => p.term.cursor,
             ("terminal", "cursor_text") => p.term_cursor_text.unwrap_or(p.term.bg),
             ("terminal", "selection") => p.term_selection.unwrap_or(p.focus),
+            ("terminal", "selected_text") => p.term_selected_text.unwrap_or(p.term.fg),
+            ("terminal", "cursor_guide") => p.term_cursor_guide.unwrap_or(p.term.cursor),
             ("terminal", "bold") => p.term_bold.unwrap_or(p.term.fg),
             ("terminal", "link") => p.term_link.unwrap_or(p.term.fg),
             ("terminal", "underline") => p.term_underline.unwrap_or(p.term.fg),
@@ -744,7 +748,11 @@ mod tests {
         assert!(Tab::ALL.iter().all(|t| !t.items().is_empty()));
         assert_eq!(
             count,
-            2 + 6 + ANSI_NAMES.len() + UI_TOKENS.len() + Status::ALL.len() + Tone::ALL.len()
+            2 + mooring_core::theme::TERMINAL_NAMES.len()
+                + ANSI_NAMES.len()
+                + UI_TOKENS.len()
+                + Status::ALL.len()
+                + Tone::ALL.len()
         );
     }
 }

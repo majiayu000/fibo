@@ -373,6 +373,16 @@ impl Vt {
     pub fn set_scheme(&mut self, scheme: Scheme) -> io::Result<()> {
         self.set_colors(scheme.colors())
     }
+    /// The cursor's shape until a program asks for one, and again after it resets (`CSI 0 q`).
+    pub fn set_default_cursor(
+        &mut self,
+        style: libghostty_vt::terminal::CursorStyle,
+    ) -> io::Result<()> {
+        self.0
+            .set_default_cursor_style(Some(style))
+            .map(|_| ())
+            .map_err(io::Error::other)
+    }
     /// The same for any colors, a user's theme included.
     pub fn set_colors(&mut self, colors: TermColors) -> io::Result<()> {
         // Back to the built-in palette first, so a theme only replaces ANSI 0-15.

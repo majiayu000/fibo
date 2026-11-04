@@ -24,13 +24,15 @@ pub const ANSI_NAMES: [&str; 16] = [
     "bright_white",
 ];
 /// Terminal colors past the defaults, painted by the window.
-pub const TERMINAL_NAMES: [&str; 6] = [
+pub const TERMINAL_NAMES: [&str; 8] = [
     "cursor",
     "cursor_text",
     "selection",
+    "selected_text",
     "bold",
     "link",
     "underline",
+    "cursor_guide",
 ];
 const SECTIONS: [&str; 5] = ["terminal", "ansi", "ui", "status", "tone"];
 
@@ -186,6 +188,8 @@ impl ThemeFile {
             ("Cursor Color", "cursor"),
             ("Cursor Text Color", "cursor_text"),
             ("Selection Color", "selection"),
+            ("Selected Text Color", "selected_text"),
+            ("Cursor Guide Color", "cursor_guide"),
             ("Bold Color", "bold"),
             ("Link Color", "link"),
             ("Underline Color", "underline"),

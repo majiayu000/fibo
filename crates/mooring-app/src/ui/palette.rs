@@ -40,6 +40,8 @@ pub struct Palette {
     pub term_bold: Option<u32>,
     pub term_link: Option<u32>,
     pub term_underline: Option<u32>,
+    pub term_selected_text: Option<u32>,
+    pub term_cursor_guide: Option<u32>,
     /// A theme's status and tone hues, when `colors.json` does not set them.
     pub status: [Option<u32>; Status::ALL.len()],
     pub tones: [Option<u32>; 3],
@@ -141,6 +143,8 @@ impl Palette {
             term_bold: None,
             term_link: None,
             term_underline: None,
+            term_selected_text: None,
+            term_cursor_guide: None,
             status: [None; Status::ALL.len()],
             tones: [None; 3],
             space_tiles: SPACE_TILES,
@@ -235,6 +239,8 @@ impl Palette {
         out.term_bold = terminal("bold");
         out.term_link = terminal("link");
         out.term_underline = terminal("underline");
+        out.term_selected_text = terminal("selected_text");
+        out.term_cursor_guide = terminal("cursor_guide");
         for (i, status) in Status::ALL.iter().enumerate() {
             out.status[i] = file
                 .color("status", status.key())

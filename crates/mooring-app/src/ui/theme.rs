@@ -695,15 +695,7 @@ impl Theme {
         hsla(value)
     }
     pub fn terminal_mono(cx: &App) -> Font {
-        let mut face = Self::mono(cx);
-        let family = super::terminal_text::current().family;
-        // A family that is not installed (typed into the file, or uninstalled since)
-        // would fall through to a proportional face whose letters miss the cells; the
-        // monospace default stands in, and the setting stays as you wrote it.
-        if !family.is_empty() && installed(&family, cx) {
-            face.family = family.into();
-        }
-        face
+        super::terminal_text::face(Self::mono(cx), |family| installed(family, cx))
     }
     pub fn mono(cx: &App) -> Font {
         static MONO: std::sync::OnceLock<String> = std::sync::OnceLock::new();

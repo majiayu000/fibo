@@ -13,6 +13,7 @@ use std::path::PathBuf;
 
 mod look;
 mod plugins;
+mod terminal_look;
 mod theme_editor;
 
 /// The chord button keeps one width, recording or not.
@@ -237,7 +238,7 @@ impl Page {
     }
 }
 /// Every searchable setting: its page, its title and the words that find it.
-const ENTRIES: [(Page, &str, &str); 28] = [
+const ENTRIES: [(Page, &str, &str); 36] = [
     (
         Page::Phones,
         "其他电脑",
@@ -288,6 +289,34 @@ const ENTRIES: [(Page, &str, &str); 28] = [
     (Page::Terminal, "行距", "行高 line height 紧凑 舒适 宽松"),
     (Page::Terminal, "光标闪烁", "光标 闪烁 blink cursor"),
     (Page::Terminal, "非当前分屏变暗", "分屏 变暗 焦点 dim split"),
+    (
+        Page::Terminal,
+        "后台窗口变暗",
+        "窗口 变暗 后台 dim inactive",
+    ),
+    (
+        Page::Terminal,
+        "默认光标形状",
+        "光标 形状 方块 竖线 下划线 cursor shape",
+    ),
+    (
+        Page::Terminal,
+        "光标所在行",
+        "光标 辅助线 高亮 当前行 cursor guide",
+    ),
+    (
+        Page::Terminal,
+        "中文和符号字体",
+        "字体 中文 汉字 非 ASCII font cjk",
+    ),
+    (Page::Terminal, "连字", "连字 ligature 合字 calt liga"),
+    (Page::Terminal, "最低对比度", "对比度 可读 看不清 contrast"),
+    (Page::Terminal, "弱化文字", "弱化 faint dim 淡 透明度"),
+    (
+        Page::Terminal,
+        "终端边距",
+        "边距 留白 内边距 padding margin",
+    ),
     (
         Page::Terminal,
         "用哪个编辑器打开行号",
@@ -777,7 +806,7 @@ impl SettingsView {
         cx.notify();
     }
     /// A segmented control over one terminal choice; `pick` writes it.
-    fn text_choices<V: Copy + 'static>(
+    pub(super) fn text_choices<V: Copy + 'static>(
         &self,
         id: &'static str,
         options: &[(V, &'static str)],
@@ -796,77 +825,6 @@ impl SettingsView {
             ));
         }
         choices
-    }
-    fn font_list(&self, text: &TerminalText, cx: &Context<Self>) -> gpui::Div {
-        let installed = cx.text_system().all_font_names();
-        let mut list = div().flex().flex_col();
-        for (i, family) in MONO_FACES
-            .into_iter()
-            .filter(|f| f.is_empty() || installed.iter().any(|n| n == f))
-            .enumerate()
-        {
-            let on = text.family == family;
-            let name = if family.is_empty() {
-                "JetBrains Mono"
-            } else {
-                family
-            };
-            list = list.child(
-                div()
-                    .id(format!("font-{family}"))
-                    .role(gpui::accesskit::Role::RadioButton)
-                    .aria_label(name)
-                    .h(px(T::TODO_HEIGHT + T::S2))
-                    .px(px(T::S16))
-                    .flex()
-                    .items_center()
-                    .gap(px(T::S12))
-                    .cursor_pointer()
-                    .when(i > 0, |d| {
-                        d.border_t(px(T::BORDER_WIDTH))
-                            .border_color(T::color(T::border()))
-                    })
-                    .map(|d| {
-                        if on {
-                            d.bg(T::color(T::raised()))
-                        } else {
-                            d.hover(|s| s.bg(T::color(T::button_hover())))
-                        }
-                    })
-                    .child(
-                        div()
-                            .w(px(T::S12))
-                            .text_size(px(T::SMALL))
-                            .text_color(T::color(T::primary()))
-                            .child(if on { "✓" } else { "" }),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .flex()
-                            .items_center()
-                            .gap(px(T::S8))
-                            .text_size(px(T::BODY_SIZE))
-                            .text_color(T::color(T::primary()))
-                            .when(on, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
-                            .child(name)
-                            .when(family.is_empty(), |d| d.child(label("内置 · 默认"))),
-                    )
-                    .child(
-                        div()
-                            .font_family(name)
-                            .text_size(px(T::BODY_SIZE))
-                            .text_color(T::color(T::secondary()))
-                            .child("Aa 0O il1 => {}"),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let mut text = terminal_text::current();
-                        text.family = family.into();
-                        this.set_text(text, cx);
-                    })),
-            );
-        }
-        list
     }
     fn preview(&self, text: &TerminalText) -> gpui::Div {
         let dot = |hue: u32| div().size(px(T::S10)).rounded_full().bg(T::color(hue));
@@ -1045,68 +1003,11 @@ impl SettingsView {
         let mut font = Vec::new();
         if shows("终端字体") {
             font.push(self.font_list(&text, cx).into_any_element());
+            font.extend(self.face_rows(&text, cx));
         }
-        let mut cursor = Vec::new();
-        if shows("光标闪烁") {
-            let blink = text.cursor_blink;
-            let choices = self.text_choices(
-                "blink",
-                &[(true, "闪烁"), (false, "常亮")],
-                |b| b == blink,
-                |t, b| t.cursor_blink = b,
-                cx,
-            );
-            cursor.push(
-                self.row(
-                    cursor.is_empty(),
-                    "光标闪烁",
-                    "当前分屏的光标；程序要求常亮时照办，打字时保持亮着",
-                    choices,
-                )
-                .into_any_element(),
-            );
-        }
-        if shows("非当前分屏变暗") {
-            let dim = text.unfocused_dim;
-            let choices = self.text_choices(
-                "dim",
-                &[(0., "不变暗"), (0.15, "轻"), (0.3, "明显")],
-                |d: f32| (dim - d).abs() < 0.01,
-                |t, d| t.unfocused_dim = d,
-                cx,
-            );
-            cursor.push(
-                self.row(
-                    cursor.is_empty(),
-                    "非当前分屏变暗",
-                    "一个标签里有多个分屏时，没有焦点的分屏淡一些",
-                    choices,
-                )
-                .into_any_element(),
-            );
-        }
-        if shows("非当前分屏的光标") {
-            let shape = text.unfocused_cursor;
-            let choices = self.text_choices(
-                "unfocused-cursor",
-                &[
-                    (UnfocusedCursor::Hidden, "隐藏"),
-                    (UnfocusedCursor::Hollow, "空心框"),
-                ],
-                |s| s == shape,
-                |t, s| t.unfocused_cursor = s,
-                cx,
-            );
-            cursor.push(
-                self.row(
-                    cursor.is_empty(),
-                    "非当前分屏的光标",
-                    "隐藏时整个窗口只有一个光标；空心框能看出各分屏输入到哪",
-                    choices,
-                )
-                .into_any_element(),
-            );
-        }
+        let cursor = self.cursor_rows(&text, cx);
+        let reading = self.reading_rows(&text, cx);
+        let frame = self.frame_rows(&text, cx);
         let mut keys = Vec::new();
         if shows("Option 键") {
             let option = text.option_key;
@@ -1168,6 +1069,8 @@ impl SettingsView {
             ("文字大小", size),
             ("终端字体", font),
             ("光标与分屏", cursor),
+            ("可读性", reading),
+            ("边距", frame),
             ("键盘", keys),
             ("点击路径", paths),
         ]))
@@ -1186,6 +1089,8 @@ impl SettingsView {
                             text.family = fresh.family;
                             text.size = fresh.size;
                             text.line_height = fresh.line_height;
+                            text.non_ascii_family = fresh.non_ascii_family;
+                            text.ligatures = fresh.ligatures;
                             this.set_text(text, cx);
                         }),
                     )),

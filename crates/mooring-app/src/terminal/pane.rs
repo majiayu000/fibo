@@ -1,3 +1,5 @@
+#[path = "pane_overlays.rs"]
+mod overlays;
 use crate::{
     connection::Connection,
     terminal::screen::{self, Screen},
@@ -181,6 +183,13 @@ impl Pane {
     }
     /// The visible screen as text, for checking what reached the program.
     #[cfg(feature = "visual-test")]
+    pub fn visual_cursor_shape(&self) -> screen::CursorShape {
+        self.screen.cursor_shape
+    }
+    pub fn visual_run_fg(&self, text: &str) -> Option<u32> {
+        let mut runs = self.screen.rows.iter().flatten();
+        runs.find(|r| r.text.contains(text)).map(|r| r.fg)
+    }
     pub fn visual_text(&self) -> String {
         let state = self.connection.state.lock().unwrap();
         state
@@ -2174,10 +2183,18 @@ impl Pane {
     /// here; the host's copy, which programs query, only from the writing pane.
     fn sync_scheme(&mut self) {
         let scheme = T::term();
+        let shape = crate::ui::terminal_text::cursor_shape();
         let writable = {
             let Ok(mut state) = self.connection.state.lock() else {
                 return;
             };
+            // Ghostty applies it at once unless the program has asked for a shape.
+            if state.cursor_shape != Some(shape)
+                && let Some(vt) = state.vt.as_mut()
+                && vt.set_default_cursor(overlays::cursor_style(shape)).is_ok()
+            {
+                state.cursor_shape = Some(shape);
+            }
             if state.scheme == Some(scheme) {
                 return;
             }
@@ -2301,6 +2318,7 @@ impl Render for Pane {
                         }
                         _ => bounds,
                     };
+                    let bounds = overlays::inset(bounds, &pane.screen, pane.peek, window);
                     // The grid starts on a backing pixel so its pixel-wide cells keep
                     // every glyph stem on whole pixels.
                     let scale = window.scale_factor();
@@ -2360,6 +2378,9 @@ impl Render for Pane {
                         window,
                         cx,
                     );
+                    if look.cursor_guide && focused {
+                        screen::paint_guide(&pane.screen, bounds, metrics, window);
+                    }
                     // Underlined only while ⌘ is held, when a click would open it.
                     let hovered: Vec<&screen::Link> = match pane.hover_link {
                         _ if !pane.modifiers.platform => Vec::new(),
@@ -2391,35 +2412,20 @@ impl Render for Pane {
                                 ),
                                 gpui::size(metrics.width * l.cols as f32, metrics.stroke),
                             ),
-                            crate::ui::theme::hsla(T::terminal_fg()),
+                            crate::ui::theme::hsla(
+                                T::palette().term_link.unwrap_or(T::terminal_fg()),
+                            ),
                         ));
                     }
                     let (top, total, len) = pane.viewport;
-                    // Matches in view, the current one stronger; drawn over the text, so
-                    // translucent, the current one also outlined.
-                    // The amber T::matched() washes into the popover; over terminal text
-                    // the pure hue is needed to stay visible in both schemes.
-                    let matched = crate::ui::theme::hsla(T::SEARCH_HIT);
-                    for (i, m) in pane.matches.iter().enumerate() {
-                        if m.row < top || m.row >= top + len {
-                            continue;
-                        }
-                        let current = pane.current_match == Some(i);
-                        let at = Bounds::new(
-                            gpui::point(
-                                bounds.left() + metrics.width * m.col as f32,
-                                bounds.top() + metrics.height * (m.row - top) as f32,
-                            ),
-                            gpui::size(metrics.width * m.cols as f32, metrics.height),
-                        );
-                        window.paint_quad(gpui::fill(
-                            at,
-                            matched.opacity(if current { 0.55 } else { 0.25 }),
-                        ));
-                        if current {
-                            window.paint_quad(gpui::outline(at, matched, gpui::BorderStyle::Solid));
-                        }
-                    }
+                    overlays::matches(
+                        &pane.matches,
+                        pane.current_match,
+                        (top, len),
+                        bounds,
+                        metrics,
+                        window,
+                    );
                     if pane.scrollbar_shown() {
                         let h = bounds.size.height;
                         let thumb = (h * (len as f32 / total as f32)).max(px(T::S20));
@@ -2438,29 +2444,22 @@ impl Render for Pane {
                             .corner_radii(px(SCROLLBAR_WIDTH / 2.)),
                         );
                     }
-                    for (row, cols) in pane.screen.selection.iter().enumerate() {
-                        let Some((left, right)) = *cols else { continue };
-                        window.paint_quad(gpui::fill(
-                            Bounds::new(
-                                gpui::point(
-                                    bounds.left() + metrics.width * left as f32,
-                                    bounds.top() + metrics.height * row as f32,
-                                ),
-                                gpui::size(
-                                    metrics.width * (right + 1).saturating_sub(left) as f32,
-                                    metrics.height,
-                                ),
-                            ),
-                            T::terminal_selection(),
-                        ));
-                    }
-                    // Ghostty's unfocused-split-opacity: the program's own cursor (Claude
-                    // and Codex draw one as reversed text) recedes with the rest.
-                    if pane.split && !focused && look.unfocused_dim > 0. {
+                    overlays::selection(&pane.screen, bounds, metrics, window);
+                    screen::paint_selected_text(
+                        &pane.screen,
+                        &font,
+                        bounds,
+                        metrics,
+                        &pane.layout_cache,
+                        window,
+                        cx,
+                    );
+                    let dim =
+                        overlays::dim(&look, pane.split && !focused, !window.is_window_active());
+                    if dim > 0. {
                         window.paint_quad(gpui::fill(
                             bounds,
-                            crate::ui::theme::hsla(pane.screen.background)
-                                .opacity(look.unfocused_dim),
+                            crate::ui::theme::hsla(pane.screen.background).opacity(dim),
                         ));
                     }
                     if !pane.marked.is_empty()
