@@ -43,8 +43,8 @@ section{margin-top:28px;padding:24px;background:var(--card);border:1px solid var
 <body>
 <main>
 <h1>Mooring 图标方向</h1>
-<p class="lead">三个方向都放到真实尺寸和菜单栏里比较。托盘图是模板图，只有单色，跟着系统明暗变。</p>
-<p class="goal"><b>要定的事：</b>哪个形状同时当 Dock 图标和托盘图标。<br><b>放弃条件：</b>托盘 18pt（一倍屏）认不出，或混在系统图标里找不到。</p>
+<p class="lead">Claude 和 Codex 各自出方向后互相批评，所有方向都放到真实尺寸和菜单栏里比较。托盘图是模板图，只有单色，跟着系统明暗变。</p>
+<p class="goal"><b>要定的事：</b>哪个形状同时当 Dock 图标和托盘图标。<br><b>放弃条件：</b>托盘 18pt（一倍屏）认不出，或混在系统图标里找不到。F 的状态设计另加一条：一倍屏原尺寸短暂看，要放大或并排才能分清平时和断线，就放弃这套状态设计。</p>
 
 <div id="out"></div>
 </main>
@@ -73,9 +73,15 @@ function ringPath(cx,cy,r,from,to){
 }
 
 const D={
+  fold:{
+    name:'F　折角绕桩',tag:'推荐',
+    why:'和 Codex 商量后的结果：保留 A 的绳眼和 >，圆弧改成折角和 45° 斜边，点改成方桩，托盘按像素对齐；连不上后台时桩消失，右侧连接处也断开。Dock 版把绳加粗、把桩放大，让小尺寸还看得见。可能的误读：带方点的终端符号或路牌，系泊的含义要靠名字。',
+    dock(){return `<svg viewBox="0 0 1024 1024" WH><path d="${TILE}" fill="#252B34"/><g transform="translate(152 152) scale(40)"><path fill="#F2EBDD" d="M2 2H9L16 9L9 16H2V13.4H7.92L12.32 9L7.92 4.6H2Z"/><rect x="5.5" y="7.5" width="3" height="3" fill="#E6502E"/></g></svg>`},
+    tray(off){return `<svg viewBox="0 0 18 18" WH fill="currentColor">${off?'<path d="M2 2H9L15 8H12L8 4H2ZM12 10H15L9 16H2V14H8Z"/>':'<path d="M2 2H9L16 9L9 16H2V14H8L13 9L8 4H2Z"/><rect x="7" y="8" width="2" height="2"/>'}</svg>`},
+  },
   eye:{
-    name:'A　绕桩',tag:'推荐',
-    why:'缆绳的绳眼套在系缆桩上，俯视正好是一个 >。一个形状同时说了“系泊”和“终端”。连不上后台时桩消失，状态长在标志里，不用再加符号。代价是新形状要重新认，单看托盘图也可能先被看成一只眼睛。',
+    name:'A　绕桩',
+    why:'缆绳的绳眼套在系缆桩上，俯视正好是一个 >。一个形状同时说了“系泊”和“终端”。连不上后台时桩消失，状态长在标志里，不用再加符号。Codex 的批评成立：米白圆弧加红点像眼睛，桩消失后外形仍完整，断线不够醒目，所以改成了 F。',
     dock(){const id='g'+uid++;return `<svg viewBox="0 0 1024 1024" WH><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e343f"/><stop offset="1" stop-color="#171b22"/></linearGradient></defs><path d="${TILE}" fill="url(#${id})"/><path d="${eyePath(610,512,150,262,236,788)}" fill="none" stroke="${INK}" stroke-width="80" stroke-linecap="round"/><circle cx="610" cy="512" r="62" fill="${SEAL}"/></svg>`},
     tray(off){return `<svg viewBox="0 0 18 18" WH fill="none" stroke="currentColor"><path d="${eyePath(11.5,9,4.4,2.4,2.4,15.6)}" stroke-width="1.6" stroke-linecap="round"/>${off?'':'<circle cx="11.5" cy="9" r="1.75" fill="currentColor" stroke="none"/>'}</svg>`},
   },
@@ -84,6 +90,18 @@ const D={
     why:'Dock 图保持现在这张，托盘用同一个缺口环加一枚小印，连不上后台时小印消失。改动最小，已经认熟的样子不丢。缺点是形状没说明产品做什么；到了托盘大小更像“刷新/加载中”的转圈，尤其小印消失时。',
     dockImg:'../../crates/mooring-app/assets/dock-ink.png',
     tray(off){const a=-46;const x=9+6.6*Math.cos(a*Math.PI/180),y=9+6.6*Math.sin(a*Math.PI/180);return `<svg viewBox="0 0 18 18" WH fill="none" stroke="currentColor"><path d="${ringPath(9,9,6.6,-6,-86)}" stroke-width="1.8" stroke-linecap="round"/>${off?'':`<rect x="${(x-1.6).toFixed(2)}" y="${(y-1.1).toFixed(2)}" width="3.2" height="2.2" rx=".5" transform="rotate(${a} ${x.toFixed(2)} ${y.toFixed(2)})" fill="currentColor" stroke="none"/>`}</svg>`},
+  },
+  bollard:{
+    name:'D　系缆桩（Codex）',
+    why:'一个稳稳立住的系缆桩，表达 Agent 持续运行、回来还能找到。轮廓集中、按像素对齐；连不上后台时支柱断开。Codex 自评的风险：可能被看成铁砧或工字钢。',
+    dock(){return `<svg viewBox="0 0 1024 1024" WH><path d="${TILE}" fill="#F4F0E7"/><g transform="translate(152 132) scale(40)" fill="#244C4F"><path d="M2 4H16V6H13L10 9V13H14V15H4V13H8V9L5 6H2Z"/></g></svg>`},
+    tray(off){return `<svg viewBox="0 0 18 18" WH fill="currentColor">${off?'<path d="M2 4H16V6H13L10 9V10H8V9L5 6H2Z"/><path d="M4 13H14V15H4Z"/>':'<path d="M2 4H16V6H13L10 9V13H14V15H4V13H8V9L5 6H2Z"/>'}</svg>`},
+  },
+  twin:{
+    name:'E　双桩横缆（Codex）',
+    why:'两根错落的桩由横缆连起来，表达多个 Agent 留在同一个工作台；连不上后台时横缆断开，桩还在。Codex 自评的风险：可能看成栅栏或字母 H，18 像素下整体感较弱。',
+    dock(){return `<svg viewBox="0 0 1024 1024" WH><path d="${TILE}" fill="#24343E"/><g transform="translate(152 152) scale(40)" fill="#F3EBDD"><path d="M1 3H8V5H6V10H12V8H10V6H17V8H15V15H12V12H6V15H3V5H1Z"/></g></svg>`},
+    tray(off){return `<svg viewBox="0 0 18 18" WH fill="currentColor">${off?'<path d="M1 3H8V5H6V15H3V5H1Z"/><path d="M10 6H17V8H15V15H12V8H10Z"/><rect x="6" y="10" width="1" height="2"/><rect x="11" y="10" width="1" height="2"/>':'<path d="M1 3H8V5H6V10H12V8H10V6H17V8H15V15H12V12H6V15H3V5H1Z"/>'}</svg>`},
   },
   m:{
     name:'C　一笔 M',
