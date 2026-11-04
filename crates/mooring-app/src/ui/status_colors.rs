@@ -179,6 +179,17 @@ impl StatusColors {
 fn path() -> Option<std::path::PathBuf> {
     config_dir().map(|dir| dir.join("colors.json"))
 }
+/// Replace a file whole: a crash or a reader on a timer sees the old one or the new one,
+/// never half of either.
+pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut temporary = path.as_os_str().to_owned();
+    temporary.push(".tmp");
+    let temporary = std::path::PathBuf::from(temporary);
+    std::fs::write(&temporary, bytes)?;
+    std::fs::rename(&temporary, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&temporary);
+    })
+}
 pub fn config_dir() -> Option<std::path::PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(std::path::PathBuf::from)
@@ -198,6 +209,23 @@ fn color(value: &serde_json::Value) -> Result<u32, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_replaced_file_leaves_no_temporary_behind() {
+        let dir = std::env::temp_dir().join(format!("mooring-atomic-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("theme-dark");
+        write_atomic(&path, b"one").unwrap();
+        write_atomic(&path, b"two").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"two");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        std::fs::create_dir(dir.join("gone.tmp")).unwrap();
+        assert!(
+            write_atomic(&dir.join("gone"), b"x").is_err(),
+            "a failed write says so"
+        );
+        assert!(!dir.join("gone").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
     #[test]
     fn overrides_only_what_is_given() {
         let c = StatusColors::parse(

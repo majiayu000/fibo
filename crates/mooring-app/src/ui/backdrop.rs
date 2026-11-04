@@ -7,43 +7,74 @@ use image::imageops::FilterType;
 use mooring_core::theme::{BackgroundImage, ImageMode};
 use std::{
     path::{Path, PathBuf},
-    sync::{
-        Arc, Mutex, OnceLock,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
 
 /// Past this on its long side a picture is scaled down: a texture larger than a 5K window
 /// only costs memory.
 const LONGEST_SIDE: u32 = 2880;
 
+/// How many pictures stay decoded: the one showing and the last one, so going back and
+/// forth between two spaces does not decode each time. The rest are let go.
+const KEEP: usize = 2;
+enum Load {
+    Idle,
+    Loading,
+    Ready(Arc<RenderImage>),
+    Failed(String),
+}
+/// What a file looked like, so a picture replaced under the same name reads as a new one.
+type Stamp = Option<(std::time::SystemTime, u64)>;
+fn stamp(path: &Path) -> Stamp {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
 pub struct Picture {
     pub path: PathBuf,
-    decoded: OnceLock<Result<Arc<RenderImage>, String>>,
-    started: AtomicBool,
+    stamp: Stamp,
+    load: Mutex<Load>,
 }
 impl Picture {
-    /// Kept for the life of the process, one per path, as palettes are.
+    /// Kept for the life of the process, one per version of a file, as palettes are: only
+    /// its path stays, the pixels go when `release` says.
     fn of(path: PathBuf) -> &'static Self {
         static KEPT: Mutex<Vec<&'static Picture>> = Mutex::new(Vec::new());
+        let stamp = stamp(&path);
         let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(found) = kept.iter().find(|p| p.path == path) {
+        if let Some(found) = kept.iter().find(|p| p.path == path && p.stamp == stamp) {
             return found;
         }
         let picture: &'static Self = Box::leak(Box::new(Self {
             path,
-            decoded: OnceLock::new(),
-            started: AtomicBool::new(false),
+            stamp,
+            load: Mutex::new(Load::Idle),
         }));
         kept.push(picture);
         picture
     }
-    pub fn image(&self) -> Option<&Arc<RenderImage>> {
-        self.decoded.get()?.as_ref().ok()
+    fn state(&self) -> std::sync::MutexGuard<'_, Load> {
+        self.load.lock().unwrap_or_else(|e| e.into_inner())
+    }
+    pub fn image(&self) -> Option<Arc<RenderImage>> {
+        match &*self.state() {
+            Load::Ready(image) => Some(image.clone()),
+            _ => None,
+        }
     }
     /// Why it cannot be shown, once that is known.
-    pub fn error(&self) -> Option<&str> {
-        self.decoded.get()?.as_ref().err().map(String::as_str)
+    pub fn error(&self) -> Option<String> {
+        match &*self.state() {
+            Load::Failed(error) => Some(error.clone()),
+            _ => None,
+        }
+    }
+    /// Lets the pixels go; the image to take off the GPU, if there was one.
+    fn release(&self) -> Option<Arc<RenderImage>> {
+        let mut state = self.state();
+        match std::mem::replace(&mut *state, Load::Idle) {
+            Load::Ready(image) => Some(image),
+            _ => None,
+        }
     }
 }
 #[derive(Clone, Copy)]
@@ -117,21 +148,62 @@ fn load(cx: &mut App) {
         return;
     };
     let picture = backdrop.picture;
-    if picture.started.swap(true, Ordering::Relaxed) {
-        return;
+    {
+        let mut state = picture.state();
+        if !matches!(*state, Load::Idle) {
+            return;
+        }
+        *state = Load::Loading;
     }
     cx.spawn(async move |cx| {
         let done = cx
             .background_executor()
             .spawn(async move { decode(&picture.path) })
             .await;
-        if let Err(error) = &done {
-            eprintln!("mooring: {error}");
-        }
-        let _ = picture.decoded.set(done);
+        *picture.state() = match done {
+            Ok(image) => Load::Ready(image),
+            Err(error) => {
+                eprintln!("mooring: {error}");
+                Load::Failed(error)
+            }
+        };
         cx.update(|cx| cx.refresh_windows());
     })
     .detach();
+}
+/// `current` goes to the front, and what falls past `keep` comes back to be let go.
+fn make_room<T: PartialEq>(recent: &mut Vec<T>, current: Option<T>, keep: usize) -> Vec<T> {
+    if let Some(current) = current {
+        recent.retain(|other| *other != current);
+        recent.insert(0, current);
+    }
+    recent.split_off(keep.min(recent.len()))
+}
+/// Keep memory bounded when themes with pictures come and go: RAM and the GPU's copy.
+fn release_old(cx: &mut App) {
+    #[derive(Clone, Copy)]
+    struct Kept(&'static Picture);
+    impl PartialEq for Kept {
+        fn eq(&self, other: &Self) -> bool {
+            std::ptr::eq(self.0, other.0)
+        }
+    }
+    static RECENT: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
+    let current = Theme::palette().backdrop.map(|b| Kept(b.picture));
+    let old = make_room(
+        &mut RECENT.lock().unwrap_or_else(|e| e.into_inner()),
+        current,
+        KEEP,
+    );
+    for Kept(picture) in old {
+        let Some(image) = picture.release() else {
+            continue;
+        };
+        for window in cx.windows() {
+            let image = image.clone();
+            let _ = window.update(cx, |_, window, _| window.drop_image(image));
+        }
+    }
 }
 impl Theme {
     /// The window's ground. Under a see-through theme this one layer carries the tint and
@@ -164,6 +236,7 @@ pub fn window_background() -> WindowBackgroundAppearance {
 /// Bring every window and the picture in line with a theme just installed.
 pub fn sync(cx: &mut App) {
     load(cx);
+    release_old(cx);
     let wanted = window_background();
     for window in cx.windows() {
         let _ = window.update(cx, |_, window, _| window.set_background_appearance(wanted));
@@ -245,6 +318,46 @@ mod tests {
         assert!(std::ptr::eq(a.picture, b.picture));
         assert_ne!(a, b);
         assert_eq!(a, Backdrop::of(&image(20)));
+    }
+    #[test]
+    fn only_the_recent_pictures_stay() {
+        let mut recent = vec![];
+        assert!(make_room(&mut recent, Some(1), 2).is_empty());
+        assert!(make_room(&mut recent, Some(2), 2).is_empty());
+        assert_eq!(recent, [2, 1]);
+        // Back to one already kept: nothing falls out.
+        assert!(make_room(&mut recent, Some(1), 2).is_empty());
+        assert_eq!(recent, [1, 2]);
+        assert_eq!(make_room(&mut recent, Some(3), 2), [2]);
+        assert_eq!(recent, [3, 1]);
+        // A theme with no picture lets nothing more go.
+        assert!(make_room(&mut recent, None, 2).is_empty());
+    }
+    #[test]
+    fn a_file_replaced_under_its_name_is_a_new_picture() {
+        let dir = std::env::temp_dir().join(format!("mooring-replaced-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sea.png");
+        std::fs::write(&path, "one").unwrap();
+        let first = Picture::of(path.clone());
+        assert!(std::ptr::eq(first, Picture::of(path.clone())));
+        std::fs::write(&path, "a different size").unwrap();
+        assert!(!std::ptr::eq(first, Picture::of(path)));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+    #[test]
+    fn a_released_picture_can_be_decoded_again() {
+        let dir = std::env::temp_dir().join(format!("mooring-release-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.png");
+        image::RgbaImage::new(2, 2).save(&path).unwrap();
+        let picture = Picture::of(path.clone());
+        *picture.state() = Load::Ready(decode(&path).unwrap());
+        assert!(picture.image().is_some());
+        assert!(picture.release().is_some());
+        assert!(picture.image().is_none() && matches!(*picture.state(), Load::Idle));
+        assert!(picture.release().is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
     #[test]
     fn a_picture_comes_out_bgra_and_bounded() {

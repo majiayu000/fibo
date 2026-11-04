@@ -36,6 +36,12 @@ pub(super) fn start(
                 native_click(w, a, origin + gpui::point(px(x), px(y)), gpui::MouseButton::Left);
             }).unwrap();
         };
+        // The nav's rows, by the page's place: adding a page must not move what a click means.
+        let nav = |page: &str, cx: &mut gpui::AsyncApp| {
+            let pages = workbench::Workbench::visual_settings_pages();
+            let row = pages.iter().position(|p| *p == page).expect("a settings page") as f32;
+            click(60., 119. + 34. * row, cx);
+        };
         let values = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_settings_values()).unwrap();
         // Every page in light and dark, for looking at the layout; changes nothing saved.
         if phase == "tour" {
@@ -200,6 +206,20 @@ pub(super) fn start(
                 assert!(T::palette().backdrop.unwrap().picture.image().is_some(), "{mode}: decoded");
                 shot(&format!("material-{mode}"), cx);
             }
+            // A file replaced under its name shows, and old pictures are let go.
+            let first = T::palette().backdrop.unwrap().picture;
+            image::RgbaImage::from_pixel(64, 64, image::Rgba([0, 255, 255, 255])).save(dir.join("images/grad.png")).unwrap();
+            cx.update(themes::reload);
+            wait(700).await;
+            let second = T::palette().backdrop.unwrap().picture;
+            assert!(!std::ptr::eq(first, second), "the replaced file is a new picture");
+            assert!(second.image().is_some());
+            shot("material-replaced", cx);
+            image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 255, 255])).save(dir.join("images/third.png")).unwrap();
+            theme("third", r##""background":{"image":"images/third.png","mode":"tile"}"##, cx); wait(700).await;
+            image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 255, 0, 255])).save(dir.join("images/fourth.png")).unwrap();
+            theme("fourth", r##""background":{"image":"images/fourth.png","mode":"tile"}"##, cx); wait(700).await;
+            assert!(second.image().is_none(), "only the two latest stay decoded");
             std::fs::write(dir.join("images/bad.png"), "not a picture").unwrap();
             theme("broken", r##""background":{"image":"images/bad.png"}"##, cx); wait(500).await;
             assert!(T::palette().backdrop.unwrap().picture.error().is_some());
@@ -267,6 +287,35 @@ pub(super) fn start(
             shot("sharing-space-first", cx);
             let saved = std::fs::read_to_string(config.join("space-themes.json")).unwrap();
             assert!(saved.contains("pine"), "{saved}");
+            // Under a space's theme: 外观 says why choosing changes nothing here, the editor
+            // starts from what shows, and saving a copy changes this space alone.
+            handle.update(cx, |v, _, a| v.visual_pick_space("other", a)).unwrap();
+            wait(300).await; shot("sharing-space-other", cx); wait(300).await;
+            let chosen_before = cx.update(|a| a.global::<appearance::Appearance>().clone());
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            wait(300).await;
+            shot("sharing-space-notice", cx);
+            assert_eq!(cx.update(|a| appearance::shown(a).unwrap().source), appearance::Source::Space);
+            cx.update(|a| appearance::set_theme("slate", false, true, a).unwrap());
+            wait(200).await;
+            assert_eq!(T::scheme(), crate::ui::theme::Scheme::Pine, "外观's choice waits for other spaces");
+            cx.update(|a| appearance::set_theme(&chosen_before.dark, false, true, a).unwrap());
+            handle.update(cx, |v, _, a| v.visual_editor_open(a)).unwrap();
+            wait(300).await;
+            assert_eq!((T::term().bg, T::term().fg), (crate::ui::theme::Scheme::Pine.bg(), crate::ui::theme::Scheme::Pine.fg()));
+            handle.update(cx, |v, _, a| v.visual_editor_set("bg", 0x10302a, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_editor_save("深松", a)).unwrap();
+            wait(400).await;
+            assert_eq!(T::term().bg, 0x10302a, "the space wears the saved copy");
+            let after = cx.update(|a| a.global::<appearance::Appearance>().clone());
+            assert_eq!(after, chosen_before, "saving under a space leaves 外观 alone");
+            let saved = std::fs::read_to_string(config.join("space-themes.json")).unwrap();
+            assert!(saved.contains("file:"), "{saved}");
+            handle.update(cx, |v, _, a| v.visual_pick_space(&first, a)).unwrap();
+            wait(300).await; shot("sharing-space-first", cx); wait(300).await;
+            assert_eq!(T::scheme(), crate::ui::theme::Scheme::Dark, "other spaces did not change");
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
             // The menu, folded and open, and picking from it with a real click.
             handle.update(cx, |v, _, a| v.visual_open_space_menu("other", a)).unwrap();
             wait(200).await; shot("sharing-menu", cx);
@@ -314,7 +363,10 @@ pub(super) fn start(
             handle.update(cx, |v, _, a| v.visual_editor_open(a)).unwrap();
             handle.update(cx, |v, _, a| v.visual_editor_set("bg", 0x123456, a)).unwrap();
             handle.update(cx, |v, _, a| v.visual_settings_close(a)).unwrap();
-            wait(500).await;
+            // The last frame's listeners hold the page until another is drawn.
+            shot("editor-closed", cx);
+            wait(300).await;
+            shot("editor-closed", cx);
             assert_eq!(term().bg, 0x0e0e11, "closing 设置 puts the saved theme back");
             handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
             handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
@@ -350,7 +402,8 @@ pub(super) fn start(
             handle.update(cx, |v, _, a| v.visual_editor_tab(0, a)).unwrap();
             wait(300).await;
             let hsv = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
-            click(689., 358., cx);
+            let at = handle.update(cx, |v, _, a| v.visual_slider_point(0, 0.6, a)).unwrap().expect("the editor drew its sliders");
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, at, gpui::MouseButton::Left)).unwrap();
             wait(300).await;
             let moved = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
             assert_ne!(hsv[0], moved[0], "clicking the hue slider moves the hue");
@@ -614,13 +667,13 @@ pub(super) fn start(
             assert_eq!(values(cx).stale_days, 7);
             shot("general-saved", cx);
         }
-        click(60., 153., cx); wait(200).await;
+        nav("外观", cx); wait(200).await;
         assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "外观");
         shot("appearance", cx);
         if phase == "1" {
             click(865., 147., cx); wait(200).await;
             assert_eq!(crate::ui::theme::Theme::scheme(), crate::ui::theme::Scheme::Dark);
-            click(60., 186., cx); wait(200).await;
+            nav("终端", cx); wait(200).await;
             assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "终端");
             click(300., 506., cx); wait(200).await;
             assert_eq!(crate::ui::terminal_text::current().family, "Menlo");
@@ -637,16 +690,16 @@ pub(super) fn start(
             shot("save-error", cx);
             std::fs::remove_dir(blocked).unwrap();
         }
-        click(67., 220., cx); wait(200).await;
+        nav("快捷键", cx); wait(200).await;
         assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "快捷键");
         shot("shortcuts", cx);
-        click(60., 255., cx); wait(200).await;
+        nav("通知", cx); wait(200).await;
         assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "通知");
         shot("notifications", cx);
-        click(60., 289., cx); wait(200).await;
+        nav("插件", cx); wait(200).await;
         assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "插件");
         shot("plugins", cx);
-        click(60., 323., cx); wait(200).await;
+        nav("关于", cx); wait(200).await;
         assert_eq!(handle.update(cx, |v, _, a| v.visual_settings_page_name(a)).unwrap(), "关于");
         shot("about", cx);
         if phase == "inspect" {

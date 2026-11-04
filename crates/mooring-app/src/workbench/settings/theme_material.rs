@@ -55,7 +55,11 @@ impl SettingsView {
                 return;
             };
             let Some(path) = paths.first() else { return };
-            let copied = themes::keep_picture(path);
+            let path = path.clone();
+            let copied = cx
+                .background_executor()
+                .spawn(async move { themes::keep_picture(&path) })
+                .await;
             let _ = this.update(cx, |this, cx| match copied {
                 Ok(path) => this.change_material(
                     |material| {
@@ -134,7 +138,7 @@ impl SettingsView {
         let note = material
             .image
             .as_ref()
-            .and_then(|image| Backdrop::of(image).picture.error().map(str::to_owned))
+            .and_then(|image| Backdrop::of(image).picture.error())
             .or_else(|| material.image.as_ref().map(|image| image.path.clone()))
             .unwrap_or_else(|| "PNG、JPEG 或 WebP，放在每个终端后面".to_owned());
         rows = rows.child(self.row(false, "背景图", &note, actions));

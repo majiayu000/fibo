@@ -2,10 +2,10 @@
 //! Colors you leave alone keep following 背景 and 前景. A draft shows everywhere and is
 //! written only by 保存; 取消, or closing 设置, puts the saved theme back.
 use super::*;
-use crate::ui::appearance::{self, Appearance};
+use crate::ui::appearance;
 use crate::ui::palette::UI_TOKENS;
 use crate::ui::theme::{Status, StatusStyle, contrast};
-use crate::ui::themes::{self, Themes};
+use crate::ui::themes;
 use crate::ui::tone::Tone;
 use gpui::{MouseDownEvent, MouseMoveEvent, MouseUpEvent, Subscription, canvas};
 use mooring_core::theme::{ANSI_NAMES, ThemeFile, hex, parse_hex};
@@ -131,6 +131,10 @@ pub(super) struct Editor {
     pub(super) draft: ThemeFile,
     /// The theme's own file; a built-in gets a new one on saving.
     over: Option<PathBuf>,
+    /// It opened on what the current space wears, so saving changes that space alone.
+    for_space: bool,
+    /// Where each slider was last drawn, for the native acceptance scene to press.
+    slider_bounds: std::rc::Rc<std::cell::Cell<[Option<gpui::Bounds<gpui::Pixels>>; 3]>>,
     tab: Tab,
     picked: Item,
     /// Kept apart from the color so a gray does not forget its hue while dragging.
@@ -143,16 +147,15 @@ pub(super) struct Editor {
 }
 impl SettingsView {
     pub(super) fn open_editor(&mut self, cx: &mut Context<Self>) {
-        let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
-        let light = chosen.shows_light(cx.window_appearance(), crate::ui::style::current(cx));
-        let shown = crate::ui::space_themes::shown(cx);
-        let Some(entry) = shown.or_else(|| {
-            cx.try_global::<Themes>()
-                .and_then(|themes| chosen.entry(themes, light))
-        }) else {
+        let Some(shown) = appearance::shown(cx) else {
             return;
         };
-        let (draft, over) = (entry.as_file(), entry.own_file());
+        let Some(entry) = shown.entry else { return };
+        let (draft, over, for_space) = (
+            entry.as_file(),
+            entry.own_file(),
+            shown.source == appearance::Source::Space,
+        );
         let picked = Tab::Base.items()[0];
         let start = picked.value(&draft);
         let name = cx.new(|cx| Field::new("主题名称", &draft.name, cx).compact());
@@ -170,6 +173,8 @@ impl SettingsView {
             hsv: to_hsv(start),
             draft,
             over,
+            for_space,
+            slider_bounds: Default::default(),
             tab: Tab::Base,
             picked,
             dragging: None,
@@ -247,14 +252,17 @@ impl SettingsView {
             return;
         }
         editor.draft.name = name;
-        let light = editor.draft.term_colors().light;
+        let (light, for_space) = (editor.draft.term_colors().light, editor.for_space);
         match themes::save(&editor.draft, editor.over.as_deref()) {
             Ok(id) => {
                 self.editor = None;
                 appearance::preview(None, cx);
                 themes::reload(cx);
-                crate::ui::space_themes::saved_as(&id, cx);
-                self.text_error = appearance::set_theme(&id, light, true, cx).err();
+                self.text_error = if for_space {
+                    crate::ui::space_themes::saved_as(&id, cx).err()
+                } else {
+                    appearance::set_theme(&id, light, true, cx).err()
+                };
                 crate::set_menus(cx);
                 cx.notify();
             }
@@ -465,10 +473,16 @@ impl SettingsView {
         cx: &Context<Self>,
     ) -> gpui::Div {
         let view = cx.entity();
+        let seen = self.editor.as_ref().map(|e| e.slider_bounds.clone());
         let paint = move |bounds: gpui::Bounds<gpui::Pixels>,
                           (): (),
                           window: &mut Window,
                           _: &mut gpui::App| {
+            if let Some(seen) = &seen {
+                let mut all = seen.get();
+                all[channel] = Some(bounds);
+                seen.set(all);
+            }
             let step = bounds.size.width / SLIDER_STEPS as f32;
             for i in 0..SLIDER_STEPS {
                 let mut at = hsv;
@@ -734,6 +748,21 @@ fn from_hsv([h, s, v]: [f32; 3]) -> u32 {
     byte(r) << 16 | byte(g) << 8 | byte(b)
 }
 
+impl SettingsView {
+    /// Where to press a slider for `to` of its range.
+    #[cfg(feature = "visual-test")]
+    pub(crate) fn visual_slider_point(
+        &self,
+        channel: usize,
+        to: f32,
+    ) -> Option<gpui::Point<gpui::Pixels>> {
+        let bounds = self.editor.as_ref()?.slider_bounds.get()[channel]?;
+        Some(gpui::point(
+            bounds.left() + bounds.size.width * to,
+            bounds.center().y,
+        ))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2,7 +2,7 @@
 //! read when it changes, on a slow timer off the window's thread; drawing never touches
 //! this, only the finished palette `appearance` installed.
 use super::palette::Palette;
-use super::status_colors::config_dir;
+use super::status_colors::{config_dir, write_atomic};
 use gpui::{App, AppContext as _, Global};
 use mooring_core::terminal::Scheme;
 use mooring_core::theme::{ThemeFile, file_stem};
@@ -147,10 +147,11 @@ impl Themes {
 pub fn dir() -> Option<PathBuf> {
     config_dir().map(|dir| dir.join("themes"))
 }
-/// What says the folder changed: each file's name, time and size.
+/// What says the folder changed: each file's name, time and size, its pictures included.
 fn signature(dir: &Path) -> Vec<(PathBuf, Option<SystemTime>, u64)> {
-    let mut out: Vec<_> = std::fs::read_dir(dir)
-        .into_iter()
+    let mut out: Vec<_> = [dir.to_owned(), dir.join("images")]
+        .iter()
+        .flat_map(std::fs::read_dir)
         .flatten()
         .flatten()
         .filter_map(|entry| {
@@ -196,7 +197,7 @@ pub fn save(file: &ThemeFile, over: Option<&Path>) -> Result<String, String> {
         || free_path(&folder, &file_stem(&file.name)),
         Path::to_owned,
     );
-    std::fs::write(&path, file.to_json())
+    write_atomic(&path, file.to_json().as_bytes())
         .map_err(|e| format!("无法保存 {}：{e}", path.display()))?;
     Ok(format!(
         "file:{}",
@@ -215,14 +216,35 @@ fn free_path(folder: &Path, stem: &str) -> PathBuf {
 }
 /// A picture copied into the themes folder; returns the path a theme names it by.
 pub fn keep_picture(from: &Path) -> Result<String, String> {
-    let folder = dir().ok_or("找不到配置目录")?.join("images");
+    keep_picture_in(&dir().ok_or("找不到配置目录")?, from)
+}
+/// The same picture again reuses its copy; another one with the same name gets its own, so
+/// a theme's picture never changes because another theme chose a file with that name.
+fn keep_picture_in(themes: &Path, from: &Path) -> Result<String, String> {
+    let folder = themes.join("images");
     std::fs::create_dir_all(&folder).map_err(|e| format!("无法创建 {}：{e}", folder.display()))?;
-    let name = from.file_name().ok_or("这不是一个文件")?;
-    let to = folder.join(name);
-    if from != to {
-        std::fs::copy(from, &to).map_err(|e| format!("无法复制 {}：{e}", from.display()))?;
+    let name = Path::new(from.file_name().ok_or("这不是一个文件")?);
+    let bytes = std::fs::read(from).map_err(|e| format!("读不了 {}：{e}", from.display()))?;
+    let (stem, extension) = (
+        name.file_stem().unwrap_or_default().to_string_lossy(),
+        name.extension()
+            .map_or(String::new(), |e| format!(".{}", e.to_string_lossy())),
+    );
+    let candidates = std::iter::once(name.to_string_lossy().into_owned())
+        .chain((2..).map(|n| format!("{stem}-{n}{extension}")));
+    for candidate in candidates {
+        let to = folder.join(&candidate);
+        let same = match std::fs::read(&to) {
+            Ok(there) if there == bytes => true,
+            Ok(_) => continue,
+            Err(_) => false,
+        };
+        if !same {
+            write_atomic(&to, &bytes).map_err(|e| format!("无法复制到 {}：{e}", to.display()))?;
+        }
+        return Ok(format!("images/{candidate}"));
     }
-    Ok(format!("images/{}", name.to_string_lossy()))
+    Err("找不到可用的文件名".to_owned())
 }
 /// A theme or an iTerm2 preset from anywhere, as a theme file ready to save.
 pub fn import(path: &Path) -> Result<ThemeFile, String> {
@@ -298,6 +320,34 @@ mod tests {
         }
         println!("Themes::read, 50 files: {:?} each", t.elapsed() / 100);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+    #[test]
+    fn a_picture_with_a_taken_name_gets_its_own_copy() {
+        let root = std::env::temp_dir().join(format!("mooring-keep-{}", std::process::id()));
+        let (themes, a, b) = (root.join("themes"), root.join("a"), root.join("b"));
+        for dir in [&themes, &a, &b] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(a.join("sea.png"), "first").unwrap();
+        std::fs::write(b.join("sea.png"), "second").unwrap();
+        let keep = |from: &Path| keep_picture_in(&themes, &from.join("sea.png")).unwrap();
+        assert_eq!(keep(&a), "images/sea.png");
+        assert_eq!(
+            keep(&a),
+            "images/sea.png",
+            "the same picture reuses its copy"
+        );
+        assert_eq!(keep(&b), "images/sea-2.png");
+        assert_eq!(keep(&b), "images/sea-2.png");
+        let first = std::fs::read(themes.join("images/sea.png")).unwrap();
+        assert_eq!(first, b"first");
+        std::fs::write(themes.join("images/new.png"), "x").unwrap();
+        assert_eq!(
+            signature(&themes).len(),
+            4,
+            "the scan sees the pictures and the folder"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
     }
     #[test]
     fn a_built_in_is_copied_under_a_new_name() {
