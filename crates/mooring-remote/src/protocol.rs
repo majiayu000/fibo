@@ -298,6 +298,10 @@ pub struct Card {
     /// How the conversation was settled: open, done, deferred or abandoned.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outcome: Option<String>,
+    /// When the conversation last changed, in Unix seconds, so a board can mix its card
+    /// with the desktop's own in time order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

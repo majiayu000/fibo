@@ -156,13 +156,8 @@ impl Workbench {
         self.overview.drop_over = None;
         // Where the card lands: its slot at the top of the column it was accepted into,
         // else back where it was picked up.
-        let slot = self
-            .overview
-            .spots
-            .slot
-            .get()
-            .filter(|(c, _)| *c == to)
-            .map(|(_, b)| b.origin);
+        let slot = (self.overview.spots.slot.get()).filter(|(c, _)| *c == to);
+        let slot = slot.map(|(_, b)| b.origin);
         let accepted = legal(card.from, to) && to != Column::Running;
         self.land(if accepted { slot } else { None }, cx);
         if card.from == to {
@@ -173,6 +168,9 @@ impl Workbench {
             self.shake(to, cx);
             self.show_toast(refusal(card.from), None, true, cx);
             return;
+        }
+        if super::board::remote::is_remote(&card.id) {
+            return self.settle_remote(card, to, cx);
         }
         let (outcome, before, text) = match to {
             Column::Running => {
@@ -295,12 +293,10 @@ impl Workbench {
         let card = if lift.from == Column::Todo {
             let task = self.workspace.tasks.iter().find(|t| t.id == lift.id)?;
             self.todo_card(task, cx)
+        } else if super::board::remote::is_remote(&lift.id) {
+            self.remote_board_card(&lift.id, cx)?
         } else {
-            let session = self
-                .workspace
-                .agent_sessions
-                .iter()
-                .find(|s| s.id == lift.id)?;
+            let session = (self.workspace.agent_sessions.iter()).find(|s| s.id == lift.id)?;
             self.board_card(session, lift.from, now(), false, cx)
         };
         let board = self.overview.spots.board.get().origin;

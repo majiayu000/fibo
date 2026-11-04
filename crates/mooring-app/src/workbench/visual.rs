@@ -1146,6 +1146,7 @@ impl Workbench {
                         pane,
                         answering: false,
                         note: None,
+                        confirm_end: false,
                         remote: None,
                     }
                 });
@@ -1705,7 +1706,6 @@ impl Workbench {
         }
     }
 }
-
 #[cfg(feature = "visual-test")]
 impl Workbench {
     /// Binds a session to each of the running terminals `rw`, `re`, `rq`, `rr`: one waiting

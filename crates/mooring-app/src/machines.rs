@@ -119,6 +119,9 @@ pub struct Linked {
     pub answering: bool,
     /// Taking its terminals over and sizing them (`resize`).
     pub resizing: bool,
+    /// Opening and ending its terminals and settling its conversations (`open`, `end`,
+    /// `outcome`).
+    pub managing: bool,
 }
 
 /// Where a machine's live connection is, if it has one now.
@@ -241,6 +244,9 @@ fn run_once(
         typing: hello.ops.iter().any(|o| o == "input"),
         answering: hello.ops.iter().any(|o| o == "answer"),
         resizing: hello.ops.iter().any(|o| o == "resize"),
+        managing: ["open", "end", "outcome"]
+            .iter()
+            .all(|op| hello.ops.iter().any(|o| o == op)),
     });
     apply(view, Some(hello.machine), list);
     changed();

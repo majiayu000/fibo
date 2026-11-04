@@ -481,6 +481,7 @@ fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
                     .map(|c| c.turn_key.clone())
                     .filter(|t| !t.is_empty()),
                 outcome: session.map(|s| outcome_key(&s.outcome).to_owned()),
+                updated: session.map(|s| w.session_updated(s)),
             }
         })
         .collect();

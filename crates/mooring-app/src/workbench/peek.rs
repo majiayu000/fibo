@@ -12,6 +12,8 @@ pub(super) struct Peek {
     pub(super) answering: bool,
     /// Why the host turned the last answer down, e.g. it was answered in the pane already.
     pub(super) note: Option<String>,
+    /// 「关闭终端」 was clicked once on another machine's terminal: it asks before ending it.
+    pub(super) confirm_end: bool,
     /// Set for another machine's terminal: what its title bar says, from that machine's
     /// card, and the link its answers go over. Nothing to open here.
     pub(super) remote: Option<RemoteTitle>,
@@ -69,6 +71,7 @@ impl Workbench {
                 pane,
                 answering: false,
                 note: None,
+                confirm_end: false,
                 remote: None,
             });
         }
@@ -168,6 +171,9 @@ impl Workbench {
         // Read only unless that machine lets this desktop type there.
         let read_only = (peek.remote.as_ref())
             .is_some_and(|r| !r.slot.lock().unwrap().as_ref().is_some_and(|l| l.typing));
+        // Another machine's terminal can be ended from here when that machine allows it.
+        let ends = (peek.remote.as_ref())
+            .is_some_and(|r| r.slot.lock().unwrap().as_ref().is_some_and(|l| l.managing));
         let approval = self.peek_approval();
         let state = match (&approval, group) {
             (Some(_), _) => Some("等你批准".to_owned()),
@@ -227,6 +233,31 @@ impl Workbench {
                         .text_size(px(T::CHIP_SIZE))
                         .text_color(T::color(T::muted())),
                 )
+            })
+            .when(ends, |d| match peek.confirm_end {
+                false => d.child(button("peek-end", "关闭终端").on_click(cx.listener(
+                    |this, _, _, cx| {
+                        if let Some(p) = &mut this.peek {
+                            p.confirm_end = true;
+                        }
+                        cx.notify();
+                    },
+                ))),
+                true => d
+                    .child(label("关掉那边这个终端？").text_size(px(T::CHIP_SIZE)))
+                    .child(
+                        button("peek-end-yes", "关闭")
+                            .text_color(Tone::Danger.ink())
+                            .on_click(cx.listener(|this, _, _, cx| this.end_remote(cx))),
+                    )
+                    .child(button("peek-end-no", "取消").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            if let Some(p) = &mut this.peek {
+                                p.confirm_end = false;
+                            }
+                            cx.notify();
+                        },
+                    ))),
             })
             .when(!remote, |d| {
                 d.child(button("peek-open", "↗ 打开").on_click(cx.listener(
