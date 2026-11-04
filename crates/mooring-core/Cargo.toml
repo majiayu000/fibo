@@ -13,4 +13,6 @@ regex = "1"
 libc.workspace = true
 sha2 = "0.10"
 rustc-hash = "2"
+ed25519-dalek = "2"
+getrandom = "0.3"
 libghostty-vt.workspace = true

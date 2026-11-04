@@ -19,6 +19,14 @@
 - 现成的插件不用自己写：`mooring plugins available` 列出 App 附带的（加 `--remote` 再查远程目录），`mooring plugins install <id>` 装上。用命令行装、卸、开关，运行中的 Mooring 会马上用上，不用再点「重新读取」。
 - 插件只能用下面列的这几类。做不到的（自己画界面、改会话状态、读对话原文）就直说做不到，别改 Mooring 的安装文件。
 
+## 发布自己的目录
+
+一个目录就是 `index.json` 加每个插件的文件，放在任何 https 地址或 `file://` 下，用户写进 `<配置>/market`。
+
+- `mooring plugins keygen --name 你的名字` 生成私钥（默认 `<配置>/publisher.key`，只有你能读，别进仓库）。之后 `mooring plugins index <目录>` 生成 `index.json` 并签出 `index.sig`。
+- 用户第一次装时看到发布者名字和密钥开头，之后密钥换了或签名没了都会再问；签名对不上的目录直接不用。没有签名的目录也能用，但每个插件第一次装都会提示。
+- 旧版本放在 `<插件>/versions/<版本>/`，每个是完整的插件目录，`index` 会一起登记。App 太旧跑不了最新版时，自动给它能跑的最新版；`mooring plugins install <id>@<版本>` 能指定版本。
+
 ## 步骤
 
 ```sh

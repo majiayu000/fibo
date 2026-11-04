@@ -1,0 +1,6 @@
+{
+  "alg": "ed25519",
+  "publisher": "Mooring 官方",
+  "key": "e88de1d56240c9dbf6f150dfdc58347a967d78ed88dc07218cb116c976aa8988",
+  "sig": "dda77db1580a8ae614f62867d142667d0ae829974a8d088fff5cc7e384f88dd2278485db077ab75f9f6731a7c34693145555fbb670b3c35c2e4fa8dbcf8aad00"
+}

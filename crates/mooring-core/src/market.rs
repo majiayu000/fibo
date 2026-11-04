@@ -13,6 +13,16 @@
 //!   "files": [{"path": "plugin.json", "sha256": "…", "size": 312}]}]}
 //! ```
 //!
+//! **Who published it.** A catalog may carry `index.sig` beside `index.json`: an ed25519
+//! signature over the index's exact bytes, whose file hashes in turn pin every file. So a
+//! valid signature says one key published this whole catalog. This repository's key is built
+//! in (`OFFICIAL_KEY`) and its catalog must be signed by it; another catalog's key is shown
+//! the first time and remembered with what was installed, so a change of publisher is asked
+//! about; a catalog with no signature is allowed and says so; a bad signature is refused.
+//!
+//! **Versions.** An entry may list older versions (`versions`, each with its own `dir`), so
+//! a build too old for the newest still gets the newest it can run.
+//!
 //! Installing is two steps, so what you are asked comes from the package itself: `prepare`
 //! copies exactly the listed files, each checked against its sha256, into a staging
 //! directory and reads them with the loaders the app uses (`Prepared` says what it will run
@@ -30,6 +40,9 @@ pub const DEFAULT_REMOTE: &str =
     "https://raw.githubusercontent.com/majiayu000/mooring/main/plugins/index.json";
 /// No plugin file is this large; a bigger one is refused, not written.
 const MAX_FILE: u64 = 16 << 20;
+/// The public half of the key this repository's catalog is signed with; the private half is
+/// `publisher.key` on the maintainer's machine, never in the repository.
+pub const OFFICIAL_KEY: &str = "e88de1d56240c9dbf6f150dfdc58347a967d78ed88dc07218cb116c976aa8988";
 
 /// Fields a newer Mooring adds to the index are ignored, and kinds it does not know are
 /// dropped from `provides`, so an older build still lists what it can install.
@@ -57,6 +70,13 @@ pub struct Entry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<bool>,
     pub files: Vec<FileEntry>,
+    /// Where its files are under `<id>/`, for an older version kept beside the newest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+    /// Older versions, newest first, each a complete entry: what a build too old for this
+    /// one installs instead. A build from before these existed ignores them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub versions: Vec<Entry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,11 +95,144 @@ pub enum Source {
     Remote(String),
 }
 
+/// Who a catalog's signature says published it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Publisher {
+    /// This repository: signed by `OFFICIAL_KEY`, or shipped inside the app itself.
+    Official,
+    /// Another key, valid for this index.
+    Signed { name: String, key: String },
+    /// No `index.sig`.
+    Unsigned,
+}
+impl Publisher {
+    /// The key to remember with what was installed.
+    fn key(&self) -> Option<String> {
+        match self {
+            Self::Official => Some(OFFICIAL_KEY.to_owned()),
+            Self::Signed { key, .. } => Some(key.clone()),
+            Self::Unsigned => None,
+        }
+    }
+    /// A key's first characters: enough to see that it changed.
+    fn fingerprint(key: &str) -> String {
+        key.chars().take(16).collect()
+    }
+    /// In words, for a confirmation.
+    pub fn said(&self) -> String {
+        match self {
+            Self::Official => OFFICIAL.to_owned(),
+            Self::Signed { name, key } => {
+                format!("{name}（密钥 {}）", Self::fingerprint(key))
+            }
+            Self::Unsigned => "没有签名的目录".to_owned(),
+        }
+    }
+}
+
+/// `index.sig`: who signed the bytes of `index.json`, and the signature.
+#[derive(Debug, Serialize, Deserialize)]
+struct Signature {
+    alg: String,
+    publisher: String,
+    key: String,
+    sig: String,
+}
+/// `publisher.key`: a publisher's private key. Never published.
+#[derive(Serialize, Deserialize)]
+struct SecretKey {
+    publisher: String,
+    secret: String,
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+fn from_hex<const N: usize>(text: &str) -> Option<[u8; N]> {
+    if text.len() != N * 2 || !text.is_ascii() {
+        return None;
+    }
+    let mut out = [0u8; N];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(out)
+}
+
+/// A new publisher key: the file to keep private, and the public key to show.
+pub fn new_key(publisher: &str) -> Result<(String, String), String> {
+    let mut secret = [0u8; 32];
+    getrandom::fill(&mut secret).map_err(|e| format!("拿不到随机数：{e}"))?;
+    let public = ed25519_dalek::SigningKey::from_bytes(&secret).verifying_key();
+    let file = SecretKey {
+        publisher: publisher.to_owned(),
+        secret: to_hex(&secret),
+    };
+    Ok((
+        serde_json::to_string_pretty(&file).map_err(|e| e.to_string())? + "\n",
+        to_hex(public.as_bytes()),
+    ))
+}
+
+/// `index.sig` for these exact `index.json` bytes, from a `publisher.key`.
+pub fn sign_index(index: &[u8], secret_key: &[u8]) -> Result<String, String> {
+    use ed25519_dalek::Signer;
+    let file: SecretKey =
+        serde_json::from_slice(secret_key).map_err(|e| format!("私钥文件格式不对：{e}"))?;
+    let secret = from_hex::<32>(&file.secret).ok_or("私钥文件格式不对")?;
+    let key = ed25519_dalek::SigningKey::from_bytes(&secret);
+    let signature = Signature {
+        alg: "ed25519".into(),
+        publisher: file.publisher,
+        key: to_hex(key.verifying_key().as_bytes()),
+        sig: to_hex(&key.sign(index).to_bytes()),
+    };
+    Ok(serde_json::to_string_pretty(&signature).map_err(|e| e.to_string())? + "\n")
+}
+
+/// Who signed these index bytes; an invalid signature is an error, never "unsigned".
+pub fn verify_index(index: &[u8], signature: &[u8]) -> Result<Publisher, String> {
+    use ed25519_dalek::Verifier;
+    let s: Signature =
+        serde_json::from_slice(signature).map_err(|e| format!("index.sig 格式不对：{e}"))?;
+    if s.alg != "ed25519" {
+        return Err(format!("index.sig 用的是 {}，这个版本只认 ed25519", s.alg));
+    }
+    let key = from_hex::<32>(&s.key)
+        .and_then(|k| ed25519_dalek::VerifyingKey::from_bytes(&k).ok())
+        .ok_or("index.sig 的密钥格式不对")?;
+    let sig = from_hex::<64>(&s.sig).ok_or("index.sig 的签名格式不对")?;
+    key.verify(index, &ed25519_dalek::Signature::from_bytes(&sig))
+        .map_err(|_| "index.json 和它的签名对不上：可能被改过，没有使用".to_owned())?;
+    Ok(if s.key == OFFICIAL_KEY {
+        Publisher::Official
+    } else {
+        Publisher::Signed {
+            name: s.publisher,
+            key: s.key,
+        }
+    })
+}
+
+/// What a catalog at `url` counts as, given its index and signature if it has one. This
+/// repository's own address accepts nothing but this repository's key.
+fn publisher_of(url: &str, index: &[u8], signature: Option<&[u8]>) -> Result<Publisher, String> {
+    let publisher = match signature {
+        Some(s) => verify_index(index, s)?,
+        None => Publisher::Unsigned,
+    };
+    if url == DEFAULT_REMOTE && publisher != Publisher::Official {
+        return Err("官方目录没有官方的签名，没有使用".to_owned());
+    }
+    Ok(publisher)
+}
+
 /// One installable plugin and where to get it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Offer {
     pub entry: Entry,
     pub source: Source,
+    pub publisher: Publisher,
 }
 
 /// What a plugin's kinds may do once installed, in words for the install confirmation.
@@ -204,6 +357,41 @@ pub fn disclosure(provides: &[Kind], touches: &[String], network: Option<bool>) 
 }
 
 impl Entry {
+    /// Whether this build can run this version.
+    pub fn compatible(&self) -> bool {
+        self.mooring.is_none_or(|l| l <= plugin::LEVEL)
+    }
+    /// This version and every older one, newest first; each without its own `versions`.
+    fn all_versions(&self) -> Vec<Entry> {
+        let mut own = self.clone();
+        own.versions = vec![];
+        let mut all = vec![own];
+        all.extend(self.versions.iter().cloned());
+        all.sort_by(|a, b| {
+            if newer(&a.version, &b.version) {
+                std::cmp::Ordering::Less
+            } else if newer(&b.version, &a.version) {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+        all
+    }
+    /// The newest version this build can run, carrying the rest for `Offer::pick`. With none
+    /// it stays the newest, for `check` to say that Mooring needs updating.
+    fn for_this_build(&self) -> Entry {
+        let all = self.all_versions();
+        let chosen = all.iter().find(|e| e.compatible()).unwrap_or(&all[0]);
+        Entry {
+            versions: all
+                .iter()
+                .filter(|e| e.version != chosen.version)
+                .cloned()
+                .collect(),
+            ..chosen.clone()
+        }
+    }
     /// Refuses an entry that could not be installed safely, before fetching anything.
     pub fn check(&self) -> Result<(), String> {
         if !plugin::valid_id(&self.id) {
@@ -215,6 +403,9 @@ impl Entry {
                 self.id,
                 plugin::LEVEL
             ));
+        }
+        if let Some(dir) = self.dir.as_deref().filter(|d| !safe_path(d)) {
+            return Err(format!("{} 的目录 \"{dir}\" 不安全", self.id));
         }
         if !self.files.iter().any(|f| f.path == "plugin.json") {
             return Err(format!("{} 的文件里没有 plugin.json", self.id));
@@ -287,19 +478,72 @@ pub fn index_of(dir: &Path) -> Result<Index, String> {
                 size: bytes.len() as u64,
             });
         }
-        plugins.push(Entry {
-            id: p.id,
-            name: p.name,
-            version: p.version.unwrap_or_else(|| "0.0.0".into()),
-            description: p.description,
-            provides: p.provides,
-            mooring: (p.level > 1).then_some(p.level),
-            touches: p.touches,
-            network: p.network,
-            files,
-        });
+        let mut entry = entry_of(p, files);
+        entry.versions = older_versions(&found.dir, &entry.id)?;
+        plugins.push(entry);
     }
     Ok(Index { api: API, plugins })
+}
+
+fn entry_of(p: Plugin, files: Vec<FileEntry>) -> Entry {
+    Entry {
+        id: p.id,
+        name: p.name,
+        version: p.version.unwrap_or_else(|| "0.0.0".into()),
+        description: p.description,
+        provides: p.provides,
+        mooring: (p.level > 1).then_some(p.level),
+        touches: p.touches,
+        network: p.network,
+        files,
+        dir: None,
+        versions: vec![],
+    }
+}
+
+/// The versions kept under `<plugin>/versions/<version>/`, newest first: each a complete
+/// plugin directory, listed like the newest one.
+fn older_versions(dir: &Path, id: &str) -> Result<Vec<Entry>, String> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir.join("versions"))
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !e.path().is_dir() || name.starts_with('.') {
+            continue;
+        }
+        let p = plugin::check(&e.path()).map_err(|why| format!("{}：{why}", e.path().display()))?;
+        if p.id != id {
+            return Err(format!("{}：id 要和插件一样（{id}）", e.path().display()));
+        }
+        let mut files = Vec::new();
+        for file in shipped_files(&p) {
+            let bytes =
+                std::fs::read(&file).map_err(|err| format!("读不了 {}：{err}", file.display()))?;
+            files.push(FileEntry {
+                path: file
+                    .strip_prefix(&p.dir)
+                    .map_err(|_| format!("{} 不在插件目录里", file.display()))?
+                    .to_string_lossy()
+                    .into_owned(),
+                sha256: sha256(&bytes),
+                size: bytes.len() as u64,
+            });
+        }
+        let mut entry = entry_of(p, files);
+        entry.dir = Some(format!("versions/{name}"));
+        out.push(entry);
+    }
+    out.sort_by(|a: &Entry, b: &Entry| {
+        if newer(&a.version, &b.version) {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Greater
+        }
+    });
+    Ok(out)
 }
 
 /// The index as `index.json` holds it: pretty, one trailing newline.
@@ -351,8 +595,10 @@ pub fn bundled() -> Result<Vec<Offer>, String> {
         .plugins
         .into_iter()
         .map(|entry| Offer {
-            entry,
+            entry: entry.for_this_build(),
             source: Source::Bundled(dir.clone()),
+            // It came inside the app: as trusted as the app itself.
+            publisher: Publisher::Official,
         })
         .collect())
 }
@@ -400,13 +646,19 @@ pub fn fetch_remote(url: &str) -> Result<Vec<Offer>, String> {
         .rsplit_once('/')
         .map(|(b, _)| b.to_owned())
         .ok_or_else(|| format!("{url} 不是一个地址"))?;
-    let index = parse(&curl(url)?)?;
+    let bytes = curl(url)?;
+    // Any failure to get a signature is no signature; this repository's address and the
+    // pin on what is installed are what make that matter.
+    let signature = curl(&format!("{base}/index.sig")).ok();
+    let publisher = publisher_of(url, &bytes, signature.as_deref())?;
+    let index = parse(&bytes)?;
     Ok(index
         .plugins
         .into_iter()
         .map(|entry| Offer {
-            entry,
+            entry: entry.for_this_build(),
             source: Source::Remote(base.clone()),
+            publisher: publisher.clone(),
         })
         .collect())
 }
@@ -417,7 +669,13 @@ pub fn merge(bundled: Vec<Offer>, remote: Vec<Offer>) -> Vec<Offer> {
     let mut out = bundled;
     for r in remote {
         match out.iter_mut().find(|o| o.entry.id == r.entry.id) {
-            Some(o) if newer(&r.entry.version, &o.entry.version) => *o = r,
+            // A newer version this build cannot run does not push out one it can.
+            Some(o)
+                if newer(&r.entry.version, &o.entry.version)
+                    && (r.entry.compatible() || !o.entry.compatible()) =>
+            {
+                *o = r
+            }
             Some(_) => {}
             None => out.push(r),
         }
@@ -429,20 +687,41 @@ impl Offer {
     fn fetch(&self, path: &str) -> Result<Vec<u8>, String> {
         match &self.source {
             Source::Bundled(dir) => {
-                let file = dir.join(&self.entry.id).join(path);
+                let mut file = dir.join(&self.entry.id);
+                if let Some(version) = &self.entry.dir {
+                    file.push(version);
+                }
+                file.push(path);
                 std::fs::read(&file).map_err(|e| format!("读不了 {}：{e}", file.display()))
             }
-            Source::Remote(base) => curl(&format!("{base}/{}/{path}", self.entry.id)),
+            Source::Remote(base) => {
+                let id = &self.entry.id;
+                curl(&match &self.entry.dir {
+                    Some(dir) => format!("{base}/{id}/{dir}/{path}"),
+                    None => format!("{base}/{id}/{path}"),
+                })
+            }
         }
     }
-    /// Who it comes from, for comparing with what is installed.
+    /// This offer at a named version, if the catalog has it.
+    pub fn pick(&self, version: &str) -> Option<Offer> {
+        let entry = self
+            .entry
+            .all_versions()
+            .into_iter()
+            .find(|e| e.version == version)?;
+        Some(Offer {
+            entry,
+            ..self.clone()
+        })
+    }
+    /// Who it comes from, for comparing with what is installed: its publisher when signed,
+    /// so a move to another address is no change; its address when not.
     fn origin_key(&self) -> String {
-        match &self.source {
-            Source::Bundled(_) => OFFICIAL.to_owned(),
-            Source::Remote(base) if DEFAULT_REMOTE.strip_suffix("/index.json") == Some(base) => {
-                OFFICIAL.to_owned()
-            }
-            Source::Remote(base) => base.clone(),
+        match (&self.publisher, &self.source) {
+            (Publisher::Unsigned, Source::Remote(base)) => base.clone(),
+            (Publisher::Unsigned, Source::Bundled(_)) => OFFICIAL.to_owned(),
+            (publisher, _) => publisher.said(),
         }
     }
     /// Where it comes from, in words.
@@ -469,6 +748,7 @@ impl Offer {
             source: InstalledFrom {
                 from: self.origin_key(),
                 files: e.files.iter().map(|f| f.path.clone()).collect(),
+                key: self.publisher.key(),
             },
             id: e.id.clone(),
             disclosure: vec![],
@@ -526,8 +806,19 @@ impl Offer {
         prepared.added = old.as_ref().map(|o| added(o, &p)).unwrap_or_default();
         prepared.replacing = old
             .as_ref()
-            .map(|o| replacing(plugins, o, &p, e, &prepared.source.from))
+            .map(|o| replacing(plugins, o, &p, e, self))
             .unwrap_or_default();
+        // Nothing vouches for a first install from outside: say who it is, or that nobody says.
+        if old.is_none() {
+            prepared.replacing.extend(match &self.publisher {
+                Publisher::Official => None,
+                Publisher::Signed { .. } => Some(format!(
+                    "发布者：{}，第一次见到这个密钥，以后换了会问你",
+                    self.publisher.said()
+                )),
+                Publisher::Unsigned => Some("这个目录没有签名，不能确认文件是谁发的".to_owned()),
+            });
+        }
         prepared.must_ask = !prepared.replacing.is_empty()
             || match &old {
                 None => runs_commands(&p.provides),
@@ -674,6 +965,9 @@ pub struct InstalledFrom {
     pub from: String,
     /// The files that package listed; anything else in its directory is somebody's own.
     pub files: Vec<String>,
+    /// The key it was signed with: a later version signed by another is asked about.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
 }
 const SOURCE_FILE: &str = "source.json";
 /// This repository's catalog, whichever way it arrived: shipped with the app or fetched.
@@ -703,16 +997,35 @@ fn files_under(dir: &Path) -> Vec<String> {
 /// What replacing `old` with this package would lose or change hands: it came from somewhere
 /// else, it is somebody's own under the same id, or its directory has files no package put
 /// there. Each is a reason to ask, whatever the package does.
-fn replacing(plugins: &Path, old: &Plugin, new: &Plugin, entry: &Entry, from: &str) -> Vec<String> {
+fn replacing(
+    plugins: &Path,
+    old: &Plugin,
+    new: &Plugin,
+    entry: &Entry,
+    offer: &Offer,
+) -> Vec<String> {
+    let from = offer.origin_key();
     let recorded: Option<InstalledFrom> =
         std::fs::read(crate::setup::data_dir(plugins, &old.id).join(SOURCE_FILE))
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok());
     let mut out = Vec::new();
-    if let Some(r) = &recorded
-        && r.from != from
-    {
-        out.push(format!("来源变了：原来来自 {}，这次来自 {from}", r.from));
+    if let Some(r) = &recorded {
+        match (&r.key, offer.publisher.key()) {
+            // The serious one, whatever the address says.
+            (Some(was), now) if now.as_ref() != Some(was) => out.push(format!(
+                "发布者变了：原来的密钥是 {}，这次{}",
+                Publisher::fingerprint(was),
+                now.map_or("没有签名".to_owned(), |k| format!(
+                    "是 {}",
+                    Publisher::fingerprint(&k)
+                ))
+            )),
+            _ if r.from != from => {
+                out.push(format!("来源变了：原来来自 {}，这次来自 {from}", r.from));
+            }
+            _ => {}
+        }
     }
     if old.name != new.name {
         out.push(format!(
@@ -990,6 +1303,12 @@ mod tests {
             want == have,
             "plugins/index.json 过期了：运行 cargo run -p mooring-host -- plugins index plugins"
         );
+        let signature = std::fs::read(dir.join("index.sig")).unwrap_or_default();
+        assert_eq!(
+            verify_index(have.as_bytes(), &signature),
+            Ok(Publisher::Official),
+            "plugins/index.sig 过期了：在有官方私钥的机器上运行 mooring plugins index plugins"
+        );
     }
 
     #[test]
@@ -1009,6 +1328,7 @@ mod tests {
         let offer = Offer {
             entry: index.plugins[0].clone(),
             source: Source::Bundled(catalog.clone()),
+            publisher: Publisher::Official,
         };
         let plugins = tmp("plugins");
         // A hand-placed copy under another directory name is replaced where it is.
@@ -1047,6 +1367,8 @@ mod tests {
             touches: vec![],
             network: None,
             files,
+            dir: None,
+            versions: vec![],
         };
         assert!(
             entry("ok", vec![file("plugin.json"), file("a/b.json")])
@@ -1099,12 +1421,15 @@ mod tests {
                 touches: vec![],
                 network: None,
                 files: vec![],
+                dir: None,
+                versions: vec![],
             },
             source: if remote {
                 Source::Remote("https://x".into())
             } else {
                 Source::Bundled(PathBuf::new())
             },
+            publisher: Publisher::Official,
         };
         let merged = merge(
             vec![offer("a", "0.2.0", false), offer("b", "0.1.0", false)],
@@ -1193,6 +1518,7 @@ mod tests {
         let offer = Offer {
             entry: index_of(&catalog).unwrap().plugins[0].clone(),
             source: Source::Bundled(catalog.clone()),
+            publisher: Publisher::Official,
         };
         let plugins = tmp("other-plugins");
         plugin(&plugins, "other", "0.1.0");
@@ -1225,6 +1551,7 @@ mod tests {
         let offer = Offer {
             entry,
             source: Source::Bundled(catalog.clone()),
+            publisher: Publisher::Official,
         };
         let plugins = tmp("provides-into");
         let result = offer.install_into(&plugins);
@@ -1255,6 +1582,7 @@ mod tests {
         Offer {
             entry,
             source: Source::Bundled(catalog.to_owned()),
+            publisher: Publisher::Official,
         }
     }
 
@@ -1541,14 +1869,12 @@ mod tests {
         let mut other = offer.clone();
         other.entry.version = "9.1.0".into();
         other.source = Source::Remote("https://other.invalid/p".into());
+        other.publisher = Publisher::Unsigned;
         let from = other.replacing_for_test(&plugins);
         let same = offer.prepare(&plugins).unwrap().must_ask;
         let _ = std::fs::remove_dir_all(&catalog);
         let _ = std::fs::remove_dir_all(&plugins);
-        assert!(
-            from.iter().any(|l| l.contains("https://other.invalid/p")),
-            "{from:?}"
-        );
+        assert!(from.iter().any(|l| l.contains("发布者变了")), "{from:?}");
         assert!(
             !same,
             "the same package from the same place needs no question"
@@ -1587,7 +1913,189 @@ mod tests {
                 .into_iter()
                 .find_map(|f| f.result.ok().filter(|o| o.id == self.entry.id))
                 .unwrap();
-            replacing(plugins, &old, &old, &self.entry, &self.origin_key())
+            replacing(plugins, &old, &old, &self.entry, self)
         }
+    }
+
+    /// A signature vouches for these exact bytes and names its key; any change breaks it.
+    #[test]
+    fn a_catalogs_signature_says_who_and_fails_on_any_change() {
+        let (secret, public) = new_key("别人的目录").unwrap();
+        let sig = sign_index(b"{\"api\":1}", secret.as_bytes()).unwrap();
+        assert_eq!(
+            verify_index(b"{\"api\":1}", sig.as_bytes()),
+            Ok(Publisher::Signed {
+                name: "别人的目录".into(),
+                key: public.clone()
+            })
+        );
+        assert!(
+            verify_index(b"{\"api\":2}", sig.as_bytes())
+                .unwrap_err()
+                .contains("改过")
+        );
+        let (other, _) = new_key("x").unwrap();
+        let mut forged: serde_json::Value =
+            serde_json::from_str(&sign_index(b"{\"api\":1}", other.as_bytes()).unwrap()).unwrap();
+        forged["key"] = public.into();
+        assert!(verify_index(b"{\"api\":1}", forged.to_string().as_bytes()).is_err());
+        assert!(verify_index(b"x", b"not json").is_err());
+    }
+
+    /// This repository's address takes nothing but this repository's key; elsewhere an
+    /// unsigned catalog is allowed and a bad signature is not.
+    #[test]
+    fn the_official_address_accepts_only_the_official_key() {
+        let index = b"{}";
+        let (secret, _) = new_key("冒充者").unwrap();
+        let sig = sign_index(index, secret.as_bytes()).unwrap();
+        assert!(publisher_of(DEFAULT_REMOTE, index, None).is_err());
+        assert!(publisher_of(DEFAULT_REMOTE, index, Some(sig.as_bytes())).is_err());
+        let elsewhere = "https://example.invalid/index.json";
+        assert_eq!(
+            publisher_of(elsewhere, index, None),
+            Ok(Publisher::Unsigned)
+        );
+        assert!(matches!(
+            publisher_of(elsewhere, index, Some(sig.as_bytes())),
+            Ok(Publisher::Signed { .. })
+        ));
+        assert!(publisher_of(elsewhere, b"changed", Some(sig.as_bytes())).is_err());
+    }
+
+    /// Installed from one key: the next version signed by another, or not signed at all, is
+    /// asked about even for an animation. The same key from a new address is not.
+    #[test]
+    fn a_change_of_publisher_is_asked_about() {
+        let catalog = tmp("publisher");
+        let plugins = tmp("publisher-into");
+        const EFFECT: &str = r#"{"api":1,"complete":{"style":"sweep"}}"#;
+        let signed = |key: &str| Publisher::Signed {
+            name: "作者".into(),
+            key: key.into(),
+        };
+        let (key_a, key_b) = ("a".repeat(64), "b".repeat(64));
+        let mut offer = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"s","name":"S","version":"1.0.0","provides":["effects"]}"#,
+            &[("effects.json", EFFECT)],
+        );
+        offer.publisher = signed(&key_a);
+        let first = offer.prepare(&plugins).unwrap();
+        assert!(first.must_ask, "a key not seen before");
+        assert!(first.lines().join("").contains(&key_a[..16]));
+        first.commit().unwrap();
+        let again = offer.prepare(&plugins).unwrap();
+        assert!(!again.must_ask, "{:?}", again.lines());
+        drop(again);
+        offer.publisher = signed(&key_b);
+        let changed = offer.prepare(&plugins).unwrap();
+        assert!(changed.must_ask && changed.lines().join("").contains("发布者变了"));
+        drop(changed);
+        offer.publisher = Publisher::Unsigned;
+        let unsigned = offer.prepare(&plugins).unwrap();
+        assert!(unsigned.must_ask && unsigned.lines().join("").contains("没有签名"));
+        drop(unsigned);
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    /// A catalog keeping an older version: a build too old for the newest gets that one, from
+    /// its own directory, and a named version can be asked for.
+    #[test]
+    fn a_build_too_old_for_the_newest_gets_the_newest_it_can_run() {
+        let catalog = tmp("versions");
+        let plugins = tmp("versions-into");
+        const EFFECT: &str = r#"{"api":1,"complete":{"style":"sweep"}}"#;
+        let write_plugin = |dir: &Path, version: &str, level: u32| {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(
+                dir.join("plugin.json"),
+                format!(
+                    r#"{{"api":1,"id":"v","name":"V","version":"{version}","provides":["effects"],"mooring":{level}}}"#
+                ),
+            )
+            .unwrap();
+            std::fs::write(dir.join("effects.json"), EFFECT).unwrap();
+        };
+        write_plugin(&catalog.join("v"), "3.0.0", 1);
+        write_plugin(&catalog.join("v/versions/2.0.0"), "2.0.0", 1);
+        write_plugin(&catalog.join("v/versions/1.0.0"), "1.0.0", 1);
+        let mut entry = index_of(&catalog).unwrap().plugins.remove(0);
+        assert_eq!(
+            entry
+                .versions
+                .iter()
+                .map(|e| e.version.as_str())
+                .collect::<Vec<_>>(),
+            ["2.0.0", "1.0.0"]
+        );
+        assert_eq!(entry.versions[0].dir.as_deref(), Some("versions/2.0.0"));
+        // What this build would see if the newest needed a later Mooring.
+        entry.mooring = Some(plugin::LEVEL + 1);
+        let chosen = entry.for_this_build();
+        assert_eq!(chosen.version, "2.0.0");
+        assert_eq!(chosen.versions.len(), 2);
+        let offer = Offer {
+            entry: chosen,
+            source: Source::Bundled(catalog.clone()),
+            publisher: Publisher::Official,
+        };
+        offer.install_into(&plugins).unwrap();
+        assert_eq!(
+            plugin::check(&plugins.join("v"))
+                .unwrap()
+                .version
+                .as_deref(),
+            Some("2.0.0")
+        );
+        assert!(
+            !plugins.join("v/versions").exists(),
+            "older versions do not travel"
+        );
+        offer.pick("1.0.0").unwrap().install_into(&plugins).unwrap();
+        assert_eq!(
+            plugin::check(&plugins.join("v"))
+                .unwrap()
+                .version
+                .as_deref(),
+            Some("1.0.0")
+        );
+        assert!(offer.pick("9.9.9").is_none());
+        // A newer remote that cannot run here does not push out a bundled one that can.
+        let mut remote = offer.clone();
+        remote.entry.version = "9.0.0".into();
+        remote.entry.mooring = Some(plugin::LEVEL + 1);
+        let merged = merge(vec![offer.clone()], vec![remote]);
+        assert_eq!(merged[0].entry.version, "2.0.0");
+        // None it can run: the newest stays, for check to say so.
+        entry
+            .versions
+            .iter_mut()
+            .for_each(|e| e.mooring = Some(plugin::LEVEL + 1));
+        assert_eq!(entry.for_this_build().version, "3.0.0");
+        assert!(
+            entry
+                .for_this_build()
+                .check()
+                .unwrap_err()
+                .contains("更新 Mooring")
+        );
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
+    fn a_version_directory_outside_the_plugin_is_refused() {
+        let catalog = tmp("dir-escape");
+        let mut offer = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"e","name":"E","version":"1.0.0","provides":["effects"]}"#,
+            &[("effects.json", r#"{"api":1,"complete":{"style":"sweep"}}"#)],
+        );
+        offer.entry.dir = Some("../../etc".into());
+        let err = offer.entry.check().unwrap_err();
+        let _ = std::fs::remove_dir_all(&catalog);
+        assert!(err.contains("不安全"), "{err}");
     }
 }

@@ -8,13 +8,16 @@ use std::path::{Path, PathBuf};
 
 pub const USAGE: &str = "用法：mooring plugins [--dir 插件目录] [--json]
       mooring plugins available [--remote]   列出可安装的插件（App 附带的，加 --remote 再查远程目录）
-      mooring plugins install <id> [--remote] [--yes]
+      mooring plugins install <id>[@版本] [--remote] [--yes]
                                               安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
       mooring plugins uninstall <id> [--force]
                                               卸载一个插件；--force 在 teardown 失败时也卸（加载不了的按目录名卸）
       mooring plugins disable|enable <id> [--force]
                                               停用或打开一个插件；--force 在 teardown 失败时也停用
-      mooring plugins index <目录> [--check]  为插件目录生成 index.json（--check 只检查是否最新）
+      mooring plugins index <目录> [--check] [--key 私钥文件]
+                                              为插件目录生成 index.json 并用私钥签名（--check 只检查是否最新、签名对不对）
+      mooring plugins keygen [--name 发布者] [--key 私钥文件]
+                                              生成发布者的签名私钥，默认 <配置>/publisher.key
       mooring plugins log <id>                这个插件最近的运行：setup、hook、出过错的装饰和额度命令
       mooring plugins set <id> [<key> <值>]   看或改插件的设置项；值写 true/false、数字或文字
       mooring plugins run <id> <声明 id> [--event 事件] [--cwd 目录]
@@ -115,6 +118,28 @@ fn plugins_dir() -> io::Result<PathBuf> {
     )?))
 }
 
+/// `<config>/publisher.key`, where a publisher's private key lives by default.
+fn default_key() -> io::Result<PathBuf> {
+    let config = mooring_core::agent::config_dir()
+        .ok_or_else(|| io::Error::other("找不到配置目录：HOME 没有设置"))?;
+    Ok(config.join("publisher.key"))
+}
+
+/// Writes a file only its owner can read, from the moment it exists.
+fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)?
+        .write_all(bytes)
+}
+
 fn offers(remote: bool) -> io::Result<Vec<market::Offer>> {
     let bundled = market::bundled().map_err(io::Error::other)?;
     if !remote {
@@ -131,7 +156,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
     let mut yes = false;
     let mut send = false;
     let mut force = false;
-    let (mut event, mut cwd) = (None, None);
+    let (mut event, mut cwd, mut key_file, mut publisher) = (None, None, None, None);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--remote" => remote = true,
@@ -141,26 +166,82 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
             "--force" => force = true,
             "--event" => event = args.next(),
             "--cwd" => cwd = args.next(),
+            "--key" => key_file = args.next().map(PathBuf::from),
+            "--name" => publisher = args.next(),
             _ => rest.push(a),
         }
     }
     match (command, rest.as_slice()) {
+        ("keygen", []) => {
+            let path = match key_file {
+                Some(path) => path,
+                None => default_key()?,
+            };
+            if path.exists() {
+                return Err(io::Error::other(format!(
+                    "{} 已经有了，不覆盖：丢了原来的密钥，已经发出去的插件就没法更新了",
+                    path.display()
+                )));
+            }
+            let (secret, public) = market::new_key(publisher.as_deref().unwrap_or("未命名"))
+                .map_err(io::Error::other)?;
+            write_private(&path, secret.as_bytes())?;
+            println!(
+                "私钥：{}（保管好，别进仓库）\n公钥：{public}",
+                path.display()
+            );
+            Ok(())
+        }
         ("index", [dir]) => {
             let dir = Path::new(dir);
             let text = market::render(&market::index_of(dir).map_err(io::Error::other)?);
             let path = dir.join("index.json");
+            let sig_path = dir.join("index.sig");
             let same = std::fs::read_to_string(&path).is_ok_and(|t| t == text);
             if check_only {
                 if !same {
                     eprintln!("{} 过期了", path.display());
                     std::process::exit(1);
                 }
+                match std::fs::read(&sig_path) {
+                    Ok(sig) => match market::verify_index(text.as_bytes(), &sig) {
+                        Ok(who) => {
+                            println!("{} 是最新的，签名有效：{}", path.display(), who.said())
+                        }
+                        Err(why) => {
+                            eprintln!("{}：{why}", sig_path.display());
+                            std::process::exit(1);
+                        }
+                    },
+                    Err(_) => println!("{} 是最新的，没有签名", path.display()),
+                }
+                return Ok(());
+            }
+            if same {
                 println!("{} 是最新的", path.display());
-            } else if !same {
-                std::fs::write(&path, text)?;
-                println!("写好了 {}", path.display());
             } else {
-                println!("{} 是最新的", path.display());
+                std::fs::write(&path, &text)?;
+                println!("写好了 {}", path.display());
+            }
+            // Signed whenever the key is here, so publishing cannot forget to.
+            let key = match key_file {
+                Some(file) => Some(file),
+                None => default_key().ok().filter(|f| f.is_file()),
+            };
+            match key {
+                Some(file) => {
+                    let sig = market::sign_index(text.as_bytes(), &std::fs::read(&file)?)
+                        .map_err(io::Error::other)?;
+                    std::fs::write(&sig_path, sig)?;
+                    println!("签好了 {}", sig_path.display());
+                }
+                None if sig_path.exists() && !same => {
+                    eprintln!(
+                        "注意：没有私钥，{} 已经和新的目录对不上",
+                        sig_path.display()
+                    );
+                }
+                None => {}
             }
             Ok(())
         }
@@ -194,11 +275,21 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
             }
             Ok(())
         }
-        ("install", [id]) => {
+        ("install", [wanted]) => {
+            let (id, version) = match wanted.split_once('@') {
+                Some((id, version)) => (id, Some(version)),
+                None => (wanted.as_str(), None),
+            };
             let offer = offers(remote)?
                 .into_iter()
-                .find(|o| &o.entry.id == id)
+                .find(|o| o.entry.id == id)
                 .ok_or_else(|| io::Error::other(format!("目录里没有叫 {id} 的插件")))?;
+            let offer = match version {
+                Some(v) => offer
+                    .pick(v)
+                    .ok_or_else(|| io::Error::other(format!("目录里 {id} 没有 {v} 这个版本")))?,
+                None => offer,
+            };
             // Read from the package itself, before anything installed changes.
             let prepared = offer.prepare(&plugins_dir()?).map_err(io::Error::other)?;
             println!("{id} v{} 装上后会：", offer.entry.version);
@@ -444,6 +535,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
                     | "uninstall"
                     | "enable"
                     | "disable"
+                    | "keygen"
                     | "log"
                     | "set"
                     | "run"
