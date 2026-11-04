@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>偷看窗的标志</title>
+<style>
+  :root {
+    --bg: #0e0f12; --panel: #15171b; --pane: #101114; --line: #262a31; --text: #d6dbe3;
+    --muted: #8a93a1; --green: #4fbf7a; --blue: #6aa3ff; --blue-bg: #1b2740; --amber: #e0b341;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #08090b; color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", sans-serif; }
+  main { max-width: 1060px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 44px 0 6px; }
+  .muted { color: var(--muted); }
+  .rec { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: #1f3a2a;
+    color: var(--green); margin-left: 8px; vertical-align: 2px; }
+  /* A stand-in for the window: sidebar strip + main area with a tab under the peek. */
+  .win { position: relative; height: 300px; display: flex; border: 1px solid var(--line);
+    border-radius: 10px; overflow: hidden; background: var(--bg); margin: 12px 0; }
+  .side { width: 180px; background: var(--panel); border-right: 1px solid var(--line);
+    padding: 12px; font-size: 12px; color: var(--muted); }
+  .side .on { color: var(--text); background: #1f2329; border-radius: 6px; padding: 2px 6px; margin-left: -6px; }
+  .tab { flex: 1; position: relative; padding: 14px; font: 12px/1.5 Menlo, monospace; color: #59606b; }
+  .peek { position: absolute; inset: 10px; background: var(--pane); border: 1px solid #3a3f48;
+    border-radius: 8px; box-shadow: 0 10px 30px #0008; display: flex; flex-direction: column; overflow: hidden; }
+  .bar { height: 34px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; }
+  .bar b { font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .word { color: var(--green); font-size: 11px; }
+  .sp { flex: 1; }
+  .btn { color: var(--muted); font-size: 12px; }
+  .chip { font-size: 11px; padding: 0 7px; border-radius: 9px; line-height: 18px; }
+  .term { flex: 1; padding: 10px 12px; font: 12px/1.6 Menlo, monospace; color: #c9ced6; }
+  .term .u { background: #e8e8e8; color: #111; padding: 0 4px; }
+  .cur { display: inline-block; width: 7px; height: 13px; background: var(--blue); vertical-align: -2px; }
+  /* A */
+  .a .peek { border: 2px solid var(--blue); }
+  .a .chip { background: var(--blue-bg); color: var(--blue); }
+  /* B */
+  .b .tab::after { content: ""; position: absolute; inset: 0; background: #000a; }
+  .b .peek { inset: 26px 34px; z-index: 1; }
+  .b .chip { border: 1px solid #3a3f48; color: var(--muted); }
+  /* C */
+  .c .band { height: 26px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    background: var(--blue); color: #0b1220; font-size: 12px; font-weight: 500; }
+  .c .band .k { opacity: .7; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 13px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>偷看窗：一眼看出「这是浮层」和「在哪台电脑」</h1>
+  <p class="muted">现在的偷看窗只比普通窗格多一圈细边和 ✕，看不出是盖在标签上的临时层，远程时也看不出打的字会发到另一台电脑。下面三个方向本机和远程偷看都适用，示例是 apple 上的会话。</p>
+
+  <h2>A 标题栏加标签 + 彩色边框<span class="rec">推荐</span></h2>
+  <p>整个偷看窗描一圈强调色边框；标题最前面一个小标「偷看」，远程时写「偷看 · apple」。右边写「Esc 关闭」。改动最小，不挡视线。</p>
+  <div class="win a">
+    <div class="side">要你处理<br>…<br><br>appledeMacBook-Pro<br><span class="on">● 你好啊</span></div>
+    <div class="tab">底下是当前标签的终端……<div class="peek">
+      <div class="bar"><span class="chip">偷看 · apple</span><span class="dot"></span><b>你好啊</b><span class="word">等你验收</span><span class="sp"></span><span class="btn">关闭终端</span><span class="btn">Esc 关闭</span><span class="btn">✕</span></div>
+      <div class="term"><span class="u">› 你好啊</span><br>● 你好！有什么需要帮忙的吗？<br><br>› <span class="cur"></span></div>
+    </div></div>
+  </div>
+
+  <h2>B 背后压暗，偷看窗缩进一圈</h2>
+  <p>当前标签整体压暗，偷看窗四周留出更宽的边，像一张浮起来的卡片。一看就知道底下还有东西，关掉就回去。代价：小窗口时偷看窗变小。</p>
+  <div class="win b">
+    <div class="side">要你处理<br>…<br><br>appledeMacBook-Pro<br><span class="on">● 你好啊</span></div>
+    <div class="tab">底下是当前标签的终端……<div class="peek">
+      <div class="bar"><span class="chip">apple</span><span class="dot"></span><b>你好啊</b><span class="word">等你验收</span><span class="sp"></span><span class="btn">关闭终端</span><span class="btn">✕</span></div>
+      <div class="term"><span class="u">› 你好啊</span><br>● 你好！有什么需要帮忙的吗？<br><br>› <span class="cur"></span></div>
+    </div></div>
+  </div>
+
+  <h2>C 顶部一条色带写清楚</h2>
+  <p>标题栏上面加一条整宽色带：「正在偷看 apple 上的终端 · 打的字会发到那台电脑 · Esc 关闭」。说得最明白，代价是多占一行、颜色最重。</p>
+  <div class="win c">
+    <div class="side">要你处理<br>…<br><br>appledeMacBook-Pro<br><span class="on">● 你好啊</span></div>
+    <div class="tab">底下是当前标签的终端……<div class="peek">
+      <div class="band">正在偷看 apple 上的终端<span class="k">· 打的字会发到那台电脑 · Esc 关闭</span></div>
+      <div class="bar"><span class="dot"></span><b>你好啊</b><span class="word">等你验收</span><span class="sp"></span><span class="btn">关闭终端</span><span class="btn">✕</span></div>
+      <div class="term"><span class="u">› 你好啊</span><br>● 你好！有什么需要帮忙的吗？<br><br>› <span class="cur"></span></div>
+    </div></div>
+  </div>
+
+  <h2>三个方向共用</h2>
+  <table>
+    <tr><th>地方</th><th>做法</th></tr>
+    <tr><td>本机偷看</td><td>同样的标志，只写「偷看」，不带机器名。</td></tr>
+    <tr><td>只读时</td><td>「只读」并进同一个标里（「偷看 · apple · 只读」），不另起一个字。</td></tr>
+    <tr><td>侧栏</td><td>正在偷看的那一行保持高亮，和偷看窗用同一个强调色。</td></tr>
+  </table>
+</main>
+</body>
+</html>

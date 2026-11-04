@@ -203,7 +203,8 @@ impl Workbench {
                 note: None,
                 confirm_end: false,
                 remote: Some(RemoteTitle {
-                    title: format!("{name} · {title}"),
+                    title,
+                    host: name.to_owned(),
                     status: card.status.as_deref().and_then(Status::from_key),
                     machine: index,
                     terminal: card.id.clone(),

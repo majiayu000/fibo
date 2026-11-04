@@ -21,6 +21,8 @@ pub(super) struct Peek {
 
 pub(super) struct RemoteTitle {
     pub(super) title: String,
+    /// That machine's name, for the band above the title bar.
+    pub(super) host: String,
     pub(super) status: Option<Status>,
     /// Which of `Workbench::machines`, and the terminal's id there.
     pub(super) machine: usize,
@@ -226,14 +228,6 @@ impl Workbench {
                         .on_click(cx.listener(|this, _, _, cx| this.answer_peek(false, cx))),
                 )
             })
-            .when(read_only, |d| {
-                d.child(
-                    label("只读")
-                        .flex_shrink_0()
-                        .text_size(px(T::CHIP_SIZE))
-                        .text_color(T::color(T::muted())),
-                )
-            })
             .when(ends, |d| match peek.confirm_end {
                 false => d.child(button("peek-end", "关闭终端").on_click(cx.listener(
                     |this, _, _, cx| {
@@ -274,6 +268,28 @@ impl Workbench {
                     .aria_label("关闭偷看")
                     .on_click(cx.listener(|this, _, _, cx| this.close_peek(cx))),
             );
+        // A band says what this is: a layer over the tab, whose machine gets the typing
+        // (direction C, docs/multi-machine/peek-marker.html, chosen 11-04).
+        let (what, how) = match &peek.remote {
+            Some(r) if read_only => (format!("正在偷看 {} 上的终端", r.host), "只读"),
+            Some(r) => (
+                format!("正在偷看 {} 上的终端", r.host),
+                "打的字会发到那台电脑",
+            ),
+            None => ("正在偷看".to_owned(), "这个会话不在当前标签里"),
+        };
+        let band = div()
+            .h(px(T::ROW))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .gap(px(T::S8))
+            .px(px(T::S12))
+            .bg(T::color(T::accent()))
+            .text_size(px(T::META))
+            .text_color(T::color(T::on_accent()))
+            .child(div().font_weight(gpui::FontWeight::MEDIUM).child(what))
+            .child(div().opacity(0.75).child(format!("· {how} · Esc 关闭")));
         div()
             .id("peek")
             .absolute()
@@ -296,6 +312,7 @@ impl Workbench {
                     cx.stop_propagation();
                 }
             }))
+            .child(band)
             .child(bar)
             .when_some(peek.note.clone(), |d, note| {
                 d.child(
