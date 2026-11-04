@@ -14,7 +14,11 @@ use workbench::Workbench;
 
 type T = theme::Theme;
 
-fn send(handle: WindowHandle<Workbench>, cx: &mut gpui::AsyncApp, input: gpui::PlatformInput) {
+pub(super) fn send(
+    handle: WindowHandle<Workbench>,
+    cx: &mut gpui::AsyncApp,
+    input: gpui::PlatformInput,
+) {
     cx.update_window(handle.into(), |_, w, a| {
         w.dispatch_event(input, a);
         w.refresh();
@@ -22,7 +26,7 @@ fn send(handle: WindowHandle<Workbench>, cx: &mut gpui::AsyncApp, input: gpui::P
     })
     .unwrap();
 }
-fn down(at: Point<Pixels>) -> gpui::PlatformInput {
+pub(super) fn down(at: Point<Pixels>) -> gpui::PlatformInput {
     gpui::MouseDownEvent {
         button: MouseButton::Left,
         position: at,
@@ -40,7 +44,7 @@ fn moved(at: Point<Pixels>) -> gpui::PlatformInput {
     }
     .to_platform_input()
 }
-fn up(at: Point<Pixels>) -> gpui::PlatformInput {
+pub(super) fn up(at: Point<Pixels>) -> gpui::PlatformInput {
     gpui::MouseUpEvent {
         button: MouseButton::Left,
         position: at,

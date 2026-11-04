@@ -78,7 +78,7 @@ code{font:11.5px ui-monospace,Menlo,monospace;color:var(--text)}
 <body>
 <header>
   <h1>侧栏：会话下面挂子代理</h1>
-  <p>Claude Code 每开一个子代理会写 <code>&lt;会话&gt;/subagents/agent-*.meta.json</code>（名字、类型、前台/后台、跑完写 <code>finished</code>）。三个方向都基于同一份数据，只是摆放不同。可以点有箭头的会话行来展开或收起。</p>
+  <p>Claude Code 每开一个子代理会写 <code>&lt;会话&gt;/subagents/agent-*.meta.json</code>（名字、类型、前台/后台，跑完写 <code>finished</code>，被停写 <code>stoppedByUser</code>）。三个方向都基于同一份数据，只是摆放不同。可以点有箭头的会话行来展开或收起。</p>
   <div class="decide"><b>要定的事：</b>子代理放在侧栏哪里、什么时候展开、跑完后留多久。<b>放弃条件：</b>如果五个在跑的会话各开三四个子代理时侧栏超过一屏，或子代理行比会话行还显眼，就退回只显示计数的「后台仍有子 Agent N 个」。</div>
 </header>
 
@@ -112,6 +112,12 @@ code{font:11.5px ui-monospace,Menlo,monospace;color:var(--text)}
     <img src="native-dark.png" alt="深色侧栏原生截图" style="width:320px;border:1px solid var(--border);border-radius:10px">
     <img src="native-light.png" alt="浅色侧栏原生截图" style="width:320px;border:1px solid var(--border);border-radius:10px">
   </div>
+  <h2>三种标记都在的原生截图（截图样例 Dense-first-standard-{dark|light}-marks）</h2>
+  <p style="color:var(--second);font-size:12px;margin:0 0 10px">前台标记、红 ✕、摘要行的「中断」，11-04 补回。数据是样例。</p>
+  <div style="display:flex;gap:18px;flex-wrap:wrap">
+    <img src="marks-dark.png" alt="三种标记的深色原生截图" style="width:640px;max-width:100%;border:1px solid var(--border);border-radius:10px">
+    <img src="marks-light.png" alt="三种标记的浅色原生截图" style="width:640px;max-width:100%;border:1px solid var(--border);border-radius:10px">
+  </div>
   <h2>子代理行的几种状态（以 B 展开后为例）</h2>
   <div class="states" id="states"></div>
 
@@ -120,13 +126,13 @@ code{font:11.5px ui-monospace,Menlo,monospace;color:var(--text)}
     <tr><th>情形</th><th>怎么显示</th></tr>
     <tr><td>开了子代理</td><td>看到新的 <code>meta.json</code> 就加一行，名字用 <code>description</code>。顺序按开启时间，先开的在上面。</td></tr>
     <tr><td>在跑</td><td>黄色缺口圈，时间从开启算起、跟着走秒，和会话行的「本轮 0:36」写法一样。</td></tr>
-    <tr><td>跑完</td><td>灰色 ✓，名字变灰，时间定格为用时。保留到父会话这一轮结束；你发下一句话后，上一轮的子代理行就清掉。</td></tr>
-    <tr><td>失败或被停</td><td>红色 ✕，保留到你看过这个会话为止。</td></tr>
-    <tr><td>前台子代理</td><td>不单独标（11-03 精简时去掉：本机最近几天一个前台子代理都没有）。</td></tr>
+    <tr><td>跑完</td><td>灰色 ✓，名字变灰，时间定格为用时。保留到父会话这一轮结束；你发下一句话后，上一轮的子代理行就清掉。子代理多时，比例条和折叠行按下面「超过 4 个」的规则。</td></tr>
+    <tr><td>失败或被停</td><td>红色 ✕，用时定格，摘要行写「N 中断」。数据来自 meta 的 <code>stoppedByUser</code>，以及父会话记录里状态为 failed / killed / stopped 的任务通知。和跑完的一样保留到这一轮结束（你发下一句话时已经看过这个会话）。</td></tr>
+    <tr><td>前台子代理</td><td>在跑时名字后面标「前台」，跑完就不标。<code>requestShape</code> 不是 background 的都算（老版本 Claude Code 不写这个字段，当时的子代理都在前台）。</td></tr>
     <tr><td>父会话没了</td><td>不显示。没写 <code>finished</code> 的 meta 只在父会话活着时才算在跑，避免旧会话留下的 3000 多个文件被当成在跑。</td></tr>
     <tr><td>数量对不上</td><td>Stop hook 报的子代理数比文件里在跑的少时，以 hook 为准，多出来的标为跑完。</td></tr>
-    <tr><td>超过 4 个</td><td>展开时只列在跑的和最近 3 个，其余折成「还有 N 个已完成」。</td></tr>
-    <tr><td>点子代理行</td><td>切到父会话的终端，不另开窗口。子代理的记录先不在侧栏里打开。</td></tr>
+    <tr><td>超过 4 个</td><td>5 个以内全列。再多只列 4 个：跑得最久的在跑、中断的、最后跑完的，依次优先；其余折成「还有 N 个在跑 · M 个中断 · K 个已完成」，点它看全部。超过 8 个时，摘要行的圆点换成比例条。</td></tr>
+    <tr><td>点子代理行</td><td>和点会话行一样：切到父会话（开着窗格就切过去，没开就浮出），已做完的会话展开它的收尾卡片。子代理的记录先不在侧栏里打开。</td></tr>
     <tr><td>颜色</td><td>子代理只用三种标记：在跑黄、跑完灰 ✓、失败红 ✕。不用会话的绿、橙，避免被当成「要你处理」。</td></tr>
   </table>
 </div>
@@ -176,8 +182,8 @@ function pips(r){
   return '<span class="pips">'+r.subs.map(s=>`<i class="${s[1]==='run'?'r':s[1]==='err'?'e':'d'}"></i>`).join('')+'</span>';
 }
 function summary(r){
-  const a=running(r), d=doneN(r);
-  return `子代理 ${pips(r)}${a?a+' 在跑':''}${a&&d?' · ':''}${d?d+' 完成':''}`;
+  const a=running(r), e=r.subs.filter(s=>s[1]==='err').length, d=doneN(r)-e;
+  return `子代理 ${pips(r)}${[a&&a+' 在跑',e&&e+' 中断',d&&d+' 完成'].filter(Boolean).join(' · ')}`;
 }
 
 function render(id, style){
@@ -214,7 +220,7 @@ render('A','A'); render('B','B'); render('C','C');
 const S = [
   {h:'在跑 + 跑完混着', r:{t:'issuelens 库检测 mooring…',st:'run',sp:'mooring',time:'0:36',subs:DATA[6].subs}, p:'跑完的变灰、留在原位，直到这一轮结束。'},
   {h:'回合结束了，子代理还在跑', r:{t:'Pulse Alpha stealth model on…',st:'run',sp:'code',time:'24分',l2:'后台仍有 shell 2 个',subs:[['Survey model card claims','run','1:12'],['Compare pricing pages','done','0:58']]}, p:'按现有状态规则，子代理还在跑，回合就不算结束，会话留在「在跑」。计数和「后台仍有 shell」合成一行。'},
-  {h:'失败 + 超过 4 个', r:{t:'重复来源审计 第二轮',st:'run',sp:'mooring',time:'6:10',subs:[['Audit persisted state','run','5:40'],['Audit session facts','err','2:11'],['Audit UI constants','done','4:02']],more:4}, p:'红 ✕ 保留到你看过为止；更早跑完的折成一行。'},
+  {h:'失败 + 超过 4 个', r:{t:'重复来源审计 第二轮',st:'run',sp:'mooring',time:'6:10',subs:[['Audit persisted state','run','5:40'],['Audit session facts','err','2:11'],['Audit UI constants','done','4:02']],more:4}, p:'红 ✕ 保留到这一轮结束，折叠时优先留着；更早跑完的折成一行。'},
   {h:'前台子代理', r:{t:'Image #1 元素静止异常',st:'run',sp:'mooring',time:'4:56',subs:[['Explore','run','0:41',true]]}, p:'父会话在等它，标「前台」。只有一个时也显示，因为它说明了会话卡在哪。'},
 ];
 document.getElementById('states').innerHTML = S.map(s=>{

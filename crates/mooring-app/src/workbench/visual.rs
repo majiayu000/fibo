@@ -1,5 +1,8 @@
 //! Fixture-driven layouts and pages for native visual evidence.
 use super::*;
+#[cfg(feature = "visual-test")]
+#[path = "subagent_sample_tests.rs"]
+mod subagent_samples;
 
 /// The space menu's state, the rename field's text and focus, each space's name and cwd.
 #[cfg(feature = "visual-test")]
@@ -660,6 +663,12 @@ impl Workbench {
     pub fn visual_restart_host(&mut self, cx: &mut Context<Self>) {
         self.close_now(Closing::Host, cx);
     }
+    /// The terminal in focus and the one floating over it, for evidence scripts.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_nav(&self) -> (Option<String>, Option<String>) {
+        let peek = self.peek.as_ref().map(|p| p.terminal.clone());
+        (self.nav.focused.clone(), peek)
+    }
     #[cfg(feature = "visual-test")]
     pub fn visual_page(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.tasks.form = None;
@@ -1068,65 +1077,8 @@ impl Workbench {
                         ..Default::default()
                     });
                 }
-                // `-sub`: four subagents under the session you are in (one ended, its
-                // list open) and two under 标签命名依旧有问题, whose turn ended with one
-                // still running, which keeps it 在跑. `-many`: twenty-three under the
-                // one you are in; `-manyall` with all of them listed.
-                if let Some(v @ ("sub" | "many" | "manyall")) = parts.get(4).copied() {
-                    use mooring_core::content::{Background, Subagent, Turn};
-                    let now = mooring_core::content::now();
-                    // A subagent a name, ten seconds apart; every `every`-th has ended.
-                    let subs = |names: &str, every: usize| -> Vec<Subagent> {
-                        let ended = |i: usize| (i % every == 0).then(|| now - 120 + i as u64);
-                        let at = |i: usize| now - 400 + 10 * i as u64;
-                        names
-                            .split(',')
-                            .enumerate()
-                            .map(|(i, name)| Subagent {
-                                name: name.into(),
-                                started: at(i),
-                                ended: ended(i),
-                            })
-                            .collect()
-                    };
-                    let many = "tasks,spaces,shortcuts,plugins,market,phone link,relay,quota,file events,marks,handoff,legacy,CLI,board,sidebar,overview,palette,settings,keymap,statusbar,tabs,peek,cleanup"
-                        .split(',')
-                        .map(|a| format!("Audit {a} drift"))
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    for c in self.workspace.content.values_mut() {
-                        match c.title.as_str() {
-                            "这个诊断的 ui 感觉很丑啊" if v == "sub" => {
-                                c.subagents = subs(
-                                    "Check IME/keyboard charters,Check PTY/process lifecycle charters,Check agent status/hook charters,Check remote/phone & render charters",
-                                    4,
-                                )
-                            }
-                            "这个诊断的 ui 感觉很丑啊" => c.subagents = subs(&many, 8),
-                            "标签命名依旧有问题" if v == "sub" => {
-                                c.turn = Turn::Completed;
-                                c.completed_claim = false;
-                                c.background = Some(Background {
-                                    agents: 1,
-                                    ..Default::default()
-                                });
-                                c.subagents = subs(
-                                    "Explore tab naming paths,Audit phone link protocol drift",
-                                    2,
-                                );
-                            }
-                            _ => (),
-                        }
-                    }
-                    if v == "manyall"
-                        && let Some(s) = self
-                            .workspace
-                            .agent_sessions
-                            .iter()
-                            .find(|s| s.terminal.as_deref() == Some("dense-t2"))
-                    {
-                        self.layout.subagents_all.insert(s.id.clone());
-                    }
+                if let Some(v @ ("sub" | "many" | "manyall" | "marks")) = parts.get(4).copied() {
+                    self.sample_subagents(v);
                 }
                 self.nav.focused = Some("dense-t2".into());
                 // `-peek`: the first session floats over the focused one.

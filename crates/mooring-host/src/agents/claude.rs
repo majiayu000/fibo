@@ -175,11 +175,13 @@ impl Adapter for Claude {
                 parser.card.name = name.trim().to_owned();
             }
         }
-        if m["type"] == "queue-operation" {
-            parser.machine_prompt(&text(&m["content"]));
-        } else if m["type"] == "user" {
-            parser.machine_prompt(&text(&m["message"]["content"]));
-        }
+        let said = match m["type"].as_str() {
+            Some("queue-operation") => text(&m["content"]),
+            Some("user") => text(&m["message"]["content"]),
+            _ => return,
+        };
+        parser.machine_prompt(&said);
+        parser.card.note_task_notification(&said);
     }
     fn is_user(&self, v: &Value) -> bool {
         v["type"] == "user"
@@ -385,10 +387,10 @@ fn unix(t: std::io::Result<std::time::SystemTime>) -> Option<u64> {
         .ok()
         .map(|d| d.as_secs())
 }
-/// Claude Code writes `agent-<id>.meta.json` (its description, type, and `finished` once
-/// done) and `agent-<id>.jsonl` (its own
-/// log) for each subagent. It started when its log was created; it ended when its meta
-/// was last written with `finished`.
+/// Claude Code writes `agent-<id>.meta.json` (its description, type, how it was requested,
+/// and `finished` once done, or `stoppedByUser`) and `agent-<id>.jsonl` (its own log) for
+/// each subagent. It started when its log was created; it ended when its meta was last
+/// written with either mark.
 pub(crate) fn subagents(dir: &Path) -> Vec<mooring_core::content::Subagent> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return vec![];
@@ -415,10 +417,15 @@ pub(crate) fn subagents(dir: &Path) -> Vec<mooring_core::content::Subagent> {
                 .find(|n| !n.is_empty())
                 .unwrap_or("")
                 .to_owned();
+            let stopped = v["stoppedByUser"] == true;
             Some(mooring_core::content::Subagent {
+                id: id.to_owned(),
                 name,
                 started,
-                ended: (v["finished"] == true).then_some(written),
+                ended: (v["finished"] == true || stopped).then_some(written),
+                // Older Claude Code wrote no shape; its subagents ran in the foreground.
+                foreground: v["requestShape"].as_str() != Some("background"),
+                stopped,
             })
         })
         .collect();
@@ -449,21 +456,50 @@ mod tests {
             "a2",
             serde_json::json!({"agentType": "Explore", "description": " "}),
         );
+        meta(
+            "a4",
+            serde_json::json!({"description": "Stopped", "requestShape": "background",
+            "stoppedByUser": true}),
+        );
         std::fs::write(dir.join("agent-a3.jsonl"), "{}\n").unwrap();
         std::fs::write(dir.join("notes.txt"), "").unwrap();
         let subs = subagents(&dir);
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
             subs.len(),
-            2,
+            3,
             "a log without its meta is not listed: {subs:?}"
         );
         assert_eq!(subs[0].name, "Audit drift");
-        assert!(!subs[0].running());
+        assert_eq!(subs[0].id, "a1");
+        assert!(!subs[0].running() && !subs[0].foreground && !subs[0].stopped);
         // No description: its type names it.
         assert_eq!(subs[1].name, "Explore");
-        assert!(subs[1].running());
+        assert!(subs[1].running() && subs[1].foreground);
+        assert!(subs[2].stopped && !subs[2].running());
         assert!(subagents(Path::new("/nonexistent/subagents")).is_empty());
+    }
+
+    #[test]
+    fn a_queued_or_delivered_notification_marks_subagents_stopped() {
+        let note = "<task-notification>\n<task-id>a1</task-id>\n<task-id>a2</task-id>\n<status>stopped</status>\n<summary>2 background agents didn't finish</summary>";
+        let mut p = crate::content::Parser::default();
+        Claude.metadata(
+            &mut p,
+            &serde_json::json!({"type": "queue-operation", "operation": "enqueue", "content": note}),
+        );
+        assert_eq!(p.card.stopped_subagents, ["a1", "a2"]);
+        // Delivered, the same report changes nothing; a good one takes its mark back.
+        Claude.metadata(
+            &mut p,
+            &serde_json::json!({"type": "user", "message": {"role": "user", "content": note}}),
+        );
+        Claude.metadata(
+            &mut p,
+            &serde_json::json!({"type": "user", "message": {"role": "user",
+            "content": "<task-notification><task-id>a1</task-id><status>completed</status>"}}),
+        );
+        assert_eq!(p.card.stopped_subagents, ["a2"]);
     }
 
     #[test]

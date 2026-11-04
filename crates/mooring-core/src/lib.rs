@@ -24,6 +24,7 @@ pub mod secret;
 pub mod setup;
 pub mod sidebar;
 pub mod status;
+pub mod subagents;
 pub mod terminal;
 pub mod theme;
 pub mod time;

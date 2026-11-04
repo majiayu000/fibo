@@ -14,6 +14,8 @@ mod phones_evidence;
 mod remote_typing_evidence;
 #[path = "settings_evidence.rs"]
 mod settings_evidence;
+#[path = "subagent_evidence.rs"]
+mod subagent_evidence;
 
 /// Runs the evidence script the environment asks for against the opened workbench.
 pub fn start(
@@ -26,6 +28,7 @@ pub fn start(
         || remote_typing_evidence::start(handle, evidence.clone(), cx)
         || cpu_probe_evidence::start(handle, evidence.clone(), cx)
         || pane_drag_evidence::start(handle, evidence.clone(), cx)
+        || subagent_evidence::start(handle, evidence.clone(), cx)
     {
         return;
     }
@@ -3076,18 +3079,12 @@ pub fn start(
                 if name == "HereTyped" {
                     use gpui::InputEvent;
                     // A plain keystroke into the terminal folds the card over it.
-                    cx.update_window(handle.into(), |_, w, a| {
-                        w.dispatch_event(
-                            gpui::KeyDownEvent {
-                                keystroke: gpui::Keystroke::parse("x").unwrap(),
-                                is_held: false,
-                                prefer_character_input: false,
-                            }
-                            .to_platform_input(),
-                            a,
-                        );
-                    })
-                    .unwrap();
+                    let key = gpui::KeyDownEvent {
+                        keystroke: gpui::Keystroke::parse("x").unwrap(),
+                        is_held: false,
+                        prefer_character_input: false,
+                    };
+                    pane_drag_evidence::send(handle, cx, key.to_platform_input());
                     let open = handle.update(cx, |v, _, _| v.visual_here_open()).unwrap();
                     assert!(!open, "typing into the pane folds its 你在这里 card");
                     eprintln!("HereTyped: card folded after a keystroke");

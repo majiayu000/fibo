@@ -2,6 +2,7 @@
 use crate::model::AgentSession;
 #[cfg(test)]
 use crate::model::Workspace;
+pub use crate::subagents::Subagent;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +118,9 @@ pub struct Content {
     /// transcript (`<session>/subagents/agent-*.meta.json`).
     #[serde(default)]
     pub subagents: Vec<Subagent>,
+    /// Subagents a task notification in this log reported as not finished, by id.
+    #[serde(default)]
+    pub stopped_subagents: Vec<String>,
     /// The background shells the last Stop listed as running (Claude Code names each with
     /// its description and command). Which of them is a job the agent waits for is live
     /// evidence the host adds to its snapshot; stored, every one is `job: false`.
@@ -138,21 +142,6 @@ pub struct ShellTask {
     /// shell the host could not look at, is not one.
     #[serde(default)]
     pub job: bool,
-}
-/// One subagent a session started: its description (its type without one), and when it
-/// started and ended.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Subagent {
-    pub name: String,
-    pub started: u64,
-    /// `None` while it runs.
-    #[serde(default)]
-    pub ended: Option<u64>,
-}
-impl Subagent {
-    pub fn running(&self) -> bool {
-        self.ended.is_none()
-    }
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Touch {
@@ -194,28 +183,6 @@ impl Content {
     }
 }
 impl Content {
-    /// Keeps the subagents the sidebar lists: this turn's, and older ones still running.
-    /// After a Stop that reported its tasks, no more run than it counted; the oldest
-    /// extras are the ones whose end was never written (a killed session leaves its
-    /// subagents unfinished on disk).
-    pub fn keep_subagents(&mut self, all: Vec<Subagent>) {
-        let mut kept: Vec<Subagent> = all
-            .into_iter()
-            .filter(|s| s.running() || s.started >= self.turn_started)
-            .collect();
-        if self.turn != Turn::Running
-            && let Some(b) = self.background
-        {
-            let running = kept.iter().filter(|s| s.running()).count();
-            let extra = running.saturating_sub(b.agents as usize);
-            for s in kept.iter_mut().filter(|s| s.running()).take(extra) {
-                s.ended = Some(self.updated.max(s.started));
-            }
-        }
-        // Ended before this turn: gone with the turn that ran them.
-        kept.retain(|s| s.running() || s.started >= self.turn_started);
-        self.subagents = kept;
-    }
     /// Lines added and removed in the current turn, over every file it touched.
     pub fn turn_lines(&self) -> (u32, u32) {
         self.files
@@ -874,48 +841,6 @@ pub fn now() -> u64 {
     crate::time::now()
 }
 
-#[cfg(test)]
-mod subagent_tests {
-    use super::*;
-    fn sub(started: u64, ended: Option<u64>) -> Subagent {
-        Subagent {
-            name: format!("a{started}"),
-            started,
-            ended,
-        }
-    }
-    #[test]
-    fn a_turn_keeps_its_own_subagents_and_older_ones_still_running() {
-        let mut c = Content {
-            turn: Turn::Running,
-            turn_started: 100,
-            updated: 150,
-            ..Default::default()
-        };
-        c.keep_subagents(vec![
-            sub(10, Some(20)),
-            sub(50, None),
-            sub(120, Some(130)),
-            sub(140, None),
-        ]);
-        let names: Vec<_> = c.subagents.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, ["a50", "a120", "a140"]);
-        // The turn stopped and its Stop counted one agent still at work: the older
-        // unfinished one is taken as ended, and having started before this turn, it goes.
-        c.turn = Turn::Completed;
-        c.background = Some(Background {
-            agents: 1,
-            ..Default::default()
-        });
-        c.keep_subagents(vec![sub(50, None), sub(120, Some(130)), sub(140, None)]);
-        let names: Vec<_> = c
-            .subagents
-            .iter()
-            .map(|s| (s.name.as_str(), s.running()))
-            .collect();
-        assert_eq!(names, [("a120", false), ("a140", true)]);
-    }
-}
 #[cfg(test)]
 mod grouping_tests {
     use super::*;
