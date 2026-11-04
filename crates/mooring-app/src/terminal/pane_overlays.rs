@@ -41,7 +41,9 @@ pub(super) fn inset(
     if peek || padding <= 0. {
         return bounds;
     }
-    window.paint_quad(gpui::fill(bounds, hsla(sc.background)));
+    if T::palette().opacity == 100 && T::palette().backdrop.is_none() {
+        window.paint_quad(gpui::fill(bounds, hsla(sc.background)));
+    }
     let margin = px(padding);
     Bounds::new(
         bounds.origin + gpui::point(margin, margin),

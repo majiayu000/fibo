@@ -134,6 +134,7 @@ pub fn apply(cx: &mut App) {
     if let Some(palette) = wanted
         && Theme::install(palette)
     {
+        super::backdrop::sync(cx);
         cx.refresh_windows();
     }
 }

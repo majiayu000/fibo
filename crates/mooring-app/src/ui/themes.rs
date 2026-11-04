@@ -84,6 +84,11 @@ impl Themes {
             match parsed {
                 Ok(mut file) => {
                     file.problems.extend(Palette::unknown_keys(&file));
+                    if let Some(image) = &file.material.image
+                        && !super::backdrop::resolve(&image.path).is_file()
+                    {
+                        file.problems.push(format!("找不到背景图 {}", image.path));
+                    }
                     if !file.problems.is_empty() {
                         out.problems
                             .push((shown.to_string(), file.problems.join("；")));
@@ -169,6 +174,17 @@ fn free_path(folder: &Path, stem: &str) -> PathBuf {
         .map(|n| folder.join(format!("{stem}-{n}.json")))
         .find(|path| !path.exists())
         .unwrap_or(plain)
+}
+/// A picture copied into the themes folder; returns the path a theme names it by.
+pub fn keep_picture(from: &Path) -> Result<String, String> {
+    let folder = dir().ok_or("找不到配置目录")?.join("images");
+    std::fs::create_dir_all(&folder).map_err(|e| format!("无法创建 {}：{e}", folder.display()))?;
+    let name = from.file_name().ok_or("这不是一个文件")?;
+    let to = folder.join(name);
+    if from != to {
+        std::fs::copy(from, &to).map_err(|e| format!("无法复制 {}：{e}", from.display()))?;
+    }
+    Ok(format!("images/{}", name.to_string_lossy()))
 }
 /// A theme or an iTerm2 preset from anywhere, as a theme file ready to save.
 pub fn import(path: &Path) -> Result<ThemeFile, String> {

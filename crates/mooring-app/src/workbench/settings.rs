@@ -15,6 +15,7 @@ mod look;
 mod plugins;
 mod terminal_look;
 mod theme_editor;
+mod theme_material;
 
 /// The chord button keeps one width, recording or not.
 const KEY_WIDTH: f32 = T::HERE_LABEL + T::S20;

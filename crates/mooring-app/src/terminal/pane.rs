@@ -2509,7 +2509,7 @@ impl Render for Pane {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(T::color(T::pane()))
+            .bg(T::surface(T::pane()))
             .track_focus(&self.focus)
             // Right-click is never reported to the program: it opens Mooring's pane
             // menu even when a full-screen Agent has taken the mouse.

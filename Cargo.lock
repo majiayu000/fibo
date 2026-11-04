@@ -3335,6 +3335,7 @@ dependencies = [
  "futures",
  "gpui",
  "gpui_platform",
+ "image",
  "libc",
  "mooring-core",
  "mooring-plugin-host",

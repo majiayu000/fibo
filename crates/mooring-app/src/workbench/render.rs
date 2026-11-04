@@ -63,7 +63,7 @@ impl Render for Workbench {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(T::color(T::app()))
+            .bg(T::base())
             .text_color(T::color(T::primary()))
             .text_size(px(T::BODY_SIZE))
             .line_height(gpui::relative(T::LINE_HEIGHT))
@@ -398,7 +398,7 @@ impl Render for Workbench {
                     .when(active || terminal_style, |d| d.child(close))
                     // The current tab: white with a hairline, the others bare.
                     .when(active && !terminal_style, |d| {
-                        d.bg(T::color(T::pane()))
+                        d.bg(T::surface(T::pane()))
                             .border_color(T::color(T::border()))
                             .font_weight(gpui::FontWeight::MEDIUM)
                     })
@@ -457,8 +457,8 @@ impl Render for Workbench {
                         .w(px(T::S20 * 2.))
                         .bg(gpui::linear_gradient(
                             90.,
-                            gpui::linear_color_stop(T::color(T::pane()).opacity(0.), 0.),
-                            gpui::linear_color_stop(T::color(T::pane()), 1.),
+                            gpui::linear_color_stop(T::surface(T::pane()).opacity(0.), 0.),
+                            gpui::linear_color_stop(T::surface(T::pane()), 1.),
                         )),
                 )
             })
@@ -490,7 +490,7 @@ impl Render for Workbench {
                 .px(px(T::S8))
                 .border_t(px(T::BORDER_WIDTH))
                 .border_color(T::color(T::border()))
-                .bg(T::color(T::panel()))
+                .bg(T::surface(T::panel()))
                 .text_size(px(T::MONO_SIZE))
                 .child(label(space_name.to_owned()).flex_shrink_0())
                 .child(strip.flex_1())
@@ -554,7 +554,7 @@ impl Render for Workbench {
             .flex_col()
             // One white surface under the title row and the panes; the sidebar's gray
             // beside it is the only other layer.
-            .when(!terminal_style, |d| d.bg(T::color(T::pane())))
+            .when(!terminal_style, |d| d.bg(T::surface(T::pane())))
             .child(header);
         // Indexing in progress is a top-bar note; only a lost link to the host is worth a
         // strip, in words the user can act on. A missing official status source is not:
@@ -656,7 +656,7 @@ impl Render for Workbench {
                 .min_h_0()
                 .min_w_0()
                 .relative()
-                .when(cards, |d| d.p(px(T::S8)).bg(T::color(T::pane())));
+                .when(cards, |d| d.p(px(T::S8)).bg(T::surface(T::pane())));
             if let Some(zoomed) = &self.nav.zoomed {
                 grid = grid.child(self.pane_view(zoomed, false, window, cx));
             } else if let Some(tree) = current.and_then(|t| t.layout.as_ref()) {
@@ -830,7 +830,7 @@ impl Workbench {
         // tab needs you.
         .when(!terminal_style, |d| {
             d.font_features(T::tabular())
-                .bg(T::color(T::pane()))
+                .bg(T::surface(T::pane()))
                 .text_color(T::color(T::muted()))
         })
         .when(terminal_style, |d| {

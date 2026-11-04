@@ -46,6 +46,11 @@ pub struct Palette {
     pub status: [Option<u32>; Status::ALL.len()],
     pub tones: [Option<u32>; 3],
     pub space_tiles: [[u32; 2]; 6],
+    /// How much of the window's ground is painted, in percent.
+    pub opacity: u8,
+    pub blur: bool,
+    /// The picture behind terminals, already resolved so drawing only reads it.
+    pub backdrop: Option<super::backdrop::Backdrop>,
 
     pub terminal_bg: u32,
     pub terminal_fg: u32,
@@ -148,6 +153,9 @@ impl Palette {
             status: [None; Status::ALL.len()],
             tones: [None; 3],
             space_tiles: SPACE_TILES,
+            opacity: 100,
+            blur: false,
+            backdrop: None,
             terminal_bg: bg,
             terminal_fg: fg,
             vivid,
@@ -256,6 +264,13 @@ impl Palette {
                 *slot = file.space_gradients[i % file.space_gradients.len()];
             }
         }
+        out.opacity = file.material.opacity;
+        out.blur = file.material.blur;
+        out.backdrop = file
+            .material
+            .image
+            .as_ref()
+            .map(super::backdrop::Backdrop::of);
         out
     }
     /// Names in a file's `ui`, `status` and `tone` no window color answers to.

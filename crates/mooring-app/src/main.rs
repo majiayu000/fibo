@@ -103,6 +103,7 @@ fn window_options(bounds: Bounds<gpui::Pixels>) -> WindowOptions {
                 px(theme::Theme::TRAFFIC_LIGHT_Y),
             )),
         }),
+        window_background: ui::backdrop::window_background(),
         ..Default::default()
     }
 }

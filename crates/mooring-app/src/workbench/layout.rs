@@ -428,8 +428,8 @@ impl Workbench {
             let half = T::PANE_HEADER / 2.;
             let split = gpui::linear_gradient(
                 180.,
-                gpui::linear_color_stop(T::color(T::app()), 0.5),
-                gpui::linear_color_stop(T::color(T::pane()), 0.5),
+                gpui::linear_color_stop(T::surface(T::app()), 0.5),
+                gpui::linear_color_stop(T::surface(T::pane()), 0.5),
             );
             let frame = |d: gpui::Div| d.bg(line);
             pane_box = pane_box
@@ -478,7 +478,7 @@ impl Workbench {
                         .min_h_0()
                         .flex()
                         .flex_col()
-                        .bg(T::color(T::pane()))
+                        .bg(T::surface(T::pane()))
                         .when(borders, |d| {
                             d.border_l(px(T::BORDER_WIDTH))
                                 .border_r(px(T::BORDER_WIDTH))
@@ -494,7 +494,7 @@ impl Workbench {
             // own background never covers the line, and the gutter shares the pane's
             // ground so nothing shows past the corners.
             pane_box = pane_box
-                .bg(T::color(T::pane()))
+                .bg(T::surface(T::pane()))
                 .rounded(px(T::PANE_RADIUS))
                 .child(
                     self.pane_grip(id, &title, div())
@@ -508,7 +508,7 @@ impl Workbench {
                         .gap(px(T::S8))
                         // A pane that asks you something says so by its ring and its
                         // state chip; the title row keeps the card's own ground.
-                        .bg(T::color(T::header()))
+                        .bg(T::surface(T::header()))
                         // The title keeps its own width, so its hover pill hugs it.
                         .child(left)
                         .child(div().flex_1())

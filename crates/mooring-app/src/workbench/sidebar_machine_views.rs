@@ -500,7 +500,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(T::color(F::bg()))
+            .bg(T::surface(F::bg()))
             .border_r(px(T::BORDER_WIDTH))
             .border_color(T::color(F::line()))
             .child(self.flat_lights(cx))

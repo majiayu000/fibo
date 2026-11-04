@@ -128,7 +128,7 @@ impl Item {
     }
 }
 pub(super) struct Editor {
-    draft: ThemeFile,
+    pub(super) draft: ThemeFile,
     /// The theme's own file; a built-in gets a new one on saving.
     over: Option<PathBuf>,
     tab: Tab,
@@ -139,7 +139,7 @@ pub(super) struct Editor {
     name: Entity<Field>,
     hex: Entity<Field>,
     _hex_changed: Subscription,
-    error: Option<String>,
+    pub(super) error: Option<String>,
 }
 impl SettingsView {
     pub(super) fn open_editor(&mut self, cx: &mut Context<Self>) {
@@ -304,6 +304,9 @@ impl SettingsView {
             .gap(px(T::S12))
             .child(self.editor_header(editor, cx))
             .child(tabs)
+            .when(editor.tab == Tab::Base, |d| {
+                d.child(self.material_rows(editor, cx))
+            })
             .child(
                 div()
                     .flex()

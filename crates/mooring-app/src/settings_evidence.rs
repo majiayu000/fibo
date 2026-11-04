@@ -158,6 +158,61 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
+        // A theme's material: see-through, blurred, a picture in each mode, then back to none.
+        if phase == "material" {
+            use crate::ui::{appearance, theme::Theme as T, themes};
+            use gpui::WindowBackgroundAppearance as W;
+            let dir = themes::dir().unwrap();
+            std::fs::create_dir_all(dir.join("images")).unwrap();
+            let picture = image::RgbaImage::from_fn(600, 400, |x, y| {
+                let edge = x < 12 || y < 12 || x >= 588 || y >= 388;
+                if edge { image::Rgba([255, 200, 0, 255]) } else { image::Rgba([(x * 255 / 600) as u8, (y * 255 / 400) as u8, 150, 255]) }
+            });
+            picture.save(dir.join("images/grad.png")).unwrap();
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+            pane.update(cx, |p, a| p.visual_type("clear; printf 'over the picture\\n\\033[41m red cells keep their color \\033[0m\\n中文输入与等宽文字\\n'\r", a));
+            wait(800).await;
+            let theme = |name: &str, body: &str, cx: &mut gpui::AsyncApp| {
+                std::fs::write(dir.join(format!("{name}.json")), format!(r##"{{"bg":"#0f1c2e","fg":"#d5dfef",{body}}}"##)).unwrap();
+                cx.update(themes::reload);
+                cx.update(|a| appearance::set_theme(&format!("file:{name}"), false, true, a).unwrap());
+            };
+            let backing = |cx: &mut gpui::AsyncApp| cx.update(|_| crate::ui::backdrop::window_background());
+            theme("glass", r##""window":{"opacity":0.7}"##, cx); wait(400).await;
+            assert_eq!(backing(cx), W::Transparent);
+            assert_eq!(T::palette().opacity, 70);
+            shot("material-transparent", cx);
+            theme("frost", r##""window":{"opacity":0.7,"blur":true}"##, cx); wait(400).await;
+            assert_eq!(backing(cx), W::Blurred);
+            shot("material-blur", cx);
+            for mode in ["fill", "fit", "stretch", "tile"] {
+                theme(&format!("pic-{mode}"), &format!(r##""background":{{"image":"images/grad.png","mode":"{mode}","strength":0.5}}"##), cx);
+                wait(700).await;
+                assert_eq!(backing(cx), W::Opaque);
+                assert!(T::palette().backdrop.unwrap().picture.image().is_some(), "{mode}: decoded");
+                shot(&format!("material-{mode}"), cx);
+            }
+            std::fs::write(dir.join("images/bad.png"), "not a picture").unwrap();
+            theme("broken", r##""background":{"image":"images/bad.png"}"##, cx); wait(500).await;
+            assert!(T::palette().backdrop.unwrap().picture.error().is_some());
+            shot("material-broken", cx);
+            theme("gone", r##""background":{"image":"images/nowhere.png"}"##, cx); wait(300).await;
+            assert!(cx.update(|a| a.global::<themes::Themes>().problems.iter().any(|(_, why)| why.contains("找不到背景图"))));
+            cx.update(|a| appearance::set_theme("dark", false, true, a).unwrap()); wait(300).await;
+            assert_eq!(backing(cx), W::Opaque);
+            // The editor's rows, on a theme with a picture.
+            theme("pic-edit", r##""window":{"opacity":0.8},"background":{"image":"images/grad.png"}"##, cx); wait(500).await;
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_editor_open(a)).unwrap();
+            wait(400).await;
+            shot("material-editor", cx);
+            handle.update(cx, |v, _, a| v.visual_editor_cancel(a)).unwrap();
+            eprintln!("settings material PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         if phase == "editor" {
             use crate::ui::{appearance::{self, Mode}, theme::Theme as T, themes::{self, Themes}};
             let term = || T::term();

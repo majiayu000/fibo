@@ -998,9 +998,10 @@ pub fn paint_cached(
     // Glyph strokes thicken by luminance as the rest of the UI's text does (Ghostty's
     // font-thicken = true): left as drawn, light thin strokes on the dark grid read
     // as blur on a lower-density display.
+    let ground = extras::paint_ground(sc, bounds, window);
     window.paint_layer(bounds, |window| {
         window.with_glyph_dilation(None, |window| {
-            paint_grid(sc, f, bounds, metrics, cache, window, cx)
+            paint_grid(sc, f, bounds, metrics, ground, cache, window, cx)
         })
     });
     // Cursor and later overlays stay outside the layer so they still draw over glyphs.
@@ -1068,16 +1069,20 @@ pub fn paint_cached(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_grid(
     sc: &Screen,
     f: &Font,
     bounds: Bounds<Pixels>,
     metrics: CellMetrics,
+    ground: f32,
     cache: &mut LayoutCache,
     window: &mut Window,
     cx: &mut App,
 ) {
-    window.paint_quad(fill(bounds, hsla(sc.background)));
+    if ground > 0. {
+        window.paint_quad(fill(bounds, hsla(sc.background).opacity(ground)));
+    }
     let cw = metrics.width;
     let lh = metrics.height;
     cache.prepare(f, metrics, sc.rows.len());

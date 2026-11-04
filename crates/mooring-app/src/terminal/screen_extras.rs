@@ -145,6 +145,31 @@ pub fn paint_guide(sc: &Screen, bounds: Bounds<Pixels>, metrics: CellMetrics, wi
         hsla(color).opacity(STRENGTH),
     ));
 }
+/// What lies under a terminal's cells: the theme's picture, if it has one, and how opaque
+/// the ground is over it. A see-through theme's tint is the window's own base, so a terminal
+/// on the theme's ground paints none; one a program recolored keeps its color, as thin.
+pub(super) fn paint_ground(sc: &Screen, bounds: Bounds<Pixels>, window: &mut Window) -> f32 {
+    let p = Theme::palette();
+    if let Some(backdrop) = p.backdrop
+        && let Some(image) = backdrop.picture.image()
+    {
+        let device = image.size(0);
+        let scale = window.scale_factor();
+        let natural = size(
+            px(device.width.0 as f32 / scale),
+            px(device.height.0 as f32 / scale),
+        );
+        for at in crate::ui::backdrop::placements(backdrop.mode, natural, bounds) {
+            let _ = window.paint_image(bounds, at, Default::default(), image.clone(), 0, false);
+        }
+        return backdrop.ground();
+    }
+    match p.opacity {
+        100 => 1.,
+        _ if sc.background == p.term.bg => 0.,
+        percent => f32::from(percent) / 100.,
+    }
+}
 /// WCAG relative luminance over 0–1.
 fn luminance(color: u32) -> f32 {
     mooring_core::terminal::luminance(color)
