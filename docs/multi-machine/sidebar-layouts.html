@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>多机侧栏合并稿</title>
+<title>多机侧栏布局</title>
 <style>
 :root{--page:#0f1114;--side:#15181d;--rail:#101317;--pane:#21252c;--raised:#262a31;--band:#1b1f25;--line:#2a2f37;--line2:#22262d;--strong:#3a404a;--text:#e4e4e7;--title:#ececee;--sec:#a2a2aa;--mut:#8d8d96;--green:#3fb27f;--yellow:#e5b83b;--orange:#e8823a}
 *{box-sizing:border-box}
@@ -40,9 +40,21 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 .badge{min-width:14px;height:14px;padding:0 4px;border-radius:7px;background:var(--orange);color:var(--side);font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
 .m{flex:none;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1px solid #565c67;border-radius:4px;font-size:9.5px;line-height:1;font-weight:600;color:#c9c9cf}
 .m.dim{color:var(--mut);border-color:var(--strong)}
-.seg{margin:10px 12px 0;padding:2px;display:flex;gap:2px;height:26px;flex:none;border:1px solid var(--line);border-radius:7px}
-.seg button{flex:1;display:flex;align-items:center;justify-content:center;border-radius:5px;font-size:11.5px;color:var(--mut)}
-.seg button[aria-pressed=true]{background:var(--raised);color:var(--text)}
+.switch{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;font-size:12px;color:var(--mut)}
+.seg{padding:2px;display:flex;gap:2px;height:34px;border:1px solid var(--line);border-radius:8px}
+.seg button{padding:0 14px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:13px;color:var(--sec)}
+.seg button[aria-pressed=true]{background:var(--raised);color:var(--title)}
+.chip.on{background:var(--raised);border-color:#565c67}
+.mchips{display:flex;flex-wrap:wrap;gap:5px;margin:8px 12px 0;padding-top:8px;border-top:1px solid var(--line2)}
+.mchips .chip{padding-left:5px}
+.mchips .chip.off{color:var(--mut)}
+.tune{flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:7px;color:var(--sec)}
+.tune:hover,.tune[aria-expanded=true]{background:var(--raised)}
+.pop{position:absolute;right:8px;bottom:44px;z-index:3;width:252px;padding:6px;background:var(--band);border:1px solid var(--strong);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.pop .cap{padding:4px 8px 6px;font-size:11px;color:var(--mut)}
+.pop button{width:100%;padding:6px 8px;display:flex;align-items:center;gap:8px;border-radius:6px;font-size:13px;color:var(--text)}
+.pop button:hover{background:var(--raised)}
+.pop .tick{flex:none;width:12px;color:var(--green)}
 .list{flex:1;min-height:0;overflow:auto;padding-bottom:8px}
 .grp{padding:12px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:var(--mut)}
 .grp b{font-weight:500;color:var(--sec)}
@@ -70,7 +82,7 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 .keys{width:100%;flex:none;padding:8px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--mut)}
 .keys:hover{color:var(--text)}
 .keys .mono{padding:0 4px;border:1px solid var(--line);border-radius:4px;margin-right:6px}
-.foot{flex:none;padding:10px 16px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--sec)}
+.foot{position:relative;flex:none;padding:7px 8px 9px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);font-size:12px;color:var(--sec)}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .head{height:40px;flex:none;padding:0 12px 0 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);font-size:13px}
 .head .name{font-weight:600}
@@ -89,8 +101,9 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 </head>
 <body>
 <main>
-<h1>多机侧栏：A、B、C 合在一起</h1>
-<p>能点：左边竖栏选机器，「全部」下面切按状态（A）或按机器（C），选单台就是 B。点会话，右边跟着换；点 ⌘J 跳到下一个要你的。只有本机时竖栏不出现，侧栏和现在一样。mac-mini 是示意数据。</p>
+<h1>多机侧栏：三种布局，随时切换</h1>
+<p>A、B、C 各是一种完整布局，选哪个由你。窗口里的入口在侧栏右下角的调整按钮；上面这排只是方便试。点会话，右边跟着换；点 ⌘J 跳到下一个要你的。mac-mini 是示意数据。</p>
+<div class="switch"><div class="seg" id="switch" role="group" aria-label="布局"></div></div>
 <div class="scroll"><div class="win">
   <div class="lights" aria-hidden="true"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
   <div class="body">
@@ -127,7 +140,9 @@ const SESSIONS=[
 const LABEL={pinned:'置顶',needs:'要你处理',running:'在跑',today:'今天'};
 const WORD={review:'等你验收',running:'在跑',idle:'空闲',off:'断开'};
 const q=new URLSearchParams(location.hash.slice(1));
-const state={scope:q.get('scope')||'all',group:q.get('group')||'status',selected:q.get('sel')||'a1',folded:new Set(['mini'])};
+const LAYOUTS=[['a','A 一张清单'],['b','B 机器栏'],['c','C 按机器折叠']];
+const selected=q.get('sel')||'a1';
+const state={layout:q.get('layout')||'a',scope:q.get('scope')||SESSIONS.find(x=>x.id===selected).m,only:null,selected,folded:new Set(['mini']),menu:q.get('menu')==='1'};
 const machine=id=>MACHINES.find(m=>m.id===id);
 const inMachine=id=>SESSIONS.filter(x=>x.m===id);
 const liveCount=id=>inMachine(id).filter(x=>x.st!=='off').length;
@@ -155,32 +170,42 @@ function groups(items,showMark,today,older){
 function chips(ms){
   return `<div class="chips">`+ms.flatMap(m=>m.chips.map(c=>`<button class="chip">${ms.length>1?mark(m):''}<span class="sd" style="background:${c[1]}"></span>${c[0]}${c[2]?`<span class="badge">${c[2]}</span>`:''}</button>`)).join('')+`</div>`;
 }
+function renderSwitch(){
+  document.getElementById('switch').innerHTML=LAYOUTS.map(([id,name])=>`<button data-act="layout" data-id="${id}" aria-pressed="${state.layout===id}">${name}</button>`).join('');
+}
 function renderRail(){
+  const rail=document.getElementById('rail');
+  rail.style.display=state.layout==='b'?'':'none';
   const icon=`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`;
-  const all=`<button class="rb${state.scope==='all'?' on':''}" data-act="scope" data-id="all" aria-label="全部机器" aria-pressed="${state.scope==='all'}">${icon}<rect x="8" y="4" width="12" height="12" rx="2"></rect><path d="M4 8v10a2 2 0 0 0 2 2h10"></path></svg></button>`;
   const each=MACHINES.map(m=>{
     const n=needsCount(m.id),label=`${m.name}${m.online?'':'，断开'}${n?`，${n} 个要你处理`:''}`;
     const face=m.id==='local'?`${icon}<rect x="5" y="5" width="14" height="10" rx="1.6"></rect><path d="M3 19h18"></path></svg>`:m.mark;
     return `<button class="rb${state.scope===m.id?' on':''}${m.online?'':' off'}" data-act="scope" data-id="${m.id}" aria-label="${label}" aria-pressed="${state.scope===m.id}">${face}${n?`<span class="badge">${n}</span>`:''}</button>`;
   }).join('');
-  document.getElementById('rail').innerHTML=all+each+`<span style="flex:1"></span><button class="rb" style="border:1px dashed #4a4a54;color:var(--mut);font-weight:400" aria-label="添加一台电脑">+</button>`;
+  rail.innerHTML=each+`<span style="flex:1"></span><button class="rb" style="border:1px dashed #4a4a54;color:var(--mut);font-weight:400" aria-label="添加一台电脑">+</button>`;
 }
 function renderSide(){
-  const online=MACHINES.filter(m=>m.online);
+  const online=MACHINES.filter(m=>m.online),local=machine('local');
   let html='';
-  if(state.scope==='all'){
+  if(state.layout!=='b'){
     html+=`<div class="brand"><b>MOORING</b></div><div class="search"><span>找会话、空间或原话</span><span class="mono">⌘P</span></div>`;
-    html+=chips(online);
-    html+=`<div class="seg" role="group" aria-label="排列方式"><button data-act="group" data-id="status" aria-pressed="${state.group==='status'}">按状态</button><button data-act="group" data-id="machine" aria-pressed="${state.group==='machine'}">按机器</button></div>`;
+    if(state.layout==='a'){
+      html+=chips([local]);
+      html+=`<div class="mchips">`+MACHINES.filter(m=>m.mark).map(m=>{
+        const n=needsCount(m.id);
+        return `<button class="chip${m.online?'':' off'}${state.only===m.id?' on':''}" data-act="only" data-id="${m.id}" aria-pressed="${state.only===m.id}">${mark(m,!m.online)}${m.name}${m.online?'':' · 断开'}${n?`<span class="badge">${n}</span>`:''}</button>`;
+      }).join('')+`</div>`;
+    }
     html+=`<div class="list">`;
-    if(state.group==='status'){
-      html+=groups(SESSIONS,true,MACHINES.reduce((a,m)=>a+m.today,0),MACHINES.reduce((a,m)=>a+m.older,0));
+    if(state.layout==='a'){
+      const ms=state.only?[machine(state.only)]:MACHINES;
+      html+=groups(state.only?inMachine(state.only):SESSIONS,!state.only,ms.reduce((a,m)=>a+m.today,0),ms.reduce((a,m)=>a+m.older,0));
     }else{
       for(const m of MACHINES){
         const folded=state.folded.has(m.id),n=needsCount(m.id);
         const note=m.online?`${liveCount(m.id)} 个会话`:'断开 · 12 秒后重试';
         html+=`<div class="mh"><button class="toggle" data-act="fold" data-id="${m.id}" aria-expanded="${!folded}"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="${folded?'M3.5 2l3 3-3 3':'M2 3.5l3 3 3-3'}"></path></svg>${mark(m,!m.online)}${m.name}<span class="note">${note}</span>${n?`<span class="badge">${n}</span>`:''}</button>${m.online?`<button class="add" aria-label="在${m.name}上开新终端">+</button>`:''}</div>`;
-        if(!folded)html+=groups(inMachine(m.id),false,m.today,m.older);
+        if(!folded)html+=(m.id==='local'?chips([m]):'')+groups(inMachine(m.id),false,m.today,m.older);
       }
     }
     html+=`</div>`;
@@ -192,10 +217,11 @@ function renderSide(){
     html+=`<div class="list">${groups(inMachine(m.id),false,m.today,m.older)}</div>`;
   }
   html+=`<button class="keys" data-act="next"><span class="mono">⌘J</span>下一个要你的（所有机器）</button>`;
-  const foot=state.scope==='all'
+  const foot=state.layout!=='b'
     ?`${online.length}/${MACHINES.length} 台在线 · ${online.reduce((a,m)=>a+m.chips.length,0)} 个空间 · ${online.reduce((a,m)=>a+liveCount(m.id),0)} 个会话`
     :`${machine(state.scope).chips.length} 个空间 · ${inMachine(state.scope).length} 个会话`;
-  html+=`<div class="foot">${foot}</div>`;
+  const menu=state.menu?`<div class="pop"><div class="cap">多台机器的布局</div>`+LAYOUTS.map(([id,name])=>`<button data-act="layout" data-id="${id}" role="menuitemradio" aria-checked="${state.layout===id}"><span class="tick">${state.layout===id?'✓':''}</span>${name}</button>`).join('')+`</div>`:'';
+  html+=`<div class="foot"><span>${foot}</span><button class="tune" data-act="menu" aria-label="调整布局" aria-expanded="${state.menu}"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><circle cx="9" cy="8" r="2.6" fill="currentColor"></circle><circle cx="15" cy="16" r="2.6" fill="currentColor"></circle></svg></button>${menu}</div>`;
   document.getElementById('side').innerHTML=html;
 }
 function renderMain(){
@@ -212,21 +238,32 @@ function renderMain(){
     +`<div class="term"><div>Claude Code <span class="dim">v2.1.300</span></div><div class="dim">Opus 5.5 · Claude Pro</div><div class="dim">~/Desktop/code</div>${talk}</div>`
     +`<div class="status"><span><span class="dot${m.online?'':' bad'}"></span>${m.name} · ${m.online?liveCount(m.id)+' 个会话':'断开'}</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>`;
 }
-function render(){renderRail();renderSide();renderMain();}
+function render(){renderSwitch();renderRail();renderSide();renderMain();}
 function nextNeeding(){
   const list=SESSIONS.filter(x=>x.group==='needs'&&x.st!=='off');
   const at=list.findIndex(x=>x.id===state.selected);
   const to=list[(at+1)%list.length];
   state.selected=to.id;
-  if(state.scope!=='all'&&state.scope!==to.m)state.scope=to.m;
+  state.scope=to.m;
+  if(state.only&&state.only!==to.m)state.only=null;
   state.folded.delete(to.m);
+}
+function setLayout(id){
+  const m=SESSIONS.find(x=>x.id===state.selected).m;
+  state.layout=id;
+  state.only=null;
+  state.scope=m;
+  state.folded.delete(m);
 }
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');
-  if(!b)return;
-  const {act,id}=b.dataset;
+  const {act,id}=b?b.dataset:{};
+  const wasOpen=state.menu;
+  state.menu=act==='menu'?!wasOpen:false;
+  if(!b){if(wasOpen)render();return;}
+  if(act==='layout')setLayout(id);
   if(act==='scope')state.scope=id;
-  if(act==='group')state.group=id;
+  if(act==='only')state.only=state.only===id?null:id;
   if(act==='pick')state.selected=id;
   if(act==='fold')state.folded.has(id)?state.folded.delete(id):state.folded.add(id);
   if(act==='next')nextNeeding();
