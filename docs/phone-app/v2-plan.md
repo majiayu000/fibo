@@ -112,3 +112,57 @@
 - 额度只从配对的电脑来。手机唯一的网络出口是连中继的 WebSocket，中继只转发加密内容，手机不直接找任何服务商。
 - 同一页按电脑列出，不相加：两台电脑可能共用账号，也可能不是，电脑只报套餐、不报账号。
 - 电脑离线时显示这台手机上次收到的读数，标「断开前」；重新连上就换回实时读数。取消配对时一起删掉。
+
+## 补齐和设计稿的缺口（2026-11-05，分支 feat/phone-gaps2）
+
+**决定：分支名、在跑时长、干了多久、接着上次的对话、设为空间、权限和模型标签、今天 tokens、看板待办、改动页测试结果，全部采用；金额否定；「真手机上好不好用」待验证。**
+
+新增的协议（hello 的 `ops` 会列出，老电脑不列，手机就不显示入口）：
+
+| op / 字段 | 内容 | 权限 |
+|---|---|---|
+| `list` 的卡片 | `branch`、`running_since`、`doing`、`model`、`permission` | 三档 |
+| `list` | `todos:[{id, space, title, agent}]`，和桌面看板的「待办」同一个函数（`status::open_todos`） | 三档 |
+| `chat` 的 `tools` | 加 `took`（秒，不知道时不写） | 三档 |
+| `diff`（带 `terminal`） | 加 `checks:[{command, counts, ok, at, stale}]` | 三档 |
+| `open` | 加 `resume`（会话 id）。在这段对话自己的目录里跑 `Workspace::resume_command`（和桌面同一个）；用户的话走 `$1`，不进脚本；还在跑就回 `{terminal, existing:true}`，不开第二份；目录不在了就报错，不换目录 | full |
+| `lastsession` | `{cwd, agent}` → `{session:{id, title, updated, terminal?}}`，只看桌面会列出的对话 | full |
+| `addspace` | `{path, request}` → `{id, name, cwd}`；已经是空间就返回原来的，重发安全 | full |
+| `usage` | `{since}` → `{since, agents:[{agent, tokens, cached}], partial}`；手机传自己的零点；不占请求队列，一次最多读 4 秒，没读完 `partial:true`，手机接着问 | 三档 |
+
+### B 项的证据
+
+**权限模式和模型：可靠，已显示（只读）。**
+- Claude：模型在 assistant 行的 `message.model`（真实日志里 26 325 行都有，`<synthetic>` 要跳过）；权限在 `permission-mode` 行和用户提问行的 `permissionMode`（今天的日志里 8 550 处）。
+- Codex：每轮的 `turn_context` 有 `model`、`approval_policy`、`sandbox_policy.type`。
+- 真实日志跑过解析器：Codex 得到 `gpt-6.1-sol`、全部放行 / 只读，Claude 得到 `claude-opus-5-5`、全部放行 / 逐个确认。
+- 限制：显示的是日志最后写的值。真实日志里模式切换落在下一条提问行或下一次状态行上，所以 Shift+Tab 之后、下一次写日志之前可能还是旧值。升级前已索引的对话，要等写新日志才有这两项，没有就不显示。
+
+**今天 tokens：可靠，已显示；金额不显示。**
+- crates 里原来没有本地计量（搜不到 `input_tokens`），新写在 `agents/usage_lines.rs`。
+- Claude 一条回复按内容块写多行，每行带同一份 `usage`：今天的日志里重复行 14 446、实际回复 11 975，不去重会多算一倍多，所以按 `message.id` 去重。Codex 8 个文件逐个核对过，`last_token_usage` 之和等于最后的 `total_token_usage`。
+- 拿真实日志核对：`usage` 回 Claude 8 244 434 / 缓存 284 439 629、Codex 505 766 / 9 148 928，和另写的 Python 统计逐位相同。缓存读取比其余大两个量级，所以单独写「另有缓存读取」，不算进大数字。
+- 金额：crates 里没有价格表，模型和缓存价又常变，订阅用户也不按 token 付钱，算出来的数不可靠。
+- 限制：只算这台电脑本地日志里的 Claude 和 Codex。同一天 fork 的 Codex 会话如果复制了父会话的计数，可能重复（没遇到，没专门测）。
+
+**待办：可靠，已接上。** 数据就在 Workspace，`list` 带上，手机看板只读显示。判定挪进 core，桌面和手机同一个函数。
+
+**改动页测试结果：可靠，已显示。** 来源是日志里测试命令的退出码（`Evidence` 的 `test`，桌面验收也用它），不看 Agent 怎么说；带管道的命令本来就不算。`stale` 表示这段对话之后又改过文件，手机写「通过，之后又改过」。限制：只知道这段对话自己的改动和测试，别的会话或手动改的不知道；只有 `diff {terminal}` 有。设计稿的「8 个测试通过」这种汉化计数没做，显示命令加通过 / 没通过。
+
+### 和设计稿还不一样的地方
+
+- 一键回复「打包并安装 / 先别」：那是从 Agent 的自由文字里猜的，不做。编号选项和问题工具的选项照旧。
+- 工具摘要点开「看每条命令」：现在有改动时打开改动页，没做逐条列表。
+- 附件按钮、审批失效时间、后果说明：不做（见上文）。
+- 选目录底部「上一级」换成了「设为空间」，和设计稿一致；上一级用顶部路径点回去。
+- 只配了一台电脑时，会话标题栏不写电脑名，给分支和状态词留位置；配了多台才写。
+
+### 已验 / 没验
+
+已验：全量 `cargo test`（core、remote、host、relay）569 个通过，clippy 和 fmt 过；`mooring remote --stdio` 测了每个新字段和 op，含权限和重发；网页版 390×844 浅深两色连真后台看了每个新元素。恢复时终端打出 `fake claude: --resume <id> 接着把 $(touch /tmp/pwned-gaps) 'x' 做完`，文件没有被创建。`list` 在 8 张卡片时中位 1.4 ms（debug 包，经 stdio）。
+
+没验：真手机；真 Claude Code 和真 Codex 跑 `open resume`（`--resume id prompt` 只对过两个 CLI 的 `--help`，假 CLI 上跑通）；iOS 和 Android 原生的新界面；真后台上 Codex 卡片的标签（解析器用真实日志验过，界面没有）；Shift+Tab 之后标签多久变（只看过日志顺序）。
+
+### 怎么复现
+
+`cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture` 起演示电脑（假 Agent、真后台、真中继、独立的 HOME 和真 git 仓库），`cd mobile && bunx expo start --web`，粘贴打印的链接。对照图是 [v2-compare/](v2-compare/) 的 `gaps-*.png`，左设计稿右 App。测试在 `crates/mooring-host/tests/remote_v2_gaps.rs`。
