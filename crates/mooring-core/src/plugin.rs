@@ -13,9 +13,10 @@ use std::path::{Path, PathBuf};
 /// The package format's major version; a plugin of another is refused, not guessed at.
 pub const API: u32 = 1;
 /// What this build's plugin support adds up to, raised whenever a kind or a manifest field
-/// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`. A plugin needing a
-/// higher level says so in `mooring`, and is refused with "update Mooring".
-pub const LEVEL: u32 = 2;
+/// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`, 3 an
+/// action's `agent`. A plugin needing a higher level says so in `mooring`, and is refused
+/// with "update Mooring".
+pub const LEVEL: u32 = 3;
 
 /// What a plugin can extend. The file each kind reads is fixed, so a manifest only says
 /// which kinds it means to provide and a missing file is reported rather than ignored.
@@ -386,6 +387,32 @@ pub fn files(kind: Kind) -> Vec<PathBuf> {
         .filter_map(|f| f.result.as_ref().ok())
         .flat_map(|p| p.files(kind))
         .collect()
+}
+
+/// Why a declaration file does not parse. A field or value this build has never heard of
+/// may be a typo or may be from a newer Mooring: say both.
+pub fn bad_format(e: &serde_json::Error) -> String {
+    let text = e.to_string();
+    if text.contains("unknown field") || text.contains("unknown variant") {
+        format!("格式不对：{text}（写错了，或者要更新 Mooring 才认识）")
+    } else {
+        format!("格式不对：{text}")
+    }
+}
+
+/// One kind's files through the loader a running process reads them with.
+pub fn load_kind(kind: Kind, files: Vec<PathBuf>, home: &Path) -> Vec<crate::agent::Loaded> {
+    match kind {
+        Kind::Agent => crate::agent::load_files(files, home).1,
+        Kind::Actions => crate::action::load(files).1,
+        Kind::Rules => crate::rule::load(files).1,
+        Kind::Sidebar => crate::sidebar::load(files).1,
+        Kind::Hooks => crate::hook::load(files).1,
+        Kind::Decorations => crate::decoration::load(files).1,
+        Kind::Effects => crate::effect::load(files).1,
+        Kind::Setup => crate::setup::load(files),
+        Kind::Quota => crate::quota::load(files).1,
+    }
 }
 
 /// `<config_dir>/plugins`, the directory the settings page tells people to use.

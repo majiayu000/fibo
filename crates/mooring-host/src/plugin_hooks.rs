@@ -267,6 +267,7 @@ mod tests {
             timeout_ms,
             min_ms: 0,
             file: PathBuf::new(),
+            skipped: vec![],
         }
     }
     fn payload() -> Payload {

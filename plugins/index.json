@@ -46,21 +46,22 @@
     {
       "id": "common-actions",
       "name": "常用命令",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "右键菜单与 ⌘P 里的几条常用命令，也是 actions.json 的写法示例",
       "provides": [
         "actions"
       ],
+      "mooring": 3,
       "files": [
         {
           "path": "actions.json",
-          "sha256": "2329b997467107d54ceb329d6db5e008197fe59339ed17844e9d5989b74f3dff",
-          "size": 746
+          "sha256": "0bb29842ca49f006572217d9cb8d4fad26c1c3d860e97c1f718189abeea0c268",
+          "size": 693
         },
         {
           "path": "plugin.json",
-          "sha256": "f44e32e86fead118af834227d5df6b373e4e3ef972b29f6bb9057aaeb5f2f215",
-          "size": 220
+          "sha256": "9b5eb2ad5304bcd6fa47cbed99f391f300d04a8e81efc128fe2d87fbb5ff9ad5",
+          "size": 244
         }
       ]
     },
@@ -130,7 +131,7 @@
     {
       "id": "focus-sidebar",
       "name": "专注左栏",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "左栏只摊开需要你的会话，其余都收成一行，每行带第二行说明",
       "provides": [
         "sidebar"
@@ -138,13 +139,13 @@
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "2ab0e44df09024ec481a757d27d183e37f84ba50b5b14801248ebdebde30a4e6",
-          "size": 220
+          "sha256": "f7622ee76631c1a5e74610e97b204f876eb0ccdc508a30e2460610d002d706bd",
+          "size": 228
         },
         {
           "path": "sidebar.json",
-          "sha256": "c341a818e697b5ec724628b1e53fa560741261fa8527da19871ad17bd84da213",
-          "size": 224
+          "sha256": "eece5621744a954ad73576fe168c7e37b11bdde7c3d05f51370d87babd651164",
+          "size": 216
         }
       ]
     },

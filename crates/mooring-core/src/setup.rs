@@ -40,7 +40,7 @@ pub enum Phase {
 
 pub fn read(file: &Path) -> Result<Setup, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let s: Setup = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    let s: Setup = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if s.api != API {
         return Err(format!(
             "安装步骤格式是 api {}，这个版本只认 api {API}",

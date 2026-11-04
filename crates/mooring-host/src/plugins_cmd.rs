@@ -1,6 +1,6 @@
 //! `mooring plugins`: checks the plugins under the config directory with the same code
 //! the app loads them with, so an Agent that wrote one knows before a restart whether it
-//! will take effect, and why not. It reads only; it never changes a plugin.
+//! will take effect, and why not; and installs, removes and configures them.
 use mooring_core::market;
 use mooring_core::plugin::{self, Kind};
 use std::io;
@@ -186,14 +186,16 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                 .into_iter()
                 .find(|o| &o.entry.id == id)
                 .ok_or_else(|| io::Error::other(format!("目录里没有叫 {id} 的插件")))?;
+            // Read from the package itself, before anything installed changes.
+            let prepared = offer.prepare(&plugins_dir()?).map_err(io::Error::other)?;
             println!("{id} v{} 装上后会：", offer.entry.version);
-            for p in offer.entry.disclosure() {
+            for p in prepared.lines() {
                 println!("  · {p}");
             }
             // An Agent or a script installing one that runs commands says so on purpose,
             // and what it will do is now in its output for the user to read.
             use std::io::IsTerminal;
-            if market::runs_commands(&offer.entry.provides) && !yes {
+            if prepared.must_ask && !yes {
                 if !std::io::stdin().is_terminal() {
                     return Err(io::Error::other(
                         "它会在这台电脑上运行命令：确认上面这些后加 --yes 再装",
@@ -206,9 +208,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                     return Err(io::Error::other("没有安装"));
                 }
             }
-            let at = offer
-                .install_into(&plugins_dir()?)
-                .map_err(io::Error::other)?;
+            let at = prepared.commit().map_err(io::Error::other)?;
             println!("装好了 {id} v{} → {}", offer.entry.version, at.display());
             println!("在 Mooring 的 设置 › 插件 点「重新读取」就生效");
             Ok(())
@@ -379,18 +379,7 @@ fn check(dir: &Path, home: &Path) -> Vec<Checked> {
 
 /// One kind's files through the loader the app uses.
 fn load(kind: Kind, files: Vec<PathBuf>, home: &Path) -> Vec<File> {
-    use mooring_core::*;
-    let report = match kind {
-        Kind::Agent => agent::load_files(files, home).1,
-        Kind::Actions => action::load(files).1,
-        Kind::Rules => rule::load(files).1,
-        Kind::Sidebar => sidebar::load(files).1,
-        Kind::Hooks => hook::load(files).1,
-        Kind::Decorations => decoration::load(files).1,
-        Kind::Effects => effect::load(files).1,
-        Kind::Setup => setup::load(files),
-        Kind::Quota => quota::load(files).1,
-    };
+    let report = plugin::load_kind(kind, files, home);
     report
         .into_iter()
         .map(|l| {
@@ -584,6 +573,45 @@ mod tests {
             }
         }
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// An Agent copies the guide's hook example as it stands, and event text comes from the
+    /// conversation: with a stand-in `osascript`, that text must arrive as an argument and
+    /// never inside the script it runs.
+    #[test]
+    fn the_guides_hook_example_keeps_event_text_out_of_the_script() {
+        let guide = include_str!("plugins.md");
+        let hooks = guide
+            .split("```json\n")
+            .skip(1)
+            .filter_map(|b| serde_json::from_str::<serde_json::Value>(b.split("```").next()?).ok())
+            .find(|v| v.get("hooks").is_some())
+            .unwrap();
+        let command = hooks["hooks"][0]["command"].as_str().unwrap();
+        let bin = std::env::temp_dir().join(format!("kl-guide-osa-{}", std::process::id()));
+        write(
+            &bin.join("osascript"),
+            "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -e ] && { shift; printf '%s\\n' \"$1\"; }; shift; done\n",
+        );
+        let exe = bin.join("osascript");
+        std::process::Command::new("chmod")
+            .arg("+x")
+            .arg(&exe)
+            .status()
+            .unwrap();
+        let path = format!("{}:/usr/bin:/bin", bin.display());
+        const PAYLOAD: &str = "x\" & (do shell script \"touch /tmp/no\") & \"y";
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", command])
+            .env("PATH", path)
+            .env("MOORING_DETAIL", PAYLOAD)
+            .env("MOORING_TITLE", PAYLOAD)
+            .output()
+            .unwrap();
+        let script = String::from_utf8_lossy(&out.stdout).into_owned();
+        std::fs::remove_dir_all(&bin).unwrap();
+        assert!(!script.is_empty());
+        assert!(!script.contains("do shell script"), "{script}");
     }
 
     /// The plugins shipped in the repo are the guide's examples: they must all check out.

@@ -62,9 +62,28 @@ pub struct Hook {
     pub min_ms: u64,
     #[serde(skip)]
     pub file: PathBuf,
+    /// Events named in `on` that this build does not know (a newer Mooring's): skipped.
+    #[serde(skip)]
+    pub skipped: Vec<String>,
 }
 fn default_timeout() -> u64 {
     5_000
+}
+
+/// The `on` names a build knows and the ones it does not.
+fn known_events(names: Vec<serde_json::Value>) -> (Vec<serde_json::Value>, Vec<String>) {
+    let (mut known, mut unknown) = (Vec::new(), Vec::new());
+    for name in names {
+        if serde_json::from_value::<Event>(name.clone()).is_ok() {
+            known.push(name);
+        } else {
+            unknown.push(
+                name.as_str()
+                    .map_or_else(|| name.to_string(), str::to_owned),
+            );
+        }
+    }
+    (known, unknown)
 }
 
 /// What a hook is told. Only the session's card: never the transcript. A command event
@@ -188,7 +207,24 @@ struct File {
 
 fn read(file: &Path, taken: &[Hook]) -> Result<Vec<Hook>, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let f: File = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    // An event this build does not know is skipped, not the whole file: a plugin written for
+    // a newer Mooring keeps working for the events both know.
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
+    let mut skipped: Vec<Vec<String>> = Vec::new();
+    let mut empty_after_skip: Vec<bool> = Vec::new();
+    for h in value["hooks"].as_array_mut().into_iter().flatten() {
+        let Some(on) = h.get_mut("on").and_then(|o| o.as_array_mut()) else {
+            skipped.push(vec![]);
+            empty_after_skip.push(false);
+            continue;
+        };
+        let (known, unknown) = known_events(std::mem::take(on));
+        empty_after_skip.push(known.is_empty() && !unknown.is_empty());
+        *on = known;
+        skipped.push(unknown);
+    }
+    let f: File = serde_json::from_value(value).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
         return Err(format!(
             "hooks 格式是 api {}，这个版本只认 api {API}",
@@ -211,9 +247,10 @@ fn read(file: &Path, taken: &[Hook]) -> Result<Vec<Hook>, String> {
         if taken.iter().chain(before.iter()).any(|t| t.id == h.id) {
             return Err(format!("hook id \"{}\" 和前面的插件重名", h.id));
         }
-        if h.on.is_empty() {
+        if h.on.is_empty() && !empty_after_skip[i] {
             return Err(format!("hook {} 的 on 至少写一个事件", h.id));
         }
+        h.skipped = skipped[i].clone();
         match (&h.command, &h.webhook) {
             (Some(c), None) if !c.trim().is_empty() => {}
             (None, Some(u)) if u.starts_with("https://") || u.starts_with("http://") => {}
@@ -253,7 +290,16 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Hook>, Vec<Loaded>) {
                         .iter()
                         .map(|h| {
                             let on: Vec<_> = h.on.iter().map(|e| e.name()).collect();
-                            format!("{}（{}）", h.id, on.join("/"))
+                            if h.skipped.is_empty() {
+                                format!("{}（{}）", h.id, on.join("/"))
+                            } else {
+                                format!(
+                                    "{}（{}；这个版本不认识 {}，跳过了）",
+                                    h.id,
+                                    on.join("/"),
+                                    h.skipped.join("、")
+                                )
+                            }
                         })
                         .collect::<Vec<_>>()
                         .join("、")
@@ -327,8 +373,9 @@ mod tests {
             r#"{"api":1,"hooks":[{"id":"stray","on":["done"],"command":"true","min_ms":10}]}"#,
         );
         let (hooks, report) = load(vec![good, both, event, slow, dup, long, stray]);
-        assert_eq!(hooks.len(), 3);
-        assert_eq!(hooks[2].min_ms, 10_000);
+        // The unknown event costs that hook its event; see the test below.
+        assert_eq!(hooks.len(), 4);
+        assert_eq!(hooks[3].min_ms, 10_000);
         assert_eq!(
             report[5].result,
             Ok("long（command_done/command_failed）".into())
@@ -340,7 +387,7 @@ mod tests {
             Ok("say（waiting/error）、slack（done）".into())
         );
         assert!(report[1].result.as_ref().unwrap_err().contains("其中一个"));
-        assert!(report[2].result.as_ref().unwrap_err().contains("格式不对"));
+        assert!(report[2].result.as_ref().unwrap().contains("跳过了"));
         assert!(
             report[3]
                 .result
@@ -349,6 +396,53 @@ mod tests {
                 .contains("timeout_ms")
         );
         assert!(report[4].result.as_ref().unwrap_err().contains("重名"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A new event name costs a plugin that event, not the whole file.
+    #[test]
+    fn an_event_from_a_newer_mooring_is_skipped_not_fatal() {
+        let d = std::env::temp_dir().join(format!("kl-hook-future-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let f = d.join("hooks.json");
+        std::fs::write(
+            &f,
+            r#"{"api":1,"hooks":[{"id":"a","on":["done","subagent_done"],"command":"true"},
+                {"id":"b","on":["only_new"],"command":"true"}]}"#,
+        )
+        .unwrap();
+        let (hooks, report) = load(vec![f.clone()]);
+        assert_eq!(hooks[0].on, [Event::Done]);
+        assert!(hooks[1].on.is_empty(), "never fires");
+        let said = report[0].result.as_ref().unwrap();
+        assert!(
+            said.contains("subagent_done") && said.contains("only_new"),
+            "{said}"
+        );
+        std::fs::write(
+            &f,
+            r#"{"api":1,"hooks":[{"id":"a","on":[],"command":"true"}]}"#,
+        )
+        .unwrap();
+        assert!(
+            load(vec![f.clone()]).1[0]
+                .result
+                .as_ref()
+                .unwrap_err()
+                .contains("至少")
+        );
+        std::fs::write(
+            &f,
+            r#"{"api":1,"hooks":[{"id":"a","on":["done"],"retry":3,"command":"true"}]}"#,
+        )
+        .unwrap();
+        assert!(
+            load(vec![f]).1[0]
+                .result
+                .as_ref()
+                .unwrap_err()
+                .contains("更新 Mooring")
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 }

@@ -31,7 +31,7 @@ pub fn matches(rule: &[String], words: &[&str]) -> bool {
 
 fn read(file: &Path) -> Result<Vec<Vec<String>>, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let f: File = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
         return Err(format!("规则格式是 api {}，这个版本只认 api {API}", f.api));
     }

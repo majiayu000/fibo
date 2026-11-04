@@ -13,10 +13,11 @@
 //!   "files": [{"path": "plugin.json", "sha256": "…", "size": 312}]}]}
 //! ```
 //!
-//! Installing copies exactly the listed files, each checked against its sha256, into a
-//! staging directory, checks it as a plugin, then swaps it in as `plugins/<id>`. Copying
-//! runs nothing; once it is in place a plugin with `setup.json` runs its `setup`. What a
-//! plugin may run is stated up front (`permissions`).
+//! Installing is two steps, so what you are asked comes from the package itself: `prepare`
+//! copies exactly the listed files, each checked against its sha256, into a staging
+//! directory and reads them with the loaders the app uses (`Prepared` says what it will run
+//! and what it adds over the installed version); `commit` swaps it in as `plugins/<id>` and,
+//! when it has one, runs its `setup`. Copying and checking run nothing.
 use crate::plugin::{self, Kind, Plugin};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -203,9 +204,6 @@ pub fn disclosure(provides: &[Kind], touches: &[String], network: Option<bool>) 
 }
 
 impl Entry {
-    pub fn disclosure(&self) -> Vec<String> {
-        disclosure(&self.provides, &self.touches, self.network)
-    }
     /// Refuses an entry that could not be installed safely, before fetching anything.
     pub fn check(&self) -> Result<(), String> {
         if !plugin::valid_id(&self.id) {
@@ -444,103 +442,312 @@ impl Offer {
             Source::Remote(_) => "远程目录",
         }
     }
-    /// Installs it as `<plugins>/<id>`, replacing an installed copy of the same id
-    /// (wherever that one's directory is). Nothing is left half-written: a bad file or
-    /// a plugin that does not check out leaves the old copy as it was.
-    pub fn install_into(&self, plugins: &Path) -> Result<PathBuf, String> {
+    /// Fetches and checks it into a staging directory without touching what is installed.
+    /// A package that says more than its listing, or whose files the loaders refuse, stops
+    /// here: an update can never replace a working plugin with one that does not load.
+    pub fn prepare(&self, plugins: &Path) -> Result<Prepared, String> {
         let e = &self.entry;
         e.check()?;
         std::fs::create_dir_all(plugins).map_err(|err| format!("建不了插件目录：{err}"))?;
-        let stage = plugins.join(format!(".installing-{}-{}", e.id, std::process::id()));
-        let _ = std::fs::remove_dir_all(&stage);
-        let staged = (|| {
-            for f in &e.files {
-                let bytes = self.fetch(&f.path)?;
-                if bytes.len() as u64 != f.size || sha256(&bytes) != f.sha256 {
-                    return Err(format!(
-                        "{} 的 {} 和目录里登记的不一致（大小或 sha256 不对），没有安装",
-                        e.id, f.path
-                    ));
-                }
-                let to = stage.join(&f.path);
-                if let Some(parent) = to.parent() {
-                    std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-                }
-                std::fs::write(&to, bytes).map_err(|err| err.to_string())?;
-            }
-            let p = plugin::check(&stage)?;
-            if p.id != e.id {
-                return Err(format!(
-                    "plugin.json 里的 id 是 {}，目录里登记的是 {}",
-                    p.id, e.id
-                ));
-            }
-            // What you were asked to confirm comes from the listing: the package may
-            // not do more than it says.
-            if let Some(k) = p.provides.iter().find(|k| !e.provides.contains(k)) {
-                return Err(format!(
-                    "{} 的 plugin.json 声明了 {}，目录里没有登记，没有安装",
-                    e.id,
-                    k.label()
-                ));
-            }
-            Ok(())
-        })();
-        if let Err(err) = staged {
-            let _ = std::fs::remove_dir_all(&stage);
-            return Err(err);
-        }
-        // Replace whichever directory holds this id now, else take `<id>`.
-        let target = plugin::discover(plugins)
-            .into_iter()
-            .find(|f| f.result.as_ref().is_ok_and(|p| p.id == e.id))
-            .map(|f| f.dir)
-            .filter(|d| d.parent() == Some(plugins));
-        let target = match target {
-            Some(dir) => dir,
-            // `<id>` may hold another plugin (an example copied and renamed) or a broken
-            // one someone is writing: never delete it to make room.
-            None if plugins.join(&e.id).exists() => {
-                let _ = std::fs::remove_dir_all(&stage);
-                return Err(format!(
-                    "{} 已被别的东西占用（不是插件 {}），没有安装；把它移走或改名后再装",
-                    plugins.join(&e.id).display(),
-                    e.id
-                ));
-            }
-            None => plugins.join(&e.id),
+        static STAGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = STAGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let stage = plugins.join(format!(".installing-{}-{}-{n}", e.id, std::process::id()));
+        // Dropped on every way out below: a refused package leaves nothing behind.
+        let mut prepared = Prepared {
+            stage: Some(stage.clone()),
+            plugins: plugins.to_owned(),
+            id: e.id.clone(),
+            disclosure: vec![],
+            added: vec![],
+            must_ask: false,
         };
-        let old = plugins.join(format!(".replaced-{}-{}", e.id, std::process::id()));
-        let _ = std::fs::remove_dir_all(&old);
-        let had = target.exists();
-        if had {
-            std::fs::rename(&target, &old).map_err(|err| {
-                let _ = std::fs::remove_dir_all(&stage);
-                format!("换不掉旧的 {}：{err}", target.display())
-            })?;
-        }
-        if let Err(err) = std::fs::rename(&stage, &target) {
-            if had {
-                let _ = std::fs::rename(&old, &target);
+        for f in &e.files {
+            let bytes = self.fetch(&f.path)?;
+            if bytes.len() as u64 != f.size || sha256(&bytes) != f.sha256 {
+                return Err(format!(
+                    "{} 的 {} 和目录里登记的不一致（大小或 sha256 不对），没有安装",
+                    e.id, f.path
+                ));
             }
-            let _ = std::fs::remove_dir_all(&stage);
-            return Err(format!("装不进 {}：{err}", target.display()));
+            let to = stage.join(&f.path);
+            if let Some(parent) = to.parent() {
+                std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+            }
+            std::fs::write(&to, bytes).map_err(|err| err.to_string())?;
         }
-        let _ = std::fs::remove_dir_all(&old);
-        // Installed or updated: it does what it sets up now (again, after an update),
-        // unless it was turned off.
-        if !plugin::turned_off(plugins, &e.id) {
-            crate::setup::run(plugins, &target, crate::setup::Phase::Setup).map_err(|err| {
-                format!("装好了，但 {err}；修好后在 设置 › 插件 里停用再打开可以重试")
-            })?;
+        let p = plugin::check(&stage)?;
+        if p.id != e.id {
+            return Err(format!(
+                "plugin.json 里的 id 是 {}，目录里登记的是 {}",
+                p.id, e.id
+            ));
         }
-        Ok(target)
+        // What you are shown may never be less than what the package says of itself.
+        if let Some(k) = p.provides.iter().find(|k| !e.provides.contains(k)) {
+            return Err(format!(
+                "{} 的 plugin.json 声明了 {}，目录里没有登记，没有安装",
+                e.id,
+                k.label()
+            ));
+        }
+        if let Some(t) = p.touches.iter().find(|t| !e.touches.contains(t)) {
+            return Err(format!(
+                "{} 的 plugin.json 说会改 {t}，目录里没有登记，没有安装",
+                e.id
+            ));
+        }
+        if p.network == Some(true) && e.network != Some(true) {
+            return Err(format!(
+                "{} 的 plugin.json 说会联网，目录里没有登记，没有安装",
+                e.id
+            ));
+        }
+        loadable(&p)?;
+        let old = plugin::discover(plugins)
+            .into_iter()
+            .find_map(|f| f.result.ok().filter(|o| o.id == e.id));
+        prepared.disclosure = disclosure_of(&p);
+        prepared.added = old.as_ref().map(|o| added(o, &p)).unwrap_or_default();
+        prepared.must_ask = match &old {
+            None => runs_commands(&p.provides),
+            Some(_) => !prepared.added.is_empty(),
+        };
+        Ok(prepared)
+    }
+    /// Installs it as `<plugins>/<id>`, replacing an installed copy of the same id
+    /// (wherever that one's directory is), without asking. Nothing is left half-written: a
+    /// bad file or a plugin that does not check out leaves the old copy as it was.
+    pub fn install_into(&self, plugins: &Path) -> Result<PathBuf, String> {
+        self.prepare(plugins)?.commit()
     }
     /// Installs it into this process's plugins directory (after `plugin::install`).
     pub fn install(&self) -> Result<PathBuf, String> {
         let config = plugin::config().ok_or("找不到配置目录")?;
         self.install_into(&plugin::dir(config))
     }
+}
+
+/// A package fetched and checked, waiting to be swapped in. Dropping it discards it.
+#[derive(Debug)]
+pub struct Prepared {
+    stage: Option<PathBuf>,
+    plugins: PathBuf,
+    pub id: String,
+    /// What it will do once installed, read from the package.
+    pub disclosure: Vec<String>,
+    /// What it can do that the installed version cannot; empty on a first install.
+    pub added: Vec<String>,
+    /// Whether to confirm first: it runs commands, or an update adds to what it runs.
+    pub must_ask: bool,
+}
+impl Drop for Prepared {
+    fn drop(&mut self) {
+        if let Some(stage) = self.stage.take() {
+            let _ = std::fs::remove_dir_all(stage);
+        }
+    }
+}
+impl Prepared {
+    /// What to tell someone before they confirm, one line each.
+    pub fn lines(&self) -> Vec<String> {
+        if self.added.is_empty() {
+            self.disclosure.clone()
+        } else {
+            self.added.clone()
+        }
+    }
+    /// Swaps it in as `<plugins>/<id>`, replacing whichever directory holds this id now.
+    pub fn commit(mut self) -> Result<PathBuf, String> {
+        let stage = self.stage.take().ok_or("已经装过了")?;
+        let (plugins, id) = (self.plugins.clone(), self.id.clone());
+        let discard = |err: String| {
+            let _ = std::fs::remove_dir_all(&stage);
+            err
+        };
+        let target = plugin::discover(&plugins)
+            .into_iter()
+            .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
+            .map(|f| f.dir)
+            .filter(|d| d.parent() == Some(plugins.as_path()));
+        let target = match target {
+            Some(dir) => dir,
+            // `<id>` may hold another plugin (an example copied and renamed) or a broken
+            // one someone is writing: never delete it to make room.
+            None if plugins.join(&id).exists() => {
+                return Err(discard(format!(
+                    "{} 已被别的东西占用（不是插件 {id}），没有安装；把它移走或改名后再装",
+                    plugins.join(&id).display(),
+                )));
+            }
+            None => plugins.join(&id),
+        };
+        let old = plugins.join(format!(".replaced-{id}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&old);
+        let had = target.exists();
+        if had {
+            std::fs::rename(&target, &old)
+                .map_err(|err| discard(format!("换不掉旧的 {}：{err}", target.display())))?;
+        }
+        if let Err(err) = std::fs::rename(&stage, &target) {
+            if had {
+                let _ = std::fs::rename(&old, &target);
+            }
+            return Err(discard(format!("装不进 {}：{err}", target.display())));
+        }
+        let _ = std::fs::remove_dir_all(&old);
+        // Installed or updated: it does what it sets up now (again, after an update),
+        // unless it was turned off.
+        if !plugin::turned_off(&plugins, &id) {
+            crate::setup::run(&plugins, &target, crate::setup::Phase::Setup).map_err(|err| {
+                format!("装好了，但 {err}；修好后在 设置 › 插件 里停用再打开可以重试")
+            })?;
+        }
+        Ok(target)
+    }
+}
+
+/// Every file of the kinds it provides through the loader that will read it.
+fn loadable(p: &Plugin) -> Result<(), String> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    for kind in &p.provides {
+        for loaded in plugin::load_kind(*kind, kind.files(&p.dir), &home) {
+            if let Err(why) = loaded.result {
+                let file = loaded
+                    .file
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy();
+                return Err(format!("{} 的 {file} 加载不了，没有安装：{why}", p.id));
+            }
+        }
+    }
+    // Loading skips an event a newer Mooring may know, so an installed plugin keeps working.
+    // A hook left with no event never fires: installing that is a mistake, whichever it is.
+    for h in crate::hook::load(p.files(Kind::Hooks)).0 {
+        if h.on.is_empty() {
+            return Err(format!(
+                "{} 的 hook {} 没有这个版本认识的事件（{}），没有安装",
+                p.id,
+                h.id,
+                h.skipped.join("、")
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The commands and webhook addresses a plugin declares, as written.
+fn declared(p: &Plugin) -> (Vec<String>, Vec<String>) {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let (mut commands, mut webhooks) = (Vec::new(), Vec::new());
+    for kind in &p.provides {
+        let files = kind.files(&p.dir);
+        match kind {
+            Kind::Actions => {
+                commands.extend(crate::action::load(files).0.into_iter().map(|a| a.command));
+            }
+            Kind::Hooks => {
+                for h in crate::hook::load(files).0 {
+                    commands.extend(h.command);
+                    webhooks.extend(h.webhook);
+                }
+            }
+            Kind::Decorations => {
+                commands.extend(
+                    crate::decoration::load(files)
+                        .0
+                        .into_iter()
+                        .map(|d| d.command),
+                );
+            }
+            Kind::Quota => {
+                commands.extend(
+                    crate::quota::load(files)
+                        .0
+                        .into_iter()
+                        .filter_map(|s| s.command),
+                );
+            }
+            Kind::Setup => {
+                for f in files {
+                    if let Ok(s) = crate::setup::read(&f) {
+                        commands.extend([s.setup, s.teardown]);
+                    }
+                }
+            }
+            Kind::Agent => {
+                let specs = crate::agent::load_files(files, &home).0;
+                for s in specs.into_iter().filter(|s| s.file.is_some()) {
+                    commands.extend([s.start, s.resume]);
+                }
+            }
+            Kind::Rules | Kind::Sidebar | Kind::Effects => {}
+        }
+    }
+    (commands, webhooks)
+}
+
+/// How many declared commands a confirmation lists before saying how many more.
+const SHOWN_COMMANDS: usize = 12;
+
+/// What installing this package means, from the package: the kinds' words, then the files
+/// it says it changes, whether it goes online, where webhooks post, and the commands
+/// themselves. A webhook is going online whatever the manifest says.
+pub fn disclosure_of(p: &Plugin) -> Vec<String> {
+    let (commands, webhooks) = declared(p);
+    let network = if webhooks.is_empty() {
+        p.network
+    } else {
+        Some(true)
+    };
+    let mut out = disclosure(&p.provides, &p.touches, network);
+    for url in &webhooks {
+        out.push(format!("把会话标题和回复第一行发到：{url}"));
+    }
+    for c in commands.iter().take(SHOWN_COMMANDS) {
+        out.push(format!("要跑的命令：{}", crate::content::short(c, 160)));
+    }
+    if commands.len() > SHOWN_COMMANDS {
+        out.push(format!("还有 {} 条命令", commands.len() - SHOWN_COMMANDS));
+    }
+    out
+}
+
+/// What `new` can do that `old` cannot: what an update has to ask about.
+fn added(old: &Plugin, new: &Plugin) -> Vec<String> {
+    let (old_commands, old_hooks) = declared(old);
+    let (new_commands, new_hooks) = declared(new);
+    let mut out = Vec::new();
+    for k in new.provides.iter().filter(|k| !old.provides.contains(k)) {
+        if runs_commands(&[*k]) {
+            out.push(format!(
+                "这次更新新增了「{}」：{}",
+                k.label(),
+                permissions(&[*k])[0]
+            ));
+        }
+    }
+    for t in new.touches.iter().filter(|t| !old.touches.contains(t)) {
+        out.push(format!("这次更新新增了要改的文件：{t}"));
+    }
+    let online = |p: &Plugin, hooks: &[String]| p.network == Some(true) || !hooks.is_empty();
+    if online(new, &new_hooks) && !online(old, &old_hooks) {
+        out.push("这次更新开始联网".to_owned());
+    }
+    for url in new_hooks.iter().filter(|u| !old_hooks.contains(u)) {
+        out.push(format!("这次更新新增了发送地址：{url}"));
+    }
+    for c in new_commands.iter().filter(|c| !old_commands.contains(c)) {
+        out.push(format!(
+            "这次更新新增或改了命令：{}",
+            crate::content::short(c, 160)
+        ));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -828,5 +1035,171 @@ mod tests {
         let _ = std::fs::remove_dir_all(&plugins);
         assert!(result.is_err_and(|e| e.contains("没有登记")));
         assert!(!installed);
+    }
+
+    /// One catalog plugin of `kinds`, its declaration files as given, ready to offer.
+    fn offer_of(catalog: &Path, manifest: &str, files: &[(&str, &str)]) -> Offer {
+        let id: serde_json::Value = serde_json::from_str(manifest).unwrap();
+        let id = id["id"].as_str().unwrap().to_owned();
+        let d = catalog.join(&id);
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("plugin.json"), manifest).unwrap();
+        for (name, body) in files {
+            std::fs::write(d.join(name), body).unwrap();
+        }
+        let entry = index_of(catalog)
+            .unwrap()
+            .plugins
+            .into_iter()
+            .find(|e| e.id == id)
+            .unwrap();
+        Offer {
+            entry,
+            source: Source::Bundled(catalog.to_owned()),
+        }
+    }
+
+    /// Hashes all right, contents that do not load: the working version stays.
+    #[test]
+    fn a_package_that_does_not_load_leaves_the_installed_version() {
+        let catalog = tmp("broken-update");
+        let plugins = tmp("broken-update-into");
+        const GOOD: &str = r#"{"api":1,"hooks":[{"id":"ok","on":["done"],"command":"true"}]}"#;
+        offer_of(
+            &catalog,
+            r#"{"api":1,"id":"h","name":"H","version":"1.0.0","provides":["hooks"]}"#,
+            &[("hooks.json", GOOD)],
+        )
+        .install_into(&plugins)
+        .unwrap();
+        let err = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"h","name":"H","version":"2.0.0","provides":["hooks"]}"#,
+            &[(
+                "hooks.json",
+                r#"{"api":1,"hooks":[{"id":"ok","on":["dne"],"command":"true"}]}"#,
+            )],
+        )
+        .install_into(&plugins)
+        .unwrap_err();
+        let kept = plugin::check(&plugins.join("h")).unwrap().version;
+        let hooks = std::fs::read_to_string(plugins.join("h/hooks.json")).unwrap();
+        let entries = std::fs::read_dir(&plugins).unwrap().count();
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(err.contains("dne"), "{err}");
+        assert_eq!(kept.as_deref(), Some("1.0.0"));
+        assert_eq!(hooks, GOOD);
+        assert_eq!(entries, 1, "no staging left behind");
+    }
+
+    /// The listing says less than the package about what it changes or whether it goes
+    /// online: what you would be shown is not what it is, so it is refused.
+    #[test]
+    fn a_package_may_not_claim_more_than_its_listing() {
+        let catalog = tmp("liar");
+        let plugins = tmp("liar-into");
+        let mut offer = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"l","name":"L","version":"1.0.0","provides":["effects"],"network":true,"touches":["~/.ssh/config"]}"#,
+            &[("effects.json", r#"{"api":1,"complete":{"style":"sweep"}}"#)],
+        );
+        let honest = offer.clone();
+        offer.entry.touches.clear();
+        let touches = offer.prepare(&plugins).unwrap_err();
+        offer.entry.touches = honest.entry.touches.clone();
+        offer.entry.network = Some(false);
+        let network = offer.prepare(&plugins).unwrap_err();
+        let ok = honest.prepare(&plugins).map(|p| p.disclosure.clone());
+        let entries = std::fs::read_dir(&plugins).unwrap().count();
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(touches.contains("~/.ssh/config"), "{touches}");
+        assert!(network.contains("联网"), "{network}");
+        assert!(ok.unwrap().iter().any(|l| l.contains("~/.ssh/config")));
+        assert_eq!(entries, 0, "a dropped preparation leaves nothing");
+    }
+
+    /// The confirmation reads the package: webhook addresses and commands by name, and a
+    /// webhook counts as going online whatever the manifest says.
+    #[test]
+    fn the_confirmation_names_commands_and_webhooks() {
+        let catalog = tmp("names");
+        let plugins = tmp("names-into");
+        let prepared = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"n","name":"N","version":"1.0.0","provides":["hooks"]}"#,
+            &[(
+                "hooks.json",
+                r#"{"api":1,"hooks":[{"id":"a","on":["done"],"webhook":"https://example.invalid/x"},{"id":"b","on":["done"],"command":"say hi"}]}"#,
+            )],
+        )
+        .prepare(&plugins)
+        .unwrap();
+        let (lines, ask) = (prepared.lines(), prepared.must_ask);
+        drop(prepared);
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(ask);
+        assert!(lines.contains(&"会联网".to_owned()), "{lines:?}");
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("https://example.invalid/x")),
+            "{lines:?}"
+        );
+        assert!(lines.iter().any(|l| l.contains("say hi")), "{lines:?}");
+    }
+
+    /// An update is asked about exactly when it adds to what runs; animations are not.
+    #[test]
+    fn an_update_asks_only_when_it_adds_to_what_runs() {
+        let catalog = tmp("adds");
+        let plugins = tmp("adds-into");
+        const EFFECT: &str = r#"{"api":1,"complete":{"style":"sweep"}}"#;
+        offer_of(
+            &catalog,
+            r#"{"api":1,"id":"u","name":"U","version":"1.0.0","provides":["effects"]}"#,
+            &[("effects.json", EFFECT)],
+        )
+        .install_into(&plugins)
+        .unwrap();
+        let same = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"u","name":"U","version":"1.1.0","provides":["effects"]}"#,
+            &[("effects.json", r#"{"api":1,"complete":{"style":"fade"}}"#)],
+        )
+        .prepare(&plugins)
+        .unwrap();
+        let (same_asks, same_added) = (same.must_ask, same.added.clone());
+        drop(same);
+        let more = offer_of(
+            &catalog,
+            r#"{"api":1,"id":"u","name":"U","version":"2.0.0","provides":["effects","setup"]}"#,
+            &[
+                ("effects.json", EFFECT),
+                (
+                    "setup.json",
+                    r#"{"api":1,"setup":"evil on","teardown":"evil off"}"#,
+                ),
+            ],
+        )
+        .prepare(&plugins)
+        .unwrap();
+        let (more_asks, more_added) = (more.must_ask, more.added.clone());
+        drop(more);
+        let _ = std::fs::remove_dir_all(&catalog);
+        let _ = std::fs::remove_dir_all(&plugins);
+        assert!(!same_asks, "{same_added:?}");
+        assert!(more_asks);
+        assert!(
+            more_added.iter().any(|l| l.contains("安装步骤")),
+            "{more_added:?}"
+        );
+        assert!(
+            more_added.iter().any(|l| l.contains("evil on")),
+            "{more_added:?}"
+        );
     }
 }

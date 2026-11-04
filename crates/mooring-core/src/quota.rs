@@ -242,7 +242,7 @@ struct File {
 
 fn read(file: &Path) -> Result<Vec<Source>, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let f: File = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
         return Err(format!("额度格式是 api {}，这个版本只认 api {API}", f.api));
     }
@@ -317,8 +317,10 @@ static SOURCES: crate::plugin::Slot<(Vec<Source>, Vec<Loaded>)> = crate::plugin:
 static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// The last reading of each command source, by generation and index.
 static RAN: Mutex<Option<(u64, HashMap<usize, Quota>)>> = Mutex::new(None);
-/// File sources' last reading, by path and modification time.
-type FileReadings = HashMap<PathBuf, (SystemTime, Option<Quota>)>;
+/// File sources' last parsed document, by path and modification time. The document and not
+/// the reading: two sources may read one file through different pointers, and a reloaded
+/// source may change its pointers while the file stays as it was.
+type FileReadings = HashMap<PathBuf, (SystemTime, Option<Value>)>;
 static READ: Mutex<Option<FileReadings>> = Mutex::new(None);
 
 /// Loads the installed plugins' sources once (after `plugin::install`).
@@ -364,20 +366,18 @@ pub fn from_plugins() -> Vec<(Agent, Quota)> {
                 let Ok(changed) = std::fs::metadata(&path).and_then(|m| m.modified()) else {
                     continue;
                 };
-                match read.get(&path) {
-                    Some((t, q)) if *t == changed => q.clone(),
-                    _ => {
-                        let at = changed
-                            .duration_since(UNIX_EPOCH)
-                            .map_or(0, |d| d.as_secs());
-                        let q = std::fs::read(&path)
-                            .ok()
-                            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-                            .and_then(|doc| s.reading(&doc, at));
-                        read.insert(path, (changed, q.clone()));
-                        q
-                    }
+                let at = changed
+                    .duration_since(UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                if read.get(&path).is_none_or(|(t, _)| *t != changed) {
+                    let doc = std::fs::read(&path)
+                        .ok()
+                        .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+                    read.insert(path.clone(), (changed, doc));
                 }
+                read.get(&path)
+                    .and_then(|(_, doc)| doc.as_ref())
+                    .and_then(|doc| s.reading(doc, at))
             }
             None => ran.get(&i).cloned(),
         };
@@ -604,6 +604,54 @@ mod tests {
             )),
             Ok("a".into())
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// One file, two sources, different pointers: each reads its own number, and a pointer
+    /// changed in the declaration takes effect though the file did not change.
+    #[test]
+    fn sources_sharing_a_file_each_read_their_own_pointer() {
+        let root = std::env::temp_dir().join(format!("kl-quota-shared-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("plugins/q");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"api":1,"id":"q","name":"q","provides":["quota"]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("quota.json"),
+            r#"{"api":1,"sources":[
+              {"agent":"claude","file":"s.json","windows":[{"minutes":300,"used":"/claude"}]},
+              {"agent":"codex","file":"s.json","windows":[{"minutes":300,"used":"/codex"}]}]}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("plugin-data/q")).unwrap();
+        std::fs::write(
+            root.join("plugin-data/q/s.json"),
+            r#"{"claude":11,"codex":77}"#,
+        )
+        .unwrap();
+        crate::plugin::install(&root);
+        install();
+        let used = || -> Vec<(String, u16)> {
+            from_plugins()
+                .into_iter()
+                .map(|(a, q)| (a.key().to_owned(), q.windows[0].used))
+                .collect()
+        };
+        assert_eq!(
+            used(),
+            [("Claude".to_owned(), 11), ("Codex".to_owned(), 77)]
+        );
+        std::fs::write(
+            dir.join("quota.json"),
+            r#"{"api":1,"sources":[{"agent":"claude","file":"s.json","windows":[{"minutes":300,"used":"/codex"}]}]}"#,
+        )
+        .unwrap();
+        crate::plugin::reload();
+        assert_eq!(used(), [("Claude".to_owned(), 77)]);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

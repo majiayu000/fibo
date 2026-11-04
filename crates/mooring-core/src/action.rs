@@ -51,6 +51,10 @@ pub struct Action {
     pub run: Run,
     #[serde(default)]
     pub when: When,
+    /// Only in panes of this Agent (its executable or name): a command that means one CLI
+    /// must not be offered in another's pane.
+    #[serde(default)]
+    pub agent: Option<String>,
     /// The file it came from, for the settings page.
     #[serde(skip)]
     pub file: PathBuf,
@@ -88,12 +92,23 @@ impl Context {
 impl Action {
     /// Whether the action is offered for a pane with this context.
     pub fn offered(&self, ctx: &Context) -> bool {
-        match self.when {
+        let when = match self.when {
             When::Always => true,
             When::Agent => ctx.session_id.is_some(),
             When::Shell => ctx.session_id.is_none(),
             When::Task => ctx.task.is_some(),
-        }
+        };
+        when && self.agent.as_deref().is_none_or(|want| {
+            ctx.agent.as_deref().is_some_and(|name| {
+                let this = crate::agent::Agent::all()
+                    .into_iter()
+                    .find(|a| a.name() == name);
+                name.eq_ignore_ascii_case(want)
+                    || this.is_some_and(|a| {
+                        a.executable() == want || a.key().eq_ignore_ascii_case(want)
+                    })
+            })
+        })
     }
     /// The command for one pane, each value single-quoted for where it stands: bare, it
     /// is quoted; inside `"…"` the double quotes close around it; inside `'…'` its own
@@ -164,7 +179,7 @@ impl Quote {
 /// Reads one `actions.json`: every action, or why none of it loads.
 fn read(file: &Path) -> Result<Vec<Action>, String> {
     let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let f: File = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
         return Err(format!("动作格式是 api {}，这个版本只认 api {API}", f.api));
     }
@@ -310,6 +325,7 @@ mod tests {
             command: "codex exec --cd {cwd} \"看看 {task}\" {unknown}".into(),
             run: Run::Split,
             when: When::Always,
+            agent: None,
             file: PathBuf::new(),
         };
         let ctx = Context {
@@ -339,6 +355,7 @@ mod tests {
             command: "x".into(),
             run: Run::Paste,
             when,
+            agent: None,
             file: PathBuf::new(),
         };
         let shell = Context::default();
@@ -411,6 +428,7 @@ mod tests {
                 command: template.into(),
                 run: Run::Split,
                 when: When::Always,
+                agent: None,
                 file: PathBuf::new(),
             };
             let ctx = Context {
@@ -431,5 +449,26 @@ mod tests {
                 "{template}: {shown:?} from {command}"
             );
         }
+    }
+
+    /// A command meant for one CLI stays out of another's pane.
+    #[test]
+    fn an_action_for_one_agent_is_not_offered_in_anothers_pane() {
+        let action: Action = serde_json::from_str(
+            r#"{"id":"r","title":"t","command":"claude --resume {session_id}","when":"agent","agent":"claude"}"#,
+        )
+        .unwrap();
+        let pane = |agent: &str| Context {
+            cwd: "/".into(),
+            session_id: Some("s".into()),
+            agent: Some(agent.into()),
+            ..Default::default()
+        };
+        assert!(action.offered(&pane("Claude Code")));
+        assert!(!action.offered(&pane("Codex")));
+        assert!(!action.offered(&Context {
+            cwd: "/".into(),
+            ..Default::default()
+        }));
     }
 }
