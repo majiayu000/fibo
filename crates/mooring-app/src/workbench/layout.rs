@@ -339,8 +339,7 @@ impl Workbench {
                     })),
             );
         // The turn bar: what this turn changed and how far its todo's criteria are, with
-        // 退回 and the window's one solid button, 标记完成. Only while it waits for you
-        // to check it.
+        // the window's one solid button, 标记完成. Only while it waits for you to check it.
         let turn = self
             .shown_turn_bar(id, session, review, status)
             .map(|(s, g)| self.turn_bar(id, s, g, cx));
@@ -1820,8 +1819,8 @@ impl Workbench {
             .and_then(|tid| self.workspace.tasks.iter().find(|t| &t.id == tid))
     }
     /// Under a pane's title while its turn waits for you to check it: `这一轮改了 3 个文件 ·
-    /// 验收标准 1/3`, then 退回 (back to the terminal, to say what is wrong) and 标记完成,
-    /// the only solid button in the window. A part with nothing to say is left out.
+    /// 验收标准 1/3`, then 标记完成, the only solid button in the window. To say what is
+    /// wrong, type in the terminal below. A part with nothing to say is left out.
     fn turn_bar(&self, id: &str, s: &AgentSession, g: Status, cx: &Context<Self>) -> gpui::Div {
         // The session's own state ink, as its title's chip has it.
         let ink = g.colors().1;
@@ -1876,7 +1875,6 @@ impl Workbench {
                         })),
                 );
         }
-        let back = id.to_owned();
         let terminal = id.to_owned();
         let accept = s.id.clone();
         let open = self.layout.changes_open.as_deref() == Some(id);
@@ -1954,21 +1952,6 @@ impl Workbench {
             .text_size(px(T::SMALL))
             .child(facts)
             .children(changes)
-            .child(
-                button(gpui::SharedString::from(format!("turn-back-{id}")), "退回")
-                    .h(px(T::PANE_ACTION))
-                    .px(px(T::S10))
-                    .border(px(T::BORDER_WIDTH))
-                    .border_color(T::color(T::control()))
-                    .text_color(T::color(T::primary()))
-                    .tooltip(|_, cx| {
-                        cx.new(|_| super::render::TextTip("回到终端，告诉它哪里不对".into()))
-                            .into()
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.focus_terminal(&back, window, cx);
-                    })),
-            )
             .child(super::forms::solid(
                 button(
                     gpui::SharedString::from(format!("accept-pane-{id}")),
