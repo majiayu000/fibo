@@ -339,6 +339,28 @@ impl ThemeFile {
         Ok(out)
     }
 }
+/// A plugin's theme files, for `mooring plugins check`. The window checks them again with
+/// the names of its own colors.
+pub fn load(files: Vec<std::path::PathBuf>) -> Vec<crate::agent::Loaded> {
+    files
+        .into_iter()
+        .map(|file| {
+            let stem = file
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            let result = std::fs::read_to_string(&file)
+                .map_err(|e| e.to_string())
+                .and_then(|text| ThemeFile::parse(&text, &stem))
+                .and_then(|theme| match theme.problems.is_empty() {
+                    true => Ok(theme.name),
+                    false => Err(theme.problems.join("；")),
+                });
+            crate::agent::Loaded { file, result }
+        })
+        .collect()
+}
 pub fn hex(color: u32) -> String {
     format!("#{color:06x}")
 }

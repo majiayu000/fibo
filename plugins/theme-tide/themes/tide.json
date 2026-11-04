@@ -1,0 +1,8 @@
+{
+  "name": "潮汐",
+  "bg": "#0b2530",
+  "fg": "#d8ecef",
+  "terminal": { "cursor": "#5fd3c8", "selection": "#1d5a66", "selected_text": "#f2fbfb", "cursor_guide": "#5fd3c8" },
+  "ansi": { "red": "#ef6f6c", "green": "#6fd08c", "yellow": "#e8c872", "blue": "#6fb7e8", "magenta": "#c79be8", "cyan": "#5fd3c8" },
+  "ui": { "sidebar": "#071b23" }
+}

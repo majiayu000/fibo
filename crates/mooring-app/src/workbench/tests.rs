@@ -709,9 +709,12 @@ fn new_spaces_take_the_next_free_name() {
             })
             .collect()
     };
-    assert_eq!(sidebar::new_space_name(&named(&["工作空间"])), "新空间");
     assert_eq!(
-        sidebar::new_space_name(&named(&["新空间", "新空间 2"])),
+        sidebar_spaces::new_space_name(&named(&["工作空间"])),
+        "新空间"
+    );
+    assert_eq!(
+        sidebar_spaces::new_space_name(&named(&["新空间", "新空间 2"])),
         "新空间 3"
     );
 }

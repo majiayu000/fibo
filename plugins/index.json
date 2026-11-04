@@ -260,6 +260,33 @@
           "size": 86514
         }
       ]
+    },
+    {
+      "id": "theme-tide",
+      "name": "主题：潮汐与晨雾",
+      "version": "0.1.0",
+      "description": "一暗一亮两套主题：潮汐是深青的底，晨雾是偏冷的纸白。装上后在设置 › 外观里选",
+      "provides": [
+        "themes"
+      ],
+      "mooring": 3,
+      "files": [
+        {
+          "path": "plugin.json",
+          "sha256": "3e7e40c800030b74d17f26a41d142a7ea4d311ec22f0c41ca0608aacb6061f0d",
+          "size": 257
+        },
+        {
+          "path": "themes/mist.json",
+          "sha256": "f398250f291297d68c4d7e4b961ddd3d84774586fdf7745da2337ec0f2b734a8",
+          "size": 257
+        },
+        {
+          "path": "themes/tide.json",
+          "sha256": "996c336a57981fd1f4f8b7263f2f0ec7d1c8fd3ae0b390bd37e5d7020f2512fd",
+          "size": 346
+        }
+      ]
     }
   ]
 }

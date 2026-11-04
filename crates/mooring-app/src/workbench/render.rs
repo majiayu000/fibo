@@ -3,6 +3,7 @@ use super::*;
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.follow_space_theme(cx);
         // Whenever the current tab changes (a click, the sidebar, a shortcut, a new tab),
         // scroll the strip so that tab is in view: the strip always shows where you are.
         if self.layout.revealed_tab != self.nav.tab {
@@ -1424,11 +1425,6 @@ impl Workbench {
         self.launch(false, None, cx);
     }
     /// The Agent an empty tab offers first: the last one picked, else the default.
-    pub(super) fn first_agent(&self) -> Agent {
-        self.tasks
-            .last_agent
-            .unwrap_or(self.workspace.settings.default_agent)
-    }
     /// A tab with no terminal yet, a new space's first view: where work starts, one solid
     /// button for the Agent used last, the other Agents and a bare shell as quiet links.
     fn empty_tab(&self, cx: &Context<Self>) -> gpui::Div {

@@ -404,6 +404,7 @@ fn run() -> io::Result<()> {
         });
         cx.set_global(ui::appearance::Appearance::load());
         ui::themes::start(cx);
+        cx.set_global(ui::space_themes::SpaceThemes::load());
         cx.set_global(ui::style::Style::load());
         cx.set_global(ui::peek::PeekChoice::load());
         cx.set_global(ui::pinned_ask::PinnedAsk::load());

@@ -213,6 +213,68 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
+        // Sharing and spaces: themes from a plugin, and a theme per space.
+        if phase == "sharing" {
+            use crate::ui::{appearance, space_themes, theme::Theme as T, themes::{self, Themes}};
+            use mooring_core::plugin;
+            let config = crate::ui::status_colors::config_dir().unwrap();
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            // A plugin's themes come and go with it, and 调整 never writes into it.
+            let dir = config.join("plugins/tide-themes");
+            std::fs::create_dir_all(dir.join("themes")).unwrap();
+            std::fs::write(dir.join("plugin.json"), r#"{"api":1,"id":"tide-themes","name":"潮汐主题","provides":["themes"]}"#).unwrap();
+            std::fs::write(dir.join("themes/tide.json"), r##"{"name":"潮汐","bg":"#0b2530","fg":"#d8ecef","ui":{"sidebar":"#071b23"}}"##).unwrap();
+            cx.update(|a| { plugin::reload(); themes::reload(a); });
+            let id = "plugin:tide-themes/tide";
+            let entry = cx.update(|a| a.global::<Themes>().get(id).cloned()).expect("the plugin's theme is offered");
+            assert!(entry.read_only && entry.own_file().is_none());
+            assert_eq!(entry.as_file().name, "潮汐 副本");
+            cx.update(|a| appearance::set_theme(id, false, true, a).unwrap());
+            wait(300).await;
+            assert_eq!(T::term().bg, 0x0b2530);
+            shot("sharing-plugin-theme", cx);
+            handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+            handle.update(cx, |v, _, a| v.visual_settings_show("外观", a)).unwrap();
+            wait(300).await;
+            shot("sharing-look-page", cx);
+            cx.update_window(handle.into(), |_, w, a| { w.dispatch_keystroke(gpui::Keystroke::parse("escape").unwrap(), a); }).unwrap();
+            std::fs::remove_dir_all(&dir).unwrap();
+            cx.update(|a| { plugin::reload(); themes::reload(a); });
+            wait(300).await;
+            assert!(cx.update(|a| a.global::<Themes>().get(id).is_none()));
+            assert_eq!(T::term().bg, crate::ui::theme::Scheme::Dark.bg(), "uninstalled: back to the side's default");
+            // One space wears a theme; the other follows 外观; the window changes on switching.
+            handle.update(cx, |v, _, a| v.visual_add_space("other", "", a)).unwrap();
+            wait(600).await;
+            let spaces = handle.update(cx, |v, _, _| v.visual_spaces()).unwrap();
+            eprintln!("spaces: {spaces:?}");
+            let first = "default".to_owned();
+            cx.update(|a| space_themes::set("other", Some("pine"), a).unwrap());
+            handle.update(cx, |v, _, a| v.visual_pick_space("other", a)).unwrap();
+            wait(300).await; shot("sharing-space-other", cx); wait(300).await;
+            assert_eq!(T::scheme(), crate::ui::theme::Scheme::Pine, "the space's theme");
+            shot("sharing-space-other", cx);
+            handle.update(cx, |v, _, a| v.visual_pick_space(&first, a)).unwrap();
+            wait(300).await; shot("sharing-space-first", cx); wait(300).await;
+            assert_eq!(T::scheme(), crate::ui::theme::Scheme::Dark, "a space without one follows 外观");
+            shot("sharing-space-first", cx);
+            let saved = std::fs::read_to_string(config.join("space-themes.json")).unwrap();
+            assert!(saved.contains("pine"), "{saved}");
+            // The menu, folded and open, and picking from it with a real click.
+            handle.update(cx, |v, _, a| v.visual_open_space_menu("other", a)).unwrap();
+            wait(200).await; shot("sharing-menu", cx);
+            let row = handle.update(cx, |v, _, _| v.visual_space_menu_point(3)).unwrap();
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, row, gpui::MouseButton::Left)).unwrap();
+            wait(200).await; shot("sharing-menu-open", cx);
+            let graphite = handle.update(cx, |v, _, _| v.visual_space_menu_point(4 + 1 + 2)).unwrap();
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, graphite, gpui::MouseButton::Left)).unwrap();
+            wait(300).await; shot("sharing-picked", cx);
+            eprintln!("picked: {:?}", std::fs::read_to_string(config.join("space-themes.json")).unwrap());
+            cx.update(|a| space_themes::set("other", None, a).unwrap());
+            eprintln!("settings sharing PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         if phase == "editor" {
             use crate::ui::{appearance::{self, Mode}, theme::Theme as T, themes::{self, Themes}};
             let term = || T::term();

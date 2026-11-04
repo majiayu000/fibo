@@ -96,6 +96,7 @@ pub fn permissions(provides: &[Kind]) -> Vec<&'static str> {
             Kind::Effects => "只挑选标记完成时播哪种动画，不运行任何东西",
             Kind::Setup => "装上、更新或打开时运行它的 setup 命令，停用或卸载时运行 teardown 撤回，可以改别的程序的设置",
             Kind::Quota => "读它指定的文件或定时运行它写的命令，取某个 Agent 的额度",
+            Kind::Themes => "只给设置 › 外观多几套主题，不运行任何东西",
         });
     }
     out

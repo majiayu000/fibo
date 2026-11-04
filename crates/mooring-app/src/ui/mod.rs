@@ -7,6 +7,7 @@ pub mod icons;
 pub mod palette;
 pub mod peek;
 pub mod pinned_ask;
+pub mod space_themes;
 pub mod status_colors;
 pub mod style;
 pub mod terminal_text;

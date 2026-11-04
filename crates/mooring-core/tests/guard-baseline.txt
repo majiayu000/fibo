@@ -2,6 +2,7 @@ field background	crates/mooring-app/src/model/session_state.rs	1
 field background	crates/mooring-app/src/terminal/pane.rs	3
 field background	crates/mooring-app/src/terminal/pane_overlays.rs	1
 field background	crates/mooring-app/src/terminal/screen.rs	3
+field background	crates/mooring-app/src/terminal/screen_extras.rs	1
 field background	crates/mooring-app/src/ui/theme.rs	1
 field background	crates/mooring-app/src/workbench/sidebar_list.rs	1
 field background	crates/mooring-host/src/host/mod.rs	2

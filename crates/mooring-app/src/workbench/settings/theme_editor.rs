@@ -145,13 +145,14 @@ impl SettingsView {
     pub(super) fn open_editor(&mut self, cx: &mut Context<Self>) {
         let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
         let light = chosen.shows_light(cx.window_appearance(), crate::ui::style::current(cx));
-        let Some(entry) = cx
-            .try_global::<Themes>()
-            .and_then(|themes| chosen.entry(themes, light))
-        else {
+        let shown = crate::ui::space_themes::shown(cx);
+        let Some(entry) = shown.or_else(|| {
+            cx.try_global::<Themes>()
+                .and_then(|themes| chosen.entry(themes, light))
+        }) else {
             return;
         };
-        let (draft, over) = (entry.as_file(), entry.file.as_ref().map(|f| f.0.clone()));
+        let (draft, over) = (entry.as_file(), entry.own_file());
         let picked = Tab::Base.items()[0];
         let start = picked.value(&draft);
         let name = cx.new(|cx| Field::new("主题名称", &draft.name, cx).compact());
@@ -252,6 +253,7 @@ impl SettingsView {
                 self.editor = None;
                 appearance::preview(None, cx);
                 themes::reload(cx);
+                crate::ui::space_themes::saved_as(&id, cx);
                 self.text_error = appearance::set_theme(&id, light, true, cx).err();
                 crate::set_menus(cx);
                 cx.notify();

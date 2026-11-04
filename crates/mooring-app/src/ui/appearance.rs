@@ -125,7 +125,9 @@ pub fn preview(file: Option<&ThemeFile>, cx: &mut App) {
 }
 /// Re-read the choice against the system appearance and repaint every window.
 pub fn apply(cx: &mut App) {
-    let wanted = cx.try_global::<Preview>().and_then(|p| p.0).or_else(|| {
+    let shown = |cx: &App| super::space_themes::shown(cx).map(|entry| entry.palette);
+    let draft = cx.try_global::<Preview>().and_then(|p| p.0);
+    let wanted = draft.or_else(|| shown(cx)).or_else(|| {
         let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
         let light = chosen.shows_light(cx.window_appearance(), super::style::current(cx));
         let themes = cx.try_global::<Themes>()?;

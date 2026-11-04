@@ -19,6 +19,8 @@ pub struct Entry {
     pub palette: Palette,
     /// The file and what it says; a built-in has none.
     pub file: Option<(PathBuf, ThemeFile)>,
+    /// From a plugin: 调整 starts a copy of it, as for a built-in.
+    pub read_only: bool,
 }
 impl Entry {
     pub fn light(&self) -> bool {
@@ -26,15 +28,26 @@ impl Entry {
     }
     /// What 调整 starts from: the theme itself, or a built-in as if written out.
     pub fn as_file(&self) -> ThemeFile {
-        self.file.as_ref().map_or_else(
-            || ThemeFile {
+        match &self.file {
+            Some((_, file)) if self.read_only => ThemeFile {
+                name: format!("{} 副本", self.name),
+                ..file.clone()
+            },
+            Some((_, file)) => file.clone(),
+            None => ThemeFile {
                 name: format!("{} 副本", self.name),
                 bg: self.palette.term.bg,
                 fg: self.palette.term.fg,
                 ..ThemeFile::default()
             },
-            |(_, file)| file.clone(),
-        )
+        }
+    }
+    /// The file 保存 writes over; none means a new one.
+    pub fn own_file(&self) -> Option<PathBuf> {
+        self.file
+            .as_ref()
+            .filter(|_| !self.read_only)
+            .map(|(path, _)| path.clone())
     }
 }
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -61,6 +74,7 @@ impl Themes {
                     name: scheme.label().to_owned(),
                     palette: Palette::of_scheme(scheme),
                     file: None,
+                    read_only: false,
                 })
                 .collect(),
             problems: vec![],
@@ -77,33 +91,57 @@ impl Themes {
         for path in paths {
             let stem = path.file_stem().unwrap_or_default().to_string_lossy();
             let id = format!("file:{stem}");
-            let shown = path.file_name().unwrap_or_default().to_string_lossy();
-            let parsed = std::fs::read_to_string(&path)
-                .map_err(|e| e.to_string())
-                .and_then(|text| ThemeFile::parse(&text, &stem));
-            match parsed {
-                Ok(mut file) => {
-                    file.problems.extend(Palette::unknown_keys(&file));
-                    if let Some(image) = &file.material.image
-                        && !super::backdrop::resolve(&image.path).is_file()
-                    {
-                        file.problems.push(format!("找不到背景图 {}", image.path));
-                    }
-                    if !file.problems.is_empty() {
-                        out.problems
-                            .push((shown.to_string(), file.problems.join("；")));
-                    }
-                    out.entries.push(Entry {
-                        id,
-                        name: file.name.clone(),
-                        palette: Palette::of_file(&file),
-                        file: Some((path.clone(), file)),
-                    });
-                }
-                Err(error) => out.problems.push((shown.to_string(), error)),
+            out.add(path.clone(), id, None);
+        }
+        for plugin in mooring_core::plugin::report()
+            .iter()
+            .filter_map(|found| found.result.as_ref().ok())
+        {
+            for path in plugin.files(mooring_core::plugin::Kind::Themes) {
+                let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+                let id = format!("plugin:{}/{stem}", plugin.id);
+                out.add(path.clone(), id, Some(&plugin.dir));
             }
         }
         out
+    }
+    /// One theme file. `plugin` is the folder of the plugin shipping it: its picture lives
+    /// there, and its file is not the user's to write over.
+    fn add(&mut self, path: PathBuf, id: String, plugin: Option<&Path>) {
+        let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+        let shown = path.file_name().unwrap_or_default().to_string_lossy();
+        let parsed = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|text| ThemeFile::parse(&text, &stem));
+        let mut file = match parsed {
+            Ok(file) => file,
+            Err(error) => {
+                self.problems.push((shown.to_string(), error));
+                return;
+            }
+        };
+        if let (Some(dir), Some(image)) = (plugin, file.material.image.as_mut())
+            && Path::new(&image.path).is_relative()
+        {
+            image.path = dir.join(&image.path).to_string_lossy().into_owned();
+        }
+        file.problems.extend(Palette::unknown_keys(&file));
+        if let Some(image) = &file.material.image
+            && !super::backdrop::resolve(&image.path).is_file()
+        {
+            file.problems.push(format!("找不到背景图 {}", image.path));
+        }
+        if !file.problems.is_empty() {
+            self.problems
+                .push((shown.to_string(), file.problems.join("；")));
+        }
+        self.entries.push(Entry {
+            id,
+            name: file.name.clone(),
+            palette: Palette::of_file(&file),
+            read_only: plugin.is_some(),
+            file: Some((path.clone(), file)),
+        });
     }
 }
 pub fn dir() -> Option<PathBuf> {

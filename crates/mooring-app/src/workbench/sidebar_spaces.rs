@@ -1,7 +1,95 @@
 //! 会话优先's space chips, which narrow the list below them to one space.
 use super::*;
 
+/// 「新空间」, or 「新空间 2」 and on when that name is taken.
+pub(super) fn new_space_name(spaces: &[Space]) -> String {
+    (1..)
+        .map(|i| match i {
+            1 => "新空间".to_owned(),
+            i => format!("新空间 {i}"),
+        })
+        .find(|name| !spaces.iter().any(|s| &s.name == name))
+        .unwrap_or_default()
+}
 impl Workbench {
+    pub(super) fn first_agent(&self) -> Agent {
+        self.tasks
+            .last_agent
+            .unwrap_or(self.workspace.settings.default_agent)
+    }
+    /// The window wears the current space's theme; asked on every render, and cheap.
+    pub(super) fn follow_space_theme(&self, cx: &mut Context<Self>) {
+        use crate::ui::space_themes;
+        if space_themes::needs_follow(&self.nav.space, cx) {
+            let space = self.nav.space.clone();
+            cx.defer(move |cx| space_themes::follow(&space, cx));
+        }
+    }
+    /// The space menu's 主题 row and, unfolded, every theme to give this space.
+    pub(super) fn space_theme_rows(&self, id: &str, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
+        use crate::ui::{
+            space_themes::{self, SpaceThemes},
+            themes::Themes,
+        };
+        let Some(spaces) = cx.try_global::<SpaceThemes>() else {
+            return vec![];
+        };
+        let Some(themes) = cx.try_global::<Themes>() else {
+            return vec![];
+        };
+        let on = spaces.of(id);
+        let named = on.and_then(|on| themes.get(on)).map(|e| e.name.as_str());
+        let mut rows = vec![
+            button(
+                "space-menu-theme",
+                format!(
+                    "主题：{} {}",
+                    named.unwrap_or("跟随外观"),
+                    if spaces.menu_open { "▾" } else { "▸" }
+                ),
+            )
+            .w_full()
+            .justify_start()
+            .border_0()
+            .on_click(cx.listener(|_, _, _, cx| {
+                space_themes::toggle_menu(cx);
+                cx.notify();
+            }))
+            .into_any_element(),
+        ];
+        if !spaces.menu_open {
+            return rows;
+        }
+        let choices = std::iter::once((None, "跟随外观".to_owned())).chain(
+            themes
+                .entries
+                .iter()
+                .map(|e| (Some(e.id.clone()), e.name.clone())),
+        );
+        for (i, (theme, name)) in choices.enumerate() {
+            let picked = theme.as_deref() == on;
+            let space = id.to_owned();
+            rows.push(
+                button(
+                    gpui::SharedString::from(format!("space-theme-{i}")),
+                    format!("{} {name}", if picked { "✓" } else { "　" }),
+                )
+                .w_full()
+                .justify_start()
+                .border_0()
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.layout.space_menu = None;
+                    space_themes::toggle_menu(cx);
+                    if let Err(error) = space_themes::set(&space, theme.as_deref(), cx) {
+                        eprintln!("mooring: {error}");
+                    }
+                    cx.notify();
+                }))
+                .into_any_element(),
+            );
+        }
+        rows
+    }
     pub(super) fn space_tiles(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         use crate::ui::theme::Flat as F;
         let mut out: Vec<gpui::AnyElement> = vec![];

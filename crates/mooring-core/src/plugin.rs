@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 /// The package format's major version; a plugin of another is refused, not guessed at.
 pub const API: u32 = 1;
 /// What this build's plugin support adds up to, raised whenever a kind or a manifest field
-/// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`. A plugin needing a
+/// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`, 3 `themes`. A plugin needing a
 /// higher level says so in `mooring`, and is refused with "update Mooring".
-pub const LEVEL: u32 = 2;
+pub const LEVEL: u32 = 3;
 
 /// What a plugin can extend. The file each kind reads is fixed, so a manifest only says
 /// which kinds it means to provide and a missing file is reported rather than ignored.
@@ -40,6 +40,8 @@ pub enum Kind {
     Setup,
     /// `quota.json`: where an Agent's usage limits are read (see `quota`).
     Quota,
+    /// `themes/*.json`: colors and material for the window, data only (see `theme`).
+    Themes,
 }
 impl Kind {
     /// The kind a manifest names, if this build knows it.
@@ -50,6 +52,7 @@ impl Kind {
     pub fn level(self) -> u32 {
         match self {
             Self::Setup | Self::Quota => 2,
+            Self::Themes => 3,
             _ => 1,
         }
     }
@@ -64,6 +67,7 @@ impl Kind {
             Self::Effects => "动效",
             Self::Setup => "安装步骤",
             Self::Quota => "额度",
+            Self::Themes => "主题",
         }
     }
     /// The files of this kind inside a plugin directory, in load order.
@@ -83,6 +87,18 @@ impl Kind {
                 if single.is_file() {
                     files.insert(0, single);
                 }
+                files
+            }
+            Self::Themes => {
+                let mut files: Vec<PathBuf> = std::fs::read_dir(dir.join("themes"))
+                    .map(|entries| {
+                        entries
+                            .filter_map(|e| e.ok().map(|e| e.path()))
+                            .filter(|p| p.extension().is_some_and(|e| e == "json"))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                files.sort();
                 files
             }
             Self::Actions => [dir.join("actions.json")]

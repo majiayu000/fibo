@@ -59,7 +59,7 @@ fn write_note(dir: &Path) -> io::Result<()> {
     std::fs::rename(temporary, path)
 }
 
-const KINDS: [Kind; 9] = [
+const KINDS: [Kind; 10] = [
     Kind::Agent,
     Kind::Actions,
     Kind::Rules,
@@ -69,6 +69,7 @@ const KINDS: [Kind; 9] = [
     Kind::Effects,
     Kind::Setup,
     Kind::Quota,
+    Kind::Themes,
 ];
 
 #[derive(serde::Serialize)]
@@ -390,6 +391,7 @@ fn load(kind: Kind, files: Vec<PathBuf>, home: &Path) -> Vec<File> {
         Kind::Effects => effect::load(files).1,
         Kind::Setup => setup::load(files),
         Kind::Quota => quota::load(files).1,
+        Kind::Themes => theme::load(files),
     };
     report
         .into_iter()
