@@ -350,7 +350,7 @@ pub(super) fn start(
             handle.update(cx, |v, _, a| v.visual_editor_tab(0, a)).unwrap();
             wait(300).await;
             let hsv = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
-            click(689., 222., cx);
+            click(689., 358., cx);
             wait(300).await;
             let moved = handle.update(cx, |v, _, a| v.visual_editor_hsv(a)).unwrap();
             assert_ne!(hsv[0], moved[0], "clicking the hue slider moves the hue");

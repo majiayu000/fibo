@@ -48,8 +48,9 @@ keycap	crates/mooring-app/src/workbench/diagnostics.rs	1
 keycap	crates/mooring-app/src/workbench/forms.rs	1
 keycap	crates/mooring-app/src/workbench/layout.rs	2
 keycap	crates/mooring-app/src/workbench/settings.rs	9
-keycap	crates/mooring-app/src/workbench/settings/plugins.rs	2
+keycap	crates/mooring-app/src/workbench/settings/plugins.rs	1
 keycap	crates/mooring-core/src/market.rs	1
+keycap	crates/mooring-core/src/plugin.rs	1
 word 做完了	crates/mooring-app/src/model/session_state.rs	1
 word 做完了	crates/mooring-app/src/remote_board_evidence.rs	2
 word 做完了	crates/mooring-app/src/workbench/board_drawer.rs	1
