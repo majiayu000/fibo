@@ -536,6 +536,87 @@
       ]
     },
     {
+      "id": "theme-glass",
+      "name": "主题：磨砂玻璃",
+      "version": "0.1.0",
+      "description": "一暗一亮两套半透明主题：窗口的底透出桌面并模糊，文字始终不透明",
+      "provides": [
+        "themes"
+      ],
+      "mooring": 3,
+      "files": [
+        {
+          "path": "plugin.json",
+          "sha256": "3bcec286128a0b56248c2b68731a9deeb33c9ef05ee3bfdaee179c82349f2d6f",
+          "size": 235
+        },
+        {
+          "path": "themes/glass-dark.json",
+          "sha256": "9ab663b51b96ccb95d6da2eec92bc4e32a3163b24f233acff13b3d5d4098b91d",
+          "size": 361
+        },
+        {
+          "path": "themes/glass-light.json",
+          "sha256": "763692ea5be15196dff8ac27276776cbdafd23bad17c69a9c4ad612e3f141ba8",
+          "size": 307
+        }
+      ]
+    },
+    {
+      "id": "theme-harbor",
+      "name": "主题：夜港",
+      "version": "0.1.0",
+      "description": "深蓝的夜，窗口底下是一片淡淡的港湾和月光。图片很淡，不抢终端的字",
+      "provides": [
+        "themes"
+      ],
+      "mooring": 3,
+      "files": [
+        {
+          "path": "images/harbor.png",
+          "sha256": "67d7aa087cba11c64a17e6e26aa4114e4fb6901f1d87cdc9a984a692b296ba5b",
+          "size": 76273
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "a2f02904c892337cb2abc5b6a2beec3a5091bbed85e6476eb0adcae5ab6c80e7",
+          "size": 267
+        },
+        {
+          "path": "themes/harbor.json",
+          "sha256": "87b31cc78f1c015c0381d0078352870f3286e679ca34f249179902ce346b5f80",
+          "size": 430
+        }
+      ]
+    },
+    {
+      "id": "theme-paper",
+      "name": "主题：旧纸",
+      "version": "0.1.0",
+      "description": "米黄的纸，带一点纤维的纹理，字是墨色。白天看久了不刺眼",
+      "provides": [
+        "themes"
+      ],
+      "mooring": 3,
+      "files": [
+        {
+          "path": "images/paper.png",
+          "sha256": "34e8241db4b7895de4e18fe639204c71e6b100b439e7e1a21b7764297089df1d",
+          "size": 45319
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "2149675d6ae4ec2f21f4229aa83c0d221e08c05e6880c6a29366d38a95c46cbf",
+          "size": 250
+        },
+        {
+          "path": "themes/paper.json",
+          "sha256": "68a9fc1938627053ce8aa60f97367da326dd7e649c687538a02ddfc10444b815",
+          "size": 373
+        }
+      ]
+    },
+    {
       "id": "theme-tide",
       "name": "主题：潮汐与晨雾",
       "version": "0.1.0",
