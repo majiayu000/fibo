@@ -178,7 +178,25 @@ export default function Chat() {
   const options = choices(waiting);
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
-  const toDiff = () => router.push({ pathname: '/diff', params: { machine, terminal } });
+  const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
+  // The hub's heartbeat redraws this screen; a row redraws only when its own message changes.
+  const renderItem = useCallback(
+    ({ item: l }: { item: Line }) =>
+      l.kind === 'msg' ? (
+        l.m.role === 'user' ? (
+          <Mine text={l.m.text} at={l.m.at} copyable />
+        ) : (
+          <Theirs m={l.m} agent={agent} onTools={l.m.tools?.files?.length ? toDiff : undefined} />
+        )
+      ) : l.kind === 'pending' ? (
+        <Mine text={l.p.text} note="发送中…" tone="pending" />
+      ) : (
+        <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
+          <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
+        </Pressable>
+      ),
+    [agent, toDiff],
+  );
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.bg }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
@@ -208,21 +226,10 @@ export default function Chat() {
           inverted
           data={rows}
           keyExtractor={(l) => (l.kind === 'msg' ? `m${l.m.seq}` : l.kind === 'pending' ? `p${l.p.at}${l.p.text}` : `u${l.id}`)}
-          renderItem={({ item: l }) =>
-            l.kind === 'msg' ? (
-              l.m.role === 'user' ? (
-                <Mine text={l.m.text} at={l.m.at} />
-              ) : (
-                <Theirs m={l.m} agent={agent} onTools={l.m.tools?.files?.length ? toDiff : undefined} />
-              )
-            ) : l.kind === 'pending' ? (
-              <Mine text={l.p.text} note="发送中…" tone="pending" />
-            ) : (
-              <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
-                <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
-              </Pressable>
-            )
-          }
+          renderItem={renderItem}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={9}
           onEndReached={older}
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
