@@ -71,7 +71,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 - `MOORING_BIN`、`MOORING_RUNTIME`：`mooring` 命令和它连的后台，插件里 `"$MOORING_BIN" list` 和在 Mooring 终端里一样能用。
 - `MOORING_OPTION_<KEY>`：插件的每个设置项（见下）。开关是 `1` / `0`。
 
-`PATH` 是登录 shell 里的（`node`、`gh` 这些找得到），每次启动问一次；问不到时只有系统目录。
+`PATH` 是登录 shell 里的（`node`、`gh` 这些找得到）：App 和后台各在跑第一条插件命令时开一个登录 shell 问一次（你的 `.zshrc` 因此多加载一次，约 1 秒，不卡界面），3 秒问不到就只有系统目录。
 
 ## 设置项（`plugin.json` 的 `options`）
 
