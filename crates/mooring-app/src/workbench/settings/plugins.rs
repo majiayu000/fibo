@@ -172,12 +172,12 @@ impl SettingsView {
             return None;
         }
         let e = &offer.entry;
-        let verb = if waiting.added.is_empty() {
-            "装上后它会"
+        let lead = if waiting.added.is_empty() {
+            "装上后它会："
         } else {
-            "这次更新"
+            ""
         };
-        let note = format!("{verb}：{}。确认吗？", waiting.lines().join("；"));
+        let note = format!("{lead}{}。确认吗？", waiting.lines().join("；"));
         let (name, version) = (e.name.clone(), e.version.clone());
         let controls = div()
             .flex()

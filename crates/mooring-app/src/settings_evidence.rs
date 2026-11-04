@@ -235,6 +235,70 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
+        // A plugin whose teardown fails can still be taken away, and one that does not load
+        // can be removed. MOORING_PLUGIN_CLICKS: 卸载 卡住的, 仍然卸载, 移除 broken.
+        if phase == "plugin-stuck" {
+            use mooring_core::plugin;
+            let clicks: Vec<(f32, f32)> = std::env::var("MOORING_PLUGIN_CLICKS").unwrap_or_default()
+                .split(';').filter_map(|p| p.split_once(',')).map(|(x, y)| (x.parse().unwrap(), y.parse().unwrap())).collect();
+            let at = |i: usize| clicks.get(i).copied();
+            handle.update(cx, |v, _, a| v.visual_settings_show("插件", a)).unwrap();
+            wait(400).await;
+            shot("stuck-start", cx);
+            let Some(remove) = at(0) else { eprintln!("settings plugin-stuck SHOTS"); cx.update(|a| a.quit()); return; };
+            click(remove.0, remove.1, cx); wait(1000).await;
+            assert!(plugin::installed("stuck").is_some(), "a failing teardown keeps it");
+            shot("stuck-refused", cx);
+            let Some(force) = at(1) else { eprintln!("settings plugin-stuck SHOTS"); cx.update(|a| a.quit()); return; };
+            click(force.0, force.1, cx); wait(1000).await;
+            assert!(plugin::installed("stuck").is_none(), "仍然卸载 takes it away");
+            shot("stuck-forced", cx);
+            let Some(broken) = at(2) else { eprintln!("settings plugin-stuck SHOTS"); cx.update(|a| a.quit()); return; };
+            click(broken.0, broken.1, cx); wait(1000).await;
+            assert!(!plugin::report().iter().any(|f| f.result.is_err()), "移除 takes the broken one away");
+            shot("stuck-broken-gone", cx);
+            eprintln!("settings plugin-stuck PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
+        // Every way to install asks before anything of the package runs: an animation plugin
+        // that also has a setup, from 完成动画, and an update that adds one, from 已安装.
+        // MOORING_PLUGIN_CLICKS: 安装 in 完成动画, 确认安装, 更新, 确认安装. MOORING_GUARD_MARK
+        // is the file the catalog's setups touch.
+        if phase == "plugin-guard" {
+            use mooring_core::plugin;
+            let clicks: Vec<(f32, f32)> = std::env::var("MOORING_PLUGIN_CLICKS").unwrap_or_default()
+                .split(';').filter_map(|p| p.split_once(',')).map(|(x, y)| (x.parse().unwrap(), y.parse().unwrap())).collect();
+            let at = |i: usize| clicks.get(i).copied();
+            let mark = std::path::PathBuf::from(std::env::var_os("MOORING_GUARD_MARK").expect("guard mark"));
+            handle.update(cx, |v, _, a| v.visual_settings_show("插件", a)).unwrap();
+            wait(400).await;
+            shot("guard-start", cx);
+            let Some(install) = at(0) else { eprintln!("settings plugin-guard SHOTS"); cx.update(|a| a.quit()); return; };
+            click(install.0, install.1, cx); wait(1000).await;
+            assert!(plugin::installed("anim-setup").is_none(), "完成动画's 安装 asks first");
+            assert!(!mark.exists(), "nothing of it ran");
+            shot("guard-animation-asks", cx);
+            let Some(confirm) = at(1) else { eprintln!("settings plugin-guard SHOTS"); cx.update(|a| a.quit()); return; };
+            click(confirm.0, confirm.1, cx); wait(1500).await;
+            assert!(plugin::installed("anim-setup").is_some());
+            assert!(mark.exists(), "confirmed, its setup ran");
+            std::fs::remove_file(&mark).unwrap();
+            shot("guard-animation-installed", cx);
+            let Some(update) = at(2) else { eprintln!("settings plugin-guard SHOTS"); cx.update(|a| a.quit()); return; };
+            click(update.0, update.1, cx); wait(1000).await;
+            assert_eq!(plugin::installed("up").unwrap().version.as_deref(), Some("1.0.0"), "更新 asks first");
+            assert!(!mark.exists(), "nothing of the update ran");
+            shot("guard-update-asks", cx);
+            let Some(confirm) = at(3) else { eprintln!("settings plugin-guard SHOTS"); cx.update(|a| a.quit()); return; };
+            click(confirm.0, confirm.1, cx); wait(1500).await;
+            assert_eq!(plugin::installed("up").unwrap().version.as_deref(), Some("2.0.0"));
+            assert!(mark.exists(), "confirmed, the update's setup ran");
+            shot("guard-update-done", cx);
+            eprintln!("settings plugin-guard PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         // 插件: install from the catalog with real clicks, confirm one that runs commands,
         // switch one of its actions off, uninstall, then pick a plugin's animation preset.
         // MOORING_PLUGIN_CLICKS="x,y;…" in panel points, in this order: 安装 落印 (in

@@ -387,12 +387,9 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
 /// What a forced removal leaves: why teardown failed and what it says it had changed.
 fn left_behind(why: &str, touches: &[String]) -> String {
     if touches.is_empty() {
-        format!("teardown 失败了（{why}），它改过的东西可能还在")
+        format!("{why}，它改过的东西可能还在")
     } else {
-        format!(
-            "teardown 失败了（{why}），这些文件可能还留着它的改动：{}",
-            touches.join("、")
-        )
+        format!("{why}，这些文件可能还留着它的改动：{}", touches.join("、"))
     }
 }
 
