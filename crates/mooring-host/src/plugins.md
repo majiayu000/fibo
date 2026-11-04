@@ -183,6 +183,20 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 
 - `style`：`seal`（印章，默认）、`stamp`（落印）、`sweep`（扫光合上）、`dissolve`（化进侧栏）、`fade`（只淡出），以及从 `-_-` 变笑脸的 `relief`（松口气）、`wake`（睡醒了）、`sunrise`（小太阳）、`heart`（比心）、`cat`（小猫）、`tea`（一杯热茶）、`hop`（蹦回家），还有拿终端的字和窗格做文章的 `moor`（靠岸）、`gravity`（字往下掉）、`swirl`（漩涡）、`backspace`（退格收工）、`crt`（老显示器关机）、`confetti`（彩纸）。
 - `duration_ms` 在 600–4000 之间；`land`：`sidebar`（落到侧栏那一行）或 `none`。
+- 脸的动画（`relief` `wake` `sunrise` `heart` `cat` `tea` `hop`）可以带自己的帧，场景不变，只换脸：
+
+  ```json
+  {"api": 1, "complete": {"style": "tea", "duration_ms": 3000, "land": "sidebar", "face": {
+    "open": "c[", "close": "]",
+    "frames": [
+      {"left": "=", "mouth": "_", "right": "=", "ms": 900},
+      {"left": "^", "mouth": "—", "right": "^", "ms": 300, "scramble": true},
+      {"left": "-", "mouth": "—", "right": "-", "ms": 90},
+      {"left": "^", "mouth": "—", "right": "^", "ms": 300}
+    ]}}}
+  ```
+
+  每帧显示成 `外框左 + 左眼 + 空格 + 嘴 + 空格 + 右眼 + 外框右`，所有帧字符数要一样（不然脸会抖），最多 24 帧、每帧 24 个字符。`ms` 是这帧停多久（20–3000），最后一帧停到脸离开；最后一帧之前的加起来不超过 `duration_ms` 的 80%。最后一帧的样子第一次出现时，场景变开心（变暖、跳一下）。`scramble` 表示这帧先闪一小段乱码，再从左到右落定。设置 › 插件 › 完成动画 ›「自己画一个」就是写这个文件，存到 `plugins/my-face-<n>/`。
 - 装上或打开动画插件就换成它的动画，在 设置 › 插件 › 完成动画 里能换回；卸载或停用正在播的那个退回印章。系统开了「减弱动态效果」时一律只淡出。
 
 ## setup：装上时改别的程序，卸载时改回来（`setup.json`）

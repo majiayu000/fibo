@@ -89,7 +89,7 @@
     {
       "id": "complete-cat",
       "name": "完成动画：小猫",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "字符小猫 =- . -= 一只只睁开眼，变成 =^ . ^=，招招手，留下一串 :. 走进侧栏",
       "provides": [
         "effects"
@@ -97,12 +97,12 @@
       "files": [
         {
           "path": "effects.json",
-          "sha256": "70cf8bdd94bf8e1e55dec2f59f4694fc428db9b2d3fa35547cfff6062d736390",
+          "sha256": "38db440e50e3a0e9c8c1c9b88cd754b8a25064401048bee2f1718199f920f840",
           "size": 89
         },
         {
           "path": "plugin.json",
-          "sha256": "715244a594edce1d0abd4738028a09d64ee5c2cd216944a6dcfe9eccbf9d0872",
+          "sha256": "97d721678ab09d835e0cbb1159db983d30c3f100882a40abd97c8852b58ed2b4",
           "size": 243
         }
       ]
@@ -194,7 +194,7 @@
     {
       "id": "complete-heart",
       "name": "完成动画：比心",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "一个 <3 飘向字符 - _ -，它变成 ^ — ^，更多 <3 往上飘",
       "provides": [
         "effects"
@@ -207,7 +207,7 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "5041d5fa20d1fa31aa325df764c222bab76d0955692c04d47812522389229b0e",
+          "sha256": "04054686f32b6c089f52b1148dac3e0e71551d4e4a2be849afd80a6c53ea6718",
           "size": 216
         }
       ]
@@ -215,7 +215,7 @@
     {
       "id": "complete-hop",
       "name": "完成动画：蹦回家",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "字符 - _ - 很快变成 ^ — ^，一蹦一跳一路蹦回侧栏那一行",
       "provides": [
         "effects"
@@ -228,7 +228,7 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "5ae8754a4b4928dd76e78cbc65632e9495076a3493f664baca65f62254263c7b",
+          "sha256": "e7628478365011732a55cb074a48cc857001cd817c989cad33f0c761b66f1607",
           "size": 222
         }
       ]
@@ -257,7 +257,7 @@
     {
       "id": "complete-relief",
       "name": "完成动画：松口气",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "字符 - _ - 冒汗、深吸一口气、呼出一串 ~，变成 ^ — ^，说一声辛苦啦",
       "provides": [
         "effects"
@@ -270,7 +270,7 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "b703d2e5396745d8786d6031598b1debb333a5fc0704c3a2106f831931d47d1d",
+          "sha256": "73b2f36d1bc71d34d6004da396c0846597d780bcef8d52031db9913d09a3b805",
           "size": 242
         }
       ]
@@ -299,7 +299,7 @@
     {
       "id": "complete-sunrise",
       "name": "完成动画：小太阳",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "字符 - _ - 从一排 ____ 后面升起，天色变暖，\\ | / 光芒散开时变成 ^ — ^",
       "provides": [
         "effects"
@@ -307,12 +307,12 @@
       "files": [
         {
           "path": "effects.json",
-          "sha256": "600afc630edca144478c2dce1238745f4033f1ee66d3b309ff16aef12c9d76be",
+          "sha256": "6d4fee558a97b30f33daf885ed8b45bf5d3fd3ac6211f69b9f3c2f7b0336e800",
           "size": 93
         },
         {
           "path": "plugin.json",
-          "sha256": "9bb5762ded1c65ba5c611dc166f64cd61d38c8e309bffa053368a1b0d5643c7e",
+          "sha256": "b8c7236972329477cc481920a68bdc2d71924875c233d6804056e091f6d6f045",
           "size": 245
         }
       ]
@@ -362,7 +362,7 @@
     {
       "id": "complete-tea",
       "name": "完成动画：一杯热茶",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "字符茶杯 c[- _ -] 冒着 ~ 热气，暖了变成 c[^ — ^]，头顶冒出 <3",
       "provides": [
         "effects"
@@ -370,12 +370,12 @@
       "files": [
         {
           "path": "effects.json",
-          "sha256": "7c4984ce29a1af9d13d6544368a9f75df11806560e567a26dd9d503abcb1434b",
+          "sha256": "88772b6e1c40bf9c210702a82f0845c3a7be225fa871a3cd0a7ba7a6759ecef4",
           "size": 89
         },
         {
           "path": "plugin.json",
-          "sha256": "506fe62db5119c1b8e413a7f382ebf587a2be58769692deb762f72668ddf51f4",
+          "sha256": "f428f6e9adb713d6ccb948717447a07dd66ed115acf9a7c926dd43611e821459",
           "size": 231
         }
       ]
@@ -383,21 +383,21 @@
     {
       "id": "complete-wake",
       "name": "完成动画：睡醒了",
-      "version": "0.1.0",
-      "description": "字符 - _ - 打瞌睡冒 z，先睁一只眼 - _ o，再睁另一只 o _ o，眨一下变成 ^ — ^",
+      "version": "0.2.0",
+      "description": "字符脸 = _ = 冒着 z 打瞌睡，睁一只眼，眨一下，一阵乱码后变成 ^ — ^",
       "provides": [
         "effects"
       ],
       "files": [
         {
           "path": "effects.json",
-          "sha256": "172544829e91ce9c5025fbe537b7882798da6ec8bbe57360efbf79d47c519b18",
+          "sha256": "d127db64c63ab6e5574703a3b087b812a319a8880cc94c7b0c66302f4f7b7c7e",
           "size": 90
         },
         {
           "path": "plugin.json",
-          "sha256": "81da71bc1d76d829db6a67215f2c330116b1b24f610986f5f140a4529fc72d81",
-          "size": 249
+          "sha256": "e628c033720ef116ea00c1bcabb3dd7accd50d135762c6a274867fbc451ca224",
+          "size": 241
         }
       ]
     },

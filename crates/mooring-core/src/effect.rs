@@ -12,7 +12,10 @@
 //! ```json
 //! {"api": 1, "complete": {"style": "stamp", "duration_ms": 2400, "land": "sidebar"}}
 //! ```
+//!
+//! A face style may carry its own frames under `face` (`crate::face`).
 use crate::agent::Loaded;
+use crate::face::{Script, Sheet};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -91,6 +94,16 @@ impl Style {
         Self::Crt,
         Self::Confetti,
     ];
+    /// The styles that play a face (`crate::face`), which a plugin may draw itself.
+    pub const FACES: [Self; 7] = [
+        Self::Relief,
+        Self::Wake,
+        Self::Sunrise,
+        Self::Heart,
+        Self::Cat,
+        Self::Tea,
+        Self::Hop,
+    ];
     /// The name `effects.json` and the settings file write.
     pub fn name(self) -> &'static str {
         match self {
@@ -160,9 +173,15 @@ impl Style {
             Self::Crt => 2_000,
             Self::Dissolve | Self::Swirl | Self::Backspace | Self::Confetti => 2_800,
             Self::Fade => 600,
-            Self::Relief | Self::Heart | Self::Hop | Self::Moor | Self::Gravity => 3_000,
-            Self::Sunrise | Self::Cat => 3_200,
-            Self::Wake | Self::Tea => 3_400,
+            Self::Relief
+            | Self::Wake
+            | Self::Sunrise
+            | Self::Heart
+            | Self::Cat
+            | Self::Tea
+            | Self::Hop
+            | Self::Moor
+            | Self::Gravity => 3_000,
         }
     }
     /// Whether the style ends by flying into the session's sidebar row unless told not to.
@@ -187,6 +206,8 @@ pub struct Complete {
     pub duration: Duration,
     /// Whether it ends in the sidebar; the dissolve's specks always head there.
     pub land: bool,
+    /// The frames a plugin drew for a face style, in place of the style's own.
+    pub face: Option<&'static Script>,
 }
 impl Default for Complete {
     fn default() -> Self {
@@ -199,7 +220,15 @@ impl Complete {
             style,
             duration: Duration::from_millis(style.default_ms()),
             land: style.lands_by_default(),
+            face: None,
         }
+    }
+    /// The frames it plays, for a face style: its plugin's, else the style's own.
+    pub fn drawn_sheet(&self) -> Sheet {
+        self.face.map_or_else(
+            || crate::face::builtin_sheet(self.style),
+            |f| f.sheet().clone(),
+        )
     }
     /// What actually plays: reduced motion turns every style into the short fade.
     pub fn played(self, reduce_motion: bool) -> Self {
@@ -226,6 +255,8 @@ struct CompleteFile {
     duration_ms: Option<u64>,
     #[serde(default)]
     land: Option<Land>,
+    #[serde(default)]
+    face: Option<Sheet>,
 }
 
 fn read(file: &Path) -> Result<Option<Complete>, String> {
@@ -243,9 +274,20 @@ fn read(file: &Path) -> Result<Option<Complete>, String> {
             "duration_ms 要在 {MIN_MS}–{MAX_MS} 之间，写的是 {ms}"
         ));
     }
+    let face = match c.face {
+        Some(_) if !Style::FACES.contains(&c.style) => {
+            return Err(format!(
+                "face 只能配脸的动画，「{}」没有脸",
+                c.style.label()
+            ));
+        }
+        Some(sheet) => Some(crate::face::intern(Script::build(sheet, ms as u32)?)),
+        None => None,
+    };
     Ok(Some(Complete {
         style: c.style,
         duration: Duration::from_millis(ms),
+        face,
         land: match c.land {
             Some(l) => l == Land::Sidebar,
             None => c.style.lands_by_default(),
@@ -549,6 +591,7 @@ mod tests {
                 style: Style::Sweep,
                 duration: Duration::from_millis(3_000),
                 land: false,
+                face: None,
             },
         };
         let presets = [tuned.clone()];

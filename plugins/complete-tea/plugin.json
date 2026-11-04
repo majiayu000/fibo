@@ -2,7 +2,7 @@
   "api": 1,
   "id": "complete-tea",
   "name": "完成动画：一杯热茶",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "字符茶杯 c[- _ -] 冒着 ~ 热气，暖了变成 c[^ — ^]，头顶冒出 <3",
   "provides": ["effects"]
 }

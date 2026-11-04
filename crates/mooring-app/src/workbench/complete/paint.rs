@@ -23,6 +23,8 @@ pub(super) struct Painter<'a> {
     pub(super) cx: &'a mut gpui::App,
     /// The terminal's font, for the faces written in characters.
     pub(super) mono: gpui::Font,
+    /// The frames a plugin drew, in place of the face style's own.
+    pub(super) face: Option<&'static mooring_core::face::Script>,
     /// Where text stays, when it must not go past something.
     pub(super) clip: Option<Bounds<Pixels>>,
     pub(super) paths: usize,

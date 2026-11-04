@@ -1,6 +1,9 @@
 //! Isolated native settings acceptance. Uses GPUI event dispatch and real PNG output.
 use super::*;
 
+#[path = "settings_evidence/faces.rs"]
+mod faces;
+
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
     evidence: Option<PathBuf>,
@@ -626,6 +629,10 @@ pub(super) fn start(
             shot("plugins-look-picked", cx);
             eprintln!("settings plugins PASS");
             cx.update(|a| a.quit());
+            return;
+        }
+        if phase == "faces" {
+            faces::run(handle, &directory, cx).await;
             return;
         }
         // 标记完成动画: 外观's row shows what plays and 换一个 turns to 插件, where 只淡出 is

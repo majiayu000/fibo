@@ -3,7 +3,9 @@
 //! and what happens around it is characters too. Text sizes stay few on purpose, since
 //! every new size is a new shape and new glyphs in the atlas.
 use super::*;
+use mooring_core::face::Script;
 use std::f32::consts::{PI, TAU};
+use std::sync::Arc;
 
 /// The face's font size in a pane big enough for it, and for what is around it.
 const FACE_SIZE: f32 = 56.;
@@ -17,62 +19,17 @@ const FACE_LIFT: f32 = 40.;
 const SHRINK_STEPS: [f32; 5] = [1., 0.76, 0.56, 0.4, 0.28];
 /// A row of the sunrise's horizon, cut to the pane.
 const HORIZON: &str = "________________________________________________________________";
+/// Once it smiles it floats, this much of its size up and down, this many times in a run.
+const FLOAT_RISE: f32 = 0.05;
+const FLOAT_CYCLES: f32 = 3.;
 /// Characters a twinkle goes through.
 const TWINKLE: [&str; 5] = [".", "+", "*", "+", "."];
-
-/// When each face comes on, in order. The first is the tired one; the first with both
-/// eyes up is the moment it turns happy.
-fn beats(style: Style) -> &'static [(f32, &'static str)] {
-    match style {
-        Style::Relief => &[
-            (0., " - _ - "),
-            (0.14, " - _ -;"),
-            (0.26, " - . -;"),
-            (0.34, " - o - "),
-            (0.44, " - _ - "),
-            (0.48, " ^ _ - "),
-            (0.52, " ^ — ^ "),
-        ],
-        Style::Wake => &[
-            (0., "- _ -"),
-            (0.4, "- _ o"),
-            (0.48, "o _ o"),
-            (0.54, "- _ -"),
-            (0.57, "o _ o"),
-            (0.62, "^ — ^"),
-        ],
-        Style::Sunrise => &[(0., "- _ -"), (0.42, "^ _ -"), (0.47, "^ — ^")],
-        Style::Heart => &[(0., "- _ -"), (0.36, "o _ o"), (0.42, "^ — ^")],
-        Style::Cat => &[
-            (0., "=- . -="),
-            (0.26, "=^ . -="),
-            (0.33, "=- . ^="),
-            (0.4, "=- . -="),
-            (0.46, "=^ . ^="),
-        ],
-        Style::Tea => &[(0., "c[- _ -]"), (0.46, "c[^ _ -]"), (0.5, "c[^ — ^]")],
-        _ => &[(0., "- _ -"), (0.14, "^ _ -"), (0.18, "^ — ^")],
-    }
-}
-/// The face showing at `t`.
-fn face_at(style: Style, t: f32) -> &'static str {
-    beats(style)
-        .iter()
-        .rev()
-        .find(|(from, _)| *from <= t)
-        .map_or("", |(_, face)| face)
-}
-/// When the face has both eyes up.
-fn turn(style: Style) -> f32 {
-    beats(style)
-        .iter()
-        .find(|(_, face)| face.matches('^').count() == 2)
-        .map_or(0., |(from, _)| *from)
-}
 
 /// One frame of a scene.
 struct Scene {
     style: Style,
+    /// The frames: a plugin's, else the style's own.
+    script: &'static Script,
     t: f32,
     center: Point<Pixels>,
     /// The face's size and the size of what is around it.
@@ -148,8 +105,12 @@ impl Painter<'_> {
     ) {
         let short = f32::from(body.size.width.min(body.size.height));
         let s = (short / FULL_SIZE_SIDE).clamp(MIN_SCALE, 1.);
+        let Some(script) = self.face.or_else(|| Script::builtin(style)) else {
+            return;
+        };
         let scene = Scene {
             style,
+            script,
             t,
             center: point(body.center().x, body.center().y - px(FACE_LIFT * s)),
             size: (FACE_SIZE * s).round(),
@@ -169,7 +130,7 @@ impl Painter<'_> {
     }
     /// The face's color: the plain text color, warm from the moment it smiles.
     fn tint(&self, sc: &Scene) -> Hsla {
-        if sc.t >= turn(sc.style) {
+        if sc.t >= sc.script.smiles_at() {
             self.warm
         } else {
             self.ink
@@ -178,7 +139,7 @@ impl Painter<'_> {
     /// The face in its place, or on its way to the sidebar row, where it shrinks by steps
     /// and turns green; with no row in sight it stays and fades with the pane. `lift`
     /// moves it up, only while it has not left.
-    fn face(&mut self, sc: &Scene, text: &'static str, lift: f32) {
+    fn face(&mut self, sc: &Scene, text: Arc<str>, lift: f32) {
         let tm = timing(sc.style);
         let k = sl(sc.t, tm.fade.0, tm.land);
         let shown = sl(sc.t, 0.05, 0.09);
@@ -205,8 +166,16 @@ impl Painter<'_> {
     }
     /// A jump when the smile arrives.
     fn joy(&self, sc: &Scene) -> f32 {
-        let from = turn(sc.style);
+        let from = sc.script.smiles_at();
         bounce(sl(sc.t, from, from + 0.2), 2.) * sc.size * 0.6
+    }
+    /// Floating gently between the smile and leaving, in whole pixels so that it adds no
+    /// new glyph positions.
+    fn float(&self, sc: &Scene) -> f32 {
+        let from = sc.script.smiles_at() + 0.1;
+        let leaves = timing(sc.style).fade.0;
+        let k = sl(sc.t, from, from + 0.06) * (1. - sl(sc.t, leaves - 0.06, leaves));
+        ((sc.t * FLOAT_CYCLES * TAU).sin() * sc.size * FLOAT_RISE * k).round()
     }
     /// Stars twinkling over and beside the face as `k` goes from 0 to 1; below it are the
     /// words.
@@ -244,9 +213,9 @@ impl Painter<'_> {
                 self.text(at, "~", sc.side, self.soft.opacity(1. - k));
             }
         }
-        let lift = self.joy(sc);
-        self.face(sc, face_at(sc.style, t), lift);
-        let from = turn(sc.style);
+        let lift = self.joy(sc) + self.float(sc);
+        self.face(sc, sc.script.at(t), lift);
+        let from = sc.script.smiles_at();
         self.twinkles(sc, sl(t, from + 0.02, from + 0.26), 11);
     }
 
@@ -265,9 +234,9 @@ impl Painter<'_> {
             }
         }
         let startled = bounce(sl(t, 0.4, 0.48), 1.) * sc.size * 0.3;
-        let lift = startled + self.joy(sc);
-        self.face(sc, face_at(sc.style, t), lift);
-        let from = turn(sc.style);
+        let lift = startled + self.joy(sc) + self.float(sc);
+        self.face(sc, sc.script.at(t), lift);
+        let from = sc.script.smiles_at();
         self.twinkles(sc, sl(t, from + 0.02, from + 0.22), 23);
     }
 
@@ -305,7 +274,7 @@ impl Painter<'_> {
         let rise = eio(sl(t, 0.08, 0.46));
         let leaving = t >= tm.fade.0;
         self.clip = (!leaving).then_some(above);
-        let rays = eo(sl(t, turn(sc.style), turn(sc.style) + 0.12)) * shown;
+        let rays = eo(sl(t, sc.script.smiles_at(), sc.script.smiles_at() + 0.12)) * shown;
         if rays > 0. {
             for (i, ray) in ["-", "\\", "|", "/", "-", "\\", "|", "/"]
                 .iter()
@@ -321,7 +290,7 @@ impl Painter<'_> {
             }
         }
         let below = lerp(sc.size * 2., 0., rise);
-        self.face(sc, face_at(sc.style, t), -below);
+        self.face(sc, sc.script.at(t), self.float(sc) - below);
         self.clip = None;
     }
 
@@ -351,8 +320,8 @@ impl Painter<'_> {
                 self.text(at, "<3", sc.side, self.rose.opacity(a));
             }
         }
-        let lift = self.joy(sc);
-        self.face(sc, face_at(sc.style, t), lift);
+        let lift = self.joy(sc) + self.float(sc);
+        self.face(sc, sc.script.at(t), lift);
     }
 
     /// `=- . -=` opens one eye and the other, smiles, waves, and leaves prints on its way.
@@ -373,7 +342,8 @@ impl Painter<'_> {
                 }
             }
         }
-        let wave = sl(t, turn(sc.style) + 0.06, turn(sc.style) + 0.1) * self.around(sc);
+        let wave =
+            sl(t, sc.script.smiles_at() + 0.06, sc.script.smiles_at() + 0.1) * self.around(sc);
         if wave > 0. {
             let paw = if ((t * 16.) as u32).is_multiple_of(2) {
                 "/"
@@ -386,8 +356,8 @@ impl Painter<'_> {
             );
             self.text(at, paw, sc.size, self.warm.opacity(wave));
         }
-        let lift = self.joy(sc);
-        self.face(sc, face_at(sc.style, t), lift);
+        let lift = self.joy(sc) + self.float(sc);
+        self.face(sc, sc.script.at(t), lift);
     }
 
     /// `c[- _ -]` on its saucer with `~` rising; it warms up and a `<3` comes over the steam.
@@ -408,7 +378,12 @@ impl Painter<'_> {
             };
             self.text(at, row, sc.side, self.soft.opacity(steam));
         }
-        let heart = back_out(sl(t, turn(sc.style) + 0.04, turn(sc.style) + 0.12)).clamp(0., 1.);
+        let heart = back_out(sl(
+            t,
+            sc.script.smiles_at() + 0.04,
+            sc.script.smiles_at() + 0.12,
+        ))
+        .clamp(0., 1.);
         self.text(
             point(
                 sc.center.x,
@@ -424,7 +399,7 @@ impl Painter<'_> {
             sc.side,
             self.soft.opacity(shown),
         );
-        self.face(sc, face_at(sc.style, t), 0.);
+        self.face(sc, sc.script.at(t), 0.);
     }
 
     /// Cheers up and hops all the way to its sidebar row, kicking up dots.
@@ -468,7 +443,7 @@ impl Painter<'_> {
         let at = point(ground.x, ground.y - px(high + self.joy(sc)));
         self.text(
             at,
-            face_at(sc.style, t),
+            sc.script.at(t),
             shrunk(sc.size, along),
             color.opacity(shown),
         );
@@ -480,56 +455,30 @@ impl Painter<'_> {
 mod tests {
     use super::*;
 
-    const FACES: [Style; 7] = [
-        Style::Relief,
-        Style::Wake,
-        Style::Sunrise,
-        Style::Heart,
-        Style::Cat,
-        Style::Tea,
-        Style::Hop,
-    ];
-
     #[test]
-    fn every_face_starts_tired_and_is_smiling_before_the_words_leave() {
-        for style in FACES {
-            let start = face_at(style, 0.);
-            assert_eq!(
-                start.matches('-').count(),
-                2,
-                "{style:?} starts as - -: {start}"
-            );
-            assert!(!start.contains('^'), "{style:?} starts tired: {start}");
+    fn every_face_is_smiling_before_it_leaves() {
+        for style in Style::FACES {
+            let script = Script::builtin(style).unwrap();
             let tm = timing(style);
-            let later = face_at(style, tm.fade.0);
-            assert_eq!(later.matches('^').count(), 2, "{style:?} ends ^ ^: {later}");
-            assert!(turn(style) <= tm.words.1, "{style:?} smiles by the words");
+            let later = script.at(tm.fade.0);
+            assert_eq!(
+                later.matches('^').count(),
+                2,
+                "{style:?} leaves ^ ^: {later}"
+            );
+            assert!(
+                script.smiles_at() <= tm.words.1,
+                "{style:?} smiles by the words"
+            );
             assert!(
                 tm.fade.1 <= tm.land + 1e-5,
                 "{style:?} lands after the fade"
             );
-            assert!(style.greeting().is_some(), "{style:?} says something warm");
-        }
-    }
-
-    #[test]
-    fn a_face_keeps_its_width_so_it_does_not_jitter() {
-        for style in FACES {
-            let width = beats(style)[0].1.chars().count();
-            for (from, face) in beats(style) {
-                assert_eq!(face.chars().count(), width, "{style:?} at {from}: {face}");
-            }
             assert!(
-                beats(style).windows(2).all(|b| b[0].0 < b[1].0),
-                "{style:?} in order"
+                mooring_core::face::MAX_SHARE <= tm.land,
+                "{style:?}: a drawing's frames all show before it lands"
             );
         }
-    }
-
-    #[test]
-    fn waking_opens_one_eye_before_the_other() {
-        assert_eq!(face_at(Style::Wake, 0.44), "- _ o");
-        assert_eq!(face_at(Style::Wake, 0.5), "o _ o");
     }
 
     #[test]

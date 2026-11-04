@@ -2,7 +2,7 @@
   "api": 1,
   "id": "complete-heart",
   "name": "完成动画：比心",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "一个 <3 飘向字符 - _ -，它变成 ^ — ^，更多 <3 往上飘",
   "provides": ["effects"]
 }

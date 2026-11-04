@@ -2,7 +2,7 @@
   "api": 1,
   "id": "complete-wake",
   "name": "完成动画：睡醒了",
-  "version": "0.1.0",
-  "description": "字符 - _ - 打瞌睡冒 z，先睁一只眼 - _ o，再睁另一只 o _ o，眨一下变成 ^ — ^",
+  "version": "0.2.0",
+  "description": "字符脸 = _ = 冒着 z 打瞌睡，睁一只眼，眨一下，一阵乱码后变成 ^ — ^",
   "provides": ["effects"]
 }

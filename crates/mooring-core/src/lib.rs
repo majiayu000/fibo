@@ -3,6 +3,7 @@ pub mod agent;
 pub mod decoration;
 pub mod delivery;
 pub mod effect;
+pub mod face;
 pub mod hook;
 pub mod layout;
 pub mod legacy;

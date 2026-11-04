@@ -1849,7 +1849,6 @@ impl Render for SettingsView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let searching = !self.query(cx).is_empty();
         let body = self.body(cx);
-        let query_focused = self.query.clone();
         let (title, description) = if searching {
             ("搜索结果", "在所有分类中查找。")
         } else {
@@ -1886,8 +1885,9 @@ impl Render for SettingsView {
                         cx.emit(SettingsAction::Close);
                         cx.stop_propagation();
                         window.prevent_default();
-                    } else if !query_focused.focus_handle(cx).is_focused(window) {
-                        // Settings never forward a shortcut to a terminal behind the panel.
+                    } else if this.focus.is_focused(window) {
+                        // Settings never forward a shortcut to a terminal behind the panel;
+                        // a field holding the focus gets its keys.
                         cx.stop_propagation();
                     }
                 }),

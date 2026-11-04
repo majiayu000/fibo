@@ -1,4 +1,4 @@
 {
   "api": 1,
-  "complete": { "style": "wake", "duration_ms": 3400, "land": "sidebar" }
+  "complete": { "style": "wake", "duration_ms": 3000, "land": "sidebar" }
 }

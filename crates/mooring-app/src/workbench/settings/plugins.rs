@@ -8,6 +8,7 @@ use mooring_core::market::{self, Offer};
 use mooring_core::plugin::{self, Kind};
 
 mod actions;
+mod face_editor;
 
 /// The catalog as the page last read it.
 #[derive(Default)]
@@ -28,6 +29,8 @@ pub(in crate::workbench) struct Market {
     /// A plugin that would not go because its teardown failed: (id, name, whether removing
     /// or only turning off). You may overrule that; it may have left something behind.
     stuck: Option<(String, String, bool)>,
+    /// 自己画一个, while open.
+    face: Option<face_editor::FaceEditor>,
     /// A plugin setting being typed: plugin id, key, the field and its Enter/Esc events.
     editing: Option<(
         String,
@@ -274,6 +277,7 @@ impl SettingsView {
             )
         }));
         let mut rows = Vec::new();
+        rows.push(self.face_card(cx));
         for (title, note, choice, complete) in choices {
             let on = choice == playing;
             let key = choice.name().replace(':', "-");
@@ -287,6 +291,7 @@ impl SettingsView {
                 );
             }
             controls = controls.child(try_button(&key, complete, cx));
+            controls = controls.children(self.face_edit_button(&choice, &title, complete, cx));
             if !on {
                 controls =
                     controls.child(secondary(format!("complete-use-{key}"), "用这个").on_click(

@@ -2,7 +2,7 @@
   "api": 1,
   "id": "complete-relief",
   "name": "完成动画：松口气",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "字符 - _ - 冒汗、深吸一口气、呼出一串 ~，变成 ^ — ^，说一声辛苦啦",
   "provides": ["effects"]
 }

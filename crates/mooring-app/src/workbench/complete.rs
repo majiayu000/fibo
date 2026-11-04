@@ -657,6 +657,7 @@ impl Workbench {
                             window,
                             cx,
                             mono: mono.clone(),
+                            face: f.effect.face,
                             clip: None,
                             paths: 0,
                             quads: 0,
