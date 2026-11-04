@@ -67,20 +67,6 @@ fn short_name(name: &str) -> String {
     name.strip_prefix("完成动画：").unwrap_or(name).to_owned()
 }
 
-/// Where a kind's choices live once installed.
-fn where_to_find(kind: Kind) -> Option<&'static str> {
-    match kind {
-        Kind::Effects => Some("装上或打开就换成它，在上面「完成动画」里能换回"),
-        Kind::Sidebar => Some("在左栏顶部切换排法"),
-        Kind::Actions => Some("在窗格右键菜单和 ⌘P 里"),
-        Kind::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
-        Kind::Agent => Some("Agent 类要等 Mooring 后台下次启动（更新 App 或重启电脑）才生效"),
-        Kind::Quota => Some("显示在状态栏的额度里"),
-        Kind::Themes => Some("在设置 › 外观里选"),
-        Kind::Hooks | Kind::Rules | Kind::Setup => None,
-    }
-}
-
 impl SettingsView {
     /// Reads the plugins again and tells the workbench and the host.
     pub(super) fn plugins_changed(&mut self, cx: &mut Context<Self>) {
@@ -508,7 +494,7 @@ impl SettingsView {
                 note.extend(
                     p.provides
                         .iter()
-                        .filter_map(|k| where_to_find(*k))
+                        .filter_map(|k| k.where_it_shows())
                         .map(str::to_owned),
                 );
             }

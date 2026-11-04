@@ -14,6 +14,23 @@ pub(super) fn cursor_style(shape: CursorDefault) -> CursorStyle {
         CursorDefault::Underline => CursorStyle::Underline,
     }
 }
+/// How the cursor is drawn this frame: none under text being composed, blinking when
+/// focused, and as chosen in a split without focus.
+pub(super) fn cursor_paint(
+    look: &TerminalText,
+    no_marked_text: bool,
+    focused: bool,
+    blink_on: bool,
+) -> screen::CursorPaint {
+    use crate::ui::terminal_text::UnfocusedCursor;
+    match (no_marked_text, focused, blink_on, look.unfocused_cursor) {
+        (false, ..) | (true, true, false, _) | (true, false, _, UnfocusedCursor::Hidden) => {
+            screen::CursorPaint::Hidden
+        }
+        (true, true, true, _) => screen::CursorPaint::Shown,
+        (true, false, _, UnfocusedCursor::Hollow) => screen::CursorPaint::Hollow,
+    }
+}
 /// The stronger of the two fades. Ghostty's unfocused-split-opacity: the program's own
 /// cursor (Claude and Codex draw one as reversed text) recedes with the rest.
 pub(super) fn dim(look: &TerminalText, unfocused_split: bool, background_window: bool) -> f32 {

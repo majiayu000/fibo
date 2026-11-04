@@ -181,15 +181,17 @@ impl Pane {
     pub fn visual_type(&mut self, text: &str, cx: &mut Context<Self>) {
         self.input(text.as_bytes().to_vec(), cx);
     }
-    /// The visible screen as text, for checking what reached the program.
     #[cfg(feature = "visual-test")]
     pub fn visual_cursor_shape(&self) -> screen::CursorShape {
         self.screen.cursor_shape
     }
+    #[cfg(feature = "visual-test")]
     pub fn visual_run_fg(&self, text: &str) -> Option<u32> {
         let mut runs = self.screen.rows.iter().flatten();
         runs.find(|r| r.text.contains(text)).map(|r| r.fg)
     }
+    /// The visible screen as text, for checking what reached the program.
+    #[cfg(feature = "visual-test")]
     pub fn visual_text(&self) -> String {
         let state = self.connection.state.lock().unwrap();
         state
@@ -2350,24 +2352,12 @@ impl Render for Pane {
                     let Some(metrics) = pane.metrics else { return };
                     let focused = pane.focus.is_focused(window);
                     let look = crate::ui::terminal_text::current();
-                    let cursor = if !pane.marked.is_empty() {
-                        screen::CursorPaint::Hidden
-                    } else if focused {
-                        if pane.blink_on {
-                            screen::CursorPaint::Shown
-                        } else {
-                            screen::CursorPaint::Hidden
-                        }
-                    } else {
-                        match look.unfocused_cursor {
-                            crate::ui::terminal_text::UnfocusedCursor::Hidden => {
-                                screen::CursorPaint::Hidden
-                            }
-                            crate::ui::terminal_text::UnfocusedCursor::Hollow => {
-                                screen::CursorPaint::Hollow
-                            }
-                        }
-                    };
+                    let cursor = overlays::cursor_paint(
+                        &look,
+                        pane.marked.is_empty(),
+                        focused,
+                        pane.blink_on,
+                    );
                     screen::paint_cached(
                         &pane.screen,
                         &font,

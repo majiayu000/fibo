@@ -70,6 +70,19 @@ impl Kind {
             Self::Themes => "主题",
         }
     }
+    /// Where a plugin of this kind shows once it is on, for 设置 › 插件.
+    pub fn where_it_shows(self) -> Option<&'static str> {
+        match self {
+            Self::Effects => Some("装上或打开就换成它，在上面「完成动画」里能换回"),
+            Self::Sidebar => Some("在左栏顶部切换排法"),
+            Self::Actions => Some("在窗格右键菜单和 ⌘P 里"),
+            Self::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
+            Self::Agent => Some("Agent 类要等 Mooring 后台下次启动（更新 App 或重启电脑）才生效"),
+            Self::Quota => Some("显示在状态栏的额度里"),
+            Self::Themes => Some("在设置 › 外观里选"),
+            Self::Hooks | Self::Rules | Self::Setup => None,
+        }
+    }
     /// The files of this kind inside a plugin directory, in load order.
     pub fn files(self, dir: &Path) -> Vec<PathBuf> {
         match self {
