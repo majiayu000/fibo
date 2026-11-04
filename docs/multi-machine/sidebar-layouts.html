@@ -14,17 +14,28 @@ main>p{margin:0 0 14px;color:var(--sec);font-size:13px}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left;cursor:pointer}
 button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
-.win{min-width:1360px;height:900px;display:flex;flex-direction:column;background:var(--pane)}
+.win{min-width:1360px;height:900px;display:flex;background:var(--side)}
+.left{width:316px;flex:none;display:flex;flex-direction:column;border-right:1px solid var(--line)}
 .body{flex:1;min-height:0;display:flex}
-.lights{height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--side);width:100%}
+.lights{height:46px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px 0 16px}
 .lights i{width:12px;height:12px;border-radius:50%}
+.toggle-side{margin-left:auto;color:var(--sec);display:flex}
+.tabs{height:46px;flex:none;display:flex;align-items:center;gap:6px;padding:0 12px;font-size:13px;color:var(--sec);border-bottom:1px solid var(--line2)}
+.tab{height:30px;max-width:190px;padding:0 10px;display:flex;align-items:center;gap:7px;border-radius:7px;white-space:nowrap}
+.tab.on{color:var(--title);border:1px solid var(--line)}
+.tab .a{flex:none;width:12px;height:8px;border-radius:2px;background:#d97757}
+.tab .n{overflow:hidden;text-overflow:ellipsis}
+.panel{flex:1;min-height:0;margin:8px 8px 6px;display:flex;flex-direction:column;background:var(--pane);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.close{margin-left:auto;font-size:16px;line-height:1;color:var(--sec)}
+.row.cur{box-shadow:inset 0 0 0 1px var(--strong)}
+.foot span.txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rail{width:44px;flex:none;padding:6px 0 12px;display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--rail);border-right:1px solid var(--line2);border-top:1px solid var(--line2)}
 .rb{position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid var(--line);font-size:12.5px;font-weight:600;color:#c9c9cf}
 .rb:hover{background:var(--band)}
 .rb.on{background:var(--raised);border-color:#565c67;color:var(--title)}
 .rb.off{color:#7e848f;border-style:dashed}
 .rb .badge{position:absolute;right:-5px;top:-5px;box-shadow:0 0 0 2px var(--rail)}
-.side{width:316px;flex:none;display:flex;flex-direction:column;background:var(--side);border-right:1px solid var(--line)}
+.side{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--side)}
 .brand{height:28px;flex:none;padding:0 18px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--sec)}
 .brand b{letter-spacing:3px;font-weight:600;color:var(--title)}
 .brand .one{font-size:14px;font-weight:600;color:var(--title)}
@@ -88,7 +99,7 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 .keys{width:100%;flex:none;padding:8px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--mut)}
 .keys:hover{color:var(--text)}
 .keys .mono{padding:0 4px;border:1px solid var(--line);border-radius:4px;margin-right:6px}
-.foot{position:relative;flex:none;padding:7px 8px 9px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);font-size:12px;color:var(--sec)}
+.foot{position:relative;flex:none;padding:7px 8px 9px 16px;display:flex;align-items:center;justify-content:space-between;gap:2px;border-top:1px solid var(--line);font-size:12px;color:var(--sec)}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .head{height:40px;flex:none;padding:0 12px 0 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);font-size:13px}
 .head .name{font-weight:600}
@@ -108,15 +119,32 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 <body>
 <main>
 <h1>多机侧栏：三种布局，随时切换</h1>
-<p>A、B、C 各是一种完整布局，选哪个由你。窗口里的入口在侧栏右下角的调整按钮；上面这排只是方便试。点会话，右边跟着换；点 ⌘J 跳到下一个要你的。mac-mini 是示意数据。</p>
+<p>只改左侧 316 宽的侧栏：顶部标签栏、右边窗格和状态栏都是现有界面，切换时不变，这里也不响应点击。窗口里的入口是侧栏右下角现有的「选择视图」按钮；上面这排只是方便试。mac-mini 是示意数据。</p>
 <div class="switch"><div class="seg" id="switch" role="group" aria-label="布局"></div></div>
 <div class="scroll"><div class="win">
-  <div class="lights" aria-hidden="true"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
-  <div class="body">
-    <nav class="rail" id="rail" aria-label="机器"></nav>
-    <aside class="side" id="side"></aside>
-    <section class="main" id="main"></section>
+  <div class="left">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><button class="toggle-side" aria-label="收起侧栏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="2.6"></rect><path d="M9.25 4.25v15.5"></path><path d="M15.25 9.5L12.75 12l2.5 2.5"></path></svg></button></div>
+    <div class="body">
+      <nav class="rail" id="rail" aria-label="机器"></nav>
+      <aside class="side" id="side"></aside>
+    </div>
   </div>
+  <section class="main" id="main">
+    <div class="tabs">
+      <div class="tab"><span class="a"></span><span class="n">Four_agents_w...</span><span class="st review" style="margin:0"></span></div>
+      <div class="tab"><span class="n">zsh</span></div>
+      <div class="tab"><span class="n">zsh 2</span></div>
+      <div class="tab"><span class="a"></span><span class="n">插件系统优化空间</span><span class="st running" style="margin:0"></span></div>
+      <div class="tab"><span class="a"></span><span class="n">配色方案选项缺失</span><span class="st running" style="margin:0"></span></div>
+      <div class="tab on"><span class="a"></span><span class="n">多机器 UI 设置方案</span><span>×</span></div>
+      <span style="padding:0 8px;font-size:17px">+</span>
+    </div>
+    <div class="panel">
+      <div class="head"><span class="sd" style="width:8px;height:8px;background:var(--green)"></span><span class="name">appledeMacBook-Pro.local · 你好啊</span><span class="word">等你验收</span><span class="close">×</span></div>
+      <div class="term"><div>Claude Code <span class="dim">v2.1.300</span></div><div class="dim">Opus 5.5 · Claude Pro</div><div class="dim">~/Desktop/code</div><div class="prompt">❯ 你好啊</div><div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div><div class="dim" style="margin-top:12px">* Brewed for 6s · done 12:32 AM</div><div class="prompt">❯ 嗯嗯</div><div>● 嗯，随时说就行，我在这儿等着。</div><div class="dim" style="margin-top:12px">* Brewed for 6s · done 10:54 AM</div></div>
+    </div>
+    <div class="status"><span><span class="dot"></span>本机 · 10 个会话</span><span>5h 2% · 周 58% · 周 100% +1 · 本机诊断 · ⌘P 命令</span></div>
+  </section>
 </div></div>
 </main>
 <script>
@@ -156,7 +184,7 @@ const needsCount=id=>machine(id).online?inMachine(id).filter(x=>x.group==='needs
 const mark=(m,dim)=>m.mark?`<span class="m${dim?' dim':''}">${m.mark}</span>`:'';
 function row(x,showMark){
   const m=machine(x.m),off=x.st==='off';
-  return `<button class="row${off?' off':''}${x.id===state.selected?' sel':''}" data-act="pick" data-id="${x.id}"><span class="st ${x.st}"></span><span class="x"><span class="t"><span class="ttl">${x.title}</span>${showMark?mark(m,off):''}<span class="tag"><span class="sd" style="background:${x.g}"></span>${x.space}</span><span class="tm">${x.time}</span></span>${x.sub?`<span class="sub">${x.sub}</span>`:''}</span></button>`;
+  return `<button class="row${off?' off':''}${x.id===state.selected?' sel':''}${x.id==='p1'?' cur':''}" data-act="pick" data-id="${x.id}"><span class="st ${x.st}"></span><span class="x"><span class="t"><span class="ttl">${x.title}</span>${showMark?mark(m,off):''}<span class="tag"><span class="sd" style="background:${x.g}"></span>${x.space}</span><span class="tm">${x.time}</span></span>${x.sub?`<span class="sub">${x.sub}</span>`:''}</span></button>`;
 }
 function groups(items,showMark,today,older){
   let out='';
@@ -194,7 +222,7 @@ function renderSide(){
   const online=MACHINES.filter(m=>m.online),local=machine('local');
   let html='';
   if(state.layout!=='b'){
-    html+=`<div class="brand"><b>MOORING</b></div><div class="search"><span>找会话、空间或原话</span><span class="mono">⌘P</span></div>`;
+    html+=`<div class="brand"><b>MOORING</b><span class="live"><span class="dot"></span>本机</span></div><div class="search"><span>找会话、空间或原话</span><span class="mono">⌘P</span></div>`;
     if(state.layout==='a'){
       html+=chips([local]);
       html+=`<div class="mchips">`+MACHINES.filter(m=>m.mark).map(m=>{
@@ -217,34 +245,19 @@ function renderSide(){
     html+=`</div>`;
   }else{
     const m=machine(state.scope);
-    html+=`<div class="brand"><span class="one">${m.name}</span><span class="live"><span class="dot${m.online?'':' bad'}"></span>${m.online?'在线':'断开'}</span></div><div class="search"><span>找这台的会话</span><span class="mono">⌘P</span></div>`;
+    html+=`<div class="brand"><b>MOORING</b><span class="live"><span class="dot${m.online?'':' bad'}"></span>${m.name}${m.online?'':' · 断开'}</span></div><div class="search"><span>找会话、空间或原话</span><span class="mono">⌘P</span></div>`;
     html+=chips([m]);
     if(!m.online)html+=`<div class="notice">连不上这台电脑，下面是断开前的会话，状态可能已经变了。12 秒后重试。<br><button class="btn" style="margin-top:8px">立刻重连</button></div>`;
     html+=`<div class="list">${groups(inMachine(m.id),false,m.today,m.older)}</div>`;
   }
-  html+=`<button class="keys" data-act="next"><span class="mono">⌘J</span>下一个要你的（所有机器）</button>`;
-  const foot=state.layout!=='b'
-    ?`${online.length}/${MACHINES.length} 台在线 · ${online.reduce((a,m)=>a+m.chips.length,0)} 个空间 · ${online.reduce((a,m)=>a+liveCount(m.id),0)} 个会话`
-    :`${machine(state.scope).chips.length} 个空间 · ${inMachine(state.scope).length} 个会话`;
+  html+=`<button class="keys" data-act="next"><span class="mono">⌘J</span>下一个要你的</button>`;
+  const shown=state.layout==='b'?machine(state.scope):local;
+  const foot=state.layout==='b'?`${shown.name} · ${inMachine(shown.id).length} 个会话`:`${shown.name} · ${shown.chips.length} 个空间 · ${inMachine(shown.id).length} 个会话 待办 0`;
   const menu=state.menu?`<div class="pop"><div class="cap">多台机器的布局</div>`+LAYOUTS.map(([id,name])=>`<button data-act="layout" data-id="${id}" role="menuitemradio" aria-checked="${state.layout===id}"><span class="tick">${state.layout===id?'✓':''}</span>${name}</button>`).join('')+`</div>`:'';
-  html+=`<div class="foot"><span>${foot}</span><button class="tune" data-act="menu" aria-label="调整布局" aria-expanded="${state.menu}"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><circle cx="9" cy="8" r="2.6" fill="currentColor"></circle><circle cx="15" cy="16" r="2.6" fill="currentColor"></circle></svg></button>${menu}</div>`;
+  html+=`<div class="foot"><span class="txt">${foot}</span><button class="tune" data-act="menu" aria-label="选择视图" aria-expanded="${state.menu}"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16M4 16h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><circle cx="9" cy="8" r="2.6" fill="currentColor"></circle><circle cx="15" cy="16" r="2.6" fill="currentColor"></circle></svg></button><button class="tune" aria-label="手机"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.4"></rect><path d="M10.5 18h3"></path></svg></button><button class="tune" aria-label="设置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"></path></svg></button>${menu}</div>`;
   document.getElementById('side').innerHTML=html;
 }
-function renderMain(){
-  const x=SESSIONS.find(v=>v.id===state.selected),m=machine(x.m),off=x.st==='off';
-  const wordClass=x.st==='running'?' running':(x.st==='idle'||off)?' none':'';
-  const dotColor={review:'var(--green)',running:'var(--yellow)',idle:'#6a6a72',off:'#5a5f68'}[x.st];
-  const title=m.mark?`${m.name} · ${x.title}`:x.title;
-  const talk=x.id==='a1'
-    ?`<div class="prompt">❯ 你好啊</div><div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div><div class="dim" style="margin-top:12px">* Brewed for 6s · done 12:32 AM</div><div class="prompt">❯ 嗯嗯</div><div>● 嗯，随时说就行，我在这儿等着。</div><div class="dim" style="margin-top:12px">* Brewed for 6s · done 10:54 AM</div>`
-    :`<div class="dim" style="margin-top:16px">这里是「${x.title}」的终端画面</div>`;
-  document.getElementById('main').innerHTML=
-    `<div class="head"><span class="sd" style="width:8px;height:8px;background:${dotColor}"></span>${mark(m,off)}<span class="name">${title}</span><span class="word${wordClass}">${WORD[x.st]}</span><span class="sp"></span>${m.mark&&!off?'<button class="ghost">关闭终端</button>':''}</div>`
-    +(off?`<div class="say"><span>连接断开，下面是断开时的画面，状态可能已经变了。12 秒后重试。</span><button class="btn">立刻重连</button></div>`:'')
-    +`<div class="term"><div>Claude Code <span class="dim">v2.1.300</span></div><div class="dim">Opus 5.5 · Claude Pro</div><div class="dim">~/Desktop/code</div>${talk}</div>`
-    +`<div class="status"><span><span class="dot${m.online?'':' bad'}"></span>${m.name} · ${m.online?liveCount(m.id)+' 个会话':'断开'}</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>`;
-}
-function render(){renderSwitch();renderRail();renderSide();renderMain();}
+function render(){renderSwitch();renderRail();renderSide();}
 function nextNeeding(){
   const list=SESSIONS.filter(x=>x.group==='needs'&&x.st!=='off');
   const at=list.findIndex(x=>x.id===state.selected);
