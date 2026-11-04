@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多机侧栏方向</title>
+<style>
+:root{--bg:#0f1114;--line:#2a2f37;--text:#e4e4e7;--muted:#a2a2aa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC",system-ui,sans-serif}
+main{max-width:1360px;margin:0 auto;padding:32px 16px 80px}
+h1{font-size:22px;margin:0 0 6px}
+h2{font-size:17px;margin:48px 0 10px}
+p{margin:0;color:var(--muted)}
+nav{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:16px;padding:10px 0;margin-top:12px;background:var(--bg);border-bottom:1px solid var(--line)}
+nav a{color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{text-decoration:underline}
+.cmp{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px}
+.cmp figure{margin:0;flex:none;width:316px}
+.cmp figcaption{font-size:13px;font-weight:600;margin-bottom:8px}
+.crop{width:316px;height:960px;overflow:hidden;border:1px solid var(--line);border-radius:8px}
+.note{white-space:pre-line;margin:0 0 12px;max-width:760px}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.host{display:block}
+</style>
+</head>
+<body>
+<main>
+<h1>多台机器怎么进侧栏</h1>
+<p>要定的是侧栏用哪个方向，看板跟着走。放弃条件沿用 spec：两周内没真正连上远程机器用，就不做这轮界面。mac-mini 和它的会话是示意数据。</p>
+<nav><a href="#compare">侧栏并排</a><a href="#now">现在</a><a href="#a">A 一张清单</a><a href="#b">B 机器栏</a><a href="#c">C 按机器折叠</a><a href="#states">三个方向共用：连接状态</a></nav>
+<h2 id="compare">侧栏并排</h2>
+<div class="cmp"><figure><figcaption>现在</figcaption><div class="crop"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-running{border:2px solid #e5b83b;border-top-color:transparent}
+.st-idle{width:8px;height:8px;margin:0 1px;background:#6a6a72}
+.st-dot-review{width:8px;height:8px;margin:0 1px;background:#3fb27f}
+.row{box-sizing:border-box;width:300px;margin:0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row .st{margin-top:4px}
+.row.sel{box-shadow:inset 0 0 0 1px #3a404a}
+.x{flex:1;min-width:0;display:flex;flex-direction:column}
+.t{display:flex;align-items:center;gap:8px}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.sub{margin-top:2px;font-size:11.5px;color:#e5b83b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp{padding:14px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; background: #15181d; border-right: 1px solid #2a2f37; display: flex; flex-direction: column">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="height: 26px; flex: none; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; font-size: 11px">
+      <span style="letter-spacing: 3px; font-weight: 600; color: #ececee">MOORING</span>
+      <span style="display: flex; align-items: center; gap: 6px; color: #a2a2aa"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>本机</span>
+    </div>
+    <div style="margin: 10px 12px 0; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找会话、空间或原话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+    <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 2px">
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间<span class="badge">2</span></span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr<span class="badge">2</span></span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>code</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#8a6a2a,#b38a3a)"></span>her</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring<span class="badge">1</span></span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span>
+      
+    </div>
+    <div style="flex: 1; min-height: 0; overflow: hidden">
+      
+        <div class="grp"><b>置顶</b><span>2</span></div>
+        
+          <button class="row sel">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">超分炒粉测评</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">16时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">多终端</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">6:05</span></span>
+            <span class="sub">正在运行 python3 -</span></span>
+          </button>
+        
+      
+        <div class="grp"><b>要你处理</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">配色方案选项缺失</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">本机资源占用诊断报告</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Write Me Down方向的AI角…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">14时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Gödel, Escher, Bach 电子书</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">23时</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>在跑</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Crouton Alpha 隐身模型</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span><span class="tm">2:11</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">#1479 价格同步与 cargo…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span><span class="tm">3:08</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">插件系统优化空间</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">7:01</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Four_agents_write 后台 C…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">8:45</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>今天</b><span>47</span></div>
+        
+      
+        <div class="grp"><b>更早</b><span>65</span></div>
+        
+      
+      <div style="padding: 16px 18px 5px; display: flex; align-items: baseline; gap: 8px"><span style="font-size: 12px; font-weight: 600; color: #a2a2aa">appledeMacBook-Pro.local</span><span style="font-size: 11px; color: #8d8d96">3 个会话</span></div>
+      <button class="row" style="background: #262a31; align-items: center"><span class="st st-dot-review" style="margin-top: 0"></span><span class="ttl">你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></button>
+      <button class="row" style="align-items: center"><span class="st st-idle" style="margin-top: 0"></span><span class="ttl">codex · 空闲 · 看不到对话</span></button>
+      <button class="row" style="align-items: center"><span class="st st-dot-review" style="margin-top: 0"></span><span class="ttl">w你好</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></button>
+    </div>
+    <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的</div>
+    <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">本机 · 8 个空间 · 10 个会话 &#160; 待办 0</div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span style="font-weight: 600">appledeMacBook-Pro.local · 你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>本机 · 10 个会话</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div></figure><figure><figcaption>A 一张清单</figcaption><div class="crop"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-running{border:2px solid #e5b83b;border-top-color:transparent}
+.st-off{width:8px;height:8px;margin:0 1px;background:#5a5f68}
+.row{box-sizing:border-box;width:300px;margin:0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row .st{margin-top:4px}
+.row.sel{background:#262a31}
+.row.off{color:#8d8d96}
+.x{flex:1;min-width:0;display:flex;flex-direction:column}
+.t{display:flex;align-items:center;gap:6px}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.sub{margin-top:2px;font-size:11.5px;color:#e5b83b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp{padding:14px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.m{flex:none;box-sizing:border-box;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1px solid #565c67;border-radius:4px;font-size:9.5px;line-height:1;font-weight:600;color:#c9c9cf}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; background: #15181d; border-right: 1px solid #2a2f37; display: flex; flex-direction: column">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="height: 26px; flex: none; padding: 0 18px; display: flex; align-items: center; font-size: 11px"><span style="letter-spacing: 3px; font-weight: 600; color: #ececee">MOORING</span></div>
+    <div style="margin: 10px 12px 0; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找会话、空间或原话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+    <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 0">
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间<span class="badge">2</span></button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr<span class="badge">2</span></button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>code</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#8a6a2a,#b38a3a)"></span>her</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring<span class="badge">1</span></button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</button>
+      
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 12px 0; padding-top: 8px; border-top: 1px solid #22262d">
+      <button class="chip" style="padding-left: 5px"><span class="m">A</span>apple<span class="badge">2</span></button>
+      <button class="chip" style="padding-left: 5px; color: #8d8d96"><span class="m" style="color: #8d8d96; border-color: #3a404a">M</span>mac-mini · 断开</button>
+    </div>
+    <div style="flex: 1; min-height: 0; overflow: hidden">
+      
+        <div class="grp"><b>置顶</b><span>2</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">超分炒粉测评</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">16时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">多终端</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">6:05</span></span>
+            <span class="sub">正在运行 python3 -</span></span>
+          </button>
+        
+      
+        <div class="grp"><b>要你处理</b><span>7</span></div>
+        
+          <button class="row sel">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">你好啊</span><span class="m">A</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">配色方案选项缺失</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">本机资源占用诊断报告</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">w你好</span><span class="m">A</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">7时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Write Me Down方向的AI角…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">14时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Gödel, Escher, Bach 电子书</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">23时</span></span>
+            </span>
+          </button>
+        
+          <button class="row off">
+            <span class="st st-off"></span>
+            <span class="x"><span class="t"><span class="ttl">发布脚本检查</span><span class="m">M</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>deploy</span><span class="tm">断开</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>在跑</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Crouton Alpha 隐身模型</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span><span class="tm">2:11</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">#1479 价格同步与 cargo…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span><span class="tm">3:08</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">插件系统优化空间</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">7:01</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Four_agents_write 后台 C…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">8:45</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>今天</b><span>48</span></div>
+        
+      
+        <div class="grp"><b>更早</b><span>65</span></div>
+        
+      
+    </div>
+    <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的</div>
+    <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">2/3 台在线 · 8 个空间 · 13 个会话 &#160; 待办 0</div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span class="m">A</span><span style="font-weight: 600">apple · 你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>apple · 3 个会话</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div></figure><figure><figcaption>B 机器栏</figcaption><div class="crop"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-idle{width:8px;height:8px;margin:0 1px;background:#6a6a72}
+.row{box-sizing:border-box;width:248px;margin:0 8px;padding:6px 10px;display:flex;align-items:center;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row.sel{background:#262a31}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.grp{padding:14px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.rail{position:relative;box-sizing:border-box;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid #2a2f37;font-size:13px;font-weight:600;color:#c9c9cf}
+.rail.on{background:#262a31;border-color:#565c67;color:#ececee}
+.rail .badge{position:absolute;right:-5px;top:-5px;box-shadow:0 0 0 2px #101317}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; display: flex; flex-direction: column; background: #15181d; border-right: 1px solid #2a2f37">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="flex: 1; min-height: 0; display: flex">
+      <div style="width: 52px; flex: none; box-sizing: border-box; padding: 6px 0 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #101317; border-right: 1px solid #22262d; border-top: 1px solid #22262d">
+        <button class="rail" aria-label="本机，4 个要你处理"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="10" rx="1.6"></rect><path d="M3 19h18"></path></svg><span class="badge">4</span></button>
+        <button class="rail on" aria-label="apple，2 个要你处理">A<span class="badge">2</span></button>
+        <button class="rail" aria-label="mac-mini，断开" style="color: #7e848f; border-style: dashed">M</button>
+        <div style="flex: 1"></div>
+        <button class="rail" aria-label="添加一台电脑" style="border: 1px dashed #4a4a54; color: #8d8d96; font-weight: 400">+</button>
+      </div>
+      <div style="width: 263px; flex: none; display: flex; flex-direction: column">
+        <div style="height: 34px; flex: none; padding: 0 18px; display: flex; align-items: center; justify-content: space-between"><span style="font-size: 14px; font-weight: 600; color: #ececee">apple</span><span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #a2a2aa"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>在线</span></div>
+        <div style="margin: 4px 12px 0; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找这台的会话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 2px">
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code<span class="badge">2</span></button>
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</button>
+        </div>
+        <div style="flex: 1; min-height: 0; overflow: hidden">
+          <div class="grp"><b>要你处理</b><span>2</span></div>
+          <button class="row sel"><span class="st st-review"></span><span class="ttl">你好啊</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">刚刚</span></button>
+          <button class="row"><span class="st st-review"></span><span class="ttl">w你好</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">7时</span></button>
+          <div class="grp"><b>今天</b><span>1</span></div>
+          <button class="row"><span class="st st-idle"></span><span class="ttl">codex · 空闲 · 看不到对话</span></button>
+        </div>
+        <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的（所有机器）</div>
+        <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">2 个空间 · 3 个会话</div>
+      </div>
+    </div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span style="font-weight: 600">你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: flex-end; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div></figure><figure><figcaption>C 按机器折叠</figcaption><div class="crop"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-running{border:2px solid #e5b83b;border-top-color:transparent}
+.st-idle{width:8px;height:8px;margin:0 1px;background:#6a6a72}
+.row{box-sizing:border-box;width:300px;margin:0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row .st{margin-top:4px}
+.row.sel{background:#262a31}
+.x{flex:1;min-width:0;display:flex;flex-direction:column}
+.t{display:flex;align-items:center;gap:8px}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.sub{margin-top:2px;font-size:11.5px;color:#e5b83b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp{padding:12px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.mh{box-sizing:border-box;width:316px;height:34px;flex:none;padding:0 14px;display:flex;align-items:center;gap:7px;background:#1b1f25;border-top:1px solid #2a2f37;border-bottom:1px solid #22262d;font-size:12.5px;font-weight:600;color:#ececee}
+.mh .note{flex:1;min-width:0;font-size:11px;font-weight:400;color:#a2a2aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{flex:none;color:#8d8d96}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; background: #15181d; border-right: 1px solid #2a2f37; display: flex; flex-direction: column">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="height: 26px; flex: none; padding: 0 18px; display: flex; align-items: center; font-size: 11px"><span style="letter-spacing: 3px; font-weight: 600; color: #ececee">MOORING</span></div>
+    <div style="margin: 10px 12px; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找会话、空间或原话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+    <button class="mh" aria-expanded="true"><svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 3.5l3 3 3-3"></path></svg>本机<span class="note">10 个会话</span></button>
+    <div style="flex: 1; min-height: 0; overflow: hidden">
+      <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 0">
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间<span class="badge">2</span></button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr<span class="badge">2</span></button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>code</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#8a6a2a,#b38a3a)"></span>her</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring<span class="badge">1</span></button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</button>
+        
+      </div>
+      
+        <div class="grp"><b>置顶</b><span>2</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">超分炒粉测评</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">16时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">多终端</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">6:05</span></span>
+            <span class="sub">正在运行 python3 -</span></span>
+          </button>
+        
+      
+        <div class="grp"><b>要你处理</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">配色方案选项缺失</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">本机资源占用诊断报告</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Write Me Down方向的AI角…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">14时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Gödel, Escher, Bach 电子书</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">23时</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>在跑</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Crouton Alpha 隐身模型</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span><span class="tm">2:11</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">#1479 价格同步与 cargo…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span><span class="tm">3:08</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">插件系统优化空间</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">7:01</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Four_agents_write 后台 C…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">8:45</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>今天</b><span>47</span></div>
+        
+      
+        <div class="grp"><b>更早</b><span>65</span></div>
+        
+      
+    </div>
+    <button class="mh" aria-expanded="true"><svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 3.5l3 3 3-3"></path></svg>apple<span class="note">3 个会话</span><span class="badge">2</span><span aria-label="在 apple 上开新终端" style="font-size: 15px; font-weight: 400; color: #a2a2aa">+</span></button>
+    <div style="flex: none; padding: 4px 0">
+      <button class="row sel"><span class="st st-review"></span><span class="x"><span class="t"><span class="ttl">你好啊</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">刚刚</span></span></span></button>
+      <button class="row"><span class="st st-review"></span><span class="x"><span class="t"><span class="ttl">w你好</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">7时</span></span></span></button>
+      <button class="row"><span class="st st-idle"></span><span class="x"><span class="t"><span class="ttl">codex · 空闲 · 看不到对话</span></span></span></button>
+    </div>
+    <button class="mh" aria-expanded="false" style="color: #a2a2aa"><svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3.5 2l3 3-3 3"></path></svg>mac-mini<span class="note">断开 · 12 秒后重试</span></button>
+    <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的</div>
+    <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">8 个空间 · 13 个会话 &#160; 待办 0</div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span style="font-weight: 600">apple · 你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>apple · 3 个会话</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div></figure></div>
+<h2 id="now">现在</h2><p class="note">现在的问题
+1. apple 的两个「等你验收」不在要你处理里，⌘J 也跳不到。
+2. 远程行是另一种样式：实心点、状态词代替时间、没有空间。
+3. 标题写 appledeMacBook-Pro.local，配置里的名字 apple 没用上。
+4. 正在看 apple，右上角和底部仍写「本机」。</p><div class="scroll"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-running{border:2px solid #e5b83b;border-top-color:transparent}
+.st-idle{width:8px;height:8px;margin:0 1px;background:#6a6a72}
+.st-dot-review{width:8px;height:8px;margin:0 1px;background:#3fb27f}
+.row{box-sizing:border-box;width:300px;margin:0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row .st{margin-top:4px}
+.row.sel{box-shadow:inset 0 0 0 1px #3a404a}
+.x{flex:1;min-width:0;display:flex;flex-direction:column}
+.t{display:flex;align-items:center;gap:8px}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.sub{margin-top:2px;font-size:11.5px;color:#e5b83b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp{padding:14px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; background: #15181d; border-right: 1px solid #2a2f37; display: flex; flex-direction: column">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="height: 26px; flex: none; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; font-size: 11px">
+      <span style="letter-spacing: 3px; font-weight: 600; color: #ececee">MOORING</span>
+      <span style="display: flex; align-items: center; gap: 6px; color: #a2a2aa"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>本机</span>
+    </div>
+    <div style="margin: 10px 12px 0; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找会话、空间或原话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+    <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 2px">
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间<span class="badge">2</span></span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr<span class="badge">2</span></span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>code</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#8a6a2a,#b38a3a)"></span>her</span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring<span class="badge">1</span></span>
+      
+        <span class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span>
+      
+    </div>
+    <div style="flex: 1; min-height: 0; overflow: hidden">
+      
+        <div class="grp"><b>置顶</b><span>2</span></div>
+        
+          <button class="row sel">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">超分炒粉测评</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">16时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">多终端</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">6:05</span></span>
+            <span class="sub">正在运行 python3 -</span></span>
+          </button>
+        
+      
+        <div class="grp"><b>要你处理</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">配色方案选项缺失</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">本机资源占用诊断报告</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Write Me Down方向的AI角…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">14时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Gödel, Escher, Bach 电子书</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">23时</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>在跑</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Crouton Alpha 隐身模型</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span><span class="tm">2:11</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">#1479 价格同步与 cargo…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span><span class="tm">3:08</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">插件系统优化空间</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">7:01</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Four_agents_write 后台 C…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">8:45</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>今天</b><span>47</span></div>
+        
+      
+        <div class="grp"><b>更早</b><span>65</span></div>
+        
+      
+      <div style="padding: 16px 18px 5px; display: flex; align-items: baseline; gap: 8px"><span style="font-size: 12px; font-weight: 600; color: #a2a2aa">appledeMacBook-Pro.local</span><span style="font-size: 11px; color: #8d8d96">3 个会话</span></div>
+      <button class="row" style="background: #262a31; align-items: center"><span class="st st-dot-review" style="margin-top: 0"></span><span class="ttl">你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></button>
+      <button class="row" style="align-items: center"><span class="st st-idle" style="margin-top: 0"></span><span class="ttl">codex · 空闲 · 看不到对话</span></button>
+      <button class="row" style="align-items: center"><span class="st st-dot-review" style="margin-top: 0"></span><span class="ttl">w你好</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></button>
+    </div>
+    <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的</div>
+    <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">本机 · 8 个空间 · 10 个会话 &#160; 待办 0</div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span style="font-weight: 600">appledeMacBook-Pro.local · 你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>本机 · 10 个会话</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div>
+<h2 id="a">A 一张清单</h2><p class="note">A 推荐
+所有机器进同一张清单，只有远程行多一个方块字母。
+好：⌘J 和要你处理不用改概念，和看板方向 A 一致。
+代价：机器和会话多时清单变长。</p><div class="scroll"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-running{border:2px solid #e5b83b;border-top-color:transparent}
+.st-off{width:8px;height:8px;margin:0 1px;background:#5a5f68}
+.row{box-sizing:border-box;width:300px;margin:0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row .st{margin-top:4px}
+.row.sel{background:#262a31}
+.row.off{color:#8d8d96}
+.x{flex:1;min-width:0;display:flex;flex-direction:column}
+.t{display:flex;align-items:center;gap:6px}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.sub{margin-top:2px;font-size:11.5px;color:#e5b83b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp{padding:14px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.m{flex:none;box-sizing:border-box;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1px solid #565c67;border-radius:4px;font-size:9.5px;line-height:1;font-weight:600;color:#c9c9cf}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; background: #15181d; border-right: 1px solid #2a2f37; display: flex; flex-direction: column">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="height: 26px; flex: none; padding: 0 18px; display: flex; align-items: center; font-size: 11px"><span style="letter-spacing: 3px; font-weight: 600; color: #ececee">MOORING</span></div>
+    <div style="margin: 10px 12px 0; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找会话、空间或原话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+    <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 0">
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间<span class="badge">2</span></button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr<span class="badge">2</span></button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>code</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#8a6a2a,#b38a3a)"></span>her</button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring<span class="badge">1</span></button>
+      
+        <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</button>
+      
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 12px 0; padding-top: 8px; border-top: 1px solid #22262d">
+      <button class="chip" style="padding-left: 5px"><span class="m">A</span>apple<span class="badge">2</span></button>
+      <button class="chip" style="padding-left: 5px; color: #8d8d96"><span class="m" style="color: #8d8d96; border-color: #3a404a">M</span>mac-mini · 断开</button>
+    </div>
+    <div style="flex: 1; min-height: 0; overflow: hidden">
+      
+        <div class="grp"><b>置顶</b><span>2</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">超分炒粉测评</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">16时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">多终端</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">6:05</span></span>
+            <span class="sub">正在运行 python3 -</span></span>
+          </button>
+        
+      
+        <div class="grp"><b>要你处理</b><span>7</span></div>
+        
+          <button class="row sel">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">你好啊</span><span class="m">A</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">配色方案选项缺失</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">本机资源占用诊断报告</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">w你好</span><span class="m">A</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">7时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Write Me Down方向的AI角…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">14时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Gödel, Escher, Bach 电子书</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">23时</span></span>
+            </span>
+          </button>
+        
+          <button class="row off">
+            <span class="st st-off"></span>
+            <span class="x"><span class="t"><span class="ttl">发布脚本检查</span><span class="m">M</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>deploy</span><span class="tm">断开</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>在跑</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Crouton Alpha 隐身模型</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span><span class="tm">2:11</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">#1479 价格同步与 cargo…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span><span class="tm">3:08</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">插件系统优化空间</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">7:01</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Four_agents_write 后台 C…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">8:45</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>今天</b><span>48</span></div>
+        
+      
+        <div class="grp"><b>更早</b><span>65</span></div>
+        
+      
+    </div>
+    <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的</div>
+    <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">2/3 台在线 · 8 个空间 · 13 个会话 &#160; 待办 0</div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span class="m">A</span><span style="font-weight: 600">apple · 你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>apple · 3 个会话</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div>
+<h2 id="b">B 机器栏</h2><p class="note">B
+左边一条机器栏，点一台，整个侧栏换成那台。
+好：每台机器完整、互不打扰，机器多也不挤。
+代价：要你处理被拆开，要靠徽标和 ⌘J 才看得全；行宽少 52。
+适合：常年 4 台以上。</p><div class="scroll"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-idle{width:8px;height:8px;margin:0 1px;background:#6a6a72}
+.row{box-sizing:border-box;width:248px;margin:0 8px;padding:6px 10px;display:flex;align-items:center;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row.sel{background:#262a31}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.grp{padding:14px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.rail{position:relative;box-sizing:border-box;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid #2a2f37;font-size:13px;font-weight:600;color:#c9c9cf}
+.rail.on{background:#262a31;border-color:#565c67;color:#ececee}
+.rail .badge{position:absolute;right:-5px;top:-5px;box-shadow:0 0 0 2px #101317}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; display: flex; flex-direction: column; background: #15181d; border-right: 1px solid #2a2f37">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="flex: 1; min-height: 0; display: flex">
+      <div style="width: 52px; flex: none; box-sizing: border-box; padding: 6px 0 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #101317; border-right: 1px solid #22262d; border-top: 1px solid #22262d">
+        <button class="rail" aria-label="本机，4 个要你处理"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="10" rx="1.6"></rect><path d="M3 19h18"></path></svg><span class="badge">4</span></button>
+        <button class="rail on" aria-label="apple，2 个要你处理">A<span class="badge">2</span></button>
+        <button class="rail" aria-label="mac-mini，断开" style="color: #7e848f; border-style: dashed">M</button>
+        <div style="flex: 1"></div>
+        <button class="rail" aria-label="添加一台电脑" style="border: 1px dashed #4a4a54; color: #8d8d96; font-weight: 400">+</button>
+      </div>
+      <div style="width: 263px; flex: none; display: flex; flex-direction: column">
+        <div style="height: 34px; flex: none; padding: 0 18px; display: flex; align-items: center; justify-content: space-between"><span style="font-size: 14px; font-weight: 600; color: #ececee">apple</span><span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #a2a2aa"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>在线</span></div>
+        <div style="margin: 4px 12px 0; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找这台的会话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 2px">
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code<span class="badge">2</span></button>
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</button>
+        </div>
+        <div style="flex: 1; min-height: 0; overflow: hidden">
+          <div class="grp"><b>要你处理</b><span>2</span></div>
+          <button class="row sel"><span class="st st-review"></span><span class="ttl">你好啊</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">刚刚</span></button>
+          <button class="row"><span class="st st-review"></span><span class="ttl">w你好</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">7时</span></button>
+          <div class="grp"><b>今天</b><span>1</span></div>
+          <button class="row"><span class="st st-idle"></span><span class="ttl">codex · 空闲 · 看不到对话</span></button>
+        </div>
+        <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的（所有机器）</div>
+        <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">2 个空间 · 3 个会话</div>
+      </div>
+    </div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span style="font-weight: 600">你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: flex-end; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div>
+<h2 id="c">C 按机器折叠</h2><p class="note">C
+每台机器一个可折叠的区，折叠时标题写要你处理的数。
+好：改动最小，从现在的结构长出来。
+代价：本机列表长时把远程挤到下面，只能靠标题吸底提醒；要扫几个区。</p><div class="scroll"><div class="host" style="width:1280px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.st{flex:none;box-sizing:border-box;display:block;width:10px;height:10px;border-radius:50%}
+.st-review{border:2px solid #3fb27f}
+.st-running{border:2px solid #e5b83b;border-top-color:transparent}
+.st-idle{width:8px;height:8px;margin:0 1px;background:#6a6a72}
+.row{box-sizing:border-box;width:300px;margin:0 8px;padding:6px 10px;display:flex;align-items:flex-start;gap:9px;border-radius:6px;font-size:13px;line-height:18px;color:#e4e4e7}
+.row .st{margin-top:4px}
+.row.sel{background:#262a31}
+.x{flex:1;min-width:0;display:flex;flex-direction:column}
+.t{display:flex;align-items:center;gap:8px}
+.ttl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;max-width:84px;display:flex;align-items:center;gap:5px;font-size:11px;color:#8d8d96}
+.sd{flex:none;width:7px;height:7px;border-radius:50%}
+.tm{flex:none;min-width:26px;text-align:right;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96}
+.sub{margin-top:2px;font-size:11.5px;color:#e5b83b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp{padding:12px 18px 5px;display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:#8d8d96}
+.grp b{font-weight:500;color:#a2a2aa}
+.chip{height:24px;box-sizing:border-box;padding:0 8px 0 6px;display:flex;align-items:center;gap:5px;border-radius:12px;border:1px solid #2a2f37;font-size:11.5px;color:#c9c9cf}
+.badge{min-width:14px;height:14px;padding:0 4px;box-sizing:border-box;border-radius:7px;background:#e8823a;color:#15181d;font-size:9.5px;line-height:14px;font-weight:700;text-align:center}
+.mh{box-sizing:border-box;width:316px;height:34px;flex:none;padding:0 14px;display:flex;align-items:center;gap:7px;background:#1b1f25;border-top:1px solid #2a2f37;border-bottom:1px solid #22262d;font-size:12.5px;font-weight:600;color:#ececee}
+.mh .note{flex:1;min-width:0;font-size:11px;font-weight:400;color:#a2a2aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{flex:none;color:#8d8d96}
+.mono{font-family:"SF Mono",Menlo,monospace}
+.term{flex:1;min-height:0;padding:14px 12px;font-family:"SF Mono",Menlo,monospace;font-size:14px;line-height:22px;color:#d6dbe3;overflow:hidden}
+.prompt{background:#eef0f3;color:#15181d;padding:2px 8px;margin:16px -4px}
+.dim{color:#7e848f}
+</style>
+
+<div style="width: 1280px; height: 960px; display: flex; background: #21252c; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif; overflow: hidden">
+  <div style="width: 316px; flex: none; background: #15181d; border-right: 1px solid #2a2f37; display: flex; flex-direction: column">
+    <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px" aria-hidden="true">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    </div>
+    <div style="height: 26px; flex: none; padding: 0 18px; display: flex; align-items: center; font-size: 11px"><span style="letter-spacing: 3px; font-weight: 600; color: #ececee">MOORING</span></div>
+    <div style="margin: 10px 12px; height: 30px; flex: none; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; border-radius: 8px; border: 1px solid #2a2f37; font-size: 12px; color: #8d8d96"><span>找会话、空间或原话</span><span class="mono" style="font-size: 11px">⌘P</span></div>
+    <button class="mh" aria-expanded="true"><svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 3.5l3 3 3-3"></path></svg>本机<span class="note">10 个会话</span></button>
+    <div style="flex: 1; min-height: 0; overflow: hidden">
+      <div style="display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 12px 0">
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间<span class="badge">2</span></button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr<span class="badge">2</span></button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#c04f9c,#8a5ad8)"></span>code</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#8a6a2a,#b38a3a)"></span>her</button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring<span class="badge">1</span></button>
+        
+          <button class="chip"><span class="sd" style="width: 9px; height: 9px; background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</button>
+        
+      </div>
+      
+        <div class="grp"><b>置顶</b><span>2</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">超分炒粉测评</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">16时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">多终端</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">6:05</span></span>
+            <span class="sub">正在运行 python3 -</span></span>
+          </button>
+        
+      
+        <div class="grp"><b>要你处理</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">配色方案选项缺失</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">本机资源占用诊断报告</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#7bd389,#2f9e66)"></span>vsr</span><span class="tm">刚刚</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Write Me Down方向的AI角…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">14时</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-review"></span>
+            <span class="x"><span class="t"><span class="ttl">Gödel, Escher, Bach 电子书</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>工作空间</span><span class="tm">23时</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>在跑</b><span>4</span></div>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Crouton Alpha 隐身模型</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>新空间</span><span class="tm">2:11</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">#1479 价格同步与 cargo…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#3d62c9,#7b8cf0)"></span>litellm-rs</span><span class="tm">3:08</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">插件系统优化空间</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">7:01</span></span>
+            </span>
+          </button>
+        
+          <button class="row ">
+            <span class="st st-running"></span>
+            <span class="x"><span class="t"><span class="ttl">Four_agents_write 后台 C…</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#f59e6b,#d9467a)"></span>mooring</span><span class="tm">8:45</span></span>
+            </span>
+          </button>
+        
+      
+        <div class="grp"><b>今天</b><span>47</span></div>
+        
+      
+        <div class="grp"><b>更早</b><span>65</span></div>
+        
+      
+    </div>
+    <button class="mh" aria-expanded="true"><svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 3.5l3 3 3-3"></path></svg>apple<span class="note">3 个会话</span><span class="badge">2</span><span aria-label="在 apple 上开新终端" style="font-size: 15px; font-weight: 400; color: #a2a2aa">+</span></button>
+    <div style="flex: none; padding: 4px 0">
+      <button class="row sel"><span class="st st-review"></span><span class="x"><span class="t"><span class="ttl">你好啊</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">刚刚</span></span></span></button>
+      <button class="row"><span class="st st-review"></span><span class="x"><span class="t"><span class="ttl">w你好</span><span class="tag"><span class="sd" style="background: linear-gradient(135deg,#5ab0f0,#4b4fd6)"></span>code</span><span class="tm">7时</span></span></span></button>
+      <button class="row"><span class="st st-idle"></span><span class="x"><span class="t"><span class="ttl">codex · 空闲 · 看不到对话</span></span></span></button>
+    </div>
+    <button class="mh" aria-expanded="false" style="color: #a2a2aa"><svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3.5 2l3 3-3 3"></path></svg>mac-mini<span class="note">断开 · 12 秒后重试</span></button>
+    <div style="flex: none; padding: 8px 16px; border-top: 1px solid #2a2f37; font-size: 11px; color: #8d8d96"><span class="mono" style="padding: 0 4px; border: 1px solid #2a2f37; border-radius: 4px; margin-right: 6px">⌘J</span>下一个要你的</div>
+    <div style="flex: none; padding: 10px 16px 12px; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa">8 个空间 · 13 个会话 &#160; 待办 0</div>
+  </div>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <div style="height: 40px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2f37; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3fb27f"></span><span style="font-weight: 600">apple · 你好啊</span><span style="font-size: 11px; color: #3fb27f">等你验收</span></div>
+    <div class="term">
+      <div>Claude Code <span class="dim">v2.1.300</span></div>
+      <div class="dim">Opus 5.5 · Claude Pro</div>
+      <div class="dim">~/Desktop/code</div>
+      <div class="prompt">❯ 你好啊</div>
+      <div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 12:32 AM</div>
+      <div class="prompt">❯ 嗯嗯</div>
+      <div>● 嗯，随时说就行，我在这儿等着。</div>
+      <div class="dim" style="margin-top: 12px">* Brewed for 6s · done 10:54 AM</div>
+    </div>
+    <div style="height: 30px; flex: none; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2a2f37; font-size: 12px; color: #a2a2aa"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3fb27f"></span>apple · 3 个会话</span><span>5h 2% · 周 58% · 本机诊断 · ⌘P 命令</span></div>
+  </div>
+</div>
+</template></div></div>
+<h2 id="states">三个方向共用：连接状态</h2><p class="note">不管选哪个都要的部分
+mac-mini 和它的会话只是示意。断开的文案来自现有的 Link::Offline 和 1～30 秒重连。
+版本旧的提示 spec 里写着还没设计，这里是第一稿。
+三个方向都要：卡片加更新时间，行上显示空间名，⌘J 跨机器跳，标题用配置里的名字。</p><div class="scroll"><div class="host" style="width:1040px;height:960px"><template shadowrootmode="open"><style>
+body{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.line{display:grid;grid-template-columns:150px minmax(0,1fr);gap:24px;align-items:start}
+.cap{font-size:13px;line-height:20px;font-weight:600;color:#ececee;padding-top:9px}
+.pane{border:1px solid #2a2f37;border-radius:8px;overflow:hidden;background:#21252c}
+.head{height:40px;box-sizing:border-box;padding:0 12px 0 16px;display:flex;align-items:center;gap:8px;font-size:13px}
+.ttl{font-weight:600}
+.dot{flex:none;width:8px;height:8px;border-radius:50%;background:#3fb27f}
+.m{flex:none;box-sizing:border-box;width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1px solid #565c67;border-radius:4px;font-size:9.5px;line-height:1;font-weight:600;color:#c9c9cf}
+.word{font-size:11px;color:#3fb27f}
+.ro{font-size:11px;color:#a2a2aa;padding:1px 6px;border:1px solid #3a404a;border-radius:4px}
+.sp{flex:1}
+.btn{height:26px;box-sizing:border-box;padding:0 10px;display:flex;align-items:center;border:1px solid #3a404a;border-radius:6px;font-size:12px;color:#e4e4e7}
+.ghost{height:26px;padding:0 8px;display:flex;align-items:center;font-size:12px;color:#a2a2aa}
+.say{padding:10px 16px;border-top:1px solid #2a2f37;background:#1b1f25;font-size:12.5px;line-height:18px;color:#c9c9cf;display:flex;align-items:center;gap:12px}
+.say .why{flex:1;min-width:0}
+.fine{display:block;font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#8d8d96;margin-top:2px}
+.item{box-sizing:border-box;width:100%;height:32px;padding:0 10px;display:flex;align-items:center;gap:8px;border-radius:6px;font-size:13px;color:#e4e4e7}
+.item.hot{background:#262a31}
+.item .k{margin-left:auto;font-size:11px;color:#8d8d96}
+</style>
+
+<div style="width: 1040px; height: 960px; box-sizing: border-box; padding: 48px; display: flex; flex-direction: column; gap: 28px; background: #15181d; color: #e4e4e7; font-family: -apple-system, 'PingFang SC', system-ui, sans-serif">
+  <div class="line">
+    <div class="cap">连着，能打字</div>
+    <div class="pane"><div class="head"><span class="dot"></span><span class="m">A</span><span class="ttl">apple · 你好啊</span><span class="word">等你验收</span><span class="sp"></span><button class="ghost">关闭终端</button></div></div>
+  </div>
+  <div class="line">
+    <div class="cap">对面版本旧，只能看</div>
+    <div class="pane"><div class="head"><span class="dot"></span><span class="m">A</span><span class="ttl">apple · 你好啊</span><span class="word">等你验收</span><span class="ro">只读</span></div>
+    <div class="say"><span class="why">apple 上的 Mooring 太旧，这里只能看。在 apple 上更新后就能打字和答审批。</span></div></div>
+  </div>
+  <div class="line">
+    <div class="cap">对面要回了写入</div>
+    <div class="pane"><div class="head"><span class="dot"></span><span class="m">A</span><span class="ttl">apple · 你好啊</span><span class="word">等你验收</span><span class="ro">只读 · 可明确接管</span><span class="sp"></span><button class="btn">接管</button></div></div>
+  </div>
+  <div class="line">
+    <div class="cap">断开，正在重连</div>
+    <div class="pane"><div class="head"><span class="dot" style="background: #5a5f68"></span><span class="m" style="color: #8d8d96; border-color: #3a404a">M</span><span class="ttl" style="color: #a2a2aa">mac-mini · 发布脚本检查</span></div>
+    <div class="say"><span class="why">连接断开，下面是断开时的画面，状态可能已经变了。12 秒后重试。<span class="fine">ssh: connect to host mac-mini port 22: Operation timed out</span></span><button class="btn">立刻重连</button></div></div>
+  </div>
+  <div class="line">
+    <div class="cap">新开终端：选机器</div>
+    <div class="pane" style="width: 300px; padding: 6px; background: #1b1f25">
+      <button class="item hot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="10" rx="1.6"></rect><path d="M3 19h18"></path></svg>本机<span class="k">⌘T</span></button>
+      <button class="item"><span class="m">A</span>apple</button>
+      <button class="item" disabled="disabled" style="color: #8d8d96"><span class="m" style="color: #8d8d96; border-color: #3a404a">M</span>mac-mini<span class="k">断开</span></button>
+    </div>
+  </div>
+</div>
+</template></div></div>
+</main>
+</body>
+</html>
