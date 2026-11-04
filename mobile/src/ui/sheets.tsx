@@ -60,13 +60,18 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   const t = useTheme();
   const [text, setText] = useState('');
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     if (!visible) return;
+    setLoaded(false);
     const r = remote(machine);
     if (!r) return setError('电脑没连上');
     setError('');
     r.request('read', { terminal, lines: 40 })
-      .then((x) => setText(String(x.text ?? '').replace(/\s+$/, '')))
+      .then((x) => {
+        setText(String(x.text ?? '').replace(/\s+$/, ''));
+        setLoaded(true);
+      })
       .catch((e) => setError((e as Error).message));
   }, [visible, machine, terminal]);
   return (
@@ -74,7 +79,7 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
       <Text style={[s.title, { color: t.text }]}>终端最后几行</Text>
       <ScrollView style={{ maxHeight: 420 }} horizontal={false}>
         <Text selectable style={[s.screen, { color: t.text, backgroundColor: t.well }]}>
-          {error || text || '…'}
+          {error || (loaded ? text || '画面是空的' : '…')}
         </Text>
       </ScrollView>
       <Wide label="关上" kind="grey" onPress={onClose} height={46} />

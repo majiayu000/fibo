@@ -7,6 +7,8 @@ import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 export type SwipeAction = { label: string; color: string; fg: string; run: () => void };
 
 const THRESHOLD = 90;
+/** What shows under the row is decoration until you drag: screen readers skip it. */
+const hidden = { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const };
 
 // A drag ends in a click on web (and sometimes a press on a phone): the row checks this
 // before it opens, so a swipe never doubles as a tap.
@@ -46,12 +48,13 @@ export function Swipe({ children, left, right }: { children: ReactNode; left?: S
   return (
     <View style={{ overflow: 'hidden' }}>
       {right && (
-        <View style={[StyleSheet.absoluteFill, s.under, { backgroundColor: right.color, justifyContent: 'flex-start' }]}>
+        <View {...hidden} style={[StyleSheet.absoluteFill, s.under, { backgroundColor: right.color, justifyContent: 'flex-start' }]}>
           <Text style={[s.label, { color: right.fg }]}>{right.label}</Text>
         </View>
       )}
       {left && (
         <Animated.View
+          {...hidden}
           style={[
             StyleSheet.absoluteFill,
             s.under,

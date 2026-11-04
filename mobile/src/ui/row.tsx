@@ -39,6 +39,8 @@ export function Row({
   const space = spaceName(m, c);
   return (
     <Pressable
+      // With buttons inside, the row must not swallow them for screen readers.
+      accessible={!children}
       onPress={onPress}
       style={({ pressed }) => [
         s.row,
