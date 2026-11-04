@@ -1,6 +1,6 @@
 # 手机 App
 
-状态（2026-11-03）：App 已在 `mobile/` 跑通配对、会话列表、聊天和审批，iOS 模拟器和安卓真机都验过；完整设计稿见 [design.html](design.html)，竞品调研见 [peerscope](peerscope/rounds/20261103-s1/00-README.md)。电脑端已经做好的部分：[远程协议](https://github.com/majiayu000/keepline/blob/6cd6f0cbe72d1a8031d9e4467c600e8753e74e39/specs/extensions/remote-protocol.md)、[自建中继](https://github.com/majiayu000/keepline/blob/6cd6f0cbe72d1a8031d9e4467c600e8753e74e39/specs/extensions/relay.md)（这两份文档还在旧仓库 keepline 里）、按设备分权限、后台托管，以及 App 里的配对面板。
+状态（2026-11-03）：App 已在 `mobile/` 跑通配对、会话列表、聊天和审批，iOS 模拟器和安卓真机都验过；完整设计稿见 [design.html](design.html)，竞品调研见 [peerscope](peerscope/rounds/20261103-s1/00-README.md)。电脑端已经做好的部分：[远程协议](https://github.com/majiayu000/keepline/blob/6cd6f0cbe72d1a8031d9e4467c600e8753e74e39/specs/extensions/remote-protocol.md)、[自建中继](https://github.com/majiayu000/keepline/blob/6cd6f0cbe72d1a8031d9e4467c600e8753e74e39/specs/extensions/relay.md)（这两份文档还在旧仓库 keepline 里）、按设备分权限、后台托管，以及 App 里的配对面板。自己部署中继见 [自建中继](../relay/self-host.md)。
 
 ## 11-02 用户定的方向
 
