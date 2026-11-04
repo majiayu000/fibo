@@ -97,6 +97,8 @@ impl Render for SidebarView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.drawn.set(Instant::now());
         self.asked.set(false);
+        #[cfg(feature = "visual-test")]
+        FIRED.store(false, std::sync::atomic::Ordering::Relaxed);
         self.workbench
             .update(cx, |w, cx| {
                 let name = w
@@ -149,7 +151,11 @@ impl Workbench {
             .then(|| CATCH_UP.saturating_sub(state.drawn.get().elapsed()));
         if let Some(wait) = catch_up {
             #[cfg(feature = "visual-test")]
-            CATCH_UPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            {
+                use std::sync::atomic::Ordering::Relaxed;
+                CATCH_UPS.fetch_add(1, Relaxed);
+                CHAINED.fetch_add(usize::from(FIRED.load(Relaxed)), Relaxed);
+            }
             let later = view.clone();
             let draw = move |cx: &mut gpui::App| ask(&later, cx);
             if wait.is_zero() {
@@ -224,6 +230,8 @@ impl Workbench {
 /// Draws the sidebar next frame. Marked as asked, so the workbench drawing beside it
 /// in that frame sets no further catch-up: a catch-up never sets off the next one.
 fn ask(view: &Entity<SidebarView>, cx: &mut gpui::App) {
+    #[cfg(feature = "visual-test")]
+    FIRED.store(true, std::sync::atomic::Ordering::Relaxed);
     view.update(cx, |v, cx| {
         v.due.set(false);
         v.asked.set(true);
@@ -233,6 +241,11 @@ fn ask(view: &Entity<SidebarView>, cx: &mut gpui::App) {
 
 #[cfg(feature = "visual-test")]
 static CATCH_UPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// A catch-up fired and the sidebar has not drawn since: one set now is set off by it.
+#[cfg(feature = "visual-test")]
+static FIRED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "visual-test")]
+static CHAINED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// Checks turn the catch-up off, so a sidebar that missed a change shows it.
 fn catch_up_on() -> bool {
@@ -247,11 +260,14 @@ fn catch_up_on() -> bool {
 impl Workbench {
     /// Catch-up draws set so far, and whether the sidebar waits to draw: a window that
     /// only draws when asked must fall quiet once nothing changes.
-    pub fn visual_catch_ups(&self, cx: &gpui::App) -> (usize, bool, bool) {
+    /// The last is how many a catch-up's own frame set: never one in a working build,
+    /// however often the window draws by itself.
+    pub fn visual_catch_ups(&self, cx: &gpui::App) -> (usize, bool, bool, usize) {
+        use std::sync::atomic::Ordering::Relaxed;
         let view = self.redraw.as_ref().map(|r| r.sidebar.read(cx));
-        let count = CATCH_UPS.load(std::sync::atomic::Ordering::Relaxed);
         let asked = view.is_some_and(|v| v.asked.get());
-        (count, asked, view.is_some_and(|v| v.due.get()))
+        let due = view.is_some_and(|v| v.due.get());
+        (CATCH_UPS.load(Relaxed), asked, due, CHAINED.load(Relaxed))
     }
     /// Asks the sidebar to draw next frame, as a catch-up does.
     pub fn visual_ask_sidebar(&self, cx: &mut gpui::App) {

@@ -256,7 +256,7 @@ async fn redraw_check(
         .update(cx, |v, _, cx| v.visual_ask_sidebar(cx))
         .unwrap();
     frame(cx);
-    let (start, ..) = catch_ups(cx);
+    let (start, .., chained_start) = catch_ups(cx);
     pane.update(cx, |_, cx| cx.notify());
     frame(cx);
     let mut was_due = catch_ups(cx).2;
@@ -268,10 +268,11 @@ async fn redraw_check(
         }
         was_due = catch_ups(cx).2;
     }
-    let (end, ..) = catch_ups(cx);
+    let (end, .., chained) = catch_ups(cx);
     lines.push(format!(
-        "catch-ups after one pane frame and 5 quiet s: {} (1 expected)",
-        end - start
+        "catch-ups after one pane frame and 5 quiet s: {} (1 expected); set by a catch-up's own frame: {}",
+        end - start,
+        chained - chained_start
     ));
     let line = lines.join("; ");
     eprintln!("CPU-PROBE redraw-check {line}");

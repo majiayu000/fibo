@@ -26,8 +26,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'crates/mooring-app/perf-baseline.txt'
 BUDGET = 0.15
 SHARE_BUDGET = 2.0
-# A loop drew 15 catch-ups in the 5 quiet seconds; a working build 1, rarely up to 8.
-LOOP = 12
 FIXTURE = [sys.executable, str(ROOT / 'scripts/perf-fixture.py')]
 
 
@@ -69,11 +67,14 @@ def main():
         fails.append('no redraw-check line in the probe output')
 
     quiet = probe(bindir, out / 'catch-up', 'redraw-check', catch_up=True)
-    m = re.search(r'catch-ups after one pane frame and 5 quiet s: (\d+)', quiet)
+    # Counting catch-ups is not enough: a runner with a display draws the window by itself,
+    # 15 in 5 s from a working build. What the loop does is a catch-up's own frame setting
+    # the next one; a working build never does.
+    m = re.search(r"set by a catch-up's own frame: (\d+)", quiet)
     if not m:
-        fails.append('no catch-up count in the probe output')
-    elif int(m.group(1)) >= LOOP:
-        fails.append(f'{m.group(1)} catch-ups in 5 quiet seconds: a catch-up schedules the next')
+        fails.append('no chained catch-up count in the probe output')
+    elif int(m.group(1)) > 0:
+        fails.append(f"{m.group(1)} catch-ups set by a catch-up's own frame: a catch-up schedules the next")
 
     if os.environ.get('MOORING_PERF_UPDATE'):
         assert counted, 'no instruction counter here: update the baseline on real hardware'
