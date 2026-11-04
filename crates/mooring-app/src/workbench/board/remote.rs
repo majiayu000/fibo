@@ -209,7 +209,7 @@ impl Workbench {
                     .text_size(px(T::META))
                     .text_color(T::color(T::muted()))
                     .when_some(agent, |d, a| d.child(agent_mark(a, T::color(T::muted()))))
-                    .child(pill(r.machine.clone(), link.opacity(0.4), None, link))
+                    .child(name_pill(r.machine.clone(), link.opacity(0.4), None, link))
                     .when_some(when, |d, when| {
                         d.child(
                             svg()

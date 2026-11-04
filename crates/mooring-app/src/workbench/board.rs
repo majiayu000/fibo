@@ -12,7 +12,9 @@ use gpui::{
 use mooring_core::model::Agent;
 use std::time::Duration;
 
+mod pill;
 pub(super) mod remote;
+use pill::{name_pill, pill};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(super) enum Column {
@@ -164,41 +166,6 @@ fn branch_hue(branch: &str) -> Option<u32> {
     })
 }
 
-/// A rounded label with an outline in its own hue and an optional dot.
-fn pill(
-    text: impl Into<gpui::SharedString>,
-    edge: Hsla,
-    dot: Option<Hsla>,
-    ink: Hsla,
-) -> gpui::Div {
-    div()
-        .h(px(PILL))
-        .px(px(T::S8))
-        .flex()
-        .flex_shrink_0()
-        .items_center()
-        .gap(px(T::BOARD_PILL_GAP))
-        .rounded(px(PILL / 2.))
-        .border(px(T::BORDER_WIDTH))
-        .border_color(edge)
-        .text_size(px(T::META))
-        .text_color(ink)
-        .when_some(dot, |d, c| {
-            d.child(
-                div()
-                    .size(px(T::BOARD_PILL_DOT))
-                    .rounded_full()
-                    .bg(c)
-                    .flex_shrink_0(),
-            )
-        })
-        .child(
-            div()
-                .max_w(px(T::BOARD_PILL_MAX))
-                .truncate()
-                .child(text.into()),
-        )
-}
 const PILL: f32 = T::BOARD_PILL;
 const COLUMN_MIN: f32 = T::BOARD_COLUMN_MIN;
 const CARD_GAP: f32 = T::BOARD_CARD_SPACING;
@@ -948,7 +915,7 @@ impl Workbench {
         };
         let branch_pill = branch.as_ref().map(|b| {
             let hue = branch_hue(b).map_or(T::color(T::muted()), T::color);
-            pill(
+            name_pill(
                 b.rsplit('/').next().unwrap_or(b).to_owned(),
                 hue.opacity(0.4),
                 Some(hue),
@@ -1067,6 +1034,7 @@ impl Workbench {
                     .when(column == Column::Done, |d| {
                         d.child(
                             div()
+                                .flex_shrink_0()
                                 .text_size(px(T::META))
                                 .text_color(Status::Closed.colors().1)
                                 .child(format!("✓ {}", Status::Closed.label())),
@@ -1076,6 +1044,7 @@ impl Workbench {
                         d.child(
                             div()
                                 .flex()
+                                .flex_shrink_0()
                                 .items_center()
                                 .gap(px(T::S4))
                                 .text_size(px(T::META))
