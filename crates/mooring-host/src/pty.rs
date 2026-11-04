@@ -411,13 +411,21 @@ mod env_tests {
         // Read while it runs: macOS holds a closing terminal open until its output is read.
         let mut text = String::new();
         let mut buf = [0u8; 4096];
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut exited = false;
         loop {
             match out.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => text.push_str(&String::from_utf8_lossy(&buf[..n])),
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    if child.try_wait().unwrap().is_some() || std::time::Instant::now() > deadline {
+                    // The child can exit before its output reaches the terminal (a slow CI
+                    // runner read nothing): keep reading a moment after it exits.
+                    if !exited && child.try_wait().unwrap().is_some() {
+                        exited = true;
+                        deadline =
+                            std::time::Instant::now() + std::time::Duration::from_millis(500);
+                    }
+                    if std::time::Instant::now() > deadline {
                         break;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(10));
