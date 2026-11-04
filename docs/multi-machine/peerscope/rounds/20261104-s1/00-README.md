@@ -1,28 +1,28 @@
-# Mooring 连接方式调研（2026-11-04）
+# Mooring 连接方式调研（2026-11-04，源码版）
 
-**结论**：同类产品里自己有服务器的，常见做法是「官方服务器默认、设置里能换成自建、能直连就不走服务器」（RustDesk、Syncthing、iroh 写明了这三点），中继也大多看不到内容。Mooring 建议照这个做：一个「连接方式」设置，四个选项——
+**结论**：读了 8 个开源产品的源码之后，结论有三处变化。
 
-1. **自动（默认）**：先直连，不通就走官方中继，走中继期间继续试直连；
-2. Mooring 官方中继；
-3. 自建中继（填地址和 key）；
-4. 只走 ssh / Tailscale（现在的方式）。
+1. **和 Mooring 最像的 Rex（Ghostty 作者的新终端）没有自己的中继**，而是把 Tailscale 直接嵌进服务端，身份就是 Tailscale 账号。所以「Tailscale」这个选项应该学 Rex 内置，而不是让用户自己配 ssh。
+2. **官方中继默认开不开，同类分两派**：Happy、RustDesk 默认开，Paseo 新装默认关。
+3. **最该先补的是断线续传**：Rex 断线后按「已收到多少字节」补发，不重新要整屏。Mooring 每次都要整屏，这是今天打开远程画面慢的原因之一。
 
-最先该做的不是选项本身，而是**显示当前走哪条路、一个来回多久**。今天 apple 那条 Tailscale 路一个来回 400 ms，界面上看不出来。
+建议的连接方式四选一：**Tailscale（内置）/ Mooring 官方中继 / 自建中继 / ssh**。最先做的仍是「显示走哪条路、一个来回多久」，其次是断线续传。
 
-- [调研：15 个候选、8 家怎么做、事实核验](01-competitor-research.md)
-- [方案：四个选项、要做的五件事、待定项](02-my-plan.md)
+- [调研：16 个候选、Rex 深挖、9 种中继的内部构造、源码核验](01-competitor-research.md)
+- [方案：四个选项、七件事、待定项](02-my-plan.md)
 
 ## 待你决定
 
-- 默认是不是「自动」；直连不通时默认走官方中继，还是第一次先问你（Paseo 的做法）。
+- 默认用哪个：已登录 Tailscale 的机器默认走 Tailscale，否则默认走官方中继？还是像 Paseo 那样，中继默认关、要你点开？
+- Tailscale 选项是内置（tsnet，学 Rex），还是先只让用户填 tailnet 地址。
 - 官方中继放在哪、用什么域名、谁出机器（部署要你授权）。
-- 直连先做简单版（试已知的局域网和 Tailscale 地址），还是直接做打洞（iroh、嵌入 Tailscale、mDNS 还没比较）。
 
 ## 覆盖率和没做到
 
-- 候选 15 个，深挖 8 个：RustDesk、Tailscale、Syncthing、iroh、Happy、Paseo、VS Code Remote Tunnels、Claude Code Remote Control。另有 upterm、sshx 只读了 README。
-- 全部只读了官方文档和 README，没读源码，也没装上实测延迟和打洞成功率。
-- tmate 官网没打开，ZeroTier、frp 没细看。
-- 没看用户评论。
-- Paseo 默认开不开中继、Happy 手机端默认用哪台服务器，文档没写清。
-- 经过一次第三方审查：改正了 Happy 设置项的名字和默认值，补上「中继兜底要不要先问你」这个待定项。
+- 候选 16 个。读了固定版本源码的有 8 个：RustDesk、Tailscale、Syncthing、iroh、Happy、Paseo、upterm、sshx。
+- Rex 闭源：只读了官方文档，以及一个第三方开源兼容服务端（tuxosaurus）的源码。凡是「Rex 怎么实现」的结论，都标了「兼容实现」。
+- VS Code 隧道、Claude Remote Control 闭源，只有文档。
+- 没有编译、运行或抓包；没测延迟和打洞成功率。
+- tmate、ZeroTier、frp 没细看；没看用户评论。
+- 和第一版只读文档相比，按源码更正了：Paseo 中继新装默认关（不是「首次问」）；sshx 代码里能自建；upterm 的中继能读内容；RustDesk 验签失败会退回明文；iroh「约九成能直连」只是文档说法，源码里没有。
+- 第一版经过两轮第三方审查。这一版改动大，还需要再审一次。

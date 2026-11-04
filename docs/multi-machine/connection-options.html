@@ -10,94 +10,154 @@
     --blue:#6aa3ff; --green:#4fbf7a; --amber:#e0b341; --red:#e0645c; --chip:#1b2740; }
   * { box-sizing:border-box; }
   body { margin:0; background:#08090b; color:var(--text); font:14px/1.65 -apple-system,"PingFang SC",sans-serif; }
-  main { max-width:1080px; margin:0 auto; padding:32px 16px 64px; }
+  main { max-width:1100px; margin:0 auto; padding:32px 16px 64px; }
   h1 { font-size:22px; margin:0 0 6px; } h2 { font-size:17px; margin:40px 0 8px; } h3 { font-size:15px; margin:22px 0 4px; }
   .muted { color:var(--muted); }
   .lead { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:14px 0; }
+  .lead ol { margin:6px 0 0; padding-left:20px; }
   table { border-collapse:collapse; width:100%; margin-top:8px; font-size:13px; }
   th,td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
   th { color:var(--muted); font-weight:600; white-space:nowrap; }
   a { color:var(--blue); }
   code { background:#1b1e24; padding:1px 5px; border-radius:4px; font-size:12px; }
   .y { color:var(--green); } .n { color:var(--red); } .q { color:var(--amber); }
-  .mock { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; max-width:520px; margin:12px 0; }
+  .tag { font-size:11px; padding:0 6px; border-radius:8px; border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+  .src { color:var(--green); border-color:#2d4a37; } .doc { color:var(--amber); border-color:#4a4020; }
+  .fix { color:var(--red); }
+  .mock { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; max-width:560px; margin:12px 0; }
   .opt { display:flex; gap:10px; align-items:flex-start; padding:9px 10px; border-radius:8px; border:1px solid transparent; }
   .opt.on { border-color:#3a4a6a; background:var(--chip); }
   .radio { width:14px; height:14px; border-radius:50%; border:2px solid var(--muted); margin-top:3px; flex-shrink:0; }
   .on .radio { border-color:var(--blue); background:radial-gradient(var(--blue) 40%, transparent 45%); }
-  .opt b { display:block; font-weight:600; }
-  .opt small { color:var(--muted); font-size:12px; }
-  .field { margin:4px 0 0 24px; display:flex; gap:6px; }
-  .field span { flex:1; border:1px solid var(--line); border-radius:6px; padding:3px 8px; font-size:12px; color:var(--muted); }
+  .opt b { display:block; font-weight:600; } .opt small { color:var(--muted); font-size:12px; }
   .route { margin-top:10px; font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:8px; }
   .route b { color:var(--amber); font-weight:600; }
+  .fig { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; margin:12px 0; overflow-x:auto; }
+  svg { display:block; min-width:860px; width:100%; height:auto; }
+  svg text { fill:var(--text); font:12px -apple-system,"PingFang SC",sans-serif; }
+  svg .m { fill:var(--muted); font-size:11px; } svg .t { font-weight:600; font-size:13px; }
+  svg .box { fill:#1c2027; stroke:#3a414c; }
 </style>
 </head>
 <body>
 <main>
-  <h1>连接方式：同类产品怎么做，Mooring 怎么选</h1>
-  <p class="muted">2026-11-04。15 个候选，深挖 8 个，全部只读了官方文档和 README，没装上实测。正文和事实核验在 <code>docs/multi-machine/peerscope/rounds/20261104-s1/</code>。</p>
+  <h1>连接方式：同类产品怎么做，Mooring 怎么选（源码版）</h1>
+  <p class="muted">2026-11-04。16 个候选，8 个开源产品读了固定版本的源码；Rex、VS Code、Claude Remote Control 闭源，只有文档。标签：<span class="tag src">源码</span> 读过源码，<span class="tag doc">文档</span> 只看了文档。正文和每条源码链接在 <code>docs/multi-machine/peerscope/rounds/20261104-s1/01-competitor-research.md</code>。</p>
 
   <div class="lead">
-    <b>结论</b>：自己有服务器的同类产品，常见做法是「官方服务器默认、设置里能换成自建、能直连就不走服务器」，RustDesk、Syncthing、iroh 三点都写明了；抽查的 5 家都写明中继看不到内容。<br>
-    Mooring 建议一个「连接方式」设置，四个选项：<b>自动（默认）</b>、官方中继、自建中继、只走 ssh/Tailscale。<br>
-    最先做的是<b>显示当前走哪条路、一个来回多久</b>——今天 apple 那条 Tailscale 路 400 ms，界面上看不出来。
+    <b>读完源码，结论变了三处：</b>
+    <ol>
+      <li><b>和 Mooring 最像的 Rex（Ghostty 作者的新终端）没有自己的中继</b>：把 Tailscale 直接嵌进服务端，身份就是 Tailscale 账号。「Tailscale」选项应该学它内置，而不是让你自己配 ssh。</li>
+      <li><b>官方中继默认开不开，同类分两派</b>：Happy、RustDesk 默认开；Paseo 新装默认关。</li>
+      <li><b>最该先补的是断线续传</b>：Rex 按「已收到多少字节」补发，不重新要整屏。Mooring 每次都要整屏，这也是打开远程画面慢的原因之一。</li>
+    </ol>
   </div>
 
-  <h2>1 各家怎么连</h2>
+  <h2>1 最像 Mooring 的：Rex</h2>
+  <p>Superlogical（Ghostty 作者 Mitchell Hashimoto 的公司）做的终端，围绕给 AI Agent 用的常驻会话设计：后台持有会话，窗口只是客户端。闭源，公测免费。它的第三方 Linux 兼容服务端 tuxosaurus 也用 libghostty-vt 出整屏快照，和 Mooring 同一个思路。</p>
   <table>
-    <tr><th>产品</th><th>官方服务器</th><th>自建</th><th>直连 / 打洞</th><th>服务器看得到内容？</th><th>用户在哪改</th></tr>
-    <tr><td><a href="https://github.com/rustdesk/rustdesk">RustDesk</a><br><span class="muted">远程桌面 · 12.8 万★</span></td><td class="y">有，默认</td><td class="y">有（hbbs/hbbr）</td><td class="y">先打洞，不通才中继</td><td class="muted">自建要填公钥</td><td>⋮ → 网络：ID 服务器、中继服务器、Key</td></tr>
-    <tr><td><a href="https://tailscale.com/kb/1232/derp-servers">Tailscale</a><br><span class="muted">组网</span></td><td class="y">DERP，兜底</td><td class="y">自建 DERP（少见）、Headscale 自建控制面</td><td class="y">大多直连 → tailnet 里自己配的 peer relay → DERP</td><td class="y">看不到（WireGuard）</td><td>一般不用改</td></tr>
-    <tr><td><a href="https://docs.syncthing.net/users/relaying.html">Syncthing</a><br><span class="muted">文件同步 · 9 万★</span></td><td class="y">公共中继池，默认开</td><td class="y">有</td><td class="y">直连优先；走中继时继续试直连</td><td class="y">看不到；明说能看到 IP、设备 ID、流量大小</td><td>监听地址写 <code>relay://…</code></td></tr>
-    <tr><td><a href="https://docs.iroh.computer/concepts/relays">iroh</a><br><span class="muted">Rust P2P 库 · 1.3 万★</span></td><td class="q">公共中继，限速、只适合开发</td><td class="y">开源中继 / 付费独享</td><td class="y">约九成能直连（自述）</td><td class="y">看不到</td><td>代码里配置</td></tr>
-    <tr><td><a href="https://happy.engineering/docs/guides/self-hosting">Happy</a><br><span class="muted">手机遥控 Claude · 2.4 万★</span></td><td class="y">有（桌面端默认）</td><td class="y">有</td><td class="n">查过没有提到</td><td class="y">看不到（只存加密数据）</td><td>App 登录前齿轮 → Server → Server URL；CLI 用 <code>HAPPY_SERVER_URL</code>（<a href="https://github.com/slopus/happy-server">加密说明</a>）</td></tr>
-    <tr><td><a href="https://github.com/getpaseo/paseo">Paseo</a><br><span class="muted">多端遥控 Agent · 2.3 万★</span></td><td class="q">有官方中继仓库，是否托管没写</td><td class="q">未写</td><td class="y">TCP / Tailscale / VPN 直连</td><td class="y">中继端到端加密</td><td>首次启动时问开不开中继</td></tr>
-    <tr><td><a href="https://code.visualstudio.com/docs/remote/tunnels">VS Code 隧道</a></td><td class="y">只有微软 dev tunnels</td><td class="n">文档没提</td><td class="n">没提</td><td class="y">隧道里套 SSH</td><td>要登录 GitHub/微软账号；另有 Remote-SSH</td></tr>
-    <tr><td><a href="https://code.claude.com/docs/en/remote-control">Claude Remote Control</a></td><td class="y">只有 Anthropic</td><td class="n">没有</td><td class="n">没有</td><td class="q">只写了 TLS，全文没有「端到端」</td><td>不能改</td></tr>
-    <tr><td><a href="https://github.com/owenthereal/upterm">upterm</a> / <a href="https://github.com/ekzhang/sshx">sshx</a></td><td class="y">默认官方</td><td>upterm 有 <code>--server</code>；sshx 不支持</td><td class="n">没有</td><td>sshx 端到端；upterm 未写</td><td>命令行参数</td></tr>
+    <tr><th>点</th><th>做法</th><th>依据</th></tr>
+    <tr><td>远程怎么连</td><td>没有自己的中继。内置 Tailscale 节点（<code>rex server start --tailscale</code> → <code>https://rex.&lt;tailnet&gt;.ts.net</code>）、Tailscale Serve、tailnet 地址、或自带 VPN；明文 HTTP 要 <code>--allow-anonymous</code>，文档警告「每个连接都有完全权限」</td><td><span class="tag doc">文档</span> <a href="https://www.superlogical.com/rex/docs/linux/remote-access.md">remote-access</a></td></tr>
+    <tr><td>内置 Tailscale</td><td>服务端用 tsnet 作为一台独立设备加入 tailnet，在 443 用 Tailscale 证书开 HTTPS；被控机不用装 Tailscale</td><td><span class="tag src">兼容实现源码</span> <a href="https://github.com/wesleygrimes/tuxosaurus/blob/0c12586d54adc562e57339da5ac2bfdaf9735db7/internal/tailnet/node.go#L115">node.go#L115</a></td></tr>
+    <tr><td>谁能连</td><td>用 WhoIs 查对方的 Tailscale 账号，默认只放这台服务器的主人，带 tag 的设备和别的账号都拒；没有配对码</td><td><span class="tag src">兼容实现源码</span> <a href="https://github.com/wesleygrimes/tuxosaurus/blob/0c12586d54adc562e57339da5ac2bfdaf9735db7/internal/tailnet/node.go#L429">node.go#L429</a></td></tr>
+    <tr><td>断线</td><td>输出走单独的数据流；重连时带「已收到多少字节」，8 MiB、60 秒内补发，超出才重新要整屏</td><td><span class="tag src">兼容实现</span> <a href="https://github.com/wesleygrimes/tuxosaurus/blob/0c12586d54adc562e57339da5ac2bfdaf9735db7/docs/protocol.md">protocol.md</a></td></tr>
+    <tr><td>代价</td><td>要开 tailnet 的 HTTPS 证书，设备名会进公开的证书透明日志；第三方实测一次调用 0.07–0.09 秒</td><td><span class="tag doc">文章</span> <a href="https://dev.classmethod.jp/en/articles/reona-superlogical-rex-beta-try/">classmethod</a></td></tr>
+  </table>
+  <p class="muted">tuxosaurus 不是 Superlogical 的代码，它自述按 Rex 服务端的一个版本跑同一套协议测试，只能当兼容实现的证据。</p>
+
+  <h2>2 各家中继的内部构造</h2>
+  <div class="fig">
+  <svg viewBox="0 0 1060 300" role="img" aria-label="三种中继形态">
+    <rect class="box" x="10" y="20" width="330" height="260" rx="10"/>
+    <text class="t" x="26" y="44">A 有状态服务器（存加密数据）</text>
+    <text class="m" x="26" y="64">Happy、sshx</text>
+    <rect class="box" x="30" y="84" width="80" height="40" rx="6"/><text x="46" y="108">手机</text>
+    <rect class="box" x="130" y="84" width="90" height="60" rx="6"/><text x="140" y="108">服务器</text><text class="m" x="140" y="126">数据库</text>
+    <rect class="box" x="240" y="84" width="80" height="40" rx="6"/><text x="256" y="108">电脑</text>
+    <text class="m" x="26" y="174">· 离线也能看历史、多设备同步</text>
+    <text class="m" x="26" y="192">· 内容加密，但时间戳、会话 id 等明文</text>
+    <text class="m" x="26" y="210">· 永远经服务器，没有直连</text>
+
+    <rect class="box" x="360" y="20" width="330" height="260" rx="10"/>
+    <text class="t" x="376" y="44">B 无状态转发（看不到内容）</text>
+    <text class="m" x="376" y="64">Paseo、Syncthing、iroh、DERP、RustDesk hbbr、Mooring</text>
+    <rect class="box" x="380" y="84" width="80" height="40" rx="6"/><text x="396" y="108">手机</text>
+    <rect class="box" x="480" y="84" width="90" height="40" rx="6"/><text x="492" y="108">中继</text>
+    <rect class="box" x="590" y="84" width="80" height="40" rx="6"/><text x="606" y="108">电脑</text>
+    <text class="m" x="376" y="174">· 两端自己做加密（Noise / TLS / WireGuard）</text>
+    <text class="m" x="376" y="192">· 中继只看到 IP、地址、字节数</text>
+    <text class="m" x="376" y="210">· 好的做法：能直连就切走（Tailscale、iroh、</text>
+    <text class="m" x="376" y="226">  Syncthing）</text>
+
+    <rect class="box" x="710" y="20" width="340" height="260" rx="10"/>
+    <text class="t" x="726" y="44">C 不做中继，交给组网</text>
+    <text class="m" x="726" y="64">Rex（内置 Tailscale）、Mooring 现在的 ssh</text>
+    <rect class="box" x="730" y="84" width="80" height="40" rx="6"/><text x="746" y="108">客户端</text>
+    <rect class="box" x="830" y="84" width="100" height="40" rx="6"/><text x="842" y="108">tailnet</text>
+    <rect class="box" x="950" y="84" width="80" height="40" rx="6"/><text x="958" y="108">服务端</text>
+    <text class="m" x="726" y="174">· 身份就是 Tailscale 账号，不用配对码</text>
+    <text class="m" x="726" y="192">· 打洞、换路都由 Tailscale 做</text>
+    <text class="m" x="726" y="210">· 要求用户有 Tailscale 账号</text>
+  </svg>
+  </div>
+  <table>
+    <tr><th>中继</th><th>形态</th><th>能看到什么</th><th>依据</th></tr>
+    <tr><td>Happy 服务器</td><td>A：数据库存会话和消息，socket.io</td><td>内容 AES-256-GCM 加密；会话 id、tag、在线状态、时间戳明文</td><td><span class="tag src">源码</span> <a href="https://github.com/slopus/happy/blob/c2f3801a9d64ff93249c0d262909f052f1201381/packages/happy-server/prisma/schema.prisma#L95">schema.prisma</a></td></tr>
+    <tr><td>sshx 服务器</td><td>A：转发加密终端流</td><td>密钥只在链接 <code>#</code> 后面，服务器拿不到</td><td><span class="tag src">源码</span> <a href="https://github.com/ekzhang/sshx/blob/3604e8ec5ce0e741bd4a7de2e339b980ca8a2d40/crates/sshx/src/controller.rs#L83">controller.rs</a></td></tr>
+    <tr><td>Paseo 中继</td><td>B：Cloudflare Worker</td><td>Noise_NK，daemon 公钥放链接 <code>#</code> 后面</td><td><span class="tag src">源码</span> <a href="https://github.com/getpaseo/paseo/blob/67628b48fe4c6ec05fbaccca7be4573605c5c5b8/packages/relay/src/secure-channel.ts#L10">secure-channel.ts</a></td></tr>
+    <tr><td>Tailscale DERP</td><td>B：按目标公钥转包</td><td>只有「目标公钥 + WireGuard 密文」</td><td><span class="tag src">源码</span> <a href="https://github.com/tailscale/tailscale/blob/4290c03d37d0956e6ab0421bbe85fdc764ff1c50/derp/derp.go#L75">derp.go</a></td></tr>
+    <tr><td>iroh-relay</td><td>B：按 EndpointId 转发</td><td>IP、EndpointId、字节数；TLS 绑定对端公钥</td><td><span class="tag src">源码</span> <a href="https://github.com/n0-computer/iroh/blob/f35039493803c240595cc7b56a976b8bb14f8f05/iroh/src/tls/verifier.rs#L33">verifier.rs</a></td></tr>
+    <tr><td>Syncthing strelaysrv</td><td>B：拼接</td><td>IP、谁找谁、字节数（还会公开在状态页）；两端 TLS</td><td><span class="tag src">源码</span> <a href="https://github.com/syncthing/syncthing/blob/b34734376128492fa4e1b01412193de033e20613/cmd/strelaysrv/session.go#L247">session.go</a></td></tr>
+    <tr><td>RustDesk hbbs + hbbr</td><td>B：hbbs 签公钥、帮打洞，hbbr 转字节</td><td class="fix">验签失败会退回明文</td><td><span class="tag src">源码</span> <a href="https://github.com/rustdesk/rustdesk/blob/55786aaa5709ac0a450aabcf06f9d1fee3119908/src/client.rs#L1689">client.rs#L1689</a></td></tr>
+    <tr><td>upterm uptermd</td><td>SSH 中间人</td><td class="fix">能读到内容</td><td><span class="tag src">源码</span> <a href="https://github.com/owenthereal/upterm/blob/87f8ee86fb34a7a9ca8e0f0e9f34a0189758a0da/server/sshstock.go#L281">sshstock.go</a></td></tr>
+    <tr><td>Mooring mooring-relay</td><td>B：WebSocket 转发</td><td>Noise 端到端；IP、路由码哈希、时间、字节数</td><td>本仓库</td></tr>
   </table>
 
-  <h2>2 四种做法</h2>
+  <h2>3 默认值、换路</h2>
   <table>
-    <tr><th>做法</th><th>谁</th></tr>
-    <tr><td>官方默认 + 可换自建 + 尽量直连</td><td>RustDesk、Syncthing、iroh、Tailscale</td></tr>
-    <tr><td>官方默认 + 自建，不直连</td><td>Happy、upterm</td></tr>
-    <tr><td>只有官方</td><td>VS Code 隧道、Claude Remote Control、sshx</td></tr>
-    <tr><td>不给服务器，自己组网</td><td>frp、Paseo 不开中继时、<b>Mooring 现在</b></td></tr>
+    <tr><th>产品</th><th>默认</th><th>连上后还会换到更好的路吗</th></tr>
+    <tr><td>Happy</td><td>官方 <code>api.cluster-fluster.com</code>，手机和 CLI 都是</td><td>不直连，永远经服务器</td></tr>
+    <tr><td>RustDesk</td><td>官方 <code>rs-ny.rustdesk.com</code>；TCP/UDP/IPv6/WebRTC 同时打洞</td><td class="q">源码里没找到中途换路</td></tr>
+    <tr><td>Paseo</td><td><b>新装中继默认关</b>，只听本机；开了才走 <code>relay.paseo.sh</code></td><td class="q">没找到自动切换</td></tr>
+    <tr><td>Syncthing</td><td>公共中继池默认开</td><td class="y">会：局域网 TCP &gt; QUIC &gt; 公网 &gt; 中继，有更好的就换</td></tr>
+    <tr><td>iroh</td><td>4 个区域官方中继</td><td class="y">会：每 60 秒检查，同一连接里换路不断线</td></tr>
+    <tr><td>Tailscale</td><td>直连优先，DERP 兜底</td><td class="y">会：有流量时每 3 秒心跳，已直连也每分钟再试</td></tr>
+    <tr><td>Rex</td><td>没有服务器，默认只听本机</td><td>交给 Tailscale</td></tr>
   </table>
+  <p class="muted">第一版只看文档时写错的：Paseo「首次启动会问」→ 实际新装默认关；sshx「不能自建」→ 代码里有 <code>--server</code>；upterm「没写」→ 能读内容；RustDesk「一律加密」→ 有明文退路；iroh「约九成能直连」→ 只是文档说法，源码里没有。</p>
 
-  <h2>3 Mooring 的设置长这样（草图）</h2>
+  <h2>4 Mooring 的设置长这样（草图）</h2>
   <div class="mock">
     <div style="font-weight:600;margin-bottom:6px">连接 apple 的方式</div>
-    <div class="opt on"><i class="radio"></i><div><b>自动（推荐）</b><small>先直连（局域网、Tailscale），不通走 Mooring 官方中继；走中继时每分钟再试直连</small></div></div>
-    <div class="opt"><i class="radio"></i><div><b>Mooring 官方中继</b><small>看不到内容；能看到两端 IP、路由码的哈希、连接时间和流量大小</small></div></div>
-    <div class="opt"><i class="radio"></i><div><b>自建中继</b><small>经过你自己的服务器</small><div class="field"><span>https://relay.example.com</span><span>注册 key（可选）</span></div></div></div>
-    <div class="opt"><i class="radio"></i><div><b>只走 ssh / Tailscale</b><small>现在的方式：ssh apple</small></div></div>
+    <div class="opt on"><i class="radio"></i><div><b>Tailscale（内置）</b><small>Mooring 作为一台设备加入你的 tailnet，只放你自己的账号；不用配 ssh</small></div></div>
+    <div class="opt"><i class="radio"></i><div><b>Mooring 官方中继</b><small>看不到内容；能看到两端 IP、路由码哈希、时间和流量大小</small></div></div>
+    <div class="opt"><i class="radio"></i><div><b>自建中继</b><small>填你自己的中继地址和可选的注册 key</small></div></div>
+    <div class="opt"><i class="radio"></i><div><b>ssh</b><small>现在的方式：ssh apple</small></div></div>
     <div class="route">现在走：<b>Tailscale · 一个来回 400 ms</b>（示例）</div>
   </div>
 
-  <h2>4 要做的事，按顺序</h2>
+  <h2>5 要做的事，按顺序</h2>
   <table>
-    <tr><th>#</th><th>事</th><th>大小</th></tr>
-    <tr><td>1</td><td>显示当前走哪条路、一个来回多久（参照 sshx 的延迟估计）</td><td>小，马上能做</td></tr>
-    <tr><td>2</td><td>桌面连桌面也能走中继（多机第 5 步），复用第 4 阶段的设备配对</td><td>中</td></tr>
-    <tr><td>3</td><td>「自动」：先试已知的局域网 / Tailscale 地址；以后可换 iroh 打洞</td><td>简单版小，iroh 版大</td></tr>
-    <tr><td>4</td><td>官方中继：部署 mooring-relay（机房、域名、限速、带宽费用要先定；不加账号）</td><td>要你授权和机器</td></tr>
-    <tr><td>5</td><td>自建中继说明：一条 docker run + 设置里填两个值</td><td>小</td></tr>
+    <tr><th>#</th><th>事</th><th>学谁</th><th>大小</th></tr>
+    <tr><td>1</td><td>显示走哪条路、一个来回多久</td><td>sshx</td><td>小</td></tr>
+    <tr><td>2</td><td>断线续传：按已收到的字节补发，不重新要整屏；打开时先显示上次画面</td><td>Rex</td><td>中</td></tr>
+    <tr><td>3</td><td>桌面连桌面也能走中继（多机第 5 步）</td><td>—</td><td>中</td></tr>
+    <tr><td>4</td><td>Tailscale 内置：tsnet 作为独立设备，按账号放行（Go 库，要做可行性试验）</td><td>Rex</td><td>中到大</td></tr>
+    <tr><td>5</td><td>走中继时每分钟试一次直连地址，通了就换</td><td>Syncthing、Tailscale</td><td>小</td></tr>
+    <tr><td>6</td><td>官方中继：部署 mooring-relay（机房、域名、限速、费用先定；不加账号）</td><td>Happy、Paseo</td><td>要你授权和机器</td></tr>
+    <tr><td>7</td><td>自建中继说明：一条 docker run + 两个设置</td><td>RustDesk、upterm</td><td>小</td></tr>
   </table>
-  <p class="muted">不建议做：自建 Tailscale DERP/Headscale（那是 Tailscale 的事）；账号体系（配对码 + 路由码已够，这比 VS Code、Claude 都轻）。</p>
+  <p class="muted">不建议做：自己写打洞（用 Tailscale 或 iroh）；中继退回明文或解开内容（RustDesk、upterm 的反面例子）；另做账号体系。</p>
 
-  <h2>5 待你决定</h2>
+  <h2>6 待你决定</h2>
   <ul>
-    <li>默认是不是「自动」。</li>
-    <li>直连不通时默认就走官方中继，还是像 Paseo 那样第一次先问你——前者省事，后者不会在你不知情时把流量交给第三方服务器。</li>
-    <li>官方中继放在哪（国内节点？）、什么域名、谁出机器。</li>
-    <li>直连先做简单版（试已知地址），还是做打洞：iroh、把 Tailscale 嵌进 App、局域网 mDNS 发现，还没比较。</li>
+    <li>默认用哪个：已登录 Tailscale 的默认走 Tailscale、否则默认官方中继？还是像 Paseo 那样中继默认关、要你点开？</li>
+    <li>Tailscale 选项是内置（tsnet，学 Rex），还是先只让你填 tailnet 地址。</li>
+    <li>官方中继放在哪、用什么域名、谁出机器。</li>
   </ul>
 
   <h2>没做到</h2>
-  <p class="muted">只读了文档没实测；没读源码核对加密实现；Paseo 默认开不开中继、Happy 手机端默认用哪台服务器没核实；tmate 官网没打开，ZeroTier、frp 没细看；没看用户评论。</p>
+  <p class="muted">没编译、没运行、没抓包，没测延迟和打洞成功率；Rex 闭源，实现细节来自第三方兼容服务端；VS Code、Claude Remote Control 只有文档；tmate、ZeroTier、frp 没细看；没看用户评论。</p>
 </main>
 </body>
 </html>
