@@ -38,7 +38,7 @@ const AGENTS_MD: &str = "# Mooring 配置目录
 
 1. 先运行 `mooring --skill plugins`，读完整说明：插件格式、规矩和例子。
 2. 插件写在 `plugins/<id>/`，一个想法一个插件。写完运行 `mooring plugins` 检查，全是 ✓ 才算写好。
-3. 告诉用户在 Mooring 的 设置 › 插件 点「重新读取」就生效（Agent 类要等 Mooring 后台下次启动），以及去哪里看。
+3. 告诉用户在 Mooring 的 设置 › 插件 点「重新读取」就生效，以及去哪里看。
 
 别改用户已有的插件和 `plugins/disabled.json`；快捷键、终端字体、完成动画在 App 的「设置」里改。
 在 Mooring 打开的终端里 `mooring` 直接能用；驱动别的终端的说明是 `mooring --skill`。
@@ -726,9 +726,7 @@ fn render(dir: &Path, checked: &[Checked]) -> String {
             (None, None) => {}
         }
     }
-    out.push_str(
-        "改完在 Mooring 的 设置 › 插件 点「重新读取」就生效（Agent 类要等 Mooring 后台下次启动）。\n",
-    );
+    out.push_str("改完在 Mooring 的 设置 › 插件 点「重新读取」就生效。\n");
     out
 }
 

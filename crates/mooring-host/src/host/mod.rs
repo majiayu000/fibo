@@ -48,6 +48,8 @@ struct Host {
     index: crate::log_index::Index,
     recognition: RecognitionStatus,
     log_events: Option<crate::file_events::Notifier>,
+    /// Transcript roots after plugins changed, for the log subscription to restart with.
+    new_roots: Option<Vec<(Agent, std::path::PathBuf)>>,
     recognition_subscribers: HashMap<u64, Subscriber>,
     /// `mooring events` connections, and what they were last told.
     event_subscribers: HashMap<u64, Subscriber>,
@@ -951,6 +953,7 @@ fn serve_runtime(
         index: index.fork(root)?,
         recognition: RecognitionStatus::default(),
         log_events: None,
+        new_roots: None,
         recognition_subscribers: HashMap::new(),
         event_subscribers: HashMap::new(),
         events: Default::default(),
@@ -1116,6 +1119,7 @@ mod recognition_tests {
             index: index.fork(&root).unwrap(),
             recognition: RecognitionStatus::default(),
             log_events: None,
+            new_roots: None,
             recognition_subscribers: HashMap::new(),
             event_subscribers: HashMap::new(),
             events: Default::default(),

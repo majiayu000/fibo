@@ -13,6 +13,7 @@ fn fixture() -> (Host, std::path::PathBuf) {
         index,
         recognition: RecognitionStatus::default(),
         log_events: None,
+        new_roots: None,
         recognition_subscribers: HashMap::new(),
         event_subscribers: HashMap::new(),
         events: Default::default(),

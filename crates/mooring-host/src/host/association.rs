@@ -439,6 +439,9 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
         loop {
             let started = Instant::now();
             let result = (|| -> io::Result<()> {
+                if let Some(roots) = lock(&shared)?.new_roots.take() {
+                    index.roots = roots;
+                }
                 let mut checkpoint = index.initialize()?;
                 let roots = index
                     .roots
@@ -453,6 +456,13 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                 association.apply(&shared, &index, &index.cached()?)?;
                 follow_associated(&shared, &mut index, &mut association, &watch)?;
                 loop {
+                    // Asked before it waits as well as after: a reload that came while this
+                    // subscription was starting had no notifier to wake it with.
+                    if let Some(roots) = lock(&shared)?.new_roots.take() {
+                        index.flush()?;
+                        index.roots = roots;
+                        return Ok(());
+                    }
                     // Held cards wait at most a second for the database. With nothing held the
                     // subscriber blocks on events alone, so an idle host still never wakes.
                     let mut batch = loop {
@@ -465,6 +475,13 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                             Err(e) => return Err(io::Error::other(e)),
                         }
                     };
+                    // Plugins changed which CLIs exist: start over with their directories. The
+                    // checkpoint replays whatever this batch held.
+                    if let Some(roots) = lock(&shared)?.new_roots.take() {
+                        index.flush()?;
+                        index.roots = roots;
+                        return Ok(());
+                    }
                     // A single bounded burst window starts ONLY after a native event arrives.
                     // This matches FSEvents' 200 ms latency for eager vnode writes too. It never
                     // wakes an idle subscriber, and continuous writers cannot extend the deadline.
@@ -565,7 +582,10 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                     )?;
                 }
             })();
-            let Err(error) = result else { return };
+            let Err(error) = result else {
+                retry = SUBSCRIPTION_RETRY_MIN;
+                continue;
+            };
             if started.elapsed() > SUBSCRIPTION_RETRY_MAX {
                 retry = SUBSCRIPTION_RETRY_MIN;
             }

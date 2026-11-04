@@ -365,13 +365,37 @@ pub struct Registry {
     report: Vec<Loaded>,
 }
 
-static REGISTRY: OnceLock<Registry> = OnceLock::new();
+static REGISTRY: crate::plugin::Slot<Registry> = crate::plugin::Slot::new();
+/// Where this process registered from, once it did: what `reload` reads again.
+static FROM: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
+/// Bumped when the registry is replaced, for whatever is built from it.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn registry() -> &'static Registry {
     REGISTRY.get_or_init(|| Registry {
         specs: builtin(),
         report: vec![],
     })
+}
+
+/// How many times the registry has been replaced: compare to know a copy of it is stale.
+pub fn generation() -> u64 {
+    GENERATION.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Reads the declarations again after plugins changed (`plugin::reload`). An Agent that went
+/// away keeps its `Agent` value in stored sessions, with no spec, as one read back from a
+/// database always could; one that arrived is known from now on. Does nothing in a process
+/// that never registered.
+pub(crate) fn reload() {
+    let Some((dir, home)) = FROM.get() else {
+        return;
+    };
+    let mut files = json_files(dir);
+    files.extend(crate::plugin::files(crate::plugin::Kind::Agent));
+    let (specs, report) = load_files(files, home);
+    REGISTRY.set(Registry { specs, report });
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Each declaration file's outcome since `install`; empty before it or without files.
@@ -461,12 +485,22 @@ pub fn install() -> bool {
     let mut files = json_files(&dir.join("agents"));
     files.extend(crate::plugin::files(crate::plugin::Kind::Agent));
     let (specs, report) = load_files(files, Path::new(&home));
-    REGISTRY.set(Registry { specs, report }).is_ok()
+    if REGISTRY.get().is_some() {
+        return false;
+    }
+    let _ = FROM.set((dir.join("agents"), PathBuf::from(home)));
+    REGISTRY.set(Registry { specs, report });
+    true
 }
 
 pub fn install_from(dir: &Path, home: &Path) -> bool {
     let (specs, report) = load(dir, home);
-    REGISTRY.set(Registry { specs, report }).is_ok()
+    if REGISTRY.get().is_some() {
+        return false;
+    }
+    let _ = FROM.set((dir.to_owned(), home.to_owned()));
+    REGISTRY.set(Registry { specs, report });
+    true
 }
 
 /// Each `*.json` in `dir`, by file name.

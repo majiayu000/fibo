@@ -310,6 +310,7 @@ impl Workbench {
                             mooring_core::plugin::reload();
                             decorations::forget();
                             this.sidebar.wasm = Default::default();
+                            this.tasks.found = None;
                             cx.refresh_windows();
                         }
                         if let Some(view) = &this.settings {

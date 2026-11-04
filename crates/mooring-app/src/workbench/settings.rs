@@ -2126,6 +2126,8 @@ impl Workbench {
                 // Decorations and WASM sidebars cache by position and file: start afresh.
                 decorations::forget();
                 this.sidebar.wasm = Default::default();
+                // Which Agents exist may have changed; ask the login shell about them again.
+                this.tasks.found = None;
                 this.request(Request::ReloadPlugins, cx);
                 cx.refresh_windows();
                 cx.notify();

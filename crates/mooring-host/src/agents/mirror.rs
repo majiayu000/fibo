@@ -14,6 +14,8 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Where a sourced CLI's sessions are written: the root its adapter reports.
@@ -21,25 +23,57 @@ pub fn dir(home: &Path, agent: Agent) -> PathBuf {
     home.join(".local/share/mooring/sources").join(agent.key())
 }
 
-/// One thread per registered CLI with a SQLite source; none when there is none.
-pub fn start(home: &Path) {
-    for agent in Agent::all() {
-        let Some(source) = agent.spec().and_then(|s| s.source.clone()) else {
+/// One running mirror: its source, and the flag that ends its thread.
+struct Running {
+    key: &'static str,
+    source: RecordSource,
+    stop: Arc<AtomicBool>,
+}
+static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
+
+/// One thread per registered CLI with a SQLite source; none when there is none. Called at
+/// start and whenever plugins change: a mirror whose CLI went away or changed its source ends,
+/// a new one starts.
+pub fn sync(home: &Path) {
+    let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+    let wanted: Vec<(Agent, RecordSource)> = Agent::all()
+        .into_iter()
+        .filter_map(|a| Some((a, a.spec()?.source.clone()?)))
+        .collect();
+    running.retain(|r| {
+        let keep = wanted
+            .iter()
+            .any(|(a, s)| a.key() == r.key && *s == r.source);
+        if !keep {
+            r.stop.store(true, Ordering::SeqCst);
+        }
+        keep
+    });
+    for (agent, source) in wanted {
+        if running.iter().any(|r| r.key == agent.key()) {
             continue;
-        };
+        }
         let dir = dir(home, agent);
-        std::thread::Builder::new()
+        let stop = Arc::new(AtomicBool::new(false));
+        let (thread_source, thread_stop) = (source.clone(), stop.clone());
+        let started = std::thread::Builder::new()
             .name(format!("mirror-{}", agent.key()))
-            .spawn(move || run(&source, &dir))
-            .ok();
+            .spawn(move || run(&thread_source, &dir, &thread_stop));
+        if started.is_ok() {
+            running.push(Running {
+                key: agent.key(),
+                source,
+                stop,
+            });
+        }
     }
 }
 
-fn run(source: &RecordSource, dir: &Path) {
+fn run(source: &RecordSource, dir: &Path, stop: &AtomicBool) {
     let mut mirror = Mirror::open(dir);
     let mut db: Option<Connection> = None;
     let mut last_error = String::new();
-    loop {
+    while !stop.load(Ordering::SeqCst) {
         match mirror.poll(source, &mut db) {
             Ok(()) => last_error.clear(),
             Err(e) => {

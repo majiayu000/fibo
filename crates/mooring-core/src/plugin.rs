@@ -265,14 +265,14 @@ pub fn config() -> Option<&'static Path> {
     CONFIG.get().map(PathBuf::as_path)
 }
 
-/// Discovers the plugins again and reloads every kind a running process can swap:
-/// actions, sidebar presets, decorations, effects, rules and hooks. Agents stay as they
-/// were registered at start (`needs_restart`). Does nothing before `install`.
+/// Discovers the plugins again and reloads every kind. Does nothing before `install`.
 pub fn reload() {
     let Some(config) = CONFIG.get() else {
         return;
     };
     INSTALLED.set(discover(&dir(config)));
+    // First: the others name Agents.
+    crate::agent::reload();
     crate::action::reload();
     crate::sidebar::reload();
     crate::decoration::reload();
@@ -280,11 +280,6 @@ pub fn reload() {
     crate::rule::reload();
     crate::hook::reload();
     crate::quota::reload();
-}
-
-/// Kinds a running app cannot swap in: the agent registry is fixed at start.
-pub fn needs_restart(kind: Kind) -> bool {
-    kind == Kind::Agent
 }
 
 /// The installed plugin with this id, if one loaded.

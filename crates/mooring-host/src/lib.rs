@@ -28,6 +28,6 @@ pub mod content;
 /// them like any transcript. Only the real daemon calls it; fixtures use their own roots.
 pub fn start_mirrors() {
     if let Some(home) = std::env::var_os("HOME") {
-        agents::mirror::start(std::path::Path::new(&home));
+        agents::mirror::sync(std::path::Path::new(&home));
     }
 }

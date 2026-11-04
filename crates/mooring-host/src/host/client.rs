@@ -352,7 +352,20 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         }
         Request::ReloadPlugins => {
             mooring_core::plugin::reload();
+            let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+            let home = home.unwrap_or_default();
+            crate::agents::mirror::sync(&home);
             let mut host = lock(shared)?;
+            // A CLI that arrived or left changes which directories are read. The subscription
+            // restarts from its checkpoint with the new roots, and walks the new one once.
+            let roots = crate::agents::roots_after_reload(&host.index.roots, &home);
+            if roots != host.index.roots {
+                host.index.roots = roots.clone();
+                host.new_roots = Some(roots);
+                if let Some(events) = &host.log_events {
+                    events.file(std::path::PathBuf::new());
+                }
+            }
             host.recognition.plugins_revision += 1;
             host.publish_status()?;
             Ok(Reply::Ok)
