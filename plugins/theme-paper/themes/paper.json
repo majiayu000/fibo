@@ -1,0 +1,9 @@
+{
+  "name": "旧纸",
+  "bg": "#f1e9d8",
+  "fg": "#2f2a22",
+  "terminal": { "cursor": "#8a4b2a", "selection": "#dcc9a4" },
+  "ansi": { "red": "#a53a2c", "green": "#4a6b2a", "yellow": "#80600f", "blue": "#2e5a86", "magenta": "#7a4a78", "cyan": "#256b68" },
+  "ui": { "sidebar": "#e8dfca" },
+  "background": { "image": "images/paper.png", "mode": "tile", "strength": 0.3 }
+}

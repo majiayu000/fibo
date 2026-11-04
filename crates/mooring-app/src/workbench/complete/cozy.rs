@@ -13,6 +13,9 @@ const SIDE_SIZE: f32 = 22.;
 /// The pane's short side at which the sizes are full, and the least they scale to.
 const FULL_SIZE_SIDE: f32 = 420.;
 const MIN_SCALE: f32 = 0.55;
+/// The same on a settings card, where the short side is far shorter.
+const SMALL_FULL_SIDE: f32 = 300.;
+const SMALL_MIN_SCALE: f32 = 0.3;
 /// How far above the pane's center the face sits, leaving the words below it.
 const FACE_LIFT: f32 = 40.;
 /// The sizes a face passes through on its way to the sidebar.
@@ -104,7 +107,11 @@ impl Painter<'_> {
         target: Option<Point<Pixels>>,
     ) {
         let short = f32::from(body.size.width.min(body.size.height));
-        let s = (short / FULL_SIZE_SIDE).clamp(MIN_SCALE, 1.);
+        let s = if self.small {
+            (short / SMALL_FULL_SIDE).clamp(SMALL_MIN_SCALE, 1.)
+        } else {
+            (short / FULL_SIZE_SIDE).clamp(MIN_SCALE, 1.)
+        };
         let Some(script) = self.face.or_else(|| Script::builtin(style)) else {
             return;
         };

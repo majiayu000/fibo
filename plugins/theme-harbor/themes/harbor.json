@@ -1,0 +1,9 @@
+{
+  "name": "夜港",
+  "bg": "#0c1524",
+  "fg": "#d6e2f0",
+  "terminal": { "cursor": "#f2c879", "selection": "#27405f", "selected_text": "#f4f8fc", "cursor_guide": "#f2c879" },
+  "ansi": { "red": "#ef7f76", "green": "#7fd1a0", "yellow": "#f2c879", "blue": "#7fb6ee", "magenta": "#c3a2ec", "cyan": "#74d0d6" },
+  "ui": { "sidebar": "#091120" },
+  "background": { "image": "images/harbor.png", "mode": "fill", "strength": 0.28 }
+}

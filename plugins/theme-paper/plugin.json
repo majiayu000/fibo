@@ -1,0 +1,9 @@
+{
+  "api": 1,
+  "id": "theme-paper",
+  "name": "主题：旧纸",
+  "version": "0.1.0",
+  "description": "米黄的纸，带一点纤维的纹理，字是墨色。白天看久了不刺眼",
+  "provides": ["themes"],
+  "files": ["images/paper.png"]
+}

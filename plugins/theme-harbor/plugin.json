@@ -1,0 +1,9 @@
+{
+  "api": 1,
+  "id": "theme-harbor",
+  "name": "主题：夜港",
+  "version": "0.1.0",
+  "description": "深蓝的夜，窗口底下是一片淡淡的港湾和月光。图片很淡，不抢终端的字",
+  "provides": ["themes"],
+  "files": ["images/harbor.png"]
+}

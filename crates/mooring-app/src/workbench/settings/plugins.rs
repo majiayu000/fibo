@@ -8,7 +8,13 @@ use mooring_core::market::{self, Offer};
 use mooring_core::plugin::{self, Kind};
 
 mod actions;
+mod catalog;
+mod detail;
 mod face_editor;
+mod gallery;
+mod showcase;
+use catalog::Item;
+use gallery::Tab;
 
 /// The catalog as the page last read it.
 #[derive(Default)]
@@ -31,6 +37,22 @@ pub(in crate::workbench) struct Market {
     stuck: Option<(String, String, bool)>,
     /// 自己画一个, while open.
     face: Option<face_editor::FaceEditor>,
+    /// Which of the page's two tabs is showing, and which kind 发现 is narrowed to.
+    tab: Tab,
+    category: Option<mooring_core::plugin_category::Category>,
+    /// The plugin opened in the detail view, when it opened, and where the list was.
+    open: Option<String>,
+    opened: Option<std::time::Instant>,
+    back_to: gpui::Point<gpui::Pixels>,
+    /// The card or stage being pointed at, and since when: it is the one that plays.
+    hover: Option<(String, std::time::Instant)>,
+    /// 声明文件明细, unfolded.
+    files_open: bool,
+    /// 发现's search, and the page's scroll so opening a plugin starts at its top.
+    search: Option<Entity<crate::ui::field::Field>>,
+    pub(super) scroll: gpui::ScrollHandle,
+    /// What each plugin's own files say, read once with the catalog.
+    showcase: std::collections::HashMap<String, showcase::Showcase>,
     /// A plugin setting being typed: plugin id, key, the field and its Enter/Esc events.
     editing: Option<(
         String,
@@ -40,16 +62,38 @@ pub(in crate::workbench) struct Market {
     )>,
 }
 impl Market {
-    pub(in crate::workbench) fn read() -> Self {
-        let (bundled, bundled_error) = match market::bundled() {
+    pub(in crate::workbench) fn read(cx: &mut Context<SettingsView>) -> Self {
+        let search = cx.new(|cx| {
+            crate::ui::field::Field::new("搜索插件", "", cx)
+                .compact()
+                .placeholder("搜索插件")
+        });
+        cx.observe(&search, |_, _, cx| cx.notify()).detach();
+        let mut market = Self {
+            search: Some(search),
+            ..Self::default()
+        };
+        market.read_catalog();
+        market
+    }
+    /// The catalog from disk again; what you were looking at stays.
+    fn read_catalog(&mut self) {
+        (self.bundled, self.bundled_error) = match market::bundled() {
             Ok(b) => (b, None),
             Err(e) => (vec![], Some(e)),
         };
-        Self {
-            bundled,
-            bundled_error,
-            ..Self::default()
-        }
+        self.showcase = showcase::read_all(&self.bundled);
+    }
+    fn search_field(&self, _: &Context<SettingsView>) -> Option<Entity<crate::ui::field::Field>> {
+        self.search.clone()
+    }
+    fn search_text(&self, cx: &Context<SettingsView>) -> String {
+        self.search
+            .as_ref()
+            .map_or_else(String::new, |f| f.read(cx).text.trim().to_owned())
+    }
+    fn query(&self, cx: &Context<SettingsView>) -> String {
+        self.search_text(cx).to_lowercase()
     }
     /// Every offer: bundled ones, replaced by newer remote ones, then remote-only ones.
     fn offers(&self) -> Vec<Offer> {
@@ -60,6 +104,21 @@ impl Market {
             .cloned()
             .unwrap_or_default();
         market::merge(self.bundled.clone(), remote)
+    }
+}
+
+/// The drawing's card, as tall as the animation cards beside it.
+const FACE_TILE: f32 = 190.;
+/// An animation's picture in 已安装.
+const THUMB_W: f32 = 116.;
+const THUMB_H: f32 = 64.;
+
+/// A path under the home folder written from `~`.
+pub(in crate::workbench) fn tilde(path: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    match path.strip_prefix(&home) {
+        Some(rest) if !home.is_empty() => format!("~{rest}"),
+        _ => path.to_owned(),
     }
 }
 
@@ -76,18 +135,11 @@ fn short_name(name: &str) -> String {
     name.strip_prefix("完成动画：").unwrap_or(name).to_owned()
 }
 
-/// 试播: plays an animation on the shown pane without marking anything. Shipped animation
-/// plugins are named `complete-<style>`, so they can be tried before they are installed.
-fn try_button(key: &str, complete: Complete, cx: &Context<SettingsView>) -> impl IntoElement {
-    secondary(format!("complete-try-{key}"), "试播").on_click(
-        cx.listener(move |_, _, _, cx| cx.emit(SettingsAction::PreviewComplete(Some(complete)))),
-    )
-}
-
 impl SettingsView {
     /// Reads the plugins again and tells the workbench and the host.
     pub(super) fn plugins_changed(&mut self, cx: &mut Context<Self>) {
         plugin::reload();
+        self.market.showcase = showcase::read_all(&self.market.offers());
         crate::ui::themes::reload(cx);
         cx.emit(SettingsAction::PluginsChanged);
         cx.notify();
@@ -231,161 +283,221 @@ impl SettingsView {
         self.market.editing = Some((id.to_owned(), key, field, events));
         cx.notify();
     }
-    /// 完成动画: every animation 标记完成 can play, one row each: the one playing marked
-    /// 正在用, the others 用这个, each with 试播; animation plugins not installed yet
-    /// offer 安装, which also makes them the one playing.
-    fn animations(
+    /// One plugin's right-click actions, each with its own switch.
+    fn action_rows(
         &self,
-        offers: &[Offer],
-        busy: bool,
+        p: &mooring_core::plugin::Plugin,
         cx: &Context<Self>,
     ) -> Vec<gpui::AnyElement> {
-        use mooring_core::effect::{self, Pick, Style};
-        let picked = effect::picked();
-        let presets = effect::presets();
-        // A picked plugin since turned off or removed plays the seal.
-        let playing = match &picked {
-            Some(Pick::Plugin(id)) if !presets.iter().any(|p| &p.id == id) => {
-                Pick::Builtin(Style::Seal)
-            }
-            Some(p) => p.clone(),
-            None => Pick::Builtin(Style::Seal),
-        };
-        let mut choices: Vec<(String, String, Pick, Complete)> = presets
+        mooring_core::action::all()
             .iter()
-            .map(|p| {
-                let description = plugin::installed(&p.id)
-                    .and_then(|i| i.description.clone())
-                    .unwrap_or_else(|| format!("{}，插件 {}", p.complete.style.label(), p.id));
-                (
-                    short_name(&p.name),
-                    description,
-                    Pick::Plugin(p.id.clone()),
-                    p.complete,
-                )
-            })
-            .collect();
-        choices.extend(Style::BUILTIN.into_iter().map(|s| {
-            (
-                s.label().to_owned(),
-                match s {
-                    Style::Fade => "内置；系统开了「减弱动态效果」时都播它".to_owned(),
-                    _ => "内置；按钮填满，印章盖在窗格上，窗格淡出".to_owned(),
-                },
-                Pick::Builtin(s),
-                Complete::of(s),
-            )
-        }));
-        let mut rows = Vec::new();
-        rows.push(self.face_card(cx));
-        for (title, note, choice, complete) in choices {
-            let on = choice == playing;
-            let key = choice.name().replace(':', "-");
-            let mut controls = div().flex().items_center().gap(px(T::S8));
-            if on {
-                controls = controls.child(
-                    div()
-                        .text_size(px(T::SMALL))
-                        .text_color(T::color(T::primary()))
-                        .child("● 正在用"),
-                );
-            }
-            controls = controls.child(try_button(&key, complete, cx));
-            controls = controls.children(self.face_edit_button(&choice, &title, complete, cx));
-            if !on {
-                controls =
-                    controls.child(secondary(format!("complete-use-{key}"), "用这个").on_click(
-                        cx.listener(move |this, _, _, cx| {
-                            this.text_error = effect::pick(Some(choice.clone())).err();
-                            cx.notify();
-                        }),
-                    ));
-            }
-            rows.push(
-                self.row(rows.is_empty(), &title, &note, controls)
-                    .into_any_element(),
-            );
-        }
-        // Turned off in 已安装: turning it back on makes it the one playing.
-        for p in plugin::report()
-            .iter()
-            .filter_map(|f| f.result.as_ref().ok())
-            .filter(|p| !p.enabled && p.provides.contains(&Kind::Effects))
-        {
-            let id = p.id.clone();
-            let title = short_name(&p.name);
-            rows.push(
+            .filter(|a| a.file.parent() == Some(p.dir.as_path()))
+            .map(|a| {
+                let on = a.enabled();
+                let aid = a.id.clone();
                 self.row(
-                    rows.is_empty(),
-                    &title,
-                    "已停用 · 打开插件就换成它",
-                    secondary(format!("complete-enable-{}", p.id), "打开并用这个").on_click(
-                        cx.listener(move |this, _, _, cx| {
-                            if this.market.working.is_none() {
-                                this.switch_plugin(id.clone(), true, false, cx);
-                            }
-                        }),
-                    ),
+                    false,
+                    &format!("　└ {}", a.title),
+                    &a.command,
+                    switch(format!("action-switch-{}", a.id), on).on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            this.text_error = mooring_core::action::set_enabled(&aid, !on).err();
+                            cx.notify();
+                        },
+                    )),
                 )
-                .into_any_element(),
-            );
-        }
-        let have = |id: &str| plugin::installed(id).is_some();
-        for o in offers
-            .iter()
-            .filter(|o| o.entry.provides.contains(&Kind::Effects) && !have(&o.entry.id))
-        {
-            let e = &o.entry;
-            let working = self.market.working.as_deref() == Some(e.id.as_str());
-            let title = short_name(&e.name);
-            let note = format!(
-                "未安装 · {}",
-                e.description.as_deref().unwrap_or("装上就换成它")
-            );
-            let asked = self.confirming(o, cx);
-            let note = asked.as_ref().map_or(note.clone(), |(n, _)| n.clone());
-            let control = if let Some((_, buttons)) = asked {
-                buttons
-            } else if working {
-                div()
-                    .text_size(px(T::SMALL))
-                    .text_color(T::color(T::secondary()))
-                    .child("正在安装…")
-            } else {
-                let offer = o.clone();
-                let style = e.id.strip_prefix("complete-").and_then(Style::parse);
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(T::S8))
-                    .when_some(style, |d, s| {
-                        d.child(try_button(&e.id, Complete::of(s), cx))
-                    })
-                    .child(
-                        secondary(format!("complete-install-{}", e.id), "安装")
-                            .when(busy, |b| b.opacity(0.5))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if this.market.working.is_none() {
-                                    this.install_offer(offer.clone(), cx);
-                                }
-                            })),
-                    )
-            };
-            rows.push(
-                self.row(rows.is_empty(), &title, &note, control)
-                    .into_any_element(),
-            );
-        }
-        rows
+                .into_any_element()
+            })
+            .collect()
     }
-
-    /// Installed plugins with their switches, then the catalog, then each declaration
-    /// file's outcome for whoever writes plugins.
-    pub(super) fn plugins_page(&self, cx: &Context<Self>) -> gpui::Div {
-        use mooring_core::agent;
-        if !self.shows(Page::Plugins, "插件", cx) {
-            return div();
+    /// 远程目录, only ever fetched when asked.
+    fn remote_row(&self, cx: &Context<Self>) -> gpui::Div {
+        let url = market::remote_url();
+        let note = match &self.market.remote {
+            _ if self.market.fetching => "正在获取…".to_owned(),
+            None => format!("{url}；只在点了之后才联网"),
+            Some(Ok(r)) => format!("{url}；有 {} 个插件，更新的和新的已列在上面", r.len()),
+            Some(Err(e)) => format!("获取失败：{e}"),
+        };
+        let note = match &self.market.bundled_error {
+            Some(e) => format!("{e} · {note}"),
+            None => note,
+        };
+        div().pt(px(T::S20)).child(
+            card().child(
+                self.row(
+                    true,
+                    "远程目录",
+                    &note,
+                    secondary("plugins-fetch", "检查远程目录")
+                        .when(self.market.fetching, |b| b.opacity(0.5))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if !this.market.fetching {
+                                this.fetch_remote(cx);
+                            }
+                        })),
+                ),
+            ),
+        )
+    }
+    /// 自己画一个, or the drawing waiting from a 试播, as a card among the animations.
+    fn face_tile(&self, cx: &Context<Self>) -> impl IntoElement {
+        div()
+            .id("complete-draw")
+            .role(gpui::accesskit::Role::Button)
+            .aria_label(if face_editor::has_draft() {
+                "接着画"
+            } else {
+                "自己画一个"
+            })
+            .min_h(px(FACE_TILE))
+            .p(px(T::S10))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(T::S4))
+            .cursor_pointer()
+            .rounded(px(T::CONTROL_RADIUS))
+            .border(px(T::BORDER_WIDTH))
+            .border_color(T::color(T::control()))
+            .hover(|s| s.bg(T::color(T::chip())))
+            .on_click(cx.listener(|this, _, _, cx| this.face_open(None, cx)))
+            .child(
+                div()
+                    .text_size(px(T::BODY_SIZE))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(T::color(T::primary()))
+                    .child(if face_editor::has_draft() {
+                        "接着画"
+                    } else {
+                        "- _ -　自己画一个"
+                    }),
+            )
+            .child(label(if face_editor::has_draft() {
+                "上次试播的那张还留着".to_owned()
+            } else {
+                "一帧一帧改眼睛和嘴，存成插件".to_owned()
+            }))
+    }
+    /// One installed plugin in 已安装: its picture or mark, what it is, its next step.
+    fn installed_row(&self, first: bool, item: &Item, cx: &Context<Self>) -> gpui::AnyElement {
+        let mut note = Vec::new();
+        if let Some(v) = &item.version {
+            note.push(format!("v{v}"));
         }
+        if item.builtin() {
+            note.clear();
+        }
+        if let Some(d) = &item.description {
+            note.push(d.clone());
+        }
+        if let Some(p) = &item.plugin {
+            note.extend(p.warnings.iter().cloned());
+            let runs = plugin::config()
+                .map(|c| mooring_core::plugin_context::runs(&plugin::dir(c), &p.id))
+                .unwrap_or_default();
+            let now = mooring_core::content::now();
+            for r in mooring_core::plugin_context::failing(&runs)
+                .into_iter()
+                .filter(|r| now.saturating_sub(r.at) < 7 * 86_400)
+            {
+                note.push(format!(
+                    "上次运行失败（{}）：{}；终端里 mooring plugins log {} 看全部",
+                    r.what, r.detail, p.id
+                ));
+            }
+        }
+        let id = item.id.clone();
+        let opened = id.clone();
+        let mut controls = div().flex().items_center().gap(px(T::S8));
+        if item.complete.is_some() || item.update {
+            controls = controls.child(self.item_control(item, false, cx));
+        }
+        if let Some(p) = item.plugin.as_ref().filter(|_| item.complete.is_none()) {
+            let on = p.enabled;
+            controls = controls.child(switch(format!("plugin-switch-{}", p.id), on).on_click(
+                cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    if this.market.working.is_none() {
+                        this.switch_plugin(id.clone(), !on, false, cx);
+                    }
+                }),
+            ));
+        }
+        let hover_id = item.id.clone();
+        div()
+            .id(gpui::SharedString::from(format!("plugin-row-{}", item.id)))
+            .role(gpui::accesskit::Role::Button)
+            .aria_label(gpui::SharedString::from(item.name.clone()))
+            .px(px(T::S12))
+            .py(px(T::S8))
+            .flex()
+            .items_center()
+            .gap(px(T::S12))
+            .cursor_pointer()
+            .hover(|s| s.bg(T::color(T::chip())))
+            .when(!first, |d| {
+                d.border_t(px(T::BORDER_WIDTH))
+                    .border_color(T::color(T::border()))
+            })
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                let was = this
+                    .market
+                    .hover
+                    .as_ref()
+                    .is_some_and(|(i, _)| *i == hover_id);
+                if *hovered && !was {
+                    this.market.hover = Some((hover_id.clone(), std::time::Instant::now()));
+                    cx.notify();
+                } else if !*hovered && was {
+                    this.market.hover = None;
+                    cx.notify();
+                }
+            }))
+            .on_click(cx.listener(move |this, _, _, cx| this.open_item(opened.clone(), cx)))
+            .map(|d| match item.complete {
+                Some(complete) => d.child(
+                    div()
+                        .w(px(THUMB_W))
+                        .h(px(THUMB_H))
+                        .flex_shrink_0()
+                        .overflow_hidden()
+                        .rounded(px(T::CONTROL_RADIUS - T::S2))
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(T::color(T::border()))
+                        .child(self.item_stage(item, complete)),
+                ),
+                None => d.child(
+                    div()
+                        .w(px(T::S20))
+                        .flex_shrink_0()
+                        .flex()
+                        .justify_center()
+                        .child(label(gallery::mark(item.category).to_owned())),
+                ),
+            })
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(T::S2))
+                    .child(
+                        div()
+                            .text_size(px(T::BODY_SIZE))
+                            .text_color(T::color(T::primary()))
+                            .child(item.name.clone()),
+                    )
+                    .child(label(note.join(" · "))),
+            )
+            .child(controls)
+            .into_any_element()
+    }
+    fn installed_tab(&self, items: &[Item], cx: &Context<Self>) -> gpui::Div {
+        use mooring_core::agent;
+        use mooring_core::plugin_category::Category;
         let status = |ok: bool, text: String| {
             div()
                 .flex_shrink_0()
@@ -397,19 +509,16 @@ impl SettingsView {
                 })
                 .child(text)
         };
-        let offers = self.market.offers();
         let busy = self.market.working.is_some();
-
-        let animations = self.animations(&offers, busy, cx);
-
-        // ── 已安装 ──
-        let mut installed = Vec::new();
+        let mut page = div().flex().flex_col();
+        // What just happened and what is waiting on you, above everything.
+        let mut notices = Vec::new();
         if let Some(done) = &self.market.done {
             let (ok, text) = match done {
                 Ok(t) => (true, t.clone()),
                 Err(e) => (false, e.clone()),
             };
-            installed.push(
+            notices.push(
                 div()
                     .px(px(T::S16))
                     .py(px(T::S10))
@@ -430,9 +539,9 @@ impl SettingsView {
             } else {
                 "仍然停用"
             };
-            installed.push(
+            notices.push(
                 self.row(
-                    installed.is_empty(),
+                    notices.is_empty(),
                     verb,
                     "它撤回失败了，继续的话，它改过的东西可能会留下来",
                     secondary(format!("plugin-force-{id}"), verb).on_click(cx.listener(
@@ -451,26 +560,52 @@ impl SettingsView {
                 .into_any_element(),
             );
         }
-        let found = plugin::report();
-        if found.is_empty() {
-            installed.push(
+        let updates: Vec<&str> = items
+            .iter()
+            .filter(|i| i.update)
+            .map(|i| i.name.as_str())
+            .collect();
+        if !updates.is_empty() {
+            notices.push(
                 self.row(
-                    installed.is_empty(),
-                    "还没有装插件",
-                    "从下面「可安装」里挑一个，点安装就生效。",
+                    notices.is_empty(),
+                    &format!("{} 个插件有新版本", updates.len()),
+                    &updates.join("、"),
                     div(),
                 )
                 .into_any_element(),
             );
         }
-        for f in found {
-            let first = installed.is_empty();
-            let Ok(p) = &f.result else {
+        if !notices.is_empty() {
+            page = page.child(div().pt(px(T::S12)).child(card().children(notices)));
+        }
+        // By what each is for, the animation playing first in its own group.
+        for c in Category::ALL {
+            let mut rows: Vec<&Item> = items
+                .iter()
+                .filter(|i| i.category == c && i.installed())
+                .collect();
+            let now = catalog::playing();
+            rows.sort_by_key(|i| i.pick.as_ref() != Some(&now));
+            if rows.is_empty() {
+                continue;
+            }
+            let mut group = card();
+            for (n, item) in rows.iter().enumerate() {
+                group = group.child(self.installed_row(n == 0, item, cx));
+            }
+            page = page.child(heading(c.label())).child(group);
+        }
+        // What did not load cannot be turned off or updated, but can always be taken away.
+        let broken: Vec<gpui::AnyElement> = plugin::report()
+            .iter()
+            .filter(|f| f.result.is_err())
+            .enumerate()
+            .map(|(n, f)| {
                 let name = f
                     .dir
                     .file_name()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-                // It cannot be turned off or updated, but it can always be taken away.
                 let (dir_name, shown) = (name.clone(), name.clone());
                 let remove = secondary(format!("plugin-remove-broken-{name}"), "移除")
                     .when(busy, |b| b.opacity(0.5))
@@ -479,305 +614,145 @@ impl SettingsView {
                             this.uninstall(dir_name.clone(), shown.clone(), false, cx);
                         }
                     }));
-                installed.push(
-                    self.row(
-                        first,
-                        &name,
-                        f.result.as_ref().err().map_or("", String::as_str),
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(T::S8))
-                            .child(status(false, "没有加载".into()))
-                            .child(remove),
-                    )
-                    .into_any_element(),
-                );
-                continue;
-            };
-            let update = offers.iter().find(|o| {
-                o.entry.id == p.id
-                    && p.version
-                        .as_deref()
-                        .is_none_or(|v| market::newer(&o.entry.version, v))
-            });
-            let mut note = vec![format!(
-                "{}{}",
-                p.version
-                    .as_deref()
-                    .map_or_else(String::new, |v| format!("v{v} · ")),
-                kinds(&p.provides)
-            )];
-            if let Some(d) = &p.description {
-                note.push(d.clone());
-            }
-            if p.enabled {
-                note.extend(
-                    p.provides
-                        .iter()
-                        .filter_map(|k| k.where_it_shows())
-                        .map(str::to_owned),
-                );
-            }
-            if let Some(u) = update {
-                note.push(format!("{}有新版本 v{}", u.origin(), u.entry.version));
-            }
-            if !p.touches.is_empty() {
-                note.push(format!("改了别的程序的文件：{}", p.touches.join("、")));
-            }
-            note.extend(p.warnings.iter().cloned());
-            let runs = plugin::config()
-                .map(|c| mooring_core::plugin_context::runs(&plugin::dir(c), &p.id))
-                .unwrap_or_default();
-            let now = mooring_core::content::now();
-            for r in mooring_core::plugin_context::failing(&runs)
-                .into_iter()
-                .filter(|r| now.saturating_sub(r.at) < 7 * 86_400)
-            {
-                note.push(format!(
-                    "上次运行失败（{}）：{}；终端里 mooring plugins log {} 看全部",
-                    r.what, r.detail, p.id
-                ));
-            }
-            let on = p.enabled;
-            let (id, name) = (p.id.clone(), p.name.clone());
-            let mut controls = div().flex().items_center().gap(px(T::S8));
-            let asked = update.and_then(|u| self.confirming(u, cx));
-            if let Some((question, buttons)) = asked {
-                note.push(question);
-                controls = controls.child(buttons);
-            } else if let Some(u) = update.cloned() {
-                controls = controls.child(
-                    secondary(format!("plugin-update-{}", p.id), "更新")
-                        .when(busy, |b| b.opacity(0.5))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.market.working.is_none() {
-                                this.install_offer(u.clone(), cx);
-                            }
-                        })),
-                );
-            }
-            let removable = f
-                .dir
-                .parent()
-                .is_some_and(|d| plugin::config().is_some_and(|c| d == plugin::dir(c)));
-            if removable {
-                let (id, name) = (id.clone(), name.clone());
-                controls = controls.child(
-                    secondary(format!("plugin-remove-{}", p.id), "卸载")
-                        .when(busy, |b| b.opacity(0.5))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.market.working.is_none() {
-                                this.uninstall(id.clone(), name.clone(), false, cx);
-                            }
-                        })),
-                );
-            }
-            if self.market.working.as_deref() == Some(p.id.as_str()) {
-                controls = controls.child(
-                    div()
-                        .text_size(px(T::SMALL))
-                        .text_color(T::color(T::secondary()))
-                        .child("正在处理…"),
-                );
-            }
-            controls = controls.child(switch(format!("plugin-switch-{}", p.id), on).on_click(
-                cx.listener(move |this, _, _, cx| {
-                    if this.market.working.is_none() {
-                        this.switch_plugin(id.clone(), !on, false, cx);
-                    }
-                }),
-            ));
-            installed.push(
-                self.row(first, &p.name, &note.join(" · "), controls)
-                    .into_any_element(),
-            );
-            // Its settings, each a row: a switch, a choice to step through, or text to type.
-            if p.enabled
-                && let Some(plugins) = plugin::config().map(plugin::dir)
-            {
-                for (o, v) in mooring_core::plugin_context::values(&plugins, p) {
-                    installed.push(self.option_row(&p.id, o, v, cx).into_any_element());
-                }
-            }
-            // Each right-click action of the plugin, switched one by one.
-            if p.enabled && p.provides.contains(&Kind::Actions) {
-                for a in mooring_core::action::all()
-                    .iter()
-                    .filter(|a| a.file.parent() == Some(p.dir.as_path()))
-                {
-                    let on = a.enabled();
-                    let aid = a.id.clone();
-                    installed.push(
-                        self.row(
-                            false,
-                            &format!("　└ {}", a.title),
-                            &a.command,
-                            switch(format!("action-switch-{}", a.id), on).on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    this.text_error =
-                                        mooring_core::action::set_enabled(&aid, !on).err();
-                                    cx.notify();
-                                },
-                            )),
-                        )
-                        .into_any_element(),
-                    );
-                }
-            }
-        }
-        installed.push(
-            self.row(
-                false,
-                "重新读取",
-                "手动改了插件目录，或在终端里用 mooring plugins install 装了插件后，点这里马上生效",
-                secondary("plugins-reload", "重新读取").on_click(cx.listener(|this, _, _, cx| {
-                    this.market = Market {
-                        remote: this.market.remote.take(),
-                        ..Market::read()
-                    };
-                    this.plugins_changed(cx);
-                })),
-            )
-            .into_any_element(),
-        );
-
-        // ── 可安装 ──
-        let mut available = Vec::new();
-        let have = |id: &str| {
-            plugin::report()
-                .iter()
-                .any(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
-        };
-        for o in offers.iter().filter(|o| !have(&o.entry.id)) {
-            let e = &o.entry;
-            let first = available.is_empty();
-            let working = self.market.working.as_deref() == Some(e.id.as_str());
-            let mut note = vec![format!(
-                "v{} · {} · {}",
-                e.version,
-                kinds(&e.provides),
-                o.origin()
-            )];
-            if let Some(d) = &e.description {
-                note.push(d.clone());
-            }
-            let control = if working {
-                div().child(status(true, "正在安装…".into()))
-            } else if let Some((question, buttons)) = self.confirming(o, cx) {
-                note = vec![question];
-                buttons
-            } else {
-                let offer = o.clone();
-                div().child(
-                    secondary(format!("plugin-install-{}", e.id), "安装")
-                        .when(busy, |b| b.opacity(0.5))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if this.market.working.is_none() {
-                                this.install_offer(offer.clone(), cx);
-                            }
-                        })),
-                )
-            };
-            available.push(
-                self.row(first, &e.name, &note.join(" · "), control)
-                    .into_any_element(),
-            );
-        }
-        if available.is_empty() {
-            available.push(
                 self.row(
-                    true,
-                    "目录里的插件都装上了",
-                    self.market
-                        .bundled_error
-                        .as_deref()
-                        .unwrap_or("可以查一下远程目录有没有新的。"),
-                    div(),
+                    n == 0,
+                    &name,
+                    f.result.as_ref().err().map_or("", String::as_str),
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(T::S8))
+                        .child(status(false, "没有加载".into()))
+                        .child(remove),
                 )
-                .into_any_element(),
-            );
+                .into_any_element()
+            })
+            .collect();
+        if !broken.is_empty() {
+            page = page
+                .child(heading("没有加载"))
+                .child(card().children(broken));
         }
-        let url = market::remote_url();
-        let remote_note = match &self.market.remote {
-            _ if self.market.fetching => "正在获取…".to_owned(),
-            None => format!("{url}；只在点了之后才联网"),
-            Some(Ok(r)) => format!("{url}；有 {} 个插件，更新的和新的已列在上面", r.len()),
-            Some(Err(e)) => format!("获取失败：{e}"),
-        };
-        available.push(
-            self.row(
-                false,
-                "远程目录",
-                &remote_note,
-                secondary("plugins-fetch", "检查远程目录")
-                    .when(self.market.fetching, |b| b.opacity(0.5))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        if !this.market.fetching {
-                            this.fetch_remote(cx);
-                        }
-                    })),
-            )
-            .into_any_element(),
-        );
-
+        page = page.child(div().pt(px(T::S20)).child(card().child(self.row(
+            true,
+            "重新读取",
+            "手动改了插件目录，或在终端里用 mooring plugins install 装了插件后，点这里马上生效",
+            secondary("plugins-reload", "重新读取").on_click(cx.listener(|this, _, _, cx| {
+                this.market.read_catalog();
+                this.market.confirm = None;
+                this.market.working = None;
+                this.market.done = None;
+                this.market.stuck = None;
+                this.market.face = None;
+                this.market.editing = None;
+                this.plugins_changed(cx);
+            })),
+        ))));
         // ── 声明文件明细 ──
+        let opened = self.market.files_open;
+        page = page.child(
+            div().pt(px(T::S12)).flex().child(
+                secondary(
+                    "plugin-files",
+                    if opened {
+                        "▾ 声明文件明细"
+                    } else {
+                        "▸ 声明文件明细"
+                    },
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.market.files_open = !opened;
+                    cx.notify();
+                })),
+            ),
+        );
+        if opened {
+            let files = |rows: Vec<(String, Result<String, String>)>| {
+                rows.into_iter()
+                    .enumerate()
+                    .map(|(i, (file, result))| {
+                        match result {
+                            Ok(did) => {
+                                self.row(i == 0, &tilde(&file), &did, status(true, "生效".into()))
+                            }
+                            Err(e) => self.row(
+                                i == 0,
+                                &tilde(&file),
+                                &e,
+                                status(false, "没有生效".into()),
+                            ),
+                        }
+                        .into_any_element()
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let report = |r: &[agent::Loaded], did: fn(String) -> String| {
+                r.iter()
+                    .map(|l| (l.file.display().to_string(), l.result.clone().map(did)))
+                    .collect::<Vec<_>>()
+            };
+            let mut detail = Vec::new();
+            detail.extend(report(mooring_core::action::report(), |t| {
+                format!("加进右键菜单和 ⌘P：{t}")
+            }));
+            detail.extend(report(mooring_core::rule::report(), |t| {
+                format!("这些命令算跑过验证：{t}")
+            }));
+            detail.extend(report(mooring_core::hook::report(), |t| {
+                format!("会话状态变化时由后台调用：{t}；终端里 mooring plugins log 看运行记录")
+            }));
+            detail.extend(report(mooring_core::sidebar::report(), |t| {
+                format!("左栏顶部多了：{t}")
+            }));
+            detail.extend(report(mooring_core::decoration::report(), |t| {
+                format!("窗格标题栏或悬停卡片里显示：{t}")
+            }));
+            detail.extend(report(mooring_core::effect::report(), |t| t));
+            detail.extend(report(mooring_core::quota::report(), |t| {
+                format!("状态栏额度多了：{t}")
+            }));
+            detail.extend(report(agent::report(), |t| format!("注册为 {t}")));
+            let rows = files(detail);
+            if !rows.is_empty() {
+                page = page.child(div().pt(px(T::S8)).child(card().children(rows)));
+            }
+        }
         let where_ = agent::config_dir().map_or_else(
             || "~/.config/mooring".to_owned(),
             |d| d.display().to_string(),
         );
-        let files = |rows: Vec<(String, Result<String, String>)>| {
-            rows.into_iter()
-                .enumerate()
-                .map(|(i, (file, result))| {
-                    match result {
-                        Ok(did) => {
-                            self.row(i == 0, &tilde(&file), &did, status(true, "生效".into()))
-                        }
-                        Err(e) => {
-                            self.row(i == 0, &tilde(&file), &e, status(false, "没有生效".into()))
-                        }
-                    }
-                    .into_any_element()
-                })
-                .collect::<Vec<_>>()
-        };
-        let report = |r: &[agent::Loaded], did: fn(String) -> String| {
-            r.iter()
-                .map(|l| (l.file.display().to_string(), l.result.clone().map(did)))
-                .collect::<Vec<_>>()
-        };
-        let mut detail = Vec::new();
-        detail.extend(report(mooring_core::action::report(), |t| {
-            format!("加进右键菜单和 ⌘P：{t}")
-        }));
-        detail.extend(report(mooring_core::rule::report(), |t| {
-            format!("这些命令算跑过验证：{t}")
-        }));
-        detail.extend(report(mooring_core::hook::report(), |t| {
-            format!("会话状态变化时由后台调用：{t}；终端里 mooring plugins log 看运行记录")
-        }));
-        detail.extend(report(mooring_core::sidebar::report(), |t| {
-            format!("左栏顶部多了：{t}")
-        }));
-        detail.extend(report(mooring_core::decoration::report(), |t| {
-            format!("窗格标题栏或悬停卡片里显示：{t}")
-        }));
-        detail.extend(report(mooring_core::effect::report(), |t| t));
-        detail.extend(report(mooring_core::quota::report(), |t| {
-            format!("状态栏额度多了：{t}")
-        }));
-        detail.extend(report(agent::report(), |t| format!("注册为 {t}")));
-
-        self.cards(vec![
-            ("完成动画", animations),
-            ("已安装", installed),
-            ("可安装", available),
-            ("声明文件明细", files(detail)),
-        ])
-        .child(div().pt(px(T::S12)).px(px(T::S4)).child(label(format!(
+        page.child(div().pt(px(T::S12)).px(px(T::S4)).child(label(format!(
             "插件放在 {}/plugins/<id>/；写插件的说明：在终端运行 mooring --skill plugins。",
             tilde(&where_)
         ))))
+    }
+    /// 已安装 and 发现, or one plugin opened from either, or the frame editor.
+    pub(super) fn plugins_page(&self, cx: &Context<Self>) -> gpui::Div {
+        if !self.shows(Page::Plugins, "插件", cx) {
+            return div();
+        }
+        if self.market.face.is_some() {
+            return div().pt(px(T::S8)).child(card().child(self.face_card(cx)));
+        }
+        let items = catalog::items(&self.market.offers());
+        if let Some(item) = self
+            .market
+            .open
+            .as_ref()
+            .and_then(|id| items.iter().find(|i| i.id == *id))
+        {
+            return self.item_detail(item, &items, cx);
+        }
+        let installed = items.iter().filter(|i| i.plugin.is_some()).count();
+        let total = items.iter().filter(|i| !i.builtin()).count();
+        let top = self.plugin_tabs(installed, total, cx);
+        div()
+            .flex()
+            .flex_col()
+            .child(top)
+            .child(match self.market.tab {
+                Tab::Discover => self.discover_tab(&items, cx),
+                Tab::Installed => self.installed_tab(&items, cx),
+            })
     }
 }

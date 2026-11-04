@@ -60,14 +60,7 @@ fn secondary(
         .bg(T::color(T::popover()))
         .text_color(T::color(T::primary()))
 }
-/// A path under the home folder written from `~`.
-pub(super) fn tilde(path: &str) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
-    match path.strip_prefix(&home) {
-        Some(rest) if !home.is_empty() => format!("~{rest}"),
-        _ => path.to_owned(),
-    }
-}
+pub(super) use plugins::tilde;
 /// A card: rows separated by hairlines, as macOS groups its settings.
 fn card() -> gpui::Div {
     div()
@@ -479,7 +472,7 @@ impl SettingsView {
             machines: crate::machines::load(),
             machine_field,
             machines_error: None,
-            market: plugins::Market::read(),
+            market: plugins::Market::read(cx),
             editor: None,
         }
     }
@@ -1986,6 +1979,7 @@ impl Render for SettingsView {
                     .child(
                         div()
                             .id("settings-body")
+                            .track_scroll(&self.market.scroll)
                             .flex_1()
                             .min_h_0()
                             .overflow_y_scroll()

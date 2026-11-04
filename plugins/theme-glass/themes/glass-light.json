@@ -1,0 +1,8 @@
+{
+  "name": "亮玻璃",
+  "bg": "#f2f4f7",
+  "fg": "#1e2733",
+  "terminal": { "cursor": "#2a6fc2", "selection": "#bcd6f2" },
+  "ansi": { "red": "#b83a36", "green": "#25764a", "yellow": "#856310", "blue": "#2159a3", "magenta": "#7442a3", "cyan": "#157280" },
+  "window": { "opacity": 0.86, "blur": true }
+}

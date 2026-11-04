@@ -25,6 +25,8 @@ pub(super) struct Painter<'a> {
     pub(super) mono: gpui::Font,
     /// The frames a plugin drew, in place of the face style's own.
     pub(super) face: Option<&'static mooring_core::face::Script>,
+    /// Drawn on a card rather than a pane: its sizes go lower than a pane's ever need.
+    pub(super) small: bool,
     /// Where text stays, when it must not go past something.
     pub(super) clip: Option<Bounds<Pixels>>,
     pub(super) paths: usize,

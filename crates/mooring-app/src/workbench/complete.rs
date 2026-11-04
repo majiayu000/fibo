@@ -16,9 +16,11 @@ mod cozy;
 mod fun;
 mod paint;
 mod snapshot;
+mod stage;
 mod timing;
 use paint::Painter;
 use snapshot::Snapshot;
+pub(super) use stage::{Play, stage};
 use timing::*;
 
 /// The most specks the dissolve sends; a fuller screen sends one from every n-th cell,
@@ -435,26 +437,13 @@ impl Workbench {
         let keep = id.to_owned();
         let (a, b, c, d) = tm.words;
         let shown = eo(sl(t, a, b)) * if c > 0. { 1. - sl(t, c, d) } else { 1. };
-        let veil = match style {
-            Style::Seal => 0.88 * eo(sl(t, 0.1, 0.35)),
-            Style::Stamp => 0.86 * eo(sl(t, 0.06, 0.28)),
-            Style::Sweep => 0.8,
-            Style::Dissolve => 0.25 * sl(t, 0.05, 0.2) + 0.65 * sl(t, 0.35, 0.65),
-            Style::Fade | Style::Gravity | Style::Swirl | Style::Backspace | Style::Crt => 0.,
-            Style::Moor => 0.86 * eo(sl(t, 0.08, 0.28)),
-            Style::Confetti => 0.86 * eo(sl(t, 0.08, 0.26)),
-            _ => 0.88 * eo(sl(t, 0.05, 0.2)),
-        };
+        let veil = veil_amount(style, t);
         let veil_width = if style == Style::Sweep {
             sweep_at(t).clamp(0., 1.)
         } else {
             1.
         };
-        let lids = match style {
-            Style::Sweep => eio(sl(t, 0.66, 0.84)),
-            Style::Crt => fun::crt_lids(t),
-            _ => 0.,
-        };
+        let lids = lids_amount(style, t);
         let countdown = (t / tm.fade.0).min(1.);
         let words = div()
             .absolute()
@@ -655,6 +644,7 @@ impl Workbench {
                             cx,
                             mono: mono.clone(),
                             face: f.effect.face,
+                            small: false,
                             clip: None,
                             paths: 0,
                             quads: 0,

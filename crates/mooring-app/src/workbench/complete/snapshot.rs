@@ -42,6 +42,8 @@ pub(super) struct Letter {
 }
 /// A character, its width in cells, and whether it is bold and italic.
 type FaceKey = (char, u16, bool, bool);
+/// Characters already shaped; a settings card shares these across its frames.
+pub(super) type Faces = Rc<RefCell<HashMap<FaceKey, Option<Face>>>>;
 /// A line of text: its left and right, its top, the color it starts in.
 type Line = (Pixels, Pixels, Pixels, Hsla);
 /// What the terminal showed when the run started.
@@ -68,7 +70,7 @@ pub(super) struct Snapshot {
     bar_font: gpui::Font,
     texts: std::sync::Arc<gpui::TextSystem>,
     metrics: CellMetrics,
-    faces: RefCell<HashMap<FaceKey, Option<Face>>>,
+    faces: Faces,
 }
 impl Snapshot {
     /// None for the styles that leave the terminal's text alone.
@@ -81,9 +83,34 @@ impl Snapshot {
         }
         let (grid, row, ground) = pane.grid_area()?;
         let metrics = pane.cell_metrics()?;
-        let cell = metrics.width;
         let bar = pane.ask_bar(cx);
-        let mut cells = pane.text_cells();
+        let cells = pane.text_cells();
+        Some(Self::from_cells(
+            style,
+            cells,
+            bar,
+            (grid, row),
+            metrics,
+            T::color(T::inverse(ground)),
+            title,
+            Rc::default(),
+            cx,
+        ))
+    }
+    /// What `of` reads from a pane, from anywhere: a settings card has no pane behind it.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn from_cells(
+        style: Style,
+        mut cells: Vec<TextCell>,
+        bar: Option<AskBar>,
+        (grid, row): (Bounds<Pixels>, Pixels),
+        metrics: CellMetrics,
+        fg: Hsla,
+        title: Option<&str>,
+        faces: Faces,
+        cx: &App,
+    ) -> Self {
+        let cell = metrics.width;
         if let Some(bar) = &bar {
             cells.retain(|c| c.at.y + row <= bar.area.top() || c.at.y >= bar.area.bottom());
         }
@@ -106,7 +133,7 @@ impl Snapshot {
         let moving = if moves { cells } else { vec![] };
         let cols = (f32::from(grid.size.width) / f32::from(cell)).floor() as usize;
         let typed = typed_line(title, cols);
-        Some(Self {
+        Self {
             letters: OnceCell::new(),
             moving: RefCell::new(moving),
             bar,
@@ -116,13 +143,13 @@ impl Snapshot {
             cell,
             row,
             typed,
-            fg: T::color(T::inverse(ground)),
+            fg,
             font: T::terminal_mono(cx),
             bar_font: T::mono(cx),
             texts: cx.text_system().clone(),
             metrics,
-            faces: RefCell::default(),
-        })
+            faces,
+        }
     }
     /// The characters that move, the bar's first as they read first.
     pub(super) fn letters<'a>(&'a self, window: &Window) -> &'a [Letter] {
@@ -333,53 +360,64 @@ pub(super) fn text_wipe(
             let Some((grid, row, ground)) = pane.read(cx).grid_area() else {
                 return;
             };
-            let color = T::color(ground);
-            let wipe = |left: Pixels, top: Pixels, bottom: Pixels, window: &mut Window| {
-                if grid.right() > left && bottom > top {
-                    window.paint_quad(gpui::fill(
-                        Bounds::new(point(left, top), size(grid.right() - left, bottom - top)),
-                        color,
-                    ));
-                }
-            };
-            let bar = text.bar.as_ref().map(|b| b.area);
-            match style {
-                Style::Gravity | Style::Swirl if t >= LIFT => {
-                    wipe(grid.left(), grid.top(), grid.bottom(), window);
-                    if let Some(area) = bar {
-                        // The bar's words have left; its band goes after them.
-                        window.paint_quad(gpui::fill(area, color));
-                        let band = T::color(T::button());
-                        let left = 1. - sl(t, LIFT, LIFT + BAND_FADE);
-                        window.paint_quad(gpui::fill(area, band.opacity(left)));
-                    }
-                }
-                Style::Backspace if t > 0.12 => {
-                    let Some(last) = text.kept(t).checked_sub(1) else {
-                        wipe(grid.left(), grid.top(), grid.bottom(), window);
-                        if let Some(area) = bar {
-                            window.paint_quad(gpui::fill(area, color));
-                        }
-                        return;
-                    };
-                    let (right, top) = text.reading[last];
-                    match bar.filter(|area| top == area.top()) {
-                        // The cursor is in the bar, which ends past the grid in a margin.
-                        Some(area) => window.paint_quad(gpui::fill(
-                            Bounds::new(
-                                point(right, top),
-                                size((area.right() - right).max(px(0.)), row),
-                            ),
-                            color,
-                        )),
-                        None => wipe(right, top, top + row, window),
-                    }
-                    wipe(grid.left(), top + row, grid.bottom(), window);
-                }
-                _ => {}
-            }
+            paint_wipe(style, t, &text, grid, row, T::color(ground), window);
         },
     )
     .absolute()
     .inset_0()
+}
+/// Covers the text that has left or been deleted at `t`, in the terminal's own ground.
+pub(super) fn paint_wipe(
+    style: Style,
+    t: f32,
+    text: &Snapshot,
+    grid: Bounds<Pixels>,
+    row: Pixels,
+    color: Hsla,
+    window: &mut Window,
+) {
+    let wipe = |left: Pixels, top: Pixels, bottom: Pixels, window: &mut Window| {
+        if grid.right() > left && bottom > top {
+            window.paint_quad(gpui::fill(
+                Bounds::new(point(left, top), size(grid.right() - left, bottom - top)),
+                color,
+            ));
+        }
+    };
+    let bar = text.bar.as_ref().map(|b| b.area);
+    match style {
+        Style::Gravity | Style::Swirl if t >= LIFT => {
+            wipe(grid.left(), grid.top(), grid.bottom(), window);
+            if let Some(area) = bar {
+                // The bar's words have left; its band goes after them.
+                window.paint_quad(gpui::fill(area, color));
+                let band = T::color(T::button());
+                let left = 1. - sl(t, LIFT, LIFT + BAND_FADE);
+                window.paint_quad(gpui::fill(area, band.opacity(left)));
+            }
+        }
+        Style::Backspace if t > 0.12 => {
+            let Some(last) = text.kept(t).checked_sub(1) else {
+                wipe(grid.left(), grid.top(), grid.bottom(), window);
+                if let Some(area) = bar {
+                    window.paint_quad(gpui::fill(area, color));
+                }
+                return;
+            };
+            let (right, top) = text.reading[last];
+            match bar.filter(|area| top == area.top()) {
+                // The cursor is in the bar, which ends past the grid in a margin.
+                Some(area) => window.paint_quad(gpui::fill(
+                    Bounds::new(
+                        point(right, top),
+                        size((area.right() - right).max(px(0.)), row),
+                    ),
+                    color,
+                )),
+                None => wipe(right, top, top + row, window),
+            }
+            wipe(grid.left(), top + row, grid.bottom(), window);
+        }
+        _ => {}
+    }
 }

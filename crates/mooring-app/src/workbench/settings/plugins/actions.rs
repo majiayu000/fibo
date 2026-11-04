@@ -23,8 +23,10 @@ impl SettingsView {
             let _ = this.update(cx, |this, cx| match prepared {
                 Ok(p) if p.must_ask => {
                     this.market.working = None;
+                    // The question is asked where its answer can be read in full.
+                    let id = p.id.clone();
                     this.market.confirm = Some(p);
-                    cx.notify();
+                    this.open_item(id, cx);
                 }
                 Ok(p) => this.commit_install(p, name, version, cx),
                 Err(e) => {

@@ -1,0 +1,8 @@
+{
+  "api": 1,
+  "id": "theme-glass",
+  "name": "主题：磨砂玻璃",
+  "version": "0.1.0",
+  "description": "一暗一亮两套半透明主题：窗口的底透出桌面并模糊，文字始终不透明",
+  "provides": ["themes"]
+}

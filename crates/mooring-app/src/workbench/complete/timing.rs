@@ -40,6 +40,28 @@ pub(super) fn rng(mut seed: u32) -> impl FnMut() -> f32 {
     }
 }
 
+/// How much of the pane the veil covers at `t`.
+pub(super) fn veil_amount(style: Style, t: f32) -> f32 {
+    match style {
+        Style::Seal => 0.88 * eo(sl(t, 0.1, 0.35)),
+        Style::Stamp => 0.86 * eo(sl(t, 0.06, 0.28)),
+        Style::Sweep => 0.8,
+        Style::Dissolve => 0.25 * sl(t, 0.05, 0.2) + 0.65 * sl(t, 0.35, 0.65),
+        Style::Fade | Style::Gravity | Style::Swirl | Style::Backspace | Style::Crt => 0.,
+        Style::Moor => 0.86 * eo(sl(t, 0.08, 0.28)),
+        Style::Confetti => 0.86 * eo(sl(t, 0.08, 0.26)),
+        _ => 0.88 * eo(sl(t, 0.05, 0.2)),
+    }
+}
+/// How far the lids have closed at `t`, for the styles that shut the pane.
+pub(super) fn lids_amount(style: Style, t: f32) -> f32 {
+    match style {
+        Style::Sweep => eio(sl(t, 0.66, 0.84)),
+        Style::Crt => super::fun::crt_lids(t),
+        _ => 0.,
+    }
+}
+
 /// Per style, the slices of the run each part plays in.
 pub(super) struct Timing {
     /// Where the button has filled and turned into ✓ 做完了 (`Status::Closed.label()`).

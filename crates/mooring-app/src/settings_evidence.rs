@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "settings_evidence/faces.rs"]
 mod faces;
+#[path = "settings_evidence/plugin_page.rs"]
+mod plugin_page;
 
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
@@ -633,6 +635,10 @@ pub(super) fn start(
         }
         if phase == "faces" {
             faces::run(handle, &directory, cx).await;
+            return;
+        }
+        if phase == "plugin-page" {
+            plugin_page::run(handle, &directory, cx).await;
             return;
         }
         // 标记完成动画: 外观's row shows what plays and 换一个 turns to 插件, where 只淡出 is
