@@ -30,6 +30,14 @@ export type Card = {
   status_label?: string | null;
   /** Waiting on you or failed, counted as the desktop counts 要你处理. */
   needs_you?: boolean;
+  /** An Agent runs but no conversation is tied to it, in the user's words. */
+  note?: string | null;
+  /** The conversation's current turn, for `outcome`. */
+  turn?: string | null;
+  /** open, done, deferred or abandoned. */
+  outcome?: string | null;
+  /** When the conversation last changed, Unix seconds. */
+  updated?: number | null;
 };
 
 export type Machine = {
@@ -46,11 +54,32 @@ export type Machine = {
   spaces: Record<string, string>;
   /** Seconds since the epoch of the last list. */
   updated?: number;
+  /** `macos` or `linux`; from hosts that speak the 11-04 contract (v2-plan.md). */
+  os?: string;
+  /** The host's app version, when it says. */
+  appVersion?: string;
+  /** Round trip of the last `ping`, measured here, in ms. */
+  latency?: number;
+  /** Seconds since the epoch when it was last online. */
+  seen?: number;
 };
 
 type State = { loaded: boolean; machines: Machine[] };
 
 let state: State = { loaded: false, machines: [] };
+
+type Dial = (link: Link) => Promise<Remote>;
+let dial: Dial = (link) => Remote.connect(link);
+let staged: Link[] | null = null;
+
+/**
+ * Screenshots only (`EXPO_PUBLIC_FIXTURE=1`, see `src/fixture.ts`): these machines instead
+ * of the paired ones, reached through `d`. Never called in a normal build.
+ */
+export function stage(links: Link[], d: Dial) {
+  staged = links;
+  dial = d;
+}
 const listeners = new Set<() => void>();
 const remotes = new Map<string, Remote>();
 const retry = new Map<string, { delay: number; timer?: ReturnType<typeof setTimeout> }>();
@@ -89,22 +118,22 @@ async function connect(id: string) {
   set(id, { status: 'connecting', error: undefined });
   let r: Remote;
   try {
-    r = await Remote.connect(m.link);
+    r = await dial(m.link);
   } catch (e) {
-    ended(id, (e as RemoteError).code, (e as Error).message);
+    ended(id, (e as RemoteError).code, (e as Error).message, (e as RemoteError).reason);
     return;
   }
   remotes.set(id, r);
   r.onEnded((e) => {
     remotes.delete(id);
-    ended(id, e.code);
+    ended(id, e.code, undefined, e.reason);
   });
   try {
     // The device id names this phone for the request ids its writes carry.
     const hello = await r.request('hello', { version: 1, client: m.link.device });
     const beat = setInterval(() => {
       if (r.ended) clearInterval(beat);
-      else r.request('ping').catch(() => undefined);
+      else ping(id, r);
     }, HEARTBEAT_MS);
     r.onEnded(() => clearInterval(beat));
     retry.delete(id);
@@ -113,7 +142,11 @@ async function connect(id: string) {
       role: hello.role,
       ops: hello.ops ?? [],
       name: hello.machine?.name || m.name,
+      os: typeof hello.os === 'string' ? hello.os : undefined,
+      appVersion: typeof hello.app_version === 'string' ? hello.app_version : undefined,
+      seen: Date.now() / 1000,
     });
+    ping(id, r);
     await follow(id, r);
     await refresh(id);
   } catch (e) {
@@ -121,10 +154,20 @@ async function connect(id: string) {
   }
 }
 
+/** The heartbeat, timed: the phone's own measure of the link's latency. */
+function ping(id: string, r: Remote) {
+  const sent = Date.now();
+  r.request('ping')
+    .then(() => {
+      if (remotes.get(id) === r) set(id, { latency: Date.now() - sent, seen: Date.now() / 1000 });
+    })
+    .catch(() => undefined);
+}
+
 /** The connection is down: shown by its close code, and tried again unless refused. */
-function ended(id: string, code: number | undefined, fallback?: string) {
+function ended(id: string, code: number | undefined, fallback?: string, reason?: string) {
   if (!get(id)) return;
-  const o = closeOutcome(code);
+  const o = closeOutcome(code, reason);
   // Without a code, what the connection said (a timeout, a bad handshake) says more.
   set(id, { status: o.status, error: code === undefined && fallback ? fallback : o.text });
   if (o.retry === 'now') {
@@ -163,7 +206,7 @@ function later(id: string) {
 
 export async function start() {
   if (state.loaded) return;
-  const links = await loadMachines();
+  const links = staged ?? (await loadMachines());
   state = {
     loaded: true,
     machines: links.map((link) => ({
@@ -224,6 +267,18 @@ export function reconnect(id: string) {
   retry.delete(id);
   connect(id);
 }
+
+/** Whether the machine offers `op` to this phone (its `hello` lists it). */
+export const supports = (m: Machine | undefined, op: string) => !!m && m.status === 'online' && m.ops.includes(op);
+
+/** Fields of the 11-04 contract on old ops (answer `always`, chat `tools`, open `agent`):
+ * a host that says its `os` in hello speaks it; an older one would drop them silently. */
+export const speaksV2 = (m: Machine | undefined) => !!m?.os;
+
+/** What a screen says instead of its data when the machine lacks the op. */
+export const NOT_YET = '这台电脑的 Mooring 还不支持，更新后可用';
+
+export const getMachine = get;
 
 /** The live connection to a machine, for one-off requests; `null` while it is down. */
 export const remote = (id: string) => remotes.get(id) ?? null;
