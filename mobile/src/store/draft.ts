@@ -9,6 +9,8 @@ export type Draft = {
   about?: string;
   agent: 'claude' | 'codex';
   prompt: string;
+  /** The conversation to pick back up instead of starting one. */
+  resume?: { id: string; title: string; updated: number };
 };
 
 let draft: Draft = { agent: 'claude', prompt: '' };
@@ -19,7 +21,7 @@ export function setDraft(patch: Partial<Draft>) {
   listeners.forEach((l) => l());
 }
 
-export const resetDraft = () => setDraft({ cwd: undefined, about: undefined, prompt: '' });
+export const resetDraft = () => setDraft({ cwd: undefined, about: undefined, prompt: '', resume: undefined });
 
 export const useDraft = () =>
   useSyncExternalStore(
