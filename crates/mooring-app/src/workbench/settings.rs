@@ -233,7 +233,7 @@ impl Page {
     }
 }
 /// Every searchable setting: its page, its title and the words that find it.
-const ENTRIES: [(Page, &str, &str); 36] = [
+const ENTRIES: [(Page, &str, &str); 37] = [
     (
         Page::Phones,
         "其他电脑",
@@ -279,6 +279,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
         "钉住这一轮的提问",
         "提问 置顶 钉住 顶部条 浮出 你问 回答太长 pin prompt sticky",
     ),
+    (Page::Look, "状态圆圈转动", "转圈 动画 耗电 性能 spinner"),
     (Page::Terminal, "终端字体", "字体 family font mono 等宽"),
     (Page::Terminal, "字号", "文字大小 font size 缩放 pt"),
     (Page::Terminal, "行距", "行高 line height 紧凑 舒适 宽松"),
@@ -395,8 +396,7 @@ pub(super) struct SettingsView {
     relay_key: Entity<Field>,
     /// Why the phones setting was not sent.
     remote_error: Option<&'static str>,
-    /// 其他电脑: as saved in `<config>/machines.json`, the field a new one is typed in,
-    /// and why the last change was not saved.
+    /// 其他电脑: `<config>/machines.json`, the new one's field and the last save's error.
     machines: Vec<crate::machines::Spec>,
     machine_field: Entity<Field>,
     machines_error: Option<String>,

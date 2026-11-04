@@ -569,7 +569,7 @@ impl Workbench {
                 .font_family(mono.clone())
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_size(px(T::SMALL))
-                .child(crate::ui::widgets::status_mark_seen(g, attention))
+                .child(self.session_mark(g, attention, cx))
         };
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))

@@ -686,9 +686,9 @@ impl Render for Workbench {
                     .children(sidebar)
                     .child(main),
             )
-            .when(!beside, |d| d.child(self.statusbar_view(width, cx)));
-        // 标记完成 runs leave their panes for the sidebar, so they draw over everything
-        // but the menus.
+            .when(!beside, |d| d.child(self.statusbar_view(width, cx)))
+            .children(self.turning_view(cx));
+        // 标记完成 runs leave their panes for the sidebar: over everything but the menus.
         if let Some(overlay) = self.completing_overlay(window) {
             root = root.child(overlay);
         }

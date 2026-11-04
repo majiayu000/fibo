@@ -13,7 +13,8 @@ mooring-app/visual-test`; BIN_DIR is where those binaries are.
 
 The probe quits the host it used: prepare again before each probe. MOORING_NO_CATCH_UP=1
 is passed through for redraw-check; NORUN=1 at prepare leaves no turn running, so no
-clock ticks the sidebar. MACHINE=1 at prepare configures a machine that never connects.
+clock ticks the sidebar. FEWNEED=1 leaves little to act on, so the running rows fit the
+list's limit. MACHINE=1 at prepare configures a machine that never connects.
 """
 import json, os, pathlib, shlex, socket, struct, subprocess, sys, tempfile, time
 STATE = pathlib.Path.home() / 'Library/Caches/MooringPerf/state.json'
@@ -47,6 +48,7 @@ if cmd == 'prepare':
                (stamp - 3600, 'event_msg', {'type': 'task_started', 'turn_id': cid + '-turn'}),
                (stamp - 1800, 'event_msg', {'type': 'token_count', 'rate_limits': {'primary': {'used_percent': 40.0, 'window_minutes': 300, 'resets_at': now + 3600}, 'secondary': None}})]
         g = n % 10
+        if os.environ.get('FEWNEED') and g != 9: g = 0 if n % 500 == 0 else 8  # few to act on, so the rows running are listed
         if g == 0: rec.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '要不要继续？', 'questions': [{'question': '要不要继续？', 'options': [{'label': '继续'}, {'label': '停'}]}]}))
         elif g < 7: rec.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已完成，请核对。'}))
         elif g != 9 or os.environ.get('NORUN'): rec.append((stamp, 'event_msg', {'type': 'turn_aborted'}))

@@ -10,6 +10,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
 
+mod turning;
+
 /// How long the sidebar may show what it drew while the rest of the window keeps
 /// drawing: a change that reached the window without a workbench notify (a child view's
 /// own state, a clock) shows within this.
@@ -75,6 +77,8 @@ pub(super) struct Redraw {
     /// An empty view inside the workbench: notifying it redraws the workbench (its
     /// parent) without asking the sidebar to draw again.
     tick: Entity<Tick>,
+    marks: Rc<turning::Marks>,
+    turning: Entity<turning::Turning>,
 }
 
 pub(super) struct Tick;
@@ -105,6 +109,9 @@ impl Render for SidebarView {
                 // The column's motion draws it again next frame, it alone; once that
                 // settles nothing asks.
                 w.sidebar.motion.settle();
+                if let Some(r) = &w.redraw {
+                    r.marks.clear();
+                }
                 if w.sidebar.motion.moving() {
                     window.on_next_frame(move |_, cx| ask(&view, cx));
                 }
@@ -136,9 +143,14 @@ impl Workbench {
                     cx.notify();
                 }),
             });
+            let marks = Rc::new(turning::Marks::default());
             Redraw {
                 sidebar,
                 tick: cx.new(|_| Tick),
+                turning: cx.new(|_| turning::Turning {
+                    marks: marks.clone(),
+                }),
+                marks,
             }
         })
     }
@@ -154,8 +166,11 @@ impl Workbench {
             return None;
         }
         let state = view.read(cx);
-        let catch_up = (catch_up_on() && !state.asked.get() && !state.due.replace(true))
-            .then(|| CATCH_UP.saturating_sub(state.drawn.get().elapsed()));
+        let catch_up = (catch_up_on()
+            && !self.turning_alone(cx)
+            && !state.asked.get()
+            && !state.due.replace(true))
+        .then(|| CATCH_UP.saturating_sub(state.drawn.get().elapsed()));
         if let Some(wait) = catch_up {
             #[cfg(feature = "visual-test")]
             {
