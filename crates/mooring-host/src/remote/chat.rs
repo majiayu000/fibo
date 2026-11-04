@@ -59,6 +59,7 @@ fn message(m: ChatMessage) -> rp::Message {
                     removed,
                 })
                 .collect(),
+            took: t.took,
         }),
     }
 }

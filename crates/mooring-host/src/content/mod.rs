@@ -200,7 +200,7 @@ pub(crate) fn question_summary(v: &Value) -> String {
         600,
     )
 }
-fn seconds(v: &Value) -> u64 {
+pub fn seconds(v: &Value) -> u64 {
     v.as_str()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|d| d.timestamp().max(0) as u64)

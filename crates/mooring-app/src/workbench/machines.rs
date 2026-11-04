@@ -252,6 +252,7 @@ impl Workbench {
             cwd: None,
             agent: None,
             prompt: None,
+            resume: None,
             request: Some(mooring_core::protocol::RequestId::fresh().id),
         };
         let sent = cx.background_spawn(async move {

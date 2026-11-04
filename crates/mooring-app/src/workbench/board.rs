@@ -317,27 +317,11 @@ impl Workbench {
             .collect()
     }
     fn board_todos(&self) -> Vec<&Task> {
-        self.workspace
-            .tasks
-            .iter()
+        (mooring_core::status::open_todos(&self.workspace, now()).into_iter())
             .filter(|t| {
-                self.workspace
-                    .task_outcomes
-                    .get(&t.id)
-                    .unwrap_or(&Outcome::Open)
-                    .needs_review(now())
-                    && self
-                        .overview
-                        .filter_space
-                        .as_ref()
-                        .is_none_or(|id| id == &t.space)
+                (self.overview.filter_space.as_ref()).is_none_or(|id| id == &t.space)
                     && self.overview.agent.is_none_or(|a| a == t.agent)
                     && !self.overview.changed_only
-                    && !self
-                        .workspace
-                        .agent_sessions
-                        .iter()
-                        .any(|s| s.task.as_ref() == Some(&t.id))
             })
             .collect()
     }

@@ -417,7 +417,7 @@ impl Workbench {
     pub(super) fn next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         enum Next {
             Here(AgentSession),
-            There(usize, Card, String),
+            There(usize, Box<Card>, String),
         }
         let mut all: Vec<(String, Next)> = self
             .needs_you()
@@ -427,7 +427,7 @@ impl Workbench {
         for index in 0..self.machines.len() {
             for r in self.remote_rows_of(index) {
                 if r.online && r.card.needs_you {
-                    all.push((r.key, Next::There(index, r.card, r.host_name)));
+                    all.push((r.key, Next::There(index, Box::new(r.card), r.host_name)));
                 }
             }
         }
@@ -458,7 +458,7 @@ impl Workbench {
             }
             Next::There(index, card, name) => {
                 self.reveal_machine(Some(index));
-                self.open_remote_peek(index, card, &name, window, cx);
+                self.open_remote_peek(index, *card, &name, window, cx);
             }
         }
     }
