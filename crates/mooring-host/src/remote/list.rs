@@ -2,10 +2,11 @@
 //! burst of events), so everything here reads what the host already has, and a card's
 //! branch comes from `.git/HEAD` through a short cache, never a git process.
 use crate::control;
-use mooring_core::{git_head, model::*, protocol::*, status};
+use mooring_core::{git_head, model::*, protocol::*, status, status_group};
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -34,7 +35,7 @@ fn branch(cwd: &str) -> Option<String> {
 }
 
 /// Spaces and running terminals as cards: what each Agent is doing and what it asks.
-pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
+pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io::Result<Value> {
     let now = mooring_core::content::now();
     let terminals: Vec<_> = w
         .terminals
@@ -64,7 +65,11 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Va
                 .and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
             rp::Card {
                 id: t.id.clone(),
-                space: t.space.clone(),
+                // The space the window lists the conversation under; a shell's own.
+                space: session
+                    .and_then(|s| w.session_space(s))
+                    .unwrap_or(&t.space)
+                    .to_owned(),
                 tab: control::tab_title(w, &t.id),
                 cwd: cwd.clone(),
                 phase,
@@ -83,6 +88,9 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Va
                     question: p.question.clone(),
                     folder: p.folder.clone(),
                 }),
+                column: session
+                    .and_then(|s| status_group::column(w, s, now))
+                    .map(|c| c.key().to_owned()),
                 note,
                 turn: content
                     .map(|c| c.turn_key.clone())
@@ -118,12 +126,12 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Va
             agent: control::agent_label(t.agent),
         })
         .collect();
-    json!(rp::List {
-        machine: super::machine(socket),
+    Ok(json!(rp::List {
+        machine: super::machine(socket)?,
         spaces,
         terminals,
         todos,
-    })
+    }))
 }
 
 fn outcome_key(o: &Outcome) -> &'static str {
@@ -138,7 +146,6 @@ fn outcome_key(o: &Outcome) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mooring_core::status;
 
     /// The phone's cards say what the window says, on every sample case.
     #[test]
@@ -147,7 +154,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mooring-cards-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let list: rp::List =
-            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock"))).unwrap();
+            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock")).unwrap())
+                .unwrap();
         let at = mooring_core::content::now();
         assert!(!list.terminals.is_empty());
         for card in &list.terminals {
@@ -168,6 +176,13 @@ mod tests {
                 card.id
             );
             assert_eq!(card.needs_you, w.needs_you(s, at), "{}", card.id);
+            assert_eq!(card.space, w.session_space(s).unwrap_or(&term.space));
+            assert_eq!(
+                card.column.as_deref(),
+                status_group::column(&w, s, at).map(|c| c.key()),
+                "{}",
+                card.id
+            );
         }
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -198,7 +213,8 @@ mod tests {
         );
         let dir = std::env::temp_dir().join(format!("mooring-unbound-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let list: rp::List = serde_json::from_value(list(&w, &seen, &dir.join("sock"))).unwrap();
+        let list: rp::List =
+            serde_json::from_value(list(&w, &seen, &dir.join("sock")).unwrap()).unwrap();
         let card = list.terminals.iter().find(|c| c.id == shell).unwrap();
         assert_eq!(card.phase, rp::Phase::Shell);
         assert_eq!(card.agent.as_deref(), Some("codex"));

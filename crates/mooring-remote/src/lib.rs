@@ -13,7 +13,8 @@
 //!
 //! `tests/vectors.rs` checks `vectors/v1.json`: fixed inputs and the exact bytes they
 //! must produce, for an implementation in another language to check itself against.
-//! Shapes and rules are in `specs/extensions/remote-protocol.md` and `relay.md`.
+//! Shapes and rules are in the Keepline repo's `specs/extensions/remote-protocol.md` and
+//! `relay.md` (not moved here).
 pub mod asks;
 pub mod client;
 pub mod close;
@@ -22,4 +23,5 @@ pub mod protocol;
 pub mod role;
 pub mod secure;
 pub mod tools;
+pub mod usage;
 pub mod wire;

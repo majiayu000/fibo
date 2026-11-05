@@ -1,7 +1,7 @@
 # Mooring 手机端竞品调研
 
 研究快照：2026-11-03。这份文档只写竞品，我方要改什么见 [02-my-plan.md](02-my-plan.md)。
-对照基线：Mooring 仓库 main@d88045ec 的手机端设计稿（`specs/phone-app/design.html`）和已实现的 App（`mobile`）。
+对照基线：Mooring 仓库 main@d88045ec 的手机端设计稿（`specs/phone-app/design.html`，现 `docs/phone-app/design.html`）和已实现的 App（`mobile`）。
 
 图例（结论后方括号里的证据等级）：`[E2]` 只看了官方 README、文档或商店页；`[E3]` 读过固定 commit 的源码；`[D1]` 只有零星公开讨论。没有装上竞品实际使用，所以没有任何「谁更好用、谁更快」的结论。
 

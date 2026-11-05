@@ -1,8 +1,8 @@
-//! 鸟瞰 as a board (specs/overview-kanban/kanban.html): one column per thing you might do
-//! next, left to right in the order work moves; what waits on you or failed has its own
-//! column, 要你处理 (decided 11-02: five columns, the inbox variant is not done). Each card
-//! carries one colored mark, its space's gradient; everything else stays neutral so the
-//! status colors read first.
+//! 鸟瞰 as a board (Keepline repo, specs/overview-kanban/kanban.html): one column per
+//! thing you might do next, left to right in the order work moves; what waits on you or
+//! failed has its own column, 要你处理 (decided 11-02: five columns, the inbox variant is
+//! not done). Each card carries one colored mark, its space's gradient; everything else
+//! stays neutral so the status colors read first.
 use super::*;
 use crate::ui::icons::agent_icon;
 use gpui::{
@@ -16,15 +16,7 @@ mod pill;
 pub(super) mod remote;
 use pill::{name_pill, pill};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub(super) enum Column {
-    Todo,
-    Running,
-    Needs,
-    Review,
-    Done,
-    Stale,
-}
+pub(super) use mooring_core::status_group::{Column, column as column_of};
 
 /// Each column keeps GPUI's measured item heights and its own scroll anchor.
 pub(super) struct ColumnList {
@@ -52,60 +44,6 @@ impl ColumnList {
         }
     }
 }
-impl Column {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Todo => "待办",
-            Self::Running => Status::Running.label(),
-            Self::Needs => mooring_core::status::NEEDS_YOU,
-            // Stopped and put off ones; finished turns are in 要你处理 since 11-03.
-            Self::Review => Status::Paused.label(),
-            Self::Done => Status::Closed.label(),
-            Self::Stale => Status::Stale.label(),
-        }
-    }
-    pub(super) fn id(self) -> &'static str {
-        match self {
-            Self::Todo => "todo",
-            Self::Running => "running",
-            Self::Needs => "needs",
-            Self::Review => "review",
-            Self::Done => "done",
-            Self::Stale => "stale",
-        }
-    }
-}
-
-/// Which column an open or just-finished session belongs in; `None` keeps it off the board.
-pub(super) fn column_of(w: &Workspace, s: &AgentSession, now: u64) -> Option<Column> {
-    if !s.outcome.needs_review(now) {
-        return (s.outcome == Outcome::Completed && completed_within(w, &s.id, now, DAY))
-            .then_some(Column::Done);
-    }
-    let status = status_of(w, s);
-    Some(match status {
-        // Just opened, no turn yet: nothing to put on a card.
-        Status::Fresh => return None,
-        // Every stopped turn that is yours: 要你处理, the sidebar's group of the same name
-        // (asking, failed, finished for you to check, work left in the background).
-        Status::Running => Column::Running,
-        // The one count of 要你处理 (status::needs_you): the chip, the sidebar and this
-        // column agree. A finished or failed one whose tab you closed waits in 停下了.
-        _ if w.needs_you(s, now) => Column::Needs,
-        Status::Stale => Column::Stale,
-        // A turn you stopped, or one put off whose time came: 停下了.
-        _ => Column::Review,
-    })
-}
-const DAY: u64 = 86_400;
-fn completed_within(w: &Workspace, id: &str, now: u64, window: u64) -> bool {
-    w.outcome_history
-        .iter()
-        .rev()
-        .find(|h| h.session == id)
-        .is_some_and(|h| h.after == Outcome::Completed && now.saturating_sub(h.at) < window)
-}
-
 /// Four-color gradients for a space's avatar, picked by its id so a space keeps its look.
 /// No pure red or orange as a base: those belong to 出错 and 等你回答.
 pub(super) fn mesh_index(seed: &str) -> usize {
@@ -601,13 +539,13 @@ impl Workbench {
                 .border_color(T::color(T::control()))
                 .bg(T::color(T::raised()))
                 .with_animation(
-                    gpui::SharedString::from(format!("slot-{}", column.id())),
+                    gpui::SharedString::from(format!("slot-{}", column.key())),
                     Animation::new(Duration::from_millis(260)).with_easing(gpui::ease_out_quint()),
                     |d, t| d.h(px(T::BOARD_SLOT * t)),
                 )
         });
         div()
-            .id(gpui::SharedString::from(format!("drop-{}", column.id())))
+            .id(gpui::SharedString::from(format!("drop-{}", column.key())))
             .rounded(px(T::CARD_RADIUS))
             // From the moment a card is lifted every column says whether it takes it:
             // the ones that do are outlined, the rest fade back.
@@ -694,7 +632,7 @@ impl Workbench {
             .children(slot)
             .child(
                 div()
-                    .id(gpui::SharedString::from(format!("column-{}", column.id())))
+                    .id(gpui::SharedString::from(format!("column-{}", column.key())))
                     .flex_1()
                     .min_h_0()
                     .child(cards),
@@ -865,7 +803,7 @@ impl Workbench {
         // 要你处理's cards say what they wait on: the status, its age and the question.
         let asks_you = (column == Column::Needs).then(|| status_of(&self.workspace, session));
         let content = self.workspace.content.get(&session.id);
-        let space_id = session_space(&self.workspace, session).unwrap_or("外部");
+        let space_id = self.workspace.session_space(session).unwrap_or("外部");
         let space_name = self
             .workspace
             .spaces

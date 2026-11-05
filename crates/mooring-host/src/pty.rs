@@ -395,7 +395,14 @@ mod env_tests {
     fn a_spawned_shell_does_not_see_the_hosts_launcher_state() {
         use std::io::Read;
         std::env::set_var("CLAUDE_CODE_CHILD_SESSION", "1");
-        let argv = ["/usr/bin/env".to_owned()];
+        // The shell outlives `env` so its output is read before the terminal closes: when
+        // the only process exits first, macOS may close the terminal with its output unread
+        // and the first read returns end of file with nothing (seen on a CI runner).
+        let argv = [
+            "/bin/sh".to_owned(),
+            "-c".to_owned(),
+            "/usr/bin/env; sleep 1".to_owned(),
+        ];
         let colorfgbg = mooring_core::terminal::Scheme::default()
             .colors()
             .colorfgbg();

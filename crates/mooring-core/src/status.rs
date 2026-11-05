@@ -143,17 +143,7 @@ impl Phase {
     }
 }
 
-/// A terminal with no conversation whose program reports its own state (OSC 7501):
-/// working, blocked, error, done or idle, read as the same states sessions use.
-pub fn of_program(state: &str) -> Status {
-    match state {
-        "working" => Status::Running,
-        "blocked" => Status::Waiting,
-        "error" => Status::Error,
-        "done" => Status::Review,
-        _ => Status::Paused,
-    }
-}
+pub use crate::program_state::of_program;
 
 /// When the turn behind 在跑 began, for 「在跑 · 12 分钟」; `None` in any other state.
 pub fn running_since(w: &Workspace, s: &AgentSession, now: u64) -> Option<u64> {
@@ -373,11 +363,8 @@ fn recorded(w: &Workspace, s: &AgentSession, c: Option<&Content>, now: u64) -> S
     }
     // A question in the log waits for you only while someone can answer it. A session
     // bound to a Mooring terminal reads its record here only once its agent has left
-    // that terminal (or the terminal ended): nobody is left to ask.
-    let left_its_terminal = s
-        .terminal
-        .as_ref()
-        .is_some_and(|id| w.terminals.iter().any(|t| &t.id == id));
+    // that terminal (or the terminal ended, or its row is gone): nobody is left to ask.
+    let left_its_terminal = s.terminal.is_some();
     if c.turn == Turn::Waiting && !left_its_terminal {
         return Status::Waiting;
     }
@@ -599,6 +586,10 @@ mod tests {
         assert_eq!(of(&w, &session(Some("t"), false), NOW), Status::Paused);
         let w = workspace(Some(content(Turn::Waiting)), Some(129));
         assert_eq!(of(&w, &session(Some("t"), false), NOW), Status::Error);
+        // Its terminal's row is gone: nobody is left to answer either.
+        let mut w = workspace(Some(content(Turn::Waiting)), None);
+        w.terminals.clear();
+        assert_eq!(of(&w, &session(Some("t"), true), NOW), Status::Paused);
         // Still at the prompt in its terminal: waiting.
         let w = workspace(Some(content(Turn::Waiting)), None);
         assert_eq!(of(&w, &session(Some("t"), true), NOW), Status::Waiting);

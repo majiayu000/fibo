@@ -54,7 +54,7 @@ class Fake {
 }
 
 /** Every dial goes through here: held until released, like a relay waiting on its machine. */
-let dials: { resolve: (r: Fake) => void; reject: (e: any) => void; socket?: Fake }[] = [];
+let dials: { link: any; resolve: (r: Fake) => void; reject: (e: any) => void; socket?: Fake }[] = [];
 const live = () => dials.filter((d) => d.socket && !d.socket.ended).length;
 const settle = () => new Promise((done) => setTimeout(done, 5));
 async function answerAll() {
@@ -75,7 +75,7 @@ async function failAll() {
 
 const LINK = { machine: 'm1', name: 'mac', device: 'phone', relay: 'ws://x', code: 'c', key: 'k' } as any;
 const started = (async () => {
-  hub.stage([LINK], () => new Promise((resolve, reject) => dials.push({ resolve: resolve as any, reject })));
+  hub.stage([LINK], (link: any) => new Promise((resolve, reject) => dials.push({ link, resolve: resolve as any, reject })));
   await hub.start();
 })();
 
@@ -154,4 +154,73 @@ test('the old connection ending says nothing about the new one', async () => {
   expect(hub.remote('m1')).not.toBeNull();
   // The handshake check closed itself; the old one ended on its own; one is left.
   expect(live()).toBe(1);
+});
+
+// Pairing again against that one connection: a replaced connection ends without taking its
+// successor down, and a dial for the old link is dropped.
+const answer = (at: number) => {
+  const d = dials[at];
+  d.socket = new Fake();
+  d.resolve(d.socket);
+  return d.socket;
+};
+const linkFor = (machine: string, device = 'phone') => ({ ...LINK, machine, name: machine, device });
+/** Pairs, answering the probe and then the connection; gives the connection. */
+async function paired(link: any) {
+  const from = dials.length;
+  const done = hub.pair(link);
+  await settle();
+  answer(from);
+  await settle();
+  const socket = answer(from + 1);
+  await done;
+  await settle();
+  return socket;
+}
+
+test('tapping retry while it dials does not dial again', async () => {
+  const socket = await paired(linkFor('m4'));
+  socket.end({ code: 4401, reason: '' });
+  await settle();
+  const before = dials.length;
+  hub.reconnect('m4');
+  hub.reconnect('m4');
+  hub.reconnect('m4');
+  expect(dials.length).toBe(before + 1);
+  answer(before);
+  await settle();
+  expect(hub.getMachine('m4')?.status).toBe('online');
+});
+
+test('the old connection ending after a new pairing leaves the new one', async () => {
+  const old = await paired(linkFor('m2'));
+  const fresh = await paired(linkFor('m2'));
+  expect(old.closed).toBe(true);
+  old.end({ code: 1000, reason: '' });
+  await settle();
+  expect(hub.remote('m2')).toBe(fresh as any);
+  expect(hub.getMachine('m2')?.status).toBe('online');
+});
+
+test('pairing again mid-dial drops that dial and dials the new link', async () => {
+  const socket = await paired(linkFor('m3'));
+  socket.end({ code: 4401, reason: '' });
+  await settle();
+  const pending = dials.length;
+  hub.reconnect('m3');
+  const again = linkFor('m3', 'phone-2');
+  const done = hub.pair(again);
+  await settle();
+  answer(pending + 1);
+  await settle();
+  // The old dial answers late: nobody wants it. The new link's dial is already out.
+  const late = answer(pending);
+  await settle();
+  expect(late.closed).toBe(true);
+  expect(dials.at(-1)?.link).toBe(again);
+  const now = answer(dials.length - 1);
+  await done;
+  await settle();
+  expect(hub.remote('m3')).toBe(now as any);
+  expect(hub.getMachine('m3')?.status).toBe('online');
 });

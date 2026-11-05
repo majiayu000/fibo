@@ -190,13 +190,13 @@
 <p class="muted">共同点：要拦 PR，就要用与机器负载无关的指标（指令数、模拟执行）；用墙钟时间只能事后提醒。Mooring 门禁按这个思路：真机用指令数，CI 虚拟机用同进程内的比例。</p>
 
 <h2 id="open">10. 未解问题与下一步</h2>
-<p><b>没测准</b> 背景图和半透明主题的显卡开销：11-04 跑了 3 轮真实窗口（<code>theme-live.py</code>），App CPU 中位数都在 6.5–7.3%（默认 6.5%），看不出差异；但当时机器有人在用，全机 GPU 在 34–51% 之间来回跳，两轮窗口被别的窗口挡住（CPU 0.1%、0.7%），分不出主题的影响。要在空闲机器、窗口保持在前台时重跑。</p>
+<p><b>没测准</b> 背景图和半透明主题的显卡开销：11-05 在有其他会话编译、开窗口（负载 12–218）时跑了 <code>theme-live.py</code>。App CPU 各主题都在 4–6% 上下，看不出主题抬高 CPU（个别轮次窗口被挡，低到 0.1–0.6%）。WindowServer GPU：默认 5–8%，夜港 5.5–6.6%，旧纸 4–11%，暗玻璃 9.5–10%，暗玻璃可能多约 3 个点，但窗口在最前面的只有默认和夜港各一轮，其余都混着别的窗口，不能算结论。要在没有其他会话开窗口时重跑。</p>
 <ul>
   <li><span class="tag">已否定</span> 11-05 怀疑窗口 CPU 退化（App 采到 6–17%）：同一夹具真实窗口对比 <code>bc292cf</code> 和 <code>aadb906</code>，6 个终端有输出时指令数从 291–312 M/s 降到 195–257 M/s，占用从 556–575 MB 降到 405–416 MB。App 自己也回落到 4.5%，当时是重启后的恢复负载。窗口被挡住时不画，数字会低到约 2 M/s，要剔除；空闲场景 1–110 M/s 波动太大，没有下结论。</li>
   <li><span class="tag">未查</span> 开启补画时，开头那帧顶栏「＋」附近有 803 px 差异；新 main（11-04）才出现，门禁目前只比对关闭补画的那轮，不拦。</li>
   <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>
   <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
-  <li><span class="tag">不改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：主库存的是用户操作（待办、完成状态），<code>synchronous=FULL</code> 保留；日志索引本来就是 NORMAL。</li>
+  <li><span class="tag">已改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：原先主库因存的是用户操作（待办、完成状态）保留 <code>synchronous=FULL</code>；11-05 按 <code>docs/plan.md</code> 第 3 阶段改成 WAL + NORMAL，进程崩溃不丢，只有掉电或系统崩溃可能丢最后几笔（见 <code>docs/decisions/2026-11-05-workbench-db-synchronous-normal.md</code>）。写库挪出锁还没做。日志索引本来就是 NORMAL。</li>
   <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试。</li>
   <li><span class="tag">已查</span> 窗口进程约 759 MB（M3 Max，真实使用 4.5 小时）：Metal 驱动池 384 MB，Rust 堆约 177 MB，三个 drawable 约 92 MB，其他图形内存约 49 MB（含后台缓冲 31 MB），其余约 55 MB。驱动池里 blit 占的 160 MB 已省掉，渲染占的 224 MB 只要窗口在画就省不掉；Rust 堆没细查。GPU 空闲约 2 秒后驱动收回整个池，下次提交重新分配，最小程序里耗时 7–24 ms（平时 0.4 ms），真实窗口没量。</li>
 </ul>

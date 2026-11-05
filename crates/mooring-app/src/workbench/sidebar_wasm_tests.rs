@@ -163,13 +163,13 @@ fn a_reply_too_big_to_draw_is_refused() {
 }
 
 /// What one left-column draw spends on a real workspace, step by step, for the
-/// "is incremental input worth it" question in specs/plugins/plugin-system.md.
+/// "is incremental input worth it" question in docs/plugin-system/spec.md.
 /// `MOORING_WS_JSON=<Workspace JSON> cargo test --release -p mooring-app
 /// sidebar_cost_on_a_real_workspace -- --ignored --nocapture`
 #[test]
 #[ignore]
 fn sidebar_cost_on_a_real_workspace() {
-    use crate::model::session_state::{live_terminal, session_space, session_status};
+    use crate::model::session_state::{live_terminal, session_status};
     use std::collections::HashSet;
     use std::time::Instant;
     let path = std::env::var("MOORING_WS_JSON").expect("MOORING_WS_JSON");
@@ -204,7 +204,7 @@ fn sidebar_cost_on_a_real_workspace() {
                     Some(c) => c.hidden_for(s).is_some(),
                     None => !(s.current && s.binding.is_some()),
                 };
-                !hidden && session_space(&w, s) == Some(space.as_str())
+                !hidden && w.session_space(s) == Some(space.as_str())
             })
             .collect();
         let a = lap(&mut t);
@@ -274,7 +274,7 @@ fn sidebar_cost_on_a_real_workspace() {
     eprintln!("合计: p50 {:.0} µs, p95 {:.0} µs", totals[100], totals[190]);
 }
 
-/// The words a module can see are the table in specs/plugins/plugin-system.md; a new
+/// The words a module can see are the table in docs/plugin-system/spec.md; a new
 /// one belongs there too.
 #[test]
 fn modules_see_only_the_documented_group_words() {

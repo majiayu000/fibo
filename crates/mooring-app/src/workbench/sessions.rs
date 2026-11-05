@@ -165,9 +165,9 @@ impl Workbench {
             cx,
         );
     }
-    /// `in_pane`: the card sits on the session's own pane, not in the overview.
-    /// Head (title, status, this turn), the facts that scroll, and the two decisions at
-    /// the foot with the rest behind 更多 (specs/terminal-workbench/design/palette-here.html).
+    /// `in_pane`: the card sits on the session's own pane, not in the overview. Head
+    /// (title, status, this turn), the facts that scroll, and the two decisions at the foot
+    /// with the rest behind 更多 (Keepline repo, specs/terminal-workbench/design/palette-here.html).
     pub(super) fn here_card(
         &self,
         session: &AgentSession,

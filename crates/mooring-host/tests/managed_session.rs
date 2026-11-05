@@ -1671,12 +1671,12 @@ read -r finish
         );
         std::thread::sleep(Duration::from_millis(50));
     }
+    let mut appended = 0;
     for i in 0..4 {
         assert!(h.root.join(format!("load-{i}.done")).exists());
-        let lines = fs::read_to_string(logs.join(format!("load-{i}.jsonl")))
-            .unwrap()
-            .lines()
-            .count();
+        let text = fs::read_to_string(logs.join(format!("load-{i}.jsonl"))).unwrap();
+        appended += (text.len() - text.find('\n').unwrap() - 1) as u64;
+        let lines = text.lines().count();
         assert_eq!(lines as u64, 1 + window * 10, "writer {i} workload");
     }
     // Writer completion precedes the asynchronous file event. Include its final
@@ -1705,7 +1705,7 @@ read -r finish
     let stats = recognition(&h);
     // Gated on retired instructions per appended line, not CPU time, which moves with
     // machine load (649-666 k a line at load 31-50 on 2026-11-04, about 1.3% of a core).
-    // A virtual machine (CI) counts none; there the budget is 2% of a core.
+    // A VM (CI) counts none and its CPU time tracks load: there appended bytes are read once.
     let seconds = cpu_seconds(
         after.ri_user_time + after.ri_system_time - cpu.ri_user_time - cpu.ri_system_time,
     );
@@ -1715,13 +1715,13 @@ read -r finish
     let ps = stats.metrics.ps_spawns - before.metrics.ps_spawns;
     let lsof = stats.metrics.lsof_spawns - before.metrics.lsof_spawns;
     eprintln!(
-        "4 agents / {window}s (load {load:?}, {cores} cores): daemon CPU {seconds:.4}s, {per_line} instructions a line, idle control {idle}, ps spawns {ps}, lsof spawns {lsof}, incremental bytes {}",
+        "4 agents / {window}s (load {load:?}, {cores} cores): daemon CPU {seconds:.4}s, {per_line} instructions a line, idle control {idle}, ps spawns {ps}, lsof spawns {lsof}, incremental bytes {} of {appended}",
         stats.metrics.log_bytes - before.metrics.log_bytes
     );
     assert_eq!((ps, lsof), (0, 0), "transcript appends spawned probes");
     assert!(idle <= 50_000_000, "idle control busy: {idle}");
     let within = match after.ri_instructions {
-        0 => seconds <= 0.02 * window as f64,
+        0 => stats.metrics.log_bytes - before.metrics.log_bytes <= appended + appended / 10,
         _ => per_line <= 1_000_000,
     };
     assert!(within, "daemon over its budget, see the line above");
@@ -4478,7 +4478,7 @@ fn mooring_agent_names_an_agent_hidden_behind_a_wrapper() {
 /// reads costs the others nothing and is told `lagged` when it reads again.
 #[test]
 fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody() {
-    use mooring_core::hook::Notice;
+    use {mooring_core::hook::Notice, std::io::BufRead};
     let h = Host::start();
     h.setup();
     let subscribe = |h: &Host| {
@@ -4497,6 +4497,7 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
+    let mut cli_out = io::BufReader::new(cli.stdout.take().unwrap()).lines();
     let mut fast = subscribe(&h);
     let snapshot = match receive::<Reply>(&mut fast).unwrap() {
         Reply::Events(n) => n,
@@ -4578,6 +4579,7 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
     let (_, approval) = next("approval", &|n| n.event == "approval" && mine(n));
     assert_eq!(approval.detail, "Do you want to proceed?");
     assert_eq!(approval.terminal.as_deref(), Some("ev"));
+    let first = cli_out.next().unwrap().unwrap(); // It has subscribed: it said something.
     let asked = Instant::now();
     h.call(Request::AnswerApproval {
         id: "ev".into(),
@@ -4602,11 +4604,11 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
     assert_eq!(failed.exit_code, Some(3));
     // A subscriber that stops reading while a burst goes by.
     let mut stalled = subscribe(&h);
-    h.call(h.launch(
-        "burst",
-        "i=0; while [ $i -lt 3000 ]; do printf '\\033]133;C\\007\\033]133;D;0\\007'; i=$((i+1)); done; sleep 60",
-    ))
-    .unwrap();
+    let marks = |n: u32| {
+        format!("i=0; while [ $i -lt {n} ]; do printf '\\033]133;C\\007\\033]133;D;0\\007'; i=$((i+1)); done")
+    };
+    h.call(h.launch("burst", &(marks(3000) + "; sleep 60")))
+        .unwrap();
     let mut burst = 0;
     let started = Instant::now();
     while burst < 3000 {
@@ -4625,22 +4627,10 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
         "3000 command events to the reading subscriber in {:?}",
         started.elapsed()
     );
-    let mut lagged = false;
-    stalled
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .unwrap();
-    while let Ok(Reply::Events(batch)) = receive::<Reply>(&mut stalled) {
-        if batch.iter().any(|n| n.event == "lagged") {
-            lagged = true;
-            break;
-        }
-    }
-    assert!(lagged, "the stalled subscriber was never told it lagged");
-    let _ = cli.kill();
-    let out = String::from_utf8(cli.wait_with_output().unwrap().stdout).unwrap();
-    let lines: Vec<serde_json::Value> = out
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
+    let _ = cli.kill().and_then(|()| cli.wait());
+    let lines: Vec<serde_json::Value> = std::iter::once(Ok(first))
+        .chain(cli_out)
+        .map(|l| serde_json::from_str(&l.unwrap()).unwrap())
         .collect();
     let kinds: Vec<&str> = lines
         .iter()
@@ -4667,6 +4657,16 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
     next("terminal_exited", &|n| {
         n.event == "terminal_exited" && n.terminal.as_deref() == Some("ev")
     });
+    // Twice the stalled one's backlog (4096 notices; the burst stayed under it: one in its
+    // writer's stuck frame, one queued) plus its socket. A terminal ends once its output is read.
+    h.call(h.launch("flood", &marks(12288))).unwrap();
+    let ended = |t: &Terminal| t.id == "flood" && t.state == ProcessState::Exited;
+    wait_for(&h, "the flood ends", |w| w.terminals.iter().any(ended));
+    let timeout = Some(Duration::from_secs(10));
+    stalled.set_read_timeout(timeout).unwrap();
+    let lagged = std::iter::from_fn(|| receive::<Reply>(&mut stalled).ok())
+        .any(|r| matches!(r, Reply::Events(b) if b.iter().any(|n| n.event == "lagged")));
+    assert!(lagged, "the stalled subscriber was never told it lagged");
     eprintln!("approval answered -> approval_gone in {latency:?}");
     assert!(latency < Duration::from_millis(200), "{latency:?}");
 }

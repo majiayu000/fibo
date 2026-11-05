@@ -1,7 +1,7 @@
 // A client of one Mooring machine through a relay: the WebSocket, the Noise handshake,
 // JSON lines both ways, ACKs, requests by id and streams. What
 // `next/crates/mooring-relay/examples/phone.rs` does, for the app. Protocol shapes:
-// `specs/extensions/remote-protocol.md`.
+// the Keepline repo's `specs/extensions/remote-protocol.md` (not moved here).
 import { concat, text, utf8 } from './bytes';
 import { type Link, linkUrl } from './link';
 import { closeOutcome } from './close';

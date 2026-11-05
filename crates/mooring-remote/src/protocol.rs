@@ -10,6 +10,7 @@ pub const VERSION: u32 = 1;
 pub const MAX_LINE: usize = 1 << 20;
 pub use crate::asks::*;
 pub use crate::tools::*;
+pub use crate::usage::*;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Request {
@@ -463,6 +464,11 @@ pub struct Card {
     /// It asks to be trusted with its folder before anything else; answer with `trust`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trust: Option<TrustAsk>,
+    /// The board column the host put it in (`status_group::Column::key`: needs,
+    /// running, review, done, stale); absent for shells, for conversations off the
+    /// board, and from hosts before 11-05.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<String>,
     /// An Agent runs here but no conversation is tied to it (e.g. a Codex on the shared
     /// daemon): `agent` says which, this says so in the user's words. Phase stays `shell`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -661,50 +667,6 @@ pub struct LastSession {
     /// The terminal it still runs in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal: Option<String>,
-}
-
-/// The reply to `usage`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Usage {
-    pub since: u64,
-    pub agents: Vec<AgentUsage>,
-    /// The logs are not all read yet; ask again for the rest.
-    pub partial: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentUsage {
-    pub agent: String,
-    /// Input and output, new to the model: cache writes count, cache reads do not.
-    pub tokens: u64,
-    /// Read back from its cache, counted apart: a long session re-reads its whole context
-    /// on every call, so these run a hundred times the rest.
-    pub cached: u64,
-}
-
-/// The reply to `quota`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Quotas {
-    pub agents: Vec<AgentQuota>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentQuota {
-    /// `claude`, `codex`… as cards name them.
-    pub agent: String,
-    pub plan: String,
-    /// When the CLI recorded it, Unix seconds.
-    pub at: u64,
-    pub windows: Vec<QuotaWindow>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QuotaWindow {
-    pub minutes: u32,
-    /// Percent used.
-    pub used: u16,
-    /// Unix seconds; 0 when unknown.
-    pub resets_at: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

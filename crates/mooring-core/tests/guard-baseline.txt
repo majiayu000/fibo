@@ -5,7 +5,7 @@ field background	crates/mooring-app/src/terminal/screen.rs	3
 field background	crates/mooring-app/src/terminal/screen_extras.rs	1
 field background	crates/mooring-app/src/ui/theme.rs	1
 field background	crates/mooring-app/src/workbench/sidebar_list.rs	1
-field background	crates/mooring-host/src/host/mod.rs	2
+field background	crates/mooring-host/src/host/mod.rs	1
 field background	crates/mooring-host/src/host/report_back.rs	1
 field background	crates/mooring-host/src/host/shell_watch.rs	2
 field content-name	crates/mooring-host/src/control.rs	1
@@ -16,33 +16,35 @@ field content-title	crates/mooring-app/src/workbench/board_drawer.rs	3
 field content-title	crates/mooring-app/src/workbench/machines.rs	1
 field content-title	mobile/src/ui/format.ts	1
 field session-updated	crates/mooring-app/src/model/session_state.rs	1
-field session-updated	crates/mooring-app/src/workbench/layout.rs	2
+field session-updated	crates/mooring-app/src/workbench/layout/turn_bar.rs	2
 field session-updated	crates/mooring-host/src/host/association.rs	3
 field session-updated	crates/mooring-host/src/host/mod.rs	1
 field solid-surface	crates/mooring-app/src/main.rs	1
 field solid-surface	crates/mooring-app/src/terminal/pane.rs	1
 field solid-surface	crates/mooring-app/src/ui/field.rs	1
-field solid-surface	crates/mooring-app/src/workbench/board_drawer.rs	1
+field solid-surface	crates/mooring-app/src/workbench/board_drawer/drawer.rs	1
 field solid-surface	crates/mooring-app/src/workbench/cleanup.rs	1
-field solid-surface	crates/mooring-app/src/workbench/forms.rs	4
-field solid-surface	crates/mooring-app/src/workbench/layout.rs	1
+field solid-surface	crates/mooring-app/src/workbench/forms.rs	1
+field solid-surface	crates/mooring-app/src/workbench/forms/criteria.rs	1
+field solid-surface	crates/mooring-app/src/workbench/forms/preview.rs	2
+field solid-surface	crates/mooring-app/src/workbench/layout/pane_view.rs	1
 field solid-surface	crates/mooring-app/src/workbench/peek.rs	2
-field solid-surface	crates/mooring-app/src/workbench/settings.rs	2
+field solid-surface	crates/mooring-app/src/workbench/settings/panel.rs	2
 field solid-surface	crates/mooring-app/src/workbench/task_detail.rs	2
 field tab-title	crates/mooring-app/src/workbench/diagnostics.rs	1
 field tab-title	crates/mooring-app/src/workbench/tabs.rs	2
 field turn	crates/mooring-app/src/workbench/board/remote.rs	1
 field turn	crates/mooring-host/examples/claim_scan.rs	1
-field turn	crates/mooring-host/src/control.rs	2
+field turn	crates/mooring-host/src/control/explain.rs	2
 field turn	crates/mooring-host/src/host/client.rs	1
-field turn	crates/mooring-host/src/host/mod.rs	8
+field turn	crates/mooring-host/src/host/mod.rs	6
 field turn	crates/mooring-host/src/host/report_back.rs	2
 field turn	crates/mooring-host/src/host/status.rs	1
 field turn	crates/mooring-host/src/plugin_hooks.rs	1
 field turn	mobile/src/actions.ts	2
 field turn_started	crates/mooring-app/src/desktop.rs	1
 field turn_started	crates/mooring-app/src/workbench/board.rs	1
-field turn_started	crates/mooring-app/src/workbench/layout.rs	2
+field turn_started	crates/mooring-app/src/workbench/layout/turn_bar.rs	2
 field turn_started	crates/mooring-app/src/workbench/sessions.rs	3
 field turn_started	crates/mooring-app/src/workbench/sidebar.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_flat.rs	1
@@ -50,36 +52,38 @@ field turn_started	crates/mooring-app/src/workbench/sidebar_list.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_recent.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_wasm.rs	2
 field turn_started	crates/mooring-host/src/host/association.rs	1
-field turn_started	crates/mooring-host/src/host/mod.rs	2
+field turn_started	crates/mooring-host/src/host/mod.rs	1
 field turn_started	crates/mooring-host/src/host/report_back.rs	3
 field turn_started	crates/mooring-host/src/plugin_hooks.rs	3
 keycap	crates/mooring-app/src/terminal/open_path.rs	7
 keycap	crates/mooring-app/src/terminal/pane.rs	1
-keycap	crates/mooring-app/src/workbench/diagnostics.rs	1
-keycap	crates/mooring-app/src/workbench/forms.rs	1
+keycap	crates/mooring-app/src/workbench/diagnostics/view.rs	1
+keycap	crates/mooring-app/src/workbench/forms/card.rs	1
 keycap	crates/mooring-app/src/workbench/layout.rs	2
-keycap	crates/mooring-app/src/workbench/settings.rs	9
+keycap	crates/mooring-app/src/workbench/settings.rs	3
+keycap	crates/mooring-app/src/workbench/settings/keys.rs	4
 keycap	crates/mooring-app/src/workbench/settings/plugins.rs	1
+keycap	crates/mooring-app/src/workbench/settings/terminal_page.rs	2
 keycap	crates/mooring-core/src/market.rs	1
 keycap	crates/mooring-core/src/plugin.rs	1
 word 做完了	crates/mooring-app/src/model/session_state.rs	1
 word 做完了	crates/mooring-app/src/remote_board_evidence.rs	2
 word 做完了	crates/mooring-app/src/workbench/board_drawer.rs	1
-word 做完了	crates/mooring-app/src/workbench/layout.rs	1
+word 做完了	crates/mooring-app/src/workbench/layout/turn_bar.rs	1
 word 做完了	crates/mooring-app/src/workbench/sidebar_recent.rs	1
 word 做完了	crates/mooring-app/src/workbench/task_detail.rs	1
 word 做完了	mobile/src/app/board.tsx	1
 word 停下了	crates/mooring-app/src/model/session_state.rs	1
 word 停下了	mobile/src/app/board.tsx	1
 word 出错(无了)	crates/mooring-app/src/model/session_state.rs	1
-word 出错(无了)	crates/mooring-app/src/workbench/settings.rs	2
+word 出错(无了)	crates/mooring-app/src/workbench/settings/notifications.rs	2
 word 出错(无了)	crates/mooring-app/src/workbench/sidebar_wasm.rs	1
 word 出错(无了)	crates/mooring-core/src/market.rs	1
 word 出错了	crates/mooring-host/src/host/report_back.rs	1
 word 出错了	mobile/src/app/settings.tsx	2
 word 在跑	crates/mooring-app/src/desktop.rs	1
 word 在跑	crates/mooring-app/src/model/session_state.rs	4
-word 在跑	crates/mooring-app/src/workbench/layout.rs	1
+word 在跑	crates/mooring-app/src/workbench/layout/confirm_close.rs	1
 word 在跑	crates/mooring-host/src/agents/mod.rs	1
 word 在跑	crates/mooring-host/src/host/mod.rs	2
 word 在跑	mobile/src/app/board.tsx	1
@@ -101,13 +105,14 @@ word 稍后再看	crates/mooring-app/src/workbench/mod.rs	1
 word 稍后再看	crates/mooring-app/src/workbench/overview.rs	1
 word 稍后再看	crates/mooring-app/src/workbench/sessions.rs	2
 word 稍后再看	crates/mooring-app/src/workbench/task_detail.rs	1
-word 稍后再看	crates/mooring-core/src/model.rs	1
-word 空闲	crates/mooring-app/src/workbench/diagnostics.rs	2
+word 稍后再看	crates/mooring-core/src/model/workspace_edit.rs	1
+word 空闲	crates/mooring-app/src/workbench/diagnostics/cpu.rs	1
+word 空闲	crates/mooring-app/src/workbench/diagnostics/scatter.rs	1
 word 空闲	crates/mooring-core/src/diagnostics.rs	1
 word 空闲	crates/mooring-host/src/agents/codex.rs	2
 word 空闲	crates/mooring-host/src/content/mod.rs	1
-word 等你回答	crates/mooring-app/src/workbench/layout.rs	1
-word 等你回答	crates/mooring-host/src/control.rs	1
+word 等你回答	crates/mooring-app/src/workbench/layout/confirm_close.rs	1
+word 等你回答	crates/mooring-host/src/control/prompt.rs	1
 word 等你回答	mobile/src/app/chat.tsx	1
 word 等你回答	mobile/src/app/settings.tsx	2
 word 等你验收	crates/mooring-app/src/model/session_state.rs	1
@@ -116,7 +121,7 @@ word 等你验收	crates/mooring-app/src/workbench/task_detail.rs	1
 word 等你验收	mobile/src/app/settings.tsx	2
 word 等后台	crates/mooring-app/src/model/session_state.rs	1
 word 要你处理	crates/mooring-app/src/remote_board_evidence.rs	2
-word 要你处理	crates/mooring-app/src/workbench/board_drawer.rs	1
+word 要你处理	crates/mooring-app/src/workbench/board_drawer/drawer.rs	1
 word 要你处理	crates/mooring-host/src/agents/codex.rs	1
 word 要你处理	mobile/src/app/board.tsx	1
 word 需要你	crates/mooring-app/src/workbench/settings.rs	1

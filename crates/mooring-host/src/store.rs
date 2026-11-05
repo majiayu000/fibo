@@ -16,12 +16,22 @@ fn enum_name<T: serde::Serialize>(value: &T) -> io::Result<String> {
 fn enum_value<T: serde::de::DeserializeOwned>(name: String) -> io::Result<T> {
     serde_json::from_value(serde_json::Value::String(name)).map_err(db_error)
 }
-/// A criterion's evidence column: a JSON list of attached session records. Older rows hold
-/// NULL or a bare source reference no build ever wrote from the app; both read as none.
-fn criterion_evidence(column: Option<String>) -> Vec<CriterionEvidence> {
-    column
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+/// A criterion's evidence column: a JSON list of attached session records, NULL when there
+/// is none. Anything else fails the load rather than quietly dropping what proved it.
+/// Refuses a database an older build left: it is not read, migrated or deleted, so nothing in
+/// it is lost; the user starts on a new runtime directory instead.
+fn old_format(root: &Path, what: &str) -> io::Error {
+    io::Error::other(format!(
+        "{} 是旧版本的格式（{what}），这个版本不读也不改它，不自动迁移或删除；\
+         用 --runtime <新目录> 启动，换一个新的运行目录",
+        root.join("workbench.sqlite").display()
+    ))
+}
+fn criterion_evidence(column: Option<String>) -> io::Result<Vec<CriterionEvidence>> {
+    column.map_or(Ok(vec![]), |text| {
+        serde_json::from_str(&text)
+            .map_err(|e| io::Error::other(format!("验收条件的证据列不是证据列表：{e}")))
+    })
 }
 
 impl Store {
@@ -53,16 +63,15 @@ impl Store {
             )
             .map_err(db_error)?;
         if old_grid {
-            return Err(io::Error::other(
-                "旧固定网格库不可用于分割树构建；请指定新的隔离 runtime，不自动迁移或删除",
-            ));
+            return Err(old_format(root, "固定网格布局"));
         }
         if old {
-            return Err(io::Error::other(
-                "旧实验库仍使用 workspace JSON；请指定新的隔离目录，不自动迁移或删除",
-            ));
+            return Err(old_format(root, "workspace JSON"));
         }
-        db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
+        // WAL + NORMAL (docs/plan.md, stage 3): a crashed process loses nothing; only power loss
+        // or an OS crash can drop the last few commits. Layout, tasks and outcomes can take that,
+        // and commits under the host lock no longer fsync every time.
+        db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
             CREATE TABLE IF NOT EXISTS meta (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
             INSERT OR IGNORE INTO meta VALUES(1,0);
             CREATE TABLE IF NOT EXISTS app_settings (id INTEGER PRIMARY KEY CHECK(id=1), notifications INTEGER NOT NULL, stale_days INTEGER NOT NULL, away_minutes INTEGER NOT NULL, default_agent TEXT NOT NULL);
@@ -96,6 +105,18 @@ impl Store {
             CREATE TABLE IF NOT EXISTS session_names (session_id TEXT PRIMARY KEY REFERENCES agent_sessions(id), name TEXT NOT NULL);")
             .map_err(db_error)?;
         db.execute_batch(requests::TABLE).map_err(db_error)?;
+        // Tabs are deleted when closed, with their panes and place in the order. A row an
+        // older build only marked closed, or left without panes or a place, is that build's.
+        let old_tabs: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM tabs WHERE closed<>0 OR id NOT IN (SELECT tab_id FROM tab_layout_nodes) OR id NOT IN (SELECT tab_id FROM tab_order))",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(db_error)?;
+        if old_tabs {
+            return Err(old_format(root, "只标记关闭或没有窗格、没有顺序的标签行"));
+        }
         let mut store = Self(db);
         let mut workspace = store.load()?;
         let before = workspace.clone();
@@ -268,21 +289,12 @@ impl Store {
                 .push(AcceptanceCriterion {
                     id: r.get(1).map_err(db_error)?,
                     description: r.get(2).map_err(db_error)?,
-                    evidence: criterion_evidence(r.get(3).map_err(db_error)?),
+                    evidence: criterion_evidence(r.get(3).map_err(db_error)?)?,
                 });
         }
-        // Tabs are deleted when closed. Rows an older build only marked closed, and tabs
-        // left without panes, are dropped here; their terminals died with that host.
-        self.0
-            .execute_batch(
-                "DELETE FROM tab_order WHERE tab_id IN (SELECT id FROM tabs WHERE closed<>0 OR id NOT IN (SELECT tab_id FROM tab_layout_nodes));
-                 DELETE FROM tab_layout_nodes WHERE tab_id IN (SELECT id FROM tabs WHERE closed<>0);
-                 DELETE FROM tabs WHERE closed<>0 OR id NOT IN (SELECT tab_id FROM tab_layout_nodes);",
-            )
-            .map_err(db_error)?;
         let mut statement = self
             .0
-            .prepare("SELECT id,space_id,default_task_id,title FROM tabs LEFT JOIN tab_order ON tab_order.tab_id=tabs.id ORDER BY COALESCE(tab_order.position, tabs.rowid), tabs.rowid")
+            .prepare("SELECT id,space_id,default_task_id,title FROM tabs JOIN tab_order ON tab_order.tab_id=tabs.id ORDER BY tab_order.position")
             .map_err(db_error)?;
         let rows = statement
             .query_map([], |r| {

@@ -209,7 +209,13 @@ fn active(agent: Agent, config: Option<&Path>) -> Rules {
 pub fn load_override(agent: Agent, dir: &Path) -> Option<Result<Rules, String>> {
     let stem = agent.key().to_lowercase();
     let path = dir.join("screen-rules").join(format!("{stem}.json"));
-    let text = std::fs::read_to_string(&path).ok()?;
+    // Only a missing file means no override; one that cannot be read is reported like a
+    // broken one, never taken for absent.
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => return Some(Err(format!("{}: {e}", path.display()))),
+    };
     Some(
         Rules::parse(&text, Source::Override(path.clone()))
             .and_then(|r| {
@@ -555,6 +561,10 @@ mod tests {
         assert!(load_override(agent, &dir).is_none(), "no file, no override");
 
         assert_eq!(active(agent, Some(&dir)).source, Source::Bundled);
+
+        std::fs::write(&file, b"\xff\xfe{}").unwrap();
+        let err = load_override(agent, &dir).unwrap().unwrap_err();
+        assert!(err.contains(&file.display().to_string()), "{err}");
 
         std::fs::write(&file, "{ not json").unwrap();
         assert!(load_override(agent, &dir).unwrap().is_err());

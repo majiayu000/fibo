@@ -33,6 +33,9 @@ export type Card = {
   needs_you?: boolean;
   /** It asks to be trusted with this folder before anything else; `status` says it waits. */
   trust?: { question: string; folder: string } | null;
+  /** The board column its host put it in (needs, running, review, done, stale); absent
+   *  for shells and conversations off the board. */
+  column?: string | null;
   /** An Agent runs but no conversation is tied to it, in the user's words. */
   note?: string | null;
   /** The conversation's current turn, for `outcome`. */
@@ -97,6 +100,11 @@ let staged: Link[] | null = null;
 export function stage(links: Link[], d: Dial) {
   staged = links;
   dial = d;
+  // A clean hub for whoever stages it: test files share this module in one process.
+  state = { ...state, loaded: false, machines: [] };
+  remotes.clear();
+  dialing.clear();
+  for (const id of [...retry.keys()]) stopRetry(id);
 }
 const listeners = new Set<() => void>();
 const remotes = new Map<string, Remote>();
@@ -166,11 +174,13 @@ async function connect(id: string) {
   }
   dialing.delete(id);
   remotes.set(id, r);
+  // What the machine answered when it turned this phone away after the handshake.
+  let refusal: string | undefined;
   r.onEnded((e) => {
     // Only the current connection's end says anything about the machine.
     if (remotes.get(id) !== r) return;
     remotes.delete(id);
-    ended(id, e.code, undefined, e.reason);
+    ended(id, refusal ? undefined : e.code, refusal, e.reason);
   });
   try {
     // The device id names this phone for the request ids its writes carry.
@@ -195,6 +205,9 @@ async function connect(id: string) {
     await follow(id, r);
     await refresh(id);
   } catch (e) {
+    // The connection still up means the machine itself said no: say what it said, not
+    // that the network is down.
+    if (!r.ended) refusal = `电脑上的 Mooring 没接受这台手机：${(e as Error).message}`;
     r.close();
   }
 }

@@ -65,21 +65,21 @@ fn navigation_uses_live_identity_and_path_boundaries() {
     assert!(live_terminal(&w, &s).is_none());
     s.terminal = None;
     s.cwd = "/tmp/project".into();
-    assert_eq!(session_space(&w, &s), Some("space"));
+    assert_eq!(w.session_space(&s), Some("space"));
     s.cwd = "/tmp-other/project".into();
-    assert_eq!(session_space(&w, &s), None);
+    assert_eq!(w.session_space(&s), None);
     w.spaces.push(Space {
         id: "nested".into(),
         name: "Nested".into(),
         cwd: "/tmp/project".into(),
     });
     s.cwd = "/tmp/project/sub".into();
-    assert_eq!(session_space(&w, &s), Some("nested"));
+    assert_eq!(w.session_space(&s), Some("nested"));
     // One opened in a Mooring terminal of the broader space follows its project too.
     s.terminal = Some("t0".into());
-    assert_eq!(session_space(&w, &s), Some("nested"));
+    assert_eq!(w.session_space(&s), Some("nested"));
     s.cwd = "/tmp/other".into();
-    assert_eq!(session_space(&w, &s), Some("space"));
+    assert_eq!(w.session_space(&s), Some("space"));
     s.terminal = None;
     s.cwd = "/tmp/project/sub".into();
     s.updated = 100;
@@ -727,7 +727,7 @@ fn a_picked_agent_starts_without_a_todo() {
 
 /// Every coarse view of a state (the sidebar's buckets, the plugin words, the palette's
 /// counts) derives from the one `Status` and agrees on what is in flight and what needs
-/// you (specs/status-model).
+/// you (Keepline repo, specs/status-model).
 #[test]
 fn every_projection_of_a_status_agrees() {
     use mooring_core::sidebar::Bucket;

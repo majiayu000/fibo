@@ -198,8 +198,12 @@ pub fn kick(socket: &Path, needle: &str) -> io::Result<Device> {
     Ok(devices[i].clone())
 }
 
+/// Unpairs every device; each phone is told so (4401) instead of finding the machine
+/// offline.
 pub fn clear(socket: &Path) -> io::Result<()> {
-    save(socket, &[])
+    let gone = load(socket);
+    save(socket, &[])?;
+    gone.iter().try_for_each(|d| revoke(socket, d))
 }
 
 pub fn now_ms() -> u64 {
@@ -258,18 +262,23 @@ pub fn last_seen(socket: &Path) -> std::collections::HashMap<String, u64> {
 }
 
 /// This machine's id stays the same across restarts, so a client that knows several
-/// machines can tell their terminals apart.
-pub fn machine(socket: &Path) -> Machine {
+/// machines can tell their terminals apart. An id that cannot be kept is an error: a fresh
+/// one on every call would make one computer look like several.
+pub fn machine(socket: &Path) -> io::Result<Machine> {
     let file = socket.with_file_name("machine-id");
-    let id = std::fs::read_to_string(&file)
-        .ok()
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
+    let kept = match std::fs::read_to_string(&file) {
+        Ok(text) => Some(text.trim().to_owned()).filter(|s| !s.is_empty()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e),
+    };
+    let id = match kept {
+        Some(id) => id,
+        None => {
             let id = uuid::Uuid::new_v4().to_string();
-            let _ = std::fs::write(&file, &id);
+            write_private(&file, &id)?;
             id
-        });
+        }
+    };
     let mut name = [0u8; 256];
     // SAFETY: gethostname writes at most `len` bytes into the buffer it is given.
     let ok = unsafe { libc::gethostname(name.as_mut_ptr().cast(), name.len()) } == 0;
@@ -279,7 +288,7 @@ pub fn machine(socket: &Path) -> Machine {
     } else {
         String::new()
     };
-    Machine { id, name }
+    Ok(Machine { id, name })
 }
 
 /// The machine's pairing code, made on first use, readable only by this user.
@@ -349,7 +358,7 @@ pub fn pair_link(
     Link::websocket_base(relay).map_err(io::Error::other)?;
     // Made now so the machine has one to register with; the phone never sees it.
     machine_code(socket, false)?;
-    let machine = machine(socket);
+    let machine = machine(socket)?;
     let (device, key) = add(socket, name, role)?;
     let link = Link {
         relay: relay.to_owned(),
@@ -408,6 +417,22 @@ mod tests {
     }
 
     #[test]
+    fn clearing_revokes_every_route() {
+        let dir = std::env::temp_dir().join(format!("kl-clr-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("workbench.sock");
+        let (a, _) = add(&socket, "iPhone", Role::Full).unwrap();
+        let (b, _) = add(&socket, "iPad", Role::View).unwrap();
+        clear(&socket).unwrap();
+        assert!(load(&socket).is_empty());
+        assert_eq!(
+            revoked(&socket),
+            [a.route_hash().unwrap(), b.route_hash().unwrap()]
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn the_code_is_kept_private_and_only_replaced_on_request() {
         let dir = std::env::temp_dir().join(format!("kl-code-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -433,6 +458,28 @@ mod tests {
         assert_eq!(list.len(), wire::MAX_RETIRED);
         assert!(!list.contains(&wire::token_hash(&a.token())));
         assert!(list.contains(&wire::token_hash(&b.token())));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_machine_id_is_kept_or_its_loss_reported() {
+        let dir = std::env::temp_dir().join(format!("kl-mid-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("workbench.sock");
+        let a = machine(&socket).unwrap();
+        assert_eq!(machine(&socket).unwrap().id, a.id);
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(dir.join("machine-id"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+        // Where the id cannot be written, say so instead of handing out a new one each time.
+        std::fs::remove_file(dir.join("machine-id")).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let unwritable = machine(&socket);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(unwritable.is_err(), "{unwritable:?}");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
