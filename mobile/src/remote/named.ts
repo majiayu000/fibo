@@ -19,18 +19,19 @@ export function requestId() {
 }
 
 /**
- * Sends `op` on whatever connection `current` gives, under one request id. The machine
+ * Sends `op` under the supplied persisted request id, or a fresh one for this call.
+ * The machine
  * saying no is the answer; only a connection that ended is tried again, every `stepMs`,
  * until `patienceMs` have gone.
  */
 export async function named(
   current: () => Link | undefined,
   op: string,
-  fields: Record<string, unknown>,
+  fields: Record<string, unknown> & { request?: string },
   patienceMs = WRITE_PATIENCE_MS,
   stepMs = 500,
 ) {
-  const request = requestId();
+  const request = fields.request ?? requestId();
   const until = Date.now() + patienceMs;
   for (;;) {
     const r = current();

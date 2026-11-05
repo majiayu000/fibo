@@ -41,3 +41,44 @@ test('the machine saying no is not tried again', async () => {
 test('a machine that never comes back leaves the write unsure', async () => {
   await expect(named(() => undefined, 'send', {}, 30, 5)).rejects.toThrow(UNSURE);
 });
+
+
+test('a restored outbox item keeps its request id after the previous call lost its receipt', async () => {
+  const stored = JSON.stringify({ id: 'persisted-message', terminal: 't', text: 'hello' });
+  const applied = new Set<string>();
+  const seen: string[] = [];
+  let executions = 0;
+  function accept(fields: any) {
+    seen.push(fields.request);
+    if (!applied.has(fields.request)) {
+      applied.add(fields.request);
+      executions++;
+    }
+    return 'ok';
+  }
+  const first = {
+    ended: null as unknown,
+    async request(_op: string, fields: any) {
+      accept(fields);
+      this.ended = { code: 1006 };
+      throw new Error('receipt lost');
+    },
+  };
+  const fields = () => {
+    const item = JSON.parse(stored);
+    return { terminal: item.terminal, text: item.text, enter: true, request: item.id };
+  };
+  await expect(named(() => first, 'send', fields(), 20, 1)).rejects.toThrow(UNSURE);
+  // A fresh invocation and link, reconstructed only from what the outbox persisted.
+  const second = link(accept);
+  expect(await named(() => second, 'send', fields())).toBe('ok');
+  expect(seen).toEqual(['persisted-message', 'persisted-message']);
+  expect(executions).toBe(1);
+});
+
+test('independent writes without an outbox id still receive distinct ids', async () => {
+  const l = link(() => 'ok');
+  await named(() => l, 'send', { text: 'one' });
+  await named(() => l, 'send', { text: 'two' });
+  expect(l.seen[0].request).not.toBe(l.seen[1].request);
+});
