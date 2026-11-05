@@ -1,0 +1,29 @@
+[
+  {
+    "stage": "Codex before first message",
+    "agent": "Codex",
+    "notes": null,
+    "sessions": 0
+  },
+  {
+    "stage": "shell after Codex exit",
+    "agent": null,
+    "notes": null,
+    "sessions": 0
+  },
+  {
+    "stage": "Claude in same terminal",
+    "agent": "Claude",
+    "notes": {
+      "note": "claude · 发出第一句后对上对话",
+      "why": "Mooring 看到这个 claude 在跑，但它的命令行没写是哪段对话。发出第一句话后，按画面上的提示词对上；想启动就认出，运行一次 mooring hooks install 装上 Hook。"
+    },
+    "sessions": 0
+  },
+  {
+    "stage": "shell after Claude exit",
+    "agent": null,
+    "notes": null,
+    "sessions": 0
+  }
+]

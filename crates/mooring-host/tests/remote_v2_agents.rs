@@ -3,7 +3,7 @@
 #[path = "remote_v2/common.rs"]
 mod common;
 use common::*;
-use mooring_core::model::*;
+use mooring_core::{model::*, protocol::*};
 use serde_json::{json, Value};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -93,6 +93,9 @@ fn remote_ask_names_the_command_and_answers_only_about_it() {
     assert_eq!(ask["subject"], "touch second.txt");
     assert_eq!(ask["kind"], "Bash command");
     assert_eq!(ask["note"], "Create empty second.txt file");
+    // Its scope in the menu's words, not a blanket 「不再询问」.
+    let label = "允许，这个项目以后都能访问 /Users/x/t";
+    assert_eq!(ask["always"], label);
     let answer = |subject: &str, always: bool, req: &str| json!({ "op": "answer", "terminal": "tip", "question": "Do you want to proceed?", "allow": true, "always": always, "subject": subject, "request": req });
     // Waits out the settle after input: the host answers only what it has read.
     let e = r.error(answer("git push origin main", false, "w1"));
@@ -103,8 +106,31 @@ fn remote_ask_names_the_command_and_answers_only_about_it() {
     );
     r.ok(answer("touch second.txt", false, "w2"));
     h.wait_screen("tip", "plain=[\\n]");
-    r.ok(answer("touch second.txt", true, "w3"));
+    let labelled = |said: &str, req: &str| json!({ "op": "answer", "terminal": "tip", "question": "Do you want to proceed?", "allow": true, "always": true, "subject": "touch second.txt", "always_label": said, "request": req });
+    let e = r.error(labelled("允许，git push 命令以后不再询问", "w3"));
+    assert!(e.contains("这一项已经变了"), "{e}");
+    r.ok(labelled(label, "w4"));
     h.wait_screen("tip", "always=[2]");
+}
+
+/// A menu without the option has no words for it: the phone shows no button.
+#[test]
+fn remote_ask_has_no_always_words_on_a_menu_without_the_option() {
+    let h = Host::start();
+    let user = json!({"type":"user","uuid":"u0","cwd":"/project","entrypoint":"cli","userType":"external","message":{"content":"touch it"}});
+    let script = "printf '\\033[2J\\033[HBash command\\n\\n  touch second.txt\\n\\nDo you want to proceed?\\n❯ 1. Yes\\n  2. No\\n'; sleep 60";
+    h.claude("plain", Path::new("/tmp"), &[user], script);
+    let until = Instant::now() + Duration::from_secs(90);
+    let mut r = Remote::open(&h, None, &[]);
+    let ask = loop {
+        let got = r.ask(json!({ "op": "ask", "terminal": "plain" }));
+        if got.get("error").is_none() {
+            break got["ok"].clone();
+        }
+        assert!(Instant::now() < until, "ask never answered");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    assert!(ask.get("always").is_none(), "{ask}");
 }
 
 #[test]
@@ -225,6 +251,44 @@ fn remote_stop_on_codex_presses_esc_and_replies_once_it_stopped() {
     let card = cards.iter().find(|c| c["id"] == "esc").unwrap();
     assert_ne!(card["phase"], "working", "replied before it stopped");
     assert!(card["session"].is_string(), "the Agent stays");
+}
+
+/// The window's 中断这一轮 sends these same two requests straight to the host: the key is the
+/// CLI's, the reply comes when the turn has ended, and an idle Codex gets no key at all
+/// (Ctrl-C there quits it).
+#[test]
+fn the_windows_interrupt_on_codex_is_esc_and_hears_when_it_stopped() {
+    let h = Host::start();
+    fake_codex(&h, "esc", &["1b"], 1);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "esc", "working");
+    let id = "esc".to_owned();
+    h.call(Request::Interrupt { id: id.clone() }).unwrap();
+    let ended = h.call(Request::AwaitInterrupt { id: id.clone() }).unwrap();
+    assert!(
+        matches!(
+            ended,
+            Reply::Interrupted {
+                closed_background: false
+            }
+        ),
+        "{ended:?}"
+    );
+    let screen = h.screen("esc");
+    assert!(screen.contains("keys: 1b"), "{screen}");
+    // The state says what happened: stopped by you, not a turn waiting for you to check.
+    let list = r.ok(json!({ "op": "list" }));
+    let cards = list["terminals"].as_array().unwrap();
+    let card = cards.iter().find(|c| c["id"] == "esc").unwrap();
+    assert_eq!(card["status_label"], "停下了", "{card}");
+    let e = h.call(Request::Interrupt { id: id.clone() }).unwrap_err();
+    assert!(e.to_string().contains("没有要中断的"), "{e}");
+    std::thread::sleep(Duration::from_millis(300));
+    let screen = h.screen("esc");
+    assert!(
+        !screen.contains("KEY="),
+        "a refused one presses nothing: {screen}"
+    );
 }
 
 /// The menu a Ctrl-C from elsewhere left up: only Enter, only with the cursor on Cancel

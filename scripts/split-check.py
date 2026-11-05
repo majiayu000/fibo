@@ -161,7 +161,7 @@ def audit(args):
             print(f'ok   {sha[:9]} {subject}')
         if new:
             # The list is in the theme's tests, wherever a split of its own put them.
-            listed = git('grep', '-h', 'terminal/pane.rs', args.end, '--', 'crates/mooring-app/src/ui') + git('grep', '-h', '"desktop.rs"', args.end, '--', 'crates/mooring-app/src/ui')
+            listed = git('grep', '-h', '"terminal/', args.end, '--', 'crates/mooring-app/src/ui') + git('grep', '-h', '"desktop.rs"', args.end, '--', 'crates/mooring-app/src/ui')
             for f in new:
                 short = f.removeprefix('crates/mooring-app/src/')
                 if git('cat-file', '-t', f'{args.end}:{f}').strip() == 'blob' and f'"{short}"' not in listed and not short.endswith('_tests.rs'):

@@ -147,6 +147,44 @@ fn search_finds_scrollback_and_wide_graphemes_without_spacer_gaps() {
     assert!(vt.search("").unwrap().is_empty());
 }
 #[test]
+fn search_shares_each_rows_text_and_keeps_every_occurrence() {
+    let mut vt = Vt::new(40, 3).unwrap();
+    vt.feed(b"aaaaa  \r\naaa  ");
+    let found = vt.search("a").unwrap();
+    assert_eq!(
+        found
+            .iter()
+            .map(|m| (m.row, m.col, m.cols))
+            .collect::<Vec<_>>(),
+        [
+            (0, 0, 1),
+            (0, 1, 1),
+            (0, 2, 1),
+            (0, 3, 1),
+            (0, 4, 1),
+            (1, 0, 1),
+            (1, 1, 1),
+            (1, 2, 1)
+        ]
+    );
+    assert!(
+        found[..5]
+            .iter()
+            .all(|m| Arc::ptr_eq(&m.line, &found[0].line))
+    );
+    assert!(
+        found[5..]
+            .iter()
+            .all(|m| Arc::ptr_eq(&m.line, &found[5].line))
+    );
+    assert!(!Arc::ptr_eq(&found[0].line, &found[5].line));
+    let copy = found.clone();
+    assert!(Arc::ptr_eq(&copy[0].line, &found[0].line));
+    drop(vt);
+    assert_eq!(&*copy[0].line, "aaaaa");
+    assert_eq!(&*copy[5].line, "aaa");
+}
+#[test]
 fn viewport_counts_rows_from_the_top_of_history() {
     let mut vt = Vt::new(20, 3).unwrap();
     vt.feed(b"line-1\r\nline-2\r\nline-3\r\nline-4\r\nline-5");

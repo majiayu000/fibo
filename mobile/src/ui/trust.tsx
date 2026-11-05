@@ -8,14 +8,17 @@ import { Btn, mono } from './kit';
 import { trustWords } from './parse';
 import { agentName } from './status';
 import { useTheme } from './theme';
+import { useSettled } from './useHold';
 
-export function TrustAsk({ machine, card, can }: { machine: string; card: Card; can: boolean }) {
+/** `place` is where the card sits in its list: moved, a tap waits as it does for a new card. */
+export function TrustAsk({ machine, card, can, place = '' }: { machine: string; card: Card; can: boolean; place?: string }) {
   const t = useTheme();
   const [busy, setBusy] = useState(false);
+  const settled = useSettled(`${card.trust?.folder}|${place}`);
   if (!card.trust) return null;
   const words = trustWords(agentName(card.agent));
   const answer = (yes: boolean) => {
-    if (busy) return;
+    if (busy || !settled.passes()) return;
     setBusy(true);
     answerTrust(machine, card, yes)
       .catch((e) => oops((e as Error).message))
@@ -29,9 +32,9 @@ export function TrustAsk({ machine, card, can }: { machine: string; card: Card; 
       </Text>
       <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19 }}>{words.means}</Text>
       {can ? (
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Btn primary label="信任这个文件夹" disabled={busy} onPress={() => answer(true)} />
-          <Btn label="不信任" disabled={busy} onPress={() => answer(false)} />
+        <View style={{ flexDirection: 'row', gap: 8 }} onStartShouldSetResponder={() => !settled.ready}>
+          <Btn primary label="信任这个文件夹" disabled={busy || !settled.ready} onPress={() => answer(true)} />
+          <Btn label="不信任" disabled={busy || !settled.ready} onPress={() => answer(false)} />
         </View>
       ) : (
         <Text style={{ color: t.dim, fontSize: 13 }}>这台手机的权限不够，到电脑上回答。</Text>

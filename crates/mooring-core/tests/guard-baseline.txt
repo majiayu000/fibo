@@ -1,11 +1,11 @@
 field background	crates/mooring-app/src/model/session_state.rs	1
-field background	crates/mooring-app/src/terminal/pane.rs	2
 field background	crates/mooring-app/src/terminal/pane_overlays.rs	3
+field background	crates/mooring-app/src/terminal/pane_render.rs	2
 field background	crates/mooring-app/src/terminal/screen_capture.rs	1
 field background	crates/mooring-app/src/terminal/screen_extras.rs	1
 field background	crates/mooring-app/src/terminal/screen_paint.rs	2
 field background	crates/mooring-app/src/ui/theme.rs	1
-field background	crates/mooring-app/src/workbench/sidebar_list.rs	1
+field background	crates/mooring-app/src/workbench/sidebar_list/session_row.rs	1
 field background	crates/mooring-host/src/host/mod.rs	1
 field background	crates/mooring-host/src/host/report_back.rs	1
 field background	crates/mooring-host/src/host/shell_watch.rs	2
@@ -21,7 +21,7 @@ field session-updated	crates/mooring-app/src/workbench/layout/turn_bar.rs	2
 field session-updated	crates/mooring-host/src/host/association.rs	3
 field session-updated	crates/mooring-host/src/host/mod.rs	1
 field solid-surface	crates/mooring-app/src/main.rs	1
-field solid-surface	crates/mooring-app/src/terminal/pane.rs	1
+field solid-surface	crates/mooring-app/src/terminal/pane_render.rs	1
 field solid-surface	crates/mooring-app/src/ui/field.rs	1
 field solid-surface	crates/mooring-app/src/workbench/board_drawer/drawer.rs	1
 field solid-surface	crates/mooring-app/src/workbench/cleanup.rs	1
@@ -50,7 +50,7 @@ field turn_started	crates/mooring-app/src/workbench/layout/turn_bar.rs	2
 field turn_started	crates/mooring-app/src/workbench/sessions/here_card.rs	3
 field turn_started	crates/mooring-app/src/workbench/sidebar/view.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_flat.rs	1
-field turn_started	crates/mooring-app/src/workbench/sidebar_list.rs	1
+field turn_started	crates/mooring-app/src/workbench/sidebar_list/dense_row.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_recent.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_wasm.rs	2
 field turn_started	crates/mooring-host/src/host/association.rs	1
@@ -58,7 +58,7 @@ field turn_started	crates/mooring-host/src/host/mod.rs	1
 field turn_started	crates/mooring-host/src/host/report_back.rs	3
 field turn_started	crates/mooring-host/src/plugin_hooks.rs	3
 keycap	crates/mooring-app/src/terminal/open_path.rs	7
-keycap	crates/mooring-app/src/terminal/pane.rs	1
+keycap	crates/mooring-app/src/terminal/pane_links.rs	1
 keycap	crates/mooring-app/src/workbench/diagnostics/view.rs	1
 keycap	crates/mooring-app/src/workbench/forms/card.rs	1
 keycap	crates/mooring-app/src/workbench/layout.rs	2
