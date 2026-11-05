@@ -1,8 +1,12 @@
 //! A relay older than per-phone route codes would take the machine and route no phone to
 //! it; `mooring remote --relay` leaves it and says the relay needs upgrading.
+#[path = "support/tied.rs"]
+mod tied;
 use futures_util::{SinkExt, StreamExt};
+use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
+use tied::SpawnTied;
 use tokio_tungstenite::tungstenite::Message;
 
 #[test]
@@ -38,20 +42,24 @@ fn a_relay_that_only_speaks_protocol_2_is_left_with_a_reason() {
         .args(["remote", "--relay", &format!("ws://{addr}")])
         .args(["--runtime", &root.to_string_lossy()])
         .stderr(Stdio::piped())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let start = Instant::now();
-    while machine.try_wait().unwrap().is_none() {
-        if start.elapsed() > Duration::from_secs(15) {
-            let _ = machine.kill();
-            panic!("still on a relay that speaks protocol 2 after 15 s");
+    let status = loop {
+        if let Some(status) = machine.try_wait().unwrap() {
+            break status;
         }
+        assert!(
+            start.elapsed() < Duration::from_secs(15),
+            "still on a relay that speaks protocol 2 after 15 s"
+        );
         std::thread::sleep(Duration::from_millis(50));
-    }
-    let out = machine.wait_with_output().unwrap();
+    };
+    let mut said = String::new();
+    let mut stderr = machine.stderr.take().unwrap();
+    stderr.read_to_string(&mut said).unwrap();
     relay.join().unwrap();
-    let said = String::from_utf8_lossy(&out.stderr);
-    assert!(!out.status.success(), "stayed on an old relay: {said}");
+    assert!(!status.success(), "stayed on an old relay: {said}");
     assert!(said.contains("中继版本太旧（协议 2"), "{said}");
     let _ = std::fs::remove_dir_all(&root);
 }

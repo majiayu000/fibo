@@ -49,6 +49,8 @@ export default function Layout() {
         <Stack.Screen name="pair" />
         <Stack.Screen name="chat" />
         <Stack.Screen name="approve" />
+        <Stack.Screen name="tools" />
+        <Stack.Screen name="tool" />
         <Stack.Screen name="new" options={{ animation: 'slide_from_bottom' }} />
       </Stack>
       {locked && (

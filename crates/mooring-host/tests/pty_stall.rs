@@ -26,6 +26,8 @@
 //! STALL_SAMPLE (run macOS `sample` on the host during each window into sample-<n>.txt,
 //! with STALL_KEEP; `sample` suspends the host while it walks stacks, so a sampled run
 //! is for attribution only, never for the numbers).
+#[path = "support/tied.rs"]
+mod tied;
 use mooring_core::{model::*, protocol::*};
 use std::{
     fs,
@@ -40,6 +42,7 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use tied::SpawnTied;
 
 fn env_num(name: &str, default: u64) -> u64 {
     std::env::var(name)
@@ -77,7 +80,7 @@ while True:
 struct Fixture {
     root: PathBuf,
     runtime: PathBuf,
-    host: Child,
+    host: tied::Tied,
 }
 impl Fixture {
     fn socket(&self) -> PathBuf {
@@ -95,13 +98,7 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        if let Ok(Reply::Workspace(w)) = self.call(&Request::Workspace) {
-            for t in w.terminals {
-                let _ = self.call(&Request::Stop { id: t.id });
-            }
-        }
-        let _ = self.host.kill();
-        let _ = self.host.wait();
+        self.host.kill_tree();
         if std::env::var_os("STALL_KEEP").is_none() {
             let _ = fs::remove_dir_all(&self.root);
         } else {
@@ -355,6 +352,7 @@ fn pty_floor_without_host() {
         unsafe {
             command.pre_exec(|| {
                 libc::setsid();
+                libc::signal(libc::SIGHUP, libc::SIG_DFL);
                 libc::ioctl(0, libc::TIOCSCTTY as libc::c_ulong, 0);
                 Ok(())
             });
@@ -468,7 +466,7 @@ fn pty_read_stall_under_load() {
         .envs(host_env(&home))
         .stdout(Stdio::null())
         .stderr(fs::File::create(root.join("host.log")).unwrap())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let mut f = Fixture {
         root: root.clone(),
