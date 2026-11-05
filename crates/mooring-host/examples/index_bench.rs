@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
     index.flush()?;
     let took = began.elapsed().as_secs_f64();
     let path = log.to_string_lossy();
-    let (messages, _) = index.chat(&path, None, None, 500, false)?;
+    let (messages, _) = index.chat(&path, 0, None, None, 500, false)?;
     let card = index.card(&path)?;
     println!(
         "{} MB in {took:.1} s ({:.0} MB/s), peak {} MB, read {} MB; found={}, newest-500 chat messages={}, partial_history={:?}, unknown_records={:?}",

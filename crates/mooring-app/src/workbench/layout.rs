@@ -57,6 +57,8 @@ pub(super) struct LayoutState {
     pub(super) icon_menu: Option<gpui::Point<gpui::Pixels>>,
     /// A close that would stop a running Agent, waiting for the user to confirm it.
     pub(super) confirm_close: Option<Closing>,
+    /// The terminal whose turn 中断这一轮 is watching end.
+    pub(super) interrupting: Option<String>,
     /// Interrupted terminals already reopened in place once; a failed try keeps the button.
     pub(super) reopened: HashSet<String>,
     /// Panes playing their 标记完成 run, each with the run's number so a late timer
@@ -459,30 +461,6 @@ pub(super) fn choose_icon(icon: AppIcon, cx: &mut gpui::App) {
         eprintln!("记住图标选择失败: {e}");
     }
     cx.set_global(Chosen { icon, file });
-}
-/// The pane menu's items in four groups (None draws a rule between them): layout,
-/// text, the session and its todo, then what stops or closes something.
-pub(super) fn menu_rows(zoomed: bool) -> Vec<Option<&'static str>> {
-    vec![
-        Some("向右分屏"),
-        Some("向下分屏"),
-        Some(if zoomed { "还原" } else { "放大" }),
-        Some("移到标签…"),
-        None,
-        Some("复制"),
-        Some("粘贴"),
-        Some("搜索滚动内容"),
-        Some("在编辑器里看滚动内容"),
-        None,
-        Some("为什么是这个状态"),
-        Some("为这个待办开一个会话"),
-        Some("挂到待办…"),
-        Some("取消关联"),
-        None,
-        Some("中断（Ctrl-C）"),
-        Some("停止 Agent"),
-        Some("关闭画面"),
-    ]
 }
 /// The rule between two groups of the pane menu.
 pub(super) const MENU_RULE: f32 = T::S8 + T::BORDER_WIDTH;

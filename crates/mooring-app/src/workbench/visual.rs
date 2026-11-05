@@ -283,7 +283,7 @@ impl Workbench {
             .expect("right mouse opened pane menu");
         let zoomed = self.nav.zoomed.as_deref() == Some(&menu.terminal);
         let mut y = T::S6;
-        for row in super::layout::menu_rows(zoomed) {
+        for row in super::pane_menu::menu_rows(zoomed, true) {
             match row {
                 Some(t) if t == title => {
                     return menu.position + gpui::point(px(T::S20), px(y + T::ROW / 2.));
