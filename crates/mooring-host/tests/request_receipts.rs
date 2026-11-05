@@ -385,3 +385,44 @@ fn receipts_daemon() {
     let root = PathBuf::from(std::env::var_os("MOORING_FIXTURE_RUNTIME").unwrap());
     mooring_host::serve_with_roots(&root, vec![(Agent::Codex, root.join("logs/codex"))]).unwrap();
 }
+
+#[test]
+fn a_failed_launch_is_still_refused_when_replayed_and_after_restart() {
+    let root = std::env::temp_dir().join(format!("kl-rq-{}", uuid::Uuid::new_v4().simple()));
+    let h = Host::start(&root);
+    h.call(
+        None,
+        Edit::AddSpace(Space {
+            id: "s".into(),
+            name: "Tests".into(),
+            cwd: "/tmp".into(),
+        }),
+    )
+    .unwrap();
+    let request = Request::Launch {
+        id: "failed".into(),
+        space: "s".into(),
+        argv: vec![root
+            .join("missing-executable")
+            .to_string_lossy()
+            .into_owned()],
+        cwd: "/tmp".into(),
+        cols: 80,
+        rows: 24,
+        scheme: Default::default(),
+        colors: None,
+    };
+    let socket = root.join("workbench.sock");
+    let first = rpc(&socket, &request).unwrap_err().to_string();
+    let w = h.workspace();
+    assert_eq!(w.terminals.len(), 1);
+    assert_eq!(w.terminals[0].state, ProcessState::Failed);
+    assert!(w.terminals[0].pid.is_none());
+    assert_eq!(rpc(&socket, &request).unwrap_err().to_string(), first);
+    h.stop();
+    let h = Host::start(&root);
+    assert_eq!(rpc(&socket, &request).unwrap_err().to_string(), first);
+    assert_eq!(h.workspace().terminals.len(), 1);
+    drop(h);
+    std::fs::remove_dir_all(root).unwrap();
+}

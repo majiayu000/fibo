@@ -408,6 +408,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                         "launch ID was already used with different arguments",
                     ));
                 }
+                if existing.pid.is_none() {
+                    return Err(io::Error::other(
+                        existing.error.as_deref().unwrap_or("终端启动结果未知"),
+                    ));
+                }
                 return Ok(Reply::Workspace(host.snapshot()));
             }
             if id.is_empty()
