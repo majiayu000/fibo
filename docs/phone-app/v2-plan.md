@@ -266,3 +266,74 @@
 ### 怎么复现
 
 `cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（`review` 会话的第二段是这次加的），`cd mobile && bunx expo start --web`，粘贴打印的链接。杀掉 `mooring remote --relay` 进程，5 秒后它会自己起来，可以试重连。测试：`crates/mooring-host/tests/remote_tools.rs`。
+
+## 真机实测查出的问题（2026-11-05，分支 fix/phone-real-run）
+
+**决定：七条都采用；第 6 条的「回填更早的消息」待做（方案在下面）。放弃条件：真手机上审批卡片再写错命令，或点停下后 Agent 被退出。**
+
+要支撑的决定：离开电脑时，手机点的每个按钮是不是真的做了它写的事。
+
+### 新增的协议
+
+| op / 字段 | 内容 | 权限 |
+|---|---|---|
+| `ask` | `{terminal}` → `{question, kind, subject, note?, detail?, truncated?}`，读屏 400 行，画面上没有审批时报错。`subject` 空表示没认出布局 | 三档 |
+| `answer` | 加 `subject?`。带上时画面上的已经换了一条就拒绝 | approve 和 full |
+| `stop` | 回复加 `closed_background`。状态不在跑才回复，7 秒内没停、Agent 没了都报错 | full |
+| `trust` | `{terminal, folder, trust, request}`：电脑核对目录和光标后按键，再确认提示没了 | full |
+| `list` 的卡片 | 加 `trust:{question, folder}`；状态由 `status::of_terminal` 决定，等你回答 | 三档 |
+| `send` | 提示信任时拒绝 | full |
+| `chat` | 加 `partial`：日志是从尾部开始读的 | 三档 |
+| `events` | 加 `trust` / `trust_gone` | 三档 |
+
+### 真实 CLI 的行为（Claude Code 2.1.318、Codex 0.166，临时目录）
+
+| 操作 | Codex | Claude Code |
+|---|---|---|
+| 跑命令时 Ctrl-C | 弹 Task is still running 菜单 | 中断 |
+| 空闲时 Ctrl-C | **退出 Codex**（Disconnected） | 只提示再按一次 |
+| 跑命令时 Esc | 这一轮中断，**命令接着跑**（1 background terminal running），日志要到命令结束才写 turn_aborted | 中断，命令也停 |
+| 菜单里 Cancel task | 同上面的 Esc | — |
+| `/stop` | 关掉全部后台命令 | — |
+| 信任提示 Esc | 进 Agent command center，Codex 没退出 | 退出 Claude Code |
+| 信任提示刚出现就按箭头 | — | 可能被吞，之后回车就是 No, exit（实测踩到） |
+| Codex 不在 git 仓库里 | 不问信任 | 照样问 |
+
+所以 `stop` 对 Codex 是：Esc，1.5 秒后还在跑且画面写着 `/stop to close` 才发 `/stop`。一轮没有命令时自己就结束了，这时什么都不关，更早的后台服务不受影响。
+
+### 第 6 条：最大的日志
+
+原因不是大小。那份 4.2 GB 是子代理自己的日志（`subagents/agent-*.jsonl`），行行带 `isSidechain:true`，解析按设计跳过，它的对话是父日志。「等 4 分多钟」是 `real_log_costs` 自己等满 500×0.5 秒。
+
+| 日志 | 读法 | 耗时 | 峰值内存 | chat 条数 |
+|---|---|---|---|---|
+| 4 211 MB 子代理 | 首次扫描 | 0.0 s | 8 MB | 0 |
+| 4 211 MB 子代理 | 整份（46 MB/s） | 90.7 s | 10 MB | 0 |
+| 279 MB 最大的真对话 | 首次扫描 | 0.0 s | 10 MB | 3 |
+| 279 MB 最大的真对话 | 整份（275 MB/s） | 1.0 s | 21 MB | 500（上限） |
+
+复现：`cargo run --release -p mooring-host --example index_bench -- claude <日志> [first]`，只出数字。
+
+相邻的真问题：电脑第一次见到一份已有日志时只读最后 128 KiB，超过 7 天的连这段也不读，手机看着像对话就这么长。这轮只让手机明说（`partial`）。
+
+回填的方案，这轮没做：chat 按 rowid 排序和翻页，回填的旧行 rowid 反而更大。要改成按 `(offset, ordinal)` 排，`seq` 和手机的翻页游标一起换，再加一个后台任务按需读前面的部分（279 MB 约 1 秒）。读时持有索引的锁，要分段放开，否则 4 GB 那种要挡其他日志约 90 秒。
+
+### 第 4、7 条的统计（最近 30 个真实 rollout，只数不看内容）
+
+一句回复的写法：item+response 294，三处都有 120，只有 item 19，item+task_complete 15，只有 response 15。修复前记 568 条（445 种），修复后 477 条（464 种）；多出的 19 种是以前丢的，余下 13 条是真的说了两遍。升级前已索引的旧行在读取时跳过（相邻、一字不差、60 秒内），不重建：重建只读尾部，会丢历史。
+
+完成事件的覆盖率（有一行 / 日志里的总数）：McpToolCall 581/581（其中 44 条是新加的，其余本来有 function_call）、FileChange 26/26、ImageView 37/37、web.search 161/161、image_gen 42/42。`cargo test -p mooring-host --lib real_rollout_counts -- --ignored --nocapture`。
+
+运行时才拼出来的 patch：**能靠 FileChange 解决文件和行数**（统计时 47 个文件里有 4 个在脚本原文里找不到），前提是这个 Codex 版本写这个事件；脚本里拼补丁的代码本身还是读不到。
+
+### 对照截图
+
+[v2-compare/](v2-compare/) 的 `real-*.png`，网页版连真后台真中继（`phone_gaps_demo`，假 Agent 画的是真实画面），路径是改过的。
+
+### 已验 / 没验
+
+已验：见汇报和各提交说明；真 CLI 跑过的有 `ask`、`answer` 带 subject、`always`（选第 2 项，模式没变成 auto）、`stop`（`sleep` 进程真的没了，Agent 还在）、`trust` 两种回答、一句一条、FileChange 进清单。
+
+没验：真手机（iOS、Android）；真 Claude Code 的「不再询问」之后第二次还会不会问；旧版 Codex（没有那个菜单的版本，只用假 Agent 验了 Esc）；旧版 Claude Code 带数字的信任画面（没有认）；MCP 审批在真手机上的长说明；桌面窗口。
+
+相邻情况：桌面「中断（Ctrl-C）」还发 Ctrl-C，Codex 上会弹菜单，空闲时会退出 Codex；Codex 中断后卡片写「等你验收」不是「停下了」，原因没查；只有 `send` 在信任提示时被拒，`keys` 和 `input` 还能按。
