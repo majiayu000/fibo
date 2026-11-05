@@ -209,11 +209,16 @@ pub fn serve(
         };
         match op {
             "hello" => {
-                greeted = true;
                 client = (request["client"].as_str())
                     .filter(|c| !c.is_empty())
                     .map(str::to_owned);
-                let _ = out.send(json!({ "id": id, "ok": hello(socket, access.role) }));
+                match hello(socket, access.role) {
+                    Ok(ok) => {
+                        greeted = true;
+                        let _ = out.send(json!({ "id": id, "ok": ok }));
+                    }
+                    Err(e) => fail(format!("记不住本机标识：{e}")),
+                }
             }
             _ if !greeted => fail("先发 hello".into()),
             _ if !access.role.allows(op) => fail(format!(
@@ -282,10 +287,10 @@ pub fn serve(
 }
 
 pub(crate) use mooring_host::devices::machine;
-fn hello(socket: &Path, role: Role) -> Value {
-    json!(rp::Hello {
+fn hello(socket: &Path, role: Role) -> io::Result<Value> {
+    Ok(json!(rp::Hello {
         version: rp::VERSION,
-        machine: machine(socket),
+        machine: machine(socket)?,
         ops: OPS
             .iter()
             .filter(|op| role.allows(op))
@@ -302,7 +307,7 @@ fn hello(socket: &Path, role: Role) -> Value {
             .into()
         ),
         app_version: Some(env!("CARGO_PKG_VERSION").into()),
-    })
+    }))
 }
 
 /// A write its client named: it runs once however often it comes (`Request::Once`).
@@ -348,7 +353,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
                     Ok(Reply::Recognition(r)) => r,
                     _ => Default::default(),
                 };
-                Ok(list::list(&w, &seen, socket))
+                list::list(&w, &seen, socket)
             }
             other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },

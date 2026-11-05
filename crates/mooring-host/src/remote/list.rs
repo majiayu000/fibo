@@ -6,6 +6,7 @@ use mooring_core::{git_head, model::*, protocol::*, status};
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -34,7 +35,7 @@ fn branch(cwd: &str) -> Option<String> {
 }
 
 /// Spaces and running terminals as cards: what each Agent is doing and what it asks.
-pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
+pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io::Result<Value> {
     let now = mooring_core::content::now();
     let terminals: Vec<_> = w
         .terminals
@@ -110,12 +111,12 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Va
             agent: control::agent_label(t.agent),
         })
         .collect();
-    json!(rp::List {
-        machine: super::machine(socket),
+    Ok(json!(rp::List {
+        machine: super::machine(socket)?,
         spaces,
         terminals,
         todos,
-    })
+    }))
 }
 
 fn outcome_key(o: &Outcome) -> &'static str {
@@ -139,7 +140,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mooring-cards-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let list: rp::List =
-            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock"))).unwrap();
+            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock")).unwrap())
+                .unwrap();
         let at = mooring_core::content::now();
         assert!(!list.terminals.is_empty());
         for card in &list.terminals {
@@ -190,7 +192,8 @@ mod tests {
         );
         let dir = std::env::temp_dir().join(format!("mooring-unbound-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let list: rp::List = serde_json::from_value(list(&w, &seen, &dir.join("sock"))).unwrap();
+        let list: rp::List =
+            serde_json::from_value(list(&w, &seen, &dir.join("sock")).unwrap()).unwrap();
         let card = list.terminals.iter().find(|c| c.id == shell).unwrap();
         assert_eq!(card.phase, rp::Phase::Shell);
         assert_eq!(card.agent.as_deref(), Some("codex"));

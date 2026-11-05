@@ -16,12 +16,13 @@ fn enum_name<T: serde::Serialize>(value: &T) -> io::Result<String> {
 fn enum_value<T: serde::de::DeserializeOwned>(name: String) -> io::Result<T> {
     serde_json::from_value(serde_json::Value::String(name)).map_err(db_error)
 }
-/// A criterion's evidence column: a JSON list of attached session records. Older rows hold
-/// NULL or a bare source reference no build ever wrote from the app; both read as none.
-fn criterion_evidence(column: Option<String>) -> Vec<CriterionEvidence> {
-    column
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+/// A criterion's evidence column: a JSON list of attached session records, NULL when there
+/// is none. Anything else fails the load rather than quietly dropping what proved it.
+fn criterion_evidence(column: Option<String>) -> io::Result<Vec<CriterionEvidence>> {
+    column.map_or(Ok(vec![]), |text| {
+        serde_json::from_str(&text)
+            .map_err(|e| io::Error::other(format!("验收条件的证据列不是证据列表：{e}")))
+    })
 }
 
 impl Store {
@@ -268,7 +269,7 @@ impl Store {
                 .push(AcceptanceCriterion {
                     id: r.get(1).map_err(db_error)?,
                     description: r.get(2).map_err(db_error)?,
-                    evidence: criterion_evidence(r.get(3).map_err(db_error)?),
+                    evidence: criterion_evidence(r.get(3).map_err(db_error)?)?,
                 });
         }
         // Tabs are deleted when closed. Rows an older build only marked closed, and tabs
