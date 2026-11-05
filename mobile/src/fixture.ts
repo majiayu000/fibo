@@ -229,6 +229,6 @@ export function install() {
     return remote(l.machine) as never;
   });
   outboxReady.then(() => {
-    if (!unsent().length) enqueue({ machine: 'air', terminal: 'x', text: '测完把 APK 装到手机上' });
+    if (!unsent().length) enqueue({ machine: 'air', terminal: 'x', session: 'fixture-air', text: '测完把 APK 装到手机上' });
   });
 }

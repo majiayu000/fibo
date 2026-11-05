@@ -1,6 +1,8 @@
 use super::elide::STRING_KEEP;
 use super::*;
 use std::io::Write;
+#[path = "query_perf_tests.rs"]
+mod query_perf;
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
@@ -734,4 +736,36 @@ fn a_rewritten_log_forgets_its_old_words() {
     let words = i.original_words(path.to_str().unwrap()).unwrap();
     assert!(!words.contains("第一次"), "old words survive: {words}");
     assert!(words.contains("新要求"), "{words}");
+}
+
+#[test]
+fn changing_a_runtime_root_imports_existing_files_once() {
+    let f = Fixture::new();
+    let second = f.0.join("second");
+    fs::create_dir_all(&second).unwrap();
+    // Both files predate the first checkpoint; B never emits a new event.
+    fs::write(f.0.join("logs/a.jsonl"), line("root-a")).unwrap();
+    fs::write(second.join("b.jsonl"), line("root-b")).unwrap();
+    let mut first = f.index();
+    let checkpoint = first.initialize().unwrap();
+    first.bootstrap().unwrap();
+    drop(first);
+    let open = || Index::open(&f.0, vec![(Agent::Codex, second.clone())]).unwrap();
+    let mut next = open();
+    assert_eq!(next.initialize().unwrap(), checkpoint);
+    next.bootstrap().unwrap();
+    assert!(
+        next.cached().unwrap().iter().any(|t| t.cli_id == "root-b"),
+        "same runtime with a new root skipped existing files"
+    );
+    assert_eq!(next.counts.directories, 1);
+    drop(next);
+    let mut again = open();
+    again.initialize().unwrap();
+    again.bootstrap().unwrap();
+    assert_eq!(
+        again.counts,
+        IoCounts::default(),
+        "unchanged root was scanned again"
+    );
 }

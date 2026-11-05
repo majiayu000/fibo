@@ -111,6 +111,7 @@ fn hand_over(socket: &Path, id: &str, text: &str, timeout: Duration) -> io::Resu
             return expect_ok(rpc(
                 socket,
                 &Request::SendText {
+                    session: None,
                     id: id.into(),
                     text: text.into(),
                     submit: true,

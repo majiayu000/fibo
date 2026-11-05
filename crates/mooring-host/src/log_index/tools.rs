@@ -1,11 +1,10 @@
 //! A conversation's tool calls for a phone (`Request::ToolCalls`): which rows a stretch of
 //! work holds and where their raw lines are. What the rows cut short is read from those
 //! lines by the caller, away from this connection and the host's lock.
-use super::chat::{summary, SEQ};
+use super::chat::{place, summary, FAILED, SEQ};
 use super::{err, Index};
 use mooring_core::protocol::{ChatTools, ToolResultRow, ToolRow};
 use rusqlite::{params, OptionalExtension, Row};
-use std::collections::{HashMap, HashSet};
 use std::io;
 
 /// A page of calls: what the stretch adds up to (first page), its rows, the next cursor.
@@ -46,20 +45,22 @@ impl Index {
     ) -> io::Result<Page> {
         let limit = limit.clamp(1, 200);
         let until = seq.unwrap_or(i64::MAX);
+        let end = place(until);
         let from: i64 = self
             .db
-            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND kind IN ('user','assistant') AND {SEQ}<?2 ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode=(SELECT inode FROM session_records WHERE path=?1 LIMIT 1) AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
             .map_err(err)?
-            .query_row(params![path, until], |r| r.get(0))
+            .query_row(params![path, end.0, end.1], |r| r.get(0))
             .optional()
             .map_err(err)?
             .unwrap_or(0);
         let start = after.map_or(from, |a| a.max(from));
+        let begin = place(start);
         let mut rows = self
             .db
-            .prepare_cached(&format!("SELECT {SEQ},call_id,text,at,inode,offset FROM session_records WHERE path=?1 AND kind='tool_call' AND {SEQ}>?2 AND {SEQ}<?3 ORDER BY offset,ordinal LIMIT ?4"))
+            .prepare_cached(&format!("SELECT {SEQ},call_id,text,at,inode,offset FROM session_records WHERE path=?1 AND kind='tool_call' AND (offset,ordinal)>(?2,?3) AND (offset,ordinal)<(?4,?5) ORDER BY offset,ordinal LIMIT ?6"))
             .map_err(err)?
-            .query_map(params![path, start, until, limit as i64 + 1], row)
+            .query_map(params![path, begin.0, begin.1, end.0, end.1, limit as i64 + 1], row)
             .map_err(err)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(err)?;
@@ -102,46 +103,29 @@ impl Index {
         let Some(first) = rows.first().map(|r| r.seq) else {
             return Ok(());
         };
-        let wanted: HashSet<&str> = rows.iter().map(|r| r.id.as_str()).collect();
-        let mut found: HashMap<String, Vec<ToolResultRow>> = HashMap::new();
+        let from = place(first);
         let mut q = self
             .db
-            .prepare_cached(&format!("SELECT {SEQ},at,exit_code,inode,offset,call_id FROM session_records WHERE path=?1 AND kind='tool_result' AND {SEQ}>?2 ORDER BY offset,ordinal"))
+            .prepare_cached(&format!("SELECT {SEQ},at,exit_code,inode,offset FROM session_records WHERE path=?1 AND call_id=?2 AND kind='tool_result' AND (offset,ordinal)>(?3,?4) ORDER BY offset,ordinal LIMIT {MOST_RESULTS}"))
             .map_err(err)?;
-        let mut hits = q.query(params![path, first]).map_err(err)?;
-        while let Some(r) = hits.next().map_err(err)? {
-            let id: String = r.get(5).map_err(err)?;
-            if wanted.contains(id.as_str()) {
-                let results = found.entry(id).or_default();
-                if results.len() < MOST_RESULTS {
-                    results.push(result(r).map_err(err)?);
-                }
-            }
-        }
         for r in rows {
-            r.results = found.remove(&r.id).unwrap_or_default();
+            r.results = q
+                .query_map(params![path, r.id, from.0, from.1], result)
+                .map_err(err)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(err)?;
         }
         Ok(())
     }
 
     /// What a whole stretch adds up to, as `chat`'s `tools` counts it.
     fn stretch(&self, path: &str, from: i64, until: i64) -> io::Result<ChatTools> {
-        let failed = self
-            .db
-            .prepare_cached(&format!("SELECT call_id FROM session_records WHERE path=?1 AND kind='tool_result' AND exit_code<>0 AND {SEQ}>?2"))
-            .map_err(err)?
-            .query_map(params![path, from], |r| r.get::<_, String>(0))
-            .map_err(err)?
-            .collect::<Result<HashSet<_>, _>>()
-            .map_err(err)?;
+        let (from, until) = (place(from), place(until));
         let calls = self
             .db
-            .prepare_cached(&format!("SELECT call_id,text FROM session_records WHERE path=?1 AND kind='tool_call' AND {SEQ}>?2 AND {SEQ}<?3 ORDER BY offset,ordinal"))
+            .prepare_cached(&format!("SELECT text,{FAILED} FROM session_records AS call WHERE path=?1 AND kind='tool_call' AND (offset,ordinal)>(?2,?3) AND (offset,ordinal)<(?4,?5) ORDER BY offset,ordinal"))
             .map_err(err)?
-            .query_map(params![path, from, until], |r| {
-                let id: String = r.get(0)?;
-                Ok((r.get::<_, String>(1)?, failed.contains(&id)))
-            })
+            .query_map(params![path, from.0, from.1, until.0, until.1], |r| Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?)))
             .map_err(err)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(err)?;

@@ -607,7 +607,7 @@ impl Host {
                 return;
             };
             thread::spawn(move || {
-                if let Err(e) = client::send_text(&shared, &parent, &text, true) {
+                if let Err(e) = client::send_text(&shared, &parent, &text, true, None) {
                     eprintln!("report to {parent}: {e}");
                 }
             });

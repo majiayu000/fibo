@@ -349,6 +349,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
         c
     };
     let send = |text: &str, request: Option<&str>| Op::Send {
+        session: None,
         terminal: "far".into(),
         text: text.into(),
         enter: true,
@@ -359,6 +360,16 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
     first.request(send("named", Some("r1")), t).unwrap();
     drop(first);
     let again = connect();
+    // The terminal is alive but contains a shell, not the conversation queued on the phone.
+    let refused_chat = Op::Send {
+        terminal: "far".into(),
+        session: Some("old-conversation".into()),
+        text: "must-not-reach-shell".into(),
+        enter: true,
+        request: Some("stale-chat".into()),
+    };
+    let refusal = again.request(refused_chat, t).unwrap_err().to_string();
+    assert!(refusal.contains("原对话"), "{refusal}");
     again.request(send("named", Some("r1")), t).unwrap();
     again.request(send("unnamed", None), t).unwrap();
     again.request(send("unnamed", None), t).unwrap();
@@ -372,6 +383,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
     assert_eq!(again.request(gone, t).unwrap_err().to_string(), refused);
     std::thread::sleep(Duration::from_millis(500));
     let lines = fs::read_to_string(&typed).unwrap();
+    assert!(!lines.contains("must-not-reach-shell"), "{lines:?}");
     let count = |w: &str| lines.lines().filter(|l| l.trim() == w).count();
     assert_eq!((count("named"), count("unnamed")), (1, 2), "{lines:?}");
     drop(again);
@@ -384,4 +396,45 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
 fn receipts_daemon() {
     let root = PathBuf::from(std::env::var_os("MOORING_FIXTURE_RUNTIME").unwrap());
     mooring_host::serve_with_roots(&root, vec![(Agent::Codex, root.join("logs/codex"))]).unwrap();
+}
+
+#[test]
+fn a_failed_launch_is_still_refused_when_replayed_and_after_restart() {
+    let root = std::env::temp_dir().join(format!("kl-rq-{}", uuid::Uuid::new_v4().simple()));
+    let h = Host::start(&root);
+    h.call(
+        None,
+        Edit::AddSpace(Space {
+            id: "s".into(),
+            name: "Tests".into(),
+            cwd: "/tmp".into(),
+        }),
+    )
+    .unwrap();
+    let request = Request::Launch {
+        id: "failed".into(),
+        space: "s".into(),
+        argv: vec![root
+            .join("missing-executable")
+            .to_string_lossy()
+            .into_owned()],
+        cwd: "/tmp".into(),
+        cols: 80,
+        rows: 24,
+        scheme: Default::default(),
+        colors: None,
+    };
+    let socket = root.join("workbench.sock");
+    let first = rpc(&socket, &request).unwrap_err().to_string();
+    let w = h.workspace();
+    assert_eq!(w.terminals.len(), 1);
+    assert_eq!(w.terminals[0].state, ProcessState::Failed);
+    assert!(w.terminals[0].pid.is_none());
+    assert_eq!(rpc(&socket, &request).unwrap_err().to_string(), first);
+    h.stop();
+    let h = Host::start(&root);
+    assert_eq!(rpc(&socket, &request).unwrap_err().to_string(), first);
+    assert_eq!(h.workspace().terminals.len(), 1);
+    drop(h);
+    std::fs::remove_dir_all(root).unwrap();
 }

@@ -123,6 +123,7 @@ fn remote_chat_pages_a_conversation_by_terminal_and_session() {
 
     // The Agent replies again: `after` gives only that.
     h.call(Request::SendText {
+        session: None,
         id: "chat".into(),
         text: String::new(),
         submit: true,

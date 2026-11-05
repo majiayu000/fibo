@@ -171,13 +171,17 @@ export default function Chat() {
 
   /** Sends `text`; while the computer is away it waits in the outbox instead. */
   async function send(text: string): Promise<boolean> {
+    if (!session) {
+      setError('尚未识别对话，暂时不能发送');
+      return false;
+    }
     if (!online) {
-      enqueue({ machine, terminal, text });
+      enqueue({ machine, terminal, session, text });
       return true;
     }
     setPending((p) => [...p, { text, at: Date.now() / 1000 }]);
     try {
-      await write(machine, 'send', { terminal, text, enter: true });
+      await write(machine, 'send', { terminal, session, text, enter: true });
       setError('');
       return true;
     } catch (e) {

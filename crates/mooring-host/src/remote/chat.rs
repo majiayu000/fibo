@@ -6,6 +6,10 @@ use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
 
+#[cfg(test)]
+#[path = "chat_poll_tests.rs"]
+mod tests;
+
 /// The conversation a request names, by its session id or the terminal running it.
 pub(super) fn session_of(socket: &Path, request: &Value) -> io::Result<String> {
     match (request["session"].as_str(), request["terminal"].as_str()) {
