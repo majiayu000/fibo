@@ -208,7 +208,7 @@ fn ten_event_subscribers_cost_the_host_almost_nothing() {
     for i in 0..4 {
         h.call(h.launch(
             &format!("spin{i}"),
-            "while :; do for c in '|' '/' '-' '\\\\'; do printf '\\r\\033[2K%s working… (esc to interrupt)' \"$c\"; sleep 0.08; done; done",
+            "while kill -0 $PPID 2>/dev/null; do for c in '|' '/' '-' '\\\\'; do printf '\\r\\033[2K%s working… (esc to interrupt)' \"$c\"; sleep 0.08; done; done",
         ))
         .unwrap();
     }

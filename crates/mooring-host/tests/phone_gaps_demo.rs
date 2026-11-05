@@ -166,7 +166,7 @@ fn phone_gaps_demo() {
         echo,
     );
     // Finished: the tool line, the diff's test result.
-    h.claude(
+    let review = h.claude(
         "review",
         &repo,
         &[
@@ -184,6 +184,49 @@ fn phone_gaps_demo() {
         ],
         echo,
     );
+    // Then a stretch with what a tool's detail has to cope with, as a running CLI writes it:
+    // a failure, a long output and a long line, an image, and secrets to hide (made up here).
+    let id = review.file_stem().unwrap().to_string_lossy().into_owned();
+    let test_log: String = (1..=30_000)
+        .map(|i| format!("test tool_text::tests::case_{i:05} ... ok\n"))
+        .collect();
+    let wide = format!(
+        "{}\n{}\n",
+        "column ".repeat(400),
+        "长行中文输出".repeat(120)
+    );
+    let extra = [
+        timed(user(&main, "再跑一遍全量测试"), now - 170),
+        timed(call("d1", "Bash", json!({"command":"cargo test --workspace --no-fail-fast 2>&1 | tail -n 200"})), now - 165),
+        timed(json!({"type":"user","uuid":"r-d1","message":{"content":[{"type":"tool_result","tool_use_id":"d1","is_error":true,"content":"error: test failed, to rerun pass `-p mooring-host --test managed_session`\nExit code 101"}]}}), now - 140),
+        timed(call("d2", "Bash", json!({"command":"cat target/test-output.log"})), now - 139),
+        timed(result("d2", &test_log), now - 130),
+        timed(call("d3", "Read", json!({"file_path":"src/app/chat.tsx"})), now - 129),
+        timed(result("d3", "1\texport const a = 1;\n2\t// Android draws edge to edge.\n3\texport const b = 3;\n"), now - 129),
+        timed(call("d4", "Edit", json!({"file_path":"src/app/chat.tsx","old_string":"export const b = 2;","new_string":"// Android draws edge to edge.\nexport const b = 3;"})), now - 128),
+        timed(result("d4", "ok"), now - 128),
+        timed(call("d5", "Bash", json!({"command":"curl -H 'Authorization: Bearer demo1234token5678' https://api.example.com/v1/items"})), now - 127),
+        timed(result("d5", "GITHUB_TOKEN=ghp_demo0123456789abcdefghijklmnopqr\npostgres://me:hunter2@db.local/app\n{\"ok\":true}\n"), now - 126),
+        timed(call("d6", "Read", json!({"file_path":"docs/shot.png"})), now - 125),
+        timed(json!({"type":"user","uuid":"r-d6","message":{"content":[{"type":"tool_result","tool_use_id":"d6","content":[{"type":"image","source":{"data":"QUJD".repeat(60_000)}}]}]}}), now - 125),
+        timed(call("d7", "Grep", json!({"pattern":"KeyboardAvoidingView","path":"src/app"})), now - 124),
+        timed(result("d7", "src/app/chat.tsx:6:import { KeyboardAvoidingView } from 'react-native';\n"), now - 124),
+        timed(call("d8", "Bash", json!({"command":"cat wide.txt"})), now - 123),
+        timed(result("d8", &wide), now - 123),
+        timed(call("d9", "WebFetch", json!({"url":"https://docs.expo.dev/versions/v58.0.0/"})), now - 122),
+        timed(result("d9", "Expo SDK 58"), now - 122),
+        timed(said("全量测试里有一个失败，日志在上面。", true), now - 120),
+    ];
+    let mut text = String::new();
+    for mut row in extra {
+        row["sessionId"] = id.clone().into();
+        text += &format!("{row}\n");
+    }
+    {
+        use std::io::Write;
+        let mut file = fs::OpenOptions::new().append(true).open(&review).unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+    }
 
     // In tabs, as the window keeps them: only those count as 要你处理.
     for t in ["approve", "ask", "failed", "running", "writing", "review"] {
@@ -275,6 +318,24 @@ fn phone_gaps_demo() {
         });
     });
     bound.recv().unwrap();
+    // The real screens the phone's approval and trust cards are about: 11-05's real run.
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/screens");
+    let draw = |cli: &str, name: &str| {
+        let file = fixtures.join(cli).join(name);
+        format!(
+            "stty -echo; printf '\\033[2J\\033[H'; cat '{}'; sleep 100000",
+            file.display()
+        )
+    };
+    h.claude(
+        "real-push",
+        &repo,
+        &[user("/project", "把 main 推到远端")],
+        &draw("claude", "approval-push-requires.txt"),
+    );
+    h.launch("long-screen", &repo, "seq 1 60; sleep 100000");
+    h.launch("trust-claude", &repo, &draw("claude", "trust-real.txt"));
+    h.launch("trust-codex", &repo, &draw("codex", "trust-real.txt"));
     let base = "ws://127.0.0.1:8790";
     let root = h.root.to_string_lossy().into_owned();
     let paired = Command::new(env!("CARGO_BIN_EXE_mooring"))
@@ -297,17 +358,21 @@ fn phone_gaps_demo() {
         .lines()
         .find(|l| l.starts_with("mooring://pair?"))
         .expect("pairing link");
-    let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
-        .args(["remote", "--relay", base, "--runtime", &root])
-        .env("HOME", &home)
-        .env("SHELL", &shell)
-        .env("CLAUDE_CONFIG_DIR", h.root.join("claude-home"))
-        .env("CODEX_HOME", h.root.join("codex-home"))
-        .stderr(Stdio::inherit())
-        .spawn()
-        .unwrap();
     println!("PAIRING LINK: {link}");
     println!("RUNTIME: {root}");
     println!("HOME: {}", home.display());
-    machine.wait().ok();
+    // Killed, it comes back after a few seconds: for trying a phone's reconnect.
+    loop {
+        let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
+            .args(["remote", "--relay", base, "--runtime", &root])
+            .env("HOME", &home)
+            .env("SHELL", &shell)
+            .env("CLAUDE_CONFIG_DIR", h.root.join("claude-home"))
+            .env("CODEX_HOME", h.root.join("codex-home"))
+            .stderr(Stdio::inherit())
+            .spawn_tied()
+            .unwrap();
+        machine.wait().ok();
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
 }

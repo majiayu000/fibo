@@ -193,10 +193,10 @@ fn the_js_phone_client_chats_through_a_real_relay() {
     let (base, _stop, _relay) = local_relay("127.0.0.1:0", Default::default());
     let root = h.root.to_string_lossy().into_owned();
     let link = pair(&root, &base, "JS 手机", "full");
-    let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
+    let _machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
         .args(["remote", "--relay", &base, "--runtime", &root])
         .stderr(Stdio::null())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     // The machine registers with the relay before a phone can reach it.
     let until = Instant::now() + Duration::from_secs(10);
@@ -211,8 +211,6 @@ fn the_js_phone_client_chats_through_a_real_relay() {
         .args(["test/phone-e2e.ts", &link.text(), "phone-chat"])
         .output()
         .expect("bun");
-    machine.kill().ok();
-    machine.wait().ok();
     assert!(
         out.status.success(),
         "{}",

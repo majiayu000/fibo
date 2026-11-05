@@ -324,7 +324,7 @@ fn recognition_status_stream_recovers_after_log_root_is_rebuilt() {
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {

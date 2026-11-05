@@ -1,0 +1,15 @@
+• Edited edit.txt (+1 -1)
+    1 -alpha
+    1 +gamma
+    + Show details
+
+  Would you like to make the following edits?
+
+  Description: Apply proposed file edits
+  Destination: /Users/x/t/edit.txt
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for these files (a)
+  3. No, and tell Codex what to do differently (esc)
+
+  Press enter to confirm or esc to cancel

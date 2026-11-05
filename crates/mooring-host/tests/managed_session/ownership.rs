@@ -192,7 +192,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let until = Instant::now() + Duration::from_secs(5);
     loop {

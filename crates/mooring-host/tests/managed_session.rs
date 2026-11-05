@@ -1,3 +1,5 @@
+#[path = "support/tied.rs"]
+mod tied;
 use mooring_core::{model::*, protocol::*, terminal::Vt};
 use std::{
     fs, io,
@@ -7,6 +9,7 @@ use std::{
     sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
     time::{Duration, Instant},
 };
+use tied::SpawnTied;
 
 #[path = "managed_session/claude_logs.rs"]
 mod claude_logs;
@@ -148,7 +151,7 @@ fn phone_demo_machine() {
     let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
         .args(["remote", "--relay", &base, "--runtime", &root])
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     println!("PAIRING LINK: {}", link.text());
     println!("RUNTIME: {root}");

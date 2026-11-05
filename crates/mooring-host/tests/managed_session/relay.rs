@@ -27,7 +27,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         Command::new(env!("CARGO_BIN_EXE_mooring"))
             .args(["remote", "--relay", &base, "--runtime", &root])
             .stderr(Stdio::piped())
-            .spawn()
+            .spawn_tied()
             .unwrap()
     };
     let mut on_relay = machine();
@@ -315,7 +315,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     assert_eq!(phone.next(|v| v["id"] == 1)["ok"]["version"], 1);
 
     // A second machine with the same code takes over; the first one exits.
-    let mut twin = machine();
+    let _twin = machine();
     let until = Instant::now() + Duration::from_secs(10);
     let status = loop {
         if let Some(s) = on_relay.try_wait().unwrap() {
@@ -331,8 +331,6 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         said.iter().any(|l| l.contains("没有配对或密钥不对")),
         "{said:?}"
     );
-    let _ = twin.kill();
-    let _ = twin.wait();
     drop(app);
 }
 
@@ -516,7 +514,7 @@ fn a_phone_that_never_finishes_its_handshake_is_closed() {
     let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
         .args(["remote", "--relay", &base, "--runtime", &root])
         .stderr(Stdio::null())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let rt = Phone::rt();
     let url = link.url().unwrap();

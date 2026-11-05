@@ -1,22 +1,24 @@
-// The approval a card shows, read off its terminal: what it wants to run, and whether the
-// screen offers "don't ask again". Only the approval needs the screen's text.
+// The approval a card shows: what it wants to run, as the machine read it off the screen.
 import { useEffect, useState } from 'react';
-import { type Ask, readAsk } from '../ui/parse';
+import { type Ask, askFrom } from '../ui/parse';
 import { type Card, remote } from './hub';
 
-export function useAsk(machine: string, card: Card | undefined, online: boolean): Ask & { screen: string } {
+export function useAsk(machine: string, card: Card | undefined, online: boolean): Ask {
   const question = card?.approval ?? '';
-  const [screen, setScreen] = useState('');
+  const [reply, setReply] = useState<Parameters<typeof askFrom>[0]>(null);
+  // Every command asks in the same words, so the question alone cannot say a new one came.
+  const moved = card?.updated;
   useEffect(() => {
+    setReply(null);
     const r = question && online && card ? remote(machine) : null;
-    if (!r || !card) return setScreen('');
+    if (!r || !card) return;
     let live = true;
-    r.request('read', { terminal: card.id, lines: 24 })
-      .then((x) => live && setScreen(String(x.text ?? '').replace(/\s+$/, '')))
+    r.request('ask', { terminal: card.id })
+      .then((x) => live && setReply(x))
       .catch(() => undefined);
     return () => {
       live = false;
     };
-  }, [question, online, machine, card?.id]);
-  return { ...readAsk(screen, question), screen };
+  }, [question, online, machine, card?.id, moved]);
+  return askFrom(reply, question);
 }

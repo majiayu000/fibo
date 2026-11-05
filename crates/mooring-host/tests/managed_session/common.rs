@@ -17,7 +17,7 @@ pub(crate) enum FixtureLease {
     },
 }
 pub(crate) struct Host {
-    pub(crate) child: Child,
+    pub(crate) child: tied::Tied,
     pub(crate) root: PathBuf,
     pub(crate) _lease: FixtureLease,
 }
@@ -37,7 +37,7 @@ impl Host {
         let child = fixture_command(&root)
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         let h = Self {
             child,
@@ -130,8 +130,7 @@ impl Drop for Host {
                     let _ = self.call(Request::Stop { id: s.id });
                 }
             }
-            let _ = self.child.kill();
-            let _ = self.child.wait();
+            self.child.kill_tree();
         }
         let _ = fs::remove_dir_all(&self.root);
     }

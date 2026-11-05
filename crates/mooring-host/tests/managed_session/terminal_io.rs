@@ -4,7 +4,7 @@ use super::*;
 fn diagnostic_stream_measures_a_busy_managed_terminal_without_holding_workspace_lock() {
     let host = Host::measured();
     host.setup();
-    host.call(host.launch("diag-cpu", "while :; do :; done"))
+    host.call(host.launch("diag-cpu", "while kill -0 $PPID 2>/dev/null; do :; done"))
         .unwrap();
     let before = host.workspace().revision;
     let mut stream = UnixStream::connect(host.socket()).unwrap();
@@ -90,7 +90,7 @@ fn a_newer_host_takes_running_terminals_over_without_ending_them() {
         .env("MOORING_FIXTURE_TAKEOVER", "1")
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     // The old host hands over and exits on its own.
     let until = Instant::now() + Duration::from_secs(15);

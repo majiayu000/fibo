@@ -258,7 +258,7 @@ fn nested_split_tree_and_ratios_survive_store_reopen() {
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let until = Instant::now() + Duration::from_secs(10);
     let workspace = loop {
@@ -360,7 +360,7 @@ fn host_death_interrupts_pty_and_restart_preserves_no_fake_running_process() {
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -388,7 +388,7 @@ fn socket_publication_waits_for_initialization_then_first_rpc_succeeds() {
     let child = fixture_command(&root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let h = Host {
         child,

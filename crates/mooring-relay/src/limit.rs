@@ -7,6 +7,9 @@
 //! always when `trust_proxy` is set, which is right only when the relay's port is
 //! reachable through the proxy alone (a container port published on 127.0.0.1 shows
 //! the bridge's address, not loopback).
+//!
+//! An IPv6 address counts under its /64: one home or phone gets a whole /64 and can pick
+//! a new source address in it for every socket.
 use axum::http::HeaderMap;
 use std::{
     collections::HashMap,
@@ -41,10 +44,11 @@ struct Entry {
     opened: u32,
 }
 
-#[derive(Default)]
 pub struct Limits {
     rules: Rules,
     ips: Arc<Mutex<HashMap<IpAddr, Entry>>>,
+    /// When entries of addresses gone quiet were last dropped.
+    swept: Mutex<Instant>,
 }
 
 /// One admitted socket; dropping it frees its place.
@@ -73,6 +77,7 @@ impl Limits {
         Self {
             rules,
             ips: Arc::default(),
+            swept: Mutex::new(Instant::now()),
         }
     }
 
@@ -92,8 +97,17 @@ impl Limits {
 
     /// A place for one more socket from `ip`, or `None` when it is over a limit.
     pub fn admit(&self, ip: IpAddr) -> Option<Slot> {
+        let ip = counted_as(ip);
         let rules = &self.rules;
         let mut ips = self.ips.lock().unwrap_or_else(|e| e.into_inner());
+        // A socket that ends within a minute of its address's first leaves the entry
+        // behind; once a minute those go, or every address ever seen stays in memory.
+        let mut swept = self.swept.lock().unwrap_or_else(|e| e.into_inner());
+        if swept.elapsed() >= MINUTE {
+            ips.retain(|_, e| e.open > 0 || e.since.is_some_and(|s| s.elapsed() < MINUTE));
+            *swept = Instant::now();
+        }
+        drop(swept);
         let e = ips.entry(ip).or_default();
         if e.since.is_none_or(|s| s.elapsed() >= MINUTE) {
             e.since = Some(Instant::now());
@@ -110,6 +124,17 @@ impl Limits {
             ip,
             ips: self.ips.clone(),
         })
+    }
+}
+
+/// The key an address is counted under: an IPv6 address by its /64.
+fn counted_as(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => IpAddr::V4(v4),
+            None => IpAddr::V6((u128::from(v6) & !(u64::MAX as u128)).into()),
+        },
+        v4 => v4,
     }
 }
 
@@ -140,6 +165,26 @@ mod tests {
     }
 
     #[test]
+    fn ipv6_addresses_count_by_their_64() {
+        let limits = Limits::new(Rules {
+            open: 1,
+            per_minute: 0,
+            trust_proxy: false,
+        });
+        let _a = limits.admit(ip("2001:db8:1:2::1")).unwrap();
+        assert!(
+            limits.admit(ip("2001:db8:1:2:ffff::9")).is_none(),
+            "another address in the same /64 is the same place"
+        );
+        assert!(limits.admit(ip("2001:db8:1:3::1")).is_some());
+        let _v4 = limits.admit(ip("1.2.3.4")).unwrap();
+        assert!(
+            limits.admit(ip("::ffff:1.2.3.4")).is_none(),
+            "mapped v4 is v4"
+        );
+    }
+
+    #[test]
     fn an_address_opens_only_so_many_sockets_a_minute() {
         let limits = Limits::new(Rules {
             open: 0,
@@ -150,6 +195,30 @@ mod tests {
             drop(limits.admit(ip("1.2.3.4")).unwrap());
         }
         assert!(limits.admit(ip("1.2.3.4")).is_none());
+    }
+
+    #[test]
+    fn addresses_gone_quiet_are_forgotten() {
+        let limits = Limits::new(Rules::default());
+        // Closed within its first minute: the entry outlives the socket.
+        drop(limits.admit(ip("1.2.3.4")).unwrap());
+        let _held = limits.admit(ip("5.6.7.8")).unwrap();
+        assert_eq!(limits.ips.lock().unwrap().len(), 2);
+        let long_ago = Instant::now() - 2 * MINUTE;
+        for e in limits.ips.lock().unwrap().values_mut() {
+            e.since = Some(long_ago);
+        }
+        *limits.swept.lock().unwrap() = long_ago;
+        drop(limits.admit(ip("9.9.9.9")).unwrap());
+        let ips = limits.ips.lock().unwrap();
+        assert!(
+            !ips.contains_key(&ip("1.2.3.4")),
+            "a quiet address is dropped"
+        );
+        assert!(
+            ips.contains_key(&ip("5.6.7.8")),
+            "one with a socket open stays"
+        );
     }
 
     #[test]

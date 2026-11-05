@@ -1,0 +1,19 @@
+
+⏺ Calling Claude Docs… (ctrl+o to expand)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Tool use
+ Claude Docs — Guide Tool: (MCP)
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ items: ["topic.index"]
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ About the Claude Docs — Guide Tool:
+ │ Docs guides: topic.instructions repeats the server instructions. Read it only if your client
+ │ dropped them. Also topic.<name>, refusal.<code>. After a doc's birth → ["topic.index"].
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for Claude Docs — Guide commands in ~/t…
+   3. No
+
+ Esc to cancel · Tab to amend
