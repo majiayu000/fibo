@@ -6,19 +6,31 @@ use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
 
-/// A conversation as chat, named by its terminal or its session id.
-pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
-    let session = match (request["session"].as_str(), request["terminal"].as_str()) {
-        (Some(s), _) => s.to_owned(),
+#[cfg(test)]
+#[path = "chat_poll_tests.rs"]
+mod tests;
+
+/// The conversation a request names, by its session id or the terminal running it.
+pub(super) fn session_of(socket: &Path, request: &Value) -> io::Result<String> {
+    match (request["session"].as_str(), request["terminal"].as_str()) {
+        (Some(s), _) => Ok(s.to_owned()),
         (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
             Reply::Workspace(w) => w
                 .current_agent(t)
                 .map(|s| s.id.clone())
-                .ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话"))?,
-            other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+                .ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话")),
+            other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
-        (None, None) => return Err(io::Error::other("chat 需要 terminal 或 session")),
-    };
+        (None, None) => Err(io::Error::other(format!(
+            "{} 需要 terminal 或 session",
+            request["op"].as_str().unwrap_or("chat")
+        ))),
+    }
+}
+
+/// A conversation as chat, named by its terminal or its session id.
+pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
+    let session = session_of(socket, request)?;
     let reply = rpc(
         socket,
         &Request::Chat {
@@ -30,12 +42,29 @@ pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
         },
     )?;
     match reply {
-        Reply::Chat { messages, more } => Ok(json!(rp::Chat {
+        // The page without anything older is where a reader would otherwise take a log read
+        // part way for the conversation's start, or for an empty one.
+        Reply::Chat {
+            messages,
+            more,
+            partial,
+        } => Ok(json!(rp::Chat {
             session,
             messages: messages.into_iter().map(message).collect(),
             more,
+            partial: partial && !more,
         })),
         Reply::Error(e) => Err(io::Error::other(e)),
+        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+    }
+}
+
+/// `backfill`: reads the next stretch of a conversation's log. Replies once there is about a
+/// page more of its messages, or a second has passed: the client asks until `done`.
+pub(super) fn backfill(socket: &Path, request: &Value) -> io::Result<Value> {
+    let session = session_of(socket, request)?;
+    match rpc(socket, &Request::Backfill { session })? {
+        Reply::Backfilled { added, done } => Ok(json!(rp::Backfilled { added, done })),
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }
@@ -50,16 +79,21 @@ fn message(m: ChatMessage) -> rp::Message {
             rp::Speaker::Agent
         },
         text: m.text,
-        tools: m.tools.map(|t| rp::Tools {
-            commands: t.commands,
-            files: (t.files.into_iter())
-                .map(|(path, added, removed)| rp::FileLines {
-                    path,
-                    added,
-                    removed,
-                })
-                .collect(),
-            took: t.took,
-        }),
+        tools: m.tools.map(tools),
+    }
+}
+
+pub(super) fn tools(t: ChatTools) -> rp::Tools {
+    rp::Tools {
+        commands: t.commands,
+        files: (t.files.into_iter())
+            .map(|(path, added, removed)| rp::FileLines {
+                path,
+                added,
+                removed,
+            })
+            .collect(),
+        took: t.took,
+        calls: t.calls,
     }
 }

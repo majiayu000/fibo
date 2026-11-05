@@ -8,9 +8,11 @@
 
 | 日期 | 决定 | 状态 |
 |---|---|---|
+| 2026-11-06 | [Agent 身份先于聊天记录](2026-11-06-agent-identity-before-transcript.md) | 采用 |
 | 2026-11-03 | [鸟瞰看板拖起卡片时倾斜](2026-11-03-tilt-board-cards-while-dragging.md) | 否定 |
 | 2026-11-03 | [后台 shell 一律算等后台](2026-11-03-count-background-shells-as-waiting.md) | 被取代 |
 | 2026-11-03 | [后台 shell 按监听端口分任务和服务](2026-11-03-split-background-shells-by-listening-port.md) | 采用 |
 | 2026-11-04 | [后台 shell：脚本自己连的端口不算服务，规则和真实案例记在这一处](2026-11-04-background-shell-own-client.md) | 采用 |
 | 2026-11-05 | [第一版图标用系泊环，信号黄加墨色](2026-11-05-mooring-ring-icon.md) | 采用 |
 | 2026-11-05 | [工作台主库改 synchronous=NORMAL](2026-11-05-workbench-db-synchronous-normal.md) | 采用 |
+| 2026-11-05 | [本地 main 只跟随远端](2026-11-05-local-main-follows-origin.md) | 采用 |

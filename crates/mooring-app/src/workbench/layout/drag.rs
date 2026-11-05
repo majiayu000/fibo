@@ -180,7 +180,7 @@ impl Workbench {
     }
     /// The title's mark: hovering the bar swaps it for the move arrows, as the whole
     /// title lights up, so the bar reads as a handle before it is pressed.
-    pub(super) fn grip_mark(&self, id: &str, session: Option<&AgentSession>) -> gpui::Div {
+    pub(super) fn grip_mark(&self, id: &str, agent: Option<Agent>) -> gpui::Div {
         let group = grip_group(id);
         let size = px(T::BOARD_MARK);
         let arrows = gpui::svg().path("icons/move.svg").size(size);
@@ -195,7 +195,7 @@ impl Workbench {
                 div()
                     .flex()
                     .group_hover(group.clone(), |s| s.opacity(0.))
-                    .child(mark(session.map(|s| s.runtime), T::color(T::secondary()))),
+                    .child(mark(agent, T::color(T::secondary()))),
             )
             .child(
                 div()

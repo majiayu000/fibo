@@ -152,7 +152,7 @@
 ### 和设计稿还不一样的地方
 
 - 一键回复「打包并安装 / 先别」：那是从 Agent 的自由文字里猜的，不做。编号选项和问题工具的选项照旧。
-- 工具摘要点开「看每条命令」：现在有改动时打开改动页，没做逐条列表。
+- 工具摘要点开「看每条命令」：现在有改动时打开改动页，没做逐条列表。（已做，见下面「工具调用的完整还原」。）
 - 附件按钮、审批失效时间、后果说明：不做（见上文）。
 - 选目录底部「上一级」换成了「设为空间」，和设计稿一致；上一级用顶部路径点回去。
 - 只配了一台电脑时，会话标题栏不写电脑名，给分支和状态词留位置；配了多台才写。
@@ -166,3 +166,281 @@
 ### 怎么复现
 
 `cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture` 起演示电脑（假 Agent、真后台、真中继、独立的 HOME 和真 git 仓库），`cd mobile && bunx expo start --web`，粘贴打印的链接。对照图是 [v2-compare/](v2-compare/) 的 `gaps-*.png`，左设计稿右 App。测试在 `crates/mooring-host/tests/remote_v2_gaps.rs`。
+
+## 工具调用的完整还原（2026-11-05，分支 feat/phone-tools）
+
+**决定：协议、打码、读日志和界面采用；「真手机上好不好用」待验证。放弃条件：真手机打开一段清单超过 1 秒，或者同一台手机再出现多条连接。**
+
+要支撑的决定：离开电脑时，能不能只靠手机看懂 Agent 到底做了什么（用户：「还原挺重要」）。
+
+### 协议
+
+| op | 请求 | 回复 `ok` | 权限 |
+|---|---|---|---|
+| `toolcalls` | `{session 或 terminal, seq?, after?, limit?}`。`seq` 是这段工作引出的 Agent 消息；不写就是最后一条消息之后（一轮还在跑时用）。`limit` 默认 100，最多 200 | `{session, tools?, calls:[{id, name, kind, label, at, took_ms?, failed, code?, open?, size?}], next?, gone?}`。`tools` 只在第一页 | 三档 |
+| `toolcall` | `{session 或 terminal, call}` | `{…同上一条, input_kind, input:{total, head, tail, tail_at}, output?, steps?, note?}` | 三档 |
+| `toolcall` 分段 | 再加 `part:"input"/"output"`, `offset` | `{part, offset, text, next, total}`，每段 64 KiB | 三档 |
+
+`chat` 的 `tools` 加 `calls`（这段的工具调用总数），只有读文件、搜索的一段也能点开。`Request::ToolCalls`、`ToolCall` 只给行号和偏移，不读日志。
+
+和任务描述的出入：单条默认给输入两端 24 KiB + 8 KiB、输出两端 48 KiB + 16 KiB（按 JSON 转义后的字节算），实测单次回复最大 65 KB，MAX_LINE 是 1 MiB。清单和单条都在 `usage` 那样的独立线程里跑，不占请求队列。
+
+### 怎么读
+
+- **不靠截断的索引，也不扫日志。** `session_records` 每行记着日志的 inode 和这一行的起始偏移。后台用单独的 SQLite 连接（`fork_current`，WAL 读不挡写，也不拿后台的大锁）查出行号和偏移，`mooring remote` 进程自己 seek 过去读那一行。一行最多读 32 MiB，超过的写「这条输出超过 32 MB，手机不显示」，不算记录不在；同一进程同时只读一个；清单读够 3 秒就停，剩下的不给 `size`，手机 10 秒的请求上限不会被碰到。
+- **文件对不上就说不在。** 打开失败、inode 不同、那一行解析不出来：单条报「原始记录已不在」，清单仍给索引留下的说明并带 `gone:true`，手机写「只剩下这份清单」。
+- **Claude**：按 `tool_use.id` / `tool_use_id` 在这一行的内容块里找（一行可能有多个）。`is_error` 只算失败，没有退出码；输出首行或末行写了 `Exit code N` 才显示 N（索引把 `is_error` 记成 1，显示出来会误导）。
+- **Codex**：`function_call`、`custom_tool_call`、`CommandExecution` 都认。`exec` 脚本用 `agents/codex_script.rs` 拆：跳过字符串和注释，读 `tools.x(...)` 里写死的字符串。真实日志里脚本用到的工具主要是 `exec_command`、`web__run`、`write_stdin`、`apply_patch`、`view_image`。运行时才拼出来的命令和补丁写明「读不到内容」，详情页也有一句说明。只跑命令、且命令有自己一行的脚本不单独列，否则同一条命令出现两次。`write_stdin` 的结果归到原命令上。
+- **其他 Agent**：`toolcalls`、`toolcall` 回「这个 Agent 还不支持查看工具详情」，判断走 `Adapter::reads_tools`。
+
+### 打码
+
+`crates/mooring-host/src/redact.rs` 的 `redact` 是唯一入口，由 `tool_text::clean` 调用：去终端颜色和控制字符、长 base64 换成占位、然后打码。**所有切片都从打码后的文本上切**，所以密钥不会跨在切口上，offset 每次也一样。清单的一行说明也是先打码再截短，截短后的半截密钥就认不出来了。规则：私钥块（没写完也隐藏到结尾）、URL 里的账号密码、已知前缀（`sk-`、`ghp_`、`github_pat_`、`xox*`、`AKIA`、`AIza`、`glpat-`、`npm_`、`hf_`、`ya29.`、`sk_live_`、JWT 等）、`Authorization` 和 `Bearer`、`--token xxx`、名字带 token/secret/password/api_key/credential 的赋值。
+
+真实日志统计（最近 200 个日志，58,008 段工具文本，814 MB，`cargo test --release -p mooring-host --test redact_corpus -- --ignored --nocapture`，只输出计数，没有写出或提交原文）：
+
+| 规则 | 命中 | 不同取值 |
+|---|---|---|
+| 赋值 | 350 | 184 |
+| 已知前缀 | 32 | 24 |
+| `--token` 类参数 | 17 | 11 |
+| URL 账号密码 | 11 | 6 |
+| Authorization | 7 | 3 |
+| 私钥块 | 2 | 2 |
+
+有内容被隐藏的文本占 0.35%（任务里粗略正则的 2% 里误报多）。
+
+- **漏网，看形状估的，没有逐条读原文**：密钥名后面紧跟的随机串，隐藏后还剩 2 处。已知前缀还剩约 70 处，都比真实密钥短（规则要求的长度以下），多半是文档、测试里的示例或截断后的显示。名字不带这些词的密钥（比如随便起名的环境变量）规则认不出来，数不出有多少。
+- **误报，同样是估的**：赋值规则里 90 处隐藏的是全小写单词（如 `"token": "some-name"`），这类大半是误报；宁可多藏，所以保留。
+- 包含关键词的行上还有 2,870 处长串，绝大多数是标识符；像随机串的 181 处，其中紧跟 `=`/`:` 的 97 处，但前面的名字不带这些词，没有隐藏，也没法判断是不是密钥。
+
+变异验证：六条规则、GitHub 前缀、占位词豁免、`clean` 跳过打码（单元和 `--stdio` 各一遍）、清单说明 / 输入 / 输出不打码，逐个撤掉都有测试失败。
+
+### 手机
+
+- 会话页摘要行点开是 `/tools`（清单），再点是 `/tool`（单条）。一轮还在跑时，会话页底部多一行「看它到现在做了什么」。清单顶上一行「改了 x +a −b · 看改动」进改动页，会话标题栏的改动胶囊也保留。
+- 清单行高固定（62 pt，`getItemLayout`），每页 100 条，滑到底取下一页。失败的整行标红，写退出码。
+- 单条：输出 / 输入两个标签；等宽字（`ui/mono.ts`）；只画屏幕上的行（`ui/codeview.tsx`，行高固定）；整块横滑；超过 1000 字符的行分到下一行，不截断；两端之间写「中间还有 1.1 MB」，「再取一段」「全部取完」固定在列表上方。复制：没取完时写明「已复制取到的部分，中间还差 X」。
+- 只在点开时取，状态都在页面组件里，离开就没了。两个页面没有引用 `store/` 任何东西，网页版走完后查过 localStorage 里没有工具输出。
+- 旧电脑没有这个 op：显示 `NOT_YET`，摘要行点开后仍有改动入口。
+
+对照截图：[v2-compare/](v2-compare/) 的 `tools-*.png`（浅深各一张，真后台真中继，内容都是 `phone_gaps_demo` 里手写的，密钥是编的）。
+
+### 性能（`real_log_costs`，release 包，只打印耗时）
+
+| 日志 | 清单每页 p50 / p95 / 最大 | 单条 p50 / p95 / 最大 | 后台同时回复 p50 / p99 / 最大（单独跑时） |
+|---|---|---|---|
+| Claude 279 MB，500 条消息 | 3.9 / 5.6 / 13.7 ms | 3.4 / 4.2 / 4.2 ms | 0.10 / 0.32 / 14.6 ms（0.33 / 3.97 / 7.5 ms） |
+| Codex 87 MB，216 条消息 | 2.5 / 3.9 / 13.1 ms | 2.5 / 3.7 / 4.0 ms | 0.10 / 0.29 / 0.46 ms（0.45 / 3.15 / 3.9 ms） |
+
+后台回复是用 `ReadScreen` 持续探测（约 1000 次）：一边反复取清单和单条，一边看后台会不会变慢。看不出变慢。这两份日志里最大的输出（641 KB、5.1 MB）都是图片，单条耗时主要是读和解析那一行。纯文本长输出用手写的 38 MB 日志量（每条 680 KB，处处带可隐藏的内容，是打码最费的情况）：单条 p50 16.0 ms、最大 16.3 ms，分段每段 p50 15.8 ms、最大 16.8 ms，清单每页（100 条，每条读 680 KB）p50 5.4 ms、最大 29 ms，最大回复 64 KB。
+
+### 同一台手机 3 条连接：真问题，在手机，已修
+
+依据：
+
+- 电脑端 `online` 按会话列，一条 WebSocket 一项，没有重复显示。真机的 `remote-log.jsonl` 里 273 次 connected、268 次 left，按 1.5 秒内聚类最多一次连上 20 条，说明手机确实开了这么多连接。中继是一对一转发，电脑端的会话 id 由中继按每条 WebSocket 发，不会自己多出来。
+- 手机的 `hub.ts` 有三处配合起来出问题：
+  1. `connect` 只查 `remotes.has(id)`，而拨号完成才写进去，**拨号途中再调用就会再拨一条**。
+  2. 回前台和「重试」只 `retry.delete(id)`，**退避定时器没取消**，后面照样触发。`later` 覆盖 `r.timer` 时也不清旧的。手机在后台时 JS 定时器是冻住的，回前台一起触发，所以几条同时连上，`since` 只差几毫秒。
+  3. 新连接覆盖 `remotes` 后，**旧连接没人关**，还在发心跳；它断开时又把新连接从 `remotes` 里删掉，并各自排一次重连。于是下一次断网，N 条变成 N 次重连，数字只增不减。
+- 修法：同一台电脑只拨一条（`dialing`），取消重试统一走 `stopRetry`，只有当前连接的断开才算断开，拨到一半被移除或重新配对的连接自己关掉。`pair` 的握手检查也走同一个 `dial`。
+
+验证：
+
+- `mobile/test/hub.test.ts` 四条。换回旧的 `hub.ts`，其中三条失败。
+- 活的对比：真中继、真电脑，中间加 800 ms 延迟的代理模拟慢网，反复杀掉电脑端并切换前后台。旧版一轮出现 2 条；新版三轮都是 1 条。
+
+### 已验 / 没验
+
+已验：见上面各节；`bun test` 全过、两个 tsc 配置、`expo-doctor` 20/20；全量 cargo 和 clippy 的结果在提交说明里。网页版 390×844 浅深两色都走完了：清单、失败、长输出分段、取完、打码、图片占位、横滑、Edit 的 diff、进改动页。
+
+没验：
+
+- 真手机（iOS、Android 原生都没跑）：横向 ScrollView 套 FlatList 的手势、等宽字在安卓上的行高、复制几十万字符。
+- 最大的那份 4.2 GB 日志（2 GB 图片的 user 行、2.2 GB api-request-blob）：测试后台等了 4 分多钟，这份日志一条消息也没有进索引，所以没量到。原因没查，`chat` 同样依赖索引，应该是已有行为。其余日志的偏移读取和文件大小无关，但这一点没有在 4 GB 偏移上亲手量过。
+- 真 Codex 正在写的日志：格式来自最近 30 个真实 rollout 的结构统计和手写样例，界面没连过真 Codex 会话。
+- Claude Code 把超长输出存成文件（只在日志里留预览）的情况：看到的就是那份预览，没有跟进文件。
+- 相邻情况：Codex 的 `McpToolCall`、`FileChange`、`ImageView`、`Extension` 完成事件没进索引，它们只通过 `exec` 脚本的步骤和输出体现；Grok 等其他 Agent 只有一句不支持。
+
+### 怎么复现
+
+`cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（`review` 会话的第二段是这次加的），`cd mobile && bunx expo start --web`，粘贴打印的链接。杀掉 `mooring remote --relay` 进程，5 秒后它会自己起来，可以试重连。测试：`crates/mooring-host/tests/remote_tools.rs`。
+
+## 真机实测查出的问题（2026-11-05，分支 fix/phone-real-run）
+
+**决定：七条都采用；第 6 条的「回填更早的消息」已做，见下面「真机实测后留下的四件事」。放弃条件：真手机上审批卡片再写错命令，或点停下后 Agent 被退出。**
+
+要支撑的决定：离开电脑时，手机点的每个按钮是不是真的做了它写的事。
+
+### 新增的协议
+
+| op / 字段 | 内容 | 权限 |
+|---|---|---|
+| `ask` | `{terminal}` → `{question, kind, subject, note?, detail?, truncated?}`，读屏 400 行，画面上没有审批时报错。`subject` 空表示没认出布局 | 三档 |
+| `answer` | 加 `subject?`。带上时画面上的已经换了一条就拒绝（后来又加 `always_label`，见文末） | approve 和 full |
+| `stop` | 回复加 `closed_background`。状态不在跑才回复，7 秒内没停、Agent 没了都报错 | full |
+| `trust` | `{terminal, folder, trust, request}`：电脑核对目录和光标后按键，再确认提示没了 | full |
+| `list` 的卡片 | 加 `trust:{question, folder}`；状态由 `status::of_terminal` 决定，等你回答 | 三档 |
+| `send` | 提示信任时拒绝 | full |
+| `chat` | 加 `partial`：日志是从尾部开始读的 | 三档 |
+| `events` | 加 `trust` / `trust_gone` | 三档 |
+
+### 真实 CLI 的行为（Claude Code 2.1.318、Codex 0.166，临时目录）
+
+| 操作 | Codex | Claude Code |
+|---|---|---|
+| 跑命令时 Ctrl-C | 弹 Task is still running 菜单 | 中断 |
+| 空闲时 Ctrl-C | **退出 Codex**（Disconnected） | 只提示再按一次 |
+| 跑命令时 Esc | 这一轮中断，**命令接着跑**（1 background terminal running），日志要到命令结束才写 turn_aborted | 中断，命令也停 |
+| 菜单里 Cancel task | 同上面的 Esc | — |
+| `/stop` | 关掉全部后台命令 | — |
+| 信任提示 Esc | 进 Agent command center，Codex 没退出 | 退出 Claude Code |
+| 信任提示刚出现就按箭头 | — | 可能被吞，之后回车就是 No, exit（实测踩到） |
+| Codex 不在 git 仓库里 | 不问信任 | 照样问 |
+
+所以 `stop` 对 Codex 是：Esc，1.5 秒后还在跑且画面写着 `/stop to close` 才发 `/stop`。一轮没有命令时自己就结束了，这时什么都不关，更早的后台服务不受影响。
+
+### 第 6 条：最大的日志
+
+原因不是大小。那份 4.2 GB 是子代理自己的日志（`subagents/agent-*.jsonl`），行行带 `isSidechain:true`，解析按设计跳过，它的对话是父日志。「等 4 分多钟」是 `real_log_costs` 自己等满 500×0.5 秒。
+
+| 日志 | 读法 | 耗时 | 峰值内存 | chat 条数 |
+|---|---|---|---|---|
+| 4 211 MB 子代理 | 首次扫描 | 0.0 s | 8 MB | 0 |
+| 4 211 MB 子代理 | 整份（46 MB/s） | 90.7 s | 10 MB | 0 |
+| 279 MB 最大的真对话 | 首次扫描 | 0.0 s | 10 MB | 3 |
+| 279 MB 最大的真对话 | 整份（275 MB/s） | 1.0 s | 21 MB | 500（上限） |
+
+复现：`cargo run --release -p mooring-host --example index_bench -- claude <日志> [first]`，只出数字。
+
+相邻的真问题：电脑第一次见到一份已有日志时只读最后 128 KiB，超过 7 天的连这段也不读，手机看着像对话就这么长。这轮只让手机明说（`partial`）。
+
+回填的方案（当时没做，后来做了，见文末）：chat 按 rowid 排序和翻页，回填的旧行 rowid 反而更大。要改成按 `(offset, ordinal)` 排，`seq` 和手机的翻页游标一起换，再加一个后台任务按需读前面的部分（279 MB 约 1 秒）。读时持有索引的锁，要分段放开，否则 4 GB 那种要挡其他日志约 90 秒。
+
+### 第 4、7 条的统计（最近 30 个真实 rollout，只数不看内容）
+
+一句回复的写法：item+response 294，三处都有 120，只有 item 19，item+task_complete 15，只有 response 15。修复前记 568 条（445 种），修复后 477 条（464 种）；多出的 19 种是以前丢的，余下 13 条是真的说了两遍。升级前已索引的旧行在读取时跳过（相邻、一字不差、60 秒内），不重建：重建只读尾部，会丢历史。
+
+完成事件的覆盖率（有一行 / 日志里的总数）：McpToolCall 581/581（其中 44 条是新加的，其余本来有 function_call）、FileChange 26/26、ImageView 37/37、web.search 161/161、image_gen 42/42。`cargo test -p mooring-host --lib real_rollout_counts -- --ignored --nocapture`。
+
+运行时才拼出来的 patch：**能靠 FileChange 解决文件和行数**（统计时 47 个文件里有 4 个在脚本原文里找不到），前提是这个 Codex 版本写这个事件；脚本里拼补丁的代码本身还是读不到。
+
+### 对照截图
+
+[v2-compare/](v2-compare/) 的 `real-*.png`，网页版连真后台真中继（`phone_gaps_demo`，假 Agent 画的是真实画面），路径是改过的。
+
+### 已验 / 没验
+
+已验：见汇报和各提交说明；真 CLI 跑过的有 `ask`、`answer` 带 subject、`always`（选第 2 项，模式没变成 auto）、`stop`（`sleep` 进程真的没了，Agent 还在）、`trust` 两种回答、一句一条、FileChange 进清单。
+
+没验：真手机（iOS、Android）；真 Claude Code 的「不再询问」之后第二次还会不会问；旧版 Codex（没有那个菜单的版本，只用假 Agent 验了 Esc）；旧版 Claude Code 带数字的信任画面（没有认）；MCP 审批在真手机上的长说明；桌面窗口。
+
+相邻情况（前两条后来修了，见文末）：桌面「中断（Ctrl-C）」还发 Ctrl-C，Codex 上会弹菜单，空闲时会退出 Codex；Codex 中断后卡片写「等你验收」不是「停下了」，原因没查；只有 `send` 在信任提示时被拒，`keys` 和 `input` 还能按。
+
+## 真机实测后留下的四件事（2026-11-05，分支 fix/phone-safety）
+
+**决定：四条都采用；「真手机上第一次点允许没反应」待真机验证。放弃条件：真手机上再出现点到别的卡片，或翻到头后手机卡住。**
+
+要支撑的决定：手机上批准的是不是眼睛看到的那一条，按钮写的是不是它真做的事，翻到头能不能看全对话。
+
+### 1. 收件箱不再把别的卡片换到手指下面
+
+排序是纯函数 `ui/inbox.ts` 的 `arrange`。要你处理的（审批、问题、信任提示）固定在最上面，按出现先后，新来的放后面，互相变种类也不动；其余的照旧按状态和最近活动排，不影响上面。断线电脑的卡片答不了，不钉，回来时排最后；离线横条放到它们下面。
+
+手指按着或滚动时整张收件箱停在上一次（`useHold`）：抬手或静止 150 ms 后才换，手指一直不抬 10 秒后放开（触摸结束事件丢了不能冻结）。卡片刚出现、命令或说明刚换、刚挪位置（第几张、`onLayout` 的 y 和高度）的 600 ms 内按钮变灰，点了没有效果，也不落到整行上打开会话。答完到列表刷新之前按钮也是灰的，第二下不会答到下一条。`useAsk` 不再因为日志动了就清空已读到的命令（之前会退回问句、行变高、下一次多问一次）。拒绝也带 `subject`。`answer` 带 subject 的核对没动。
+
+第一次点「允许」没反应：没有真机上的证据能定是哪个原因。看过的：按钮里的文字不抢手势（网页真实触摸点文字，第一下就生效）；`Pressable` 按下时量好区域，手指在区域外松手算没按（`Pressability.js`），列表这时重排就丢这一下，现在按着不重排；键盘在时第一下只收键盘，加了 `keyboardShouldPersistTaps="handled"`；发送途中没有任何反馈，看着像没反应，现在变灰。真机上还要看一遍。
+
+旧版和新版对照（网页，真实触摸事件，同一份桩数据）：
+
+| 情形 | 旧版 | 新版 |
+|---|---|---|
+| 瞄准第一张的允许，另一张日志一动抢了位置 | 瞄准卡 A，答到卡 B | 瞄准的就是答到的 |
+| 手指按住时列表重排，然后松手 | 瞄准卡 A，答到卡 B | 瞄准的就是答到的 |
+
+其他 15 项（新卡片刚出现时点无效且不打开会话、等够后点文字第一下生效、上面的走了这张移上来时无效、按着和滚动中不重排、松手和停稳后才应用、详情页按钮等）都看过结果。
+
+### 2. 「以后不再询问」改成菜单这一项自己的话
+
+`ask` 多一个 `always`：电脑把这一项的原话转述成中文（`screen_ask::always_words`），认不出的写法原样给 CLI 的话，不猜。没有这一项就没有这个字段，手机没有按钮。按钮可以多行，路径不截断；二次确认也写这句。`answer` 带 `always_label`：菜单这一项变了就拒绝。
+
+| 菜单原话 | 按钮 |
+|---|---|
+| Yes, and always allow access to /Users/x/t from this project | 允许，这个项目以后都能访问 /Users/x/t |
+| Yes, and don't ask again for git push commands | 允许，git push 命令以后不再询问 |
+| Yes, and don't ask again for: git push * | 允许，git push * 以后不再询问 |
+| Yes, and don't ask again for touch a.txt, rm -f a.txt, and touch b.txt commands in /Users/x/t | 允许，/Users/x/t 里的 touch a.txt, rm -f a.txt, and touch b.txt 命令以后不再询问 |
+| Yes, and don't ask again for example.com | 允许，example.com 以后不再询问 |
+| Yes, and switch to accept edits (…) for this session (shift+tab) | 允许，并切到自动接受编辑：这次会话里改文件和常用文件命令都不再询问 |
+| Yes, and don't ask again for this command in this session (a) | 允许，这条命令这次会话里不再询问 |
+| Yes, and don't ask again for these files (a) | 允许，这些文件以后不再询问 |
+| Yes, and don't ask again for commands that start with `x` (p) | 允许，`x` 开头的命令以后不再询问 |
+
+真 Codex 0.166 看到的是最后一种，选了之后 `touch hello.txt` 真的跑了。
+
+### 3. 桌面的中断和手机是同一个所有者
+
+手机 `stop` 里「等它停下、关掉留下的命令」挪进后台（`Request::AwaitInterrupt`，`host/client/stop.rs`）。桌面和手机都发 `Interrupt` 加 `AwaitInterrupt`，按什么键由 `Adapter::interrupt_key` 决定。
+
+桌面菜单（`workbench/pane_menu.rs`）：有 Agent 的终端写「中断这一轮」，它不在干活时变灰并说明；普通 shell 还写「中断（Ctrl-C）」，发 Ctrl-C。没停下时的原因显示在提示条。
+
+顺带查清上一轮留下的问题：真 Codex 中断后写「等你验收」，是因为它随后发 OSC 7501 idle，旧的读法把这个词当成回合做完，盖掉日志的 `turn_aborted`。`origin/main` 的 `program_state::apply` 已经修了，这里用它。
+
+真 Codex 0.166（临时 HOME 和 CODEX_HOME，独立 runtime，`sleep 45`；变基前跑的，当时用的是这里自己的 idle 修复，变基后没再跑真 CLI）：停下 2.0 秒，`sleep` 进程没了，Codex 还在，卡片「停下了」，5 秒后仍是；空闲时点停下被拒绝，Codex 还在。
+
+### 4. 翻到头时读回更早的部分
+
+| op / 字段 | 内容 | 权限 |
+|---|---|---|
+| `backfill` | `{session 或 terminal}` → `{added, done}`。读下一段，凑够一页消息、读满 64 MiB 或约 0.8 秒就回；客户端问到 `done`，再 `chat before`。只改电脑本地索引 | 三档 |
+| `chat` 的 `seq` | 现在是日志里的位置（`offset*4096+ordinal+1`），后读进来的旧行排在前面，已有的 seq 不变 | 三档 |
+| `chat` 的 `partial` | 只在还有没读的部分时才有；读到日志开头后不再写 | 三档 |
+
+和方案的差别：`chat` 只给从「读到哪」开始的连续部分。第一次读取从日志头留下的第一句在没读那段的另一侧，从它往前翻会跳过整段，所以读完之前不放在页面里。代价：尾部没有消息的对话，手机先是空的，写「点这里读」。
+
+读法：每段 8 MiB，一段一个小事务；单独的线程和连接，QoS 降到 utility，段之间停 20 ms，同一时间只读一份；不碰卡片和解析器状态；已有索引不重建（只加一张 `log_backfill` 记进度）。一行比一段还长时跳过这一行。文件换了从新位置重来。
+
+真实日志（release，独立 runtime，`cp -c` 的克隆或只读打开；`real_backfill_costs`、`examples/backfill_bench.rs`，只出数字）：
+
+| 日志 | 第一次 | 读回 | 调用次数 / 最慢一次 | 峰值内存 | 结果 |
+|---|---|---|---|---|---|
+| Claude 279 MB | 2 条 | 1.9 s | 11 / 301 ms | 16 MB | 635 条，顺序对 |
+| Codex 122 MB | 3 条 | 0.9 s | 2 / 519 ms | 13 MB | 45 条 |
+| 子代理 4.2 GB | 0 条 | 26.7 s | 63 / 563 ms | 10 MB | 0 条（设计如此，它不算对话） |
+
+对后台的影响（279 MB，一边读回一边用 `ReadScreen` 探测，真后台、活着的终端）：读回时 p50 0.11 / p99 0.31 / 最大 0.98 ms；单独跑时 0.31 / 1.51 / 4.15 ms，看不出变慢。读回时 `chat` 带 tools 每次 p50 1.62 ms、最大 2.21 ms。
+
+网页版连真后台：600 轮的演示长对话，从第 597 句一路翻到第 0 句，出现过「点这里读」和「正在读更早的消息…」，到头后这两句都没了。
+
+### 对照截图
+
+[v2-compare/](v2-compare/) 的 `safety-inbox.png`、`safety-approve.png`、`backfill-before.png`、`backfill-reading.png`、`backfill-top.png`：网页版连真后台真中继，内容是 `phone_gaps_demo` 里手写的。
+
+### 已验 / 没验
+
+已验（变基到 origin/main 后）：全量 `cargo test`（core、remote、host、relay）657 个通过、0 失败、31 个按设计忽略；`cargo fmt --check`、`clippy --workspace --all-targets -D warnings`；`bun test` 109 个通过；两个 tsc 配置；`expo-doctor` 20/20。网页真实触摸 15 项和旧新对照的新版一侧在变基中途重跑过，手机代码之后没变。
+
+变基前做的，之后没重做：第 1、2 条的 19 个变异，真 Codex，真后台的网页走查，耗时和内存。
+
+变基时全量跑过一次有 3 个失败，都发生在机器负载 50 到 70 时：`remote_ask_names_the_command_and_answers_only_about_it` 和 `remote_answer_always_takes_dont_ask_again_and_refuses_a_menu_without_it` 是等绑定超时，单独连跑 3 次全过；`a_dialog_gone_from_the_screen_is_settled_by_claude_official_status` 在负载 50 多时单独跑 5 次败 3 次，负载 25 左右本分支 8 次全过、origin/main 6 次全过。没在高负载下跑过 origin/main，所以它是不是这个分支引入的没有排除干净。
+
+没验：
+
+- 真手机（iOS、Android 原生）：`onTouchStart` 冻结、`onLayout` 报位置变化、600 ms 灰按钮的手感、第一次点没反应这个现象本身。网页的 `onLayout` 不报纯位置变化，所以「第几张」一起算；上面那张变高、这张被挤下去，只有原生才等 600 ms，网页版没验到。网页用鼠标时不冻结，只有触摸才冻结。
+- 真 Claude Code 走一遍新的 `ask` 和按钮：菜单原话来自已存的真实画面（2.1.318），这次没再起真 Claude，因为它要用真 HOME，会触发用户自己的 hook。
+- 桌面窗口真点「中断这一轮」：只有菜单文字和判断的单测、同样两个请求直发后台的测试，窗口没开。
+- 真手机上翻 279 MB；读回时写索引和后台自己写库的竞争只在这份日志上量过，没有多份同时动。
+
+相邻情况：
+
+- Agent 在「等你回答」时桌面的「中断这一轮」是灰的（后台本来就拒绝），要中断得在终端里自己按，或用「停止 Agent」。
+- 只有 Claude 和 Codex 真跑过；其他 Agent 的按键仍是默认 Ctrl-C，读回走同一个解析器，没单独测。
+- 别台电脑的终端（多机）在桌面上的中断没动，看的是本机 `current_agent`，没有 Agent 记录时仍发 Ctrl-C，Codex 上有同样的问题，没验。
+- seq 数字变了：升级后台时正开着的手机会话，下一次轮询可能带旧的小数字，重开这一屏才对。
+- 真实索引里 40 张卡片 `partial_history` 为真、`from_offset` 是 0（其中 31 张看着只读了尾部，日志都建于 11-02、11-03，推测是这个字段加上之前读的，没查实）。按 plan.md「不为旧格式留兼容」不去推算起点：它们读不回，手机写原来那句「更早的消息没有读进来」，要回电脑看。
+- 只有 `send` 在信任提示时被拒，`keys` 和 `input` 还能按（上一轮留下的，没动）。
+
+### 怎么复现
+
+`cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（多了 `long-history` 这张长对话），`cd mobile && bunx expo start --web`，粘贴链接。耗时：`MOORING_TOOLS_LOG=<日志> cargo test --release -p mooring-host --test remote_backfill -- --ignored --exact real_backfill_costs --nocapture`，`cargo run --release -p mooring-host --example backfill_bench -- claude <日志>`。

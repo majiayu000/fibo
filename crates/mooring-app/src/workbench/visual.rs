@@ -247,7 +247,7 @@ impl Workbench {
             Column::Done,
         ]
         .into_iter()
-        .find(|c| c.id() == column)?;
+        .find(|c| c.key() == column)?;
         let bounds = self
             .overview
             .columns
@@ -283,7 +283,7 @@ impl Workbench {
             .expect("right mouse opened pane menu");
         let zoomed = self.nav.zoomed.as_deref() == Some(&menu.terminal);
         let mut y = T::S6;
-        for row in super::layout::menu_rows(zoomed) {
+        for row in super::pane_menu::menu_rows(zoomed, true) {
             match row {
                 Some(t) if t == title => {
                     return menu.position + gpui::point(px(T::S20), px(y + T::ROW / 2.));
@@ -721,7 +721,7 @@ impl Workbench {
         self.nav.zoomed = None;
         self.nav.space = "s0".into();
         self.nav.tab = Some(
-            if name == "TodoStart" {
+            if matches!(name, "TodoStart" | "UnboundAgent") {
                 "start"
             } else {
                 "feedback"
@@ -737,7 +737,7 @@ impl Workbench {
             // The status bar's 工作中 popover beside the sidebar: one session, one color.
             "StatusSessions" => self.statusbar = Some(super::statusbar::StatusPop::Sessions),
             // Main is the window as it opens (docs/ui-v3/v3-4.png); 看进度's card has its own.
-            "Main" | "MainSpace" => {}
+            "Main" | "MainSpace" | "UnboundAgent" => {}
             "HereClickOut" => {
                 self.overview.here = self.workspace.current_agent("p0").map(|s| s.id.clone())
             }

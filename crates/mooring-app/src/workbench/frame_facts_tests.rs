@@ -2,6 +2,46 @@ use super::*;
 use crate::workbench::tests::fixture;
 use mooring_core::content::{Content, Turn};
 
+#[test]
+fn pane_agent_uses_process_identity_before_a_transcript_and_before_history() {
+    let mut w = fixture();
+    let mut recognized = HashMap::from([("t0".into(), Agent::Codex)]);
+    let facts = |w: &Workspace| FrameFacts::work_out(w, inputs(w, &HashMap::new(), 100));
+    assert_eq!(
+        facts(&w).pane_agent(&w, &recognized, "t0"),
+        Some(Agent::Codex)
+    );
+    assert!(
+        w.current_agent("t0").is_none(),
+        "a mark is not a conversation"
+    );
+    assert_eq!(facts(&w).pane_agent(&w, &recognized, "t3"), None);
+    recognized.clear();
+    assert_eq!(
+        facts(&w).pane_agent(&w, &recognized, "t0"),
+        None,
+        "exit clears an unbound mark"
+    );
+    // A new CLI must not inherit the mark of an older conversation on this pane.
+    recognized.insert("t1".into(), Agent::Claude);
+    assert_eq!(
+        facts(&w).pane_agent(&w, &recognized, "t1"),
+        Some(Agent::Claude)
+    );
+    // Once bound, the conversation supplies its identity. Historical display is retained.
+    w.agent_sessions[0].current = true;
+    assert_eq!(
+        facts(&w).pane_agent(&w, &recognized, "t1"),
+        Some(Agent::Codex)
+    );
+    w.agent_sessions[0].current = false;
+    recognized.clear();
+    assert_eq!(
+        facts(&w).pane_agent(&w, &recognized, "t1"),
+        Some(Agent::Codex)
+    );
+}
+
 /// What the window worked out by walking every session before these were remembered:
 /// the facts must give the same answer for any workspace.
 fn assert_same_as_walking(w: &Workspace, resumed: &HashMap<String, String>, now: u64) {

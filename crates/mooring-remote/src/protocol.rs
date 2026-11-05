@@ -8,6 +8,10 @@ use serde_json::{Map, Value};
 
 pub const VERSION: u32 = 1;
 pub const MAX_LINE: usize = 1 << 20;
+pub use crate::asks::*;
+pub use crate::chat::*;
+pub use crate::tools::*;
+pub use crate::usage::*;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Request {
@@ -63,8 +67,9 @@ pub enum Op {
         request: Option<String>,
     },
     /// Answers the approval asking `question`; refused if it is no longer on screen.
-    /// `always` takes the menu's 「don't ask again」 option instead, refused when it has
-    /// none: never a plain allow in its place.
+    /// `always` takes the menu's 「don't ask again」 option, refused when it has none: never
+    /// a plain allow in its place. `subject` and `always_label` are what the client showed
+    /// ([`Ask`]): refused if the screen now asks or offers something else.
     Answer {
         terminal: String,
         question: String,
@@ -72,7 +77,24 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         always: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        subject: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        always_label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
+    },
+    /// Answers a card's [`TrustAsk`]; the machine reads the screen around each key.
+    Trust {
+        terminal: String,
+        folder: String,
+        trust: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
+    /// What the approval on a terminal's screen asks about: [`Ask`]. An error when it shows
+    /// none.
+    Ask {
+        terminal: String,
     },
     /// A conversation as chat: [`Chat`]. Names the `terminal` running it (its current
     /// conversation) or the `session`. Without `after` or `before`, the newest `limit`
@@ -194,6 +216,43 @@ pub enum Op {
     },
     /// The account limits each Agent last reported, within a week: [`Quotas`].
     Quota,
+    /// Reads the next stretch of a conversation's log its first read skipped (names its
+    /// `terminal` or `session`): [`Backfilled`]. Then `chat` with `before` has the messages.
+    Backfill {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+    },
+    /// The tool calls of one stretch of a conversation (names its `terminal` or `session`):
+    /// [`ToolCalls`]. `seq` is the Agent message they led to (none: since the last message);
+    /// `after` is the `next` of the page before; `limit` defaults to 100, at most 200.
+    ToolCalls {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seq: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        after: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u64>,
+    },
+    /// One call in full, from its raw log lines, secrets hidden: [`ToolCallDetail`], the
+    /// head and tail of its input and output. With `part` (`input` or `output`) and
+    /// `offset`: the next stretch of that text, [`ToolSlice`].
+    ToolCall {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+        call: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        part: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        offset: Option<u64>,
+    },
 }
 
 impl Op {
@@ -206,6 +265,8 @@ impl Op {
             Self::Keys { .. } => "keys",
             Self::Input { .. } => "input",
             Self::Answer { .. } => "answer",
+            Self::Ask { .. } => "ask",
+            Self::Trust { .. } => "trust",
             Self::Chat { .. } => "chat",
             Self::Events => "events",
             Self::Watch { .. } => "watch",
@@ -223,6 +284,9 @@ impl Op {
             Self::LastSession { .. } => "lastsession",
             Self::AddSpace { .. } => "addspace",
             Self::Usage { .. } => "usage",
+            Self::ToolCalls { .. } => "toolcalls",
+            Self::Backfill { .. } => "backfill",
+            Self::ToolCall { .. } => "toolcall",
         }
     }
 }
@@ -236,6 +300,8 @@ pub const OPS: &[&str] = &[
     "keys",
     "input",
     "answer",
+    "ask",
+    "trust",
     "chat",
     "events",
     "watch",
@@ -253,6 +319,9 @@ pub const OPS: &[&str] = &[
     "lastsession",
     "addspace",
     "usage",
+    "toolcalls",
+    "toolcall",
+    "backfill",
 ];
 
 /// A line from the machine.
@@ -405,6 +474,14 @@ pub struct Card {
     /// Waiting on you or failed, as the desktop counts 要你处理.
     #[serde(default)]
     pub needs_you: bool,
+    /// It asks to be trusted with its folder before anything else; answer with `trust`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust: Option<TrustAsk>,
+    /// The board column the host put it in (`status_group::Column::key`: needs,
+    /// running, review, done, stale); absent for shells, for conversations off the
+    /// board, and from hosts before 11-05.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<String>,
     /// An Agent runs here but no conversation is tied to it (e.g. a Codex on the shared
     /// daemon): `agent` says which, this says so in the user's words. Phase stays `shell`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -452,43 +529,6 @@ pub struct Text {
 }
 
 /// The reply to `chat`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Chat {
-    pub session: String,
-    /// Oldest first.
-    pub messages: Vec<Message>,
-    /// Older messages exist before the first: ask again with `before`.
-    pub more: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Message {
-    /// Grows with each message; the cursor for `after` and `before`.
-    pub seq: i64,
-    /// Seconds since the epoch.
-    pub at: u64,
-    pub role: Speaker,
-    pub text: String,
-    /// With `chat`'s `tools`, on Agent messages.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Tools>,
-}
-
-/// The tool calls between an Agent message and the message before it.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Tools {
-    /// Shell commands run.
-    pub commands: u32,
-    /// Files changed, in the order first touched.
-    pub files: Vec<FileLines>,
-    /// Seconds this stretch of work took; absent when the log cannot say.
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub took: u64,
-}
-
-fn is_zero(n: &u64) -> bool {
-    *n == 0
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileLines {
@@ -594,50 +634,6 @@ pub struct LastSession {
     /// The terminal it still runs in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal: Option<String>,
-}
-
-/// The reply to `usage`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Usage {
-    pub since: u64,
-    pub agents: Vec<AgentUsage>,
-    /// The logs are not all read yet; ask again for the rest.
-    pub partial: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentUsage {
-    pub agent: String,
-    /// Input and output, new to the model: cache writes count, cache reads do not.
-    pub tokens: u64,
-    /// Read back from its cache, counted apart: a long session re-reads its whole context
-    /// on every call, so these run a hundred times the rest.
-    pub cached: u64,
-}
-
-/// The reply to `quota`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Quotas {
-    pub agents: Vec<AgentQuota>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentQuota {
-    /// `claude`, `codex`… as cards name them.
-    pub agent: String,
-    pub plan: String,
-    /// When the CLI recorded it, Unix seconds.
-    pub at: u64,
-    pub windows: Vec<QuotaWindow>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QuotaWindow {
-    pub minutes: u32,
-    /// Percent used.
-    pub used: u16,
-    /// Unix seconds; 0 when unknown.
-    pub resets_at: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
