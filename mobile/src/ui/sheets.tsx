@@ -1,12 +1,12 @@
 // Two bottom sheets: one asks for a sentence (要求修改, 拒绝并告诉它), one shows a
 // terminal's last lines.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, TextInput, View } from 'react-native';
 import { remote } from '../remote/hub';
-import { CodeView } from './codeview';
+import { CodeView, LINE } from './codeview';
 import { copyWithNote } from './copy';
 import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
-import { textRows } from './toolview';
+import { opensAtEnd, textRows } from './toolview';
 import { useTheme } from './theme';
 
 function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -82,6 +82,7 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   const [note, setNote] = useState('');
   const closed = useRef(false);
   const { width } = useWindowDimensions();
+  const rows = useMemo(() => textRows(text), [text]);
   useEffect(() => {
     closed.current = !visible;
     if (!visible) return;
@@ -106,7 +107,7 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
       {!!note && <Notice text={note} style={{ paddingVertical: 2 }} />}
       {text && !error ? (
         <View style={[s.screen, { backgroundColor: t.well }]}>
-          <CodeView rows={textRows(text)} gap={noGap} footer={8} room={width - SHEET_PAD * 2} atEnd />
+          <CodeView rows={rows} gap={noGap} footer={8} room={width - SHEET_PAD * 2} atEnd={opensAtEnd(rows.length, SCREEN_HEIGHT, LINE)} />
         </View>
       ) : (
         <Text style={{ color: t.dim, fontSize: 14, paddingVertical: 24, textAlign: 'center' }}>{error || (loaded ? '画面是空的' : '…')}</Text>
@@ -117,6 +118,7 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
 }
 
 const SHEET_PAD = 16;
+const SCREEN_HEIGHT = 440;
 const noGap = () => <View />;
 
 const s = StyleSheet.create({
@@ -125,5 +127,5 @@ const s = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 17, fontWeight: '600' },
   input: { minHeight: 96, borderRadius: 14, padding: 12, fontSize: 15, textAlignVertical: 'top' },
-  screen: { height: 440, borderRadius: 12, overflow: 'hidden' },
+  screen: { height: SCREEN_HEIGHT, borderRadius: 12, overflow: 'hidden' },
 });

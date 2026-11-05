@@ -1,9 +1,16 @@
 // A tool's text as the phone holds and draws it: bytes against the machine's offsets, the gap
 // between head and tail, rows of one height however long a line is.
 import { describe, expect, test } from 'bun:test';
-import { allText, byteLength, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, textRows, took, toolName, viewRows } from '../src/ui/toolview';
+import { allText, byteLength, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, opensAtEnd, textRows, took, toolName, viewRows } from '../src/ui/toolview';
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
+
+describe('a terminal in its sheet', () => {
+  test('opens at the end only when it does not fit', () => {
+    expect(opensAtEnd(12, 440, 19)).toBe(false);
+    expect(opensAtEnd(40, 440, 19)).toBe(true);
+  });
+});
 
 describe('words for a call', () => {
   test('sizes and times', () => {

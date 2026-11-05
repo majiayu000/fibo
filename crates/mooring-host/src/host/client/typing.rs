@@ -181,9 +181,9 @@ pub(in crate::host) fn answer_trust(
             live.input_at = Some(Instant::now());
             !trust || seen.on_yes
         };
+        // The card stops asking when the screen does, on its next quiet read: a key that
+        // did nothing leaves the question there to answer again.
         if done {
-            let mut host = lock(shared)?;
-            host.set_terminal_trust(id, None)?;
             return Ok(());
         }
         thread::sleep(TRUST_STEP);

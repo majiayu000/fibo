@@ -6,7 +6,7 @@ import { mono } from './mono';
 import { useTheme } from './theme';
 import { columns, type ViewRow } from './toolview';
 
-const LINE = 19;
+export const LINE = 19;
 const GAP = 64;
 const CHAR = 7.2;
 const PAD = 18;

@@ -171,3 +171,7 @@ export function columns(rows: ViewRow[]): number {
   }
   return most;
 }
+
+/** Whether a list of `rows` this tall opens scrolled to its end: a text that fits has no end
+ * to go to, and a list told to start on its last row draws only that one. */
+export const opensAtEnd = (rows: number, height: number, line: number) => rows * line > height;

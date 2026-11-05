@@ -318,6 +318,21 @@ fn phone_gaps_demo() {
         });
     });
     bound.recv().unwrap();
+    // The real screens the phone's approval and trust cards are about: 11-05's real run.
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/screens");
+    let draw = |cli: &str, name: &str| {
+        let file = fixtures.join(cli).join(name);
+        format!("stty -echo; printf '\\033[2J\\033[H'; cat '{}'; sleep 100000", file.display())
+    };
+    h.claude(
+        "real-push",
+        &repo,
+        &[user("/project", "把 main 推到远端")],
+        &draw("claude", "approval-push-requires.txt"),
+    );
+    h.launch("long-screen", &repo, "seq 1 60; sleep 100000");
+    h.launch("trust-claude", &repo, &draw("claude", "trust-real.txt"));
+    h.launch("trust-codex", &repo, &draw("codex", "trust-real.txt"));
     let base = "ws://127.0.0.1:8790";
     let root = h.root.to_string_lossy().into_owned();
     let paired = Command::new(env!("CARGO_BIN_EXE_mooring"))
