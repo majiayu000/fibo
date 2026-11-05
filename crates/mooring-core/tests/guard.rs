@@ -52,6 +52,9 @@ fn owner(path: &str) -> bool {
         || path.starts_with("crates/mooring-host/src/content/")
         || path.starts_with("crates/mooring-host/src/agents/")
         || path.ends_with("/log_index.rs")
+        || ["update.rs", "recovery.rs", "elide.rs"]
+            .iter()
+            .any(|f| path.ends_with(&format!("/log_index/{f}")))
         || path.ends_with("/store.rs")
 }
 /// Tests and screenshot fixtures build raw states on purpose.

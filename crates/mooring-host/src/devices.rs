@@ -198,8 +198,12 @@ pub fn kick(socket: &Path, needle: &str) -> io::Result<Device> {
     Ok(devices[i].clone())
 }
 
+/// Unpairs every device; each phone is told so (4401) instead of finding the machine
+/// offline.
 pub fn clear(socket: &Path) -> io::Result<()> {
-    save(socket, &[])
+    let gone = load(socket);
+    save(socket, &[])?;
+    gone.iter().try_for_each(|d| revoke(socket, d))
 }
 
 pub fn now_ms() -> u64 {
@@ -409,6 +413,22 @@ mod tests {
         assert!(std::fs::metadata(&path).unwrap().len() < 200);
         assert!(previous(&path).exists());
         assert!(last_seen(&socket).contains_key(&b.id));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn clearing_revokes_every_route() {
+        let dir = std::env::temp_dir().join(format!("kl-clr-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("workbench.sock");
+        let (a, _) = add(&socket, "iPhone", Role::Full).unwrap();
+        let (b, _) = add(&socket, "iPad", Role::View).unwrap();
+        clear(&socket).unwrap();
+        assert!(load(&socket).is_empty());
+        assert_eq!(
+            revoked(&socket),
+            [a.route_hash().unwrap(), b.route_hash().unwrap()]
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

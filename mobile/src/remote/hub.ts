@@ -31,6 +31,9 @@ export type Card = {
   status_label?: string | null;
   /** Waiting on you or failed, counted as the desktop counts 要你处理. */
   needs_you?: boolean;
+  /** The board column its host put it in (needs, running, review, done, stale); absent
+   *  for shells and conversations off the board. */
+  column?: string | null;
   /** An Agent runs but no conversation is tied to it, in the user's words. */
   note?: string | null;
   /** The conversation's current turn, for `outcome`. */
