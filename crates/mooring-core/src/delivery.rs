@@ -108,8 +108,13 @@ pub fn attempt(socket: &Path, request: &Request) -> Settled {
 pub fn deliver(socket: &Path, request: &Request, patience: Duration) -> Settled {
     let start = Instant::now();
     let mut wait = Duration::from_millis(100);
+    let mut ever_sent = false;
     loop {
-        let settled = attempt(socket, request);
+        let mut settled = attempt(socket, request);
+        if let Settled::Unknown { sent, .. } = &mut settled {
+            ever_sent |= *sent;
+            *sent = ever_sent;
+        }
         let again = match &settled {
             Settled::Unknown { sent, .. } => !sent || resendable(request),
             _ => false,
@@ -193,6 +198,44 @@ mod tests {
             Settled::Unknown { sent: true, .. }
         ));
         assert_eq!(tries.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn a_received_request_stays_unknown_after_the_host_disappears() {
+        let root = std::env::temp_dir().join(format!("kl-dl-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let socket = root.join("s");
+        let listener = UnixListener::bind(&socket).unwrap();
+        let gone = socket.clone();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            receive::<Request>(&mut stream).unwrap();
+            send(
+                &mut stream,
+                CONTROL,
+                &Reply::Hello {
+                    major: MAJOR,
+                    instance: String::new(),
+                    build: Default::default(),
+                },
+            )
+            .unwrap();
+            assert!(matches!(
+                receive::<Request>(&mut stream).unwrap(),
+                Request::Edit { .. }
+            ));
+            drop(listener);
+            std::fs::remove_file(gone).unwrap();
+            // The request arrived, but its receipt and the next connection are lost.
+        });
+        let settled = deliver(&socket, &named(), SHORT);
+        server.join().unwrap();
+        assert!(
+            matches!(settled, Settled::Unknown { sent: true, .. }),
+            "{settled:?}"
+        );
+        assert!(settled.words().unwrap().starts_with("不确定是否成功"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
