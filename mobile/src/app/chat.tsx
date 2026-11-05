@@ -241,7 +241,7 @@ export default function Chat() {
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
           ListEmptyComponent={
-            <Text style={{ color: t.dim, textAlign: 'center', transform: [{ scaleY: -1 }] }}>
+            <Text style={{ color: t.dim, textAlign: 'center' }}>
               {card?.session ? '这段对话还没有消息' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
