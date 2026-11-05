@@ -1,10 +1,11 @@
 // Two bottom sheets: one asks for a sentence (要求修改, 拒绝并告诉它), one shows a
 // terminal's last lines.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, TextInput, View } from 'react-native';
 import { remote } from '../remote/hub';
 import { CodeView } from './codeview';
-import { Wide, noOutline, useBottom } from './kit';
+import { copyWithNote } from './copy';
+import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
 import { textRows } from './toolview';
 import { useTheme } from './theme';
 
@@ -78,10 +79,14 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
+  const [note, setNote] = useState('');
+  const closed = useRef(false);
   const { width } = useWindowDimensions();
   useEffect(() => {
+    closed.current = !visible;
     if (!visible) return;
     setLoaded(false);
+    setNote('');
     const r = remote(machine);
     if (!r) return setError('电脑没连上');
     setError('');
@@ -94,7 +99,11 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   }, [visible, machine, terminal]);
   return (
     <Frame visible={visible} onClose={onClose}>
-      <Text style={[s.title, { color: t.text }]}>终端最后几行</Text>
+      <View style={s.head}>
+        <Text style={[s.title, { color: t.text }]}>终端最后几行</Text>
+        <Btn label="复制" onPress={() => copyWithNote(text, '已复制', setNote, () => closed.current)} disabled={!text || !!error} />
+      </View>
+      {!!note && <Notice text={note} style={{ paddingVertical: 2 }} />}
       {text && !error ? (
         <View style={[s.screen, { backgroundColor: t.well }]}>
           <CodeView rows={textRows(text)} gap={noGap} footer={8} room={width - SHEET_PAD * 2} atEnd />
@@ -113,6 +122,7 @@ const noGap = () => <View />;
 const s = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: SHEET_PAD, gap: 12 },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 17, fontWeight: '600' },
   input: { minHeight: 96, borderRadius: 14, padding: 12, fontSize: 15, textAlignVertical: 'top' },
   screen: { height: 440, borderRadius: 12, overflow: 'hidden' },

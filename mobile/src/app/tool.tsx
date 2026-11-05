@@ -1,12 +1,12 @@
 // One tool call whole: what was asked and what came back, as the machine cleaned them. A long
 // text comes as its two ends and the middle is fetched on request; all of it goes when this
 // screen does, never into storage.
-import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NOT_YET, remote, supports, useHub } from '@/remote/hub';
 import { CodeView } from '@/ui/codeview';
+import { copyWithNote } from '@/ui/copy';
 import { Btn, Nav, Notice, mono, useBottom } from '@/ui/kit';
 import { type Theme, useTheme } from '@/ui/theme';
 import { allText, byteLength, bytes, extend, loaded, type Loaded, metaWords, missing, type ToolDetail, toolName, viewRows } from '@/ui/toolview';
@@ -118,9 +118,7 @@ export default function ToolScreen() {
 
   const copy = () => {
     if (!text) return;
-    Clipboard.setStringAsync(allText(text)).catch(() => undefined);
-    setNote(rest > 0 ? `已复制取到的部分，中间还差 ${bytes(rest)}` : '已复制全部');
-    setTimeout(() => !left.current && setNote(''), 3000);
+    copyWithNote(allText(text), rest > 0 ? `已复制取到的部分，中间还差 ${bytes(rest)}` : '已复制全部', setNote, () => left.current);
   };
 
   const steps = detail?.steps ?? [];
