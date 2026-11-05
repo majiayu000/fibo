@@ -17,6 +17,8 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
+use super::codex_items;
+pub(crate) use super::codex_script::script_patches;
 pub struct Codex;
 impl Adapter for Codex {
     fn screen_rules(&self) -> &'static str {
@@ -24,6 +26,35 @@ impl Adapter for Codex {
     }
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CODEX_HOME", ".codex").join("sessions")
+    }
+    fn trust_screen(&self, lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
+        super::trust::codex(lines)
+    }
+    /// Its footer says 「esc to interrupt」. Ctrl-C (0.166) opens 「Task is still running」
+    /// over a running turn and, on an idle one, disconnects and quits: real runs, 11-05.
+    fn interrupt_key(&self) -> &'static [u8] {
+        b"\x1b"
+    }
+    /// After Esc a running command stays as 「1 background terminal running · /stop to
+    /// close」, and the log says the turn runs until it ends: `sleep 60` went on (real, 0.166).
+    fn closes_background(&self, tail: &str) -> Option<&'static str> {
+        let filled = |l: &&str| !l.trim().is_empty();
+        let lines: Vec<&str> = tail.lines().filter(filled).collect();
+        let bottom = &lines[lines.len().saturating_sub(6)..];
+        let left = bottom
+            .iter()
+            .any(|l| l.contains("background terminal") && l.contains("/stop to close"));
+        let working = bottom.iter().any(|l| l.contains("esc to interrupt"));
+        (left && !working).then_some("/stop")
+    }
+    fn reads_tools(&self) -> bool {
+        true
+    }
+    fn tool_call_line(&self, line: &Value, id: &str) -> Option<super::ToolCallLine> {
+        super::tool_lines::codex_call(line, id)
+    }
+    fn tool_result_line(&self, line: &Value, _id: &str) -> Option<super::ToolOutput> {
+        super::tool_lines::codex_result(line)
     }
     fn usage_marker(&self) -> Option<&'static [u8]> {
         Some(b"\"token_count\"")
@@ -184,13 +215,15 @@ impl Adapter for Codex {
                 ),
                 "task_complete" | "task_completed" | "turn_completed" => {
                     if let Some(s) = p["last_agent_message"].as_str() {
-                        parser.message(false, s.into(), at, source, true);
+                        codex_items::final_said(parser, s.into(), at, source);
                     }
                     parser.phase(Turn::Completed, "", at, source);
                 }
                 "turn_aborted" => parser.phase(Turn::Interrupted, "", at, source),
                 "user_message" => parser.message(true, text(&p["message"]), at, source, false),
-                "agent_message" => parser.message(false, text(&p["message"]), at, source, false),
+                "agent_message" => {
+                    codex_items::item_said(parser, text(&p["message"]), at, source, false)
+                }
                 "approval_request" | "permission_request" | "request_user_input" => {
                     parser.card.waiting = question_summary(p);
                     parser.card.choices = question_choices(p);
@@ -223,8 +256,8 @@ impl Adapter for Codex {
         match item["type"].as_str().unwrap_or("") {
             "message" => match item["role"].as_str() {
                 Some("user") => parser.message(true, text(&item["content"]), at, source, false),
-                Some("assistant") => parser.message(
-                    false,
+                Some("assistant") => codex_items::response_said(
+                    parser,
                     text(&item["content"]),
                     at,
                     source,
@@ -232,6 +265,13 @@ impl Adapter for Codex {
                 ),
                 _ => (),
             },
+            "AgentMessage" => codex_items::item_said(
+                parser,
+                text(&item["content"]),
+                at,
+                source,
+                item["phase"] == "final_answer",
+            ),
             "function_call" | "custom_tool_call" => parser.tool(
                 item["call_id"]
                     .as_str()
@@ -274,6 +314,7 @@ impl Adapter for Codex {
                 );
             }
             "reasoning" => (),
+            _ if ty == "event_msg" && codex_items::add_item(parser, item, at, source) => (),
             _ if matches!(
                 ty,
                 "session_meta"
@@ -361,43 +402,6 @@ impl Adapter for Codex {
             });
         Some(("Codex app-server thread/read", result))
     }
-}
-
-/// The files a Codex `exec` call's script patches: it is JavaScript calling
-/// `tools.apply_patch("…")`, the edits' only trace among the indexed records (its commands
-/// have their own, `CommandExecution`). A patch built at run time cannot be read here.
-pub(crate) fn script_patches(script: &str) -> Vec<(String, u32, u32)> {
-    let mut files = Vec::new();
-    let mut left = script;
-    while let Some(at) = left.find("tools.apply_patch(") {
-        left = &left[at + "tools.apply_patch(".len()..];
-        if let Some((patch, tail)) = string_literal(left) {
-            files.extend(crate::content::patch_lines(&patch));
-            left = tail;
-        }
-    }
-    files
-}
-
-/// The JavaScript string at the start of `text`, unescaped, and what follows it.
-fn string_literal(text: &str) -> Option<(String, &str)> {
-    let text = text.trim_start();
-    let quote = text.chars().next().filter(|c| "\"'`".contains(*c))?;
-    let mut out = String::new();
-    let mut chars = text.char_indices().skip(1);
-    while let Some((i, c)) = chars.next() {
-        match c {
-            '\\' => match chars.next()?.1 {
-                'n' => out.push('\n'),
-                't' => out.push('\t'),
-                'r' => out.push('\r'),
-                other => out.push(other),
-            },
-            c if c == quote => return Some((out, &text[i + c.len_utf8()..])),
-            c => out.push(c),
-        }
-    }
-    None
 }
 
 /// Codex's own title rules: "Action Required" while blocked,

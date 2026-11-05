@@ -218,7 +218,10 @@ pub fn spawn(
             if libc::sigprocmask(libc::SIG_SETMASK, &mask, std::ptr::null_mut()) < 0 {
                 return Err(io::Error::last_os_error());
             }
+            // SIGHUP too: ignored here (a host started under nohup) it stays ignored across
+            // exec and a shell cannot trap it back, so the terminal closing would end nothing.
             for signal in [
+                libc::SIGHUP,
                 libc::SIGINT,
                 libc::SIGQUIT,
                 libc::SIGTSTP,

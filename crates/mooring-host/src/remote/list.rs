@@ -1,8 +1,8 @@
 //! `list`: spaces, running terminals as cards, and the board's todos. Called often (every
 //! burst of events), so everything here reads what the host already has, and a card's
 //! branch comes from `.git/HEAD` through a short cache, never a git process.
-use crate::control::{self, Phase};
-use mooring_core::{git_head, model::*, protocol::*, status};
+use crate::control;
+use mooring_core::{git_head, model::*, protocol::*, status, status_group};
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -45,23 +45,31 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
             let session = w.current_agent(&t.id);
             let cwd = w.terminal_cwd(t);
             let content = session.and_then(|s| w.content.get(&s.id));
-            let phase = match control::phase(w, &t.id) {
-                Phase::Working => rp::Phase::Working,
-                Phase::Waiting => rp::Phase::Waiting,
-                Phase::Idle => rp::Phase::Idle,
-                Phase::None => rp::Phase::Shell,
-            };
+            let trust = seen.terminal_trust.get(&t.id);
             let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
-            let status = control::status(w, &t.id);
+            let status = status::of_terminal(w, &t.id, trust.is_some(), now);
+            let phase = match status.map(status::Status::phase) {
+                Some(status::Phase::Working) => rp::Phase::Working,
+                Some(status::Phase::Waiting) => rp::Phase::Waiting,
+                Some(status::Phase::Idle) => rp::Phase::Idle,
+                None => rp::Phase::Shell,
+            };
             // An Agent here that no conversation is tied to: what it is, in the host's words.
             let unbound = session
                 .is_none()
                 .then(|| seen.terminal_agents.get(&t.id).copied())
-                .flatten();
-            let note = unbound.and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
+                .flatten()
+                .or(trust.map(|p| p.agent));
+            let note = unbound
+                .filter(|_| trust.is_none())
+                .and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
             rp::Card {
                 id: t.id.clone(),
-                space: t.space.clone(),
+                // The space the window lists the conversation under; a shell's own.
+                space: session
+                    .and_then(|s| w.session_space(s))
+                    .unwrap_or(&t.space)
+                    .to_owned(),
                 tab: control::tab_title(w, &t.id),
                 cwd: cwd.clone(),
                 phase,
@@ -75,7 +83,14 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                 waiting: content.and_then(|c| said(&c.waiting)),
                 status: status.map(|s| s.key().to_owned()),
                 status_label: status.map(|s| s.label().to_owned()),
-                needs_you: session.is_some_and(|s| w.needs_you(s, now)),
+                needs_you: trust.is_some() || session.is_some_and(|s| w.needs_you(s, now)),
+                trust: trust.map(|p| rp::TrustAsk {
+                    question: p.question.clone(),
+                    folder: p.folder.clone(),
+                }),
+                column: session
+                    .and_then(|s| status_group::column(w, s, now))
+                    .map(|c| c.key().to_owned()),
                 note,
                 turn: content
                     .map(|c| c.turn_key.clone())
@@ -131,7 +146,6 @@ fn outcome_key(o: &Outcome) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mooring_core::status;
 
     /// The phone's cards say what the window says, on every sample case.
     #[test]
@@ -162,6 +176,13 @@ mod tests {
                 card.id
             );
             assert_eq!(card.needs_you, w.needs_you(s, at), "{}", card.id);
+            assert_eq!(card.space, w.session_space(s).unwrap_or(&term.space));
+            assert_eq!(
+                card.column.as_deref(),
+                status_group::column(&w, s, at).map(|c| c.key()),
+                "{}",
+                card.id
+            );
         }
         let _ = std::fs::remove_dir_all(dir);
     }

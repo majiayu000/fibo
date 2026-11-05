@@ -83,9 +83,20 @@ export default function Approve() {
         {card?.approval && (
           <View style={[s.box, { borderColor: t.dark ? 'rgba(240,136,62,0.45)' : 'rgba(187,77,0,0.35)', backgroundColor: t.card }]}>
             <Text style={{ fontSize: 14, color: t.wait, fontWeight: '500' }}>{/^edit|write|create/i.test(ask.kind) ? '它要改' : '它要运行'}</Text>
+            {!!ask.note && (
+              <Text selectable style={{ fontSize: 15, color: t.text, lineHeight: 22 }}>
+                {ask.note}
+              </Text>
+            )}
             <Text selectable style={[s.cmd, { backgroundColor: t.well, color: t.text }]}>
               {ask.subject}
             </Text>
+            {!!ask.detail && (
+              <Text selectable style={[s.detail, { backgroundColor: t.well, color: t.dim }]}>
+                {ask.detail}
+              </Text>
+            )}
+            {ask.truncated && <Text style={{ fontSize: 13, color: t.wait }}>电脑只读到这些，上面还有。打开终端能看全。</Text>}
             {!!said && (
               <Text style={{ fontSize: 13, color: t.dim, lineHeight: 20 }}>
                 它刚才说：「{said}」
@@ -102,7 +113,7 @@ export default function Approve() {
                     kind="allow"
                     icon="face"
                     disabled={busy}
-                    onPress={() => run(() => approve(machine, card, ask.subject))}
+                    onPress={() => run(() => approve(machine, card, ask))}
                     textStyle={{ fontSize: 17 }}
                   />
                 </View>
@@ -123,7 +134,7 @@ export default function Approve() {
                 height={46}
                 label="以后不再询问"
                 disabled={busy}
-                onPress={() => run(() => approve(machine, card, ask.subject, true))}
+                onPress={() => run(() => approve(machine, card, ask, true))}
                 textStyle={{ fontSize: 15, fontWeight: '500' }}
               />
             )}
@@ -160,4 +171,5 @@ const s = StyleSheet.create({
   title: { fontSize: 19, fontWeight: TITLE_WEIGHT },
   box: { borderWidth: 1.5, borderRadius: 22, padding: 16, gap: 14 },
   cmd: { fontFamily: mono, fontSize: 20, lineHeight: 29, borderRadius: 14, padding: 14, overflow: 'hidden' },
+  detail: { fontFamily: mono, fontSize: 13, lineHeight: 19, borderRadius: 14, padding: 12, overflow: 'hidden' },
 });
