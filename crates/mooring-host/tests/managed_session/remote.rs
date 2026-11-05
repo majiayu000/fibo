@@ -84,6 +84,7 @@ fn the_desktop_client_lists_and_watches_another_machine() {
     }
     // What happens there after the screen arrived follows it.
     h.call(Request::SendText {
+        session: None,
         id: "far".into(),
         text: "ok".into(),
         submit: true,

@@ -187,6 +187,9 @@ pub enum Request {
     /// Scripts and other Agents: text placed in a terminal as a paste, then Enter when
     /// `submit`. Goes in beside whoever is typing there.
     SendText {
+        /// Restricts a chat message to this current conversation; None permits shell input.
+        #[serde(default)]
+        session: Option<String>,
         id: String,
         text: String,
         submit: bool,

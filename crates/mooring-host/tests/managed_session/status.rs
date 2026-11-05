@@ -175,6 +175,7 @@ fn a_child_agents_finished_turn_is_typed_into_its_starter() {
         })
         .is_err());
     h.call(Request::SendText {
+        session: None,
         id: "child".into(),
         text: "审一下改动".into(),
         submit: true,

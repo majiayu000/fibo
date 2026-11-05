@@ -41,6 +41,8 @@ pub enum Op {
     },
     /// Pastes `text`; `enter` then presses Enter.
     Send {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
         terminal: String,
         text: String,
         #[serde(default)]
