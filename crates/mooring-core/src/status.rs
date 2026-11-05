@@ -280,6 +280,15 @@ pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
         && of(w, s, now).needs_you()
 }
 
+/// The state of what runs in a terminal. An Agent asking to be trusted with its folder is
+/// waiting on you, with or without a conversation: it does nothing until you answer.
+pub fn of_terminal(w: &Workspace, terminal: &str, asks_trust: bool, now: u64) -> Option<Status> {
+    if asks_trust {
+        return Some(Status::Waiting);
+    }
+    w.current_agent(terminal).map(|s| of(w, s, now))
+}
+
 /// The session's state now. The only place that decides it.
 pub fn of(w: &Workspace, s: &AgentSession, now: u64) -> Status {
     let content = w.content.get(&s.id);

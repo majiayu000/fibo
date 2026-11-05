@@ -1,0 +1,37 @@
+# cargo deny check. CI runs only `advisories` for now; licenses, bans and sources are for
+# running by hand until they are clean enough to gate on.
+
+[advisories]
+# Unmaintained crates count only when one of ours names them: the rest come in through GPUI
+# (paste, rustybuzz, ttf-parser, zbus's zvariant) and are fixed there, not here.
+unmaintained = "workspace"
+yanked = "warn"
+
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[bans]
+# GPUI and wasmtime bring their own versions of many crates; listed, not refused.
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+[sources.allow-org]
+# GPUI pins its own forks (font-kit, wasm_thread) by rev.
+github = ["zed-industries"]

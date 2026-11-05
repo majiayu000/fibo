@@ -1,17 +1,20 @@
 //! A CLI Mooring was never compiled to know, added by a declaration file alone: the
 //! daemon recognises it, binds its transcript to the terminal and can stop it, or, with no
 //! transcript declared, says so on the terminal. See docs/architecture/PLUGIN_SYSTEM.md.
+#[path = "support/tied.rs"]
+mod tied;
 use mooring_core::{model::*, protocol::*};
 use std::{
     fs, io,
     os::unix::net::UnixStream,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     time::{Duration, Instant},
 };
+use tied::SpawnTied;
 
 struct Host {
-    child: Child,
+    child: tied::Tied,
     root: PathBuf,
 }
 impl Host {
@@ -38,7 +41,7 @@ impl Host {
             .env("MOORING_FIXTURE_RUNTIME", &root)
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         let h = Self { child, root };
         let until = Instant::now() + Duration::from_secs(30);
@@ -144,8 +147,7 @@ impl Drop for Host {
                 let _ = self.call(Request::Stop { id: t.id });
             }
         }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.kill_tree();
         let _ = fs::remove_dir_all(&self.root);
     }
 }
