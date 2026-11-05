@@ -531,14 +531,9 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                         if !wrapped {
                             event_id = event_id.max(event.id);
                         }
-                        // Logs, and a subagent's meta, which moves its parent's card.
-                        if event.flags & 0x10 == 0
-                            && (event.path.extension().is_some_and(|e| e == "jsonl")
-                                || event
-                                    .path
-                                    .to_str()
-                                    .is_some_and(|p| p.ends_with(".meta.json")))
-                        {
+                        // The index's adapter identifies logs and subagent metadata;
+                        // a declared CLI need not use the built-ins' extension.
+                        if event.flags & 0x10 == 0 {
                             paths.insert(event.path);
                         }
                     }
