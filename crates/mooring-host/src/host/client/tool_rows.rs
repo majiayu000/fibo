@@ -59,7 +59,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             };
             let (messages, more) =
                 (host.index).chat(&s.transcript, floor, after, before, limit, tools)?;
-            let partial = floor > 0;
+            // A card that says part of its log was skipped but not from where cannot read it
+            // back: it goes on saying so.
+            let skipped =
+                |c: &mooring_core::content::Content| c.partial_history && c.from_offset == 0;
+            let partial = floor > 0 || host.workspace.content.get(&session).is_some_and(skipped);
             Ok(Reply::Chat {
                 messages,
                 more,

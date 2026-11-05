@@ -381,6 +381,24 @@ mod tests {
         assert_eq!(l.from(), 0);
     }
 
+    /// A card that does not say where its first read began has nothing to read back from:
+    /// done at once, nothing added, and no guessing from gaps (docs/plan.md: no old formats).
+    #[test]
+    fn a_card_that_never_said_where_it_began_is_left_as_it_is() {
+        let l = log((0..4000).map(|i| said(i, 900)));
+        let before = l.pages();
+        l.index
+            .db
+            .execute(
+                "UPDATE session_content SET projection=json_set(projection,'$.from_offset',0) WHERE path=?1",
+                [l.key()],
+            )
+            .unwrap();
+        let got = l.index.backfill(Agent::Codex, &l.key()).unwrap();
+        assert_eq!((got.added, got.done), (0, true));
+        assert!(l.pages().len() >= before.len());
+    }
+
     /// A log replaced mid-way starts over: rows of the old file are gone, progress too.
     #[test]
     fn a_replaced_log_starts_over() {

@@ -55,6 +55,8 @@ export default function Chat() {
   const [partial, setPartial] = useState(false);
   const [readingBack, setReadingBack] = useState(false);
   const [readFailed, setReadFailed] = useState('');
+  // Read as far as it can be and the computer still says part is missing: nothing more to try.
+  const [readAll, setReadAll] = useState(false);
   const paging = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,6 +83,7 @@ export default function Chat() {
         const same = shown.current === null || shown.current === page.session;
         const had = same ? last.current : 0;
         shown.current = page.session;
+        if (!same) setReadAll(false);
         setSession(page.session);
         setMore(page.more);
         setPartial(!!page.partial);
@@ -133,7 +136,7 @@ export default function Chat() {
     );
   }, [messages]);
 
-  const canReadBack = partial && !more && supports(m, 'backfill');
+  const canReadBack = partial && !more && !readAll && supports(m, 'backfill');
   // Scrolled to the top: the next page, or when the index ends, the next stretch of the log.
   const older = useCallback(async () => {
     const r = remote(machine);
@@ -150,6 +153,7 @@ export default function Chat() {
         do {
           reply = await r.request('backfill', { session });
         } while (!reply.added && !reply.done && shown.current === session);
+        if (reply.done) setReadAll(true);
       }
       const before = messages[0] ? { before: messages[0].seq } : { limit: 50 };
       const page = await r.request('chat', { session, ...before, ...extra });
