@@ -26,6 +26,8 @@
 //! STALL_SAMPLE (run macOS `sample` on the host during each window into sample-<n>.txt,
 //! with STALL_KEEP; `sample` suspends the host while it walks stacks, so a sampled run
 //! is for attribution only, never for the numbers).
+#[path = "support/tied.rs"]
+mod tied;
 use mooring_core::{model::*, protocol::*};
 use std::{
     fs,
@@ -40,6 +42,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use tied::SpawnTied;
 
 #[path = "pty_stall/support.rs"]
 mod support;
@@ -94,6 +97,7 @@ fn pty_floor_without_host() {
         unsafe {
             command.pre_exec(|| {
                 libc::setsid();
+                libc::signal(libc::SIGHUP, libc::SIG_DFL);
                 libc::ioctl(0, libc::TIOCSCTTY as libc::c_ulong, 0);
                 Ok(())
             });
@@ -197,7 +201,7 @@ fn pty_read_stall_under_load() {
         .envs(host_env(&home))
         .stdout(Stdio::null())
         .stderr(fs::File::create(root.join("host.log")).unwrap())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let mut f = Fixture {
         root: root.clone(),

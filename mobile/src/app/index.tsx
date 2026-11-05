@@ -9,40 +9,16 @@ import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/h
 import { useAsk } from '@/remote/useAsk';
 import { drop, useOutbox } from '@/store/outbox';
 import { SpaceMark } from '@/ui/icons';
+import { type Item, sort } from '@/ui/inbox';
 import { Btn, Group, Pill, Round, TITLE_WEIGHT, Wide, mono, useBottom, useTop } from '@/ui/kit';
 import { Row, rowStyles, spaceName } from '@/ui/row';
-import { rank } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
+import { TrustAsk } from '@/ui/trust';
 import { type Theme, useTheme } from '@/ui/theme';
 
 const open = (m: Machine, c: Card) => {
   if (!justSwiped()) router.push({ pathname: '/chat', params: { machine: m.id, terminal: c.id } });
 };
-
-type Item = { m: Machine; c: Card };
-
-/** Conversations sorted into the inbox, 稍后提醒 and 已处理. */
-function sort(machines: Machine[]) {
-  const inbox: Item[] = [];
-  const later: Item[] = [];
-  const done: Item[] = [];
-  for (const m of machines) {
-    for (const c of m.cards) {
-      if (!c.agent || c.phase === 'shell') continue;
-      const item = { m, c };
-      // Something new to answer brings a settled conversation back.
-      const asks = Boolean(c.approval || c.phase === 'waiting');
-      if (c.outcome === 'done' && !asks) done.push(item);
-      else if (c.outcome === 'deferred' && !asks) later.push(item);
-      else inbox.push(item);
-    }
-  }
-  const newest = (a: Item, b: Item) => (b.c.updated ?? 0) - (a.c.updated ?? 0);
-  inbox.sort((a, b) => rank(a.c) - rank(b.c) || newest(a, b));
-  later.sort(newest);
-  done.sort(newest);
-  return { inbox, later, done };
-}
 
 function run(p: Promise<unknown>) {
   p.catch((e) => oops((e as Error).message));
@@ -57,10 +33,15 @@ function ApprovalRow({ m, c, t }: Item & { t: Theme }) {
       <Text numberOfLines={3} style={[s.cmd, { backgroundColor: t.well, color: t.text }]}>
         {ask.subject}
       </Text>
+      {!!ask.note && (
+        <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13 }}>
+          {ask.note}
+        </Text>
+      )}
       <View style={s.act}>
         {can && (
           <>
-            <Btn primary icon="face" label="允许" onPress={() => run(approve(m.id, c, ask.subject))} />
+            <Btn primary icon="face" label="允许" onPress={() => run(approve(m.id, c, ask))} />
             <Btn label="拒绝" onPress={() => run(deny(m.id, c))} />
           </>
         )}
@@ -75,7 +56,11 @@ function ApprovalRow({ m, c, t }: Item & { t: Theme }) {
 
 function Swiped({ m, c, t, last }: Item & { t: Theme; last?: boolean }) {
   const can = supports(m, 'outcome') && !!c.session;
-  const body = c.approval && m.status === 'online' ? <ApprovalRow m={m} c={c} t={t} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
+  const body = c.trust && m.status === 'online' ? (
+    <Row m={m} c={c} onPress={() => open(m, c)}>
+      <TrustAsk machine={m.id} card={c} can={supports(m, 'trust')} />
+    </Row>
+  ) : c.approval && m.status === 'online' ? <ApprovalRow m={m} c={c} t={t} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
   if (!can) return body;
   return (
     <Swipe

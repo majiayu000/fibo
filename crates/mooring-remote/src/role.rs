@@ -34,7 +34,7 @@ impl Role {
         match op {
             // `dirs` shows the machine's folders, so it is no read for a lesser role.
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
-            | "mkdir" | "stop" | "lastsession" | "addspace" => self == Self::Full,
+            | "mkdir" | "stop" | "lastsession" | "addspace" | "trust" => self == Self::Full,
             "answer" => self != Self::View,
             _ => true,
         }
@@ -55,6 +55,7 @@ pub fn acts(op: &str) -> bool {
             | "mkdir"
             | "stop"
             | "addspace"
+            | "trust"
     )
 }
 
@@ -65,11 +66,31 @@ mod tests {
     #[test]
     fn roles_allow_only_what_they_name() {
         for op in [
-            "hello", "list", "read", "chat", "watch", "events", "close", "diff", "quota", "usage",
+            "hello",
+            "list",
+            "read",
+            "chat",
+            "watch",
+            "events",
+            "close",
+            "diff",
+            "quota",
+            "usage",
+            "toolcalls",
+            "toolcall",
+            "ask",
         ] {
             assert!(Role::View.allows(op));
         }
-        for op in ["dirs", "mkdir", "stop", "open", "lastsession", "addspace"] {
+        for op in [
+            "dirs",
+            "mkdir",
+            "stop",
+            "open",
+            "lastsession",
+            "addspace",
+            "trust",
+        ] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }
         assert!(!Role::View.allows("answer") && !Role::View.allows("send"));
@@ -79,5 +100,6 @@ mod tests {
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
         assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
         assert!(!acts("diff") && !acts("dirs") && !acts("quota") && !acts("usage"));
+        assert!(!acts("toolcalls") && !acts("toolcall"));
     }
 }

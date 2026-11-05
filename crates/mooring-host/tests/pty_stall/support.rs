@@ -48,7 +48,7 @@ while True:
 pub(crate) struct Fixture {
     pub(crate) root: PathBuf,
     pub(crate) runtime: PathBuf,
-    pub(crate) host: Child,
+    pub(crate) host: crate::tied::Tied,
 }
 impl Fixture {
     pub(crate) fn socket(&self) -> PathBuf {
@@ -66,13 +66,7 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        if let Ok(Reply::Workspace(w)) = self.call(&Request::Workspace) {
-            for t in w.terminals {
-                let _ = self.call(&Request::Stop { id: t.id });
-            }
-        }
-        let _ = self.host.kill();
-        let _ = self.host.wait();
+        self.host.kill_tree();
         if std::env::var_os("STALL_KEEP").is_none() {
             let _ = fs::remove_dir_all(&self.root);
         } else {

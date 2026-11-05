@@ -630,6 +630,7 @@ impl Workspace {
 
 mod edit;
 pub use edit::{Edit, SeenSession};
+mod space;
 mod tabs;
 #[cfg(test)]
 mod tests;
