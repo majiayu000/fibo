@@ -340,6 +340,10 @@ impl SettingsView {
         })
         .detach();
         Self::check_hooks(None, cx);
+        let (machines, machines_error) = match crate::machines::load() {
+            Ok(machines) => (machines, None),
+            Err(e) => (Vec::new(), Some(format!("没读到电脑配置：{e}"))),
+        };
         Self {
             focus: cx.focus_handle(),
             page: Page::General,
@@ -358,9 +362,9 @@ impl SettingsView {
             relay,
             relay_key,
             remote_error: None,
-            machines: crate::machines::load(),
+            machines,
             machine_field,
-            machines_error: None,
+            machines_error,
             market: plugins::Market::read(cx),
             editor: None,
         }
