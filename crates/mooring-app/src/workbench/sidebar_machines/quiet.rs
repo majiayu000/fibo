@@ -5,6 +5,7 @@
 //! Looking at or typing in its sessions never ends it: only 接着管 does.
 use super::*;
 use crate::workbench::palette::Hit;
+use crate::workbench::sidebar_motion::mix;
 
 fn fold_key(host: &str) -> String {
     format!("quiet:{host}")
@@ -65,6 +66,9 @@ impl Workbench {
         };
         self.machines[index].view.lock().unwrap().spec.quiet = quiet;
         self.sidebar.machine_menu = None;
+        let name = machine_label(&host).to_owned();
+        let rail = self.machine_layout() == Machines::Rail;
+        self.sidebar.motion.fly(&host, &name, quiet, rail);
         // You just left it: the column does not go on showing it alone.
         if quiet && self.sidebar.machine_scope.as_deref() == Some(host.as_str()) {
             self.set_machine_scope(None);
@@ -73,6 +77,21 @@ impl Workbench {
             self.error = Some(format!("没存上，下次打开不会记得：{e}"));
         }
         cx.notify();
+    }
+    /// A machine's square that remembers where it was drawn, for the flight.
+    pub(in crate::workbench) fn spotted_mark(
+        &self,
+        host: &str,
+        name: &str,
+        line: bool,
+    ) -> gpui::Div {
+        machine_mark(machine_letter(name), line).relative().child(
+            self.sidebar
+                .motion
+                .mark_spot(host, line)
+                .absolute()
+                .size_full(),
+        )
     }
     /// Right button on anything naming a machine, in either state.
     pub(in crate::workbench) fn machine_menu_on<E: gpui::InteractiveElement + 'static>(
@@ -151,8 +170,15 @@ impl Workbench {
             let open = self.sidebar.open(&key, false);
             let name = machine_label(&host).to_owned();
             let words = quiet_words(&name, self.quiet_waiting(index));
+            let state = self.sidebar.motion.line_state(&host);
+            let rest = words[name.len()..].to_owned();
             let line = div()
                 .id(gpui::SharedString::from(format!("quiet-{index}")))
+                .relative()
+                .opacity(state.shown)
+                .when(state.glow > 0., |d| {
+                    d.bg(T::color(F::selected_line()).opacity(state.glow * 0.6))
+                })
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(format!(
                     "{words}，点一下{}",
@@ -171,15 +197,16 @@ impl Workbench {
                 .cursor_pointer()
                 .hover(|s| s.bg(T::color(F::hover())))
                 .child(self.sidebar.fold_mark(&key, open))
-                .child(machine_mark(machine_letter(&name), true))
+                .child(self.spotted_mark(&host, &name, true))
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
-                        .truncate()
+                        .flex()
                         .text_size(px(F::TAG))
-                        .text_color(T::color(F::third()))
-                        .child(words),
+                        .text_color(mix(T::color(F::third()), T::color(F::bright()), state.glow))
+                        .child(div().flex_shrink_0().child(name.clone()))
+                        .child(div().min_w_0().truncate().opacity(state.rest).child(rest)),
                 )
                 .child(
                     div()
@@ -213,6 +240,7 @@ impl Workbench {
                         .id(gpui::SharedString::from(format!("quiet-rows-{index}")))
                         .h(px(height))
                         .flex_shrink_0()
+                        .opacity(state.shown)
                         .overflow_y_scroll()
                         .children(rows.iter().map(|r| self.remote_row(r, cx)))
                         .into_any_element(),
@@ -298,6 +326,14 @@ impl Workbench {
     pub fn visual_quiet_waiting(&self, index: usize) -> usize {
         self.quiet_waiting(index)
     }
+    /// Where machine `index`'s square was drawn on its heading and line, and is in flight.
+    pub fn visual_flight_marks(&self, index: usize) -> [Option<(f32, f32)>; 3] {
+        let host = self.machine_host(index).unwrap_or_default();
+        self.sidebar.motion.visual_marks(&host)
+    }
+    pub fn visual_quiet_moving(&self) -> bool {
+        self.sidebar.motion.moving()
+    }
     pub fn visual_quiet_unfold(&mut self, index: usize, open: bool, cx: &mut Context<Self>) {
         if let Some(host) = self.machine_host(index) {
             self.sidebar.toggled.insert(fold_key(&host), open);
@@ -323,6 +359,7 @@ impl Workbench {
     }
     pub fn visual_leave_board(&mut self, cx: &mut Context<Self>) {
         self.nav.overview = false;
+        self.sync_panes(cx);
         cx.notify();
     }
     pub fn visual_close_peek(&mut self, cx: &mut Context<Self>) {

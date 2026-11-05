@@ -1,0 +1,25 @@
+#!/bin/sh
+# Local main only follows origin/main. Sessions commit on their own branches and reach main
+# on GitHub; a local main that also takes commits drifts away until nobody can push it
+# (11-05: 18 ahead, 128 behind). This catches every way in (commit, merge, fast-forward,
+# reset) because they all update the ref. Installed by scripts/install-hooks.sh.
+[ "$1" = prepared ] || exit 0
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r old new ref; do
+  [ "$ref" = refs/heads/main ] || continue
+  [ "$new" = "$zero" ] && continue
+  git merge-base --is-ancestor "$new" refs/remotes/origin/main 2>/dev/null && continue
+  status=1
+done
+[ "$status" = 0 ] && exit 0
+[ -n "${MOORING_ALLOW_LOCAL_MAIN:-}" ] && exit 0
+cat >&2 <<'MSG'
+Local main only follows origin/main, so this was not applied.
+  A merge left half done: git merge --abort
+  Work on a branch:  git switch -c fix/thing
+  Reach main:        git fetch origin && git rebase origin/main && git push origin HEAD:main
+  Follow it here:    git pull --ff-only
+See "Reaching main" in CLAUDE.md.
+MSG
+exit 1
