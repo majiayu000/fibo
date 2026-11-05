@@ -138,6 +138,47 @@ export function resetText(resetsAt: number, now = Date.now() / 1000): string {
 /** How full a window is, as the gauge colours it: under half, past half, past 80%. */
 export const level = (used: number): 'low' | 'mid' | 'high' => (used > 80 ? 'high' : used >= 50 ? 'mid' : 'low');
 
+/** A stretch of time as people say it: 「45 秒」「12 分钟」「1 小时 20 分钟」. */
+export function span(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s < 60) return `${s} 秒`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} 分钟`;
+  return m % 60 ? `${Math.floor(m / 60)} 小时 ${m % 60} 分钟` : `${Math.floor(m / 60)} 小时`;
+}
+
+/** A running turn's time beside its state word; nothing in its first minute. */
+export const runningFor = (since: number | null | undefined, now: number) => (since && now - since >= 60 ? span(now - since) : '');
+
+/** 12800000 as 「12.8M」. */
+export function compact(n: number): string {
+  const one = (x: number) => (x >= 100 ? String(Math.round(x)) : String(Math.round(x * 10) / 10));
+  if (n >= 1e9) return `${one(n / 1e9)}B`;
+  if (n >= 1e6) return `${one(n / 1e6)}M`;
+  if (n >= 1e3) return `${one(n / 1e3)}K`;
+  return String(n);
+}
+
+/** A model's name as a person says it: `claude-opus-5-5` is 「Opus 5.5」; others as they are. */
+export function modelName(model: string): string {
+  const m = model.match(/^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/);
+  if (!m) return model;
+  const name = m[1][0].toUpperCase() + m[1].slice(1);
+  return m[3] ? `${name} ${m[2]}.${m[3]}` : `${name} ${m[2]}`;
+}
+
+export type Check = { command: string; counts?: string; ok: boolean; at: number; stale: boolean };
+
+/** What the conversation's last test commands said, from their exit codes. */
+export function checkLine(checks: Check[] | undefined): { text: string; failed: boolean; stale: boolean } | null {
+  if (!checks?.length) return null;
+  const word = (c: Check) => `${c.command} ${c.ok ? '通过' : '没通过'}`;
+  const fresh = checks.filter((c) => !c.stale);
+  // Changed since: the old results say nothing about the files now.
+  if (!fresh.length) return { text: `${word(checks[0])}，之后又改过`, failed: !checks[0].ok, stale: true };
+  return { text: fresh.map(word).join(' · '), failed: fresh.some((c) => !c.ok), stale: false };
+}
+
 /** The relay's host, as 「连接」 shows it; a private address reads as the local network. */
 export function relayPlace(relay: string): { host: string; lan: boolean } {
   const host = relay.replace(/^\w+:\/\//, '').replace(/\/.*$/, '');

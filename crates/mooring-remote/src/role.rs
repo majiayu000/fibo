@@ -34,7 +34,7 @@ impl Role {
         match op {
             // `dirs` shows the machine's folders, so it is no read for a lesser role.
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
-            | "mkdir" | "stop" => self == Self::Full,
+            | "mkdir" | "stop" | "lastsession" | "addspace" => self == Self::Full,
             "answer" => self != Self::View,
             _ => true,
         }
@@ -45,7 +45,16 @@ impl Role {
 pub fn acts(op: &str) -> bool {
     matches!(
         op,
-        "send" | "keys" | "input" | "answer" | "open" | "end" | "outcome" | "mkdir" | "stop"
+        "send"
+            | "keys"
+            | "input"
+            | "answer"
+            | "open"
+            | "end"
+            | "outcome"
+            | "mkdir"
+            | "stop"
+            | "addspace"
     )
 }
 
@@ -56,11 +65,11 @@ mod tests {
     #[test]
     fn roles_allow_only_what_they_name() {
         for op in [
-            "hello", "list", "read", "chat", "watch", "events", "close", "diff", "quota",
+            "hello", "list", "read", "chat", "watch", "events", "close", "diff", "quota", "usage",
         ] {
             assert!(Role::View.allows(op));
         }
-        for op in ["dirs", "mkdir", "stop", "open"] {
+        for op in ["dirs", "mkdir", "stop", "open", "lastsession", "addspace"] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }
         assert!(!Role::View.allows("answer") && !Role::View.allows("send"));
@@ -68,7 +77,7 @@ mod tests {
         assert!(Role::Full.allows("send") && Role::Full.allows("keys"));
         assert_eq!(Role::parse("admin"), None);
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
-        assert!(acts("keys") && acts("mkdir") && acts("stop") && !acts("watch"));
-        assert!(!acts("diff") && !acts("dirs") && !acts("quota"));
+        assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
+        assert!(!acts("diff") && !acts("dirs") && !acts("quota") && !acts("usage"));
     }
 }

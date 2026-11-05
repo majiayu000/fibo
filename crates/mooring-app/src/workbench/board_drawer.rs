@@ -462,7 +462,7 @@ impl Workbench {
                 [&c.waiting, &c.error, &c.last_reply]
                     .into_iter()
                     .find(|t| !t.trim().is_empty())
-                    .cloned()
+                    .map(|t| mooring_core::content::plain_line(t))
                     .unwrap_or_default()
             })
             .filter(|t| !t.trim().is_empty())

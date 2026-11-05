@@ -10,6 +10,7 @@
 //! - `frames-section`: a frame of 本机's whole section folding under 按机器. Needs a machine in
 //!   machines.json, so the gate does not run it: `perf-fixture.py` with MACHINE=1 at prepare.
 //! - `frames-rail`: the same machine's rail layout, at rest and with the list arriving.
+//! - `frames-turning`: the running mark turning, in `cpu_probe_evidence/turning.rs`.
 //! - `frames-plugins`: 设置 › 插件 and the themes with a picture or a see-through window, in
 //!   `cpu_probe_evidence/plugins.rs`.
 //! - `redraw-check`: not a cost but a check that caching hides nothing: after each of a
@@ -28,6 +29,8 @@ use super::*;
 use gpui::WindowHandle;
 #[path = "cpu_probe_evidence/plugins.rs"]
 mod plugins;
+#[path = "cpu_probe_evidence/turning.rs"]
+mod turning;
 use std::time::{Duration, Instant};
 
 fn cpu_secs() -> f64 {
@@ -299,6 +302,8 @@ pub(super) fn start(
                     at.elapsed().as_secs_f64() / 300. * 1000.,
                     used / 300. * 60. * 100.
                 )
+            } else if name == "frames-turning" {
+                turning::run(handle, cx).await
             } else if name == "frames-motion" {
                 motion_frames(handle, cx).await
             } else if name == "frames-arrive" {

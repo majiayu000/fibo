@@ -1,5 +1,5 @@
 //! Codex: `~/.codex/sessions` rollouts, one `session_meta` header per thread.
-use super::{home_dir, temporary, Adapter, Hint, OfficialAnswer, Pending};
+use super::{home_dir, temporary, Adapter, Hint, OfficialAnswer, Pending, UsageState};
 use crate::content::{input, question_choices, question_summary, re, text, Parser};
 use mooring_core::content::{short, Source, Turn};
 use mooring_core::model::AgentSession;
@@ -24,6 +24,12 @@ impl Adapter for Codex {
     }
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CODEX_HOME", ".codex").join("sessions")
+    }
+    fn usage_marker(&self) -> Option<&'static [u8]> {
+        Some(b"\"token_count\"")
+    }
+    fn usage_line(&self, line: &[u8], since: u64, state: &mut UsageState) -> Option<(u64, u64)> {
+        super::usage_lines::codex_line(line, since, state.running)
     }
     fn runs(&self, executable: &str, script: Option<&str>) -> bool {
         executable == "codex" || script.is_some_and(|s| s.ends_with("/@openai/codex/bin/codex.js"))
@@ -159,6 +165,15 @@ impl Adapter for Codex {
     fn add(&self, parser: &mut Parser, v: &Value, at: u64, source: &Source) {
         let ty = v["type"].as_str().unwrap_or("");
         let p = &v["payload"];
+        if ty == "turn_context" {
+            if let Some(model) = p["model"].as_str() {
+                parser.card.model = model.to_owned();
+            }
+            if let Some(words) = super::permission::codex(p) {
+                parser.card.permission = words;
+            }
+            return;
+        }
         if ty == "event_msg" && p["type"] != "item_completed" {
             match p["type"].as_str().unwrap_or("") {
                 "task_started" | "turn_started" => parser.phase(

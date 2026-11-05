@@ -1,16 +1,25 @@
 // A conversation as one flat row (the design's new look): project and computer, its
-// state in one coloured word on the right; the title; then directory and Agent in mono.
+// state in one coloured word on the right; the title; then branch (else directory) and
+// what it is doing (else its Agent) in mono.
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, type StyleProp, StyleSheet, Text, type TextStyle, View } from 'react-native';
 import type { Card, Machine } from '../remote/hub';
 import { cardTitle } from './format';
 import { SpaceMark } from './icons';
 import { TITLE_WEIGHT, mono } from './kit';
-import { agentName, base, statusColor, statusWord, tilde } from './status';
+import { useNow } from './now';
+import { runningFor } from './parse';
+import { base, rowDetail, statusColor, statusWord, tilde } from './status';
 import { useTheme } from './theme';
 
 export function spaceName(m: Machine, c: Card) {
   return m.spaces[c.space] || base(c.cwd) || c.space;
+}
+
+/** 「在跑 · 12 分钟」. Its own component: the clock redraws this word, not the row. */
+export function RunningWord({ c, color, style }: { c: Card; color: string; style?: StyleProp<TextStyle> }) {
+  const time = runningFor(c.running_since, useNow());
+  return <Text style={[style, { color }]}>{time ? `${statusWord(c)} · ${time}` : statusWord(c)}</Text>;
 }
 
 export function Row({
@@ -54,14 +63,14 @@ export function Row({
         <Text numberOfLines={1} style={[s.where, { color: t.dim }]}>
           {space} · {m.name || '电脑'}
         </Text>
-        <Text style={[s.state, { color }]}>{word}</Text>
+        {!right && !stale && c.running_since ? <RunningWord c={c} color={color} style={s.state} /> : <Text style={[s.state, { color }]}>{word}</Text>}
       </View>
       <Text numberOfLines={2} style={[s.title, { color: dim ? t.dim : t.text }, stale && { opacity: 0.6 }]}>
         {cardTitle(c)}
       </Text>
       {children ?? (
         <Text numberOfLines={1} style={[s.l3, { color: t.dim }, stale && { opacity: 0.6 }]}>
-          {[tilde(c.cwd), agentName(c.agent)].filter(Boolean).join(' · ')}
+          {[c.branch || tilde(c.cwd), rowDetail(c)].filter(Boolean).join(' · ')}
         </Text>
       )}
     </Pressable>

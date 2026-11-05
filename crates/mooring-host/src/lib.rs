@@ -17,6 +17,7 @@ pub mod recognition;
 pub mod screen_rules;
 mod store;
 pub use agents::hooks;
+pub use agents::{roots as agent_log_roots, usage_line, usage_marker, UsageState};
 pub use host::remote::{load as remote_config, Config as RemoteConfig};
 pub use host::{serve, serve_taking_over, serve_with_options, serve_with_roots};
 pub const PROTOCOL_MAJOR: u32 = mooring_core::protocol::MAJOR;

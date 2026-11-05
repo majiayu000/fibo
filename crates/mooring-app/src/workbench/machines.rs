@@ -46,6 +46,9 @@ impl Workbench {
         let mut out = Vec::new();
         for (index, remote) in self.machines.iter().enumerate() {
             let view = remote.view.lock().unwrap().clone();
+            if view.spec.quiet {
+                continue;
+            }
             let name = view
                 .machine
                 .as_ref()
@@ -72,7 +75,7 @@ impl Workbench {
                 Link::Connecting => ("连接中…".to_owned(), false),
                 Link::Offline(why) => (format!("没连上：{why}"), true),
             };
-            out.push(
+            let heading = self.machine_menu_on(
                 div()
                     .id(gpui::SharedString::from(format!("machine-{index}")))
                     .when(recent, |d| d.mx(px(T::S8)))
@@ -118,9 +121,11 @@ impl Workbench {
                                 )),
                             )
                         },
-                    )
-                    .into_any_element(),
+                    ),
+                index,
+                cx,
             );
+            out.push(heading.into_any_element());
             if view.link != Link::Online {
                 continue;
             }
@@ -252,6 +257,7 @@ impl Workbench {
             cwd: None,
             agent: None,
             prompt: None,
+            resume: None,
             request: Some(mooring_core::protocol::RequestId::fresh().id),
         };
         let sent = cx.background_spawn(async move {
