@@ -1671,12 +1671,12 @@ read -r finish
         );
         std::thread::sleep(Duration::from_millis(50));
     }
+    let mut appended = 0;
     for i in 0..4 {
         assert!(h.root.join(format!("load-{i}.done")).exists());
-        let lines = fs::read_to_string(logs.join(format!("load-{i}.jsonl")))
-            .unwrap()
-            .lines()
-            .count();
+        let text = fs::read_to_string(logs.join(format!("load-{i}.jsonl"))).unwrap();
+        appended += (text.len() - text.find('\n').unwrap() - 1) as u64;
+        let lines = text.lines().count();
         assert_eq!(lines as u64, 1 + window * 10, "writer {i} workload");
     }
     // Writer completion precedes the asynchronous file event. Include its final
@@ -1705,7 +1705,7 @@ read -r finish
     let stats = recognition(&h);
     // Gated on retired instructions per appended line, not CPU time, which moves with
     // machine load (649-666 k a line at load 31-50 on 2026-11-04, about 1.3% of a core).
-    // A virtual machine (CI) counts none; there the budget is 2% of a core.
+    // A VM (CI) counts none and its CPU time tracks load: there appended bytes are read once.
     let seconds = cpu_seconds(
         after.ri_user_time + after.ri_system_time - cpu.ri_user_time - cpu.ri_system_time,
     );
@@ -1715,13 +1715,13 @@ read -r finish
     let ps = stats.metrics.ps_spawns - before.metrics.ps_spawns;
     let lsof = stats.metrics.lsof_spawns - before.metrics.lsof_spawns;
     eprintln!(
-        "4 agents / {window}s (load {load:?}, {cores} cores): daemon CPU {seconds:.4}s, {per_line} instructions a line, idle control {idle}, ps spawns {ps}, lsof spawns {lsof}, incremental bytes {}",
+        "4 agents / {window}s (load {load:?}, {cores} cores): daemon CPU {seconds:.4}s, {per_line} instructions a line, idle control {idle}, ps spawns {ps}, lsof spawns {lsof}, incremental bytes {} of {appended}",
         stats.metrics.log_bytes - before.metrics.log_bytes
     );
     assert_eq!((ps, lsof), (0, 0), "transcript appends spawned probes");
     assert!(idle <= 50_000_000, "idle control busy: {idle}");
     let within = match after.ri_instructions {
-        0 => seconds <= 0.02 * window as f64,
+        0 => stats.metrics.log_bytes - before.metrics.log_bytes <= appended + appended / 10,
         _ => per_line <= 1_000_000,
     };
     assert!(within, "daemon over its budget, see the line above");
