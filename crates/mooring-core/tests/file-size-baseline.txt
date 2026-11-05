@@ -2,7 +2,6 @@ crates/mooring-app/src/harness.rs	3315
 crates/mooring-app/src/terminal/pane.rs	2919
 crates/mooring-app/src/terminal/screen.rs	1329
 crates/mooring-app/src/workbench/board.rs	1071
-crates/mooring-app/src/workbench/forms.rs	1098
 crates/mooring-app/src/workbench/mod.rs	1052
 crates/mooring-app/src/workbench/overview.rs	1051
 crates/mooring-app/src/workbench/palette.rs	1269
