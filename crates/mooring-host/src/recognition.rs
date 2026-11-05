@@ -188,6 +188,7 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
         .collect();
     let mut seen = HashSet::new();
     let mut selected = Vec::new();
+    let mut parents = HashMap::new();
     while let Some(pid) = pending.pop() {
         if !seen.insert(pid) {
             continue;
@@ -221,41 +222,24 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
                 "managed process tree changed during enumeration; retry on next event",
             ));
         }
-        pending.extend(
-            children[..count as usize]
-                .iter()
-                .filter(|p| **p > 0)
-                .map(|p| *p as u32),
-        );
+        for child in children[..count as usize].iter().filter(|p| **p > 0) {
+            parents.insert(*child as u32, pid);
+            pending.push(*child as u32);
+        }
     }
     if selected.is_empty() {
         return Ok(vec![]);
     }
-    let pids = selected
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
+    // Read in-process rather than spawning `/bin/ps` per hook: the walk above already knows
+    // each child's parent, and ps reads the same KERN_PROCARGS2 argv for its command.
+    selected.sort_unstable();
     PS_SPAWNS.fetch_add(1, Ordering::Relaxed);
-    let result = Command::new("/bin/ps")
-        .args(["-p", &pids, "-o", "pid=,ppid=,command="])
-        .output()?;
-    if !result.status.success() && result.stdout.is_empty() {
-        return Ok(vec![]);
-    }
     // pid, parent, the Agent its name shows, the Agent a MOORING_AGENT hint names.
     let mut raw = vec![];
-    for line in String::from_utf8_lossy(&result.stdout).lines() {
-        let mut fields = line.trim().splitn(2, char::is_whitespace);
-        let Some(pid) = fields.next().and_then(|s| s.parse().ok()) else {
-            continue;
-        };
-        let rest = fields.next().unwrap_or("").trim_start();
-        let mut fields = rest.splitn(2, char::is_whitespace);
-        let Some(parent) = fields.next().and_then(|s| s.parse().ok()) else {
-            continue;
-        };
-        let runtime = crate::agents::from_command(fields.next().unwrap_or("").trim_start());
+    for pid in selected {
+        let parent = parents.get(&pid).copied().unwrap_or(0);
+        let command = process_argv(pid).unwrap_or_default().join(" ");
+        let runtime = crate::agents::from_command(&command);
         let hint = if runtime.is_none() {
             procargs(pid)
                 .ok()
