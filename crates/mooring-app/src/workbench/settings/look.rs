@@ -199,6 +199,27 @@ impl SettingsView {
                 .into_any_element(),
             );
         }
+        if self.shows(Page::Look, "状态圆圈转动", cx) {
+            use crate::ui::running_spin;
+            let on = running_spin::current(cx);
+            let note = if mooring_core::effect::reduce_motion() {
+                "系统开了「减弱动态效果」，现在不会转".to_owned()
+            } else {
+                format!(
+                    "开启后，有「{}」的会话时窗口每秒多画约 10 次，CPU 约多占 3–5% 个核，也更耗电；窗口被完全挡住时不转",
+                    Status::Running.label()
+                )
+            };
+            let toggle = switch("running-spin", on).on_click(cx.listener(move |this, _, _, cx| {
+                this.text_error = running_spin::choose(!on, cx).err();
+                cx.refresh_windows();
+                cx.notify();
+            }));
+            motion.push(
+                self.row(motion.is_empty(), "状态圆圈转动", &note, toggle)
+                    .into_any_element(),
+            );
+        }
         let mut asks = Vec::new();
         if self.shows(Page::Look, "钉住这一轮的提问", cx) {
             use crate::ui::pinned_ask::{self, PinnedAsk};

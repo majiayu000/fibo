@@ -1,12 +1,14 @@
-// The board: the desktop's five columns, one at a time — 要你处理, 在跑, 停下了, 待办, 做完了, 很久没动
-// (desktop only for now), 今天完成 — conversations grouped by space within each.
+// The board: the desktop's columns, one at a time — 要你处理, 在跑, 停下了, 待办, 做完了, 很久没动 —
+// conversations grouped by space within each. 待办 is what the desktop's holds, read only.
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { type Card, type Machine, useHub } from '@/remote/hub';
+import { type Card, type Machine, type Todo, useHub } from '@/remote/hub';
 import { cardTitle } from '@/ui/format';
 import { Icon, SpaceDot } from '@/ui/icons';
 import { Nav, Notice, mono, useBottom } from '@/ui/kit';
+import { useNow } from '@/ui/now';
+import { runningFor } from '@/ui/parse';
 import { spaceName } from '@/ui/row';
 import { agentName, needsYou, statusColor, statusKey, statusWord, tilde } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
@@ -38,6 +40,38 @@ const colour = (k: Column, t: Theme) => ({ you: t.wait, run: t.run, review: t.di
 
 type Item = { m: Machine; c: Card };
 
+/** How long a running turn has run; the clock redraws this and not the board. */
+function Elapsed({ since, color }: { since: number; color: string }) {
+  return <Text style={{ fontSize: 13, color }}>{runningFor(since, useNow())}</Text>;
+}
+
+function Todos({ items, t }: { items: { m: Machine; todo: Todo }[]; t: Theme }) {
+  const groups = new Map<string, { m: Machine; todo: Todo }[]>();
+  for (const it of items) {
+    const name = it.m.spaces[it.todo.space] || it.todo.space;
+    groups.set(name, [...(groups.get(name) ?? []), it]);
+  }
+  return [...groups].map(([name, list]) => (
+    <View key={name}>
+      <View style={s.grp}>
+        <SpaceDot id={list[0].todo.space || name} size={10} />
+        <Text style={{ fontSize: 15, fontWeight: '600', color: t.text }}>{name}</Text>
+        <Text style={{ fontSize: 14, color: t.dim }}>· {list.length}</Text>
+      </View>
+      {list.map(({ m, todo }) => (
+        <View key={`${m.id}/${todo.id}`} style={[s.row, { borderColor: t.sep }]}>
+          <Text numberOfLines={2} style={{ fontSize: 16, color: t.text }}>
+            {todo.title}
+          </Text>
+          <Text numberOfLines={1} style={{ fontSize: 13, color: t.dim }}>
+            {[agentName(todo.agent), m.name].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+      ))}
+    </View>
+  ));
+}
+
 export default function Board() {
   const t = useTheme();
   const bottom = useBottom();
@@ -51,7 +85,9 @@ export default function Board() {
     const k = column(c);
     if (k) cols[k].push({ m, c });
   }
-  const total = COLUMNS.reduce((n, x) => n + cols[x.key].length, 0);
+  const todos = shown.flatMap((m) => (m.todos ?? []).map((todo) => ({ m, todo })));
+  const count = (k: Column) => (k === 'todo' ? todos.length : cols[k].length);
+  const total = COLUMNS.reduce((n, x) => n + count(x.key), 0);
   const items = cols[col].sort((a, b) => (b.c.updated ?? 0) - (a.c.updated ?? 0));
   const groups = new Map<string, Item[]>();
   for (const it of items) {
@@ -80,7 +116,7 @@ export default function Board() {
       />
       <View style={[s.strip, { paddingHorizontal: 18 }]}>
         {COLUMNS.map((x) => (
-          <View key={x.key} style={{ flex: total ? Math.max(cols[x.key].length, 0.4) : 1, height: 4, borderRadius: 2, backgroundColor: cols[x.key].length ? colour(x.key, t) : t.empty }} />
+          <View key={x.key} style={{ flex: total ? Math.max(count(x.key), 0.4) : 1, height: 4, borderRadius: 2, backgroundColor: count(x.key) ? colour(x.key, t) : t.empty }} />
         ))}
       </View>
       <View>
@@ -95,16 +131,16 @@ export default function Board() {
               >
                 <View style={[s.dot, { backgroundColor: colour(x.key, t) }]} />
                 <Text style={{ fontSize: 14, color: on ? t.onAct : t.text }}>{x.label}</Text>
-                {x.key !== 'todo' && <Text style={{ fontSize: 14, fontWeight: '700', color: on ? t.onAct : t.text }}>{cols[x.key].length}</Text>}
+                <Text style={{ fontSize: 14, fontWeight: '700', color: on ? t.onAct : t.text }}>{count(x.key)}</Text>
               </Pressable>
             );
           })}
         </ScrollView>
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: bottom + 16 }}>
-        {col === 'todo' ? (
-          <Notice text="待办只在电脑上：桌面端的待办还没进远程协议" />
-        ) : items.length === 0 ? (
+        {col === 'todo' && todos.length > 0 ? (
+          <Todos items={todos} t={t} />
+        ) : count(col) === 0 ? (
           <Notice text="这一列现在是空的" />
         ) : (
           [...groups].map(([name, list]) => (
@@ -124,7 +160,7 @@ export default function Board() {
                     <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: t.text }}>
                       {cardTitle(c)}
                     </Text>
-                    <Text style={{ fontSize: 13, color: t.dim }}>{c.updated ? ago(c.updated) : ''}</Text>
+                    {c.running_since ? <Elapsed since={c.running_since} color={t.dim} /> : <Text style={{ fontSize: 13, color: t.dim }}>{c.updated ? ago(c.updated) : ''}</Text>}
                   </View>
                   {col === 'you' ? (
                     <Text numberOfLines={1} style={{ fontSize: 14, color: statusColor(c, t) }}>
@@ -132,11 +168,11 @@ export default function Board() {
                     </Text>
                   ) : (
                     <Text numberOfLines={1} style={{ fontFamily: mono, fontSize: 13, color: t.dim }}>
-                      {tilde(c.cwd)}
+                      {c.doing || tilde(c.cwd)}
                     </Text>
                   )}
                   <Text numberOfLines={1} style={{ fontSize: 13, color: t.dim }}>
-                    {[agentName(c.agent), m.name].filter(Boolean).join(' · ')}
+                    {[agentName(c.agent), m.name, c.branch].filter(Boolean).join(' · ')}
                   </Text>
                 </Pressable>
               ))}

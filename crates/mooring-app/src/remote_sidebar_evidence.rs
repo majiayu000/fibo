@@ -38,6 +38,24 @@ pub(super) fn start(
         let column = |cx: &mut gpui::AsyncApp| {
             handle.update(cx, |v, _, _| v.visual_column()).unwrap()
         };
+        if std::env::var_os("MOORING_QUIET_RESTART").is_some() {
+            // The other machine is stopped by now, so what this can tell is the state read
+            // back and its line; the counts were checked while it was up.
+            let mut quiet = false;
+            for _ in 0..40 {
+                wait(250).await;
+                quiet = handle.update(cx, |v, _, _| v.visual_machine_quiet(0)).unwrap();
+                if quiet && handle.update(cx, |v, _, _| v.visual_wants()).unwrap() == 1 {
+                    break;
+                }
+            }
+            assert!(quiet, "先不管 was forgotten across a launch");
+            assert_eq!(column(cx).0, 0, "a machine quiet since the last launch is listed");
+            shoot("quiet-relaunch.png", cx);
+            eprintln!("quiet relaunch PASS");
+            cx.update(|cx| cx.quit());
+            return;
+        }
         let mut listed = 0;
         for _ in 0..160 {
             wait(250).await;
@@ -243,6 +261,105 @@ pub(super) fn start(
         wait(200).await;
 
 
+        // 先不管这台: out of every count, the key and the board, in every layout; looking at
+        // its sessions does not end it, and the words and the file follow both ways.
+        handle
+            .update(cx, |v, _, cx| v.visual_choose_preset("recent", cx))
+            .unwrap();
+        wait(300).await;
+        let file = std::path::PathBuf::from(std::env::var("HOME").unwrap())
+            .join(".config/mooring/machines.json");
+        let saved = || std::fs::read_to_string(&file).unwrap().contains("\"quiet\": true");
+        assert!(!saved(), "a machine started out quiet");
+        assert_eq!(wants(cx), 2, "both machines before 先不管");
+        handle
+            .update(cx, |v, _, cx| v.visual_scope_machine(Some(0), cx))
+            .unwrap();
+        wait(300).await;
+        handle
+            .update(cx, |v, _, cx| v.visual_machine_menu(0, true, cx))
+            .unwrap();
+        wait(200).await;
+        shoot("quiet-menu.png", cx);
+        handle
+            .update(cx, |v, _, cx| v.visual_set_machine_quiet(0, true, cx))
+            .unwrap();
+        wait(300).await;
+        assert!(saved(), "先不管 was not saved");
+        assert_eq!(column(cx), (0, None, false), "先不管 left the column on that machine");
+        assert_eq!(wants(cx), 1, "a quiet machine counts in the title row");
+        assert_eq!(
+            handle.update(cx, |v, _, _| v.visual_quiet_waiting(0)).unwrap(),
+            1,
+            "its line lost count of what waits"
+        );
+        assert!(
+            handle.update(cx, |v, _, _| v.visual_remote_columns()).unwrap().iter().all(|(id, _)| id != "far"),
+            "a quiet machine's card stayed on the board"
+        );
+        shoot("quiet-a.png", cx);
+        handle
+            .update(cx, |v, _, cx| v.visual_scope_machine(Some(0), cx))
+            .unwrap();
+        assert_eq!(column(cx).1, None, "a quiet machine can be shown alone");
+        handle
+            .update(cx, |v, _, cx| v.visual_scope_machine(None, cx))
+            .unwrap();
+        for (preset, shot) in [("machine-rail", "quiet-b.png"), ("machine-fold", "quiet-c.png")] {
+            handle
+                .update(cx, |v, _, cx| v.visual_choose_preset(preset, cx))
+                .unwrap();
+            wait(300).await;
+            assert_eq!(column(cx).0, 0, "{preset} lists a quiet machine");
+            assert_eq!(wants(cx), 1, "{preset} counts a quiet machine");
+            shoot(shot, cx);
+        }
+        handle
+            .update(cx, |v, _, cx| v.visual_choose_preset("recent", cx))
+            .unwrap();
+        handle
+            .update(cx, |v, _, cx| v.visual_quiet_unfold(0, true, cx))
+            .unwrap();
+        wait(300).await;
+        shoot("quiet-open.png", cx);
+        let opened = handle
+            .update(cx, |v, w, cx| v.visual_peek_remote(0, "far", w, cx))
+            .unwrap();
+        assert!(opened, "a quiet machine's session did not open");
+        wait(500).await;
+        shoot("quiet-peek.png", cx);
+        assert_eq!(wants(cx), 1, "looking at a quiet machine ended 先不管");
+        assert!(saved(), "looking at a quiet machine ended 先不管");
+        handle.update(cx, |v, _, cx| v.visual_close_peek(cx)).unwrap();
+        handle.update(cx, |v, _, cx| v.visual_show_board(cx)).unwrap();
+        wait(400).await;
+        shoot("quiet-board.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_leave_board(cx)).unwrap();
+        wait(200).await;
+        // Back by ⌘P's words, then away by them.
+        let back = handle
+            .update(cx, |v, _, cx| v.visual_machine_hit("接着管", cx))
+            .unwrap();
+        wait(300).await;
+        assert_eq!(back.as_deref(), Some("接着管 far"));
+        assert!(!saved(), "接着管 was not saved");
+        assert_eq!(wants(cx), 2, "接着管 did not bring its count back");
+        assert_eq!(column(cx).0, 1, "接着管 did not bring its row back");
+        shoot("resumed-a.png", cx);
+        let away = handle
+            .update(cx, |v, _, cx| v.visual_machine_hit("先不管", cx))
+            .unwrap();
+        assert_eq!(away.as_deref(), Some("先不管 far"));
+        wait(300).await;
+        // ⌘J stays on this machine with nothing else waiting there.
+        handle.update(cx, |v, w, cx| v.visual_next_waiting(w, cx)).unwrap();
+        wait(300).await;
+        let peek = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
+        assert!(
+            !peek.is_some_and(|k| k.starts_with("remote:")),
+            "the next-waiting key went to a quiet machine"
+        );
+
         // The other machine drops off: its row stays, faded, and it counts as down.
         handle
             .update(cx, |v, _, cx| v.visual_choose_preset("recent", cx))
@@ -261,6 +378,21 @@ pub(super) fn start(
             }
         }
         assert!(down, "the stopped machine still reads as connected");
+        // Quiet through the drop: nothing moves, and it still counts what it listed last.
+        assert_eq!(wants(cx), 1, "a drop moved a quiet machine's count");
+        assert_eq!(
+            handle.update(cx, |v, _, _| v.visual_quiet_waiting(0)).unwrap(),
+            1,
+            "a drop changed a quiet machine's line"
+        );
+        wait(300).await;
+        shoot("quiet-dropped.png", cx);
+        // Back while it is down: it reads as any machine that dropped off.
+        handle
+            .update(cx, |v, _, cx| v.visual_set_machine_quiet(0, false, cx))
+            .unwrap();
+        wait(300).await;
+        assert!(!saved(), "接着管 while down was not saved");
         assert_eq!(wants(cx), 1, "a machine that dropped off still counts in the title row");
         assert_eq!(column(cx).0, 1, "its last row left the list");
         shoot("a-dropped.png", cx);
@@ -269,6 +401,12 @@ pub(super) fn start(
             .unwrap();
         wait(300).await;
         shoot("c-dropped.png", cx);
+        // Left quiet for the next launch, which the outer script makes.
+        handle
+            .update(cx, |v, _, cx| v.visual_set_machine_quiet(0, true, cx))
+            .unwrap();
+        wait(200).await;
+        assert!(saved(), "the last 先不管 was not saved");
         eprintln!("remote sidebar PASS: A, B, C listed as they should, right of the column unchanged, the next-waiting key crossed machines, dropped machine kept and faded");
         cx.update(|cx| cx.quit());
     })

@@ -4,6 +4,7 @@ use super::{err, Index};
 use crate::agents::codex::script_patches;
 use crate::content::{edit_lines, patch_lines, patch_text, LINES, PATCHED};
 use mooring_core::protocol::{ChatMessage, ChatTools};
+use rusqlite::OptionalExtension;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::io;
@@ -60,12 +61,17 @@ impl Index {
             return Ok(());
         };
         let (first, last) = (first.seq, last.seq);
-        let from: i64 = self
+        // The message before this page: where its first message's work began.
+        let (from, mut before_at, mut before_user): (i64, i64, bool) = self
             .db
-            .prepare_cached("SELECT COALESCE(MAX(rowid),0) FROM session_records WHERE path=?1 AND kind IN ('user','assistant') AND rowid<?2")
+            .prepare_cached("SELECT rowid,at,kind='user' FROM session_records WHERE path=?1 AND kind IN ('user','assistant') AND rowid<?2 ORDER BY rowid DESC LIMIT 1")
             .map_err(err)?
-            .query_row(rusqlite::params![path, first], |r| r.get(0))
-            .map_err(err)?;
+            .query_row(rusqlite::params![path, first], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .optional()
+            .map_err(err)?
+            .unwrap_or_default();
         // A result comes after its call, possibly past this page.
         let failed = self
             .db
@@ -77,11 +83,16 @@ impl Index {
             .map_err(err)?;
         let calls = self
             .db
-            .prepare_cached("SELECT rowid,call_id,text FROM session_records WHERE path=?1 AND kind='tool_call' AND rowid>?2 AND rowid<?3 ORDER BY rowid")
+            .prepare_cached("SELECT rowid,call_id,text,at FROM session_records WHERE path=?1 AND kind='tool_call' AND rowid>?2 AND rowid<?3 ORDER BY rowid")
             .map_err(err)?
             .query_map(rusqlite::params![path, from, last], |r| {
                 let id: String = r.get(1)?;
-                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(2)?, failed.contains(&id)))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(2)?,
+                    failed.contains(&id),
+                    r.get::<_, i64>(3)?,
+                ))
             })
             .map_err(err)?
             .collect::<Result<Vec<_>, _>>()
@@ -89,14 +100,30 @@ impl Index {
         let mut calls = calls.into_iter().peekable();
         for m in messages.iter_mut() {
             let mut before = Vec::new();
-            while let Some((_, text, failed)) = calls.next_if(|c| c.0 < m.seq) {
+            let mut first_call = 0;
+            while let Some((_, text, failed, at)) = calls.next_if(|c| c.0 < m.seq) {
+                if before.is_empty() {
+                    first_call = at;
+                }
                 before.push((text, failed));
             }
             if !m.user {
-                m.tools = Some(summary(&before));
+                let began = if before_user { before_at } else { first_call };
+                let mut tools = summary(&before);
+                tools.took = took(began, m.at);
+                m.tools = Some(tools);
             }
+            (before_at, before_user) = (m.at as i64, m.user);
         }
         Ok(())
+    }
+}
+
+/// The seconds between two logged times; a record with no time says nothing.
+fn took(began: i64, at: u64) -> u64 {
+    match u64::try_from(began) {
+        Ok(began) if began > 0 => at.saturating_sub(began),
+        _ => 0,
     }
 }
 

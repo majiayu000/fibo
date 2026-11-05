@@ -113,8 +113,29 @@ pub enum Op {
         agent: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
+        /// Picks a conversation back up (`lastsession` names it), in its Agent and its own
+        /// directory, as the window does; `agent` and `cwd` are not read. If it still runs,
+        /// the reply names that terminal with `existing` and nothing opens.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resume: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
+    },
+    /// The conversation last worked on in `cwd` with `agent`, for 「接着上次的对话」: [`Last`].
+    LastSession {
+        cwd: String,
+        agent: String,
+    },
+    /// Makes a folder a space: [`Space`]. One that already is keeps its space.
+    AddSpace {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
+    /// Tokens each Agent's local logs say it used since `since` (Unix seconds, the phone's
+    /// midnight): [`Usage`].
+    Usage {
+        since: u64,
     },
     /// Closes a terminal and stops what runs in it.
     End {
@@ -199,14 +220,39 @@ impl Op {
             Self::Mkdir { .. } => "mkdir",
             Self::Stop { .. } => "stop",
             Self::Quota => "quota",
+            Self::LastSession { .. } => "lastsession",
+            Self::AddSpace { .. } => "addspace",
+            Self::Usage { .. } => "usage",
         }
     }
 }
 
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
-    "hello", "list", "read", "send", "keys", "input", "answer", "chat", "events", "watch",
-    "resize", "open", "end", "outcome", "close", "ping", "diff", "dirs", "mkdir", "stop", "quota",
+    "hello",
+    "list",
+    "read",
+    "send",
+    "keys",
+    "input",
+    "answer",
+    "chat",
+    "events",
+    "watch",
+    "resize",
+    "open",
+    "end",
+    "outcome",
+    "close",
+    "ping",
+    "diff",
+    "dirs",
+    "mkdir",
+    "stop",
+    "quota",
+    "lastsession",
+    "addspace",
+    "usage",
 ];
 
 /// A line from the machine.
@@ -314,6 +360,18 @@ pub struct List {
     pub machine: Machine,
     pub spaces: Vec<Space>,
     pub terminals: Vec<Card>,
+    /// What the board's 待办 holds; absent from hosts before 11-05.
+    #[serde(default)]
+    pub todos: Vec<Todo>,
+}
+
+/// A todo no conversation works on yet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Todo {
+    pub id: String,
+    pub space: String,
+    pub title: String,
+    pub agent: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -361,6 +419,21 @@ pub struct Card {
     /// with the desktop's own in time order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated: Option<u64>,
+    /// The branch checked out in `cwd`; a detached HEAD gives its short commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// When the turn began, in Unix seconds, while the state is running.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running_since: Option<u64>,
+    /// While running, what the log says it does now (`运行 cargo test`, `改 chat.tsx`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doing: Option<String>,
+    /// The model that last answered, as the log names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Its permission mode as its log last said it, in words to show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -408,6 +481,13 @@ pub struct Tools {
     pub commands: u32,
     /// Files changed, in the order first touched.
     pub files: Vec<FileLines>,
+    /// Seconds this stretch of work took; absent when the log cannot say.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub took: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -429,6 +509,22 @@ pub struct Diff {
     pub removed: u32,
     /// Some patches were cut or left out: the whole is over 512 KiB.
     pub truncated: bool,
+    /// With `terminal`: the test and check commands its conversation last ran.
+    #[serde(default)]
+    pub checks: Vec<Check>,
+}
+
+/// A test or check command as the log recorded it: its exit code, never the Agent's words.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Check {
+    pub command: String,
+    /// What its output counted (`8 passed`); empty when it counted nothing readable.
+    #[serde(default)]
+    pub counts: String,
+    pub ok: bool,
+    pub at: u64,
+    /// The conversation changed files after it ran, so it does not cover them.
+    pub stale: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -480,6 +576,43 @@ pub struct GitInfo {
     pub changes: Option<u32>,
     /// A linked work tree, not the main checkout.
     pub worktree: bool,
+}
+
+/// The reply to `lastsession`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Last {
+    /// Absent when this directory has no such conversation.
+    #[serde(default)]
+    pub session: Option<LastSession>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LastSession {
+    pub id: String,
+    pub title: String,
+    pub updated: u64,
+    /// The terminal it still runs in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<String>,
+}
+
+/// The reply to `usage`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Usage {
+    pub since: u64,
+    pub agents: Vec<AgentUsage>,
+    /// The logs are not all read yet; ask again for the rest.
+    pub partial: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentUsage {
+    pub agent: String,
+    /// Input and output, new to the model: cache writes count, cache reads do not.
+    pub tokens: u64,
+    /// Read back from its cache, counted apart: a long session re-reads its whole context
+    /// on every call, so these run a hundred times the rest.
+    pub cached: u64,
 }
 
 /// The reply to `quota`.
