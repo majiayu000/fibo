@@ -1,3 +1,5 @@
+use super::inspect::list_json;
+use super::open::split_argv;
 use super::*;
 use mooring_core::agent::Agent;
 fn fixture() -> Workspace {

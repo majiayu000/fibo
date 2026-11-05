@@ -405,6 +405,11 @@ pub struct Card {
     /// Waiting on you or failed, as the desktop counts 要你处理.
     #[serde(default)]
     pub needs_you: bool,
+    /// The board column the host put it in (`status_group::Column::key`: needs,
+    /// running, review, done, stale); absent for shells, for conversations off the
+    /// board, and from hosts before 11-05.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<String>,
     /// An Agent runs here but no conversation is tied to it (e.g. a Codex on the shared
     /// daemon): `agent` says which, this says so in the user's words. Phase stays `shell`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
