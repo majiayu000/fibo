@@ -328,3 +328,45 @@ fn a_declared_cli_without_transcripts_is_named_on_its_terminal_until_it_exits() 
         !r.terminal_notes.contains_key("pane") && !r.terminal_hints.contains_key("pane")
     });
 }
+
+#[test]
+fn a_declared_extension_keeps_indexing_after_initial_import() {
+    use std::io::Write;
+    let row = |text: &str| {
+        serde_json::json!({
+            "sid":"fake-ndjson", "cwd":"/tmp", "role":"user", "content":text
+        })
+    };
+    let h = Host::start(|root| {
+        let mut spec: serde_json::Value = serde_json::from_str(&declaration(true)(root)).unwrap();
+        spec["transcripts"]["extension"] = "ndjson".into();
+        fs::write(
+            root.join("logs/fake/one.ndjson"),
+            format!("{}\n", row("first")),
+        )
+        .unwrap();
+        spec.to_string()
+    });
+    let log = h.root.join("logs/fake/one.ndjson").canonicalize().unwrap();
+    let indexed = |h: &Host, expected| {
+        let db = rusqlite::Connection::open(h.root.join("workbench.sqlite")).unwrap();
+        let count: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM session_records WHERE path=?1 AND kind='user'",
+                [log.to_string_lossy().as_ref()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        count == expected
+    };
+    h.wait("custom transcript was not imported", |h| indexed(h, 1));
+    for (expected, text) in [(2, "second"), (3, "third")] {
+        let mut file = fs::OpenOptions::new().append(true).open(&log).unwrap();
+        writeln!(file, "{}", row(text)).unwrap();
+        file.flush().unwrap();
+        drop(file);
+        h.wait("ordinary append to the ndjson file was not indexed", |h| {
+            indexed(h, expected)
+        });
+    }
+}
