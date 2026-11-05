@@ -65,6 +65,11 @@
 
 - 写库改为 `synchronous=NORMAL`；结束的终端回收（Reclaimed，释放 fd 和缓冲）。
 - 按第 0 步压测结果决定：停顿超过 16ms，就上「状态线程 + 写库线程」；否则只把 fsync、fork、ps、hook 挪出锁。
+  - 11-05 复测（见「进度」）后的建议，待定：暂不上「状态线程 + 写库线程」。去掉每个 Hook 的 ps 之后，每秒 50 个 Hook 时 p99 ≤ 1.9ms、p99.9 ≤ 13ms，和只有终端时一个量级；pump 等锁约 0.5%，锁不是瓶颈。只把下面几件事挪出锁或做轻，每件单独一个 PR，各自用 `pty_stall` 复测：
+    1. Hook 第一段锁里 `host.workspace.clone()` + `host.index.fork_current()` + `index.cached()`（`host/client.rs` 的 `Request::Hook`）：锁内采样最多的一块。`processes()` 只要正在运行的终端 pid，可以只拷 pid 列表和要用的终端字段，或者让工作区按 `Arc` 共享、写时复制。
+    2. Hook 第二段锁里的 `commit` → `store.save_applying`（同步写 SQLite，NORMAL 之后 fsync 很少）和回复用的 `snapshot()`：现在占比小，先不动；Hook 再翻几倍或要更大的工作区时，再把写库挪到单独线程（就是原来的「写库线程」，按需再做）。
+    3. `RecognitionStatus` 的 `ps_spawns` 改名（例如 `process_tree_reads`）：#13 之后它数的是进程内读进程树，不再是起 `/bin/ps`，每个 Hook 加 1，读数容易误会。
+    4. 验收「PTY 读最大停顿 < 16ms」改成「p99.9 < 16ms，最大值和同机裸 PTY 对照一起报」：裸 PTY 对照本身最大就到 24ms，最大值分不出宿主和本机。
 - 交接两阶段，每一步都能注入失败做测试。
 
 验收：开关 200 个终端后，fd 和内存回到基线；PTY 读最大停顿 < 16ms；在 Prepare / READY / COMMIT / SERVING 前后各注入一次失败，终端都不断。
@@ -101,3 +106,4 @@
   - 终端里换了对话推 `session_switched`（单测 `a_terminal_that_moves_to_another_conversation_says_so_once`）；手机收到事件就重新拉列表，聊天页跟着换会话。
   - 配对先确认、握手成功才保存；动作模板只用单引号转义；内置的 git 动作带 `core.fsmonitor=false`（用配了 fsmonitor 钩子的仓库验证过：不带会跑，带了不跑）。
   - 没验：手机真机上的确认页和断线重发（只跑了 JS 客户端和类型检查）；「终端里 /new 后手机 5 秒内切过去」没在真机和真 Claude 上走过，只验了事件；中继协议 3 没部署到任何公网中继，用户本机现在没开中继。
+- 2026-11-05 PTY 压测复测（main e85b13e，已含 #7 / #13 / #14 / #16；12 核，负载 10～23，同时有十几个会话在编译）：每组三次。只有终端：最大 2.9～37.6ms、p99 0.35～7.1ms、p99.9 1.0～17.7ms；终端 + 日志每 100ms 一批 + 每秒 50 个 Hook：最大 7.1～41.2ms、p99 0.17～1.9ms、p99.9 0.29～13.1ms（11-03 是最大 168ms～5.1s、p99 16～920ms），只有 Hook 那段最大 0.9～18.9ms、p99 ≤ 1.6ms、p99.9 ≤ 7.4ms；每秒 15 个 Hook：最大 2.6～41.4ms、p99 ≤ 1.1ms、p99.9 ≤ 7.8ms；裸 PTY 对照最大 5.6～24.5ms、p99.9 0.5～2.3ms。Hook 全部按时结束（每秒 50 个时每段 1000 个、失败 0，CLI 耗时 p50 8～9ms、p99 10～44ms），宿主没有 `ps` 子进程，`lsof_spawns` 0；`ps_spawns` 每个 Hook 加 1（约 2020 次一轮），但 #13 之后它数的是进程内读进程树，没起 `/bin/ps`。结论：p99.9 已到 16ms 以下，和只有终端时同一量级；最大值偶尔 40ms 左右，裸 PTY 自己也到 24ms、只有终端时到 37ms，是本机负载造成的，不是宿主。采样（`STALL_SAMPLE=1`，只看归属）：pump 等锁约 0.5%（11-03 是 0.4%）；Hook 路径里最大的是锁外的 `processes()`，锁内是第一段的工作区克隆 + `fork_current()`，`commit` 写库和 `snapshot()` 各约前者的四分之一。第 3 阶段因此建议不上「状态线程 + 写库线程」，只把几件事挪出锁（清单在第 3 阶段下）。另：开测时本机 PTY 用尽（`kern.tty.ptmx_max` 511），占着的是 7 次 `scripts/perf-gate.py` 留下的 420 个孤儿终端（`~/Library/Caches/MooringPerf/p-*/codex -c 'while :; do sleep 3600; done'`，宿主已退出）：`perf-fixture.py stop` 先用 RPC 停终端再杀宿主，RPC 失败时终端留了下来，结束这些孤儿后才测得起来。复现：`cargo test --release -p mooring-host --test pty_stall -- --ignored --nocapture --test-threads 1`（不需要 `DEVELOPER_DIR`；每秒 15 个 Hook 用 `STALL_HOOKS_PER_SEC=15 STALL_PHASES=2,3`；报告在 target/tmp/pty-*-report.txt）。
