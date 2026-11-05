@@ -24,6 +24,8 @@ jobs:
     runs-on: macos-latest
     env:
       LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+      # Incremental state is not worth its size in the target/ cache.
+      CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v4
 
@@ -32,9 +34,30 @@ jobs:
           components: rustfmt, clippy
 
       # Local rust-toolchain.toml pins the same rustfmt/clippy version.
+      # Its own cache is not used: libghostty-vt-sys keeps Zig's caches in Cargo's OUT_DIR,
+      # which the target/ cache below carries. Left on, it saved 25MB per run and filled the quota.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.16.0
+          use-cache: false
+
+      # Cargo rebuilds path dependencies whose sources are newer than their outputs, so a fresh
+      # clone of .deps (GPUI, libghostty-rs) would rebuild them even with target/ restored.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('bootstrap.sh', 'patches/**') }}
+
+      # Also holds the Ghostty checkout and its Zig build, under libghostty-vt-sys's OUT_DIR.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**') }}
+          restore-keys: cargo-${{ runner.os }}-${{ github.job }}-
 
       - name: Prepare pinned native dependencies
         run: sh bootstrap.sh
@@ -60,9 +83,30 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1.95.0
 
+      # Its own cache is not used: libghostty-vt-sys keeps Zig's caches in Cargo's OUT_DIR,
+      # which the target/ cache below carries. Left on, it saved 25MB per run and filled the quota.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.16.0
+          use-cache: false
+
+      # Cargo rebuilds path dependencies whose sources are newer than their outputs, so a fresh
+      # clone of .deps (GPUI, libghostty-rs) would rebuild them even with target/ restored.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('bootstrap.sh', 'patches/**') }}
+
+      # Also holds the Ghostty checkout and its Zig build, under libghostty-vt-sys's OUT_DIR.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**') }}
+          restore-keys: cargo-${{ runner.os }}-${{ github.job }}-
 
       - name: Prepare pinned native dependencies
         run: sh bootstrap.sh
