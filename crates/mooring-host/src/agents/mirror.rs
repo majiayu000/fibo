@@ -70,11 +70,15 @@ pub fn sync(home: &Path) {
 }
 
 fn run(source: &RecordSource, dir: &Path, stop: &AtomicBool) {
-    let mut mirror = Mirror::open(dir);
+    let mut mirror: Option<Mirror> = None;
     let mut db: Option<Connection> = None;
     let mut last_error = String::new();
     while !stop.load(Ordering::SeqCst) {
-        match mirror.poll(source, &mut db) {
+        let polled = match &mut mirror {
+            Some(m) => m.poll(source, &mut db),
+            None => Mirror::open(dir).map(|m| mirror = Some(m)),
+        };
+        match polled {
             Ok(()) => last_error.clear(),
             Err(e) => {
                 db = None;
@@ -109,15 +113,22 @@ pub struct Mirror {
 }
 
 impl Mirror {
-    pub fn open(dir: &Path) -> Self {
-        let cursors = std::fs::read(dir.join(".cursors.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default();
-        Self {
+    /// Only a missing file starts from nothing: cursors that cannot be read would write
+    /// every session's rows out again after the ones already there.
+    pub fn open(dir: &Path) -> io::Result<Self> {
+        let path = dir.join(".cursors.json");
+        let bad = |e: &dyn std::fmt::Display| {
+            io::Error::other(format!("抄写进度 {} 读不了，暂停抄写：{e}", path.display()))
+        };
+        let cursors = match std::fs::read(&path) {
+            Ok(b) => serde_json::from_slice(&b).map_err(|e| bad(&e))?,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Cursors::default(),
+            Err(e) => return Err(bad(&e)),
+        };
+        Ok(Self {
             dir: dir.to_owned(),
             cursors,
-        }
+        })
     }
 
     /// One pass: sessions changed since the last, and each one's rows after its cursor.
@@ -323,7 +334,7 @@ mod tests {
                  INSERT INTO part VALUES('1','a',1,'user','{}');",
             )
             .unwrap();
-        let mut mirror = Mirror::open(&out);
+        let mut mirror = Mirror::open(&out).unwrap();
         let mut db = None;
         mirror.poll(&source, &mut db).unwrap();
         writer
@@ -376,7 +387,7 @@ mod tests {
                  INSERT INTO part VALUES('b','s/1',2,'assistant','{\"type\":\"step-finish\",\"reason\":\"stop\"}');",
             )
             .unwrap();
-        let mut mirror = Mirror::open(&out);
+        let mut mirror = Mirror::open(&out).unwrap();
         let mut db = None;
         mirror.poll(&source, &mut db).unwrap();
         let file = out.join("s_1.jsonl");
@@ -398,7 +409,7 @@ mod tests {
                  INSERT INTO part VALUES('c','s/1',3,'user','{\"type\":\"text\",\"text\":\"again\"}');",
             )
             .unwrap();
-        let mut restarted = Mirror::open(&out);
+        let mut restarted = Mirror::open(&out).unwrap();
         restarted.poll(&source, &mut None).unwrap();
         let all = lines(&file);
         assert_eq!(all.len(), 3);
@@ -420,7 +431,7 @@ mod tests {
             .unwrap();
         source.sessions = "SELECT id AS _session, dir AS _cwd, updated AS _t, title AS _title FROM session WHERE updated > ?1".into();
         let out = root.join("out");
-        let mut mirror = Mirror::open(&out);
+        let mut mirror = Mirror::open(&out).unwrap();
         let mut db = None;
         mirror.poll(&source, &mut db).unwrap();
         let titles = |file: &Path| -> Vec<String> {
@@ -446,6 +457,32 @@ mod tests {
     }
 
     #[test]
+    fn unreadable_cursors_write_nothing_again() {
+        let root = std::env::temp_dir().join(format!("kl-mirror-bad-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let (source, writer) = fixture(&root);
+        writer
+            .execute_batch(
+                "INSERT INTO session VALUES('s','/w',1);
+                 INSERT INTO part VALUES('a','s',1,'user','{}');",
+            )
+            .unwrap();
+        let out = root.join("out");
+        Mirror::open(&out)
+            .unwrap()
+            .poll(&source, &mut None)
+            .unwrap();
+        std::fs::write(out.join(".cursors.json"), "{").unwrap();
+        let err = Mirror::open(&out)
+            .err()
+            .expect("broken cursors are an error");
+        assert!(err.to_string().contains(".cursors.json"), "{err}");
+        assert_eq!(lines(&out.join("s.jsonl")).len(), 1, "no row written twice");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn a_missing_database_is_an_error_not_a_panic() {
         let source = RecordSource {
             sqlite: PathBuf::from("/nonexistent/mooring/cli.db"),
@@ -453,7 +490,7 @@ mod tests {
             records: "SELECT 1".into(),
             poll_ms: 200,
         };
-        let mut mirror = Mirror::open(Path::new("/nonexistent/mooring/out"));
+        let mut mirror = Mirror::open(Path::new("/nonexistent/mooring/out")).unwrap();
         let mut db = None;
         assert!(mirror.poll(&source, &mut db).is_err());
         assert!(db.is_none());

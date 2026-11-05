@@ -10,10 +10,10 @@ use gpui::{Bounds, ContentMask, Pixels, TransformationMatrix};
 use std::cell::RefCell;
 use std::sync::atomic::AtomicBool;
 
-/// One turn. Twelve steps of it: a smaller step costs in proportion and reads no better
-/// on a mark this size.
+/// One turn, in steps of about 10 degrees. At 100 ms a step, 30 degrees each, people saw it
+/// stutter; whoever turns this on wants it smooth, and the setting says what that costs.
 const TURN: Duration = Duration::from_millis(1200);
-const STEP: Duration = Duration::from_millis(100);
+const STEP: Duration = Duration::from_millis(33);
 
 struct Mark {
     bounds: Bounds<Pixels>,

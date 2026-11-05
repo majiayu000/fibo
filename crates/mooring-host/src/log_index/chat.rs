@@ -42,9 +42,16 @@ impl Index {
             .collect::<Result<Vec<_>, _>>()
             .map_err(err)?;
         let more = messages.len() as i64 > limit;
-        messages.truncate(limit as usize);
         if after.is_none() {
             messages.reverse();
+        }
+        drop_repeats(&mut messages);
+        // Without `after` the row past the limit is the oldest: it spoke for `more` and for
+        // the first message's repeat, and is not shown.
+        let over = messages.len().saturating_sub(limit as usize);
+        match after {
+            None => drop(messages.drain(..over)),
+            Some(_) => messages.truncate(limit as usize),
         }
         if tools {
             self.attach_tools(path, &mut messages)?;
@@ -119,6 +126,26 @@ impl Index {
     }
 }
 
+/// How close a repeat of an Agent's words has to be to count as the same message logged
+/// again: `task_complete` follows its message within seconds.
+const REPEAT_WITHIN: u64 = 60;
+
+/// Logs indexed before the parser told them apart hold a Codex turn's last message twice;
+/// reindexing them would lose what only the old rows still have, so this reads past them.
+fn drop_repeats(messages: &mut Vec<ChatMessage>) {
+    let mut before: Option<(String, u64)> = None;
+    messages.retain(|m| {
+        let repeat = !m.user
+            && before.as_ref().is_some_and(|(text, at)| {
+                *text == m.text && m.at.saturating_sub(*at) <= REPEAT_WITHIN
+            });
+        if !repeat {
+            before = (!m.user).then(|| (m.text.clone(), m.at));
+        }
+        !repeat
+    });
+}
+
 /// The seconds between two logged times; a record with no time says nothing.
 fn took(began: i64, at: u64) -> u64 {
     match u64::try_from(began) {
@@ -129,8 +156,21 @@ fn took(began: i64, at: u64) -> u64 {
 
 /// Commands run and files changed by `tool_call` records (`Name {arguments}`), each with
 /// whether it failed: a failed edit changed nothing, a failed command still ran.
-fn summary(calls: &[(String, bool)]) -> ChatTools {
-    let mut out = ChatTools::default();
+pub(super) fn summary(calls: &[(String, bool)]) -> ChatTools {
+    let mut out = ChatTools {
+        calls: calls.len() as u32,
+        ..Default::default()
+    };
+    // Files a Codex change item names: the script that made the change names them too.
+    let items: Vec<String> = (calls.iter())
+        .filter(|(c, _)| c.starts_with("apply_patch "))
+        .filter_map(|(c, _)| serde_json::from_str::<Value>(c.split_once(' ')?.1).ok())
+        .flat_map(|args| {
+            let files: Vec<(String, u32, u32)> = serde_json::from_value(args[PATCHED].clone())
+                .unwrap_or_else(|_| patch_lines(patch_text(&args)));
+            files.into_iter().map(|f| f.0)
+        })
+        .collect();
     for (call, failed) in calls {
         let (name, args) = call.split_once(' ').unwrap_or((call, ""));
         let args: Value = serde_json::from_str(args).unwrap_or(Value::Null);
@@ -148,6 +188,9 @@ fn summary(calls: &[(String, bool)]) -> ChatTools {
             if let Some(script) = args["input"].as_str() {
                 touched = script_patches(script);
             }
+            touched.retain(|(path, _, _)| {
+                !(items.iter()).any(|i| i == path || i.ends_with(&format!("/{path}")))
+            });
         } else if matches!(short, "Edit" | "MultiEdit" | "Write" | "NotebookEdit") {
             let (added, removed) =
                 serde_json::from_value(args[LINES].clone()).unwrap_or_else(|_| edit_lines(&args));
@@ -223,6 +266,63 @@ mod tests {
         );
     }
 
+    /// A script's patch and the change item it produced are one change; a patch built at
+    /// run time, which the script's text cannot say, is known from the item alone.
+    #[test]
+    fn a_change_item_and_its_script_count_once() {
+        let call = |name: &str, args: Value| (format!("{name} {args}"), false);
+        let patch = "*** Begin Patch\n*** Update File: src/a.rs\n@@\n-x\n+y\n*** End Patch";
+        let script = format!(
+            "await tools.apply_patch(\"{}\");",
+            patch.replace('\n', "\\n")
+        );
+        let item = "*** Update File: /r/src/a.rs\n@@ -1 +1 @@\n-x\n+y\n";
+        let s = summary(&[
+            call("exec", json!({ "input": script })),
+            call("apply_patch", json!({ "input": item })),
+        ]);
+        assert_eq!(s.files, [("/r/src/a.rs".to_owned(), 1, 1)]);
+        let s = summary(&[
+            call("exec", json!({ "input": "await tools.apply_patch(p);" })),
+            call("apply_patch", json!({ "input": item })),
+        ]);
+        assert_eq!(s.files, [("/r/src/a.rs".to_owned(), 1, 1)]);
+    }
+
+    /// A log indexed before the parser told the copies apart: the second copy is not shown,
+    /// on any page, and the same words later in the conversation still are.
+    #[test]
+    fn a_turns_last_message_indexed_twice_reads_as_one() {
+        let dir = std::env::temp_dir().join(format!("mooring-chat-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let i = Index::open(&dir, vec![]).unwrap();
+        let rows = [
+            (10, "user", "改一下"),
+            (20, "assistant", "好了"),
+            (25, "assistant", "好了"),
+            (100, "user", "再改"),
+            (200, "assistant", "好了"),
+            (205, "assistant", "好了"),
+            (900, "assistant", "好了"),
+        ];
+        for (n, (at, kind, text)) in rows.iter().enumerate() {
+            i.db.execute(
+                "INSERT INTO session_records VALUES('p',1,?1,0,?2,?3,?4,'',NULL)",
+                rusqlite::params![n as i64, at, kind, text],
+            )
+            .unwrap();
+        }
+        let words = |m: &[ChatMessage]| m.iter().map(|m| m.at).collect::<Vec<_>>();
+        let (all, more) = i.chat("p", None, None, 50, false).unwrap();
+        assert_eq!(words(&all), [10, 20, 100, 200, 900]);
+        assert!(!more);
+        // A page that starts on the second copy does not show it either.
+        let (page, more) = i.chat("p", None, None, 2, false).unwrap();
+        assert_eq!(words(&page), [200, 900]);
+        assert!(more);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     /// Codex's `exec` scripts, as real logs have them, short and past the 8 KiB record. Each
     /// command inside has a `CommandExecution` of its own, so the script itself counts none.
     #[test]
@@ -256,8 +356,14 @@ mod tests {
                 ]
             );
         }
-        // Built at run time: nothing to read, nothing made up.
-        assert_eq!(summary(&calls[2..3]), ChatTools::default());
+        // Built at run time: nothing to read, nothing made up; the call itself still counts.
+        assert_eq!(
+            summary(&calls[2..3]),
+            ChatTools {
+                calls: 1,
+                ..Default::default()
+            }
+        );
         // The command the script ran, as Codex logs it once it is done.
         assert_eq!(summary(&calls[3..]).commands, 1);
     }

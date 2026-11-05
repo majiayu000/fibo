@@ -209,7 +209,13 @@ fn active(agent: Agent, config: Option<&Path>) -> Rules {
 pub fn load_override(agent: Agent, dir: &Path) -> Option<Result<Rules, String>> {
     let stem = agent.key().to_lowercase();
     let path = dir.join("screen-rules").join(format!("{stem}.json"));
-    let text = std::fs::read_to_string(&path).ok()?;
+    // Only a missing file means no override; one that cannot be read is reported like a
+    // broken one, never taken for absent.
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => return Some(Err(format!("{}: {e}", path.display()))),
+    };
     Some(
         Rules::parse(&text, Source::Override(path.clone()))
             .and_then(|r| {
@@ -324,28 +330,36 @@ impl Explained {
         })
     }
     /// The key that takes the menu's 「don't ask again」 option (Claude Code's 「Yes, and
-    /// don't ask again for …」 or 「Yes, and switch to accept edits」, Codex's 「Yes, and
-    /// don't ask again for this command in this session (a)」): its own letter when it
-    /// shows one, else its number. None when the menu has no such option.
+    /// don’t ask again for …」, 「Yes, and always allow access to …」 or 「Yes, and switch to
+    /// accept edits」, Codex's 「Yes, and don't ask again for this command in this session
+    /// (a)」): its own letter when it shows one, else its number. None when the menu has no
+    /// such option. Never 「switch to auto mode」: that hands over every later prompt.
     pub fn always_key(&self) -> Option<String> {
         let hit = self.found.as_ref().ok()?;
-        hit.evidence
+        let lines = &hit.evidence;
+        lines.iter().enumerate().find_map(|(i, l)| {
+            let (_, n, text) = option(l)?;
+            let lower = text.to_lowercase().replace('’', "'");
+            let always = [
+                "don't ask again",
+                "always allow",
+                "during this session",
+                "accept edits",
+            ]
             .iter()
-            .filter_map(|l| option(l))
-            .find_map(|(_, n, text)| {
-                let lower = text.to_lowercase();
-                let always = ["don't ask again", "during this session", "accept edits"]
-                    .iter()
-                    .any(|s| lower.contains(s));
-                if n == 1 || !lower.starts_with("yes") || !always {
-                    return None;
-                }
-                let letter = (text.strip_suffix(')'))
-                    .and_then(|t| t.rsplit_once('('))
-                    .map(|(_, k)| k)
-                    .filter(|k| k.len() == 1 && k.chars().all(|c| c.is_ascii_alphabetic()));
-                Some(letter.map_or_else(|| n.to_string(), str::to_owned))
-            })
+            .any(|s| lower.contains(s));
+            if n == 1 || !lower.starts_with("yes") || !always || lower.contains("auto mode") {
+                return None;
+            }
+            // A long option wraps, its letter alone on the next line.
+            let wrapped = lines.get(i + 1).filter(|next| option(next).is_none());
+            let tail = wrapped.map_or(text, |next| next.trim());
+            let letter = (tail.strip_suffix(')'))
+                .and_then(|t| t.rsplit_once('('))
+                .map(|(_, k)| k)
+                .filter(|k| k.len() == 1 && k.chars().all(|c| c.is_ascii_alphabetic()));
+            Some(letter.map_or_else(|| n.to_string(), str::to_owned))
+        })
     }
     pub fn rule(&self) -> Option<&'static Rule> {
         let rules = self.rules;
@@ -548,6 +562,10 @@ mod tests {
 
         assert_eq!(active(agent, Some(&dir)).source, Source::Bundled);
 
+        std::fs::write(&file, b"\xff\xfe{}").unwrap();
+        let err = load_override(agent, &dir).unwrap().unwrap_err();
+        assert!(err.contains(&file.display().to_string()), "{err}");
+
         std::fs::write(&file, "{ not json").unwrap();
         assert!(load_override(agent, &dir).unwrap().is_err());
         // A broken file is reported and the bundled rules read the screen.
@@ -645,5 +663,12 @@ mod tests {
         assert_eq!(plain.always_key(), None);
         let idle = explain(default_rules(), "$ ls\n");
         assert_eq!(idle.always_key(), None);
+        // Handing over every later prompt is not 「不再询问这一条」, whatever it says.
+        let auto = explain(
+            default_rules(),
+            "Do you want to proceed?\n❯ 1. Yes\n  2. Yes, and switch to auto mode · don't ask again\n  3. No\n",
+        );
+        assert!(auto.approval().is_some());
+        assert_eq!(auto.always_key(), None);
     }
 }
