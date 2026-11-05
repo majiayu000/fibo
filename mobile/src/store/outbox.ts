@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { persisted } from './kv';
 
-export type Unsent = { id: string; machine: string; terminal: string; text: string; at: number; error?: string };
+export type Unsent = { id: string; machine: string; terminal: string; session: string; text: string; at: number; error?: string };
 
 const box = persisted<{ items: Unsent[] }>('mooring.outbox', { items: [] });
 export const outboxReady = box.ready;

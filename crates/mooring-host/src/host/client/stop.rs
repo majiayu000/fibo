@@ -35,7 +35,7 @@ pub(super) fn await_interrupt(shared: &Shared, id: &str) -> io::Result<Reply> {
             };
             if let Reply::Text(tail) = dispatch(shared, read)? {
                 if let Some(text) = cli.closes_background(&tail) {
-                    send_text(shared, id, text, true)?;
+                    send_text(shared, id, text, true, None)?;
                     closed = true;
                 }
             }

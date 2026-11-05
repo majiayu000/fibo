@@ -2640,7 +2640,7 @@ pub fn start(
             }).unwrap();
             wait(300).await;
             assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "Esc did not close the peek");
-            call(Request::SendText { id: "agent".into(), text: "done".into(), submit: true });
+            call(Request::SendText { session: None, id: "agent".into(), text: "done".into(), submit: true });
             let mut ended = String::new();
             for _ in 0..50 {
                 wait(100).await;
