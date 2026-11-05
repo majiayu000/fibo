@@ -1,5 +1,20 @@
 use super::*;
 #[test]
+fn the_workbench_db_commits_with_synchronous_normal() {
+    let dir = std::env::temp_dir().join(format!("kl-sync-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (db, _) = Store::open(&dir).unwrap();
+    let sync: i64 =
+        db.0.query_row("PRAGMA synchronous", [], |r| r.get(0))
+            .unwrap();
+    assert_eq!(
+        sync, 1,
+        "workbench.sqlite must stay WAL + synchronous=NORMAL"
+    );
+    drop(db);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+#[test]
 fn launch_flags_survive_reopen_and_go_when_dropped() {
     let dir = std::env::temp_dir().join(format!("kl-launch-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();

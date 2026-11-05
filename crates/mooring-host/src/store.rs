@@ -63,7 +63,10 @@ impl Store {
                 "旧实验库仍使用 workspace JSON；请指定新的隔离目录，不自动迁移或删除",
             ));
         }
-        db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
+        // WAL + NORMAL (docs/plan.md, stage 3): a crashed process loses nothing; only power loss
+        // or an OS crash can drop the last few commits. Layout, tasks and outcomes can take that,
+        // and commits under the host lock no longer fsync every time.
+        db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
             CREATE TABLE IF NOT EXISTS meta (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
             INSERT OR IGNORE INTO meta VALUES(1,0);
             CREATE TABLE IF NOT EXISTS app_settings (id INTEGER PRIMARY KEY CHECK(id=1), notifications INTEGER NOT NULL, stale_days INTEGER NOT NULL, away_minutes INTEGER NOT NULL, default_agent TEXT NOT NULL);
