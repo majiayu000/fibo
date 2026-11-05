@@ -268,6 +268,7 @@ mod tasks;
 use tasks::TaskUi;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "visual-test")]
 mod visual;
 
 mod closing;

@@ -1,25 +1,20 @@
 //! Fixture-driven layouts and pages for native visual evidence.
 use super::*;
-#[cfg(feature = "visual-test")]
 #[path = "subagent_sample_tests.rs"]
 mod subagent_samples;
 
 /// The space menu's state, the rename field's text and focus, each space's name and cwd.
-#[cfg(feature = "visual-test")]
 pub type VisualSpaceState = (bool, Option<(String, bool)>, Vec<(String, String)>);
 impl Workbench {
     /// ⌘B, as the sidebar button does.
-    #[cfg(feature = "visual-test")]
     pub fn visual_toggle_sidebar(&mut self, cx: &mut Context<Self>) {
         self.toggle_sidebar(cx);
     }
     /// The host's socket, whether its connection strip shows, and 「重新连接」 itself.
-    #[cfg(feature = "visual-test")]
     pub fn visual_socket(&self) -> PathBuf {
         self.store.socket().to_owned()
     }
     /// The pane's session, whether 标记完成 is offered on it, and whether the pane is shown.
-    #[cfg(feature = "visual-test")]
     pub fn visual_completable(&self, terminal: &str) -> (Option<String>, bool, bool) {
         let session = self.pane_session(terminal);
         let review = session.is_some_and(|s| {
@@ -32,19 +27,16 @@ impl Workbench {
         )
     }
     /// The 标记完成 button's click, and 「留着这个画面」 mid-run.
-    #[cfg(feature = "visual-test")]
     pub fn visual_complete(&mut self, terminal: &str, cx: &mut Context<Self>) {
         let session = self.pane_session(terminal).expect("no session").id.clone();
         self.complete_pane(terminal.to_owned(), session, cx);
     }
     /// The session card over the pane, as clicking its status opens it.
-    #[cfg(feature = "visual-test")]
     pub fn visual_open_here(&mut self, terminal: &str, cx: &mut Context<Self>) {
         self.overview.here = self.pane_session(terminal).map(|s| s.id.clone());
         cx.notify();
     }
     /// 标记完成 with a given animation, held at `pin` of the way through when given.
-    #[cfg(feature = "visual-test")]
     pub fn visual_complete_with(
         &mut self,
         terminal: &str,
@@ -58,7 +50,6 @@ impl Workbench {
     }
     /// Where a run is held for screenshots: `MOORING_COMPLETE_TS` as `from,to,step`. The
     /// window takes `MOORING_COMPLETE_WINDOW` (`width,height`) first, to try a small pane.
-    #[cfg(feature = "visual-test")]
     pub fn visual_complete_times(&self, window: &mut Window) -> Vec<f32> {
         if let Ok(asked) = std::env::var("MOORING_COMPLETE_WINDOW")
             && let Some((w, h)) = asked.split_once(',')
@@ -79,12 +70,10 @@ impl Workbench {
             _ => vec![0.1, 0.32, 0.45, 0.6, 0.8, 0.9, 0.95],
         }
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_specks(&self) -> usize {
         super::complete::SPECKS.load(std::sync::atomic::Ordering::Relaxed)
     }
     /// The overlay's paints since the last call: frame gaps and paint times, in ms.
-    #[cfg(feature = "visual-test")]
     pub fn visual_take_paints(&self) -> (Vec<f32>, Vec<f32>) {
         let most = std::mem::take(&mut *super::complete::PRIMITIVES.lock().unwrap());
         eprintln!(
@@ -99,7 +88,6 @@ impl Workbench {
         let paints = log.iter().map(|(_, d)| d.as_secs_f32() * 1e3).collect();
         (gaps, paints)
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_pin_completing(
         &mut self,
         terminal: &str,
@@ -109,7 +97,6 @@ impl Workbench {
         self.pin_completing(terminal, t);
         cx.notify();
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_keep_completed(&mut self, terminal: &str, cx: &mut Context<Self>) {
         self.layout.completing.remove(terminal);
         cx.notify();
@@ -117,7 +104,6 @@ impl Workbench {
     /// A notification for `id` clicked before the session loaded, from a tab page: the
     /// session is taken out of what this window holds, as before its first refresh.
     /// `then_overview` is the user opening the overview before it loads.
-    #[cfg(feature = "visual-test")]
     pub fn visual_route_before_load(
         &mut self,
         id: &str,
@@ -135,7 +121,6 @@ impl Workbench {
         }
         said
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_session_ids(&self) -> Vec<String> {
         self.workspace
             .agent_sessions
@@ -144,7 +129,6 @@ impl Workbench {
             .collect()
     }
     /// The overview's open state, the session it centers on, and the error line.
-    #[cfg(feature = "visual-test")]
     pub fn visual_route_state(&self) -> (bool, Option<String>, Option<String>) {
         (
             self.nav.overview,
@@ -152,15 +136,12 @@ impl Workbench {
             self.error.clone(),
         )
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_cut_off(&self) -> bool {
         self.store.cut_off()
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_reconnect(&mut self, cx: &mut Context<Self>) {
         self.reconnect(cx);
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_layout(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.nav.overview = false;
         self.nav.zoomed = None;
@@ -236,7 +217,6 @@ impl Workbench {
         window.refresh();
     }
     /// The middle of the first card in a board column, by the column's id.
-    #[cfg(feature = "visual-test")]
     pub fn visual_card_center(&self, column: &str) -> Option<gpui::Point<gpui::Pixels>> {
         use super::board::Column;
         let c = [
@@ -258,14 +238,12 @@ impl Workbench {
         Some(bounds.center())
     }
     /// How far apart neighbouring board columns are drawn.
-    #[cfg(feature = "visual-test")]
     pub fn visual_column_step(&self) -> gpui::Pixels {
         self.overview
             .column_width
             .unwrap_or(px(T::BOARD_COLUMN_MIN))
             + px(T::S14)
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_bounds(&self) -> gpui::Bounds<gpui::Pixels> {
         *self
             .layout
@@ -273,7 +251,6 @@ impl Workbench {
             .get(&Vec::new())
             .expect("root splitter bounds")
     }
-    #[cfg(feature = "visual-test")]
     /// The middle of the pane menu's item `title`, past the rules between groups.
     pub fn visual_menu_point(&self, title: &str) -> gpui::Point<gpui::Pixels> {
         let menu = self
@@ -295,7 +272,6 @@ impl Workbench {
         panic!("no {title} in the pane menu");
     }
     /// Opens the session menu on `id` at `at`, as a right click on its row does.
-    #[cfg(feature = "visual-test")]
     pub fn visual_open_session_menu(
         &mut self,
         id: &str,
@@ -306,7 +282,6 @@ impl Workbench {
         cx.notify();
     }
     /// Where the open session menu lists `title`.
-    #[cfg(feature = "visual-test")]
     pub fn visual_session_menu_point(&self, title: &str) -> gpui::Point<gpui::Pixels> {
         let (id, position) = self
             .layout
@@ -320,7 +295,6 @@ impl Workbench {
             .unwrap_or_else(|| panic!("no {title} in the session menu"));
         *position + gpui::point(px(T::S20), px(T::S6 + T::ROW * (index as f32 + 0.5)))
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_tab_menu_point(&self, index: usize) -> gpui::Point<gpui::Pixels> {
         let (_, position) = self
             .layout
@@ -330,7 +304,6 @@ impl Workbench {
         *position + gpui::point(px(T::S20), px(T::S6 + T::ROW * (index as f32 + 0.5)))
     }
     /// Whether the tab menu is open, and the rename field's text and focus if any.
-    #[cfg(feature = "visual-test")]
     pub fn visual_tab_state(
         &self,
         window: &Window,
@@ -347,7 +320,6 @@ impl Workbench {
         )
     }
     /// Types into the open rename field as an input method would, caret at the end.
-    #[cfg(feature = "visual-test")]
     pub fn visual_rename_type(&mut self, text: &str, cx: &mut Context<Self>) {
         if let Some((_, field, _)) = &self.layout.renaming_tab {
             field.update(cx, |f, cx| {
@@ -357,7 +329,6 @@ impl Workbench {
         }
     }
     /// The name the first tab of this space shows.
-    #[cfg(feature = "visual-test")]
     pub fn visual_first_tab_name(&self, cx: &gpui::App) -> String {
         self.workspace
             .tabs
@@ -366,13 +337,11 @@ impl Workbench {
             .map(|t| self.tab_name(t, cx))
             .unwrap_or_default()
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_new_tab(&mut self, cx: &mut Context<Self>) {
         self.launch(false, None, cx);
     }
     /// Opens a conversation whose resume cannot take (unknown CLI id, no live terminal),
     /// as clicking a 出错了 row does; returns the tab count and the current tab after.
-    #[cfg(feature = "visual-test")]
     pub fn visual_open_failed_session(
         &mut self,
         window: &mut Window,
@@ -396,7 +365,6 @@ impl Workbench {
         (self.workspace.tabs.len(), self.nav.tab.clone())
     }
     /// The recorded directory of the shown tab's first terminal.
-    #[cfg(feature = "visual-test")]
     pub fn visual_shown_cwd(&self) -> String {
         let tab = self.nav.tab.as_ref().expect("a shown tab");
         let id = self.workspace.tab_terminals(tab)[0].clone();
@@ -409,7 +377,6 @@ impl Workbench {
         terminal.cwd.clone()
     }
     /// The settings panel when open: (recording, a taken chord waiting, panel focused).
-    #[cfg(feature = "visual-test")]
     pub fn visual_settings(&self, window: &Window, cx: &gpui::App) -> Option<(bool, bool, bool)> {
         let view = self.settings.as_ref()?.read(cx);
         Some((
@@ -419,7 +386,6 @@ impl Workbench {
         ))
     }
     /// Starts recording a chord for the action named as in keys.json, as its key button does.
-    #[cfg(feature = "visual-test")]
     pub fn visual_settings_record(&mut self, name: &str, cx: &mut Context<Self>) {
         let action = crate::keymap::Keymap::actions()
             .find(|a| a.name() == name)
@@ -428,7 +394,6 @@ impl Workbench {
         view.update(cx, |v, cx| v.record(action, cx));
     }
     /// 取消 under a taken chord, or 全部恢复默认.
-    #[cfg(feature = "visual-test")]
     pub fn visual_settings_press(&mut self, button: &str, cx: &mut Context<Self>) {
         let view = self.settings.clone().expect("settings open");
         view.update(cx, |v, cx| match button {
@@ -441,7 +406,6 @@ impl Workbench {
         });
     }
     /// Whether a terminal pane holds input focus.
-    #[cfg(feature = "visual-test")]
     pub fn visual_pane_focused(&self, window: &Window, cx: &gpui::App) -> bool {
         self.layout
             .panes
@@ -450,7 +414,6 @@ impl Workbench {
     }
     /// The shown tab's panes in layout order and the one whose handle really holds
     /// input focus (not just the one the workbench remembers).
-    #[cfg(feature = "visual-test")]
     pub fn visual_pane_focus(
         &self,
         window: &Window,
@@ -479,7 +442,6 @@ impl Workbench {
         (order, focused)
     }
     /// Tabs out of sight left and right of the strip, and a point on the right marker.
-    #[cfg(feature = "visual-test")]
     pub fn visual_tab_overflow(&self) -> (usize, usize, gpui::Point<gpui::Pixels>) {
         let count = self.visual_tab_row().0.len();
         let (left, right) = super::render::hidden_tabs(&self.layout.tab_scroll, count);
@@ -491,14 +453,12 @@ impl Workbench {
         )
     }
     /// Scrolls the tab strip back to its start.
-    #[cfg(feature = "visual-test")]
     pub fn visual_tab_scroll_home(&mut self, cx: &mut Context<Self>) {
         let y = self.layout.tab_scroll.offset().y;
         self.layout.tab_scroll.set_offset(gpui::point(px(0.), y));
         cx.notify();
     }
     /// The current space's tabs in strip order, the shown one, and its pane count.
-    #[cfg(feature = "visual-test")]
     pub fn visual_tab_row(&self) -> (Vec<String>, Option<String>, usize) {
         let row = self
             .workspace
@@ -514,15 +474,12 @@ impl Workbench {
             .map_or(0, |t| self.workspace.tab_terminals(t).len());
         (row, self.nav.tab.clone(), panes)
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_tabs(&self) -> (usize, Option<String>) {
         (self.workspace.tabs.len(), self.nav.tab.clone())
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_check_panes(&self, count: usize) {
         assert_eq!(self.layout.panes.len(), count);
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_check_saved_ratio(&self) {
         let Reply::Workspace(w) = rpc(self.store.socket(), &Request::Workspace).unwrap() else {
             panic!("workspace")
@@ -538,28 +495,23 @@ impl Workbench {
             matches!(local.layout,Some(Layout::Split{ratio,..}) if (6600..6800).contains(&ratio))
         );
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_confirming_close(&self) -> bool {
         self.layout.confirm_close.is_some()
     }
     /// The dialog's 取消.
-    #[cfg(feature = "visual-test")]
     pub fn visual_cancel_close(&mut self, cx: &mut Context<Self>) {
         self.layout.confirm_close = None;
         cx.notify();
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_split_down(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let id = self.nav.focused.clone().unwrap();
         self.menu_action(&id, "向下分屏", window, cx);
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_close_focused(&mut self, cx: &mut Context<Self>) {
         let id = self.nav.focused.clone().unwrap();
         self.close_pane(&id, cx);
     }
     /// Closes the shown tab, as its × does; the neighbour that takes over is returned.
-    #[cfg(feature = "visual-test")]
     pub fn visual_close_tab(&mut self, cx: &mut Context<Self>) -> Option<String> {
         let id = self.nav.tab.clone().unwrap();
         self.close_tab(&id, cx);
@@ -572,7 +524,6 @@ impl Workbench {
         }
         Some(tab)
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_assert_new_shell(&self, count: usize, window: &Window, cx: &gpui::App) {
         self.visual_check_panes(count);
         let id = self.nav.focused.as_ref().unwrap();
@@ -593,7 +544,6 @@ impl Workbench {
         );
         assert!(self.workspace.agent_sessions.is_empty());
     }
-    #[cfg(feature = "visual-test")]
     /// Of the two shells this run opened, `closed` were closed and must have stopped.
     pub fn visual_check_closed_processes(&self, closed: usize) {
         let extras: Vec<_> = self
@@ -612,7 +562,6 @@ impl Workbench {
             .count();
         assert_eq!(stopped, closed, "closing a pane stops its terminal");
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_marked_overlay(
         &mut self,
         window: &mut Window,
@@ -629,7 +578,6 @@ impl Workbench {
         }
         None
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_view(&mut self, overview: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.nav.overview = overview;
         self.sync_panes(cx);
@@ -647,14 +595,12 @@ impl Workbench {
         window.refresh();
     }
     /// The first pane of the shown tab.
-    #[cfg(feature = "visual-test")]
     pub fn visual_decorations(&self, cx: &Context<Self>) -> (Vec<String>, Vec<String>) {
         let tab = self.nav.tab.as_ref().expect("a shown tab");
         let id = self.workspace.tab_terminals(tab)[0].clone();
         let lines = self.pane_decorations(&id, cx);
         (lines.title.into_iter().map(|(l, _)| l).collect(), lines.tip)
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_shown_pane(&self) -> Entity<Pane> {
         let tab = self.nav.tab.as_ref().expect("a shown tab");
         let id = self
@@ -666,7 +612,6 @@ impl Workbench {
         self.layout.panes[&id].clone()
     }
     /// Whether the shown tab still has its pane and no completion run is left on it.
-    #[cfg(feature = "visual-test")]
     pub fn visual_shown_pane_alive(&self) -> bool {
         self.nav.tab.as_ref().is_some_and(|tab| {
             self.workspace.tab_terminals(tab).first().is_some_and(|id| {
@@ -674,25 +619,20 @@ impl Workbench {
             })
         })
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_pane_menu_open(&self) -> bool {
         self.layout.menu.is_some()
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_here_open(&self) -> bool {
         self.overview.here.is_some()
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_restart_host(&mut self, cx: &mut Context<Self>) {
         self.close_now(Closing::Host, cx);
     }
     /// The terminal in focus and the one floating over it, for evidence scripts.
-    #[cfg(feature = "visual-test")]
     pub fn visual_nav(&self) -> (Option<String>, Option<String>) {
         let peek = self.peek.as_ref().map(|p| p.terminal.clone());
         (self.nav.focused.clone(), peek)
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_page(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.tasks.form = None;
         self.tasks.quick_task = None;
@@ -1132,7 +1072,6 @@ impl Workbench {
     /// one failed), two run, four are done, three stopped and a few went quiet, over five
     /// folders. Kept in memory only, in a tab of their own, and the revision is pushed
     /// past the host's so its snapshots leave them be.
-    #[cfg(feature = "visual-test")]
     fn visual_dense_fixture(&mut self) {
         use mooring_core::content::{Content, Evidence, Quote, Source, Turn};
         if self.workspace.terminals.iter().any(|t| t.id == "dense-t0") {
@@ -1424,7 +1363,6 @@ impl Workbench {
     /// Attaches the fixture sessions' own records to task0's criteria through a real
     /// edit: a passing test and a file change on the first, a failed test on the third;
     /// with `full`, passing records on all three.
-    #[cfg(feature = "visual-test")]
     fn visual_attach_evidence(&mut self, full: bool, cx: &mut Context<Self>) {
         let Some(mut task) = self
             .workspace
@@ -1460,13 +1398,11 @@ impl Workbench {
         self.edit(Edit::UpdateTask(task), cx);
     }
     /// The overview toggle's centre, as last drawn.
-    #[cfg(feature = "visual-test")]
     pub fn visual_toggle_point(&self) -> gpui::Point<gpui::Pixels> {
         self.overview.toggle_at.expect("toggle drawn").center()
     }
     /// Overview shown, the tab in view, the space filter, and who holds the keyboard:
     /// the overview itself or a pane of the shown tab.
-    #[cfg(feature = "visual-test")]
     pub fn visual_overview_state(
         &self,
         window: &Window,
@@ -1492,7 +1428,6 @@ impl Workbench {
         )
     }
     /// Tab titles in strip order for the shown space, and the spaces left.
-    #[cfg(feature = "visual-test")]
     pub fn visual_tab_titles(&self) -> Vec<String> {
         self.workspace
             .tabs
@@ -1501,7 +1436,6 @@ impl Workbench {
             .map(|t| t.title.clone())
             .collect()
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_page_tab(&mut self, title: &str, _: &mut Window, cx: &mut Context<Self>) {
         let tab = self
             .workspace
@@ -1515,7 +1449,6 @@ impl Workbench {
         self.nav.focused = None;
         self.sync_panes(cx);
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_move_pane(&mut self, title: &str, cx: &mut Context<Self>) {
         let pane = self.nav.focused.clone().expect("a focused pane");
         let to = self
@@ -1526,7 +1459,6 @@ impl Workbench {
             .map(|t| t.id.clone());
         self.move_pane(&pane, to.as_deref(), cx);
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_tab_layout(&self, title: &str) -> usize {
         self.workspace
             .tabs
@@ -1534,7 +1466,6 @@ impl Workbench {
             .find(|t| visual_tab_is(&self.workspace, t, title))
             .map_or(0, |t| self.workspace.tab_terminals(&t.id).len())
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_open_space_menu(&mut self, id: &str, cx: &mut Context<Self>) {
         self.layout.space_menu =
             Some((id.into(), gpui::point(px(T::S20), px(T::TOP + 4. * T::ROW))));
@@ -1542,7 +1473,6 @@ impl Workbench {
         cx.notify();
     }
     /// Names this space's tabs in strip order, for scripts that address them by name.
-    #[cfg(feature = "visual-test")]
     pub fn visual_name_tabs(&mut self, names: &[&str], cx: &mut Context<Self>) {
         let tabs: Vec<_> = self
             .workspace
@@ -1557,23 +1487,19 @@ impl Workbench {
         }
     }
     /// Shows space `id` as a click on it in the sidebar does.
-    #[cfg(feature = "visual-test")]
     pub fn visual_pick_space(&mut self, id: &str, cx: &mut Context<Self>) {
         self.pick_space(id, cx);
     }
     /// The executable of the Agent an empty tab offers first.
-    #[cfg(feature = "visual-test")]
     pub fn visual_first_agent(&self) -> String {
         self.first_agent().executable().to_owned()
     }
     /// The empty tab's 「运行 X」 button, pressed.
-    #[cfg(feature = "visual-test")]
     pub fn visual_run_agent(&mut self, executable: &str, cx: &mut Context<Self>) {
         let agent = Agent::from_executable(executable).expect("a known Agent");
         self.run_agent_here(agent, cx);
     }
     /// The shown space and tab, and the shown tab's first pane's screen text.
-    #[cfg(feature = "visual-test")]
     pub fn visual_shown(&self, cx: &gpui::App) -> (String, Option<String>, String) {
         let text = self
             .nav
@@ -1586,7 +1512,6 @@ impl Workbench {
         (self.nav.space.clone(), self.nav.tab.clone(), text)
     }
     /// Adds a space with a fixed id beside the current one.
-    #[cfg(feature = "visual-test")]
     pub fn visual_add_space(&mut self, id: &str, cwd: &str, cx: &mut Context<Self>) {
         self.edit(
             Edit::AddSpace(Space {
@@ -1598,25 +1523,21 @@ impl Workbench {
         );
     }
     /// The sidebar's 「＋ 空间」, pressed.
-    #[cfg(feature = "visual-test")]
     pub fn visual_new_space(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.new_space(window, cx);
     }
     /// Whether the pane menu shows 「为什么是这个状态」.
-    #[cfg(feature = "visual-test")]
     pub fn visual_menu_why(&self) -> bool {
         self.layout
             .menu
             .as_ref()
             .is_some_and(|m| matches!(m.page, MenuPage::Why))
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_spaces(&self) -> Vec<String> {
         self.workspace.spaces.iter().map(|s| s.id.clone()).collect()
     }
     /// Whether the space menu is open, the rename field's text and focus if any, and
     /// each space's name and directory.
-    #[cfg(feature = "visual-test")]
     pub fn visual_space_state(&self, window: &Window, cx: &gpui::App) -> VisualSpaceState {
         (
             self.layout.space_menu.is_some(),
@@ -1633,7 +1554,6 @@ impl Workbench {
                 .collect(),
         )
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_space_menu_point(&self, index: usize) -> gpui::Point<gpui::Pixels> {
         let (_, position) = self
             .layout
@@ -1642,7 +1562,6 @@ impl Workbench {
             .expect("right mouse opened space menu");
         *position + gpui::point(px(T::S20), px(T::S6 + T::ROW * (index as f32 + 0.5)))
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_space_rename_type(&mut self, text: &str, cx: &mut Context<Self>) {
         if let Some((_, field, _)) = &self.layout.renaming_space {
             field.update(cx, |f, cx| {
@@ -1651,14 +1570,12 @@ impl Workbench {
             });
         }
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_rename_first_space(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.workspace.spaces.first().map(|s| s.id.clone()) {
             self.rename_space(&id, window, cx);
         }
     }
     /// Points the first space at a folder that is gone, as a deleted worktree does.
-    #[cfg(feature = "visual-test")]
     pub fn visual_lose_space_dir(&mut self, cx: &mut Context<Self>) {
         if let Some(space) = self.workspace.spaces.first() {
             let cwd = "/nonexistent/mooring-space-evidence".into();
@@ -1672,7 +1589,6 @@ impl Workbench {
         }
     }
 }
-#[cfg(feature = "visual-test")]
 impl Workbench {
     /// Binds a session to each of the running terminals `rw`, `re`, `rq`, `rr`: one waiting
     /// on an approval, one stopped on an error, one asking a question with a short title,
@@ -1818,7 +1734,6 @@ impl Workbench {
 
 /// A tab the visual runs name: by what it shows, its own pinned name, or its terminal
 /// (a tab holding one conversation hands its name to that conversation).
-#[cfg(feature = "visual-test")]
 pub(super) fn visual_tab_is(w: &Workspace, tab: &Tab, title: &str) -> bool {
     tab.title == title
         || w.tab_title(tab, &std::collections::HashMap::new(), None) == title
