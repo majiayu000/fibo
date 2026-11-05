@@ -28,38 +28,13 @@ pub fn report_view(
     }
     (group, mooring_core::protocol::TerminalNote { note, why })
 }
-/// The space a session is listed under: its todo's; else its terminal's, or the space
-/// of the project it works in when that one sits inside the terminal's (an Agent opened
-/// in ~/code that works in a project with its own space); else, for one Mooring did not
-/// open, the deepest space holding its folder.
-pub fn session_space<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
-    s.task
-        .as_ref()
-        .and_then(|id| w.tasks.iter().find(|t| &t.id == id))
-        .map(|t| t.space.as_str())
-        .or_else(|| {
-            let space = s
-                .terminal
-                .as_ref()
-                .and_then(|id| w.terminals.iter().find(|t| &t.id == id))
-                .map(|t| t.space.as_str())?;
-            Some(narrower_space(&w.spaces, space, &s.cwd).map_or(space, |n| n.id.as_str()))
-        })
-        .or_else(|| {
-            w.spaces
-                .iter()
-                .filter(|p| std::path::Path::new(&s.cwd).starts_with(&p.cwd))
-                .max_by_key(|p| p.cwd.len())
-                .map(|p| p.id.as_str())
-        })
-}
 /// How many sessions 要你处理 counts (`status::needs_you`) in each space, in one pass:
 /// asked per space, every render walked all sessions once per space.
 pub fn needs_by_space(w: &Workspace) -> HashMap<&str, usize> {
     let now = now();
     let mut out = HashMap::new();
     for s in w.agent_sessions.iter().filter(|s| w.needs_you(s, now)) {
-        if let Some(space) = session_space(w, s) {
+        if let Some(space) = w.session_space(s) {
             *out.entry(space).or_default() += 1;
         }
     }
@@ -364,9 +339,7 @@ mod needs_tests {
             let each = w
                 .agent_sessions
                 .iter()
-                .filter(|s| {
-                    session_space(&w, s) == Some(space.id.as_str()) && needs_attention(&w, s)
-                })
+                .filter(|s| w.session_space(s) == Some(space.id.as_str()) && needs_attention(&w, s))
                 .count();
             assert_eq!(
                 counts.get(space.id.as_str()).copied().unwrap_or(0),

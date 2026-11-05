@@ -842,7 +842,7 @@ impl Workbench {
                             when,
                         ),
                         _ => {
-                            let place = session_space(&self.workspace, s)
+                            let place = (self.workspace.session_space(s))
                                 .and_then(|space| self.space_name(space))
                                 .unwrap_or_else(|| home_relative(&s.cwd));
                             let mut sub = format!("{place} · {}", s.runtime.executable());
@@ -1014,7 +1014,7 @@ impl Workbench {
         let s = self.workspace.agent_sessions.iter().find(|s| s.id == id)?;
         let (group, _) = session_status(&self.workspace, &self.attention.unseen, s);
         let content = self.workspace.content.get(&s.id);
-        let place = session_space(&self.workspace, s)
+        let place = (self.workspace.session_space(s))
             .and_then(|space| self.space_name(space))
             .unwrap_or_else(|| home_relative(&s.cwd));
         let fact = |name: &'static str, value: gpui::AnyElement| {

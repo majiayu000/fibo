@@ -416,7 +416,7 @@ impl Workbench {
     /// Other machines' cards on the board now: terminal id and column.
     pub fn visual_remote_columns(&self) -> Vec<(String, &'static str)> {
         (self.remote_cards().into_iter())
-            .map(|r| (r.card.id, r.column.id()))
+            .map(|r| (r.card.id, r.column.key()))
             .collect()
     }
     /// Opens the board, as 鸟瞰 does.
