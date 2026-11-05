@@ -877,7 +877,7 @@ impl Workbench {
                 "托管"
             },
             session.runtime.executable(),
-            session_space(&self.workspace, &session)
+            (self.workspace.session_space(&session))
                 .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
                 .map_or("外部", |s| s.name.as_str()),
             if self
