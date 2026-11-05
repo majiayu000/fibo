@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 pub(crate) mod claude;
 pub(crate) mod codex;
+mod codex_items;
 mod codex_script;
 mod cursor;
 mod declared;

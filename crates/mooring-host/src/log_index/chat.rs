@@ -42,9 +42,16 @@ impl Index {
             .collect::<Result<Vec<_>, _>>()
             .map_err(err)?;
         let more = messages.len() as i64 > limit;
-        messages.truncate(limit as usize);
         if after.is_none() {
             messages.reverse();
+        }
+        drop_repeats(&mut messages);
+        // Without `after` the row past the limit is the oldest: it spoke for `more` and for
+        // the first message's repeat, and is not shown.
+        let over = messages.len().saturating_sub(limit as usize);
+        match after {
+            None => drop(messages.drain(..over)),
+            Some(_) => messages.truncate(limit as usize),
         }
         if tools {
             self.attach_tools(path, &mut messages)?;
@@ -117,6 +124,26 @@ impl Index {
         }
         Ok(())
     }
+}
+
+/// How close a repeat of an Agent's words has to be to count as the same message logged
+/// again: `task_complete` follows its message within seconds.
+const REPEAT_WITHIN: u64 = 60;
+
+/// Logs indexed before the parser told them apart hold a Codex turn's last message twice;
+/// reindexing them would lose what only the old rows still have, so this reads past them.
+fn drop_repeats(messages: &mut Vec<ChatMessage>) {
+    let mut before: Option<(String, u64)> = None;
+    messages.retain(|m| {
+        let repeat = !m.user
+            && before.as_ref().is_some_and(|(text, at)| {
+                *text == m.text && m.at.saturating_sub(*at) <= REPEAT_WITHIN
+            });
+        if !repeat {
+            before = (!m.user).then(|| (m.text.clone(), m.at));
+        }
+        !repeat
+    });
 }
 
 /// The seconds between two logged times; a record with no time says nothing.
@@ -224,6 +251,40 @@ mod tests {
                 ("/r/big.txt".to_owned(), 300, 0),
             ]
         );
+    }
+
+    /// A log indexed before the parser told the copies apart: the second copy is not shown,
+    /// on any page, and the same words later in the conversation still are.
+    #[test]
+    fn a_turns_last_message_indexed_twice_reads_as_one() {
+        let dir = std::env::temp_dir().join(format!("mooring-chat-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let i = Index::open(&dir, vec![]).unwrap();
+        let rows = [
+            (10, "user", "改一下"),
+            (20, "assistant", "好了"),
+            (25, "assistant", "好了"),
+            (100, "user", "再改"),
+            (200, "assistant", "好了"),
+            (205, "assistant", "好了"),
+            (900, "assistant", "好了"),
+        ];
+        for (n, (at, kind, text)) in rows.iter().enumerate() {
+            i.db.execute(
+                "INSERT INTO session_records VALUES('p',1,?1,0,?2,?3,?4,'',NULL)",
+                rusqlite::params![n as i64, at, kind, text],
+            )
+            .unwrap();
+        }
+        let words = |m: &[ChatMessage]| m.iter().map(|m| m.at).collect::<Vec<_>>();
+        let (all, more) = i.chat("p", None, None, 50, false).unwrap();
+        assert_eq!(words(&all), [10, 20, 100, 200, 900]);
+        assert!(!more);
+        // A page that starts on the second copy does not show it either.
+        let (page, more) = i.chat("p", None, None, 2, false).unwrap();
+        assert_eq!(words(&page), [200, 900]);
+        assert!(more);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// Codex's `exec` scripts, as real logs have them, short and past the 8 KiB record. Each

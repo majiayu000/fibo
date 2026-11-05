@@ -17,6 +17,7 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
+use super::codex_items;
 pub(crate) use super::codex_script::script_patches;
 pub struct Codex;
 impl Adapter for Codex {
@@ -211,13 +212,15 @@ impl Adapter for Codex {
                 ),
                 "task_complete" | "task_completed" | "turn_completed" => {
                     if let Some(s) = p["last_agent_message"].as_str() {
-                        parser.message(false, s.into(), at, source, true);
+                        codex_items::final_said(parser, s.into(), at, source);
                     }
                     parser.phase(Turn::Completed, "", at, source);
                 }
                 "turn_aborted" => parser.phase(Turn::Interrupted, "", at, source),
                 "user_message" => parser.message(true, text(&p["message"]), at, source, false),
-                "agent_message" => parser.message(false, text(&p["message"]), at, source, false),
+                "agent_message" => {
+                    codex_items::item_said(parser, text(&p["message"]), at, source, false)
+                }
                 "approval_request" | "permission_request" | "request_user_input" => {
                     parser.card.waiting = question_summary(p);
                     parser.card.choices = question_choices(p);
@@ -250,8 +253,8 @@ impl Adapter for Codex {
         match item["type"].as_str().unwrap_or("") {
             "message" => match item["role"].as_str() {
                 Some("user") => parser.message(true, text(&item["content"]), at, source, false),
-                Some("assistant") => parser.message(
-                    false,
+                Some("assistant") => codex_items::response_said(
+                    parser,
                     text(&item["content"]),
                     at,
                     source,
@@ -259,6 +262,13 @@ impl Adapter for Codex {
                 ),
                 _ => (),
             },
+            "AgentMessage" => codex_items::item_said(
+                parser,
+                text(&item["content"]),
+                at,
+                source,
+                item["phase"] == "final_answer",
+            ),
             "function_call" | "custom_tool_call" => parser.tool(
                 item["call_id"]
                     .as_str()
