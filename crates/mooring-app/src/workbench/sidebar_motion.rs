@@ -18,6 +18,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 mod flight;
+pub(in crate::workbench) use flight::{block_key, mix};
 
 const ROW_IN: f32 = 180.;
 const STAGGER: f32 = 16.;
