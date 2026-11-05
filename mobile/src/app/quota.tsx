@@ -9,6 +9,7 @@ import { Nav, Notice, useBottom } from '@/ui/kit';
 import { level, quotaView, resetText, windowName } from '@/ui/parse';
 import { agentName } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
+import { TodayTokens } from '@/ui/usage';
 
 const STRIPES = 20;
 
@@ -99,6 +100,7 @@ function MachineQuota({ m, named, t }: { m: Machine; named: boolean; t: Theme })
       {view === 'loading' && !error && <ActivityIndicator style={{ marginTop: 24 }} />}
       {(view === 'live' || view === 'gone') && saved?.length === 0 && <Notice text="这一周电脑上的 Agent 都没报过额度" />}
       {(view === 'live' || view === 'gone') && saved?.map((a) => <AgentCard key={a.agent} r={a} t={t} />)}
+      {m.status === 'online' && <TodayTokens m={m} />}
     </View>
   );
 }

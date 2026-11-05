@@ -275,6 +275,7 @@ fn another_desktop_opens_settles_and_ends() {
         cwd: Some("/tmp".into()),
         agent: None,
         prompt: None,
+        resume: None,
         request: Some("o1".into()),
     };
     let first = c.request(open(), T).unwrap();

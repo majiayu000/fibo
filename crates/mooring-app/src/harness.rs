@@ -109,7 +109,7 @@ pub fn start(
                 let style = std::env::var("MOORING_COMPLETE_STYLE").ok();
                 if tid == "done" && let Some(style) = &style {
                     // A plugin's animation, held at points of the run for comparison with
-                    // specs/complete-animation/directions.html, then played for real.
+                    // docs/complete-animation/directions.html, then played for real.
                     let style: mooring_core::effect::Style = serde_json::from_value(serde_json::json!(style)).expect("style");
                     let effect = mooring_core::effect::Complete { land: std::env::var_os("MOORING_COMPLETE_NO_LAND").is_none(), ..mooring_core::effect::Complete::of(style) };
                     shot("0-review.png", cx);

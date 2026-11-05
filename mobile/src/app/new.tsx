@@ -1,16 +1,17 @@
 // A new task: pick the computer, the directory and the Agent, write what it should do;
-// the computer opens a new tab running that Agent with it as the first message.
+// the computer opens a new tab running that Agent with it as the first message. Or pick
+// up the last conversation there: then what you write is optional, its next message.
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
-import { NOT_YET, refresh, speaksV2, supports, useHub, write } from '@/remote/hub';
+import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { resetDraft, setDraft, useDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
 import { Btn, Label, Nav, Notice, Wide, mono, noOutline, useBottom } from '@/ui/kit';
-import { tilde } from '@/ui/status';
-import { useTheme } from '@/ui/theme';
+import { agentName, tilde } from '@/ui/status';
+import { ago, useTheme } from '@/ui/theme';
 
 export default function NewTask() {
   const t = useTheme();
@@ -19,6 +20,7 @@ export default function NewTask() {
   const draft = useDraft();
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
   const online = machines.filter((m) => m.status === 'online');
   const m = machines.find((x) => x.id === draft.machine) ?? online[0] ?? machines[0];
 
@@ -27,13 +29,36 @@ export default function NewTask() {
   }, [m?.id]);
 
   const able = supports(m, 'open') && speaksV2(m);
-  const ready = able && !!draft.cwd && !!draft.prompt.trim() && !busy;
+  const canResume = able && !!draft.cwd && supports(m, 'lastsession');
+  const ready = able && !!draft.cwd && (!!draft.prompt.trim() || !!draft.resume) && !busy;
+
+  // Another directory, Agent or computer: another 「上次」.
+  useEffect(() => {
+    setNote('');
+    if (draft.resume) setDraft({ resume: undefined });
+  }, [draft.cwd, draft.agent, draft.machine]);
+
+  /** Finds the last conversation here. One still running is not opened again: you go to it. */
+  async function findLast() {
+    const r = m ? remote(m.id) : null;
+    if (!m || !r || !draft.cwd) return;
+    setNote('');
+    try {
+      const { session: found } = await r.request('lastsession', { cwd: draft.cwd, agent: draft.agent });
+      if (!found) setNote(`这个目录里没有 ${agentName(draft.agent)} 的旧对话`);
+      else if (found.terminal) router.replace({ pathname: '/chat', params: { machine: m.id, terminal: found.terminal } });
+      else setDraft({ resume: { id: found.id, title: found.title, updated: found.updated } });
+    } catch (e) {
+      setNote((e as Error).message);
+    }
+  }
 
   async function start() {
     if (!m || !draft.cwd) return;
     setBusy(true);
     try {
-      const ok = await write(m.id, 'open', { cwd: draft.cwd, agent: draft.agent, prompt: draft.prompt.trim() });
+      const prompt = draft.prompt.trim();
+      const ok = await write(m.id, 'open', draft.resume ? { resume: draft.resume.id, ...(prompt ? { prompt } : {}) } : { cwd: draft.cwd, agent: draft.agent, prompt });
       resetDraft();
       await refresh(m.id);
       if (ok?.terminal) router.replace({ pathname: '/chat', params: { machine: m.id, terminal: ok.terminal } });
@@ -110,7 +135,7 @@ export default function NewTask() {
           </View>
         </View>
         <View style={s.field}>
-          <Label>要它做什么</Label>
+          <Label>{draft.resume ? '接着说什么（可以不写）' : '要它做什么'}</Label>
           <TextInput
             multiline
             value={draft.prompt}
@@ -129,12 +154,27 @@ export default function NewTask() {
                 .catch(() => undefined)
             }
           />
+          {canResume && !draft.resume && <Btn label="接着上次的对话" onPress={findLast} />}
         </View>
+        {!!draft.resume && (
+          <View style={[s.resume, { backgroundColor: t.card, borderColor: t.line }]}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={{ fontSize: 12, color: t.dim }}>接着上次的对话 · {ago(draft.resume.updated)}</Text>
+              <Text numberOfLines={2} style={{ fontSize: 15, color: t.text }}>
+                {draft.resume.title}
+              </Text>
+            </View>
+            <Pressable onPress={() => setDraft({ resume: undefined })} style={[s.clear, { backgroundColor: t.well }]} accessibilityLabel="不接着这段对话">
+              <Icon name="close" size={12} width={2.4} color={t.text} />
+            </Pressable>
+          </View>
+        )}
+        {!!note && <Notice text={note} />}
         {m && m.status === 'online' && !able && <Notice text={NOT_YET} />}
         {m && m.status !== 'online' && <Notice text={m.error ?? '电脑没连上'} />}
       </ScrollView>
       <View style={{ paddingHorizontal: 18, paddingBottom: bottom + 4, gap: 10 }}>
-        <Wide label={busy ? '正在打开…' : '开始'} disabled={!ready} onPress={start} />
+        <Wide label={busy ? '正在打开…' : draft.resume ? '接着做' : '开始'} disabled={!ready} onPress={start} />
         <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>电脑上会出现一个新标签页，你回到电脑前可以直接接着用</Text>
       </View>
     </View>
@@ -148,5 +188,7 @@ const s = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4 },
   seg: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, padding: 3, gap: 3 },
   segItem: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  resume: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, padding: 14 },
+  clear: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   area: { minHeight: 150, borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 15, lineHeight: 22, textAlignVertical: 'top' },
 });

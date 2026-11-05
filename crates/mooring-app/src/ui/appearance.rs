@@ -92,7 +92,7 @@ impl Appearance {
         write("theme-dark", &self.dark)
     }
     /// Which side shows. The terminal-native style is dark unless light was picked
-    /// outright (specs/terminal-workbench/design/main-directions.html).
+    /// outright (Keepline repo, specs/terminal-workbench/design/main-directions.html).
     pub fn shows_light(&self, system: WindowAppearance, style: Style) -> bool {
         match (self.mode, system) {
             (Mode::Light, _) => true,

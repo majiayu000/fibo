@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
-import { NOT_YET, remote, supports, useHub, write } from '@/remote/hub';
+import { NOT_YET, refresh, remote, supports, useHub, write } from '@/remote/hub';
 import { setDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
 import { Label, Nav, Notice, Wide, mono, noOutline, useBottom } from '@/ui/kit';
@@ -62,6 +62,7 @@ export default function Dirs() {
   const [error, setError] = useState('');
   const [cut, setCut] = useState('');
   const [making, setMaking] = useState(false);
+  const [adding, setAdding] = useState(false);
   // Counting changes in a big tree can take the machine about three seconds.
   const [busy, setBusy] = useState(false);
   const typedPath = /^[~/]/.test(query.trim());
@@ -108,8 +109,22 @@ export default function Dirs() {
   }, [query, typedPath, online, can, machine]);
 
   function choose(cwd: string, d?: Dir | null) {
-    setDraft({ machine, cwd, about: d ? about(d) : undefined });
+    const space = m?.spaceDirs?.[cwd];
+    const known = [d && about(d), space && `空间 ${space}`].filter(Boolean).join(' · ');
+    setDraft({ machine, cwd, about: known || undefined });
     router.back();
+  }
+
+  async function makeSpace(path: string) {
+    setAdding(true);
+    try {
+      await write(machine, 'addspace', { path });
+      await refresh(machine);
+    } catch (e) {
+      oops((e as Error).message);
+    } finally {
+      setAdding(false);
+    }
   }
 
   async function mkdir(name: string) {
@@ -126,6 +141,7 @@ export default function Dirs() {
   const crumbs = list ? trail(list.path, list.home) : [];
   const here = picked?.path ?? list?.path;
   const recent = (list?.recent ?? []).slice(0, 6);
+  const spaceHere = here ? m?.spaceDirs?.[here] : undefined;
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
@@ -292,7 +308,14 @@ export default function Dirs() {
                 <Wide kind="grey" height={40} label="新建文件夹" disabled={!supports(m, 'mkdir')} onPress={() => setMaking(true)} textStyle={{ fontSize: 15 }} />
               </View>
               <View style={{ flex: 1 }}>
-                <Wide kind="grey" height={40} label="上一级" disabled={!list?.parent} onPress={() => list?.parent && setPath(list.parent)} textStyle={{ fontSize: 15 }} />
+                <Wide
+                  kind="grey"
+                  height={40}
+                  label={spaceHere ? `空间 ${spaceHere}` : adding ? '正在设置…' : '设为空间'}
+                  disabled={!here || !!spaceHere || adding || !supports(m, 'addspace')}
+                  onPress={() => here && makeSpace(here)}
+                  textStyle={{ fontSize: 15 }}
+                />
               </View>
             </View>
           </View>}

@@ -2,7 +2,7 @@
 // options, a patch's lines, quota words, the relay's place, breadcrumbs, dangerous commands.
 import { describe, expect, test } from 'bun:test';
 import { Close, closeOutcome } from '../src/remote/close';
-import { choices, dangerous, diffLines, level, questionText, quotaView, readAsk, relayPlace, resetText, trail, windowName } from '../src/ui/parse';
+import { checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, readAsk, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 const BOX = `╭──────────╮
 │ Bash command                    │
@@ -108,5 +108,39 @@ describe('quotaView', () => {
   test('an online computer shows readings, or waits for the first', () => {
     expect(quotaView(true, true, [{}])).toBe('live');
     expect(quotaView(true, true, null)).toBe('loading');
+  });
+});
+
+describe('the gaps against the design', () => {
+  test('a span reads as people say it', () => {
+    expect(span(45)).toBe('45 秒');
+    expect(span(720)).toBe('12 分钟');
+    expect(span(3600)).toBe('1 小时');
+    expect(span(4800)).toBe('1 小时 20 分钟');
+  });
+  test('a running turn says its time after its first minute', () => {
+    expect(runningFor(1000, 1030)).toBe('');
+    expect(runningFor(1000, 1720)).toBe('12 分钟');
+    expect(runningFor(null, 1000)).toBe('');
+  });
+  test('tokens read short', () => {
+    expect(compact(950)).toBe('950');
+    expect(compact(12_800_000)).toBe('12.8M');
+    expect(compact(3_282_342_605)).toBe('3.3B');
+    expect(compact(125_500)).toBe('126K');
+  });
+  test('a model reads as people say it, an unknown one as it is', () => {
+    expect(modelName('claude-opus-5-5')).toBe('Opus 5.5');
+    expect(modelName('claude-sonnet-4-5-20250929')).toBe('Sonnet 4.5');
+    expect(modelName('claude-opus-4-20250514')).toBe('Opus 4');
+    expect(modelName('gpt-6.1-sol')).toBe('gpt-6.1-sol');
+    expect(modelName('k3')).toBe('k3');
+  });
+  test('checks say what still covers the files', () => {
+    const c = (command: string, ok: boolean, stale: boolean) => ({ command, ok, stale, at: 1 });
+    expect(checkLine([])).toBeNull();
+    expect(checkLine([c('tsc', true, false), c('cargo test', true, false)])).toEqual({ text: 'tsc 通过 · cargo test 通过', failed: false, stale: false });
+    expect(checkLine([c('tsc', false, false), c('cargo test', true, true)])).toEqual({ text: 'tsc 没通过', failed: true, stale: false });
+    expect(checkLine([c('cargo test', true, true)])).toEqual({ text: 'cargo test 通过，之后又改过', failed: false, stale: true });
   });
 });

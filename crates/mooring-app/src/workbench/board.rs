@@ -1,8 +1,8 @@
-//! 鸟瞰 as a board (specs/overview-kanban/kanban.html): one column per thing you might do
-//! next, left to right in the order work moves; what waits on you or failed has its own
-//! column, 要你处理 (decided 11-02: five columns, the inbox variant is not done). Each card
-//! carries one colored mark, its space's gradient; everything else stays neutral so the
-//! status colors read first.
+//! 鸟瞰 as a board (Keepline repo, specs/overview-kanban/kanban.html): one column per
+//! thing you might do next, left to right in the order work moves; what waits on you or
+//! failed has its own column, 要你处理 (decided 11-02: five columns, the inbox variant is
+//! not done). Each card carries one colored mark, its space's gradient; everything else
+//! stays neutral so the status colors read first.
 use super::*;
 use crate::ui::icons::agent_icon;
 use gpui::{
@@ -317,27 +317,11 @@ impl Workbench {
             .collect()
     }
     fn board_todos(&self) -> Vec<&Task> {
-        self.workspace
-            .tasks
-            .iter()
+        (mooring_core::status::open_todos(&self.workspace, now()).into_iter())
             .filter(|t| {
-                self.workspace
-                    .task_outcomes
-                    .get(&t.id)
-                    .unwrap_or(&Outcome::Open)
-                    .needs_review(now())
-                    && self
-                        .overview
-                        .filter_space
-                        .as_ref()
-                        .is_none_or(|id| id == &t.space)
+                (self.overview.filter_space.as_ref()).is_none_or(|id| id == &t.space)
                     && self.overview.agent.is_none_or(|a| a == t.agent)
                     && !self.overview.changed_only
-                    && !self
-                        .workspace
-                        .agent_sessions
-                        .iter()
-                        .any(|s| s.task.as_ref() == Some(&t.id))
             })
             .collect()
     }
@@ -424,7 +408,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .font_features(super::diagnostics::tabular())
-            .child(self.board_header(open, stale, empty, cx))
+            .children(self.board_top(open, stale, empty, cx))
             .when_some(self.error.clone(), |d, error| {
                 d.child(
                     div()
