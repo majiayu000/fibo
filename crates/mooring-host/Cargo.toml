@@ -35,3 +35,4 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 
 [dev-dependencies]
 mooring-relay = { path = "../mooring-relay" }
+rusqlite = { version = "0.38", features = ["hooks"] }
