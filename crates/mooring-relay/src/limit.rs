@@ -7,6 +7,9 @@
 //! always when `trust_proxy` is set, which is right only when the relay's port is
 //! reachable through the proxy alone (a container port published on 127.0.0.1 shows
 //! the bridge's address, not loopback).
+//!
+//! An IPv6 address counts under its /64: one home or phone gets a whole /64 and can pick
+//! a new source address in it for every socket.
 use axum::http::HeaderMap;
 use std::{
     collections::HashMap,
@@ -92,6 +95,7 @@ impl Limits {
 
     /// A place for one more socket from `ip`, or `None` when it is over a limit.
     pub fn admit(&self, ip: IpAddr) -> Option<Slot> {
+        let ip = counted_as(ip);
         let rules = &self.rules;
         let mut ips = self.ips.lock().unwrap_or_else(|e| e.into_inner());
         let e = ips.entry(ip).or_default();
@@ -110,6 +114,17 @@ impl Limits {
             ip,
             ips: self.ips.clone(),
         })
+    }
+}
+
+/// The key an address is counted under: an IPv6 address by its /64.
+fn counted_as(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => IpAddr::V4(v4),
+            None => IpAddr::V6((u128::from(v6) & !(u64::MAX as u128)).into()),
+        },
+        v4 => v4,
     }
 }
 
@@ -137,6 +152,26 @@ mod tests {
         );
         drop(a);
         assert!(limits.admit(ip("1.2.3.4")).is_some());
+    }
+
+    #[test]
+    fn ipv6_addresses_count_by_their_64() {
+        let limits = Limits::new(Rules {
+            open: 1,
+            per_minute: 0,
+            trust_proxy: false,
+        });
+        let _a = limits.admit(ip("2001:db8:1:2::1")).unwrap();
+        assert!(
+            limits.admit(ip("2001:db8:1:2:ffff::9")).is_none(),
+            "another address in the same /64 is the same place"
+        );
+        assert!(limits.admit(ip("2001:db8:1:3::1")).is_some());
+        let _v4 = limits.admit(ip("1.2.3.4")).unwrap();
+        assert!(
+            limits.admit(ip("::ffff:1.2.3.4")).is_none(),
+            "mapped v4 is v4"
+        );
     }
 
     #[test]
