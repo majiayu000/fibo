@@ -8,7 +8,8 @@
       "kind": "Bash command",
       "subject": "git push origin feat/x"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，git push 命令以后不再询问"
   },
   "approval-managed-push.txt": {
     "state": "waiting",
@@ -26,7 +27,8 @@
     "state": "waiting",
     "rule": "approval",
     "question": "Do you want to create approval-proof.txt?",
-    "note": "R9 真实 Claude Code 2.1.302 画面转录（evidence/r9-20261021/real-approval.png）"
+    "note": "R9 真实 Claude Code 2.1.302 画面转录（evidence/r9-20261021/real-approval.png）",
+    "always_label": "允许，并切到自动接受编辑：这次会话里改文件和常用文件命令都不再询问"
   },
   "choice-deploy.txt": {
     "state": "waiting",
@@ -88,7 +90,8 @@
       "subject": "touch second.txt",
       "note": "Create empty second.txt file"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，这个项目以后都能访问 /Users/x/t"
   },
   "approval-bash-real.txt": {
     "state": "waiting",
@@ -100,7 +103,8 @@
       "subject": "touch second.txt",
       "note": "Create empty file second.txt"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，这个项目以后都能访问 /Users/x/t"
   },
   "approval-push-requires.txt": {
     "state": "waiting",
@@ -112,7 +116,8 @@
       "subject": "git push origin main",
       "note": "Push main branch to origin\nThis command requires approval"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，git push * 以后不再询问"
   },
   "approval-write-real.txt": {
     "state": "waiting",
@@ -124,7 +129,8 @@
       "subject": "w.txt",
       "detail": "1 hi"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，并切到自动接受编辑：这次会话里改文件和常用文件命令都不再询问"
   },
   "approval-edit-real.txt": {
     "state": "waiting",
@@ -136,7 +142,8 @@
       "subject": "edit.txt",
       "detail": "1 -alpha\n1 +gamma\n2  beta"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，并切到自动接受编辑：这次会话里改文件和常用文件命令都不再询问"
   },
   "approval-webfetch-real.txt": {
     "state": "waiting",
@@ -148,7 +155,8 @@
       "subject": "url: https://example.com/\nprompt: What is the page title (the HTML title / main heading), and give a brief summary of the\ntext content of the page.",
       "note": "Claude wants to fetch content from example.com"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，example.com 以后不再询问"
   },
   "approval-mcp-real.txt": {
     "state": "waiting",
@@ -160,7 +168,8 @@
       "subject": "Claude Docs — Guide Tool: (MCP)\nitems: [\"topic.index\"]",
       "note": "About the Claude Docs — Guide Tool:\nDocs guides: topic.instructions repeats the server instructions. Read it only if your client\ndropped them. Also topic.<name>, refusal.<code>. After a doc's birth → [\"topic.index\"]."
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，~/t… 里的 Claude Docs — Guide 命令以后不再询问"
   },
   "approval-multiline-real.txt": {
     "state": "waiting",
@@ -172,7 +181,8 @@
       "subject": "touch a.txt\nrm -f a.txt\ntouch b.txt",
       "note": "Create a.txt, remove it, then create b.txt"
     },
-    "always": "2"
+    "always": "2",
+    "always_label": "允许，/Users/x/t 里的 touch a.txt, rm -f a.txt, and touch b.txt 命令以后不再询问"
   },
   "trust-real.txt": {
     "state": "idle",

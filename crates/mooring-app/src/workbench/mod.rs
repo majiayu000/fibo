@@ -236,6 +236,7 @@ mod nav;
 use nav::Nav;
 mod overview;
 mod pace;
+mod pane_menu;
 mod pressure;
 use overview::OverviewState;
 mod palette;
@@ -465,6 +466,7 @@ impl Workbench {
                 renaming_space: None,
                 icon_menu: None,
                 confirm_close: None,
+                interrupting: None,
                 renaming_tab: None,
                 tab_scroll: gpui::ScrollHandle::new(),
                 revealed_tab: None,

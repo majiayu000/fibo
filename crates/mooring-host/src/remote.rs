@@ -265,13 +265,14 @@ pub fn serve(
                 });
             }
             // Reads a log's lines, seconds at the worst: beside the requests too.
-            "toolcalls" | "toolcall" => {
+            "toolcalls" | "toolcall" | "backfill" => {
                 let (out, socket) = (out.clone(), socket.to_owned());
-                let many = op == "toolcalls";
+                let op = op.to_owned();
                 thread::spawn(move || {
-                    let result = match many {
-                        true => tools::tool_calls(&socket, &request),
-                        false => tools::tool_call(&socket, &request),
+                    let result = match op.as_str() {
+                        "toolcalls" => tools::tool_calls(&socket, &request),
+                        "toolcall" => tools::tool_call(&socket, &request),
+                        _ => chat::backfill(&socket, &request),
                     };
                     let _ = out.send(match result {
                         Ok(ok) => json!({ "id": id, "ok": ok }),
