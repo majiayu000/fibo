@@ -3,7 +3,7 @@
 #[path = "remote_v2/common.rs"]
 mod common;
 use common::*;
-use mooring_core::model::*;
+use mooring_core::{model::*, protocol::*};
 use serde_json::{json, Value};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -251,6 +251,44 @@ fn remote_stop_on_codex_presses_esc_and_replies_once_it_stopped() {
     let card = cards.iter().find(|c| c["id"] == "esc").unwrap();
     assert_ne!(card["phase"], "working", "replied before it stopped");
     assert!(card["session"].is_string(), "the Agent stays");
+}
+
+/// The window's 中断这一轮 sends these same two requests straight to the host: the key is the
+/// CLI's, the reply comes when the turn has ended, and an idle Codex gets no key at all
+/// (Ctrl-C there quits it).
+#[test]
+fn the_windows_interrupt_on_codex_is_esc_and_hears_when_it_stopped() {
+    let h = Host::start();
+    fake_codex(&h, "esc", &["1b"], 1);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "esc", "working");
+    let id = "esc".to_owned();
+    h.call(Request::Interrupt { id: id.clone() }).unwrap();
+    let ended = h.call(Request::AwaitInterrupt { id: id.clone() }).unwrap();
+    assert!(
+        matches!(
+            ended,
+            Reply::Interrupted {
+                closed_background: false
+            }
+        ),
+        "{ended:?}"
+    );
+    let screen = h.screen("esc");
+    assert!(screen.contains("keys: 1b"), "{screen}");
+    // The state says what happened: stopped by you, not a turn waiting for you to check.
+    let list = r.ok(json!({ "op": "list" }));
+    let cards = list["terminals"].as_array().unwrap();
+    let card = cards.iter().find(|c| c["id"] == "esc").unwrap();
+    assert_eq!(card["status_label"], "停下了", "{card}");
+    let e = h.call(Request::Interrupt { id: id.clone() }).unwrap_err();
+    assert!(e.to_string().contains("没有要中断的"), "{e}");
+    std::thread::sleep(Duration::from_millis(300));
+    let screen = h.screen("esc");
+    assert!(
+        !screen.contains("KEY="),
+        "a refused one presses nothing: {screen}"
+    );
 }
 
 /// The menu a Ctrl-C from elsewhere left up: only Enter, only with the cursor on Cancel

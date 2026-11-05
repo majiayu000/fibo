@@ -213,9 +213,18 @@ pub enum Request {
         folder: String,
         trust: bool,
     },
-    /// Ctrl-C, the window's 中断, only while the conversation in the terminal is working:
-    /// what its turn was at that moment decides, not what a client saw earlier.
+    /// Interrupts the turn of the conversation in the terminal, with the key its CLI takes
+    /// for that (`Adapter::interrupt_key`), only while it is working: what its turn was at
+    /// that moment decides, not what a client saw earlier. The window's 中断这一轮 and a
+    /// phone's 停下 are both this and [`Request::AwaitInterrupt`].
     Interrupt {
+        id: String,
+    },
+    /// After [`Request::Interrupt`]: replies [`Reply::Interrupted`] once the state says the
+    /// turn ended, with the Agent still there, and closes a command the turn left running.
+    /// Refused if it does not end within seconds or the Agent left. A key sent is not a turn
+    /// stopped. Outside `Once`: its one lock would hold every other answer up meanwhile.
+    AwaitInterrupt {
         id: String,
     },
     /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `SendInput`,
@@ -396,6 +405,10 @@ pub enum Reply {
     },
     Ok,
     Text(String),
+    /// [`Request::AwaitInterrupt`]: the turn ended; whether a command it left was closed too.
+    Interrupted {
+        closed_background: bool,
+    },
     /// `Chat`: the messages, oldest first, and whether older ones exist before them.
     Chat {
         messages: Vec<ChatMessage>,

@@ -3,6 +3,7 @@
 use super::*;
 mod edit;
 mod once;
+mod stop;
 mod tool_rows;
 mod typing;
 pub(super) use typing::*;
@@ -582,6 +583,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             interrupt(shared, &id)?;
             Ok(Reply::Ok)
         }
+        Request::AwaitInterrupt { id } => stop::await_interrupt(shared, &id),
         Request::RemoteConfigure {
             enabled,
             relay,
