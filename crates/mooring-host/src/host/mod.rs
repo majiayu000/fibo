@@ -99,47 +99,6 @@ fn cue(cues: &mut HashMap<String, (String, u64)>, terminal: &str, busy: Option<S
     };
     true
 }
-/// A conversation's turn as its program reported it (OSC 7501).
-fn program_report_turn(
-    c: &mut mooring_core::content::Content,
-    r: &mooring_core::protocol::ProgramReport,
-) {
-    use mooring_core::content::Turn;
-    let said = if r.msg.is_empty() { &r.title } else { &r.msg };
-    let turn = match r.state.as_str() {
-        "working" => Turn::Running,
-        "blocked" => Turn::Waiting,
-        "error" => Turn::Error,
-        _ => Turn::Completed,
-    };
-    if c.turn != turn {
-        if turn == Turn::Running {
-            c.turn_started = r.since;
-        }
-        if turn == Turn::Waiting {
-            c.waiting = if said.is_empty() {
-                "程序说在等你".into()
-            } else {
-                format!("{said}（程序上报）")
-            };
-            c.waiting_episode += 1;
-        }
-        if turn == Turn::Error && c.error.is_empty() {
-            c.error = if said.is_empty() {
-                "程序上报出错".into()
-            } else {
-                said.clone()
-            };
-        }
-        c.turn = turn;
-    }
-    if turn != Turn::Running {
-        c.background = None;
-    }
-    c.signal = "程序上报".into();
-    c.signal_at = r.since;
-    c.signal_detail = format!("终端里的程序通过 OSC 7501 报告 {}", r.state);
-}
 fn geometry(cols: u16, rows: u16) -> io::Result<()> {
     if !(2..=400).contains(&cols) || !(1..=200).contains(&rows) {
         return Err(io::Error::other("terminal size outside 2..400 × 1..200"));
@@ -243,7 +202,7 @@ impl Host {
             let Some(c) = w.content.get_mut(&s.id) else {
                 continue;
             };
-            program_report_turn(c, r);
+            mooring_core::program_state::apply(c, r);
         }
         w
     }
