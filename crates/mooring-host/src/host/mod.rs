@@ -54,7 +54,7 @@ struct Host {
     new_roots: Option<Vec<(Agent, std::path::PathBuf)>>,
     recognition_subscribers: HashMap<u64, Subscriber>,
     /// `mooring events` connections, and what they were last told.
-    event_subscribers: HashMap<u64, Subscriber>,
+    event_subscribers: HashMap<u64, events::EventSubscriber>,
     events: events::Tracker,
     exits: Option<crate::process_exit::ExitWatch>,
     agent_pids: HashMap<u32, String>,

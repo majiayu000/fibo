@@ -4478,7 +4478,7 @@ fn mooring_agent_names_an_agent_hidden_behind_a_wrapper() {
 /// reads costs the others nothing and is told `lagged` when it reads again.
 #[test]
 fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody() {
-    use mooring_core::hook::Notice;
+    use {mooring_core::hook::Notice, std::io::BufRead};
     let h = Host::start();
     h.setup();
     let subscribe = |h: &Host| {
@@ -4497,6 +4497,7 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
+    let mut cli_out = io::BufReader::new(cli.stdout.take().unwrap()).lines();
     let mut fast = subscribe(&h);
     let snapshot = match receive::<Reply>(&mut fast).unwrap() {
         Reply::Events(n) => n,
@@ -4578,6 +4579,7 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
     let (_, approval) = next("approval", &|n| n.event == "approval" && mine(n));
     assert_eq!(approval.detail, "Do you want to proceed?");
     assert_eq!(approval.terminal.as_deref(), Some("ev"));
+    let first = cli_out.next().unwrap().unwrap(); // It has subscribed: it said something.
     let asked = Instant::now();
     h.call(Request::AnswerApproval {
         id: "ev".into(),
@@ -4602,11 +4604,11 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
     assert_eq!(failed.exit_code, Some(3));
     // A subscriber that stops reading while a burst goes by.
     let mut stalled = subscribe(&h);
-    h.call(h.launch(
-        "burst",
-        "i=0; while [ $i -lt 3000 ]; do printf '\\033]133;C\\007\\033]133;D;0\\007'; i=$((i+1)); done; sleep 60",
-    ))
-    .unwrap();
+    let marks = |n: u32| {
+        format!("i=0; while [ $i -lt {n} ]; do printf '\\033]133;C\\007\\033]133;D;0\\007'; i=$((i+1)); done")
+    };
+    h.call(h.launch("burst", &(marks(3000) + "; sleep 60")))
+        .unwrap();
     let mut burst = 0;
     let started = Instant::now();
     while burst < 3000 {
@@ -4625,22 +4627,10 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
         "3000 command events to the reading subscriber in {:?}",
         started.elapsed()
     );
-    let mut lagged = false;
-    stalled
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .unwrap();
-    while let Ok(Reply::Events(batch)) = receive::<Reply>(&mut stalled) {
-        if batch.iter().any(|n| n.event == "lagged") {
-            lagged = true;
-            break;
-        }
-    }
-    assert!(lagged, "the stalled subscriber was never told it lagged");
-    let _ = cli.kill();
-    let out = String::from_utf8(cli.wait_with_output().unwrap().stdout).unwrap();
-    let lines: Vec<serde_json::Value> = out
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
+    let _ = cli.kill().and_then(|()| cli.wait());
+    let lines: Vec<serde_json::Value> = std::iter::once(Ok(first))
+        .chain(cli_out)
+        .map(|l| serde_json::from_str(&l.unwrap()).unwrap())
         .collect();
     let kinds: Vec<&str> = lines
         .iter()
@@ -4667,6 +4657,16 @@ fn events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody()
     next("terminal_exited", &|n| {
         n.event == "terminal_exited" && n.terminal.as_deref() == Some("ev")
     });
+    // Twice the stalled one's backlog (4096 notices; the burst stayed under it: one in its
+    // writer's stuck frame, one queued) plus its socket. A terminal ends once its output is read.
+    h.call(h.launch("flood", &marks(12288))).unwrap();
+    let ended = |t: &Terminal| t.id == "flood" && t.state == ProcessState::Exited;
+    wait_for(&h, "the flood ends", |w| w.terminals.iter().any(ended));
+    let timeout = Some(Duration::from_secs(10));
+    stalled.set_read_timeout(timeout).unwrap();
+    let lagged = std::iter::from_fn(|| receive::<Reply>(&mut stalled).ok())
+        .any(|r| matches!(r, Reply::Events(b) if b.iter().any(|n| n.event == "lagged")));
+    assert!(lagged, "the stalled subscriber was never told it lagged");
     eprintln!("approval answered -> approval_gone in {latency:?}");
     assert!(latency < Duration::from_millis(200), "{latency:?}");
 }
