@@ -97,9 +97,27 @@ impl Access {
     }
 }
 
+/// A host's relay connection ends with its host, however the host went: handing over to
+/// a newer one exits without unwinding, and a crash signals nobody. Left behind, it would
+/// redial and take the machine's place on the relay from the new host's connection.
+fn exit_with_parent() {
+    // SAFETY: getppid(2) takes no arguments and cannot fail.
+    let parent = unsafe { libc::getppid() };
+    thread::spawn(move || loop {
+        thread::sleep(std::time::Duration::from_secs(1));
+        // SAFETY: as above.
+        if unsafe { libc::getppid() } != parent {
+            std::process::exit(0);
+        }
+    });
+}
+
 pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
     let cmd = control::command("remote").expect("remote is in the command table");
     let a = Args::parse(args, cmd)?;
+    if a.has("report") {
+        exit_with_parent();
+    }
     if a.value("relay").is_some()
         || a.has("devices")
         || a.value("revoke").is_some()
