@@ -52,8 +52,9 @@ export async function approve(machine: string, card: Card, ask: Ask, always = fa
   return true;
 }
 
-export async function deny(machine: string, card: Card) {
-  await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false });
+/** Refuses it; `ask` as with `approve`, so an answer that took a while refuses nothing newer. */
+export async function deny(machine: string, card: Card, ask: Ask) {
+  await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false, ...(ask.known ? { subject: ask.subject } : {}) });
   setTimeout(() => refresh(machine), 300);
 }
 

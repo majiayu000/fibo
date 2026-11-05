@@ -21,6 +21,7 @@ import { TerminalSheet } from '@/ui/sheets';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
 import { useTheme } from '@/ui/theme';
+import { useSettled } from '@/ui/useHold';
 
 type Pending = { text: string; at: number };
 
@@ -188,6 +189,7 @@ export default function Chat() {
   );
 
   const ask = useAsk(machine, card, online);
+  const settled = useSettled(`${ask.subject}|${ask.note}`);
   const waiting = online && card?.phase === 'waiting' && !card.approval ? card.waiting : null;
   const options = choices(waiting);
   const agent = agentName(card?.agent);
@@ -292,8 +294,8 @@ export default function Chat() {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {supports(m, 'answer') && (
               <>
-                <Btn primary icon="face" label="允许" onPress={() => approve(machine, card, ask).catch((e) => oops(e.message))} />
-                <Btn label="拒绝" onPress={() => deny(machine, card).catch((e) => oops(e.message))} />
+                <Btn primary icon="face" label="允许" disabled={!settled.ready} onPress={() => settled.passes() && approve(machine, card, ask).catch((e) => oops(e.message))} />
+                <Btn label="拒绝" disabled={!settled.ready} onPress={() => settled.passes() && deny(machine, card, ask).catch((e) => oops(e.message))} />
               </>
             )}
             <Btn label="详情" onPress={() => router.push({ pathname: '/approve', params: { machine, terminal } })} />
