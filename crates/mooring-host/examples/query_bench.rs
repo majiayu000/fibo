@@ -70,7 +70,8 @@ fn main() {
         db.execute_batch(
             "PRAGMA synchronous=NORMAL;
             DROP INDEX IF EXISTS session_records_messages;
-            DROP INDEX IF EXISTS session_records_call;",
+            DROP INDEX IF EXISTS session_records_call;
+            DROP INDEX IF EXISTS session_records_tools;",
         )
         .unwrap();
         let seed = insert(&db, 0, 500000);
