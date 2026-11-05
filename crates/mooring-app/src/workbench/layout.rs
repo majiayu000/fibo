@@ -666,10 +666,9 @@ impl Workbench {
                             .on_mouse_down(
                                 gpui::MouseButton::Left,
                                 cx.listener(move |this, _, _, cx| {
-                                    if !this.store.busy() {
-                                        this.layout.drag = Some(drag_path.clone());
-                                        this.layout.menu = None;
-                                    }
+                                    // Its resize is a request, which waits behind a busy one.
+                                    this.layout.drag = Some(drag_path.clone());
+                                    this.layout.menu = None;
                                     cx.stop_propagation();
                                     cx.notify();
                                 }),
