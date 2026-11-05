@@ -4,7 +4,9 @@ use super::*;
 mod bars;
 mod keys;
 mod tabs;
-pub(super) use tabs::{TextTip, hidden_tabs};
+pub(super) use tabs::TextTip;
+#[cfg(feature = "visual-test")]
+pub(super) use tabs::hidden_tabs;
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
