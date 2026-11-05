@@ -1,11 +1,11 @@
 // One approval, large: what it wants to run in big mono type, what it said just before,
-// 拒绝 and 允许 (Face ID when settings ask), 「以后不再询问」 (the machine says no when the menu lacks it),
-// and 「拒绝，并告诉它…」.
+// 拒绝 and 允许 (Face ID when settings ask), the menu's own 「don't ask again」 option in its
+// words (none when the menu has none), and 「拒绝，并告诉它…」.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { approve, deny, oops } from '@/actions';
-import { remote, speaksV2, supports, useHub, write } from '@/remote/hub';
+import { remote, supports, useHub, write } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
 import { useSettings } from '@/store/settings';
 import { cardTitle } from '@/ui/format';
@@ -15,6 +15,7 @@ import { spaceName } from '@/ui/row';
 import { agentName } from '@/ui/status';
 import { SayDialog } from '@/ui/sheets';
 import { ago, useTheme } from '@/ui/theme';
+import { useSettled } from '@/ui/useHold';
 
 export default function Approve() {
   const t = useTheme();
@@ -46,12 +47,15 @@ export default function Approve() {
     };
   }, [online, machine, terminal]);
 
+  // What it asks arrives after the page does; 允许 waits until that has been up a moment.
+  const settled = useSettled(`${ask.subject}|${ask.note}|${ask.always}`);
+  const off = busy || !settled.ready;
   const gone = !card?.approval;
   const can = supports(m, 'answer');
   const space = m && card ? spaceName(m, card) : '';
 
   async function run(f: () => Promise<unknown>) {
-    if (busy) return;
+    if (busy || !settled.passes()) return;
     setBusy(true);
     try {
       const done = await f();
@@ -66,7 +70,7 @@ export default function Approve() {
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <Nav />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 4, paddingBottom: bottom + 16, gap: 16 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 4, paddingBottom: bottom + 16, gap: 16 }}>
         <View style={s.head}>
           <SpaceMark name={space || 'M'} id={card?.space || space || machine} size={56} radius={16} />
           <View style={{ flex: 1, gap: 3 }}>
@@ -105,14 +109,14 @@ export default function Approve() {
             {can ? (
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
-                  <Wide label="拒绝" kind="danger" disabled={busy} onPress={() => run(() => deny(machine, card))} textStyle={{ fontSize: 17 }} />
+                  <Wide label="拒绝" kind="danger" disabled={off} onPress={() => run(() => deny(machine, card, ask))} textStyle={{ fontSize: 17 }} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Wide
                     label="允许"
                     kind="allow"
                     icon="face"
-                    disabled={busy}
+                    disabled={off}
                     onPress={() => run(() => approve(machine, card, ask))}
                     textStyle={{ fontSize: 17 }}
                   />
@@ -128,12 +132,13 @@ export default function Approve() {
         )}
         {card?.approval && can && (
           <View style={{ gap: 8 }}>
-            {speaksV2(m) && (
+            {!!ask.always && (
               <Wide
                 kind="outline"
                 height={46}
-                label="以后不再询问"
-                disabled={busy}
+                wrap
+                label={ask.always}
+                disabled={off}
                 onPress={() => run(() => approve(machine, card, ask, true))}
                 textStyle={{ fontSize: 15, fontWeight: '500' }}
               />
@@ -155,7 +160,7 @@ export default function Approve() {
           setTelling(false);
           if (!card) return;
           run(async () => {
-            await deny(machine, card);
+            await deny(machine, card, ask);
             // The prompt closes first; then the sentence lands in the Agent's input.
             await new Promise((r) => setTimeout(r, 600));
             await write(machine, 'send', { terminal, text, enter: true });

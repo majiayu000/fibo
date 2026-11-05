@@ -269,6 +269,62 @@ fn under_title(above: &[&str]) -> ApprovalAsk {
     }
 }
 
+/// What a menu's 「don't ask again」 option grants, in the person's words: its scope is
+/// different on every menu, so a button must say which. The shapes are the real ones in
+/// `tests/fixtures/screens`; an unknown one reads as the CLI wrote it, never as a guess.
+pub fn always_words(option: &str) -> String {
+    let text = option.replace('’', "'");
+    let body = text.strip_suffix("(shift+tab)").unwrap_or(&text).trim_end();
+    // Codex's key in brackets is for its own keyboard.
+    let body = match body.rsplit_once(" (") {
+        Some((head, key)) if key.len() == 2 && key.ends_with(')') => head,
+        _ => body,
+    };
+    let Some(what) = (body.strip_prefix("Yes, and ")).or(body.strip_prefix("Yes, ")) else {
+        return option.to_owned();
+    };
+    let session = what.ends_with(" in this session");
+    if let Some(rest) = what.strip_prefix("always allow access to ") {
+        if let Some(dir) = rest.strip_suffix(" from this project") {
+            return format!("允许，这个项目以后都能访问 {dir}");
+        }
+    }
+    if what.starts_with("switch to accept edits") {
+        let when = if what.contains("session") {
+            "这次会话里"
+        } else {
+            ""
+        };
+        return format!("允许，并切到自动接受编辑：{when}改文件和常用文件命令都不再询问");
+    }
+    if what == "allow all edits during this session" {
+        return "允许，这次会话里的编辑都不再询问".into();
+    }
+    let Some(rest) =
+        (what.strip_prefix("don't ask again for: ")).or(what.strip_prefix("don't ask again for "))
+    else {
+        return option.to_owned();
+    };
+    let rest = rest.strip_suffix(" in this session").unwrap_or(rest);
+    let when = if session { "这次会话里" } else { "以后" };
+    if rest == "this command" {
+        return format!("允许，这条命令{when}不再询问");
+    }
+    if rest == "these files" {
+        return format!("允许，这些文件{when}不再询问");
+    }
+    if let Some(prefix) = rest.strip_prefix("commands that start with ") {
+        return format!("允许，{prefix} 开头的命令{when}不再询问");
+    }
+    if let Some((what, place)) = rest.rsplit_once(" commands in ") {
+        return format!("允许，{place} 里的 {what} 命令{when}不再询问");
+    }
+    if let Some(what) = rest.strip_suffix(" commands") {
+        return format!("允许，{what} 命令{when}不再询问");
+    }
+    format!("允许，{rest} {when}不再询问")
+}
+
 /// The menu Codex 0.166 puts over a running turn when it gets Ctrl-C.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CancelMenu {

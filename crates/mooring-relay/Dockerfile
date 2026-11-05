@@ -1,7 +1,7 @@
 # The relay on its own, for anyone hosting one. Build from the repository root:
 #   docker build -f crates/mooring-relay/Dockerfile -t mooring-relay .
 # Run it behind an HTTPS proxy; see docs/relay/self-host.md.
-FROM rust:1.95-slim-bookworm AS build
+FROM rust:1.99.1-slim-bookworm AS build
 WORKDIR /src
 COPY Cargo.lock ./
 COPY crates/mooring-remote crates/mooring-remote

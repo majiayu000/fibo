@@ -1,4 +1,84 @@
 use super::*;
+
+#[test]
+fn quiet_agent_identity_is_published_before_a_transcript_and_cleared_on_exit() {
+    let (mut host, root) = super::tests::fixture();
+    host.workspace.terminals.push(Terminal {
+        id: "t".into(),
+        space: "s".into(),
+        argv: vec!["/bin/sh".into()],
+        cwd: "/tmp".into(),
+        pid: Some(100),
+        state: ProcessState::Running,
+        exit_code: None,
+        error: None,
+    });
+    let process = |pid, parent, runtime| crate::recognition::Process {
+        pid,
+        parent,
+        runtime,
+        cli_session_id: None,
+        no_daemon: true,
+        launch: vec![],
+    };
+    let shell = process(100, 0, None);
+    let codex = process(101, 100, Some(Agent::Codex));
+    let (tx, rx) = sync_channel(16);
+    let (socket, _peer) = UnixStream::pair().unwrap();
+    host.recognition_subscribers.insert(
+        1,
+        Subscriber {
+            tx,
+            socket,
+            lagged: Default::default(),
+        },
+    );
+    host.observe_processes(&[shell.clone(), codex.clone()], &HashMap::new())
+        .unwrap();
+    assert_eq!(
+        host.recognition.terminal_agents.get("t"),
+        Some(&Agent::Codex)
+    );
+    assert!(
+        host.recognition.terminal_notes.is_empty(),
+        "identity alone must not invent a warning"
+    );
+    assert!(
+        host.workspace.agent_sessions.is_empty(),
+        "identity is not a conversation"
+    );
+    let (_, bytes) = rx
+        .try_recv()
+        .expect("identity-only change must reach the window");
+    let Reply::Recognition(seen) = serde_json::from_slice(&bytes).unwrap() else {
+        panic!()
+    };
+    assert_eq!(seen.terminal_agents.get("t"), Some(&Agent::Codex));
+    host.observe_processes(&[shell.clone(), codex], &HashMap::new())
+        .unwrap();
+    assert!(
+        rx.try_recv().is_err(),
+        "unchanged identity must not publish another update"
+    );
+    host.agent_exited(101).unwrap();
+    assert!(!host.recognition.terminal_agents.contains_key("t"));
+    assert!(
+        rx.try_recv().is_ok(),
+        "exit must clear the icon in the window"
+    );
+    let claude = process(102, 100, Some(Agent::Claude));
+    host.observe_processes(&[shell.clone(), claude], &HashMap::new())
+        .unwrap();
+    assert_eq!(
+        host.recognition.terminal_agents.get("t"),
+        Some(&Agent::Claude)
+    );
+    host.observe_processes(&[shell], &HashMap::new()).unwrap();
+    assert!(host.recognition.terminal_agents.is_empty());
+    drop(host);
+    fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
     let root = std::env::temp_dir().join(format!("kl-gap-{}", uuid::Uuid::new_v4()));
