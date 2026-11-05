@@ -1,3 +1,5 @@
+#[path = "support/tied.rs"]
+mod tied;
 use mooring_core::{model::*, protocol::*, terminal::Vt};
 use std::{
     fs, io,
@@ -7,6 +9,7 @@ use std::{
     sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
     time::{Duration, Instant},
 };
+use tied::SpawnTied;
 
 // Functional fixtures still run in parallel. Resource measurements exclusively
 // own the fixture lane so 40-PTY setup, SQLite fsync and FSEvents recovery from
@@ -18,7 +21,7 @@ static FIXTURES: RwLock<()> = RwLock::new(());
 fn diagnostic_stream_measures_a_busy_managed_terminal_without_holding_workspace_lock() {
     let host = Host::measured();
     host.setup();
-    host.call(host.launch("diag-cpu", "while :; do :; done"))
+    host.call(host.launch("diag-cpu", "while kill -0 $PPID 2>/dev/null; do :; done"))
         .unwrap();
     let before = host.workspace().revision;
     let mut stream = UnixStream::connect(host.socket()).unwrap();
@@ -84,7 +87,7 @@ enum FixtureLease {
     },
 }
 struct Host {
-    child: Child,
+    child: tied::Tied,
     root: PathBuf,
     _lease: FixtureLease,
 }
@@ -104,7 +107,7 @@ impl Host {
         let child = fixture_command(&root)
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         let h = Self {
             child,
@@ -197,8 +200,7 @@ impl Drop for Host {
                     let _ = self.call(Request::Stop { id: s.id });
                 }
             }
-            let _ = self.child.kill();
-            let _ = self.child.wait();
+            self.child.kill_tree();
         }
         let _ = fs::remove_dir_all(&self.root);
     }
@@ -262,7 +264,7 @@ fn a_newer_host_takes_running_terminals_over_without_ending_them() {
         .env("MOORING_FIXTURE_TAKEOVER", "1")
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     // The old host hands over and exits on its own.
     let until = Instant::now() + Duration::from_secs(15);
@@ -1150,7 +1152,7 @@ fn two_cli_conversations_in_one_real_pty_keep_separate_ownership_after_restart()
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let until = Instant::now() + Duration::from_secs(5);
     loop {
@@ -1747,7 +1749,7 @@ fn recognition_status_stream_recovers_after_log_root_is_rebuilt() {
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -2254,7 +2256,7 @@ fn nested_split_tree_and_ratios_survive_store_reopen() {
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let until = Instant::now() + Duration::from_secs(10);
     let workspace = loop {
@@ -2572,7 +2574,7 @@ fn host_death_interrupts_pty_and_restart_preserves_no_fake_running_process() {
     h.child = fixture_command(&h.root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -2995,7 +2997,7 @@ fn socket_publication_waits_for_initialization_then_first_rpc_succeeds() {
     let child = fixture_command(&root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let h = Host {
         child,
@@ -4680,7 +4682,7 @@ fn ten_event_subscribers_cost_the_host_almost_nothing() {
     for i in 0..4 {
         h.call(h.launch(
             &format!("spin{i}"),
-            "while :; do for c in '|' '/' '-' '\\\\'; do printf '\\r\\033[2K%s working… (esc to interrupt)' \"$c\"; sleep 0.08; done; done",
+            "while kill -0 $PPID 2>/dev/null; do for c in '|' '/' '-' '\\\\'; do printf '\\r\\033[2K%s working… (esc to interrupt)' \"$c\"; sleep 0.08; done; done",
         ))
         .unwrap();
     }
@@ -5562,7 +5564,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         Command::new(env!("CARGO_BIN_EXE_mooring"))
             .args(["remote", "--relay", &base, "--runtime", &root])
             .stderr(Stdio::piped())
-            .spawn()
+            .spawn_tied()
             .unwrap()
     };
     let mut on_relay = machine();
@@ -5850,7 +5852,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     assert_eq!(phone.next(|v| v["id"] == 1)["ok"]["version"], 1);
 
     // A second machine with the same code takes over; the first one exits.
-    let mut twin = machine();
+    let _twin = machine();
     let until = Instant::now() + Duration::from_secs(10);
     let status = loop {
         if let Some(s) = on_relay.try_wait().unwrap() {
@@ -5866,8 +5868,6 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         said.iter().any(|l| l.contains("没有配对或密钥不对")),
         "{said:?}"
     );
-    let _ = twin.kill();
-    let _ = twin.wait();
     drop(app);
 }
 
@@ -6230,10 +6230,10 @@ fn the_js_phone_client_chats_through_a_real_relay() {
     let (base, _stop, _relay) = local_relay("127.0.0.1:0", Default::default());
     let root = h.root.to_string_lossy().into_owned();
     let link = pair(&root, &base, "JS 手机", "full");
-    let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
+    let _machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
         .args(["remote", "--relay", &base, "--runtime", &root])
         .stderr(Stdio::null())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     // The machine registers with the relay before a phone can reach it.
     let until = Instant::now() + Duration::from_secs(10);
@@ -6248,8 +6248,6 @@ fn the_js_phone_client_chats_through_a_real_relay() {
         .args(["test/phone-e2e.ts", &link.text(), "phone-chat"])
         .output()
         .expect("bun");
-    machine.kill().ok();
-    machine.wait().ok();
     assert!(
         out.status.success(),
         "{}",
@@ -6358,7 +6356,7 @@ fn phone_demo_machine() {
     let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
         .args(["remote", "--relay", &base, "--runtime", &root])
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     println!("PAIRING LINK: {}", link.text());
     println!("RUNTIME: {root}");
@@ -6511,7 +6509,7 @@ fn a_phone_that_never_finishes_its_handshake_is_closed() {
     let mut machine = Command::new(env!("CARGO_BIN_EXE_mooring"))
         .args(["remote", "--relay", &base, "--runtime", &root])
         .stderr(Stdio::null())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     let rt = Phone::rt();
     let url = link.url().unwrap();

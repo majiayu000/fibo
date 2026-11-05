@@ -116,7 +116,7 @@ fn remote_stop_interrupts_a_working_agent_and_refuses_anything_else() {
     let row = json!({"type":"assistant","uuid":"a9","timestamp":mooring_core::content::now(),"message":{"model":"claude","stop_reason":"end_turn","content":[{"type":"text","text":"stopped"}]}});
     std::fs::write(&ended, format!("{row}\n")).unwrap();
     let script = format!(
-        "trap 'echo INTERRUPTED; cat {} >> \"$LOG\"' INT; echo WORKING; while :; do sleep 1; done",
+        "trap 'echo INTERRUPTED; cat {} >> \"$LOG\"' INT; echo WORKING; while kill -0 $PPID 2>/dev/null; do sleep 1; done",
         shell_quote(&ended.to_string_lossy())
     );
     h.claude("busy", Path::new("/tmp"), &[user], &script);
@@ -185,7 +185,7 @@ fn fake_codex_saying(h: &Host, id: &str, ends: &[&str], cursor: u8, esc: &str) {
     // taken for the Agent and gone at every key.
     let keys = h.root.join(format!("keys-{id}.sh"));
     let body = format!(
-        "stty -icanon -echo -isig; printf '• Working (1s • esc to interrupt)\\n'; while :; do k=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'); keys=\"$keys $k\"; [ \"$k\" = 1b ] && printf '\\033[2J\\033[H{esc}\\n'; printf 'KEY=%s\\n' \"$k\"; [ \"$k\" = 03 ] && {menu}; case ' {} ' in *\" $k \"*) printf '\\033[2J\\033[H{esc}\\nkeys:%s\\n' \"$keys\"; cat {} >> {rollout};; esac; done",
+        "stty -icanon -echo -isig; printf '• Working (1s • esc to interrupt)\\n'; while kill -0 $PPID 2>/dev/null; do k=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'); keys=\"$keys $k\"; [ \"$k\" = 1b ] && printf '\\033[2J\\033[H{esc}\\n'; printf 'KEY=%s\\n' \"$k\"; [ \"$k\" = 03 ] && {menu}; case ' {} ' in *\" $k \"*) printf '\\033[2J\\033[H{esc}\\nkeys:%s\\n' \"$keys\"; cat {} >> {rollout};; esac; done",
         ends.join(" "),
         shell_quote(&ended.to_string_lossy()),
     );
