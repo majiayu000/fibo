@@ -1,4 +1,3 @@
-crates/mooring-app/src/desktop.rs	806
 crates/mooring-app/src/harness.rs	3315
 crates/mooring-app/src/terminal/pane.rs	2969
 crates/mooring-app/src/terminal/screen.rs	1329
