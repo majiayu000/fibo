@@ -151,8 +151,10 @@ pub(super) fn start(
         handle.update(cx, |v, _, a| v.visual_phones(true, None, a)).unwrap();
         both("5-after-kick", cx).await;
         let _ = phone.kill();
+        let _ = phone.wait();
         call(Request::RemoteConfigure { enabled: false, relay: base, key: None });
         let _ = relay.kill();
+        let _ = relay.wait();
         eprintln!("phones evidence: ok");
         cx.update(|cx| cx.quit());
     })

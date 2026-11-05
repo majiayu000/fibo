@@ -92,7 +92,7 @@
 | 1 | `ci-test.sh:37` 写死 `tests/managed_session.rs` | 拆成多个测试二进制或 `tests/managed_session/main.rs` 后，偶发失败不再重跑，CI 随机变红 | 已实测：cargo 的输出头变成 `Running tests/managed_session/main.rs`，脚本匹配不上。根文件留在原路径，用 `#[path = "managed_session/xxx.rs"] mod xxx;` 引入子模块 |
 | 2 | `ui/theme.rs:850` 的颜色守卫写死 `terminal/pane.rs`、`desktop.rs` | **不报错**：搬走的代码不再被检查 | 拆 `pane.rs`、`desktop.rs` 时把新文件加进这个清单 |
 | 3 | 按文件名判断的守卫：`tests/guard.rs:50,58`（`log_index.rs`、`harness.rs`、`visual.rs`）、`ui/tone.rs:73`、`tests/architecture_boundary.rs` 的 `FIXTURES` | 新文件被当成普通产品代码，测试报错。此时用 `MOORING_GUARD_UPDATE=1` 重写基线也能变绿，等于**把守卫放宽了** | 改守卫的路径规则，让新文件继承原有身份。重写 `guard-baseline.txt` 后，每个 `field` / `word` 的总数不得增加 |
-| 4 | `harness.rs`、`visual.rs`、`pane.rs` 等的 `visual-test` 代码 | **不报错**：CI 的 clippy 和测试都不开这个特性，发布构建也不编译这部分 | 每次提交前都跑下面的 `cargo check --features visual-test` |
+| 4 | `harness.rs`、`visual.rs`、`pane.rs` 等的 `visual-test` 代码 | **不报错**：CI 的 clippy 和测试都不开这个特性，发布构建也不编译这部分 | 每次提交前都跑下面开 `visual-test` 的 clippy |
 | 5 | `examples/paint_bench.rs`、`terminal_reference.rs` 用 `#[path]` 引入 `screen.rs`、`theme.rs` | **不报错**：`mod xxx;` 的解析目录变了，只有这两个 example 编不过。已实测：`theme.rs` 加一个普通 `mod` 后，CI 用的 clippy 仍然通过，开特性才报 E0583 | 这两个文件里的子模块一律写 `#[path]`（`screen.rs` 已是这样）；用特性检查确认 |
 
 ## 每个提交的自查（执行人）
@@ -101,12 +101,12 @@
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo check -p mooring-app --all-targets --features visual-test   # 陷阱 4、5
+cargo clippy -p mooring-app --all-targets --features visual-test -- -D warnings   # 陷阱 4、5
 cargo test -p <改动的 crate>
 cargo test -p mooring-core --test file_size --test guard
 ```
 
-这里用 `cargo check`，不用 clippy：开 `visual-test` 的 clippy 在基线上就有 5 个报错（`visual.rs:1731`、`pane.rs:227`、`desktop.rs:469`、`phones_evidence.rs:64,86`），不属于这次拆分。
+开 `visual-test` 的 clippy 原先有几个旧报错，所以这里和 CI 曾经只用 `cargo check`；报错修掉后两边都改成了 clippy。
 
 另外遵守 `CLAUDE.md` 的提交说明格式（`Why:`、`Rejected:`）。提交被 hook 拦一次是正常的：读完它贴出的历史 `Rejected:` 再提交一次。
 

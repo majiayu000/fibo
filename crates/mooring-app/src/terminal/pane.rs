@@ -22,7 +22,7 @@ mod search;
 mod state;
 #[cfg(feature = "visual-test")]
 #[path = "pane_visual.rs"]
-mod visual;
+pub mod visual;
 use crate::{
     connection::Connection,
     terminal::screen::{self, Screen},
