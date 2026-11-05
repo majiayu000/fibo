@@ -128,6 +128,71 @@ fn a_closed_tab_is_gone_after_reopen() {
     drop(db);
     std::fs::remove_dir_all(dir).unwrap();
 }
+/// What a current build does to tabs (moving a tab's last pane away, closing panes, a
+/// restart that interrupts their terminals) leaves no tab without panes or a place in the
+/// order, so the old-format refusal never fires on it.
+#[test]
+fn current_tab_edits_and_restarts_reopen() {
+    let dir = std::env::temp_dir().join(format!("kl-tabpaths-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut db, before) = Store::open(&dir).unwrap();
+    let mut w = before.clone();
+    w.spaces.push(Space {
+        id: "s".into(),
+        name: "s".into(),
+        cwd: "/tmp".into(),
+    });
+    for id in ["a", "b", "c"] {
+        w.terminals.push(Terminal {
+            id: id.into(),
+            space: "s".into(),
+            argv: vec!["/bin/sh".into()],
+            cwd: "/tmp".into(),
+            pid: None,
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
+        w.edit(Edit::CreateTab {
+            tab: Tab {
+                id: id.into(),
+                space: "s".into(),
+                default_task: None,
+                title: String::new(),
+                layout: Some(Layout::Leaf(id.into())),
+            },
+        })
+        .unwrap();
+    }
+    db.save(&before, &w).unwrap();
+    let mut next = w.clone();
+    next.edit(Edit::MovePane {
+        terminal: "a".into(),
+        target: "b".into(),
+        side: Some((mooring_core::layout::Axis::Right, false)),
+    })
+    .unwrap();
+    db.save(&w, &next).unwrap();
+    let mut last = next.clone();
+    last.edit(Edit::ClosePane {
+        terminal: "c".into(),
+    })
+    .unwrap();
+    last.edit(Edit::ClosePane {
+        terminal: "b".into(),
+    })
+    .unwrap();
+    db.save(&next, &last).unwrap();
+    drop(db);
+    for _ in 0..2 {
+        let (_, loaded) = Store::open(&dir).unwrap();
+        let ids: Vec<_> = loaded.tabs.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, ["b"]);
+        assert_eq!(loaded.tabs[0].layout, Some(Layout::Leaf("a".into())));
+        assert_eq!(loaded.terminals[0].state, ProcessState::Interrupted);
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
 #[test]
 fn an_old_format_database_is_refused_and_left_as_it_was() {
     let cases = [
