@@ -56,6 +56,14 @@ jobs:
       - name: Cargo test
         run: sh ci-test.sh
 
+      - name: Upload managed_session retries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-test-retries
+          path: target/ci-test-retries.txt
+          if-no-files-found: ignore
+
   window-perf:
     name: Window performance gate
     runs-on: macos-latest
