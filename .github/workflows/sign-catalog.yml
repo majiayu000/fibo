@@ -35,8 +35,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # The version is this commit's: it is the action's 1.95.0 branch.
-      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95.0
+      # Installs what rust-toolchain.toml pins: the version, rustfmt, clippy, the wasm target.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
 
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:

@@ -20,10 +20,12 @@ export type Ask = {
   truncated: boolean;
   /** The machine named the subject. Until then nothing can be judged from it. */
   known: boolean;
+  /** What the menu's 「don't ask again」 option grants, as the machine read it; '' when it has none. */
+  always: string;
 };
 
 /** The reply to `ask` as screens read it; `question` stands in until there is a subject. */
-export function askFrom(reply: { kind?: string; subject?: string; note?: string; detail?: string; truncated?: boolean } | null, question: string): Ask {
+export function askFrom(reply: { kind?: string; subject?: string; note?: string; detail?: string; truncated?: boolean; always?: string } | null, question: string): Ask {
   const subject = reply?.subject ?? '';
   return {
     subject: subject || question,
@@ -32,6 +34,7 @@ export function askFrom(reply: { kind?: string; subject?: string; note?: string;
     detail: reply?.detail ?? '',
     truncated: !!reply?.truncated,
     known: !!subject,
+    always: reply?.always ?? '',
   };
 }
 
@@ -49,6 +52,10 @@ export const partialWords = (messages: number) =>
   messages
     ? '更早的消息没有读进来：电脑第一次看到这段对话时，只读了日志的最后一段。'
     : '这段日志电脑只读了最后一段，里面没有消息。之后的新消息会显示，更早的要回电脑上看。';
+
+/** What a conversation with older lines still unread says, on a computer that can read them. */
+export const readBackWords = (reading: boolean, failed: string) =>
+  reading ? '正在读更早的消息…' : failed ? `${failed}。点这里再试一次` : '更早的消息还在电脑的日志里。继续往上翻，或者点这里读';
 
 /** Commands worth a second confirmation: pushing, deleting, deploying, publishing. */
 const DANGER = [

@@ -20,6 +20,10 @@ pub struct Ask {
     /// The subject ran off the top of what the machine could read: there is more of it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
+    /// What the menu's 「don't ask again」 option grants, in the person's words; its scope
+    /// differs by menu. None: the menu has no such option, and `always` would be refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub always: Option<String>,
 }
 
 /// An Agent asking to be trusted with a folder before it does anything.

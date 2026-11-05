@@ -136,6 +136,16 @@ fn every_saved_approval_says_what_it_asks_and_which_key_is_always() {
                         want["always"]
                     ));
                 }
+                // The button's words, as `ask` reads the screen: without an agent to go by.
+                let label = (screen_rules::explain(screen_rules::default_rules(), screen))
+                    .always_option()
+                    .map(|o| screen_ask::always_words(&o.text));
+                if label.as_deref() != want["always_label"].as_str() {
+                    wrong.push(format!(
+                        "{cli}/{name}: always label {label:?}, want {}",
+                        want["always_label"]
+                    ));
+                }
                 // Never the option that hands over every later prompt.
                 let picked = key.and_then(|k| {
                     screen.lines().find(|l| {

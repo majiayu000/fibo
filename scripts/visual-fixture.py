@@ -121,7 +121,10 @@ if sys.argv[1] == 'prepare':
         lines = ['› ' + titles[n], '', '• 已读取项目上下文', '• 修改标签命名', '', '此处为隔离视觉测试输出，未调用模型。']
         script = 'exec 3<' + shlex.quote(str(logs / f'visual-{n}.jsonl')) + '; printf "%s\\n" ' + ' '.join(shlex.quote(s) for s in lines) + '; while IFS= read -r line; do printf "%s\\n" "$line"; done'
         r = rpc(root, {'Launch': {'id': f'p{n}', 'space': 's0', 'argv': [str(root / 'codex'), '-c', script], 'cwd': str(root / 'projects/工作空间'), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
-    rpc(root, {'Launch': {'id': 'pstart', 'space': 's0', 'argv': ['/bin/zsh', '-f'], 'cwd': str(root / 'projects/工作空间'), 'cols': 100, 'rows': 35}})
+    start = ['/bin/zsh', '-f']
+    if os.environ.get('MOORING_FIXTURE_UNBOUND_AGENT'):
+        start = [str(root / 'codex'), '-c', 'printf "OpenAI Codex\\nWaiting for your first message\\n"; while IFS= read -r line; do :; done', '--no-daemon']
+    rpc(root, {'Launch': {'id': 'pstart', 'space': 's0', 'argv': start, 'cwd': str(root / 'projects/工作空间'), 'cols': 100, 'rows': 35}})
     def leaf(p): return {'Leaf': p}
     def split(a, b, axis): return {'Split': {'axis': axis, 'ratio': 5000, 'first': a, 'second': b}}
     for id, title, task, layout in [('feedback', '标签命名依旧有问题', 'task0', split(leaf('p0'), split(leaf('p1'), leaf('p2'), 'Down'), 'Right')), ('start', '健身', 'task1', leaf('pstart'))]:

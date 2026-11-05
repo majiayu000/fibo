@@ -185,6 +185,7 @@ export function Wide({
   disabled,
   icon,
   height = 52,
+  wrap,
   textStyle,
 }: {
   label: string;
@@ -193,6 +194,8 @@ export function Wide({
   disabled?: boolean;
   icon?: IconName;
   height?: number;
+  /** All of the label, however many lines: words the person agrees to must not be cut off. */
+  wrap?: boolean;
   textStyle?: StyleProp<TextStyle>;
 }) {
   const t = useTheme();
@@ -210,12 +213,13 @@ export function Wide({
       onPress={onPress}
       style={({ pressed }) => [
         s.wide,
-        { height, backgroundColor: look.bg, borderColor: look.border },
+        wrap ? { minHeight: height, paddingVertical: 10 } : { height },
+        { backgroundColor: look.bg, borderColor: look.border },
         (pressed || disabled) && { opacity: disabled ? 0.4 : 0.75 },
       ]}
     >
       {icon && <Icon name={icon} size={18} width={2} color={look.fg} />}
-      <Text style={[s.wideText, { color: look.fg }, textStyle]} numberOfLines={1}>
+      <Text style={[s.wideText, { color: look.fg }, textStyle, wrap && { flexShrink: 1, textAlign: 'center' }]} numberOfLines={wrap ? undefined : 1}>
         {label}
       </Text>
     </Pressable>

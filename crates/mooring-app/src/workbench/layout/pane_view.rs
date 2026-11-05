@@ -111,8 +111,9 @@ impl Workbench {
         let line = T::color(if focused { T::focus() } else { T::border() });
         // Who and where, never the conversation's title again: that is the tab's and the
         // sidebar's. `Codex ~/…/tools/mooring`; a plain shell names its program.
-        let who = match session {
-            Some(s) => s.runtime.name().to_owned(),
+        let agent = self.pane_agent(id);
+        let who = match agent {
+            Some(agent) => agent.name().to_owned(),
             None => pane
                 .read(cx)
                 .program_title()
@@ -141,7 +142,7 @@ impl Workbench {
                 })
             })
             // Whose pane: its CLI's mark always, or a terminal's; the move arrows on hover.
-            .child(self.grip_mark(id, session))
+            .child(self.grip_mark(id, agent))
             .child(
                 div()
                     .flex_shrink_0()

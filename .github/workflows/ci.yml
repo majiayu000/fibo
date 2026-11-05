@@ -29,11 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@1.95.0
-        with:
-          components: rustfmt, clippy
+      # Installs what rust-toolchain.toml pins: the version, rustfmt, clippy, the wasm target.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
 
-      # Local rust-toolchain.toml pins the same rustfmt/clippy version.
       # Its own cache saves a new 25MB entry per run, which filled the quota; .zig-cache (its
       # ZIG_GLOBAL_CACHE_DIR, where Ghostty's Zig packages and build runner go) is in the cache below.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
@@ -104,7 +103,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@1.95.0
+      # Installs what rust-toolchain.toml pins: the version, rustfmt, clippy, the wasm target.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
 
       # Its own cache saves a new 25MB entry per run, which filled the quota; .zig-cache (its
       # ZIG_GLOBAL_CACHE_DIR, where Ghostty's Zig packages and build runner go) is in the cache below.
