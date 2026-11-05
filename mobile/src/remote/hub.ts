@@ -145,9 +145,11 @@ async function connect(id: string) {
     return;
   }
   remotes.set(id, r);
+  // What the machine answered when it turned this phone away after the handshake.
+  let refusal: string | undefined;
   r.onEnded((e) => {
     remotes.delete(id);
-    ended(id, e.code, undefined, e.reason);
+    ended(id, refusal ? undefined : e.code, refusal, e.reason);
   });
   try {
     // The device id names this phone for the request ids its writes carry.
@@ -171,6 +173,9 @@ async function connect(id: string) {
     await follow(id, r);
     await refresh(id);
   } catch (e) {
+    // The connection still up means the machine itself said no: say what it said, not
+    // that the network is down.
+    if (!r.ended) refusal = `电脑上的 Mooring 没接受这台手机：${(e as Error).message}`;
     r.close();
   }
 }
