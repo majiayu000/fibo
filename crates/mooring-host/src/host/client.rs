@@ -566,6 +566,10 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             answer_approval(shared, &id, &question, true, true)?;
             Ok(Reply::Ok)
         }
+        Request::AnswerTrust { id, folder, trust } => {
+            answer_trust(shared, &id, &folder, trust)?;
+            Ok(Reply::Ok)
+        }
         Request::SendKeys { id, keys } => {
             send_keys(shared, &id, &keys)?;
             Ok(Reply::Ok)

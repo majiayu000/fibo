@@ -33,6 +33,15 @@ pub struct HookShell {
     pub description: String,
     pub command: String,
 }
+/// An Agent asking to be trusted with a folder before it does anything.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrustPrompt {
+    pub agent: crate::agent::Agent,
+    /// Its words.
+    pub question: String,
+    /// The folder as its screen writes it.
+    pub folder: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Request {
     Hello {
@@ -197,13 +206,20 @@ pub enum Request {
         id: String,
         question: String,
     },
+    /// Answers an Agent's 「trust this folder?」, read off the screen before and after the
+    /// keys go out; refused when that prompt about `folder` is not what it shows.
+    AnswerTrust {
+        id: String,
+        folder: String,
+        trust: bool,
+    },
     /// Ctrl-C, the window's 中断, only while the conversation in the terminal is working:
     /// what its turn was at that moment decides, not what a client saw earlier.
     Interrupt {
         id: String,
     },
     /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `SendInput`,
-    /// `AnswerApproval`, `AnswerAlways`, `Interrupt`) run
+    /// `AnswerApproval`, `AnswerAlways`, `AnswerTrust`, `Interrupt`) run
     /// at most once under `request`: a resend after a lost reply gets the first outcome
     /// back (a phone or another computer that reconnected). Edits name themselves.
     Once {
@@ -602,6 +618,10 @@ pub struct RecognitionStatus {
     /// reading the note's words.
     #[serde(default)]
     pub terminal_agents: std::collections::HashMap<String, crate::agent::Agent>,
+    /// Terminal -> the question an Agent asks before anything else: whether to trust the
+    /// folder. Read off its screen; there may be no conversation yet. Live state, not stored.
+    #[serde(default)]
+    pub terminal_trust: std::collections::HashMap<String, TrustPrompt>,
     /// Terminal -> the title its program set, spinner dropped. Live state, not stored.
     #[serde(default)]
     pub terminal_titles: std::collections::HashMap<String, String>,
@@ -634,6 +654,7 @@ impl Default for RecognitionStatus {
             metrics: RecognitionMetrics::default(),
             terminal_hints: Default::default(),
             terminal_notes: Default::default(),
+            terminal_trust: Default::default(),
             terminal_agents: Default::default(),
             terminal_titles: Default::default(),
             terminal_commands: Default::default(),

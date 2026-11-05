@@ -74,6 +74,12 @@ fn terminal_notice(event: &str, w: &Workspace, id: &str, at: u64) -> Notice {
     n.space = space_of(w, Some(id));
     n
 }
+/// Only running terminals ask: one that ended took its prompt with it.
+fn map_retain(map: &mut HashMap<String, TrustPrompt>, w: &Workspace) {
+    map.retain(|id, _| {
+        (w.terminals.iter()).any(|t| t.id == *id && t.state == ProcessState::Running)
+    });
+}
 impl Tracker {
     /// Starts from `w`: the first subscriber gets it as its snapshot, not as changes.
     pub(super) fn seed(&mut self, w: &Workspace) {
@@ -170,6 +176,32 @@ impl Tracker {
 }
 
 impl Host {
+    /// What the screen says about trusting the folder; subscribers hear when it changes.
+    pub(super) fn set_terminal_trust(
+        &mut self,
+        terminal: &str,
+        prompt: Option<TrustPrompt>,
+    ) -> io::Result<()> {
+        let map = &mut self.recognition.terminal_trust;
+        if map.get(terminal) == prompt.as_ref() {
+            return Ok(());
+        }
+        let event = if prompt.is_some() {
+            "trust"
+        } else {
+            "trust_gone"
+        };
+        match prompt {
+            Some(p) => map.insert(terminal.to_owned(), p),
+            None => map.remove(terminal),
+        };
+        let w = self.workspace.clone();
+        map_retain(&mut self.recognition.terminal_trust, &w);
+        self.publish_status()?;
+        let at = mooring_core::content::now();
+        self.send_events(vec![terminal_notice(event, &w, terminal, at)]);
+        Ok(())
+    }
     /// Queues `notices` for every subscriber; one that has fallen behind is marked and
     /// told `lagged` once it catches up, never waited for.
     pub(super) fn send_events(&self, notices: Vec<Notice>) {

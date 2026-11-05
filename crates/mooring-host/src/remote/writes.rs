@@ -220,7 +220,7 @@ pub(super) fn stop(socket: &Path, request: &Value, client: Option<&str>) -> io::
         }
         if Instant::now() >= until {
             return Err(io::Error::other(
-                "发了中断，但它还在跑。可以打开终端看一眼，或者再试一次",
+                "发了中断，但它没有停。可以打开终端看一眼，或者再试一次",
             ));
         }
         std::thread::sleep(Duration::from_millis(200));

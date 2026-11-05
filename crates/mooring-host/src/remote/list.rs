@@ -1,7 +1,7 @@
 //! `list`: spaces, running terminals as cards, and the board's todos. Called often (every
 //! burst of events), so everything here reads what the host already has, and a card's
 //! branch comes from `.git/HEAD` through a short cache, never a git process.
-use crate::control::{self, Phase};
+use crate::control;
 use mooring_core::{git_head, model::*, protocol::*, status};
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
@@ -44,20 +44,24 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Va
             let session = w.current_agent(&t.id);
             let cwd = w.terminal_cwd(t);
             let content = session.and_then(|s| w.content.get(&s.id));
-            let phase = match control::phase(w, &t.id) {
-                Phase::Working => rp::Phase::Working,
-                Phase::Waiting => rp::Phase::Waiting,
-                Phase::Idle => rp::Phase::Idle,
-                Phase::None => rp::Phase::Shell,
-            };
+            let trust = seen.terminal_trust.get(&t.id);
             let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
-            let status = control::status(w, &t.id);
+            let status = status::of_terminal(w, &t.id, trust.is_some(), now);
+            let phase = match status.map(status::Status::phase) {
+                Some(status::Phase::Working) => rp::Phase::Working,
+                Some(status::Phase::Waiting) => rp::Phase::Waiting,
+                Some(status::Phase::Idle) => rp::Phase::Idle,
+                None => rp::Phase::Shell,
+            };
             // An Agent here that no conversation is tied to: what it is, in the host's words.
             let unbound = session
                 .is_none()
                 .then(|| seen.terminal_agents.get(&t.id).copied())
-                .flatten();
-            let note = unbound.and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
+                .flatten()
+                .or(trust.map(|p| p.agent));
+            let note = unbound
+                .filter(|_| trust.is_none())
+                .and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
             rp::Card {
                 id: t.id.clone(),
                 space: t.space.clone(),
@@ -74,7 +78,11 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Va
                 waiting: content.and_then(|c| said(&c.waiting)),
                 status: status.map(|s| s.key().to_owned()),
                 status_label: status.map(|s| s.label().to_owned()),
-                needs_you: session.is_some_and(|s| w.needs_you(s, now)),
+                needs_you: trust.is_some() || session.is_some_and(|s| w.needs_you(s, now)),
+                trust: trust.map(|p| rp::TrustAsk {
+                    question: p.question.clone(),
+                    folder: p.folder.clone(),
+                }),
                 note,
                 turn: content
                     .map(|c| c.turn_key.clone())

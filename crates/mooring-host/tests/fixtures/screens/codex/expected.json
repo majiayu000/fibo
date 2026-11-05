@@ -59,5 +59,9 @@
       "note": "Apply proposed file edits"
     },
     "always": "a"
+  },
+  "trust-real.txt": {
+    "state": "idle",
+    "note": "真实画面：新文件夹的信任提示，不是审批也不是选择题，screen_ask::trust_screen 认它"
   }
 }

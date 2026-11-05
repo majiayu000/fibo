@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, asksTwice, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, asksTwice, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -30,6 +30,14 @@ describe('an approval the machine read', () => {
     expect(asksTwice(none)).toBe(true);
     expect(asksTwice(askFrom({ subject: '', kind: 'Bash command' }, 'q'))).toBe(true);
     expect(asksTwice(askFrom({ subject: 'ls', truncated: true }, 'q'))).toBe(true);
+  });
+});
+
+describe('a folder asking to be trusted', () => {
+  test('says what trusting allows, naming the Agent', () => {
+    const w = trustWords('Codex');
+    expect(w.ask).toContain('Codex');
+    for (const word of ['读', '改', '运行', '文件夹']) expect(w.means).toContain(word);
   });
 });
 

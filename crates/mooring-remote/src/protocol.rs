@@ -79,6 +79,14 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
+    /// Answers a card's [`TrustAsk`]; the machine reads the screen around each key.
+    Trust {
+        terminal: String,
+        folder: String,
+        trust: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
     /// What the approval on a terminal's screen asks about: [`Ask`]. An error when it shows
     /// none.
     Ask {
@@ -246,6 +254,7 @@ impl Op {
             Self::Input { .. } => "input",
             Self::Answer { .. } => "answer",
             Self::Ask { .. } => "ask",
+            Self::Trust { .. } => "trust",
             Self::Chat { .. } => "chat",
             Self::Events => "events",
             Self::Watch { .. } => "watch",
@@ -279,6 +288,7 @@ pub const OPS: &[&str] = &[
     "input",
     "answer",
     "ask",
+    "trust",
     "chat",
     "events",
     "watch",
@@ -450,6 +460,9 @@ pub struct Card {
     /// Waiting on you or failed, as the desktop counts 要你处理.
     #[serde(default)]
     pub needs_you: bool,
+    /// It asks to be trusted with its folder before anything else; answer with `trust`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust: Option<TrustAsk>,
     /// An Agent runs here but no conversation is tied to it (e.g. a Codex on the shared
     /// daemon): `agent` says which, this says so in the user's words. Phase stays `shell`.
     #[serde(default, skip_serializing_if = "Option::is_none")]

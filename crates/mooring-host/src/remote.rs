@@ -405,6 +405,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             }
         }
         "send" => {
+            asks::not_asking_trust(socket, &terminal()?)?;
             let send = Request::SendText {
                 id: terminal()?,
                 text: text(request, "text")?.to_owned(),
@@ -457,6 +458,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             ok_reply(rpc(socket, &named(client, request, answer))?)
         }
         "ask" => asks::ask(socket, &terminal()?),
+        "trust" => asks::trust(socket, request, client),
         "chat" => chat::chat(socket, request),
         "diff" => diff::diff(socket, request),
         "dirs" => dirs::dirs(socket, request),

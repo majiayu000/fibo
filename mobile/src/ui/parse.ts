@@ -38,6 +38,12 @@ export function askFrom(reply: { kind?: string; subject?: string; note?: string;
 /** Whether allowing it asks once more: a dangerous command, or one nobody could read. */
 export const asksTwice = (ask: Pick<Ask, 'subject' | 'known' | 'truncated'>) => !ask.known || ask.truncated || dangerous(ask.subject);
 
+/** What a folder-trust question says, in the person's words: what trusting it allows. */
+export const trustWords = (agent: string) => ({
+  ask: `${agent || 'Agent'} 问：信任这个文件夹吗？`,
+  means: '信任后，它能读、改、运行这个文件夹里的文件。这个决定会记在电脑上。不信任的话，它不会在这里工作。',
+});
+
 /** Commands worth a second confirmation: pushing, deleting, deploying, publishing. */
 const DANGER = [
   /\bgit\s+push\b/,

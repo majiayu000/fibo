@@ -31,6 +31,8 @@ export type Card = {
   status_label?: string | null;
   /** Waiting on you or failed, counted as the desktop counts 要你处理. */
   needs_you?: boolean;
+  /** It asks to be trusted with this folder before anything else; `status` says it waits. */
+  trust?: { question: string; folder: string } | null;
   /** An Agent runs but no conversation is tied to it, in the user's words. */
   note?: string | null;
   /** The conversation's current turn, for `outcome`. */

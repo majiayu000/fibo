@@ -21,3 +21,12 @@ pub struct Ask {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
 }
+
+/// An Agent asking to be trusted with a folder before it does anything.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrustAsk {
+    /// Its words.
+    pub question: String,
+    /// The folder as its screen writes it; `trust` names it back.
+    pub folder: String,
+}

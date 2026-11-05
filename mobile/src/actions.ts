@@ -57,6 +57,14 @@ export async function deny(machine: string, card: Card) {
   setTimeout(() => refresh(machine), 300);
 }
 
+/** Says whether to trust the folder a card asks about; the machine presses the keys. */
+export async function answerTrust(machine: string, card: Card, trust: boolean) {
+  if (!card.trust) return;
+  if (trust && !(await verify('信任这个文件夹'))) return;
+  await write(machine, 'trust', { terminal: card.id, folder: card.trust.folder, trust });
+  setTimeout(() => refresh(machine), 300);
+}
+
 /** Settles a conversation: 已处理 is `done`, 稍后提醒 `deferred` (the machine brings it back in an hour), back to the inbox `open`. */
 export async function settle(machine: string, card: Card, outcome: 'done' | 'deferred' | 'open') {
   if (!card.session) throw new Error('这个终端里没有 Agent 对话');

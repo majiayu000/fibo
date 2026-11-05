@@ -19,6 +19,7 @@ import { choices, questionText } from '@/ui/parse';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
 import { agentName, statusColor } from '@/ui/status';
+import { TrustAsk } from '@/ui/trust';
 import { useTheme } from '@/ui/theme';
 
 type Pending = { text: string; at: number };
@@ -167,7 +168,7 @@ export default function Chat() {
   async function stop() {
     try {
       const done = await write(machine, 'stop', { terminal });
-      setError(done?.closed_background ? '停下了。它后台还在跑的命令也一起关了。' : '');
+      setError(done?.closed_background ? '这一轮中断了。它后台没结束的命令也一起关了。' : '');
       setTimeout(() => refresh(machine), 300);
     } catch (e) {
       setError((e as Error).message);
@@ -265,7 +266,7 @@ export default function Chat() {
           }
           ListEmptyComponent={
             <Text style={{ color: t.dim, textAlign: 'center' }}>
-              {card?.session ? '这段对话还没有消息' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
+              {card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
         />
@@ -292,6 +293,11 @@ export default function Chat() {
           </View>
         </View>
       )}
+      {!!card?.trust && online && (
+        <View style={{ marginHorizontal: 12, marginBottom: 10, padding: 14, borderRadius: 20, borderWidth: 1.5, borderColor: t.wait, backgroundColor: t.card }}>
+          <TrustAsk machine={machine} card={card} can={supports(m, 'trust')} />
+        </View>
+      )}
       {!!waiting && (
         <View style={{ paddingHorizontal: 18, paddingBottom: 10, gap: 8 }}>
           <Text numberOfLines={6} style={{ color: t.wait, fontSize: 13, lineHeight: 19 }}>
@@ -310,7 +316,7 @@ export default function Chat() {
       {!!error && <Notice tone="danger" text={error} />}
       {online && !card ? (
         <Notice text="这个终端已经关了" />
-      ) : m?.role && m.role !== 'full' && !supports(m, 'send') ? (
+      ) : card?.trust && online ? null :  m?.role && m.role !== 'full' && !supports(m, 'send') ? (
         <Notice text={`这台手机的权限是「${m.role === 'view' ? '只看' : '能答审批'}」，不能发消息`} />
       ) : (
         <Composer

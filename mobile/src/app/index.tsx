@@ -13,6 +13,7 @@ import { Btn, Group, Pill, Round, TITLE_WEIGHT, Wide, mono, useBottom, useTop } 
 import { Row, rowStyles, spaceName } from '@/ui/row';
 import { rank } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
+import { TrustAsk } from '@/ui/trust';
 import { type Theme, useTheme } from '@/ui/theme';
 
 const open = (m: Machine, c: Card) => {
@@ -80,7 +81,11 @@ function ApprovalRow({ m, c, t }: Item & { t: Theme }) {
 
 function Swiped({ m, c, t, last }: Item & { t: Theme; last?: boolean }) {
   const can = supports(m, 'outcome') && !!c.session;
-  const body = c.approval && m.status === 'online' ? <ApprovalRow m={m} c={c} t={t} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
+  const body = c.trust && m.status === 'online' ? (
+    <Row m={m} c={c} onPress={() => open(m, c)}>
+      <TrustAsk machine={m.id} card={c} can={supports(m, 'trust')} />
+    </Row>
+  ) : c.approval && m.status === 'online' ? <ApprovalRow m={m} c={c} t={t} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
   if (!can) return body;
   return (
     <Swipe

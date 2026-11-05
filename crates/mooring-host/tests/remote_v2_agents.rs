@@ -300,7 +300,7 @@ fn remote_stop_says_so_when_the_agent_keeps_working() {
     let mut r = Remote::open(&h, None, &[]);
     wait_phase(&mut r, "deaf", "working");
     let e = r.error(json!({ "op": "stop", "terminal": "deaf", "request": "s1" }));
-    assert!(e.contains("还在跑"), "{e}");
+    assert!(e.contains("没有停"), "{e}");
     assert!(h.screen("deaf").contains("KEY=1b"));
 }
 

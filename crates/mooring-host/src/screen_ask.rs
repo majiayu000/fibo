@@ -9,6 +9,8 @@
 //!   under it, then the question.
 //! - Codex: the question, then the subject under it (`$ cmd`, `file (+1 -1)`), then the menu.
 
+use mooring_core::model::Agent;
+
 /// What an approval asks about. `subject` is empty when the screen shows none of the known
 /// layouts: nothing is guessed, and the reader is told to look at the terminal.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -301,6 +303,66 @@ pub fn cancel_menu(tail: &str) -> Option<CancelMenu> {
     })
 }
 
+/// An Agent's 「trust this folder?」 prompt, which comes before any conversation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrustScreen {
+    pub agent: Agent,
+    pub question: String,
+    pub folder: String,
+    /// The cursor is on the option that trusts, so Enter trusts.
+    pub on_yes: bool,
+    /// The key that moves the cursor toward that option.
+    pub toward_yes: &'static str,
+}
+
+/// That prompt when it fills the bottom of the screen, every part of it there. Claude Code
+/// numbers nothing and starts on 「No, exit」, so Enter alone would quit. Real screens: 2.1.318,
+/// Codex 0.166.
+pub fn trust_screen(tail: &str) -> Option<TrustScreen> {
+    let lines: Vec<&str> = (tail.lines().map(str::trim))
+        .filter(|l| !l.is_empty())
+        .collect();
+    let lines = &lines[lines.len().saturating_sub(20)..];
+    let footer = lines.last()?;
+    let cursor = |l: &str| l.starts_with(['❯', '›', '>']);
+    let plain =
+        |l: &'_ str| -> String { l.trim_start_matches(['❯', '›', '>', ' ']).to_owned() };
+    let find = |want: &str| lines.iter().copied().find(|l| plain(l) == want);
+    let after = |label: &str| {
+        let at = lines.iter().position(|l| *l == label)?;
+        lines.get(at + 1).map(|l| (*l).to_owned())
+    };
+    let words = |first: &str, stop: &[&str]| {
+        let at = lines.iter().position(|l| l.starts_with(first))?;
+        let end = lines[at..].iter().position(|l| {
+            stop.iter().any(|s| l.starts_with(s)) || cursor(l) || plain(l).starts_with("1. ")
+        })?;
+        Some(lines[at..at + end].join(" "))
+    };
+    if *footer == "Enter to confirm · Esc to cancel" {
+        find("No, exit")?;
+        let yes = find("Yes, I trust this folder")?;
+        return Some(TrustScreen {
+            agent: Agent::Claude,
+            question: words("Quick safety check:", &["Claude Code'll", "Security guide"])?,
+            folder: after("Accessing workspace:")?,
+            on_yes: cursor(yes),
+            toward_yes: "down",
+        });
+    }
+    if footer.starts_with("enter continue") && footer.contains("esc back") {
+        let yes = find("1. Trust and continue")?;
+        return Some(TrustScreen {
+            agent: Agent::Codex,
+            question: words("Trust this folder?", &[])?,
+            folder: after("Folder access")?,
+            on_yes: cursor(yes),
+            toward_yes: "up",
+        });
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,6 +485,50 @@ mod tests {
         // Scrolled up, with the composer back under it.
         let answered = format!("{MENU}\n• a\n• b\n• c\n• d\n• e\n• f\n• g\n• h\n");
         assert_eq!(cancel_menu(&answered), None);
+    }
+    #[test]
+    fn a_trust_prompt_needs_all_its_parts() {
+        let screen = |cli: &str| {
+            let path = format!(
+                "{}/tests/fixtures/screens/{cli}/trust-real.txt",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            std::fs::read_to_string(path).unwrap()
+        };
+        let claude = screen("claude");
+        let t = trust_screen(&claude).unwrap();
+        assert_eq!(t.agent, Agent::Claude);
+        assert_eq!(t.folder, "~/t/new-folder");
+        assert!(t
+            .question
+            .starts_with("Quick safety check: Is this a project"));
+        assert!(t.question.ends_with("this folder first."), "{}", t.question);
+        assert!(!t.on_yes, "it starts on No, exit");
+        let moved = claude
+            .replace("❯ No, exit", "  No, exit")
+            .replace("  Yes, I trust", "❯ Yes, I trust");
+        assert!(trust_screen(&moved).unwrap().on_yes);
+        let codex = screen("codex");
+        let t = trust_screen(&codex).unwrap();
+        assert_eq!(
+            (t.agent, t.folder.as_str()),
+            (Agent::Codex, "~/t/new-folder")
+        );
+        assert!(t.question.starts_with("Trust this folder?"));
+        assert!(t.question.ends_with("will be saved."), "{}", t.question);
+        assert!(t.on_yes);
+
+        for broken in [
+            claude.replace("No, exit", "No"),
+            claude.replace("Yes, I trust this folder", "Yes"),
+            claude.replace("Accessing workspace:", "Workspace:"),
+            codex.replace("Folder access", "Folder"),
+            format!("{claude}\n$ ls\n"),
+            // Prose in a conversation about the prompt is not the prompt.
+            "Trust this folder? is what Codex asks\n› Ask Codex to do anything\n".to_owned(),
+        ] {
+            assert_eq!(trust_screen(&broken), None, "{broken}");
+        }
     }
     #[test]
     fn no_known_layout_leaves_the_subject_empty() {
