@@ -9,7 +9,7 @@
 
 ## 要支撑的决定
 
-README 批次 4（窗口界面）开工前，下面两件事要先做完，否则批次 4 会把问题固化：
+下面第 1 件要在 README 批次 4（窗口界面）开工前做完，否则批次 4 会把重复规则一起搬走。第 2 件单独排期，不卡拆分（2026-11-05 用户定）：
 
 1. 「状态 → 分组」这条规则在桌面写了三遍、手机写了一遍，宿主给远程卡片用的空间算法又不一样（审计 A2、A3）。
 2. `Pane` 有 65 个字段、约 90 个方法。按 README 把方法分到几个文件后，每个文件仍然能读写全部 65 个字段：文件拆开了，职责没有拆开。`impl Workbench` 分布在 46 个文件里就是这个结果。
@@ -31,9 +31,9 @@ README 批次 4（窗口界面）开工前，下面两件事要先做完，否�
 - 远程协议的 `Card` 增加算好的 `column` 字段。手机 `mobile/src/app/board.tsx` 和桌面 `remote_column` 只读这个字段，同时删掉 `mobile/src/ui/status.ts` 里按 `phase` 猜状态的兜底。
 - `crates/mooring-core/tests/one_owner.rs` 增加对照：对 `sample::every_state()`，本机看板列、远程卡片的 `column`、侧栏桶三者一致。
 
-### G2 · `Pane` 字段分组（README 批次 4 拆 `pane.rs` 之前）
+### G2 · `Pane` 字段分组（单独排期，不卡拆分）
 
-只把字段收进子结构，不搬文件，不改行为：
+`pane.rs` 先按 README 只搬不改，职责问题留给这一项解决。到时只把字段收进子结构，不搬文件，不改行为：
 
 | 子结构 | 收进去的状态 | 用到它的方法 |
 |---|---|---|
@@ -43,7 +43,7 @@ README 批次 4（窗口界面）开工前，下面两件事要先做完，否�
 | `Links` | 悬停词、路径识别 | `hover_word`、`check_hover_path`、`open_target`、`click_hint` |
 | `Handoff` | `Stage`、`Handoff` | `retry/dismiss/step/watch_handoff`、`prefill` |
 
-做完后，README 给 `pane.rs` 写的切法（`Render`、`EntityInputHandler`、`key`、`ask_overlays` 分开）照常执行，各文件就只碰各自的子结构。
+做完后，README 给 `pane.rs` 切出的文件（`Render`、`EntityInputHandler`、`key`、`ask_overlays`）就只碰各自的子结构。
 
 ### G3 · 截图探针整模块 gate（README 批次 5 之前，可选）
 
@@ -53,10 +53,12 @@ README 批次 4（窗口界面）开工前，下面两件事要先做完，否�
 
 ```
 README 批次 1–3（只搬不改，可先做）
-G1 ──┐
-G2 ──┼─ README 批次 4（窗口界面）
-G3 ──┴─ README 批次 5（验收工具）
+G1 ──── README 批次 4（窗口界面）
+G3 ──── README 批次 5（验收工具）
+G2：单独排期，批次 4 之前或之后都可以
 ```
+
+G1 会有意改变界面和远程协议，所以 README 的验收基线定在 G1 合入之后；G1 自己的改动不走纯搬动审计，靠它带的测试把关。
 
 审计清单里的其它修复（OSC 7501、忙时丢弃、静默吞错、文档漂移、tokio）先合入，G1–G3 基于它们之后的 main 来做。
 
