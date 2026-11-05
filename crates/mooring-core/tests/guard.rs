@@ -62,6 +62,7 @@ fn fixture(path: &str) -> bool {
     path.contains("/tests/")
         || path.ends_with("tests.rs")
         || path.ends_with("harness.rs")
+        || path.contains("/src/harness/")
         || path.ends_with("visual.rs")
         || path.contains("/workbench/visual/")
         || path.contains("/test/")
