@@ -323,9 +323,10 @@ impl Host {
         processes: &[crate::recognition::Process],
         files: &HashMap<u32, Vec<String>>,
     ) -> io::Result<()> {
-        let old_hints = (
+        let old_seen = (
             self.recognition.terminal_hints.clone(),
             self.recognition.terminal_notes.clone(),
+            self.recognition.terminal_agents.clone(),
         );
         self.recognition.terminal_hints.clear();
         self.recognition.terminal_notes.clear();
@@ -359,10 +360,17 @@ impl Host {
                 }
             } else if let Some(runtime) = process.runtime {
                 let adapter = crate::agents::adapter(runtime);
-                let watch = match adapter.pending(process, processes) {
+                let pending = adapter.pending(process, processes);
+                // A CLI exists before its first transcript or explanatory note.
+                if !matches!(pending, crate::agents::Pending::Wait) {
+                    self.recognition
+                        .terminal_agents
+                        .insert(terminal.clone(), runtime);
+                }
+                let watch = match pending {
                     crate::agents::Pending::Wait => false,
                     crate::agents::Pending::Unrecorded(hint) => {
-                        self.hint(&terminal, runtime, hint);
+                        self.hint(&terminal, hint);
                         if let std::collections::hash_map::Entry::Vacant(entry) =
                             self.unrecorded_pids.entry(process.pid)
                         {
@@ -383,14 +391,14 @@ impl Host {
                                 None => String::new(),
                             };
                             if let Some(hint) = adapter.title_status(&title) {
-                                self.hint(&terminal, runtime, hint);
+                                self.hint(&terminal, hint);
                             }
                         } else if pending
                             == (crate::agents::Pending::Unbound {
                                 title_status: false,
                             })
                         {
-                            self.hint(&terminal, runtime, crate::agents::unbound_hint(runtime));
+                            self.hint(&terminal, crate::agents::unbound_hint(runtime));
                         }
                         if let std::collections::hash_map::Entry::Vacant(entry) =
                             self.unbound_pids.entry(process.pid)
@@ -411,10 +419,11 @@ impl Host {
                 }
             }
         }
-        if old_hints
+        if old_seen
             != (
                 self.recognition.terminal_hints.clone(),
                 self.recognition.terminal_notes.clone(),
+                self.recognition.terminal_agents.clone(),
             )
         {
             self.publish_status()?;
@@ -539,7 +548,7 @@ impl Host {
             runtime.filter(|_| self.recognition.terminal_hints.contains_key(terminal))
         {
             if let Some(hint) = crate::agents::adapter(runtime).title_status(title) {
-                changed |= self.hint(terminal, runtime, hint);
+                changed |= self.hint(terminal, hint);
             }
         }
         if changed {
@@ -574,10 +583,7 @@ impl Host {
         Ok(())
     }
     /// Sets a terminal's hint and note together; whether either changed.
-    fn hint(&mut self, terminal: &str, agent: Agent, hint: crate::agents::Hint) -> bool {
-        self.recognition
-            .terminal_agents
-            .insert(terminal.into(), agent);
+    fn hint(&mut self, terminal: &str, hint: crate::agents::Hint) -> bool {
         let changed = self.recognition.terminal_hints.get(terminal) != Some(&hint.text)
             || self.recognition.terminal_notes.get(terminal) != Some(&hint.note);
         self.recognition

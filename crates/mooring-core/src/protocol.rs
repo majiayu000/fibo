@@ -614,8 +614,7 @@ pub struct RecognitionStatus {
     /// `terminal_hints` so the app shows any CLI's note without knowing which CLI it is.
     #[serde(default)]
     pub terminal_notes: std::collections::HashMap<String, TerminalNote>,
-    /// Terminal -> the Agent behind its note, so the app knows what runs there without
-    /// reading the note's words.
+    /// Terminal -> the recognized unbound Agent, even before any transcript or note.
     #[serde(default)]
     pub terminal_agents: std::collections::HashMap<String, crate::agent::Agent>,
     /// Terminal -> the question an Agent asks before anything else: whether to trust the
