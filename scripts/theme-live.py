@@ -5,10 +5,12 @@ screen, so the system compositor's work on a picture or a see-through window is 
   python3 scripts/theme-live.py BIN_DIR [SECONDS] [ROUNDS] [PICTURES_DIR]
 
 Opens the real window on the 2000-session workspace of perf-fixture.py, four terminals
-printing, each theme in turn for some rounds, and reports the app's CPU and the whole
-machine's GPU use with the median of the rounds. GPU use is system-wide and swings with what
-else is on screen (one round read 43% for the plain theme and 26% for a picture), so only
-differences that hold across the rounds mean anything. Needs an unlocked screen, so this is
+printing, each theme in turn for some rounds, and reports the median of the rounds: the app's
+CPU and WindowServer's GPU time as a share of the time measured. WindowServer composites
+everything on screen, so only rounds with our window in front count for it: run this with no
+other session opening windows. The app's own GPU time reads 0 from this source and the whole
+machine's utilization read 43% for the plain theme and 26% for a picture in one round, which
+is why neither is used. Needs an unlocked screen, so this is
 a thing to run by hand, not in CI.
 """
 import os, pathlib, re, shutil, statistics, subprocess, sys, threading, time
@@ -23,10 +25,33 @@ THEMES = [
 ]
 
 
-def gpu_percent():
-    out = subprocess.run(['ioreg', '-r', '-d', '1', '-c', 'IOAccelerator'], capture_output=True, text=True).stdout
-    m = re.search(r'"Device Utilization %"=(\d+)', out)
-    return int(m.group(1)) if m else None
+def gpu_seconds():
+    """Each process's accumulated GPU time, which the driver keeps per client."""
+    text = subprocess.run(['ioreg', '-l', '-w0'], capture_output=True, text=True, errors='replace').stdout
+    owner, seen = None, {}
+    for line in text.splitlines():
+        m = re.search(r'"IOUserClientCreator" = "pid (\d+), ', line)
+        if m:
+            owner = int(m.group(1))
+            continue
+        m = re.search(r'"AppUsage" = \((.*)\)', line)
+        if m and owner is not None:
+            used = sum(int(n) for n in re.findall(r'"accumulatedGPUTime"=(\d+)', m.group(1)))
+            seen[owner] = seen.get(owner, 0) + used / 1e9
+    return seen
+
+
+def pid_of(pattern):
+    found = subprocess.run(['pgrep', '-f', pattern], capture_output=True, text=True).stdout.split()
+    return int(found[0]) if found else None
+
+
+def front_app():
+    # No permission needed, unlike asking System Events.
+    who = subprocess.run(['lsappinfo', 'front'], capture_output=True, text=True).stdout.strip()
+    out = subprocess.run(['lsappinfo', 'info', '-only', 'name', who], capture_output=True, text=True).stdout
+    m = re.search(r'"LSDisplayName"="([^"]*)"', out)
+    return m.group(1) if m else '?'
 
 
 def main():
@@ -47,18 +72,20 @@ def main():
                 shutil.copytree(ROOT / 'plugins' / plugin, config / 'plugins' / plugin)
                 (config / 'appearance').write_text(side)
                 (config / f'theme-{side}').write_text(theme)
-            samples, done = [], threading.Event()
+            fronts, used, done = [], {}, threading.Event()
 
             def watch():
                 time.sleep(10)  # as the fixture's own measurement: past the start
                 if pictures and n == 0:
                     pictures.mkdir(parents=True, exist_ok=True)
                     subprocess.run(['screencapture', '-x', str(pictures / f'{name}.png')], capture_output=True)
+                server = pid_of('/WindowServer')
+                start, began = gpu_seconds(), time.monotonic()
                 while not done.is_set():
-                    value = gpu_percent()
-                    if value is not None:
-                        samples.append(value)
-                    time.sleep(1)
+                    fronts.append(front_app())
+                    done.wait(1)
+                end, spent = gpu_seconds(), time.monotonic() - began
+                used['server'] = (end.get(server, 0) - start.get(server, 0)) / spent * 100
 
             thread = threading.Thread(target=watch)
             thread.start()
@@ -70,12 +97,16 @@ def main():
                 thread.join()
                 subprocess.run(FIXTURE + ['stop'], capture_output=True)
             cpu = float(re.search(r'([\d.]+)% of a core', live).group(1))
-            gpu = statistics.mean(samples) if samples else float('nan')
+            shown = fronts.count('mooring-app') / max(len(fronts), 1)
+            server_gpu = used.get('server', float('nan'))
             seen[name][0].append(cpu)
-            seen[name][1].append(gpu)
-            print(f'round {n + 1} {name}: CPU {cpu:.1f}% of a core; GPU {gpu:.0f}%', flush=True)
-    for name, (cpu, gpu) in seen.items():
-        print(f'{name}: CPU median {statistics.median(cpu):.1f}% of a core; GPU median {statistics.median(gpu):.0f}%', flush=True)
+            if shown >= 0.9:
+                seen[name][1].append(server_gpu)
+            print(f'round {n + 1} {name}: CPU {cpu:.1f}%; WindowServer GPU {server_gpu:.1f}%; '
+                  f'in front {shown:.0%}; load {os.getloadavg()[0]:.0f}', flush=True)
+    for name, (cpu, server) in seen.items():
+        tail = f'{statistics.median(server):.1f}% ({len(server)} rounds in front)' if server else 'no round in front'
+        print(f'{name}: CPU {statistics.median(cpu):.1f}% of a core; WindowServer GPU {tail}', flush=True)
 
 
 main()
