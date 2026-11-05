@@ -78,6 +78,46 @@ fn every_sample_reads_one_name_one_state() {
     assert_eq!(status::of(&w, by("closed"), at), Status::Closed);
 }
 
+/// The board's column, the `column` a host sends on a remote card (read back by the
+/// other machine and the phone) and the sidebar's group and tier agree on every case.
+#[test]
+fn board_cards_and_sidebar_group_each_sample_alike() {
+    use mooring_core::sidebar::Bucket;
+    use mooring_core::status_group::{Column, bucket, column, rank};
+    let w = every_state();
+    let at = now();
+    for case in CASES {
+        let s = w.agent_sessions.iter().find(|s| s.id == *case).unwrap();
+        let st = status::of(&w, s, at);
+        let col = column(&w, s, at);
+        assert_eq!(col.and_then(|c| Column::from_key(c.key())), col, "{case}");
+        let b = bucket(st);
+        match col {
+            Some(Column::Needs) => {
+                assert!(
+                    w.needs_you(s, at) && b == Bucket::Attention,
+                    "{case}: {b:?}"
+                );
+                // Every state 要你处理 holds has its own place ahead of an unseen
+                // stopped row; 等后台 once fell behind with the stopped ones.
+                assert!(
+                    rank(st, true) < rank(Status::Paused, true),
+                    "{case}: {st:?}"
+                );
+            }
+            Some(Column::Running) => assert_eq!(b, Bucket::Running, "{case}"),
+            Some(Column::Stale) => assert_eq!(b, Bucket::Stale, "{case}"),
+            Some(Column::Review) => assert!(
+                b == Bucket::Stopped || (b == Bucket::Attention && !w.needs_you(s, at)),
+                "{case}: {b:?}"
+            ),
+            Some(Column::Done | Column::Todo) | None => {
+                assert!(!w.needs_you(s, at), "{case}: needs you but off 要你处理")
+            }
+        }
+    }
+}
+
 /// A tiny deterministic generator, so a failure names the seed that reproduces it.
 struct Lcg(u64);
 impl Lcg {
