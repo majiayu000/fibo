@@ -40,6 +40,10 @@ impl Live {
         });
         Self { inner, report }
     }
+    #[cfg(test)]
+    pub(super) fn connected(&self) -> bool {
+        self.inner.lock().unwrap().0 == RemoteState::Connected
+    }
     fn change(&self, f: impl FnOnce(&mut Now)) {
         if let Ok(mut i) = self.inner.lock() {
             f(&mut i);
