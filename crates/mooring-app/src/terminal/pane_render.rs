@@ -436,7 +436,7 @@ impl Render for Pane {
                             .cursor_pointer()
                             .when(current, |d| d.text_color(T::color(T::primary())).font_weight(gpui::FontWeight::SEMIBOLD))
                             .when(!current, |d| d.text_color(T::color(T::secondary())))
-                            .child(m.line.clone())
+                            .child(gpui::SharedString::from(&m.line))
                             .on_click(cx.listener(move |this, _, _, cx| this.show_match(i, cx))),
                     );
                 }

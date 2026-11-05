@@ -105,7 +105,8 @@ pub struct SearchMatch {
     pub col: u16,
     /// Width in cells; a wide character counts two.
     pub cols: u16,
-    pub line: String,
+    /// Shared by every occurrence on this row.
+    pub line: Arc<str>,
 }
 /// A terminal may move between threads, but every access must be exclusive.
 /// Ghostty callbacks capture only Send values; no platform/UI handles live here.
@@ -134,6 +135,7 @@ impl Vt {
             if !line.contains(query) {
                 continue;
             }
+            let text: Arc<str> = line.trim_end().into();
             // Byte offset of each cell's text, to turn a byte match back into columns.
             let mut starts = Vec::with_capacity(cells.len());
             let mut at = 0;
@@ -153,7 +155,7 @@ impl Vt {
                     row: y,
                     col,
                     cols: end.saturating_sub(col),
-                    line: line.trim_end().to_owned(),
+                    line: Arc::clone(&text),
                 });
             }
         }
