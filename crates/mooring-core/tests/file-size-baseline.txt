@@ -4,7 +4,6 @@ crates/mooring-app/src/terminal/pane.rs	2969
 crates/mooring-app/src/terminal/screen.rs	1329
 crates/mooring-app/src/ui/theme.rs	904
 crates/mooring-app/src/workbench/board.rs	1149
-crates/mooring-app/src/workbench/board_drawer.rs	830
 crates/mooring-app/src/workbench/diagnostics.rs	2301
 crates/mooring-app/src/workbench/forms.rs	1098
 crates/mooring-app/src/workbench/layout.rs	2119
