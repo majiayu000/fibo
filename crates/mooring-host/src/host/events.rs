@@ -5,7 +5,7 @@
 use super::*;
 use mooring_core::hook::Notice;
 use std::collections::HashSet;
-use std::sync::atomic::AtomicBool;
+use std::sync::Condvar;
 
 /// What subscribers were last told, to send only what changed.
 #[derive(Default)]
@@ -169,27 +169,107 @@ impl Tracker {
     }
 }
 
+/// Notices one `mooring events` connection may have waiting before more are dropped and
+/// it is told `lagged`. Counted in notices, not frames: one commit carries one notice or
+/// hundreds, so how many frames a burst makes depends on how fast the host is, and a frame
+/// limit called a reading client lagged on a slow machine and missed a stalled one on a
+/// fast machine. 4096 holds a burst well beyond what a person's terminals produce between
+/// two reads (thousands of commands finishing), in about a megabyte at the few hundred
+/// bytes a notice takes, far below a frame's limit when written as one.
+const EVENT_BACKLOG: usize = 4096;
+
+#[derive(Default)]
+struct Backlog {
+    notices: Vec<Notice>,
+    /// Notices were dropped; the writer says `lagged` after what it writes next.
+    lagged: bool,
+    /// The connection is gone; the writer stops.
+    closed: bool,
+}
+type Queue = Arc<(Mutex<Backlog>, Condvar)>;
+pub(super) struct EventSubscriber {
+    queue: Queue,
+}
+impl EventSubscriber {
+    /// Queues `notices`, or drops them all and marks the subscriber lagged if they would
+    /// take its backlog past `EVENT_BACKLOG`; never waits for the subscriber.
+    fn offer(&self, notices: &[Notice]) -> io::Result<()> {
+        let (backlog, wake) = &*self.queue;
+        let mut b = lock(backlog)?;
+        if b.notices.len() + notices.len() > EVENT_BACKLOG {
+            b.lagged = true;
+        } else {
+            b.notices.extend_from_slice(notices);
+        }
+        wake.notify_one();
+        Ok(())
+    }
+}
+impl Drop for EventSubscriber {
+    fn drop(&mut self) {
+        let (backlog, wake) = &*self.queue;
+        if let Ok(mut b) = lock(backlog) {
+            b.closed = true;
+        }
+        wake.notify_one();
+    }
+}
+
 impl Host {
     /// Queues `notices` for every subscriber; one that has fallen behind is marked and
     /// told `lagged` once it catches up, never waited for.
     pub(super) fn send_events(&self, notices: Vec<Notice>) {
-        if notices.is_empty() || self.event_subscribers.is_empty() {
+        if notices.is_empty() {
             return;
         }
-        let Ok(bytes) = serde_json::to_vec(&Reply::Events(notices)) else {
-            return;
+        for (connection, s) in &self.event_subscribers {
+            if let Err(e) = s.offer(&notices) {
+                eprintln!("events subscriber {connection}: {e}");
+            }
+        }
+    }
+}
+
+/// Writes what is waiting, all of it as one frame, each time the queue wakes it.
+fn write_events(mut writer: UnixStream, first: Vec<u8>, queue: &Queue) -> io::Result<()> {
+    write_frame(&mut writer, CONTROL, &first)?;
+    let (backlog, wake) = &**queue;
+    loop {
+        let (notices, lagged) = {
+            let mut b = lock(backlog)?;
+            while b.notices.is_empty() && !b.lagged && !b.closed {
+                b = wake
+                    .wait(b)
+                    .map_err(|_| io::Error::other("events queue poisoned"))?;
+            }
+            if b.closed {
+                return Ok(());
+            }
+            (
+                std::mem::take(&mut b.notices),
+                std::mem::take(&mut b.lagged),
+            )
         };
-        let frame = Arc::new(bytes);
-        for s in self.event_subscribers.values() {
-            s.offer((CONTROL, frame.clone()));
+        if !notices.is_empty() {
+            let bytes = serde_json::to_vec(&Reply::Events(notices)).map_err(io::Error::other)?;
+            write_frame(&mut writer, CONTROL, &bytes)?;
+        }
+        // Dropped events are not replayed; the client reads the snapshot again.
+        if lagged {
+            let notice = Notice::named("lagged", mooring_core::content::now());
+            let bytes =
+                serde_json::to_vec(&Reply::Events(vec![notice])).map_err(io::Error::other)?;
+            write_frame(&mut writer, CONTROL, &bytes)?;
         }
     }
 }
 
 pub(super) fn subscribe(mut stream: UnixStream, shared: Shared, connection: u64) -> io::Result<()> {
-    let (tx, rx) = sync_channel::<Frame>(256);
-    let lagged = Arc::new(AtomicBool::new(false));
-    {
+    // A subscriber that stops reading is marked lagged, not cut by the connection's write
+    // timeout in the middle of a frame; one that goes away fails the write at once.
+    stream.set_write_timeout(None)?;
+    let queue = Queue::default();
+    let first = {
         let mut host = lock(&shared)?;
         let w = host.snapshot();
         if host.event_subscribers.is_empty() {
@@ -197,35 +277,21 @@ pub(super) fn subscribe(mut stream: UnixStream, shared: Shared, connection: u64)
         }
         let first =
             serde_json::to_vec(&Reply::Events(Tracker::snapshot(&w))).map_err(io::Error::other)?;
-        tx.send((CONTROL, Arc::new(first)))
-            .map_err(io::Error::other)?;
         host.event_subscribers.insert(
             connection,
-            Subscriber {
-                tx,
-                socket: stream.try_clone()?,
-                lagged: Arc::clone(&lagged),
+            EventSubscriber {
+                queue: Arc::clone(&queue),
             },
         );
-    }
-    let mut writer = stream.try_clone()?;
+        first
+    };
+    let writer = stream.try_clone()?;
+    let writer_guard = stream.try_clone()?;
     thread::spawn(move || {
-        for (kind, bytes) in rx {
-            if write_frame(&mut writer, kind, &bytes).is_err() {
-                break;
-            }
-            // Dropped events are not replayed; the client reads the snapshot again.
-            if lagged.swap(false, Ordering::AcqRel) {
-                let notice = Notice::named("lagged", mooring_core::content::now());
-                let Ok(bytes) = serde_json::to_vec(&Reply::Events(vec![notice])) else {
-                    break;
-                };
-                if write_frame(&mut writer, CONTROL, &bytes).is_err() {
-                    break;
-                }
-            }
+        if let Err(e) = write_events(writer, first, &queue) {
+            eprintln!("events stream ended: {e}");
         }
-        let _ = writer.shutdown(std::net::Shutdown::Both);
+        let _ = writer_guard.shutdown(std::net::Shutdown::Both);
     });
     // A blocked read observes the client leaving without a heartbeat or timer.
     let result = read_frame(&mut stream);
@@ -234,4 +300,37 @@ pub(super) fn subscribe(mut stream: UnixStream, shared: Shared, connection: u64)
     drop(host);
     let _ = stream.shutdown(std::net::Shutdown::Both);
     result.map(|_| ())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn waiting(s: &EventSubscriber) -> (usize, bool) {
+        let b = lock(&s.queue.0).unwrap();
+        (b.notices.len(), b.lagged)
+    }
+    /// A slow machine commits a burst one notice at a time; 3000 commits are still 3000
+    /// notices, under the backlog, so a reader that is reading is not called lagged.
+    #[test]
+    fn the_backlog_counts_notices_not_commits() {
+        let s = EventSubscriber {
+            queue: Queue::default(),
+        };
+        let one = [Notice::named("command_done", 0)];
+        for _ in 0..3000 {
+            s.offer(&one).unwrap();
+        }
+        let (queued, lagged) = waiting(&s);
+        assert_eq!((queued, lagged), (3000, false));
+        s.offer(&vec![one[0].clone(); EVENT_BACKLOG - queued])
+            .unwrap();
+        assert_eq!(waiting(&s), (EVENT_BACKLOG, false));
+        s.offer(&one).unwrap();
+        assert_eq!(
+            waiting(&s),
+            (EVENT_BACKLOG, true),
+            "one past the backlog is dropped"
+        );
+    }
 }
