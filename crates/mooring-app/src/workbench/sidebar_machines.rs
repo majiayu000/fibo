@@ -11,6 +11,8 @@ use crate::ui::theme::Flat as F;
 use mooring_core::sidebar::{Bucket, Machines, Preset, all as all_presets};
 use mooring_remote::protocol::{Card, Phase};
 
+mod quiet;
+
 /// What another machine's row shows, worked out once per draw.
 pub(super) struct RemoteRow {
     pub(super) index: usize,
@@ -27,6 +29,8 @@ pub(super) struct RemoteRow {
     /// When it last moved; a terminal that does not say counts as now, since it is live.
     pub(super) when: u64,
     pub(super) shown: bool,
+    /// Its machine is 先不管: gray, and links coming and going do not show.
+    quiet: bool,
 }
 
 /// `user@host` reads as `host`: the short name is what fits a row.
@@ -61,7 +65,7 @@ fn listed_card(c: &Card) -> bool {
 impl RemoteRow {
     /// What it asks you, the second line of its row.
     fn asks(&self) -> Option<String> {
-        (self.online && self.status.blocked())
+        (self.online && !self.quiet && self.status.blocked())
             .then(|| self.card.approval.as_ref().or(self.card.waiting.as_ref()))
             .flatten()
             .and_then(|t| t.lines().find(|l| !l.trim().is_empty()))
@@ -110,9 +114,11 @@ impl Workbench {
         let host = self.sidebar.machine_scope.as_deref()?;
         matches!(self.machine_layout(), Machines::Mixed | Machines::Rail)
             .then(|| {
-                self.machines
-                    .iter()
-                    .position(|m| m.view.lock().unwrap().spec.host == host)
+                // A quiet machine is never shown alone.
+                self.machines.iter().position(|m| {
+                    let view = m.view.lock().unwrap();
+                    view.spec.host == host && !view.spec.quiet
+                })
             })
             .flatten()
     }
@@ -178,6 +184,7 @@ impl Workbench {
                     key,
                     status,
                     bucket: remote_bucket(status, card.needs_you),
+                    quiet: view.spec.quiet,
                     when: card.updated.unwrap_or(now),
                     card: card.clone(),
                 }
@@ -197,6 +204,7 @@ impl Workbench {
                 rows
             }
             (None, Machines::Mixed) if self.space_filter().is_none() => (0..self.machines.len())
+                .filter(|i| !self.machine_quiet(*i))
                 .flat_map(|i| self.remote_rows_of(i))
                 .collect(),
             _ => Vec::new(),
@@ -207,8 +215,16 @@ impl Workbench {
     pub(super) fn remote_needs(&self, index: usize) -> usize {
         self.remote_rows_of(index)
             .iter()
-            .filter(|r| r.online && r.card.needs_you)
+            .filter(|r| r.online && !r.quiet && r.card.needs_you)
             .count()
+    }
+    /// What a quiet machine's line counts: the last it listed, connected or not.
+    pub(super) fn quiet_waiting(&self, index: usize) -> usize {
+        self.machines.get(index).map_or(0, |m| {
+            let view = m.view.lock().unwrap();
+            let waits = |c: &&Card| c.needs_you && listed_card(c);
+            view.terminals.iter().filter(waits).count()
+        })
     }
 
     /// One session of another machine, in the same shape as `flat_row`. A dropped machine's
@@ -217,23 +233,29 @@ impl Workbench {
         let card = &r.card;
         let asks = r.asks();
         let two = asks.is_some();
-        let time = if !r.online {
+        let time = if !r.online && !r.quiet {
             "断开".to_owned()
         } else {
             card.updated
                 .map_or_else(String::new, |at| short_ago(at, now()))
         };
         // Named when this list holds more than one machine.
-        let mark = (self.machine_layout() == Machines::Mixed && self.machine_scope().is_none())
-            .then(|| machine_mark(machine_letter(&r.machine), !r.online));
+        let mark = (!r.quiet
+            && self.machine_layout() == Machines::Mixed
+            && self.machine_scope().is_none())
+        .then(|| machine_mark(machine_letter(&r.machine), !r.online));
         let space = self.machines.get(r.index).and_then(|m| {
             let view = m.view.lock().unwrap();
-            view.spaces
-                .iter()
-                .find(|s| s.id == card.space)
-                .map(|s| self.space_tag(&s.id, &s.name))
+            view.spaces.iter().find(|s| s.id == card.space).map(|s| {
+                if r.quiet {
+                    quiet::quiet_tag(&s.name)
+                } else {
+                    self.space_tag(&s.id, &s.name)
+                }
+            })
         });
         let title_ink = match r.bucket {
+            _ if r.quiet => F::third(),
             Bucket::Attention | Bucket::Running | Bucket::Done => F::title(),
             Bucket::Stopped | Bucket::Fresh => F::quiet(),
             Bucket::Stale => F::second(),
@@ -242,11 +264,12 @@ impl Workbench {
             .online
             .then(|| (r.index, card.clone(), r.host_name.clone()));
         let tip = match (&r.why, r.online) {
+            (Some(_), _) | (None, false) if r.quiet => format!("{} 现在没连上", r.machine),
             (Some(why), _) => format!("{} 没连上：{why}", r.machine),
             (None, false) => format!("正在连 {}", r.machine),
             (None, true) => format!("{} · {}", r.machine, card.cwd),
         };
-        div()
+        let row = div()
             .id(gpui::SharedString::from(format!("remote-{}", r.key)))
             .relative()
             .mx(px(T::S8))
@@ -257,7 +280,7 @@ impl Workbench {
             .gap(px(F::ROW_GAP))
             .rounded(px(F::ROW_RADIUS))
             .font_family(T::UI_FONT)
-            .when(!r.online, |d| d.opacity(0.55))
+            .when(!r.online && !r.quiet, |d| d.opacity(0.55))
             .when(r.online, |d| {
                 d.cursor_pointer().hover(|s| s.bg(T::color(F::selected())))
             })
@@ -266,7 +289,11 @@ impl Workbench {
                 div()
                     .flex_shrink_0()
                     .when(two, |d| d.mt(px(T::S4)))
-                    .child(flat_state(r.status, false)),
+                    .child(if r.quiet {
+                        quiet::quiet_ring().into_any_element()
+                    } else {
+                        flat_state(r.status, false)
+                    }),
             )
             .child(
                 div()
@@ -332,8 +359,12 @@ impl Workbench {
                 d.on_click(cx.listener(move |this, _, window, cx| {
                     this.open_remote_peek(index, card.clone(), &name, window, cx);
                 }))
-            })
-            .into_any_element()
+            });
+        if r.quiet {
+            self.machine_menu_on(row, r.index, cx).into_any_element()
+        } else {
+            row.into_any_element()
+        }
     }
 
     /// ⌘J: the next session that needs you, on any machine; the column follows it there.
@@ -343,7 +374,7 @@ impl Workbench {
         let (mut count, mut asks, mut failed) = (0, false, false);
         for machine in &self.machines {
             let view = machine.view.lock().unwrap();
-            if view.link != Link::Online {
+            if view.link != Link::Online || view.spec.quiet {
                 continue;
             }
             for card in view
@@ -417,7 +448,7 @@ impl Workbench {
     pub(super) fn next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         enum Next {
             Here(AgentSession),
-            There(usize, Card, String),
+            There(usize, Box<Card>, String),
         }
         let mut all: Vec<(String, Next)> = self
             .needs_you()
@@ -426,8 +457,8 @@ impl Workbench {
             .collect();
         for index in 0..self.machines.len() {
             for r in self.remote_rows_of(index) {
-                if r.online && r.card.needs_you {
-                    all.push((r.key, Next::There(index, r.card, r.host_name)));
+                if r.online && !r.quiet && r.card.needs_you {
+                    all.push((r.key, Next::There(index, Box::new(r.card), r.host_name)));
                 }
             }
         }
@@ -458,7 +489,7 @@ impl Workbench {
             }
             Next::There(index, card, name) => {
                 self.reveal_machine(Some(index));
-                self.open_remote_peek(index, card, &name, window, cx);
+                self.open_remote_peek(index, *card, &name, window, cx);
             }
         }
     }

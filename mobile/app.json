@@ -58,6 +58,14 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/JetBrainsMonoNL-Regular.ttf"
+          ]
+        }
       ]
     ],
     "scheme": "mooring",

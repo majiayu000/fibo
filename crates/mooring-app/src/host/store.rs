@@ -15,6 +15,8 @@ use std::{
 /// A host restart drops the status link for a moment and it reconnects on its own;
 /// only an outage longer than this is worth telling the user about.
 pub const CUT_OFF_NOTICE: Duration = Duration::from_secs(3);
+/// A new terminal's slot: whether it splits, its task, the lost pane it replaces.
+pub type Launch = (bool, Option<String>, Option<String>);
 
 pub struct Store {
     socket: PathBuf,
@@ -30,6 +32,8 @@ pub struct Store {
     in_flight: Option<Request>,
     /// Requests made while another user action was in flight, in order.
     queued: VecDeque<Request>,
+    /// The launch asked for while another action was in flight; it runs after `queued`.
+    held_launch: Option<Launch>,
     recognition: RecognitionStatus,
     /// When the status link to the host dropped; `None` while it is up.
     cut_off_at: Option<Instant>,
@@ -48,6 +52,7 @@ impl Store {
             sync_again: false,
             in_flight: None,
             queued: VecDeque::new(),
+            held_launch: None,
             recognition: RecognitionStatus::default(),
             cut_off_at: None,
             _recognition_connection: recognition_connection,
@@ -115,6 +120,22 @@ impl Store {
     }
     pub fn next_queued(&mut self) -> Option<Request> {
         self.queued.pop_front()
+    }
+    /// Whether a launch may start now; during another action it waits instead, the
+    /// latest one asked for (a double click opens one terminal, not two).
+    pub fn admit_launch(
+        &mut self,
+        split: bool,
+        task: &Option<String>,
+        replace: &Option<String>,
+    ) -> bool {
+        if self.busy {
+            self.held_launch = Some((split, task.clone(), replace.clone()));
+        }
+        !self.busy
+    }
+    pub fn next_launch(&mut self) -> Option<Launch> {
+        self.held_launch.take()
     }
     /// Starts a background sync unless one is in flight; that one fetches again after.
     pub fn begin_sync(&mut self) -> bool {

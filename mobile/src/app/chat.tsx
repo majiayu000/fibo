@@ -15,9 +15,9 @@ import { cardTitle } from '@/ui/format';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
 import { choices, questionText } from '@/ui/parse';
-import { spaceName } from '@/ui/row';
+import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
-import { agentName, statusColor, statusWord } from '@/ui/status';
+import { agentName, statusColor } from '@/ui/status';
 import { useTheme } from '@/ui/theme';
 
 type Pending = { text: string; at: number };
@@ -178,7 +178,25 @@ export default function Chat() {
   const options = choices(waiting);
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
-  const toDiff = () => router.push({ pathname: '/diff', params: { machine, terminal } });
+  const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
+  // The hub's heartbeat redraws this screen; a row redraws only when its own message changes.
+  const renderItem = useCallback(
+    ({ item: l }: { item: Line }) =>
+      l.kind === 'msg' ? (
+        l.m.role === 'user' ? (
+          <Mine text={l.m.text} at={l.m.at} copyable />
+        ) : (
+          <Theirs m={l.m} agent={agent} onTools={l.m.tools?.files?.length ? toDiff : undefined} />
+        )
+      ) : l.kind === 'pending' ? (
+        <Mine text={l.p.text} note="发送中…" tone="pending" />
+      ) : (
+        <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
+          <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
+        </Pressable>
+      ),
+    [agent, toDiff],
+  );
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.bg }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
@@ -186,10 +204,17 @@ export default function Chat() {
         rule
         title={card ? cardTitle(card) : '对话'}
         sub={
-          <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim }}>
-            {[m && card ? spaceName(m, card) : '', m?.name].filter(Boolean).join(' · ')}
-            {card && online && <Text style={{ color: statusColor(card, t) }}>{` · ${statusWord(card)}`}</Text>}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim, flexShrink: 1 }}>
+              {[m && card ? spaceName(m, card) : '', machines.length > 1 ? m?.name : '', card?.branch].filter(Boolean).join(' · ')}
+            </Text>
+            {card && online && (
+              <>
+                <Text style={{ fontSize: 12, color: t.dim }}> · </Text>
+                <RunningWord c={card} color={statusColor(card, t)} style={{ fontSize: 12, flexShrink: 0 }} />
+              </>
+            )}
+          </View>
         }
         right={
           <Pill
@@ -208,26 +233,15 @@ export default function Chat() {
           inverted
           data={rows}
           keyExtractor={(l) => (l.kind === 'msg' ? `m${l.m.seq}` : l.kind === 'pending' ? `p${l.p.at}${l.p.text}` : `u${l.id}`)}
-          renderItem={({ item: l }) =>
-            l.kind === 'msg' ? (
-              l.m.role === 'user' ? (
-                <Mine text={l.m.text} at={l.m.at} />
-              ) : (
-                <Theirs m={l.m} agent={agent} onTools={l.m.tools?.files?.length ? toDiff : undefined} />
-              )
-            ) : l.kind === 'pending' ? (
-              <Mine text={l.p.text} note="发送中…" tone="pending" />
-            ) : (
-              <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
-                <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
-              </Pressable>
-            )
-          }
+          renderItem={renderItem}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={9}
           onEndReached={older}
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
           ListEmptyComponent={
-            <Text style={{ color: t.dim, textAlign: 'center', transform: [{ scaleY: -1 }] }}>
+            <Text style={{ color: t.dim, textAlign: 'center' }}>
               {card?.session ? '这段对话还没有消息' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
@@ -273,6 +287,8 @@ export default function Chat() {
       ) : (
         <Composer
           agent={agent}
+          model={card?.model}
+          permission={card?.permission}
           running={!!running}
           canStop={supports(m, 'stop')}
           canContinue={online && card?.phase === 'idle'}

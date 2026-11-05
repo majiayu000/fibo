@@ -1,5 +1,5 @@
 //! Claude Code: `~/.claude/projects` transcripts, every record naming its session.
-use super::{home_dir, temporary, Adapter, Hint, OfficialAnswer, Pending};
+use super::{home_dir, temporary, Adapter, Hint, OfficialAnswer, Pending, UsageState};
 use crate::content::{claims_done, text, user_text, Parser};
 use mooring_core::content::{short, Source, Turn};
 use mooring_core::model::AgentSession;
@@ -44,6 +44,12 @@ impl Adapter for Claude {
     }
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CLAUDE_CONFIG_DIR", ".claude").join("projects")
+    }
+    fn usage_marker(&self) -> Option<&'static [u8]> {
+        Some(b"\"usage\"")
+    }
+    fn usage_line(&self, line: &[u8], since: u64, state: &mut UsageState) -> Option<(u64, u64)> {
+        super::usage_lines::claude_line(line, since, state.seen)
     }
     fn runs(&self, executable: &str, script: Option<&str>) -> bool {
         executable == "claude"
@@ -192,6 +198,12 @@ impl Adapter for Claude {
             return;
         }
         parser.inherited = inherited(v, source);
+        // Written whenever the mode is in force, and again on each prompt.
+        if ty == "permission-mode" || ty == "user" {
+            if let Some(mode) = v["permissionMode"].as_str() {
+                parser.card.permission = super::permission::claude(mode);
+            }
+        }
         // Handed to Claude Code's background daemon: the conversation goes on in a forked
         // session, which holds this one's history. This turn is over here, and this copy
         // would show the same conversation twice.
@@ -262,6 +274,9 @@ impl Adapter for Claude {
             return;
         }
         if ty == "assistant" && msg["model"] != "<synthetic>" {
+            if let Some(model) = msg["model"].as_str() {
+                parser.card.model = model.to_owned();
+            }
             let final_answer = matches!(
                 msg["stop_reason"].as_str(),
                 Some("end_turn" | "stop_sequence")

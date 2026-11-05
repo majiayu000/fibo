@@ -122,6 +122,8 @@ pub(super) struct SidebarPrefs {
     pub machine_scope: Option<String>,
     /// That machine's space shown alone; its host owns the ids, so it is not `space_filter`.
     pub machine_space: Option<String>,
+    /// 先不管这台's menu: which machine and where it was opened. Not saved.
+    pub machine_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
     pub(super) motion: super::sidebar_motion::SidebarMotion,
 }
 impl SidebarPrefs {
@@ -149,6 +151,7 @@ impl SidebarPrefs {
             space_filter: None,
             machine_scope: None,
             machine_space: None,
+            machine_menu: None,
             motion: Default::default(),
         }
     }
@@ -175,10 +178,6 @@ impl SidebarPrefs {
     /// the spaces fold into one line, rows carry a state symbol and a time.
     pub fn dense(&self) -> bool {
         self.preset().group != Grouping::Flat
-    }
-    /// Whether a group is open: its default, flipped once per click.
-    pub fn open(&self, key: &str, default: bool) -> bool {
-        self.toggled.get(key).copied().unwrap_or(default)
     }
 }
 
@@ -569,7 +568,7 @@ impl Workbench {
                 .font_family(mono.clone())
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_size(px(T::SMALL))
-                .child(crate::ui::widgets::status_mark_seen(g, attention))
+                .child(self.session_mark(g, attention, cx))
         };
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))

@@ -28,9 +28,19 @@ pub struct Spec {
     /// `mooring` on that machine; unset tries `mooring` on its PATH, then the app bundle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// 先不管这台: it stays connected but asks nothing of you here.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub quiet: bool,
 }
 
 impl Spec {
+    pub fn new(host: String) -> Self {
+        Self {
+            host,
+            path: None,
+            quiet: false,
+        }
+    }
     pub fn command(&self) -> Vec<String> {
         let run = match &self.path {
             Some(path) => format!("exec {} remote --stdio", quote(path)),
@@ -88,6 +98,33 @@ pub fn save(specs: &[Spec]) -> io::Result<()> {
         serde_json::to_vec_pretty(specs).map_err(io::Error::other)?,
     )?;
     std::fs::rename(tmp, f)
+}
+
+/// `specs` with `host` quiet or not; `None` when it is not among them, so a file that could
+/// not be read is never written back empty.
+fn with_quiet(mut specs: Vec<Spec>, host: &str, quiet: bool) -> Option<Vec<Spec>> {
+    specs.iter_mut().find(|s| s.host == host)?.quiet = quiet;
+    Some(specs)
+}
+/// Sets 先不管 on what the file holds now, leaving everything else in it alone.
+pub fn set_quiet(host: &str, quiet: bool) -> io::Result<()> {
+    let specs = with_quiet(load(), host, quiet)
+        .ok_or_else(|| io::Error::other(format!("machines.json 里没有 {host}")))?;
+    save(&specs)
+}
+/// `next` with what `saved` says about 先不管: a list held since before the switch does not
+/// undo it.
+fn keep_quiet(mut next: Vec<Spec>, saved: &[Spec]) -> Vec<Spec> {
+    for spec in &mut next {
+        if let Some(s) = saved.iter().find(|s| s.host == spec.host) {
+            spec.quiet = s.quiet;
+        }
+    }
+    next
+}
+/// Saves the list settings edits, which adds and removes machines and nothing else.
+pub fn save_keeping_quiet(next: &[Spec]) -> io::Result<()> {
+    save(&keep_quiet(next.to_vec(), &load()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -401,6 +438,7 @@ mod tests {
         let spec = Spec {
             host: "mac2".into(),
             path: None,
+            quiet: false,
         };
         let r = Remote::start(spec, connect, move || {
             let _ = tx.send(());
@@ -435,6 +473,7 @@ mod tests {
         let spec = Spec {
             host: "mac2".into(),
             path: None,
+            quiet: false,
         };
         let r = Remote::start(spec, connect, move || {
             let _ = tx.send(());
@@ -472,6 +511,7 @@ mod tests {
         let spec = Spec {
             host: "mac2".into(),
             path: None,
+            quiet: false,
         };
         let r = Remote::start(spec, connect, move || {
             let _ = tx.send(());
@@ -489,6 +529,7 @@ mod tests {
         let spec = Spec {
             host: "mac2".into(),
             path: None,
+            quiet: false,
         };
         let r = Remote::start(
             spec,
@@ -514,6 +555,7 @@ mod tests {
         let named = Spec {
             host: "mac2".into(),
             path: Some("/opt/My Apps/mooring".into()),
+            quiet: false,
         };
         let argv = named.command();
         assert_eq!(argv[0], "ssh");
@@ -526,10 +568,48 @@ mod tests {
         let unnamed = Spec {
             host: "mac2".into(),
             path: None,
+            quiet: false,
         };
         let probe = unnamed.command().last().unwrap().clone();
         assert!(probe.contains("command -v mooring"));
         assert!(probe.contains("$HOME/Applications/Mooring.app"));
         assert!(probe.contains("p=/Applications/Mooring.app"));
+    }
+
+    fn spec(host: &str, quiet: bool) -> Spec {
+        Spec {
+            quiet,
+            ..Spec::new(host.to_owned())
+        }
+    }
+    #[test]
+    fn a_file_from_before_quiet_reads_as_attending_and_attending_is_not_written() {
+        let old: Vec<Spec> = serde_json::from_str(r#"[{"host":"apple"}]"#).unwrap();
+        assert!(!old[0].quiet);
+        let text = serde_json::to_string(&old).unwrap();
+        assert!(!text.contains("quiet"), "{text}");
+        let text = serde_json::to_string(&[spec("apple", true)]).unwrap();
+        let back: Vec<Spec> = serde_json::from_str(&text).unwrap();
+        assert!(back[0].quiet, "先不管 did not survive a save: {text}");
+    }
+    #[test]
+    fn quiet_goes_both_ways_and_touches_one_machine() {
+        let specs = vec![spec("apple", false), spec("pear", false)];
+        let quiet = with_quiet(specs, "apple", true).unwrap();
+        assert!(quiet[0].quiet && !quiet[1].quiet);
+        let back = with_quiet(quiet, "apple", false).unwrap();
+        assert!(!back[0].quiet && !back[1].quiet);
+    }
+    #[test]
+    fn an_unreadable_file_is_never_written_back_empty() {
+        assert_eq!(with_quiet(Vec::new(), "apple", true), None);
+    }
+    #[test]
+    fn settings_adding_a_machine_does_not_undo_quiet() {
+        let stale = vec![spec("apple", false), spec("pear", false)];
+        let saved = [spec("apple", true)];
+        let next = keep_quiet(stale, &saved);
+        assert!(next[0].quiet, "the list settings held undid 先不管");
+        assert!(!next[1].quiet);
     }
 }
