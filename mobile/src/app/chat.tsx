@@ -1,5 +1,5 @@
 // One conversation: your words in grey bubbles, the Agent's flat, its work folded into a
-// line that opens the diff; the approval or question it waits on; a composer card whose
+// line that opens each call it made; the approval or question it waits on; a composer card whose
 // send key turns into stop while the Agent runs.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,12 +12,14 @@ import { useAsk } from '@/remote/useAsk';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { Composer } from '@/ui/composer';
 import { cardTitle } from '@/ui/format';
+import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
-import { choices, questionText } from '@/ui/parse';
+import { choices, questionText, partialWords } from '@/ui/parse';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
 import { agentName, statusColor } from '@/ui/status';
+import { TrustAsk } from '@/ui/trust';
 import { useTheme } from '@/ui/theme';
 
 type Pending = { text: string; at: number };
@@ -49,6 +51,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [session, setSession] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [partial, setPartial] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
@@ -76,6 +79,7 @@ export default function Chat() {
         shown.current = page.session;
         setSession(page.session);
         setMore(page.more);
+        setPartial(!!page.partial);
         // Another conversation: its messages replace the old one's, not join them.
         setMessages((have) => (same ? merge(have, page.messages) : page.messages));
         setError('');
@@ -163,6 +167,16 @@ export default function Chat() {
     }
   }
 
+  async function stop() {
+    try {
+      const done = await write(machine, 'stop', { terminal });
+      setError(done?.closed_background ? '这一轮中断了。它后台没结束的命令也一起关了。' : '');
+      setTimeout(() => refresh(machine), 300);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   // Inverted list: index 0 sits at the bottom.
   const rows: Line[] = useMemo(
     () => [
@@ -179,6 +193,10 @@ export default function Chat() {
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
   const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
+  const toTools = useCallback(
+    (seq?: number) => router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}) } }),
+    [machine, terminal],
+  );
   // The hub's heartbeat redraws this screen; a row redraws only when its own message changes.
   const renderItem = useCallback(
     ({ item: l }: { item: Line }) =>
@@ -186,7 +204,7 @@ export default function Chat() {
         l.m.role === 'user' ? (
           <Mine text={l.m.text} at={l.m.at} copyable />
         ) : (
-          <Theirs m={l.m} agent={agent} onTools={l.m.tools?.files?.length ? toDiff : undefined} />
+          <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
       ) : l.kind === 'pending' ? (
         <Mine text={l.p.text} note="发送中…" tone="pending" />
@@ -195,7 +213,7 @@ export default function Chat() {
           <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, toDiff],
+    [agent, toTools],
   );
 
   return (
@@ -240,9 +258,22 @@ export default function Chat() {
           onEndReached={older}
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
+          ListHeaderComponent={
+            running && session && supports(m, 'toolcalls') ? (
+              <Pressable accessibilityRole="button" onPress={() => toTools()} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 6 }}>
+                <Text style={{ flex: 1, fontSize: 13, color: t.dim }}>看它到现在做了什么</Text>
+                <Icon name="right" size={14} width={2} color={t.dim} />
+              </Pressable>
+            ) : undefined
+          }
+          ListFooterComponent={
+            partial && !more && messages.length > 0 ? (
+              <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19, textAlign: 'center', paddingVertical: 8 }}>{partialWords(messages.length)}</Text>
+            ) : undefined
+          }
           ListEmptyComponent={
             <Text style={{ color: t.dim, textAlign: 'center' }}>
-              {card?.session ? '这段对话还没有消息' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
+              {partial ? partialWords(0) : card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
         />
@@ -253,15 +284,25 @@ export default function Chat() {
           <Text numberOfLines={3} style={{ fontFamily: mono, fontSize: 13, color: t.text, backgroundColor: t.well, borderRadius: 10, padding: 10, overflow: 'hidden' }}>
             {ask.subject}
           </Text>
+          {!!ask.note && (
+            <Text numberOfLines={2} style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>
+              {ask.note}
+            </Text>
+          )}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {supports(m, 'answer') && (
               <>
-                <Btn primary icon="face" label="允许" onPress={() => approve(machine, card, ask.subject).catch((e) => oops(e.message))} />
+                <Btn primary icon="face" label="允许" onPress={() => approve(machine, card, ask).catch((e) => oops(e.message))} />
                 <Btn label="拒绝" onPress={() => deny(machine, card).catch((e) => oops(e.message))} />
               </>
             )}
             <Btn label="详情" onPress={() => router.push({ pathname: '/approve', params: { machine, terminal } })} />
           </View>
+        </View>
+      )}
+      {!!card?.trust && online && (
+        <View style={{ marginHorizontal: 12, marginBottom: 10, padding: 14, borderRadius: 20, borderWidth: 1.5, borderColor: t.wait, backgroundColor: t.card }}>
+          <TrustAsk machine={machine} card={card} can={supports(m, 'trust')} />
         </View>
       )}
       {!!waiting && (
@@ -282,7 +323,7 @@ export default function Chat() {
       {!!error && <Notice tone="danger" text={error} />}
       {online && !card ? (
         <Notice text="这个终端已经关了" />
-      ) : m?.role && m.role !== 'full' && !supports(m, 'send') ? (
+      ) : card?.trust && online ? null :  m?.role && m.role !== 'full' && !supports(m, 'send') ? (
         <Notice text={`这台手机的权限是「${m.role === 'view' ? '只看' : '能答审批'}」，不能发消息`} />
       ) : (
         <Composer
@@ -294,7 +335,7 @@ export default function Chat() {
           canContinue={online && card?.phase === 'idle'}
           offline={!online}
           onSend={send}
-          onStop={() => act('stop', {})}
+          onStop={() => stop()}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />

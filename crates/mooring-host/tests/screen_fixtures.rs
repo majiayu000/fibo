@@ -2,7 +2,7 @@
 //! and the default rules `screen_wait` reads with; `expected.json` beside them names the
 //! state, and for a prompt the rule and the question. Mismatches are listed by file name.
 use mooring_core::model::Agent;
-use mooring_host::screen_rules;
+use mooring_host::{screen_ask, screen_rules};
 use std::path::{Path, PathBuf};
 
 fn root() -> PathBuf {
@@ -101,5 +101,55 @@ fn every_saved_screen_reads_as_its_expected_state() {
         wrong.len()
     );
     assert!(negatives >= 5);
+    assert!(wrong.is_empty(), "mismatches:\n{}", wrong.join("\n"));
+}
+
+/// What the phone shows and answers: on each screen with an `ask`, the subject in full, and
+/// the key `always` presses. mobile/test/parse.test.ts reads the same expectations.
+#[test]
+fn every_saved_approval_says_what_it_asks_and_which_key_is_always() {
+    let (mut wrong, mut asks) = (vec![], 0);
+    for (cli, name, screen, want) in &fixtures() {
+        if let Some(ask) = want.get("ask") {
+            asks += 1;
+            let a = screen_ask::approval_ask(screen).unwrap_or_default();
+            let word = |k: &str| ask[k].as_str().unwrap_or("").to_owned();
+            let got = (&a.kind, &a.subject, &a.note, &a.detail);
+            let expected = (
+                &word("kind"),
+                &word("subject"),
+                &word("note"),
+                &word("detail"),
+            );
+            if got != expected {
+                wrong.push(format!("{cli}/{name}: got {got:?}, want {expected:?}"));
+            }
+            assert!(!a.truncated, "{cli}/{name}");
+        }
+        if want["state"] == "waiting" {
+            let e = screen_rules::explain(screen_rules::bundled(agent(cli)), screen);
+            if e.approval().is_some() && want.get("ask").is_some() {
+                let key = e.always_key();
+                if key.as_deref() != want["always"].as_str() {
+                    wrong.push(format!(
+                        "{cli}/{name}: always {key:?}, want {}",
+                        want["always"]
+                    ));
+                }
+                // Never the option that hands over every later prompt.
+                let picked = key.and_then(|k| {
+                    screen.lines().find(|l| {
+                        l.trim_start_matches([' ', '❯', '›'])
+                            .starts_with(&format!("{k}. "))
+                    })
+                });
+                assert!(
+                    !picked.is_some_and(|l| l.contains("auto mode")),
+                    "{cli}/{name} would pick auto mode"
+                );
+            }
+        }
+    }
+    assert!(asks >= 8, "{asks}");
     assert!(wrong.is_empty(), "mismatches:\n{}", wrong.join("\n"));
 }

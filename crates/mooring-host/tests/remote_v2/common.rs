@@ -1,6 +1,8 @@
 //! What the phone v2 protocol tests share: a host of their own from the test binary
 //! (`common::daemon_fixture`) and `mooring remote --stdio` speaking to it.
 #![allow(dead_code)]
+#[path = "../support/tied.rs"]
+pub mod tied;
 use mooring_core::{model::*, protocol::*};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
@@ -9,15 +11,23 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use std::{fs, io};
+pub use tied::SpawnTied;
 
 /// A host on its own runtime and log roots, from this binary (`daemon_fixture`).
 pub struct Host {
-    child: Child,
+    child: tied::Tied,
     pub root: PathBuf,
 }
 impl Host {
     pub fn start() -> Self {
+        Self::start_over(|_| ())
+    }
+    /// With what `seed` puts under its runtime before it starts: a first walk finds it.
+    pub fn start_over(seed: impl FnOnce(&Path)) -> Self {
         let root = std::env::temp_dir().join(format!("kl-{}", uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(&root).unwrap();
+        fs::set_permissions(&root, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+        seed(&root);
         let child = Command::new(std::env::current_exe().unwrap())
             .args([
                 "--ignored",
@@ -32,7 +42,7 @@ impl Host {
             .env("MOORING_REMOTE_EXE", env!("CARGO_BIN_EXE_mooring"))
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         let h = Self { child, root };
         let until = Instant::now() + Duration::from_secs(30);
@@ -140,6 +150,48 @@ impl Host {
         }
         path
     }
+    /// A fake Codex in `terminal`, bound by the id on its command line, whose rollout holds
+    /// `rows` after its `session_meta`. Returns the log path.
+    pub fn codex(&self, terminal: &str, cwd: &Path, rows: &[Value], script: &str) -> PathBuf {
+        let logs = self.root.join("logs/codex");
+        fs::create_dir_all(&logs).unwrap();
+        let cli = self.root.join("codex");
+        if !cli.exists() {
+            std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let path = logs.join(format!("rollout-2026-11-05T00-00-00-{id}.jsonl"));
+        let meta = json!({"type":"session_meta","timestamp":"2026-11-05T00:00:00Z","payload":{"id":id,"cwd":cwd,"originator":"codex_cli_rs","source":"cli"}});
+        let mut lines = format!("{meta}\n");
+        for row in rows {
+            lines += &format!("{row}\n");
+        }
+        let seed = self.root.join(format!("seed-{terminal}"));
+        fs::write(&seed, lines).unwrap();
+        let body = format!(
+            "cat {} > {}; {script}",
+            shell_quote(&seed.to_string_lossy()),
+            shell_quote(&path.to_string_lossy()),
+        );
+        self.launch(
+            terminal,
+            cwd,
+            &format!(
+                "exec {} -c {} resume {id}",
+                shell_quote(&cli.to_string_lossy()),
+                shell_quote(&body),
+            ),
+        );
+        let until = Instant::now() + Duration::from_secs(30);
+        while self.workspace().current_agent(terminal).is_none() {
+            assert!(
+                Instant::now() < until,
+                "the id on its command line must bind"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        path
+    }
 }
 impl Drop for Host {
     fn drop(&mut self) {
@@ -148,8 +200,7 @@ impl Drop for Host {
                 let _ = self.call(Request::Stop { id: t.id });
             }
         }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.kill_tree();
         let _ = fs::remove_dir_all(&self.root);
     }
 }
