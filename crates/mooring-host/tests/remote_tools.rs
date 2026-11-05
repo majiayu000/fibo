@@ -420,6 +420,64 @@ fn a_log_read_only_from_its_end_says_so() {
     assert_eq!(page["partial"], true);
 }
 
+/// Codex items that had no row: a phone sees each in the list and opens it, and an image is
+/// only named. Shapes from real rollouts.
+#[test]
+fn codex_finished_items_are_rows_a_phone_can_open() {
+    let h = Host::start();
+    let work = scratch(&h, "work");
+    let done = |item: Value| json!({"type":"event_msg","timestamp":"2026-11-05T00:00:03Z","payload":{"type":"item_completed","item":item}});
+    let first = json!({"type":"response_item","timestamp":"2026-11-05T00:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"go"}]}});
+    let reply = json!({"type":"response_item","timestamp":"2026-11-05T00:00:09Z","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"好了"}]}});
+    let rows = [
+        first,
+        done(
+            json!({"type":"McpToolCall","id":"ex1","server":"crawlume","tool":"fetch","arguments":{"url":"https://e.com/a"},"status":"completed","duration":{"secs":2,"nanos":0},"result":{"content":[{"type":"text","text":"页面正文"},{"type":"image","data":"QUJDRA=="}],"isError":false}}),
+        ),
+        done(
+            json!({"type":"FileChange","id":"ex2","status":"completed","stdout":"","stderr":"","changes":{"/r/old.rs":{"type":"update","unified_diff":"--- a/old.rs\n+++ b/old.rs\n@@ -1 +1 @@\n-x\n+y\n"}}}),
+        ),
+        done(json!({"type":"ImageView","id":"ex3","path":"/r/a.png"})),
+        reply,
+    ];
+    h.codex("c", &work, &rows, "sleep 60");
+    let mut r = Remote::open(&h, None, &[]);
+    let m = messages(&mut r, "c", 2);
+    assert_eq!(m[1]["tools"]["files"][0]["path"], "/r/old.rs");
+    assert_eq!(m[1]["tools"]["files"][0]["added"], 1);
+    assert_eq!(m[1]["tools"]["calls"], 3);
+    let list = r.ok(json!({ "op": "toolcalls", "terminal": "c", "seq": m[1]["seq"] }));
+    let calls = list["calls"].as_array().unwrap();
+    let kinds: Vec<_> = calls
+        .iter()
+        .map(|c| {
+            (
+                c["name"].as_str().unwrap(),
+                c["kind"].as_str().unwrap(),
+                c["label"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("mcp__crawlume__fetch", "other", "https://e.com/a"),
+            ("apply_patch", "edit", "/r/old.rs"),
+            ("view_image", "read", "/r/a.png"),
+        ]
+    );
+    assert_eq!(calls[0]["took_ms"], 2000);
+    let one = r.ok(json!({ "op": "toolcall", "terminal": "c", "call": "ex1" }));
+    let out = one["output"]["head"].as_str().unwrap();
+    assert!(out.contains("页面正文") && out.contains("张图片"), "{out}");
+    assert!(!out.contains("QUJDRA"), "{out}");
+    let one = r.ok(json!({ "op": "toolcall", "terminal": "c", "call": "ex2" }));
+    assert_eq!(one["input_kind"], "diff");
+    assert!(one["input"]["head"].as_str().unwrap().contains("+y"));
+    let one = r.ok(json!({ "op": "toolcall", "terminal": "c", "call": "ex3" }));
+    assert!(one["output"]["head"].as_str().unwrap().contains("张图片"));
+}
+
 #[test]
 fn codex_scripts_read_as_what_they_did() {
     let h = Host::start();

@@ -161,6 +161,16 @@ pub(super) fn summary(calls: &[(String, bool)]) -> ChatTools {
         calls: calls.len() as u32,
         ..Default::default()
     };
+    // Files a Codex change item names: the script that made the change names them too.
+    let items: Vec<String> = (calls.iter())
+        .filter(|(c, _)| c.starts_with("apply_patch "))
+        .filter_map(|(c, _)| serde_json::from_str::<Value>(c.split_once(' ')?.1).ok())
+        .flat_map(|args| {
+            let files: Vec<(String, u32, u32)> = serde_json::from_value(args[PATCHED].clone())
+                .unwrap_or_else(|_| patch_lines(patch_text(&args)));
+            files.into_iter().map(|f| f.0)
+        })
+        .collect();
     for (call, failed) in calls {
         let (name, args) = call.split_once(' ').unwrap_or((call, ""));
         let args: Value = serde_json::from_str(args).unwrap_or(Value::Null);
@@ -178,6 +188,9 @@ pub(super) fn summary(calls: &[(String, bool)]) -> ChatTools {
             if let Some(script) = args["input"].as_str() {
                 touched = script_patches(script);
             }
+            touched.retain(|(path, _, _)| {
+                !(items.iter()).any(|i| i == path || i.ends_with(&format!("/{path}")))
+            });
         } else if matches!(short, "Edit" | "MultiEdit" | "Write" | "NotebookEdit") {
             let (added, removed) =
                 serde_json::from_value(args[LINES].clone()).unwrap_or_else(|_| edit_lines(&args));
@@ -251,6 +264,29 @@ mod tests {
                 ("/r/big.txt".to_owned(), 300, 0),
             ]
         );
+    }
+
+    /// A script's patch and the change item it produced are one change; a patch built at
+    /// run time, which the script's text cannot say, is known from the item alone.
+    #[test]
+    fn a_change_item_and_its_script_count_once() {
+        let call = |name: &str, args: Value| (format!("{name} {args}"), false);
+        let patch = "*** Begin Patch\n*** Update File: src/a.rs\n@@\n-x\n+y\n*** End Patch";
+        let script = format!(
+            "await tools.apply_patch(\"{}\");",
+            patch.replace('\n', "\\n")
+        );
+        let item = "*** Update File: /r/src/a.rs\n@@ -1 +1 @@\n-x\n+y\n";
+        let s = summary(&[
+            call("exec", json!({ "input": script })),
+            call("apply_patch", json!({ "input": item })),
+        ]);
+        assert_eq!(s.files, [("/r/src/a.rs".to_owned(), 1, 1)]);
+        let s = summary(&[
+            call("exec", json!({ "input": "await tools.apply_patch(p);" })),
+            call("apply_patch", json!({ "input": item })),
+        ]);
+        assert_eq!(s.files, [("/r/src/a.rs".to_owned(), 1, 1)]);
     }
 
     /// A log indexed before the parser told the copies apart: the second copy is not shown,

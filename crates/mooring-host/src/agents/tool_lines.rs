@@ -29,7 +29,7 @@ impl ToolOutput {
 }
 
 /// Adds a list of content blocks: text in order, images counted.
-fn add_blocks(out: &mut ToolOutput, blocks: &[Value]) {
+pub(super) fn add_blocks(out: &mut ToolOutput, blocks: &[Value]) {
     for b in blocks {
         match b["type"].as_str().unwrap_or("") {
             "image" | "input_image" | "image_url" => {
@@ -111,7 +111,7 @@ pub(super) fn codex_call(line: &Value, id: &str) -> Option<ToolCallLine> {
                 args: serde_json::json!({ "cmd": item["command"], "cwd": item["cwd"] }),
             })
         }
-        _ => None,
+        _ => super::codex_items::call_line(item, id),
     }
 }
 
@@ -128,7 +128,7 @@ pub(super) fn codex_result(line: &Value) -> Option<ToolOutput> {
             out.took_ms = secs.map(|s| s * 1000 + nanos / 1_000_000);
             item.get("output").unwrap_or(&item["aggregated_output"])
         }
-        _ => return None,
+        _ => return super::codex_items::result_line(item),
     };
     out.code = item["exit_code"].as_i64().map(|c| c as i32);
     match body {

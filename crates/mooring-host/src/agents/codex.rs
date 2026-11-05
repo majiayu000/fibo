@@ -311,6 +311,7 @@ impl Adapter for Codex {
                 );
             }
             "reasoning" => (),
+            _ if ty == "event_msg" && codex_items::add_item(parser, item, at, source) => (),
             _ if matches!(
                 ty,
                 "session_meta"
