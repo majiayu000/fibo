@@ -196,7 +196,7 @@
   <li><span class="tag">未查</span> 开启补画时，开头那帧顶栏「＋」附近有 803 px 差异；新 main（11-04）才出现，门禁目前只比对关闭补画的那轮，不拦。</li>
   <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>
   <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
-  <li><span class="tag">不改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：主库存的是用户操作（待办、完成状态），<code>synchronous=FULL</code> 保留；日志索引本来就是 NORMAL。</li>
+  <li><span class="tag">已改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：原先主库因存的是用户操作（待办、完成状态）保留 <code>synchronous=FULL</code>；11-05 按 <code>docs/plan.md</code> 第 3 阶段改成 WAL + NORMAL，进程崩溃不丢，只有掉电或系统崩溃可能丢最后几笔（见 <code>docs/decisions/2026-11-05-workbench-db-synchronous-normal.md</code>）。写库挪出锁还没做。日志索引本来就是 NORMAL。</li>
   <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试。</li>
   <li><span class="tag">已查</span> 窗口进程约 759 MB（M3 Max，真实使用 4.5 小时）：Metal 驱动池 384 MB，Rust 堆约 177 MB，三个 drawable 约 92 MB，其他图形内存约 49 MB（含后台缓冲 31 MB），其余约 55 MB。驱动池里 blit 占的 160 MB 已省掉，渲染占的 224 MB 只要窗口在画就省不掉；Rust 堆没细查。GPU 空闲约 2 秒后驱动收回整个池，下次提交重新分配，最小程序里耗时 7–24 ms（平时 0.4 ms），真实窗口没量。</li>
 </ul>
