@@ -19,7 +19,6 @@ crates/mooring-host/src/content/mod.rs	2055
 crates/mooring-host/src/control.rs	1247
 crates/mooring-host/src/host/mod.rs	1057
 crates/mooring-host/src/log_index.rs	2063
-crates/mooring-host/src/recognition.rs	1775
 crates/mooring-host/src/relay.rs	939
 crates/mooring-host/tests/managed_session.rs	6632
 crates/mooring-host/tests/pty_stall.rs	904
