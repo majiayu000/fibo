@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>待办跟进 demo</title>
+<style>
+:root{
+  --bg:#fafaf8;--side:#f5f5f2;--card:#fff;--hover:#f0f0ec;--line:#e4e4df;--line2:#cfcfc8;
+  --text:#1d1d1b;--sub:#55554f;--muted:#7c7c74;--faint:#a0a097;
+  --run:#a07d10;--run-bg:#fbf6e3;--ask:#c8601e;--ask-bg:#fdf1e8;--ok:#26845a;--ok-bg:#e9f6ef;
+  --ink:#2a2a27;--ink-text:#fff;--term:#17181b;--term-text:#d6d8dd;--term-dim:#8b8e96;--term-cmd:#8fd3a8;
+  --mark:#4565d8;--mark-bg:#eef1fd;--shadow:0 12px 40px rgba(30,30,20,.14);
+  --mono:"SF Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#21252c;--side:#1c2026;--card:#2a2f37;--hover:#323842;--line:#3a404a;--line2:#4b525e;
+  --text:#e9ebef;--sub:#bcc1ca;--muted:#979da8;--faint:#767c87;
+  --run:#e0bd52;--run-bg:#3a3524;--ask:#f0975a;--ask-bg:#40302a;--ok:#5ac48d;--ok-bg:#25392f;
+  --ink:#e9ebef;--ink-text:#1c2026;--term:#14161a;--mark:#9db0f5;--mark-bg:#2d3450;--shadow:0 12px 40px rgba(0,0,0,.4);
+}}
+:root[data-theme="dark"]{
+  --bg:#21252c;--side:#1c2026;--card:#2a2f37;--hover:#323842;--line:#3a404a;--line2:#4b525e;
+  --text:#e9ebef;--sub:#bcc1ca;--muted:#979da8;--faint:#767c87;
+  --run:#e0bd52;--run-bg:#3a3524;--ask:#f0975a;--ask-bg:#40302a;--ok:#5ac48d;--ok-bg:#25392f;
+  --ink:#e9ebef;--ink-text:#1c2026;--term:#14161a;--mark:#9db0f5;--mark-bg:#2d3450;--shadow:0 12px 40px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--mark);outline-offset:1px}
+.mono{font-family:var(--mono);font-size:11.5px}
+
+/* 演示条：不属于产品 */
+.demo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:9px 16px;background:var(--ink);color:var(--ink-text)}
+.demo b{font-weight:600}
+.demo .seg{background:rgba(127,127,127,.22);border:0}
+.demo .seg button{color:inherit;opacity:.75}
+.demo .seg button.on{background:var(--ink-text);color:var(--ink);opacity:1}
+.steps{display:flex;flex-wrap:wrap;gap:4px 12px;flex:1;min-width:260px;list-style:none;margin:0;padding:0;font-size:12px}
+.steps li{opacity:.55}.steps li.now{opacity:1;font-weight:600}.steps li.did{opacity:.75;text-decoration:line-through}
+.dlink{font-size:12px;opacity:.8;text-decoration:underline;text-underline-offset:3px}
+.dlink:hover{opacity:1}.dlink[aria-pressed="true"]{opacity:1;font-weight:600}
+
+/* 窗口 */
+.app{position:relative;display:flex;height:calc(100vh - 44px);min-height:600px;overflow:hidden;border-bottom:1px solid var(--line)}
+.side{flex:0 0 232px;background:var(--side);border-right:1px solid var(--line);padding:12px 10px;overflow:auto}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;padding:0 6px 12px}
+.brand i{width:14px;height:14px;border-radius:50%;border:3px solid var(--text)}
+.find{display:flex;justify-content:space-between;color:var(--muted);padding:6px 8px;border:1px solid var(--line);border-radius:7px;margin-bottom:12px}
+.side h4{margin:14px 6px 5px;font-size:11.5px;font-weight:500;color:var(--muted)}
+.srow{display:flex;gap:7px;align-items:baseline;width:100%;text-align:left;padding:4px 6px;border-radius:6px;color:var(--sub)}
+.srow:hover{background:var(--hover)}
+.srow span:nth-child(2){flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.bar{display:flex;align-items:center;gap:8px;height:42px;flex:none;padding:0 16px;border-bottom:1px solid var(--line);color:var(--muted)}
+.bar b{color:var(--text);font-weight:500}.bar .sp{flex:1}
+.pill{padding:3px 9px;border-radius:7px;background:var(--hover);color:var(--sub)}
+.head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:14px 18px 8px;flex:none}
+.head h1{margin:0;font-size:19px;font-weight:600}
+.head .sum{color:var(--muted)}.head .sp{flex:1}
+.seg{display:inline-flex;padding:2px;border-radius:8px;background:var(--hover);border:1px solid var(--line)}
+.seg button{padding:3px 10px;border-radius:6px;color:var(--muted);white-space:nowrap}
+.seg button.on{background:var(--card);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.link{color:var(--muted);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
+.link:hover{color:var(--text)}
+
+/* 看板 */
+.board{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(218px,1fr));gap:12px;padding:0 18px 14px;overflow-x:auto}
+.col{display:flex;flex-direction:column;min-height:0}
+.colh{display:flex;align-items:center;gap:7px;height:32px;flex:none;font-weight:500}
+.colh .n{color:var(--muted);font-weight:400}
+.list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 2px 30px}
+.card{position:relative;flex:none;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.card:hover{border-color:var(--line2);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.card.sel{border-color:var(--text)}
+.card.ask{border-left:3px solid var(--ask)}
+.card.session{background:transparent}
+.ctop{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11.5px}
+.ag{font:600 9.5px var(--mono);padding:1px 3px;border-radius:3px;background:var(--hover);color:var(--sub)}
+.orb{margin-left:auto;width:14px;height:14px;border-radius:50%;flex:none}
+.ctitle{display:flex;gap:7px;align-items:flex-start;font-weight:500;line-height:1.35}
+.ctitle.plain{font-weight:400;color:var(--sub)}
+.check{flex:none;width:15px;height:15px;margin-top:1px;border:1.5px solid var(--line2);border-radius:4px;display:grid;place-items:center;font-size:10px;line-height:1;color:transparent;background:var(--card)}
+.check:hover{border-color:var(--ok);color:var(--ok)}
+.check.on{background:var(--muted);border-color:var(--muted);color:var(--card)}
+.done-title{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line2)}
+.cline{color:var(--muted);font-size:12px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cfoot{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11.5px}
+.cfoot .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);font-size:11.5px;color:var(--muted);white-space:nowrap}
+.chip::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.chip.running{color:var(--run);background:var(--run-bg);border-color:transparent}
+.chip.ask{color:var(--ask);background:var(--ask-bg);border-color:transparent}
+.chip.review{color:var(--ok);background:var(--ok-bg);border-color:transparent}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:4px 10px;border-radius:7px;background:var(--hover);color:var(--text);white-space:nowrap}
+.btn:hover{background:var(--line)}
+.btn.solid{background:var(--ink);color:var(--ink-text)}.btn.solid:hover{opacity:.88;background:var(--ink)}
+.btn:disabled{opacity:.45;cursor:default}
+.src{color:var(--mark)}
+.quick{flex:none;background:var(--card);border:1px dashed var(--line2);border-radius:10px;padding:7px 9px}
+.quick:focus-within{border-style:solid;border-color:var(--text)}
+.quick input{width:100%;border:0;outline:0;background:none}
+.quick input::placeholder{color:var(--faint)}
+.quick .qb{display:flex;align-items:center;gap:6px;margin-top:6px}
+.quick .qb small{color:var(--faint);flex:1;font-size:11px}
+.quick .btn{padding:2px 8px;font-size:12px}
+@keyframes arrive{from{background:var(--mark-bg)}}
+.flash{animation:arrive 1.5s ease-out}
+
+/* 清单 */
+.ledger{flex:1;min-height:0;overflow-y:auto;padding:2px 18px 40px}
+.ledger .inner{max-width:900px}
+.ledger .quick{margin-bottom:10px}
+.ledger h3{margin:18px 0 5px;font-size:12px;font-weight:500;color:var(--muted)}
+.row{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:3px 9px;align-items:center;padding:8px 9px;border-bottom:1px solid var(--line);cursor:pointer}
+.row:hover{background:var(--hover)}.row.sel{background:var(--hover)}
+.row .rt{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .rs{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.row .rl{grid-column:2/-1;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .btn{padding:2px 8px;font-size:12px}
+
+/* 详情 */
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(470px,100%);background:var(--card);border-left:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;z-index:5;animation:slide .2s cubic-bezier(.2,.8,.3,1)}
+@keyframes slide{from{transform:translateX(30px);opacity:.3}}
+.dhead{padding:13px 16px 10px;border-bottom:1px solid var(--line);flex:none}
+.dtop{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.dtop .sp{flex:1}
+.x{width:24px;height:24px;border-radius:6px;font-size:15px;color:var(--muted)}.x:hover{background:var(--hover)}
+.dhead h2{margin:6px 0 9px;font-size:16px;font-weight:600;line-height:1.35}
+.acts{display:flex;flex-wrap:wrap;gap:6px}
+.dbody{flex:1;min-height:0;overflow-y:auto;padding:4px 16px 16px}
+.sec{padding-top:13px}
+.sech{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:5px;font-weight:600;font-size:12px}
+.sech small{font-weight:400;color:var(--faint);font-size:11px}
+.said{padding:8px 10px;border-radius:8px;background:var(--hover);white-space:pre-wrap}
+.wait{color:var(--faint);font-size:12px}
+.crit{display:flex;gap:7px;padding:2px 0;color:var(--sub)}
+.crit::before{content:"○";color:var(--faint);font-size:11px;line-height:19px}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:grid;grid-template-columns:44px 1fr;gap:8px;padding:4px 0 4px;border-top:1px solid var(--line)}
+.tl li:first-child{border-top:0}
+.tl time{color:var(--faint);font-family:var(--mono);font-size:11px;line-height:18px}
+.tl small{display:block;color:var(--faint);font-size:11px}
+.srel{display:flex;align-items:center;gap:8px;padding:4px 0}
+.srel .sp{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--sub)}
+details summary{cursor:pointer;color:var(--muted);font-size:12px}
+details pre{margin:6px 0 0;padding:9px 10px;border-radius:8px;background:var(--hover);white-space:pre-wrap;word-break:break-word;font:11.5px/1.5 var(--mono);color:var(--sub)}
+.term{flex:none;max-height:38%;min-height:110px;overflow-y:auto;background:var(--term);color:var(--term-text);padding:9px 12px;font:11.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word}
+.term .tt{color:var(--term-dim);margin-bottom:4px;font-family:-apple-system,"PingFang SC",sans-serif}
+.term .in{color:#fff}.term .in::before{content:"› ";color:var(--term-dim)}
+.term .tool{color:var(--term-dim)}
+.term .cmd{color:var(--term-cmd)}.term .cmd::before{content:"$ ";color:var(--term-dim)}
+.say{display:flex;gap:6px;padding:8px 12px;background:var(--term);border-top:1px solid #2c2e33;flex:none}
+.say input{flex:1;min-width:0;background:#24262b;color:#fff;border:1px solid #3a3d44;border-radius:6px;padding:4px 8px}
+.say .btn{background:#34373e;color:#fff}.say .btn:hover{background:#44474e}
+.hint{color:var(--muted);font-size:12px;padding:10px 0}
+.toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:12px;align-items:center;max-width:90%;padding:7px 13px;border-radius:9px;background:var(--ink);color:var(--ink-text);box-shadow:var(--shadow);z-index:9}
+.toast button{text-decoration:underline;text-underline-offset:3px}
+
+/* 标出新增 */
+.show-new .nw{outline:1.5px dashed var(--mark);outline-offset:2px;border-radius:5px}
+
+/* 说明 */
+.notes{max-width:960px;margin:0 auto;padding:32px 20px 70px}
+.notes h2{font-size:17px;margin:26px 0 8px}
+.notes h2:first-child{margin-top:0}
+.notes p{margin:6px 0;color:var(--sub);font-size:14px;line-height:1.65}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:13px}
+th,td{text-align:left;vertical-align:top;padding:7px 12px 7px 0;border-bottom:1px solid var(--line)}
+th{font-weight:500;color:var(--muted)}
+td:first-child{font-weight:500;white-space:nowrap}
+code{font:12px var(--mono)}
+
+@media (max-width:900px){
+  .side{display:none}
+  .app{height:calc(100vh - 92px);min-height:520px}
+  .board{padding:0 16px 14px;grid-template-columns:repeat(5,250px)}
+  .head,.ledger{padding-left:16px;padding-right:16px}
+  .row{grid-template-columns:18px minmax(0,1fr) auto}
+  .row .rs{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="demo">
+  <b>待办跟进 demo</b>
+  <span class="seg" role="group" aria-label="方向">
+    <button data-act="dir" data-v="A" id="dirA">A 看板里跟进</button>
+    <button data-act="dir" data-v="B" id="dirB">B 单独清单</button>
+  </span>
+  <ol class="steps" id="steps"></ol>
+  <button class="dlink" data-act="shownew" id="shownew" aria-pressed="false">标出新增</button>
+  <button class="dlink" data-act="theme">深浅色</button>
+  <button class="dlink" data-act="reset">重来</button>
+  <a class="dlink" href="#notes" style="color:inherit">怎么改 ↓</a>
+</div>
+
+<div class="app" id="app">
+  <aside class="side" id="side"></aside>
+  <main class="main">
+    <div class="bar"><span>工作空间</span>/<b>鸟瞰全部</b><span class="sp"></span><span class="pill">鸟瞰</span></div>
+    <div class="head" id="head"></div>
+    <div id="view" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
+  </main>
+  <div id="drawer"></div>
+  <div id="toast"></div>
+</div>
+
+<section class="notes" id="notes">
+  <h2>我建议这样改</h2>
+  <p>不新建功能，把现有待办改成“会跟进的事项”：<b>你只写一句话，Agent 负责补充和写进展，只有你能标完成。</b>代码里“开始”已经会把待办内容交给 Agent，缺的是 Agent 写回和界面上看得到进展。</p>
+  <div class="tw"><table>
+    <tr><th>改什么</th><th>现在</th><th>改成</th></tr>
+    <tr><td>Agent 写回</td><td><code>mooring</code> 没有待办命令</td><td>加 <code>mooring todo add/show/note/list</code>，没有 <code>done</code></td></tr>
+    <tr><td>记录</td><td>填表单，或从会话“放入待办”</td><td>看板上写一句回车；或在会话里说“记一下”</td></tr>
+    <tr><td>详情</td><td>说明、验收标准、证据</td><td>你写的 / Agent 补充 / 进展时间线，分开显示</td></tr>
+    <tr><td>再开会话</td><td>只带标题、描述、验收标准</td><td>再带上背景和进展，接着做</td></tr>
+    <tr><td>时间</td><td>待办没有时间字段</td><td>加创建和完成时间，才能分“今天”和“之前”</td></tr>
+    <tr><td>状态</td><td>7 种，如“会话都做完了”“验收齐了”</td><td>待办只显示 没做 / 在做 / 做完了，会话状态不变</td></tr>
+    <tr><td>看板卡片</td><td>开始后就只看到会话卡</td><td>ToDo 卡跟着会话走，几个会话合成一张</td></tr>
+    <tr><td>标完成</td><td>待办和会话要各标一次</td><td>标 ToDo 时关联会话一起完成，可撤销</td></tr>
+  </table></div>
+  <h2>A 和 B 怎么选</h2>
+  <p><b>A 看板里跟进（我推荐先做）：</b>不加新页面，你已经习惯看鸟瞰，切“只看 ToDo”就只剩要完成的事。坏处是默认视图里 ToDo 和会话卡混在一起。</p>
+  <p><b>B 单独清单：</b>按“今天新增 / 之前没做完 / 今天做完”排，每天要做什么最清楚，也最接近你说的“账本”。代价是多一个页面，事情和会话要到两处看。</p>
+  <h2>这版不做</h2>
+  <p>优先级、负责人、标签、周期、飞书自动捡取、全局快捷键。用两周后，记录或启动的事少于 10 件，或进展你根本不看，就不再加功能。</p>
+  <p>Demo 里的事项和 Agent 写回内容都是示例，终端是模拟的，没有接真实数据。</p>
+</section>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ORB={her:'linear-gradient(135deg,#f08a5d,#b83b5e)',mooring:'linear-gradient(135deg,#6a82fb,#c471ed)','日常':'linear-gradient(135deg,#43cea2,#185a9d)'};
+const COLS=[['todo','待办'],['running','在跑'],['needs','要你处理'],['paused','停着'],['done','做完了']];
+const WORD={running:'在跑',ask:'等你回答',review:'等你验收',paused:'停着',done:'做完了',todo:'还没开始'};
+const COLOF={todo:'todo',running:'running',ask:'needs',review:'needs',paused:'paused',done:'done'};
+const ICON={
+ todo:'<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>',
+ running:'<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--line2)" stroke-width="1.5"/><path d="M7 1.5a5.5 5.5 0 0 0 0 11" fill="none" stroke="var(--run)" stroke-width="1.8"/></svg>',
+ needs:'<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--ask)" stroke-width="1.5"/><circle cx="7" cy="7" r="2.4" fill="var(--ask)"/></svg>',
+ paused:'<svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 3v8M9 3v8" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round"/></svg>',
+ done:'<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="var(--muted)"/><path d="M4.4 7.2l1.8 1.8 3.4-3.6" fill="none" stroke="var(--card)" stroke-width="1.5"/></svg>'};
+
+const seed=()=>[
+ {id:'T-14',kind:'todo',title:'沙箱同时开 3 个就启动失败',space:'her',said:'沙箱同时开 3 个就起不来，回收和资源申请怎么改要定一下',from:'你写的',created:'09:12',day:'today',state:'todo',context:'',criteria:[],notes:[],sessions:[],term:[],
+  script:{tools:['读沙箱服务的配置和 Pod 事件','对比失败时间和在跑的沙箱'],context:'每个沙箱固定占 2 核、活 8 小时，只有 cpu001 能放，同时活着 2 个时第 3 个就放不下。失败都是等满 80 秒超时。',criteria:['同时开 3 个沙箱都能启动','空闲的沙箱会被回收，有记录可查'],note:'方案写好了：空闲 30 分钟回收，申请降到 1 核。等你定要不要这样改。',second:'按你定的方案改完并上了 dev，同时开 3 个都启动了。'}},
+ {id:'T-13',kind:'todo',title:'给 Emo 回长剧压缩的测试结果',space:'日常',said:'给 Emo 回长剧压缩的测试结果',from:'你写的',created:'昨天',day:'earlier',state:'todo',context:'',criteria:[],notes:[],sessions:[],term:[]},
+ {id:'T-12',kind:'todo',title:'部署 BFF 时模型流会断',space:'her',said:'部署 BFF 前要等活动 Run 结束，不然会断。这个根因后面要除',from:'Agent 记的 · 来自会话 3C2A',created:'昨天',day:'earlier',state:'running',context:'模型流经过 BFF，BFF 重建时只等 10 秒就关。已有自动续跑兜底，根因没动。',criteria:['部署 BFF 时活动 Run 不再断流'],notes:[{t:'昨天',s:'3C2A',x:'确认 3 次断流都对上 BFF 重建时间'},{t:'10:41',s:'9E07',x:'在改优雅退出，等连接结束再关'}],sessions:[{code:'9E07',title:'BFF 优雅退出',state:'running'}],term:[{k:'tool',x:'改 BFF 的退出逻辑…'}]},
+ {id:'T-11',kind:'todo',title:'Enhancer 实参要整段重打',space:'her',said:'K3 每次把设定重打一遍太慢了，看怎么改',from:'你写的',created:'昨天',day:'earlier',state:'ask',context:'K3 约 80% 的时间在重打 8–9K 的设定，Enhancer 不能引用之前的输出。',criteria:['写一集不用重打设定'],notes:[{t:'11:20',s:'B41D',x:'两种做法列好了，要你定：做在 OR 还是 agentrun？'}],sessions:[{code:'B41D',title:'实参传引用方案',state:'ask'}],term:[{k:'say',x:'做在 OR 还是 agentrun？'}]},
+ {id:'T-10',kind:'todo',title:'K3 请求长时间无响应',space:'her',said:'第 13 集挂了，查下是真挂死还是太慢',from:'Agent 记的 · 来自会话 77A0',created:'今天 13:40',day:'today',state:'review',context:'45–73 万 token 时首字要等 5–8.5 分钟，之前把空闲上限改成 300 秒是误判。',criteria:['长任务不再被误杀'],notes:[{t:'13:52',s:'77A0',x:'查清了不是挂死，是首字慢'},{t:'15:30',s:'D210',x:'空闲上限恢复 600 秒，已上 dev，等你看长任务结果'}],sessions:[{code:'77A0',title:'K3 无响应排查',state:'done'},{code:'D210',title:'恢复空闲上限',state:'review'}],term:[{k:'say',x:'改好了，等你看长任务结果。'}]},
+ {id:'T-09',kind:'todo',title:'发布重启后 Run 被判死',space:'her',said:'发布杀 Pod 后 Run 直接失败了，恢复路径要真实发布验证一次',from:'你写的',created:'昨天',day:'earlier',state:'paused',context:'恢复后同一幂等键撞上遗留 pending，结果交回时原回调已消失。',criteria:['发布时有在途调用，Run 能恢复'],notes:[{t:'21:13',s:'50CC',x:'修复已切到 dev，等下一次有在途调用的发布验证'}],sessions:[{code:'50CC',title:'恢复轮等重放结果',state:'paused'}],term:[]},
+ {id:'T-08',kind:'todo',title:'Opus 主控启动即 400',space:'her',said:'主控换 Opus 后连回一句话都 400',from:'你写的',created:'今天 14:15',day:'today',state:'done',context:'Bedrock 不接受工具 schema 顶层的 oneOf/allOf/anyOf。',criteria:[],notes:[{t:'14:51',s:'A902',x:'统一用不带顶层组合的 schema，已验证成功'}],sessions:[{code:'A902',title:'Opus 400',state:'done'}],term:[]},
+ {id:'S-1',kind:'session',code:'1F3A',title:'帮我启动项目',words:'帮我启动项目',space:'mooring',state:'running',term:[{k:'in',x:'帮我启动项目'},{k:'tool',x:'./run.sh'}]},
+ {id:'S-2',kind:'session',code:'6D20',title:'看下 dev 今天的报错',words:'看下 dev 今天的报错',record:{title:'compose 超时要查',words:'这个 compose 超时后面要查一下，记一下'},space:'her',state:'running',term:[{k:'in',x:'看下 dev 今天的报错'},{k:'say',x:'今天主要是 compose 超时 3 次，其他都是旧问题。这次先不动？'}]},
+ {id:'S-3',kind:'session',code:'C8E1',title:'这几天 YouTube 的效果如何',words:'这几天 YouTube 的效果如何',space:'日常',state:'review',term:[{k:'in',x:'这几天 YouTube 的效果如何'},{k:'say',x:'播放量比上周高 12%，详情在上面。'}]},
+ {id:'S-4',kind:'session',code:'04BE',title:'这个库的改动都在 GitHub 没有',words:'这个库的改动都在 GitHub 没有',space:'mooring',state:'paused',term:[{k:'in',x:'这个库的改动都在 GitHub 没有'},{k:'say',x:'都推上去了。'}]},
+];
+let S;const timers={};let undo=null,toastTimer=null;
+const fresh=()=>({items:seed(),open:null,dir:(S&&S.dir)||'A',only:false,quick:'',peek:false,flash:null,toast:null,did:{},next:15});
+const by=id=>S.items.find(i=>i.id===id);
+const now=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+const hex=()=>Math.random().toString(16).slice(2,6).toUpperCase();
+const todoWord=t=>t.state==='todo'?'没做':t.state==='done'?'做完了':'在做';
+const last=t=>t.notes.length?t.notes[t.notes.length-1].x:'';
+
+function promptOf(t){
+  const p=[t.title];
+  if(t.said&&t.said!==t.title)p.push(t.said);
+  if(t.context)p.push('背景：\n'+t.context);
+  if(t.criteria.length)p.push('验收标准：\n'+t.criteria.map(c=>'- '+c).join('\n'));
+  if(t.notes.length)p.push('目前进展：\n'+t.notes.map(n=>'- '+n.t+' '+n.x).join('\n'));
+  p.push(`（这条 ToDo 是 ${t.id}。有进展用 mooring todo note 写回，完成由用户标记。）`);
+  return p.join('\n\n');
+}
+
+/* ---- 渲染 ---- */
+function chip(st){return `<span class="chip ${st}">${WORD[st]}</span>`}
+function cardHTML(i){
+  const sel=S.open===i.id?' sel':'',fl=S.flash===i.id?' flash':'',vt=`style="view-transition-name:c-${i.id}"`;
+  if(i.kind==='session')return `<article class="card session${sel}${fl}" ${vt} tabindex="0" data-act="open" data-id="${i.id}">
+    <div class="ctop"><span class="ag">CC</span><span class="mono">${i.code}</span><i class="orb" style="background:${ORB[i.space]}"></i></div>
+    <div class="ctitle plain">${esc(i.title)}</div>
+    <div class="cfoot">${chip(i.state)}</div></article>`;
+  const isDone=i.state==='done',ask=i.state==='ask'?' ask':'';
+  const foot=i.state==='todo'
+    ?`<span class="sp"></span><button class="btn" data-act="start" data-id="${i.id}">开始 →</button>`
+    :`${isDone?'':chip(i.state)}<span class="sp"></span><span>${i.sessions.length} 个会话</span>`;
+  return `<article class="card${ask}${sel}${fl}" ${vt} tabindex="0" data-act="open" data-id="${i.id}">
+    <div class="ctop"><span>${esc(i.id)}</span>${i.state==='todo'?'<span>· '+esc(i.created)+'</span>':''}<i class="orb" style="background:${ORB[i.space]}"></i></div>
+    <div class="ctitle"><button class="check nw${isDone?' on':''}" data-act="${isDone?'reopen':'done'}" data-id="${i.id}" aria-label="${isDone?'撤销完成':'标记完成'}" title="${isDone?'撤销完成':'标记完成'}">✓</button><span class="${isDone?'done-title':''}">${esc(i.title)}</span></div>
+    ${last(i)&&!isDone?`<div class="cline nw">${esc(last(i))}</div>`:''}
+    <div class="cfoot">${foot}</div></article>`;
+}
+function quickHTML(){return `<form class="quick nw" data-form="quick">
+  <input id="quick" placeholder="写一句，回车记下" aria-label="写一句话记下要做的事" value="${esc(S.quick)}" autocomplete="off">
+  <div class="qb"><small>⌘↵ 记下并开始</small><button type="button" class="btn" data-act="quickstart">开始 →</button></div></form>`}
+function boardHTML(){
+  const vis=S.items.filter(i=>!i.gone&&(!S.only||i.kind==='todo'));
+  return `<div class="board">`+COLS.map(([k,l])=>{
+    const c=vis.filter(i=>COLOF[i.state]===k);
+    return `<section class="col"><div class="colh">${ICON[k]}<span>${l}</span><span class="n">${c.length}</span></div>
+      <div class="list">${k==='todo'?quickHTML():''}${c.map(cardHTML).join('')}</div></section>`}).join('')+`</div>`;
+}
+function rowHTML(t){
+  const d=t.state==='done',sel=S.open===t.id?' sel':'',fl=S.flash===t.id?' flash':'';
+  const st=t.state==='todo'?`<button class="btn" data-act="start" data-id="${t.id}">开始 →</button>`:d?'':chip(t.state);
+  return `<article class="row${sel}${fl}" style="view-transition-name:c-${t.id}" tabindex="0" data-act="open" data-id="${t.id}">
+    <button class="check${d?' on':''}" data-act="${d?'reopen':'done'}" data-id="${t.id}" aria-label="${d?'撤销完成':'标记完成'}">✓</button>
+    <span class="rt ${d?'done-title':''}">${esc(t.title)}</span>
+    <span class="rs">${esc(t.space)} · ${esc(t.created)}</span>${st||'<span></span>'}
+    ${last(t)&&!d?`<span class="rl">${esc(last(t))}</span>`:''}</article>`;
+}
+function ledgerHTML(){
+  const ts=S.items.filter(i=>i.kind==='todo'&&!i.gone);
+  const g=[['今天新增',ts.filter(t=>t.day==='today'&&t.state!=='done')],['之前没做完',ts.filter(t=>t.day==='earlier'&&t.state!=='done')],['今天做完',ts.filter(t=>t.state==='done')]];
+  return `<div class="ledger"><div class="inner">${quickHTML()}`+g.map(([l,c])=>`<h3>${l} ${c.length}</h3>${c.map(rowHTML).join('')||'<div class="wait">没有</div>'}`).join('')+`</div></div>`;
+}
+function headHTML(){
+  const ts=S.items.filter(i=>i.kind==='todo'&&!i.gone);
+  const open=ts.filter(t=>t.state!=='done').length,done=ts.length-open;
+  const gone=S.items.filter(i=>i.gone).length;
+  const filter=S.dir==='A'?`<span class="seg nw" role="group" aria-label="看板内容"><button class="${S.only?'':'on'}" data-act="only" data-v="0">全部</button><button class="${S.only?'on':''}" data-act="only" data-v="1">只看 ToDo</button></span>`:'';
+  return `<h1>${S.dir==='A'?'鸟瞰全部':'要做的事'}</h1><span class="sum">${open} 件没做完 · 今天做完 ${done} 件</span><span class="sp"></span>${gone?`<span class="link" style="text-decoration:none">稍后再看与已放弃 ${gone}</span>`:''}${filter}`;
+}
+function sideHTML(){
+  const row=(i)=>`<button class="srow" data-act="open" data-id="${i.id}"><span>${i.kind==='todo'?'☐':'·'}</span><span>${esc(i.title)}</span></button>`;
+  const a=S.items.filter(i=>!i.gone&&COLOF[i.state]==='needs'),b=S.items.filter(i=>!i.gone&&i.state==='running');
+  return `<div class="brand"><i></i>Mooring</div><div class="find"><span>搜索</span><span>⌘P</span></div>
+   <h4>要你处理 ${a.length}</h4>${a.map(row).join('')}<h4>在跑 ${b.length}</h4>${b.map(row).join('')}`;
+}
+function termHTML(i,title){
+  const line=l=>`<div class="${l.k==='say'?'':l.k}">${esc(l.x)}</div>`;
+  return `<div class="term" id="term"><div class="tt">${esc(title)} · 演示</div>${i.term.map(line).join('')||'<div class="tool">还没开始</div>'}</div>`;
+}
+function todoDrawer(t){
+  const d=t.state==='done',started=t.sessions.length>0;
+  let acts='';
+  if(d)acts=`<button class="btn" data-act="reopen" data-id="${t.id}">撤销完成</button>`;
+  else{
+    if(!started)acts+=`<button class="btn solid" data-act="start" data-id="${t.id}">开始</button>`;
+    else acts+=`<button class="btn" data-act="another" data-id="${t.id}">再开一个会话</button>`;
+    acts+=`<button class="btn${started?' solid':''}" data-act="done" data-id="${t.id}">标记完成</button><button class="btn" data-act="defer" data-id="${t.id}">稍后再看</button><button class="btn" data-act="drop" data-id="${t.id}">放弃</button>`;
+  }
+  const sessRows=t.sessions.map(s=>`<div class="srel"><span class="ag">CC</span><span class="mono">${s.code}</span><span class="sp">${esc(s.title)}</span>${chip(s.state)}</div>`).join('');
+  return `<aside class="drawer" aria-label="ToDo 详情">
+   <div class="dhead"><div class="dtop"><i class="orb" style="margin:0;background:${ORB[t.space]}"></i><span>${esc(t.space)}</span><span>· ${esc(t.id)} · ${todoWord(t)}</span><span class="sp"></span><button class="x" data-act="close" aria-label="关闭">×</button></div>
+     <h2>${esc(t.title)}</h2><div class="acts">${acts}</div></div>
+   <div class="dbody" id="dbody">
+     <div class="sec"><div class="sech"><span>你写的</span><small class="nw">Agent 不会改这里 · ${esc(t.from)} · ${esc(t.created)}</small></div><div class="said">${esc(t.said)}</div></div>
+     <div class="sec nw"><div class="sech"><span>Agent 补充</span></div>
+       ${t.context?`<div class="${S.flash==='ctx'+t.id?'flash':''}">${esc(t.context)}</div>`:`<div class="wait">${started?'Agent 还没写':'开始后由 Agent 写'}：背景、原因、验收标准</div>`}
+       ${t.criteria.length?`<div style="margin-top:6px">${t.criteria.map(c=>`<div class="crit">${esc(c)}</div>`).join('')}</div>`:''}</div>
+     <div class="sec nw"><div class="sech"><span>进展</span><small>只记结论和下一步</small></div>
+       ${t.notes.length?`<ol class="tl">${t.notes.slice().reverse().map((n,x)=>`<li class="${x===0&&S.flash==='note'+t.id?'flash':''}"><time>${esc(n.t)}</time><span>${esc(n.x)}<small>来自会话 ${esc(n.s)}</small></span></li>`).join('')}</ol>`:'<div class="wait">还没有</div>'}</div>
+     ${started?`<div class="sec"><div class="sech"><span>会话 ${t.sessions.length}</span></div>${sessRows}</div>`:''}
+     ${d?'':`<div class="sec nw"><details id="peek" ${S.peek?'open':''}><summary>${started?'再开会话时':'开始时'}会交给 Agent 的内容</summary><pre>${esc(promptOf(t))}</pre></details></div>`}
+   </div>
+   ${t.term.length?termHTML(t,'Claude Code'):''}</aside>`;
+}
+function sessionDrawer(s){
+  const rec=s.record;
+  return `<aside class="drawer" aria-label="会话"><div class="dhead"><div class="dtop"><span class="ag">CC</span><span class="mono">${s.code}</span><span>· ${esc(s.space)}</span>${chip(s.state)}<span class="sp"></span><button class="x" data-act="close" aria-label="关闭">×</button></div><h2>${esc(s.title)}</h2></div>
+   <div class="dbody"><div class="hint">这是一个普通会话，没有 ToDo。${rec?'要是聊到后面要跟进的事，直接在终端里说“记一下”。':'当场问完、答完的事不用记，它只留在会话里。'}</div></div>
+   ${termHTML(s,'Claude Code')}
+   <form class="say nw" data-form="say" data-id="${s.id}"><input id="say" aria-label="在终端里说" value="${esc(rec?rec.words:'')}" placeholder="想记就说“记一下”" autocomplete="off"><button class="btn">发送</button></form></aside>`;
+}
+const STEPS=[['start','写一句，点开始'],['back','看 Agent 写回'],['again','再开一个会话'],['finish','你标记完成'],['record','会话里说“记一下”']];
+function stepsHTML(){let c=false;return STEPS.map(([k,l],n)=>{const did=S.did[k];const now=!did&&!c;if(now)c=true;return `<li class="${did?'did':now?'now':''}">${n+1} ${l}</li>`}).join('')}
+
+function paint(){
+  const ae=document.activeElement,qf=ae&&ae.id==='quick',sf=ae&&ae.id==='say';
+  const pos=qf?ae.selectionStart:0,sv=sf?ae.value:null;
+  const body=$('#dbody'),top=body?body.scrollTop:0;
+  const lists=[...document.querySelectorAll('.list,.ledger')].map(e=>e.scrollTop);
+  $('#dirA').classList.toggle('on',S.dir==='A');$('#dirB').classList.toggle('on',S.dir==='B');
+  $('#steps').innerHTML=stepsHTML();
+  $('#side').innerHTML=sideHTML();
+  $('#head').innerHTML=headHTML();
+  $('#view').innerHTML=S.dir==='A'?boardHTML():ledgerHTML();
+  const it=S.open&&by(S.open);
+  const sameDrawer=$('#drawer').dataset.id===(it?it.id:'');
+  $('#drawer').innerHTML=it?(it.kind==='todo'?todoDrawer(it):sessionDrawer(it)):'';
+  $('#drawer').dataset.id=it?it.id:'';
+  if(sameDrawer&&it){const a=$('#drawer .drawer');if(a)a.style.animation='none'}
+  $('#toast').innerHTML=S.toast?`<div class="toast" role="status"><span>${esc(S.toast)}</span>${undo?'<button data-act="undo">撤销</button>':''}</div>`:'';
+  const b2=$('#dbody');if(b2&&sameDrawer)b2.scrollTop=top;
+  document.querySelectorAll('.list,.ledger').forEach((e,n)=>{if(lists[n])e.scrollTop=lists[n]});
+  const tm=$('#term');if(tm)tm.scrollTop=tm.scrollHeight;
+  if(qf){const q=$('#quick');if(q){q.focus();q.setSelectionRange(pos,pos)}}
+  if(sf){const q=$('#say');if(q){q.value=sv;q.focus()}}
+  // 高亮只算一次：之后的重绘不再放它。
+  if(S.flash){const f=S.flash;setTimeout(()=>{if(S.flash===f)S.flash=null},1600)}
+}
+function update(move){
+  if(move&&document.startViewTransition&&!matchMedia('(prefers-reduced-motion:reduce)').matches)document.startViewTransition(paint);
+  else paint();
+}
+function toast(msg,restore){
+  S.toast=msg;undo=restore||null;clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{S.toast=null;undo=null;paint()},6000);
+}
+
+/* ---- 模拟 Agent ---- */
+function stop(id){(timers[id]||[]).forEach(clearTimeout);timers[id]=[]}
+function run(t,steps,gap=1100){
+  stop(t.id);
+  steps.forEach((f,n)=>timers[t.id].push(setTimeout(()=>{f();},gap*(n+1))));
+}
+function startSession(t,again){
+  const code=hex();
+  t.sessions.forEach(s=>{if(s.state!=='done')s.state='paused'});
+  const sess={code,title:again?'接着做：'+t.title:t.title,state:'running'};
+  t.sessions.push(sess);t.state='running';S.open=t.id;S.flash=t.id;S.did.start=true;
+  if(again)S.did.again=true;
+  t.term=(t.term||[]).concat([{k:'tool',x:again?'—— 新会话，带着背景和进展 ——':'—— 启动 claude，内容已交给它 ——'},{k:'in',x:t.title}]);
+  const sc=t.script||{tools:['读相关代码和记录','确认问题在哪'],context:'（示例）Agent 查完后把背景和原因写在这里。',criteria:['（示例）Agent 提出的验收标准，你可以改'],note:'（示例）查清了原因，方案写好了，等你定。',second:'（示例）按方案改好了，等你验收。'};
+  const addNote=x=>{t.notes.push({t:now(),s:code,x});S.flash='note'+t.id};
+  const end=st=>{sess.state=st;t.state=st};
+  const steps=[];
+  if(again){
+    steps.push(()=>{t.term.push({k:'tool',x:'读到上次的进展，从那里接着做…'});paint()});
+    steps.push(()=>{const x=sc.second;t.term.push({k:'cmd',x:`mooring todo note ${t.id} "${x}"`});addNote(x);paint()});
+    steps.push(()=>{t.term.push({k:'say',x:'改好了，等你验收。'});end('review');update(true)});
+  }else{
+    sc.tools.forEach(x=>steps.push(()=>{t.term.push({k:'tool',x:x+'…'});paint()}));
+    steps.push(()=>{t.term.push({k:'cmd',x:`mooring todo note ${t.id} --context "${sc.context.slice(0,28)}…"`});t.context=sc.context;S.flash='ctx'+t.id;S.did.back=true;paint()});
+    steps.push(()=>{sc.criteria.forEach(c=>t.term.push({k:'cmd',x:`mooring todo note ${t.id} --criterion "${c}"`}));t.criteria=sc.criteria.slice();paint()});
+    steps.push(()=>{t.term.push({k:'cmd',x:`mooring todo note ${t.id} "${sc.note.slice(0,28)}…"`});addNote(sc.note);paint()});
+    steps.push(()=>{t.term.push({k:'say',x:'方案写好了，等你看。'});end('review');update(true)});
+  }
+  run(t,steps);
+  update(true);
+}
+function addTodo(text){
+  const title=text.trim();if(!title)return null;
+  const t={id:'T-'+S.next++,kind:'todo',title,space:'her',said:title,from:'你写的',created:'今天 '+now(),day:'today',state:'todo',context:'',criteria:[],notes:[],sessions:[],term:[]};
+  S.items.unshift(t);S.quick='';S.flash=t.id;return t;
+}
+function setDone(t){
+  stop(t.id);
+  const snap=JSON.stringify(t);const n=t.sessions.filter(s=>s.state!=='done').length;
+  t.state='done';t.sessions.forEach(s=>s.state='done');S.did.finish=true;S.flash=t.id;
+  if(S.open===t.id)S.peek=false;
+  toast(n?`这件事和 ${n} 个会话都标完成了`:'这件事标完成了',()=>{Object.assign(t,JSON.parse(snap))});
+  update(true);
+}
+
+/* ---- 事件 ---- */
+const A={
+ dir(el){S.dir=el.dataset.v;S.open=null;paint()},
+ only(el){S.only=el.dataset.v==='1';update(true)},
+ open(el){S.open=el.dataset.id;S.peek=false;paint()},
+ close(){S.open=null;paint()},
+ start(el){startSession(by(el.dataset.id),false)},
+ another(el){startSession(by(el.dataset.id),true)},
+ done(el){setDone(by(el.dataset.id))},
+ reopen(el){const t=by(el.dataset.id);t.state=t.sessions.length?'review':'todo';t.sessions.forEach(s=>{if(s===t.sessions[t.sessions.length-1])s.state='review'});update(true)},
+ defer(el){const t=by(el.dataset.id);stop(t.id);t.gone='later';S.open=null;toast('稍后再看，明天早上回来',()=>{delete t.gone});update(true)},
+ drop(el){const t=by(el.dataset.id);stop(t.id);t.gone='dropped';S.open=null;toast('已放弃这件事',()=>{delete t.gone});update(true)},
+ undo(){if(undo)undo();undo=null;S.toast=null;update(true)},
+ quickstart(){const t=addTodo(S.quick);if(t)startSession(t,false);else{const q=$('#quick');if(q)q.focus()}},
+ shownew(el){const on=document.body.classList.toggle('show-new');el.setAttribute('aria-pressed',on)},
+ theme(){const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;r.dataset.theme=dark?'light':'dark'},
+ reset(){Object.keys(timers).forEach(stop);S=fresh();undo=null;paint()},
+};
+document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el)return;A[el.dataset.act](el)});
+document.addEventListener('toggle',e=>{if(e.target.id==='peek')S.peek=e.target.open},true);
+document.addEventListener('input',e=>{if(e.target.id==='quick')S.quick=e.target.value});
+document.addEventListener('submit',e=>{
+  e.preventDefault();const f=e.target;
+  if(f.dataset.form==='quick'){if(addTodo(S.quick)){update(true);const q=$('#quick');if(q)q.focus()}}
+  if(f.dataset.form==='say'){
+    const s=by(f.dataset.id),x=$('#say').value.trim();if(!x)return;
+    s.term.push({k:'in',x});$('#say').value='';paint();
+    if(!/记/.test(x)){setTimeout(()=>{s.term.push({k:'say',x:'（演示）说“记一下”才会记成 ToDo。'});paint()},600);return}
+    const title=s.record?s.record.title:s.title;
+    setTimeout(()=>{s.term.push({k:'cmd',x:`mooring todo add "${title}" --session ${s.code}`});paint()},700);
+    setTimeout(()=>{
+      s.term.push({k:'say',x:'记好了。'});
+      Object.assign(s,{kind:'todo',id:'T-'+S.next++,title,said:x,from:'Agent 记的 · 来自会话 '+s.code,created:'今天 '+now(),day:'today',context:'',criteria:[],notes:[],sessions:[{code:s.code,title:s.words,state:s.state}]});
+      timers[s.id]=[];S.open=s.id;S.flash=s.id;S.did.record=true;update(true);
+    },1500);
+  }
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&S.open){S.open=null;paint();return}
+  if(e.target.id==='quick'&&e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();A.quickstart();return}
+  if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.act==='open'){e.target.click()}
+});
+S=fresh();paint();
+</script>
+</body>
+</html>
