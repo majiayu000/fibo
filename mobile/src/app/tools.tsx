@@ -22,14 +22,14 @@ const Row = memo(function Row({ call, onOpen }: { call: ToolCall; onOpen: (id: s
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${call.label || call.name}，${metaWords(call)}`}
+      accessibilityLabel={`${call.about || call.label || call.name}，${metaWords(call)}`}
       onPress={() => onOpen(call.id)}
       style={({ pressed }) => [s.row, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}
     >
       <Icon name={call.failed ? 'alert' : (ICONS[call.kind] ?? 'gear')} size={18} width={1.8} color={call.failed ? t.err : t.dim} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text numberOfLines={1} style={[s.label, { color: call.failed ? t.err : t.text }]}>
-          {call.label || '（没有说明）'}
+        <Text numberOfLines={call.about ? 2 : 1} style={[call.about ? s.about : s.label, { color: call.failed ? t.err : t.text }]}>
+          {call.about || call.label || '（没有说明）'}
         </Text>
         <Text numberOfLines={1} style={{ fontSize: 12, color: call.failed ? t.err : t.dim }}>
           {metaWords(call)}
@@ -158,5 +158,6 @@ export default function ToolsScreen() {
 const s = StyleSheet.create({
   row: { height: ROW, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, borderBottomWidth: 1 },
   label: { fontFamily: mono, fontSize: 13 },
+  about: { fontSize: 14, lineHeight: 20 },
   files: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, height: 50, borderBottomWidth: 1 },
 });

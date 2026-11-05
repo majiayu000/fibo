@@ -111,7 +111,7 @@ fn a_stretch_lists_its_calls_and_a_call_opens_whole() {
     assert_eq!(list["tools"]["commands"], 1);
     assert!(list.get("next").is_none() && list.get("gone").is_none());
     assert_eq!(
-        calls[0]["label"], "curl -H 'Authorization: Bearer [已隐藏]' [已隐藏]",
+        calls[0]["label"], "curl -H Authorization: Bearer",
         "a label is cleaned too"
     );
     assert_eq!(

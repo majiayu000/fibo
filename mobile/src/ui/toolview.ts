@@ -7,6 +7,8 @@ export type ToolCall = {
   name: string;
   kind: string;
   label: string;
+  /** What the Agent said it does. */
+  about?: string;
   at: number;
   took_ms?: number;
   failed: boolean;
@@ -41,14 +43,14 @@ export function took(ms: number | undefined): string {
 /** The tool's own name, an MCP tool's as `server · tool`. */
 export function toolName(name: string): string {
   const short = name.startsWith('mcp__') ? name.slice(5).replace('__', ' · ') : name;
-  return short === 'exec' ? '脚本' : short === 'exec_command' ? 'Bash' : short;
+  return short === 'exec' ? '脚本' : short === 'exec_command' || short === 'Bash' ? '命令' : short;
 }
 
 /** The dim line under a call: what happened to it, how long, how much. A title that already
  * names the tool leaves it out. */
 export function metaWords(call: ToolCall, named = true): string {
   const ending = call.failed ? (call.code !== undefined && call.code !== 0 ? `失败 · 退出码 ${call.code}` : '失败') : call.open ? '还没有结果' : '';
-  return [ending, named ? toolName(call.name) : '', took(call.took_ms), call.size !== undefined && !call.open ? bytes(call.size) : ''].filter(Boolean).join(' · ');
+  return [ending, named && call.kind !== 'command' ? toolName(call.name) : '', took(call.took_ms), call.size !== undefined && !call.open ? bytes(call.size) : ''].filter(Boolean).join(' · ');
 }
 
 /** A text as held on the phone while its page is open: the head grows towards the tail. */
@@ -90,6 +92,40 @@ export type ViewRow = { kind: 'line'; text: string; tone?: 'add' | 'del' } | { k
 /** Longest row drawn: a line past this goes on over the next rows, none is cut. */
 export const MOST_COLUMNS = 1000;
 
+/** A shell command read as steps: a new line after `&&`, `||` and `;`, before `|`, outside
+ * quotes. Only for reading; a copy keeps the text as it ran. A here-document stays as it is. */
+export function commandSteps(text: string): string {
+  if (text.includes('<<')) return text;
+  let out = '';
+  let quote = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\\') {
+      out += c + (text[++i] ?? '');
+      continue;
+    }
+    if (quote) {
+      if (c === quote) quote = '';
+      out += c;
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    const two = text.slice(i, i + 2);
+    if (two === '&&' || two === '||') {
+      out += `${two}\n`;
+      i++;
+      while (text[i + 1] === ' ') i++;
+    } else if (c === ';' && text[i + 1] !== ';' && text[i - 1] !== ';') {
+      out += ';\n';
+      while (text[i + 1] === ' ') i++;
+    } else if (c === '|' && text[i - 1] !== '>') {
+      out = `${out.trimEnd()}\n| `;
+      while (text[i + 1] === ' ') i++;
+    } else out += c;
+  }
+  return out;
+}
+
 function pushLines(rows: ViewRow[], text: string, diff: boolean) {
   if (!text) return;
   const lines = text.split('\n');
@@ -110,9 +146,10 @@ function pushLines(rows: ViewRow[], text: string, diff: boolean) {
 export function viewRows(l: Loaded, end: number, kind: string): ViewRow[] {
   const rows: ViewRow[] = [];
   const diff = kind === 'diff';
-  pushLines(rows, l.head, diff);
+  const shown = (t: string) => (kind === 'command' ? commandSteps(t) : t);
+  pushLines(rows, shown(l.head), diff);
   if (missing(l, end) > 0) rows.push({ kind: 'gap' });
-  pushLines(rows, l.tail, diff);
+  pushLines(rows, shown(l.tail), diff);
   return rows;
 }
 

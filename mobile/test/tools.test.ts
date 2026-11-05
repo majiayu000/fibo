@@ -1,7 +1,7 @@
 // A tool's text as the phone holds and draws it: bytes against the machine's offsets, the gap
 // between head and tail, rows of one height however long a line is.
 import { describe, expect, test } from 'bun:test';
-import { allText, byteLength, bytes, columns, extend, loaded, metaWords, missing, MOST_COLUMNS, took, toolName, viewRows } from '../src/ui/toolview';
+import { allText, byteLength, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, took, toolName, viewRows } from '../src/ui/toolview';
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
@@ -12,14 +12,14 @@ describe('words for a call', () => {
   });
   test('names read as people say them', () => {
     expect(toolName('mcp__playwright__browser_navigate')).toBe('playwright · browser_navigate');
-    expect([toolName('exec'), toolName('exec_command'), toolName('Read')]).toEqual(['脚本', 'Bash', 'Read']);
+    expect([toolName('exec'), toolName('exec_command'), toolName('Read')]).toEqual(['脚本', '命令', 'Read']);
   });
   test('a failure comes first, with its code when it has one', () => {
     const c = { id: 'a', name: 'Bash', kind: 'command', label: 'x', at: 1, took_ms: 3000, size: 2048 };
-    expect(metaWords({ ...c, failed: true, code: 101 })).toBe('失败 · 退出码 101 · Bash · 3 秒 · 2 KB');
-    expect(metaWords({ ...c, failed: true })).toBe('失败 · Bash · 3 秒 · 2 KB');
-    expect(metaWords({ ...c, failed: false })).toBe('Bash · 3 秒 · 2 KB');
-    expect(metaWords({ ...c, failed: false, open: true })).toBe('还没有结果 · Bash · 3 秒');
+    expect(metaWords({ ...c, failed: true, code: 101 })).toBe('失败 · 退出码 101 · 3 秒 · 2 KB');
+    expect(metaWords({ ...c, failed: true })).toBe('失败 · 3 秒 · 2 KB');
+    expect(metaWords({ ...c, failed: false })).toBe('3 秒 · 2 KB');
+    expect(metaWords({ ...c, failed: false, open: true })).toBe('还没有结果 · 3 秒');
     expect(metaWords({ ...c, failed: false }, false)).toBe('3 秒 · 2 KB');
   });
 });
@@ -80,5 +80,16 @@ describe('rows', () => {
     const rows = viewRows(loaded({ total: big.length, head: big, tail: '', tail_at: big.length }), big.length, 'text');
     expect(rows.length).toBe(200_000);
     expect(performance.now() - started).toBeLessThan(500);
+  });
+});
+
+describe('commandSteps', () => {
+  test('a chained command reads a step a line', () => {
+    expect(commandSteps('cd /a && FOO=1 cargo test 2>&1 | tail -3; echo done')).toBe('cd /a &&\nFOO=1 cargo test 2>&1\n| tail -3;\necho done');
+  });
+  test('quotes, a here-document and a redirect stay whole', () => {
+    expect(commandSteps(`git commit -m 'a && b; c | d'`)).toBe(`git commit -m 'a && b; c | d'`);
+    expect(commandSteps('cat <<E\na && b\nE')).toBe('cat <<E\na && b\nE');
+    expect(commandSteps('echo x >| f')).toBe('echo x >| f');
   });
 });

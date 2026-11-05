@@ -134,7 +134,8 @@ pub(super) fn tool_calls(socket: &Path, request: &Value) -> io::Result<Value> {
         let (name, args) = split_text(&row.text);
         let mut d = describe_tool(name, &args);
         // Cut down in the index to nothing to name it by: its raw line has the rest.
-        if d.label.is_empty() || (name == "exec" && args.get("input").is_none()) {
+        let cut = d.kind == "command" && d.about.is_empty() && name == "Bash";
+        if d.label.is_empty() || cut || (name == "exec" && args.get("input").is_none()) {
             if let Some(call) = raw
                 .as_mut()
                 .and_then(|l| l.line(row.inode, row.offset))
@@ -166,6 +167,7 @@ pub(super) fn tool_calls(socket: &Path, request: &Value) -> io::Result<Value> {
             name: name.to_owned(),
             kind: d.kind.to_owned(),
             label: clean(&d.label),
+            about: Some(clean(&d.about)).filter(|a| !a.is_empty()),
             at: row.at,
             took_ms: took(row, output.as_ref()),
             failed: bad,
@@ -283,6 +285,7 @@ pub(super) fn tool_call(socket: &Path, request: &Value) -> io::Result<Value> {
             name,
             kind: described.kind.to_owned(),
             label: clean(&described.label),
+            about: Some(clean(&described.about)).filter(|a| !a.is_empty()),
             at: row.at,
             took_ms: took(&row, output.as_ref()),
             failed: bad,

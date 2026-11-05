@@ -30,6 +30,9 @@ pub struct ToolCallInfo {
     pub kind: String,
     /// One line: the command, the file, the search.
     pub label: String,
+    /// What the Agent said it does, in its own words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<String>,
     pub at: u64,
     /// How long it took, when the log can say.
     #[serde(default, skip_serializing_if = "Option::is_none")]

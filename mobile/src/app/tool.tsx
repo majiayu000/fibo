@@ -147,6 +147,11 @@ export default function ToolScreen() {
         <ActivityIndicator style={{ marginTop: 40 }} />
       ) : (
         <>
+          {!!detail.about && (
+            <Text selectable style={{ marginHorizontal: 18, marginBottom: 10, fontSize: 15, lineHeight: 22, color: t.text }}>
+              {detail.about}
+            </Text>
+          )}
           {!!detail.label && (
             <Text numberOfLines={3} selectable style={[s.well, { backgroundColor: t.well, color: detail.failed ? t.err : t.text }]}>
               {detail.label}

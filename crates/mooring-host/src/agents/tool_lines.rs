@@ -151,6 +151,8 @@ pub(super) fn codex_result(line: &Value) -> Option<ToolOutput> {
 /// One call in words: for its row, and how to show its input.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Described {
+    /// What the Agent said this does, when it said.
+    pub about: String,
     /// `command`, `edit`, `read`, `search`, `web`, `agent` or `other`.
     pub kind: &'static str,
     pub label: String,
@@ -290,7 +292,11 @@ pub fn describe_tool(name: &str, args: &Value) -> Described {
                 .and_then(command_text)
                 .unwrap_or_default();
             d.kind = "command";
-            d.label = one_line(&cmd);
+            // What runs, without the `cd` and variables most commands open with. The
+            // input keeps the command whole.
+            d.label = mooring_core::content::command_gist(&crate::redact::redact(&cmd))
+                .unwrap_or_else(|| one_line(&cmd));
+            d.about = first_str(args, &["description"]).map_or_else(String::new, one_line);
             d.input = cmd;
             d.input_kind = "command";
         }
@@ -466,7 +472,10 @@ mod tests {
     #[test]
     fn labels_say_what_each_tool_did() {
         let label = |name: &str, args: Value| describe_tool(name, &args).label;
-        assert_eq!(label("Bash", json!({"command":"ls  -a\nmore"})), "ls -a …");
+        let cd = json!({"command":"cd /a/b && FOO=1 cargo test -p x 2>&1 | tail -3","description":"跑 x 的测试"});
+        assert_eq!(label("Bash", cd.clone()), "cargo test -p x");
+        assert_eq!(describe_tool("Bash", &cd).about, "跑 x 的测试");
+        assert_eq!(label("Bash", json!({"command":"cd /a/b"})), "cd /a/b");
         assert_eq!(label("Read", json!({"file_path":"/r/a.rs"})), "/r/a.rs");
         assert_eq!(
             label("Grep", json!({"pattern":"fn main","path":"src"})),
@@ -487,7 +496,12 @@ mod tests {
         );
         let long = format!("{} ghp_0123456789abcdefghijklmnopqrstuv", "x".repeat(190));
         let cut = label("Bash", json!({ "command": long }));
-        assert!(cut.contains("[已隐藏]") && !cut.contains("ghp_"), "{cut}");
+        assert!(!cut.contains("ghp_"), "{cut}");
+        let token = label(
+            "Bash",
+            json!({"command":"curl ghp_0123456789abcdefghijklmnopqrstuv"}),
+        );
+        assert_eq!(token, "curl [已隐藏]");
         let kept = describe_tool("Write", &json!({"file_path":"/r/big.txt","_lines":[300,0]}));
         assert_eq!(kept.label, "/r/big.txt");
     }
