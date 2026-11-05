@@ -34,7 +34,7 @@ fn fake(h: &Host, id: &str, first: &str, then: &str, swallow: u32, yes_first: bo
     let script = write(
         "sh",
         &format!(
-            "stty -icanon -echo -isig; at={start}; n=0; cat {a}; while :; do k=$(dd bs=3 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'); case \"$k\" in 1b) printf 'CHOSE=esc\\n';; 1b5b4?|1b4f4?) n=$((n+1)); if [ $n -gt {swallow} ]; then at={moved}; printf '\\033[2J\\033[H'; cat {b}; fi;; 0a|0d) printf 'CHOSE=%s\\n' $at;; esac; done"
+            "stty -icanon -echo -isig; at={start}; n=0; cat {a}; while kill -0 $PPID 2>/dev/null; do k=$(dd bs=3 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'); case \"$k\" in 1b) printf 'CHOSE=esc\\n';; 1b5b4?|1b4f4?) n=$((n+1)); if [ $n -gt {swallow} ]; then at={moved}; printf '\\033[2J\\033[H'; cat {b}; fi;; 0a|0d) printf 'CHOSE=%s\\n' $at;; esac; done"
         ),
     );
     h.launch(id, Path::new("/tmp"), &format!("exec /bin/sh {script}"));

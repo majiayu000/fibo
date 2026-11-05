@@ -1,6 +1,8 @@
 //! What the phone v2 protocol tests share: a host of their own from the test binary
 //! (`common::daemon_fixture`) and `mooring remote --stdio` speaking to it.
 #![allow(dead_code)]
+#[path = "../support/tied.rs"]
+pub mod tied;
 use mooring_core::{model::*, protocol::*};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
@@ -9,10 +11,11 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use std::{fs, io};
+pub use tied::SpawnTied;
 
 /// A host on its own runtime and log roots, from this binary (`daemon_fixture`).
 pub struct Host {
-    child: Child,
+    child: tied::Tied,
     pub root: PathBuf,
 }
 impl Host {
@@ -39,7 +42,7 @@ impl Host {
             .env("MOORING_REMOTE_EXE", env!("CARGO_BIN_EXE_mooring"))
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         let h = Self { child, root };
         let until = Instant::now() + Duration::from_secs(30);
@@ -197,8 +200,7 @@ impl Drop for Host {
                 let _ = self.call(Request::Stop { id: t.id });
             }
         }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.kill_tree();
         let _ = fs::remove_dir_all(&self.root);
     }
 }

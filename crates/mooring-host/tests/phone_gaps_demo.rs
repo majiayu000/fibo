@@ -370,7 +370,7 @@ fn phone_gaps_demo() {
             .env("CLAUDE_CONFIG_DIR", h.root.join("claude-home"))
             .env("CODEX_HOME", h.root.join("codex-home"))
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         machine.wait().ok();
         std::thread::sleep(std::time::Duration::from_secs(5));
