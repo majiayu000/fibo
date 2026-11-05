@@ -1,6 +1,7 @@
 //! Meaning colors for everything that is not a session: a form error, a used-up quota,
 //! the host link, a phone's connection, a plugin's line. They never borrow a session
-//! status color, so recoloring 在跑 or 等你回答 leaves them alone (specs/status-model).
+//! status color, so recoloring 在跑 or 等你回答 leaves them alone (Keepline repo,
+//! specs/status-model).
 use super::theme::{Theme, hsla, tone_of};
 use gpui::Hsla;
 
@@ -81,8 +82,8 @@ mod tests {
             .collect()
     }
 
-    /// One judgment (specs/status-model): what a session is doing is decided in
-    /// `mooring_core::status`, so no view reads the turn and decides for itself.
+    /// One judgment (Keepline repo, specs/status-model): what a session is doing is
+    /// decided in `mooring_core::status`, so no view reads the turn and decides for itself.
     #[test]
     fn views_never_judge_a_turn_themselves() {
         for (name, code) in product_code() {

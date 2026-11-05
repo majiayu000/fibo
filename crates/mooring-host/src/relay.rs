@@ -3,11 +3,11 @@
 //! that opens `/c/<token>/mooring` is one remote-protocol session, the same as
 //! `remote --stdio`, run inside a Noise channel the relay cannot read.
 //!
-//! Two secrets, both next to the socket and readable only by this user:
-//! - `remote-code`, the machine's: phones find it on the relay by a token derived from it.
-//! - one key per phone, in `remote-devices.json`: its handshake proves it holds it, and
-//!   the key decides what it may do. Unpairing a phone drops its open sessions too.
-//!
+//! Next to the socket, readable only by this user: the machine's `remote-code`, which it
+//! registers with and no pairing link carries; per phone, in `remote-devices.json`, its
+//! own route code (its link carries it) and a key its handshake proves, deciding what it
+//! may do. Only phones whose route hashes this machine lists reach it (`devices::routes`,
+//! resent as `Frame::Routes` on pair and unpair); unpairing drops their open sessions.
 //! `--pair --relay <url>` pairs a phone and prints its link and QR code; `--devices`
 //! lists them, `--revoke` unpairs one, `--new-code` replaces the code and unpairs all.
 use crate::control::Args;

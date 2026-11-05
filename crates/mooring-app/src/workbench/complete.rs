@@ -3,7 +3,7 @@
 //! of the run's progress `t`, drawn partly in the pane (button, veil, words, lids) and
 //! partly on a window-wide overlay so it can leave the pane and land in the sidebar row.
 //! 「留着这个画面」 keeps the pane open; the session stays completed either way.
-//! Prototype of every style: specs/complete-animation/directions.html.
+//! Prototype of every style: docs/complete-animation/directions.html.
 use super::layout::PaneAction;
 use super::*;
 use gpui::{Bounds, Hsla, PathBuilder, Pixels, Point, point, size};
