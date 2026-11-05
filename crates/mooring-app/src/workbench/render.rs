@@ -281,11 +281,8 @@ impl Render for Workbench {
                     (*attention, std::cmp::Reverse(super::layout::urgency(*g)))
                 })
                 .map(|(g, _)| g);
-            // Whose tab it is: the CLI of its first pane with a conversation.
-            let agent = ids
-                .iter()
-                .find_map(|id| self.pane_session(id))
-                .map(|s| s.runtime);
+            // A recognized CLI has a mark before its first conversation, too.
+            let agent = ids.iter().find_map(|id| self.pane_agent(id));
             if let Some((_, field, _)) =
                 self.layout.renaming_tab.as_ref().filter(|(t, ..)| t == &id)
             {
