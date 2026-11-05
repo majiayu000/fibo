@@ -3,6 +3,7 @@
 use super::*;
 mod edit;
 mod once;
+mod stop;
 mod tool_rows;
 mod typing;
 pub(super) use typing::*;
@@ -505,28 +506,10 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             );
             Ok(Reply::Workspace(host.snapshot()))
         }
-        Request::Chat {
-            session,
-            after,
-            before,
-            limit,
-            tools,
-        } => {
-            let host = lock(shared)?;
-            let s = host
-                .workspace
-                .agent_sessions
-                .iter()
-                .find(|s| s.id == session)
-                .ok_or_else(|| io::Error::other("会话不存在"))?;
-            let (messages, more) = host
-                .index
-                .chat(&s.transcript, after, before, limit, tools)?;
-            Ok(Reply::Chat { messages, more })
-        }
-        request @ (Request::ToolCalls { .. } | Request::ToolCall { .. }) => {
-            tool_rows::dispatch(shared, request)
-        }
+        request @ (Request::Chat { .. }
+        | Request::ToolCalls { .. }
+        | Request::ToolCall { .. }
+        | Request::Backfill { .. }) => tool_rows::dispatch(shared, request),
         Request::ReadScreen { id, rows } => {
             let host = lock(shared)?;
             let terminal = host
@@ -582,6 +565,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             interrupt(shared, &id)?;
             Ok(Reply::Ok)
         }
+        Request::AwaitInterrupt { id } => stop::await_interrupt(shared, &id),
         Request::RemoteConfigure {
             enabled,
             relay,

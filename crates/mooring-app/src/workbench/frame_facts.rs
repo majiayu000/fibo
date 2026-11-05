@@ -104,6 +104,18 @@ impl FrameFacts {
         w.agent_sessions.get(*self.latest.get(terminal)?)
     }
 
+    fn pane_agent(
+        &self,
+        w: &Workspace,
+        recognized: &HashMap<String, Agent>,
+        terminal: &str,
+    ) -> Option<Agent> {
+        self.current_agent(w, terminal)
+            .map(|s| s.runtime)
+            .or_else(|| recognized.get(terminal).copied())
+            .or_else(|| self.latest(w, terminal).map(|s| s.runtime))
+    }
+
     fn current_on<'a>(&self, w: &'a Workspace, terminals: &[String]) -> Vec<&'a AgentSession> {
         let mut at: Vec<usize> = terminals
             .iter()
@@ -170,6 +182,16 @@ impl Workbench {
         facts
             .current_agent(&self.workspace, terminal)
             .or_else(|| facts.latest(&self.workspace, terminal))
+    }
+
+    /// The CLI's mark and name do not require an associated conversation. A newly
+    /// recognized process takes precedence over the pane's historical conversation.
+    pub(super) fn pane_agent(&self, terminal: &str) -> Option<Agent> {
+        self.facts().pane_agent(
+            &self.workspace,
+            &self.store.recognition().terminal_agents,
+            terminal,
+        )
     }
 
     /// The current sessions of these terminals, in workspace order.

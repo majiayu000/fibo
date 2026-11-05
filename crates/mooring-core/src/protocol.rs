@@ -143,6 +143,11 @@ pub enum Request {
     Stop {
         id: String,
     },
+    /// Reads the next stretch of a conversation's log that its first read skipped, on a thread
+    /// and a connection of its own at low priority, so a long log holds nothing else up.
+    Backfill {
+        session: String,
+    },
     /// A phone's chat view: one conversation's user and Agent messages from the index,
     /// oldest first. `after` gives those newer than a `seq`; otherwise the newest `limit`,
     /// or those older than `before`.
@@ -213,9 +218,18 @@ pub enum Request {
         folder: String,
         trust: bool,
     },
-    /// Ctrl-C, the window's 中断, only while the conversation in the terminal is working:
-    /// what its turn was at that moment decides, not what a client saw earlier.
+    /// Interrupts the turn of the conversation in the terminal, with the key its CLI takes
+    /// for that (`Adapter::interrupt_key`), only while it is working: what its turn was at
+    /// that moment decides, not what a client saw earlier. The window's 中断这一轮 and a
+    /// phone's 停下 are both this and [`Request::AwaitInterrupt`].
     Interrupt {
+        id: String,
+    },
+    /// After [`Request::Interrupt`]: replies [`Reply::Interrupted`] once the state says the
+    /// turn ended, with the Agent still there, and closes a command the turn left running.
+    /// Refused if it does not end within seconds or the Agent left. A key sent is not a turn
+    /// stopped. Outside `Once`: its one lock would hold every other answer up meanwhile.
+    AwaitInterrupt {
         id: String,
     },
     /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `SendInput`,
@@ -396,10 +410,22 @@ pub enum Reply {
     },
     Ok,
     Text(String),
+    /// [`Request::AwaitInterrupt`]: the turn ended; whether a command it left was closed too.
+    Interrupted {
+        closed_background: bool,
+    },
     /// `Chat`: the messages, oldest first, and whether older ones exist before them.
+    /// `partial`: older lines of its log have not been read in yet ([`Request::Backfill`]).
     Chat {
         messages: Vec<ChatMessage>,
         more: bool,
+        #[serde(default)]
+        partial: bool,
+    },
+    /// [`Request::Backfill`]: messages found; `done` once the log is read back to its start.
+    Backfilled {
+        added: u32,
+        done: bool,
     },
     /// `ToolCalls`; `tools` on the stretch's first page, `next` the cursor while more follow.
     ToolCalls {
@@ -614,8 +640,7 @@ pub struct RecognitionStatus {
     /// `terminal_hints` so the app shows any CLI's note without knowing which CLI it is.
     #[serde(default)]
     pub terminal_notes: std::collections::HashMap<String, TerminalNote>,
-    /// Terminal -> the Agent behind its note, so the app knows what runs there without
-    /// reading the note's words.
+    /// Terminal -> the recognized unbound Agent, even before any transcript or note.
     #[serde(default)]
     pub terminal_agents: std::collections::HashMap<String, crate::agent::Agent>,
     /// Terminal -> the question an Agent asks before anything else: whether to trust the

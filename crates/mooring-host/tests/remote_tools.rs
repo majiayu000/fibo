@@ -415,8 +415,8 @@ fn a_log_read_only_from_its_end_says_so() {
     );
     assert_eq!(page["partial"], true);
     let page = r.ok(json!({ "op": "chat", "session": none }));
-    // Only the first ask, which a recent log's opening always gives, and no answer to it.
-    assert_eq!(page["messages"].as_array().unwrap().len(), 1);
+    // Nothing yet, not even the first ask kept from its head: that lies past what was skipped.
+    assert_eq!(page["messages"].as_array().unwrap().len(), 0);
     assert_eq!(page["partial"], true);
 }
 

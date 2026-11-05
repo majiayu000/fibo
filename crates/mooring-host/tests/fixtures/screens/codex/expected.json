@@ -8,7 +8,8 @@
       "kind": "Command",
       "subject": "cargo test --workspace"
     },
-    "always": "a"
+    "always": "a",
+    "always_label": "允许，这条命令这次会话里不再询问"
   },
   "approval-edits.txt": {
     "state": "waiting",
@@ -46,7 +47,8 @@
       "subject": "touch /tmp/probe",
       "note": "Allow the exact requested command to create /tmp/probe?"
     },
-    "always": "p"
+    "always": "p",
+    "always_label": "允许，`touch /tmp/mooring-lab-approval-probe` 开头的命令以后不再询问"
   },
   "approval-edits-real.txt": {
     "state": "waiting",
@@ -58,7 +60,8 @@
       "subject": "/Users/x/t/edit.txt",
       "note": "Apply proposed file edits"
     },
-    "always": "a"
+    "always": "a",
+    "always_label": "允许，这些文件以后不再询问"
   },
   "trust-real.txt": {
     "state": "idle",
