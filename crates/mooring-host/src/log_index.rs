@@ -118,7 +118,7 @@ impl Index {
             CREATE TABLE IF NOT EXISTS log_scan_dirs(path TEXT PRIMARY KEY,runtime TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS log_files(path TEXT PRIMARY KEY,runtime TEXT NOT NULL,dev INTEGER NOT NULL,inode INTEGER NOT NULL,offset INTEGER NOT NULL,pending BLOB NOT NULL,discard INTEGER NOT NULL,cli_id TEXT,cwd TEXT,updated INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS log_identity ON log_files(runtime,cli_id);
-            CREATE TABLE IF NOT EXISTS log_roots(runtime TEXT PRIMARY KEY);").map_err(err)?;
+            CREATE TABLE IF NOT EXISTS log_scan_roots(runtime TEXT NOT NULL,path TEXT NOT NULL,PRIMARY KEY(runtime,path));").map_err(err)?;
         crate::content::schema(&db)?;
         let roots = roots
             .into_iter()
@@ -183,8 +183,8 @@ impl Index {
             )
             .map_err(err)?;
             tx.execute(
-                "INSERT OR IGNORE INTO log_roots VALUES(?1)",
-                [agent.executable()],
+                "INSERT OR IGNORE INTO log_scan_roots VALUES(?1,?2)",
+                params![agent.executable(), path.to_string_lossy()],
             )
             .map_err(err)?;
         }
@@ -192,18 +192,16 @@ impl Index {
         self.counts.writes += 1;
         Ok(event)
     }
-    /// A CLI supported after this index was built gets its one directory walk. CLIs the
-    /// index already holds files or pending directories for count as walked.
+    /// Each runtime/root pair gets one directory walk. The runtime alone cannot say
+    /// that a different directory's existing files have already been imported.
     fn seed_new_roots(&mut self) -> io::Result<()> {
         let tx = self.db.transaction().map_err(err)?;
         let mut seeded = false;
         for (agent, path) in &self.roots {
             let known: bool = tx
                 .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM log_roots WHERE runtime=?1)
-                        OR EXISTS(SELECT 1 FROM log_files WHERE runtime=?1)
-                        OR EXISTS(SELECT 1 FROM log_scan_dirs WHERE runtime=?1)",
-                    [agent.executable()],
+                    "SELECT EXISTS(SELECT 1 FROM log_scan_roots WHERE runtime=?1 AND path=?2)",
+                    params![agent.executable(), path.to_string_lossy()],
                     |r| r.get(0),
                 )
                 .map_err(err)?;
@@ -216,8 +214,8 @@ impl Index {
                 seeded = true;
             }
             tx.execute(
-                "INSERT OR IGNORE INTO log_roots VALUES(?1)",
-                [agent.executable()],
+                "INSERT OR IGNORE INTO log_scan_roots VALUES(?1,?2)",
+                params![agent.executable(), path.to_string_lossy()],
             )
             .map_err(err)?;
         }
