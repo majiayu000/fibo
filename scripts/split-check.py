@@ -165,6 +165,17 @@ def audit(args):
                 if git('cat-file', '-t', f'{args.end}:{f}').strip() == 'blob' and f'"{short}"' not in listed and not short.endswith('_tests.rs'):
                     problems.append(sha)
                     print(f'TRAP {short}: not in the color guard list in ui/theme.rs')
+    # MOORING_GUARD_UPDATE turns a guard green whatever moved, so its totals are checked here.
+    def totals(rev):
+        counts = collections.Counter()
+        for row in git('show', f'{rev}:crates/mooring-core/tests/guard-baseline.txt').splitlines():
+            kind, _, n = row.split('\t')
+            counts[kind] += int(n)
+        return counts
+    grown = totals(args.end) - totals(args.base)
+    for kind, n in sorted(grown.items()):
+        problems.append(kind)
+        print(f'GUARD {kind}: {n} more than at the base; a split only moves these')
     print(f'{done} split commits, {len(problems)} to read by hand')
     return 1 if problems or not done else 0
 
