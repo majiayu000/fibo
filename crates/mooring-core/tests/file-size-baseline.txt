@@ -1,2 +1,2 @@
 crates/mooring-app/src/harness.rs	3315
-crates/mooring-app/src/workbench/visual.rs	1826
+crates/mooring-app/src/workbench/visual.rs	1741

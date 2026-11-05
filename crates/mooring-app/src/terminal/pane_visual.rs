@@ -5,21 +5,17 @@ use gpui::{Bounds, Context, EntityInputHandler, Pixels, Window};
 use mooring_core::terminal::libghostty_vt::terminal::ScrollViewport;
 
 impl Pane {
-    #[cfg(feature = "visual-test")]
     pub fn visual_type(&mut self, text: &str, cx: &mut Context<Self>) {
         self.input(text.as_bytes().to_vec(), cx);
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_cursor_shape(&self) -> screen::CursorShape {
         self.screen.cursor_shape
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_run_fg(&self, text: &str) -> Option<u32> {
         let mut runs = self.screen.rows.iter().flatten();
         runs.find(|r| r.text.contains(text)).map(|r| r.fg)
     }
     /// The visible screen as text, for checking what reached the program.
-    #[cfg(feature = "visual-test")]
     pub fn visual_text(&self) -> String {
         let state = self.connection.state.lock().unwrap();
         state
@@ -32,7 +28,6 @@ impl Pane {
             .unwrap_or_default()
     }
     /// The rows the viewport shows now, scrolled back or not.
-    #[cfg(feature = "visual-test")]
     pub fn visual_text_shown(&self) -> String {
         let rows: Vec<String> = self
             .screen
@@ -42,17 +37,14 @@ impl Pane {
             .collect();
         rows.join("\n")
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_bounds(&self) -> Option<Bounds<Pixels>> {
         self.bounds
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_viewport(&self) -> (usize, usize, usize) {
         self.viewport
     }
     /// Where each ask was found, and what is pinned: the newest ask's text and whether
     /// it scrolls back, and the text of the ask whose answer is being read.
-    #[cfg(feature = "visual-test")]
     pub fn visual_pinned_ask(
         &self,
     ) -> (Vec<Option<usize>>, Option<(String, bool)>, Option<String>) {
@@ -66,12 +58,10 @@ impl Pane {
         )
     }
     /// Scrolls history so `row` is the top row, as the scrollbar would.
-    #[cfg(feature = "visual-test")]
     pub fn visual_scroll_row(&mut self, row: usize, cx: &mut Context<Self>) {
         self.scroll_to(ScrollViewport::Row(row), cx);
     }
     /// Opens search with `query` and runs it, as typing it and pressing Enter does.
-    #[cfg(feature = "visual-test")]
     pub fn visual_search(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.open_search(window, cx);
         let field = self.search.field.clone().unwrap();
@@ -81,19 +71,16 @@ impl Pane {
         });
         self.find_text(cx);
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_matches(&self) -> (Option<usize>, Vec<usize>) {
         (
             self.search.current_match,
             self.search.matches.iter().map(|m| m.row).collect(),
         )
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_step_match(&mut self, step: isize, cx: &mut Context<Self>) {
         self.step_match(step, cx);
     }
     /// The window point at the middle of cell (`row`, `col`).
-    #[cfg(feature = "visual-test")]
     pub fn visual_cell(&self, row: u16, col: u16) -> Option<gpui::Point<Pixels>> {
         let (bounds, metrics) = (self.bounds?, self.metrics?);
         Some(gpui::point(
@@ -102,23 +89,19 @@ impl Pane {
         ))
     }
     /// The selected columns (inclusive) on each viewport row, as drawn.
-    #[cfg(feature = "visual-test")]
     pub fn visual_selection_cols(&self) -> Vec<Option<(u16, u16)>> {
         self.screen.selection.clone()
     }
     /// ⌘= / ⌘- / ⌘0 on the terminal text, as the shortcuts do.
-    #[cfg(feature = "visual-test")]
     pub fn visual_zoom(&mut self, step: Option<i8>, cx: &mut Context<Self>) {
         screen::zoom(step).unwrap();
         cx.refresh_windows();
     }
     /// The viewport rows the selection is drawn on, and the text it would copy.
-    #[cfg(feature = "visual-test")]
     pub fn visual_selection(&self) -> (Vec<u16>, Option<String>) {
         self.visual_selection_drawn().0
     }
     /// Also the text drawn on those rows.
-    #[cfg(feature = "visual-test")]
     pub fn visual_selection_drawn(&self) -> ((Vec<u16>, Option<String>), Vec<String>) {
         let drawn = (self.screen.selection.iter().zip(&self.screen.rows))
             .filter(|(s, _)| s.is_some())
@@ -137,18 +120,15 @@ impl Pane {
         let text = self.selected_text();
         ((rows, text), drawn)
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_error(&self) -> Option<String> {
         self.local_error
             .clone()
             .or_else(|| self.connection.state.lock().ok()?.error.clone())
     }
-    #[cfg(feature = "visual-test")]
     pub fn visual_select_hint(&mut self, cx: &mut Context<Self>) {
         self.show_toast(SELECT_HINT, cx);
     }
     /// Where the link whose target starts with `prefix` is drawn, and its cell count.
-    #[cfg(feature = "visual-test")]
     pub fn visual_link(&self, prefix: &str) -> Option<(gpui::Point<Pixels>, u16)> {
         let (bounds, metrics) = (self.bounds?, self.metrics?);
         let link = self
@@ -165,7 +145,6 @@ impl Pane {
         ))
     }
     /// Whether the viewport shows the live screen rather than scrollback.
-    #[cfg(feature = "visual-test")]
     pub fn visual_at_bottom(&self) -> bool {
         let state = self.connection.state.lock().unwrap();
         state
@@ -174,7 +153,6 @@ impl Pane {
             .is_some_and(|v| v.terminal().viewport_active().unwrap_or(false))
     }
     /// Where the path word `word` is drawn, and the file it points to once hovered.
-    #[cfg(feature = "visual-test")]
     pub fn visual_path(
         &self,
         word: &str,
@@ -194,12 +172,10 @@ impl Pane {
         ))
     }
     /// The note shown beside the pointer for a click on what it is over.
-    #[cfg(feature = "visual-test")]
     pub fn visual_hint(&self) -> Option<String> {
         self.click_hint()
     }
     /// Whether the program in this pane asked for mouse reports, and where to click it.
-    #[cfg(feature = "visual-test")]
     pub fn visual_mouse_app(&self) -> (bool, Option<gpui::Point<Pixels>>) {
         let state = self.connection.state.lock().unwrap();
         let tracking = state
@@ -208,7 +184,6 @@ impl Pane {
             .is_some_and(|v| v.terminal().is_mouse_tracking().unwrap_or(false));
         (tracking, self.bounds.map(|b| b.center()))
     }
-    #[cfg(feature = "visual-test")]
     pub fn verify_marked_overlay(
         &mut self,
         window: &mut Window,
@@ -241,7 +216,6 @@ impl Pane {
         eprintln!("Pane IME handler: overlay={range:?}, requested caret={caret:?}");
         range
     }
-    #[cfg(feature = "visual-test")]
     fn shown_path(&self) -> Option<&std::path::PathBuf> {
         self.shown_target().map(|t| &t.path)
     }
