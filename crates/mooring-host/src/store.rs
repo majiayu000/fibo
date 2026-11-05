@@ -16,12 +16,13 @@ fn enum_name<T: serde::Serialize>(value: &T) -> io::Result<String> {
 fn enum_value<T: serde::de::DeserializeOwned>(name: String) -> io::Result<T> {
     serde_json::from_value(serde_json::Value::String(name)).map_err(db_error)
 }
-/// A criterion's evidence column: a JSON list of attached session records. Older rows hold
-/// NULL or a bare source reference no build ever wrote from the app; both read as none.
-fn criterion_evidence(column: Option<String>) -> Vec<CriterionEvidence> {
-    column
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+/// A criterion's evidence column: a JSON list of attached session records, NULL when there
+/// is none. Anything else fails the load rather than quietly dropping what proved it.
+fn criterion_evidence(column: Option<String>) -> io::Result<Vec<CriterionEvidence>> {
+    column.map_or(Ok(vec![]), |text| {
+        serde_json::from_str(&text)
+            .map_err(|e| io::Error::other(format!("验收条件的证据列不是证据列表：{e}")))
+    })
 }
 
 impl Store {
@@ -62,7 +63,10 @@ impl Store {
                 "旧实验库仍使用 workspace JSON；请指定新的隔离目录，不自动迁移或删除",
             ));
         }
-        db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
+        // WAL + NORMAL (docs/plan.md, stage 3): a crashed process loses nothing; only power loss
+        // or an OS crash can drop the last few commits. Layout, tasks and outcomes can take that,
+        // and commits under the host lock no longer fsync every time.
+        db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
             CREATE TABLE IF NOT EXISTS meta (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
             INSERT OR IGNORE INTO meta VALUES(1,0);
             CREATE TABLE IF NOT EXISTS app_settings (id INTEGER PRIMARY KEY CHECK(id=1), notifications INTEGER NOT NULL, stale_days INTEGER NOT NULL, away_minutes INTEGER NOT NULL, default_agent TEXT NOT NULL);
@@ -268,7 +272,7 @@ impl Store {
                 .push(AcceptanceCriterion {
                     id: r.get(1).map_err(db_error)?,
                     description: r.get(2).map_err(db_error)?,
-                    evidence: criterion_evidence(r.get(3).map_err(db_error)?),
+                    evidence: criterion_evidence(r.get(3).map_err(db_error)?)?,
                 });
         }
         // Tabs are deleted when closed. Rows an older build only marked closed, and tabs

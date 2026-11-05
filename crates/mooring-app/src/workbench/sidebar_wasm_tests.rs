@@ -163,7 +163,7 @@ fn a_reply_too_big_to_draw_is_refused() {
 }
 
 /// What one left-column draw spends on a real workspace, step by step, for the
-/// "is incremental input worth it" question in specs/plugins/plugin-system.md.
+/// "is incremental input worth it" question in docs/plugin-system/spec.md.
 /// `MOORING_WS_JSON=<Workspace JSON> cargo test --release -p mooring-app
 /// sidebar_cost_on_a_real_workspace -- --ignored --nocapture`
 #[test]
@@ -274,7 +274,7 @@ fn sidebar_cost_on_a_real_workspace() {
     eprintln!("合计: p50 {:.0} µs, p95 {:.0} µs", totals[100], totals[190]);
 }
 
-/// The words a module can see are the table in specs/plugins/plugin-system.md; a new
+/// The words a module can see are the table in docs/plugin-system/spec.md; a new
 /// one belongs there too.
 #[test]
 fn modules_see_only_the_documented_group_words() {
