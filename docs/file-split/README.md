@@ -127,7 +127,9 @@ cargo test -p mooring-core --test file_size --test guard
 
 ## 验收命令
 
-全程在同一台机器上跑，别的编译尽量停掉，屏幕不要锁。
+全程在同一台机器上跑，别的编译尽量停掉，屏幕不要锁。基线和终点必须是同一台，换机器就要重测基线。
+
+没有完整 Xcode 的机器也能跑：脚本发现没有 Xcode 时，只在验收用的 worktree 里给 GPUI 打开 `runtime_shaders`，不用 metal 编译器。这样编出来的着色器加载方式和正式版不同，所以这台机器上 `perf-gate` 对仓库基线的结论不算数，只比基线和终点两边的数字。
 
 ```sh
 python3 scripts/split-check.py self-test

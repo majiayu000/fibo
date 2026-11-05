@@ -19,7 +19,9 @@ import argparse, collections, hashlib, json, os, pathlib, re, shutil, struct, su
 
 BASE = pathlib.Path(__file__).resolve().parents[1]
 CACHE = pathlib.Path.home() / 'Library/Caches/MooringVisual'
-ENV = {**os.environ, 'DEVELOPER_DIR': '/Applications/Xcode.app/Contents/Developer', 'LIBGHOSTTY_VT_SYS_OPTIMIZE': 'ReleaseFast'}
+XCODE = '/Applications/Xcode.app/Contents/Developer'
+ENV = {**os.environ, 'LIBGHOSTTY_VT_SYS_OPTIMIZE': 'ReleaseFast', **({'DEVELOPER_DIR': XCODE} if os.path.isdir(XCODE) else {})}
+APP_MANIFEST = 'crates/mooring-app/Cargo.toml'
 SPLIT = 'refactor(split):'
 # Files a split commit may touch besides Rust sources.
 BOOKKEEPING = {'crates/mooring-core/tests/file-size-baseline.txt', 'crates/mooring-core/tests/guard-baseline.txt', 'docs/file-split/README.md'}
@@ -294,6 +296,13 @@ def measure(args):
         (work / '.deps').symlink_to((BASE / '.deps').resolve())
     git('reset', '-q', '--hard', cwd=work)
     git('checkout', '-q', '--detach', sha, cwd=work)
+    if not os.path.isdir(XCODE):
+        # No metal compiler here: GPUI compiles its shaders at start instead. Both sides of a
+        # comparison build the same way; perf-gate's numbers don't match the committed baseline.
+        manifest = work / APP_MANIFEST
+        text = manifest.read_text()
+        assert 'features = ["font-kit"]' in text, APP_MANIFEST
+        manifest.write_text(text.replace('features = ["font-kit"]', 'features = ["font-kit", "runtime_shaders"]'))
     # Scenes need a window being drawn: keep the display awake for this run.
     awake = subprocess.Popen(['caffeinate', '-dimsu', '-w', str(os.getpid())])
     r = {'sha': sha}
