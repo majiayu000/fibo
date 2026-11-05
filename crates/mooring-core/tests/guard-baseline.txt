@@ -44,7 +44,7 @@ field turn_started	crates/mooring-app/src/desktop.rs	1
 field turn_started	crates/mooring-app/src/workbench/board.rs	1
 field turn_started	crates/mooring-app/src/workbench/layout/turn_bar.rs	2
 field turn_started	crates/mooring-app/src/workbench/sessions.rs	3
-field turn_started	crates/mooring-app/src/workbench/sidebar.rs	1
+field turn_started	crates/mooring-app/src/workbench/sidebar/view.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_flat.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_list.rs	1
 field turn_started	crates/mooring-app/src/workbench/sidebar_recent.rs	1
