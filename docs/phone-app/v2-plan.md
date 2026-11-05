@@ -419,7 +419,11 @@
 
 ### 已验 / 没验
 
-已验：全量 `cargo test`（core、remote、host、relay）641 个通过、0 失败、31 个按设计忽略；`cargo fmt --check`、`clippy --workspace --all-targets -D warnings`；`bun test` 100 个通过；两个 tsc 配置；`expo-doctor` 20/20。第 1、2 条的 19 个变异全部有测试失败。真 Codex 见第 2、3 节。网页版看过截图。
+已验（变基到 origin/main 后）：全量 `cargo test`（core、remote、host、relay）657 个通过、0 失败、31 个按设计忽略；`cargo fmt --check`、`clippy --workspace --all-targets -D warnings`；`bun test` 109 个通过；两个 tsc 配置；`expo-doctor` 20/20。网页真实触摸 15 项和旧新对照的新版一侧在变基中途重跑过，手机代码之后没变。
+
+变基前做的，之后没重做：第 1、2 条的 19 个变异，真 Codex，真后台的网页走查，耗时和内存。
+
+变基时全量跑过一次有 3 个失败，都发生在机器负载 50 到 70 时：`remote_ask_names_the_command_and_answers_only_about_it` 和 `remote_answer_always_takes_dont_ask_again_and_refuses_a_menu_without_it` 是等绑定超时，单独连跑 3 次全过；`a_dialog_gone_from_the_screen_is_settled_by_claude_official_status` 在负载 50 多时单独跑 5 次败 3 次，负载 25 左右本分支 8 次全过、origin/main 6 次全过。没在高负载下跑过 origin/main，所以它是不是这个分支引入的没有排除干净。
 
 没验：
 
