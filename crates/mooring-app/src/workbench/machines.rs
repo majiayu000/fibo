@@ -13,7 +13,13 @@ use mooring_remote::protocol::{Card, Phase};
 impl Workbench {
     /// One connection per machine in `<config>/machines.json`; with none, nothing runs.
     pub(super) fn start_machines(cx: &mut Context<Self>) -> Vec<Remote> {
-        let specs = crate::machines::load();
+        let specs = match crate::machines::load() {
+            Ok(specs) => specs,
+            Err(e) => {
+                eprintln!("读取其他电脑配置失败：{e}");
+                return Vec::new();
+            }
+        };
         if specs.is_empty() {
             return Vec::new();
         }

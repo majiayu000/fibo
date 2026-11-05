@@ -80,15 +80,37 @@ pub fn file() -> Option<PathBuf> {
     mooring_core::agent::config_dir().map(|d| d.join("machines.json"))
 }
 
-pub fn load() -> Vec<Spec> {
-    file()
-        .and_then(|f| std::fs::read(f).ok())
-        .and_then(|b| serde_json::from_slice(&b).ok())
-        .unwrap_or_default()
+pub fn load() -> io::Result<Vec<Spec>> {
+    load_from(&file().ok_or_else(|| io::Error::other("找不到配置目录"))?)
+}
+
+fn load_from(file: &std::path::Path) -> io::Result<Vec<Spec>> {
+    let bytes = match std::fs::read(file) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(io::Error::new(
+                e.kind(),
+                format!("读不了 {}：{e}", file.display()),
+            ));
+        }
+    };
+    serde_json::from_slice(&bytes).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{} 格式不对：{e}", file.display()),
+        )
+    })
 }
 
 pub fn save(specs: &[Spec]) -> io::Result<()> {
-    let f = file().ok_or_else(|| io::Error::other("找不到配置目录"))?;
+    save_to(
+        &file().ok_or_else(|| io::Error::other("找不到配置目录"))?,
+        specs,
+    )
+}
+
+fn save_to(f: &std::path::Path, specs: &[Spec]) -> io::Result<()> {
     if let Some(dir) = f.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -108,7 +130,7 @@ fn with_quiet(mut specs: Vec<Spec>, host: &str, quiet: bool) -> Option<Vec<Spec>
 }
 /// Sets 先不管 on what the file holds now, leaving everything else in it alone.
 pub fn set_quiet(host: &str, quiet: bool) -> io::Result<()> {
-    let specs = with_quiet(load(), host, quiet)
+    let specs = with_quiet(load()?, host, quiet)
         .ok_or_else(|| io::Error::other(format!("machines.json 里没有 {host}")))?;
     save(&specs)
 }
@@ -124,7 +146,14 @@ fn keep_quiet(mut next: Vec<Spec>, saved: &[Spec]) -> Vec<Spec> {
 }
 /// Saves the list settings edits, which adds and removes machines and nothing else.
 pub fn save_keeping_quiet(next: &[Spec]) -> io::Result<()> {
-    save(&keep_quiet(next.to_vec(), &load()))
+    save_keeping_quiet_to(
+        &file().ok_or_else(|| io::Error::other("找不到配置目录"))?,
+        next,
+    )
+}
+
+fn save_keeping_quiet_to(file: &std::path::Path, next: &[Spec]) -> io::Result<()> {
+    save_to(file, &keep_quiet(next.to_vec(), &load_from(file)?))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -611,5 +640,36 @@ mod tests {
         let next = keep_quiet(stale, &saved);
         assert!(next[0].quiet, "the list settings held undid 先不管");
         assert!(!next[1].quiet);
+    }
+    #[test]
+    fn invalid_machine_config_is_not_overwritten_by_settings() {
+        let root = std::env::temp_dir().join(format!(
+            "mooring-machines-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let file = root.join("machines.json");
+        let invalid = br#"[{"host":"apple"}, broken]"#;
+        std::fs::write(&file, invalid).unwrap();
+        let next = vec![spec("new-machine", false)];
+        assert_eq!(
+            load_from(&file).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert!(save_keeping_quiet_to(&file, &next).is_err());
+        assert_eq!(std::fs::read(&file).unwrap(), invalid);
+        // An unreadable path is not an initial empty configuration either.
+        assert!(load_from(&root).is_err());
+        assert!(save_keeping_quiet_to(&root, &next).is_err());
+        assert!(root.is_dir());
+        // A genuinely absent file remains a supported first-run case.
+        let missing = root.join("new/machines.json");
+        assert!(load_from(&missing).unwrap().is_empty());
+        save_keeping_quiet_to(&missing, &next).unwrap();
+        assert_eq!(load_from(&missing).unwrap(), next);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
