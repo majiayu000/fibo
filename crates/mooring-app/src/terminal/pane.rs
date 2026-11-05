@@ -1,5 +1,7 @@
 #[path = "pane_overlays.rs"]
 mod overlays;
+#[path = "pane_state.rs"]
+mod state;
 use crate::{
     connection::Connection,
     terminal::screen::{self, Screen},
@@ -23,6 +25,7 @@ use mooring_core::{
         },
     },
 };
+use state::{AskPin, Handoff, Links, Search, Selection, Stage};
 use std::{ops::Range, path::Path, sync::atomic::Ordering, time::Instant};
 
 /// The strip along a pane's right edge that grabs the scrollbar, and the thumb's width.
@@ -65,13 +68,10 @@ pub struct Pane {
     requested_cell: (u32, u32),
     local_error: Option<String>,
     handoff: Option<Handoff>,
-    /// The selection gesture; the selection itself lives on the terminal, so it stays
-    /// on its text as output or the scrollbar moves it.
-    selecting: Option<crate::terminal::selection::Selecting>,
+    select: Selection,
     /// Backing scale of the last paint, for drags reported outside the pane.
     scale: f32,
     mouse: Option<crate::terminal::terminal_input::MouseEncoder>,
-    pressed_button: Option<gpui::MouseButton>,
     scroll_lines: f32,
     scroll_cols: f32,
     /// The viewport is in history; a chip offers the way back to the live screen.
@@ -79,16 +79,7 @@ pub struct Pane {
     /// The viewport's first row, the scrollable rows and the shown rows, read each frame;
     /// rows count from the top of history, as search matches do.
     viewport: (usize, usize, usize),
-    /// The scrollbar thumb is being dragged.
-    dragging_scrollbar: bool,
-    hover_link: Option<(u16, u16)>,
-    /// The path word under the pointer, and where it points when that exists on disk.
-    hover_word: Option<screen::Link>,
-    hover_path: Option<Hovered>,
-    /// The modifiers last seen, so links are underlined only while ⌘ is held, and where
-    /// the pointer is, for the note saying what a click would do.
-    modifiers: gpui::Modifiers,
-    pointer: Option<Point<Pixels>>,
+    links: Links,
     /// The program's working directory, asked from the host when a relative path is hovered.
     cwd: Option<std::path::PathBuf>,
     /// When the footer last asked the host for that directory; output re-asks at most
@@ -104,13 +95,7 @@ pub struct Pane {
     blink_epoch: u64,
     /// When the user last sent input; its echo is drawn without waiting for the shared tick.
     typed: Option<Instant>,
-    search: Option<gpui::Entity<crate::ui::field::Field>>,
-    matches: Vec<mooring_core::terminal::SearchMatch>,
-    /// The query `matches` came from; Enter on an edited query searches again.
-    searched: Option<String>,
-    _search_events: Option<gpui::Subscription>,
-    /// The match the view moved to; ↑/↓ and Enter step through them.
-    current_match: Option<usize>,
+    search: Search,
     /// A multi-line paste waiting for the user's go-ahead (no bracketed paste).
     paste_confirm: Option<String>,
     bells_seen: u64,
@@ -137,16 +122,7 @@ pub struct Pane {
     /// cannot repaint, so the pane says so until dismissed.
     started_under: Option<mooring_core::terminal::TermColors>,
     tint_note_dismissed: bool,
-    /// What this terminal's conversation was asked, oldest first, as the workbench last
-    /// saw it, and where each sits in history once found.
-    asks: Vec<String>,
-    ask_rows: Vec<Option<usize>>,
-    /// When the asks were last looked for, and the history's length then.
-    asks_located: Option<(Instant, usize)>,
-    locating_asks: bool,
-    pinned: mooring_core::prompt_pin::Pinned,
-    /// When the viewport last moved through history, for the floating ask.
-    scrolled_at: Option<Instant>,
+    ask: AskPin,
 }
 /// A hovered path word that exists on disk.
 #[derive(Clone, Debug, PartialEq)]
@@ -226,11 +202,12 @@ impl Pane {
         &self,
     ) -> (Vec<Option<usize>>, Option<(String, bool)>, Option<String>) {
         (
-            self.ask_rows.clone(),
+            self.ask.ask_rows.clone(),
             self.pinned_latest(),
-            self.pinned
+            self.ask
+                .pinned
                 .viewed
-                .and_then(|(i, _)| self.asks.get(i).cloned()),
+                .and_then(|(i, _)| self.ask.asks.get(i).cloned()),
         )
     }
     /// Scrolls history so `row` is the top row, as the scrollbar would.
@@ -242,7 +219,7 @@ impl Pane {
     #[cfg(feature = "visual-test")]
     pub fn visual_search(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.open_search(window, cx);
-        let field = self.search.clone().unwrap();
+        let field = self.search.field.clone().unwrap();
         field.update(cx, |f, cx| {
             f.text = query.into();
             cx.notify();
@@ -252,8 +229,8 @@ impl Pane {
     #[cfg(feature = "visual-test")]
     pub fn visual_matches(&self) -> (Option<usize>, Vec<usize>) {
         (
-            self.current_match,
-            self.matches.iter().map(|m| m.row).collect(),
+            self.search.current_match,
+            self.search.matches.iter().map(|m| m.row).collect(),
         )
     }
     #[cfg(feature = "visual-test")]
@@ -350,7 +327,7 @@ impl Pane {
         let (bounds, metrics) = (self.bounds?, self.metrics?);
         // The last piece, so a path broken over rows is hovered where it ends.
         let link = self.screen.paths.iter().rfind(|l| l.uri == word)?;
-        let hovered = (self.hover_word.as_ref() == Some(link))
+        let hovered = (self.links.hover_word.as_ref() == Some(link))
             .then(|| self.shown_path().cloned())
             .flatten();
         Some((
@@ -494,20 +471,14 @@ impl Pane {
             requested_cell: (0, 0),
             local_error: None,
             handoff: None,
-            selecting: crate::terminal::selection::Selecting::new().ok(),
+            select: Selection::new(),
             scale: 1.,
             mouse: None,
-            pressed_button: None,
             scroll_lines: 0.,
             scroll_cols: 0.,
             scrolled_back: false,
             viewport: (0, 0, 0),
-            dragging_scrollbar: false,
-            hover_link: None,
-            hover_word: None,
-            hover_path: None,
-            modifiers: gpui::Modifiers::default(),
-            pointer: None,
+            links: Links::default(),
             cwd: None,
             cwd_asked: None,
             cwd_due: false,
@@ -516,11 +487,7 @@ impl Pane {
             blink_on: true,
             blink_epoch: 0,
             typed: None,
-            search: None,
-            matches: vec![],
-            searched: None,
-            _search_events: None,
-            current_match: None,
+            search: Search::default(),
             paste_confirm: None,
             bells_seen: 0,
             bell: false,
@@ -532,12 +499,7 @@ impl Pane {
             peek: false,
             started_under: None,
             tint_note_dismissed: false,
-            asks: Vec::new(),
-            ask_rows: Vec::new(),
-            asks_located: None,
-            locating_asks: false,
-            pinned: Default::default(),
-            scrolled_at: None,
+            ask: AskPin::default(),
         }
     }
     /// Attaches again after the host dropped this pane's stream; the snapshot restores
@@ -769,10 +731,10 @@ impl Pane {
             gpui::MouseButton::Middle => mouse::Button::Middle,
             _ => mouse::Button::Right,
         };
-        self.pressed_button = Some(event.button);
+        self.select.pressed_button = Some(event.button);
         // The thumb is Mooring's own, even over a program that took the mouse.
         if event.button == gpui::MouseButton::Left && self.on_scrollbar(event.position) {
-            self.dragging_scrollbar = true;
+            self.select.dragging_scrollbar = true;
             self.scroll_to_pointer(event.position, cx);
             cx.stop_propagation();
             return;
@@ -796,7 +758,7 @@ impl Pane {
             if let Ok(state) = state.lock()
                 && let Some(vt) = &state.vt
                 && let Some(grid) = grid(vt, self.metrics, self.scale)
-                && let Some(sel) = &mut self.selecting
+                && let Some(sel) = &mut self.select.selecting
             {
                 let _ = sel.press(vt.terminal(), grid, at);
             }
@@ -811,11 +773,11 @@ impl Pane {
     ) {
         // The outside handler sees releases over tabs and other panes too.
         // Only capture a release for a gesture that started in this pane.
-        if self.pressed_button != Some(event.button) {
+        if self.select.pressed_button != Some(event.button) {
             return;
         }
-        self.pressed_button = None;
-        if std::mem::take(&mut self.dragging_scrollbar) {
+        self.select.pressed_button = None;
+        if std::mem::take(&mut self.select.dragging_scrollbar) {
             return;
         }
         let button = match event.button {
@@ -833,14 +795,14 @@ impl Pane {
         );
         if !reported
             && event.button == gpui::MouseButton::Left
-            && self.selecting.as_ref().is_some_and(|s| s.active)
+            && self.select.selecting.as_ref().is_some_and(|s| s.active)
         {
             let at = self.local(event.position).unwrap_or_default();
             let state = self.connection.state.clone();
             if let Ok(state) = state.lock()
                 && let Some(vt) = &state.vt
                 && let Some(grid) = grid(vt, self.metrics, self.scale)
-                && let Some(sel) = &mut self.selecting
+                && let Some(sel) = &mut self.select.selecting
             {
                 sel.release(vt.terminal(), grid, at);
             }
@@ -857,13 +819,13 @@ impl Pane {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.pointer = Some(event.position);
+        self.links.pointer = Some(event.position);
         self.set_modifiers(event.modifiers, cx);
         let hover = self
             .cell_at(event.position)
             .filter(|(y, x)| self.screen.link_at(*y, *x).is_some());
-        if hover != self.hover_link {
-            self.hover_link = hover;
+        if hover != self.links.hover_link {
+            self.links.hover_link = hover;
             cx.notify();
         }
         let word = self
@@ -891,14 +853,14 @@ impl Pane {
     }
     /// Window-wide, so a selection drag keeps extending after it leaves the pane.
     fn drag_selection(&mut self, event: &gpui::MouseMoveEvent, cx: &mut Context<Self>) {
-        if self.dragging_scrollbar {
+        if self.select.dragging_scrollbar {
             if event.pressed_button == Some(gpui::MouseButton::Left) {
                 self.scroll_to_pointer(event.position, cx);
             }
             return;
         }
         if event.pressed_button != Some(gpui::MouseButton::Left)
-            || !self.selecting.as_ref().is_some_and(|s| s.active)
+            || !self.select.selecting.as_ref().is_some_and(|s| s.active)
         {
             return;
         }
@@ -907,7 +869,7 @@ impl Pane {
         };
         let state = self.connection.state.clone();
         let Ok(state) = state.lock() else { return };
-        let (Some(vt), Some(sel)) = (&state.vt, &mut self.selecting) else {
+        let (Some(vt), Some(sel)) = (&state.vt, &mut self.select.selecting) else {
             return;
         };
         let Some(grid) = grid(vt, self.metrics, self.scale) else {
@@ -934,7 +896,7 @@ impl Pane {
                     let Ok(mut state) = state.lock() else {
                         return false;
                     };
-                    let (Some(vt), Some(sel)) = (&mut state.vt, &mut this.selecting) else {
+                    let (Some(vt), Some(sel)) = (&mut state.vt, &mut this.select.selecting) else {
                         return false;
                     };
                     let Some(grid) = grid(vt, this.metrics, this.scale) else {
@@ -1089,10 +1051,10 @@ impl Pane {
     /// What the conversation in this terminal was asked, oldest first. New asks are
     /// looked for on the next repaint.
     pub fn set_asks(&mut self, asks: Vec<String>, cx: &mut Context<Self>) {
-        if self.asks != asks {
-            self.asks = asks;
-            self.ask_rows.clear();
-            self.asks_located = None;
+        if self.ask.asks != asks {
+            self.ask.asks = asks;
+            self.ask.ask_rows.clear();
+            self.ask.asks_located = None;
             cx.notify();
         }
     }
@@ -1104,12 +1066,12 @@ impl Pane {
     /// The newest ask while its row is above the viewport, and whether it can be
     /// scrolled back to.
     pub fn pinned_latest(&self) -> Option<(String, bool)> {
-        let (i, row) = self.pinned.latest?;
-        Some((self.asks.get(i)?.clone(), row.is_some()))
+        let (i, row) = self.ask.pinned.latest?;
+        Some((self.ask.asks.get(i)?.clone(), row.is_some()))
     }
     /// Shows the newest ask's row at the top.
     pub fn back_to_latest_ask(&mut self, cx: &mut Context<Self>) {
-        if let Some((_, Some(row))) = self.pinned.latest {
+        if let Some((_, Some(row))) = self.ask.pinned.latest {
             self.back_to_ask(row, cx);
         }
     }
@@ -1120,29 +1082,29 @@ impl Pane {
     /// again once output may have moved them. Runs on each repaint.
     fn refresh_pinned(&mut self, cx: &mut Context<Self>) {
         let choice = crate::ui::pinned_ask::current(cx);
-        let was = self.pinned.latest.is_some();
+        let was = self.ask.pinned.latest.is_some();
         let prompt = self.prompt_line().filter(|_| choice.any());
         match prompt {
-            Some(prompt) if !self.asks.is_empty() => {
-                self.pinned = if self.ask_rows.len() == self.asks.len() {
-                    mooring_core::prompt_pin::pinned(&self.ask_rows, self.viewport)
+            Some(prompt) if !self.ask.asks.is_empty() => {
+                self.ask.pinned = if self.ask.ask_rows.len() == self.ask.asks.len() {
+                    mooring_core::prompt_pin::pinned(&self.ask.ask_rows, self.viewport)
                 } else {
                     Default::default()
                 };
-                let due = match self.asks_located {
+                let due = match self.ask.asks_located {
                     None => true,
                     Some((at, total)) => {
                         let ms = at.elapsed().as_millis() as u64;
                         (total != self.viewport.1 && ms >= ASK_LOCATE_MS) || ms >= ASK_RELOCATE_MS
                     }
                 };
-                if due && !self.locating_asks {
+                if due && !self.ask.locating_asks {
                     self.locate_asks(prompt, cx);
                 }
             }
-            _ => self.pinned = Default::default(),
+            _ => self.ask.pinned = Default::default(),
         }
-        if was != self.pinned.latest.is_some() {
+        if was != self.ask.pinned.latest.is_some() {
             cx.emit(PaneEvent::PinnedAsk);
         }
     }
@@ -1151,8 +1113,8 @@ impl Pane {
         prompt: &'static mooring_core::agent::PromptLine,
         cx: &mut Context<Self>,
     ) {
-        self.locating_asks = true;
-        let asks = self.asks.clone();
+        self.ask.locating_asks = true;
+        let asks = self.ask.asks.clone();
         let keys: Vec<_> = asks
             .iter()
             .map(|a| mooring_core::prompt_pin::key(a))
@@ -1167,15 +1129,15 @@ impl Pane {
         cx.spawn(async move |this, cx| {
             let found = job.await;
             let _ = this.update(cx, |this, cx| {
-                this.locating_asks = false;
+                this.ask.locating_asks = false;
                 // The asks changed while looking: the next repaint looks again.
-                if this.asks != asks {
+                if this.ask.asks != asks {
                     return;
                 }
                 let Some((rows, total)) = found else { return };
-                this.asks_located = Some((Instant::now(), total));
-                if this.ask_rows != rows {
-                    this.ask_rows = rows;
+                this.ask.asks_located = Some((Instant::now(), total));
+                if this.ask.ask_rows != rows {
+                    this.ask.ask_rows = rows;
                     cx.notify();
                 }
             });
@@ -1247,12 +1209,15 @@ impl Pane {
         }
         let reading = self.scrolled_back
             && self
+                .ask
                 .scrolled_at
                 .is_some_and(|at| at.elapsed().as_millis() < u128::from(ASK_FLOAT_MS));
         let float = self
+            .ask
             .pinned
             .viewed
             .or(self
+                .ask
                 .pinned
                 .latest
                 .filter(|_| !bar_shown)
@@ -1448,10 +1413,10 @@ impl Pane {
     /// Checks a hovered path word on disk. A relative one also asks the host where the
     /// program is now, then checks again, so a `cd` since the last hover is followed.
     fn hover_word(&mut self, word: Option<screen::Link>, cx: &mut Context<Self>) {
-        if word == self.hover_word {
+        if word == self.links.hover_word {
             return;
         }
-        self.hover_word = word.clone();
+        self.links.hover_word = word.clone();
         self.check_hover_path(cx);
         // Asked for absolute paths too: the menu copies a path relative to it.
         let Some(word) = word else { return };
@@ -1464,7 +1429,7 @@ impl Pane {
             if let Ok(Reply::Cwd(cwd)) = reply {
                 this.update(cx, |pane, cx| {
                     pane.cwd = Some(cwd.into());
-                    if pane.hover_word.as_ref() == Some(&word) {
+                    if pane.links.hover_word.as_ref() == Some(&word) {
                         pane.check_hover_path(cx);
                     }
                 })
@@ -1476,7 +1441,7 @@ impl Pane {
     /// The whole word when it names a file, else a piece of a broken one that does.
     fn check_hover_path(&mut self, cx: &mut Context<Self>) {
         let cwd = self.cwd.as_deref();
-        let found = self.hover_word.as_ref().and_then(|w| {
+        let found = self.links.hover_word.as_ref().and_then(|w| {
             [(Some(w.uri.as_str()), true), (w.alone.as_deref(), false)]
                 .into_iter()
                 .find_map(|(word, whole)| {
@@ -1490,16 +1455,16 @@ impl Pane {
                     })
                 })
         });
-        if found != self.hover_path {
-            self.hover_path = found;
+        if found != self.links.hover_path {
+            self.links.hover_path = found;
             cx.notify();
         }
     }
     /// The hovered path that exists, while its word is still on screen where it was.
     fn shown_target(&self) -> Option<&Hovered> {
-        let word = self.hover_word.as_ref()?;
+        let word = self.links.hover_word.as_ref()?;
         (self.screen.path_at(word.row, word.col) == Some(word))
-            .then_some(self.hover_path.as_ref())
+            .then_some(self.links.hover_path.as_ref())
             .flatten()
     }
     #[cfg(feature = "visual-test")]
@@ -1512,24 +1477,24 @@ impl Pane {
     }
     /// While ⌘ is held over a link or path: what a click does, and how to only show it.
     fn click_hint(&self) -> Option<String> {
-        if !self.modifiers.platform {
+        if !self.links.modifiers.platform {
             return None;
         }
-        if self.hover_link.is_some() {
+        if self.links.hover_link.is_some() {
             return Some("⌘ 点击在浏览器打开".into());
         }
         let target = self.shown_target()?;
         Some(super::open_path::hint(&Self::open_plan(
             target,
-            self.modifiers.alt,
+            self.links.modifiers.alt,
         )))
     }
     fn set_modifiers(&mut self, modifiers: gpui::Modifiers, cx: &mut Context<Self>) {
         let shows = |m: &gpui::Modifiers| (m.platform, m.platform && m.alt);
-        if shows(&modifiers) != shows(&self.modifiers) {
+        if shows(&modifiers) != shows(&self.links.modifiers) {
             cx.notify();
         }
-        self.modifiers = modifiers;
+        self.links.modifiers = modifiers;
     }
     fn open_plan(target: &Hovered, reveal: bool) -> super::open_path::Plan {
         super::open_path::plan(
@@ -1648,41 +1613,42 @@ impl Pane {
         // Enter finds, then steps to the next match; the panel's buttons do the same.
         let events = cx.subscribe(&field, |this, _, event, cx| {
             if let crate::ui::field::FieldEvent::Submit = event {
-                if this.matches.is_empty() || this.searched != this.search_query(cx) {
+                if this.search.matches.is_empty() || this.search.searched != this.search_query(cx) {
                     this.find_text(cx);
                 } else {
                     this.step_match(1, cx);
                 }
             }
         });
-        self.search = Some(field);
-        self._search_events = Some(events);
-        self.matches.clear();
-        self.current_match = None;
-        self.searched = None;
+        self.search.field = Some(field);
+        self.search._events = Some(events);
+        self.search.matches.clear();
+        self.search.current_match = None;
+        self.search.searched = None;
         cx.notify();
     }
     fn close_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.search = None;
-        self._search_events = None;
-        self.matches.clear();
-        self.current_match = None;
-        self.searched = None;
+        self.search.field = None;
+        self.search._events = None;
+        self.search.matches.clear();
+        self.search.current_match = None;
+        self.search.searched = None;
         window.focus(&self.focus, cx);
         cx.notify();
     }
     fn search_query(&self, cx: &App) -> Option<String> {
         self.search
+            .field
             .as_ref()
             .map(|f| f.read(cx).text.trim().to_owned())
     }
     /// Moves to the next (1) or previous (-1) match, wrapping around, and centers it.
     fn step_match(&mut self, step: isize, cx: &mut Context<Self>) {
-        if self.matches.is_empty() {
+        if self.search.matches.is_empty() {
             return;
         }
-        let n = self.matches.len() as isize;
-        let next = match self.current_match {
+        let n = self.search.matches.len() as isize;
+        let next = match self.search.current_match {
             Some(i) => (i as isize + step).rem_euclid(n),
             // The first step from nothing lands on the nearest match above the bottom.
             None if step < 0 => n - 1,
@@ -1691,7 +1657,9 @@ impl Pane {
         self.show_match(next, cx);
     }
     fn show_match(&mut self, i: usize, cx: &mut Context<Self>) {
-        let Some(m) = self.matches.get(i) else { return };
+        let Some(m) = self.search.matches.get(i) else {
+            return;
+        };
         let row = m.row.saturating_sub(self.viewport.2 / 2);
         if let Ok(mut s) = self.connection.state.lock()
             && let Some(vt) = &mut s.vt
@@ -1701,14 +1669,14 @@ impl Pane {
                 self.viewport = v;
             }
         }
-        self.current_match = Some(i);
+        self.search.current_match = Some(i);
         cx.notify();
     }
     fn find_text(&mut self, cx: &mut Context<Self>) {
         let Some(query) = self.search_query(cx) else {
             return;
         };
-        self.searched = Some(query.clone());
+        self.search.searched = Some(query.clone());
         let state = self.connection.state.clone();
         let job = cx.background_spawn(async move {
             state
@@ -1725,8 +1693,8 @@ impl Pane {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok(found) => {
-                        this.matches = found;
-                        this.current_match = None;
+                        this.search.matches = found;
+                        this.search.current_match = None;
                         // Newest first, as the bottom of the screen is closest.
                         this.step_match(-1, cx);
                     }
@@ -2201,7 +2169,7 @@ impl Render for Pane {
             let top = self.viewport.0;
             self.viewport = vt.viewport().unwrap_or(self.viewport);
             if self.scrolled_back && self.viewport.0 != top {
-                self.scrolled_at = Some(Instant::now());
+                self.ask.scrolled_at = Some(Instant::now());
                 cx.spawn(async move |this, cx| {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(ASK_FLOAT_MS + 50))
@@ -2332,8 +2300,8 @@ impl Render for Pane {
                         screen::paint_guide(&pane.screen, bounds, metrics, window);
                     }
                     // Underlined only while ⌘ is held, when a click would open it.
-                    let hovered: Vec<&screen::Link> = match pane.hover_link {
-                        _ if !pane.modifiers.platform => Vec::new(),
+                    let hovered: Vec<&screen::Link> = match pane.links.hover_link {
+                        _ if !pane.links.modifiers.platform => Vec::new(),
                         Some((y, x)) => pane.screen.link_at(y, x).map_or(Vec::new(), |hover| {
                             pane.screen
                                 .links
@@ -2341,7 +2309,7 @@ impl Render for Pane {
                                 .filter(|l| l.uri == hover.uri)
                                 .collect()
                         }),
-                        None => match (pane.shown_target(), pane.hover_word.as_ref()) {
+                        None => match (pane.shown_target(), pane.links.hover_word.as_ref()) {
                             (Some(target), Some(word)) if target.whole => pane
                                 .screen
                                 .paths
@@ -2369,8 +2337,8 @@ impl Render for Pane {
                     }
                     let (top, total, len) = pane.viewport;
                     overlays::matches(
-                        &pane.matches,
-                        pane.current_match,
+                        &pane.search.matches,
+                        pane.search.current_match,
                         (top, len),
                         bounds,
                         metrics,
@@ -2524,9 +2492,9 @@ impl Render for Pane {
                         ),
                 )
             })
-            .when_some(self.search.clone(), |d, field| {
-                let count = self.matches.len();
-                let at = self.current_match.map_or(0, |i| i + 1);
+            .when_some(self.search.field.clone(), |d, field| {
+                let count = self.search.matches.len();
+                let at = self.search.current_match.map_or(0, |i| i + 1);
                 let link = |id: &'static str, text: &'static str| {
                     div().id(id).cursor_pointer().text_color(T::color(T::link())).child(text)
                 };
@@ -2546,7 +2514,7 @@ impl Render for Pane {
                                 d.child(link("prev-match", "↑ 上一个").on_click(cx.listener(|this, _, _, cx| this.step_match(-1, cx))))
                                     .child(link("next-match", "↓ 下一个").on_click(cx.listener(|this, _, _, cx| this.step_match(1, cx))))
                             })
-                            .child(div().text_color(T::color(T::secondary())).child(if self.searched.is_none() {
+                            .child(div().text_color(T::color(T::secondary())).child(if self.search.searched.is_none() {
                                 "按回车查找".to_owned()
                             } else if count == 0 {
                                 "没有匹配".to_owned()
@@ -2557,8 +2525,8 @@ impl Render for Pane {
                             .child(link("close-find", "关闭搜索").on_click(cx.listener(|this, _, window, cx| this.close_search(window, cx)))),
                     );
                 // The newest 20 matches, newest first; clicking one goes to it.
-                for (i, m) in self.matches.iter().enumerate().rev().take(20) {
-                    let current = self.current_match == Some(i);
+                for (i, m) in self.search.matches.iter().enumerate().rev().take(20) {
+                    let current = self.search.current_match == Some(i);
                     panel = panel.child(
                         div()
                             .id(gpui::SharedString::from(format!("match-{i}")))
@@ -2629,7 +2597,7 @@ impl Render for Pane {
                         )
                     }),
             )
-            .when_some(self.click_hint().zip(self.pointer), |d, (hint, at)| {
+            .when_some(self.click_hint().zip(self.links.pointer), |d, (hint, at)| {
                 // Below and right of the pointer, so the word itself stays readable.
                 d.child(
                     gpui::deferred(
@@ -2766,24 +2734,6 @@ impl EntityInputHandler for Pane {
 }
 
 const HANDOFF_LIMIT: u64 = 60;
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Stage {
-    Shell,
-    Agent,
-    Placed,
-    NotReady,
-    /// The shell could not find the Agent command; nothing was placed.
-    Missing,
-}
-struct Handoff {
-    command: Option<String>,
-    text: Option<String>,
-    stage: Stage,
-    started: Instant,
-    released: bool,
-    tail: String,
-    still: u8,
-}
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HandoffState {
     Waiting,
