@@ -2,7 +2,7 @@
 // Approvals are answered in the row; swipe left for 已处理, right for 稍后提醒. What you
 // wrote while a computer was away waits under 「未发送」.
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { approve, deny, oops, settle } from '@/actions';
 import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/hub';
@@ -11,57 +11,59 @@ import { drop, useOutbox } from '@/store/outbox';
 import { SpaceMark } from '@/ui/icons';
 import { Btn, Group, Pill, Round, TITLE_WEIGHT, Wide, mono, useBottom, useTop } from '@/ui/kit';
 import { Row, rowStyles, spaceName } from '@/ui/row';
-import { rank } from '@/ui/status';
+import { type Arranged, type Item, arrange, itemKey } from '@/ui/inbox';
 import { Swipe, justSwiped } from '@/ui/swipe';
+import { TrustAsk } from '@/ui/trust';
 import { type Theme, useTheme } from '@/ui/theme';
+import { useHold, useSettled } from '@/ui/useHold';
 
 const open = (m: Machine, c: Card) => {
   if (!justSwiped()) router.push({ pathname: '/chat', params: { machine: m.id, terminal: c.id } });
 };
 
-type Item = { m: Machine; c: Card };
-
-/** Conversations sorted into the inbox, 稍后提醒 and 已处理. */
-function sort(machines: Machine[]) {
-  const inbox: Item[] = [];
-  const later: Item[] = [];
-  const done: Item[] = [];
-  for (const m of machines) {
-    for (const c of m.cards) {
-      if (!c.agent || c.phase === 'shell') continue;
-      const item = { m, c };
-      // Something new to answer brings a settled conversation back.
-      const asks = Boolean(c.approval || c.phase === 'waiting');
-      if (c.outcome === 'done' && !asks) done.push(item);
-      else if (c.outcome === 'deferred' && !asks) later.push(item);
-      else inbox.push(item);
-    }
-  }
-  const newest = (a: Item, b: Item) => (b.c.updated ?? 0) - (a.c.updated ?? 0);
-  inbox.sort((a, b) => rank(a.c) - rank(b.c) || newest(a, b));
-  later.sort(newest);
-  done.sort(newest);
-  return { inbox, later, done };
-}
+/** Long enough for the refresh an answer asks for to come back. */
+const ANSWER_SHOWS_MS = 1000;
 
 function run(p: Promise<unknown>) {
   p.catch((e) => oops((e as Error).message));
 }
 
-function ApprovalRow({ m, c, t }: Item & { t: Theme }) {
+// What the row's buttons answer: a new command, or the row moving, and a tap waits again.
+function ApprovalRow({ m, c, t, place }: Item & { t: Theme; place: string }) {
   const online = m.status === 'online';
   const ask = useAsk(m.id, c, online);
   const can = supports(m, 'answer');
+  const settled = useSettled(`${ask.subject}|${ask.note}|${place}`);
+  // Until the list shows the answer, the row is what it was: no second answer for what comes next.
+  const [busy, setBusy] = useState(false);
+  const off = busy || !settled.ready;
+  const answer = (f: () => Promise<unknown>) => {
+    if (busy || !settled.passes()) return;
+    setBusy(true);
+    f().then(
+      (sent) => setTimeout(() => setBusy(false), sent === false ? 0 : ANSWER_SHOWS_MS),
+      (e) => {
+        setBusy(false);
+        oops((e as Error).message);
+      },
+    );
+  };
   return (
     <Row m={m} c={c} onPress={() => open(m, c)}>
       <Text numberOfLines={3} style={[s.cmd, { backgroundColor: t.well, color: t.text }]}>
         {ask.subject}
       </Text>
-      <View style={s.act}>
+      {!!ask.note && (
+        <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13 }}>
+          {ask.note}
+        </Text>
+      )}
+      {/* While off, a tap here stops here: it does not fall through and open the conversation. */}
+      <View style={s.act} onStartShouldSetResponder={() => off}>
         {can && (
           <>
-            <Btn primary icon="face" label="允许" onPress={() => run(approve(m.id, c, ask.subject))} />
-            <Btn label="拒绝" onPress={() => run(deny(m.id, c))} />
+            <Btn primary icon="face" label="允许" disabled={off} onPress={() => answer(() => approve(m.id, c, ask))} />
+            <Btn label="拒绝" disabled={off} onPress={() => answer(() => deny(m.id, c, ask))} />
           </>
         )}
         <Btn
@@ -73,17 +75,37 @@ function ApprovalRow({ m, c, t }: Item & { t: Theme }) {
   );
 }
 
-function Swiped({ m, c, t, last }: Item & { t: Theme; last?: boolean }) {
+function Swiped({ m, c, t, last, nth }: Item & { t: Theme; last?: boolean; nth?: number }) {
   const can = supports(m, 'outcome') && !!c.session;
-  const body = c.approval && m.status === 'online' ? <ApprovalRow m={m} c={c} t={t} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
-  if (!can) return body;
+  const online = m.status === 'online';
+  const buttons = online && Boolean(c.trust || c.approval);
+  // Which card it is, where it sits and how tall: its buttons are somewhere else if any changes.
+  // The count is known at once; the layout comes a moment later, and only native reports a move.
+  const [laid, setLaid] = useState('');
+  const place = `${nth}/${laid}`;
+  const body = c.trust && online ? (
+    <Row m={m} c={c} onPress={() => open(m, c)}>
+      <TrustAsk machine={m.id} card={c} can={supports(m, 'trust')} place={place} />
+    </Row>
+  ) : c.approval && online ? <ApprovalRow m={m} c={c} t={t} place={place} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
   return (
-    <Swipe
-      left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => run(settle(m.id, c, 'done')) }}
-      right={{ label: '稍后提醒', color: t.waitBg, fg: t.wait, run: () => run(settle(m.id, c, 'deferred')) }}
+    <View
+      onLayout={(e) => {
+        const { y, height } = e.nativeEvent.layout;
+        if (buttons) setLaid(`${y}/${height}`);
+      }}
     >
-      {body}
-    </Swipe>
+      {can ? (
+        <Swipe
+          left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => run(settle(m.id, c, 'done')) }}
+          right={{ label: '稍后提醒', color: t.waitBg, fg: t.wait, run: () => run(settle(m.id, c, 'deferred')) }}
+        >
+          {body}
+        </Swipe>
+      ) : (
+        body
+      )}
+    </View>
   );
 }
 
@@ -107,7 +129,12 @@ export default function Inbox() {
   const unsent = useOutbox();
   const [showLater, setShowLater] = useState(false);
   const [showDone, setShowDone] = useState(false);
-  const { inbox, later, done } = sort(machines);
+  // Nothing moves under a finger or a scroll: what changed shows when it lifts or settles.
+  const hold = useHold();
+  const shown = useRef<Arranged | null>(null);
+  if (!shown.current || !hold.held()) shown.current = arrange(machines, shown.current?.pins ?? []);
+  const { pinned, rest, later, done, offline } = shown.current;
+  const inbox = [...pinned, ...rest];
   const where = (id: string, terminal: string) => {
     const m = machines.find((x) => x.id === id);
     const c = m?.cards.find((x) => x.id === terminal);
@@ -133,7 +160,13 @@ export default function Inbox() {
           <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
         </View>
       </View>
-      <ScrollView contentContainerStyle={{ paddingBottom: bottom + 16 }}>
+      <View style={{ flex: 1 }} {...hold.touch}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: bottom + 16 }}
+        onScroll={hold.onScroll}
+        scrollEventThrottle={32}
+        keyboardShouldPersistTaps="handled"
+      >
         {loaded && machines.length === 0 && (
           <View style={s.empty}>
             <Text style={[s.emptyTitle, { color: t.text }]}>还没有配对电脑</Text>
@@ -145,11 +178,15 @@ export default function Inbox() {
             </View>
           </View>
         )}
-        {machines.filter((m) => m.status !== 'online').map((m) => (
+        {pinned.map((i, n) => (
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={n} />
+        ))}
+        {/* Under what asks you: a computer coming and going pushes nothing you could tap. */}
+        {offline.map((m) => (
           <Offline key={m.id} m={m} t={t} />
         ))}
-        {inbox.map(({ m, c }, i) => (
-          <Swiped key={`${m.id}/${c.id}`} m={m} c={c} t={t} last={i === inbox.length - 1 && !unsent.length} />
+        {rest.map((i, n) => (
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={n === rest.length - 1 && !unsent.length} />
         ))}
         {loaded && machines.some((m) => m.status === 'online') && inbox.length === 0 && (
           <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>没有要处理的事</Text>
@@ -194,6 +231,7 @@ export default function Inbox() {
             </Swipe>
           ))}
       </ScrollView>
+      </View>
     </View>
   );
 }

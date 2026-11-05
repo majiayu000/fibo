@@ -5,7 +5,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert, Platform } from 'react-native';
 import { type Card, NOT_YET, refresh, write } from './remote/hub';
 import { settings } from './store/settings';
-import { dangerous } from './ui/parse';
+import { type Ask, asksTwice } from './ui/parse';
 
 /** Yes or no from the person, as a system dialog. */
 export function confirm(title: string, detail: string, ok: string, destructive = false): Promise<boolean> {
@@ -31,27 +31,39 @@ export async function verify(reason: string): Promise<boolean> {
 }
 
 /**
- * Allows the approval `card` shows. `subject` is the command it asks about, for the
- * second confirmation; `always` picks the screen's "don't ask again" option.
+ * Allows the approval `card` shows. `ask` is what it asks about, for the second
+ * confirmation; the machine refuses if the screen has moved on to another. `always` picks
+ * the menu's "don't ask again" option, the one `ask.always` words: refused if it has changed.
  */
-export async function approve(machine: string, card: Card, subject: string, always = false): Promise<boolean> {
-  if (settings.get().confirmDanger && dangerous(subject)) {
-    const sure = await confirm('确定允许？', subject, '允许');
+export async function approve(machine: string, card: Card, ask: Ask, always = false): Promise<boolean> {
+  if (settings.get().confirmDanger && asksTwice(ask)) {
+    const what = ask.known ? ask.subject : '电脑没读出它要做什么，打开终端看一眼更稳妥。';
+    const sure = await confirm('确定允许？', always ? `${what}\n\n${ask.always}` : what, '允许');
     if (!sure) return false;
   }
-  if (!(await verify(`允许 ${subject}`))) return false;
+  if (!(await verify(`允许 ${ask.subject}`))) return false;
   await write(machine, 'answer', {
     terminal: card.id,
     question: card.approval,
     allow: true,
-    ...(always ? { always: true } : {}),
+    ...(ask.known ? { subject: ask.subject } : {}),
+    ...(always ? { always: true, always_label: ask.always } : {}),
   });
   setTimeout(() => refresh(machine), 300);
   return true;
 }
 
-export async function deny(machine: string, card: Card) {
-  await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false });
+/** Refuses it; `ask` as with `approve`, so an answer that took a while refuses nothing newer. */
+export async function deny(machine: string, card: Card, ask: Ask) {
+  await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false, ...(ask.known ? { subject: ask.subject } : {}) });
+  setTimeout(() => refresh(machine), 300);
+}
+
+/** Says whether to trust the folder a card asks about; the machine presses the keys. */
+export async function answerTrust(machine: string, card: Card, trust: boolean) {
+  if (!card.trust) return;
+  if (trust && !(await verify('信任这个文件夹'))) return;
+  await write(machine, 'trust', { terminal: card.id, folder: card.trust.folder, trust });
   setTimeout(() => refresh(machine), 300);
 }
 

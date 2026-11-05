@@ -4,17 +4,20 @@
 //! set it up. Each integrated shell also marks its commands (OSC 133), and a hooks plugin
 //! hears each one that finished, with its exit code. macOS's bash 3.2 is integrated as
 //! well; fish keeps its own prompt marks.
+#[path = "support/tied.rs"]
+mod tied;
 use mooring_core::{model::*, protocol::*};
 use std::{
     fs, io,
     os::unix::net::UnixStream,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     time::{Duration, Instant},
 };
+use tied::SpawnTied;
 
 struct Host {
-    child: Child,
+    child: tied::Tied,
     root: PathBuf,
 }
 impl Host {
@@ -66,7 +69,7 @@ impl Host {
             .env("MOORING_NO_LOGIN_PATH", "1")
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         let h = Self { child, root };
         let until = Instant::now() + Duration::from_secs(30);
@@ -108,8 +111,7 @@ impl Host {
 impl Drop for Host {
     fn drop(&mut self) {
         let _ = self.call(Request::Stop { id: "sh".into() });
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.kill_tree();
         let _ = fs::remove_dir_all(&self.root);
     }
 }

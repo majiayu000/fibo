@@ -58,6 +58,18 @@ const paths = {
     </>
   ),
   prompt: <Path d="M4 17l6-6-6-6M12 19h8" />,
+  file: (
+    <>
+      <Path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <Path d="M14 3v6h6" />
+    </>
+  ),
+  globe: (
+    <>
+      <Circle cx="12" cy="12" r="9" />
+      <Path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
+    </>
+  ),
   shield: <Path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z" />,
   stop: <Rect x="7" y="7" width="10" height="10" rx="1.5" />,
   alert: (

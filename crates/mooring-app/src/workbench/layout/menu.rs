@@ -52,11 +52,12 @@ impl Workbench {
                     pane.update(cx, |p, cx| p.open_search(window, cx));
                 }
             }
-            "中断（Ctrl-C）" => {
+            super::super::pane_menu::INTERRUPT_SHELL => {
                 if let Some(pane) = self.layout.panes.get(id) {
                     pane.update(cx, |p, cx| p.interrupt(cx));
                 }
             }
+            super::super::pane_menu::INTERRUPT_TURN => self.interrupt_turn(id, cx),
             "停止 Agent" => self.request_close(Closing::Agent(id.into()), cx),
             "取消关联" => {
                 if let Some(session) = self.current_agent(id) {
@@ -264,7 +265,11 @@ impl Workbench {
                 }
                 let keys = crate::keymap::current(cx);
                 let zoomed = self.nav.zoomed.as_deref() == Some(&menu.terminal);
-                for (i, row) in menu_rows(zoomed).into_iter().enumerate() {
+                let agent = session.is_some();
+                for (i, row) in super::super::pane_menu::menu_rows(zoomed, agent)
+                    .into_iter()
+                    .enumerate()
+                {
                     let Some(title) = row else {
                         entries.push(menu_rule(i));
                         continue;
@@ -277,6 +282,7 @@ impl Workbench {
                         "挂到待办…" | "停止 Agent" => {
                             session.is_none().then_some("这个终端里没有识别到 Agent")
                         }
+                        super::super::pane_menu::INTERRUPT_TURN => self.interrupt_blocked(session),
                         "取消关联" => match session {
                             None => Some("这个终端里没有识别到 Agent"),
                             Some(s) if s.task.is_none() => Some("这个会话没有挂到待办"),

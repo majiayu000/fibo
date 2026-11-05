@@ -298,6 +298,12 @@ pub struct Explained {
     /// The rule that matched, or why each rule did not, in rule order.
     pub found: Result<Hit, Vec<Miss>>,
 }
+/// A menu's 「don't ask again」 option: the key that takes it and its words as written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlwaysOption {
+    pub key: String,
+    pub text: String,
+}
 impl PartialEq for Explained {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self.rules, other.rules) && self.found == other.found
@@ -329,29 +335,56 @@ impl Explained {
                 .any(|(cursor, n, _)| cursor && n == 1)
         })
     }
-    /// The key that takes the menu's 「don't ask again」 option (Claude Code's 「Yes, and
-    /// don't ask again for …」 or 「Yes, and switch to accept edits」, Codex's 「Yes, and
-    /// don't ask again for this command in this session (a)」): its own letter when it
-    /// shows one, else its number. None when the menu has no such option.
-    pub fn always_key(&self) -> Option<String> {
+    /// The menu's 「don't ask again」 option (Claude Code's 「Yes, and don’t ask again for …」,
+    /// 「Yes, and always allow access to …」 or 「Yes, and switch to accept edits」, Codex's
+    /// 「Yes, and don't ask again for this command in this session (a)」). None when the menu
+    /// has no such option. Never 「switch to auto mode」: that hands over every later prompt.
+    pub fn always_option(&self) -> Option<AlwaysOption> {
         let hit = self.found.as_ref().ok()?;
-        hit.evidence
+        let lines = &hit.evidence;
+        lines.iter().enumerate().find_map(|(i, l)| {
+            let (_, n, first) = option(l)?;
+            let lower = first.to_lowercase().replace('’', "'");
+            let always = [
+                "don't ask again",
+                "always allow",
+                "during this session",
+                "accept edits",
+            ]
             .iter()
-            .filter_map(|l| option(l))
-            .find_map(|(_, n, text)| {
-                let lower = text.to_lowercase();
-                let always = ["don't ask again", "during this session", "accept edits"]
-                    .iter()
-                    .any(|s| lower.contains(s));
-                if n == 1 || !lower.starts_with("yes") || !always {
-                    return None;
-                }
-                let letter = (text.strip_suffix(')'))
-                    .and_then(|t| t.rsplit_once('('))
-                    .map(|(_, k)| k)
-                    .filter(|k| k.len() == 1 && k.chars().all(|c| c.is_ascii_alphabetic()));
-                Some(letter.map_or_else(|| n.to_string(), str::to_owned))
+            .any(|s| lower.contains(s));
+            if n == 1 || !lower.starts_with("yes") || !always || lower.contains("auto mode") {
+                return None;
+            }
+            // A long option wraps, the rest on the lines under it up to the next option.
+            let rest = lines[i + 1..]
+                .iter()
+                .take_while(|l| {
+                    let lower = l.to_lowercase();
+                    option(l).is_none()
+                        && !l.trim().is_empty()
+                        && !lower.contains("esc to")
+                        && !lower.contains("enter to")
+                })
+                .map(|l| l.trim());
+            let text = std::iter::once(first)
+                .chain(rest)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let letter = (text.strip_suffix(')'))
+                .and_then(|t| t.rsplit_once('('))
+                .map(|(_, k)| k)
+                .filter(|k| k.len() == 1 && k.chars().all(|c| c.is_ascii_alphabetic()));
+            Some(AlwaysOption {
+                key: letter.map_or_else(|| n.to_string(), str::to_owned),
+                text,
             })
+        })
+    }
+    /// The key that takes [`Self::always_option`]: its own letter when it shows one, else its
+    /// number.
+    pub fn always_key(&self) -> Option<String> {
+        self.always_option().map(|o| o.key)
     }
     pub fn rule(&self) -> Option<&'static Rule> {
         let rules = self.rules;
@@ -655,5 +688,12 @@ mod tests {
         assert_eq!(plain.always_key(), None);
         let idle = explain(default_rules(), "$ ls\n");
         assert_eq!(idle.always_key(), None);
+        // Handing over every later prompt is not 「不再询问这一条」, whatever it says.
+        let auto = explain(
+            default_rules(),
+            "Do you want to proceed?\n❯ 1. Yes\n  2. Yes, and switch to auto mode · don't ask again\n  3. No\n",
+        );
+        assert!(auto.approval().is_some());
+        assert_eq!(auto.always_key(), None);
     }
 }

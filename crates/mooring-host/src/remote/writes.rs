@@ -168,13 +168,19 @@ fn agent_argv(shell: &str, command: &str, prompt: Option<&str>) -> Vec<String> {
     argv
 }
 
-/// `stop`: interrupts the Agent's turn, the window's 中断. The host checks it is working
-/// inside the named act, so a resend gets the first reply even though it has stopped since.
+/// `stop`: interrupts the Agent's turn, as the window's 中断这一轮 does. The host checks it is
+/// working inside the named act, so a resend gets the first reply even though it has stopped
+/// since. A key sent is not a turn stopped: this replies once the host says so.
 pub(super) fn stop(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
-    let interrupt = Request::Interrupt {
-        id: text(request, "terminal")?.to_owned(),
-    };
-    ok_reply(rpc(socket, &named(client, request, interrupt))?)
+    let id = text(request, "terminal")?.to_owned();
+    let interrupt = Request::Interrupt { id: id.clone() };
+    ok_reply(rpc(socket, &named(client, request, interrupt))?)?;
+    match rpc(socket, &Request::AwaitInterrupt { id })? {
+        Reply::Interrupted { closed_background } => {
+            Ok(json!({ "closed_background": closed_background }))
+        }
+        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+    }
 }
 
 /// `mkdir`: one new folder in an existing one. A folder already there is what was asked

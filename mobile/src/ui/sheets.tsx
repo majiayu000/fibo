@@ -1,9 +1,12 @@
 // Two bottom sheets: one asks for a sentence (要求修改, 拒绝并告诉它), one shows a
 // terminal's last lines.
-import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, TextInput, View } from 'react-native';
 import { remote } from '../remote/hub';
-import { Wide, mono, noOutline, useBottom } from './kit';
+import { CodeView, LINE } from './codeview';
+import { copyWithNote } from './copy';
+import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
+import { opensAtEnd, textRows } from './toolview';
 import { useTheme } from './theme';
 
 function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -76,9 +79,15 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
+  const [note, setNote] = useState('');
+  const closed = useRef(false);
+  const { width } = useWindowDimensions();
+  const rows = useMemo(() => textRows(text), [text]);
   useEffect(() => {
+    closed.current = !visible;
     if (!visible) return;
     setLoaded(false);
+    setNote('');
     const r = remote(machine);
     if (!r) return setError('电脑没连上');
     setError('');
@@ -91,21 +100,32 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   }, [visible, machine, terminal]);
   return (
     <Frame visible={visible} onClose={onClose}>
-      <Text style={[s.title, { color: t.text }]}>终端最后几行</Text>
-      <ScrollView style={{ maxHeight: 420 }} horizontal={false}>
-        <Text selectable style={[s.screen, { color: t.text, backgroundColor: t.well }]}>
-          {error || (loaded ? text || '画面是空的' : '…')}
-        </Text>
-      </ScrollView>
+      <View style={s.head}>
+        <Text style={[s.title, { color: t.text }]}>终端最后几行</Text>
+        <Btn label="复制" onPress={() => copyWithNote(text, '已复制', setNote, () => closed.current)} disabled={!text || !!error} />
+      </View>
+      {!!note && <Notice text={note} style={{ paddingVertical: 2 }} />}
+      {text && !error ? (
+        <View style={[s.screen, { backgroundColor: t.well }]}>
+          <CodeView rows={rows} gap={noGap} footer={8} room={width - SHEET_PAD * 2} atEnd={opensAtEnd(rows.length, SCREEN_HEIGHT, LINE)} />
+        </View>
+      ) : (
+        <Text style={{ color: t.dim, fontSize: 14, paddingVertical: 24, textAlign: 'center' }}>{error || (loaded ? '画面是空的' : '…')}</Text>
+      )}
       <Wide label="关上" kind="grey" onPress={onClose} height={46} />
     </Frame>
   );
 }
 
+const SHEET_PAD = 16;
+const SCREEN_HEIGHT = 440;
+const noGap = () => <View />;
+
 const s = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 16, gap: 12 },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: SHEET_PAD, gap: 12 },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 17, fontWeight: '600' },
   input: { minHeight: 96, borderRadius: 14, padding: 12, fontSize: 15, textAlignVertical: 'top' },
-  screen: { fontFamily: mono, fontSize: 12, lineHeight: 17, padding: 10, borderRadius: 12 },
+  screen: { height: SCREEN_HEIGHT, borderRadius: 12, overflow: 'hidden' },
 });

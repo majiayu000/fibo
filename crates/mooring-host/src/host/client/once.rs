@@ -17,6 +17,7 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
             | Request::SendInput { .. }
             | Request::AnswerApproval { .. }
             | Request::AnswerAlways { .. }
+            | Request::AnswerTrust { .. }
             | Request::Interrupt { .. }
     ) {
         return Err(io::Error::other(

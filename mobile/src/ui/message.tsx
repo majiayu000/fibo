@@ -11,7 +11,7 @@ import { span } from './parse';
 import { SelectSheet } from './sheets';
 import { clock, useTheme } from './theme';
 
-export type Tools = { commands?: number; files?: { path: string; added: number; removed: number }[]; took?: number };
+export type Tools = { commands?: number; files?: { path: string; added: number; removed: number }[]; took?: number; calls?: number };
 export type Message = { seq: number; at: number; role: 'user' | 'agent'; text: string; tools?: Tools | null };
 
 const NOTE_MS = 3000;
@@ -76,20 +76,22 @@ export const Mine = memo(function Mine({ text, at, note, tone, copyable }: { tex
 /** A stretch this long says so even with no command or edit to show: it read and thought. */
 const LONG_S = 60;
 
-/** 「干了 2 分钟 · 跑了 3 个命令 · 改了 chat.tsx +6 −2」, opening the diff. */
+/** 「干了 2 分钟 · 跑了 3 个命令 · 改了 chat.tsx +6 −2」, opening what it did call by call. */
 export const Worked = memo(function Worked({ tools, onPress }: { tools: Tools; onPress?: () => void }) {
   const t = useTheme();
   const files = tools.files ?? [];
   const commands = tools.commands ?? 0;
   const took = tools.took ?? 0;
-  if (!commands && !files.length && took < LONG_S) return null;
+  // A stretch of reading has no command and no edit, but calls to look at all the same.
+  const calls = !commands && !files.length ? (tools.calls ?? 0) : 0;
+  if (!commands && !files.length && !calls && took < LONG_S) return null;
   const added = files.reduce((n, f) => n + f.added, 0);
   const removed = files.reduce((n, f) => n + f.removed, 0);
   const name = files.length === 1 ? files[0].path.split('/').pop() : `${files.length} 个文件`;
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={[s.worked, { borderColor: t.sep }]}>
       <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13, flex: 1 }}>
-        {[took > 0 ? `干了 ${span(took)}` : '', commands > 0 ? `跑了 ${commands} 个命令` : ''].filter(Boolean).join(' · ')}
+        {[took > 0 ? `干了 ${span(took)}` : '', commands > 0 ? `跑了 ${commands} 个命令` : '', calls > 0 ? `用了 ${calls} 个工具` : ''].filter(Boolean).join(' · ')}
         {(took > 0 || commands > 0) && files.length > 0 && ' · '}
         {files.length > 0 && '改了 '}
         {files.length > 0 && (
@@ -103,13 +105,13 @@ export const Worked = memo(function Worked({ tools, onPress }: { tools: Tools; o
   );
 });
 
-export const Theirs = memo(function Theirs({ m, agent, onTools }: { m: Message; agent: string; onTools?: () => void }) {
+export const Theirs = memo(function Theirs({ m, agent, onTools }: { m: Message; agent: string; onTools?: (seq: number) => void }) {
   const t = useTheme();
   const [said, say] = useCopied();
   const [selecting, setSelecting] = useState(false);
   return (
     <View style={{ gap: 8 }}>
-      {m.tools && <Worked tools={m.tools} onPress={onTools} />}
+      {m.tools && <Worked tools={m.tools} onPress={onTools ? () => onTools(m.seq) : undefined} />}
       <Pressable
         onLongPress={() => {
           Clipboard.setStringAsync(readable(m.text)).catch(() => undefined);

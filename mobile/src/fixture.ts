@@ -3,7 +3,7 @@
 // Loaded only when the bundle is built with EXPO_PUBLIC_FIXTURE=1 (`_layout.tsx`); a normal
 // build drops it. Nothing here reaches a real computer.
 import { RemoteError } from './remote/client';
-import { stage } from './remote/hub';
+import { refresh, stage } from './remote/hub';
 import type { Link } from './remote/link';
 import { enqueue, outboxReady, unsent } from './store/outbox';
 
@@ -23,7 +23,7 @@ const LINKS = [
   link('air', 'MacBook Air', 'wss://relay.example.com'),
 ];
 
-const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop'];
+const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop', 'backfill'];
 
 const card = (o: Record<string, unknown>) => ({
   space: 's-mooring',
@@ -168,8 +168,20 @@ function quota() {
   };
 }
 
+/** For a browser driving the fixture: cards it sets show on `refresh`, answers land in `answers`. */
+const driver: { cards?: Record<string, unknown>[]; answers: unknown[]; asks?: Record<string, unknown>; refresh: () => void; card: typeof card } = {
+  answers: [],
+  refresh: () => void refresh('agent-os'),
+  card,
+};
+
 function remote(machine: string) {
   const answer = (op: string, f: Record<string, unknown>): unknown => {
+    if (op === 'answer' || op === 'trust') driver.answers.push({ op, ...f });
+    if (op === 'ask' && driver.asks) return driver.asks;
+    if (op === 'list' && driver.cards && machine === 'agent-os') {
+      return { machine: { id: machine, name: 'Agent-OS' }, spaces: [{ id: 's-mooring', name: 'mooring', cwd: '/Users/demo/code/mooring' }], terminals: driver.cards };
+    }
     switch (op) {
       case 'hello':
         return { version: 1, machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name }, ops: ALL_OPS, role: machine === 'dev-linux' ? 'answer' : 'full', requests: true, os: machine === 'dev-linux' ? 'linux' : 'macos', app_version: '0.1.0' };
@@ -184,6 +196,8 @@ function remote(machine: string) {
         };
       case 'read':
         return { text: SCREEN };
+      case 'ask':
+        return { question: 'Do you want to proceed?', kind: 'Bash command', subject: 'git push origin main', note: '推送 main 到远端', always: '允许，git push 命令以后不再询问' };
       case 'chat':
         return f.after || f.before ? { session: f.session, more: false, messages: [] } : chat(String(f.terminal));
       case 'diff':
@@ -209,6 +223,7 @@ function remote(machine: string) {
 }
 
 export function install() {
+  (globalThis as { fixture?: typeof driver }).fixture = driver;
   stage(LINKS, async (l) => {
     if (l.machine === 'air') throw new RemoteError('电脑上的 Mooring 不在线', 1012);
     return remote(l.machine) as never;
