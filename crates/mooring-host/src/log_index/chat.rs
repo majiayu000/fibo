@@ -43,11 +43,18 @@ impl Index {
             (None, None) => ("<", "DESC", i64::MAX),
         };
         let (offset, ordinal) = place(cursor);
+        // SQLite seeks using the explicit offset bound, then tests the tuple. Leaving
+        // this at the history floor makes an empty poll walk all the old records.
+        let floor = if after.is_some() {
+            (floor as i64).max(offset)
+        } else {
+            floor as i64
+        };
         let sql = format!("SELECT {SEQ},at,kind,text FROM session_records WHERE path=?1 AND inode=(SELECT inode FROM session_records WHERE path=?1 LIMIT 1) AND kind IN ('user','assistant') AND offset>=?5 AND (offset,ordinal){range}(?2,?3) ORDER BY offset {order},ordinal {order} LIMIT ?4");
         let mut q = self.db.prepare_cached(&sql).map_err(err)?;
         let mut messages = q
             .query_map(
-                rusqlite::params![path, offset, ordinal, limit + 1, floor as i64],
+                rusqlite::params![path, offset, ordinal, limit + 1, floor],
                 |r| {
                     Ok(ChatMessage {
                         seq: r.get(0)?,
