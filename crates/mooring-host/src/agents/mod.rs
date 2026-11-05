@@ -14,13 +14,16 @@ use std::path::{Path, PathBuf};
 
 pub(crate) mod claude;
 pub(crate) mod codex;
+mod codex_script;
 mod cursor;
 mod declared;
 mod grok;
 pub mod hooks;
+pub use tool_lines::{describe_tool, Described, ToolCallLine, ToolOutput};
 pub mod mirror;
 mod permission;
 mod qoder;
+mod tool_lines;
 mod usage_lines;
 
 /// What the host says on a terminal about an Agent it sees but cannot read: `text` is the
@@ -92,6 +95,18 @@ pub trait Adapter: Sync {
     }
     /// `(new tokens, cache reads)` a line says were used since `since`.
     fn usage_line(&self, _line: &[u8], _since: u64, _state: &mut UsageState) -> Option<(u64, u64)> {
+        None
+    }
+    /// Whether a phone can read this CLI's tool calls back from its log: the two below.
+    fn reads_tools(&self) -> bool {
+        false
+    }
+    /// The call `id` as a log line of its holds it.
+    fn tool_call_line(&self, _line: &Value, _id: &str) -> Option<ToolCallLine> {
+        None
+    }
+    /// The output of call `id` as a log line of its holds it.
+    fn tool_result_line(&self, _line: &Value, _id: &str) -> Option<ToolOutput> {
         None
     }
     /// Whether a process is this CLI: its executable, or the script an interpreter runs.
@@ -286,6 +301,16 @@ pub fn usage_line(
     state: &mut UsageState,
 ) -> Option<(u64, u64)> {
     adapter(agent).usage_line(line, since, state)
+}
+
+pub fn reads_tools(agent: Agent) -> bool {
+    adapter(agent).reads_tools()
+}
+pub fn tool_call_line(agent: Agent, line: &Value, id: &str) -> Option<ToolCallLine> {
+    adapter(agent).tool_call_line(line, id)
+}
+pub fn tool_result_line(agent: Agent, line: &Value, id: &str) -> Option<ToolOutput> {
+    adapter(agent).tool_result_line(line, id)
 }
 
 pub fn roots(home: &Path) -> Vec<(Agent, PathBuf)> {

@@ -23,6 +23,7 @@ mod dirs;
 mod list;
 mod quota;
 mod resume;
+mod tools;
 mod usage;
 mod writes;
 
@@ -251,6 +252,21 @@ pub fn serve(
                 let out = out.clone();
                 thread::spawn(move || {
                     let _ = out.send(match usage::usage(&request) {
+                        Ok(ok) => json!({ "id": id, "ok": ok }),
+                        Err(e) => json!({ "id": id, "error": e.to_string() }),
+                    });
+                });
+            }
+            // Reads a log's lines, seconds at the worst: beside the requests too.
+            "toolcalls" | "toolcall" => {
+                let (out, socket) = (out.clone(), socket.to_owned());
+                let many = op == "toolcalls";
+                thread::spawn(move || {
+                    let result = match many {
+                        true => tools::tool_calls(&socket, &request),
+                        false => tools::tool_call(&socket, &request),
+                    };
+                    let _ = out.send(match result {
                         Ok(ok) => json!({ "id": id, "ok": ok }),
                         Err(e) => json!({ "id": id, "error": e.to_string() }),
                     });

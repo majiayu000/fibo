@@ -13,6 +13,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 mod chat;
+mod tools;
 /// How long a turn may run before its prompt is logged and still be the one it opened.
 const TURN_LEAD: u64 = 120;
 fn err(e: impl std::error::Error + Send + Sync + 'static) -> io::Error {
@@ -2041,7 +2042,6 @@ mod tests {
         fs::write(&bad, format!("{}{}", line("a"), line("a"))).unwrap();
         assert!(i.update(Agent::Codex, &bad, false).unwrap().is_some());
     }
-
     /// A log rewritten shorter in place keeps no words from before.
     #[test]
     fn a_rewritten_log_forgets_its_old_words() {

@@ -179,7 +179,7 @@ fn remote_chat_tools_sum_what_the_agent_did_before_each_message() {
     assert_eq!(m[1]["tools"], json!({ "commands": 0, "files": [] }));
     assert_eq!(
         m[2]["tools"],
-        json!({ "commands": 2, "files": [{ "path": "/r/a.rs", "added": 2, "removed": 1 }] })
+        json!({ "commands": 2, "calls": 4, "files": [{ "path": "/r/a.rs", "added": 2, "removed": 1 }] })
     );
     assert_eq!(m[4]["tools"], json!({ "commands": 0, "files": [] }));
     // A page that starts mid-turn still counts from the message before it.

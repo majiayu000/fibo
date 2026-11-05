@@ -1,5 +1,5 @@
 // One conversation: your words in grey bubbles, the Agent's flat, its work folded into a
-// line that opens the diff; the approval or question it waits on; a composer card whose
+// line that opens each call it made; the approval or question it waits on; a composer card whose
 // send key turns into stop while the Agent runs.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,6 +12,7 @@ import { useAsk } from '@/remote/useAsk';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { Composer } from '@/ui/composer';
 import { cardTitle } from '@/ui/format';
+import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
 import { choices, questionText } from '@/ui/parse';
@@ -179,6 +180,10 @@ export default function Chat() {
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
   const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
+  const toTools = useCallback(
+    (seq?: number) => router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}) } }),
+    [machine, terminal],
+  );
   // The hub's heartbeat redraws this screen; a row redraws only when its own message changes.
   const renderItem = useCallback(
     ({ item: l }: { item: Line }) =>
@@ -186,7 +191,7 @@ export default function Chat() {
         l.m.role === 'user' ? (
           <Mine text={l.m.text} at={l.m.at} copyable />
         ) : (
-          <Theirs m={l.m} agent={agent} onTools={l.m.tools?.files?.length ? toDiff : undefined} />
+          <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
       ) : l.kind === 'pending' ? (
         <Mine text={l.p.text} note="发送中…" tone="pending" />
@@ -195,7 +200,7 @@ export default function Chat() {
           <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, toDiff],
+    [agent, toTools],
   );
 
   return (
@@ -240,6 +245,14 @@ export default function Chat() {
           onEndReached={older}
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
+          ListHeaderComponent={
+            running && session && supports(m, 'toolcalls') ? (
+              <Pressable accessibilityRole="button" onPress={() => toTools()} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 6 }}>
+                <Text style={{ flex: 1, fontSize: 13, color: t.dim }}>看它到现在做了什么</Text>
+                <Icon name="right" size={14} width={2} color={t.dim} />
+              </Pressable>
+            ) : undefined
+          }
           ListEmptyComponent={
             <Text style={{ color: t.dim, textAlign: 'center' }}>
               {card?.session ? '这段对话还没有消息' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}

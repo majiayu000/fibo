@@ -3,6 +3,7 @@
 //! reference for phone apps in other languages.
 //!
 //! - [`protocol`]: the JSON lines a client and a machine exchange.
+//! - [`tools`]: the replies to `toolcalls` and `toolcall`.
 //! - [`client`]: a client of one machine over a pipe (`mooring remote --stdio`, often via ssh).
 //! - [`close`]: the close codes a phone's socket ends with, one per case.
 //! - [`role`]: what a paired device may do.
@@ -19,4 +20,5 @@ pub mod link;
 pub mod protocol;
 pub mod role;
 pub mod secure;
+pub mod tools;
 pub mod wire;

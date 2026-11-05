@@ -45,6 +45,15 @@ impl Adapter for Claude {
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CLAUDE_CONFIG_DIR", ".claude").join("projects")
     }
+    fn reads_tools(&self) -> bool {
+        true
+    }
+    fn tool_call_line(&self, line: &Value, id: &str) -> Option<super::ToolCallLine> {
+        super::tool_lines::claude_call(line, id)
+    }
+    fn tool_result_line(&self, line: &Value, id: &str) -> Option<super::ToolOutput> {
+        super::tool_lines::claude_result(line, id)
+    }
     fn usage_marker(&self) -> Option<&'static [u8]> {
         Some(b"\"usage\"")
     }

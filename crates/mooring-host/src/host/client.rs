@@ -3,6 +3,7 @@
 use super::*;
 mod edit;
 mod once;
+mod tool_rows;
 mod typing;
 pub(super) use typing::*;
 
@@ -522,6 +523,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 .index
                 .chat(&s.transcript, after, before, limit, tools)?;
             Ok(Reply::Chat { messages, more })
+        }
+        request @ (Request::ToolCalls { .. } | Request::ToolCall { .. }) => {
+            tool_rows::dispatch(shared, request)
         }
         Request::ReadScreen { id, rows } => {
             let host = lock(shared)?;

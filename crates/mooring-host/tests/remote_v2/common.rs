@@ -140,6 +140,48 @@ impl Host {
         }
         path
     }
+    /// A fake Codex in `terminal`, bound by the id on its command line, whose rollout holds
+    /// `rows` after its `session_meta`. Returns the log path.
+    pub fn codex(&self, terminal: &str, cwd: &Path, rows: &[Value], script: &str) -> PathBuf {
+        let logs = self.root.join("logs/codex");
+        fs::create_dir_all(&logs).unwrap();
+        let cli = self.root.join("codex");
+        if !cli.exists() {
+            std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let path = logs.join(format!("rollout-2026-11-05T00-00-00-{id}.jsonl"));
+        let meta = json!({"type":"session_meta","timestamp":"2026-11-05T00:00:00Z","payload":{"id":id,"cwd":cwd,"originator":"codex_cli_rs","source":"cli"}});
+        let mut lines = format!("{meta}\n");
+        for row in rows {
+            lines += &format!("{row}\n");
+        }
+        let seed = self.root.join(format!("seed-{terminal}"));
+        fs::write(&seed, lines).unwrap();
+        let body = format!(
+            "cat {} > {}; {script}",
+            shell_quote(&seed.to_string_lossy()),
+            shell_quote(&path.to_string_lossy()),
+        );
+        self.launch(
+            terminal,
+            cwd,
+            &format!(
+                "exec {} -c {} resume {id}",
+                shell_quote(&cli.to_string_lossy()),
+                shell_quote(&body),
+            ),
+        );
+        let until = Instant::now() + Duration::from_secs(30);
+        while self.workspace().current_agent(terminal).is_none() {
+            assert!(
+                Instant::now() < until,
+                "the id on its command line must bind"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        path
+    }
 }
 impl Drop for Host {
     fn drop(&mut self) {

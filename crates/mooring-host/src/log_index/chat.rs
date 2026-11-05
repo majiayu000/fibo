@@ -129,8 +129,11 @@ fn took(began: i64, at: u64) -> u64 {
 
 /// Commands run and files changed by `tool_call` records (`Name {arguments}`), each with
 /// whether it failed: a failed edit changed nothing, a failed command still ran.
-fn summary(calls: &[(String, bool)]) -> ChatTools {
-    let mut out = ChatTools::default();
+pub(super) fn summary(calls: &[(String, bool)]) -> ChatTools {
+    let mut out = ChatTools {
+        calls: calls.len() as u32,
+        ..Default::default()
+    };
     for (call, failed) in calls {
         let (name, args) = call.split_once(' ').unwrap_or((call, ""));
         let args: Value = serde_json::from_str(args).unwrap_or(Value::Null);
@@ -256,8 +259,14 @@ mod tests {
                 ]
             );
         }
-        // Built at run time: nothing to read, nothing made up.
-        assert_eq!(summary(&calls[2..3]), ChatTools::default());
+        // Built at run time: nothing to read, nothing made up; the call itself still counts.
+        assert_eq!(
+            summary(&calls[2..3]),
+            ChatTools {
+                calls: 1,
+                ..Default::default()
+            }
+        );
         // The command the script ran, as Codex logs it once it is done.
         assert_eq!(summary(&calls[3..]).commands, 1);
     }

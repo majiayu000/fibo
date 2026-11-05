@@ -8,6 +8,7 @@ use serde_json::{Map, Value};
 
 pub const VERSION: u32 = 1;
 pub const MAX_LINE: usize = 1 << 20;
+pub use crate::tools::*;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Request {
@@ -194,6 +195,35 @@ pub enum Op {
     },
     /// The account limits each Agent last reported, within a week: [`Quotas`].
     Quota,
+    /// The tool calls of one stretch of a conversation (names its `terminal` or `session`):
+    /// [`ToolCalls`]. `seq` is the Agent message they led to (none: since the last message);
+    /// `after` is the `next` of the page before; `limit` defaults to 100, at most 200.
+    ToolCalls {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seq: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        after: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u64>,
+    },
+    /// One call in full, from its raw log lines, secrets hidden: [`ToolCallDetail`], the
+    /// head and tail of its input and output. With `part` (`input` or `output`) and
+    /// `offset`: the next stretch of that text, [`ToolSlice`].
+    ToolCall {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+        call: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        part: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        offset: Option<u64>,
+    },
 }
 
 impl Op {
@@ -223,6 +253,8 @@ impl Op {
             Self::LastSession { .. } => "lastsession",
             Self::AddSpace { .. } => "addspace",
             Self::Usage { .. } => "usage",
+            Self::ToolCalls { .. } => "toolcalls",
+            Self::ToolCall { .. } => "toolcall",
         }
     }
 }
@@ -253,6 +285,8 @@ pub const OPS: &[&str] = &[
     "lastsession",
     "addspace",
     "usage",
+    "toolcalls",
+    "toolcall",
 ];
 
 /// A line from the machine.
@@ -484,9 +518,15 @@ pub struct Tools {
     /// Seconds this stretch of work took; absent when the log cannot say.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub took: u64,
+    /// Every tool call, whatever kind.
+    #[serde(default, skip_serializing_if = "none")]
+    pub calls: u32,
 }
 
 fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+fn none(n: &u32) -> bool {
     *n == 0
 }
 

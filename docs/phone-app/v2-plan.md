@@ -152,7 +152,7 @@
 ### 和设计稿还不一样的地方
 
 - 一键回复「打包并安装 / 先别」：那是从 Agent 的自由文字里猜的，不做。编号选项和问题工具的选项照旧。
-- 工具摘要点开「看每条命令」：现在有改动时打开改动页，没做逐条列表。
+- 工具摘要点开「看每条命令」：现在有改动时打开改动页，没做逐条列表。（已做，见下面「工具调用的完整还原」。）
 - 附件按钮、审批失效时间、后果说明：不做（见上文）。
 - 选目录底部「上一级」换成了「设为空间」，和设计稿一致；上一级用顶部路径点回去。
 - 只配了一台电脑时，会话标题栏不写电脑名，给分支和状态词留位置；配了多台才写。
@@ -166,3 +166,103 @@
 ### 怎么复现
 
 `cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture` 起演示电脑（假 Agent、真后台、真中继、独立的 HOME 和真 git 仓库），`cd mobile && bunx expo start --web`，粘贴打印的链接。对照图是 [v2-compare/](v2-compare/) 的 `gaps-*.png`，左设计稿右 App。测试在 `crates/mooring-host/tests/remote_v2_gaps.rs`。
+
+## 工具调用的完整还原（2026-11-05，分支 feat/phone-tools）
+
+**决定：协议、打码、读日志和界面采用；「真手机上好不好用」待验证。放弃条件：真手机打开一段清单超过 1 秒，或者同一台手机再出现多条连接。**
+
+要支撑的决定：离开电脑时，能不能只靠手机看懂 Agent 到底做了什么（用户：「还原挺重要」）。
+
+### 协议
+
+| op | 请求 | 回复 `ok` | 权限 |
+|---|---|---|---|
+| `toolcalls` | `{session 或 terminal, seq?, after?, limit?}`。`seq` 是这段工作引出的 Agent 消息；不写就是最后一条消息之后（一轮还在跑时用）。`limit` 默认 100，最多 200 | `{session, tools?, calls:[{id, name, kind, label, at, took_ms?, failed, code?, open?, size?}], next?, gone?}`。`tools` 只在第一页 | 三档 |
+| `toolcall` | `{session 或 terminal, call}` | `{…同上一条, input_kind, input:{total, head, tail, tail_at}, output?, steps?, note?}` | 三档 |
+| `toolcall` 分段 | 再加 `part:"input"/"output"`, `offset` | `{part, offset, text, next, total}`，每段 64 KiB | 三档 |
+
+`chat` 的 `tools` 加 `calls`（这段的工具调用总数），只有读文件、搜索的一段也能点开。`Request::ToolCalls`、`ToolCall` 只给行号和偏移，不读日志。
+
+和任务描述的出入：单条默认给输入两端 24 KiB + 8 KiB、输出两端 48 KiB + 16 KiB（按 JSON 转义后的字节算），实测单次回复最大 65 KB，MAX_LINE 是 1 MiB。清单和单条都在 `usage` 那样的独立线程里跑，不占请求队列。
+
+### 怎么读
+
+- **不靠截断的索引，也不扫日志。** `session_records` 每行记着日志的 inode 和这一行的起始偏移。后台用单独的 SQLite 连接（`fork_current`，WAL 读不挡写，也不拿后台的大锁）查出行号和偏移，`mooring remote` 进程自己 seek 过去读那一行。一行最多读 32 MiB，超过的写「这条输出超过 32 MB，手机不显示」，不算记录不在；同一进程同时只读一个；清单读够 3 秒就停，剩下的不给 `size`，手机 10 秒的请求上限不会被碰到。
+- **文件对不上就说不在。** 打开失败、inode 不同、那一行解析不出来：单条报「原始记录已不在」，清单仍给索引留下的说明并带 `gone:true`，手机写「只剩下这份清单」。
+- **Claude**：按 `tool_use.id` / `tool_use_id` 在这一行的内容块里找（一行可能有多个）。`is_error` 只算失败，没有退出码；输出首行或末行写了 `Exit code N` 才显示 N（索引把 `is_error` 记成 1，显示出来会误导）。
+- **Codex**：`function_call`、`custom_tool_call`、`CommandExecution` 都认。`exec` 脚本用 `agents/codex_script.rs` 拆：跳过字符串和注释，读 `tools.x(...)` 里写死的字符串。真实日志里脚本用到的工具主要是 `exec_command`、`web__run`、`write_stdin`、`apply_patch`、`view_image`。运行时才拼出来的命令和补丁写明「读不到内容」，详情页也有一句说明。只跑命令、且命令有自己一行的脚本不单独列，否则同一条命令出现两次。`write_stdin` 的结果归到原命令上。
+- **其他 Agent**：`toolcalls`、`toolcall` 回「这个 Agent 还不支持查看工具详情」，判断走 `Adapter::reads_tools`。
+
+### 打码
+
+`crates/mooring-host/src/redact.rs` 的 `redact` 是唯一入口，由 `tool_text::clean` 调用：去终端颜色和控制字符、长 base64 换成占位、然后打码。**所有切片都从打码后的文本上切**，所以密钥不会跨在切口上，offset 每次也一样。清单的一行说明也是先打码再截短，截短后的半截密钥就认不出来了。规则：私钥块（没写完也隐藏到结尾）、URL 里的账号密码、已知前缀（`sk-`、`ghp_`、`github_pat_`、`xox*`、`AKIA`、`AIza`、`glpat-`、`npm_`、`hf_`、`ya29.`、`sk_live_`、JWT 等）、`Authorization` 和 `Bearer`、`--token xxx`、名字带 token/secret/password/api_key/credential 的赋值。
+
+真实日志统计（最近 200 个日志，58,008 段工具文本，814 MB，`cargo test --release -p mooring-host --test redact_corpus -- --ignored --nocapture`，只输出计数，没有写出或提交原文）：
+
+| 规则 | 命中 | 不同取值 |
+|---|---|---|
+| 赋值 | 350 | 184 |
+| 已知前缀 | 32 | 24 |
+| `--token` 类参数 | 17 | 11 |
+| URL 账号密码 | 11 | 6 |
+| Authorization | 7 | 3 |
+| 私钥块 | 2 | 2 |
+
+有内容被隐藏的文本占 0.35%（任务里粗略正则的 2% 里误报多）。
+
+- **漏网，看形状估的，没有逐条读原文**：密钥名后面紧跟的随机串，隐藏后还剩 2 处。已知前缀还剩约 70 处，都比真实密钥短（规则要求的长度以下），多半是文档、测试里的示例或截断后的显示。名字不带这些词的密钥（比如随便起名的环境变量）规则认不出来，数不出有多少。
+- **误报，同样是估的**：赋值规则里 90 处隐藏的是全小写单词（如 `"token": "some-name"`），这类大半是误报；宁可多藏，所以保留。
+- 包含关键词的行上还有 2,870 处长串，绝大多数是标识符；像随机串的 181 处，其中紧跟 `=`/`:` 的 97 处，但前面的名字不带这些词，没有隐藏，也没法判断是不是密钥。
+
+变异验证：六条规则、GitHub 前缀、占位词豁免、`clean` 跳过打码（单元和 `--stdio` 各一遍）、清单说明 / 输入 / 输出不打码，逐个撤掉都有测试失败。
+
+### 手机
+
+- 会话页摘要行点开是 `/tools`（清单），再点是 `/tool`（单条）。一轮还在跑时，会话页底部多一行「看它到现在做了什么」。清单顶上一行「改了 x +a −b · 看改动」进改动页，会话标题栏的改动胶囊也保留。
+- 清单行高固定（62 pt，`getItemLayout`），每页 100 条，滑到底取下一页。失败的整行标红，写退出码。
+- 单条：输出 / 输入两个标签；等宽字（`ui/mono.ts`）；只画屏幕上的行（`ui/codeview.tsx`，行高固定）；整块横滑；超过 1000 字符的行分到下一行，不截断；两端之间写「中间还有 1.1 MB」，「再取一段」「全部取完」固定在列表上方。复制：没取完时写明「已复制取到的部分，中间还差 X」。
+- 只在点开时取，状态都在页面组件里，离开就没了。两个页面没有引用 `store/` 任何东西，网页版走完后查过 localStorage 里没有工具输出。
+- 旧电脑没有这个 op：显示 `NOT_YET`，摘要行点开后仍有改动入口。
+
+对照截图：[v2-compare/](v2-compare/) 的 `tools-*.png`（浅深各一张，真后台真中继，内容都是 `phone_gaps_demo` 里手写的，密钥是编的）。
+
+### 性能（`real_log_costs`，release 包，只打印耗时）
+
+| 日志 | 清单每页 p50 / p95 / 最大 | 单条 p50 / p95 / 最大 | 后台同时回复 p50 / p99 / 最大（单独跑时） |
+|---|---|---|---|
+| Claude 279 MB，500 条消息 | 3.9 / 5.6 / 13.7 ms | 3.4 / 4.2 / 4.2 ms | 0.10 / 0.32 / 14.6 ms（0.33 / 3.97 / 7.5 ms） |
+| Codex 87 MB，216 条消息 | 2.5 / 3.9 / 13.1 ms | 2.5 / 3.7 / 4.0 ms | 0.10 / 0.29 / 0.46 ms（0.45 / 3.15 / 3.9 ms） |
+
+后台回复是用 `ReadScreen` 持续探测（约 1000 次）：一边反复取清单和单条，一边看后台会不会变慢。看不出变慢。这两份日志里最大的输出（641 KB、5.1 MB）都是图片，单条耗时主要是读和解析那一行。纯文本长输出用手写的 38 MB 日志量（每条 680 KB，处处带可隐藏的内容，是打码最费的情况）：单条 p50 16.0 ms、最大 16.3 ms，分段每段 p50 15.8 ms、最大 16.8 ms，清单每页（100 条，每条读 680 KB）p50 5.4 ms、最大 29 ms，最大回复 64 KB。
+
+### 同一台手机 3 条连接：真问题，在手机，已修
+
+依据：
+
+- 电脑端 `online` 按会话列，一条 WebSocket 一项，没有重复显示。真机的 `remote-log.jsonl` 里 273 次 connected、268 次 left，按 1.5 秒内聚类最多一次连上 20 条，说明手机确实开了这么多连接。中继是一对一转发，电脑端的会话 id 由中继按每条 WebSocket 发，不会自己多出来。
+- 手机的 `hub.ts` 有三处配合起来出问题：
+  1. `connect` 只查 `remotes.has(id)`，而拨号完成才写进去，**拨号途中再调用就会再拨一条**。
+  2. 回前台和「重试」只 `retry.delete(id)`，**退避定时器没取消**，后面照样触发。`later` 覆盖 `r.timer` 时也不清旧的。手机在后台时 JS 定时器是冻住的，回前台一起触发，所以几条同时连上，`since` 只差几毫秒。
+  3. 新连接覆盖 `remotes` 后，**旧连接没人关**，还在发心跳；它断开时又把新连接从 `remotes` 里删掉，并各自排一次重连。于是下一次断网，N 条变成 N 次重连，数字只增不减。
+- 修法：同一台电脑只拨一条（`dialing`），取消重试统一走 `stopRetry`，只有当前连接的断开才算断开，拨到一半被移除或重新配对的连接自己关掉。`pair` 的握手检查也走同一个 `dial`。
+
+验证：
+
+- `mobile/test/hub.test.ts` 四条。换回旧的 `hub.ts`，其中三条失败。
+- 活的对比：真中继、真电脑，中间加 800 ms 延迟的代理模拟慢网，反复杀掉电脑端并切换前后台。旧版一轮出现 2 条；新版三轮都是 1 条。
+
+### 已验 / 没验
+
+已验：见上面各节；`bun test` 全过、两个 tsc 配置、`expo-doctor` 20/20；全量 cargo 和 clippy 的结果在提交说明里。网页版 390×844 浅深两色都走完了：清单、失败、长输出分段、取完、打码、图片占位、横滑、Edit 的 diff、进改动页。
+
+没验：
+
+- 真手机（iOS、Android 原生都没跑）：横向 ScrollView 套 FlatList 的手势、等宽字在安卓上的行高、复制几十万字符。
+- 最大的那份 4.2 GB 日志（2 GB 图片的 user 行、2.2 GB api-request-blob）：测试后台等了 4 分多钟，这份日志一条消息也没有进索引，所以没量到。原因没查，`chat` 同样依赖索引，应该是已有行为。其余日志的偏移读取和文件大小无关，但这一点没有在 4 GB 偏移上亲手量过。
+- 真 Codex 正在写的日志：格式来自最近 30 个真实 rollout 的结构统计和手写样例，界面没连过真 Codex 会话。
+- Claude Code 把超长输出存成文件（只在日志里留预览）的情况：看到的就是那份预览，没有跟进文件。
+- 相邻情况：Codex 的 `McpToolCall`、`FileChange`、`ImageView`、`Extension` 完成事件没进索引，它们只通过 `exec` 脚本的步骤和输出体现；Grok 等其他 Agent 只有一句不支持。
+
+### 怎么复现
+
+`cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（`review` 会话的第二段是这次加的），`cd mobile && bunx expo start --web`，粘贴打印的链接。杀掉 `mooring remote --relay` 进程，5 秒后它会自己起来，可以试重连。测试：`crates/mooring-host/tests/remote_tools.rs`。

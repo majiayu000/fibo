@@ -65,7 +65,18 @@ mod tests {
     #[test]
     fn roles_allow_only_what_they_name() {
         for op in [
-            "hello", "list", "read", "chat", "watch", "events", "close", "diff", "quota", "usage",
+            "hello",
+            "list",
+            "read",
+            "chat",
+            "watch",
+            "events",
+            "close",
+            "diff",
+            "quota",
+            "usage",
+            "toolcalls",
+            "toolcall",
         ] {
             assert!(Role::View.allows(op));
         }
@@ -79,5 +90,6 @@ mod tests {
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
         assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
         assert!(!acts("diff") && !acts("dirs") && !acts("quota") && !acts("usage"));
+        assert!(!acts("toolcalls") && !acts("toolcall"));
     }
 }

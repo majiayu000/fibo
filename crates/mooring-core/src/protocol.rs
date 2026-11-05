@@ -148,6 +148,23 @@ pub enum Request {
         #[serde(default)]
         tools: bool,
     },
+    /// A phone opening a stretch of work: the tool calls logged before the Agent message
+    /// `seq` and after the message before it (no `seq`: after the last message), oldest
+    /// first, from past the `after` cursor. Rows only: their raw lines are the caller's to
+    /// read, without the host's lock.
+    ToolCalls {
+        session: String,
+        #[serde(default)]
+        seq: Option<i64>,
+        #[serde(default)]
+        after: Option<i64>,
+        limit: usize,
+    },
+    /// One tool call by its id, and where its raw lines are.
+    ToolCall {
+        session: String,
+        call: String,
+    },
     /// Scripts and other Agents: the last `rows` rows of a terminal as plain text.
     ReadScreen {
         id: String,
@@ -368,6 +385,17 @@ pub enum Reply {
         messages: Vec<ChatMessage>,
         more: bool,
     },
+    /// `ToolCalls`; `tools` on the stretch's first page, `next` the cursor while more follow.
+    ToolCalls {
+        log: ToolLog,
+        tools: Option<ChatTools>,
+        rows: Vec<ToolRow>,
+        next: Option<i64>,
+    },
+    ToolCall {
+        log: ToolLog,
+        row: ToolRow,
+    },
     /// A terminal size in cells: what a split's new pane starts at (`SplitRoom`).
     Size {
         cols: u16,
@@ -404,6 +432,39 @@ pub struct ChatTools {
     /// the message before was the Agent's own (it may have slept since). 0 when unknown.
     #[serde(default)]
     pub took: u64,
+    /// Every tool call in it, whatever kind: a stretch of reading has no command or edit.
+    #[serde(default)]
+    pub calls: u32,
+}
+
+/// The raw log a conversation's tool rows point into, and the CLI that wrote it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolLog {
+    pub path: String,
+    pub runtime: crate::model::Agent,
+}
+
+/// A tool call as the index has it: `text` is `Name {arguments}`, long arguments cut down
+/// to the fields read later, so the whole of it is only in its raw line at `offset`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolRow {
+    pub seq: i64,
+    pub id: String,
+    pub text: String,
+    pub at: u64,
+    pub inode: u64,
+    pub offset: u64,
+    /// Its results, oldest first: a command read back later has several.
+    pub results: Vec<ToolResultRow>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolResultRow {
+    pub seq: i64,
+    pub at: u64,
+    pub code: Option<i32>,
+    pub inode: u64,
+    pub offset: u64,
 }
 
 /// A running terminal passed from one host to the next.
