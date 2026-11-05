@@ -33,7 +33,7 @@ field tab-title	crates/mooring-app/src/workbench/diagnostics.rs	1
 field tab-title	crates/mooring-app/src/workbench/tabs.rs	2
 field turn	crates/mooring-app/src/workbench/board/remote.rs	1
 field turn	crates/mooring-host/examples/claim_scan.rs	1
-field turn	crates/mooring-host/src/control.rs	2
+field turn	crates/mooring-host/src/control/explain.rs	2
 field turn	crates/mooring-host/src/host/client.rs	1
 field turn	crates/mooring-host/src/host/mod.rs	6
 field turn	crates/mooring-host/src/host/report_back.rs	2
@@ -107,7 +107,7 @@ word 空闲	crates/mooring-core/src/diagnostics.rs	1
 word 空闲	crates/mooring-host/src/agents/codex.rs	2
 word 空闲	crates/mooring-host/src/content/mod.rs	1
 word 等你回答	crates/mooring-app/src/workbench/layout/confirm_close.rs	1
-word 等你回答	crates/mooring-host/src/control.rs	1
+word 等你回答	crates/mooring-host/src/control/prompt.rs	1
 word 等你回答	mobile/src/app/chat.tsx	1
 word 等你回答	mobile/src/app/settings.tsx	2
 word 等你验收	crates/mooring-app/src/model/session_state.rs	1
