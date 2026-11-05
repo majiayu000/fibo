@@ -40,7 +40,7 @@ impl Workbench {
                 self.focus_terminal(&lost, window, cx);
                 return;
             }
-            if let Some(space) = session_space(&self.workspace, session) {
+            if let Some(space) = self.workspace.session_space(session) {
                 self.nav.space = space.into();
             }
             self.resuming.resume = Some((

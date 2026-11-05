@@ -309,7 +309,7 @@ impl Workbench {
         let space = self
             .space_filter()
             .is_none()
-            .then(|| session_space(&self.workspace, session))
+            .then(|| self.workspace.session_space(session))
             .flatten()
             .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
             .map(|s| self.space_tag(&s.id, &s.name));

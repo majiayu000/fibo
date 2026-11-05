@@ -170,14 +170,16 @@ impl super::Pane {
     }
     /// The first line of an ask, as a pane shows it.
     pub(super) fn ask_first_line(&self, i: usize) -> Option<String> {
-        self.asks
+        self.ask
+            .asks
             .get(i)
             .and_then(|a| a.lines().map(str::trim).find(|l| !l.is_empty()))
             .map(|l| mooring_core::content::short(l, 200))
     }
     /// The bar's words and the row they scroll back to, when the bar is showing.
     pub(super) fn ask_bar_line(&self, cx: &gpui::App) -> Option<(String, Option<usize>)> {
-        self.pinned
+        self.ask
+            .pinned
             .latest
             .filter(|_| crate::ui::pinned_ask::current(cx).bar)
             .and_then(|(i, row)| Some((self.ask_first_line(i)?, row)))

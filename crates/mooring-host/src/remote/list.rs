@@ -2,7 +2,7 @@
 //! burst of events), so everything here reads what the host already has, and a card's
 //! branch comes from `.git/HEAD` through a short cache, never a git process.
 use crate::control::{self, Phase};
-use mooring_core::{git_head, model::*, protocol::*, status};
+use mooring_core::{git_head, model::*, protocol::*, status, status_group};
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -61,7 +61,11 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
             let note = unbound.and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
             rp::Card {
                 id: t.id.clone(),
-                space: t.space.clone(),
+                // The space the window lists the conversation under; a shell's own.
+                space: session
+                    .and_then(|s| w.session_space(s))
+                    .unwrap_or(&t.space)
+                    .to_owned(),
                 tab: control::tab_title(w, &t.id),
                 cwd: cwd.clone(),
                 phase,
@@ -76,6 +80,9 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                 status: status.map(|s| s.key().to_owned()),
                 status_label: status.map(|s| s.label().to_owned()),
                 needs_you: session.is_some_and(|s| w.needs_you(s, now)),
+                column: session
+                    .and_then(|s| status_group::column(w, s, now))
+                    .map(|c| c.key().to_owned()),
                 note,
                 turn: content
                     .map(|c| c.turn_key.clone())
@@ -131,7 +138,6 @@ fn outcome_key(o: &Outcome) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mooring_core::status;
 
     /// The phone's cards say what the window says, on every sample case.
     #[test]
@@ -162,6 +168,13 @@ mod tests {
                 card.id
             );
             assert_eq!(card.needs_you, w.needs_you(s, at), "{}", card.id);
+            assert_eq!(card.space, w.session_space(s).unwrap_or(&term.space));
+            assert_eq!(
+                card.column.as_deref(),
+                status_group::column(&w, s, at).map(|c| c.key()),
+                "{}",
+                card.id
+            );
         }
         let _ = std::fs::remove_dir_all(dir);
     }
