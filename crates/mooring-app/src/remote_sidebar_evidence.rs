@@ -346,6 +346,33 @@ pub(super) fn start(
         assert_eq!(wants(cx), 2, "接着管 did not bring its count back");
         assert_eq!(column(cx).0, 1, "接着管 did not bring its row back");
         shoot("resumed-a.png", cx);
+        // The flight: where it went has to be seen. Held at each moment, then it must end.
+        let held = |ms: u64, name: &str, cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_hold_motion(Some(ms))).unwrap();
+            handle.update(cx, |_, _, cx| cx.notify()).unwrap();
+            shoot(name, cx);
+            handle.update(cx, |v, _, _| v.visual_quiet_moving()).unwrap()
+        };
+        handle.update(cx, |v, _, _| v.visual_hold_motion(Some(0))).unwrap();
+        handle
+            .update(cx, |v, _, cx| v.visual_machine_menu(0, true, cx))
+            .unwrap();
+        handle
+            .update(cx, |v, _, cx| v.visual_set_machine_quiet(0, true, cx))
+            .unwrap();
+        for (ms, name) in [(30, "fly-030"), (150, "fly-150"), (260, "fly-260"), (390, "fly-390"), (450, "glow-450"), (560, "glow-560")] {
+            assert!(held(ms, &format!("{name}.png"), cx), "{name} should still be moving");
+        }
+        assert!(!held(1100, "fly-rest.png", cx), "the flight never ended");
+        handle
+            .update(cx, |v, _, cx| v.visual_set_machine_quiet(0, false, cx))
+            .unwrap();
+        handle.update(cx, |v, _, _| v.visual_hold_motion(Some(1100))).unwrap();
+        for (ms, name) in [(1250, "back-150"), (1400, "back-300")] {
+            assert!(held(ms, &format!("{name}.png"), cx), "{name} should still be moving");
+        }
+        assert!(!held(2000, "back-rest.png", cx), "the way back never ended");
+        handle.update(cx, |v, _, _| v.visual_hold_motion(None)).unwrap();
         let away = handle
             .update(cx, |v, _, cx| v.visual_machine_hit("先不管", cx))
             .unwrap();

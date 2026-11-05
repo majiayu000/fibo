@@ -11,10 +11,13 @@
 use super::sidebar_list::SidebarPrefs;
 use super::*;
 use crate::machines::Link;
+use crate::ui::theme::Flat as F;
 use mooring_core::sidebar::Machines;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Instant;
+
+mod flight;
 
 const ROW_IN: f32 = 180.;
 const STAGGER: f32 = 16.;
@@ -178,6 +181,8 @@ impl Switch {
 pub(in crate::workbench) struct SidebarMotion {
     folds: Vec<Fold>,
     switch: Option<Switch>,
+    flight: Option<flight::Flight>,
+    seats: flight::Seats,
 }
 impl SidebarMotion {
     /// Turning back midway starts from where it is, not from the far end.
@@ -222,9 +227,12 @@ impl SidebarMotion {
         {
             self.switch = None;
         }
+        if self.flight.as_ref().is_some_and(|f| f.ended(now)) {
+            self.flight = None;
+        }
     }
     pub(super) fn moving(&self) -> bool {
-        !self.folds.is_empty() || self.switch.is_some()
+        !self.folds.is_empty() || self.switch.is_some() || self.flight.is_some()
     }
     fn folding(&self, key: &str) -> Option<&Fold> {
         self.folds.iter().find(|f| f.key == key)
@@ -534,12 +542,12 @@ mod tests {
     fn the_rail_mark_lands_on_its_slot() {
         let now = Instant::now();
         let mut m = SidebarMotion {
-            folds: Vec::new(),
             switch: Some(Switch {
                 started: now,
                 from: (0., 1.),
                 rail: Some((0., 2.)),
             }),
+            ..Default::default()
         };
         assert!(m.moving());
         assert_eq!(settle_spring(0.), 0.);

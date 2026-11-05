@@ -604,6 +604,11 @@ impl Workbench {
             .child(self.flat_foot(listed, cx));
         // The rail lies over the left of the column rather than beside it: in a row, taffy
         // measures the whole list's content to size it (117 M instructions a redraw).
+        let rail_left = if self.machine_layout() == Machines::Rail {
+            RAIL
+        } else {
+            0.
+        };
         let body = match (self.machine_layout() == Machines::Rail).then(|| self.machine_rail(cx)) {
             Some(rail) => div()
                 .relative()
@@ -618,6 +623,7 @@ impl Workbench {
         };
         div()
             .id("sidebar")
+            .relative()
             .w(px(F::WIDTH))
             .h_full()
             .min_h_0()
@@ -630,6 +636,7 @@ impl Workbench {
             .border_color(T::color(F::line()))
             .child(self.flat_lights(cx))
             .child(body)
+            .children(self.sidebar.motion.pill(rail_left))
     }
     /// What the brand row names: this machine, or the one shown alone, and whether it is up.
     pub(super) fn column_machine(&self) -> (String, bool) {

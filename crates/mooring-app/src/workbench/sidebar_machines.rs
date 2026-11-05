@@ -38,7 +38,7 @@ pub(super) fn machine_label(host: &str) -> &str {
     host.rsplit('@').next().unwrap_or(host)
 }
 /// The letter in a machine's square mark.
-pub(super) fn machine_letter(name: &str) -> String {
+pub(in crate::workbench) fn machine_letter(name: &str) -> String {
     name.chars()
         .next()
         .map_or_else(String::new, |c| c.to_uppercase().collect())
@@ -73,7 +73,7 @@ impl RemoteRow {
     }
 }
 
-pub(super) fn machine_mark(letter: String, faded: bool) -> gpui::Div {
+pub(in crate::workbench) fn machine_mark(letter: String, faded: bool) -> gpui::Div {
     const MARK: f32 = 15.;
     div()
         .size(px(MARK))

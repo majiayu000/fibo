@@ -43,6 +43,15 @@ fn quiet_words(name: &str, waiting: usize) -> String {
     }
 }
 
+/// `from` turned `t` of the way to `to`, for the words as the line glows.
+fn mix(from: gpui::Hsla, to: gpui::Hsla, t: f32) -> gpui::Hsla {
+    gpui::Hsla {
+        l: from.l + (to.l - from.l) * t,
+        a: from.a + (to.a - from.a) * t,
+        ..from
+    }
+}
+
 /// What the palette says for a machine.
 fn switch_words(name: &str, quiet: bool) -> String {
     format!("{} {name}", if quiet { "接着管" } else { "先不管" })
@@ -64,7 +73,9 @@ impl Workbench {
             return;
         };
         self.machines[index].view.lock().unwrap().spec.quiet = quiet;
-        self.sidebar.machine_menu = None;
+        let menu = (self.sidebar.machine_menu.take()).map(|(_, at)| f32::from(at.y));
+        let name = machine_label(&host).to_owned();
+        self.sidebar.motion.fly(&host, &name, quiet, menu);
         // You just left it: the column does not go on showing it alone.
         if quiet && self.sidebar.machine_scope.as_deref() == Some(host.as_str()) {
             self.set_machine_scope(None);
@@ -151,8 +162,15 @@ impl Workbench {
             let open = self.sidebar.open(&key, false);
             let name = machine_label(&host).to_owned();
             let words = quiet_words(&name, self.quiet_waiting(index));
+            let (shown, glow) = self.sidebar.motion.line_state(&host);
             let line = div()
                 .id(gpui::SharedString::from(format!("quiet-{index}")))
+                .relative()
+                .opacity(shown)
+                .when(glow > 0., |d| {
+                    d.bg(T::color(F::selected_line()).opacity(glow * 0.6))
+                })
+                .child(self.sidebar.motion.line_spot(&host).absolute().size_full())
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(format!(
                     "{words}，点一下{}",
@@ -178,7 +196,7 @@ impl Workbench {
                         .min_w_0()
                         .truncate()
                         .text_size(px(F::TAG))
-                        .text_color(T::color(F::third()))
+                        .text_color(mix(T::color(F::third()), T::color(F::bright()), glow))
                         .child(words),
                 )
                 .child(
@@ -213,6 +231,7 @@ impl Workbench {
                         .id(gpui::SharedString::from(format!("quiet-rows-{index}")))
                         .h(px(height))
                         .flex_shrink_0()
+                        .opacity(shown)
                         .overflow_y_scroll()
                         .children(rows.iter().map(|r| self.remote_row(r, cx)))
                         .into_any_element(),
@@ -298,6 +317,9 @@ impl Workbench {
     pub fn visual_quiet_waiting(&self, index: usize) -> usize {
         self.quiet_waiting(index)
     }
+    pub fn visual_quiet_moving(&self) -> bool {
+        self.sidebar.motion.moving()
+    }
     pub fn visual_quiet_unfold(&mut self, index: usize, open: bool, cx: &mut Context<Self>) {
         if let Some(host) = self.machine_host(index) {
             self.sidebar.toggled.insert(fold_key(&host), open);
@@ -323,6 +345,7 @@ impl Workbench {
     }
     pub fn visual_leave_board(&mut self, cx: &mut Context<Self>) {
         self.nav.overview = false;
+        self.sync_panes(cx);
         cx.notify();
     }
     pub fn visual_close_peek(&mut self, cx: &mut Context<Self>) {
