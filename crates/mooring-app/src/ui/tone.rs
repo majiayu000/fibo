@@ -107,7 +107,7 @@ mod tests {
             // The same marks on another machine's cards there.
             "workbench/board/remote.rs",
             // The 很久没动 age chart.
-            "workbench/overview.rs",
+            "workbench/overview/card.rs",
             // A deferred step in the cleanup walk.
             "workbench/cleanup.rs",
             // 「N 工作中」「N 等你」 counts.

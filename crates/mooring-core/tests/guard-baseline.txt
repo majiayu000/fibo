@@ -114,7 +114,7 @@ word 等你回答	crates/mooring-host/src/control/prompt.rs	1
 word 等你回答	mobile/src/app/chat.tsx	1
 word 等你回答	mobile/src/app/settings.tsx	2
 word 等你验收	crates/mooring-app/src/model/session_state.rs	1
-word 等你验收	crates/mooring-app/src/workbench/overview.rs	1
+word 等你验收	crates/mooring-app/src/workbench/overview/groups.rs	1
 word 等你验收	crates/mooring-app/src/workbench/task_detail.rs	1
 word 等你验收	mobile/src/app/settings.tsx	2
 word 等后台	crates/mooring-app/src/model/session_state.rs	1
