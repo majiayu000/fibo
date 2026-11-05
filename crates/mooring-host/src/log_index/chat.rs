@@ -9,35 +9,55 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::io;
 
+mod backfill;
+
+/// A record's `seq`: where it is in its log, so reading older lines later (`backfill`) keeps
+/// the order and every seq already handed out. Past zero, and under 2^53 for a log under
+/// 2 TiB, so a phone's JavaScript holds it exactly; no line makes 4096 records.
+pub(super) const SEQ: &str = "(offset*4096+MIN(ordinal,4095)+1)";
+
+/// The `(offset, ordinal)` a seq names.
+fn place(seq: i64) -> (i64, i64) {
+    let at = seq.saturating_sub(1);
+    (at >> 12, at & 4095)
+}
+
 impl Index {
     /// A conversation's user and Agent messages, oldest first, and whether older ones
-    /// exist. See `Request::Chat`.
+    /// exist. See `Request::Chat`. `floor` is where the unbroken stretch up to its end begins
+    /// (`read_from`): a first ask kept from a log's head would sit on the far side of what has
+    /// not been read, and paging back from it would skip all of that.
     pub fn chat(
         &self,
         path: &str,
+        floor: u64,
         after: Option<i64>,
         before: Option<i64>,
         limit: usize,
         tools: bool,
     ) -> io::Result<(Vec<ChatMessage>, bool)> {
         let limit = limit.clamp(1, 500) as i64;
-        let kinds = "kind IN ('user','assistant')";
-        let (sql, cursor) = match (after, before) {
-            (Some(a), _) => (format!("SELECT rowid,at,kind,text FROM session_records WHERE path=?1 AND {kinds} AND rowid>?2 ORDER BY rowid LIMIT ?3"), a),
-            (None, Some(b)) => (format!("SELECT rowid,at,kind,text FROM session_records WHERE path=?1 AND {kinds} AND rowid<?2 ORDER BY rowid DESC LIMIT ?3"), b),
-            (None, None) => (format!("SELECT rowid,at,kind,text FROM session_records WHERE path=?1 AND {kinds} AND rowid<?2 ORDER BY rowid DESC LIMIT ?3"), i64::MAX),
+        let (range, order, cursor) = match (after, before) {
+            (Some(a), _) => (">", "ASC", a),
+            (None, Some(b)) => ("<", "DESC", b),
+            (None, None) => ("<", "DESC", i64::MAX),
         };
+        let (offset, ordinal) = place(cursor);
+        let sql = format!("SELECT {SEQ},at,kind,text FROM session_records WHERE path=?1 AND inode=(SELECT inode FROM session_records WHERE path=?1 LIMIT 1) AND kind IN ('user','assistant') AND offset>=?5 AND (offset,ordinal){range}(?2,?3) ORDER BY offset {order},ordinal {order} LIMIT ?4");
         let mut q = self.db.prepare_cached(&sql).map_err(err)?;
         let mut messages = q
-            .query_map(rusqlite::params![path, cursor, limit + 1], |r| {
-                Ok(ChatMessage {
-                    seq: r.get(0)?,
-                    at: u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
-                    user: r.get::<_, String>(2)? == "user",
-                    text: r.get(3)?,
-                    tools: None,
-                })
-            })
+            .query_map(
+                rusqlite::params![path, offset, ordinal, limit + 1, floor as i64],
+                |r| {
+                    Ok(ChatMessage {
+                        seq: r.get(0)?,
+                        at: u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
+                        user: r.get::<_, String>(2)? == "user",
+                        text: r.get(3)?,
+                        tools: None,
+                    })
+                },
+            )
             .map_err(err)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(err)?;
@@ -71,9 +91,9 @@ impl Index {
         // The message before this page: where its first message's work began.
         let (from, mut before_at, mut before_user): (i64, i64, bool) = self
             .db
-            .prepare_cached("SELECT rowid,at,kind='user' FROM session_records WHERE path=?1 AND kind IN ('user','assistant') AND rowid<?2 ORDER BY rowid DESC LIMIT 1")
+            .prepare_cached(&format!("SELECT {SEQ},at,kind='user' FROM session_records WHERE path=?1 AND inode=(SELECT inode FROM session_records WHERE path=?1 LIMIT 1) AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
             .map_err(err)?
-            .query_row(rusqlite::params![path, first], |r| {
+            .query_row(rusqlite::params![path, place(first).0, place(first).1], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })
             .optional()
@@ -82,7 +102,7 @@ impl Index {
         // A result comes after its call, possibly past this page.
         let failed = self
             .db
-            .prepare_cached("SELECT call_id FROM session_records WHERE path=?1 AND kind='tool_result' AND exit_code<>0 AND rowid>?2")
+            .prepare_cached(&format!("SELECT call_id FROM session_records WHERE path=?1 AND kind='tool_result' AND exit_code<>0 AND {SEQ}>?2"))
             .map_err(err)?
             .query_map(rusqlite::params![path, from], |r| r.get::<_, String>(0))
             .map_err(err)?
@@ -90,7 +110,7 @@ impl Index {
             .map_err(err)?;
         let calls = self
             .db
-            .prepare_cached("SELECT rowid,call_id,text,at FROM session_records WHERE path=?1 AND kind='tool_call' AND rowid>?2 AND rowid<?3 ORDER BY rowid")
+            .prepare_cached(&format!("SELECT {SEQ},call_id,text,at FROM session_records WHERE path=?1 AND kind='tool_call' AND {SEQ}>?2 AND {SEQ}<?3 ORDER BY offset,ordinal"))
             .map_err(err)?
             .query_map(rusqlite::params![path, from, last], |r| {
                 let id: String = r.get(1)?;
@@ -313,11 +333,11 @@ mod tests {
             .unwrap();
         }
         let words = |m: &[ChatMessage]| m.iter().map(|m| m.at).collect::<Vec<_>>();
-        let (all, more) = i.chat("p", None, None, 50, false).unwrap();
+        let (all, more) = i.chat("p", 0, None, None, 50, false).unwrap();
         assert_eq!(words(&all), [10, 20, 100, 200, 900]);
         assert!(!more);
         // A page that starts on the second copy does not show it either.
-        let (page, more) = i.chat("p", None, None, 2, false).unwrap();
+        let (page, more) = i.chat("p", 0, None, None, 2, false).unwrap();
         assert_eq!(words(&page), [200, 900]);
         assert!(more);
         std::fs::remove_dir_all(dir).unwrap();

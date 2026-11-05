@@ -8,6 +8,7 @@
 
 | 日期 | 决定 | 状态 |
 |---|---|---|
+| 2026-11-06 | [Agent 身份先于聊天记录](2026-11-06-agent-identity-before-transcript.md) | 采用 |
 | 2026-11-03 | [鸟瞰看板拖起卡片时倾斜](2026-11-03-tilt-board-cards-while-dragging.md) | 否定 |
 | 2026-11-03 | [后台 shell 一律算等后台](2026-11-03-count-background-shells-as-waiting.md) | 被取代 |
 | 2026-11-03 | [后台 shell 按监听端口分任务和服务](2026-11-03-split-background-shells-by-listening-port.md) | 采用 |

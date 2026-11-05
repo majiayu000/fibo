@@ -105,6 +105,18 @@ fn components_take_colors_and_sizes_from_tokens() {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files: Vec<_> = [
         "terminal/pane.rs",
+        "terminal/pane_ask.rs",
+        "terminal/pane_handoff.rs",
+        "terminal/pane_handoff_tests.rs",
+        "terminal/pane_ime.rs",
+        "terminal/pane_input.rs",
+        "terminal/pane_links.rs",
+        "terminal/pane_mouse.rs",
+        "terminal/pane_paste.rs",
+        "terminal/pane_paste_tests.rs",
+        "terminal/pane_render.rs",
+        "terminal/pane_search.rs",
+        "terminal/pane_visual.rs",
         "ui/field.rs",
         "ui/widgets.rs",
         "desktop.rs",

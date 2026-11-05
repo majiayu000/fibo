@@ -9,6 +9,7 @@ use serde_json::{Map, Value};
 pub const VERSION: u32 = 1;
 pub const MAX_LINE: usize = 1 << 20;
 pub use crate::asks::*;
+pub use crate::chat::*;
 pub use crate::tools::*;
 pub use crate::usage::*;
 
@@ -66,9 +67,9 @@ pub enum Op {
         request: Option<String>,
     },
     /// Answers the approval asking `question`; refused if it is no longer on screen.
-    /// `always` takes the menu's 「don't ask again」 option instead, refused when it has
-    /// none: never a plain allow in its place. `subject` is what the client showed
-    /// ([`Ask`]): refused if the screen now asks about something else.
+    /// `always` takes the menu's 「don't ask again」 option, refused when it has none: never
+    /// a plain allow in its place. `subject` and `always_label` are what the client showed
+    /// ([`Ask`]): refused if the screen now asks or offers something else.
     Answer {
         terminal: String,
         question: String,
@@ -77,6 +78,8 @@ pub enum Op {
         always: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         subject: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        always_label: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
@@ -213,6 +216,14 @@ pub enum Op {
     },
     /// The account limits each Agent last reported, within a week: [`Quotas`].
     Quota,
+    /// Reads the next stretch of a conversation's log its first read skipped (names its
+    /// `terminal` or `session`): [`Backfilled`]. Then `chat` with `before` has the messages.
+    Backfill {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+    },
     /// The tool calls of one stretch of a conversation (names its `terminal` or `session`):
     /// [`ToolCalls`]. `seq` is the Agent message they led to (none: since the last message);
     /// `after` is the `next` of the page before; `limit` defaults to 100, at most 200.
@@ -274,6 +285,7 @@ impl Op {
             Self::AddSpace { .. } => "addspace",
             Self::Usage { .. } => "usage",
             Self::ToolCalls { .. } => "toolcalls",
+            Self::Backfill { .. } => "backfill",
             Self::ToolCall { .. } => "toolcall",
         }
     }
@@ -309,6 +321,7 @@ pub const OPS: &[&str] = &[
     "usage",
     "toolcalls",
     "toolcall",
+    "backfill",
 ];
 
 /// A line from the machine.
@@ -516,52 +529,6 @@ pub struct Text {
 }
 
 /// The reply to `chat`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Chat {
-    pub session: String,
-    /// Oldest first.
-    pub messages: Vec<Message>,
-    /// Older messages exist before the first: ask again with `before`.
-    pub more: bool,
-    /// Its log was first read from near the end, so what came before is not here at all.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub partial: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Message {
-    /// Grows with each message; the cursor for `after` and `before`.
-    pub seq: i64,
-    /// Seconds since the epoch.
-    pub at: u64,
-    pub role: Speaker,
-    pub text: String,
-    /// With `chat`'s `tools`, on Agent messages.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Tools>,
-}
-
-/// The tool calls between an Agent message and the message before it.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Tools {
-    /// Shell commands run.
-    pub commands: u32,
-    /// Files changed, in the order first touched.
-    pub files: Vec<FileLines>,
-    /// Seconds this stretch of work took; absent when the log cannot say.
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub took: u64,
-    /// Every tool call, whatever kind.
-    #[serde(default, skip_serializing_if = "none")]
-    pub calls: u32,
-}
-
-fn is_zero(n: &u64) -> bool {
-    *n == 0
-}
-fn none(n: &u32) -> bool {
-    *n == 0
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileLines {
