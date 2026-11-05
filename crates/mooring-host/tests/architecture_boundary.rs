@@ -10,11 +10,7 @@ const OWNERS: &[&str] = &["mooring-host/src/agents/", "mooring-core/src/agent.rs
 const FIXTURES: &[(&str, &str)] = &[
     (
         "mooring-app/src/workbench/visual.rs",
-        "visual evidence draws a fixed Codex session",
-    ),
-    (
-        "mooring-app/src/workbench/visual/fixture.rs",
-        "visual fixtures bind Claude and Codex sessions",
+        "visual evidence and its fixtures draw fixed Claude and Codex sessions",
     ),
     (
         "mooring-app/src/settings_evidence.rs",
@@ -79,7 +75,10 @@ fn only_the_registry_and_adapters_name_a_cli() {
             .to_string_lossy()
             .replace('\\', "/");
         if OWNERS.iter().any(|o| relative.starts_with(o))
-            || FIXTURES.iter().any(|(f, _)| relative == *f)
+            || FIXTURES.iter().any(|(f, _)| {
+                // A file split out of a fixture (`visual.rs` → `visual/…`) stays one.
+                relative == *f || relative.starts_with(&format!("{}/", f.trim_end_matches(".rs")))
+            })
         {
             continue;
         }
