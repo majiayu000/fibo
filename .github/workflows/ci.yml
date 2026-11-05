@@ -8,6 +8,13 @@ on:
     branches:
       - main
 
+# Each push to main runs everything on scarce macOS runners, and many sessions push: 14 runs
+# queued in one night and none finished. At most one runs and one waits; a newer push replaces
+# the waiting one. A running one is left to finish, or frequent pushes would never get a result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
