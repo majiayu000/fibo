@@ -1,23 +1,7 @@
 //! The left column: spaces, the current space's sessions and its (folded) todos.
 use super::*;
 
-/// What needs you, in this order: waiting on you, failed, a finished turn not seen yet.
-const NEEDS_YOU: [Status; 3] = [Status::Waiting, Status::Error, Status::Review];
-/// Row tiers by the shown state: what needs you, then live work, then the rest, then
-/// sessions opened but not yet spoken to, then what has gone quiet. Inside a tier the
-/// newest comes first (see `sidebar_time`).
-pub(super) fn sidebar_rank(g: Status, attention: bool) -> (u8, usize) {
-    if attention {
-        let at = NEEDS_YOU.iter().position(|o| *o == g);
-        return (0, at.unwrap_or(NEEDS_YOU.len()));
-    }
-    match g {
-        Status::Running => (1, 0),
-        Status::Fresh => (3, 0),
-        Status::Stale => (4, 0),
-        _ => (2, 0),
-    }
-}
+pub(super) use mooring_core::status_group::rank as sidebar_rank;
 /// A closed session the sidebar still counts: no outcome yet and not gone quiet past
 /// the stale days; older ones wait in the overview's 很久没动.
 pub(super) fn closed_recently(w: &Workspace, s: &AgentSession) -> bool {
@@ -244,9 +228,9 @@ impl Workbench {
                     && self.session_hidden(s).is_none()
                     && match (all_spaces, self.space_filter()) {
                         (true, None) => true,
-                        (true, Some(only)) => session_space(&self.workspace, s) == Some(only),
+                        (true, Some(only)) => self.workspace.session_space(s) == Some(only),
                         (false, _) => {
-                            session_space(&self.workspace, s) == Some(self.nav.space.as_str())
+                            self.workspace.session_space(s) == Some(self.nav.space.as_str())
                         }
                     }
             })
@@ -692,7 +676,7 @@ impl Workbench {
             .filter(|s| {
                 self.session_hidden(s).is_none()
                     && self.session_open(s)
-                    && session_space(&self.workspace, s) == Some(id)
+                    && self.workspace.session_space(s) == Some(id)
             })
             .collect();
         let needs = |g: Status| {

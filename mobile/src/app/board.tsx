@@ -10,33 +10,26 @@ import { Nav, Notice, mono, useBottom } from '@/ui/kit';
 import { useNow } from '@/ui/now';
 import { runningFor } from '@/ui/parse';
 import { spaceName } from '@/ui/row';
-import { agentName, needsYou, statusColor, statusKey, statusWord, tilde } from '@/ui/status';
+import { agentName, statusColor, statusWord, tilde } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
 
-type Column = 'you' | 'run' | 'review' | 'todo' | 'done' | 'stale';
+/** The host's column keys (`status_group::Column::key`), in the phone's order. */
+type Column = 'needs' | 'running' | 'review' | 'todo' | 'done' | 'stale';
 const COLUMNS: { key: Column; label: string }[] = [
-  { key: 'you', label: '要你处理' },
-  { key: 'run', label: '在跑' },
+  { key: 'needs', label: '要你处理' },
+  { key: 'running', label: '在跑' },
   { key: 'review', label: '停下了' },
   { key: 'todo', label: '待办' },
   { key: 'done', label: '做完了' },
   { key: 'stale', label: '很久没动' },
 ];
+const isColumn = (k: string | null | undefined): k is Column => COLUMNS.some((c) => c.key === k);
 
-/** The column a card goes in: the same reading of what the host said as the desktop's
- *  `remote_column`. */
-function column(c: Card): Column | null {
-  if (!c.session) return null;
-  if (c.outcome === 'done') return 'done';
-  if (c.outcome === 'abandoned' || c.outcome === 'deferred') return null;
-  const k = statusKey(c);
-  if (k === 'fresh' || k === 'closed' || k === 'deferred') return null;
-  if (k === 'running') return 'run';
-  if (needsYou(c) || c.approval) return 'you';
-  return k === 'stale' ? 'stale' : 'review';
-}
+/** The column a card goes in: the one its host computed, as the desktop's `remote_column`
+ *  reads it. A card without one stays off the board. */
+const column = (c: Card): Column | null => (isColumn(c.column) ? c.column : null);
 
-const colour = (k: Column, t: Theme) => ({ you: t.wait, run: t.run, review: t.dim, todo: t.dim, done: t.dim, stale: t.dim })[k];
+const colour = (k: Column, t: Theme) => ({ needs: t.wait, running: t.run, review: t.dim, todo: t.dim, done: t.dim, stale: t.dim })[k];
 
 type Item = { m: Machine; c: Card };
 
@@ -77,9 +70,9 @@ export default function Board() {
   const bottom = useBottom();
   const { machines } = useHub();
   const [only, setOnly] = useState<string | null>(null);
-  const [col, setCol] = useState<Column>('you');
+  const [col, setCol] = useState<Column>('needs');
   const shown = machines.filter((m) => !only || m.id === only);
-  const cols: Record<Column, Item[]> = { you: [], run: [], review: [], todo: [], done: [], stale: [] };
+  const cols: Record<Column, Item[]> = { needs: [], running: [], review: [], todo: [], done: [], stale: [] };
   for (const m of shown) for (const c of m.cards) {
     if (!c.agent || c.phase === 'shell') continue;
     const k = column(c);
@@ -162,7 +155,7 @@ export default function Board() {
                     </Text>
                     {c.running_since ? <Elapsed since={c.running_since} color={t.dim} /> : <Text style={{ fontSize: 13, color: t.dim }}>{c.updated ? ago(c.updated) : ''}</Text>}
                   </View>
-                  {col === 'you' ? (
+                  {col === 'needs' ? (
                     <Text numberOfLines={1} style={{ fontSize: 14, color: statusColor(c, t) }}>
                       {c.approval ? '等你审批' : (c.waiting || statusWord(c)).split('\n')[0]}
                     </Text>
