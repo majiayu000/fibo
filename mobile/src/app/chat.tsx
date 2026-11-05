@@ -15,7 +15,7 @@ import { cardTitle } from '@/ui/format';
 import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
-import { choices, questionText, partialWords } from '@/ui/parse';
+import { choices, questionText, partialWords, readBackWords } from '@/ui/parse';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
 import { agentName, statusColor } from '@/ui/status';
@@ -53,6 +53,9 @@ export default function Chat() {
   const [session, setSession] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [partial, setPartial] = useState(false);
+  const [readingBack, setReadingBack] = useState(false);
+  const [readFailed, setReadFailed] = useState('');
+  const paging = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
@@ -130,14 +133,37 @@ export default function Chat() {
     );
   }, [messages]);
 
+  const canReadBack = partial && !more && supports(m, 'backfill');
+  // Scrolled to the top: the next page, or when the index ends, the next stretch of the log.
   const older = useCallback(async () => {
     const r = remote(machine);
-    if (!r || !session || !more || !messages.length) return;
-    const page = await r.request('chat', { session, before: messages[0].seq, ...(tools ? { tools: true } : {}) });
-    if (shown.current !== session) return;
-    setMore(page.more);
-    setMessages((have) => merge(have, page.messages));
-  }, [machine, session, more, messages, tools]);
+    if (!r || !session || paging.current) return;
+    if (!canReadBack && !(more && messages.length)) return;
+    paging.current = true;
+    const extra = tools ? { tools: true } : {};
+    try {
+      if (canReadBack) {
+        setReadingBack(true);
+        setReadFailed('');
+        // Each call reads for at most about a second; a stretch of the log may hold no message.
+        let reply;
+        do {
+          reply = await r.request('backfill', { session });
+        } while (!reply.added && !reply.done && shown.current === session);
+      }
+      const before = messages[0] ? { before: messages[0].seq } : { limit: 50 };
+      const page = await r.request('chat', { session, ...before, ...extra });
+      if (shown.current !== session) return;
+      setMore(page.more);
+      setPartial(!!page.partial);
+      setMessages((have) => merge(have, page.messages));
+    } catch (e) {
+      setReadFailed((e as Error).message);
+    } finally {
+      paging.current = false;
+      setReadingBack(false);
+    }
+  }, [machine, session, more, messages, tools, canReadBack]);
 
   /** Sends `text`; while the computer is away it waits in the outbox instead. */
   async function send(text: string): Promise<boolean> {
@@ -269,13 +295,17 @@ export default function Chat() {
             ) : undefined
           }
           ListFooterComponent={
-            partial && !more && messages.length > 0 ? (
+            canReadBack && messages.length > 0 ? (
+              <Pressable accessibilityRole="button" disabled={readingBack} onPress={older} style={{ paddingVertical: 8 }}>
+                <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19, textAlign: 'center' }}>{readBackWords(readingBack, readFailed)}</Text>
+              </Pressable>
+            ) : partial && !more && messages.length > 0 ? (
               <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19, textAlign: 'center', paddingVertical: 8 }}>{partialWords(messages.length)}</Text>
             ) : undefined
           }
           ListEmptyComponent={
-            <Text style={{ color: t.dim, textAlign: 'center' }}>
-              {partial ? partialWords(0) : card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
+            <Text onPress={canReadBack && !readingBack ? older : undefined} style={{ color: t.dim, textAlign: 'center' }}>
+              {canReadBack ? readBackWords(readingBack, readFailed) : partial ? partialWords(0) : card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
         />

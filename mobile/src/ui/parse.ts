@@ -53,6 +53,10 @@ export const partialWords = (messages: number) =>
     ? '更早的消息没有读进来：电脑第一次看到这段对话时，只读了日志的最后一段。'
     : '这段日志电脑只读了最后一段，里面没有消息。之后的新消息会显示，更早的要回电脑上看。';
 
+/** What a conversation with older lines still unread says, on a computer that can read them. */
+export const readBackWords = (reading: boolean, failed: string) =>
+  reading ? '正在读更早的消息…' : failed ? `${failed}。点这里再试一次` : '更早的消息还在电脑的日志里。继续往上翻，或者点这里读';
+
 /** Commands worth a second confirmation: pushing, deleting, deploying, publishing. */
 const DANGER = [
   /\bgit\s+push\b/,

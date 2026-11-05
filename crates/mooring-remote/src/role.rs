@@ -78,6 +78,7 @@ mod tests {
             "usage",
             "toolcalls",
             "toolcall",
+            "backfill",
             "ask",
         ] {
             assert!(Role::View.allows(op));

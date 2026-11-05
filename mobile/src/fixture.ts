@@ -23,7 +23,7 @@ const LINKS = [
   link('air', 'MacBook Air', 'wss://relay.example.com'),
 ];
 
-const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop'];
+const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop', 'backfill'];
 
 const card = (o: Record<string, unknown>) => ({
   space: 's-mooring',

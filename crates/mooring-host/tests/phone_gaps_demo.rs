@@ -34,7 +34,27 @@ fn said(text: &str, last: bool) -> Value {
 #[test]
 #[ignore = "manual: a demo machine for the phone app"]
 fn phone_gaps_demo() {
-    let h = Host::start();
+    // A long conversation the walk finds on its own, so only its end is read at first: what
+    // the phone reads back when it scrolls to the top.
+    let long_id = uuid::Uuid::new_v4().to_string();
+    let long_log = |root: &std::path::Path| {
+        let dir = root.join("logs/claude");
+        fs::create_dir_all(&dir).unwrap();
+        let mut log = String::new();
+        for n in 0..600 {
+            let pad = "。".repeat(1500);
+            let row = |v: Value| {
+                let mut v = v;
+                v["sessionId"] = long_id.clone().into();
+                v["timestamp"] = mooring_core::content::now().into();
+                format!("{v}\n")
+            };
+            log += &row(user("/project", &format!("第 {n} 句话{pad}")));
+            log += &row(said(&format!("这是第 {n} 句的回复"), true));
+        }
+        fs::write(dir.join(format!("{long_id}.jsonl")), log).unwrap();
+    };
+    let h = Host::start_over(long_log);
     let home = scratch(&h, "home");
     let repo = home.join("code/mooring");
     fs::create_dir_all(repo.join("src/app")).unwrap();
@@ -334,6 +354,36 @@ fn phone_gaps_demo() {
         &draw("claude", "approval-push-requires.txt"),
     );
     h.launch("long-screen", &repo, "seq 1 60; sleep 100000");
+    h.launch(
+        "long-history",
+        &repo,
+        &format!(
+            "exec {} -c 'sleep 100000; :' fixture --session-id {long_id}",
+            h.root.join("claude").display()
+        ),
+    );
+    // A running CLI binds to its log when the log moves.
+    let long_path = h.root.join(format!("logs/claude/{long_id}.jsonl"));
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while h.workspace().current_agent("long-history").is_none() {
+        assert!(
+            std::time::Instant::now() < until,
+            "long-history never bound"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let mut row = said("还在", true);
+        row["sessionId"] = long_id.clone().into();
+        row["timestamp"] = mooring_core::content::now().into();
+        use std::io::Write;
+        writeln!(
+            fs::OpenOptions::new()
+                .append(true)
+                .open(&long_path)
+                .unwrap(),
+            "{row}"
+        )
+        .unwrap();
+    }
     h.launch("trust-claude", &repo, &draw("claude", "trust-real.txt"));
     h.launch("trust-codex", &repo, &draw("codex", "trust-real.txt"));
     let base = "ws://127.0.0.1:8790";

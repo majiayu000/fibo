@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, asksTwice, partialWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -54,6 +54,9 @@ describe('a conversation read only from the end of its log', () => {
     expect(partialWords(3)).toContain('更早的消息没有读进来');
     expect(partialWords(0)).toContain('里面没有消息');
     expect(partialWords(0)).not.toBe(partialWords(3));
+    expect(readBackWords(false, '')).toContain('点这里读');
+    expect(readBackWords(true, '')).toContain('正在读');
+    expect(readBackWords(false, '读不回')).toContain('再试一次');
   });
 });
 

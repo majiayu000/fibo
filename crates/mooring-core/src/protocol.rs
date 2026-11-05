@@ -143,6 +143,11 @@ pub enum Request {
     Stop {
         id: String,
     },
+    /// Reads the next stretch of a conversation's log that its first read skipped, on a thread
+    /// and a connection of its own at low priority, so a long log holds nothing else up.
+    Backfill {
+        session: String,
+    },
     /// A phone's chat view: one conversation's user and Agent messages from the index,
     /// oldest first. `after` gives those newer than a `seq`; otherwise the newest `limit`,
     /// or those older than `before`.
@@ -410,9 +415,17 @@ pub enum Reply {
         closed_background: bool,
     },
     /// `Chat`: the messages, oldest first, and whether older ones exist before them.
+    /// `partial`: older lines of its log have not been read in yet ([`Request::Backfill`]).
     Chat {
         messages: Vec<ChatMessage>,
         more: bool,
+        #[serde(default)]
+        partial: bool,
+    },
+    /// [`Request::Backfill`]: messages found; `done` once the log is read back to its start.
+    Backfilled {
+        added: u32,
+        done: bool,
     },
     /// `ToolCalls`; `tools` on the stretch's first page, `next` the cursor while more follow.
     ToolCalls {
