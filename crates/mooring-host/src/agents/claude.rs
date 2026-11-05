@@ -12,6 +12,9 @@ const CONTINUED: &str = "Claude 会话已转到另一个会话接着跑";
 
 pub struct Claude;
 impl Adapter for Claude {
+    fn trust_screen(&self, lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
+        super::trust::claude(lines)
+    }
     /// A Braille (up to 2.1.227) or half-circle (2.1.228 on) spinner opens the title while
     /// a turn runs; "✳" stands there between turns.
     fn title_busy(&self, title: &str) -> Option<bool> {

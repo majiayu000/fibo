@@ -315,52 +315,15 @@ pub struct TrustScreen {
     pub toward_yes: &'static str,
 }
 
-/// That prompt when it fills the bottom of the screen, every part of it there. Claude Code
-/// numbers nothing and starts on 「No, exit」, so Enter alone would quit. Real screens: 2.1.318,
-/// Codex 0.166.
+/// That prompt when it fills the bottom of the screen, as the CLI that draws it says.
 pub fn trust_screen(tail: &str) -> Option<TrustScreen> {
     let lines: Vec<&str> = (tail.lines().map(str::trim))
         .filter(|l| !l.is_empty())
         .collect();
     let lines = &lines[lines.len().saturating_sub(20)..];
-    let footer = lines.last()?;
-    let cursor = |l: &str| l.starts_with(['❯', '›', '>']);
-    let plain =
-        |l: &'_ str| -> String { l.trim_start_matches(['❯', '›', '>', ' ']).to_owned() };
-    let find = |want: &str| lines.iter().copied().find(|l| plain(l) == want);
-    let after = |label: &str| {
-        let at = lines.iter().position(|l| *l == label)?;
-        lines.get(at + 1).map(|l| (*l).to_owned())
-    };
-    let words = |first: &str, stop: &[&str]| {
-        let at = lines.iter().position(|l| l.starts_with(first))?;
-        let end = lines[at..].iter().position(|l| {
-            stop.iter().any(|s| l.starts_with(s)) || cursor(l) || plain(l).starts_with("1. ")
-        })?;
-        Some(lines[at..at + end].join(" "))
-    };
-    if *footer == "Enter to confirm · Esc to cancel" {
-        find("No, exit")?;
-        let yes = find("Yes, I trust this folder")?;
-        return Some(TrustScreen {
-            agent: Agent::Claude,
-            question: words("Quick safety check:", &["Claude Code'll", "Security guide"])?,
-            folder: after("Accessing workspace:")?,
-            on_yes: cursor(yes),
-            toward_yes: "down",
-        });
-    }
-    if footer.starts_with("enter continue") && footer.contains("esc back") {
-        let yes = find("1. Trust and continue")?;
-        return Some(TrustScreen {
-            agent: Agent::Codex,
-            question: words("Trust this folder?", &[])?,
-            folder: after("Folder access")?,
-            on_yes: cursor(yes),
-            toward_yes: "up",
-        });
-    }
-    None
+    Agent::all()
+        .into_iter()
+        .find_map(|agent| crate::agents::adapter(agent).trust_screen(lines))
 }
 
 #[cfg(test)]

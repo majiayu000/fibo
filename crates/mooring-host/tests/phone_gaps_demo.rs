@@ -322,7 +322,10 @@ fn phone_gaps_demo() {
     let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/screens");
     let draw = |cli: &str, name: &str| {
         let file = fixtures.join(cli).join(name);
-        format!("stty -echo; printf '\\033[2J\\033[H'; cat '{}'; sleep 100000", file.display())
+        format!(
+            "stty -echo; printf '\\033[2J\\033[H'; cat '{}'; sleep 100000",
+            file.display()
+        )
     };
     h.claude(
         "real-push",

@@ -25,6 +25,7 @@ pub mod mirror;
 mod permission;
 mod qoder;
 mod tool_lines;
+mod trust;
 mod usage_lines;
 
 /// What the host says on a terminal about an Agent it sees but cannot read: `text` is the
@@ -102,6 +103,10 @@ pub trait Adapter: Sync {
     /// CLIs; on one where it does something else this says which key does.
     fn interrupt_key(&self) -> &'static [u8] {
         b"\x03"
+    }
+    /// Its 「trust this folder?」 prompt, from a screen's last filled lines.
+    fn trust_screen(&self, _lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
+        None
     }
     /// What to type when an interrupted turn left its command running on screen, ending it.
     /// None: nothing to do, or this CLI never leaves one.

@@ -317,7 +317,7 @@ mod tests {
             }}),
         );
         let mut p = Parser::default();
-        feed(&mut p, &[change.clone()]);
+        feed(&mut p, std::slice::from_ref(&change));
         assert_eq!(rows(&p), ["apply_patch"]);
         let touched: Vec<_> = (p.card.files.iter())
             .map(|f| (f.path.as_str(), f.added, f.removed))
