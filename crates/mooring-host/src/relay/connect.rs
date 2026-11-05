@@ -125,7 +125,7 @@ async fn connect(
     live.state(RemoteState::Connected, String::new());
 
     let (out, mut outbox) = mpsc::channel::<Message>(64);
-    let writer = tokio::spawn(async move {
+    let mut writer = tokio::spawn(async move {
         let mut tick = tokio::time::interval(PING);
         tick.tick().await;
         loop {
@@ -142,10 +142,11 @@ async fn connect(
     let mut sessions: HashMap<String, Session> = HashMap::new();
     let log = devices::log_file(socket);
     let mut recheck = tokio::time::interval(RECHECK);
+    let mut deadline = tokio::time::Instant::now() + SILENCE;
     let ended = loop {
-        let deadline = tokio::time::Instant::now() + SILENCE;
         let m = tokio::select! {
             m = tokio::time::timeout_at(deadline, stream.next()) => m,
+            _ = &mut writer => break Ended::Lost("中继发送连接已结束".into()),
             // A phone paired or unpaired since is told to the relay; an unpaired one on
             // now is dropped within RECHECK, and one that never finishes its handshake
             // within HANDSHAKE_LIMIT.
@@ -189,6 +190,7 @@ async fn connect(
             Ok(Some(Err(e))) => break Ended::Lost(e.to_string()),
             Ok(Some(Ok(m))) => m,
         };
+        deadline = tokio::time::Instant::now() + SILENCE;
         // A phone's message: a binary frame, or JSON with base64 on a protocol-1 relay.
         let phone = match &m {
             Message::Binary(b) => match wire::decode(b) {

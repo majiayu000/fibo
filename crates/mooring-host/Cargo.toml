@@ -34,4 +34,5 @@ qrcode = { version = "0.14", default-features = false }
 serde_json = { workspace = true, features = ["preserve_order"] }
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 mooring-relay = { path = "../mooring-relay" }
