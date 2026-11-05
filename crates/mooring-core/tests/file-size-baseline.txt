@@ -5,7 +5,6 @@ crates/mooring-app/src/workbench/board.rs	1071
 crates/mooring-app/src/workbench/forms.rs	1098
 crates/mooring-app/src/workbench/mod.rs	1052
 crates/mooring-app/src/workbench/overview.rs	1051
-crates/mooring-app/src/workbench/palette.rs	1269
 crates/mooring-app/src/workbench/render.rs	1477
 crates/mooring-app/src/workbench/sessions.rs	836
 crates/mooring-app/src/workbench/sidebar.rs	1202
