@@ -129,6 +129,8 @@ cargo test -p mooring-core --test file_size --test guard
 
 全程在同一台机器上跑，别的编译尽量停掉，屏幕不要锁。基线和终点必须是同一台，换机器就要重测基线。
 
+**用 `apple` 验收，等拆分结束、它的终端释放之后再跑。** 2026-11-05 在两台机器上各跑两遍基线（`eedc95a`）：`SCROLLBACK`、`SELECTION`、`SELECTION_PIXEL`、`FOLLOW_INPUT`、`PEEK`、`PANE_DRAG`、`WHEEL` 这 7 个在本机不稳定，在 `apple` 上两遍都过，当时两边负载相近，所以怀疑是本机有人使用、窗口抢焦点，只有两遍数据，还没证实。`apple` 第二遍大面积失败是 PTY 用尽（`Device not configured`，526 个设备，上限 511），不是代码问题；脚本现在开跑前会检查，剩余不足 100 个就拒绝运行。那边的第一遍基线可用作参考，正式验收要在 PTY 释放后重测。
+
 没有完整 Xcode 的机器也能跑：脚本发现没有 Xcode 时，只在验收用的 worktree 里给 GPUI 打开 `runtime_shaders`，不用 metal 编译器。这样编出来的着色器加载方式和正式版不同，所以这台机器上 `perf-gate` 对仓库基线的结论不算数，只比基线和终点两边的数字。
 
 ```sh
@@ -142,7 +144,7 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 
 报告里「回归」要查；`compare.html` 里的图要人看；出问题时对可疑提交跑 `scripts/visual-check.py shots <提交> <目录>`，一个提交只拆一个文件，所以定位后直接撤回。
 
-**这些场景在所有轮次都失败，等于没有覆盖**：`ROUTE`、`SPLIT`、`TAB`、`LINK`、`NEW_SPACE`、`OVERVIEW`、`PHONES`、`SUBAGENT`。部分是缺前置数据或参数，原因没逐个查。它们对应的分屏、标签、新空间、手机，第 6 层必须亲手过。其余不稳定的（`SPLIT_CLI`、`SCROLLBACK`、`SELECTION`、`SHORTCUT`、`TAB_OVERFLOW`、`FOLLOW_INPUT`、`PEEK`、`PANE_DRAG`、`WHEEL`、`KEYMAP`、`RESTART`，以及页面 `CloseWorking` 所在那组）只有基线两遍都过才算数，对应功能也要在第 6 层过一遍。
+**这些场景在两台机器上都失败，等于没有覆盖**：`ROUTE`、`SPLIT`、`SHORTCUT`、`TAB`、`LINK`、`NEW_SPACE`、`OVERVIEW`、`PHONES`、`KEYMAP`、`SUBAGENT`。部分是缺前置数据或参数，原因没逐个查。它们对应的分屏、标签、快捷键、新空间、手机，第 6 层必须亲手过。页面 `CloseWorking` 所在那组也不稳定。其余场景只有基线两遍都过才算数。
 
 **工具测过什么**：纯搬动判干净，改掉逻辑的提交被点名（`take` 改 `skip`），故意把「新建待办」改成「新建事项」时三张 `TodoNew` 被筛出。**没测过**：悬停、拖动中途这类截图到不了的状态；工具对 `harness.rs` 这种必须重构的文件只能标出来，要人读。
 

@@ -285,7 +285,17 @@ def test_names(log):
     return [l[:-6] for l in pathlib.Path(log).read_text(errors='replace').splitlines() if l.endswith(': test')]
 
 
+def terminals_left():
+    """Free pseudo-terminals. At the limit every scene fails with 'Device not configured',
+    which reads like a regression and is not one."""
+    limit = int(subprocess.run(['sysctl', '-n', 'kern.tty.ptmx_max'], capture_output=True, text=True).stdout)
+    return limit - len(list(pathlib.Path('/dev').glob('ttys*')))
+
+
 def measure(args):
+    left = terminals_left()
+    if left < 100 and not args.force:
+        sys.exit(f'only {left} pseudo-terminals free: close some sessions first, or --force')
     out = pathlib.Path(args.out).resolve(); out.mkdir(parents=True, exist_ok=True)
     sha = git('rev-parse', '--verify', f'{args.sha}^{{commit}}').strip()
     # One path for every commit: the fixture's sessions live under it, and pages show it.
@@ -564,7 +574,7 @@ fn two() { assert_eq!(one(3, 1), 3); }
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 commands = parser.add_subparsers(required=True)
 s = commands.add_parser('audit'); s.add_argument('base'); s.add_argument('end'); s.set_defaults(go=audit)
-s = commands.add_parser('measure'); s.add_argument('sha'); s.add_argument('out'); s.add_argument('--repeat', action='store_true'); s.add_argument('--only', help='scene names or pages, comma separated'); s.set_defaults(go=measure)
+s = commands.add_parser('measure'); s.add_argument('sha'); s.add_argument('out'); s.add_argument('--repeat', action='store_true'); s.add_argument('--force', action='store_true'); s.add_argument('--only', help='scene names or pages, comma separated'); s.set_defaults(go=measure)
 s = commands.add_parser('report'); s.add_argument('base'); s.add_argument('again'); s.add_argument('end'); s.add_argument('--partial', action='store_true'); s.set_defaults(go=report)
 s = commands.add_parser('self-test'); s.set_defaults(go=self_test)
 args = parser.parse_args()
