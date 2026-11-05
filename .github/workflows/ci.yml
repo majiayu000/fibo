@@ -34,8 +34,8 @@ jobs:
           components: rustfmt, clippy
 
       # Local rust-toolchain.toml pins the same rustfmt/clippy version.
-      # Its own cache is not used: libghostty-vt-sys keeps Zig's caches in Cargo's OUT_DIR,
-      # which the target/ cache below carries. Left on, it saved 25MB per run and filled the quota.
+      # Its own cache saves a new 25MB entry per run, which filled the quota; .zig-cache (its
+      # ZIG_GLOBAL_CACHE_DIR, where Ghostty's Zig packages and build runner go) is in the cache below.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.16.0
@@ -48,15 +48,16 @@ jobs:
           path: .deps
           key: deps-${{ runner.os }}-${{ hashFiles('bootstrap.sh', 'patches/**') }}
 
-      # Also holds the Ghostty checkout and its Zig build, under libghostty-vt-sys's OUT_DIR.
+      # The Ghostty checkout and its local Zig cache sit under libghostty-vt-sys's OUT_DIR in target/.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
+            .zig-cache
             target
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**') }}
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**', '.github/workflows/ci.yml') }}
           restore-keys: cargo-${{ runner.os }}-${{ github.job }}-
 
       - name: Prepare pinned native dependencies
@@ -83,8 +84,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1.95.0
 
-      # Its own cache is not used: libghostty-vt-sys keeps Zig's caches in Cargo's OUT_DIR,
-      # which the target/ cache below carries. Left on, it saved 25MB per run and filled the quota.
+      # Its own cache saves a new 25MB entry per run, which filled the quota; .zig-cache (its
+      # ZIG_GLOBAL_CACHE_DIR, where Ghostty's Zig packages and build runner go) is in the cache below.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.16.0
@@ -97,15 +98,16 @@ jobs:
           path: .deps
           key: deps-${{ runner.os }}-${{ hashFiles('bootstrap.sh', 'patches/**') }}
 
-      # Also holds the Ghostty checkout and its Zig build, under libghostty-vt-sys's OUT_DIR.
+      # The Ghostty checkout and its local Zig cache sit under libghostty-vt-sys's OUT_DIR in target/.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
+            .zig-cache
             target
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**') }}
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**', '.github/workflows/ci.yml') }}
           restore-keys: cargo-${{ runner.os }}-${{ github.job }}-
 
       - name: Prepare pinned native dependencies
