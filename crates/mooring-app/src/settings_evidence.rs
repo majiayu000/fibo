@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "settings_evidence/faces.rs"]
 mod faces;
+#[path = "settings_evidence/icons.rs"]
+mod icons;
 #[path = "settings_evidence/plugin_page.rs"]
 mod plugin_page;
 
@@ -48,6 +50,10 @@ pub(super) fn start(
             click(60., 119. + 34. * row, cx);
         };
         let values = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_settings_values()).unwrap();
+        if phase == "icons" {
+            icons::run(handle, &directory, cx).await;
+            return;
+        }
         // Every page in light and dark, for looking at the layout; changes nothing saved.
         if phase == "tour" {
             for (scheme, look) in [("light", crate::ui::appearance::Mode::Light), ("dark", crate::ui::appearance::Mode::Dark)] {
@@ -481,6 +487,28 @@ pub(super) fn start(
             assert!(!dir.join("day.json").exists());
             shot("theme-deleted", cx);
             eprintln!("settings editor PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
+        // 状态圆圈转动: the row alone under its search, off then on.
+        if phase == "running-spin" {
+            for (name, on) in [("running-spin-off", false), ("running-spin-on", true)] {
+                cx.update(|a| crate::ui::running_spin::choose(on, a).unwrap());
+                handle.update(cx, |v, _, a| {
+                    let field = v.visual_settings_query(a);
+                    field.update(a, |f, cx| { f.text = "转动".into(); cx.notify(); });
+                }).unwrap();
+                wait(300).await;
+                shot(name, cx);
+            }
+            let saved = || std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("running-spin")).unwrap();
+            assert_eq!(saved(), "on");
+            // A click on the switch writes the file.
+            click(879., 178., cx);
+            wait(300).await;
+            shot("running-spin-clicked", cx);
+            assert_eq!(saved(), "off", "the click did not turn it off");
+            eprintln!("settings running-spin PASS");
             cx.update(|a| a.quit());
             return;
         }

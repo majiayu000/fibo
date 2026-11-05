@@ -39,7 +39,19 @@ export type Card = {
   outcome?: string | null;
   /** When the conversation last changed, Unix seconds. */
   updated?: number | null;
+  /** The branch checked out in its directory. */
+  branch?: string | null;
+  /** When the turn began, Unix seconds, while its state is running. */
+  running_since?: number | null;
+  /** While running, what its log says it does now: 「运行 cargo test」. */
+  doing?: string | null;
+  /** The model that last answered, and its permission mode in words to show. */
+  model?: string | null;
+  permission?: string | null;
 };
+
+/** A todo no conversation works on yet, the board's 待办. */
+export type Todo = { id: string; space: string; title: string; agent: string };
 
 export type Machine = {
   id: string;
@@ -53,6 +65,9 @@ export type Machine = {
   cards: Card[];
   /** Space id to name. */
   spaces: Record<string, string>;
+  /** A space's directory to its name. */
+  spaceDirs?: Record<string, string>;
+  todos?: Todo[];
   /** Seconds since the epoch of the last list. */
   updated?: number;
   /** `macos` or `linux`; from hosts that speak the 11-04 contract (v2-plan.md). */
@@ -103,6 +118,8 @@ async function refresh(id: string) {
     set(id, {
       cards: list.terminals,
       spaces: Object.fromEntries((list.spaces ?? []).map((s: any) => [s.id, s.name])),
+      spaceDirs: Object.fromEntries((list.spaces ?? []).filter((s: any) => s.cwd).map((s: any) => [s.cwd, s.name])),
+      todos: list.todos ?? [],
       name: list.machine?.name || get(id)?.name || '',
       updated: Date.now() / 1000,
     });

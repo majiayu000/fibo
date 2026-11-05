@@ -142,7 +142,7 @@ pub fn run(a: &Args) -> io::Result<()> {
         .map(str::to_owned)
         .or_else(|| std::env::var("MOORING_RELAY_KEY").ok())
         .filter(|k| !k.is_empty());
-    let name = devices::machine(&a.socket).name;
+    let name = devices::machine(&a.socket)?.name;
     let live = Live::new(a.has("report").then(|| a.socket.clone()));
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()

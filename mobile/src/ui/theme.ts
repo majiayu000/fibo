@@ -78,6 +78,8 @@ const dark: typeof light = {
 
 export type Theme = typeof light;
 
+export const themes = { light, dark };
+
 export function useTheme(): Theme {
   const system = useColorScheme();
   const { appearance } = useSettings();

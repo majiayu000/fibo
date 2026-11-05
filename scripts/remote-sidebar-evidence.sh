@@ -77,8 +77,13 @@ setup(R + '/far/workbench.sock', R + '/farhome', 'far-codex', 'far', '整理远�
 setup(R + '/rt/workbench.sock', R + '/home', 'here-codex', 'here', '整理本机的验收清单')
 PY
 PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude CODEX_HOME=$R/home/.codex MOORING_REMOTE_SIDEBAR_EVIDENCE=1 MOORING_FAR_PID=$FAR \
-  perl -e 'alarm 150; exec @ARGV' $REPO/target/debug/mooring-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
+  perl -e 'alarm 300; exec @ARGV' $REPO/target/debug/mooring-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
 echo "app exit $?"
 grep -E "PASS|panicked|assert|left:|right:" -A1 $R/app.log | head -12
+# A new launch reads 先不管 back from machines.json.
+PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude CODEX_HOME=$R/home/.codex MOORING_REMOTE_SIDEBAR_EVIDENCE=1 MOORING_QUIET_RESTART=1 MOORING_FAR_PID=$FAR \
+  perl -e 'alarm 60; exec @ARGV' $REPO/target/debug/mooring-app --runtime $R/rt --visual-evidence $R/shots > $R/relaunch.log 2>&1
+echo "relaunch exit $?"
+grep -E "PASS|panicked|assert|left:|right:" -A1 $R/relaunch.log | head -6
 kill $FAR $HERE 2>/dev/null; sleep 1; pkill -f "$R/" 2>/dev/null
 ls $R/shots

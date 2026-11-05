@@ -5,6 +5,9 @@ use super::overview::{quiet, solid};
 use super::*;
 use mooring_core::sidebar as presets;
 
+mod parts;
+use parts::section_heading;
+
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Hit {
     NewSession,
@@ -25,6 +28,8 @@ pub(super) enum Hit {
     Action(usize),
     /// A left-column view (目录, a plugin's), by preset id: picking it switches.
     View(String),
+    /// 先不管 or 接着管 another machine, by its index in `Workbench::machines`.
+    Machine(usize),
     /// 本机诊断: opens the CPU / GPU panel, otherwise only reachable from the sidebar foot.
     Diagnostics,
     /// 「再显示 N 个」: the rest of a folded group, `hidden` rows past what shows.
@@ -292,6 +297,7 @@ impl Workbench {
         let tools: Vec<Hit> = contains("本机诊断 诊断 卡顿 占用 CPU GPU 内存 diagnostics", query)
             .then_some(Hit::Diagnostics)
             .into_iter()
+            .chain(self.machine_hits(query))
             .collect();
         for (title, hits) in [
             ("会话", sessions),
@@ -366,6 +372,7 @@ impl Workbench {
             }
             Hit::NextWaiting => self.next_waiting(window, cx),
             Hit::View(id) => self.choose_sidebar_preset(&id, cx),
+            Hit::Machine(index) => self.switch_machine_quiet(index, cx),
             Hit::Diagnostics => self.show_diagnostics(window, cx),
             Hit::Action(i) => {
                 if let (Some(action), Some(pane)) =
@@ -759,6 +766,13 @@ impl Workbench {
                         .more_row(row, selected, (*hidden).min(MORE_STEP), unit, hit, cx)
                         .into_any_element();
                 }
+                Hit::Machine(index) => (
+                    glyph("◌"),
+                    self.machine_hit_title(*index),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ),
                 Hit::View(id) => {
                     let name = presets::find(id).name.clone();
                     let on = self.sidebar.preset().id == *id;
@@ -1180,25 +1194,6 @@ pub(super) fn kbd(text: impl Into<gpui::SharedString>) -> gpui::Div {
         .text_size(px(T::CHIP_SIZE))
         .text_color(T::color(T::secondary()))
         .child(text.into())
-}
-fn section_heading(title: &'static str, note: &str) -> gpui::Div {
-    div()
-        .px(px(T::S16))
-        .pt(px(T::S10))
-        .pb(px(T::S4))
-        .flex()
-        .gap(px(T::S6))
-        .text_size(px(T::META))
-        .text_color(T::color(T::muted()))
-        .font_features(T::tabular())
-        .child(
-            div()
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(T::color(T::secondary()))
-                .child(title),
-        )
-        .child(div().flex_1())
-        .child(note.to_owned())
 }
 /// When the user spoke over the session, one tick per timed ask between the first and
 /// the last; nothing for a single ask or asks without times.

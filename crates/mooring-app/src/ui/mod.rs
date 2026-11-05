@@ -8,6 +8,7 @@ pub mod icons;
 pub mod palette;
 pub mod peek;
 pub mod pinned_ask;
+pub mod running_spin;
 pub mod space_themes;
 pub mod status_colors;
 pub mod style;

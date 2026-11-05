@@ -47,6 +47,9 @@ export function rank(c: Card): number {
   return 5;
 }
 
+/** What a row's third line says after its branch: what it is doing now, else its Agent. */
+export const rowDetail = (c: Card) => c.doing || agentName(c.agent);
+
 export const agentName = (agent?: string | null) =>
   agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : agent ? agent[0].toUpperCase() + agent.slice(1) : '';
 

@@ -40,6 +40,8 @@ struct Heading {
     open: bool,
     /// The machine `＋` opens a terminal on.
     add: Option<usize>,
+    /// The other machine this heads, whose menu it opens.
+    machine: Option<usize>,
 }
 
 impl Workbench {
@@ -60,7 +62,9 @@ impl Workbench {
             }
             (Machines::Mixed, _) => {
                 let mut out = self.space_tiles(cx);
-                out.push(self.machine_chips(cx).into_any_element());
+                if (0..self.machines.len()).any(|i| !self.machine_quiet(i)) {
+                    out.push(self.machine_chips(cx).into_any_element());
+                }
                 out
             }
             _ => self.space_tiles(cx),
@@ -70,7 +74,9 @@ impl Workbench {
     /// a second click lists every one again.
     fn machine_chips(&self, cx: &Context<Self>) -> gpui::Div {
         let scope = self.machine_scope();
-        let chips = self.machines.iter().enumerate().map(|(index, remote)| {
+        let attended = |(i, _): &(usize, _)| !self.machine_quiet(*i);
+        let listed = self.machines.iter().enumerate().filter(attended);
+        let chips = listed.map(|(index, remote)| {
             let (host, online) = {
                 let view = remote.view.lock().unwrap();
                 (view.spec.host.clone(), view.link == Link::Online)
@@ -78,7 +84,7 @@ impl Workbench {
             let name = machine_label(&host).to_owned();
             let need = self.remote_needs(index);
             let on = scope == Some(index);
-            div()
+            let chip = div()
                 .id(gpui::SharedString::from(format!("machine-chip-{index}")))
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(if on {
@@ -138,7 +144,8 @@ impl Workbench {
                     this.set_machine_scope((!again).then(|| host.clone()));
                     this.sidebar.space_filter = None;
                     cx.notify();
-                }))
+                }));
+            self.machine_menu_on(chip, index, cx)
         });
         div()
             .mx(px(T::S12))
@@ -228,10 +235,11 @@ impl Workbench {
             need,
             open,
             add,
+            machine,
         } = h;
         let toggle = key.clone();
         let key_for_mark = key.clone();
-        div()
+        let heading = div()
             .id(gpui::SharedString::from(format!("section-{key}")))
             .role(gpui::accesskit::Role::Button)
             .aria_label(format!(
@@ -298,8 +306,11 @@ impl Workbench {
             })
             .on_click(
                 cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&toggle, open, cx)),
-            )
-            .into_any_element()
+            );
+        match machine {
+            Some(index) => self.machine_menu_on(heading, index, cx).into_any_element(),
+            None => heading.into_any_element(),
+        }
     }
     fn local_section_heading(&self, open: bool, cx: &Context<Self>) -> gpui::AnyElement {
         let sessions = self
@@ -317,6 +328,7 @@ impl Workbench {
                 need: self.needs_you().len(),
                 open,
                 add: None,
+                machine: None,
             },
             cx,
         )
@@ -354,6 +366,7 @@ impl Workbench {
                     need: self.remote_needs(index),
                     open,
                     add: (online && self.machine_manages(index)).then_some(index),
+                    machine: Some(index),
                 },
                 cx,
             ),
@@ -400,13 +413,19 @@ impl Workbench {
         recent: bool,
         cx: &Context<Self>,
     ) -> Vec<gpui::AnyElement> {
-        match self.machine_layout() {
+        let mut out = match self.machine_layout() {
             Machines::Below => self.machine_rows(recent, cx),
             Machines::Sections => (0..self.machines.len())
+                .filter(|i| !self.machine_quiet(*i))
                 .flat_map(|i| self.machine_section(i, cx))
                 .collect(),
             Machines::Mixed | Machines::Rail => Vec::new(),
+        };
+        // 会话优先 keeps them in its foot (`flat_column`); other lists end with them.
+        if !recent {
+            out.extend(self.quiet_lines(cx));
         }
+        out
     }
 
     /// The rail's button for this machine (`None`) or another.
@@ -479,6 +498,10 @@ impl Workbench {
                 this.sidebar.space_filter = None;
                 cx.notify();
             }));
+        let button = match index {
+            Some(i) => self.machine_menu_on(button, i, cx),
+            None => button,
+        };
         // The badge lies beside the button, not in it: a div paints its border after its
         // children, so the button's corner would cross the digits.
         div()
@@ -527,7 +550,11 @@ impl Workbench {
                 )
             })
             .child(self.rail_button(None, cx))
-            .children((0..self.machines.len()).map(|i| self.rail_button(Some(i), cx)))
+            .children(
+                (0..self.machines.len())
+                    .filter(|i| !self.machine_quiet(*i))
+                    .map(|i| self.rail_button(Some(i), cx)),
+            )
             .child(div().flex_1())
             .child(self.rail_add(cx))
     }
@@ -572,6 +599,7 @@ impl Workbench {
             .child(self.flat_brand())
             .child(self.flat_search(cx))
             .child(list)
+            .children(self.quiet_lines(cx))
             .child(self.flat_keys(cx))
             .child(self.flat_foot(listed, cx));
         // The rail lies over the left of the column rather than beside it: in a row, taffy

@@ -5,7 +5,7 @@
 //! order; `events` and `watch` are streams that run beside them until closed.
 //! The message shapes are in the Keepline repo's `specs/extensions/remote-protocol.md`
 //! (not moved here).
-use crate::control::{self, Args, Phase};
+use crate::control::{self, Args};
 use base64::Engine;
 use mooring_core::{model::*, protocol::*, terminal::Vt};
 use mooring_host::devices::{self, Role};
@@ -21,7 +21,10 @@ use std::thread;
 mod chat;
 mod diff;
 mod dirs;
+mod list;
 mod quota;
+mod resume;
+mod usage;
 mod writes;
 
 const MAX_LINE: u64 = rp::MAX_LINE as u64;
@@ -207,11 +210,16 @@ pub fn serve(
         };
         match op {
             "hello" => {
-                greeted = true;
                 client = (request["client"].as_str())
                     .filter(|c| !c.is_empty())
                     .map(str::to_owned);
-                let _ = out.send(json!({ "id": id, "ok": hello(socket, access.role) }));
+                match hello(socket, access.role) {
+                    Ok(ok) => {
+                        greeted = true;
+                        let _ = out.send(json!({ "id": id, "ok": ok }));
+                    }
+                    Err(e) => fail(format!("记不住本机标识：{e}")),
+                }
             }
             _ if !greeted => fail("先发 hello".into()),
             _ if !access.role.allows(op) => fail(format!(
@@ -225,6 +233,16 @@ pub fn serve(
             }
             "ping" => {
                 let _ = out.send(json!({ "id": id, "ok": {} }));
+            }
+            // Reads logs for up to seconds: beside the requests, not ahead of an answer.
+            "usage" => {
+                let out = out.clone();
+                thread::spawn(move || {
+                    let _ = out.send(match usage::usage(&request) {
+                        Ok(ok) => json!({ "id": id, "ok": ok }),
+                        Err(e) => json!({ "id": id, "error": e.to_string() }),
+                    });
+                });
             }
             "resize" => match resize(&streams, &request) {
                 Ok(()) => {
@@ -270,10 +288,10 @@ pub fn serve(
 }
 
 pub(crate) use mooring_host::devices::machine;
-fn hello(socket: &Path, role: Role) -> Value {
-    json!(rp::Hello {
+fn hello(socket: &Path, role: Role) -> io::Result<Value> {
+    Ok(json!(rp::Hello {
         version: rp::VERSION,
-        machine: machine(socket),
+        machine: machine(socket)?,
         ops: OPS
             .iter()
             .filter(|op| role.allows(op))
@@ -290,7 +308,7 @@ fn hello(socket: &Path, role: Role) -> Value {
             .into()
         ),
         app_version: Some(env!("CARGO_PKG_VERSION").into()),
-    })
+    }))
 }
 
 /// A write its client named: it runs once however often it comes (`Request::Once`).
@@ -336,7 +354,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
                     Ok(Reply::Recognition(r)) => r,
                     _ => Default::default(),
                 };
-                Ok(list(&w, &seen, socket))
+                list::list(&w, &seen, socket)
             }
             other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
@@ -412,87 +430,14 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
         "diff" => diff::diff(socket, request),
         "dirs" => dirs::dirs(socket, request),
         "quota" => quota::quota(socket),
+        "lastsession" => resume::last_session(socket, request),
+        "addspace" => writes::add_space(socket, request, client),
         "mkdir" => writes::mkdir(request),
         "stop" => writes::stop(socket, request, client),
         "open" => writes::open(socket, request, client),
         "end" => writes::end(socket, request, client),
         "outcome" => writes::outcome(socket, request, client),
         op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
-    }
-}
-
-/// Spaces and running terminals as cards: what each Agent is doing and what it asks.
-fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> Value {
-    let now = mooring_core::content::now();
-    let terminals: Vec<_> = w
-        .terminals
-        .iter()
-        .filter(|t| t.state == ProcessState::Running)
-        .map(|t| {
-            let session = w.current_agent(&t.id);
-            let content = session.and_then(|s| w.content.get(&s.id));
-            let phase = match control::phase(w, &t.id) {
-                Phase::Working => rp::Phase::Working,
-                Phase::Waiting => rp::Phase::Waiting,
-                Phase::Idle => rp::Phase::Idle,
-                Phase::None => rp::Phase::Shell,
-            };
-            let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
-            let status = control::status(w, &t.id);
-            // An Agent here that no conversation is tied to: what it is, in the host's words.
-            let unbound = session
-                .is_none()
-                .then(|| seen.terminal_agents.get(&t.id).copied())
-                .flatten();
-            let note = unbound.and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
-            rp::Card {
-                id: t.id.clone(),
-                space: t.space.clone(),
-                tab: control::tab_title(w, &t.id),
-                cwd: w.terminal_cwd(t),
-                phase,
-                agent: session
-                    .map(|s| s.runtime)
-                    .or(unbound)
-                    .map(|a| control::agent_label(a).to_owned()),
-                session: session.map(|s| s.id.clone()),
-                title: session.map(|s| w.session_title(s)),
-                approval: content.and_then(|c| said(&c.approval)),
-                waiting: content.and_then(|c| said(&c.waiting)),
-                status: status.map(|s| s.key().to_owned()),
-                status_label: status.map(|s| s.label().to_owned()),
-                needs_you: session.is_some_and(|s| w.needs_you(s, now)),
-                note,
-                turn: content
-                    .map(|c| c.turn_key.clone())
-                    .filter(|t| !t.is_empty()),
-                outcome: session.map(|s| outcome_key(&s.outcome).to_owned()),
-                updated: session.map(|s| w.session_updated(s)),
-            }
-        })
-        .collect();
-    let spaces = w
-        .spaces
-        .iter()
-        .map(|s| rp::Space {
-            id: s.id.clone(),
-            name: s.name.clone(),
-            cwd: s.cwd.clone(),
-        })
-        .collect();
-    json!(rp::List {
-        machine: machine(socket),
-        spaces,
-        terminals,
-    })
-}
-
-fn outcome_key(o: &Outcome) -> &'static str {
-    match o {
-        Outcome::Open => "open",
-        Outcome::Completed => "done",
-        Outcome::Deferred { .. } => "deferred",
-        Outcome::Abandoned => "abandoned",
     }
 }
 
@@ -670,82 +615,5 @@ fn watch(st: &mut Stream, terminal: &str, socket: &Path, take: bool) -> io::Resu
             }
             _ => (),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mooring_core::status;
-
-    /// The phone's cards say what the window says, on every sample case.
-    #[test]
-    fn cards_read_every_field_from_its_owner() {
-        let w = mooring_core::sample::every_state();
-        let dir = std::env::temp_dir().join(format!("mooring-cards-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let list: rp::List =
-            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock"))).unwrap();
-        let at = mooring_core::content::now();
-        assert!(!list.terminals.is_empty());
-        for card in &list.terminals {
-            let term = w.terminals.iter().find(|t| t.id == card.id).unwrap();
-            assert_eq!(card.tab, w.terminal_tab_title(&card.id), "{}", card.id);
-            assert_eq!(card.cwd, w.terminal_cwd(term), "{}", card.id);
-            let Some(s) = w.current_agent(&card.id) else {
-                assert_eq!(card.phase, rp::Phase::Shell);
-                continue;
-            };
-            let st = status::of(&w, s, at);
-            assert_eq!(card.title.as_deref(), Some(w.session_title(s).as_str()));
-            assert_eq!(card.status.as_deref(), Some(st.key()), "{}", card.id);
-            assert_eq!(
-                card.status_label.as_deref(),
-                Some(st.label()),
-                "{}",
-                card.id
-            );
-            assert_eq!(card.needs_you, w.needs_you(s, at), "{}", card.id);
-        }
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    /// A Codex on the shared daemon has no conversation, yet it is no plain shell.
-    #[test]
-    fn an_agent_without_a_conversation_lists_with_its_note() {
-        let mut w = mooring_core::sample::every_state();
-        let shell = w
-            .terminals
-            .iter()
-            .find(|t| t.state == ProcessState::Running)
-            .unwrap()
-            .id
-            .clone();
-        w.agent_sessions
-            .retain(|s| s.terminal.as_deref() != Some(shell.as_str()));
-        assert!(w.current_agent(&shell).is_none());
-        let mut seen = RecognitionStatus::default();
-        seen.terminal_agents
-            .insert(shell.clone(), mooring_core::agent::Agent::Codex);
-        seen.terminal_notes.insert(
-            shell.clone(),
-            TerminalNote {
-                note: "codex · 空闲 · 看不到对话".into(),
-                why: String::new(),
-            },
-        );
-        let dir = std::env::temp_dir().join(format!("mooring-unbound-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let list: rp::List = serde_json::from_value(list(&w, &seen, &dir.join("sock"))).unwrap();
-        let card = list.terminals.iter().find(|c| c.id == shell).unwrap();
-        assert_eq!(card.phase, rp::Phase::Shell);
-        assert_eq!(card.agent.as_deref(), Some("codex"));
-        assert_eq!(card.note.as_deref(), Some("codex · 空闲 · 看不到对话"));
-        assert!(list
-            .terminals
-            .iter()
-            .filter(|c| c.id != shell)
-            .all(|c| c.note.is_none()));
-        let _ = std::fs::remove_dir_all(dir);
     }
 }

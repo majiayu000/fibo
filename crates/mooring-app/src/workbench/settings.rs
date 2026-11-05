@@ -233,7 +233,7 @@ impl Page {
     }
 }
 /// Every searchable setting: its page, its title and the words that find it.
-const ENTRIES: [(Page, &str, &str); 36] = [
+const ENTRIES: [(Page, &str, &str); 37] = [
     (
         Page::Phones,
         "其他电脑",
@@ -268,7 +268,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
         "跟随系统 亮色 暗色 明暗 dark light 曜黑 纸白 蓝灰 石墨 暖灰 松绿 紫灰 配色 导入 itermcolors 编辑器",
     ),
     (Page::Look, "界面样式", "样式 标准 终端原生 tmux 等宽 style"),
-    (Page::Look, "应用图标", "dock 图标 水墨 吉祥物 icon"),
+    (Page::Look, "应用图标", "dock 图标 二次元 吉祥物 icon"),
     (
         Page::Look,
         "标记完成动画",
@@ -279,6 +279,7 @@ const ENTRIES: [(Page, &str, &str); 36] = [
         "钉住这一轮的提问",
         "提问 置顶 钉住 顶部条 浮出 你问 回答太长 pin prompt sticky",
     ),
+    (Page::Look, "状态圆圈转动", "转圈 动画 耗电 性能 spinner"),
     (Page::Terminal, "终端字体", "字体 family font mono 等宽"),
     (Page::Terminal, "字号", "文字大小 font size 缩放 pt"),
     (Page::Terminal, "行距", "行高 line height 紧凑 舒适 宽松"),
@@ -395,8 +396,7 @@ pub(super) struct SettingsView {
     relay_key: Entity<Field>,
     /// Why the phones setting was not sent.
     remote_error: Option<&'static str>,
-    /// 其他电脑: as saved in `<config>/machines.json`, the field a new one is typed in,
-    /// and why the last change was not saved.
+    /// 其他电脑: `<config>/machines.json`, the new one's field and the last save's error.
     machines: Vec<crate::machines::Spec>,
     machine_field: Entity<Field>,
     machines_error: Option<String>,
@@ -1687,7 +1687,7 @@ impl SettingsView {
                                     return;
                                 }
                                 let mut next = this.machines.clone();
-                                next.push(crate::machines::Spec { host, path: None });
+                                next.push(crate::machines::Spec::new(host));
                                 this.machine_field.update(cx, |f, _| f.set_text(""));
                                 this.save_machines(next, cx);
                             })),
@@ -1698,7 +1698,7 @@ impl SettingsView {
         rows
     }
     fn save_machines(&mut self, next: Vec<crate::machines::Spec>, cx: &mut Context<Self>) {
-        match crate::machines::save(&next) {
+        match crate::machines::save_keeping_quiet(&next) {
             Ok(()) => {
                 self.machines = next;
                 self.machines_error = None;
