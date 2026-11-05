@@ -71,6 +71,7 @@ mod tests {
                 let name = path.strip_prefix(&root).unwrap().display().to_string();
                 let test_only = name.ends_with("tests.rs")
                     || name.ends_with("_evidence.rs")
+                    || name.starts_with("workbench/visual/")
                     || ["harness.rs", "workbench/visual.rs"].contains(&name.as_str());
                 if test_only {
                     return None;
