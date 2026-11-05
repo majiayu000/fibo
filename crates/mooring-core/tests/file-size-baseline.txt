@@ -18,7 +18,6 @@ crates/mooring-app/src/workbench/sidebar.rs	1218
 crates/mooring-app/src/workbench/sidebar_list.rs	1268
 crates/mooring-app/src/workbench/task_detail.rs	1122
 crates/mooring-app/src/workbench/visual.rs	1826
-crates/mooring-core/src/content.rs	831
 crates/mooring-core/src/model.rs	1901
 crates/mooring-host/src/content/mod.rs	2055
 crates/mooring-host/src/control.rs	1247
