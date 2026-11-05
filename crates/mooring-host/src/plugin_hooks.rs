@@ -499,8 +499,19 @@ mod tests {
     #[test]
     fn each_state_reaches_hooks_once_and_a_restart_replays_nothing() {
         use mooring_core::content::Content;
-        use mooring_core::model::{AgentSession, Outcome};
+        use mooring_core::model::{AgentSession, Outcome, ProcessState, Terminal};
         let mut w = Workspace::default();
+        // The agent is still in its terminal, so a question in it waits for you.
+        w.terminals.push(Terminal {
+            id: "pty".into(),
+            space: "lib".into(),
+            argv: vec![],
+            cwd: "/project".into(),
+            pid: None,
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
         w.agent_sessions.push(AgentSession {
             id: "s".into(),
             runtime: mooring_core::model::Agent::Codex,
