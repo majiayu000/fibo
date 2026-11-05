@@ -1,5 +1,5 @@
 crates/mooring-app/src/harness.rs	3315
-crates/mooring-app/src/terminal/pane.rs	2969
+crates/mooring-app/src/terminal/pane.rs	2919
 crates/mooring-app/src/workbench/board.rs	1133
 crates/mooring-app/src/workbench/diagnostics.rs	2301
 crates/mooring-app/src/workbench/forms.rs	1098
@@ -16,7 +16,6 @@ crates/mooring-app/src/workbench/task_detail.rs	1122
 crates/mooring-app/src/workbench/visual.rs	1826
 crates/mooring-host/src/content/mod.rs	2055
 crates/mooring-host/src/control.rs	1247
-crates/mooring-host/src/host/mod.rs	1057
 crates/mooring-host/src/log_index.rs	2063
 crates/mooring-host/src/relay.rs	939
 crates/mooring-host/tests/managed_session.rs	6632
