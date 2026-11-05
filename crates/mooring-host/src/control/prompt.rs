@@ -8,6 +8,7 @@ pub(super) fn send(a: Args) -> io::Result<()> {
     expect_ok(rpc(
         &a.socket,
         &Request::SendText {
+            session: None,
             id,
             text,
             submit: a.has("enter"),
@@ -36,6 +37,7 @@ pub(super) fn prompt(a: Args) -> io::Result<()> {
     expect_ok(rpc(
         &a.socket,
         &Request::SendText {
+            session: None,
             id: id.clone(),
             text,
             submit: true,

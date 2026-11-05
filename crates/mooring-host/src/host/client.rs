@@ -524,10 +524,12 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let text = lock(terminal)?.vt.tail_text(rows.clamp(1, 10_000))?;
             Ok(Reply::Text(text))
         }
-        Request::SendText { id, text, submit } => {
-            send_text(shared, &id, &text, submit)?;
-            Ok(Reply::Ok)
-        }
+        Request::SendText {
+            id,
+            text,
+            submit,
+            session,
+        } => send_text(shared, &id, &text, submit, session.as_deref()).map(|()| Reply::Ok),
         Request::ReportTo { child, parent } => {
             let mut host = lock(shared)?;
             for id in [&child, &parent] {

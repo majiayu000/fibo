@@ -8,6 +8,7 @@ pub(in crate::host) fn send_text(
     id: &str,
     text: &str,
     submit: bool,
+    session: Option<&str>,
 ) -> io::Result<()> {
     if text.contains('\x1b') {
         return Err(io::Error::other("文本包含终端控制字符"));
@@ -15,7 +16,9 @@ pub(in crate::host) fn send_text(
     if text.len() > 64 * 1024 {
         return Err(io::Error::other("单次输入超过 64 KiB"));
     }
-    let terminal = lock(shared)?
+    let host = lock(shared)?;
+    check_session(&host.workspace, id, session)?;
+    let terminal = host
         .terminals
         .get(id)
         .cloned()
@@ -42,6 +45,7 @@ pub(in crate::host) fn send_text(
             live.input_at = Some(Instant::now());
         }
     }
+    drop(host);
     // Same as typing in the app: the prompt on screen is no longer waiting on the user.
     lock(shared)?.set_screen_wait(id, None)?;
     if !submit {
@@ -49,8 +53,26 @@ pub(in crate::host) fn send_text(
     }
     // Long enough for an Agent's paste handling to finish before Enter arrives.
     thread::sleep(Duration::from_millis(150));
-    pty::write(&mut lock(&terminal)?.master, b"\r")?;
+    {
+        let host = lock(shared)?;
+        check_session(&host.workspace, id, session)?;
+        let mut live = lock(&terminal)?;
+        if live.exited {
+            return Err(io::Error::other("terminal has exited"));
+        }
+        pty::write(&mut live.master, b"\r")?;
+    }
     record_submission(shared, id)
+}
+fn check_session(workspace: &Workspace, id: &str, expected: Option<&str>) -> io::Result<()> {
+    if let Some(expected) = expected {
+        if workspace.current_agent(id).map(|s| s.id.as_str()) != Some(expected) {
+            return Err(io::Error::other(
+                "原对话已离开这个终端，消息未继续发送，请打开原对话处理",
+            ));
+        }
+    }
+    Ok(())
 }
 /// The bytes a key sends: arrows as the program asked for them (DECCKM), `ctrl-x` as
 /// its control code, any other single character as itself.
@@ -242,4 +264,30 @@ fn typed(shared: &Shared, id: &str, entered: bool) -> io::Result<()> {
         record_submission(shared, id)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    use crate::host::tests::session;
+
+    #[test]
+    fn chat_identity_tracks_the_current_conversation_not_the_terminal() {
+        let mut workspace = Workspace {
+            agent_sessions: vec![session("a", 1, Some("t"), true)],
+            ..Default::default()
+        };
+        assert!(check_session(&workspace, "t", Some("a")).is_ok());
+        assert!(check_session(&workspace, "other", Some("a")).is_err());
+        workspace.agent_sessions[0].current = false;
+        workspace
+            .agent_sessions
+            .push(session("b", 2, Some("t"), true));
+        assert!(check_session(&workspace, "t", Some("a")).is_err());
+        assert!(check_session(&workspace, "t", Some("b")).is_ok());
+        workspace.agent_sessions[1].current = false;
+        assert!(check_session(&workspace, "t", Some("b")).is_err());
+        assert!(check_session(&workspace, "t", Some("")).is_err());
+        assert!(check_session(&workspace, "t", None).is_ok());
+    }
 }

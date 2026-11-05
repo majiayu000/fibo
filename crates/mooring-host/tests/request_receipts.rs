@@ -349,6 +349,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
         c
     };
     let send = |text: &str, request: Option<&str>| Op::Send {
+        session: None,
         terminal: "far".into(),
         text: text.into(),
         enter: true,
@@ -359,6 +360,16 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
     first.request(send("named", Some("r1")), t).unwrap();
     drop(first);
     let again = connect();
+    // The terminal is alive but contains a shell, not the conversation queued on the phone.
+    let refused_chat = Op::Send {
+        terminal: "far".into(),
+        session: Some("old-conversation".into()),
+        text: "must-not-reach-shell".into(),
+        enter: true,
+        request: Some("stale-chat".into()),
+    };
+    let refusal = again.request(refused_chat, t).unwrap_err().to_string();
+    assert!(refusal.contains("原对话"), "{refusal}");
     again.request(send("named", Some("r1")), t).unwrap();
     again.request(send("unnamed", None), t).unwrap();
     again.request(send("unnamed", None), t).unwrap();
@@ -372,6 +383,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
     assert_eq!(again.request(gone, t).unwrap_err().to_string(), refused);
     std::thread::sleep(Duration::from_millis(500));
     let lines = fs::read_to_string(&typed).unwrap();
+    assert!(!lines.contains("must-not-reach-shell"), "{lines:?}");
     let count = |w: &str| lines.lines().filter(|l| l.trim() == w).count();
     assert_eq!((count("named"), count("unnamed")), (1, 2), "{lines:?}");
     drop(again);
