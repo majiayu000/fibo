@@ -17,7 +17,14 @@ pub struct Host {
 }
 impl Host {
     pub fn start() -> Self {
+        Self::start_over(|_| ())
+    }
+    /// With what `seed` puts under its runtime before it starts: a first walk finds it.
+    pub fn start_over(seed: impl FnOnce(&Path)) -> Self {
         let root = std::env::temp_dir().join(format!("kl-{}", uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(&root).unwrap();
+        fs::set_permissions(&root, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+        seed(&root);
         let child = Command::new(std::env::current_exe().unwrap())
             .args([
                 "--ignored",

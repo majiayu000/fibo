@@ -358,6 +358,68 @@ fn a_raw_log_that_is_gone_says_so() {
 }
 
 /// A Codex rollout as real ones are: scripts, their commands logged apart, and function calls.
+/// A long log the host first meets as it is: only its end is read. The chat says what is
+/// missing, with messages in that end and with none, instead of looking like the start.
+#[test]
+fn a_log_read_only_from_its_end_says_so() {
+    let id = |n: u8| format!("00000000-0000-4000-8000-00000000000{n}");
+    let line = |id: &str, row: Value| {
+        let mut row = row;
+        row["sessionId"] = id.into();
+        row["cwd"] = "/project".into();
+        row["entrypoint"] = "cli".into();
+        row["userType"] = "external".into();
+        row["timestamp"] = mooring_core::content::now().into();
+        format!("{row}\n")
+    };
+    let h = Host::start_over(|root| {
+        let dir = root.join("logs/claude/project");
+        fs::create_dir_all(&dir).unwrap();
+        // Long, ending in words: what the end holds shows.
+        let mut with = line(&id(1), user(Path::new("/project"), "u0", "很早的话"));
+        with += &line(&id(1), said("a0", &"很早的回复".repeat(40_000)));
+        with += &line(&id(1), user(Path::new("/project"), "u1", "最近的话"));
+        with += &line(&id(1), said("a1", "最近的回复"));
+        fs::write(dir.join(format!("{}.jsonl", id(1))), with).unwrap();
+        // Long, its end all machine records: nothing there to show.
+        let mut none = line(&id(2), user(Path::new("/project"), "u0", "很早的话"));
+        let blob = json!({"type":"api-request-blob","blob":"x".repeat(200_000)});
+        none += &line(&id(2), blob);
+        fs::write(dir.join(format!("{}.jsonl", id(2))), none).unwrap();
+    });
+    let session = |h: &Host, cli: &str| {
+        let until = Instant::now() + Duration::from_secs(30);
+        loop {
+            let w = h.workspace();
+            let found = w.agent_sessions.iter().find(|s| s.cli_session_id == cli);
+            if let Some(s) = found {
+                return s.id.clone();
+            }
+            assert!(Instant::now() < until, "the walk never found {cli}");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    };
+    let (with, none) = (session(&h, &id(1)), session(&h, &id(2)));
+    let mut r = Remote::open(&h, None, &[]);
+    let page = r.ok(json!({ "op": "chat", "session": with }));
+    let words: Vec<_> = page["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["text"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(words.iter().any(|t| t == "最近的回复"), "{words:?}");
+    assert!(
+        !words.iter().any(|t| t.starts_with("很早的回复")),
+        "{words:?}"
+    );
+    assert_eq!(page["partial"], true);
+    let page = r.ok(json!({ "op": "chat", "session": none }));
+    // Only the first ask, which a recent log's opening always gives, and no answer to it.
+    assert_eq!(page["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(page["partial"], true);
+}
+
 #[test]
 fn codex_scripts_read_as_what_they_did() {
     let h = Host::start();

@@ -38,12 +38,25 @@ pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
         },
     )?;
     match reply {
-        Reply::Chat { messages, more } => Ok(json!(rp::Chat {
-            session,
-            messages: messages.into_iter().map(message).collect(),
-            more,
-        })),
+        Reply::Chat { messages, more } => {
+            let partial = !more && read_from_the_end(socket, &session)?;
+            Ok(json!(rp::Chat {
+                session,
+                messages: messages.into_iter().map(message).collect(),
+                more,
+                partial,
+            }))
+        }
         Reply::Error(e) => Err(io::Error::other(e)),
+        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+    }
+}
+
+/// Whether this conversation's history starts part way: the page without anything older
+/// is where a reader would otherwise take it for the start, or for an empty one.
+fn read_from_the_end(socket: &Path, session: &str) -> io::Result<bool> {
+    match rpc(socket, &Request::Workspace)? {
+        Reply::Workspace(w) => Ok(w.content.get(session).is_some_and(|c| c.partial_history)),
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }

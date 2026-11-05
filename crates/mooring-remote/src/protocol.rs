@@ -517,6 +517,9 @@ pub struct Chat {
     pub messages: Vec<Message>,
     /// Older messages exist before the first: ask again with `before`.
     pub more: bool,
+    /// Its log was first read from near the end, so what came before is not here at all.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub partial: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

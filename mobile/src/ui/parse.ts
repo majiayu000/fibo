@@ -44,6 +44,12 @@ export const trustWords = (agent: string) => ({
   means: '信任后，它能读、改、运行这个文件夹里的文件。这个决定会记在电脑上。不信任的话，它不会在这里工作。',
 });
 
+/** What a conversation read only from its log's end says about what is missing. */
+export const partialWords = (messages: number) =>
+  messages
+    ? '更早的消息没有读进来：电脑第一次看到这段对话时，只读了日志的最后一段。'
+    : '这段日志电脑只读了最后一段，里面没有消息。之后的新消息会显示，更早的要回电脑上看。';
+
 /** Commands worth a second confirmation: pushing, deleting, deploying, publishing. */
 const DANGER = [
   /\bgit\s+push\b/,

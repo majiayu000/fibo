@@ -15,7 +15,7 @@ import { cardTitle } from '@/ui/format';
 import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
-import { choices, questionText } from '@/ui/parse';
+import { choices, questionText, partialWords } from '@/ui/parse';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
 import { agentName, statusColor } from '@/ui/status';
@@ -51,6 +51,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [session, setSession] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [partial, setPartial] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
@@ -78,6 +79,7 @@ export default function Chat() {
         shown.current = page.session;
         setSession(page.session);
         setMore(page.more);
+        setPartial(!!page.partial);
         // Another conversation: its messages replace the old one's, not join them.
         setMessages((have) => (same ? merge(have, page.messages) : page.messages));
         setError('');
@@ -264,9 +266,14 @@ export default function Chat() {
               </Pressable>
             ) : undefined
           }
+          ListFooterComponent={
+            partial && !more && messages.length > 0 ? (
+              <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19, textAlign: 'center', paddingVertical: 8 }}>{partialWords(messages.length)}</Text>
+            ) : undefined
+          }
           ListEmptyComponent={
             <Text style={{ color: t.dim, textAlign: 'center' }}>
-              {card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
+              {partial ? partialWords(0) : card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
         />

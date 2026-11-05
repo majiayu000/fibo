@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, asksTwice, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, asksTwice, partialWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -38,6 +38,14 @@ describe('a folder asking to be trusted', () => {
     const w = trustWords('Codex');
     expect(w.ask).toContain('Codex');
     for (const word of ['读', '改', '运行', '文件夹']) expect(w.means).toContain(word);
+  });
+});
+
+describe('a conversation read only from the end of its log', () => {
+  test('says so, with messages and without', () => {
+    expect(partialWords(3)).toContain('更早的消息没有读进来');
+    expect(partialWords(0)).toContain('里面没有消息');
+    expect(partialWords(0)).not.toBe(partialWords(3));
   });
 });
 
