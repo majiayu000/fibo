@@ -45,7 +45,7 @@ field turn	crates/mooring-host/src/host/status.rs	1
 field turn	crates/mooring-host/src/plugin_hooks.rs	1
 field turn	mobile/src/actions.ts	2
 field turn_started	crates/mooring-app/src/desktop.rs	1
-field turn_started	crates/mooring-app/src/workbench/board.rs	1
+field turn_started	crates/mooring-app/src/workbench/board/card.rs	1
 field turn_started	crates/mooring-app/src/workbench/layout/turn_bar.rs	2
 field turn_started	crates/mooring-app/src/workbench/sessions/here_card.rs	3
 field turn_started	crates/mooring-app/src/workbench/sidebar/view.rs	1
