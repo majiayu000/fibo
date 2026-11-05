@@ -26,6 +26,23 @@ impl Adapter for Codex {
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CODEX_HOME", ".codex").join("sessions")
     }
+    /// Its footer says 「esc to interrupt」. Ctrl-C (0.166) opens 「Task is still running」
+    /// over a running turn and, on an idle one, disconnects and quits: real runs, 11-05.
+    fn interrupt_key(&self) -> &'static [u8] {
+        b"\x1b"
+    }
+    /// After Esc a running command stays as 「1 background terminal running · /stop to
+    /// close」, and the log says the turn runs until it ends: `sleep 60` went on (real, 0.166).
+    fn closes_background(&self, tail: &str) -> Option<&'static str> {
+        let filled = |l: &&str| !l.trim().is_empty();
+        let lines: Vec<&str> = tail.lines().filter(filled).collect();
+        let bottom = &lines[lines.len().saturating_sub(6)..];
+        let left = bottom
+            .iter()
+            .any(|l| l.contains("background terminal") && l.contains("/stop to close"));
+        let working = bottom.iter().any(|l| l.contains("esc to interrupt"));
+        (left && !working).then_some("/stop")
+    }
     fn reads_tools(&self) -> bool {
         true
     }

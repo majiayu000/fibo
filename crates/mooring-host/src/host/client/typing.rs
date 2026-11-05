@@ -136,8 +136,11 @@ pub(in crate::host) fn type_input(shared: &Shared, id: &str, bytes: &[u8]) -> io
     }
     typed(shared, id, bytes.contains(&b'\r'))
 }
-/// Ctrl-C (byte 3), the window's 中断, while the terminal's conversation is working. The
-/// Agent stays and can be asked to go on, unlike `StopAgent`, which ends its process.
+/// The key its CLI interrupts a turn with, while the terminal's conversation is working.
+/// The Agent stays and can be asked to go on, unlike `StopAgent`, which ends its process.
+/// A 「Task is still running」 menu on screen is answered instead, read under the lock the
+/// key goes out under: Enter only with the cursor on 「Cancel task」, since its other
+/// options leave the task running or quit the Agent.
 pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
     let w = lock(shared)?.snapshot();
     let session =
@@ -149,7 +152,31 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
             state.label()
         )));
     }
-    type_input(shared, id, &[3])
+    let key = crate::agents::adapter(session.runtime).interrupt_key();
+    let terminal = lock(shared)?
+        .terminals
+        .get(id)
+        .cloned()
+        .ok_or_else(|| io::Error::other("terminal not found"))?;
+    {
+        let mut live = lock(&terminal)?;
+        if live.exited {
+            return Err(io::Error::other("terminal has exited"));
+        }
+        let tail = live.vt.tail_text(usize::from(live.rows))?;
+        let bytes: &[u8] = match crate::screen_ask::cancel_menu(&tail) {
+            None => key,
+            Some(menu) if menu.on_cancel => b"\r",
+            Some(_) => {
+                return Err(io::Error::other(
+                    "画面上的菜单光标不在「Cancel task」上，没有替你选，请打开终端处理",
+                ))
+            }
+        };
+        pty::write(&mut live.master, bytes)?;
+        live.input_at = Some(Instant::now());
+    }
+    typed(shared, id, false)
 }
 /// Same as typing in the app: the prompt on screen is no longer waiting on the user, and
 /// Enter submits.

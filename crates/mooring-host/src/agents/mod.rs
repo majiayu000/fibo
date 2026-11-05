@@ -97,6 +97,16 @@ pub trait Adapter: Sync {
     fn usage_line(&self, _line: &[u8], _since: u64, _state: &mut UsageState) -> Option<(u64, u64)> {
         None
     }
+    /// The key that interrupts its running turn and keeps it alive. Ctrl-C does on most
+    /// CLIs; on one where it does something else this says which key does.
+    fn interrupt_key(&self) -> &'static [u8] {
+        b"\x03"
+    }
+    /// What to type when an interrupted turn left its command running on screen, ending it.
+    /// None: nothing to do, or this CLI never leaves one.
+    fn closes_background(&self, _tail: &str) -> Option<&'static str> {
+        None
+    }
     /// Whether a phone can read this CLI's tool calls back from its log: the two below.
     fn reads_tools(&self) -> bool {
         false

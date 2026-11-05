@@ -162,6 +162,148 @@ fn remote_stop_interrupts_a_working_agent_and_refuses_anything_else() {
     assert!(e.contains("不能 stop"), "{e}");
 }
 
+/// A fake Codex 0.166 at work: it names each key it gets, logs an aborted turn on `ends`,
+/// and on Ctrl-C draws the menu the real one does, its cursor on `cursor`.
+fn fake_codex(h: &Host, id: &str, ends: &[&str], cursor: u8) {
+    fake_codex_saying(h, id, ends, cursor, "")
+}
+/// With `esc` printed on Esc: what the real one draws once it has interrupted.
+fn fake_codex_saying(h: &Host, id: &str, ends: &[&str], cursor: u8, esc: &str) {
+    let now = mooring_core::content::now();
+    let started = json!({"type":"event_msg","timestamp":now,"payload":{"type":"task_started","turn_id":"t1"}});
+    let aborted = json!({"type":"event_msg","timestamp":now,"payload":{"type":"turn_aborted"}});
+    let ended = h.root.join(format!("ended-{id}"));
+    std::fs::write(&ended, format!("{aborted}\n")).unwrap();
+    let mark = |n: u8| if n == cursor { "›" } else { " " };
+    let menu = format!(
+        "printf '\\n  Task is still running\\n  Choose what happens to the current task.\\n\\n{} 1. Cancel task        Stop the current task and stay in Codex\\n{} 2. Run in background  Exit Codex and leave the task running\\n{} 3. Exit               Stop the current task and exit Codex\\n\\n  enter select · esc back\\n'",
+        mark(1), mark(2), mark(3)
+    );
+    let path = h.root.join("logs/codex");
+    let rollout = format!("$(grep -l 'marker-{id}\"' {}/* | head -1)", path.display());
+    // Its own file: a `$(...)` in the fake itself would be a second process named codex,
+    // taken for the Agent and gone at every key.
+    let keys = h.root.join(format!("keys-{id}.sh"));
+    let body = format!(
+        "stty -icanon -echo -isig; printf '• Working (1s • esc to interrupt)\\n'; while :; do k=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'); keys=\"$keys $k\"; [ \"$k\" = 1b ] && printf '\\033[2J\\033[H{esc}\\n'; printf 'KEY=%s\\n' \"$k\"; [ \"$k\" = 03 ] && {menu}; case ' {} ' in *\" $k \"*) printf '\\033[2J\\033[H{esc}\\nkeys:%s\\n' \"$keys\"; cat {} >> {rollout};; esac; done",
+        ends.join(" "),
+        shell_quote(&ended.to_string_lossy()),
+    );
+    std::fs::write(&keys, body).unwrap();
+    let script = format!("/bin/sh {}", shell_quote(&keys.to_string_lossy()));
+    let marker = json!({"type":"response_item","timestamp":now,"payload":{"type":"reasoning","summary":[],"id":format!("marker-{id}")}});
+    h.codex(id, Path::new("/tmp"), &[marker, started], &script);
+}
+/// Asks until the list says `want` about terminal `id`.
+fn wait_phase(r: &mut Remote, id: &str, want: &str) {
+    let until = Instant::now() + Duration::from_secs(30);
+    loop {
+        let list = r.ok(json!({ "op": "list" }));
+        let cards = list["terminals"].as_array().unwrap();
+        let card = cards.iter().find(|c| c["id"] == id);
+        if card.is_some_and(|c| c["phase"] == want) {
+            return;
+        }
+        assert!(Instant::now() < until, "{id} never {want}: {card:?}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Codex: Esc, never Ctrl-C, which opens a menu on a running turn and quits an idle one.
+/// The reply waits until the turn is over, and the Agent is still there.
+#[test]
+fn remote_stop_on_codex_presses_esc_and_replies_once_it_stopped() {
+    let h = Host::start();
+    fake_codex(&h, "esc", &["1b"], 1);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "esc", "working");
+    r.ok(json!({ "op": "stop", "terminal": "esc", "request": "s1" }));
+    let screen = h.screen("esc");
+    assert!(screen.contains("keys: 1b"), "{screen}");
+    let list = r.ok(json!({ "op": "list" }));
+    let cards = list["terminals"].as_array().unwrap();
+    let card = cards.iter().find(|c| c["id"] == "esc").unwrap();
+    assert_ne!(card["phase"], "working", "replied before it stopped");
+    assert!(card["session"].is_string(), "the Agent stays");
+}
+
+/// The menu a Ctrl-C from elsewhere left up: only Enter, only with the cursor on Cancel
+/// task. Esc there would go back to the running turn; Enter elsewhere could quit it.
+#[test]
+fn remote_stop_answers_the_cancel_menu_only_with_the_cursor_on_cancel() {
+    let h = Host::start();
+    fake_codex(&h, "on", &["0a", "0d"], 1);
+    fake_codex(&h, "exit", &[], 3);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "on", "working");
+    wait_phase(&mut r, "exit", "working");
+    for id in ["on", "exit"] {
+        r.ok(json!({ "op": "keys", "terminal": id, "keys": ["ctrl-c"], "request": format!("k-{id}") }));
+        h.wait_screen(id, "enter select");
+    }
+    r.ok(json!({ "op": "stop", "terminal": "on", "request": "s1" }));
+    let screen = h.screen("on");
+    assert!(
+        screen.contains("keys: 03 0a") || screen.contains("keys: 03 0d"),
+        "{screen}"
+    );
+    assert!(!screen.contains("KEY=1b"), "{screen}");
+
+    let e = r.error(json!({ "op": "stop", "terminal": "exit", "request": "s2" }));
+    assert!(e.contains("Cancel task"), "{e}");
+    let screen = h.screen("exit");
+    assert!(
+        !screen.contains("KEY=0a") && !screen.contains("KEY=0d"),
+        "{screen}"
+    );
+    assert!(!screen.contains("KEY=1b"), "{screen}");
+}
+
+const LEFT_RUNNING: &str = "1 background terminal running · /ps to view · /stop to close";
+
+/// Esc ends the turn on screen but its command runs on (real Codex 0.166): `sleep 60` is
+/// only over once `/stop` closes it, and the log says the turn runs until then.
+#[test]
+fn remote_stop_closes_the_command_an_interrupted_turn_left_running() {
+    let h = Host::start();
+    fake_codex_saying(&h, "left", &["0a", "0d"], 1, LEFT_RUNNING);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "left", "working");
+    let ok = r.ok(json!({ "op": "stop", "terminal": "left", "request": "s1" }));
+    assert_eq!(ok["closed_background"], true);
+    let screen = h.screen("left");
+    assert!(screen.contains("keys: 1b 2f 73 74 6f 70"), "{screen}");
+}
+
+/// A server from an earlier turn: the turn ends by itself at Esc, so nothing is closed.
+#[test]
+fn remote_stop_leaves_a_server_alone_when_the_turn_ended_by_itself() {
+    let h = Host::start();
+    fake_codex_saying(&h, "server", &["1b"], 1, LEFT_RUNNING);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "server", "working");
+    let ok = r.ok(json!({ "op": "stop", "terminal": "server", "request": "s1" }));
+    assert_eq!(ok["closed_background"], false);
+    std::thread::sleep(Duration::from_millis(2000));
+    let screen = h.screen("server");
+    assert!(
+        screen.contains("keys: 1b") && !screen.contains("2f"),
+        "{screen}"
+    );
+}
+
+/// A key is not a stop: an Agent that keeps working gets an error, not a quiet success.
+#[test]
+fn remote_stop_says_so_when_the_agent_keeps_working() {
+    let h = Host::start();
+    fake_codex(&h, "deaf", &[], 1);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "deaf", "working");
+    let e = r.error(json!({ "op": "stop", "terminal": "deaf", "request": "s1" }));
+    assert!(e.contains("还在跑"), "{e}");
+    assert!(h.screen("deaf").contains("KEY=1b"));
+}
+
 #[test]
 fn remote_chat_tools_sum_what_the_agent_did_before_each_message() {
     let h = Host::start();

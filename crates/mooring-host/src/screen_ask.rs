@@ -267,6 +267,40 @@ fn under_title(above: &[&str]) -> ApprovalAsk {
     }
 }
 
+/// The menu Codex 0.166 puts over a running turn when it gets Ctrl-C.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CancelMenu {
+    /// The cursor is on 「Cancel task」, so Enter cancels. Its neighbours leave the task
+    /// running and quit Codex.
+    pub on_cancel: bool,
+}
+
+/// That menu when it is what the bottom of the screen shows. Every part must be there.
+pub fn cancel_menu(tail: &str) -> Option<CancelMenu> {
+    let lines: Vec<&str> = (tail.lines().map(str::trim))
+        .filter(|l| !l.is_empty())
+        .collect();
+    let lines = &lines[lines.len().saturating_sub(8)..];
+    let title = lines.iter().position(|l| *l == "Task is still running")?;
+    let options = &lines[title + 1..];
+    let footer = options.last()?;
+    if !(footer.starts_with("enter select") && footer.contains("esc back")) {
+        return None;
+    }
+    let says = |word: &str| {
+        options.iter().find(|l| {
+            let rest = l.trim_start_matches(['›', '❯', '>', ' ']);
+            rest.split_once(". ")
+                .is_some_and(|(_, t)| t.starts_with(word))
+        })
+    };
+    let cancel = says("Cancel task")?;
+    says("Exit")?;
+    Some(CancelMenu {
+        on_cancel: cancel.starts_with(['›', '❯', '>']),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -358,6 +392,37 @@ mod tests {
         let a = approval_ask(screen).unwrap();
         assert_eq!(a.subject, "git push origin main");
         assert_eq!(a.note, "Push main\nThis command requires approval");
+    }
+    /// The screen a real stop stuck on: Codex 0.166 after Ctrl-C.
+    const MENU: &str = "\
+› Run this: sleep 60
+
+  Task is still running
+  Choose what happens to the current task.
+
+› 1. Cancel task        Stop the current task and stay in Codex
+  2. Run in background  Exit Codex and leave the task running
+  3. Exit               Stop the current task and exit Codex
+
+  enter select · esc back
+";
+    #[test]
+    fn the_cancel_menu_says_where_the_cursor_is() {
+        assert_eq!(cancel_menu(MENU), Some(CancelMenu { on_cancel: true }));
+        let moved = MENU
+            .replace("› 1. Cancel", "  1. Cancel")
+            .replace("  3. Exit", "› 3. Exit");
+        assert_eq!(cancel_menu(&moved), Some(CancelMenu { on_cancel: false }));
+        // Without any one part it is not that menu.
+        assert_eq!(cancel_menu(&MENU.replace("enter select", "enter")), None);
+        assert_eq!(cancel_menu(&MENU.replace("3. Exit", "3. Quit")), None);
+        assert_eq!(
+            cancel_menu("• Working (4s • esc to interrupt)\n› Ask Codex\n"),
+            None
+        );
+        // Scrolled up, with the composer back under it.
+        let answered = format!("{MENU}\n• a\n• b\n• c\n• d\n• e\n• f\n• g\n• h\n");
+        assert_eq!(cancel_menu(&answered), None);
     }
     #[test]
     fn no_known_layout_leaves_the_subject_empty() {

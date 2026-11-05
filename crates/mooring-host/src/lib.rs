@@ -21,8 +21,8 @@ mod store;
 pub mod tool_text;
 pub use agents::hooks;
 pub use agents::{
-    describe_tool, reads_tools, roots as agent_log_roots, tool_call_line, tool_result_line,
-    usage_line, usage_marker, Described, ToolCallLine, ToolOutput, UsageState,
+    adapter as agent_adapter, describe_tool, reads_tools, roots as agent_log_roots, tool_call_line,
+    tool_result_line, usage_line, usage_marker, Described, ToolCallLine, ToolOutput, UsageState,
 };
 pub use host::remote::{load as remote_config, Config as RemoteConfig};
 pub use host::{serve, serve_taking_over, serve_with_options, serve_with_roots};

@@ -164,6 +164,16 @@ export default function Chat() {
     }
   }
 
+  async function stop() {
+    try {
+      const done = await write(machine, 'stop', { terminal });
+      setError(done?.closed_background ? '停下了。它后台还在跑的命令也一起关了。' : '');
+      setTimeout(() => refresh(machine), 300);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   // Inverted list: index 0 sits at the bottom.
   const rows: Line[] = useMemo(
     () => [
@@ -312,7 +322,7 @@ export default function Chat() {
           canContinue={online && card?.phase === 'idle'}
           offline={!online}
           onSend={send}
-          onStop={() => act('stop', {})}
+          onStop={() => stop()}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />

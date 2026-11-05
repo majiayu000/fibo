@@ -9,6 +9,7 @@ use mooring_core::{agent::Agent, model::*, protocol::*, status};
 use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 /// An Agent as cards name it (`claude`, `codex`): any CLI the registry knows.
 pub(super) fn agent_named(name: &str) -> io::Result<Agent> {
@@ -168,13 +169,62 @@ fn agent_argv(shell: &str, command: &str, prompt: Option<&str>) -> Vec<String> {
     argv
 }
 
-/// `stop`: interrupts the Agent's turn, the window's 中断. The host checks it is working
-/// inside the named act, so a resend gets the first reply even though it has stopped since.
+/// How long an interrupted turn gets to end by itself before the command it left is closed:
+/// one with nothing running ends at once, and a server from an earlier turn lives on.
+const BACKGROUND_AFTER: Duration = Duration::from_millis(1500);
+/// How long `stop` watches for the turn to end: under a client's request limit, long
+/// enough for a log to say so. A real Codex and Claude Code both settled within 3 s.
+const STOP_WAIT: Duration = Duration::from_secs(7);
+
+/// `stop`: interrupts the Agent's turn. The host checks it is working inside the named act,
+/// so a resend gets the first reply even though it has stopped since. A key sent is not a
+/// turn stopped: this replies once the state says so, with the Agent still there, and
+/// otherwise says what it saw. Pressing again here would race the screen: a second key can
+/// land on whatever replaced the menu the first one answered. A command the turn left
+/// running is part of what was asked to stop; the reply says when it closed one.
 pub(super) fn stop(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
-    let interrupt = Request::Interrupt {
-        id: text(request, "terminal")?.to_owned(),
-    };
-    ok_reply(rpc(socket, &named(client, request, interrupt))?)
+    let id = text(request, "terminal")?.to_owned();
+    let interrupt = Request::Interrupt { id: id.clone() };
+    ok_reply(rpc(socket, &named(client, request, interrupt))?)?;
+    let began = Instant::now();
+    let until = began + STOP_WAIT;
+    let mut closed = false;
+    loop {
+        let w = match rpc(socket, &Request::Workspace)? {
+            Reply::Workspace(w) => w,
+            other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+        };
+        let Some(session) = w.current_agent(&id) else {
+            return Err(io::Error::other("Agent 退出了，这个终端里已经没有对话"));
+        };
+        if status::of(&w, session, mooring_core::content::now()).phase() != status::Phase::Working {
+            return Ok(json!({ "closed_background": closed }));
+        }
+        if !closed && began.elapsed() >= BACKGROUND_AFTER {
+            let read = Request::ReadScreen {
+                id: id.clone(),
+                rows: 30,
+            };
+            let cli = mooring_host::agent_adapter(session.runtime);
+            if let Reply::Text(tail) = rpc(socket, &read)? {
+                if let Some(text) = cli.closes_background(&tail) {
+                    let send = Request::SendText {
+                        id: id.clone(),
+                        text: text.to_owned(),
+                        submit: true,
+                    };
+                    ok_reply(rpc(socket, &send)?)?;
+                    closed = true;
+                }
+            }
+        }
+        if Instant::now() >= until {
+            return Err(io::Error::other(
+                "发了中断，但它还在跑。可以打开终端看一眼，或者再试一次",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 }
 
 /// `mkdir`: one new folder in an existing one. A folder already there is what was asked
