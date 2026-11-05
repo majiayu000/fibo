@@ -1,6 +1,6 @@
 # 拆分超 800 行的文件
 
-2026-11-05 记录。基线提交 `d804fd2`。
+2026-11-05 记录。基线提交 `eedc95a`（审计修复合入之后）。批次 4 之前的 G1 见 [spec.md](spec.md)，G1 合入后验收基线要重新测一遍。
 
 **要支撑的决定**：能否把 `file-size-baseline.txt` 清空，且所有功能和拆分前一致。
 
@@ -112,7 +112,7 @@ cargo test -p mooring-core --test file_size --test guard
 
 ## 验收
 
-全部拆完后做，在固定提交的独立 worktree 里跑：主工作区可能中途被别的会话提交（记录这份基线时就发生过，第一次结果因此作废）。终点提交和基线 `d804fd2` 对比。
+全部拆完后做，在固定提交的独立 worktree 里跑：主工作区可能中途被别的会话提交（记录这份基线时就发生过，第一次结果因此作废）。终点提交和基线对比。
 
 | 层 | 查什么 | 怎么查 | 证明力 |
 |---|---|---|---|
@@ -120,10 +120,33 @@ cargo test -p mooring-core --test file_size --test guard
 | 2 测试名单 | 没有测试被搬丢 | 基线名单（`docs/file-split/baseline-tests.txt`）对比终点名单，去掉模块前缀后不得缺名 | 防止「全绿但少跑了」 |
 | 3 全量测试 | 行为测试 | `sh ci-test.sh`、开 `visual-test` 的 app 测试、`mobile` 的 `bun test` 和 `bun run typecheck`、`eval/protocol-contract/check.py` | 只覆盖有测试的部分 |
 | 4 性能和窗口 | 帧成本、主题场景 | `scripts/perf-gate.py`、`scripts/theme-scenes.py`、CI 的中继镜像任务 | 真窗口 |
-| 5 画面对比 | 界面没变 | 基线和终点各渲染一遍 `visual-fixture.py` 的全部页面、`MOORING_*_EVIDENCE` 场景和 `remote-*-evidence.sh`，逐张比像素 | 这些场景大多不在 CI 里，可能早已失效，所以基线也要跑，已坏的先记下 |
+| 5 画面对比 | 界面没变 | 基线两遍加终点各渲染全部页面、`MOORING_*_EVIDENCE` 场景和 `remote-*-evidence.sh`；差异按大小排好，**由人逐张看** | 只能筛图，不能判通过：彩排里纯搬动仍有约 3 成的图要看，故意改的界面也能筛出来 |
 | 6 真机走查 | 自动手段够不到的 | 打包进真实 App，按下表最后一列走一遍，再跑被 `#[ignore]` 的真 Agent 用例（如 `real_claude_hooks_bind_at_startup_before_any_prompt`、`the_js_phone_client_chats_through_a_real_relay`）。**替换 App 需要先问用户** | 只有这层用真 Agent、真手机 |
 
-通过标准：1、2 无差异；3、4 全过（基线已失败的另记）；5 的像素差异逐张解释；6 无差异。任何一层不过，定位到具体 `refactor(split):` 提交，撤回或修复后重验。
+通过标准：1、2 无差异；3、4 全过（基线已失败的另记）；5 筛出的图逐张看过，解释得了；6 无差异。任何一层不过，定位到具体 `refactor(split):` 提交，撤回或修复后重验。
+
+## 验收命令
+
+全程在同一台机器上跑，别的编译尽量停掉，屏幕不要锁。基线和终点必须是同一台，换机器就要重测基线。
+
+**用 `apple` 验收，等拆分结束、它的终端释放之后再跑。** 2026-11-05 在两台机器上各跑两遍基线（`eedc95a`）：`SCROLLBACK`、`SELECTION`、`SELECTION_PIXEL`、`FOLLOW_INPUT`、`PEEK`、`PANE_DRAG`、`WHEEL` 这 7 个在本机不稳定，在 `apple` 上两遍都过，当时两边负载相近，所以怀疑是本机有人使用、窗口抢焦点，只有两遍数据，还没证实。`apple` 第二遍大面积失败是 PTY 用尽（`Device not configured`，526 个设备，上限 511），不是代码问题；脚本现在开跑前会检查，剩余不足 100 个就拒绝运行。那边的第一遍基线可用作参考，正式验收要在 PTY 释放后重测。
+
+没有完整 Xcode 的机器也能跑：脚本发现没有 Xcode 时，只在验收用的 worktree 里给 GPUI 打开 `runtime_shaders`，不用 metal 编译器。这样编出来的着色器加载方式和正式版不同，所以这台机器上 `perf-gate` 对仓库基线的结论不算数，只比基线和终点两边的数字。
+
+```sh
+python3 scripts/split-check.py self-test
+python3 scripts/split-check.py audit <基线> <终点>        # 第 1 层
+python3 scripts/split-check.py measure <基线> <目录A>     # 第 2–5 层，基线（已跑过可复用）
+python3 scripts/split-check.py measure <基线> <目录B> --repeat
+python3 scripts/split-check.py measure <终点> <目录C>
+python3 scripts/split-check.py report <目录A> <目录B> <目录C>
+```
+
+报告里「回归」要查；`compare.html` 里的图要人看；出问题时对可疑提交跑 `scripts/visual-check.py shots <提交> <目录>`，一个提交只拆一个文件，所以定位后直接撤回。
+
+**这些场景在两台机器上都失败，等于没有覆盖**：`ROUTE`、`SPLIT`、`SHORTCUT`、`TAB`、`LINK`、`NEW_SPACE`、`OVERVIEW`、`PHONES`、`KEYMAP`、`SUBAGENT`。部分是缺前置数据或参数，原因没逐个查。它们对应的分屏、标签、快捷键、新空间、手机，第 6 层必须亲手过。页面 `CloseWorking` 所在那组也不稳定。其余场景只有基线两遍都过才算数。
+
+**工具测过什么**：纯搬动判干净，改掉逻辑的提交被点名（`take` 改 `skip`），故意把「新建待办」改成「新建事项」时三张 `TodoNew` 被筛出。**没测过**：悬停、拖动中途这类截图到不了的状态；工具对 `harness.rs` 这种必须重构的文件只能标出来，要人读。
 
 ## 功能清单
 
@@ -157,18 +180,20 @@ cargo test -p mooring-core --test file_size --test guard
 
 ## 基线结果
 
-`d804fd2`，独立 worktree，全新编译，全程 HEAD 没变。
+`eedc95a`（#2–#7、#1 合入后），固定路径的独立 worktree，全程 HEAD 没变。测量结果在本机 `~/Library/Caches/MooringVisual/split-baseline-eedc95a/{a,b}`，同一台机器验收可以直接复用；换了提交（比如 G1 合入）就要重测。
 
 | 检查 | 结果 |
 |---|---|
-| `cargo fmt --check` | 通过 |
-| `cargo clippy --workspace --all-targets -- -D warnings` | 通过 |
-| `cargo check -p mooring-app --all-targets --features visual-test` | 通过（含两个 example） |
-| `sh ci-test.sh` | 767 通过，0 失败，23 忽略，无重跑 |
-| `cargo test -p mooring-app --features visual-test` | 208 通过，0 失败，3 忽略 |
-| `mobile`：`bun test`、`bun run typecheck` | 46 通过，0 失败；类型检查通过 |
-| `eval/protocol-contract/check.py` | 0 失败，1 警告（本机最新 300 份日志里没有子 Agent 会话） |
+| `cargo fmt --check`、默认 clippy、开 `visual-test` 的 `cargo check` | 通过 |
+| `sh ci-test.sh` | 793 通过，0 失败，26 忽略，无重跑 |
+| `cargo test -p mooring-app --features visual-test` | 215 通过，0 失败，3 忽略 |
+| `mobile`：`bun test`、`bun run typecheck` | 61 通过，0 失败；类型检查通过 |
+| `eval/protocol-contract/check.py`、`theme-scenes.py` | 通过 |
+| `perf-gate.py` | 一遍失败一遍通过：`settings-open` 超预算（+26.3%），本身波动大，其余各项稳定。不是拆分造成的 |
+| 场景和页面组 | 44 组里两遍都过的 24 组；其余见上文，受机器负载影响 |
 
-测试名单在 `baseline-tests.txt`，共 1001 条（默认 790，开 `visual-test` 的 app 测试 211）。同名测试保留多条，对比时按条数算。
+测试名单在 `baseline-tests.txt`，共 1037 条（默认加开 `visual-test` 的 app 测试）。同名测试保留多条，对比时按条数算。
 
-**基线还没跑**：`perf-gate`、`theme-scenes`、中继镜像、全部画面场景、被忽略的用例、真机走查。这些验收时用基线提交和终点提交各跑一遍。
+**已知不稳定的用例**：`events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody` 单独连跑 6 遍失败 2 遍，报错位置还不同（`managed_session.rs:4658`、`:4527`）。它失败不算拆分回归，除非 PR #15、#16 修好之后还失败。
+
+**基线还没跑**：中继镜像（CI 在跑）、被忽略的用例、真机走查。
