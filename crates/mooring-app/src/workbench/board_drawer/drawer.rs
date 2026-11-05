@@ -26,7 +26,7 @@ impl Workbench {
             })
             .filter(|t| !t.trim().is_empty())
             .unwrap_or_else(|| self.session_line(s));
-        let space_id = session_space(&self.workspace, s).unwrap_or("外部");
+        let space_id = self.workspace.session_space(s).unwrap_or("外部");
         let space = self
             .workspace
             .spaces
