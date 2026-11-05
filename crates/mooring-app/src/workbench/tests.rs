@@ -65,21 +65,21 @@ fn navigation_uses_live_identity_and_path_boundaries() {
     assert!(live_terminal(&w, &s).is_none());
     s.terminal = None;
     s.cwd = "/tmp/project".into();
-    assert_eq!(session_space(&w, &s), Some("space"));
+    assert_eq!(w.session_space(&s), Some("space"));
     s.cwd = "/tmp-other/project".into();
-    assert_eq!(session_space(&w, &s), None);
+    assert_eq!(w.session_space(&s), None);
     w.spaces.push(Space {
         id: "nested".into(),
         name: "Nested".into(),
         cwd: "/tmp/project".into(),
     });
     s.cwd = "/tmp/project/sub".into();
-    assert_eq!(session_space(&w, &s), Some("nested"));
+    assert_eq!(w.session_space(&s), Some("nested"));
     // One opened in a Mooring terminal of the broader space follows its project too.
     s.terminal = Some("t0".into());
-    assert_eq!(session_space(&w, &s), Some("nested"));
+    assert_eq!(w.session_space(&s), Some("nested"));
     s.cwd = "/tmp/other".into();
-    assert_eq!(session_space(&w, &s), Some("space"));
+    assert_eq!(w.session_space(&s), Some("space"));
     s.terminal = None;
     s.cwd = "/tmp/project/sub".into();
     s.updated = 100;

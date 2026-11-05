@@ -36,23 +36,11 @@ pub(in crate::workbench) fn is_remote(id: &str) -> bool {
     id.starts_with(PREFIX)
 }
 
-/// The column another machine's card goes in, read off what its host said: the outcome,
-/// the state and whether it is the user's to handle (`needs_you`), as `column_of` places
-/// this machine's. A terminal with no conversation stays off the board.
+/// The column another machine's card goes in: the one its host computed
+/// (`status_group::column`, as this machine's are placed). A terminal with no
+/// conversation, or a host too old to say, stays off the board.
 pub(in crate::workbench) fn remote_column(card: &Card) -> Option<Column> {
-    card.session.as_ref()?;
-    match card.outcome.as_deref() {
-        Some("done") => return Some(Column::Done),
-        Some("abandoned" | "deferred") => return None,
-        _ => {}
-    }
-    Some(match Status::from_key(card.status.as_deref()?)? {
-        Status::Fresh | Status::Closed | Status::Deferred => return None,
-        Status::Running => Column::Running,
-        _ if card.needs_you => Column::Needs,
-        Status::Stale => Column::Stale,
-        _ => Column::Review,
-    })
+    Column::from_key(card.column.as_deref()?)
 }
 
 /// In 要你处理 what holds a live question comes first, then what waited longest;
@@ -322,46 +310,20 @@ impl Workbench {
 mod tests {
     use super::*;
 
-    fn card(status: &str, needs_you: bool, outcome: &str) -> Card {
+    fn card(column: Option<&str>) -> Card {
         serde_json::from_value(serde_json::json!({
             "id": "t", "space": "s", "tab": "", "cwd": "/", "phase": "idle",
-            "session": "s1", "status": status, "needs_you": needs_you, "outcome": outcome,
+            "session": "s1", "status": "review", "column": column,
         }))
         .unwrap()
     }
 
     #[test]
     fn a_remote_card_goes_where_its_host_placed_it() {
-        assert_eq!(
-            remote_column(&card("running", false, "open")),
-            Some(Column::Running)
-        );
-        assert_eq!(
-            remote_column(&card("waiting", true, "open")),
-            Some(Column::Needs)
-        );
-        assert_eq!(
-            remote_column(&card("review", true, "open")),
-            Some(Column::Needs)
-        );
-        // A finished turn whose tab was closed waits in 停下了, as at home.
-        assert_eq!(
-            remote_column(&card("review", false, "open")),
-            Some(Column::Review)
-        );
-        assert_eq!(
-            remote_column(&card("stale", false, "open")),
-            Some(Column::Stale)
-        );
-        assert_eq!(
-            remote_column(&card("review", false, "done")),
-            Some(Column::Done)
-        );
-        assert_eq!(remote_column(&card("fresh", false, "open")), None);
-        assert_eq!(remote_column(&card("review", true, "abandoned")), None);
-        let mut shell = card("running", false, "open");
-        shell.session = None;
-        assert_eq!(remote_column(&shell), None, "no conversation, no card");
+        for c in Column::ALL {
+            assert_eq!(remote_column(&card(Some(c.key()))), Some(c));
+        }
+        assert_eq!(remote_column(&card(None)), None, "off the board");
     }
 
     #[test]

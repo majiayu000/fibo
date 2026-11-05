@@ -6,8 +6,13 @@
 # shared 3-core runner one random case in it fails per run (a different one each time), the
 # same way it does locally under load. A failure anywhere else, a compile error, or a
 # managed_session case that fails again alone still fails the step. Every retried case is
-# listed so it can be made deterministic later.
+# listed in the job summary and in $retries (uploaded as an artifact) so it can be counted and
+# made deterministic later.
 set -u
+# One random case per run is the expected noise; two in one run can still be bad luck. More
+# than that is the suite getting worse, not one unlucky case, so it fails without a retry.
+max_retries=2
+retries=target/ci-test-retries.txt
 log=$(mktemp)
 # A pipeline's status is tee's; keep cargo's own.
 {
@@ -40,13 +45,35 @@ if [ -n "$others" ]; then
 	printf '%s\n' "$others"
 	exit 1
 fi
+# Each line goes to $retries and, on CI, to the job summary.
+report() {
+	echo "$1" >>"$retries"
+	if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+		echo "- $1" >>"$GITHUB_STEP_SUMMARY"
+	fi
+}
+mkdir -p "$(dirname "$retries")"
+: >"$retries"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+	echo "### managed_session retries" >>"$GITHUB_STEP_SUMMARY"
+fi
+count=$(printf '%s\n' "$failures" | wc -l | tr -d ' ')
+if [ "$count" -gt "$max_retries" ]; then
+	echo "::error::$count managed_session cases failed, more than $max_retries; no retry"
+	for case in $(printf '%s\n' "$failures" | cut -f2); do
+		report "managed_session::$case failed, not retried ($count > $max_retries)"
+	done
+	exit 1
+fi
 status=0
 for case in $(printf '%s\n' "$failures" | cut -f2); do
 	echo "ci-test: retrying managed_session::$case"
 	if cargo test -p mooring-host --test managed_session -- --exact "$case"; then
 		echo "::warning::managed_session::$case failed once and passed on retry"
+		report "managed_session::$case failed once and passed on retry"
 	else
 		echo "::error::managed_session::$case failed twice"
+		report "managed_session::$case failed twice"
 		status=1
 	fi
 done
