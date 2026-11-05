@@ -169,7 +169,7 @@ fn a_reply_too_big_to_draw_is_refused() {
 #[test]
 #[ignore]
 fn sidebar_cost_on_a_real_workspace() {
-    use crate::model::session_state::{live_terminal, session_space, session_status};
+    use crate::model::session_state::{live_terminal, session_status};
     use std::collections::HashSet;
     use std::time::Instant;
     let path = std::env::var("MOORING_WS_JSON").expect("MOORING_WS_JSON");
@@ -204,7 +204,7 @@ fn sidebar_cost_on_a_real_workspace() {
                     Some(c) => c.hidden_for(s).is_some(),
                     None => !(s.current && s.binding.is_some()),
                 };
-                !hidden && session_space(&w, s) == Some(space.as_str())
+                !hidden && w.session_space(s) == Some(space.as_str())
             })
             .collect();
         let a = lap(&mut t);
