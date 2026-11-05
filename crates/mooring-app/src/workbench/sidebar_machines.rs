@@ -73,8 +73,10 @@ impl RemoteRow {
     }
 }
 
+/// How wide a machine's square mark is.
+pub(in crate::workbench) const MARK: f32 = 15.;
+
 pub(in crate::workbench) fn machine_mark(letter: String, faded: bool) -> gpui::Div {
-    const MARK: f32 = 15.;
     div()
         .size(px(MARK))
         .flex_shrink_0()
