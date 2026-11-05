@@ -3,6 +3,9 @@
 //! (docs/request-envelope/spec.md, step C).
 use super::*;
 use mooring_core::delivery::Settled;
+#[cfg(test)]
+#[path = "launch_wait_tests.rs"]
+mod launch_wait_tests;
 
 impl Workbench {
     /// Marks a user action in flight; the label appears only if it outlasts 300ms.
@@ -75,16 +78,23 @@ impl Workbench {
                 if received_workspace && this.store.behind(this.workspace.revision) {
                     this.sync(cx);
                 }
-                if let Some(next) = this.store.next_queued() {
-                    let (error, unsure) = (this.error.take(), this.unsure.take());
-                    this.request(next, cx);
-                    this.error = this.error.take().or(error);
-                    this.unsure = this.unsure.take().or(unsure);
-                }
-                cx.notify();
+                this.run_waiting(cx);
             });
         })
         .detach();
+    }
+    /// Starts what waited for the action that just ended: the next request, else the
+    /// held launch. The ended action's error stays shown.
+    pub(super) fn run_waiting(&mut self, cx: &mut Context<Self>) {
+        let (error, unsure) = (self.error.take(), self.unsure.take());
+        if let Some(next) = self.store.next_queued() {
+            self.request(next, cx);
+        } else if let Some((split, task, replace)) = self.store.next_launch() {
+            self.launch_in_slot(split, task, replace, cx);
+        }
+        self.error = self.error.take().or(error);
+        self.unsure = self.unsure.take().or(unsure);
+        cx.notify();
     }
     /// Sends an edit made on what this window shows, named so a resend applies it once:
     /// an outcome change carries the outcome and turn seen here, refused if either moved.

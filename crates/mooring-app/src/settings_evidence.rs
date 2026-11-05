@@ -490,6 +490,28 @@ pub(super) fn start(
             cx.update(|a| a.quit());
             return;
         }
+        // 状态圆圈转动: the row alone under its search, off then on.
+        if phase == "running-spin" {
+            for (name, on) in [("running-spin-off", false), ("running-spin-on", true)] {
+                cx.update(|a| crate::ui::running_spin::choose(on, a).unwrap());
+                handle.update(cx, |v, _, a| {
+                    let field = v.visual_settings_query(a);
+                    field.update(a, |f, cx| { f.text = "转动".into(); cx.notify(); });
+                }).unwrap();
+                wait(300).await;
+                shot(name, cx);
+            }
+            let saved = || std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("running-spin")).unwrap();
+            assert_eq!(saved(), "on");
+            // A click on the switch writes the file.
+            click(879., 178., cx);
+            wait(300).await;
+            shot("running-spin-clicked", cx);
+            assert_eq!(saved(), "off", "the click did not turn it off");
+            eprintln!("settings running-spin PASS");
+            cx.update(|a| a.quit());
+            return;
+        }
         // 钉住这一轮的提问: the row alone under its search, default (bar only) then all on.
         if phase == "pinned-ask" {
             for (name, choice) in [

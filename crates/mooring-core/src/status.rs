@@ -145,6 +145,29 @@ impl Phase {
 
 pub use crate::program_state::of_program;
 
+/// When the turn behind 在跑 began, for 「在跑 · 12 分钟」; `None` in any other state.
+pub fn running_since(w: &Workspace, s: &AgentSession, now: u64) -> Option<u64> {
+    (of(w, s, now) == Status::Running)
+        .then(|| w.content.get(&s.id)?.running_since())
+        .flatten()
+}
+
+/// The todos still to start, the board's 待办 on every surface: not put away or closed,
+/// and no conversation works on them yet.
+pub fn open_todos(w: &Workspace, now: u64) -> Vec<&Task> {
+    let open = |t: &&Task| {
+        w.task_outcomes
+            .get(&t.id)
+            .unwrap_or(&Outcome::Open)
+            .needs_review(now)
+            && !w
+                .agent_sessions
+                .iter()
+                .any(|s| s.task.as_ref() == Some(&t.id))
+    };
+    w.tasks.iter().filter(open).collect()
+}
+
 /// The running Mooring terminal whose current conversation this is.
 pub fn live_terminal<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a Terminal> {
     if !s.current {

@@ -19,6 +19,21 @@ function Frame({ visible, onClose, children }: { visible: boolean; onClose: () =
   );
 }
 
+/** A reply as plain selectable text: picking out part of it, after copying all of it by holding it. */
+export function SelectSheet({ text, onClose }: { text: string; onClose: () => void }) {
+  const t = useTheme();
+  return (
+    <Frame visible onClose={onClose}>
+      <Text style={[s.title, { color: t.text }]}>选择文字</Text>
+      <ScrollView style={{ maxHeight: 420 }}>
+        <Text selectable style={{ color: t.text, fontSize: 15, lineHeight: 23 }}>
+          {text}
+        </Text>
+      </ScrollView>
+    </Frame>
+  );
+}
+
 export function SayDialog({
   visible,
   title,

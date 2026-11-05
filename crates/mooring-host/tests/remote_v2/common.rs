@@ -113,7 +113,9 @@ impl Host {
         for row in rows {
             let mut row = row.clone();
             row["sessionId"] = id.clone().into();
-            row["timestamp"] = mooring_core::content::now().into();
+            if row.get("timestamp").is_none() {
+                row["timestamp"] = mooring_core::content::now().into();
+            }
             lines += &format!("{row}\n");
         }
         fs::write(&seed, lines).unwrap();

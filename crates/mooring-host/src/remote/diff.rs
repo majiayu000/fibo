@@ -2,6 +2,7 @@
 //! phone's 改动 view. Read only: git runs with `core.fsmonitor` off and no optional locks,
 //! so it neither starts a monitor nor rewrites the index. Patches are capped per file and
 //! in all; a file past the cap still lists, with its counts and `truncated`.
+use mooring_core::model::Workspace;
 use mooring_core::protocol::*;
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
@@ -21,19 +22,20 @@ const LINE_MARGIN: usize = 64;
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 pub(super) fn diff(socket: &Path, request: &Value) -> io::Result<Value> {
-    let cwd = match (request["cwd"].as_str(), request["terminal"].as_str()) {
-        (Some(cwd), _) => super::dirs::expand(cwd)?,
+    let (cwd, checks) = match (request["cwd"].as_str(), request["terminal"].as_str()) {
+        (Some(cwd), _) => (super::dirs::expand(cwd)?, Vec::new()),
         (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
             Reply::Workspace(w) => {
                 let term = (w.terminals.iter().find(|x| x.id == t))
                     .ok_or_else(|| io::Error::other("终端不存在"))?;
-                PathBuf::from(w.terminal_cwd(term))
+                (PathBuf::from(w.terminal_cwd(term)), checks(&w, t))
             }
             other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
         (None, None) => return Err(io::Error::other("diff 需要 terminal 或 cwd")),
     };
     let mut diff = read(&cwd)?;
+    diff.checks = checks;
     fit(&mut diff);
     Ok(json!(diff))
 }
@@ -119,7 +121,41 @@ pub(crate) fn read(cwd: &Path) -> io::Result<rp::Diff> {
         removed: files.iter().map(|f| f.removed).sum(),
         files,
         truncated,
+        checks: Vec::new(),
     })
+}
+
+/// How many commands the phone's summary names.
+const CHECKS: usize = 3;
+
+/// What the conversation in this terminal last tested, newest first, one per command: the
+/// records the log made of its exit codes (`Evidence`), never what the Agent said of them.
+fn checks(w: &Workspace, terminal: &str) -> Vec<rp::Check> {
+    let Some(content) = w.current_agent(terminal).and_then(|s| w.content.get(&s.id)) else {
+        return Vec::new();
+    };
+    let edited = content.files.iter().map(|t| t.at).max().unwrap_or(0);
+    let mut out: Vec<rp::Check> = Vec::new();
+    for e in content.evidence.iter().rev().filter(|e| e.kind == "test") {
+        // `command：counts`, or `command（exit 0，未捕获计数）`.
+        let (command, counts) = match e.summary.split_once('：') {
+            Some((command, counts)) => (command, counts),
+            None => (e.summary.split('（').next().unwrap_or_default(), ""),
+        };
+        if out.len() == CHECKS {
+            break;
+        }
+        if !out.iter().any(|c| c.command == command) {
+            out.push(rp::Check {
+                command: command.to_owned(),
+                counts: counts.to_owned(),
+                ok: e.proves(),
+                at: e.at,
+                stale: e.at < edited,
+            });
+        }
+    }
+    out
 }
 
 /// Files `--name-status -z` names, with `--numstat -z`'s counts (same order, same options).

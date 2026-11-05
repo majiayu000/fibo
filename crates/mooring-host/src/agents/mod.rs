@@ -8,6 +8,7 @@ use crate::content::{Official, Parser};
 use mooring_core::protocol::TerminalNote;
 use mooring_core::{content::Source, model::Agent, model::AgentSession};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +19,9 @@ mod declared;
 mod grok;
 pub mod hooks;
 pub mod mirror;
+mod permission;
 mod qoder;
+mod usage_lines;
 
 /// What the host says on a terminal about an Agent it sees but cannot read: `text` is the
 /// recognition hint, `note` the pane's words for the user.
@@ -82,6 +85,15 @@ pub type OfficialAnswer = (&'static str, io::Result<Vec<(usize, Official)>>);
 pub trait Adapter: Sync {
     /// The directory this CLI writes transcripts under, honouring its own home override.
     fn root(&self, home: &Path) -> PathBuf;
+    /// Bytes every line that reports tokens holds, to skip the rest of a long log unparsed;
+    /// `None` when this CLI's log does not report them.
+    fn usage_marker(&self) -> Option<&'static [u8]> {
+        None
+    }
+    /// `(new tokens, cache reads)` a line says were used since `since`.
+    fn usage_line(&self, _line: &[u8], _since: u64, _state: &mut UsageState) -> Option<(u64, u64)> {
+        None
+    }
     /// Whether a process is this CLI: its executable, or the script an interpreter runs.
     fn runs(&self, executable: &str, script: Option<&str>) -> bool;
     /// The conversation a live process names, and whether it opens its own transcript.
@@ -257,6 +269,25 @@ pub fn roots_after_reload(
 }
 
 /// Each CLI's transcript root under `home`; a CLI that writes none has no root.
+/// What counting a log's tokens remembers between lines.
+pub struct UsageState<'a> {
+    /// Replies already counted, across files.
+    pub seen: &'a mut HashSet<String>,
+    /// The running total this file's CLI logs.
+    pub running: &'a mut u64,
+}
+pub fn usage_marker(agent: Agent) -> Option<&'static [u8]> {
+    adapter(agent).usage_marker()
+}
+pub fn usage_line(
+    agent: Agent,
+    line: &[u8],
+    since: u64,
+    state: &mut UsageState,
+) -> Option<(u64, u64)> {
+    adapter(agent).usage_line(line, since, state)
+}
+
 pub fn roots(home: &Path) -> Vec<(Agent, PathBuf)> {
     Agent::all()
         .into_iter()

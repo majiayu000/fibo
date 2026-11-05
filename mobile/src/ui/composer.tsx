@@ -4,10 +4,13 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Icon } from './icons';
 import { noOutline, useBottom } from './kit';
+import { modelName } from './parse';
 import { useTheme } from './theme';
 
 export function Composer({
   agent,
+  model,
+  permission,
   running,
   canStop,
   canContinue,
@@ -16,6 +19,9 @@ export function Composer({
   onStop,
 }: {
   agent: string;
+  /** What its log says, read only: changing them is for the terminal. */
+  model?: string | null;
+  permission?: string | null;
   running: boolean;
   canStop: boolean;
   canContinue: boolean;
@@ -45,9 +51,19 @@ export function Composer({
         accessibilityLabel="给 Agent 发消息"
       />
       <View style={s.bar}>
-        {!!agent && (
-          <View style={[s.tag, { borderColor: t.line }]}>
-            <Text style={{ color: t.text, fontSize: 12 }}>{agent}</Text>
+        {!!permission && (
+          <View style={[s.tag, s.fact, { borderColor: t.line }]} accessibilityLabel={`权限：${permission}`}>
+            <Icon name="shield" size={13} width={2} color={t.text} />
+            <Text numberOfLines={1} style={{ color: t.text, fontSize: 12, flexShrink: 1 }}>
+              {permission}
+            </Text>
+          </View>
+        )}
+        {(!!model || !!agent) && (
+          <View style={[s.tag, s.fact, { borderColor: t.line }]}>
+            <Text numberOfLines={1} style={{ color: t.text, fontSize: 12, flexShrink: 1 }}>
+              {model ? modelName(model) : agent}
+            </Text>
           </View>
         )}
         {canContinue && (
@@ -88,5 +104,6 @@ const s = StyleSheet.create({
   input: { fontSize: 15, minHeight: 24, maxHeight: 140, paddingHorizontal: 4, paddingVertical: 2 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   tag: { height: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  fact: { flexDirection: 'row', gap: 5, flexShrink: 1 },
   send: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
 });

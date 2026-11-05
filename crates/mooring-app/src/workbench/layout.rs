@@ -3,10 +3,9 @@ use super::*;
 
 /// The most a terminal's text opened in an editor holds: the host's own read limit.
 const SCROLLBACK_ROWS: usize = 10_000;
-mod branch;
 mod drag;
-use branch::read_branch;
 use drag::DropState;
+use mooring_core::git_head::read_branch;
 
 /// The visible panes and what is open over them: menus, drags and pending closes.
 pub(super) struct LayoutState {
@@ -667,10 +666,9 @@ impl Workbench {
                             .on_mouse_down(
                                 gpui::MouseButton::Left,
                                 cx.listener(move |this, _, _, cx| {
-                                    if !this.store.busy() {
-                                        this.layout.drag = Some(drag_path.clone());
-                                        this.layout.menu = None;
-                                    }
+                                    // Its resize is a request, which waits behind a busy one.
+                                    this.layout.drag = Some(drag_path.clone());
+                                    this.layout.menu = None;
                                     cx.stop_propagation();
                                     cx.notify();
                                 }),

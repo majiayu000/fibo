@@ -826,7 +826,7 @@ impl Workbench {
         replace: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        if self.store.busy() {
+        if !self.store.admit_launch(split, &task_id, &replace) {
             return;
         }
         let previous = replace
@@ -1044,7 +1044,7 @@ impl Workbench {
                     Ok(_) => this.error = Some("缺少工作台响应".into()),
                     Err(e) => this.error = Some(e.to_string()),
                 }
-                cx.notify();
+                this.run_waiting(cx);
             });
         })
         .detach();

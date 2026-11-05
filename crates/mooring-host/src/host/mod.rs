@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{sync_channel, SyncSender},
-    Arc, Mutex, MutexGuard,
+    Arc, Mutex,
 };
 use std::thread;
 use std::time::{Duration, Instant};
@@ -23,6 +23,7 @@ mod association;
 mod client;
 mod events;
 mod live;
+mod lock;
 pub(crate) mod remote;
 mod report_back;
 mod shell_watch;
@@ -30,6 +31,7 @@ mod status;
 use association::*;
 use client::*;
 use live::*;
+use lock::lock;
 use status::*;
 type Shared = Arc<Mutex<Host>>;
 type LiveTerminal = Arc<Mutex<Live>>;
@@ -96,10 +98,6 @@ fn cue(cues: &mut HashMap<String, (String, u64)>, terminal: &str, busy: Option<S
         None => cues.remove(terminal),
     };
     true
-}
-fn lock<T>(m: &Mutex<T>) -> io::Result<MutexGuard<'_, T>> {
-    m.lock()
-        .map_err(|_| io::Error::other("state lock poisoned"))
 }
 fn geometry(cols: u16, rows: u16) -> io::Result<()> {
     if !(2..=400).contains(&cols) || !(1..=200).contains(&rows) {

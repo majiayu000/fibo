@@ -66,6 +66,18 @@ fn order(column: Column, keyed: &mut [(bool, u64, String)]) {
 }
 
 impl Workbench {
+    /// The board's header, then a line for each machine it leaves out (先不管这台).
+    pub(in crate::workbench) fn board_top(
+        &self,
+        open: usize,
+        stale: usize,
+        empty: bool,
+        cx: &Context<Self>,
+    ) -> Vec<gpui::AnyElement> {
+        let mut out = vec![self.board_header(open, stale, empty, cx).into_any_element()];
+        out.extend(self.quiet_board_lines(cx));
+        out
+    }
     /// Every other machine's card the board shows now. A filter for this machine's
     /// spaces, changes or closed sessions shows none of them; the Agent filter applies.
     pub(in crate::workbench) fn remote_cards(&self) -> Vec<RemoteCard> {
@@ -74,6 +86,7 @@ impl Workbench {
             return Vec::new();
         }
         (0..self.machines.len())
+            .filter(|index| !self.machine_quiet(*index))
             .flat_map(|index| self.machine_cards(index))
             .filter(|r| {
                 o.agent.is_none_or(|a| {
