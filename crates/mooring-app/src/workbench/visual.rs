@@ -247,7 +247,7 @@ impl Workbench {
             Column::Done,
         ]
         .into_iter()
-        .find(|c| c.id() == column)?;
+        .find(|c| c.key() == column)?;
         let bounds = self
             .overview
             .columns
