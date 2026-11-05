@@ -79,7 +79,7 @@ fn settings_and_notification_receipts_survive_restart() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 #[test]
-fn reopen_drops_tabs_an_older_build_only_hid_and_tabs_without_panes() {
+fn a_closed_tab_is_gone_after_reopen() {
     let dir = std::env::temp_dir().join(format!("kl-tabs-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let (mut db, before) = Store::open(&dir).unwrap();
@@ -89,7 +89,7 @@ fn reopen_drops_tabs_an_older_build_only_hid_and_tabs_without_panes() {
         name: "s".into(),
         cwd: "/tmp".into(),
     });
-    for id in ["kept", "hidden"] {
+    for id in ["kept", "closed"] {
         after.terminals.push(Terminal {
             id: id.into(),
             space: "s".into(),
@@ -109,38 +109,79 @@ fn reopen_drops_tabs_an_older_build_only_hid_and_tabs_without_panes() {
         });
     }
     db.save(&before, &after).unwrap();
-    db.0.execute_batch(
-        "UPDATE tabs SET closed=1 WHERE id='hidden';
-         INSERT INTO tabs VALUES('empty','s',NULL,'',0);",
-    )
-    .unwrap();
+    let mut closed = after.clone();
+    closed
+        .edit(Edit::CloseTab {
+            id: "closed".into(),
+            expect: None,
+        })
+        .unwrap();
+    db.save(&after, &closed).unwrap();
     drop(db);
     let (db, loaded) = Store::open(&dir).unwrap();
-    assert_eq!(
-        loaded
-            .tabs
-            .iter()
-            .map(|t| t.id.as_str())
-            .collect::<Vec<_>>(),
-        ["kept"]
-    );
+    let ids: Vec<_> = loaded.tabs.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids, ["kept"]);
     let rows: i64 =
         db.0.query_row("SELECT count(*) FROM tab_layout_nodes", [], |r| r.get(0))
             .unwrap();
     assert_eq!(rows, 1);
-    let mut closed = loaded.clone();
-    closed
-        .edit(Edit::CloseTab {
-            id: "kept".into(),
-            expect: None,
-        })
-        .unwrap();
-    let mut db = db;
-    db.save(&loaded, &closed).unwrap();
     drop(db);
-    let (_, loaded) = Store::open(&dir).unwrap();
-    assert!(loaded.tabs.is_empty());
     std::fs::remove_dir_all(dir).unwrap();
+}
+#[test]
+fn an_old_format_database_is_refused_and_left_as_it_was() {
+    let cases = [
+        "CREATE TABLE workspace (id INTEGER PRIMARY KEY, json TEXT NOT NULL);",
+        "CREATE TABLE terminals (id TEXT PRIMARY KEY, position INTEGER NOT NULL);",
+        "INSERT INTO spaces VALUES('s','s','/tmp'); INSERT INTO tabs VALUES('hidden','s',NULL,'',1);
+         INSERT INTO tab_order VALUES('hidden',0); INSERT INTO terminals VALUES('p','s','[]','/tmp',NULL,'Exited',0,NULL);
+         INSERT INTO tab_layout_nodes VALUES('hidden','','p',NULL,NULL);",
+        "INSERT INTO spaces VALUES('s','s','/tmp'); INSERT INTO tabs VALUES('empty','s',NULL,'',0);
+         INSERT INTO tab_order VALUES('empty',0);",
+        "INSERT INTO spaces VALUES('s','s','/tmp'); INSERT INTO tabs VALUES('unordered','s',NULL,'',0);
+         INSERT INTO terminals VALUES('p','s','[]','/tmp',NULL,'Exited',0,NULL);
+         INSERT INTO tab_layout_nodes VALUES('unordered','','p',NULL,NULL);",
+    ];
+    for old in cases {
+        let dir = std::env::temp_dir().join(format!("kl-old-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("workbench.sqlite");
+        if old.starts_with("CREATE") {
+            Connection::open(&file).unwrap().execute_batch(old).unwrap();
+        } else {
+            drop(Store::open(&dir).unwrap());
+            Connection::open(&file).unwrap().execute_batch(old).unwrap();
+        }
+        let dump = |file: &Path| -> Vec<String> {
+            let db = Connection::open(file).unwrap();
+            let mut tables = db
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                .unwrap();
+            let names: Vec<String> = tables
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            names
+                .iter()
+                .map(|t| {
+                    let n: i64 = db
+                        .query_row(&format!("SELECT count(*) FROM \"{t}\""), [], |r| r.get(0))
+                        .unwrap();
+                    format!("{t}:{n}")
+                })
+                .collect()
+        };
+        let kept = dump(&file);
+        let error = Store::open(&dir)
+            .err()
+            .unwrap_or_else(|| panic!("opened {old}"));
+        let message = error.to_string();
+        assert!(message.contains("旧版本的格式"), "{message}");
+        assert!(message.contains("--runtime"), "{message}");
+        assert_eq!(dump(&file), kept, "{old}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
 #[test]
 fn a_restart_records_which_conversation_each_lost_terminal_was_running() {
