@@ -82,7 +82,10 @@ impl Adapter for Codex {
         if let Ok(v) = serde_json::from_slice(bytes) {
             return Some(v);
         }
-        let s = std::str::from_utf8(bytes).ok()?;
+        // A budget can end inside a character; the prefix before it still names the thread.
+        let s = std::str::from_utf8(bytes)
+            .or_else(|e| std::str::from_utf8(&bytes[..e.valid_up_to()]))
+            .ok()?;
         if !s.contains("\"session_meta\"") {
             return None;
         }
