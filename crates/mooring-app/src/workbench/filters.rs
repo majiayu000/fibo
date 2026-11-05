@@ -6,7 +6,7 @@ impl Workbench {
         self.overview
             .filter_space
             .as_deref()
-            .is_none_or(|space| session_space(&self.workspace, s) == Some(space))
+            .is_none_or(|space| self.workspace.session_space(s) == Some(space))
             && (!self.overview.changed_only
                 || changed_since(&self.workspace, s, self.overview.since))
             && (!self.overview.closed_only || self.session_closed(s))
