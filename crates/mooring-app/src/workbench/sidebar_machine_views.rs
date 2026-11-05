@@ -2,7 +2,7 @@
 //! one mixed list, a rail that picks one machine, or a folding section per machine. The
 //! column keeps its width in all three, so nothing right of it moves.
 use super::sidebar_list::{recent_order, split_today};
-use super::sidebar_machines::{RemoteRow, machine_label, machine_letter, machine_mark};
+use super::sidebar_machines::{RemoteRow, machine_label, machine_letter};
 use super::*;
 use crate::machines::Link;
 use crate::ui::theme::Flat as F;
@@ -109,8 +109,9 @@ impl Workbench {
                 .when(on, |d| d.bg(T::color(F::chip_on())))
                 .cursor_pointer()
                 .hover(|s| s.border_color(T::color(F::chip_on_line())))
+                .opacity(self.sidebar.motion.source_shown(&host))
                 .child(
-                    machine_mark(machine_letter(&name), !online)
+                    self.spotted_mark(&host, &name, false)
                         .when_some(self.machine_breath(index, cx), |d, lit| d.opacity(lit)),
                 )
                 .child(
@@ -239,8 +240,12 @@ impl Workbench {
         } = h;
         let toggle = key.clone();
         let key_for_mark = key.clone();
+        let shown = key
+            .strip_prefix("machine:")
+            .map_or(1., |host| self.sidebar.motion.source_shown(host));
         let heading = div()
             .id(gpui::SharedString::from(format!("section-{key}")))
+            .opacity(shown)
             .role(gpui::accesskit::Role::Button)
             .aria_label(format!(
                 "{name}，{}",
@@ -358,7 +363,7 @@ impl Workbench {
                 Heading {
                     key: key.clone(),
                     mark: Some(
-                        machine_mark(machine_letter(&name), !online)
+                        self.spotted_mark(&host, &name, false)
                             .when_some(self.machine_breath(index, cx), |d, lit| d.opacity(lit)),
                     ),
                     name,
@@ -416,8 +421,19 @@ impl Workbench {
         let mut out = match self.machine_layout() {
             Machines::Below => self.machine_rows(recent, cx),
             Machines::Sections => (0..self.machines.len())
-                .filter(|i| !self.machine_quiet(*i))
-                .flat_map(|i| self.machine_section(i, cx))
+                .filter(|i| {
+                    !self.machine_quiet(*i)
+                        || (self.machine_host(*i))
+                            .is_some_and(|h| self.sidebar.motion.block_closing(&h))
+                })
+                .flat_map(|i| {
+                    let mut section = self.machine_section(i, cx);
+                    if let Some(host) = self.machine_host(i) {
+                        let key = super::sidebar_motion::block_key(&host);
+                        self.sidebar.reveal_block(&key, 0, 0, &mut section);
+                    }
+                    section
+                })
                 .collect(),
             Machines::Mixed | Machines::Rail => Vec::new(),
         };
@@ -470,6 +486,15 @@ impl Workbench {
             .role(gpui::accesskit::Role::Button)
             .aria_label(label.clone())
             .relative()
+            .when_some(host.as_deref(), |d, h| {
+                d.opacity(self.sidebar.motion.source_shown(h)).child(
+                    self.sidebar
+                        .motion
+                        .mark_spot(h, false)
+                        .absolute()
+                        .size_full(),
+                )
+            })
             .size(px(RAIL_BUTTON))
             .flex_shrink_0()
             .flex()
@@ -618,6 +643,7 @@ impl Workbench {
         };
         div()
             .id("sidebar")
+            .relative()
             .w(px(F::WIDTH))
             .h_full()
             .min_h_0()
@@ -630,6 +656,7 @@ impl Workbench {
             .border_color(T::color(F::line()))
             .child(self.flat_lights(cx))
             .child(body)
+            .children(self.sidebar.motion.pill())
     }
     /// What the brand row names: this machine, or the one shown alone, and whether it is up.
     pub(super) fn column_machine(&self) -> (String, bool) {

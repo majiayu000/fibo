@@ -346,6 +346,66 @@ pub(super) fn start(
         assert_eq!(wants(cx), 2, "接着管 did not bring its count back");
         assert_eq!(column(cx).0, 1, "接着管 did not bring its row back");
         shoot("resumed-a.png", cx);
+        // The flight: where it went has to be seen. Held at each moment, then it must end.
+        let held = |ms: u64, name: &str, cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_hold_motion(Some(ms))).unwrap();
+            handle.update(cx, |_, _, cx| cx.notify()).unwrap();
+            shoot(name, cx);
+            handle.update(cx, |v, _, _| v.visual_quiet_moving()).unwrap()
+        };
+        let marks = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_flight_marks(0)).unwrap()
+        };
+        let over = |a: Option<(f32, f32)>, b: Option<(f32, f32)>, what: &str| {
+            let (a, b) = (a.expect(what), b.expect(what));
+            assert!(
+                (a.0 - b.0).abs() <= 1. && (a.1 - b.1).abs() <= 1.,
+                "{what}: {a:?} against {b:?}"
+            );
+        };
+        // At each end the square in flight lies on the real one, in every layout.
+        let mut at = 0;
+        for (preset, tag) in [("machine-fold", "c"), ("recent", "a"), ("machine-rail", "b")] {
+            handle.update(cx, |v, _, _| v.visual_hold_motion(Some(at))).unwrap();
+            handle
+                .update(cx, |v, _, cx| v.visual_choose_preset(preset, cx))
+                .unwrap();
+            at += 2000;
+            assert!(!held(at, &format!("fly-{tag}-before.png"), cx), "{preset} kept moving");
+            handle
+                .update(cx, |v, _, cx| v.visual_set_machine_quiet(0, true, cx))
+                .unwrap();
+            assert!(held(at + 1, &format!("fly-{tag}-000.png"), cx));
+            let [heading, _, flying] = marks(cx);
+            over(flying, heading, "the flight did not start on the machine's own square");
+            for ms in [60, 150, 260, 390] {
+                assert!(held(at + ms, &format!("fly-{tag}-{ms}.png"), cx));
+            }
+            assert!(held(at + 419, &format!("fly-{tag}-419.png"), cx));
+            let [_, line, flying] = marks(cx);
+            over(flying, line, "the flight did not land on the line's square");
+            assert!(held(at + 560, &format!("fly-{tag}-glow.png"), cx));
+            assert!(!held(at + 1100, &format!("fly-{tag}-rest.png"), cx), "the flight never ended");
+            at += 1100;
+            handle.update(cx, |v, _, _| v.visual_hold_motion(Some(at))).unwrap();
+            handle
+                .update(cx, |v, _, cx| v.visual_set_machine_quiet(0, false, cx))
+                .unwrap();
+            assert!(held(at + 1, &format!("back-{tag}-000.png"), cx));
+            let [_, line, flying] = marks(cx);
+            over(flying, line, "going back did not start on the line's square");
+            assert!(held(at + 200, &format!("back-{tag}-200.png"), cx));
+            assert!(held(at + 419, &format!("back-{tag}-419.png"), cx));
+            let [heading, _, flying] = marks(cx);
+            over(flying, heading, "going back did not land on the machine's own square");
+            assert!(!held(at + 900, &format!("back-{tag}-rest.png"), cx), "the way back never ended");
+            at += 900;
+        }
+        handle.update(cx, |v, _, _| v.visual_hold_motion(None)).unwrap();
+        handle
+            .update(cx, |v, _, cx| v.visual_choose_preset("recent", cx))
+            .unwrap();
+        wait(400).await;
         let away = handle
             .update(cx, |v, _, cx| v.visual_machine_hit("先不管", cx))
             .unwrap();

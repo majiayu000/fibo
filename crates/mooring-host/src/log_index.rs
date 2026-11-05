@@ -15,6 +15,7 @@ use std::{
 mod chat;
 mod elide;
 mod recovery;
+mod tools;
 mod update;
 
 use elide::Elide;

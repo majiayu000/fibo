@@ -18,12 +18,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
+mod asks;
 mod chat;
 mod diff;
 mod dirs;
 mod list;
 mod quota;
 mod resume;
+mod tools;
 mod usage;
 mod writes;
 
@@ -98,9 +100,27 @@ impl Access {
     }
 }
 
+/// A host's relay connection ends with its host, however the host went: handing over to
+/// a newer one exits without unwinding, and a crash signals nobody. Left behind, it would
+/// redial and take the machine's place on the relay from the new host's connection.
+fn exit_with_parent() {
+    // SAFETY: getppid(2) takes no arguments and cannot fail.
+    let parent = unsafe { libc::getppid() };
+    thread::spawn(move || loop {
+        thread::sleep(std::time::Duration::from_secs(1));
+        // SAFETY: as above.
+        if unsafe { libc::getppid() } != parent {
+            std::process::exit(0);
+        }
+    });
+}
+
 pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
     let cmd = control::command("remote").expect("remote is in the command table");
     let a = Args::parse(args, cmd)?;
+    if a.has("report") {
+        exit_with_parent();
+    }
     if a.value("relay").is_some()
         || a.has("devices")
         || a.value("revoke").is_some()
@@ -244,6 +264,21 @@ pub fn serve(
                     });
                 });
             }
+            // Reads a log's lines, seconds at the worst: beside the requests too.
+            "toolcalls" | "toolcall" => {
+                let (out, socket) = (out.clone(), socket.to_owned());
+                let many = op == "toolcalls";
+                thread::spawn(move || {
+                    let result = match many {
+                        true => tools::tool_calls(&socket, &request),
+                        false => tools::tool_call(&socket, &request),
+                    };
+                    let _ = out.send(match result {
+                        Ok(ok) => json!({ "id": id, "ok": ok }),
+                        Err(e) => json!({ "id": id, "error": e.to_string() }),
+                    });
+                });
+            }
             "resize" => match resize(&streams, &request) {
                 Ok(()) => {
                     let _ = out.send(json!({ "id": id, "ok": {} }));
@@ -376,6 +411,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             }
         }
         "send" => {
+            asks::not_asking_trust(socket, &terminal()?)?;
             let send = Request::SendText {
                 id: terminal()?,
                 text: text(request, "text")?.to_owned(),
@@ -410,6 +446,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
         }
         "answer" => {
             let (id, question) = (terminal()?, text(request, "question")?.to_owned());
+            asks::same_subject(socket, &id, request)?;
             let allow = request["allow"].as_bool();
             let answer = match request["always"].as_bool().unwrap_or(false) {
                 true if allow == Some(false) => {
@@ -426,6 +463,8 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             }?;
             ok_reply(rpc(socket, &named(client, request, answer))?)
         }
+        "ask" => asks::ask(socket, &terminal()?),
+        "trust" => asks::trust(socket, request, client),
         "chat" => chat::chat(socket, request),
         "diff" => diff::diff(socket, request),
         "dirs" => dirs::dirs(socket, request),
