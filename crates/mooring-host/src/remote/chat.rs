@@ -6,19 +6,27 @@ use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
 
-/// A conversation as chat, named by its terminal or its session id.
-pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
-    let session = match (request["session"].as_str(), request["terminal"].as_str()) {
-        (Some(s), _) => s.to_owned(),
+/// The conversation a request names, by its session id or the terminal running it.
+pub(super) fn session_of(socket: &Path, request: &Value) -> io::Result<String> {
+    match (request["session"].as_str(), request["terminal"].as_str()) {
+        (Some(s), _) => Ok(s.to_owned()),
         (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
             Reply::Workspace(w) => w
                 .current_agent(t)
                 .map(|s| s.id.clone())
-                .ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话"))?,
-            other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+                .ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话")),
+            other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
-        (None, None) => return Err(io::Error::other("chat 需要 terminal 或 session")),
-    };
+        (None, None) => Err(io::Error::other(format!(
+            "{} 需要 terminal 或 session",
+            request["op"].as_str().unwrap_or("chat")
+        ))),
+    }
+}
+
+/// A conversation as chat, named by its terminal or its session id.
+pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
+    let session = session_of(socket, request)?;
     let reply = rpc(
         socket,
         &Request::Chat {
@@ -30,12 +38,25 @@ pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
         },
     )?;
     match reply {
-        Reply::Chat { messages, more } => Ok(json!(rp::Chat {
-            session,
-            messages: messages.into_iter().map(message).collect(),
-            more,
-        })),
+        Reply::Chat { messages, more } => {
+            let partial = !more && read_from_the_end(socket, &session)?;
+            Ok(json!(rp::Chat {
+                session,
+                messages: messages.into_iter().map(message).collect(),
+                more,
+                partial,
+            }))
+        }
         Reply::Error(e) => Err(io::Error::other(e)),
+        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+    }
+}
+
+/// Whether this conversation's history starts part way: the page without anything older
+/// is where a reader would otherwise take it for the start, or for an empty one.
+fn read_from_the_end(socket: &Path, session: &str) -> io::Result<bool> {
+    match rpc(socket, &Request::Workspace)? {
+        Reply::Workspace(w) => Ok(w.content.get(session).is_some_and(|c| c.partial_history)),
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }
@@ -50,16 +71,21 @@ fn message(m: ChatMessage) -> rp::Message {
             rp::Speaker::Agent
         },
         text: m.text,
-        tools: m.tools.map(|t| rp::Tools {
-            commands: t.commands,
-            files: (t.files.into_iter())
-                .map(|(path, added, removed)| rp::FileLines {
-                    path,
-                    added,
-                    removed,
-                })
-                .collect(),
-            took: t.took,
-        }),
+        tools: m.tools.map(tools),
+    }
+}
+
+pub(super) fn tools(t: ChatTools) -> rp::Tools {
+    rp::Tools {
+        commands: t.commands,
+        files: (t.files.into_iter())
+            .map(|(path, added, removed)| rp::FileLines {
+                path,
+                added,
+                removed,
+            })
+            .collect(),
+        took: t.took,
+        calls: t.calls,
     }
 }

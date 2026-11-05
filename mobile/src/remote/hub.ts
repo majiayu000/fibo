@@ -31,6 +31,8 @@ export type Card = {
   status_label?: string | null;
   /** Waiting on you or failed, counted as the desktop counts 要你处理. */
   needs_you?: boolean;
+  /** It asks to be trusted with this folder before anything else; `status` says it waits. */
+  trust?: { question: string; folder: string } | null;
   /** The board column its host put it in (needs, running, review, done, stale); absent
    *  for shells and conversations off the board. */
   column?: string | null;
@@ -98,12 +100,24 @@ let staged: Link[] | null = null;
 export function stage(links: Link[], d: Dial) {
   staged = links;
   dial = d;
+  // A clean hub for whoever stages it: test files share this module in one process.
+  state = { ...state, loaded: false, machines: [] };
+  remotes.clear();
+  dialing.clear();
+  for (const id of [...retry.keys()]) stopRetry(id);
 }
 const listeners = new Set<() => void>();
 const remotes = new Map<string, Remote>();
 const retry = new Map<string, { delay: number; timer?: ReturnType<typeof setTimeout> }>();
-/** Machines whose `dial` has not answered yet: one connection attempt at a time. */
-const dialing = new Set<string>();
+/** The dial in flight for a machine: one at a time, and one that is no longer wanted closes. */
+const dialing = new Map<string, symbol>();
+
+/** Stops any waiting retry, and starts the backoff over. */
+function stopRetry(id: string) {
+  const r = retry.get(id);
+  if (r?.timer) clearTimeout(r.timer);
+  retry.delete(id);
+}
 
 function set(id: string, patch: Partial<Machine>) {
   state = {
@@ -135,33 +149,35 @@ async function refresh(id: string) {
 
 async function connect(id: string) {
   const m = get(id);
+  // A machine has one connection: every caller (a timer, coming to the foreground, 重试) gets
+  // the one there is, or the one on its way.
   if (!m || remotes.has(id) || dialing.has(id)) return;
   const pending = retry.get(id);
   if (pending?.timer) clearTimeout(pending.timer);
+  if (pending) pending.timer = undefined;
+  const turn = Symbol();
+  dialing.set(id, turn);
   set(id, { status: 'connecting', error: undefined });
-  // Forgotten or paired again while it dialled: the link it dialled is no longer the one.
-  const stale = () => get(id)?.link !== m.link;
   let r: Remote;
-  dialing.add(id);
   try {
     r = await dial(m.link);
   } catch (e) {
+    if (dialing.get(id) !== turn) return;
     dialing.delete(id);
-    if (stale()) connect(id);
-    else ended(id, (e as RemoteError).code, (e as Error).message, (e as RemoteError).reason);
+    ended(id, (e as RemoteError).code, (e as Error).message, (e as RemoteError).reason);
+    return;
+  }
+  // Removed or paired again while dialing: this one is nobody's.
+  if (dialing.get(id) !== turn) {
+    r.close();
     return;
   }
   dialing.delete(id);
-  if (stale()) {
-    r.close();
-    connect(id);
-    return;
-  }
   remotes.set(id, r);
   // What the machine answered when it turned this phone away after the handshake.
   let refusal: string | undefined;
   r.onEnded((e) => {
-    // A connection already replaced (paired again) ends without touching its successor.
+    // Only the current connection's end says anything about the machine.
     if (remotes.get(id) !== r) return;
     remotes.delete(id);
     ended(id, refusal ? undefined : e.code, refusal, e.reason);
@@ -169,6 +185,7 @@ async function connect(id: string) {
   try {
     // The device id names this phone for the request ids its writes carry.
     const hello = await r.request('hello', { version: 1, client: m.link.device });
+    if (remotes.get(id) !== r) return;
     const beat = setInterval(() => {
       if (r.ended) clearInterval(beat);
       else ping(id, r);
@@ -212,7 +229,7 @@ function ended(id: string, code: number | undefined, fallback?: string, reason?:
   // Without a code, what the connection said (a timeout, a bad handshake) says more.
   set(id, { status: o.status, error: code === undefined && fallback ? fallback : o.text });
   if (o.retry === 'now') {
-    retry.delete(id);
+    stopRetry(id);
     connect(id);
   } else if (o.retry === 'later') later(id);
 }
@@ -240,6 +257,7 @@ function follow(id: string, r: Remote): Promise<unknown> {
 
 function later(id: string) {
   const r = retry.get(id) ?? { delay: 1000 };
+  if (r.timer) clearTimeout(r.timer);
   r.timer = setTimeout(() => connect(id), r.delay);
   r.delay = Math.min(r.delay * 2, 30_000);
   retry.set(id, r);
@@ -267,7 +285,7 @@ export async function start() {
     // Back from the background: anything that dropped meanwhile tries again now.
     for (const m of state.machines) {
       if (m.status === 'offline') {
-        retry.delete(m.id);
+        stopRetry(m.id);
         connect(m.id);
       } else if (m.status === 'online') refresh(m.id);
     }
@@ -280,8 +298,11 @@ export async function pair(link: Link) {
   probe.close();
   await saveMachine(link);
   const id = machineId(link);
-  remotes.get(id)?.close();
+  const old = remotes.get(id);
   remotes.delete(id);
+  old?.close();
+  dialing.delete(id);
+  stopRetry(id);
   const fresh: Machine = { id, link, name: link.name, status: 'offline', ops: [], cards: [], spaces: {} };
   state = {
     ...state,
@@ -294,11 +315,11 @@ export async function pair(link: Link) {
 }
 
 export async function forget(id: string) {
-  remotes.get(id)?.close();
+  const old = remotes.get(id);
   remotes.delete(id);
-  const r = retry.get(id);
-  if (r?.timer) clearTimeout(r.timer);
-  retry.delete(id);
+  old?.close();
+  dialing.delete(id);
+  stopRetry(id);
   await forgetMachine(id);
   await forgetQuota(id);
   state = { ...state, machines: state.machines.filter((m) => m.id !== id) };
@@ -306,7 +327,7 @@ export async function forget(id: string) {
 }
 
 export function reconnect(id: string) {
-  retry.delete(id);
+  stopRetry(id);
   connect(id);
 }
 

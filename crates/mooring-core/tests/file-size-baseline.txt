@@ -10,5 +10,5 @@ crates/mooring-app/src/workbench/sidebar.rs	1202
 crates/mooring-app/src/workbench/sidebar_list.rs	1257
 crates/mooring-app/src/workbench/task_detail.rs	1122
 crates/mooring-app/src/workbench/visual.rs	1826
-crates/mooring-host/tests/managed_session.rs	6632
-crates/mooring-host/tests/pty_stall.rs	904
+crates/mooring-host/tests/managed_session.rs	6630
+crates/mooring-host/tests/pty_stall.rs	902

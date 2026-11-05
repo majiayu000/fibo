@@ -1,20 +1,23 @@
 //! Another desktop typing into this machine's terminal over `mooring remote` (multi-machine
 //! step 2, docs/multi-machine/spec.md): raw input lands once, and its echo comes back fast.
+#[path = "support/tied.rs"]
+mod tied;
 use base64::Engine;
 use mooring_core::{model::*, protocol::*};
 use mooring_remote::client::Client;
 use mooring_remote::protocol::{Hello, Op, StreamBody};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
+use tied::SpawnTied;
 
 const T: Duration = Duration::from_secs(10);
 
 /// A host of its own with one terminal running `script`.
 struct Machine {
-    child: Child,
+    child: tied::Tied,
     root: PathBuf,
 }
 impl Machine {
@@ -30,7 +33,7 @@ impl Machine {
             .env("MOORING_REMOTE_EXE", env!("CARGO_BIN_EXE_mooring"))
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()
+            .spawn_tied()
             .unwrap();
         let socket = root.join("workbench.sock");
         let until = Instant::now() + Duration::from_secs(30);
@@ -81,8 +84,7 @@ impl Drop for Machine {
             &self.root.join("workbench.sock"),
             &Request::Stop { id: "far".into() },
         );
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.kill_tree();
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }
@@ -205,7 +207,9 @@ fn key_echo_latency() {
 /// program sees the new size; a stream that only looks may not.
 #[test]
 fn a_taken_terminal_follows_the_remote_panes_size() {
-    let m = Machine::start("trap 'stty size' WINCH; stty size; while :; do sleep 0.05; done");
+    let m = Machine::start(
+        "trap 'stty size' WINCH; stty size; while kill -0 $PPID 2>/dev/null; do sleep 0.05; done",
+    );
     let c = connect(&m.remote());
     let seen = Arc::new((Mutex::new(String::new()), Condvar::new()));
     let watch = |take: bool| {
