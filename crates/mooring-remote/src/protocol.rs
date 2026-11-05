@@ -66,9 +66,9 @@ pub enum Op {
         request: Option<String>,
     },
     /// Answers the approval asking `question`; refused if it is no longer on screen.
-    /// `always` takes the menu's 「don't ask again」 option instead, refused when it has
-    /// none: never a plain allow in its place. `subject` is what the client showed
-    /// ([`Ask`]): refused if the screen now asks about something else.
+    /// `always` takes the menu's 「don't ask again」 option, refused when it has none: never
+    /// a plain allow in its place. `subject` and `always_label` are what the client showed
+    /// ([`Ask`]): refused if the screen now asks or offers something else.
     Answer {
         terminal: String,
         question: String,
@@ -77,6 +77,8 @@ pub enum Op {
         always: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         subject: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        always_label: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },

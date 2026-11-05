@@ -33,11 +33,12 @@ export async function verify(reason: string): Promise<boolean> {
 /**
  * Allows the approval `card` shows. `ask` is what it asks about, for the second
  * confirmation; the machine refuses if the screen has moved on to another. `always` picks
- * the screen's "don't ask again" option.
+ * the menu's "don't ask again" option, the one `ask.always` words: refused if it has changed.
  */
 export async function approve(machine: string, card: Card, ask: Ask, always = false): Promise<boolean> {
   if (settings.get().confirmDanger && asksTwice(ask)) {
-    const sure = await confirm('确定允许？', ask.known ? ask.subject : '电脑没读出它要做什么，打开终端看一眼更稳妥。', '允许');
+    const what = ask.known ? ask.subject : '电脑没读出它要做什么，打开终端看一眼更稳妥。';
+    const sure = await confirm('确定允许？', always ? `${what}\n\n${ask.always}` : what, '允许');
     if (!sure) return false;
   }
   if (!(await verify(`允许 ${ask.subject}`))) return false;
@@ -46,7 +47,7 @@ export async function approve(machine: string, card: Card, ask: Ask, always = fa
     question: card.approval,
     allow: true,
     ...(ask.known ? { subject: ask.subject } : {}),
-    ...(always ? { always: true } : {}),
+    ...(always ? { always: true, always_label: ask.always } : {}),
   });
   setTimeout(() => refresh(machine), 300);
   return true;

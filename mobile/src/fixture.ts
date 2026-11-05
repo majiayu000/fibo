@@ -197,7 +197,7 @@ function remote(machine: string) {
       case 'read':
         return { text: SCREEN };
       case 'ask':
-        return { question: 'Do you want to proceed?', kind: 'Bash command', subject: 'git push origin main', note: '推送 main 到远端' };
+        return { question: 'Do you want to proceed?', kind: 'Bash command', subject: 'git push origin main', note: '推送 main 到远端', always: '允许，git push 命令以后不再询问' };
       case 'chat':
         return f.after || f.before ? { session: f.session, more: false, messages: [] } : chat(String(f.terminal));
       case 'diff':

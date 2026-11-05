@@ -37,6 +37,9 @@ fn read_ask(socket: &Path, terminal: &str) -> io::Result<rp::Ask> {
         note: a.note,
         detail: a.detail,
         truncated: a.truncated,
+        always: seen
+            .always_option()
+            .map(|o| screen_ask::always_words(&o.text)),
     })
 }
 
@@ -45,15 +48,22 @@ pub(super) fn ask(socket: &Path, terminal: &str) -> io::Result<Value> {
 }
 
 /// An `answer` carrying the `subject` its client showed answers that one or nothing: the
-/// question is the same words for every command, and the Agent may have moved on since.
+/// question is the same words for every command, and the Agent may have moved on since. So
+/// with the `always_label` its button read: what it grants is what the person agreed to.
 pub(super) fn same_subject(socket: &Path, terminal: &str, request: &Value) -> io::Result<()> {
-    if request["subject"].is_null() {
+    let (showed, label) = (
+        request["subject"].as_str(),
+        request["always_label"].as_str(),
+    );
+    if showed.is_none() && label.is_none() {
         return Ok(());
     }
-    let showed = text(request, "subject")?;
     let now = read_ask(socket, terminal)?;
-    if now.subject != showed {
+    if showed.is_some_and(|s| s != now.subject) {
         return Err(io::Error::other("画面上的审批已经换了一条，请重新看一眼"));
+    }
+    if label.is_some_and(|l| now.always.as_deref() != Some(l)) {
+        return Err(io::Error::other("菜单上这一项已经变了，请重新看一眼"));
     }
     Ok(())
 }

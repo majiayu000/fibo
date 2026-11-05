@@ -20,10 +20,12 @@ export type Ask = {
   truncated: boolean;
   /** The machine named the subject. Until then nothing can be judged from it. */
   known: boolean;
+  /** What the menu's 「don't ask again」 option grants, as the machine read it; '' when it has none. */
+  always: string;
 };
 
 /** The reply to `ask` as screens read it; `question` stands in until there is a subject. */
-export function askFrom(reply: { kind?: string; subject?: string; note?: string; detail?: string; truncated?: boolean } | null, question: string): Ask {
+export function askFrom(reply: { kind?: string; subject?: string; note?: string; detail?: string; truncated?: boolean; always?: string } | null, question: string): Ask {
   const subject = reply?.subject ?? '';
   return {
     subject: subject || question,
@@ -32,6 +34,7 @@ export function askFrom(reply: { kind?: string; subject?: string; note?: string;
     detail: reply?.detail ?? '',
     truncated: !!reply?.truncated,
     known: !!subject,
+    always: reply?.always ?? '',
   };
 }
 

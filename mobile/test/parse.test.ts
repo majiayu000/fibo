@@ -20,6 +20,14 @@ describe('an approval the machine read', () => {
     // Any line of a long command counts.
     expect(asksTwice(askFrom(screens['approval-multiline-real.txt'].ask!, 'q'))).toBe(true);
   });
+  test('the "don\'t ask again" button says what its menu says, and is not there without one', () => {
+    const screens = fixture('claude') as Record<string, { ask?: { subject: string; kind: string }; always_label?: string }>;
+    const words = screens['approval-bash-tip.txt'].always_label!;
+    expect(words).toContain('/Users/x/t');
+    expect(askFrom({ subject: 'x', always: words }, 'q').always).toBe(words);
+    expect(askFrom({ subject: 'x' }, 'q').always).toBe('');
+    expect(askFrom(null, 'q').always).toBe('');
+  });
   test('a tip line would not have asked twice: that was the bug', () => {
     expect(dangerous('Tip: auto mode handles these prompts for you')).toBe(false);
   });

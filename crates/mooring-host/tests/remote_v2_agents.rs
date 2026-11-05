@@ -93,6 +93,9 @@ fn remote_ask_names_the_command_and_answers_only_about_it() {
     assert_eq!(ask["subject"], "touch second.txt");
     assert_eq!(ask["kind"], "Bash command");
     assert_eq!(ask["note"], "Create empty second.txt file");
+    // Its scope in the menu's words, not a blanket 「不再询问」.
+    let label = "允许，这个项目以后都能访问 /Users/x/t";
+    assert_eq!(ask["always"], label);
     let answer = |subject: &str, always: bool, req: &str| json!({ "op": "answer", "terminal": "tip", "question": "Do you want to proceed?", "allow": true, "always": always, "subject": subject, "request": req });
     // Waits out the settle after input: the host answers only what it has read.
     let e = r.error(answer("git push origin main", false, "w1"));
@@ -103,8 +106,31 @@ fn remote_ask_names_the_command_and_answers_only_about_it() {
     );
     r.ok(answer("touch second.txt", false, "w2"));
     h.wait_screen("tip", "plain=[\\n]");
-    r.ok(answer("touch second.txt", true, "w3"));
+    let labelled = |said: &str, req: &str| json!({ "op": "answer", "terminal": "tip", "question": "Do you want to proceed?", "allow": true, "always": true, "subject": "touch second.txt", "always_label": said, "request": req });
+    let e = r.error(labelled("允许，git push 命令以后不再询问", "w3"));
+    assert!(e.contains("这一项已经变了"), "{e}");
+    r.ok(labelled(label, "w4"));
     h.wait_screen("tip", "always=[2]");
+}
+
+/// A menu without the option has no words for it: the phone shows no button.
+#[test]
+fn remote_ask_has_no_always_words_on_a_menu_without_the_option() {
+    let h = Host::start();
+    let user = json!({"type":"user","uuid":"u0","cwd":"/project","entrypoint":"cli","userType":"external","message":{"content":"touch it"}});
+    let script = "printf '\\033[2J\\033[HBash command\\n\\n  touch second.txt\\n\\nDo you want to proceed?\\n❯ 1. Yes\\n  2. No\\n'; sleep 60";
+    h.claude("plain", Path::new("/tmp"), &[user], script);
+    let until = Instant::now() + Duration::from_secs(90);
+    let mut r = Remote::open(&h, None, &[]);
+    let ask = loop {
+        let got = r.ask(json!({ "op": "ask", "terminal": "plain" }));
+        if got.get("error").is_none() {
+            break got["ok"].clone();
+        }
+        assert!(Instant::now() < until, "ask never answered");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    assert!(ask.get("always").is_none(), "{ask}");
 }
 
 #[test]

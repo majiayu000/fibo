@@ -1,11 +1,11 @@
 // One approval, large: what it wants to run in big mono type, what it said just before,
-// 拒绝 and 允许 (Face ID when settings ask), 「以后不再询问」 (the machine says no when the menu lacks it),
-// and 「拒绝，并告诉它…」.
+// 拒绝 and 允许 (Face ID when settings ask), the menu's own 「don't ask again」 option in its
+// words (none when the menu has none), and 「拒绝，并告诉它…」.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { approve, deny, oops } from '@/actions';
-import { remote, speaksV2, supports, useHub, write } from '@/remote/hub';
+import { remote, supports, useHub, write } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
 import { useSettings } from '@/store/settings';
 import { cardTitle } from '@/ui/format';
@@ -48,7 +48,7 @@ export default function Approve() {
   }, [online, machine, terminal]);
 
   // What it asks arrives after the page does; 允许 waits until that has been up a moment.
-  const settled = useSettled(`${ask.subject}|${ask.note}`);
+  const settled = useSettled(`${ask.subject}|${ask.note}|${ask.always}`);
   const off = busy || !settled.ready;
   const gone = !card?.approval;
   const can = supports(m, 'answer');
@@ -132,11 +132,12 @@ export default function Approve() {
         )}
         {card?.approval && can && (
           <View style={{ gap: 8 }}>
-            {speaksV2(m) && (
+            {!!ask.always && (
               <Wide
                 kind="outline"
                 height={46}
-                label="以后不再询问"
+                wrap
+                label={ask.always}
                 disabled={off}
                 onPress={() => run(() => approve(machine, card, ask, true))}
                 textStyle={{ fontSize: 15, fontWeight: '500' }}
