@@ -13,6 +13,10 @@ const FIXTURES: &[(&str, &str)] = &[
         "visual evidence draws a fixed Codex session",
     ),
     (
+        "mooring-app/src/workbench/visual/fixture.rs",
+        "visual fixtures bind Claude and Codex sessions",
+    ),
+    (
         "mooring-app/src/settings_evidence.rs",
         "settings evidence checks a saved default Agent",
     ),
