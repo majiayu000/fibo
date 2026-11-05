@@ -1,37 +1,42 @@
-// Reading what the machine sends into what the screens show: the command an approval
-// asks about, the options a question offers, a patch's lines, quota windows. Pure, so
+// Reading what the machine sends into what the screens show: whether an approval is
+// dangerous, the options a question offers, a patch's lines, quota windows. Pure, so
 // tests run it without React Native.
 
 /** A screen line without the box Claude Code draws around a prompt. */
 const unbox = (line: string) => line.replace(/^\s*[│┃|]\s?/, '').replace(/\s*[│┃|]\s*$/, '');
 const filled = (line: string) => line.trim() && !/^[\s╭╮╰╯─━┄┈]+$/.test(line);
 
+/** What an approval asks about, as the machine read it off the screen (`ask`). */
 export type Ask = {
-  /** What it wants to run or touch: a command, a file. */
+  /** What it wants to run or touch; the question itself until the machine has said. */
   subject: string;
   /** Its kind as the prompt titles it: "Bash command", "Edit file". */
   kind: string;
+  /** What the Agent says it does: "Create empty second.txt file". */
+  note: string;
+  /** A file's new contents or a diff. */
+  detail: string;
+  /** The machine could not read all of it. */
+  truncated: boolean;
+  /** The machine named the subject. Until then nothing can be judged from it. */
+  known: boolean;
 };
 
-/**
- * The approval on a terminal's last lines: the title line ("Bash command"), the first
- * line after it is the subject. `question` is the card's approval, the fallback subject.
- */
-export function readAsk(screen: string, question: string): Ask {
-  const lines = screen.split('\n').map(unbox);
-  const title = lines.findIndex((l) => /^\s*(Bash( command)?|Run|Edit( file)?|Write( file)?|Create( file)?|Read( file)?|Fetch|WebFetch|MCP|Tool use|Command)\b.*$/i.test(l.trim()) && l.trim().length < 40);
-  if (title >= 0) {
-    const rest = lines.slice(title + 1).filter(filled);
-    const subject = rest[0]?.trim();
-    if (subject && !/do you want|proceed\?|^❯|^>/i.test(subject)) {
-      return { subject, kind: lines[title].trim() };
-    }
-  }
-  // No title: the last filled line above the question.
-  const q = lines.findIndex((l) => /do you want|proceed\?|allow/i.test(l));
-  const above = q > 0 ? lines.slice(0, q).filter(filled) : [];
-  return { subject: above.at(-1)?.trim() || question, kind: '' };
+/** The reply to `ask` as screens read it; `question` stands in until there is a subject. */
+export function askFrom(reply: { kind?: string; subject?: string; note?: string; detail?: string; truncated?: boolean } | null, question: string): Ask {
+  const subject = reply?.subject ?? '';
+  return {
+    subject: subject || question,
+    kind: reply?.kind ?? '',
+    note: reply?.note ?? '',
+    detail: reply?.detail ?? '',
+    truncated: !!reply?.truncated,
+    known: !!subject,
+  };
 }
+
+/** Whether allowing it asks once more: a dangerous command, or one nobody could read. */
+export const asksTwice = (ask: Pick<Ask, 'subject' | 'known' | 'truncated'>) => !ask.known || ask.truncated || dangerous(ask.subject);
 
 /** Commands worth a second confirmation: pushing, deleting, deploying, publishing. */
 const DANGER = [

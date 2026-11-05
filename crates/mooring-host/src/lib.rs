@@ -15,6 +15,7 @@ mod program_status;
 mod pty;
 pub mod recognition;
 pub mod redact;
+pub mod screen_ask;
 pub mod screen_rules;
 mod store;
 pub mod tool_text;

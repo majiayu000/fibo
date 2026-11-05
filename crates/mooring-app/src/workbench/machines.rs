@@ -376,6 +376,7 @@ pub(super) fn answer_remote(
             question,
             allow,
             always: false,
+            subject: None,
             request: Some(mooring_core::protocol::RequestId::fresh().id),
         };
         linked

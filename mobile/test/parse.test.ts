@@ -1,31 +1,35 @@
-// Reading what the machine sends: the command an approval asks about, a question's
+// Reading what the machine sends: what an approval asks about, a question's
 // options, a patch's lines, quota words, the relay's place, breadcrumbs, dangerous commands.
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, readAsk, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, asksTwice, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
-const BOX = `╭──────────╮
-│ Bash command                    │
-│                                 │
-│   git push origin main          │
-│   Push 6 commits                │
-│                                 │
-│ Do you want to proceed?         │
-│ ❯ 1. Yes                        │
-│   2. Yes, and don't ask again for git push commands │
-│   3. No (esc)                   │
-╰──────────╯`;
+/** The screens the machine's parser is held to, and what it reads off each. */
+const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
+  JSON.parse(readFileSync(new URL(`../../crates/mooring-host/tests/fixtures/screens/${cli}/expected.json`, import.meta.url), 'utf8'));
 
-describe('an approval on screen', () => {
-  test('finds the command in a boxed prompt', () => {
-    expect(readAsk(BOX, 'q')).toEqual({ subject: 'git push origin main', kind: 'Bash command' });
+describe('an approval the machine read', () => {
+  test('the real Tip screen asks about the command, and git push is dangerous', () => {
+    const screens = fixture('claude');
+    expect(screens['approval-bash-tip.txt'].ask?.subject).toBe('touch second.txt');
+    const push = screens['approval-push-requires.txt'].ask!;
+    expect(push.subject).toBe('git push origin main');
+    expect(asksTwice(askFrom(push, 'Do you want to proceed?'))).toBe(true);
+    expect(asksTwice(askFrom({ subject: 'touch second.txt', kind: 'Bash command' }, 'q'))).toBe(false);
+    // Any line of a long command counts.
+    expect(asksTwice(askFrom(screens['approval-multiline-real.txt'].ask!, 'q'))).toBe(true);
   });
-  test('a prompt with no box and no such option', () => {
-    const a = readAsk('Bash command\n  git push origin main\nDo you want to proceed?\n> 1. Yes\n  2. No', 'q');
-    expect(a.subject).toBe('git push origin main');
+  test('a tip line would not have asked twice: that was the bug', () => {
+    expect(dangerous('Tip: auto mode handles these prompts for you')).toBe(false);
   });
-  test('falls back to the question when the screen says nothing yet', () => {
-    expect(readAsk('', '要继续吗').subject).toBe('要继续吗');
+  test('nothing read yet, or only part of it, asks twice whatever the words', () => {
+    const none = askFrom(null, 'Do you want to proceed?');
+    expect(none.subject).toBe('Do you want to proceed?');
+    expect(none.known).toBe(false);
+    expect(asksTwice(none)).toBe(true);
+    expect(asksTwice(askFrom({ subject: '', kind: 'Bash command' }, 'q'))).toBe(true);
+    expect(asksTwice(askFrom({ subject: 'ls', truncated: true }, 'q'))).toBe(true);
   });
 });
 

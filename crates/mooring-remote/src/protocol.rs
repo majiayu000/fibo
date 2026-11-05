@@ -8,6 +8,7 @@ use serde_json::{Map, Value};
 
 pub const VERSION: u32 = 1;
 pub const MAX_LINE: usize = 1 << 20;
+pub use crate::asks::*;
 pub use crate::tools::*;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -65,7 +66,8 @@ pub enum Op {
     },
     /// Answers the approval asking `question`; refused if it is no longer on screen.
     /// `always` takes the menu's 「don't ask again」 option instead, refused when it has
-    /// none: never a plain allow in its place.
+    /// none: never a plain allow in its place. `subject` is what the client showed
+    /// ([`Ask`]): refused if the screen now asks about something else.
     Answer {
         terminal: String,
         question: String,
@@ -73,7 +75,14 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         always: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        subject: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
+    },
+    /// What the approval on a terminal's screen asks about: [`Ask`]. An error when it shows
+    /// none.
+    Ask {
+        terminal: String,
     },
     /// A conversation as chat: [`Chat`]. Names the `terminal` running it (its current
     /// conversation) or the `session`. Without `after` or `before`, the newest `limit`
@@ -236,6 +245,7 @@ impl Op {
             Self::Keys { .. } => "keys",
             Self::Input { .. } => "input",
             Self::Answer { .. } => "answer",
+            Self::Ask { .. } => "ask",
             Self::Chat { .. } => "chat",
             Self::Events => "events",
             Self::Watch { .. } => "watch",
@@ -268,6 +278,7 @@ pub const OPS: &[&str] = &[
     "keys",
     "input",
     "answer",
+    "ask",
     "chat",
     "events",
     "watch",

@@ -3,13 +3,22 @@
     "state": "waiting",
     "rule": "approval",
     "question": "Would you like to run the following command?",
-    "note": "recognition.rs 单测里的 Codex 命令审批"
+    "note": "recognition.rs 单测里的 Codex 命令审批",
+    "ask": {
+      "kind": "Command",
+      "subject": "cargo test --workspace"
+    },
+    "always": "a"
   },
   "approval-edits.txt": {
     "state": "waiting",
     "rule": "approval",
     "question": "Would you like to make the following edits?",
-    "note": "按 Codex 审批的形状合成，不是真实画面转录"
+    "note": "按 Codex 审批的形状合成，不是真实画面转录",
+    "ask": {
+      "kind": "Edit",
+      "subject": "src/main.rs (+1 -1)"
+    }
   },
   "neg-answered.txt": {
     "state": "idle",
@@ -26,5 +35,29 @@
   "neg-working.txt": {
     "state": "idle",
     "note": "Codex 正在跑，画面上没有提问"
+  },
+  "approval-reason-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Would you like to run the following command?",
+    "note": "真实 Codex 0.166 画面（-a on-request -s read-only，临时目录）",
+    "ask": {
+      "kind": "Command",
+      "subject": "touch /tmp/probe",
+      "note": "Allow the exact requested command to create /tmp/probe?"
+    },
+    "always": "p"
+  },
+  "approval-edits-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Would you like to make the following edits?",
+    "note": "真实 Codex 0.166 画面",
+    "ask": {
+      "kind": "Edit",
+      "subject": "/Users/x/t/edit.txt",
+      "note": "Apply proposed file edits"
+    },
+    "always": "a"
   }
 }

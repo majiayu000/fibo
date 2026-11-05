@@ -3,7 +3,12 @@
     "state": "waiting",
     "rule": "approval",
     "question": "Do you want to proceed?",
-    "note": "recognition.rs 单测里的 Claude Code Bash 审批框"
+    "note": "recognition.rs 单测里的 Claude Code Bash 审批框",
+    "ask": {
+      "kind": "Bash command",
+      "subject": "git push origin feat/x"
+    },
+    "always": "2"
   },
   "approval-managed-push.txt": {
     "state": "waiting",
@@ -72,5 +77,101 @@
   "neg-typed-in-input-box.txt": {
     "state": "idle",
     "note": "用户在输入框里打的提示词含有 Do you want to proceed?"
+  },
+  "approval-bash-tip.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to proceed?",
+    "note": "用户真机上看到的原文：菜单第 2 项 always allow，第 3 项 auto mode",
+    "ask": {
+      "kind": "Bash command",
+      "subject": "touch second.txt",
+      "note": "Create empty second.txt file"
+    },
+    "always": "2"
+  },
+  "approval-bash-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to proceed?",
+    "note": "真实 Claude Code 2.1.318 画面（临时目录、manual 模式转录，路径改过）",
+    "ask": {
+      "kind": "Bash command",
+      "subject": "touch second.txt",
+      "note": "Create empty file second.txt"
+    },
+    "always": "2"
+  },
+  "approval-push-requires.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to proceed?",
+    "note": "真实 Claude Code 2.1.318 画面（临时目录、manual 模式转录，路径改过）",
+    "ask": {
+      "kind": "Bash command",
+      "subject": "git push origin main",
+      "note": "Push main branch to origin\nThis command requires approval"
+    },
+    "always": "2"
+  },
+  "approval-write-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to create w.txt?",
+    "note": "真实 Claude Code 2.1.318 画面（临时目录、manual 模式转录，路径改过）",
+    "ask": {
+      "kind": "Create file",
+      "subject": "w.txt",
+      "detail": "1 hi"
+    },
+    "always": "2"
+  },
+  "approval-edit-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to make this edit to edit.txt?",
+    "note": "真实 Claude Code 2.1.318 画面（临时目录、manual 模式转录，路径改过）",
+    "ask": {
+      "kind": "Edit file",
+      "subject": "edit.txt",
+      "detail": "1 -alpha\n1 +gamma\n2  beta"
+    },
+    "always": "2"
+  },
+  "approval-webfetch-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to allow Claude to fetch this content?",
+    "note": "真实 Claude Code 2.1.318 画面（临时目录、manual 模式转录，路径改过）",
+    "ask": {
+      "kind": "Fetch · from the web-fetch agent",
+      "subject": "url: https://example.com/\nprompt: What is the page title (the HTML title / main heading), and give a brief summary of the\ntext content of the page.",
+      "note": "Claude wants to fetch content from example.com"
+    },
+    "always": "2"
+  },
+  "approval-mcp-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to proceed?",
+    "note": "真实 Claude Code 2.1.318 画面（临时目录、manual 模式转录，路径改过）",
+    "ask": {
+      "kind": "Tool use",
+      "subject": "Claude Docs — Guide Tool: (MCP)\nitems: [\"topic.index\"]",
+      "note": "About the Claude Docs — Guide Tool:\nDocs guides: topic.instructions repeats the server instructions. Read it only if your client\ndropped them. Also topic.<name>, refusal.<code>. After a doc's birth → [\"topic.index\"]."
+    },
+    "always": "2"
+  },
+  "approval-multiline-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to proceed?",
+    "note": "真实 Claude Code 2.1.318 多行命令，每行前有 │",
+    "ask": {
+      "kind": "Bash command",
+      "subject": "touch a.txt\nrm -f a.txt\ntouch b.txt",
+      "note": "Create a.txt, remove it, then create b.txt"
+    },
+    "always": "2"
   }
 }

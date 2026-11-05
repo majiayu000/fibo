@@ -66,6 +66,47 @@ fn remote_answer_always_takes_dont_ask_again_and_refuses_a_menu_without_it() {
     h.wait_screen("approve", "second=[]");
 }
 
+/// The real Claude Code screen a phone showed the wrong card for: `ask` names the command,
+/// an answer about any other command is refused, plain allow is Enter on option 1 and
+/// `always` is option 2, never 「switch to auto mode」.
+#[test]
+fn remote_ask_names_the_command_and_answers_only_about_it() {
+    let h = Host::start();
+    let user = json!({"type":"user","uuid":"u0","cwd":"/project","entrypoint":"cli","userType":"external","message":{"content":"touch it"}});
+    let screen = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/screens/claude/approval-bash-tip.txt");
+    let draw = format!("printf '\\033[2J\\033[H'; cat {}", screen.display());
+    let script = format!(
+        "stty -icanon -echo; {draw}; k=$(dd bs=1 count=1 2>/dev/null | od -An -c | tr -d ' '); {draw}; printf 'plain=[%s]\\n' \"$k\"; k=$(dd bs=1 count=1 2>/dev/null); printf 'always=[%s]\\n' \"$k\"; sleep 60"
+    );
+    h.claude("tip", Path::new("/tmp"), &[user], &script);
+    let until = Instant::now() + Duration::from_secs(90);
+    let mut r = Remote::open(&h, None, &[]);
+    let ask = loop {
+        let got = r.ask(json!({ "op": "ask", "terminal": "tip" }));
+        if got.get("error").is_none() {
+            break got["ok"].clone();
+        }
+        assert!(Instant::now() < until, "ask never answered");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    assert_eq!(ask["subject"], "touch second.txt");
+    assert_eq!(ask["kind"], "Bash command");
+    assert_eq!(ask["note"], "Create empty second.txt file");
+    let answer = |subject: &str, always: bool, req: &str| json!({ "op": "answer", "terminal": "tip", "question": "Do you want to proceed?", "allow": true, "always": always, "subject": subject, "request": req });
+    // Waits out the settle after input: the host answers only what it has read.
+    let e = r.error(answer("git push origin main", false, "w1"));
+    assert!(e.contains("换了一条"), "{e}");
+    assert!(
+        !h.screen("tip").contains("plain="),
+        "a refused answer types nothing"
+    );
+    r.ok(answer("touch second.txt", false, "w2"));
+    h.wait_screen("tip", "plain=[\\n]");
+    r.ok(answer("touch second.txt", true, "w3"));
+    h.wait_screen("tip", "always=[2]");
+}
+
 #[test]
 fn remote_stop_interrupts_a_working_agent_and_refuses_anything_else() {
     let h = Host::start();

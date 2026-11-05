@@ -57,10 +57,15 @@ function ApprovalRow({ m, c, t }: Item & { t: Theme }) {
       <Text numberOfLines={3} style={[s.cmd, { backgroundColor: t.well, color: t.text }]}>
         {ask.subject}
       </Text>
+      {!!ask.note && (
+        <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13 }}>
+          {ask.note}
+        </Text>
+      )}
       <View style={s.act}>
         {can && (
           <>
-            <Btn primary icon="face" label="允许" onPress={() => run(approve(m.id, c, ask.subject))} />
+            <Btn primary icon="face" label="允许" onPress={() => run(approve(m.id, c, ask))} />
             <Btn label="拒绝" onPress={() => run(deny(m.id, c))} />
           </>
         )}

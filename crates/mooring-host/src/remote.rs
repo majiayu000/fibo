@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
+mod asks;
 mod chat;
 mod diff;
 mod dirs;
@@ -438,6 +439,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
         }
         "answer" => {
             let (id, question) = (terminal()?, text(request, "question")?.to_owned());
+            asks::same_subject(socket, &id, request)?;
             let allow = request["allow"].as_bool();
             let answer = match request["always"].as_bool().unwrap_or(false) {
                 true if allow == Some(false) => {
@@ -454,6 +456,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
             }?;
             ok_reply(rpc(socket, &named(client, request, answer))?)
         }
+        "ask" => asks::ask(socket, &terminal()?),
         "chat" => chat::chat(socket, request),
         "diff" => diff::diff(socket, request),
         "dirs" => dirs::dirs(socket, request),

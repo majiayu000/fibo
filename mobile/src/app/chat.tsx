@@ -266,10 +266,15 @@ export default function Chat() {
           <Text numberOfLines={3} style={{ fontFamily: mono, fontSize: 13, color: t.text, backgroundColor: t.well, borderRadius: 10, padding: 10, overflow: 'hidden' }}>
             {ask.subject}
           </Text>
+          {!!ask.note && (
+            <Text numberOfLines={2} style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>
+              {ask.note}
+            </Text>
+          )}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {supports(m, 'answer') && (
               <>
-                <Btn primary icon="face" label="允许" onPress={() => approve(machine, card, ask.subject).catch((e) => oops(e.message))} />
+                <Btn primary icon="face" label="允许" onPress={() => approve(machine, card, ask).catch((e) => oops(e.message))} />
                 <Btn label="拒绝" onPress={() => deny(machine, card).catch((e) => oops(e.message))} />
               </>
             )}
