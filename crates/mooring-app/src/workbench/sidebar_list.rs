@@ -74,18 +74,7 @@ impl Workbench {
         }
     }
 }
-pub(super) fn bucket(g: Status) -> Bucket {
-    match g {
-        // 要你处理 holds every stopped turn that is yours (11-03): asking, failed, or
-        // finished for you to check; its second line says what is left in the background.
-        Status::Waiting | Status::Error | Status::Review | Status::Background => Bucket::Attention,
-        Status::Running => Bucket::Running,
-        // Marked complete, put off or interrupted: no longer moving on its own.
-        Status::Paused | Status::Closed | Status::Deferred => Bucket::Stopped,
-        Status::Fresh => Bucket::Fresh,
-        Status::Stale => Bucket::Stale,
-    }
-}
+pub(super) use mooring_core::status_group::bucket;
 /// The state a bucket's summary shows its dot in.
 fn bucket_group(b: Bucket) -> Status {
     match b {

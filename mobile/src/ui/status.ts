@@ -4,14 +4,9 @@
 import type { Card } from '../remote/hub';
 import type { Theme } from './theme';
 
-export const needsYou = (c: Card) => c.needs_you ?? Boolean(c.approval || c.phase === 'waiting');
-
 export function statusKey(c: Card): string {
   if (c.approval) return 'approval';
-  if (c.status) return c.status;
-  if (c.phase === 'waiting') return 'waiting';
-  if (c.phase === 'working') return 'running';
-  return c.phase === 'shell' ? 'shell' : 'review';
+  return c.status ?? 'shell';
 }
 
 export function statusWord(c: Card): string {
