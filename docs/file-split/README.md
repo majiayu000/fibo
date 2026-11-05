@@ -140,7 +140,7 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 
 报告里「回归」要查；`compare.html` 里的图要人看；出问题时对可疑提交跑 `scripts/visual-check.py shots <提交> <目录>`，一个提交只拆一个文件，所以定位后直接撤回。
 
-**这些场景在基线上每次都失败，等于没有覆盖**：`SPLIT_CLI`、`ROUTE`、`SPLIT`、`TAB`、`LINK`、`NEW_SPACE`、`OVERVIEW`、`PHONES`、`SUBAGENT`。部分是缺前置数据或参数，原因没逐个查。它们对应的分屏、标签、新空间、手机，第 6 层必须亲手过。`KEYMAP`、`PANE_DRAG`、`RESTART`、`SELECTION` 等不稳定，只有基线两遍都过才算数；页面 `CloseWorking` 所在那组也一直失败。
+**这些场景在所有轮次都失败，等于没有覆盖**：`ROUTE`、`SPLIT`、`TAB`、`LINK`、`NEW_SPACE`、`OVERVIEW`、`PHONES`、`SUBAGENT`。部分是缺前置数据或参数，原因没逐个查。它们对应的分屏、标签、新空间、手机，第 6 层必须亲手过。其余不稳定的（`SPLIT_CLI`、`SCROLLBACK`、`SELECTION`、`SHORTCUT`、`TAB_OVERFLOW`、`FOLLOW_INPUT`、`PEEK`、`PANE_DRAG`、`WHEEL`、`KEYMAP`、`RESTART`，以及页面 `CloseWorking` 所在那组）只有基线两遍都过才算数，对应功能也要在第 6 层过一遍。
 
 **工具测过什么**：纯搬动判干净，改掉逻辑的提交被点名（`take` 改 `skip`），故意把「新建待办」改成「新建事项」时三张 `TodoNew` 被筛出。**没测过**：悬停、拖动中途这类截图到不了的状态；工具对 `harness.rs` 这种必须重构的文件只能标出来，要人读。
 
@@ -176,18 +176,20 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 
 ## 基线结果
 
-`d804fd2`，独立 worktree，全新编译，全程 HEAD 没变。
+`eedc95a`（#2–#7、#1 合入后），固定路径的独立 worktree，全程 HEAD 没变。测量结果在本机 `~/Library/Caches/MooringVisual/split-baseline-eedc95a/{a,b}`，同一台机器验收可以直接复用；换了提交（比如 G1 合入）就要重测。
 
 | 检查 | 结果 |
 |---|---|
-| `cargo fmt --check` | 通过 |
-| `cargo clippy --workspace --all-targets -- -D warnings` | 通过 |
-| `cargo check -p mooring-app --all-targets --features visual-test` | 通过（含两个 example） |
-| `sh ci-test.sh` | 767 通过，0 失败，23 忽略，无重跑 |
-| `cargo test -p mooring-app --features visual-test` | 208 通过，0 失败，3 忽略 |
-| `mobile`：`bun test`、`bun run typecheck` | 46 通过，0 失败；类型检查通过 |
-| `eval/protocol-contract/check.py` | 0 失败，1 警告（本机最新 300 份日志里没有子 Agent 会话） |
+| `cargo fmt --check`、默认 clippy、开 `visual-test` 的 `cargo check` | 通过 |
+| `sh ci-test.sh` | 793 通过，0 失败，26 忽略，无重跑 |
+| `cargo test -p mooring-app --features visual-test` | 215 通过，0 失败，3 忽略 |
+| `mobile`：`bun test`、`bun run typecheck` | 61 通过，0 失败；类型检查通过 |
+| `eval/protocol-contract/check.py`、`theme-scenes.py` | 通过 |
+| `perf-gate.py` | 一遍失败一遍通过：`settings-open` 超预算（+26.3%），本身波动大，其余各项稳定。不是拆分造成的 |
+| 场景和页面组 | 44 组里两遍都过的 24 组；其余见上文，受机器负载影响 |
 
-测试名单在 `baseline-tests.txt`，共 1001 条（默认 790，开 `visual-test` 的 app 测试 211）。同名测试保留多条，对比时按条数算。
+测试名单在 `baseline-tests.txt`，共 1037 条（默认加开 `visual-test` 的 app 测试）。同名测试保留多条，对比时按条数算。
 
-**基线还没跑**：`perf-gate`、`theme-scenes`、中继镜像、全部画面场景、被忽略的用例、真机走查。这些验收时用基线提交和终点提交各跑一遍。
+**已知不稳定的用例**：`events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody` 单独连跑 6 遍失败 2 遍，报错位置还不同（`managed_session.rs:4658`、`:4527`）。它失败不算拆分回归，除非 PR #15、#16 修好之后还失败。
+
+**基线还没跑**：中继镜像（CI 在跑）、被忽略的用例、真机走查。
