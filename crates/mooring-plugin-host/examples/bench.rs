@@ -1,4 +1,4 @@
-//! Measures the plugin prototype against the gates in specs/plugins/plugin-system.md.
+//! Measures the plugin prototype against the gates in docs/plugin-system/spec.md.
 //! Usage: bench <plugin.wasm> [sessions]
 use mooring_plugin_host::{Plugin, engine, precompile, start_ticker};
 use std::time::Instant;

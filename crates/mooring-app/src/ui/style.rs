@@ -1,6 +1,7 @@
 //! The workbench's look, chosen in settings and kept in `~/.config/mooring/style` as
 //! "standard" or "terminal". Both show the same things; they differ in how much shell
-//! stays around the terminals (specs/terminal-workbench/design/main-a-plus.html).
+//! stays around the terminals (Keepline repo,
+//! specs/terminal-workbench/design/main-a-plus.html).
 use gpui::{App, Global};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

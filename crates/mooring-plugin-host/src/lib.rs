@@ -1,6 +1,6 @@
 //! Loads sidebar plugins into a sandbox and asks them for a sidebar description.
 //!
-//! Prototype ABI (see specs/plugins/plugin-system.md): the plugin exports `memory`,
+//! Prototype ABI (see docs/plugin-system/spec.md): the plugin exports `memory`,
 //! `alloc(len) -> ptr`, `dealloc(ptr, cap)` and `render(ptr, len) -> ptr`; the reply at
 //! the returned pointer is a 4-byte little-endian length followed by JSON.
 use std::time::Duration;

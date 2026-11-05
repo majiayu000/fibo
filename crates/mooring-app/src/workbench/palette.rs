@@ -1,6 +1,6 @@
 //! The ⌘P search palette: a floating panel over the workbench with grouped results
 //! on the left and the selected session's preview on the right
-//! (specs/terminal-workbench/design/palette-here.html).
+//! (Keepline repo, specs/terminal-workbench/design/palette-here.html).
 use super::overview::{quiet, solid};
 use super::*;
 use mooring_core::sidebar as presets;

@@ -1,6 +1,7 @@
 //! Shortcuts: which ⌘ chord runs which workbench or terminal action. The ones changed
 //! from the defaults live in `~/.config/mooring/keys.json`; a chord without ⌘ always
-//! goes to the program in the terminal (specs/terminal-workbench/keyboard-shortcuts.md).
+//! goes to the program in the terminal (Keepline repo,
+//! specs/terminal-workbench/keyboard-shortcuts.md, not moved here).
 use gpui::{App, Global, Keystroke};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
