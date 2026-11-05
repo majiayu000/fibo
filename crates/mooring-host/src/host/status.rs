@@ -184,6 +184,20 @@ pub(super) fn check_screen_wait(
     shared: &Shared,
     id: &str,
 ) -> io::Result<Option<Instant>> {
+    // Before any conversation there may be this prompt, so it is read on every quiet screen.
+    let tail = {
+        let live = lock(terminal)?;
+        if live.exited {
+            return Ok(None);
+        }
+        live.vt.tail_text(usize::from(live.rows))?
+    };
+    let trust = crate::screen_ask::trust_screen(&tail).map(|s| TrustPrompt {
+        agent: s.agent,
+        question: s.question,
+        folder: s.folder,
+    });
+    lock(shared)?.set_terminal_trust(id, trust)?;
     // Each CLI's own screen rules; one with no Agent yet is read with the default ones.
     let agent = {
         let host = lock(shared)?;
