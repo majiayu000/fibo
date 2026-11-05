@@ -20,7 +20,7 @@ import { type Theme, useTheme } from './theme';
 /** Chinese titles are regular weight: PingFang's medium reads heavier than the design wants. */
 export const TITLE_WEIGHT = '400' as const;
 
-export const mono = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, Menlo, monospace' });
+export { mono } from './mono';
 
 /** Web draws a focus ring round inputs; the design's fields show focus by their border. */
 export const noOutline = (Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) as TextStyle;

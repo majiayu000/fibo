@@ -21,6 +21,8 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
 - so must the same motion in the layouts that need a machine: frames-section (本机's whole
   section folding under 按机器), frames-rail and frames-railrest (the rail with its list
   arriving, and at rest; a rail beside the column instead of over it cost 129 M at rest);
+- the running mark turning (scripts' frames-turning): a step keeps the sidebar's last draw and
+  the mark really moves; with no mark on screen, or the setting off, the view stops drawing
 - 设置 › 插件 (scripts' frames-plugins): a frame with one animation card playing, opening
   settings, and a terminal's frame under themes with a picture or a see-through window must
   stay within BUDGET (or, without a counter, within SHARE_BUDGET of a full redraw or a plain
@@ -43,8 +45,11 @@ SHARE_BUDGET = 2.0
 FIXTURE = [sys.executable, str(ROOT / 'scripts/perf-fixture.py')]
 
 
-def probe(bindir, out, plan, catch_up, machine=False):
+def probe(bindir, out, plan, catch_up, machine=False, running=False):
     env = {**os.environ, 'NORUN': '1'}
+    if running:
+        env.pop('NORUN')
+        env['FEWNEED'] = '1'
     if machine:
         env['MACHINE'] = '1'
     env.pop('MOORING_NO_CATCH_UP', None)
@@ -87,6 +92,27 @@ def main():
     if set(found) != {'frames-section', 'frames-rail', 'frames-railrest'}:
         fails.append(f'no machine layout numbers in the probe output: {found}')
     measured.update(found)
+    # The turning mark needs rows running on screen, which changes the column for the rest.
+    turning = probe(bindir, out / 'turning', 'frames-turning', catch_up=False, running=True)
+    t = re.search(r'frames-turning: ([\d.]+) ms CPU per step, ([\d.]+) M instructions; at rest (\d+) rows (\d+) draws; rows (\d+); moved (\d+) px; sidebar kept its draw (\w+); folded (\d+) drew (\d+) opened (\d+); off (\d+) rows (\d+) draws', turning)
+    if not t:
+        fails.append('no frames-turning line in the probe output')
+    else:
+        used, cost = float(t[1]), float(t[2])
+        rest_rows, rest_draws, rows, moved, kept, folded, drew, opened, off_rows, off_draws = int(t[3]), int(t[4]), int(t[5]), int(t[6]), t[7], int(t[8]), int(t[9]), int(t[10]), int(t[11]), int(t[12])
+        measured['frames-turning'] = cost
+        if rest_rows or rest_draws:
+            fails.append(f'the setting off still drew turning marks: {rest_rows} rows, {rest_draws} draws')
+        if not rows or not moved or used <= 0:
+            fails.append(f'the marks did not turn: {rows} rows, {moved} px, {used} ms: the gate measured nothing')
+        if kept != 'true':
+            fails.append('a turning step drew the sidebar again: it must stay cached')
+        if folded or opened != rows:
+            fails.append(f'marks did not follow their rows: {rows} rows, folded {folded}, opened {opened}')
+        if drew:
+            fails.append(f'with no mark on screen the view kept stepping: {drew} draws')
+        if off_rows or off_draws:
+            fails.append(f'turned off, the marks kept drawing: {off_rows} rows, {off_draws} draws')
     plugin_text = probe(bindir, out / 'plugins', 'frames-plugins', catch_up=False)
     costs = dict(re.findall(r'^(frames-\w+|settings-open): [^\n]*?([\d.]+) M instructions', plugin_text, re.M))
     plugin_ms = {k: float(v) for k, v in re.findall(r'^(frames-\w+): ([\d.]+) ms CPU', plugin_text, re.M)}

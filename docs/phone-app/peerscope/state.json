@@ -3,7 +3,7 @@
   "premise": {
     "product": "Mooring 手机端（远程看住、回复、审批 Claude Code / Codex 会话）",
     "from_scratch": false,
-    "baseline": "main@d88045ec，设计稿 specs/phone-app/design.html，App mobile",
+    "baseline": "main@d88045ec，设计稿 specs/phone-app/design.html（现 docs/phone-app/design.html），App mobile",
     "scope": "手机 App",
     "out_of_scope": "桌面工作台、中继部署",
     "intent": "借鉴原则，完善设计稿",
@@ -33,7 +33,7 @@
   },
   "rules": [
     "沿用用户约定：不开子代理（含审查），主线程自查。",
-    "报告放在 specs/phone-app/peerscope/，跟仓库提交。"
+    "报告放在 docs/phone-app/peerscope/，跟仓库提交。"
   ],
   "available_skills": [],
   "rounds": [

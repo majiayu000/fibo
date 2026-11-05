@@ -9,12 +9,13 @@ import { NOT_YET, remote, supports, useHub, write } from '@/remote/hub';
 import { useReviewed } from '@/store/reviewed';
 import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, TITLE_WEIGHT, mono, useBottom } from '@/ui/kit';
-import { diffLines } from '@/ui/parse';
+import { type Check, checkLine, diffLines } from '@/ui/parse';
 import { SayDialog } from '@/ui/sheets';
+import { tilde } from '@/ui/status';
 import { type Theme, useTheme } from '@/ui/theme';
 
 type File = { path: string; added: number; removed: number; status: string; patch: string; truncated?: boolean };
-type Diff = { cwd: string; branch?: string; files: File[]; added: number; removed: number; truncated?: boolean };
+type Diff = { cwd: string; branch?: string; files: File[]; added: number; removed: number; truncated?: boolean; checks?: Check[] };
 
 function FileCard({ f, t, seen, onTick, open, onOpen }: { f: File; t: Theme; seen: boolean; onTick: () => void; open: boolean; onOpen: () => void }) {
   const lines = open ? diffLines(f.patch) : [];
@@ -40,8 +41,8 @@ function FileCard({ f, t, seen, onTick, open, onOpen }: { f: File; t: Theme; see
         </Pressable>
       </Pressable>
       {open && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ minWidth: '100%', paddingBottom: 4 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
+          <View style={{ flexGrow: 1, paddingBottom: 4 }}>
             {lines.map((l, i) =>
               l.kind === 'hunk' ? (
                 <Text key={i} style={[s.dl, { color: t.dim, paddingLeft: 40 }]}>
@@ -100,6 +101,7 @@ export default function DiffScreen() {
   }, [online, can, machine, terminal, cwd]);
 
   const files = diff?.files ?? [];
+  const check = checkLine(diff?.checks);
   const seen = files.filter((f) => reviewed.has(f.path, f.patch)).length;
   const say = (text: string) =>
     write(machine, 'send', { terminal, text, enter: true })
@@ -155,8 +157,8 @@ export default function DiffScreen() {
                   <Text style={{ fontSize: 16, fontWeight: TITLE_WEIGHT, color: t.text }}>
                     看过 {seen} / {files.length} 个文件
                   </Text>
-                  <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim }}>
-                    {sent ? `已发给它：${sent}` : diff.cwd}
+                  <Text numberOfLines={2} style={{ fontSize: 12, color: !sent && check?.failed && !check.stale ? t.err : t.dim }}>
+                    {sent ? `已发给它：${sent}` : (check?.text ?? tilde(diff.cwd))}
                   </Text>
                 </View>
               </View>

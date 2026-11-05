@@ -1,4 +1,4 @@
-//! Design tokens from specs/terminal-workbench/design/README.md.
+//! Design tokens from the Keepline repo's specs/terminal-workbench/design/README.md.
 //! UI dimensions live here; terminal cell colors remain owned by the VT.
 pub use super::palette::Palette;
 pub use crate::model::session_state::Status;
@@ -628,7 +628,7 @@ impl Theme {
     pub const PANE_ACTION_RADIUS: f32 = 5.;
     /// The pane footer's text: cwd, branch and who owns input.
     pub const PANE_FOOTER_SIZE: f32 = 11.;
-    // board (specs/overview-kanban/kanban.html)
+    // board (Keepline repo, specs/overview-kanban/kanban.html, not moved here)
     /// Each space's avatar: three washes over a base, picked by the space id. No pure red
     /// or orange as a base; those belong to 出错 and 等你回答.
     pub const BOARD_MESHES: [[u32; 4]; 6] = [

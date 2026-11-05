@@ -1,9 +1,10 @@
-//! Which branch a directory is on, read straight from the repository's HEAD.
+//! Which branch a directory is on, read straight from the repository's HEAD: no process,
+//! so it is cheap enough for the window's title and the phone's `list`.
 use std::path::Path;
 
 /// The branch checked out where `dir` sits, from `.git/HEAD` (a linked worktree's `.git`
 /// file points at its own HEAD); a detached HEAD shows its short commit.
-pub(super) fn read_branch(dir: &Path) -> Option<String> {
+pub fn read_branch(dir: &Path) -> Option<String> {
     for d in dir.ancestors() {
         let dot = d.join(".git");
         let git_dir = if dot.is_dir() {

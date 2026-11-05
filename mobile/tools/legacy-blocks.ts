@@ -1,5 +1,5 @@
-// Markdown blocks as Agents write them: headings, list items, quotes, rules, fenced code
-// and paragraphs. Pure, so tests run it without React Native.
+// The block splitter the phone used before docs/phone-app/markdown.md: kept only so the corpus
+// tool can still print a before and after.
 export type Block =
   | { kind: 'code'; text: string }
   | { kind: 'heading'; level: number; text: string }

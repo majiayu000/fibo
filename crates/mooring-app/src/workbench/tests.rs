@@ -727,7 +727,7 @@ fn a_picked_agent_starts_without_a_todo() {
 
 /// Every coarse view of a state (the sidebar's buckets, the plugin words, the palette's
 /// counts) derives from the one `Status` and agrees on what is in flight and what needs
-/// you (specs/status-model).
+/// you (Keepline repo, specs/status-model).
 #[test]
 fn every_projection_of_a_status_agrees() {
     use mooring_core::sidebar::Bucket;

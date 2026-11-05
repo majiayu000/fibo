@@ -400,6 +400,10 @@ pub struct ChatTools {
     pub commands: u32,
     /// `(path, added, removed)`, in the order first touched.
     pub files: Vec<(String, u32, u32)>,
+    /// Seconds this stretch of work took: from your message, or from its first call when
+    /// the message before was the Agent's own (it may have slept since). 0 when unknown.
+    #[serde(default)]
+    pub took: u64,
 }
 
 /// A running terminal passed from one host to the next.
