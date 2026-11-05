@@ -305,7 +305,11 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
             revoked,
             ..
         })) => {
-            let refuse = if config.key.as_ref().is_some_and(|k| key.as_ref() != Some(k)) {
+            let refuse = if config
+                .key
+                .as_ref()
+                .is_some_and(|k| !same_key(k, key.as_deref()))
+            {
                 Some((4003, "A valid relay key is required"))
             } else if !wire::is_token_hash(&token_hash) {
                 Some((4002, "Invalid token hash"))
@@ -688,6 +692,12 @@ fn close(code: u16, reason: &str) -> Message {
         code,
         reason: reason.into(),
     }))
+}
+
+/// Compares digests, not the keys: how long `==` takes then says nothing about how much
+/// of a guessed key is right.
+fn same_key(want: &str, got: Option<&str>) -> bool {
+    got.is_some_and(|got| wire::token_hash(got) == wire::token_hash(want))
 }
 
 /// Close codes a peer may set: normal, or the application range.

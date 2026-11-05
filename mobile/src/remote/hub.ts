@@ -102,6 +102,8 @@ export function stage(links: Link[], d: Dial) {
 const listeners = new Set<() => void>();
 const remotes = new Map<string, Remote>();
 const retry = new Map<string, { delay: number; timer?: ReturnType<typeof setTimeout> }>();
+/** Machines whose `dial` has not answered yet: one connection attempt at a time. */
+const dialing = new Set<string>();
 
 function set(id: string, patch: Partial<Machine>) {
   state = {
@@ -133,21 +135,36 @@ async function refresh(id: string) {
 
 async function connect(id: string) {
   const m = get(id);
-  if (!m || remotes.has(id)) return;
+  if (!m || remotes.has(id) || dialing.has(id)) return;
   const pending = retry.get(id);
   if (pending?.timer) clearTimeout(pending.timer);
   set(id, { status: 'connecting', error: undefined });
+  // Forgotten or paired again while it dialled: the link it dialled is no longer the one.
+  const stale = () => get(id)?.link !== m.link;
   let r: Remote;
+  dialing.add(id);
   try {
     r = await dial(m.link);
   } catch (e) {
-    ended(id, (e as RemoteError).code, (e as Error).message, (e as RemoteError).reason);
+    dialing.delete(id);
+    if (stale()) connect(id);
+    else ended(id, (e as RemoteError).code, (e as Error).message, (e as RemoteError).reason);
+    return;
+  }
+  dialing.delete(id);
+  if (stale()) {
+    r.close();
+    connect(id);
     return;
   }
   remotes.set(id, r);
+  // What the machine answered when it turned this phone away after the handshake.
+  let refusal: string | undefined;
   r.onEnded((e) => {
+    // A connection already replaced (paired again) ends without touching its successor.
+    if (remotes.get(id) !== r) return;
     remotes.delete(id);
-    ended(id, e.code, undefined, e.reason);
+    ended(id, refusal ? undefined : e.code, refusal, e.reason);
   });
   try {
     // The device id names this phone for the request ids its writes carry.
@@ -171,6 +188,9 @@ async function connect(id: string) {
     await follow(id, r);
     await refresh(id);
   } catch (e) {
+    // The connection still up means the machine itself said no: say what it said, not
+    // that the network is down.
+    if (!r.ended) refusal = `电脑上的 Mooring 没接受这台手机：${(e as Error).message}`;
     r.close();
   }
 }
@@ -256,7 +276,7 @@ export async function start() {
 
 /** Pairs with `link`: kept only once its machine answered this phone's handshake. */
 export async function pair(link: Link) {
-  const probe = await Remote.connect(link);
+  const probe = await dial(link);
   probe.close();
   await saveMachine(link);
   const id = machineId(link);
