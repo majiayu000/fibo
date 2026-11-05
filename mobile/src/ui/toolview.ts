@@ -153,6 +153,13 @@ export function viewRows(l: Loaded, end: number, kind: string): ViewRow[] {
   return rows;
 }
 
+/** A whole text as rows, none wrapped. */
+export const textRows = (text: string): ViewRow[] => {
+  const rows: ViewRow[] = [];
+  pushLines(rows, text, false);
+  return rows;
+};
+
 /** How wide the longest row is drawn, in a monospace face where CJK takes two columns. */
 export function columns(rows: ViewRow[]): number {
   let most = 0;

@@ -153,7 +153,7 @@ export default function ToolScreen() {
             </Text>
           )}
           {!!detail.label && (
-            <Text numberOfLines={3} selectable style={[s.well, { backgroundColor: t.well, color: detail.failed ? t.err : t.text }]}>
+            <Text numberOfLines={1} ellipsizeMode="middle" style={[s.well, { backgroundColor: t.well, color: detail.failed ? t.err : t.text }]}>
               {detail.label}
             </Text>
           )}

@@ -22,8 +22,23 @@ const Line = memo(function Line({ text, tone, width }: { text: string; tone?: 'a
   );
 });
 
-export function CodeView({ rows, gap, footer }: { rows: ViewRow[]; gap: () => React.ReactElement; footer?: number }) {
-  const { width: screen } = useWindowDimensions();
+export function CodeView({
+  rows,
+  gap,
+  footer,
+  room,
+  atEnd,
+}: {
+  rows: ViewRow[];
+  gap: () => React.ReactElement;
+  footer?: number;
+  /** The width it has, when that is less than the screen's. */
+  room?: number;
+  /** Opens on the last rows. */
+  atEnd?: boolean;
+}) {
+  const { width: full } = useWindowDimensions();
+  const screen = room ?? full;
   const width = useMemo(() => Math.max(screen, columns(rows) * CHAR + PAD * 2), [rows, screen]);
   const gapAt = useMemo(() => rows.findIndex((r) => r.kind === 'gap'), [rows]);
   const renderItem = useCallback(
@@ -42,6 +57,7 @@ export function CodeView({ rows, gap, footer }: { rows: ViewRow[]; gap: () => Re
         return { length: i === gapAt ? GAP : LINE, offset: LINE * i + (before ? GAP - LINE : 0), index: i };
       }}
       initialNumToRender={40}
+      initialScrollIndex={atEnd && rows.length > 0 ? rows.length - 1 : undefined}
       maxToRenderPerBatch={40}
       windowSize={5}
       contentContainerStyle={{ paddingTop: 8, paddingBottom: footer ?? 24 }}

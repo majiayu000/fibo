@@ -1,7 +1,7 @@
 // A tool's text as the phone holds and draws it: bytes against the machine's offsets, the gap
 // between head and tail, rows of one height however long a line is.
 import { describe, expect, test } from 'bun:test';
-import { allText, byteLength, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, took, toolName, viewRows } from '../src/ui/toolview';
+import { allText, byteLength, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, textRows, took, toolName, viewRows } from '../src/ui/toolview';
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
@@ -92,4 +92,9 @@ describe('commandSteps', () => {
     expect(commandSteps('cat <<E\na && b\nE')).toBe('cat <<E\na && b\nE');
     expect(commandSteps('echo x >| f')).toBe('echo x >| f');
   });
+});
+
+test('terminal text is one row a line, however long the line', () => {
+  const long = 'Bash(cd /tmp; R=x; for f in a b c; do cat "$f"; done)'.repeat(4);
+  expect(textRows(`${long}\n\n中文\n`)).toEqual([{ kind: 'line', text: long, tone: undefined }, { kind: 'line', text: '', tone: undefined }, { kind: 'line', text: '中文', tone: undefined }]);
 });

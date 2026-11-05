@@ -28,7 +28,7 @@ const Row = memo(function Row({ call, onOpen }: { call: ToolCall; onOpen: (id: s
     >
       <Icon name={call.failed ? 'alert' : (ICONS[call.kind] ?? 'gear')} size={18} width={1.8} color={call.failed ? t.err : t.dim} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text numberOfLines={call.about ? 2 : 1} style={[call.about ? s.about : s.label, { color: call.failed ? t.err : t.text }]}>
+        <Text numberOfLines={call.about ? 2 : 1} ellipsizeMode={call.about ? 'tail' : 'middle'} style={[call.about ? s.about : s.label, { color: call.failed ? t.err : t.text }]}>
           {call.about || call.label || '（没有说明）'}
         </Text>
         <Text numberOfLines={1} style={{ fontSize: 12, color: call.failed ? t.err : t.dim }}>

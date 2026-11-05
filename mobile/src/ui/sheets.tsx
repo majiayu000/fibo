@@ -1,9 +1,11 @@
 // Two bottom sheets: one asks for a sentence (要求修改, 拒绝并告诉它), one shows a
 // terminal's last lines.
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, TextInput, View } from 'react-native';
 import { remote } from '../remote/hub';
-import { Wide, mono, noOutline, useBottom } from './kit';
+import { CodeView } from './codeview';
+import { Wide, noOutline, useBottom } from './kit';
+import { textRows } from './toolview';
 import { useTheme } from './theme';
 
 function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
@@ -76,6 +78,7 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
+  const { width } = useWindowDimensions();
   useEffect(() => {
     if (!visible) return;
     setLoaded(false);
@@ -92,20 +95,25 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   return (
     <Frame visible={visible} onClose={onClose}>
       <Text style={[s.title, { color: t.text }]}>终端最后几行</Text>
-      <ScrollView style={{ maxHeight: 420 }} horizontal={false}>
-        <Text selectable style={[s.screen, { color: t.text, backgroundColor: t.well }]}>
-          {error || (loaded ? text || '画面是空的' : '…')}
-        </Text>
-      </ScrollView>
+      {text && !error ? (
+        <View style={[s.screen, { backgroundColor: t.well }]}>
+          <CodeView rows={textRows(text)} gap={noGap} footer={8} room={width - SHEET_PAD * 2} atEnd />
+        </View>
+      ) : (
+        <Text style={{ color: t.dim, fontSize: 14, paddingVertical: 24, textAlign: 'center' }}>{error || (loaded ? '画面是空的' : '…')}</Text>
+      )}
       <Wide label="关上" kind="grey" onPress={onClose} height={46} />
     </Frame>
   );
 }
 
+const SHEET_PAD = 16;
+const noGap = () => <View />;
+
 const s = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 16, gap: 12 },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: SHEET_PAD, gap: 12 },
   title: { fontSize: 17, fontWeight: '600' },
   input: { minHeight: 96, borderRadius: 14, padding: 12, fontSize: 15, textAlignVertical: 'top' },
-  screen: { fontFamily: mono, fontSize: 12, lineHeight: 17, padding: 10, borderRadius: 12 },
+  screen: { height: 440, borderRadius: 12, overflow: 'hidden' },
 });
