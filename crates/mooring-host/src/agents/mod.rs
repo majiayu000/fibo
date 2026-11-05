@@ -427,3 +427,6 @@ pub(crate) fn carried(
     }
     out
 }
+
+#[cfg(test)]
+mod codex_header_tests;
