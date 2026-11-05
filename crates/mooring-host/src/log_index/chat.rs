@@ -6,7 +6,6 @@ use crate::content::{edit_lines, patch_lines, patch_text, LINES, PATCHED};
 use mooring_core::protocol::{ChatMessage, ChatTools};
 use rusqlite::OptionalExtension;
 use serde_json::Value;
-use std::collections::HashSet;
 use std::io;
 
 mod backfill;
@@ -16,8 +15,12 @@ mod backfill;
 /// 2 TiB, so a phone's JavaScript holds it exactly; no line makes 4096 records.
 pub(super) const SEQ: &str = "(offset*4096+MIN(ordinal,4095)+1)";
 
+/// A call's failure may arrive beyond the page. Seek by this call's id rather than
+/// collecting every later failure. ?2 and ?3 name the stretch's lower bound.
+pub(super) const FAILED: &str = "EXISTS(SELECT 1 FROM session_records AS result WHERE result.path=call.path AND result.call_id=call.call_id AND result.kind='tool_result' AND result.exit_code<>0 AND (result.offset,result.ordinal)>(?2,?3))";
+
 /// The `(offset, ordinal)` a seq names.
-fn place(seq: i64) -> (i64, i64) {
+pub(super) fn place(seq: i64) -> (i64, i64) {
     let at = seq.saturating_sub(1);
     (at >> 12, at & 4095)
 }
@@ -106,25 +109,16 @@ impl Index {
             .optional()
             .map_err(err)?
             .unwrap_or_default();
-        // A result comes after its call, possibly past this page.
-        let failed = self
-            .db
-            .prepare_cached(&format!("SELECT call_id FROM session_records WHERE path=?1 AND kind='tool_result' AND exit_code<>0 AND {SEQ}>?2"))
-            .map_err(err)?
-            .query_map(rusqlite::params![path, from], |r| r.get::<_, String>(0))
-            .map_err(err)?
-            .collect::<Result<HashSet<_>, _>>()
-            .map_err(err)?;
+        let (from, until) = (place(from), place(last));
         let calls = self
             .db
-            .prepare_cached(&format!("SELECT {SEQ},call_id,text,at FROM session_records WHERE path=?1 AND kind='tool_call' AND {SEQ}>?2 AND {SEQ}<?3 ORDER BY offset,ordinal"))
+            .prepare_cached(&format!("SELECT {SEQ},text,{FAILED},at FROM session_records AS call WHERE path=?1 AND kind='tool_call' AND (offset,ordinal)>(?2,?3) AND (offset,ordinal)<(?4,?5) ORDER BY offset,ordinal"))
             .map_err(err)?
-            .query_map(rusqlite::params![path, from, last], |r| {
-                let id: String = r.get(1)?;
+            .query_map(rusqlite::params![path, from.0, from.1, until.0, until.1], |r| {
                 Ok((
                     r.get::<_, i64>(0)?,
-                    r.get::<_, String>(2)?,
-                    failed.contains(&id),
+                    r.get::<_, String>(1)?,
+                    r.get::<_, bool>(2)?,
                     r.get::<_, i64>(3)?,
                 ))
             })
