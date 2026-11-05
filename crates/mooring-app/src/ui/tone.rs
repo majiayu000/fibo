@@ -99,15 +99,17 @@ mod tests {
     /// from that session, not from a named status.
     #[test]
     fn named_status_colors_stay_where_sessions_are_drawn() {
-        const DRAWS_SESSIONS: [&str; 11] = [
+        const DRAWS_SESSIONS: [&str; 12] = [
             // A session's subagents under its sidebar row: each one an agent at work.
             "workbench/sidebar_subagents.rs",
             // Column icons, the 在跑 sweep and 做完了 marks on the board.
             "workbench/board.rs",
+            // The 做完了 mark on a session's card there.
+            "workbench/board/card.rs",
             // The same marks on another machine's cards there.
             "workbench/board/remote.rs",
             // The 很久没动 age chart.
-            "workbench/overview.rs",
+            "workbench/overview/card.rs",
             // A deferred step in the cleanup walk.
             "workbench/cleanup.rs",
             // 「N 工作中」「N 等你」 counts.

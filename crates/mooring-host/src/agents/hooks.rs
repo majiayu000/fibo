@@ -409,7 +409,8 @@ mod tests {
             .unwrap();
         assert!(out.status.success());
         for _ in 0..100 {
-            if got.exists() {
+            // The shell creates the file before it writes to it.
+            if fs::read_to_string(&got).is_ok_and(|said| said.ends_with('\n')) {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(20));

@@ -1,5 +1,5 @@
 //! Whether the mark of a running session turns in the sidebar. Off until chosen: turning
-//! draws the window about ten more times a second, which some people want and others
+//! draws the window about thirty more times a second, which some people want and others
 //! would rather not pay for. Kept in `~/.config/mooring/running-spin` as `on` or `off`.
 use gpui::{App, Global};
 
