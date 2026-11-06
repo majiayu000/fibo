@@ -21,6 +21,12 @@ fn heading_text(count: usize) -> Option<(&'static str, usize)> {
     (count > 0).then_some((TITLE, count))
 }
 
+/// Whether this row is the selected one. A peek is what is in front: its session's row is
+/// selected until it closes, and there is one selection at a time.
+fn row_selected(focused: Option<&str>, terminal: &str, peeking: bool) -> bool {
+    !peeking && focused == Some(terminal)
+}
+
 /// The list a row sits in, whose rows it lines up with.
 #[derive(Clone, Copy)]
 enum Look {
@@ -110,7 +116,8 @@ impl Workbench {
                     why,
                     group,
                 } = row;
-                let focused = self.nav.focused.as_deref() == Some(terminal.as_str());
+                let focused =
+                    row_selected(self.nav.focused.as_deref(), &terminal, self.peek.is_some());
                 let id = gpui::SharedString::from(format!("unread-row-{terminal}"));
                 row_box(id, look, focused)
                     .child(row_mark(look, group))
@@ -133,6 +140,8 @@ impl Workbench {
                         })
                     })
                     .on_click(cx.listener(move |this, _, window, cx| {
+                        // As a session row's click does, or the peek stays over the terminal.
+                        this.close_peek(cx);
                         this.focus_terminal(&terminal, window, cx);
                     }))
                     .into_any_element()
@@ -163,6 +172,22 @@ mod tests {
     fn no_such_terminal_means_no_heading() {
         assert_eq!(heading_text(0), None);
         assert_eq!(heading_text(2), Some((TITLE, 2)));
+    }
+
+    #[test]
+    fn a_peek_takes_the_selection_from_the_row_underneath() {
+        assert!(row_selected(Some("t"), "t", false));
+        assert!(!row_selected(Some("t"), "t", true));
+        assert!(!row_selected(Some("other"), "t", false));
+    }
+
+    /// 「会话 7」 over 3 sessions while the same column says 「未关联的终端 4」.
+    #[test]
+    fn the_session_counts_leave_these_terminals_out() {
+        let view = include_str!("../sidebar/view.rs");
+        assert!(view.contains("let listed_count = sessions.len();"));
+        assert!(view.contains("self.sessions_header(listed_count, cx)"));
+        assert!(view.contains("self.flat_column(sidebar, listed_count, cx)"));
     }
 
     /// 「好像没对齐」: dot and text in the columns of 会话优先's own rows and 更早's line,

@@ -312,8 +312,9 @@ impl Workbench {
                     .child(self.todos_view(space_name, dense, cx)),
             );
         }
-        let listed_count = sessions.len() + unread.len();
-        sidebar = sidebar.child(self.sessions_header(sessions.len() + unread.len(), cx));
+        // Sessions only: the terminals with none count under their own heading.
+        let listed_count = sessions.len();
+        sidebar = sidebar.child(self.sessions_header(listed_count, cx));
         // 会话优先 lists closed sessions under 今天 and 更早, so the column is not empty.
         if !local_hidden && sessions.is_empty() && unread.is_empty() && !(recent && ended.total > 0)
         {

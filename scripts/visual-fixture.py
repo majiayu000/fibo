@@ -158,6 +158,9 @@ if sys.argv[1] == 'prepare':
             r = rpc(root, {'Launch': {'id': id, 'space': 's0', 'argv': argv, 'cwd': str(root / 'projects/工作空间'), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
             time.sleep(1)
         layout = split(split(leaf('punlinked-claude'), leaf('punlinked-first'), 'Down'), split(leaf('punlinked-codex'), leaf('punlinked-program'), 'Down'), 'Right')
+        # A space with such a terminal and no session at all.
+        r = rpc(root, {'Launch': {'id': 'punlinked-only', 'space': 's5', 'argv': [str(root / 'codex'), '-c', 'printf "\\033]0;fixture\\007"; ' + hold], 'cwd': str(root / 'projects/工作空间'), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
+        edit(root, {'CreateTab': {'tab': {'id': 'unlinked-only', 'space': 's5', 'title': '未关联', 'default_task': None, 'closed': False, 'layout': leaf('punlinked-only')}}})
         edit(root, {'CreateTab': {'tab': {'id': 'unlinked', 'space': 's0', 'title': '未关联', 'default_task': None, 'closed': False, 'layout': layout}}})
     while True:
         w = rpc(root, 'Workspace')['Workspace']
