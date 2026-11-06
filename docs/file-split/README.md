@@ -136,9 +136,10 @@ cargo test -p mooring-core --test file_size --test guard
 ```sh
 python3 scripts/split-check.py self-test
 python3 scripts/split-check.py audit <基线> <终点>        # 第 1 层
-python3 scripts/split-check.py measure <基线> <目录A>     # 第 2–5 层，基线（已跑过可复用）
-python3 scripts/split-check.py measure <基线> <目录B> --repeat
-python3 scripts/split-check.py measure <终点> <目录C>
+# 第 2–5 层。按基线、终点、基线的顺序跑，三次都用终点的截图数据
+python3 scripts/split-check.py measure <基线> <目录A> --fixture-from <终点>
+python3 scripts/split-check.py measure <终点> <目录C> --fixture-from <终点>
+python3 scripts/split-check.py measure <基线> <目录B> --fixture-from <终点>
 python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 ```
 

@@ -259,7 +259,7 @@ def wait_for_quiet(most=300):
     return round(os.getloadavg()[0], 1)
 
 
-def scenes(work, out, only=None):
+def scenes(work, out, only=None, fixture_from=None):
     results = {}
     bin_dir = work / 'target/debug'
     for name, value in SCENES.items():
@@ -274,17 +274,21 @@ def scenes(work, out, only=None):
                 break
     if only and 'pages' not in only:
         return results
-    # The same fixture on every commit, so each side gets the same data. It finds its helpers
-    # beside itself, so it runs from the worktree under test, not from this checkout.
+    # The same fixture on every commit, so each side gets the same data: the end's, since a
+    # newer one may ask for what the end can't do. It finds its helpers beside itself, so it
+    # runs from the worktree under test, not from this checkout.
     fixture = work / 'scripts/visual-fixture.py'
-    shutil.copy(BASE / 'scripts/visual-fixture.py', fixture)
+    if fixture_from:
+        fixture.write_text(git('show', f'{fixture_from}:scripts/visual-fixture.py'))
     env = {**ENV, 'MOORING_VISUAL_BIN': str(bin_dir), 'MOORING_FIXTURE_BOARD': '1'}
     for i in range(0, len(PAGES), 6):  # one run has 120 seconds
         chunk = ','.join(PAGES[i:i + 6])
         for attempt in (1, 2):
             wait_for_quiet()
-            step(out, f'fixture-prepare-{i}', [sys.executable, fixture, 'prepare'], work, env, 300)
-            ok = step(out, f'pages-{i}', [sys.executable, fixture, 'capture', out / 'scenes/pages'], work, {**env, 'MOORING_PAGE_LIST': chunk}, 180) == 0
+            # A failed prepare leaves the last run's state file: capturing then draws old data,
+            # the same on both sides, and reads as a perfect match.
+            ready = step(out, f'fixture-prepare-{i}', [sys.executable, fixture, 'prepare'], work, env, 300) == 0
+            ok = ready and step(out, f'pages-{i}', [sys.executable, fixture, 'capture', out / 'scenes/pages'], work, {**env, 'MOORING_PAGE_LIST': chunk}, 180) == 0
             step(out, f'fixture-stop-{i}', [sys.executable, fixture, 'stop'], work, env, 60)
             results['pages ' + chunk] = 'pass' if ok else 'fail'
             if ok:
@@ -375,7 +379,7 @@ def measure(args):
         names = [f'default\t{n}' for n in test_names(out / 'list-default.log')] + [f'visual-test\t{n}' for n in test_names(out / 'list-visual-test.log')]
         (out / 'tests.txt').write_text('\n'.join(sorted(names)) + '\n')
     step(out, 'build-debug', ['cargo', 'build', '-p', 'mooring-host', '-p', 'mooring-app', '--features', 'mooring-app/visual-test'], work)
-    r['scenes'] = scenes(work, out, set(args.only.split(',')) if args.only else None)
+    r['scenes'] = scenes(work, out, set(args.only.split(',')) if args.only else None, args.fixture_from)
     (out / 'measure.json').write_text(json.dumps(r, indent=1, ensure_ascii=False))
     stop_processes(f'{work}/target/')  # hosts a failed fixture run left behind
     awake.terminate()
@@ -610,7 +614,7 @@ fn two() { assert_eq!(one(3, 1), 3); }
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 commands = parser.add_subparsers(required=True)
 s = commands.add_parser('audit'); s.add_argument('base'); s.add_argument('end'); s.set_defaults(go=audit)
-s = commands.add_parser('measure'); s.add_argument('sha'); s.add_argument('out'); s.add_argument('--repeat', action='store_true'); s.add_argument('--force', action='store_true'); s.add_argument('--only', help='scene names or pages, comma separated'); s.set_defaults(go=measure)
+s = commands.add_parser('measure'); s.add_argument('sha'); s.add_argument('out'); s.add_argument('--fixture-from', help='commit whose visual-fixture.py to use; give both sides the same one'); s.add_argument('--repeat', action='store_true'); s.add_argument('--force', action='store_true'); s.add_argument('--only', help='scene names or pages, comma separated'); s.set_defaults(go=measure)
 s = commands.add_parser('report'); s.add_argument('base'); s.add_argument('again'); s.add_argument('end'); s.add_argument('--partial', action='store_true'); s.set_defaults(go=report)
 s = commands.add_parser('self-test'); s.set_defaults(go=self_test)
 args = parser.parse_args()
