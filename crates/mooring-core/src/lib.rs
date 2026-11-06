@@ -1,5 +1,6 @@
 pub mod action;
 pub mod agent;
+pub mod cli_entry;
 pub mod decoration;
 pub mod delivery;
 pub mod effect;

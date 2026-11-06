@@ -99,6 +99,7 @@ fn run() -> std::io::Result<()> {
                 mooring_host::serve_with_options
             };
             plugins_cmd::write_agents_md();
+            mooring_host::cli_setup::install(std::path::Path::new(&runtime));
             mooring_host::start_mirrors();
             serve(
                 std::path::Path::new(&runtime),

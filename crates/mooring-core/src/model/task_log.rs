@@ -47,9 +47,8 @@ pub fn short_id<'a>(w: &Workspace, id: &'a str) -> &'a str {
 impl Workspace {
     /// What an Agent is handed for a todo: its words, the progress so far, and how to
     /// write back. A later conversation starts from what the earlier ones found.
-    /// `note` is the command that writes back, spelled out with its path and runtime, and
-    /// the id goes in whole: Codex runs commands from a daemon, whose PATH and terminal are
-    /// not this one's.
+    /// `note` is the command that writes back, as the caller can reach it, and the id goes
+    /// in whole: an Agent may run commands from a daemon, whose terminal is not this one.
     pub fn task_handoff(&self, task: &Task, note: &str) -> String {
         let mut parts = vec![task.prompt()];
         let notes: Vec<String> = self

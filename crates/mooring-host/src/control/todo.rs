@@ -21,18 +21,35 @@ pub(super) fn todo(a: Args) -> io::Result<()> {
     }
 }
 
-fn own_terminal() -> Option<String> {
-    std::env::var("MOORING_TERMINAL").ok()
+/// The conversation whose CLI says it ran this command. Its terminal's variable may be
+/// missing or another terminal's when the command comes from a shared daemon.
+fn calling_session(w: &Workspace) -> Option<&AgentSession> {
+    session_named(w, &mooring_host::calling_conversations())
 }
-/// The conversation running in the calling terminal, if there is one.
+fn session_named<'a>(w: &'a Workspace, ids: &[(Agent, String)]) -> Option<&'a AgentSession> {
+    w.agent_sessions.iter().find(|s| {
+        ids.iter()
+            .any(|(a, id)| *a == s.runtime && *id == s.cli_session_id)
+    })
+}
+fn own_terminal(w: &Workspace) -> Option<String> {
+    match calling_session(w) {
+        Some(session) => session.terminal.clone(),
+        None => std::env::var("MOORING_TERMINAL").ok(),
+    }
+}
+/// The conversation running the caller, if there is one.
 fn own_session(w: &Workspace) -> Option<String> {
-    w.current_agent(&own_terminal()?).map(|s| s.id.clone())
+    if let Some(session) = calling_session(w) {
+        return Some(session.id.clone());
+    }
+    w.current_agent(&own_terminal(w)?).map(|s| s.id.clone())
 }
 /// `--task`: a todo's id, the start of it, or its exact title. Without it, the todo the
 /// calling terminal works for.
 fn pick<'a>(w: &'a Workspace, a: &Args) -> io::Result<&'a Task> {
     let Some(needle) = a.value("task") else {
-        return own_terminal()
+        return own_terminal(w)
             .and_then(|t| w.terminal_task(&t))
             .ok_or_else(|| {
                 io::Error::other(
@@ -60,7 +77,15 @@ fn space_name<'a>(w: &'a Workspace, id: &'a str) -> &'a str {
         .find(|s| s.id == id)
         .map_or(id, |s| s.name.as_str())
 }
-/// `--space`, else the calling terminal's space, else the only space there is.
+/// The space whose folder holds `cwd`, the deepest when they nest.
+fn space_at<'a>(w: &'a Workspace, cwd: &Path) -> Option<&'a Space> {
+    w.spaces
+        .iter()
+        .filter(|s| !s.cwd.is_empty() && cwd.starts_with(&s.cwd))
+        .max_by_key(|s| s.cwd.len())
+}
+/// `--space`, else the calling terminal's space, else the one this folder is in, else the
+/// only space there is.
 fn pick_space(w: &Workspace, a: &Args) -> io::Result<String> {
     if let Some(needle) = a.value("space") {
         return w
@@ -70,14 +95,22 @@ fn pick_space(w: &Workspace, a: &Args) -> io::Result<String> {
             .map(|s| s.id.clone())
             .ok_or_else(|| io::Error::other(format!("没有这个空间：{needle}")));
     }
-    if let Some(tab) = own_terminal().and_then(|t| w.terminal_tab(&t).cloned()) {
+    if let Some(tab) = own_terminal(w).and_then(|t| w.terminal_tab(&t).cloned()) {
         return Ok(tab.space);
+    }
+    let here = std::env::current_dir().ok();
+    if let Some(space) = here.and_then(|cwd| space_at(w, &cwd)) {
+        return Ok(space.id.clone());
     }
     match w.spaces.as_slice() {
         [only] => Ok(only.id.clone()),
-        _ => Err(io::Error::other(
-            "不在 Mooring 终端里，用 --space <空间> 说记到哪",
-        )),
+        spaces => {
+            let names: Vec<&str> = spaces.iter().map(|s| s.name.as_str()).collect();
+            Err(io::Error::other(format!(
+                "不在 Mooring 终端里，用 --space <空间> 说记到哪：{}",
+                names.join("、")
+            )))
+        }
     }
 }
 fn deliver_edit(a: &Args, edit: Edit) -> io::Result<()> {
@@ -219,9 +252,9 @@ fn add(a: Args) -> io::Result<()> {
     Ok(())
 }
 
-/// Who wrote a note: the calling terminal's conversation if it works for this todo or
-/// noted it, else the one conversation working for it. Codex's commands come from a daemon
-/// that may carry another terminal's variable, so an unrelated conversation is never named.
+/// Who wrote a note: the caller's conversation if it works for this todo or noted it, else
+/// the one conversation working for it. A daemon may carry another terminal's variable, so
+/// an unrelated conversation is never named.
 fn note_session(w: &Workspace, task: &str) -> Option<String> {
     let own = own_session(w).filter(|id| {
         let works = w
@@ -255,4 +288,26 @@ fn note(a: Args) -> io::Result<()> {
             text,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A CLI names a conversation by its own id, which is not the workbench's.
+    #[test]
+    fn a_cli_names_a_conversation_by_its_own_id() {
+        let mut w = mooring_core::sample::every_state();
+        let target = &mut w.agent_sessions[0];
+        target.id = "workbench-id".into();
+        target.cli_session_id = "cli-id".into();
+        let runtime = target.runtime;
+        let other = Agent::all().into_iter().find(|a| *a != runtime).unwrap();
+
+        let named =
+            |agent, id: &str| session_named(&w, &[(agent, id.to_owned())]).map(|s| s.id.as_str());
+        assert_eq!(named(runtime, "cli-id"), Some("workbench-id"));
+        assert_eq!(named(runtime, "workbench-id"), None);
+        assert_eq!(named(other, "cli-id"), None, "another CLI's id space");
+    }
 }

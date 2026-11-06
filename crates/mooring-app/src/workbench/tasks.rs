@@ -25,18 +25,28 @@ pub(super) struct TaskUi {
 impl Workbench {
     /// What an Agent is handed for `task`, with this app's own `mooring` to write back with.
     pub(super) fn task_handoff(&self, task: &Task) -> String {
-        let binary = std::env::current_exe()
-            .map(|exe| exe.with_file_name("mooring").display().to_string())
-            .unwrap_or_else(|_| "mooring".into());
-        let runtime = self
-            .store
-            .socket()
-            .parent()
-            .map(|p| p.display().to_string());
-        let mut note = format!("{} todo note", shell_quote(&binary));
-        if let Some(runtime) = runtime {
-            note.push_str(&format!(" --runtime {}", shell_quote(&runtime)));
-        }
+        let binary = std::env::current_exe().map(|exe| exe.with_file_name("mooring"));
+        let runtime = self.store.socket().parent().map(Path::to_path_buf);
+        let note = match (&binary, &runtime) {
+            (Ok(binary), Some(runtime))
+                if mooring_core::cli_entry::by_name_reaches(binary, runtime) =>
+            {
+                "mooring todo note".to_owned()
+            }
+            // The name isn't ours here, or this is a private host: say exactly which.
+            (binary, runtime) => {
+                let mut note = binary.as_ref().map_or("mooring todo note".into(), |b| {
+                    format!("{} todo note", shell_quote(&b.display().to_string()))
+                });
+                if let Some(runtime) = runtime {
+                    note.push_str(&format!(
+                        " --runtime {}",
+                        shell_quote(&runtime.display().to_string())
+                    ));
+                }
+                note
+            }
+        };
         self.workspace.task_handoff(task, &note)
     }
     /// The line above a pane that Mooring is starting an Agent in for a task.

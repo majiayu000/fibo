@@ -6,6 +6,7 @@ fn cli(h: &Host, args: &[&str]) -> (bool, String, String) {
         .args(["--runtime", &h.root.to_string_lossy()])
         // Whatever runs this test may itself be a Mooring terminal.
         .env_remove("MOORING_TERMINAL")
+        .env_remove("CODEX_THREAD_ID")
         .output()
         .unwrap();
     (
@@ -432,4 +433,71 @@ fn real_claude_notes_a_todo_when_told_and_only_then() {
         "noted in this conversation, not tied to it"
     );
     assert!(!w.task_outcomes.contains_key(&task.id));
+}
+
+/// A CLI's command from a shared daemon carries no terminal's variable, or another
+/// terminal's: it says which conversation ran it, and the folder says which space.
+#[test]
+fn a_command_from_a_daemon_is_placed_by_its_conversation_and_folder() {
+    let h = Host::start();
+    h.setup();
+    let folder = h.root.join("other-project");
+    std::fs::create_dir_all(folder.join("deep")).unwrap();
+    let folder = folder.canonicalize().unwrap();
+    h.call(Request::Edit {
+        request: None,
+        edit: Edit::AddSpace(Space {
+            id: "other".into(),
+            name: "另一个".into(),
+            cwd: folder.to_string_lossy().into_owned(),
+        }),
+    })
+    .unwrap();
+    let run = |cwd: &std::path::Path, thread: Option<&str>, args: &[&str]| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_mooring"));
+        command
+            .args(args)
+            .args(["--runtime", &h.root.to_string_lossy()])
+            .current_dir(cwd)
+            .env_remove("MOORING_TERMINAL")
+            .env_remove("CODEX_THREAD_ID");
+        if let Some(thread) = thread {
+            command.env("CODEX_THREAD_ID", thread);
+        }
+        let out = command.output().unwrap();
+        (
+            out.status.success(),
+            String::from_utf8_lossy(&out.stdout).trim().to_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    };
+
+    let (ok, id, err) = run(
+        &folder.join("deep"),
+        None,
+        &["todo", "add", "这个文件夹的事"],
+    );
+    assert!(ok, "{err}");
+    let w = h.workspace();
+    let task = w.tasks.iter().find(|t| t.id.starts_with(&id)).unwrap();
+    assert_eq!(task.space, "other", "the folder it was run in");
+    assert_eq!(
+        w.task_logs[&task.id].source, None,
+        "no conversation said so"
+    );
+
+    let (ok, _, err) = run(
+        std::path::Path::new("/"),
+        None,
+        &["todo", "add", "哪都不是"],
+    );
+    assert!(!ok, "two spaces and no way to tell");
+    assert!(err.contains("另一个"), "the error names the choices: {err}");
+
+    let (ok, _, err) = run(
+        &folder,
+        Some("not-a-conversation-here"),
+        &["todo", "note", "写回", "--task", &id],
+    );
+    assert!(ok, "an unknown id changes nothing: {err}");
 }
