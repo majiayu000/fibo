@@ -48,9 +48,17 @@ export function Swipe({ children, left, right }: { children: ReactNode; left?: S
   return (
     <View style={{ overflow: 'hidden' }}>
       {right && (
-        <View {...hidden} style={[StyleSheet.absoluteFill, s.under, { backgroundColor: right.color, justifyContent: 'flex-start' }]}>
+        // Not there until dragged: a row with margins, a card, must not show it round its edges.
+        <Animated.View
+          {...hidden}
+          style={[
+            StyleSheet.absoluteFill,
+            s.under,
+            { backgroundColor: right.color, justifyContent: 'flex-start', opacity: x.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }) },
+          ]}
+        >
           <Text style={[s.label, { color: right.fg }]}>{right.label}</Text>
-        </View>
+        </Animated.View>
       )}
       {left && (
         <Animated.View
