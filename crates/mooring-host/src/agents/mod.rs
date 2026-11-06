@@ -233,6 +233,15 @@ pub trait Adapter: Sync {
     fn hooks(&self, _home: &Path) -> Option<Hooks> {
         None
     }
+    /// The variable this CLI sets on every command it runs, naming the conversation that
+    /// ran it. Better than the terminal's: its commands may come from a shared daemon.
+    fn conversation_env(&self) -> Option<&'static str> {
+        None
+    }
+    /// Where this CLI finds skills, for one with no hook to be told things through.
+    fn skills_dir(&self, _home: &Path) -> Option<PathBuf> {
+        None
+    }
     /// The bundled rules (`screen/<cli>.json`) that read a blocked question off this CLI's
     /// quiet screen. See `crate::screen_rules`.
     fn screen_rules(&self) -> &'static str {
@@ -339,6 +348,15 @@ pub fn usage_line(
     adapter(agent).usage_line(line, since, state)
 }
 
+/// The conversations the calling process says it runs in, in its CLI's own ids, for the
+/// CLIs that say so.
+pub fn calling_conversations() -> Vec<(Agent, String)> {
+    Agent::all()
+        .into_iter()
+        .filter_map(|a| Some((a, std::env::var(adapter(a).conversation_env()?).ok()?)))
+        .filter(|(_, id)| !id.is_empty())
+        .collect()
+}
 pub fn reads_tools(agent: Agent) -> bool {
     adapter(agent).reads_tools()
 }

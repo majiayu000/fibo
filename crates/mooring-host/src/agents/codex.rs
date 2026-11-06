@@ -27,6 +27,12 @@ impl Adapter for Codex {
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CODEX_HOME", ".codex").join("sessions")
     }
+    fn conversation_env(&self) -> Option<&'static str> {
+        Some("CODEX_THREAD_ID")
+    }
+    fn skills_dir(&self, home: &Path) -> Option<PathBuf> {
+        Some(home_dir(home, "CODEX_HOME", ".codex").join("skills"))
+    }
     fn trust_screen(&self, lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
         super::trust::codex(lines)
     }

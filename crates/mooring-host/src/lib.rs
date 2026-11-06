@@ -1,6 +1,7 @@
 mod agents;
 mod background_shells;
 mod cli_commands;
+pub mod cli_setup;
 mod codex_status;
 mod command_marks;
 pub mod devices;
@@ -20,6 +21,7 @@ pub mod screen_ask;
 pub mod screen_rules;
 mod store;
 pub mod tool_text;
+pub use agents::calling_conversations;
 pub use agents::hooks;
 pub use agents::{
     adapter as agent_adapter, describe_tool, reads_tools, roots as agent_log_roots, tool_call_line,
