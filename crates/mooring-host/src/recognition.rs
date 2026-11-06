@@ -570,8 +570,13 @@ pub fn open_transcripts(
         .filter(|p| {
             p.runtime.is_some()
                 && p.cli_session_id.is_none()
-                && terminal_for_process(p.pid, processes, workspace)
-                    .is_some_and(|id| workspace.current_agent(&id).is_none())
+                && terminal_for_process(p.pid, processes, workspace).is_some_and(|id| {
+                    // /new can replace the open log without replacing the CLI process.
+                    // File evidence must stay current even after its first association.
+                    workspace
+                        .current_agent(&id)
+                        .is_none_or(|s| s.binding == Some(Binding::OpenFile))
+                })
         })
         .map(|p| p.pid)
         .collect::<Vec<u32>>();
