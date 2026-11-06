@@ -22,14 +22,18 @@ const WALK: Duration = Duration::from_secs(1);
 const STATUS: Duration = Duration::from_secs(3);
 const AT_ONCE: usize = 8;
 
-fn home() -> io::Result<PathBuf> {
+pub(super) fn home() -> io::Result<PathBuf> {
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .ok_or_else(|| io::Error::other("没有家目录"))
 }
 /// `~` and `~/…` from home; anything else must be absolute.
 pub(super) fn expand(path: &str) -> io::Result<PathBuf> {
-    let path = path.trim();
+    expand_exact(path.trim())
+}
+
+/// As `expand`, for a path that is not typed input: a folder's name may end in a space.
+pub(super) fn expand_exact(path: &str) -> io::Result<PathBuf> {
     let full = match path.strip_prefix('~') {
         Some("") => home()?,
         Some(rest) if rest.starts_with('/') => home()?.join(rest.trim_start_matches('/')),

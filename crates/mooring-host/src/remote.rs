@@ -21,6 +21,8 @@ use std::thread;
 mod asks;
 mod chat;
 mod diff;
+mod diff_config;
+mod diff_scope;
 mod dirs;
 mod list;
 mod quota;
@@ -171,7 +173,7 @@ pub fn serve(
         let (out, socket, access) = (out.clone(), socket.to_owned(), access.clone());
         thread::spawn(move || {
             for (id, request, client) in jobs {
-                let result = unary(&socket, &request, client.as_deref());
+                let result = unary(&socket, &request, client.as_deref(), access.role);
                 let op = request["op"].as_str().unwrap_or_default();
                 if devices::acts(op) {
                     access.record(op, &request, &result);
@@ -379,7 +381,7 @@ fn ok_reply(reply: Reply) -> io::Result<Value> {
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }
-fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
+fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io::Result<Value> {
     let terminal = || text(request, "terminal").map(str::to_owned);
     match request["op"].as_str().unwrap_or_default() {
         "list" => match rpc(socket, &Request::Workspace)? {
@@ -473,7 +475,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
         "trust" => asks::trust(socket, request, client),
         "chat" => chat::chat(socket, request),
         "suggestion" => chat::suggestion(socket, &terminal()?),
-        "diff" => diff::diff(socket, request),
+        "diff" => diff::diff(socket, request, role),
         "dirs" => dirs::dirs(socket, request),
         "quota" => quota::quota(socket),
         "lastsession" => resume::last_session(socket, request),
