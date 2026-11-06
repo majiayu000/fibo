@@ -292,6 +292,20 @@ def terminals_left():
     return limit - len(list(pathlib.Path('/dev').glob('ttys*')))
 
 
+def prepare_dependencies(work, sha):
+    """This commit's own patched GPUI: a patch applied for one commit can't be taken back for
+    another, and a baseline built on the end's patches would hide what they change."""
+    wanted = git('rev-parse', f'{sha}:patches', f'{sha}:bootstrap.sh')
+    deps, stamp = work / '.deps', work / '.deps-for'
+    if stamp.exists() and stamp.read_text() == wanted and deps.is_dir():
+        return
+    if deps.is_symlink():
+        deps.unlink()
+    shutil.rmtree(deps, ignore_errors=True)
+    subprocess.run(['sh', 'bootstrap.sh'], cwd=work, env=ENV, check=True, stdout=subprocess.DEVNULL)
+    stamp.write_text(wanted)
+
+
 def measure(args):
     left = terminals_left()
     if left < 100 and not args.force:
@@ -303,9 +317,9 @@ def measure(args):
     if not (work / '.git').exists():
         git('worktree', 'prune')
         git('worktree', 'add', '--detach', str(work), sha)
-        (work / '.deps').symlink_to((BASE / '.deps').resolve())
     git('reset', '-q', '--hard', cwd=work)
     git('checkout', '-q', '--detach', sha, cwd=work)
+    prepare_dependencies(work, sha)
     if not os.path.isdir(XCODE):
         # No metal compiler here: GPUI compiles its shaders at start instead. Both sides of a
         # comparison build the same way; perf-gate's numbers don't match the committed baseline.
