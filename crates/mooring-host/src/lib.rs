@@ -1,6 +1,7 @@
 mod agents;
 mod background_shells;
 mod cli_commands;
+mod cli_http;
 pub mod cli_setup;
 mod codex_status;
 mod command_marks;

@@ -247,3 +247,7 @@ pub fn process_cwd(pid: u32) -> Option<String> {
     let path = unsafe { std::ffi::CStr::from_ptr(info.pvi_cdir.vip_path.as_ptr().cast()) };
     Some(path.to_string_lossy().into_owned()).filter(|p| !p.is_empty())
 }
+/// A variable in a running process's environment, readable because it runs as this user.
+pub(crate) fn process_env(pid: u32, name: &str) -> Option<String> {
+    env_value(&procargs(pid).ok()?, name)
+}

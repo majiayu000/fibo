@@ -2,10 +2,10 @@
   "api": 1,
   "id": "opencode",
   "name": "OpenCode",
-  "version": "0.2.0",
-  "description": "从 OpenCode 的 SQLite 库读会话：回合状态、权限提示、中断、报错、命令与测试证据、改过的文件",
+  "version": "0.3.0",
+  "description": "从 OpenCode 的 SQLite 库读会话：回合状态、权限提示和回答、中断、报错、命令与测试证据、改过的文件",
   "provides": [
     "agent"
   ],
-  "mooring": 4
+  "mooring": 5
 }
