@@ -358,15 +358,9 @@ fn daemon_codex_short_prompts_bind_to_the_pane_where_enter_was_pressed() {
     h.setup();
     let [a, b] = ids();
     let gates = [h.root.join("gate-0"), h.root.join("gate-1")];
-    // Real Codex logs a prompt when Enter arrives; Enter goes in at +2 s and +6 s below.
-    let start = mooring_core::content::now();
-    let timed = |thread: &str, gate: &PathBuf, at: u64| DaemonStep {
-        at: Some(at),
-        ..step("继续", thread, Some(gate))
-    };
     // "继续" is too short to be screen evidence; only the Enter press can tell the panes apart.
-    daemon_codex(&h, "p0", "proj", &[timed(&a, &gates[0], start + 2)], "");
-    daemon_codex(&h, "p1", "proj", &[timed(&b, &gates[1], start + 6)], "");
+    daemon_codex(&h, "p0", "proj", &[step("继续", &a, Some(&gates[0]))], "");
+    daemon_codex(&h, "p1", "proj", &[step("继续", &b, Some(&gates[1]))], "");
     std::thread::sleep(Duration::from_secs(2));
     for (pane, gate) in ["p0", "p1"].iter().zip(&gates) {
         let (mut stream, _, writable) = h.attach(pane, false);
@@ -381,6 +375,20 @@ fn daemon_codex_short_prompts_bind_to_the_pane_where_enter_was_pressed() {
         )
         .unwrap();
         assert!(matches!(ack(&mut stream), Reply::Ok));
+        // Codex timestamps the prompt when Enter arrives, not while preparing its TUI.
+        let at = mooring_core::content::now();
+        let seed = h.root.join(format!("{pane}-seed-0"));
+        let rows = fs::read_to_string(&seed)
+            .unwrap()
+            .lines()
+            .map(|line| {
+                let mut row: serde_json::Value = serde_json::from_str(line).unwrap();
+                row["timestamp"] = at.into();
+                row.to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(seed, format!("{rows}\n")).unwrap();
         fs::write(gate, "").unwrap();
         // Far enough apart that each logged prompt meets only its own Enter.
         std::thread::sleep(Duration::from_secs(4));

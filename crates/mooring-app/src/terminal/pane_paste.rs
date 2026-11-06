@@ -45,6 +45,13 @@ impl Pane {
 pub(super) fn line_count(text: &str) -> usize {
     text.trim_end_matches(['\r', '\n']).lines().count()
 }
+pub(super) const NOT_COPIED: &str = "Mooring 这边没有选区，剪贴板没动。程序里选的字由它自己复制";
+/// Whether a copy has anything to take: the selection, or the screen when there is none.
+/// With the mouse taken Mooring can't see the program's own selection, so copying the screen
+/// could replace what the user just copied there.
+pub(super) fn copies_anything(whole_screen: bool, mouse_taken: bool) -> bool {
+    !(whole_screen && mouse_taken)
+}
 /// "已复制 3 行" / "已复制 12 字"; a screen copied for lack of a selection says so.
 pub(super) fn copied_note(text: &str, whole_screen: bool) -> String {
     let lines = text.lines().count();

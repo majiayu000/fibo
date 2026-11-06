@@ -67,6 +67,16 @@ impl Workbench {
             });
             cx.observe(&pane, |this, _, cx| this.pane_changed(cx))
                 .detach();
+            // Typing in the peek is typing: it brings a space put aside back too.
+            cx.subscribe(&pane, |this, pane, event, cx| {
+                if matches!(event, crate::terminal::pane::PaneEvent::Typed)
+                    && !this.workspace.quiet_spaces.is_empty()
+                {
+                    let terminal = pane.read(cx).terminal_id().to_owned();
+                    this.work_began_on_terminal(&terminal, cx);
+                }
+            })
+            .detach();
             self.peek = Some(Peek {
                 terminal,
                 session: session.id.clone(),
@@ -132,6 +142,7 @@ impl Workbench {
         peek.answering = true;
         peek.note = None;
         let terminal = peek.terminal.clone();
+        let local = peek.remote.is_none();
         let task = match &peek.remote {
             Some(r) => cx.background_spawn(super::machines::answer_remote(r, question, allow)),
             None => cx.background_spawn(self.store.send(Request::AnswerApproval {
@@ -140,6 +151,9 @@ impl Workbench {
                 allow,
             })),
         };
+        if local {
+            self.work_began_on_terminal(&terminal, cx);
+        }
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {

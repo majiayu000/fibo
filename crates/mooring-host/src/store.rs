@@ -90,6 +90,7 @@ impl Store {
             CREATE TABLE IF NOT EXISTS agent_launch (session_id TEXT PRIMARY KEY REFERENCES agent_sessions(id), flags TEXT NOT NULL);
             -- A removed space keeps its row: its terminals and settled tasks still point at it.
             CREATE TABLE IF NOT EXISTS removed_spaces (space_id TEXT PRIMARY KEY REFERENCES spaces(id));
+            CREATE TABLE IF NOT EXISTS quiet_spaces (space_id TEXT PRIMARY KEY REFERENCES spaces(id));
             CREATE TABLE IF NOT EXISTS tab_order (tab_id TEXT PRIMARY KEY REFERENCES tabs(id), position INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS task_criteria (task_id TEXT NOT NULL REFERENCES tasks(id), id TEXT NOT NULL, position INTEGER NOT NULL,
                 description TEXT NOT NULL, evidence TEXT, PRIMARY KEY(task_id,id), UNIQUE(task_id,position));
@@ -274,6 +275,15 @@ impl Store {
         for row in rows {
             w.spaces.push(row.map_err(db_error)?);
         }
+        for row in self
+            .0
+            .prepare("SELECT space_id FROM quiet_spaces")
+            .map_err(db_error)?
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(db_error)?
+        {
+            w.quiet_spaces.insert(row.map_err(db_error)?);
+        }
         let mut statement = self
             .0
             .prepare("SELECT id,space_id,title,description,runtime FROM tasks ORDER BY rowid")
@@ -444,6 +454,14 @@ impl Store {
         }
         for s in removed(&before.spaces, &w.spaces, |s| &s.id) {
             tx.execute("INSERT OR IGNORE INTO removed_spaces VALUES(?1)", [&s.id])
+                .map_err(db_error)?;
+        }
+        for id in before.quiet_spaces.difference(&w.quiet_spaces) {
+            tx.execute("DELETE FROM quiet_spaces WHERE space_id=?1", [id])
+                .map_err(db_error)?;
+        }
+        for id in w.quiet_spaces.difference(&before.quiet_spaces) {
+            tx.execute("INSERT OR IGNORE INTO quiet_spaces VALUES(?1)", [id])
                 .map_err(db_error)?;
         }
         for t in removed(&before.tabs, &w.tabs, |t| &t.id) {

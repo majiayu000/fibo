@@ -1,6 +1,7 @@
 use super::*;
 use mooring_core::turn_diff::Disk;
 use serde_json::json;
+use std::time::Instant;
 
 type T = crate::ui::theme::Theme;
 
@@ -152,15 +153,33 @@ pub(super) fn start(
                 handle.update(cx, |v, w, a| v.visual_changes($tid, w, a)).unwrap()
             };
         }
+        // A pane just shown has no place until it is drawn, which a busy machine takes a while over.
         macro_rules! pane_bounds {
-            ($tid:expr) => {
-                handle.update(cx, |v, _, a| v.visual_terminal_bounds($tid, a)).unwrap().expect("bounds")
-            };
+            ($tid:expr) => {{
+                let mut place = None;
+                for _ in 0..100 {
+                    place = handle.update(cx, |v, _, a| v.visual_terminal_bounds($tid, a)).unwrap();
+                    if place.is_some() {
+                        break;
+                    }
+                    cx.update_window(handle.into(), |_, w, a| {
+                        w.refresh();
+                        w.draw(a).clear(a);
+                    })
+                    .unwrap();
+                    wait(100).await;
+                }
+                place.expect("bounds")
+            }};
         }
         macro_rules! click {
             ($x:expr, $y:expr) => {{
                 let at = gpui::point(px($x), px($y));
-                cx.update_window(handle.into(), |_, w, a| native_click(w, a, at, gpui::MouseButton::Left)).unwrap();
+                cx.update_window(handle.into(), |_, w, a| {
+                    w.draw(a).clear(a);
+                    native_click(w, a, at, gpui::MouseButton::Left);
+                })
+                .unwrap();
                 wait(250).await;
             }};
         }
@@ -199,20 +218,45 @@ pub(super) fn start(
         check!("an input line high up keeps showing: it covers the lower part", s.below);
         check!("lists all four files", s.files.len() == 4);
         let by = |s: &workbench::ChangesProbe, name: &str| s.files.iter().position(|f| f.path.ends_with(name)).unwrap();
-        let f = &s.files[by(&s, "twice.rs")];
+        check!("the list came without any file's lines", s.details <= 1);
+        // Reads a file by choosing it, and gives what was read.
+        macro_rules! read_file {
+            ($tid:expr, $i:expr) => {{
+                while state!($tid).selected != $i {
+                    key!("tab");
+                }
+                let mut read = state!($tid).file;
+                for _ in 0..40 {
+                    if read.is_some() {
+                        break;
+                    }
+                    wait(50).await;
+                    read = state!($tid).file;
+                }
+                read
+            }};
+        }
+        let i = by(&s, "twice.rs");
+        let f = read_file!("a", i).expect("twice.rs");
         check!("a line changed twice shows once", (f.added, f.removed, f.edits, f.one_by_one) == (1, 1, 2, false));
+        check!("the list and the file agree", (s.files[i].added, s.files[i].removed) == (f.added, f.removed));
         check!("its text is the last one", f.hunks[0].lines.iter().any(|l| l.text.contains("second_try")) && !f.hunks[0].lines.iter().any(|l| l.text.contains("first_try")));
         check!("its disk agrees", f.disk == Disk::Same);
-        let f = &s.files[by(&s, "page.html")];
+        let i = by(&s, "page.html");
+        let f = read_file!("a", i).expect("page.html");
         check!("a new file is all new", f.created && f.added == 104 && f.removed == 0 && f.disk == Disk::Same);
-        let f = &s.files[by(&s, "undone.rs")];
+        let i = by(&s, "undone.rs");
+        let f = read_file!("a", i).expect("undone.rs");
         check!("a change undone adds to nothing", f.hunks.is_empty() && f.edits == 2 && f.added == 0);
-        let f = &s.files[by(&s, "stale.rs")];
+        let i = by(&s, "stale.rs");
+        let f = read_file!("a", i).expect("stale.rs");
         check!("a file changed since says so", f.disk == Disk::Changed);
+        check!("no filter for a few files", !s.filter);
         for (i, file) in s.files.iter().enumerate() {
             while state!("a").selected != i {
                 key!("tab");
             }
+            wait(150).await;
             let name = file.path.rsplit('/').next().unwrap().to_owned();
             shot(&format!("1-open-{name}.png"), cx);
         }
@@ -341,6 +385,142 @@ pub(super) fn start(
         click!(accept_x, bar_y);
         wait(300).await;
         check!("标记完成 closes it", !state!("a").open);
+        // A turn of thousands of files: the bar states them all, and the list finds any.
+        let sid_c = id(3);
+        let (many, fresh_many) = (5000usize, work.join("many"));
+        std::fs::create_dir_all(&fresh_many).unwrap();
+        // Written as a real turn is: the log first holds the prompt, then grows while it is read.
+        let opening = open(&sid_c, "全都改一遍", at);
+        launch("c", &sid_c, &opening, true);
+        let log_c = logs.join(format!("{sid_c}.jsonl"));
+        let mut bound = false;
+        for _ in 0..120 {
+            wait(250).await;
+            if handle.update(cx, |v, _, _| v.visual_completable("c")).unwrap().0.is_some() {
+                bound = true;
+                break;
+            }
+        }
+        check!("the big turn's session is known", bound);
+        let grow = |text: &str| {
+            let mut file = std::fs::OpenOptions::new().append(true).open(&log_c).unwrap();
+            file.write_all(text.as_bytes()).unwrap();
+        };
+        for batch in 0..many.div_ceil(250) {
+            let mut text = String::new();
+            for i in (batch * 250)..((batch + 1) * 250).min(many) {
+                let file = fresh_many.join(format!("group_{}/file_{i}.rs", i % 40));
+                text += &logged(&sid_c, &file, "Edit", input(&file, "old", "new"), edit(1, "old", "new"), at);
+            }
+            grow(&text);
+            wait(60).await;
+        }
+        // One of the first, long since off the card's list, touched again.
+        let again = fresh_many.join("group_0/file_0.rs");
+        grow(&logged(&sid_c, &again, "Edit", input(&again, "new", "newer"), edit(1, "new", "newer"), at));
+        grow(&close(&sid_c, at));
+        wait(300).await;
+        handle.update(cx, |v, _, a| v.visual_peek_show_tab("c", a)).unwrap();
+        let mut ready = false;
+        for _ in 0..240 {
+            wait(250).await;
+            if handle.update(cx, |v, _, _| v.visual_completable("c")).unwrap().1 {
+                ready = true;
+                break;
+            }
+        }
+        check!("the big turn comes to review", ready);
+        wait(600).await;
+        let stated = handle.update(cx, |v, _, _| v.visual_turn_stated("c")).unwrap();
+        eprintln!("NOTE bar states {stated:?}");
+        check!("the bar states every file and line, one touched twice counted once", stated == Some((many, (many as u32 + 1, many as u32 + 1))));
+        let big = pane_bounds!("c");
+        let big_top = f32::from(big.origin.y);
+        let big_right = f32::from(big.origin.x + big.size.width) + T::S14;
+        let big_left = f32::from(big.origin.x);
+        let opened = Instant::now();
+        click!(big_right - T::S10 - 62. - T::S8 - 26., big_top - T::S10 - T::TURN_BAR / 2.);
+        let mut listed = false;
+        for _ in 0..200 {
+            if state!("c").files.len() == many && state!("c").file.is_some() {
+                listed = true;
+                break;
+            }
+            wait(10).await;
+        }
+        eprintln!("NOTE opened the list and its first file in {:?}", opened.elapsed());
+        check!("it lists them all", listed);
+        shot("6-many.png", cx);
+        let s = state!("c");
+        check!("only the file on screen was read", s.details == 1);
+        check!("a filter comes with many files", s.filter && s.matches == many);
+        check!("the newest change comes first", s.files[0].path.ends_with("group_0/file_0.rs"));
+        check!("the one edited twice is summed", s.files[0].edits == 2 && s.files[0].added == 1 && s.files[0].removed == 1);
+        check!("files off the card's list are read too", s.files.iter().any(|f| f.path.ends_with("file_100.rs") && f.edits == 1));
+        // Clicks in a long list: the wait is the host reading one file.
+        let row_y = |i: usize| big_top - T::S10 + T::PANE_HEADER + T::PANE_HEADER + T::S4 + T::PANE_ACTION * (i as f32 + 0.5);
+        for row in [3usize, 7, 11] {
+            let before = state!("c").selected;
+            let asked = Instant::now();
+            let at = gpui::point(px(big_left + 40.), px(row_y(row)));
+            cx.update_window(handle.into(), |_, w, a| native_click(w, a, at, gpui::MouseButton::Left)).unwrap();
+            let mut read = false;
+            for _ in 0..400 {
+                let s = state!("c");
+                if s.selected != before && s.file.is_some() {
+                    read = true;
+                    break;
+                }
+                wait(2).await;
+            }
+            eprintln!("NOTE clicked a file, read it in {:?} (read {read})", asked.elapsed());
+            check!("clicking a far row reads that file", read);
+        }
+        // Tab keeps going; what was read does not pile up.
+        for _ in 0..40 {
+            key!("tab");
+        }
+        wait(300).await;
+        check!("old files are let go", state!("c").details <= 32);
+        key!("cmd-f");
+        let s = state!("c");
+        check!("cmd-f goes to the filter", s.filter_focused);
+        for k in ["f", "i", "l", "e", "_", "4", "9", "9", "9"] {
+            key!(k);
+        }
+        wait(200).await;
+        let s = state!("c");
+        check!("the filter narrows it", s.matches == 1 && s.files[s.selected].path.ends_with("file_4999.rs"));
+        check!("typing stays in the filter", s.filter_focused && !screen("c").contains("file_4999"));
+        shot("7-filtered.png", cx);
+        key!("backspace");
+        wait(200).await;
+        let s = state!("c");
+        check!("taking a letter off widens it", s.matches > 1);
+        let before = s.selected;
+        key!("down");
+        wait(150).await;
+        check!("arrows in the filter choose among what it leaves", state!("c").selected != before && state!("c").filter_focused);
+        key!("enter");
+        wait(200).await;
+        let s = state!("c");
+        check!("enter leaves the filter, keeping it", s.focused && !s.filter_focused && s.matches > 1);
+        key!("cmd-f");
+        for k in ["z", "z", "z", "q"] {
+            key!(k);
+        }
+        wait(200).await;
+        let s = state!("c");
+        check!("nothing matching keeps what was shown", s.matches == 0 && s.file.is_some());
+        shot("8-no-match.png", cx);
+        key!("tab");
+        check!("tab with nothing matching does nothing", state!("c").selected == s.selected);
+        key!("escape");
+        wait(200).await;
+        let s = state!("c");
+        check!("esc in the filter clears it and stays open", s.open && s.focused && s.matches == many);
+        key!("escape");
+        check!("a second esc closes", !state!("c").open);
         eprintln!("changes evidence: {fails} failed");
         std::process::exit(if fails == 0 { 0 } else { 1 });
     })

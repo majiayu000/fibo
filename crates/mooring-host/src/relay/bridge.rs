@@ -38,20 +38,22 @@ impl Bridge {
         socket: &Path,
         proto: u32,
         access: Access,
-    ) -> Self {
-        let (ours, theirs) = UnixStream::pair().expect("socket pair");
+    ) -> io::Result<Self> {
+        let (ours, theirs) = UnixStream::pair()?;
+        // Allocate every descriptor before starting workers, so failure drops them all.
+        let remote_reader = theirs.try_clone()?;
+        let mut writer = ours.try_clone()?;
+        let mut reader = ours.try_clone()?;
         let channel = Arc::new(Mutex::new(channel));
         let credit = Arc::new(Credit::default());
         {
             let socket: PathBuf = socket.into();
-            let reader = theirs.try_clone().expect("clone");
             thread::spawn(move || {
-                let _ = remote::serve(BufReader::new(reader), theirs, &socket, access);
+                let _ = remote::serve(BufReader::new(remote_reader), theirs, &socket, access);
             });
         }
         let (input, inbox) = std_mpsc::sync_channel::<Vec<u8>>(INPUT_QUEUE);
         {
-            let mut writer = ours.try_clone().expect("clone");
             thread::spawn(move || {
                 for bytes in inbox {
                     if writer.write_all(&bytes).is_err() {
@@ -62,20 +64,15 @@ impl Bridge {
             });
         }
         {
-            let (mut reader, channel, credit, id) = (
-                ours.try_clone().expect("clone"),
-                channel.clone(),
-                credit.clone(),
-                id.to_owned(),
-            );
+            let (channel, credit, id) = (channel.clone(), credit.clone(), id.to_owned());
             thread::spawn(move || pump(&mut reader, &channel, &credit, &out, &id, proto));
         }
-        Self {
+        Ok(Self {
             channel,
             input,
             credit,
             ours,
-        }
+        })
     }
 
     pub(super) fn receive(&self, message: &[u8]) -> io::Result<()> {

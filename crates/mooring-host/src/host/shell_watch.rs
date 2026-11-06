@@ -124,7 +124,7 @@ impl ShellWatch {
         match self.judged.get(&(session.to_owned(), task.to_owned())) {
             Some(j) => j.why.label(),
             None if self.job(session, task) => "宿主刚重启，还没看过进程",
-            None => "没看过进程：认不出 Agent，或它的日志没记这条命令",
+            None => "没看过进程：认不出 Agent，或它和子 Agent 的日志都没记这条命令",
         }
     }
     fn settling(&self) -> bool {
@@ -305,7 +305,7 @@ pub(super) fn start(shared: &Shared) -> io::Result<()> {
             return;
         };
         for (session, log, ids) in lost {
-            let tasks = shells::commands_in_log(&log, &ids).unwrap_or_else(|e| {
+            let tasks = crate::shell_log::commands_in_session(&log, &ids).unwrap_or_else(|e| {
                 eprintln!("background shells: {}: {e}", log.display());
                 vec![]
             });
@@ -482,7 +482,7 @@ mod tests {
         assert_eq!(lost.len(), 1);
         assert!(host.shells_lost().is_empty(), "the log is read only once");
         let (id, path, ids) = &lost[0];
-        let tasks = shells::commands_in_log(path, ids).unwrap();
+        let tasks = crate::shell_log::commands_in_session(path, ids).unwrap();
         host.shell_watch.recovered(id, tasks);
         let targets = host.shell_targets();
         let looks: Vec<_> = targets.iter().map(|(_, p, t)| (*p, t.clone())).collect();
@@ -492,5 +492,66 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         assert!(host.shell_watch.judge(&targets, &seen));
         assert_eq!(jobs(&host), 1);
+    }
+    /// The same restart, for a shell a subagent started: Claude Code lists it with the
+    /// session's, but only the subagent's log has its command. Undoing the search of those
+    /// logs leaves `jobs` at 0: 等后台 under 要你处理 while its tests still run.
+    #[test]
+    fn a_job_a_subagent_started_stays_a_job_when_the_host_restarts() {
+        let (mut host, root) = crate::host::tests::fixture();
+        let command = "sleep 30; echo subagent-7c2d";
+        let mut child = std::process::Command::new("/bin/sh")
+            .args(["-c", &format!("eval '{command}'")])
+            .spawn()
+            .unwrap();
+        let log = root.join("s.jsonl");
+        fs::write(
+            &log,
+            "{\"type\":\"user\",\"message\":{\"content\":\"hi\"}}\n",
+        )
+        .unwrap();
+        let subagents = root.join("s/subagents");
+        fs::create_dir_all(&subagents).unwrap();
+        let rows = [
+            serde_json::json!({"message":{"content":[
+                {"type":"tool_use","id":"t1","name":"Bash","input":{"command":command}}]}}),
+            serde_json::json!({"message":{"content":[
+                {"type":"tool_result","tool_use_id":"t1",
+                 "content":"Command running in background with ID: b1. Output is"}]}}),
+        ]
+        .map(|r| r.to_string());
+        fs::write(subagents.join("agent-a1.jsonl"), rows.join("\n")).unwrap();
+        let mut session = crate::host::tests::session("s", 1, Some("t"), true);
+        session.transcript = log.to_string_lossy().into_owned();
+        host.workspace.agent_sessions = vec![session];
+        host.workspace.content.insert(
+            "s".into(),
+            Content {
+                shells: vec![ShellTask {
+                    id: "b1".into(),
+                    ..Default::default()
+                }],
+                background: Some(Background {
+                    shells: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        host.agent_pids.insert(std::process::id(), "s".into());
+        let lost = host.shells_lost();
+        let (id, path, ids) = &lost[0];
+        let tasks = crate::shell_log::commands_in_session(path, ids).unwrap();
+        host.shell_watch.recovered(id, tasks);
+        let targets = host.shell_targets();
+        let looks: Vec<_> = targets.iter().map(|(_, p, t)| (*p, t.clone())).collect();
+        let seen = shells::look(&looks).unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = fs::remove_dir_all(&root);
+        host.shell_watch.judge(&targets, &seen);
+        let mut w = host.workspace.clone();
+        host.overlay_shells(&mut w);
+        assert_eq!(w.content["s"].background.unwrap().jobs, 1);
     }
 }

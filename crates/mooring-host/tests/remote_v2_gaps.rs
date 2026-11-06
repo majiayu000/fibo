@@ -490,3 +490,55 @@ fn list_carries_the_boards_todos() {
         json!([{ "id": "t1", "space": "s", "title": "写周报", "agent": "codex" }])
     );
 }
+
+/// Opening by hand in a space put aside brings it back, or what opened would vanish from the
+/// phone at once; with no directory named it opens somewhere the phone already sees.
+#[test]
+fn open_in_a_space_put_aside_brings_it_back() {
+    let h = Host::start();
+    let aside = scratch(&h, "aside");
+    let keep = scratch(&h, "keep");
+    for (id, dir) in [("a-aside", &aside), ("z-keep", &keep)] {
+        h.call(Request::Edit {
+            edit: Edit::AddSpace(Space {
+                id: id.into(),
+                name: id.into(),
+                cwd: dir.to_string_lossy().into_owned(),
+            }),
+            request: None,
+        })
+        .unwrap();
+    }
+    h.call(Request::Edit {
+        edit: Edit::SetSpaceQuiet {
+            id: "a-aside".into(),
+            quiet: true,
+        },
+        request: None,
+    })
+    .unwrap();
+    let mut r = Remote::open(&h, None, &[]);
+    let list = r.ok(json!({ "op": "list" }));
+    assert!(
+        (list["spaces"].as_array().unwrap().iter()).all(|s| s["id"] != "a-aside"),
+        "{list}"
+    );
+    let opened = r.ok(json!({ "op": "open", "request": "r1" }));
+    let terminal = opened["terminal"].as_str().unwrap().to_owned();
+    let w = h.workspace();
+    assert!(
+        w.space_quiet("a-aside"),
+        "opening elsewhere leaves it alone"
+    );
+    assert!(!w.terminal_quiet(&terminal), "opened in an attended space");
+
+    let opened = r.ok(json!({ "op": "open", "cwd": aside.to_string_lossy(), "request": "r2" }));
+    assert!(!h.workspace().space_quiet("a-aside"), "it is back");
+    let terminal = opened["terminal"].as_str().unwrap();
+    assert_eq!(h.workspace().terminal_home(terminal), Some("a-aside"));
+    let list = r.ok(json!({ "op": "list" }));
+    assert!(
+        (list["terminals"].as_array().unwrap().iter()).any(|t| t["id"] == terminal),
+        "and the phone sees what it opened: {list}"
+    );
+}

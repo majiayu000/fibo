@@ -120,6 +120,11 @@ pub enum Edit {
     RemoveSpace {
         id: String,
     },
+    /// 先不管 or 接着管 a space. Refused for the last space still attended to.
+    SetSpaceQuiet {
+        id: String,
+        quiet: bool,
+    },
 }
 
 /// The part of a session an outcome edit depends on, as its sender saw it.

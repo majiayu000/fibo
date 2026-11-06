@@ -259,6 +259,25 @@ mod tests {
     }
 
     #[test]
+    fn double_click_selects_an_isolated_single_cell_word() {
+        let mut vt = Vt::new(20, 4).unwrap();
+        vt.feed(b"foo x bar\r\ny");
+        let mut screen = crate::terminal::screen::Screen::default();
+        let mut capture = crate::terminal::screen::Capture::new().unwrap();
+        for (cell, text, row, col) in [(at(4, 0), "x", 0, 4), (at(0, 1), "y", 1, 0)] {
+            let mut sel = Selecting::new().unwrap();
+            sel.press(vt.terminal(), GRID, cell).unwrap();
+            sel.release(vt.terminal(), GRID, cell);
+            sel.press(vt.terminal(), GRID, cell).unwrap();
+            sel.release(vt.terminal(), GRID, cell);
+            // Cmd+C copies this text; with nothing selected it would copy the whole screen.
+            assert_eq!(selected(&vt).as_deref(), Some(text));
+            capture.update(&vt, &mut screen).unwrap();
+            assert_eq!(screen.selection[row], Some((col, col)), "{text} is drawn");
+        }
+    }
+
+    #[test]
     fn selection_follows_text_into_scrollback_and_spans_it() {
         let mut vt = Vt::new(20, 4).unwrap();
         vt.feed(b"first\r\nsecond\r\nthird\r\nfourth");

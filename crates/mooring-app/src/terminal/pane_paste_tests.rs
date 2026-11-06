@@ -1,4 +1,4 @@
-use super::{PasteAction, copied_note};
+use super::{PasteAction, copied_note, copies_anything};
 use gpui::{ClipboardItem, Image, ImageFormat};
 
 #[test]
@@ -11,6 +11,23 @@ fn copied_note_counts_lines_or_characters_and_flags_a_whole_screen_copy() {
     assert_eq!(copied_note("中文ab", false), "已复制 4 字");
     assert_eq!(copied_note("1\n2\n3", false), "已复制 3 行");
     assert_eq!(copied_note("a\nb", true), "没选中文字，已复制整屏 2 行");
+}
+#[test]
+fn only_a_taken_mouse_without_a_selection_leaves_the_clipboard_alone() {
+    // (no selection, mouse taken) -> copies
+    assert!(copies_anything(false, false));
+    assert!(
+        copies_anything(false, true),
+        "a Shift-drag selection still copies"
+    );
+    assert!(
+        copies_anything(true, false),
+        "a plain shell still copies its screen"
+    );
+    assert!(
+        !copies_anything(true, true),
+        "the program's selection may be on the clipboard"
+    );
 }
 #[test]
 fn text_wins_over_an_image_and_an_empty_clipboard_does_nothing() {

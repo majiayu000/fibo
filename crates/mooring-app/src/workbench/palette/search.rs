@@ -8,7 +8,8 @@ impl Workbench {
             .workspace
             .agent_sessions
             .iter()
-            .filter(|s| self.session_hidden(s).is_none())
+            // A space put aside is still found: search is one way back to it.
+            .filter(|s| sessions::automation_hidden_in(&self.workspace, s).is_none())
             .collect();
         visible.sort_by_key(|s| std::cmp::Reverse(self.workspace.session_updated(s)));
         visible
@@ -18,7 +19,10 @@ impl Workbench {
     fn counted_group(&self, s: &AgentSession) -> Option<Status> {
         let (group, _) = session_status(&self.workspace, &self.attention.unseen, s);
         let group = section(group);
-        (s.outcome.needs_review(now()) && COUNTED.contains(&group)).then_some(group)
+        (s.outcome.needs_review(now())
+            && COUNTED.contains(&group)
+            && !self.workspace.session_quiet(s))
+        .then_some(group)
     }
     pub(super) fn status_counts(&self) -> Vec<(Status, &'static str, usize)> {
         let groups: Vec<Status> = self
@@ -76,6 +80,7 @@ impl Workbench {
             let mut runs: Vec<(&'static str, Vec<Hit>)> = Vec::new();
             for s in visible
                 .into_iter()
+                .filter(|s| !self.workspace.session_quiet(s))
                 .filter(|s| group.is_none() || self.counted_group(s) == group)
             {
                 let title = recency(self.workspace.session_updated(s), at);
@@ -174,6 +179,7 @@ impl Workbench {
             .then_some(Hit::Diagnostics)
             .into_iter()
             .chain(self.machine_hits(query))
+            .chain(self.space_hits(query))
             .collect();
         for (title, hits) in [
             ("会话", sessions),
@@ -249,6 +255,7 @@ impl Workbench {
             Hit::NextWaiting => self.next_waiting(window, cx),
             Hit::View(id) => self.choose_sidebar_preset(&id, cx),
             Hit::Machine(index) => self.switch_machine_quiet(index, cx),
+            Hit::Space(id) => self.switch_space_quiet(&id, cx),
             Hit::Diagnostics => self.show_diagnostics(window, cx),
             Hit::Action(i) => {
                 if let (Some(action), Some(pane)) =

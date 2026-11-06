@@ -17,6 +17,12 @@ impl Pane {
         self.clear_selection();
         self.follow_input(cx);
         self.send_input(bytes, false, cx);
+        if self.remote.is_none() {
+            cx.emit(super::PaneEvent::Typed);
+        }
+    }
+    pub fn terminal_id(&self) -> &str {
+        &self.terminal
     }
     pub(super) fn follow_input(&mut self, cx: &mut Context<Self>) {
         self.scroll_lines = 0.;
