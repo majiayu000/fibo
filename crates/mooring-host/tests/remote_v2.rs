@@ -129,9 +129,11 @@ fn remote_diff_reads_changes_and_untracked_files_and_caps_patches() {
             .sum::<u64>()
     );
 
-    // By directory too; a folder outside git is refused in the user's words.
+    // By directory too; a folder outside git is refused in the user's words. The view role
+    // reads the terminal's own; the full role, folders nothing here names.
     let by_cwd = r.ok(json!({ "op": "diff", "cwd": repo.to_string_lossy() }));
     assert_eq!(by_cwd["files"].as_array().unwrap().len(), files.len());
+    let mut r = Remote::open(&h, Some("full"), &[]);
     let plain = scratch(&h, "plain");
     let e = r.error(json!({ "op": "diff", "cwd": plain.to_string_lossy() }));
     assert_eq!(e, "这里不是 git 仓库");

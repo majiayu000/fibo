@@ -21,9 +21,10 @@ const LINE_MARGIN: usize = 64;
 /// The empty tree: the base for a repository with no commit yet.
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-pub(super) fn diff(socket: &Path, request: &Value) -> io::Result<Value> {
+pub(super) fn diff(socket: &Path, request: &Value, role: super::Role) -> io::Result<Value> {
     let (cwd, checks) = match (request["cwd"].as_str(), request["terminal"].as_str()) {
-        (Some(cwd), _) => (super::dirs::expand(cwd)?, Vec::new()),
+        (Some(cwd), _) if role.allows("dirs") => (super::dirs::expand(cwd)?, Vec::new()),
+        (Some(cwd), _) => (super::diff_scope::checked(socket, cwd)?, Vec::new()),
         (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
             Reply::Workspace(w) => {
                 let term = (w.terminals.iter().find(|x| x.id == t))
