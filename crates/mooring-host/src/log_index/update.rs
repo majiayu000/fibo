@@ -213,19 +213,17 @@ impl Index {
         })();
         self.finish(&mut held, result)
     }
-    /// `meta` is a subagent's `agent-<id>.meta.json` under `<session>/subagents/`: the
-    /// CLI writes it when the subagent starts and again when it finishes, while the
-    /// parent's own log may not move. Re-reads the list into the parent's card and
-    /// returns the parent when that changed it; `None` for any other path.
+    /// The adapter maps its own metadata layout back to the parent transcript. A child
+    /// can start or finish without appending anything to that parent's log.
     fn refresh_subagents(
         &mut self,
         held: &mut Held,
         meta: &Path,
     ) -> io::Result<Option<Transcript>> {
-        let Some(parent) = subagent_parent(meta) else {
+        let Some(runtime) = self.runtime(meta) else {
             return Ok(None);
         };
-        let Some(runtime) = self.runtime(&parent) else {
+        let Some(parent) = crate::agents::adapter(runtime).subagent_parent(meta) else {
             return Ok(None);
         };
         let Some(all) = crate::agents::adapter(runtime).subagents(&parent) else {

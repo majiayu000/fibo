@@ -125,7 +125,9 @@ if sys.argv[1] == 'prepare':
     child_sources = None
     if os.environ.get('MOORING_FIXTURE_CHILD_ADAPTERS'):
         import visual_child_fixture
-        child_sources = visual_child_fixture.prepare(root, home, BIN, now)
+        child_sources = (visual_child_fixture.prepare_more(root, home, now)
+                         if os.environ['MOORING_FIXTURE_CHILD_ADAPTERS'] == 'more'
+                         else visual_child_fixture.prepare(root, home, BIN, now))
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
     host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 30
@@ -153,7 +155,7 @@ if sys.argv[1] == 'prepare':
     def split(a, b, axis): return {'Split': {'axis': axis, 'ratio': 5000, 'first': a, 'second': b}}
     for id, title, task, layout in [('feedback', '标签命名依旧有问题', 'task0', split(leaf('p0'), split(leaf('p1'), leaf('p2'), 'Down'), 'Right')), ('start', '健身', 'task1', leaf('pstart'))]:
         if child_sources and id == 'feedback':
-            layout = split(leaf('poc'), leaf('pcursor'), 'Right')
+            layout = split(leaf(child_sources[0][0]), leaf(child_sources[1][0]), 'Right')
             title, task = '子 Agent 对照', None
         edit(root, {'CreateTab': {'tab': {'id': id, 'space': 's0', 'title': title, 'default_task': task, 'closed': False, 'layout': layout}}})
     if os.environ.get('MOORING_FIXTURE_UNLINKED'):

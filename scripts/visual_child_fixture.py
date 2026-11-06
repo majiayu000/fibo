@@ -1,4 +1,4 @@
-"""Isolated OpenCode SQLite and Cursor child logs; never calls a model or reads user data."""
+"""Isolated child sources; never calls a model or reads user data."""
 import json
 import shlex
 import sqlite3
@@ -75,3 +75,38 @@ def launch(root, sources, rpc):
             time.sleep(.1)
         r = rpc(root, {'Hook': {'runtime': runtime, 'pid': t['pid'], 'cli_session_id': PARENT, 'transcript': str(transcript), 'ended': False, 'event': None}})
         assert 'Error' not in r, r
+
+
+def prepare_more(root, home, now):
+    from datetime import datetime, timezone
+    from urllib.parse import quote
+    stamp = lambda at: datetime.fromtimestamp(at, timezone.utc).isoformat()
+    cwd = root / 'projects/工作空间'
+    qp = home / f'.qoder/projects/fixture/{PARENT}.jsonl'
+    gp = home / '.grok/sessions' / quote(str(cwd), safe='') / PARENT / 'updates.jsonl'
+    qp.parent.mkdir(parents=True)
+    gp.parent.mkdir(parents=True)
+    def qrecord(at, role, text, child=False):
+        return {'type': role, 'sessionId': PARENT, 'cwd': str(cwd), 'timestamp': stamp(at),
+                'entrypoint': 'cli', 'userType': 'external', 'isSidechain': child,
+                'message': {'role': role, 'content': text, 'stop_reason': 'end_turn' if role == 'assistant' else None}}
+    qp.write_text(json.dumps(qrecord(now - 200, 'user', 'Qoder 并行任务'), ensure_ascii=False) + '\n')
+    gp.write_text(json.dumps({'timestamp': now - 200, 'method': 'session/update', 'params': {'sessionId': PARENT,
+                  'update': {'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': 'Grok 并行任务'}}}}, ensure_ascii=False) + '\n')
+    gp.with_name('summary.json').write_text(json.dumps({'session_summary': 'Grok 并行任务'}, ensure_ascii=False))
+    for n, cid in enumerate(CHILDREN):
+        start, end = now - 180 + n * 10, now - 50 + n * 10
+        qchild = qp.with_suffix('') / 'subagents' / f'agent-{cid}.jsonl'
+        qchild.parent.mkdir(parents=True, exist_ok=True)
+        records = [qrecord(start, 'user', TASKS[n], True)]
+        if n == 1: records.append(qrecord(end, 'assistant', '已核对', True))
+        if n == 2: records.append(qrecord(end, 'user', '[Request interrupted by user]', True))
+        qchild.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in records))
+        qchild.with_suffix('.meta.json').write_text(json.dumps({'description': TASKS[n], 'agentType': 'general-purpose'}, ensure_ascii=False))
+        gmeta = gp.parent / 'subagents' / cid / 'meta.json'
+        gmeta.parent.mkdir(parents=True)
+        gmeta.write_text(json.dumps({'subagent_id': cid, 'child_session_id': cid, 'parent_session_id': PARENT,
+                         'description': TASKS[n], 'subagent_type': 'explore', 'started_at': stamp(start),
+                         'completed_at': None if n == 0 else stamp(end),
+                         'status': ['running', 'completed', 'cancelled'][n]}, ensure_ascii=False))
+    return [('pqoder', 'qodercli', 'Qoder', qp), ('pgrok', 'grok', 'Grok', gp)]
