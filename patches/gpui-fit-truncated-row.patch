@@ -1,0 +1,107 @@
+diff --git a/crates/gpui/src/elements/mod.rs b/crates/gpui/src/elements/mod.rs
+index 8a2a1b7..334d540 100644
+--- a/crates/gpui/src/elements/mod.rs
++++ b/crates/gpui/src/elements/mod.rs
+@@ -10,6 +10,7 @@ mod list;
+ mod surface;
+ mod svg;
+ mod text;
++mod text_fit;
+ mod uniform_list;
+ 
+ pub use anchored::*;
+diff --git a/crates/gpui/src/elements/text.rs b/crates/gpui/src/elements/text.rs
+index d1896ad..277d6b6 100644
+--- a/crates/gpui/src/elements/text.rs
++++ b/crates/gpui/src/elements/text.rs
+@@ -740,6 +740,10 @@ impl TextLayout {
+                 } else {
+                     (text.clone(), Cow::Borrowed(&*runs))
+                 };
++                let (text, runs) = super::text_fit::fit_last_wrapped_row(
++                    text, runs, &text_style, truncate_width, truncate_from, wrap_width,
++                    &truncation_affix, font_size, window,
++                );
+                 let len = text.len();
+ 
+                 let Some(lines) = window
+diff --git a/crates/gpui/src/elements/text_fit.rs b/crates/gpui/src/elements/text_fit.rs
+new file mode 100644
+index 0000000..762891e
+--- /dev/null
++++ b/crates/gpui/src/elements/text_fit.rs
+@@ -0,0 +1,61 @@
++use crate::{Pixels, SharedString, TextRun, TextStyle, TruncateFrom, Window, px};
++use gpui_util::ResultExt;
++use std::borrow::Cow;
++
++/// `truncate_wrapped_line` places the affix by summing per-character advances, but rows wrap
++/// by shaped glyphs. When the two disagree the last row runs past `wrap_width` and is cut
++/// through the affix, so shorten the text until the shaped last row fits.
++#[allow(clippy::too_many_arguments)]
++pub(super) fn fit_last_wrapped_row<'a>(
++    mut text: SharedString,
++    mut runs: Cow<'a, [TextRun]>,
++    style: &TextStyle,
++    truncate_width: Option<Pixels>,
++    truncate_from: TruncateFrom,
++    wrap_width: Option<Pixels>,
++    affix: &str,
++    font_size: Pixels,
++    window: &Window,
++) -> (SharedString, Cow<'a, [TextRun]>) {
++    let (Some(max_lines), Some(wrap_width), Some(_), TruncateFrom::End) =
++        (style.line_clamp, wrap_width, truncate_width, truncate_from)
++    else {
++        return (text, runs);
++    };
++    if max_lines <= 1 {
++        return (text, runs);
++    }
++    loop {
++        let Some(lines) = window
++            .text_system()
++            .shape_text(text.clone(), font_size, &runs, Some(wrap_width), Some(max_lines))
++            .log_err()
++        else {
++            return (text, runs);
++        };
++        let last_row_width = lines.last().map_or(px(0.), |line| {
++            let layout = &line.layout.unwrapped_layout;
++            let row_start = line.layout.wrap_boundaries.last().map_or(px(0.), |boundary| {
++                layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].position.x
++            });
++            layout.width - row_start
++        });
++        if last_row_width <= wrap_width {
++            return (text, runs);
++        }
++        let kept = text.strip_suffix(affix).unwrap_or(&text);
++        let Some((last_char_ix, _)) = kept.char_indices().next_back() else {
++            return (text, runs);
++        };
++        let result = format!("{}{affix}", kept[..last_char_ix].trim_end());
++        let mut shortened_runs = runs.into_owned();
++        crate::text_system::update_runs_after_truncation(
++            &result,
++            affix,
++            &mut shortened_runs,
++            TruncateFrom::End,
++        );
++        text = result.into();
++        runs = Cow::Owned(shortened_runs);
++    }
++}
+diff --git a/crates/gpui/src/text_system/line_wrapper.rs b/crates/gpui/src/text_system/line_wrapper.rs
+index ca821bb..14d48ef 100644
+--- a/crates/gpui/src/text_system/line_wrapper.rs
++++ b/crates/gpui/src/text_system/line_wrapper.rs
+@@ -564,7 +564,7 @@ impl LineWrapper {
+     }
+ }
+ 
+-fn update_runs_after_truncation(
++pub(crate) fn update_runs_after_truncation(
+     result: &str,
+     ellipsis: &str,
+     runs: &mut Vec<TextRun>,

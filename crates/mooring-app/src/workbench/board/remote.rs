@@ -222,15 +222,7 @@ impl Workbench {
                     }),
             )
             .child(card_title(title))
-            .when_some(quote, |d, q| {
-                d.child(
-                    div()
-                        .text_size(px(T::SMALL))
-                        .text_color(T::color(T::secondary()))
-                        .line_clamp(1)
-                        .child(q),
-                )
-            })
+            .when_some(quote, |d, q| d.child(card_quote(q)))
             .child(div().flex().items_center().gap(px(T::S6)).children(state))
     }
     /// Whether machine `index` is linked now and lets this desktop open, end and settle.

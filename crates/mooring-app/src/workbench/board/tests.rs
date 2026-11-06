@@ -1,5 +1,16 @@
 use super::*;
 
+/// `line_clamp` alone stops at the last line that fits with no mark that more was cut
+/// (11-06): a card's title read as complete when it wasn't.
+#[test]
+fn clamped_card_text_says_it_was_cut() {
+    for mut text in [card_title("t"), card_quote("q")] {
+        let style = text.style().text.clone();
+        assert!(style.line_clamp.is_some());
+        assert!(style.text_overflow.is_some());
+    }
+}
+
 #[test]
 fn branches_color_by_their_prefix() {
     assert_eq!(branch_hue("feat/peek"), Some(T::BRANCH_FEAT));

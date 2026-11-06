@@ -32,6 +32,15 @@ impl Workbench {
                     .text_color(T::color(T::muted()))
                     .child(agent_mark(task.agent, T::color(T::muted())))
                     .child("还没开始")
+                    // Here, not beside 「开始」: a 200 pt card can't hold both on one row.
+                    .when(!task.acceptance.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .child(format!("· {} 条验收", task.acceptance.len())),
+                        )
+                    })
                     .child(div().flex_1())
                     .child(
                         mesh(self.space_mesh(&task.space), AVATAR)
@@ -51,15 +60,10 @@ impl Workbench {
                         None,
                         T::color(T::body()),
                     ))
-                    .child(
-                        div()
-                            .text_size(px(T::META))
-                            .text_color(T::color(T::muted()))
-                            .child(format!("{} 条验收", task.acceptance.len())),
-                    )
                     .child(div().flex_1())
                     .child(
                         button(gpui::SharedString::from(format!("start-{id}")), "开始 →")
+                            .flex_shrink_0()
                             .h(px(PILL + 4.))
                             .px(px(T::S10))
                             .bg(T::color(T::button()))
@@ -213,15 +217,7 @@ impl Workbench {
                     ),
             )
             .child(card_title(title.clone()))
-            .when_some(quote, |d, q| {
-                d.child(
-                    div()
-                        .text_size(px(T::SMALL))
-                        .text_color(T::color(T::secondary()))
-                        .line_clamp(1)
-                        .child(q),
-                )
-            })
+            .when_some(quote, |d, q| d.child(card_quote(q)))
             .child(
                 div()
                     .flex()

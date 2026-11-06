@@ -57,6 +57,7 @@ def edit(root, obj):
 
 
 names = ['工作空间', 'sys', '模型上线 work', 'mooring', 'codex-mall']
+LONG_TITLES = {12: 'Opus 5.5 dev环境 run_8746132f59319f2d27c0a1b2c3d4e5f6a7b8c9d0', 14: '文档里还有这些内容： - 产品为什么可能这么理解： 官网和定价页写的是另一回事，需要逐条核对后再回复'}
 titles = ['修标签命名', '查 tab_name 从哪来', '核对标签测试', '审查反馈接口改动', '实现缓存结果补传', '核查指纹变更', '评估视频队列方案', '整理项目说明']
 TASKS = [
     ('标签命名依旧有问题', '新开的终端标签还是叫 zsh。启动 Agent 时应该用待办标题命名标签；Agent 退出后保留这个名字，不要退回进程名。',
@@ -86,7 +87,7 @@ if sys.argv[1] == 'prepare':
         project = root / 'projects' / names[n // 8]; project.mkdir(parents=True, exist_ok=True)
         stamp = now - (6 * 86400 if n % 8 == 5 else 60 * (n + 1)); cid = f'visual-{n}'
         records = [(stamp - 3600, 'session_meta', {'id': cid, 'cwd': str(project), 'source': 'cli', 'originator': 'codex-tui', 'thread_source': 'user'}),
-                   (stamp - 3600, 'event_msg', {'type': 'user_message', 'message': titles[n % 8] + ('' if n < 8 else ' · ' + names[n // 8])}),
+                   (stamp - 3600, 'event_msg', {'type': 'user_message', 'message': (LONG_TITLES.get(n) if os.environ.get('MOORING_FIXTURE_BOARD') else None) or titles[n % 8] + ('' if n < 8 else ' · ' + names[n // 8])}),
                    (stamp - 3600, 'event_msg', {'type': 'task_started', 'turn_id': cid + '-turn'})]
         if n == 0:
             records += call(cid, 1, None, patch('crates/mooring-app/src/workbench/tabs.rs'), stamp - 1500)
@@ -139,6 +140,9 @@ if sys.argv[1] == 'prepare':
         session = next(s for s in rpc(root, 'Workspace')['Workspace']['agent_sessions'] if s['cli_session_id'] == f'visual-{n}')
         edit(root, {'AssignTask': {'id': session['id'], 'task': 'task0'}})
     if os.environ.get('MOORING_FIXTURE_BOARD'):
+        # What a narrow column has to hold: a long agent name beside 「开始」, a title too long for two lines.
+        edit(root, {'AddTask': {'id': 'long0', 'space': 's0', 'title': 'Eval 建立 agent的评估 质量、费用、效率 每个方面都需要单独打分并写回结果', 'description': '', 'acceptance': [], 'agent': 'Claude'}})
+        edit(root, {'AddTask': {'id': 'long1', 'space': 's0', 'title': '周报 + cli 的消费统计等', 'description': '', 'acceptance': [{'id': f'long1-c{i}', 'description': '验收', 'evidence': []} for i in range(5)], 'agent': 'Claude'}})
         for project in (root / 'projects').iterdir():
             subprocess.run(['git', '-C', str(project), 'init', '-q', '-b', 'feat/consolidate-local-sessions-and-more'], check=True)
         # A turn with no end, held by a live terminal: only that reaches the running column.

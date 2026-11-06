@@ -531,6 +531,16 @@ fn card_title(text: impl Into<gpui::SharedString>) -> gpui::Div {
         .line_height(relative(1.4))
         .text_color(T::color(T::primary()))
         .line_clamp(2)
+        .text_ellipsis()
+        .child(text.into())
+}
+/// A card's one line of what it waits on.
+fn card_quote(text: impl Into<gpui::SharedString>) -> gpui::Div {
+    div()
+        .text_size(px(T::SMALL))
+        .text_color(T::color(T::secondary()))
+        .line_clamp(1)
+        .text_ellipsis()
         .child(text.into())
 }
 /// One turn of the running column's arc, and one pass of a working card's comet.
