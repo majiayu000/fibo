@@ -26,6 +26,9 @@ pub const AGENT_PATH: &str = "/agent";
 /// The path after `/c/<token>` that reaches Mooring's remote protocol.
 pub const MOORING_PATH: &str = "/keepline";
 
+/// The longest frame id, in bytes: a binary frame carries its length in one byte.
+pub const MAX_ID_LEN: usize = u8::MAX as usize;
+
 /// Binary frame kinds.
 pub mod bin {
     /// A binary WebSocket message, either way.
@@ -128,8 +131,10 @@ impl Frame {
     }
 }
 
+/// Panics past [`MAX_ID_LEN`], which only a bug here can reach: a relay makes its own short
+/// ids, and a machine refuses a longer one at `Wopen`, before any session has it.
 pub fn encode(kind: u8, id: &str, payload: &[u8]) -> Vec<u8> {
-    assert!(id.len() <= 255, "frame id too long");
+    assert!(id.len() <= MAX_ID_LEN, "frame id too long");
     let mut out = Vec::with_capacity(2 + id.len() + payload.len());
     out.push(kind);
     out.push(id.len() as u8);
@@ -222,6 +227,21 @@ mod tests {
         assert_eq!(decode(&[3]), None);
         assert_eq!(decode(&[3, 5, b'a']), None);
         assert_eq!(decode(&[3, 0]), Some((3, "", &b""[..])));
+    }
+
+    #[test]
+    fn a_frame_id_may_be_exactly_as_long_as_its_length_byte_says() {
+        for id in ["a".repeat(MAX_ID_LEN), "中".repeat(MAX_ID_LEN / 3)] {
+            assert_eq!(id.len(), 255);
+            let b = encode(bin::WBIN, &id, b"x");
+            assert_eq!(decode(&b), Some((bin::WBIN, id.as_str(), &b"x"[..])));
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "frame id too long")]
+    fn encode_never_cuts_a_longer_id_down_to_its_length_byte() {
+        encode(bin::WBIN, &"a".repeat(MAX_ID_LEN + 1), b"x");
     }
 
     #[test]
