@@ -39,13 +39,28 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
 - with nothing happening, one catch-up must not schedule the next (a loop drew the whole
   window several times a second).
 """
-import os, pathlib, re, subprocess, sys
+import fcntl, os, pathlib, re, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'crates/mooring-app/perf-baseline.txt'
 BUDGET = 0.15
 SHARE_BUDGET = 2.0
 FIXTURE = [sys.executable, str(ROOT / 'scripts/perf-fixture.py')]
+LOCK = pathlib.Path.home() / 'Library/Caches/MooringPerf/gate.lock'
+
+
+def wait_for_other_gates():
+    """One gate at a time on a machine. perf-fixture.py keeps its host in one state file, so
+    two gates stop each other's probes, and their load moves the times a VM run goes by.
+    The system lets go of the lock when this process ends, however it ends."""
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    held = LOCK.open('w')
+    try:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print('perf-gate: another gate is running on this machine, waiting for it', flush=True)
+        fcntl.flock(held, fcntl.LOCK_EX)
+    return held
 
 
 def probe(bindir, out, plan, catch_up, machine=False, running=False):
@@ -77,6 +92,7 @@ def plugin_shares(ms):
 
 
 def main():
+    lock = wait_for_other_gates()  # Held until this process ends.
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
     fails = []

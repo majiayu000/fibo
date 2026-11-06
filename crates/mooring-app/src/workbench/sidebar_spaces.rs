@@ -461,28 +461,35 @@ impl Workbench {
             let counts = self
                 .git_divergence(&space.cwd, cx)
                 .and_then(super::divergence::divergence_label);
+            // A line of text, not a box: the chip above already marks the space, and a box
+            // here reads as a row that is nearly but not quite as wide as the rows below.
+            // Its text sits on the column their state marks and headings sit on.
+            let edge = if self.sidebar.preset().group == mooring_core::sidebar::Grouping::Recent {
+                F::EDGE
+            } else {
+                T::S16
+            };
             out.push(
                 div()
-                    .mt(px(T::S10))
+                    .mt(px(T::S8))
                     // Not every list opens with a heading's own space above it.
-                    .mb(px(T::S8))
-                    .mx(px(T::S12))
-                    .px(px(T::S10))
-                    .py(px(T::S8))
+                    .mb(px(T::S4))
+                    .mx(px(edge))
                     .flex()
                     .items_center()
-                    .gap(px(T::S8))
-                    .rounded(px(T::S10))
-                    .bg(T::color(F::scope()))
-                    .border(px(T::BORDER_WIDTH))
-                    .border_color(T::color(F::chip_line()))
+                    .gap(px(T::S6))
                     .text_size(px(T::SMALL))
-                    .line_height(px(F::LINE_TEXT))
-                    .child(self.space_dot(&space.id, T::S12))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .text_color(T::color(F::third()))
+                            .child("只看"),
+                    )
                     .child(
                         div()
                             .flex_shrink_0()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(T::color(F::bright()))
                             .child(space.name.clone()),
                     )
                     .when_some(branch, |d, branch| {
@@ -490,29 +497,35 @@ impl Workbench {
                             label(branch)
                                 .min_w_0()
                                 .truncate()
-                                .text_size(px(T::CHIP_SIZE))
-                                .text_color(T::color(T::muted())),
+                                .text_size(px(F::TAG))
+                                .text_color(T::color(F::third())),
                         )
                     })
                     .when_some(counts, |d, counts| {
                         d.child(
                             label(counts)
                                 .flex_shrink_0()
-                                .text_size(px(T::CHIP_SIZE))
-                                .text_color(T::color(T::muted()))
+                                .text_size(px(F::TAG))
+                                .text_color(T::color(F::third()))
                                 .font_features(T::tabular()),
                         )
                     })
-                    .child(div().flex_1())
+                    .child(div().flex_1().min_w(px(T::S8)))
                     .child(
-                        button("space-filter-clear", "✕")
+                        // Not `button()`: it sets a hover of its own, and a second one panics.
+                        div()
+                            .id("space-filter-clear")
+                            .role(gpui::accesskit::Role::Button)
                             .aria_label("看全部空间")
                             .flex_shrink_0()
                             .h(px(T::ICON_HEIGHT))
-                            .px(px(T::S6))
-                            .border_0()
-                            .text_size(px(T::CHIP_SIZE))
-                            .text_color(T::color(T::muted()))
+                            .flex()
+                            .items_center()
+                            .text_size(px(F::TAG))
+                            .text_color(T::color(F::third()))
+                            .cursor_pointer()
+                            .hover(|s| s.text_color(T::color(F::bright())))
+                            .child("看全部")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.sidebar.space_filter = None;
                                 cx.notify();
