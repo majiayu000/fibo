@@ -168,6 +168,23 @@ pub fn open_todos(w: &Workspace, now: u64) -> Vec<&Task> {
     w.tasks.iter().filter(open).collect()
 }
 
+/// Every todo you have not closed, started or not: a todo outlives the sessions run for it.
+/// Newest first, so what you just wrote is where you are looking; todos from before times
+/// were kept, and those written in the same second, go by the order they were added.
+pub fn unfinished_todos(w: &Workspace, now: u64) -> Vec<&Task> {
+    let mut todos: Vec<&Task> = (w.tasks.iter().rev())
+        .filter(|t| {
+            (w.task_outcomes.get(&t.id))
+                .unwrap_or(&Outcome::Open)
+                .needs_review(now)
+        })
+        .collect();
+    todos.sort_by_key(|t| {
+        std::cmp::Reverse(w.task_logs.get(&t.id).and_then(|l| l.created).unwrap_or(0))
+    });
+    todos
+}
+
 /// The running Mooring terminal whose current conversation this is.
 pub fn live_terminal<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a Terminal> {
     if !s.current {

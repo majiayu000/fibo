@@ -61,6 +61,7 @@ field turn_started	crates/mooring-host/src/host/report_back.rs	3
 field turn_started	crates/mooring-host/src/plugin_hooks.rs	3
 keycap	crates/mooring-app/src/terminal/open_path.rs	7
 keycap	crates/mooring-app/src/terminal/pane_links.rs	1
+keycap	crates/mooring-app/src/workbench/board/composer.rs	1
 keycap	crates/mooring-app/src/workbench/diagnostics/view.rs	1
 keycap	crates/mooring-app/src/workbench/forms/card.rs	1
 keycap	crates/mooring-app/src/workbench/layout.rs	2

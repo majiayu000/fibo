@@ -398,6 +398,7 @@ impl Workbench {
                 self.sidebar.toggled.clear();
                 self.visual_spread_spaces(parts.get(4).copied());
                 self.visual_bare_space(parts.get(4).copied());
+                self.visual_crowded(parts.get(4).copied());
                 if parts.get(4) == Some(&"open") {
                     for key in ["status:rest", "wasm:wasm-status:rest"] {
                         self.sidebar.toggled.insert(key.into(), true);
@@ -447,10 +448,10 @@ impl Workbench {
                     self.sample_subagents(v);
                 }
                 self.nav.focused = Some(
-                    if parts.get(4) == Some(&"bare") {
-                        "dense-bare"
-                    } else {
-                        "dense-t2"
+                    match parts.get(4) {
+                        Some(&"bare") => "dense-bare",
+                        Some(&"crowded") => "crowd-t0",
+                        _ => "dense-t2",
                     }
                     .into(),
                 );
