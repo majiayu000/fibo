@@ -519,6 +519,12 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         | Request::ToolCall { .. }
         | Request::Backfill { .. }) => tool_rows::dispatch(shared, request),
         Request::TurnChanges { session } => turn_changes::read(shared, &session),
+        Request::TurnFile {
+            session,
+            log,
+            path,
+            lines,
+        } => turn_changes::read_file(shared, &session, log, &path, &lines),
         Request::ReadScreen { id, rows } => {
             let host = lock(shared)?;
             let terminal = host
