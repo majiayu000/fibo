@@ -32,6 +32,53 @@ impl Workbench {
         self.facts.forget();
         self.sidebar.space_filter = (flag == Some("onespace")).then_some(other);
     }
+    /// `-bare`: narrowed to a space whose only row is a terminal no conversation is tied
+    /// to; `-bareold`: to one whose only session is old, so 更早 opens the list unheaded.
+    #[cfg(feature = "visual-test")]
+    pub(super) fn visual_bare_space(&mut self, flag: Option<&str>) {
+        if !matches!(flag, Some("bare" | "bareold")) {
+            return;
+        }
+        let Some(other) = self.workspace.spaces.get(1).map(|s| s.id.clone()) else {
+            return;
+        };
+        if flag == Some("bareold") {
+            // Forty days old in the fixture, so it lands under 更早.
+            if let Some(t) = self
+                .workspace
+                .terminals
+                .iter_mut()
+                .find(|t| t.id == "dense-t11")
+            {
+                t.space = other.clone();
+            }
+        } else {
+            let id = "dense-bare".to_owned();
+            let terminal = self.workspace.terminals.iter().find(|t| t.id == "dense-t0");
+            let tab = self.workspace.tabs.iter().find(|t| t.id == "dense");
+            let (Some(mut terminal), Some(mut tab)) = (terminal.cloned(), tab.cloned()) else {
+                return;
+            };
+            terminal.id = id.clone();
+            terminal.space = other.clone();
+            tab.id = id.clone();
+            tab.space = other.clone();
+            tab.layout = Some(mooring_core::layout::Layout::Leaf(id.clone()));
+            self.workspace.terminals.push(terminal);
+            self.workspace.tabs.push(tab);
+            let mut recognition = self.store.recognition().clone();
+            recognition.terminal_notes.insert(
+                id,
+                mooring_core::protocol::TerminalNote {
+                    note: "claude-code".into(),
+                    why: "样例：没有关联对话的终端".into(),
+                },
+            );
+            self.store.set_recognition(recognition);
+        }
+        self.facts.forget();
+        self.sidebar.space_filter = Some(other);
+    }
     pub(super) fn first_agent(&self) -> Agent {
         self.tasks
             .last_agent
