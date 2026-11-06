@@ -453,6 +453,8 @@ impl Workbench {
             out.push(
                 div()
                     .mt(px(T::S10))
+                    // Not every list opens with a heading's own space above it.
+                    .mb(px(T::S8))
                     .mx(px(T::S12))
                     .px(px(T::S10))
                     .py(px(T::S8))
