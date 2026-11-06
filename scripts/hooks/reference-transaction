@@ -18,7 +18,7 @@ cat >&2 <<'MSG'
 Local main only follows origin/main, so this was not applied.
   A merge left half done: git merge --abort
   Work on a branch:  git switch -c fix/thing
-  Reach main:        git fetch origin && git rebase origin/main && git push origin HEAD:main
+  Reach main:        git fetch origin && git rebase origin/main, push the branch, gh pr create --fill && gh pr merge --auto --merge
   Follow it here:    git pull --ff-only
 See "Reaching main" in CLAUDE.md.
 MSG

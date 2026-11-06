@@ -26,7 +26,8 @@ Mooring: a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt).
 
 Local `main` only follows `origin/main`: never commit or merge on it. It drifted to 18 ahead and 128 behind when sessions merged into it locally and each left pushing to the next, while PRs landed on GitHub. A `reference-transaction` hook refuses anything else (`sh scripts/install-hooks.sh` once per clone; `MOORING_ALLOW_LOCAL_MAIN=1` for a deliberate exception).
 
-- Work in a worktree on a branch. Verify, then `git fetch origin && git rebase origin/main`, and `git push origin HEAD:main` or open a PR. Waiting for CI is not required.
+- Work in a worktree on a branch. Verify, then `git fetch origin && git rebase origin/main`, push the branch, and `gh pr create --fill && gh pr merge --auto --merge`: it merges itself once CI passes, so nothing has to wait for it.
+- GitHub refuses a direct push to `main` and a merge before `Workbench Rust checks` passes, for everyone including admins (ruleset `main requires CI`, docs/decisions/2026-11-06-main-requires-ci.md). When a check is red, fix the cause rather than loosening the rule.
 - Follow it in the main checkout with `git pull --ff-only`. Package the App from `origin/main`.
 - Push only your own commits. Nothing waits on "someone else's unpushed commits", because there are none.
 

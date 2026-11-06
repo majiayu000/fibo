@@ -1,8 +1,9 @@
 name: Sign plugin catalog
 
 # After a push that changes the plugins or the index format, regenerates plugins/index.json,
-# signs it and commits both to main. Its own push does not start another run, because pushes
-# with GITHUB_TOKEN start no workflows.
+# signs it and sends both to main in a pull request that merges itself once CI passes: main
+# takes no direct push, not even from here (docs/decisions/2026-11-06-main-requires-ci.md).
+# That merge starts no further run, because what GITHUB_TOKEN does starts no workflows.
 on:
   push:
     branches:
@@ -61,6 +62,8 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: write
+      pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -71,7 +74,8 @@ jobs:
           name: mooring
           path: ${{ runner.temp }}/bin
 
-      - name: Sign and publish
+      - name: Sign and push to the catalog branch
+        id: sign
         env:
           # To retire this key, change the name to MOORING_PUBLISHER_KEY_SPARE, then build the
           # next pair into OFFICIAL_KEYS and ship an app that has it.
@@ -85,3 +89,16 @@ jobs:
           trap 'rm -f "$KEY_FILE"' EXIT
           (umask 077 && printf '%s' "$PUBLISHER_KEY" > "$KEY_FILE")
           sh scripts/publish-catalog.sh "$BIN" "$KEY_FILE"
+
+      # A step of its own: this token can open and merge pull requests, and neither the key
+      # nor the compiled binary is around when it is used.
+      - name: Open the pull request and start its CI
+        if: steps.sign.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create --base main --head catalog-signed \
+            --title "chore(plugins): CI 重新生成目录并签名" \
+            --body "sign-catalog 自动生成，CI 通过后自动合入。" || true
+          gh pr merge catalog-signed --auto --merge
+          gh workflow run ci.yml --ref catalog-signed
