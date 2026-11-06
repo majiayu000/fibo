@@ -1,7 +1,7 @@
 //! A conversation's tool calls for a phone (`Request::ToolCalls`): which rows a stretch of
 //! work holds and where their raw lines are. What the rows cut short is read from those
 //! lines by the caller, away from this connection and the host's lock.
-use super::chat::{place, summary, FAILED, SEQ};
+use super::chat::{place, summary, FAILED, LOG_INODE, SEQ};
 use super::{err, Index};
 use mooring_core::protocol::{ChatTools, ToolResultRow, ToolRow};
 use rusqlite::{params, OptionalExtension, Row};
@@ -48,7 +48,7 @@ impl Index {
         let end = place(until);
         let from: i64 = self
             .db
-            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode=(SELECT inode FROM session_records WHERE path=?1 LIMIT 1) AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
             .map_err(err)?
             .query_row(params![path, end.0, end.1], |r| r.get(0))
             .optional()

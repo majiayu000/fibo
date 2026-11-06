@@ -15,6 +15,11 @@ mod backfill;
 /// 2 TiB, so a phone's JavaScript holds it exactly; no line makes 4096 records.
 pub(super) const SEQ: &str = "(offset*4096+MIN(ordinal,4095)+1)";
 
+/// The inode of the log a path's records were read from. A live signal has no place in a log,
+/// so `Index::hook` stores its record under inode 0, which sorts first: taking the first row
+/// instead of the largest found no messages at all once a session had one such signal.
+pub(super) const LOG_INODE: &str = "(SELECT MAX(inode) FROM session_records WHERE path=?1)";
+
 /// A call's failure may arrive beyond the page. Seek by this call's id rather than
 /// collecting every later failure. ?2 and ?3 name the stretch's lower bound.
 pub(super) const FAILED: &str = "EXISTS(SELECT 1 FROM session_records AS result WHERE result.path=call.path AND result.call_id=call.call_id AND result.kind='tool_result' AND result.exit_code<>0 AND (result.offset,result.ordinal)>(?2,?3))";
@@ -53,7 +58,7 @@ impl Index {
         } else {
             floor as i64
         };
-        let sql = format!("SELECT {SEQ},at,kind,text FROM session_records WHERE path=?1 AND inode=(SELECT inode FROM session_records WHERE path=?1 LIMIT 1) AND kind IN ('user','assistant') AND offset>=?5 AND (offset,ordinal){range}(?2,?3) ORDER BY offset {order},ordinal {order} LIMIT ?4");
+        let sql = format!("SELECT {SEQ},at,kind,text FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND offset>=?5 AND (offset,ordinal){range}(?2,?3) ORDER BY offset {order},ordinal {order} LIMIT ?4");
         let mut q = self.db.prepare_cached(&sql).map_err(err)?;
         let mut messages = q
             .query_map(
@@ -101,7 +106,7 @@ impl Index {
         // The message before this page: where its first message's work began.
         let (from, mut before_at, mut before_user): (i64, i64, bool) = self
             .db
-            .prepare_cached(&format!("SELECT {SEQ},at,kind='user' FROM session_records WHERE path=?1 AND inode=(SELECT inode FROM session_records WHERE path=?1 LIMIT 1) AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .prepare_cached(&format!("SELECT {SEQ},at,kind='user' FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
             .map_err(err)?
             .query_row(rusqlite::params![path, place(first).0, place(first).1], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?))

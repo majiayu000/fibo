@@ -245,6 +245,24 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_hook_signal_leaves_the_messages_readable() {
+        let l = log((0..5).map(|n| said(n, 0)));
+        let before = l.chat(None, 50).0;
+        assert!(!before.is_empty());
+        let facts = mooring_core::protocol::HookFacts::default();
+        l.index.hook(&l.key(), "Stop", &facts).unwrap();
+        let signals: i64 = (l.index.db)
+            .query_row(
+                "SELECT COUNT(*) FROM session_records WHERE path=?1 AND inode=0",
+                [l.key()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(signals > 0, "the signal should be stored without a place");
+        assert_eq!(l.chat(None, 50).0, before);
+    }
+
     fn said(n: usize, pad: usize) -> String {
         let text = format!("第 {n} 句{}", "。".repeat(pad));
         format!("{{\"type\":\"event_msg\",\"timestamp\":\"2026-11-05T00:00:00Z\",\"payload\":{{\"type\":\"user_message\",\"message\":\"{text}\"}}}}\n")
