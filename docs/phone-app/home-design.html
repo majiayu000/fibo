@@ -17,20 +17,23 @@ figcaption span{color:var(--dim);font-size:13px}
 @media (max-width:430px){figure{width:100%}.phone{zoom:.9}}
 </style></head><body><main>
 <h1>Mooring 手机主页设计</h1>
-<p class="lead">三个方向，推荐 A。方向 A 的底部标签可以点，会跳到对应的屏。标题、命令和额度都是示例。</p>
-<h2>方向 A：今日主页（推荐）</h2><div class="row"><figure id="Main"><figcaption><b>A · 今日主页（推荐）</b><span>主页：先看要你决定的事</span></figcaption><div class="phone">
+<p class="lead">按同类调研改过：去掉数字格，「会话」标签换成「看板」，搜索放到主页右上角。可以点的地方会跳到对应的屏，看板这一屏没有画。标题、命令和额度都是示例。</p>
+<h2>新版方向 A</h2><div class="row"><figure id="Main"><figcaption><b>主页</b><span>要你决定的卡片在上，在跑和等你验收都能折叠，额度一行</span></figcaption><div class="phone">
 
 <div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
-  <div style="flex: 1; min-height: 0; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 14px">
-    <div style="display: flex; align-items: center; justify-content: space-between">
-      <div>
+  <div style="flex: 1; min-height: 0; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <div style="flex: 1; min-width: 0">
         <div style="font-size: 28px; font-weight: 600; letter-spacing: -0.3px">2 件要你决定</div>
         <div style="display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 13px; color: #6f6f79">
           <span style="width: 7px; height: 7px; border-radius: 50%; background: #15803d"></span>
           <span>Agent-OS.local 在线</span>
         </div>
       </div>
-      <button aria-label="新任务" style="width: 44px; height: 44px; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0">
+      <a href="#A-Search" aria-label="搜索" style="width: 44px; height: 44px; flex: none; box-sizing: border-box; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.500 4.500"/></svg>
+      </a>
+      <button aria-label="新任务" style="width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
     </div>
@@ -46,110 +49,30 @@ figcaption span{color:var(--dim);font-size:13px}
       <div style="display: flex; gap: 8px">
         <button style="flex: 1; height: 44px; border-radius: 10px; border: 0; background: #27272a; color: #fcfcfc; font-size: 15px; font-weight: 600">允许</button>
         <button style="flex: 1; height: 44px; border-radius: 10px; border: 1px solid #e4e4e7; background: #ffffff; color: #27272a; font-size: 15px">拒绝</button>
-        <a href="#A-Sessions" style="width: 64px; height: 44px; border-radius: 10px; border: 1px solid #e4e4e7; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 15px">详情</a>
+        <button style="width: 64px; height: 44px; border-radius: 10px; border: 1px solid #e4e4e7; background: #ffffff; color: #27272a; font-size: 15px">详情</button>
       </div>
     </div>
 
-    <a href="#A-Sessions" style="background: #ffffff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+    <div style="background: #ffffff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
       <div style="display: flex; align-items: center; gap: 8px">
         <span style="width: 20px; height: 20px; border-radius: 6px; background: linear-gradient(135deg,#6366f1,#3b82f6); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">H</span>
         <span style="font-size: 13px; color: #6f6f79; flex: 1">her · Codex</span>
         <span style="font-size: 13px; color: #bb4d00; font-weight: 600">等你回答</span>
       </div>
       <div style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">这次重构要保留旧接口吗？</div>
-    </a>
-
-    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-      <a href="#A-Sessions" style="border: 1px solid #e4e4e7; border-radius: 14px; background: #ffffff; padding: 11px 14px">
-        <div style="font-size: 24px; font-weight: 600; color: #a16207">9</div>
-        <div style="font-size: 13px; color: #6f6f79">在跑</div>
-      </a>
-      <a href="#A-Sessions" style="border: 1px solid #e4e4e7; border-radius: 14px; background: #ffffff; padding: 11px 14px">
-        <div style="font-size: 24px; font-weight: 600; color: #15803d">14</div>
-        <div style="font-size: 13px; color: #6f6f79">等你验收</div>
-      </a>
     </div>
 
     <div>
-      <div style="font-size: 13px; color: #6f6f79; margin-bottom: 2px">最近在跑</div>
-      
-        <a href="#A-Sessions" style="display: flex; align-items: center; gap: 10px; height: 52px; border-bottom: 1px solid rgba(228,228,231,0.7)">
-          <div style="flex: 1; min-width: 0">
-            <div style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">改动查看的时间效果</div>
-            <div style="font-size: 12px; color: #6f6f79; font-family: ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">运行 cargo test -p mooring-host</div>
-          </div>
-          <span style="font-size: 13px; color: #a16207">4 分钟</span>
+      <div style="display: flex; align-items: center; justify-content: space-between; min-height: 32px">
+        <button style="border: 0; background: none; padding: 0; min-height: 32px; display: flex; align-items: center; gap: 4px; color: #a16207; font-size: 13px; font-weight: 600">
+          在跑 · 9
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+        </button>
+        <a href="#A-Me" aria-label="Claude 5 小时额度用了 62%，看全部额度" style="display: flex; align-items: center; gap: 6px; min-height: 32px; font-size: 12px; color: #6f6f79">
+          <span>Claude 5 小时 62%</span>
+          <span style="width: 40px; height: 5px; border-radius: 3px; background: #e4e4e7; overflow: hidden; display: block"><span style="display: block; height: 5px; width: 62%; background: #e8c547"></span></span>
         </a>
-      
-        <a href="#A-Sessions" style="display: flex; align-items: center; gap: 10px; height: 52px; border-bottom: 1px solid rgba(228,228,231,0.7)">
-          <div style="flex: 1; min-width: 0">
-            <div style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Agent 架构设计文档</div>
-            <div style="font-size: 12px; color: #6f6f79; font-family: ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">读 docs/architecture.md</div>
-          </div>
-          <span style="font-size: 13px; color: #a16207">7 分钟</span>
-        </a>
-      
-    </div>
-  </div>
-
-  <nav style="height: 68px; flex: none; border-top: 1px solid #e4e4e7; background: #ffffff; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-    <a href="#Main" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #27272a; font-size: 12px; font-weight: 600">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/></svg>主页
-    </a>
-    <a href="#A-Sessions" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>会话
-    </a>
-    <a href="#A-Me" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.500 2 8 6"/></svg>我的
-    </a>
-  </nav>
-</div>
-</div></figure><figure id="A-Sessions"><figcaption><b>A · 会话标签</b><span>按状态分组，看板是切换</span></figcaption><div class="phone">
-
-<div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
-  <div style="flex: 1; min-height: 0; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
-      <div style="font-size: 28px; font-weight: 600; letter-spacing: -0.3px">会话</div>
-      <div style="display: flex; background: #f4f4f5; border-radius: 10px; padding: 3px">
-        <button aria-pressed="true" style="height: 38px; min-width: 56px; border: 0; border-radius: 8px; background: #ffffff; color: #27272a; font-size: 14px; font-weight: 600">列表</button>
-        <button aria-pressed="false" style="height: 38px; min-width: 56px; border: 0; border-radius: 8px; background: transparent; color: #6f6f79; font-size: 14px">看板</button>
       </div>
-    </div>
-    <button style="align-self: flex-start; height: 44px; border: 1px solid #e4e4e7; border-radius: 22px; background: #ffffff; color: #27272a; padding: 0 14px; display: flex; align-items: center; gap: 6px; font-size: 14px">
-      全部空间 · 25
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
-
-    <div>
-      <div style="font-size: 13px; font-weight: 600; color: #bb4d00; padding: 4px 0">要你决定 · 2</div>
-      
-        
-
-<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
-  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#f97316,#ef4444); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">M</span>
-  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">鸟瞰视图布局设计</span>
-    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">mooring · Claude Code</span>
-  </span>
-  <span style="font-size: 13px; font-weight: 600; flex: none; color: #bb4d00">要你批准</span>
-</a>
-
-      
-        
-
-<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
-  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#6366f1,#3b82f6); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">H</span>
-  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">这次重构要保留旧接口吗？</span>
-    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">her · Codex</span>
-  </span>
-  <span style="font-size: 13px; font-weight: 600; flex: none; color: #bb4d00">等你回答</span>
-</a>
-
-      
-    </div>
-    <div>
-      <div style="font-size: 13px; font-weight: 600; color: #a16207; padding: 4px 0">在跑 · 9</div>
       
         
 
@@ -187,38 +110,184 @@ figcaption span{color:var(--dim);font-size:13px}
 </a>
 
       
-        
-
-<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
-  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#22c55e,#14b8a6); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">L</span>
-  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">修复流式响应截断</span>
-    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">运行 cargo clippy</span>
-  </span>
-  <span style="font-size: 13px; font-weight: 600; flex: none; color: #a16207">12 分钟</span>
-</a>
-
-      
     </div>
-    <button style="min-height: 44px; border: 0; background: none; color: #15803d; padding: 0; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600">
+
+    <a href="#A-Sessions" style="min-height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; color: #15803d; font-size: 13px; font-weight: 600">
       等你验收 · 14
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
+    </a>
   </div>
 
   <nav style="height: 68px; flex: none; border-top: 1px solid #e4e4e7; background: #ffffff; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-    <a href="#Main" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
+    <a href="#Main" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #27272a; font-size: 12px; font-weight: 600">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/></svg>主页
     </a>
-    <a href="#A-Sessions" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #27272a; font-size: 12px; font-weight: 600">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>会话
-    </a>
+    <button style="border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4v16H5zM15 4h4v10h-4z"/></svg>看板
+    </button>
     <a href="#A-Me" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>我的
     </a>
   </nav>
 </div>
-</div></figure><figure id="A-Me"><figcaption><b>A · 我的标签</b><span>电脑、额度和设置都在这里</span></figcaption><div class="phone">
+</div></figure><figure id="A-Sessions"><figcaption><b>展开等你验收</b><span>没事时展开看，划掉后可撤销</span></figcaption><div class="phone">
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+  <div style="flex: 1; min-height: 0; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <div style="flex: 1; min-width: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.3px">没有要你决定的事</div>
+      <a href="#A-Search" aria-label="搜索" style="width: 44px; height: 44px; flex: none; box-sizing: border-box; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.500 4.500"/></svg>
+      </a>
+      <button aria-label="新任务" style="width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+
+    <a href="#Main" style="min-height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; color: #a16207; font-size: 13px; font-weight: 600">
+      在跑 · 9
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </a>
+
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; min-height: 32px; color: #15803d; font-size: 13px; font-weight: 600">
+        <span>等你验收 · 13</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+      </div>
+      
+        
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#f97316,#ef4444); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">M</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">修好手机流量</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">mooring · Claude Code</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #15803d">3 分钟前</span>
+</a>
+
+      
+        
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#8b5cf6,#d946ef); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">接口兼容性检查</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">codex专用 · Codex</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #15803d">12 分钟前</span>
+</a>
+
+      
+        
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#0ea5e9,#6366f1); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">稿</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">库的使用习惯</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">稿子 · Claude Code</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #15803d">18 分钟前</span>
+</a>
+
+      
+        
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#6366f1,#3b82f6); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">H</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">整理会话记录</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">her · Claude Code</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #15803d">26 分钟前</span>
+</a>
+
+      
+        
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#f97316,#ef4444); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">M</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Shell 运行与等待状态</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">mooring · Claude Code</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #15803d">41 分钟前</span>
+</a>
+
+      
+        
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#8b5cf6,#d946ef); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">补齐单元测试</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">codex专用 · Codex</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #15803d">1 小时前</span>
+</a>
+
+      
+    </div>
+  </div>
+
+  <div style="margin: 0 16px 12px; min-height: 48px; flex: none; border-radius: 12px; background: #27272a; color: #fcfcfc; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 14px; font-size: 14px">
+    <span>已标记「已处理」</span>
+    <button style="min-height: 44px; min-width: 64px; border: 0; background: none; color: #fcfcfc; font-size: 14px; font-weight: 600">撤销</button>
+  </div>
+
+  <nav style="height: 68px; flex: none; border-top: 1px solid #e4e4e7; background: #ffffff; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+    <a href="#Main" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #27272a; font-size: 12px; font-weight: 600">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/></svg>主页
+    </a>
+    <button style="border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4v16H5zM15 4h4v10h-4z"/></svg>看板
+    </button>
+    <a href="#A-Me" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>我的
+    </a>
+  </nav>
+</div>
+</div></figure><figure id="A-Search"><figcaption><b>搜索</b><span>搜标题和空间</span></figcaption><div class="phone">
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+  <div style="display: flex; align-items: center; gap: 10px">
+    <label style="flex: 1; min-width: 0; height: 44px; box-sizing: border-box; border: 1px solid #e4e4e7; border-radius: 22px; background: #ffffff; display: flex; align-items: center; gap: 8px; padding: 0 14px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f6f79" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.500 4.500"/></svg>
+      <input aria-label="搜索会话" value="流量" style="flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: #27272a; font-size: 15px">
+    </label>
+    <a href="#Main" style="min-height: 44px; display: flex; align-items: center; font-size: 15px">取消</a>
+  </div>
+
+  <div style="font-size: 13px; color: #6f6f79">找到 2 个，搜标题和空间</div>
+  <div>
+    
+      
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#f97316,#ef4444); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">M</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">修好手机流量</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">mooring · Claude Code</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #15803d">等你验收</span>
+</a>
+
+    
+      
+
+<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
+  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#22c55e,#14b8a6); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">L</span>
+  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">代理的流量统计</span>
+    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">litellm-rs · Codex</span>
+  </span>
+  <span style="font-size: 13px; font-weight: 600; flex: none; color: #a16207">在跑</span>
+</a>
+
+    
+  </div>
+</div>
+</div></figure><figure id="A-Me"><figcaption><b>我的</b><span>电脑、额度和设置，离线电脑收成一行</span></figcaption><div class="phone">
 
 <div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
   <div style="flex: 1; min-height: 0; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
@@ -296,250 +365,13 @@ figcaption span{color:var(--dim);font-size:13px}
     <a href="#Main" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/></svg>主页
     </a>
-    <a href="#A-Sessions" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>会话
-    </a>
+    <button style="border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4v16H5zM15 4h4v10h-4z"/></svg>看板
+    </button>
     <a href="#A-Me" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #27272a; font-size: 12px; font-weight: 600">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>我的
     </a>
   </nav>
-</div>
-</div></figure><figure id="A-Clear"><figcaption><b>A · 没有要你决定的事</b><span>没事时的主页</span></figcaption><div class="phone">
-
-<div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
-  <div style="flex: 1; min-height: 0; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 14px">
-    <div style="display: flex; align-items: center; justify-content: space-between">
-      <div>
-        <div style="font-size: 28px; font-weight: 600; letter-spacing: -0.3px">没有要你决定的事</div>
-        <div style="display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 13px; color: #6f6f79">
-          <span style="width: 7px; height: 7px; border-radius: 50%; background: #15803d"></span>
-          <span>Agent-OS.local 在线</span>
-        </div>
-      </div>
-      <button aria-label="新任务" style="width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      </button>
-    </div>
-
-    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-      <button style="text-align: left; border: 1px solid #e4e4e7; border-radius: 14px; background: #ffffff; padding: 11px 14px; color: #27272a">
-        <div style="font-size: 24px; font-weight: 600; color: #a16207">3</div>
-        <div style="font-size: 13px; color: #6f6f79">在跑</div>
-      </button>
-      <button style="text-align: left; border: 1px solid #e4e4e7; border-radius: 14px; background: #ffffff; padding: 11px 14px; color: #27272a">
-        <div style="font-size: 24px; font-weight: 600; color: #15803d">5</div>
-        <div style="font-size: 13px; color: #6f6f79">等你验收</div>
-      </button>
-    </div>
-
-    <div>
-      <div style="font-size: 13px; color: #6f6f79; margin-bottom: 2px">最近在跑</div>
-      
-        
-
-<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
-  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#f97316,#ef4444); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">M</span>
-  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">改动查看的时间效果</span>
-    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">运行 cargo test -p mooring-host</span>
-  </span>
-  <span style="font-size: 13px; font-weight: 600; flex: none; color: #a16207">4 分钟</span>
-</a>
-
-      
-        
-
-<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
-  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#6366f1,#3b82f6); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">H</span>
-  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Agent 架构设计文档</span>
-    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">读 docs/architecture.md</span>
-  </span>
-  <span style="font-size: 13px; font-weight: 600; flex: none; color: #a16207">7 分钟</span>
-</a>
-
-      
-        
-
-<a href="#Main" style="display: flex; align-items: center; gap: 10px; height: 66px; box-sizing: border-box; border-bottom: 1px solid rgba(228,228,231,0.7); color: #27272a; text-decoration: none; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif">
-  <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: linear-gradient(135deg,#22c55e,#14b8a6); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">L</span>
-  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-    <span style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">修复流式响应截断</span>
-    <span style="font-size: 13px; color: #6f6f79; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">运行 cargo clippy</span>
-  </span>
-  <span style="font-size: 13px; font-weight: 600; flex: none; color: #a16207">12 分钟</span>
-</a>
-
-      
-    </div>
-
-    <div>
-      <div style="font-size: 13px; color: #6f6f79; margin-bottom: 8px">额度</div>
-      <div style="display: flex; flex-direction: column; gap: 10px">
-        
-          <div style="display: flex; flex-direction: column; gap: 5px">
-            <div style="display: flex; justify-content: space-between; font-size: 13px">
-              <span>Claude · 5 小时</span>
-              <span style="color: #6f6f79">用了 62%</span>
-            </div>
-            <div style="height: 6px; border-radius: 3px; background: #e4e4e7; overflow: hidden">
-              <div style="height: 6px; border-radius: 3px; width: 62%; background: #e8c547"></div>
-            </div>
-          </div>
-        
-          <div style="display: flex; flex-direction: column; gap: 5px">
-            <div style="display: flex; justify-content: space-between; font-size: 13px">
-              <span>Codex · 本周</span>
-              <span style="color: #6f6f79">用了 31%</span>
-            </div>
-            <div style="height: 6px; border-radius: 3px; background: #e4e4e7; overflow: hidden">
-              <div style="height: 6px; border-radius: 3px; width: 31%; background: #22c55e"></div>
-            </div>
-          </div>
-        
-      </div>
-    </div>
-  </div>
-
-  <nav style="height: 68px; flex: none; border-top: 1px solid #e4e4e7; background: #ffffff; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-    <a href="#Main" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #27272a; font-size: 12px; font-weight: 600">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/></svg>主页
-    </a>
-    <a href="#A-Sessions" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>会话
-    </a>
-    <a href="#A-Me" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6f6f79; font-size: 12px">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>我的
-    </a>
-  </nav>
-</div>
-</div></figure></div>
-<h2>另外两个方向</h2><div class="row"><figure id="B-Spaces"><figcaption><b>B · 按空间</b><span>首页是项目卡片</span></figcaption><div class="phone">
-
-<div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
-  <div style="flex: 1; min-height: 0; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 14px">
-    <div style="display: flex; align-items: center; justify-content: space-between">
-      <div style="font-size: 28px; font-weight: 600; letter-spacing: -0.3px">空间</div>
-      <button aria-label="新任务" style="width: 44px; height: 44px; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      </button>
-    </div>
-
-    <button style="min-height: 52px; border: 0; border-radius: 14px; background: #fcf4e8; color: #bb4d00; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 15px; font-weight: 600">
-      <span>2 件要你决定</span>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-    </button>
-
-    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-      
-        <button style="height: 118px; box-sizing: border-box; text-align: left; border: 1px solid #e4e4e7; border-radius: 16px; background: #ffffff; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; color: #27272a">
-          <span style="display: flex; align-items: center; gap: 8px; width: 100%">
-            <span style="width: 24px; height: 24px; flex: none; border-radius: 7px; background: linear-gradient(135deg,#f97316,#ef4444); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">M</span>
-            <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">mooring</span>
-          </span>
-          <span style="font-size: 13px; color: #bb4d00; font-weight: 600">1 件要你决定</span>
-          <span style="font-size: 12px; color: #6f6f79">4 在跑 · 2 等验收</span>
-        </button>
-      
-        <button style="height: 118px; box-sizing: border-box; text-align: left; border: 1px solid #e4e4e7; border-radius: 16px; background: #ffffff; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; color: #27272a">
-          <span style="display: flex; align-items: center; gap: 8px; width: 100%">
-            <span style="width: 24px; height: 24px; flex: none; border-radius: 7px; background: linear-gradient(135deg,#6366f1,#3b82f6); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">H</span>
-            <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">her</span>
-          </span>
-          <span style="font-size: 13px; color: #bb4d00; font-weight: 600">1 件要你决定</span>
-          <span style="font-size: 12px; color: #6f6f79">2 在跑 · 4 等验收</span>
-        </button>
-      
-        <button style="height: 118px; box-sizing: border-box; text-align: left; border: 1px solid #e4e4e7; border-radius: 16px; background: #ffffff; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; color: #27272a">
-          <span style="display: flex; align-items: center; gap: 8px; width: 100%">
-            <span style="width: 24px; height: 24px; flex: none; border-radius: 7px; background: linear-gradient(135deg,#14b8a6,#06b6d4); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">工</span>
-            <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">工作空间</span>
-          </span>
-          <span style="font-size: 13px; color: #a16207; font-weight: 600">2 在跑</span>
-          <span style="font-size: 12px; color: #6f6f79">1 等验收</span>
-        </button>
-      
-        <button style="height: 118px; box-sizing: border-box; text-align: left; border: 1px solid #e4e4e7; border-radius: 16px; background: #ffffff; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; color: #27272a">
-          <span style="display: flex; align-items: center; gap: 8px; width: 100%">
-            <span style="width: 24px; height: 24px; flex: none; border-radius: 7px; background: linear-gradient(135deg,#8b5cf6,#d946ef); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
-            <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">codex专用</span>
-          </span>
-          <span style="font-size: 13px; color: #15803d; font-weight: 600">2 等验收</span>
-          <span style="font-size: 12px; color: #6f6f79">刚刚有更新</span>
-        </button>
-      
-        <button style="height: 118px; box-sizing: border-box; text-align: left; border: 1px solid #e4e4e7; border-radius: 16px; background: #ffffff; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; color: #27272a">
-          <span style="display: flex; align-items: center; gap: 8px; width: 100%">
-            <span style="width: 24px; height: 24px; flex: none; border-radius: 7px; background: linear-gradient(135deg,#22c55e,#14b8a6); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">L</span>
-            <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">litellm-rs</span>
-          </span>
-          <span style="font-size: 13px; color: #a16207; font-weight: 600">1 在跑</span>
-          <span style="font-size: 12px; color: #6f6f79">运行测试中</span>
-        </button>
-      
-        <button style="height: 118px; box-sizing: border-box; text-align: left; border: 1px solid #e4e4e7; border-radius: 16px; background: #ffffff; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; color: #27272a">
-          <span style="display: flex; align-items: center; gap: 8px; width: 100%">
-            <span style="width: 24px; height: 24px; flex: none; border-radius: 7px; background: linear-gradient(135deg,#0ea5e9,#6366f1); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">稿</span>
-            <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">稿子</span>
-          </span>
-          <span style="font-size: 13px; color: #15803d; font-weight: 600">1 等验收</span>
-          <span style="font-size: 12px; color: #6f6f79">18 分钟前</span>
-        </button>
-      
-    </div>
-
-    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #6f6f79">
-      <span>Agent-OS.local 在线 · 共 25 个会话</span>
-      <span>全部会话</span>
-    </div>
-  </div>
-
-  <nav style="height: 68px; flex: none; border-top: 1px solid #e4e4e7; background: #ffffff; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); font-size: 12px">
-    <button aria-current="page" style="border: 0; background: none; color: #27272a; font-weight: 600">空间</button>
-    <button style="border: 0; background: none; color: #6f6f79">看板</button>
-    <button style="border: 0; background: none; color: #6f6f79">我的</button>
-  </nav>
-</div>
-</div></figure><figure id="C-Next"><figcaption><b>C · 一次一件</b><span>一张卡片处理当前这件</span></figcaption><div class="phone">
-
-<div style="width: 390px; height: 844px; box-sizing: border-box; background: #fcfcfc; color: #27272a; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
-  <div style="display: flex; align-items: center; justify-content: space-between">
-    <div style="font-size: 15px; color: #6f6f79">第 1 件，共 2 件</div>
-    <button aria-label="全部会话" style="width: 44px; height: 44px; border-radius: 50%; border: 1px solid #e4e4e7; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-    </button>
-  </div>
-
-  <div style="flex: 1; min-height: 0; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
-    <div style="display: flex; align-items: center; gap: 8px">
-      <span style="width: 24px; height: 24px; border-radius: 7px; background: linear-gradient(135deg,#f97316,#ef4444); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">M</span>
-      <span style="font-size: 14px; color: #6f6f79; flex: 1">mooring · Claude Code</span>
-      <span style="font-size: 14px; color: #bb4d00; font-weight: 600">要你批准</span>
-    </div>
-    <div style="font-size: 24px; font-weight: 600; line-height: 1.3">鸟瞰视图布局设计</div>
-    <div style="background: #f4f4f5; border-radius: 10px; padding: 14px; font-family: ui-monospace, Menlo, monospace; font-size: 15px">git push origin main</div>
-    <div style="flex: 1"></div>
-    <button style="height: 52px; border-radius: 12px; border: 0; background: #27272a; color: #fcfcfc; font-size: 17px; font-weight: 600">允许</button>
-    <div style="display: flex; gap: 10px">
-      <button style="flex: 1; height: 48px; border-radius: 12px; border: 1px solid #e4e4e7; background: #ffffff; color: #27272a; font-size: 15px">拒绝</button>
-      <button style="flex: 1; height: 48px; border-radius: 12px; border: 1px solid #e4e4e7; background: #ffffff; color: #27272a; font-size: 15px">看对话</button>
-      <button style="flex: 1; height: 48px; border-radius: 12px; border: 1px solid #e4e4e7; background: #ffffff; color: #27272a; font-size: 15px">稍后</button>
-    </div>
-  </div>
-
-  <div style="display: flex; flex-direction: column; gap: 8px">
-    <div style="font-size: 13px; color: #6f6f79">下一件</div>
-    <button style="min-height: 52px; text-align: left; border: 1px solid #e4e4e7; border-radius: 14px; background: #ffffff; color: #27272a; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px">
-      <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">这次重构要保留旧接口吗？</span>
-      <span style="font-size: 13px; color: #bb4d00; font-weight: 600; flex: none">等你回答</span>
-    </button>
-  </div>
-
-  <div style="display: flex; gap: 8px">
-    <button style="flex: 1; min-height: 44px; border: 0; border-radius: 12px; background: #f4f4f5; color: #27272a; font-size: 14px">9 在跑</button>
-    <button style="flex: 1; min-height: 44px; border: 0; border-radius: 12px; background: #f4f4f5; color: #27272a; font-size: 14px">14 等验收</button>
-    <button style="flex: 1; min-height: 44px; border: 0; border-radius: 12px; background: #f4f4f5; color: #27272a; font-size: 14px">我的</button>
-  </div>
 </div>
 </div></figure></div>
 </main></body></html>
