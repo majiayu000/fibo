@@ -163,16 +163,14 @@ mod tests {
         .unwrap();
         std::fs::write(
             dir.join("setup.json"),
-            r#"{"api":1,"setup":"pwd > \"$MOORING_PLUGIN_DATA/on\"","teardown":"echo 还原不了 >&2; exit 3"}"#,
+            r#"{"api":1,"setup":"touch here; touch \"$MOORING_PLUGIN_DATA/on\"","teardown":"echo 还原不了 >&2; exit 3"}"#,
         )
         .unwrap();
         run(&plugins, &dir, Phase::Setup).unwrap();
         let data = root.join("plugin-data/wrap");
-        let pwd = std::fs::read_to_string(data.join("on")).unwrap();
-        assert_eq!(
-            Path::new(pwd.trim()).canonicalize().unwrap(),
-            dir.canonicalize().unwrap()
-        );
+        assert!(data.join("on").is_file());
+        // `here` lands in the plugin itself: it ran there.
+        assert!(dir.join("here").is_file());
         let err = run(&plugins, &dir, Phase::Teardown).unwrap_err();
         assert!(
             err.contains("退出码 3") && err.contains("还原不了"),
