@@ -20,6 +20,8 @@ use std::{
 use super::codex_items;
 pub(crate) use super::codex_script::script_patches;
 pub struct Codex;
+use super::codex_items::codex_state;
+
 impl Adapter for Codex {
     fn screen_rules(&self) -> &'static str {
         include_str!("screen/codex.json")
@@ -51,6 +53,12 @@ impl Adapter for Codex {
     }
     fn reads_tools(&self) -> bool {
         true
+    }
+    fn edit_marker(&self) -> Option<&'static [u8]> {
+        Some(b"\"FileChange\"")
+    }
+    fn logged_edits(&self, line: &Value) -> Vec<(String, mooring_core::turn_diff::Edit)> {
+        super::turn_edits::codex(line)
     }
     fn tool_call_line(&self, line: &Value, id: &str) -> Option<super::ToolCallLine> {
         super::tool_lines::codex_call(line, id)
@@ -435,17 +443,6 @@ fn quota(v: &Value, at: u64) -> Option<Quota> {
         plan: v["plan_type"].as_str().unwrap_or("").into(),
         windows,
     })
-}
-fn codex_state(title: &str) -> Option<&'static str> {
-    if title.trim().is_empty() {
-        None
-    } else if title.contains("Action Required") {
-        Some("需要你处理")
-    } else if title.chars().any(|c| "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".contains(c)) {
-        Some("工作中")
-    } else {
-        Some("空闲")
-    }
 }
 /// The Codex app's own sidebar reads `threads.name` from `state_<n>.sqlite` beside
 /// `sessions/`, which also names threads `session_index.jsonl` never got. One read-only

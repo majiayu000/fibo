@@ -7,6 +7,7 @@ mod once;
 mod stop;
 mod suggestion;
 mod tool_rows;
+mod turn_changes;
 mod typing;
 pub(super) use typing::*;
 
@@ -517,6 +518,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         | Request::ToolCalls { .. }
         | Request::ToolCall { .. }
         | Request::Backfill { .. }) => tool_rows::dispatch(shared, request),
+        Request::TurnChanges { session } => turn_changes::read(shared, &session),
         Request::ReadScreen { id, rows } => {
             let host = lock(shared)?;
             let terminal = host

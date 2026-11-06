@@ -5,6 +5,10 @@ use super::*;
 const SCROLLBACK_ROWS: usize = 10_000;
 mod drag;
 use drag::DropState;
+mod changes_panel;
+mod changes_slots;
+#[cfg(feature = "visual-test")]
+pub use changes_slots::ChangesProbe;
 mod confirm_close;
 mod menu;
 mod pane_view;
@@ -29,8 +33,10 @@ pub(super) struct LayoutState {
     pub(super) renaming_tab: Option<(String, Entity<Field>, [gpui::Subscription; 2])>,
     /// A sidebar conversation being renamed in place after a double-click.
     pub(super) renaming_session: Option<(String, Entity<Field>, [gpui::Subscription; 2])>,
-    /// The pane whose turn bar has 看改动 open: this turn's files listed under it.
-    pub(super) changes_open: Option<String>,
+    /// Each pane's 看改动 panel, kept closed so reopening returns to the same place.
+    pub(super) changes: HashMap<String, changes_panel::ChangesSlot>,
+    /// The workspace revision `changes` was last checked against.
+    pub(super) changes_seen: u64,
     /// A space renamed in place in the sidebar; it carries the space so a just-added
     /// one can be named before the host's reply lists it.
     pub(super) renaming_space: Option<(Space, Entity<Field>, [gpui::Subscription; 2])>,

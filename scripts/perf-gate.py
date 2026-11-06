@@ -21,6 +21,9 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
 - so must the same motion in the layouts that need a machine: frames-section (本机's whole
   section folding under 按机器), frames-rail and frames-railrest (the rail with its list
   arriving, and at rest; a rail beside the column instead of over it cost 129 M at rest);
+- terminal output with 看改动 open (scripts' frames-changes) must stay within BUDGET and must
+  not draw the panel again: it is a cached view, and laying it out for every pane's output
+  would cost several times the frame;
 - the running mark turning (scripts' frames-turning): a step keeps the sidebar's last draw and
   the mark really moves; with no mark on screen, or the setting off, the view stops drawing
 - 设置 › 插件 (scripts' frames-plugins): a frame with one animation card playing, opening
@@ -77,13 +80,21 @@ def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
     fails = []
-    text = probe(bindir, out / 'frames', 'frames-pane,frames-main,frames-motion,frames-arrive,redraw-check', catch_up=False)
+    text = probe(bindir, out / 'frames', 'frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check', catch_up=False)
     measured = {k: float(v) for k, v in re.findall(r'(frames-\w+): [^\n]*?([\d.]+) M instructions', text)}
     ms = {k: float(v) for k, v in re.findall(r'(frames-\w+): ([\d.]+) ms CPU', text)}
-    if set(measured) != {'frames-pane', 'frames-main', 'frames-motion', 'frames-arrive'} or set(ms) != set(measured):
+    if set(measured) != {'frames-pane', 'frames-changes', 'frames-main', 'frames-motion', 'frames-arrive'} or set(ms) != set(measured):
         fails.append(f'no frame numbers in the probe output: {measured} {ms}')
         ms = {'frames-pane': 1, 'frames-main': 1}
     share = ms['frames-pane'] / ms['frames-main']
+    panel = re.search(r'frames-changes: [^\n]*drawn before (\d+); drew again (\d+)', text)
+    if not panel:
+        fails.append('no frames-changes line in the probe output')
+    else:
+        if not int(panel.group(1)):
+            fails.append('看改动 was never drawn: the gate measured a pane without it')
+        if int(panel.group(2)):
+            fails.append(f'terminal output drew the open 看改动 panel {panel.group(2)} times: it must stay cached')
     # MOORING_PERF_NO_COUNTER=1 takes the runner's path on real hardware, to test it.
     counted = all(v > 0 for v in measured.values()) and not os.environ.get('MOORING_PERF_NO_COUNTER')
     # 按机器 and the rail need a machine configured, which changes the column for the rest.

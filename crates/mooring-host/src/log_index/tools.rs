@@ -75,6 +75,23 @@ impl Index {
         Ok((tools, rows, next))
     }
 
+    /// Which log the turn begun at `since` is in and where its opening message is, so reading
+    /// it costs what the turn wrote and not what the conversation did before. `None`: the
+    /// log has no message that old.
+    pub fn turn_start(&self, path: &str, since: u64) -> io::Result<Option<(u64, u64)>> {
+        self.db
+            .prepare_cached(&format!("SELECT inode,offset FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind='user' AND at<=?2 ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .map_err(err)?
+            .query_row(params![path, since as i64], |r| {
+                Ok((
+                    u64::try_from(r.get::<_, i64>(0)?).unwrap_or(0),
+                    u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
+                ))
+            })
+            .optional()
+            .map_err(err)
+    }
+
     /// One call by its id, wherever in the conversation it is.
     pub fn tool_call(&self, path: &str, id: &str) -> io::Result<Option<ToolRow>> {
         let Some(mut found) = self

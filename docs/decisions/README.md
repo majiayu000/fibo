@@ -8,6 +8,7 @@
 
 | 日期 | 决定 | 状态 |
 |---|---|---|
+| 2026-11-06 | [看改动从会话记录取，合成净改动，盖在终端上](2026-11-06-turn-changes-from-the-log.md) | 采用 |
 | 2026-11-06 | [手机聊天页显示 Claude 的下一句建议，用两周再定去留](2026-11-06-phone-input-suggestion.md) | 采用 |
 | 2026-11-06 | [Agent 身份先于聊天记录](2026-11-06-agent-identity-before-transcript.md) | 采用 |
 | 2026-11-03 | [鸟瞰看板拖起卡片时倾斜](2026-11-03-tilt-board-cards-while-dragging.md) | 否定 |
