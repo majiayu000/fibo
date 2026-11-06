@@ -179,9 +179,16 @@ pub enum Request {
         session: String,
         call: String,
     },
-    /// What this session's current turn did to its files, read from its log when asked.
+    /// The files this session's current turn changed, read from its log when asked.
     TurnChanges {
         session: String,
+    },
+    /// What the turn did to one of them, read from the places `TurnChanges` named.
+    TurnFile {
+        session: String,
+        log: u64,
+        path: String,
+        lines: Vec<u64>,
     },
     /// Scripts and other Agents: the last `rows` rows of a terminal as plain text.
     ReadScreen {
@@ -467,6 +474,7 @@ pub enum Reply {
         row: ToolRow,
     },
     TurnChanges(crate::turn_diff::TurnChanges),
+    TurnFile(crate::turn_diff::TurnFile),
     /// A terminal size in cells: what a split's new pane starts at (`SplitRoom`).
     Size {
         cols: u16,

@@ -1,8 +1,10 @@
 //! Each pane's 看改动 panel: opening, closing, and closing itself when its turn moves on.
-use super::changes_panel::{COVERS, ChangesPanel, ChangesSlot, Load};
+use super::changes_panel::{COVERS, ChangesPanel, ChangesSlot};
+#[cfg(feature = "visual-test")]
+use super::changes_panel::{Detail, Shown};
 use super::*;
 #[cfg(feature = "visual-test")]
-use mooring_core::turn_diff::{TurnChanges, TurnFile};
+use mooring_core::turn_diff::{FileSummary, TurnChanges, TurnFile};
 
 impl Workbench {
     /// What identifies the turn on `session`: a new prompt or a further edit makes it another.
@@ -69,19 +71,7 @@ impl Workbench {
                 session: session.clone(),
             });
             cx.new(|cx| {
-                let mut panel = ChangesPanel {
-                    workbench,
-                    terminal,
-                    session,
-                    pane,
-                    focus: cx.focus_handle(),
-                    load: Load::Reading { say: false },
-                    selected: 0,
-                    rows: Vec::new(),
-                    lists: Vec::new(),
-                    #[cfg(feature = "visual-test")]
-                    drew: 0,
-                };
+                let mut panel = ChangesPanel::new(workbench, terminal, session, pane, cx);
                 panel.read(asked, cx);
                 panel
             })
@@ -141,7 +131,7 @@ impl Workbench {
             let current_turn = reviewing && current == Some(slot.key);
             if slot.open && !current_turn && slot.key != (0, 0) {
                 slot.open = false;
-                if slot.view.read(cx).focus.is_focused(window) {
+                if slot.view.read(cx).focus.contains_focused(window, cx) {
                     let pane = self.layout.panes.get(&id).map(|p| p.focus_handle(cx));
                     if let Some(pane) = pane {
                         window.focus(&pane, cx);
@@ -157,10 +147,17 @@ impl Workbench {
 pub struct ChangesProbe {
     pub open: bool,
     pub below: bool,
+    /// The panel itself has the keyboard, not the filter in it.
     pub focused: bool,
+    pub filter_focused: bool,
+    pub filter: bool,
     pub selected: usize,
+    pub matches: usize,
     pub scroll: (usize, f32),
-    pub files: Vec<TurnFile>,
+    pub files: Vec<FileSummary>,
+    /// What was read of the selected file.
+    pub file: Option<std::sync::Arc<TurnFile>>,
+    pub details: usize,
     pub drew: u32,
 }
 
@@ -169,49 +166,56 @@ impl Workbench {
     pub fn visual_changes(&self, terminal: &str, window: &Window, cx: &gpui::App) -> ChangesProbe {
         let slot = self.layout.changes.get(terminal);
         let panel = slot.map(|s| s.view.read(cx));
-        let scroll = panel
-            .and_then(|p| p.lists.get(p.selected))
-            .map_or((0, 0.), |l| {
-                let top = l.logical_scroll_top();
-                (top.item_ix, f32::from(top.offset_in_item))
-            });
+        let shown = panel.and_then(|p| match p.details.get(&p.selected) {
+            Some(Detail::Ready(shown)) => Some(shown),
+            _ => None,
+        });
+        let filter = panel.and_then(|p| p.filter.as_ref());
         ChangesProbe {
             open: slot.is_some_and(|s| s.open),
             below: slot.is_some_and(|s| s.below),
             focused: panel.is_some_and(|p| p.focus.is_focused(window)),
+            filter_focused: filter.is_some_and(|f| f.focus_handle(cx).is_focused(window)),
+            filter: filter.is_some(),
             selected: panel.map_or(0, |p| p.selected),
-            scroll,
-            files: panel.map_or(Vec::new(), |p| match &p.load {
-                Load::Ready(c) => c.files.clone(),
-                _ => Vec::new(),
+            matches: panel.map_or(0, |p| p.matches.len()),
+            scroll: shown.map_or((0, 0.), |s| {
+                let top = s.list.logical_scroll_top();
+                (top.item_ix, f32::from(top.offset_in_item))
             }),
+            files: panel
+                .and_then(|p| p.changes())
+                .map_or(Vec::new(), |c| c.files.clone()),
+            file: shown.map(|s| s.file.clone()),
+            details: panel.map_or(0, |p| p.details.len()),
             drew: panel.map_or(0, |p| p.drew),
         }
     }
 
-    /// Opens the panel over `terminal` already holding `changes`, whatever that pane runs.
+    /// Opens the panel over `terminal` holding `changes` with its first file read, whatever
+    /// that pane runs.
     pub fn visual_changes_show(
         &mut self,
         terminal: &str,
         changes: TurnChanges,
+        first: TurnFile,
         cx: &mut Context<Self>,
     ) {
         let pane = self.layout.panes.get(terminal).expect("pane").clone();
         let workbench = cx.entity().downgrade();
         let terminal = terminal.to_owned();
         let view = cx.new(|cx| {
-            let mut panel = ChangesPanel {
-                workbench,
-                terminal: terminal.clone(),
-                session: String::new(),
-                pane,
-                focus: cx.focus_handle(),
-                load: Load::Failed,
-                selected: 0,
-                rows: Vec::new(),
-                lists: Vec::new(),
-                drew: 0,
-            };
+            let mut panel = ChangesPanel::new(workbench, terminal.clone(), String::new(), pane, cx);
+            // Already known, so choosing it asks the host for nothing.
+            let rows = super::changes_rows::rows_of(&first);
+            panel.details.insert(
+                0,
+                Detail::Ready(Shown {
+                    list: gpui::ListState::new(rows.len(), gpui::ListAlignment::Top, px(T::ROW)),
+                    file: std::sync::Arc::new(first),
+                    rows: std::sync::Arc::new(rows),
+                }),
+            );
             panel.loaded(Ok(Reply::TurnChanges(changes)), cx);
             panel
         });
@@ -223,5 +227,19 @@ impl Workbench {
         };
         self.layout.changes.insert(terminal, slot);
         cx.notify();
+    }
+
+    /// Asks the panel over `terminal` to draw again, as scrolling it does.
+    pub fn visual_changes_poke(&self, terminal: &str, cx: &mut Context<Self>) {
+        if let Some(slot) = self.layout.changes.get(terminal) {
+            slot.view.update(cx, |_, cx| cx.notify());
+        }
+    }
+
+    /// How many files and lines this terminal's turn bar states.
+    pub fn visual_turn_stated(&self, terminal: &str) -> Option<(usize, (u32, u32))> {
+        let s = self.pane_session(terminal)?;
+        let c = self.workspace.content.get(&s.id)?;
+        Some((self.turn_files(s), c.turn_lines()))
     }
 }
