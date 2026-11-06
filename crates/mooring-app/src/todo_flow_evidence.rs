@@ -5,13 +5,13 @@
 //! The value names where to click, `start=x,y pick=x,y from=x,y done=x,y`. Layout is read
 //! off the pictures, so a run stops at the first point it has no value for, having saved
 //! the picture to read it from. Each step is checked against the host's workspace:
-//! 1. 开始, then the Agent picked: Claude starts and the text waits in its input, unsent;
-//! 2. Enter: it does the work and writes progress back on its own;
+//! 1. 开始, then the Agent picked: Claude starts and gets the text as its first ask;
+//! 2. nobody presses Enter: it does the work and writes progress back on its own;
 //! 3. the progress panel's 来自 opens the conversation that wrote the note;
 //! 4. 标记完成 closes the todo, with its time, and its conversation with it.
 use super::pane_drag_evidence::{down, send, up};
 use super::*;
-use gpui::{InputEvent, Pixels, Point, WindowHandle, point};
+use gpui::{Pixels, Point, WindowHandle, point};
 use mooring_core::status::{self, Status};
 use std::time::{Duration, Instant};
 use workbench::Workbench;
@@ -82,7 +82,7 @@ pub(super) fn start(
             title: "数一下 crates 和 plugins 各有几项".into(),
             description: "分两段做，一段一条命令。crates 上次已经数过了，不用再数。".into(),
             acceptance: vec![],
-            agent: Agent::Claude,
+            agent: workspace().settings.default_agent,
         }));
         edit(Edit::AddTaskNote {
             task: TODO.into(),
@@ -110,14 +110,9 @@ pub(super) fn start(
         };
         click(at, cx);
 
-        // Claude starts; the text reaches its input and stays there.
+        // Claude starts and is sent the text; nothing here types into it.
         let until = Instant::now() + Duration::from_secs(120);
-        let mut last = String::new();
         let terminal = loop {
-            if Instant::now() >= until {
-                shot("3-never-placed.png", cx);
-                panic!("the text never reached the Agent's input:\n{last}");
-            }
             let w = workspace();
             let tab = w
                 .tabs
@@ -127,40 +122,17 @@ pub(super) fn start(
                 .and_then(|t| t.layout.as_ref())
                 .and_then(|l| l.ids().first().cloned());
             if let Some(pane) = pane {
-                let screen = match call(Request::ReadScreen {
-                    id: pane.clone(),
-                    rows: 40,
-                }) {
-                    Reply::Text(t) => t,
-                    _ => String::new(),
-                };
-                last = screen.clone();
-                if screen.contains("Pasted") || screen.contains("分两段做") {
-                    eprintln!("placed:\n{screen}");
-                    break pane;
-                }
+                break pane;
+            }
+            if Instant::now() >= until {
+                shot("3-never-started.png", cx);
+                panic!("开始 opened no terminal");
             }
             wait(500).await;
         };
-        wait(1500).await;
-        shot("3-placed.png", cx);
-        let w = workspace();
-        assert_eq!(w.task_logs[TODO].notes.len(), 1, "placed, not sent");
-        // Claude's hook binds it at startup; Codex has none and shows up with its first ask.
-        match w.current_agent(&terminal) {
-            Some(session) => {
-                assert_eq!(session.task.as_deref(), Some(TODO), "works for the todo");
-            }
-            None => eprintln!("not bound before the first ask"),
-        }
+        wait(10_000).await;
+        shot("3-sending.png", cx);
 
-        // The Enter the user presses.
-        let key = gpui::KeyDownEvent {
-            keystroke: gpui::Keystroke::parse("enter").unwrap(),
-            is_held: false,
-            prefer_character_input: false,
-        };
-        send(handle, cx, key.to_platform_input());
         let until = Instant::now() + Duration::from_secs(300);
         loop {
             let w = workspace();

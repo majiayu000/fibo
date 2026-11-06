@@ -31,15 +31,26 @@ pub struct TaskNote {
     pub text: String,
 }
 
-/// The short form of a todo's id that commands print and take.
-pub fn short_id(id: &str) -> &str {
-    id.get(..8).unwrap_or(id)
+/// The short form of a todo's id that commands print and take: its first eight characters,
+/// or the whole id when another todo starts the same (the app's ids share a long prefix).
+pub fn short_id<'a>(w: &Workspace, id: &'a str) -> &'a str {
+    let Some(start) = id.get(..8) else {
+        return id;
+    };
+    let shared = w
+        .tasks
+        .iter()
+        .any(|t| t.id != id && t.id.starts_with(start));
+    if shared { id } else { start }
 }
 
 impl Workspace {
     /// What an Agent is handed for a todo: its words, the progress so far, and how to
     /// write back. A later conversation starts from what the earlier ones found.
-    pub fn task_handoff(&self, task: &Task) -> String {
+    /// `note` is the command that writes back, spelled out with its path and runtime, and
+    /// the id goes in whole: Codex runs commands from a daemon, whose PATH and terminal are
+    /// not this one's.
+    pub fn task_handoff(&self, task: &Task, note: &str) -> String {
         let mut parts = vec![task.prompt()];
         let notes: Vec<String> = self
             .task_logs
@@ -50,8 +61,8 @@ impl Workspace {
             parts.push(format!("目前进展：\n{}", notes.join("\n")));
         }
         parts.push(format!(
-            "（这是 Mooring 待办 {}。每做完一段就运行 mooring todo note \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）",
-            short_id(&task.id)
+            "（这是 Mooring 待办。每做完一段就运行 {note} --task {} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）",
+            task.id
         ));
         parts.join("\n\n")
     }
@@ -157,19 +168,32 @@ mod tests {
     fn a_later_conversation_is_handed_what_the_earlier_ones_found() {
         let mut w = workspace();
         w.edit(Edit::AddTask(task("t1234567890"))).unwrap();
-        let first = w.task_handoff(&w.tasks[0]);
+        let first = w.task_handoff(&w.tasks[0], "/app/mooring todo note --runtime /rt");
         assert!(first.starts_with("沙箱起不来\n\n同时开 3 个就失败"));
         assert!(!first.contains("目前进展"));
-        assert!(first.contains("待办 t1234567"), "{first}");
+        assert!(
+            first.contains("/app/mooring todo note --runtime /rt --task t1234567890 "),
+            "the whole id and where the command is, not this terminal's PATH: {first}"
+        );
         w.edit(Edit::AddTaskNote {
             task: "t1234567890".into(),
             session: None,
             text: "  查清了是容量不够  ".into(),
         })
         .unwrap();
-        let next = w.task_handoff(&w.tasks[0]);
+        let next = w.task_handoff(&w.tasks[0], "mooring todo note");
         assert!(next.contains("目前进展：\n- 查清了是容量不够"), "{next}");
         assert_eq!(w.tasks[0].description, "同时开 3 个就失败", "原话不变");
+    }
+
+    #[test]
+    fn a_short_id_is_only_short_when_it_names_one_todo() {
+        let mut w = workspace();
+        w.edit(Edit::AddTask(task("35883-1793-1"))).unwrap();
+        w.edit(Edit::AddTask(task("35883-1793-2"))).unwrap();
+        w.edit(Edit::AddTask(task("d545a741-aaaa"))).unwrap();
+        assert_eq!(short_id(&w, "35883-1793-1"), "35883-1793-1");
+        assert_eq!(short_id(&w, "d545a741-aaaa"), "d545a741");
     }
 
     #[test]

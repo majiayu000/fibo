@@ -72,6 +72,8 @@ pub(super) struct Handoff {
     pub(super) command: Option<String>,
     pub(super) text: Option<String>,
     pub(super) stage: Stage,
+    /// Send it once placed; otherwise it waits for the user's Enter.
+    pub(super) submit: bool,
     pub(super) started: Instant,
     pub(super) released: bool,
     pub(super) tail: String,

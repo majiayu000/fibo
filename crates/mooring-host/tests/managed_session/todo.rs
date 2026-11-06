@@ -46,7 +46,9 @@ fn todo_commands_write_back_and_cannot_complete() {
     assert!(log.created.is_some());
     assert_eq!(log.notes.len(), 1);
     assert_eq!(log.notes[0].text, "查清了是容量不够");
-    assert!(w.task_handoff(task).contains("- 查清了是容量不够"));
+    assert!(w
+        .task_handoff(task, "mooring todo note")
+        .contains("- 查清了是容量不够"));
 
     let (ok, shown, err) = cli(&h, &["todo", "show", "--task", &id, "--json"]);
     assert!(ok, "{err}");
@@ -62,6 +64,19 @@ fn todo_commands_write_back_and_cannot_complete() {
     }
     let w = h.workspace();
     assert!(!w.task_outcomes.contains_key(&w.tasks.last().unwrap().id));
+
+    // The app's ids share a long prefix: what `list` prints has to name one todo.
+    edit_task(&h, "35883-1793-1");
+    edit_task(&h, "35883-1793-2");
+    let (_, listed, _) = cli(&h, &["todo", "list"]);
+    assert!(
+        listed.contains("35883-1793-1") && listed.contains("35883-1793-2"),
+        "{listed}"
+    );
+    let (ok, _, err) = cli(&h, &["todo", "note", "写到它", "--task", "35883-1793-2"]);
+    assert!(ok, "{err}");
+    let (ok, _, err) = cli(&h, &["todo", "note", "哪一个", "--task", "35883-17"]);
+    assert!(!ok && err.contains("多写几位"), "{err}");
 
     let (ok, listed, _) = cli(&h, &["todo", "list"]);
     assert!(
@@ -81,6 +96,21 @@ fn todo_commands_write_back_and_cannot_complete() {
     assert!(!listed.contains("沙箱起不来"), "{listed}");
     let (_, listed, _) = cli(&h, &["todo", "list", "--all"]);
     assert!(listed.contains("沙箱起不来"), "{listed}");
+}
+fn edit_task(h: &Host, id: &str) {
+    let space = h.workspace().spaces[0].id.clone();
+    h.call(Request::Edit {
+        request: None,
+        edit: Edit::AddTask(Task {
+            id: id.into(),
+            space,
+            title: id.into(),
+            description: String::new(),
+            acceptance: vec![],
+            agent: Agent::Claude,
+        }),
+    })
+    .unwrap();
 }
 fn task_id(h: &Host, short: &str) -> String {
     let w = h.workspace();
@@ -213,7 +243,7 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
 
     let first_session = start("real-1", "tab-1");
     let w = h.workspace();
-    ask("real-1", &w.task_handoff(&w.tasks[0]));
+    ask("real-1", &w.task_handoff(&w.tasks[0], "mooring todo note"));
     let notes = wait_notes(1);
     eprintln!("first note: {}", notes[0].text);
     assert_eq!(notes[0].session.as_deref(), Some(first_session.as_str()));
@@ -241,7 +271,7 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
     let second_session = start("real-2", "tab-2");
     assert_ne!(first_session, second_session);
     let w = h.workspace();
-    let handoff = w.task_handoff(&w.tasks[0]);
+    let handoff = w.task_handoff(&w.tasks[0], "mooring todo note");
     assert!(handoff.contains(&notes[0].text), "{handoff}");
     ask(
         "real-2",

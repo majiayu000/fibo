@@ -223,7 +223,7 @@ impl Workbench {
         if let Some(text) = tab_task
             .filter(|_| session.is_some())
             .filter(|_| pane.is_some_and(|p| p.read(cx).handoff_state().is_none()))
-            .map(|t| t.prompt())
+            .map(|t| self.task_handoff(t))
         {
             let target = terminal.to_owned();
             out.push(

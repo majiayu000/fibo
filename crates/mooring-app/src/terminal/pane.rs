@@ -460,6 +460,8 @@ impl Pane {
 pub enum HandoffState {
     Waiting,
     Placed,
+    /// Pasted, and its Enter is about to follow.
+    Sending,
     NotReady,
     Missing,
 }

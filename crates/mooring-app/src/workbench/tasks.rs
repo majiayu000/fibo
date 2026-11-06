@@ -23,6 +23,22 @@ pub(super) struct TaskUi {
     pub(super) attaching: Option<String>,
 }
 impl Workbench {
+    /// What an Agent is handed for `task`, with this app's own `mooring` to write back with.
+    pub(super) fn task_handoff(&self, task: &Task) -> String {
+        let binary = std::env::current_exe()
+            .map(|exe| exe.with_file_name("mooring").display().to_string())
+            .unwrap_or_else(|_| "mooring".into());
+        let runtime = self
+            .store
+            .socket()
+            .parent()
+            .map(|p| p.display().to_string());
+        let mut note = format!("{} todo note", shell_quote(&binary));
+        if let Some(runtime) = runtime {
+            note.push_str(&format!(" --runtime {}", shell_quote(&runtime)));
+        }
+        self.workspace.task_handoff(task, &note)
+    }
     /// The line above a pane that Mooring is starting an Agent in for a task.
     pub(super) fn handoff_bar(
         &self,
@@ -39,19 +55,20 @@ impl Workbench {
             .unwrap_or(task.agent);
         let message = match state {
             HandoffState::Waiting => format!(
-                "为待办「{}」启动 {}，就绪后放入待办内容",
+                "为待办「{}」启动 {}，就绪后发送待办内容",
                 task.title,
                 agent.name()
             ),
             HandoffState::Placed => "已放入待办内容，检查后在 Agent 里按回车发送".to_owned(),
-            HandoffState::NotReady => "Agent 还没准备好，内容没有放进去".to_owned(),
+            HandoffState::Sending => "正在发送待办内容".to_owned(),
+            HandoffState::NotReady => "Agent 还没准备好，内容没有发送".to_owned(),
             HandoffState::Missing => format!(
-                "找不到 {} 命令，内容没有放进去。先安装它或把它加进 PATH，再点「再试一次」",
+                "找不到 {} 命令，内容没有发送。先安装它或把它加进 PATH，再点「再试一次」",
                 agent.name()
             ),
         };
         let stuck = matches!(state, HandoffState::NotReady | HandoffState::Missing);
-        let text = self.workspace.task_handoff(task);
+        let text = self.task_handoff(task);
         div()
             .flex()
             .flex_wrap()

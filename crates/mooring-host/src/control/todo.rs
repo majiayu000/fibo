@@ -137,7 +137,7 @@ fn list(a: Args) -> io::Result<()> {
             .map_or(String::new(), |n| format!("  {}", n.text));
         println!(
             "{}  {}  {}  {}{last}",
-            short_id(&task.id),
+            short_id(&w, &task.id),
             task_state(&w, task, now).label(),
             space_name(&w, &task.space),
             task.title,
@@ -155,7 +155,7 @@ fn show(a: Args) -> io::Result<()> {
     }
     println!(
         "{}  {}  {}\n{}",
-        short_id(&task.id),
+        short_id(&w, &task.id),
         task_state(&w, task, now).label(),
         space_name(&w, &task.space),
         task.title
@@ -214,15 +214,39 @@ fn add(a: Args) -> io::Result<()> {
     if a.has("json") {
         return print_json(&serde_json::json!({ "id": id }));
     }
-    println!("{}", short_id(&id));
+    let w = workspace(&a.socket)?;
+    println!("{}", short_id(&w, &id));
     Ok(())
+}
+
+/// Who wrote a note: the calling terminal's conversation if it works for this todo or
+/// noted it, else the one conversation working for it. Codex's commands come from a daemon
+/// that may carry another terminal's variable, so an unrelated conversation is never named.
+fn note_session(w: &Workspace, task: &str) -> Option<String> {
+    let own = own_session(w).filter(|id| {
+        let works = w
+            .agent_sessions
+            .iter()
+            .any(|s| &s.id == id && s.task.as_deref() == Some(task));
+        works || w.task_logs.get(task).and_then(|l| l.source.as_ref()) == Some(id)
+    });
+    own.or_else(|| {
+        let mut working = w
+            .agent_sessions
+            .iter()
+            .filter(|s| s.current && s.task.as_deref() == Some(task));
+        match (working.next(), working.next()) {
+            (Some(only), None) => Some(only.id.clone()),
+            _ => None,
+        }
+    })
 }
 
 fn note(a: Args) -> io::Result<()> {
     let w = workspace(&a.socket)?;
     let text = a.text(1)?;
     let task = pick(&w, &a)?.id.clone();
-    let session = own_session(&w);
+    let session = note_session(&w, &task);
     deliver_edit(
         &a,
         Edit::AddTaskNote {

@@ -85,7 +85,7 @@ impl Workbench {
                 .and_then(|id| self.workspace.tasks.iter().find(|t| &t.id == id));
             start_command(agent, task, pending.as_ref().map(|(c, _)| c.as_str())).map(
                 |(command, text)| {
-                    let handoff = task.map(|t| self.workspace.task_handoff(t));
+                    let handoff = task.map(|t| self.task_handoff(t));
                     (command, handoff.or(text))
                 },
             )

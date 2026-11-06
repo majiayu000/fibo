@@ -7,14 +7,17 @@ use mooring_core::terminal::{agent_input_ready, command_missing};
 use std::time::Instant;
 
 const HANDOFF_LIMIT: u64 = 60;
+/// Long enough for an Agent's paste handling to finish before Enter arrives.
+const SUBMIT_AFTER: std::time::Duration = std::time::Duration::from_millis(300);
 impl Pane {
-    /// Launch an Agent in this shell, then place `text` in the Agent's own input box
-    /// without submitting it. Nothing is ever typed into the shell but the command.
+    /// Launch an Agent in this shell, then send `text` to the Agent as its first ask.
+    /// Nothing is ever typed into the shell but the command.
     pub fn start_agent(&mut self, command: &str, text: Option<String>, cx: &mut Context<Self>) {
         self.handoff = Some(Handoff {
             command: Some(command.into()),
             text,
             stage: Stage::Shell,
+            submit: true,
             started: Instant::now(),
             released: false,
             tail: String::new(),
@@ -22,12 +25,14 @@ impl Pane {
         });
         self.watch_handoff(cx);
     }
-    /// The Agent was started by hand; only the text still needs to reach its input box.
+    /// The Agent was started by hand and may be in the middle of something: the text goes
+    /// into its input box and waits for the user's Enter.
     pub fn place_text(&mut self, text: String, cx: &mut Context<Self>) {
         self.handoff = Some(Handoff {
             command: None,
             text: Some(text),
             stage: Stage::Agent,
+            submit: false,
             started: Instant::now(),
             released: true,
             tail: String::new(),
@@ -61,6 +66,7 @@ impl Pane {
         let h = self.handoff.as_ref()?;
         Some(match h.stage {
             Stage::Shell | Stage::Agent => HandoffState::Waiting,
+            Stage::Placed if h.submit => HandoffState::Sending,
             Stage::Placed => HandoffState::Placed,
             Stage::NotReady => HandoffState::NotReady,
             Stage::Missing => HandoffState::Missing,
@@ -164,8 +170,18 @@ impl Pane {
                     h.stage = Stage::Missing;
                 } else if h.released && bracketed && h.still >= 2 && agent_input_ready(&h.tail) {
                     let text = h.text.clone().unwrap_or_default();
+                    let submit = h.submit;
                     h.stage = Stage::Placed;
-                    self.prefill(&text, cx);
+                    let placed = self.prefill(&text, cx);
+                    match (placed, submit) {
+                        (true, true) => self.submit_handoff(cx),
+                        (true, false) => (),
+                        (false, _) => {
+                            if let Some(h) = self.handoff.as_mut() {
+                                h.stage = Stage::NotReady;
+                            }
+                        }
+                    }
                 } else if elapsed.as_secs() >= HANDOFF_LIMIT {
                     h.stage = Stage::NotReady;
                 }
@@ -174,17 +190,37 @@ impl Pane {
         }
         cx.notify();
     }
-    pub fn prefill(&mut self, command: &str, cx: &mut Context<Self>) {
+    /// The Enter after the paste, as its own write once the Agent has taken the paste in:
+    /// inside the paste it would be a newline. Dismissing the bar first cancels it.
+    fn submit_handoff(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(SUBMIT_AFTER).await;
+            let _ = this.update(cx, |pane, cx| {
+                if pane
+                    .handoff
+                    .as_ref()
+                    .is_some_and(|h| h.submit && h.stage == Stage::Placed)
+                {
+                    pane.input(b"\r".to_vec(), cx);
+                    pane.handoff = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+    /// Whether the text went out.
+    pub fn prefill(&mut self, command: &str, cx: &mut Context<Self>) -> bool {
         let bracketed = self.bracketed();
         if !bracketed && (command.contains('\n') || command.contains('\r')) {
             self.local_error = Some("终端尚未启用安全粘贴；请等待 shell 就绪后重试".into());
             cx.notify();
-            return;
+            return false;
         }
         if command.contains('\x1b') {
             self.local_error = Some("待填入文本包含终端控制字符".into());
             cx.notify();
-            return;
+            return false;
         }
         let bytes = if bracketed {
             format!("\x1b[200~{command}\x1b[201~").into_bytes()
@@ -192,6 +228,7 @@ impl Pane {
             command.as_bytes().to_vec()
         };
         self.input(bytes, cx);
+        true
     }
 }
 #[cfg(test)]
