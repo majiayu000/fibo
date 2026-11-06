@@ -191,15 +191,19 @@ pub(crate) fn contains(line: &[u8], needle: &[u8]) -> bool {
     line.windows(needle.len()).any(|w| w == needle)
 }
 
-/// Whether a shell's argv runs `command`. Claude Code passes it as `eval '<command>'`,
-/// each `'` inside written `'\''`; the hook clips a long command with "… [+N chars]".
+/// Whether a shell's argv runs `command`. Claude Code passes it as `eval '<command>'`; how
+/// a `'` inside is written is its own business (`'\''`, later `'"'"'`), so quoting is left
+/// out of the comparison. The hook clips a long command with "… [+N chars]".
 fn runs(argv: &str, command: &str) -> bool {
+    let bare = |s: &str| -> String {
+        s.chars()
+            .filter(|c| !matches!(c, '\'' | '"' | '\\'))
+            .collect()
+    };
     let command = command.split("… [+").next().unwrap_or(command);
     let head: String = command.chars().take(60).collect();
-    if head.trim().is_empty() {
-        return false;
-    }
-    argv.contains(&head.replace('\'', "'\\''")) || argv.contains(&head)
+    let head = bare(&head);
+    !head.trim().is_empty() && bare(argv).contains(&head)
 }
 
 pub(crate) fn children(pid: u32) -> Vec<u32> {
@@ -412,6 +416,11 @@ mod tests {
                 true,
             ),
             (
+                "a loop with a quote in its command, once its shell is found, 2026-11-06",
+                &[Some(YOUNG), Some(YOUNG)],
+                true,
+            ),
+            (
                 "a server Codex left running, found under its daemon, 2026-11-06",
                 &[Some(SERVER)],
                 false,
@@ -485,6 +494,39 @@ mod tests {
         assert!(runs(argv, "python3 -m http.server 8000… [+40 chars]"));
         assert!(!runs(argv, "cargo test"));
         assert!(!runs(argv, "  "));
+    }
+    /// Claude Code 2.1.3xx writes a `'` inside the eval as `'"'"'`. A polling loop with a
+    /// quote near its start went unfound and read as 等后台 while it ran, 2026-11-06.
+    #[test]
+    fn a_command_is_found_however_the_shell_quotes_it() {
+        let command =
+            "R=o/r; perl -e 'alarm 2400; exec @ARGV' sh -c 'while :; do gh run list; done'";
+        let argv = r#"/bin/zsh -c source /x/snapshot.sh && eval 'R=o/r; perl -e '"'"'alarm 2400; exec @ARGV'"'"' sh -c '"'"'while :; do gh run list; done'"'"'' < /dev/null && pwd -P >| /tmp/cwd"#;
+        assert!(runs(argv, command));
+        assert!(!runs(argv, "R=o/r; perl -e 'alarm 60; exec @ARGV'"));
+        assert!(!runs(argv, "''"), "nothing but quotes names no command");
+    }
+    /// The whole chain on a real process: a shell quoting that way is found and is a job.
+    #[test]
+    fn a_real_shell_quoting_a_quote_the_new_way_is_found() {
+        let command = "perl -e 'sleep 30' # quote-9b2e";
+        let quoted = command.replace('\'', r#"'"'"'"#);
+        let mut child = std::process::Command::new("/bin/zsh")
+            .args(["-c", &format!("eval '{quoted}' < /dev/null && true")])
+            .spawn()
+            .unwrap();
+        let tasks = vec![("q".to_owned(), command.to_owned())];
+        let mut seen = HashMap::new();
+        for _ in 0..50 {
+            seen = look(&[(std::process::id(), tasks.clone())]).unwrap();
+            if seen.contains_key("q") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        child.kill().unwrap();
+        let _ = child.wait();
+        assert!(judge(None, seen.get("q").copied()).job, "{seen:?}");
     }
     #[test]
     fn real_children_are_found_by_command_and_only_a_chosen_port_reads_as_a_server() {
