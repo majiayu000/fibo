@@ -287,9 +287,11 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let space = workspace
-            .spaces
-            .first()
+        // Opening where you left off is the host's to say; a space put aside is not where
+        // to start.
+        let space = (workspace.spaces.iter())
+            .find(|s| !workspace.space_quiet(&s.id))
+            .or_else(|| workspace.spaces.first())
             .map(|s| s.id.clone())
             .unwrap_or_default();
         let tab = workspace
@@ -474,6 +476,7 @@ impl Workbench {
                 subagents_all: HashSet::new(),
                 space_menu: None,
                 space_removing: false,
+                space_quieting: false,
                 space_switch: false,
                 renaming_space: None,
                 icon_menu: None,

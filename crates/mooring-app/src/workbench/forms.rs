@@ -196,7 +196,7 @@ impl Workbench {
             kind,
             fields,
             agent: self.workspace.settings.default_agent,
-            space: self.nav.space.clone(),
+            space: self.attended_or_first(self.nav.space.clone()),
             criteria: vec![],
             tried: false,
             sending: None,

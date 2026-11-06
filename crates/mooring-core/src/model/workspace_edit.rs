@@ -324,8 +324,25 @@ impl Workspace {
                         "空间里还有 {open} 个没收尾的待办，先完成或放弃它们"
                     ));
                 }
+                if !self.space_quiet(&id) && self.attended_spaces() == 1 {
+                    return Err("其他空间都先不管了，先接着管一个".into());
+                }
                 self.tabs.retain(|t| t.space != id);
                 self.spaces.retain(|s| s.id != id);
+                self.quiet_spaces.remove(&id);
+            }
+            Edit::SetSpaceQuiet { id, quiet } => {
+                if !self.spaces.iter().any(|s| s.id == id) {
+                    return Err("空间不存在".into());
+                }
+                if quiet && !self.space_quiet(&id) && self.attended_spaces() == 1 {
+                    return Err("至少要留一个在管的空间".into());
+                }
+                if quiet {
+                    self.quiet_spaces.insert(id);
+                } else {
+                    self.quiet_spaces.remove(&id);
+                }
             }
             Edit::SetOutcome { id, outcome, seen } => {
                 if let Some(seen) = seen {

@@ -49,6 +49,13 @@ impl Workbench {
                     String::new(),
                     String::new(),
                 ),
+                Hit::Space(id) => (
+                    glyph("◌"),
+                    self.space_hit_title(id),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ),
                 Hit::View(id) => {
                     let name = presets::find(id).name.clone();
                     let on = self.sidebar.preset().id == *id;
