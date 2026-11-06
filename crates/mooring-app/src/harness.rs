@@ -4,6 +4,7 @@ use super::*;
 use crate::terminal::screen;
 use gpui::WindowHandle;
 use std::time::Duration;
+mod blank_pane_evidence;
 mod changes_evidence;
 mod complete_evidence;
 #[path = "cpu_probe_evidence.rs"]
@@ -91,6 +92,9 @@ pub fn start(
         return;
     }
     if route_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    if blank_pane_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
     if reconnect_evidence::start(handle, evidence.clone(), cx) {
