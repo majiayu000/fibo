@@ -594,15 +594,22 @@ fn a_build_too_old_for_the_opencode_declarations_gets_the_version_before_them() 
         .into_iter()
         .find(|e| e.id == "opencode")
         .unwrap();
-    assert_eq!(entry.version, "0.2.0");
-    assert_eq!(entry.mooring, Some(4));
+    assert_eq!(entry.version, "0.3.0");
+    assert_eq!(entry.mooring, Some(5));
     assert!(entry.compatible(), "this build reads it");
-    assert_eq!(entry.for_this_build().version, "0.2.0");
+    assert_eq!(entry.for_this_build().version, "0.3.0");
 
     let mut older_build = entry;
     older_build.mooring = Some(plugin::LEVEL + 1);
     let chosen = older_build.for_this_build();
-    assert_eq!(chosen.version, "0.1.0");
+    // Level 4 builds read what 0.2.0 declares; earlier ones get 0.1.0.
+    assert_eq!(chosen.version, "0.2.0");
+    let older = chosen
+        .versions
+        .iter()
+        .find(|e| e.version == "0.1.0")
+        .unwrap();
+    assert_eq!(older.mooring, None);
     let old = std::fs::read_to_string(catalog.join("opencode/versions/0.1.0/agent.json")).unwrap();
     assert!(!old.contains("screen_rules") && !old.contains("interrupt"));
 }
