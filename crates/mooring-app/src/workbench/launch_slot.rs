@@ -83,7 +83,12 @@ impl Workbench {
             let task = task_id
                 .as_ref()
                 .and_then(|id| self.workspace.tasks.iter().find(|t| &t.id == id));
-            start_command(agent, task, pending.as_ref().map(|(c, _)| c.as_str()))
+            start_command(agent, task, pending.as_ref().map(|(c, _)| c.as_str())).map(
+                |(command, text)| {
+                    let handoff = task.map(|t| self.workspace.task_handoff(t));
+                    (command, handoff.or(text))
+                },
+            )
         };
         let argv = launch_argv(
             std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),

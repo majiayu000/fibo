@@ -13,6 +13,9 @@ pub struct Workspace {
     pub outcome_history: Vec<OutcomeChange>,
     #[serde(default)]
     pub task_outcomes: std::collections::HashMap<String, Outcome>,
+    /// When each todo was written down and closed, and the progress written back.
+    #[serde(default)]
+    pub task_logs: std::collections::HashMap<String, TaskLog>,
     /// One proven binding consumes this override; None cancels the tab default.
     #[serde(default)]
     pub pending_tasks: std::collections::HashMap<String, Option<String>>,
@@ -631,6 +634,8 @@ impl Workspace {
 mod edit;
 pub use edit::{Edit, SeenSession};
 mod space;
+mod task_log;
+pub use task_log::{NOTE_LIMIT, TaskLog, TaskNote, short_id};
 mod tabs;
 #[cfg(test)]
 mod tests;

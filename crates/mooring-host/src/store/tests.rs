@@ -520,3 +520,50 @@ fn task_outcome_and_pending_override_survive_reopen() {
     assert!(error.to_string().contains("证据"), "{error}");
     std::fs::remove_dir_all(root).unwrap();
 }
+#[test]
+fn a_todos_times_source_and_progress_survive_a_restart() {
+    let dir = std::env::temp_dir().join(format!("kl-log-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut db, before) = Store::open(&dir).unwrap();
+    let mut after = before.clone();
+    after
+        .edit(Edit::AddSpace(Space {
+            id: "s".into(),
+            name: "s".into(),
+            cwd: "/tmp".into(),
+        }))
+        .unwrap();
+    after
+        .edit(Edit::AddTask(Task {
+            id: "t".into(),
+            space: "s".into(),
+            title: "t".into(),
+            description: String::new(),
+            acceptance: vec![],
+            agent: Agent::Claude,
+        }))
+        .unwrap();
+    after
+        .edit(Edit::AddTaskNote {
+            task: "t".into(),
+            session: None,
+            text: "查清了".into(),
+        })
+        .unwrap();
+    db.save(&before, &after).unwrap();
+    let mut noted = after.clone();
+    noted
+        .edit(Edit::AddTaskNote {
+            task: "t".into(),
+            session: None,
+            text: "修好了".into(),
+        })
+        .unwrap();
+    db.save(&after, &noted).unwrap();
+    drop(db);
+    let (_, loaded) = Store::open(&dir).unwrap();
+    assert_eq!(loaded.task_logs, noted.task_logs);
+    assert_eq!(loaded.task_logs["t"].notes.len(), 2);
+    assert!(loaded.task_logs["t"].created.is_some());
+    std::fs::remove_dir_all(dir).unwrap();
+}

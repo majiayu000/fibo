@@ -51,7 +51,7 @@ impl Workbench {
             ),
         };
         let stuck = matches!(state, HandoffState::NotReady | HandoffState::Missing);
-        let text = task.prompt();
+        let text = self.workspace.task_handoff(task);
         div()
             .flex()
             .flex_wrap()

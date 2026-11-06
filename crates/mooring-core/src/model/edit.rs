@@ -8,7 +8,18 @@ pub enum Edit {
     /// Rename a space or point it at another directory.
     UpdateSpace(Space),
     AddTask(Task),
+    /// A todo noted in a conversation, remembered as where it came from.
+    AddTaskFrom {
+        task: Task,
+        session: Option<String>,
+    },
     UpdateTask(Task),
+    /// Progress written back on a todo. Never changes what the user wrote or its outcome.
+    AddTaskNote {
+        task: String,
+        session: Option<String>,
+        text: String,
+    },
     SetTaskOutcome {
         id: String,
         outcome: Outcome,

@@ -217,6 +217,7 @@ impl Workspace {
                 if seen.is_some_and(|seen| seen != now) && now != outcome {
                     return Err("这个待办的结局刚被改过，看一眼再定".into());
                 }
+                self.stamp_task_closed(&id, &outcome);
                 self.task_outcomes.insert(id, outcome);
             }
             Edit::SetPendingTask { terminal, task } => {
@@ -282,8 +283,15 @@ impl Workspace {
                         return Err("证据只认测试、提交和文件改动".into());
                     }
                 }
+                self.stamp_task_created(&task.id);
                 self.tasks.push(task);
             }
+            Edit::AddTaskFrom { task, session } => self.add_task_from(task, session)?,
+            Edit::AddTaskNote {
+                task,
+                session,
+                text,
+            } => self.add_task_note(task, session, text)?,
             edit @ (Edit::CreateTab { .. }
             | Edit::RenameTab { .. }
             | Edit::MoveTab { .. }

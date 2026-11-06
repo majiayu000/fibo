@@ -84,6 +84,7 @@ impl Store {
             CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, space_id TEXT NOT NULL REFERENCES spaces(id), title TEXT NOT NULL, description TEXT NOT NULL, runtime TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS outcome_history (sequence INTEGER PRIMARY KEY, session_id TEXT NOT NULL, before_json TEXT NOT NULL, after_json TEXT NOT NULL, at INTEGER NOT NULL, reason TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS task_outcomes (task_id TEXT PRIMARY KEY REFERENCES tasks(id), outcome TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS task_logs (task_id TEXT PRIMARY KEY REFERENCES tasks(id), log TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS pending_tasks (terminal_id TEXT PRIMARY KEY REFERENCES terminals(id), task_id TEXT REFERENCES tasks(id));
             CREATE TABLE IF NOT EXISTS lost_agents (terminal_id TEXT PRIMARY KEY REFERENCES terminals(id), session_id TEXT REFERENCES agent_sessions(id));
             CREATE TABLE IF NOT EXISTS agent_launch (session_id TEXT PRIMARY KEY REFERENCES agent_sessions(id), flags TEXT NOT NULL);
@@ -199,6 +200,17 @@ impl Store {
         for row in self.0.prepare("SELECT session_id,before_json,after_json,at,reason FROM outcome_history ORDER BY sequence").map_err(db_error)?.query_map([], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,i64>(3)?,r.get::<_,String>(4)?))).map_err(db_error)? {
             let (session,before,after,at,reason)=row.map_err(db_error)?;
             w.outcome_history.push(OutcomeChange {session,before:serde_json::from_str(&before).map_err(db_error)?,after:serde_json::from_str(&after).map_err(db_error)?,at:u64::try_from(at).map_err(db_error)?,reason});
+        }
+        for row in self
+            .0
+            .prepare("SELECT task_id,log FROM task_logs")
+            .map_err(db_error)?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .map_err(db_error)?
+        {
+            let (id, value) = row.map_err(db_error)?;
+            w.task_logs
+                .insert(id, serde_json::from_str(&value).map_err(db_error)?);
         }
         for row in self
             .0
@@ -505,6 +517,15 @@ impl Store {
         }
         for h in w.outcome_history.iter().skip(before.outcome_history.len()) {
             tx.execute("INSERT INTO outcome_history(session_id,before_json,after_json,at,reason) VALUES(?1,?2,?3,?4,?5)",params![h.session,serde_json::to_string(&h.before).map_err(db_error)?,serde_json::to_string(&h.after).map_err(db_error)?,i64::try_from(h.at).map_err(db_error)?,h.reason]).map_err(db_error)?;
+        }
+        for (id, log) in &w.task_logs {
+            if before.task_logs.get(id) != Some(log) {
+                tx.execute(
+                    "INSERT INTO task_logs VALUES(?1,?2) ON CONFLICT(task_id) DO UPDATE SET log=excluded.log",
+                    params![id, serde_json::to_string(log).map_err(db_error)?],
+                )
+                .map_err(db_error)?;
+            }
         }
         if before.task_outcomes != w.task_outcomes {
             for (id, outcome) in &w.task_outcomes {

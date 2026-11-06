@@ -43,6 +43,8 @@ mod resources;
 mod status;
 #[path = "managed_session/terminal_io.rs"]
 mod terminal_io;
+#[path = "managed_session/todo.rs"]
+mod todo;
 
 use codex_fixture::*;
 use common::*;

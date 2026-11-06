@@ -11,11 +11,13 @@ mod inspect;
 mod open;
 mod prompt;
 mod run_agent;
+mod todo;
 use explain::explain;
 use inspect::{events, list, read};
 use open::{close, split};
 use prompt::{prompt, send, wait_cmd};
 use run_agent::run_agent;
+use todo::todo;
 
 /// One `mooring` command: the flags it takes and its lines in the usage text. The full
 /// usage is put together from this table, `-h`/`--help` prints a command's own lines,
@@ -113,6 +115,17 @@ mooring run <agent> <任务|-> [--split] [--cwd 目录] [--no-report] [--from <�
         switches: &[],
         usage: "\
 mooring close <终端>                       关掉这块分屏并结束里面的程序",
+    },
+    Command {
+        name: "todo",
+        valued: &["task", "said", "space"],
+        switches: &["all", "work", "json"],
+        usage: "\
+mooring todo list [--all] [--json]         没做完的待办；--all 连已收尾的
+mooring todo show [--task <待办>] [--json]   看一条：用户写的、验收标准、进展
+mooring todo add <标题|-> [--said <原话>] [--space <空间>] [--work] [--json]
+                                           记一件事，默认只记下来自哪个会话；--work 表示这个会话就在做它
+mooring todo note <文字|-> [--task <待办>]   写进展：做了什么、剩什么、要用户定什么；完成由用户标记",
     },
     Command {
         name: "remote",
@@ -460,7 +473,7 @@ fn expect_ok(reply: Reply) -> io::Result<()> {
 
 /// The commands this module carries out; `main` sends each of them here.
 pub(crate) const DRIVES: &[&str] = &[
-    "list", "read", "send", "prompt", "wait", "explain", "events", "split", "run", "close",
+    "list", "read", "send", "prompt", "wait", "explain", "events", "split", "run", "close", "todo",
 ];
 pub fn run(cmd: &Command, args: impl Iterator<Item = String>) -> io::Result<()> {
     let a = Args::parse(args, cmd)?;
@@ -475,6 +488,7 @@ pub fn run(cmd: &Command, args: impl Iterator<Item = String>) -> io::Result<()> 
         "split" => split(a),
         "run" => run_agent(a),
         "close" => close(a),
+        "todo" => todo(a),
         _ => Err(io::Error::other(usage())),
     }
 }
