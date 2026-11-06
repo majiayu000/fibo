@@ -138,6 +138,9 @@ impl Adapter for Claude {
             ],
         })
     }
+    fn subagent_parent(&self, path: &Path) -> Option<PathBuf> {
+        subagent_parent(path)
+    }
     fn subagents(&self, transcript: &Path) -> Option<Vec<mooring_core::content::Subagent>> {
         Some(subagents(&transcript.with_extension("").join("subagents")))
     }
@@ -403,6 +406,21 @@ pub(crate) fn claude_session_id(args: &[String]) -> Option<String> {
         }
     }
     found
+}
+
+fn subagent_parent(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    if !(name.starts_with("agent-") && name.ends_with(".meta.json")) {
+        return None;
+    }
+    let dir = path.parent()?;
+    if dir.file_name()? != "subagents" {
+        return None;
+    }
+    let session = dir.parent()?;
+    let mut parent = session.as_os_str().to_owned();
+    parent.push(".jsonl");
+    Some(PathBuf::from(parent))
 }
 
 /// A forked or branched conversation starts with the original's records copied in, each
