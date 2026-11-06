@@ -27,7 +27,17 @@ decision-makers: majiayu000
 
 命令只在内存里，不写进存储（命令行可能含密钥）。宿主重启后，存储里还列着 shell 的活会话从它自己的 Claude 日志找回命令（`commands_in_log`），每个会话只读一次；日志是 Claude 已经写下的，这里不新增存储。
 
-不做：不按命令文字猜（名字叫 relay 的既可能是常驻服务，也可能是脚本的零件）；Codex 会话不覆盖（它的 hook 不报后台 shell）。
+不做：不按命令文字猜（名字叫 relay 的既可能是常驻服务，也可能是脚本的零件）。
+
+### Codex
+
+Codex 的 hook 不报后台 shell，它上报的 `working` 也不分任务和服务，而且宿主一重启就丢。普通启动的 Codex，命令跑在共享守护进程下面，进程上没有会话标记（真实 0.167 实测）。所以分三步：
+
+1. 屏幕底部写着 `background terminal … /stop to close`、没有 `esc to interrupt`，日志说这一轮结束了：算它留下了后台命令。新宿主启动时把每块屏幕读一遍，否则安静的屏幕不会再被读。
+2. 这时才去看叫 `codex` 的进程（窗格里的和守护进程）的子进程：stdin 是管道或 socket 的是 MCP 这类助手，跳过；日志里写过这条命令的算这个会话的。程序可能改写自己的名字，所以只比参数。
+3. 对上的命令走上面的第 1–4 条。一条都对不上时算任务，在跑到屏幕说没了，或满 2 小时。
+
+这是读日志文字来认归属，不是用文字判断任务还是服务，后者仍然只看端口。
 
 ## 踩过的真实案例
 
@@ -45,6 +55,8 @@ decision-makers: majiayu000
 | 11-05 | 轮询 CI 的循环，宿主中途重启（换 App）：内存里的命令丢了，下一个 Stop 又要等它跑完 | 在跑 | 重启后从 Claude 日志找回命令，再走 4 | 本次 |
 | 11-05 | 宿主刚重启、这个 shell 还没判定（实测约 50 秒）：不再先显示等后台 | 在跑 | 第 0 条 | 本次 |
 | 11-06 | 只跑 `claude`（命令行没有会话 ID）、等着后台 shell 时换 App：没有 hook 来，新宿主找不到进程，shell 没人看，宽限期一过就掉进等后台 | 在跑 | 启动时按 pid 从 `claude agents --json` 找回进程，再走 4 | 本次 |
+| 11-06 | Codex 后台 `sleep`，中途换 App：上报丢了，屏幕还写着后台终端 | 在跑 | 屏幕，新宿主启动时读一遍 | 本次 |
+| 11-06 | Codex 开着 `http.server`（在守护进程下，`python3` 改写了自己的名字） | 等后台 | 对上进程后走 3 | 本次 |
 | — | `tail -f`、不监听的监视程序 | 2 小时前在跑，之后等后台 | 4、1 | 3fb2791 |
 
 ## Consequences
@@ -54,17 +66,20 @@ decision-makers: majiayu000
 * Bad, because 客户端连上之前可能显示几秒「等后台」。
 * Bad, because 开着的真服务在宿主重启后，判定完之前会短暂显示「在跑」。
 * Bad, because 脚本卡在 `wait` 又留着别的不监听端口的末端进程时，仍显示「在跑」，最多到 2 小时。
+* Bad, because 两个 Codex 会话的日志都写过同一条命令时，这个进程会同时算给两边。
+* Bad, because Codex 改了底部那行字就退回只靠它上报的状态，服务又算在跑，换 App 又会掉。
 * Bad, because 树内互相连接的常驻服务（比如 `concurrently` 起的前端代理到自己的 API）会算任务，要到 2 小时才变成服务。真遇到时加案例再改。
 
 ## Implementation Plan
 
-* **Affected paths**: `crates/mooring-host/src/background_shells.rs`（`judge`、`Sockets`、`known_cases`），状态归类仍只在 `crates/mooring-core/src/status.rs`。
+* **Affected paths**: `crates/mooring-host/src/background_shells.rs`（`judge`、`Sockets`、`known_cases`），`crates/mooring-host/src/cli_commands.rs`、`crates/mooring-host/src/host/found_shells.rs`（Codex），状态归类仍只在 `crates/mooring-core/src/status.rs`。
 * **Patterns to follow**: 探测结果只叠加在快照上（`Background.jobs`），状态只由 `status::of` 判定；每次规则改动都先加案例。
 * **Patterns to avoid**: 不要退回只数 shell 个数；不要按命令文字判断；不要用「shell 外面包了一层脚本」判断，`npm run dev` 也是这样。
 
 ### Verification
 
 - [ ] `cargo test -p mooring-host --lib background_shells`：`known_cases` 是案例表，`a_real_script_using_its_own_port_differs_from_a_server_with_an_outside_client` 用真实进程验证。
+- [ ] `cargo test -p mooring-host --test managed_session codex_background`：假 Codex 接管后还在跑、开端口的算等后台。
 - [ ] `cargo test -p mooring-host --test managed_session restart_binding`：判定之前的一步，新宿主要先找到安静 Agent 的进程，否则这些规则根本轮不到。
 
 ## Alternatives

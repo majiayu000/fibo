@@ -38,14 +38,10 @@ impl Adapter for Codex {
     /// After Esc a running command stays as 「1 background terminal running · /stop to
     /// close」, and the log says the turn runs until it ends: `sleep 60` went on (real, 0.166).
     fn closes_background(&self, tail: &str) -> Option<&'static str> {
-        let filled = |l: &&str| !l.trim().is_empty();
-        let lines: Vec<&str> = tail.lines().filter(filled).collect();
-        let bottom = &lines[lines.len().saturating_sub(6)..];
-        let left = bottom
-            .iter()
-            .any(|l| l.contains("background terminal") && l.contains("/stop to close"));
-        let working = bottom.iter().any(|l| l.contains("esc to interrupt"));
-        (left && !working).then_some("/stop")
+        self.left_running(tail).then_some("/stop")
+    }
+    fn left_running(&self, tail: &str) -> bool {
+        super::codex_background::left_running(tail)
     }
     fn reads_tools(&self) -> bool {
         true

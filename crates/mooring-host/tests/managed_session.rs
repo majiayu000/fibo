@@ -15,6 +15,8 @@ use tied::SpawnTied;
 mod claude_logs;
 #[path = "managed_session/cli.rs"]
 mod cli;
+#[path = "managed_session/codex_background.rs"]
+mod codex_background;
 #[path = "managed_session/codex_daemon.rs"]
 mod codex_daemon;
 #[path = "managed_session/codex_fixture.rs"]

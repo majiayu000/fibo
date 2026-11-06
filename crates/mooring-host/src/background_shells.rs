@@ -107,6 +107,22 @@ pub fn look(targets: &[(u32, Vec<(String, String)>)]) -> io::Result<HashMap<Stri
             found.push((id.clone(), pid, tree(pid)));
         }
     }
+    seen_all(found, now)
+}
+/// Looks at processes already found, `(id, pid)`.
+pub fn look_at(pids: &[(String, u32)]) -> io::Result<HashMap<String, Seen>> {
+    let found = pids
+        .iter()
+        .map(|(id, pid)| (id.clone(), *pid, tree(*pid)))
+        .collect();
+    seen_all(found, mooring_core::content::now())
+}
+/// How long a process has run.
+pub fn age(pid: u32) -> u64 {
+    let now = mooring_core::content::now();
+    started(pid).map_or(0, |at| now.saturating_sub(at))
+}
+fn seen_all(found: Vec<(String, u32, Vec<u32>)>, now: u64) -> io::Result<HashMap<String, Seen>> {
     let all: Vec<u32> = found
         .iter()
         .flat_map(|(_, _, t)| t.iter().copied())
@@ -171,7 +187,7 @@ pub fn commands_in_log(log: &std::path::Path, ids: &[String]) -> io::Result<Vec<
     }
     Ok(out)
 }
-fn contains(line: &[u8], needle: &[u8]) -> bool {
+pub(crate) fn contains(line: &[u8], needle: &[u8]) -> bool {
     line.windows(needle.len()).any(|w| w == needle)
 }
 
@@ -186,7 +202,7 @@ fn runs(argv: &str, command: &str) -> bool {
     argv.contains(&head.replace('\'', "'\\''")) || argv.contains(&head)
 }
 
-fn children(pid: u32) -> Vec<u32> {
+pub(crate) fn children(pid: u32) -> Vec<u32> {
     let mut buf = vec![0i32; 256];
     let n = unsafe {
         libc::proc_listchildpids(
@@ -394,6 +410,11 @@ mod tests {
                 "polling loop first seen after the host restarted, 2026-11-05",
                 &[Some(YOUNG)],
                 true,
+            ),
+            (
+                "a server Codex left running, found under its daemon, 2026-11-06",
+                &[Some(SERVER)],
+                false,
             ),
             (
                 "tail -f: no port, past the limit",

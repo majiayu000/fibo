@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 mod association;
 mod client;
 mod events;
+mod found_shells;
 mod live;
 mod lock;
 pub(crate) mod remote;
@@ -210,6 +211,7 @@ impl Host {
             };
             mooring_core::program_state::apply(c, r);
         }
+        self.overlay_found(&mut w);
         w
     }
     fn set_screen_wait(

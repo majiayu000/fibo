@@ -231,6 +231,7 @@ pub(super) fn check_screen_wait(
     let mut host = lock(shared)?;
     // The last frame of a finished turn has no working line; it is read here, once still.
     host.screen_busy(id, &tail)?;
+    host.screen_background(id, &tail)?;
     let seen = host.workspace.current_agent(id).is_some().then_some(seen);
     let veto = !seen.as_ref().is_some_and(|e| e.waiting());
     host.set_screen_wait(id, seen)?;

@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 pub(crate) mod claude;
 mod claude_suggestion;
 pub(crate) mod codex;
+mod codex_background;
 mod codex_items;
 mod codex_script;
 mod cursor;
@@ -205,6 +206,10 @@ pub trait Adapter: Sync {
     }
     fn screen_busy(&self, _tail: &str) -> Option<bool> {
         None
+    }
+    /// Whether the bottom of the screen says a turn that ended left a command running.
+    fn left_running(&self, _tail: &str) -> bool {
+        false
     }
     /// Whether a conversation can run outside the PTY (a shared daemon), leaving no process
     /// or open-file evidence: then a log binds to a terminal only by what its screen shows,

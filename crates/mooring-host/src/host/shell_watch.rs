@@ -28,6 +28,10 @@ pub(super) struct ShellWatch {
     started: Option<Instant>,
     /// `SETTLE` has ended and clients were told: unjudged shells stop counting as jobs.
     settled: bool,
+    /// Terminal -> since when its screen says a command was left running.
+    pub(super) on_screen: HashMap<String, Instant>,
+    /// Session -> the pids of the commands found for it, each judged in `judged`.
+    pub(super) found: HashMap<String, Vec<String>>,
     wake: Option<SyncSender<()>>,
 }
 impl ShellWatch {
@@ -49,6 +53,26 @@ impl ShellWatch {
             self.commands.insert(session.into(), tasks);
         }
         self.poke();
+    }
+    /// Its screen stopped saying so: nothing to look at or remember for this session.
+    pub(super) fn forget(&mut self, session: &str) {
+        self.found.remove(session);
+        self.judged.retain(|(s, _), _| s != session);
+    }
+    /// One look at a session's found commands; whether the snapshot reads differently.
+    fn found_now(
+        &mut self,
+        session: &str,
+        pids: Vec<String>,
+        seen: &HashMap<String, Seen>,
+    ) -> bool {
+        self.judged
+            .retain(|(s, id), _| s != session || pids.contains(id));
+        let tasks = pids.iter().map(|p| (p.clone(), String::new())).collect();
+        let targets = [(session.to_owned(), 0, tasks)];
+        let changed = self.judge(&targets, seen);
+        let before = self.found.insert(session.to_owned(), pids);
+        changed || before != self.found.get(session).cloned()
     }
     pub(super) fn poke(&self) {
         if let Some(tx) = &self.wake {
@@ -160,6 +184,72 @@ impl Host {
         }
     }
 }
+/// A new host has seen no screen go quiet yet, and a quiet one will not again.
+fn read_screens(shared: &Shared) {
+    let Ok(screens) = lock(shared).map(|host| host.screens_to_read()) else {
+        return;
+    };
+    for (id, live) in screens {
+        let tail = lock(&live).and_then(|l| l.vt.tail_text(usize::from(l.rows)));
+        let (Ok(tail), Ok(mut host)) = (tail, lock(shared)) else {
+            continue;
+        };
+        if let Err(e) = host.screen_background(&id, &tail) {
+            eprintln!("background shells: {e}");
+        }
+    }
+}
+/// Finds and judges the commands of `looking`. `claimed` remembers what each log said about
+/// a process, since reading a log is the slow part; a young one may not be logged yet.
+fn look_for_commands(
+    shared: &Shared,
+    looking: &found_shells::Looking,
+    claimed: &mut HashMap<(String, u32), bool>,
+) {
+    if looking.is_empty() {
+        claimed.clear();
+        return;
+    }
+    let name = std::env::var("MOORING_CODEX_PROCESS");
+    let executable = name
+        .as_deref()
+        .unwrap_or(mooring_core::agent::Agent::Codex.executable());
+    let commands = crate::cli_commands::commands_of(executable);
+    for (session, log) in looking {
+        let mine: Vec<(String, u32)> = commands
+            .iter()
+            .filter(|(pid, command)| {
+                let key = (session.clone(), *pid);
+                if let Some(known) = claimed.get(&key) {
+                    return *known;
+                }
+                let ran = crate::cli_commands::log_ran(log, command).unwrap_or(false);
+                if ran || shells::age(*pid) > 60 {
+                    claimed.insert(key, ran);
+                }
+                ran
+            })
+            .map(|(pid, _)| (pid.to_string(), *pid))
+            .collect();
+        let seen = match shells::look_at(&mine) {
+            Ok(seen) => seen,
+            Err(e) => {
+                eprintln!("background shells: {e}");
+                continue;
+            }
+        };
+        let pids = mine.into_iter().map(|(id, _)| id).collect();
+        let Ok(mut host) = lock(shared) else {
+            return;
+        };
+        if host.shell_watch.found_now(session, pids, &seen) {
+            let next = host.workspace.clone();
+            if let Err(e) = host.commit(next) {
+                eprintln!("background shells: {e}");
+            }
+        }
+    }
+}
 pub(super) fn start(shared: &Shared) -> io::Result<()> {
     let (tx, rx) = sync_channel(1);
     {
@@ -168,6 +258,8 @@ pub(super) fn start(shared: &Shared) -> io::Result<()> {
         host.shell_watch.started = Some(Instant::now());
     }
     let weak = Arc::downgrade(shared);
+    let mut screens_read = false;
+    let mut claimed = HashMap::new();
     thread::spawn(move || loop {
         let Some(shared) = weak.upgrade() else {
             return;
@@ -200,12 +292,18 @@ pub(super) fn start(shared: &Shared) -> io::Result<()> {
                 }
             }
         }
-        let targets = match lock(&shared) {
-            Ok(host) => host.shell_targets(),
-            Err(_) => return,
+        if !screens_read {
+            screens_read = true;
+            read_screens(&shared);
+        }
+        let Ok((targets, looking)) =
+            lock(&shared).map(|host| (host.shell_targets(), host.looking()))
+        else {
+            return;
         };
+        look_for_commands(&shared, &looking, &mut claimed);
         drop(shared);
-        if targets.is_empty() {
+        if targets.is_empty() && looking.is_empty() {
             // Not forever: an agent recognized after a restart announces itself to no one.
             match rx.recv_timeout(IDLE) {
                 Ok(()) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => (),
