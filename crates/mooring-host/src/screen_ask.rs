@@ -223,14 +223,24 @@ fn under_question(lines: &[&str], question: usize) -> Option<ApprovalAsk> {
     }
     let (mut subject, mut note) = (vec![], vec![]);
     let mut destination = None;
-    for line in parts.iter().flatten() {
-        let t = line.trim_start();
-        if let Some(said) = t.strip_prefix("Reason:").or(t.strip_prefix("Description:")) {
-            note.push(said.trim());
-        } else if let Some(path) = t.strip_prefix("Destination:") {
-            destination = Some(path.trim());
-        } else if !t.starts_with("Environment:") {
-            subject.push(*line);
+    for part in &parts {
+        let mut in_note = false;
+        for line in part {
+            let t = line.trim_start();
+            if let Some(said) = t.strip_prefix("Reason:").or(t.strip_prefix("Description:")) {
+                note.push(said.trim());
+                in_note = true;
+            } else if let Some(path) = t.strip_prefix("Destination:") {
+                destination = Some(path.trim());
+                in_note = false;
+            } else if t.starts_with("Environment:") {
+                in_note = false;
+            } else if in_note {
+                // A wrapped explanation stays a note until a blank line or field.
+                note.push(t.trim_end());
+            } else {
+                subject.push(*line);
+            }
         }
     }
     if let Some(path) = destination {

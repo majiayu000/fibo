@@ -1,15 +1,15 @@
 {
   "id": "codex",
-  "version": "2026.10.31.1",
+  "version": "2026.11.06.1",
   "bottom_lines": 16,
   "rules": [
     {
       "id": "approval",
       "name": "审批",
       "state": "waiting",
-      "note": "命令审批：问句下面四行内有以 Yes 开头的 1 号选项，最后一个选项就在画面底部。Claude Code 的问法也认，与改成规则前一样。",
+      "note": "命令审批：问句下面的底部识别区域内有以 Yes 开头的 1 号选项，最后一个选项就在画面底部。Claude Code 的问法也认；理由和命令可以折行。",
       "anchor": { "starts_with": ["Would you like to ", "Do you want to "], "ends_with": "?" },
-      "menu": { "side": "below", "first_within": 4, "first_starts_with": "Yes", "last_within": 3 },
+      "menu": { "side": "below", "first_starts_with": "Yes", "last_within": 3 },
       "ask": "anchor"
     },
     {
