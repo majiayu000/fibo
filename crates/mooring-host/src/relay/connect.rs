@@ -292,7 +292,14 @@ async fn connect(
             Message::Text(t) => match serde_json::from_str::<Frame>(&t) {
                 Ok(Frame::Wopen { id, path }) => {
                     let ours = path.split('?').next() == Some(wire::MOORING_PATH);
-                    let reply = if !ours {
+                    // The relay picks the id. Every message to this phone carries it in a
+                    // binary frame, so one that does not fit never becomes a session.
+                    let reply = if id.len() > wire::MAX_ID_LEN {
+                        Frame::Werr {
+                            id,
+                            message: "id too long".into(),
+                        }
+                    } else if !ours {
                         Frame::Werr {
                             id,
                             message: "not found".into(),
