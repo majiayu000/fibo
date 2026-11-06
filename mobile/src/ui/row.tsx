@@ -29,6 +29,8 @@ export function Row({
   right,
   dim,
   last,
+  named,
+  boxed,
 }: {
   m: Machine;
   c: Card;
@@ -39,6 +41,10 @@ export function Row({
   right?: { text: string; color?: string };
   dim?: boolean;
   last?: boolean;
+  /** Say which computer: with one online, every row would say the same. An offline one always does. */
+  named?: boolean;
+  /** Its own card: what asks you stands apart from the rows under it. */
+  boxed?: boolean;
 }) {
   const t = useTheme();
   const stale = m.status !== 'online';
@@ -54,13 +60,14 @@ export function Row({
         s.row,
         { borderColor: t.sep, backgroundColor: t.bg },
         last && { borderBottomWidth: 0 },
+        boxed && [s.boxed, { borderColor: t.line, backgroundColor: t.card }],
         pressed && onPress && { backgroundColor: t.well },
       ]}
     >
       <View style={[s.l1, (stale || dim) && { opacity: 0.6 }]}>
         <SpaceMark name={space} id={c.space || space} />
         <Text numberOfLines={1} style={[s.where, { color: t.dim }]}>
-          {space} · {m.name || '电脑'}
+          {named || stale ? `${space} · ${m.name || '电脑'}` : space}
         </Text>
         {!right && !stale && c.running_since ? <RunningWord c={c} color={color} style={s.state} /> : <Text style={[s.state, { color }]}>{word}</Text>}
       </View>
@@ -86,5 +93,6 @@ export const rowStyles = StyleSheet.create({
 const s = StyleSheet.create({
   row: { gap: 3, paddingVertical: 12, paddingHorizontal: 18, borderBottomWidth: 1 },
   ...rowStyles,
+  boxed: { borderWidth: 1, borderRadius: 16, marginHorizontal: 12, marginBottom: 10, paddingHorizontal: 14 },
   l3: { fontFamily: mono, fontSize: 12 },
 });

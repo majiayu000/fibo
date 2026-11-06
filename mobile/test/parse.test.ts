@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -173,5 +173,23 @@ describe('the gaps against the design', () => {
     expect(checkLine([c('tsc', true, false), c('cargo test', true, false)])).toEqual({ text: 'tsc 通过 · cargo test 通过', failed: false, stale: false });
     expect(checkLine([c('tsc', false, false), c('cargo test', true, true)])).toEqual({ text: 'tsc 没通过', failed: true, stale: false });
     expect(checkLine([c('cargo test', true, true)])).toEqual({ text: 'cargo test 通过，之后又改过', failed: false, stale: true });
+  });
+});
+
+describe('tightWindows', () => {
+  const now = 1000;
+  const w = (minutes: number, used: number, resets_at = 2000) => ({ minutes, used, resets_at });
+  test('the fullest window of each Agent, fullest Agent first', () => {
+    const got = tightWindows([{ machine: 'mac', agents: [{ agent: 'codex', windows: [w(300, 10), w(10080, 40)] }, { agent: 'claude', windows: [w(300, 62), w(10080, 30)] }] }], now);
+    expect(got).toEqual([
+      { machine: 'mac', agent: 'claude', minutes: 300, used: 62 },
+      { machine: 'mac', agent: 'codex', minutes: 10080, used: 40 },
+    ]);
+  });
+  test('a window past its reset says nothing, and computers are never added up', () => {
+    expect(tightWindows([{ machine: 'mac', agents: [{ agent: 'claude', windows: [w(300, 99, 500)] }] }], now)).toEqual([]);
+    const two = tightWindows([{ machine: 'a', agents: [{ agent: 'claude', windows: [w(300, 50)] }] }, { machine: 'b', agents: [{ agent: 'claude', windows: [w(300, 60)] }] }], now);
+    expect(two.map((q) => [q.machine, q.used])).toEqual([['b', 60], ['a', 50]]);
+    expect(tightWindows([{ machine: 'a', agents: null }], now)).toEqual([]);
   });
 });

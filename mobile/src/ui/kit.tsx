@@ -99,6 +99,7 @@ export function Nav({
   close,
   rule,
   big,
+  tab,
 }: {
   title?: ReactNode;
   sub?: ReactNode;
@@ -108,12 +109,14 @@ export function Nav({
   rule?: boolean;
   /** An 18 pt title, as on 改动. */
   big?: boolean;
+  /** A bottom tab's screen: nothing to go back to. */
+  tab?: boolean;
 }) {
   const t = useTheme();
   const top = useTop();
   return (
     <View style={[s.nav, { paddingTop: top + 9 }, rule && { borderBottomWidth: 1, borderColor: t.sep, paddingBottom: 10 }]}>
-      <Round icon={close ? 'close' : 'back'} label={close ? '关闭' : '返回'} onPress={back} />
+      {!tab && <Round icon={close ? 'close' : 'back'} label={close ? '关闭' : '返回'} onPress={back} />}
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
         {typeof title === 'string' ? (
           <Text numberOfLines={1} style={[big ? s.navBig : s.navTitle, { color: t.text }]}>
