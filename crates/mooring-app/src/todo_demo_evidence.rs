@@ -541,6 +541,16 @@ pub(super) fn start(handle: WindowHandle<Workbench>, directory: &Path, cx: &mut 
         shot("9c-closed1", cx);
         wait(1000).await;
         shot("9c-closed", cx);
+        step!("drawertask", "t0");
+        wait(700).await;
+        shot("9d-drawer", cx);
+        let s = click!(840., 146.);
+        check(
+            "the drawer's link opens the todo",
+            s.contains("drawer=false") && s.contains("detail=Some(\"t0\")"),
+            &s,
+        );
+        step!("closedetail", "");
         step!("hover", "t0");
         handle
             .update(cx, |v, w, c| v.visual_todo("hover", "t0", w, c))
