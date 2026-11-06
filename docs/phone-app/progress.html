@@ -45,7 +45,21 @@ code { font: 13px ui-monospace, Menlo, monospace; background: var(--well); paddi
 pre { font: 13px/1.6 ui-monospace, Menlo, monospace; background: var(--well); padding: 12px 14px; border-radius: 10px; overflow-x: auto; margin: 8px 0; }
 a { color: inherit; text-underline-offset: 3px; }
 .note { color: var(--dim); font-size: 13px; }
-@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } main { padding: 28px 16px 60px; } }
+@media (max-width: 560px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  main { padding: 28px 16px 60px; }
+  .tablewrap { overflow: visible; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  tr:has(th) { display: none; }
+  tr { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  tr:last-child { border-bottom: 0; }
+  td, td:first-child { border: 0; padding: 2px 0; min-width: 0; }
+  td:first-child { font-weight: 500; }
+  .steps td:first-child { display: inline; color: var(--dim); font-weight: 400; margin-right: 6px; }
+  .steps td:nth-child(2) { display: inline; font-weight: 500; }
+  .steps td:nth-child(3) { margin-top: 6px; }
+  .steps td:nth-child(4) { color: var(--dim); font-size: 13px; }
+}
 </style>
 </head>
 <body>
@@ -54,10 +68,10 @@ a { color: inherit; text-underline-offset: 3px; }
 <p class="sub">Mooring 手机 App 和官方中继。记录时间 2026-11-06。</p>
 
 <div class="lead">
-  <p><b>手机能离开电脑处理事情了。</b>安卓真机已经走通：经公网中继连到你的 Mac，看对话和工具调用、批准或拒绝、发消息、停下 Agent、开新任务。</p>
+  <p><b>手机能离开电脑处理事情了。</b>安卓真机已经走通：经公网中继连到你的 Mac，看对话和工具调用、批准或拒绝、发消息、开新任务。停下 Agent 和接着上次的对话已用真 Agent 走协议验过，最新版还没在手机上点过。</p>
   <p><b>最大的缺口是推送。</b>不开 App 就不知道有审批在等你，这要你提供账号。其余是几项只能你在手机上验的操作，以及 iPhone 版。</p>
   <div class="stats">
-    <div class="stat"><b>a4ac4fa</b><span>电脑和手机正在跑的版本</span></div>
+    <div class="stat"><b>a4ac4fa</b><span>电脑和手机正在跑的版本，远端已更新</span></div>
     <div class="stat"><b>安卓</b><span>OPPO Find X9 Ultra 已安装</span></div>
     <div class="stat"><b>1 台</b><span>已配对（这台 Mac）</span></div>
     <div class="stat"><b>未开始</b><span>推送、iPhone 真机</span></div>
@@ -65,11 +79,11 @@ a { color: inherit; text-underline-offset: 3px; }
 </div>
 
 <h2>下一步，按这个顺序</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap"><table class="steps">
 <tr><th>#</th><th>做什么</th><th>谁</th><th>为什么排这里</th></tr>
 <tr><td>1</td><td>日常用几天，留意 4G、键盘挡输入框、Face ID 弹窗、相机扫码</td><td><span class="tag you">你</span></td><td>这几项我测不了，真实使用才会暴露问题</td></tr>
 <tr><td>2</td><td>确认中继证书能自动续期（现在的证书 11-11 10:04 到期）</td><td><span class="tag todo">我</span></td><td>到期前没续上，手机就连不上了。11-08 到 11-10 之间检查一次</td></tr>
-<tr><td>3</td><td>确认 CI 在新版本上跑完。<code>a4ac4fa</code> 那轮被后面的提交取消了</td><td><span class="tag todo">我</span></td><td>高负载下有 3 个测试失败过，CI 是另一份证据</td></tr>
+<tr><td>3</td><td>下次换包带上远端的新提交，并清掉用完的手机工作区</td><td><span class="tag todo">我</span></td><td>电脑和手机还在 <code>a4ac4fa</code>，远端又进了别的会话的修复。不急，攒到下一次改动一起换</td></tr>
 <tr><td>4</td><td>推送通知</td><td><span class="tag you">你定账号</span> <span class="tag todo">我做</span></td><td>最大的功能缺口。需要 FCM；国内安卓可能还要接厂商推送</td></tr>
 <tr><td>5</td><td>中继换成域名 <code>relay.niannian.site</code></td><td><span class="tag you">你加解析</span> <span class="tag todo">我做</span></td><td>现在用 IP，换服务器就要重新配对。确定长期用就该换</td></tr>
 <tr><td>6</td><td>iPhone 真机</td><td><span class="tag you">你给开发者账号</span> <span class="tag todo">我做</span></td><td>只在模拟器跑过，要签名</td></tr>
@@ -77,7 +91,7 @@ a { color: inherit; text-underline-offset: 3px; }
 </table></div>
 
 <h2>做到什么程度了</h2>
-<p class="note">「真机验过」指在 OPPO 上亲眼看到。「只测过」指自动测试或网页版通过，真手机上没走过。</p>
+<p class="note">「真机验过」指在 OPPO 上亲眼看到。「只测过」指自动测试或网页版通过，真手机上没走过。真机结果来自不同版本：信任、审批卡片和允许是在 <code>a4ac4fa</code> 上看的；拒绝、工具清单和终端面板在前一个版本；发消息和新任务更早。</p>
 <div class="tablewrap"><table>
 <tr><th>功能</th><th>状态</th><th>说明</th></tr>
 <tr><td>官方中继</td><td><span class="tag ok">真机验过</span></td><td><code>https://124.221.234.205</code>，腾讯云上海，内容端到端加密。续期还没实际发生过</td></tr>
@@ -97,6 +111,7 @@ a { color: inherit; text-underline-offset: 3px; }
 <tr><td>较早消息补读</td><td><span class="tag part">只测过</span></td><td>279 MB 日志 1.9 秒读回 635 条，网页版走过，真机没翻过</td></tr>
 <tr><td>额度</td><td><span class="tag ok">真机验过</span></td><td>只从配对的电脑取，手机不直接找服务商。离线显示「断开前」。多台电脑同页没验</td></tr>
 <tr><td>看板、改动、电脑、设置</td><td><span class="tag part">部分验过</span></td><td>看板和改动页真机打开过。设置页和待办列只在网页版看过</td></tr>
+<tr><td>桌面端「中断这一轮」</td><td><span class="tag part">只测过</span></td><td>和手机的停下走同一套逻辑，窗口里没真点过</td></tr>
 <tr><td>Face ID</td><td><span class="tag todo">没验</span></td><td>代码写了，弹窗没在真机出现过</td></tr>
 <tr><td>推送</td><td><span class="tag todo">没做</span></td><td>设置页开关只存在手机上，写着「推送还没接」</td></tr>
 <tr><td>iPhone</td><td><span class="tag todo">没做真机</span></td><td>模拟器跑过较早版本</td></tr>
@@ -114,7 +129,7 @@ a { color: inherit; text-underline-offset: 3px; }
 <h2>要留意的风险</h2>
 <ul>
   <li><b>Codex 可能要你重新登录。</b>测试时把 <code>~/.codex/auth.json</code> 复制到临时目录用过 7 次（副本已删），如果令牌被刷新，真实登录可能失效。</li>
-  <li><b>有个测试不能排除是新引入的。</b><code>a_dialog_gone_from_the_screen_is_settled_by_claude_official_status</code> 在负载 50 以上时失败，低负载通过。没在高负载下对比过旧版本。</li>
+  <li><b>有个测试在高负载下失败过。</b><code>a_dialog_gone_from_the_screen_is_settled_by_claude_official_status</code> 在负载 50 以上时失败，低负载通过。包含这些提交的 main 后来 CI 通过（<code>4b2c66c</code>），但 CI 不是高负载，也没在高负载下对比过旧版本。</li>
   <li><b>打码不是万无一失。</b>工具输出发送前在电脑上打码，但名字里不带关键词的密钥认不出。</li>
   <li><b>第一次点允许没反应</b>的现象修了三个可能原因，都是推断。再遇到请告诉我。</li>
   <li><b>电脑卡死。</b>11-05 拔电跑高负载卡死过一次。重任务要低优先级、一次一个、插着电。</li>
