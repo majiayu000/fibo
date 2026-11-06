@@ -4,6 +4,7 @@
 //!   asks for one by itself; this is what any other change on that page costs.
 //! - `frames-cardplay`: a frame with one card playing, the costliest animation of them all
 //!   over its whole run: what the window draws each display frame while you point at it.
+//!   Found over a short run of each, then measured over a long run of its own.
 //! - `stage-asks`: frames asked for at rest, while pointing, and after leaving.
 //! - `frames-themeimage`, `frames-themepaper`, `frames-themeglass`: a terminal's frame under a
 //!   theme with a picture, a tiled picture and a see-through window.
@@ -192,10 +193,26 @@ pub(super) async fn run(
             }
         }
     }
+    // The search keeps the unluckiest of its short runs: on a virtual machine one 40-frame
+    // run caught in a stall was reported as the card's cost (0.40 and 0.25 from one commit).
+    // So the number comes from a run of its own, as long as the redraw it is compared with.
+    let mut measured = (0., 0.);
+    if played > 0 {
+        let id = format!("complete-{}", worst.0);
+        handle
+            .update(cx, |v, _, cx| v.visual_plugins_grid(Some(&id), cx))
+            .unwrap();
+        frame(cx);
+        let cx = &mut *cx;
+        measured = cost(FRAMES, |n| {
+            Workbench::visual_stage_hold(Some((n % MOMENTS) as f32 / (MOMENTS - 1) as f32));
+            frame(cx);
+        });
+    }
     Workbench::visual_stage_hold(None);
     out.push(format!(
-        "frames-cardplay: {:.2} ms CPU, {:.2} M instructions; the costliest of {played}: {}",
-        worst.1, worst.2, worst.0
+        "frames-cardplay: {:.2} ms CPU, {:.2} M instructions; the costliest of {played}: {}, {:.2} ms over {MOMENTS} frames",
+        measured.0, measured.1, worst.0, worst.1
     ));
 
     // Reusing the page hides nothing, and what is measured really moves: with a card held
