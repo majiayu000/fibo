@@ -88,6 +88,7 @@ impl Parser {
                 || output.contains("haven't granted")
                 || output.contains("waiting for approval"))
         {
+            self.child_wait_from = None;
             self.card.waiting = short(&output, 600);
             self.card.turn = Turn::Waiting;
             self.fact("approval", self.card.waiting.clone(), None, at, source);
