@@ -77,7 +77,8 @@ mooring wait <终端> [--until idle|waiting|working] [--timeout 秒]
         switches: &["json"],
         usage: "\
 mooring explain --file <画面.txt> --agent <claude|codex> [--json]
-mooring explain <终端> [--json]            画面规则怎么读这块屏：状态、命中的规则、规则版本和来源、看到的行",
+mooring explain <终端> [--json]            画面规则怎么读这块屏：状态、命中的规则、规则版本和来源、看到的行；
+                                             还有每个后台 shell 算任务还是服务、依据哪条",
     },
     Command {
         name: "events",

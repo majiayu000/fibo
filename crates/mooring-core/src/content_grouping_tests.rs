@@ -150,11 +150,13 @@ fn a_stopped_turn_waiting_on_a_job_says_which_and_a_server_counts_apart() {
                 id: "a".into(),
                 description: "Start the Go relay".into(),
                 job: false,
+                ..Default::default()
             },
             ShellTask {
                 id: "b".into(),
                 description: "Run needle-in-haystack context tests on Pulse".into(),
                 job: true,
+                ..Default::default()
             },
         ],
         ..Default::default()

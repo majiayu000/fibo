@@ -147,10 +147,14 @@ pub struct ShellTask {
     pub id: String,
     pub description: String,
     /// Work that ends on its own and wakes the agent when it does (a test run, a build,
-    /// a download): no port listening below it and younger than two hours. A server, or a
-    /// shell the host could not look at, is not one.
+    /// a download): no port listening below it and younger than two hours. A server is not
+    /// one. Nor is a shell the host could not look at, except one whose agent it looked
+    /// under and did not find: the agent says it runs, so it counts, up to the same limit.
     #[serde(default)]
     pub job: bool,
+    /// Which rule said so, for `mooring explain`. Like `job`, set only on the live snapshot.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub why: String,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Touch {

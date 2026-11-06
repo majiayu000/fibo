@@ -665,7 +665,7 @@ fn shell_tasks(facts: &HookFacts) -> Vec<mooring_core::content::ShellTask> {
         .map(|t| mooring_core::content::ShellTask {
             id: t.id.clone(),
             description: t.description.clone(),
-            job: false,
+            ..Default::default()
         })
         .collect()
 }
