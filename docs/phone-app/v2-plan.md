@@ -487,3 +487,90 @@
 - 看板页、桌面端的折叠没有动。
 
 截图：[v2-compare/](v2-compare/) 的 `inbox-fold-closed-*.png`、`inbox-fold-open-*.png`、`inbox-fold-filter-*.png`。
+
+## 流量、换模型和换权限（2026-11-06，分支 feat/phone-inbox-fold）
+
+### 1. 流量
+
+要支撑的决定：手机开着收件箱能不能常开。放弃条件：半天查不清根因。验收：同样场景每小时 10 MB 以内，事件到显示不超过 1 秒。
+
+决定：两个改动都采用；真手机的前后数字待验证（下面的数字来自 JS 客户端，真手机中途被带走了）。
+
+根因（独立 runtime、本地中继，真实手机客户端代码跑在 bun 里，25 个终端，8 个假 Claude 按真实后台的识别和状态走，每分钟 72 次改日志）：
+
+1. **一份列表被拆成很多条消息**。`remote::serve` 用 `writeln!(output, "{line}")` 写没缓冲的 socket，每个 JSON 片段一次写，`bridge::pump` 读到多少发多少。同一份 7.4 KB 的 `list` 连测几次是 8–39 条 DATA，每条一个 ACK、一个 TCP 包。这解释了「手机每分钟发 350 KB 以上」：发的几乎全是 ACK，单个不大但数量多。改成每行一次写后是 1 条（超过 8 KB 的按 socket 缓冲切开，8.5 KB 的是 2 条）。
+2. **几乎每个事件都整份重发**（用户已知）。
+
+查过、不是原因的：`--report` 走本机 socket（`rpc`），不经中继；路由名单只在变化时发；中继一条进一条出，不压缩不合并；心跳 15 秒一次很小。
+
+| 组合（JS 客户端，每分钟 72 次改动） | 下行 KB/分 | 上行 KB/分 | 帧/分（下/上） | 载荷 MB/时 | 每帧按 100 B 头估的 MB/时 | 改动到显示 p50 / 最大 |
+|---|---|---|---|---|---|---|
+| 旧手机逻辑 + 旧电脑 | 716 | 31 | 1378 / 1450 | 43.8 | 59.9 | 396 / 414 ms |
+| 新手机 + 旧电脑 | 714 | 27 | 1176 / 1252 | 43.4 | 57.3 | 未单独量 |
+| 新手机 + 新电脑 | 65 | 7 | 147 / 222 | 4.2 | 6.3 | 398 / 434 ms |
+
+旧组合估出来 60 MB/时，和用户真机量到的 54–76 MB/时同一量级。100 B 是估的头（WebSocket、TLS、TCP/IP），不是量的。本地中继没有 TLS 和 nginx。
+
+结论：只换手机省不了多少（72 次/分的事件本来就比 600 ms 间隔稀），要新电脑才有效。
+
+改法：
+
+- 每行一次写。
+- 新 op `cards {since}`：同一条连接上只发变了的卡片，没变只回 `{rev}`，顺序或集合变了才带 `order`；`since` 对不上就给全部。手机看 `hello.ops`，电脑没有这个 op 就退回 `list`。
+- 事件触发的刷新：合并 150 ms，两次之间至少 600 ms；同一时间只有一个刷新在路上。
+- 聊天轮询、建议、审批的 `ask` 只在屏幕露出来时才问（`useIsFocused`）。
+
+没解释完的：用户量到电脑发 918 KB 而手机收 485 KB。推测一是小包在电脑到中继这段各带一层头、到手机那段被合并，二是 `dumpsys netstats detail --full` 不带 `--poll` 时读的是上次采样，窗口差值可能不准。两条都没证实。以后量手机要带 `--poll`。
+
+### 2. 收件箱上真机
+
+没做。真手机在开工约 15 分钟后被带走（adb 掉线，电脑网络也换了），到收尾都没回来。折叠和筛选仍只有上一节的网页和单测证据。
+
+### 3. 换模型和换权限
+
+要支撑的决定：离开电脑时能不能换模型和权限，而且不会误开放行。放弃条件：要靠手机算按键或猜状态才做得到。
+
+决定：采用，待真手机验证。
+
+| op | 内容 | 权限 |
+|---|---|---|
+| `modes` | `{terminal, kind: model\|permission}` → `{options: [{key, label, detail, current, full}], note}` | full |
+| `setmode` | `{terminal, kind, choice, allow_full?, request?}` → `{model, permission}`，CLI 那时显示的 | full |
+
+真 CLI 摸到的（Claude Code 2.1.319、Codex 0.167，画面在 `tests/fixtures/mode-screens/`）：
+
+| | Claude Code | Codex |
+|---|---|---|
+| 模型 | `/model`：Enter 写成新会话默认，`s` 只改这次；聊过之后再问 `Switch model?`（下一句重读历史） | `/model` 选型号，再选档位：Enter 写成默认，`s` 只改这次；底栏 `GPT-6-Sol medium ·` |
+| 权限 | Shift+Tab 循环，底栏写当前档：手动 → 接受编辑 → 计划 →（放行）→ 自动 | `/permissions` 菜单，`(current)` 标当前，四项 |
+| 放行 | 启动带 `--allow-dangerously-skip-permissions` 或 `--dangerously-skip-permissions` 才在循环里 | Full Access 再问一次 `Enable full access?`，写明只对这次会话 |
+
+定下的做法：
+
+- 模型一律 `s`，不动用户配置。
+- 在跑、等审批、问信任时拒绝，一个键都不按（状态和画面都看）。
+- 粘贴 `/model` 后确认输入框只有这几个字才回车；否则退回去并报错，半句话不会被发出去。这个是真碰到的：探索时按错把 `s/permissions` 发给了 Codex。
+- 放行档：手机二次确认写后果，开了 Face ID 再验证，才带 `allow_full`；电脑只认字面 `true`，没有就不按键。Codex 菜单里不认识的项按放行算。
+- Claude 从手动、接受编辑、计划去自动要经过放行档：这种会话直接拒绝，让用户在终端切。标志位看不出的（比如设置里开的）万一落在放行档，下一键立刻离开，离不开就报错。
+- 远程 `keys` 对 Agent 拒绝 `shift-tab`。
+- 卡片：host 记下换好的值（`RecognitionStatus.terminal_modes`），日志一写新值就让位。标签换了颜色，收件箱第三行写「全部放行」。
+
+真 CLI 走过（隔离 runtime，host 的 HOME 是临时的，真 CLI 用真 HOME、在临时目录）：Claude 换 Sonnet、换 Default、聊过一句之后换 Haiku（电脑答了 `Switch model?`）、换到计划、没带标志时切放行被拒、带标志时经浏览器走完确认切放行再切回；有半句话时拒绝且字还在；跑一轮时拒绝。Codex 真登录：读两个列表、切 Read Only、切 Ask for approval、切 Full Access（没带 `allow_full` 被拒，带了成功并读回）、换 GPT-6-Luna、GPT-6-Sol。每一步后 `~/.claude/settings.json`、`~/.codex/config.toml` 的 shasum 都没变。
+
+浏览器（网页版连隔离 runtime 里的真 Claude，390×844）：点模型标签看到真实列表、选 Sonnet 后标签变；权限列表 5 项；放行弹确认，取消后没变，确定后标签变红写「全部放行」。截图 `modes-*.png`。
+
+语音：没做，手机不在，输入法语音键能否输入没看。
+
+### 检查
+
+全量 `cargo test`（core、remote、host、relay）732 个通过、1 个失败、35 个按设计忽略。失败的是 `only_the_registry_and_adapters_name_a_cli`，指向 `crates/mooring-app/src/todo_flow_evidence.rs:85`，来自 origin/main 的 ee28af7，这次没动。`cargo fmt --check`、`clippy --workspace --all-targets -D warnings` 通过；`bun test` 149 个通过；两个 tsc 配置；`expo-doctor` 20/20。放行和按键的 17 个 Rust 变异、手机 13 个变异都被抓到。全量时负载 5–15。
+
+已验 / 没验见汇报。没验的最大两项：真手机流量和第 2 件事；真手机上的 Face ID 和原生弹窗。
+
+相邻情况：
+
+- 用户在电脑上手动按 Shift+Tab 或 `/model`：Claude 的权限日志写了才更新卡片，模型要等下一句回答，这之前手机写的是旧值。host 重启后记的值也没了。
+- More models 里的旧型号不列（菜单会滚动），提示在电脑上选。
+- `send` 仍可发 `/permissions` 文本，只是打开菜单。多机桌面的 `input` 是真人打字，没拦。
+- Claude 换模型的 Esc 会在记录里留一行 `Kept model as …`，每次打开列表都有。
+- 只 Claude 和 Codex；其他 Agent 回「还不支持」。
