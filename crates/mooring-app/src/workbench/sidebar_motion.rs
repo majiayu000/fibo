@@ -362,12 +362,14 @@ impl Workbench {
     pub(super) fn toggle_sidebar_group(&mut self, key: &str, open: bool, cx: &mut Context<Self>) {
         self.sidebar.toggled.insert(key.to_owned(), !open);
         self.sidebar.motion.fold(key, !open, clock());
+        self.sidebar.scroll.forget();
         cx.notify();
     }
     /// Opens a group by itself (the next-waiting key landing in it).
     pub(super) fn open_sidebar_group(&mut self, key: String) {
         if !self.sidebar.open(&key, true) {
             self.sidebar.motion.fold(&key, true, clock());
+            self.sidebar.scroll.forget();
         }
         self.sidebar.toggled.insert(key, true);
     }

@@ -21,6 +21,7 @@ impl Workbench {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .track_scroll(&self.sidebar.scroll.handle)
             .when(!recent, |d| {
                 d.px(px(T::S8))
                     .py(px(if dense { T::S8 } else { T::S12 }))
@@ -326,7 +327,10 @@ impl Workbench {
         }
         let listed = sessions.into_iter().map(|(s, g, a, _)| (s, g, a)).collect();
         let (rows, more, owns_closed) = self.session_list(listed, &ended, current.as_deref(), cx);
-        sidebar = sidebar.children(self.moving_rows(rows));
+        // After the rows are made: it takes the marks they left.
+        sidebar = sidebar
+            .child(self.list_watch(current.clone()))
+            .children(self.moving_rows(rows));
         if more > 0 {
             sidebar = sidebar.child(
                 button(
