@@ -110,6 +110,24 @@ if sys.argv[1] == 'prepare':
         elif group != 4: records.append((stamp, 'event_msg', {'type': 'turn_aborted'}))
         (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in records))
         if os.environ.get('MOORING_FIXTURE_UNLINKED'): os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
+    if os.environ.get('MOORING_FIXTURE_CODEX_CHILDREN'):
+        # Real child logs, parsed by the host in both builds; no UI-injected list.
+        parent = logs / 'visual-0.jsonl'
+        with parent.open('a') as f:
+            f.write(json.dumps({'timestamp': now - 200, 'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'children'}}) + '\n')
+        for n, (name, end) in enumerate([('review_small_prs', None), ('loom_ci', 'task_complete'), ('rui_quota_acceptance', 'turn_aborted')]):
+            cid = f'visual-child-{n}'
+            spawn = {'parent_thread_id': 'visual-0', 'depth': 1, 'agent_path': '/root/' + name}
+            records = [(now - 180 + n * 10, 'session_meta', {'id': cid, 'cwd': str(root / 'projects/工作空间'), 'source': {'subagent': {'thread_spawn': spawn}}, 'agent_nickname': name}),
+                       (now - 180 + n * 10, 'event_msg', {'type': 'task_started', 'turn_id': cid})]
+            if end: records.append((now - 50 + n * 10, 'event_msg', {'type': end}))
+            (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': kind, 'payload': payload}) + '\n' for at, kind, payload in records))
+    child_sources = None
+    if os.environ.get('MOORING_FIXTURE_CHILD_ADAPTERS'):
+        import visual_child_fixture
+        child_sources = (visual_child_fixture.prepare_more(root, home, now)
+                         if os.environ['MOORING_FIXTURE_CHILD_ADAPTERS'] == 'more'
+                         else visual_child_fixture.prepare(root, home, BIN, now))
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
     host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 30
@@ -125,6 +143,8 @@ if sys.argv[1] == 'prepare':
         lines = ['› ' + titles[n], '', '• 已读取项目上下文', '• 修改标签命名', '', '此处为隔离视觉测试输出，未调用模型。']
         script = 'exec 3<' + shlex.quote(str(logs / f'visual-{n}.jsonl')) + '; printf "%s\\n" ' + ' '.join(shlex.quote(s) for s in lines) + '; while IFS= read -r line; do printf "%s\\n" "$line"; done'
         r = rpc(root, {'Launch': {'id': f'p{n}', 'space': 's0', 'argv': [str(root / 'codex'), '-c', script], 'cwd': str(root / 'projects/工作空间'), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
+    if child_sources:
+        visual_child_fixture.launch(root, child_sources, rpc)
     start = ['/bin/zsh', '-f']
     if os.environ.get('MOORING_FIXTURE_UNBOUND_AGENT'):
         start = [str(root / 'codex'), '-c', 'printf "OpenAI Codex\\nWaiting for your first message\\n"; while IFS= read -r line; do :; done', '--no-daemon']
@@ -134,6 +154,9 @@ if sys.argv[1] == 'prepare':
     def leaf(p): return {'Leaf': p}
     def split(a, b, axis): return {'Split': {'axis': axis, 'ratio': 5000, 'first': a, 'second': b}}
     for id, title, task, layout in [('feedback', '标签命名依旧有问题', 'task0', split(leaf('p0'), split(leaf('p1'), leaf('p2'), 'Down'), 'Right')), ('start', '健身', 'task1', leaf('pstart'))]:
+        if child_sources and id == 'feedback':
+            layout = split(leaf(child_sources[0][0]), leaf(child_sources[1][0]), 'Right')
+            title, task = '子 Agent 对照', None
         edit(root, {'CreateTab': {'tab': {'id': id, 'space': 's0', 'title': title, 'default_task': task, 'closed': False, 'layout': layout}}})
     if os.environ.get('MOORING_FIXTURE_UNLINKED'):
         # The placeholder rows from the host's own recognition, not typed in here: a Claude that

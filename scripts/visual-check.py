@@ -15,7 +15,7 @@ Builds happen in one worktree under ~/Library/Caches/MooringVisual/check, so the
 checkout and its target stay untouched and a later run rebuilds only what changed. The first
 run compiles everything. Nothing here pushes, commits or touches a real workspace.
 """
-import argparse, html, os, pathlib, shutil, subprocess, sys
+import argparse, html, os, pathlib, re, shutil, subprocess, sys
 
 BASE = pathlib.Path(__file__).resolve().parents[1]
 WORK = pathlib.Path.home() / 'Library/Caches/MooringVisual/check'
@@ -74,7 +74,7 @@ def guard(args):
     checkout(args.sha)
     command = ['cargo', 'test', '-p', args.package, args.test]
     first = run(*command, check=False, capture=True)
-    if first.returncode != 0 or ' 0 passed' in first.stdout:
+    if first.returncode != 0 or not re.search(r'test result: ok\. [1-9]\d* passed', first.stdout):
         sys.exit(f'{args.test}: does not pass or did not run at {args.sha}\n{first.stdout[-2000:]}')
     target = WORK / args.undo[0]
     text = target.read_text()

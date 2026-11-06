@@ -221,58 +221,7 @@ pub struct PromptLine {
     pub pins_own: bool,
 }
 
-/// Where a declared CLI writes JSON-lines transcripts and how a record names things.
-/// Pointers are RFC 6901 JSON pointers into each record.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Transcripts {
-    /// Absolute, or under the home with `~/`. Left out when a `source` writes them.
-    #[serde(default)]
-    pub root: PathBuf,
-    #[serde(default = "jsonl")]
-    pub extension: String,
-    pub session: String,
-    pub cwd: String,
-    /// Which record is whose: `role` points at a value equal to `user` or `assistant`.
-    pub role: Option<String>,
-    #[serde(default = "user")]
-    pub user: String,
-    #[serde(default = "assistant")]
-    pub assistant: String,
-    /// The message text of a user or assistant record.
-    pub text: Option<String>,
-    /// api 2: the conversation's name as the CLI keeps it; the latest non-empty value a
-    /// record holds names the card, unless the user named it in Mooring.
-    #[serde(default)]
-    pub title: Option<String>,
-    /// api 2: records that mark a turn, a question for the user, a tool call or its
-    /// result, so a declared CLI groups like a built-in one. Every matching rule applies.
-    #[serde(default)]
-    pub events: Vec<EventRule>,
-}
-
-/// A conversation kept in a SQLite database instead of transcript files. The daemon polls
-/// it read-only and writes each session's new rows as JSON lines into a directory of its
-/// own, which then flows through the same watching, parsing and binding as any transcript:
-/// the `transcripts` pointers and `events` apply to those rows.
-///
-/// `sessions` is asked `?1` = the largest `_t` it returned before, and returns `_session`,
-/// `_cwd` and `_t` per changed session, and optionally `_title`: a changed title is
-/// written as a record of its own, so a rename shows without a new message. `records` is asked `?1` = a session, `?2`/`?3` =
-/// the `_t`/`_id` of the last row it returned for it, and returns rows after that, in
-/// order, each with `_t` and `_id`. A column holding JSON text is read as JSON.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RecordSource {
-    pub sqlite: PathBuf,
-    pub sessions: String,
-    pub records: String,
-    #[serde(default = "poll_ms")]
-    pub poll_ms: u64,
-}
-fn poll_ms() -> u64 {
-    1500
-}
+pub use crate::agent_transcripts::{RecordSource, Transcripts};
 
 /// One kind of record and what it means. `when` maps JSON pointers to the value each
 /// must hold; `"*"` only asks that the field exist.
@@ -346,13 +295,13 @@ pub struct ResultEvent {
     #[serde(default)]
     pub exit_code: Option<String>,
 }
-fn jsonl() -> String {
+pub(super) fn jsonl() -> String {
     "jsonl".into()
 }
-fn user() -> String {
+pub(super) fn user() -> String {
     "user".into()
 }
-fn assistant() -> String {
+pub(super) fn assistant() -> String {
     "assistant".into()
 }
 
@@ -672,14 +621,15 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             Some(&t.cwd),
             t.role.as_ref(),
             t.text.as_ref(),
+            t.parent.as_ref(),
         ];
         if let Some(p) = pointers.into_iter().flatten().find(|p| !p.starts_with('/')) {
             return Err(format!(
                 "transcripts 里的 \"{p}\" 要写成 / 开头的 JSON 指针"
             ));
         }
-        if !t.events.is_empty() && d.api < 2 {
-            return Err("transcripts.events 需要 api 2".into());
+        if (!t.events.is_empty() || t.parent.is_some()) && d.api < 2 {
+            return Err("transcripts.events / parent 需要 api 2".into());
         }
         if let Some(p) = &t.title {
             if d.api < 2 {

@@ -5,7 +5,9 @@ use super::*;
 const SCROLLBACK_ROWS: usize = 10_000;
 mod drag;
 use drag::DropState;
+mod changes_files;
 mod changes_panel;
+mod changes_rows;
 mod changes_slots;
 #[cfg(feature = "visual-test")]
 pub use changes_slots::ChangesProbe;

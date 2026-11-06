@@ -750,3 +750,21 @@ fn source_rows_are_idempotent() {
     assert_eq!(n, p.records.len() as i64);
     assert_eq!(load(&db, "fixture").unwrap().card, p.card);
 }
+
+#[test]
+fn a_file_pushed_off_the_card_counts_once_when_touched_again() {
+    let mut p = Parser::default();
+    for i in 0..70 {
+        p.touch_file(&format!("/r/f{i}"), 10, 1, 0);
+    }
+    assert_eq!(p.card.turn_file_count(), 70);
+    // /r/f0 fell off the list; this turn has still touched only 70 files.
+    p.touch_file("/r/f0", 10, 1, 0);
+    assert_eq!(p.card.turn_file_count(), 70);
+    assert_eq!(p.card.turn_lines(), (71, 0));
+    // One that stayed on the list does not move the count either.
+    p.touch_file("/r/f69", 10, 1, 0);
+    assert_eq!(p.card.turn_file_count(), 70);
+    p.touch_file("/r/f70", 10, 1, 0);
+    assert_eq!(p.card.turn_file_count(), 71);
+}

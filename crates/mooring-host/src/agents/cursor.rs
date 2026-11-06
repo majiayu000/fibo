@@ -21,14 +21,41 @@ fn cursor_home(home: &Path) -> PathBuf {
     home.join(".cursor")
 }
 
+/// A child is named by its file under `<parent>/subagents/`, not by a prompt or cwd.
+fn child_parent(transcript: &Path) -> Option<&Path> {
+    let subs = transcript.parent()?;
+    let parent = subs.parent()?;
+    (subs.file_name()? == "subagents"
+        && parent.parent()?.file_name()? == "agent-transcripts"
+        && uuid::Uuid::parse_str(parent.file_name()?.to_str()?).is_ok())
+    .then_some(parent)
+}
+fn owner_transcript(transcript: &Path) -> PathBuf {
+    child_parent(transcript).map_or_else(
+        || transcript.to_owned(),
+        |parent| {
+            parent.join(format!(
+                "{}.jsonl",
+                parent.file_name().unwrap().to_string_lossy()
+            ))
+        },
+    )
+}
+
 /// The chat a transcript belongs to: its id is the transcript's folder.
 fn chat_id(transcript: &Path) -> Option<&str> {
-    let id = transcript.parent()?.file_name()?.to_str()?;
+    let id = if child_parent(transcript).is_some() {
+        transcript.file_stem()?.to_str()?
+    } else {
+        transcript.parent()?.file_name()?.to_str()?
+    };
     uuid::Uuid::parse_str(id).ok().map(|_| id)
 }
 
 /// `~/.cursor/chats/<hash of cwd>/<id>`, found by id since the hash needs the cwd.
 fn chat_dir(transcript: &Path) -> Option<PathBuf> {
+    let owned = owner_transcript(transcript);
+    let transcript = owned.as_path();
     let id = chat_id(transcript)?;
     // <cursor>/projects/<project>/agent-transcripts/<id>/<id>.jsonl
     let cursor = transcript.ancestors().nth(5)?;
@@ -49,7 +76,8 @@ fn session_cwd(transcript: &Path) -> Option<String> {
     {
         return Some(cwd);
     }
-    let project = transcript.ancestors().nth(3)?.file_name()?.to_str()?;
+    let owner = owner_transcript(transcript);
+    let project = owner.ancestors().nth(3)?.file_name()?.to_str()?;
     decode(Path::new("/"), &project.split('-').collect::<Vec<_>>())
 }
 
@@ -204,11 +232,12 @@ impl Adapter for Cursor {
     fn is_transcript(&self, path: &Path) -> bool {
         chat_id(path).is_some_and(|id| {
             path.file_name() == Some(format!("{id}.jsonl").as_ref())
-                && path
-                    .ancestors()
-                    .nth(2)
-                    .and_then(Path::file_name)
-                    .is_some_and(|n| n == "agent-transcripts")
+                && (child_parent(path).is_some()
+                    || path
+                        .ancestors()
+                        .nth(2)
+                        .and_then(Path::file_name)
+                        .is_some_and(|n| n == "agent-transcripts"))
         })
     }
     /// Project folders, their transcript folder and the chats in it; never terminals,
@@ -220,24 +249,40 @@ impl Adapter for Cursor {
         name(Some(dir)) == Some("agent-transcripts")
             || name(dir.parent()) == Some("agent-transcripts")
             || name(dir.parent()) == Some("projects")
+            || (name(Some(dir)) == Some("subagents")
+                && name(dir.parent().and_then(Path::parent)) == Some("agent-transcripts"))
     }
     fn identity(&self, path: &Path, _record: &Value) -> Option<(String, String)> {
         Some((chat_id(path)?.to_owned(), session_cwd(path)?))
     }
     /// Cursor's TUI keeps what was typed; `-p` runs, subagents and editor chats keep none.
     fn observe_file(&self, parser: &mut Parser, path: &Path) {
-        if session_cwd(path).is_some_and(|cwd| temporary(&cwd)) {
+        if let Some(parent) = child_parent(path) {
+            parser.card.parent = parent.file_name().unwrap().to_string_lossy().into_owned();
+            parser.hide("Cursor 子代理");
+        } else if session_cwd(path).is_some_and(|cwd| temporary(&cwd)) {
             parser.hide(mooring_core::content::TEMPORARY_DIRECTORY);
         } else if chat_dir(path).is_some_and(|d| d.join("prompt_history.json").is_file()) {
             parser.card.interactive = true;
         }
     }
+    fn links_children(&self) -> bool {
+        true
+    }
     fn name(&self, _root: &Path, transcript: &Path) -> Option<String> {
+        if child_parent(transcript).is_some() {
+            return None;
+        }
         chat_name(&chat_dir(transcript)?)
     }
     fn metadata(&self, parser: &mut Parser, record: &Value) {
         if self.is_user(record) {
-            parser.machine_prompt(query(&text(&record["message"]["content"])));
+            let ask = text(&record["message"]["content"]);
+            if !parser.card.parent.is_empty() && parser.card.agent_name.is_empty() {
+                parser.card.agent_name =
+                    short(&mooring_core::content::plain_line(query(&ask)), 100);
+            }
+            parser.machine_prompt(query(&ask));
         }
     }
     fn is_user(&self, record: &Value) -> bool {
@@ -270,6 +315,9 @@ impl Adapter for Cursor {
         }
         if record["type"] == "turn_ended" {
             flush(parser, true, at, source);
+            // Cursor writes no tool results; this marker is its definitive answer/end.
+            parser.card.waiting.clear();
+            parser.card.choices.clear();
             match record["status"].as_str() {
                 Some("aborted") => parser.phase(Turn::Interrupted, "", at, source),
                 Some("error") if record["error"] == "User aborted request" => {

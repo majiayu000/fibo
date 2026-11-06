@@ -21,6 +21,7 @@ mod codex_script;
 mod cursor;
 mod declared;
 mod grok;
+mod grok_subagents;
 pub mod hooks;
 pub mod modes;
 pub mod modes_drive;
@@ -199,6 +200,10 @@ pub trait Adapter: Sync {
     /// The subagents this CLI keeps on disk beside a transcript, oldest first; `None`
     /// when it keeps none there.
     fn subagents(&self, _transcript: &Path) -> Option<Vec<mooring_core::content::Subagent>> {
+        None
+    }
+    /// The parent transcript whose child list changed when this metadata file moved.
+    fn subagent_parent(&self, _metadata: &Path) -> Option<PathBuf> {
         None
     }
     /// A live process of this CLI that no session has claimed yet.

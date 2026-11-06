@@ -226,6 +226,12 @@ impl Adapter for Grok {
         named(Some(dir)) || named(dir.parent())
     }
     /// Grok keeps the title it generates for a session in `summary.json`.
+    fn subagents(&self, transcript: &Path) -> Option<Vec<mooring_core::content::Subagent>> {
+        Some(super::grok_subagents::read(transcript))
+    }
+    fn subagent_parent(&self, meta: &Path) -> Option<PathBuf> {
+        super::grok_subagents::parent(meta)
+    }
     fn name(&self, _root: &Path, transcript: &Path) -> Option<String> {
         let summary = summary(transcript)?;
         let name = summary["session_summary"].as_str()?.trim();
@@ -246,7 +252,7 @@ impl Adapter for Grok {
             return;
         };
         match summary["session_kind"].as_str() {
-            Some("subagent" | "subagent_resume") => parser.hide("Grok 子代理"),
+            Some("subagent" | "subagent_resume" | "subagent_fork") => parser.hide("Grok 子代理"),
             Some("headless") => parser.hide("Grok 非交互 / headless"),
             // Kinds not seen yet stay unproven rather than shown.
             Some(_) => (),

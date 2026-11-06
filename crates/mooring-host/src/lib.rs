@@ -20,11 +20,13 @@ pub mod recognition;
 pub mod redact;
 pub mod screen_ask;
 pub mod screen_rules;
+mod shell_log;
 mod shell_match;
 mod store;
 pub mod tool_text;
 pub use agents::calling_conversations;
 pub use agents::hooks;
+pub use agents::mirror;
 pub use agents::modes_drive::switches as agent_modes_switch;
 pub use agents::{
     adapter as agent_adapter, describe_tool, reads_tools, roots as agent_log_roots, tool_call_line,

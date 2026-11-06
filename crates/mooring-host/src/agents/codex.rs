@@ -238,6 +238,7 @@ impl Adapter for Codex {
                     codex_items::item_said(parser, text(&p["message"]), at, source, false)
                 }
                 "approval_request" | "permission_request" | "request_user_input" => {
+                    parser.child_wait_from = None;
                     parser.card.waiting = question_summary(p);
                     parser.card.choices = question_choices(p);
                     parser.phase(Turn::Waiting, "", at, source);

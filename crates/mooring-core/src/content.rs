@@ -48,6 +48,16 @@ pub enum Turn {
     Interrupted,
     Error,
 }
+/// What a turn touched past the files a card keeps, so its totals stay true.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Evicted {
+    /// The `turn_started` these belong to; any other means none.
+    pub turn: u64,
+    pub files: u32,
+    pub added: u32,
+    pub removed: u32,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Content {
     #[serde(default)]
@@ -102,7 +112,7 @@ pub struct Content {
     pub approval_kind: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub approval_always: String,
-    /// A Codex subagent's parent thread id and its name, from its own session header.
+    /// A child agent's explicit parent session id and task name, supplied by its adapter.
     #[serde(default)]
     pub parent: String,
     #[serde(default)]
@@ -114,15 +124,16 @@ pub struct Content {
     /// tool call named them: absolute, or relative to the session's cwd.
     #[serde(default)]
     pub files: Vec<Touch>,
+    #[serde(default)]
+    pub evicted: Evicted,
     /// The choices of the question `waiting` holds, when the agent asked through its
     /// question tool (Claude's AskUserQuestion, Codex's request_user_input): the first
     /// question's option labels in order, so a pane can offer them as buttons. Empty for
     /// approvals, screen prompts and open questions.
     #[serde(default)]
     pub choices: Vec<String>,
-    /// Claude's subagents of the current turn, and older ones still running, oldest first:
-    /// what the sidebar lists under the session. Read from the CLI's own files beside the
-    /// transcript (`<session>/subagents/agent-*.meta.json`).
+    /// This turn's subagents, and older ones still running, oldest first. The sidebar
+    /// shares this list across adapter metadata and child-thread logs.
     #[serde(default)]
     pub subagents: Vec<Subagent>,
     /// Subagents a task notification in this log reported as not finished, by id.
@@ -177,7 +188,8 @@ const TOUCHES: usize = 64;
 impl Content {
     /// Records that `path` changed at `at` by `added` and `removed` lines; a path already
     /// listed moves to the end, keeping its counts while the same turn touches it again.
-    pub fn touch(&mut self, path: &str, at: u64, added: u32, removed: u32) {
+    /// Returns the path this pushed off the list, if the current turn had touched it.
+    pub fn touch(&mut self, path: &str, at: u64, added: u32, removed: u32) -> Option<String> {
         let (at, added, removed) = match self.files.iter().position(|t| t.path == path) {
             Some(i) => {
                 let old = self.files.remove(i);
@@ -195,9 +207,23 @@ impl Content {
             added,
             removed,
         });
-        if self.files.len() > TOUCHES {
-            self.files.remove(0);
+        if self.files.len() <= TOUCHES {
+            return None;
         }
+        let gone = self.files.remove(0);
+        if gone.at < self.turn_started {
+            return None;
+        }
+        if self.evicted.turn != self.turn_started {
+            self.evicted = Evicted {
+                turn: self.turn_started,
+                ..Default::default()
+            };
+        }
+        self.evicted.files += 1;
+        self.evicted.added += gone.added;
+        self.evicted.removed += gone.removed;
+        Some(gone.path)
     }
 }
 impl Content {
@@ -211,10 +237,25 @@ impl Content {
         let last = self.turn_files().map(|t| t.at).max().unwrap_or(0);
         (self.turn_started, last)
     }
+    /// What the card lost of this turn off its list of files.
+    fn turn_evicted(&self) -> Evicted {
+        if self.evicted.turn == self.turn_started {
+            self.evicted
+        } else {
+            Evicted::default()
+        }
+    }
+    /// How many files the current turn touched, however few the card still lists.
+    pub fn turn_file_count(&self) -> usize {
+        self.turn_files().count() + self.turn_evicted().files as usize
+    }
     /// Lines added and removed in the current turn, over every file it touched.
     pub fn turn_lines(&self) -> (u32, u32) {
+        let lost = self.turn_evicted();
         self.turn_files()
-            .fold((0, 0), |(a, r), t| (a + t.added, r + t.removed))
+            .fold((lost.added, lost.removed), |(a, r), t| {
+                (a + t.added, r + t.removed)
+            })
     }
 }
 /// In-flight work by kind. Agents (subagents, workflows, teammates, cloud sessions, MCP
