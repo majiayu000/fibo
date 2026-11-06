@@ -234,6 +234,8 @@ mod forms;
 mod frame_facts;
 mod layout;
 mod machines;
+#[cfg(feature = "visual-test")]
+pub use layout::ChangesProbe;
 use layout::LayoutState;
 mod nav;
 use nav::Nav;
@@ -481,7 +483,8 @@ impl Workbench {
                 tab_scroll: gpui::ScrollHandle::new(),
                 revealed_tab: None,
                 renaming_session: None,
-                changes_open: None,
+                changes: HashMap::new(),
+                changes_seen: 0,
                 reopened: HashSet::new(),
                 completing: HashMap::new(),
                 completing_seq: 0,

@@ -11,6 +11,7 @@ pub(super) use tabs::hidden_tabs;
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.follow_space_theme(cx);
+        self.settle_changes(window, cx);
         // Whenever the current tab changes (a click, the sidebar, a shortcut, a new tab),
         // scroll the strip so that tab is in view: the strip always shows where you are.
         if self.layout.revealed_tab != self.nav.tab {

@@ -160,6 +160,18 @@ pub(super) fn add_item(parser: &mut Parser, item: &Value, at: u64, source: &Sour
     true
 }
 
+pub(super) fn codex_state(title: &str) -> Option<&'static str> {
+    if title.trim().is_empty() {
+        None
+    } else if title.contains("Action Required") {
+        Some("需要你处理")
+    } else if title.chars().any(|c| "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".contains(c)) {
+        Some("工作中")
+    } else {
+        Some("空闲")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::content::Parser;
