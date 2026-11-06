@@ -474,6 +474,27 @@ pub struct ScreenTerminal {
 }
 /// How far apart Enter in a pane and the prompt's log time may be and still be one event.
 pub const SUBMIT_WINDOW: u64 = 3;
+/// Whether a thread's newest prompt is worth comparing with screens: it is recent or its
+/// pane just ended. A bound one only if a screen alone tied it there and a pane of its CLI
+/// has no conversation, so prompts in fully bound panes read no screens.
+pub fn screen_candidate(
+    recent: bool,
+    released: bool,
+    holder: Option<&AgentSession>,
+    open_pane: bool,
+) -> bool {
+    (recent || released)
+        && holder.is_none_or(|s| s.binding.is_none_or(|b| b == Binding::Screen) && open_pane)
+}
+/// Whether this screen and these Enter presses say the thread's newest prompt came from there.
+pub fn prompt_evidence(thread: &ScreenThread, screen: &str, submits: &[u64]) -> bool {
+    let shown = thread.key.as_ref().is_some_and(|key| screen.contains(key));
+    shown
+        || [thread.at, thread.began]
+            .into_iter()
+            .flatten()
+            .any(|at| submits.iter().any(|s| s.abs_diff(at) <= SUBMIT_WINDOW))
+}
 /// Pair threads with terminals one-to-one. Evidence is the prompt shown verbatim on the
 /// screen, or Enter pressed in that pane when the prompt was logged or its turn began (a
 /// short or pasted prompt never shows verbatim). A thread fitting two panes, or a pane fitting two
@@ -483,19 +504,9 @@ pub fn screen_bindings<'a>(
     terminals: &[ScreenTerminal],
 ) -> Vec<(String, &'a Transcript)> {
     let fits = |thread: &ScreenThread, terminal: &ScreenTerminal| {
-        let shown = thread
-            .key
-            .as_ref()
-            .is_some_and(|key| terminal.screen.contains(key));
-        let submitted = [thread.at, thread.began].into_iter().flatten().any(|at| {
-            terminal
-                .submits
-                .iter()
-                .any(|s| s.abs_diff(at) <= SUBMIT_WINDOW)
-        });
         terminal.runtime == thread.transcript.runtime
             && terminal.cwd.as_ref().is_none_or(|cwd| cwd == &thread.cwd)
-            && (shown || submitted)
+            && prompt_evidence(thread, &terminal.screen, &terminal.submits)
             && terminal.current.as_ref().is_none_or(|(id, updated, key)| {
                 id != &thread.transcript.cli_id
                     && thread.transcript.updated >= *updated

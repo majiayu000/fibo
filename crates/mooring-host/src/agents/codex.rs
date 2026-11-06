@@ -355,16 +355,17 @@ impl Adapter for Codex {
     }
     fn title_status(&self, title: &str) -> Option<Hint> {
         let state = codex_state(title);
-        let why = "这个 Codex 连着共用的后台，Mooring 只看得到它忙不忙，读不到对话。想在这里看到对话内容，下次用 codex --no-daemon 启动。";
+        let why =
+            "这个窗格还没关联到对话，Mooring 暂时只看得到它忙不忙。在这里发下一句话后会自动关联。";
         Some(Hint {
             text: match state {
-                Some(state) => format!("仅显示状态：{state}；看对话内容请用 codex --no-daemon"),
-                None => "未关联：看对话内容请用 codex --no-daemon".into(),
+                Some(state) => format!("仅显示状态：{state}；发下一句后自动关联对话"),
+                None => "未关联：发下一句后自动关联对话".into(),
             },
             note: TerminalNote {
                 note: match state {
-                    Some(state) => format!("codex · {state} · 看不到对话"),
-                    None => "codex · 看不到对话".into(),
+                    Some(state) => format!("codex · {state} · 未关联对话"),
+                    None => "codex · 未关联对话".into(),
                 },
                 why: why.into(),
             },
@@ -639,12 +640,12 @@ mod tests {
     #[test]
     fn an_unbound_codex_says_its_state_plainly() {
         let note = |title: &str| Codex.title_status(title).unwrap().note.note;
-        assert_eq!(note("⠋ fixing"), "codex · 工作中 · 看不到对话");
-        assert_eq!(note("Action Required"), "codex · 需要你处理 · 看不到对话");
-        assert_eq!(note(""), "codex · 看不到对话");
+        assert_eq!(note("⠋ fixing"), "codex · 工作中 · 未关联对话");
+        assert_eq!(note("Action Required"), "codex · 需要你处理 · 未关联对话");
+        assert_eq!(note(""), "codex · 未关联对话");
         assert_eq!(
             Codex.title_status("⠋").unwrap().text,
-            "仅显示状态：工作中；看对话内容请用 codex --no-daemon"
+            "仅显示状态：工作中；发下一句后自动关联对话"
         );
     }
 

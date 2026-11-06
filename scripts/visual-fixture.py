@@ -125,6 +125,8 @@ if sys.argv[1] == 'prepare':
     start = ['/bin/zsh', '-f']
     if os.environ.get('MOORING_FIXTURE_UNBOUND_AGENT'):
         start = [str(root / 'codex'), '-c', 'printf "OpenAI Codex\\nWaiting for your first message\\n"; while IFS= read -r line; do :; done', '--no-daemon']
+        # 'shared': a Codex on the shared daemon, the one that gets the unbound note.
+        if os.environ['MOORING_FIXTURE_UNBOUND_AGENT'] == 'shared': start.pop()
     rpc(root, {'Launch': {'id': 'pstart', 'space': 's0', 'argv': start, 'cwd': str(root / 'projects/工作空间'), 'cols': 100, 'rows': 35}})
     def leaf(p): return {'Leaf': p}
     def split(a, b, axis): return {'Split': {'axis': axis, 'ratio': 5000, 'first': a, 'second': b}}

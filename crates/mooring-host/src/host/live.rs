@@ -200,14 +200,19 @@ pub(super) fn record_exit(host: &Shared, terminal: &LiveTerminal, id: &str) -> i
     };
     session.exit_code = live.exit_code;
     let status = serde_json::to_vec(session).map_err(io::Error::other)?;
+    let mut released = vec![];
     if live.exited {
         for agent in &mut next.agent_sessions {
             if agent.terminal.as_deref() == Some(id) {
+                if agent.current {
+                    released.push(agent.transcript.clone());
+                }
                 agent.current = false;
             }
         }
     }
     host.commit(next)?;
+    host.released_logs.extend(released);
     if live.exited && host.recognition.terminal_reports.remove(id).is_some() {
         host.publish_status()?;
     }

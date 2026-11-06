@@ -207,7 +207,7 @@ mod tests {
         seen.terminal_notes.insert(
             shell.clone(),
             TerminalNote {
-                note: "codex · 空闲 · 看不到对话".into(),
+                note: "codex · 空闲 · 未关联对话".into(),
                 why: String::new(),
             },
         );
@@ -218,7 +218,7 @@ mod tests {
         let card = list.terminals.iter().find(|c| c.id == shell).unwrap();
         assert_eq!(card.phase, rp::Phase::Shell);
         assert_eq!(card.agent.as_deref(), Some("codex"));
-        assert_eq!(card.note.as_deref(), Some("codex · 空闲 · 看不到对话"));
+        assert_eq!(card.note.as_deref(), Some("codex · 空闲 · 未关联对话"));
         assert!(list
             .terminals
             .iter()

@@ -501,6 +501,178 @@ fn daemon_codex_identical_prompts_stay_unbound_until_a_distinct_follow_up() {
     );
 }
 
+fn type_in(h: &Host, pane: &str, text: &str) {
+    let (mut stream, _, _) = h.attach(pane, false);
+    send(
+        &mut stream,
+        CONTROL,
+        &Request::Input {
+            bytes: text.as_bytes().to_vec(),
+            lossy: false,
+        },
+    )
+    .unwrap();
+    assert!(matches!(ack(&mut stream), Reply::Ok));
+}
+/// Waits until `pane` is a recognized Codex no conversation is tied to.
+fn wait_unbound(h: &Host, pane: &str) {
+    // Hints are computed after a submitted command; the fixture has none, so probe via input.
+    type_in(h, pane, "\n");
+    let until = Instant::now() + Duration::from_secs(10);
+    while !recognition(h).terminal_hints.contains_key(pane) {
+        assert!(
+            Instant::now() < until,
+            "{pane} never unbound: {:?}",
+            recognition(h).terminal_hints
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[test]
+fn a_thread_resumed_in_a_new_pane_moves_there_with_its_next_prompt() {
+    let h = Host::start();
+    h.setup();
+    let [thread] = ids();
+    let gate = h.root.join("resumed");
+    daemon_codex(
+        &h,
+        "old",
+        "proj",
+        &[step("先把登录页的跳转回归问题查清楚", &thread, None)],
+        "",
+    );
+    wait_for(&h, "the first pane binds", |w| {
+        current_is(w, "old", &thread)
+    });
+    daemon_codex(
+        &h,
+        "new",
+        "proj",
+        &[step("接着把这个问题提交成一个 issue", &thread, Some(&gate))],
+        "",
+    );
+    wait_unbound(&h, "new");
+    fs::write(&gate, "").unwrap();
+    wait_for(&h, "the thread follows its newest prompt", |w| {
+        current_is(w, "new", &thread) && w.current_agent("old").is_none()
+    });
+    assert!(!recognition(&h).terminal_hints.contains_key("new"));
+    wait_unbound(&h, "old");
+    // The pane it left says it is unbound, and its exit does not end the moved session;
+    // with the prompt scrolled out of reach nothing could bind it back.
+    // (Past SUBMIT_WINDOW, or this Enter would count as evidence for the prompt.)
+    std::thread::sleep(Duration::from_secs(5));
+    for _ in 0..21 {
+        type_in(&h, "new", &"say:……\n".repeat(10));
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    std::thread::sleep(Duration::from_secs(1));
+    h.call(Request::Stop { id: "old".into() }).unwrap();
+    wait_for(&h, "the old pane is gone", |w| {
+        w.terminals
+            .iter()
+            .any(|t| t.id == "old" && t.state != ProcessState::Running)
+    });
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(current_is(&h.workspace(), "new", &thread));
+}
+
+#[test]
+fn a_thread_shown_on_both_panes_stays_put_until_its_pane_ends() {
+    use std::io::Write;
+    let h = Host::start();
+    h.setup();
+    let [thread] = ids();
+    let prompt = "把通知投递日志整理成一张证据表格";
+    daemon_codex(&h, "old", "proj", &[step(prompt, &thread, None)], "");
+    wait_for(&h, "the first pane binds", |w| {
+        current_is(w, "old", &thread)
+    });
+    daemon_codex(&h, "new", "proj", &[step(prompt, &thread, None)], "");
+    wait_unbound(&h, "new");
+    // A long turn keeps appending: this prompt's screen comparisons run out while it stays.
+    let log = h.root.join(format!("logs/codex/{thread}.jsonl"));
+    for _ in 0..8 {
+        let mut file = fs::OpenOptions::new().append(true).open(&log).unwrap();
+        writeln!(
+            file,
+            "{}",
+            serde_json::json!({"type":"event_msg","payload":{"type":"agent_reasoning","text":"…"}})
+        )
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(current_is(&h.workspace(), "old", &thread));
+    }
+    h.call(Request::Stop { id: "old".into() }).unwrap();
+    wait_for(&h, "the pane still showing it takes over at once", |w| {
+        current_is(w, "new", &thread)
+    });
+    assert!(!recognition(&h).terminal_hints.contains_key("new"));
+}
+
+#[test]
+fn a_pane_ending_hours_after_the_last_prompt_hands_over_to_the_pane_showing_it() {
+    let h = Host::start();
+    h.setup();
+    let [thread] = ids();
+    let prompt = "把这个问题提交成 issue 并注明来源";
+    let long_ago = mooring_core::content::now() - 3 * 3600;
+    let logs = h.root.join("logs/codex");
+    fs::create_dir_all(&logs).unwrap();
+    let log = logs.join(format!("{thread}.jsonl"));
+    fs::write(
+        &log,
+        format!(
+            "{}\n{}\n",
+            serde_json::json!({"type":"session_meta","payload":{"id":thread,"cwd":"/tmp"}}),
+            serde_json::json!({"timestamp":long_ago,"type":"event_msg","payload":{"type":"user_message","message":prompt}}),
+        ),
+    )
+    .unwrap();
+    let stamp = std::process::Command::new("/bin/date")
+        .args(["-r", &long_ago.to_string(), "+%Y%m%d%H%M.%S"])
+        .output()
+        .unwrap();
+    assert!(std::process::Command::new("/usr/bin/touch")
+        .args(["-t", String::from_utf8_lossy(&stamp.stdout).trim()])
+        .arg(&log)
+        .status()
+        .unwrap()
+        .success());
+    // Its TUI holds the log open, so the old pane holds it without any recent prompt.
+    let cli = h.root.join("codex");
+    std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
+    let script = format!(
+        "exec 3<{}; while read -r line; do :; done",
+        shell_quote(&log.to_string_lossy())
+    );
+    h.call(h.launch(
+        "old",
+        &format!(
+            "exec {} -c {}",
+            shell_quote(&cli.to_string_lossy()),
+            shell_quote(&script)
+        ),
+    ))
+    .unwrap();
+    type_in(&h, "old", "\n");
+    wait_for(&h, "the open file binds the old log", |w| {
+        current_is(w, "old", &thread)
+    });
+    daemon_codex(&h, "new", "proj", &[], "");
+    wait_unbound(&h, "new");
+    type_in(&h, "new", &format!("say:› {prompt}\n"));
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(h.workspace().current_agent("new").is_none());
+    h.call(Request::Stop { id: "old".into() }).unwrap();
+    wait_for(
+        &h,
+        "the old conversation moves to the pane showing it",
+        |w| current_is(w, "new", &thread),
+    );
+}
+
 #[test]
 fn unbound_daemon_codex_shows_title_state_and_no_daemon_shows_nothing() {
     let h = Host::start();
@@ -527,7 +699,7 @@ fn unbound_daemon_codex_shows_title_state_and_no_daemon_shows_nothing() {
             .terminal_hints
             .get("busy")
             .map(String::as_str)
-            == Some("仅显示状态：工作中；看对话内容请用 codex --no-daemon")
+            == Some("仅显示状态：工作中；发下一句后自动关联对话")
         {
             break;
         }

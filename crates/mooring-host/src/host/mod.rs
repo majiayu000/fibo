@@ -62,6 +62,9 @@ struct Host {
     agent_pids: HashMap<u32, String>,
     /// Agent processes no evidence has tied to a conversation yet: their terminal and CLI.
     unbound_pids: HashMap<u32, (String, Agent)>,
+    /// Logs of conversations whose pane just ended. Another pane may be showing one
+    /// (`codex resume` there), however long ago its last prompt: compare screens once.
+    released_logs: std::collections::HashSet<String>,
     /// Agent processes that save no transcript, so their hint goes when they exit.
     unrecorded_pids: HashMap<u32, String>,
     /// Recent Enter presses per terminal, seconds since the epoch: evidence for which
@@ -310,6 +313,7 @@ impl Host {
                 .find(|s| s.id == id && s.current)
             {
                 s.current = false;
+                self.released_logs.insert(s.transcript.clone());
                 if let Some(events) = &self.log_events {
                     events.file(s.transcript.clone().into());
                 }

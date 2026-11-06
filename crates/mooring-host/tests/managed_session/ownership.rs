@@ -328,7 +328,7 @@ fn manually_entered_unbound_codex_gets_a_hint_and_exit_clears_it() {
         if recognition(&h)
             .terminal_hints
             .get("shell")
-            .is_some_and(|s| s == "未关联：看对话内容请用 codex --no-daemon")
+            .is_some_and(|s| s == "未关联：发下一句后自动关联对话")
         {
             break;
         }

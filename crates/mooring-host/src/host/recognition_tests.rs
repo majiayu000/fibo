@@ -108,6 +108,7 @@ fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
         exits: None,
         agent_pids: HashMap::new(),
         unbound_pids: HashMap::new(),
+        released_logs: Default::default(),
         unrecorded_pids: HashMap::new(),
         submits: HashMap::new(),
         input_probes: Default::default(),

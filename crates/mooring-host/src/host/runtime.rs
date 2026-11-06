@@ -214,6 +214,7 @@ pub(super) fn serve_runtime(
         exits: None,
         agent_pids: HashMap::new(),
         unbound_pids: HashMap::new(),
+        released_logs: Default::default(),
         unrecorded_pids: HashMap::new(),
         submits: HashMap::new(),
         input_probes: Default::default(),

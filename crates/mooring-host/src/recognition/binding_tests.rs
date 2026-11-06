@@ -584,3 +584,33 @@ fn a_conversation_handed_to_the_claude_daemon_stays_with_its_terminal() {
     assert_eq!(moved.binding, Some(Binding::Continued));
     assert_eq!(moved.task.as_deref(), Some("todo"));
 }
+
+#[test]
+fn a_thread_whose_pane_ended_is_compared_however_old_its_last_prompt() {
+    assert!(!screen_candidate(false, false, None, true));
+    assert!(screen_candidate(false, true, None, true));
+    assert!(screen_candidate(true, false, None, true));
+}
+
+#[test]
+fn only_a_screen_tied_thread_can_leave_its_pane_and_only_for_an_open_one() {
+    let held = |binding| AgentSession {
+        id: "s".into(),
+        runtime: Agent::Codex,
+        cli_session_id: "c".into(),
+        terminal: Some("t".into()),
+        current: true,
+        task: None,
+        outcome: Outcome::Open,
+        updated: 0,
+        cwd: String::new(),
+        transcript: String::new(),
+        binding,
+        name: String::new(),
+    };
+    let screen = held(Some(Binding::Screen));
+    assert!(screen_candidate(true, false, Some(&screen), true));
+    assert!(!screen_candidate(true, false, Some(&screen), false));
+    let process = held(Some(Binding::Process));
+    assert!(!screen_candidate(true, false, Some(&process), true));
+}
