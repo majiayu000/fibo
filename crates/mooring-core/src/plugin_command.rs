@@ -27,12 +27,45 @@ const LOGIN_TIMEOUT: Duration = Duration::from_secs(3);
 const SYSTEM_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 #[cfg(windows)]
 const SYSTEM_PATH: &str = r"C:\Windows\System32;C:\Windows";
-/// What runs a declared command. Windows has it only with Git for Windows, and only if that
-/// is on `PATH`; without it the command fails to start and says so.
+/// What runs a declared command.
 #[cfg(unix)]
-const SHELL: &str = "/bin/sh";
+pub(crate) fn shell() -> OsString {
+    "/bin/sh".into()
+}
+/// Windows has it only with Git for Windows; without it the command fails to start and says
+/// so. Found once per process.
 #[cfg(windows)]
-const SHELL: &str = "sh";
+pub(crate) fn shell() -> OsString {
+    static SH: OnceLock<OsString> = OnceLock::new();
+    SH.get_or_init(|| {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let dirs: Vec<_> = std::env::split_paths(&path).collect();
+        let installed = std::env::var_os("ProgramFiles").map(|p| Path::new(&p).join("Git"));
+        sh_among(&dirs, installed.as_deref()).map_or_else(|| "sh".into(), Into::into)
+    })
+    .clone()
+}
+/// `sh.exe` on `PATH`, else beside a `git.exe` on it: Git's installer by default puts only
+/// `Git\cmd` there and keeps `sh` in `Git\bin`. Else where that installer puts it.
+#[cfg(any(windows, test))]
+fn sh_among(path: &[std::path::PathBuf], installed: Option<&Path>) -> Option<std::path::PathBuf> {
+    let on_path = path.iter().map(|dir| dir.join("sh.exe"));
+    let by_git = path
+        .iter()
+        .filter(|dir| dir.join("git.exe").is_file())
+        .filter_map(|dir| Some(dir.parent()?.join("bin").join("sh.exe")));
+    let by_installer = installed.map(|git| git.join("bin").join("sh.exe"));
+    on_path
+        .chain(by_git)
+        .chain(by_installer)
+        .find(|sh| sh.is_file())
+}
+/// A path as a test writes it into a declared command, where a backslash means something
+/// else both to JSON and to `sh`.
+#[cfg(test)]
+pub(crate) fn sh_path(path: &Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
 
 /// What is done with whatever the command leaves running once it has ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,7 +92,7 @@ impl<'a> Run<'a> {
     /// `sh -c command`, as every declared command runs.
     pub fn shell(command: &str, timeout: Duration, leftovers: Leftovers) -> Self {
         Self {
-            program: SHELL.into(),
+            program: shell(),
             args: vec!["-c".into(), command.into()],
             cwd: None,
             env: vec![],
@@ -294,6 +327,33 @@ mod tests {
 
     fn secs(n: u64) -> Duration {
         Duration::from_secs(n)
+    }
+
+    #[test]
+    fn sh_is_found_on_path_then_beside_git_then_where_git_installs() {
+        let root = std::env::temp_dir().join(format!("kl-sh-among-{}", std::process::id()));
+        let touch = |rel: &[&str]| {
+            let file = rel.iter().fold(root.clone(), |p, part| p.join(part));
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(&file, "").unwrap();
+            file
+        };
+        let on_path = touch(&["msys", "sh.exe"]);
+        touch(&["Git", "cmd", "git.exe"]);
+        let by_git = touch(&["Git", "bin", "sh.exe"]);
+        let installed = touch(&["Program Files", "Git", "bin", "sh.exe"]);
+        let (msys, git_cmd) = (root.join("msys"), root.join("Git").join("cmd"));
+        let git_home = root.join("Program Files").join("Git");
+
+        let first = sh_among(&[git_cmd.clone(), msys], Some(&git_home));
+        assert_eq!(first, Some(on_path));
+        assert_eq!(
+            sh_among(std::slice::from_ref(&git_cmd), Some(&git_home)),
+            Some(by_git)
+        );
+        assert_eq!(sh_among(&[], Some(&git_home)), Some(installed));
+        assert_eq!(sh_among(&[], None), None);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// What it left holding the pipes does not hold the caller past the command's end.

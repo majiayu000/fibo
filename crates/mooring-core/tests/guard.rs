@@ -77,7 +77,11 @@ fn files(root: &Path, dir: &str, out: &mut Vec<PathBuf>) {
     };
     for e in entries.flatten() {
         let p = e.path();
-        let rel = p.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+        let rel = p
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
         if p.is_dir() {
             if !rel.contains("node_modules") {
                 files(root, &rel, out);
@@ -121,7 +125,11 @@ fn count(root: &Path) -> BTreeMap<String, usize> {
     let bare = Regex::new(r#"["'`][^"'`\n]*出错[^了][^"'`\n]*["'`]|["'`]出错["'`]"#).unwrap();
     let mut out = BTreeMap::new();
     for p in paths {
-        let rel = p.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+        let rel = p
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
         if fixture(&rel) || rel.ends_with("tests/guard.rs") {
             continue;
         }

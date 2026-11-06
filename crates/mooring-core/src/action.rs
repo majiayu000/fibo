@@ -460,7 +460,7 @@ mod tests {
                 ..Context::default()
             };
             let command = a.command(&ctx).unwrap();
-            let out = std::process::Command::new("/bin/sh")
+            let out = std::process::Command::new(crate::plugin_command::shell())
                 .arg("-c")
                 .arg(&command)
                 .output()
@@ -525,7 +525,7 @@ mod tests {
             format!(
                 "sh {}/run.sh {}",
                 shell_quote(&dir.display().to_string()),
-                shell_quote(&root.join("plugin-data/p").display().to_string())
+                shell_quote(&root.join("plugin-data").join("p").display().to_string())
             )
         );
         let _ = std::fs::remove_dir_all(&root);

@@ -210,7 +210,7 @@ mod tests {
             dir.join("setup.json"),
             format!(
                 r#"{{"api":1,"setup":"sleep 6 & echo started","teardown":"(sleep 1; touch {}) & wait","timeout_ms":200}}"#,
-                mark.display()
+                crate::plugin_command::sh_path(&mark)
             ),
         )
         .unwrap();
