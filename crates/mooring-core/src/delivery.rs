@@ -3,7 +3,9 @@
 //! however often it is sent, and the reads change nothing, so a dropped link or a host
 //! restarting is waited out by sending the same request again; only after the patience
 //! runs out does the sender hear that the outcome is unknown, never nothing.
-use crate::protocol::{CONTROL, MAJOR, Reply, Request, receive, send};
+#[cfg(unix)]
+use crate::protocol::{CONTROL, MAJOR, receive, send};
+use crate::protocol::{Reply, Request};
 use std::io;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -64,6 +66,7 @@ pub fn resendable(request: &Request) -> bool {
 }
 
 /// One try. The error keeps its kind and says at which step it failed.
+#[cfg(unix)]
 pub fn attempt(socket: &Path, request: &Request) -> Settled {
     let stage = |name, e: io::Error| io::Error::new(e.kind(), format!("RPC {name}: {e}"));
     let unsent = |name, e| Settled::Unknown {
@@ -104,6 +107,13 @@ pub fn attempt(socket: &Path, request: &Request) -> Settled {
     }
 }
 
+/// There is no host to reach on Windows yet (docs/windows/plan.md), and waiting will not
+/// bring one: refused, so `deliver` does not spend its patience on it.
+#[cfg(windows)]
+pub fn attempt(_socket: &Path, _request: &Request) -> Settled {
+    Settled::Refused("Windows 版后台还没有做好，连不上".to_owned())
+}
+
 /// Tries until it is settled, resending while that is safe and `patience` lasts.
 pub fn deliver(socket: &Path, request: &Request, patience: Duration) -> Settled {
     let start = Instant::now();
@@ -127,7 +137,7 @@ pub fn deliver(socket: &Path, request: &Request, patience: Duration) -> Settled 
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::model::Edit;
