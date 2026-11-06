@@ -2,6 +2,7 @@ cardplay-share 0.17
 frames-arrive 59.85
 frames-cardplay 12.42
 frames-cardrest 78.93
+frames-changes 8.19
 frames-main 106.89
 frames-motion 85.82
 frames-pane 6.96
