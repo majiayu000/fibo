@@ -24,6 +24,7 @@ Ruleset `main requires CI` 作用于 `main`：必须走 PR，`Workbench Rust che
 - 两个各自通过的 PR 合在一起仍可能变红。
 - 仓库设置同时打开了 `allow_auto_merge` 和「Actions 可以创建 PR」。
 - 工作流用 `GITHUB_TOKEN` 开的 PR 不会自动跑 CI，所以 `ci.yml` 加了 `workflow_dispatch`。
+- GitHub 不把 `workflow_dispatch` 的检查结果算给 PR（实测 CI 全绿，PR 仍是 `BLOCKED`），所以手动触发的 CI 通过后，在提交上写一条同名状态。
 
 ## Implementation Plan
 
