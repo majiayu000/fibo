@@ -88,10 +88,15 @@ export type Shelf = {
   /** Empty with fewer than two spaces. By name, so a chip never moves under a finger. */
   chips: Chip[];
   pinned: Item[];
-  /** Errors, reminders that came back, then what runs. */
+  /** Errors and reminders that came back. */
   ahead: Item[];
-  /** 等你验收: it folds into one line, it is still in the inbox. */
+  /**
+   * 等你验收: it folds into one line, still in the inbox. Above what runs: on a real phone 12 running
+   * rows pushed it two screens down, and these are what the title's count is asking about.
+   */
   review: Item[];
+  /** What runs: nothing to do here yet. */
+  running: Item[];
   /** What rests: below the fold line. */
   behind: Item[];
   later: Item[];
@@ -119,13 +124,13 @@ export function shelve(a: Arranged, selected: string | null): Shelf {
   const here = (i: Item) => filter === null || name(i) === filter;
   const rest = a.rest.filter(here);
   const first = rest.filter((i) => rank(i.c) <= 2);
-  const running = rest.filter((i) => rank(i.c) === 3);
   return {
     filter,
     chips,
     pinned: a.pinned.filter(here),
-    ahead: [...first, ...rest.filter(reminder), ...running],
+    ahead: [...first, ...rest.filter(reminder)],
     review: rest.filter((i) => rank(i.c) === 4 && !reminder(i)),
+    running: rest.filter((i) => rank(i.c) === 3),
     behind: rest.filter((i) => rank(i.c) > 4),
     later: a.later.filter(here),
     done: a.done.filter(here),

@@ -31,7 +31,7 @@ mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined })
 mock.module('../src/store/settings', () => ({ settings: { get: () => ({ lock, confirmDanger: true }) } }));
 const hub = await import('../src/remote/hub');
 const { switchMode } = await import('../src/actions');
-const { FULL_CONFIRM, FULL_WORDS, isFull } = await import('../src/ui/modes');
+const { FULL_CONFIRM, FULL_WORDS, isFull, rowSaysFull } = await import('../src/ui/modes');
 
 const FULL = { key: 'bypassPermissions', label: FULL_WORDS, full: true };
 const PLAIN = { key: 'plan', label: '只做计划' };
@@ -102,4 +102,13 @@ test('the word on a card is what marks it', () => {
   expect(isFull(FULL_WORDS)).toBe(true);
   expect(isFull('自动判断')).toBe(false);
   expect(isFull(null)).toBe(false);
+});
+
+test('a row says it only when it is the exception', () => {
+  const full = { permission: FULL_WORDS };
+  const asks = { permission: '逐个确认' };
+  expect(rowSaysFull(full, [full, full])).toBe(false);
+  expect(rowSaysFull(full, [full, asks])).toBe(true);
+  expect(rowSaysFull(full, [full, { permission: null }])).toBe(false);
+  expect(rowSaysFull(asks, [full, asks])).toBe(false);
 });

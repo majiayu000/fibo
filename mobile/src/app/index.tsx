@@ -158,7 +158,7 @@ export default function Inbox() {
   const { offline } = shown.current;
   const view = useInboxView();
   const shelf = shelve(shown.current, view.space);
-  const { pinned, ahead, review, behind, later, done, chips, filter } = shelf;
+  const { pinned, ahead, review, running, behind, later, done, chips, filter } = shelf;
   const list = useRef<ComponentRef<typeof ScrollView>>(null);
   const pick = (space: string | null) => {
     setInboxView({ space });
@@ -240,12 +240,15 @@ export default function Inbox() {
           <Offline key={m.id} m={m} t={t} />
         ))}
         {ahead.map((i, n) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, ahead.length, review.length + behind.length > 0)} />
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, ahead.length, review.length + running.length + behind.length > 0)} />
         ))}
         {review.length > 0 && (
           <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />
         )}
-        {view.review && review.map((i, n) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, review.length, behind.length > 0)} />)}
+        {view.review && review.map((i, n) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, review.length, running.length + behind.length > 0)} />)}
+        {running.map((i, n) => (
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, running.length, behind.length > 0)} />
+        ))}
         {behind.map((i, n) => (
           <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, behind.length, false)} />
         ))}

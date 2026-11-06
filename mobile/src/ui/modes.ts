@@ -11,6 +11,14 @@ export const FULL_WORDS = '全部放行';
 
 export const isFull = (permission: string | null | undefined) => permission === FULL_WORDS;
 
+/**
+ * Whether a list row says so: only when it is the exception. Most of a person's sessions may run
+ * this way from the start (the first real inbox had the word on all 24), and then it says nothing
+ * and takes the room of what each is doing. The chat's own tag always says.
+ */
+export const rowSaysFull = (card: { permission?: string | null }, cards: { permission?: string | null }[]) =>
+  isFull(card.permission) && cards.some((c) => !!c.permission && !isFull(c.permission));
+
 /** What the second confirmation says: the consequence, in so many words. */
 export const FULL_CONFIRM = {
   title: `切到「${FULL_WORDS}」？`,

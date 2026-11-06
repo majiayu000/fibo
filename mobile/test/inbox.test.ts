@@ -153,17 +153,19 @@ describe('finished work folds, and does not read as nothing to do', () => {
   const review = (id: string, more: Partial<Card> = {}) => card(id, 'review', 0, { status_label: '等你验收', needs_you: true, ...more });
   const lay = (cards: Card[], selected: string | null = null, m = machine(cards)) => shelve(arrange([m], []), selected);
 
-  test('what is left of the list keeps its order: errors, what runs, the fold, what rests', () => {
+  test('what is left of the list keeps its order: errors, the fold, what runs, what rests', () => {
     const s = lay([card('paused', 'paused', 9), review('r'), card('run', 'running', 5), card('e', 'error', 1), approval('a')]);
     expect(ids(s.pinned)).toEqual(['a']);
-    expect(ids(s.ahead)).toEqual(['e', 'run']);
+    expect(ids(s.ahead)).toEqual(['e']);
     expect(ids(s.review)).toEqual(['r']);
+    expect(ids(s.running)).toEqual(['run']);
     expect(ids(s.behind)).toEqual(['paused']);
   });
   test('only 等你验收 folds: an error, a question and 等后台 stay out', () => {
     const s = lay([review('r'), card('e', 'error'), card('q', 'waiting'), card('bg', 'background')]);
     expect(ids(s.review)).toEqual(['r']);
-    expect(ids(s.ahead)).toEqual(['e', 'bg']);
+    expect(ids(s.ahead)).toEqual(['e']);
+    expect(ids(s.running)).toEqual(['bg']);
     expect(ids(s.pinned)).toEqual(['q']);
   });
   test('an approval on a finished turn asks: it does not fold', () => {
@@ -173,7 +175,8 @@ describe('finished work folds, and does not read as nothing to do', () => {
   });
   test('a 稍后提醒 whose hour is up does not fold: it comes back ahead of what runs', () => {
     const s = lay([review('due', { outcome: 'deferred' }), card('run', 'running', 9), card('e', 'error')]);
-    expect(ids(s.ahead)).toEqual(['e', 'due', 'run']);
+    expect(ids(s.ahead)).toEqual(['e', 'due']);
+    expect(ids(s.running)).toEqual(['run']);
     expect(s.review).toEqual([]);
     expect(s.acts).toBe(2);
   });
@@ -236,7 +239,7 @@ describe('the space filter hides nothing silently', () => {
     const cards = [...two(), at('b', card('l', 'review', 0, { outcome: 'deferred' })), at('a', card('d', 'closed', 0, { outcome: 'done' })), at('b', card('d2', 'closed', 0, { outcome: 'done' }))];
     const s = lay(cards, 'a');
     expect(ids(s.pinned)).toEqual(['ask-a']);
-    expect(ids(s.ahead)).toEqual(['run-a']);
+    expect(ids(s.running)).toEqual(['run-a']);
     expect(s.review).toEqual([]);
     expect(s.later).toEqual([]);
     expect(ids(s.done)).toEqual(['d']);
