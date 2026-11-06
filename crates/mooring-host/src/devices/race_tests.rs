@@ -235,7 +235,17 @@ fn the_lock_excludes_another_open_file_in_this_process_and_is_private() {
     let held = lock(&socket).unwrap();
     assert!(!try_lock(), "持锁时第二个 fd 不该拿到");
     drop(held);
-    assert!(try_lock(), "放锁后应当能拿到");
+    // Not at once: a process another thread is spawning right now copied the open files, this
+    // one too, and the lock lasts until its exec closes that copy (tens of milliseconds at
+    // worst under load). Nothing waits on it for long: `lock` blocks, it does not give up.
+    let released = std::time::Instant::now();
+    while !try_lock() {
+        assert!(
+            released.elapsed() < std::time::Duration::from_secs(30),
+            "放锁后应当能拿到"
+        );
+        std::thread::yield_now();
+    }
     use std::os::unix::fs::PermissionsExt;
     let mode = std::fs::metadata(socket.with_file_name("remote-devices.lock"))
         .unwrap()
