@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>手机端进度</title>
+<style>
+:root {
+  --bg: #fafafa; --card: #fff; --text: #1c1c1e; --dim: #6b6b70; --line: #e5e5e7;
+  --ok: #15803d; --ok-bg: #e9f7ee; --part: #a15c00; --part-bg: #fdf3e1;
+  --todo: #52525b; --todo-bg: #f0f0f2; --you: #b4231f; --you-bg: #fcebea; --well: #f3f3f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0d0f; --card: #17171a; --text: #ececee; --dim: #9a9aa2; --line: #2a2a2f;
+    --ok: #4ade80; --ok-bg: #10291a; --part: #f5b95c; --part-bg: #2e2110;
+    --todo: #b4b4bc; --todo-bg: #232327; --you: #f98b85; --you-bg: #331715; --well: #202024;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.7 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 44px 20px 80px; }
+h1 { font-size: 27px; font-weight: 600; margin: 0 0 4px; }
+h2 { font-size: 19px; font-weight: 600; margin: 44px 0 6px; }
+.sub { color: var(--dim); margin: 0 0 24px; font-size: 14px; }
+.lead { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.lead p { margin: 0 0 8px; } .lead p:last-child { margin: 0; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.stat b { display: block; font-size: 24px; font-weight: 600; line-height: 1.3; }
+.stat span { color: var(--dim); font-size: 13px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-weight: 500; color: var(--dim); font-size: 13px; }
+th, td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { min-width: 118px; }
+.tag { display: inline-block; white-space: nowrap; font-size: 12px; padding: 1px 8px; border-radius: 99px; }
+.ok { color: var(--ok); background: var(--ok-bg); }
+.part { color: var(--part); background: var(--part-bg); }
+.todo { color: var(--todo); background: var(--todo-bg); }
+.you { color: var(--you); background: var(--you-bg); }
+ol, ul { padding-left: 22px; margin: 8px 0; } li { margin: 6px 0; }
+code { font: 13px ui-monospace, Menlo, monospace; background: var(--well); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+pre { font: 13px/1.6 ui-monospace, Menlo, monospace; background: var(--well); padding: 12px 14px; border-radius: 10px; overflow-x: auto; margin: 8px 0; }
+a { color: inherit; text-underline-offset: 3px; }
+.note { color: var(--dim); font-size: 13px; }
+@media (max-width: 560px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  main { padding: 28px 16px 60px; }
+  .tablewrap { overflow: visible; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  tr:has(th) { display: none; }
+  tr { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  tr:last-child { border-bottom: 0; }
+  td, td:first-child { border: 0; padding: 2px 0; min-width: 0; }
+  td:first-child { font-weight: 500; }
+  .steps td:first-child { display: inline; color: var(--dim); font-weight: 400; margin-right: 6px; }
+  .steps td:nth-child(2) { display: inline; font-weight: 500; }
+  .steps td:nth-child(3) { margin-top: 6px; }
+  .steps td:nth-child(4) { color: var(--dim); font-size: 13px; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>手机端进度</h1>
+<p class="sub">Mooring 手机 App 和官方中继。记录时间 2026-11-06 23:30。</p>
+
+<div class="lead">
+  <p><b>手机能离开电脑处理事情了。</b>安卓真机已经走通：经公网中继连到你的 Mac，看对话和工具调用、批准或拒绝、发消息、开新任务。停下 Agent 和接着上次的对话已用真 Agent 走协议验过，最新版还没在手机上点过。</p>
+  <p><b>最大的缺口是推送。</b>不开 App 就不知道有审批在等你，这要你提供账号。其余是几项只能你在手机上验的操作，以及 iPhone 版。</p>
+  <div class="stats">
+    <div class="stat"><b>69fe098</b><span>电脑端正在跑的版本（加 CI 已签名、待合入的插件目录）；手机 App 同一份手机代码</span></div>
+    <div class="stat"><b>安卓</b><span>OPPO Find X9 Ultra 已安装</span></div>
+    <div class="stat"><b>1 台</b><span>已配对（这台 Mac）</span></div>
+    <div class="stat"><b>未开始</b><span>推送、iPhone 真机</span></div>
+  </div>
+</div>
+
+<h2>下一步，按这个顺序</h2>
+<div class="tablewrap"><table class="steps">
+<tr><th>#</th><th>做什么</th><th>谁</th><th>为什么排这里</th></tr>
+<tr><td>1</td><td>日常用几天，留意 4G、键盘挡输入框、Face ID 弹窗、相机扫码</td><td><span class="tag you">你</span></td><td>这几项我测不了，真实使用才会暴露问题</td></tr>
+<tr><td>2</td><td>确认中继证书能自动续期（现在的证书 11-11 10:04 到期）</td><td><span class="tag todo">我</span></td><td>到期前没续上，手机就连不上了。11-08 到 11-10 之间检查一次</td></tr>
+<tr><td>3</td><td>高峰时再量一次流量，清掉用完的手机工作区</td><td><span class="tag todo">我</span></td><td>真机 0.7 MB/时是在每分钟 10 个事件时量的，之前的峰值是每分钟 72 个，那个条件真机还没量</td></tr>
+<tr><td>4</td><td>推送通知</td><td><span class="tag you">你定账号</span> <span class="tag todo">我做</span></td><td>最大的功能缺口。需要 FCM；国内安卓可能还要接厂商推送</td></tr>
+<tr><td>5</td><td>中继换成域名 <code>relay.niannian.site</code></td><td><span class="tag you">你加解析</span> <span class="tag todo">我做</span></td><td>现在用 IP，换服务器就要重新配对。确定长期用就该换</td></tr>
+<tr><td>6</td><td>iPhone 真机</td><td><span class="tag you">你给开发者账号</span> <span class="tag todo">我做</span></td><td>只在模拟器跑过，要签名</td></tr>
+<tr><td>7</td><td>其他 Agent 的工具详情（Cursor、Grok 等）</td><td><span class="tag todo">我</span></td><td>现在显示「还不支持」。看你用得多不多再做</td></tr>
+</table></div>
+
+<h2>做到什么程度了</h2>
+<p class="note">「真机验过」指在 OPPO 上亲眼看到。「只测过」指自动测试或网页版通过，真手机上没走过。真机结果来自不同版本：信任、审批卡片和允许是在 <code>a4ac4fa</code> 上看的；拒绝、工具清单和终端面板在前一个版本；发消息和新任务更早。</p>
+<div class="tablewrap"><table>
+<tr><th>功能</th><th>状态</th><th>说明</th></tr>
+<tr><td>官方中继</td><td><span class="tag ok">真机验过</span></td><td><code>https://124.221.234.205</code>，腾讯云上海，内容端到端加密。续期还没实际发生过</td></tr>
+<tr><td>配对</td><td><span class="tag ok">真机验过</span></td><td>用数据线发配对链接，不扫码。App 内扫码没验</td></tr>
+<tr><td>收件箱</td><td><span class="tag ok">真机验过</span></td><td>分支、在跑时长、正在做什么，审批和等你回答固定在最上面</td></tr>
+<tr><td>收件箱折叠和筛选</td><td><span class="tag ok">真机验过</span></td><td>真实数据下折叠、展开、横滑筛选、重开记住空间都正常；真机上把折叠行挪到在跑上面。选中的空间靠右时重开不会自动滚到它</td></tr>
+<tr><td>流量</td><td><span class="tag ok">真机验过</span></td><td>新手机加新电脑 10 分钟 0.7 MB/时（每分钟 10 个事件），内容和电脑一致。之前同口径峰值 54–76 MB/时，那时每分钟 72 个事件，事件更少时也有 4.4 MB/时；峰值条件真机没量，模拟约 6.3 MB/时。改动到显示真机没量，模拟约 0.4 秒</td></tr>
+<tr><td>换模型、换权限</td><td><span class="tag ok">真机验过</span></td><td>只在临时测试会话上走过：真 Claude、真 Codex 都切成功，模型只改这次会话，配置文件没变；全部放行的二次确认弹窗亲眼看过。开着 Face ID 的情况没验</td></tr>
+<tr><td>语音输入</td><td><span class="tag ok">真机验过</span></td><td>用输入法（搜狗）的语音键，字能写进输入框。App 自己没有语音功能</td></tr>
+<tr><td>防点错</td><td><span class="tag part">只测过</span></td><td>网页版用真实触摸事件复现并修好。手指按住时重排没在真机上试</td></tr>
+<tr><td>审批</td><td><span class="tag ok">真机验过</span></td><td>写真正的命令；危险命令二次确认；允许、拒绝都生效</td></tr>
+<tr><td>一直允许某类操作</td><td><span class="tag part">部分验过</span></td><td>按钮写菜单实际内容，真机看到了。点选这一项的效果只走过协议</td></tr>
+<tr><td>信任新文件夹</td><td><span class="tag ok">真机验过</span></td><td>Claude 的提示和按钮都对。Codex 的只走过协议</td></tr>
+<tr><td>对话和 Markdown</td><td><span class="tag ok">真机验过</span></td><td>表格、代码块、列表正常。点链接、复制代码、横滑手势没验</td></tr>
+<tr><td>工具清单和详情</td><td><span class="tag ok">真机验过</span></td><td>Claude 显示人话说明，Codex 显示短命令。MCP 和文件改动只测过</td></tr>
+<tr><td>终端最后几行</td><td><span class="tag ok">真机验过</span></td><td>不折行、左右滑、可复制</td></tr>
+<tr><td>发消息</td><td><span class="tag ok">真机验过</span></td><td>在临时会话里测过，约 9 秒收到回复，含 Agent 思考时间</td></tr>
+<tr><td>停下</td><td><span class="tag part">部分验过</span></td><td>真 Codex 约 2 秒停住，但最新版只走过协议，没在手机上点</td></tr>
+<tr><td>新任务</td><td><span class="tag ok">真机验过</span></td><td>选目录、选 Agent、写一句话，用真 Codex 走通</td></tr>
+<tr><td>接着上次的对话</td><td><span class="tag part">部分验过</span></td><td>真 Claude、真 Codex 走协议能接回，手机按钮没点过</td></tr>
+<tr><td>较早消息补读</td><td><span class="tag part">只测过</span></td><td>279 MB 日志 1.9 秒读回 635 条，网页版走过，真机没翻过</td></tr>
+<tr><td>额度</td><td><span class="tag ok">真机验过</span></td><td>只从配对的电脑取，手机不直接找服务商。离线显示「断开前」。多台电脑同页没验</td></tr>
+<tr><td>看板、改动、电脑、设置</td><td><span class="tag part">部分验过</span></td><td>看板和改动页真机打开过。设置页和待办列只在网页版看过</td></tr>
+<tr><td>桌面端「中断这一轮」</td><td><span class="tag part">只测过</span></td><td>和手机的停下走同一套逻辑，窗口里没真点过</td></tr>
+<tr><td>Face ID</td><td><span class="tag todo">没验</span></td><td>代码写了，弹窗没在真机出现过</td></tr>
+<tr><td>推送</td><td><span class="tag todo">没做</span></td><td>设置页开关只存在手机上，写着「推送还没接」</td></tr>
+<tr><td>iPhone</td><td><span class="tag todo">没做真机</span></td><td>模拟器跑过较早版本</td></tr>
+</table></div>
+
+<h2>定下来的事</h2>
+<ul>
+  <li><b>手机只做聊天，不做终端。</b>工具调用可以点开看，终端只看最后几行。</li>
+  <li><b>额度</b>按电脑分开、不相加；手机只从配对的电脑取。</li>
+  <li><b>Markdown</b> 用 remark 解析加自绘组件。在 OPPO 上和原生库实测对比后选的，理由见 <a href="markdown.md">markdown.md</a>。</li>
+  <li><b>不做</b>：审批失效时间和「推送 6 个提交」这类后果说明（电脑拿不到可靠数据）；金额（没有可信价格表）；一键回复（要猜 Agent 的话）。</li>
+  <li><b>上线流程</b>：本地 main 只跟随远端。分支变基后开 PR 并设自动合并，CI 通过才进 main（11-06 起直接推会被拒）。打包也从 <code>origin/main</code> 来。</li>
+  <li><b>全部放行</b>：手机上可以切，切之前二次确认，开了 Face ID 再验证；Claude 启动时没带跳过权限的参数就不列这一档。</li>
+</ul>
+
+<h2>要留意的风险</h2>
+<ul>
+  <li><b>Codex 可能要你重新登录。</b>测试时把 <code>~/.codex/auth.json</code> 复制到临时目录用过 7 次（副本已删），如果令牌被刷新，真实登录可能失效。</li>
+  <li><b>有个测试在高负载下失败过。</b><code>a_dialog_gone_from_the_screen_is_settled_by_claude_official_status</code> 在负载 50 以上时失败，低负载通过。包含这些提交的 main 后来 CI 通过（<code>4b2c66c</code>），但 CI 不是高负载，也没在高负载下对比过旧版本。</li>
+  <li><b>打码不是万无一失。</b>工具输出发送前在电脑上打码，但名字里不带关键词的密钥认不出。</li>
+  <li><b>第一次点允许没反应</b>的现象修了三个可能原因，都是推断。再遇到请告诉我。</li>
+  <li><b>手机测试用例依赖顺序。</b><code>hub</code> 的 3 个测试在随机顺序下失败，<code>9444c03</code> 上同样存在，这轮没修。CI 用的固定顺序不受影响。</li>
+  <li><b>电脑卡死。</b>11-05 拔电跑高负载卡死过一次。重任务要低优先级、一次一个、插着电。</li>
+</ul>
+
+<h2>怎么操作</h2>
+<p class="note">以后接手的人或 Agent 照这里做。凭据不写在这里。</p>
+<p><b>换电脑上的 Mooring</b>（从 <code>origin/main</code> 的干净工作区）</p>
+<pre>export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+export LIBGHOSTTY_VT_SYS_OPTIMIZE=ReleaseFast
+nice -n 10 cargo build --release -p mooring-app -p mooring-host
+python3 package-macos.py --output ~/Desktop/code/AI/tools/mooring/target/bundle-here/Mooring.app
+osascript -e 'tell application id "local.mooring.workbench" to quit'
+env -i HOME=$HOME USER=$USER LOGNAME=$USER SHELL=/bin/zsh TMPDIR=$TMPDIR LANG=en_US.UTF-8 \
+  PATH=/usr/bin:/bin:/usr/sbin:/sbin open &lt;bundle&gt; --args --runtime ~/.local/share/keepline-workbench</pre>
+<p><b>编手机包并安装</b></p>
+<pre>cd mobile &amp;&amp; bun install --frozen-lockfile
+CI=1 bunx expo prebuild -p android --no-install
+# android/local.properties 写 sdk.dir；gradle.properties 末尾加 Clash 7897 代理
+cd android
+./gradlew :app:createBundleReleaseJsAndAssets --rerun
+./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/release/app-release.apk</pre>
+<p>OPPO 弹「安装增强防护」时，在手机上点右上角「⋮」→「开始深度扫描」→ 继续安装。这一步要手动。</p>
+<p><b>不扫码配对</b>：<code>mooring remote --pair --relay https://124.221.234.205 --name 名字 --role full</code> 拿到链接，用 <code>adb shell am start -d</code> 发给手机。链接里有密钥，不要打印或发给别人。</p>
+<p><b>真机点按前</b>先用 <code>uiautomator dump</code> 取坐标，列表随时会变。真实测试放在临时目录，用完删掉。</p>
+
+<h2>相关文档</h2>
+<ul>
+  <li><a href="v2-plan.md">v2-plan.md</a>：这一版的范围、协议和每轮的详细结果</li>
+  <li><a href="spec.md">spec.md</a>：手机端最初的开工说明和早期验收记录</li>
+  <li><a href="design.html">design.html</a>：设计稿</li>
+  <li><a href="markdown.md">markdown.md</a>：Markdown 选型</li>
+  <li><a href="../relay/self-host.md">relay/self-host.md</a>：自建中继</li>
+  <li>官方中继的部署配置在私有目录 <code>~/Desktop/code/AI/tools/mooring-deploy</code>，不在这个仓库</li>
+</ul>
+</main>
+</body>
+</html>
