@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Pressable, type StyleProp, StyleSheet, Text, type TextStyle, View } from 'react-native';
 import type { Card, Machine } from '../remote/hub';
 import { cardTitle } from './format';
+import { isFull } from './modes';
 import { SpaceMark } from './icons';
 import { TITLE_WEIGHT, mono } from './kit';
 import { useNow } from './now';
@@ -68,7 +69,7 @@ export function Row({
       </Text>
       {children ?? (
         <Text numberOfLines={1} style={[s.l3, { color: t.dim }, stale && { opacity: 0.6 }]}>
-          {[c.branch || tilde(c.cwd), rowDetail(c)].filter(Boolean).join(' · ')}
+          {[isFull(c.permission) ? c.permission : '', c.branch || tilde(c.cwd), rowDetail(c)].filter(Boolean).join(' · ')}
         </Text>
       )}
     </Pressable>

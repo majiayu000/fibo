@@ -21,6 +21,7 @@ pub mod screen_rules;
 mod store;
 pub mod tool_text;
 pub use agents::hooks;
+pub use agents::modes_drive::switches as agent_modes_switch;
 pub use agents::{
     adapter as agent_adapter, describe_tool, reads_tools, roots as agent_log_roots, tool_call_line,
     tool_result_line, usage_line, usage_marker, Described, ToolCallLine, ToolOutput, UsageState,

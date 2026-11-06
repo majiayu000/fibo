@@ -5,6 +5,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert, Platform } from 'react-native';
 import { type Card, NOT_YET, refresh, write } from './remote/hub';
 import { settings } from './store/settings';
+import { FULL_CONFIRM, type ModeKind, type ModeOption } from './ui/modes';
 import { type Ask, asksTwice } from './ui/parse';
 
 /** Yes or no from the person, as a system dialog. */
@@ -65,6 +66,21 @@ export async function answerTrust(machine: string, card: Card, trust: boolean) {
   if (trust && !(await verify('信任这个文件夹'))) return;
   await write(machine, 'trust', { terminal: card.id, folder: card.trust.folder, trust });
   setTimeout(() => refresh(machine), 300);
+}
+
+/**
+ * Picks a model or permission mode the computer offered; it presses the keys and says what the CLI
+ * shows then. The one that stops asking goes through a second confirmation and Face ID first, and
+ * only then carries `allow_full`, without which the computer refuses it. False: the person said no.
+ */
+export async function switchMode(machine: string, terminal: string, kind: ModeKind, option: ModeOption): Promise<boolean> {
+  if (option.full) {
+    if (!(await confirm(FULL_CONFIRM.title, FULL_CONFIRM.detail, FULL_CONFIRM.ok, true))) return false;
+    if (!(await verify(FULL_CONFIRM.title))) return false;
+  }
+  await write(machine, 'setmode', { terminal, kind, choice: option.key, ...(option.full ? { allow_full: true } : {}) });
+  setTimeout(() => refresh(machine), 200);
+  return true;
 }
 
 /** Settles a conversation: 已处理 is `done`, 稍后提醒 `deferred` (the machine brings it back in an hour), back to the inbox `open`. */

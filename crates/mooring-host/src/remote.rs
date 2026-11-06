@@ -26,6 +26,7 @@ mod diff_config;
 mod diff_scope;
 mod dirs;
 mod list;
+mod modes;
 mod quota;
 mod resume;
 mod tools;
@@ -445,6 +446,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
             ok_reply(rpc(socket, &named(client, request, send))?)
         }
         "keys" => {
+            modes::not_cycling(socket, request)?;
             let keys = request["keys"]
                 .as_array()
                 .ok_or_else(|| io::Error::other("keys 需要字符串数组"))?
@@ -489,6 +491,8 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
             ok_reply(rpc(socket, &named(client, request, answer))?)
         }
         "ask" => asks::ask(socket, &terminal()?),
+        "modes" => modes::options(socket, request),
+        "setmode" => modes::set(socket, request, client),
         "trust" => asks::trust(socket, request, client),
         "chat" => chat::chat(socket, request),
         "suggestion" => chat::suggestion(socket, &terminal()?),

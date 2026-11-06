@@ -21,6 +21,8 @@ import { type Message, Mine, Theirs } from '@/ui/message';
 import { choices, questionText, partialWords, readBackWords } from '@/ui/parse';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
+import type { ModeKind } from '@/ui/modes';
+import { ModeSheet } from '@/ui/modesheet';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
 import { useTheme } from '@/ui/theme';
@@ -65,6 +67,7 @@ export default function Chat() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
   const [term, setTerm] = useState(false);
+  const [picking, setPicking] = useState<ModeKind | null>(null);
   const last = useRef(0);
   last.current = messages.at(-1)?.seq ?? 0;
 
@@ -388,9 +391,12 @@ export default function Chat() {
           onSend={send}
           onStop={() => stop()}
           onUseSuggestion={() => suggestionStats.set(countUse)}
+          onModel={supports(m, 'setmode') ? () => setPicking('model') : undefined}
+          onPermission={supports(m, 'setmode') ? () => setPicking('permission') : undefined}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />
+      {!!picking && <ModeSheet machine={machine} terminal={terminal} kind={picking} onClose={() => setPicking(null)} />}
     </KeyboardAvoidingView>
   );
 }

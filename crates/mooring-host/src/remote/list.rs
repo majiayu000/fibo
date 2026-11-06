@@ -2,6 +2,7 @@
 //! burst of events), so everything here reads what the host already has, and a card's
 //! branch comes from `.git/HEAD` through a short cache, never a git process.
 use crate::control;
+use mooring_core::modes::TerminalModes;
 use mooring_core::{git_head, model::*, protocol::*, status, status_group};
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
@@ -47,6 +48,13 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
             let content = session.and_then(|s| w.content.get(&s.id));
             let trust = seen.terminal_trust.get(&t.id);
             let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
+            // What a change here set, until the log says something newer.
+            let set = seen
+                .terminal_modes
+                .get(&t.id)
+                .filter(|m| m.session.as_deref() == session.map(|s| s.id.as_str()));
+            let log_model = content.map_or("", |c| c.model.as_str());
+            let log_permission = content.map_or("", |c| c.permission.as_str());
             let status = status::of_terminal(w, &t.id, trust.is_some(), now);
             let phase = match status.map(status::Status::phase) {
                 Some(status::Phase::Working) => rp::Phase::Working,
@@ -104,8 +112,10 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                     .filter(|_| status == Some(status::Status::Running))
                     .and_then(|c| c.doing())
                     .filter(|d| !d.starts_with("做 ")),
-                model: content.and_then(|c| said(&c.model)),
-                permission: content.and_then(|c| said(&c.permission)),
+                model: (set.and_then(|m| TerminalModes::read(&m.model, log_model)))
+                    .or_else(|| content.and_then(|c| said(&c.model))),
+                permission: (set.and_then(|m| TerminalModes::read(&m.permission, log_permission)))
+                    .or_else(|| content.and_then(|c| said(&c.permission))),
             }
         })
         .collect();

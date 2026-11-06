@@ -227,6 +227,25 @@ pub enum Op {
     Suggestion {
         terminal: String,
     },
+    /// What the terminal's Agent offers as `kind` (`model` or `permission`) and which is on:
+    /// [`crate::protocol::ModeOptions`]. The machine opens the CLI's own menu to read it, so an
+    /// error says when it cannot: the Agent is busy, asking something, or no CLI it knows.
+    Modes {
+        terminal: String,
+        kind: String,
+    },
+    /// Picks an option's `key`; replies `{model, permission}`, what the CLI then shows. An
+    /// option marked `full` needs `allow_full`: the client has asked the person, and this is
+    /// the only way to it.
+    SetMode {
+        terminal: String,
+        kind: String,
+        choice: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        allow_full: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
     /// The account limits each Agent last reported, within a week: [`Quotas`].
     Quota,
     /// Reads the next stretch of a conversation's log its first read skipped (names its
@@ -302,6 +321,8 @@ impl Op {
             Self::ToolCall { .. } => "toolcall",
             Self::Suggestion { .. } => "suggestion",
             Self::Cards { .. } => "cards",
+            Self::Modes { .. } => "modes",
+            Self::SetMode { .. } => "setmode",
         }
     }
 }
@@ -339,6 +360,8 @@ pub const OPS: &[&str] = &[
     "toolcall",
     "backfill",
     "suggestion",
+    "modes",
+    "setmode",
 ];
 
 /// A line from the machine.

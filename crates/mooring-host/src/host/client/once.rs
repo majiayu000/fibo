@@ -19,6 +19,7 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
             | Request::AnswerAlways { .. }
             | Request::AnswerTrust { .. }
             | Request::Interrupt { .. }
+            | Request::Modes(_)
     ) {
         return Err(io::Error::other(
             "只有打字、按键和回答审批能这样带请求 id；编辑用 Edit 自己的 request",
