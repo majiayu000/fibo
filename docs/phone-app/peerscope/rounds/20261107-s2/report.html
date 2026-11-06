@@ -1,0 +1,153 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>peerscope · 20261107-s2</title><style>
+:root{--bg:#fbfbfa;--fg:#1d1d1f;--mut:#6b6b70;--line:#e3e3e0;--card:#fff;--acc:#2f6feb;--win:#1a7f37;--gap:#c62828;--tie:#8a6d00;--na:#6b6b70;--chip:#f0f0ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141416;--fg:#ececee;--mut:#9a9aa2;--line:#2c2c30;--card:#1c1c20;--acc:#6ea8ff;--win:#4cc26b;--gap:#ff6b6b;--tie:#e0b84a;--na:#9a9aa2;--chip:#26262b}}
+:root[data-theme=dark]{--bg:#141416;--fg:#ececee;--mut:#9a9aa2;--line:#2c2c30;--card:#1c1c20;--acc:#6ea8ff;--win:#4cc26b;--gap:#ff6b6b;--tie:#e0b84a;--na:#9a9aa2;--chip:#26262b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;font-weight:600;margin:0 12px 0 0}nav button{border:0;background:none;color:var(--mut);padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit}
+nav button.on{background:var(--chip);color:var(--fg)}main{max-width:1500px;margin:0 auto;padding:16px}
+.tab{display:none}.tab.on{display:block}h2{font-size:20px;font-weight:600}h3{font-size:17px;font-weight:600}h4,h5{font-size:15px;font-weight:600}
+.tw{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;font-size:14px;min-width:100%}th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}th{background:var(--chip);font-weight:600;position:sticky;top:0}
+code,pre{font-family:ui-monospace,Menlo,monospace;font-size:13px}pre{background:var(--chip);padding:10px;border-radius:6px;overflow:auto}
+.ev{font-size:11px;padding:0 5px;border-radius:4px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.v{font-weight:600}.v-win{color:var(--win)}.v-gap{color:var(--gap)}.v-tie{color:var(--tie)}.v-na{color:var(--na)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}.chip{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:3px 11px;cursor:pointer;font:inherit;font-size:13px}
+.chip.on,.ctl.on{background:var(--acc);border-color:var(--acc);color:#fff}.ctl{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit;font-size:13px}
+.layout{display:grid;grid-template-columns:240px 1fr;gap:16px}@media (max-width:820px){.layout{grid-template-columns:1fr}}
+.list{max-height:78vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--card)}.list div{padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}.list div.on{background:var(--chip);font-weight:600}
+.list small{display:block;color:var(--mut);font-size:12px}
+.meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin:4px 0 8px}.meta b{color:var(--fg);font-weight:600}
+.stage{position:relative;border:1px solid var(--line);border-radius:8px;background:#000;overflow:auto;height:68vh}
+.split{position:relative;transform-origin:0 0}.split .layer{position:absolute;top:0;left:0}.split .layer.top{z-index:2}
+.split img,.split video{display:block;max-width:none}.div{position:absolute;top:0;bottom:0;width:2px;background:#fff;z-index:3;cursor:ew-resize;box-shadow:0 0 0 1px #0006}
+.div::after{content:"";position:absolute;top:50%;left:-9px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0006}
+.lab{position:absolute;top:6px;z-index:4;background:#000a;color:#fff;font-size:12px;padding:2px 7px;border-radius:4px}
+.grid{display:grid;gap:8px}.cell{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}.cell .box{background:#000;overflow:hidden;position:relative;aspect-ratio:var(--ar,16/9)}
+.cell .box img,.cell .box video{width:100%;height:100%;object-fit:contain;cursor:zoom-in;transform-origin:var(--ox,50%) var(--oy,50%)}
+.cell .cap{display:flex;justify-content:space-between;gap:8px;padding:5px 8px;font-size:13px}.cell .cap span{color:var(--mut)}
+.bad{outline:2px solid var(--gap)}.miss{display:flex;align-items:center;justify-content:center;color:#ccc;height:100%;font-size:13px}
+.lb{position:fixed;inset:0;background:#000e;z-index:20;display:none;overflow:auto}.lb.on{display:block}.lb img,.lb video{display:block;margin:auto;max-width:none}.lb .x{position:fixed;top:10px;right:14px;color:#fff;font-size:24px;cursor:pointer}
+.vote{display:flex;gap:4px}.vote button{font-size:12px;padding:1px 7px}.vote button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.help{font-size:13px;color:var(--mut)}.help dt{font-weight:600;color:var(--fg)}
+</style></head><body>
+<header><h1>peerscope · 20261107-s2</h1><nav><button data-t="t0">结论</button><button data-t="t1">竞品调研</button></nav><button class="ctl" data-theme-toggle style="margin-left:auto">明/暗</button></header>
+<main><section class="tab" id="t0"><h2>Mooring 手机首页竞品调研（2026-11-07）</h2>
+<p><strong>结论：同类的首页基本都是一张排好序的会话列表，读过首页的 7 家里没有一家用数字格做概览（另外 3 家的文档没写布局）。</strong> 所以「主页」要做，但不用做成仪表盘；我上次画的方向 A 应该去掉数字格，改成要你决定的卡片加可折叠的分组。</p>
+<p>最值得补的是：额度一行、搜索、划掉后撤销，然后是推送。详细见 <a href="02-my-plan.md" target="_blank" rel="noopener">建议</a> 和 <a href="01-competitor-research.md" target="_blank" rel="noopener">竞品证据</a>。</p>
+<h3>待你决定</h3>
+<ul>
+<li>按新的方向 A（去掉数字格）重画，可以吗？</li>
+<li>审 PR 和合并要不要做，我倾向先不做。</li>
+</ul>
+<h3>覆盖范围和没做到</h3>
+<p>首页深挖 10 家：6 家读了固定版本的源码或宣传截图，codex-relay 只读了导航文件，Claude、ChatGPT Codex、Cursor 只读了官方文档，它们的布局文档没写。没有安装任何竞品，也没看应用商店评论和社交平台的用户声音，所以不知道用户实际更喜欢哪种。这份报告没有经过第三方核对。</p></section><section class="tab" id="t1"><h2>手机端首页和功能：竞品调研</h2>
+<p>研究快照：2026-11-07。这份只写竞品，Mooring 要改什么见 <a href="02-my-plan.md" target="_blank" rel="noopener">02-my-plan.md</a>。上一轮的候选池和完整功能表见 <a href="../20261103-s1/01-competitor-research.md" target="_blank" rel="noopener">20261103-s1</a>。</p>
+<p>基线：Mooring 手机 App，首页是固定版本的 <a href="https://github.com/majiayu000/mooring/blob/7e8aebba2d5c35bd1ff03f4be44e88149ded281e/mobile/src/app/index.tsx" target="_blank" rel="noopener"><code>index.tsx</code></a>。</p>
+<p>图例：<code><span class="ev ev-E2">E2</span></code> 只看了官方文档、README 或商店截图；<code><span class="ev ev-E3">E3</span></code> 读过固定 commit 的源码。没有装上任何竞品实际使用，所以没有「谁更好用」的结论。</p>
+<h3>1. 各家怎么组织首页</h3>
+<div class="tw"><table><thead><tr><th>产品</th><th>导航</th><th>打开先看到</th><th>首页上的其他东西</th></tr></thead><tbody>
+<tr><td><a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener">T3 Code</a>（49,224★）</td><td>三个区：Threads、Pulls、Usage（<a href="https://github.com/pingdotgg/t3code/blob/6577c6b6185167c0e502fa01f9e8e8f2dee6ff25/apps/mobile/src/features/layout/workspace/navigation-tab-order.ts#L1" target="_blank" rel="noopener">源码</a>）<span class="ev ev-E3">E3</span></td><td>会话列表，分组：置顶、在跑、未发送、稍后提醒、已处理（<a href="https://github.com/pingdotgg/t3code/blob/6577c6b6185167c0e502fa01f9e8e8f2dee6ff25/apps/mobile/src/features/threads/thread-list-v2-items.tsx" target="_blank" rel="noopener">分组</a>）<span class="ev ev-E3">E3</span></td><td>搜索、电脑和项目筛选（<a href="https://github.com/pingdotgg/t3code/blob/6577c6b6185167c0e502fa01f9e8e8f2dee6ff25/apps/mobile/src/features/home/HomeScreen.tsx#L732" target="_blank" rel="noopener"><code>HomeScreen.tsx#L732</code></a>）；划掉后可撤销（<a href="https://github.com/pingdotgg/t3code/blob/6577c6b6185167c0e502fa01f9e8e8f2dee6ff25/apps/mobile/src/features/home/ThreadUndoNotice.tsx" target="_blank" rel="noopener"><code>ThreadUndoNotice.tsx</code></a>）<span class="ev ev-E3">E3</span></td></tr>
+<tr><td><a href="https://github.com/Louis-CFM/coucou" target="_blank" rel="noopener">coucou</a>（6,999★）</td><td>四个标签：Agents、Services、History、Search（<a href="https://github.com/Louis-CFM/coucou/blob/b1bc09de7f7c24a80bd8eca5729b8bee60f66402/NotchBuddy/Sources/Phone/HomeView.swift#L19-L30" target="_blank" rel="noopener"><code>HomeView.swift#L19-L30</code></a>）<span class="ev ev-E3">E3</span></td><td>一张「今天」卡片，下面是按紧急程度排的会话（<a href="https://github.com/Louis-CFM/coucou/blob/b1bc09de7f7c24a80bd8eca5729b8bee60f66402/NotchBuddy/Sources/Phone/HomeView.swift#L112" target="_blank" rel="noopener"><code>#L112</code></a>、<a href="https://github.com/Louis-CFM/coucou/blob/b1bc09de7f7c24a80bd8eca5729b8bee60f66402/NotchBuddy/Sources/Phone/HomeView.swift#L124" target="_blank" rel="noopener"><code>#L124</code></a>）<span class="ev ev-E3">E3</span></td><td>今天卡片写轮数、文件数、增删行数、批准次数；在行上滑动就能允许或拒绝（<a href="https://github.com/Louis-CFM/coucou/blob/b1bc09de7f7c24a80bd8eca5729b8bee60f66402/NotchBuddy/Sources/Phone/HomeView.swift#L128" target="_blank" rel="noopener"><code>#L128</code></a>）<span class="ev ev-E3">E3</span></td></tr>
+<tr><td><a href="https://github.com/K9i-0/ccpocket" target="_blank" rel="noopener">CC Pocket</a>（1,093★）</td><td>手机上是标题栏图标加右下角「New」按钮（<a href="evidence/look/ccpocket-screens.png" target="_blank" rel="noopener">截图</a>）<span class="ev ev-E2">E2</span></td><td>「Running」列表，「Needs You」的卡片里直接批准（<a href="evidence/look/ccpocket-screens.png" target="_blank" rel="noopener">截图</a>）<span class="ev ev-E2">E2</span></td><td>额度一行写在 Running 标题旁（<a href="https://github.com/K9i-0/ccpocket/blob/9c5cfdd29852689f72f50bf4dc1ec15526206f07/apps/mobile/lib/features/session_list/widgets/usage_summary.dart#L52" target="_blank" rel="noopener"><code>usage_summary.dart#L52</code></a>）；最近会话能按项目、工具、时间、置顶筛（<a href="https://github.com/K9i-0/ccpocket/blob/9c5cfdd29852689f72f50bf4dc1ec15526206f07/apps/mobile/lib/features/session_list/widgets/session_filter_bar.dart#L61" target="_blank" rel="noopener"><code>session_filter_bar.dart#L61</code></a>）和搜索（<a href="https://github.com/K9i-0/ccpocket/blob/9c5cfdd29852689f72f50bf4dc1ec15526206f07/apps/mobile/lib/features/session_list/session_list_screen.dart#L171" target="_blank" rel="noopener"><code>session_list_screen.dart#L171</code></a>）<span class="ev ev-E3">E3</span></td></tr>
+<tr><td><a href="https://github.com/slopus/happy" target="_blank" rel="noopener">Happy</a>（24,520★）</td><td>未查完整结构</td><td>安卓版是按日期分组的会话列表（<a href="https://github.com/slopus/happy/blob/665b1f14f3b35d89dead49b7c5c97b58df42f48d/packages/happy-android/app/src/main/kotlin/com/slopus/happy/ui/home/HomeData.kt#L58" target="_blank" rel="noopener"><code>HomeData.kt#L58</code></a>）<span class="ev ev-E3">E3</span></td><td>底部常驻输入框，直接新建会话、机器人或任务（<a href="https://github.com/slopus/happy/blob/665b1f14f3b35d89dead49b7c5c97b58df42f48d/packages/happy-ios/Sources/HappyCore/Home/HomeDockKind.swift#L3-L10" target="_blank" rel="noopener"><code>HomeDockKind.swift#L3-L10</code></a>）<span class="ev ev-E3">E3</span></td></tr>
+<tr><td><a href="https://github.com/getpaseo/paseo" target="_blank" rel="noopener">Paseo</a>（23,287★）</td><td>侧边抽屉（<a href="../20261103-s1/evidence/look/paseo-mobile.png" target="_blank" rel="noopener">截图</a>）<span class="ev ev-E2">E2</span></td><td>按仓库和分支分组的树，带 PR 编号和状态（<a href="../20261103-s1/evidence/look/paseo-mobile.png" target="_blank" rel="noopener">截图</a>）<span class="ev ev-E2">E2</span></td><td>会话历史页有搜索，多台电脑时才显示电脑筛选（<a href="https://github.com/getpaseo/paseo/blob/73448d483ed8de1103785d6a1180eee585a716fb/packages/app/src/screens/sessions-screen.tsx#L121" target="_blank" rel="noopener"><code>sessions-screen.tsx#L121</code></a>）<span class="ev ev-E3">E3</span></td></tr>
+<tr><td><a href="https://github.com/nimbalyst/nimbalyst" target="_blank" rel="noopener">Nimbalyst</a>（2,030★）</td><td>先选项目，再进会话（<a href="https://github.com/nimbalyst/nimbalyst/blob/826adb4f93dbe86db35b76ce2502a3a33abe0489/packages/ios/NimbalystNative/Sources/Views/SessionListView.swift#L144" target="_blank" rel="noopener"><code>SessionListView.swift#L144</code></a>）<span class="ev ev-E3">E3</span></td><td>某个项目的会话</td><td>按阶段筛选、搜索、归档（<a href="https://github.com/nimbalyst/nimbalyst/blob/826adb4f93dbe86db35b76ce2502a3a33abe0489/packages/ios/NimbalystNative/Sources/Views/SessionListView.swift#L292" target="_blank" rel="noopener"><code>#L292</code></a>）<span class="ev ev-E3">E3</span></td></tr>
+<tr><td><a href="https://github.com/gronxb/codex-relay" target="_blank" rel="noopener">codex-relay</a>（729★）</td><td>抽屉里是会话列表（<a href="https://github.com/gronxb/codex-relay/blob/59789de0aa0da9ab6db5d3f31287098613c94446/apps/mobile/src/app/%28drawer%29/_layout.tsx#L6" target="_blank" rel="noopener"><code>_layout.tsx#L6</code></a>）<span class="ev ev-E3">E3</span></td><td>没查到单独的首页</td><td>—</td></tr>
+<tr><td><a href="https://code.claude.com/docs/en/mobile" target="_blank" rel="noopener">Claude App</a></td><td>大 App 里一个 Code 标签 <span class="ev ev-E2">E2</span></td><td>会话列表；另有 Projects，用来看「哪些完成了、哪些要你」<span class="ev ev-E2">E2</span></td><td>不能选 Bypass 权限 <span class="ev ev-E2">E2</span></td></tr>
+<tr><td><a href="https://learn.chatgpt.com/docs/mobile.md" target="_blank" rel="noopener">ChatGPT 里的 Codex</a></td><td>大 App 里一个 Codex 入口 <span class="ev ev-E2">E2</span></td><td>云端和电脑上的任务，并标出要你输入的 <span class="ev ev-E2">E2</span></td><td>布局文档没写</td></tr>
+<tr><td><a href="https://cursor.com/docs/cloud-agent/mobile" target="_blank" rel="noopener">Cursor iOS</a></td><td>文档叫 inbox，没写布局 <span class="ev ev-E2">E2</span></td><td>Agent 收件箱 <span class="ev ev-E2">E2</span></td><td>锁屏实时活动最多 8 个；一轮做完就推送；能在手机上审 PR 和合并 <span class="ev ev-E2">E2</span></td></tr>
+</tbody></table></div>
+<p>文档和截图都是各家自己发布的，文档没写的布局标为未知，没有猜。</p>
+<h3>2. 共同做法和差异</h3>
+<ul>
+<li><strong>首页基本都是排好序的会话列表。</strong> 读了 7 家的首页或导航源码和截图：T3、coucou、CC Pocket、Happy、Paseo 打开就是会话列表或按仓库分组的树；Nimbalyst 先选项目再进列表；codex-relay 的列表在抽屉里。这 7 家里，查到的范围内没有一家用数字格子做概览。最接近的是 coucou 的今天卡片，也只是列表上方的一行数字。Claude、Codex、Cursor 的文档没写布局，无法确认。</li>
+<li><strong>急的放最前面，其余折叠或靠后。</strong> T3 用分组，coucou 按紧急程度排序，CC Pocket 用 Needs You 状态标记。</li>
+<li><strong>列表上直接批准。</strong> coucou（滑动）和 CC Pocket（按钮）都能做，Mooring 也能。T3 的宣传图上列表只写一个状态词，是否能在列表批准未查。</li>
+<li><strong>搜索是常见配置。</strong> T3、coucou、CC Pocket、Paseo、Nimbalyst 都有；Mooring 的首页和看板没有（查过 <a href="https://github.com/majiayu000/mooring/blob/7e8aebba2d5c35bd1ff03f4be44e88149ded281e/mobile/src/app/index.tsx" target="_blank" rel="noopener"><code>index.tsx</code></a> 和 <a href="https://github.com/majiayu000/mooring/blob/7e8aebba2d5c35bd1ff03f4be44e88149ded281e/mobile/src/app/board.tsx" target="_blank" rel="noopener"><code>board.tsx</code></a>，只有目录页和工具页有搜索）。</li>
+<li><strong>额度放法分两种。</strong> CC Pocket 在列表标题旁放一行，还会自动显示更紧张的窗口（5 小时或一周）；T3 单独一个区，有每日图表（<a href="https://github.com/pingdotgg/t3code/blob/6577c6b6185167c0e502fa01f9e8e8f2dee6ff25/apps/mobile/src/features/usage/UsageDailyChart.tsx" target="_blank" rel="noopener"><code>UsageDailyChart.tsx</code></a>）。</li>
+<li><strong>导航不统一。</strong> T3 和 coucou 有分区或标签，Paseo 和 codex-relay 用抽屉，CC Pocket 在手机上不用标签。</li>
+</ul>
+<h3>3. Mooring 没有、别家有的</h3>
+<div class="tw"><table><thead><tr><th>功能</th><th>谁有</th><th>Mooring</th></tr></thead><tbody>
+<tr><td>推送</td><td>Claude、Cursor，及上一轮查过的 coucou、Happy、Paseo</td><td>没有</td></tr>
+<tr><td>首页搜索</td><td>T3、coucou、CC Pocket</td><td>没有</td></tr>
+<tr><td>额度放在列表上</td><td>CC Pocket</td><td>要进额度页</td></tr>
+<tr><td>划掉后撤销</td><td>T3</td><td>没有（<code>mobile/src</code> 里搜不到 undo 或撤销）</td></tr>
+<tr><td>置顶会话</td><td>T3、CC Pocket</td><td>没有</td></tr>
+<tr><td>审 PR、合并</td><td>Cursor；T3 有 Pulls 区；Paseo 显示 PR 状态</td><td>只能看改动</td></tr>
+<tr><td>今天的工作统计</td><td>coucou</td><td>没有</td></tr>
+<tr><td>首页直接写任务</td><td>Happy</td><td>要点「+」进新页面</td></tr>
+</tbody></table></div>
+<p>Mooring 已有、和主流一致的：首页直接批准，审批固定在最上，已处理和稍后提醒，未发送，按空间筛选。</p>
+<h3>4. 关键事实核验</h3>
+<div class="tw"><table><thead><tr><th>事实</th><th>影响哪条结论</th><th>来源与日期</th><th>结果</th></tr></thead><tbody>
+<tr><td>没有一家把首页做成数字概览</td><td>方向 A 的数字格要不要留</td><td>反查：读了 T3、coucou、CC Pocket、Happy、Paseo、Nimbalyst、codex-relay 的首页或导航源码和截图；2026-11-07</td><td>在这 7 家里成立；Claude、Codex、Cursor 的布局文档没写，无法确认</td></tr>
+<tr><td>T3 有单独的用量区和每日图表</td><td>之前我说「图表不加」</td><td>固定 commit 源码</td><td>成立：别家有，只是不放首页</td></tr>
+<tr><td>coucou 首页有今天统计</td><td>同上</td><td><code>HomeView.swift</code> 固定 commit</td><td>成立</td></tr>
+<tr><td>Claude App 不能选 Bypass 权限</td><td>Mooring 手机能切全部放行，和官方相反</td><td><a href="https://code.claude.com/docs/en/mobile" target="_blank" rel="noopener">官方文档</a> Limitations 节；2026-11-07</td><td>成立</td></tr>
+<tr><td>Mooring 首页没有搜索</td><td>建议加搜索</td><td><code>git grep</code> <code>origin/main</code> 的 <code>mobile/src</code>：只有 dirs、tools 有</td><td>成立</td></tr>
+<tr><td>CC Pocket 手机上没有底部标签</td><td>导航不统一</td><td>只看了宣传截图；源码只查了 <code>workspace_shell_screen.dart</code>，没读完</td><td>没完全核实，只代表截图所示的首页</td></tr>
+</tbody></table></div>
+<h3>5. 覆盖范围和没做到</h3>
+<p>候选约 25 个（上一轮 20 个，这轮新增 CC Pocket、Cursor iOS、Codync、SeaWork、Remote Codetrol）。首页深挖 10 个：6 个读了固定版本源码或截图（T3、coucou、CC Pocket、Happy、Paseo、Nimbalyst），codex-relay 只读了导航文件，3 个只读官方文档（Claude、ChatGPT Codex、Cursor）。</p>
+<p>没做到：没有安装任何竞品；没有看应用商店评论和 Reddit、X 上的用户声音，这轮没有用户怎么说的证据；Codync、SeaWork、Remote Codetrol 只看了搜索结果或 README；宣传截图可能和真实使用不同。这份报告没有经过第三方核对，由我自己核了上面的关键事实。</p></section></main>
+<div class="lb" id="lb"><span class="x">×</span><div class="c"></div></div>
+<script type="application/json" id="data">{"samples": []}</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);const S=D.samples||[];
+const st=Object.assign({tab:document.querySelector('nav button')?.dataset.t||'',tags:[],s:S[0]?.id||'',mode:'split',zoom:1,split:50,blind:0,a:0,b:1},parseHash());
+function parseHash(){const o={};location.hash.slice(1).split('&').forEach(kv=>{const[k,v]=kv.split('=');if(!k)return;const d=decodeURIComponent(v||'');o[k]=k==='tags'?(d?d.split(','):[]):(['zoom','split','blind','a','b'].includes(k)?+d:d)});return o}
+function save(){history.replaceState(null,'','#'+Object.entries(st).map(([k,v])=>k+'='+encodeURIComponent(Array.isArray(v)?v.join(','):v)).join('&'))}
+function tabs(){document.querySelectorAll('nav button').forEach(b=>{b.classList.toggle('on',b.dataset.t===st.tab);b.onclick=()=>{st.tab=b.dataset.t;tabs();save()}});document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.id===st.tab))}
+function rng(seed){let x=seed>>>0||1;return()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return(x>>>0)/4294967296}}
+function hashStr(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h}
+function items(s){let v=[...(s.variants||[])];if(st.blind){const r=rng(hashStr(s.id));v=v.map(x=>[r(),x]).sort((a,b)=>a[0]-b[0]).map(x=>x[1])}return[{...s.input,_input:1},...v]}
+function label(it,i){return it._input?(it.label||'原始输入'):(st.blind?('方案 '+String.fromCharCode(64+i)):it.name)}
+function isVid(src){return/\.(mp4|webm|mov|m4v)$/i.test(src||'')}
+function media(it,cls){if(!it||!it.src||it.missing)return`<div class="miss">缺失：${it&&it.src||''}</div>`;return isVid(it.src)?`<video class="${cls||''}" src="${it.src}" muted playsinline preload="metadata"></video>`:`<img class="${cls||''}" src="${it.src}" alt="">`}
+function ar(s){const r=(s.input&&s.input.res||'16x9').split('x').map(Number);return r[0]&&r[1]?r[0]+'/'+r[1]:'16/9'}
+const allTags=[...new Set(S.flatMap(s=>s.tags||[]))];
+function visible(){return S.filter(s=>st.tags.every(t=>(s.tags||[]).includes(t)))}
+function renderCompare(){const root=document.getElementById('cmp');if(!root)return;const vis=visible();if(!vis.find(s=>s.id===st.s)&&vis[0])st.s=vis[0].id;const s=S.find(x=>x.id===st.s);
+root.querySelector('.tags').innerHTML=allTags.map(t=>`<button class="chip ${st.tags.includes(t)?'on':''}" data-tag="${t}">${t}</button>`).join('')+`<span class="help">${vis.length}/${S.length} 个样本</span>`;
+root.querySelectorAll('[data-tag]').forEach(b=>b.onclick=()=>{const t=b.dataset.tag;st.tags=st.tags.includes(t)?st.tags.filter(x=>x!==t):[...st.tags,t];renderCompare();save()});
+root.querySelector('.list').innerHTML=vis.map(x=>`<div data-s="${x.id}" class="${x.id===st.s?'on':''}">${x.title||x.id}<small>${(x.tags||[]).join(' · ')}</small></div>`).join('');
+root.querySelectorAll('[data-s]').forEach(d=>d.onclick=()=>{st.s=d.dataset.s;renderCompare();save()});
+root.querySelectorAll('[data-mode]').forEach(b=>{b.classList.toggle('on',b.dataset.mode===st.mode);b.onclick=()=>{st.mode=b.dataset.mode;renderCompare();save()}});
+root.querySelector('[data-blind]').classList.toggle('on',!!st.blind);
+const view=root.querySelector('.view');if(!s){view.innerHTML='<p class="help">没有符合筛选的样本</p>';return}
+const its=items(s);const inv=new Set(s.invalid||[]);
+const meta=`<div class="meta"><span><b>${s.title||s.id}</b></span>${its.map((it,i)=>`<span>${label(it,i)}：<b>${it.res||'?'}</b>${inv.has(it.name)?' · <b style="color:var(--gap)">规格不合格</b>':''}</span>`).join('')}${s.verdict&&!st.blind?`<span>结论：<b>${s.verdict}</b></span>`:''}</div>`;
+if(st.mode==='split'){st.a=Math.min(st.a,its.length-1);st.b=Math.min(st.b,its.length-1);
+const opt=(k)=>`<select class="ctl" data-pick="${k}">${its.map((it,i)=>`<option value="${i}" ${st[k]===i?'selected':''}>${label(it,i)}</option>`).join('')}</select>`;
+view.innerHTML=meta+`<div class="bar">左 ${opt('a')} 右 ${opt('b')}<span class="help">拖动白线对比；100% 像素，滚动查看细节</span></div><div class="stage"><div class="split"><div class="layer base">${media(its[st.b])}</div><div class="layer top">${media(its[st.a])}</div><span class="lab" style="left:6px">${label(its[st.a],st.a)}</span><span class="lab rl">${label(its[st.b],st.b)}</span><div class="div"></div></div></div>`;
+view.querySelectorAll('[data-pick]').forEach(sel=>sel.onchange=()=>{st[sel.dataset.pick]=+sel.value;renderCompare();save()});setupSplit(view,s)}
+else{const n=its.length;const cols=n<=2?n:(n<=4?2:3);view.innerHTML=meta+`<div class="grid" style="grid-template-columns:repeat(${cols},1fr)">${its.map((it,i)=>`<div class="cell ${inv.has(it.name)?'bad':''}"><div class="box" style="--ar:${ar(s)}">${media(it,'g')}</div><div class="cap"><b>${label(it,i)}</b><span>${it.res||''}</span>${!it._input?vote(s,i):''}</div></div>`).join('')}</div>`;
+view.querySelectorAll('.box img,.box video').forEach(m=>{m.style.transform=`scale(${Math.max(1,st.zoom)})`;m.onclick=()=>lightbox(m.getAttribute('src'));m.onmousemove=e=>{const r=m.getBoundingClientRect();view.querySelectorAll('.box').forEach(b=>{b.style.setProperty('--ox',((e.clientX-r.left)/r.width*100)+'%');b.style.setProperty('--oy',((e.clientY-r.top)/r.height*100)+'%')})}});
+view.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{const[sid,i,g]=b.dataset.v.split('|');VOTES[sid+'|'+label(items(S.find(x=>x.id===sid))[i],+i)+'|'+(items(S.find(x=>x.id===sid))[i].name)]=g;renderCompare()})}
+syncVideos(view,s)}
+const VOTES={};function vote(s,i){if(!st.blind)return'';const k=Object.keys(VOTES).find(k=>k.startsWith(s.id+'|'+label(items(s)[i],i)+'|'));const cur=k?VOTES[k]:'';return`<span class="vote">${['好','同','差'].map(g=>`<button class="ctl ${cur===g?'on':''}" data-v="${s.id}|${i}|${g}">${g}</button>`).join('')}</span>`}
+function exportVotes(){const rows=Object.entries(VOTES).map(([k,g])=>{const[sid,blindLabel,name]=k.split('|');return{sample:sid,blind_label:blindLabel,variant:name,vote:g}});const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({exported_at:new Date().toISOString(),votes:rows},null,2)],{type:'application/json'}));a.download='blind-votes.json';a.click()}
+function setupSplit(view){const wrap=view.querySelector('.split');const top=view.querySelector('.layer.top');const base=view.querySelector('.layer.base');const div=view.querySelector('.div');const rl=view.querySelector('.rl');
+function size(){const m=base.querySelector('img,video');if(!m)return;const w=m.naturalWidth||m.videoWidth,h=m.naturalHeight||m.videoHeight;if(!w)return;wrap.style.width=w+'px';wrap.style.height=h+'px';wrap.style.transform=`scale(${st.zoom})`;view.querySelectorAll('.split img,.split video').forEach(x=>{x.style.width=w+'px';x.style.height=h+'px'});apply()}
+function apply(){const w=wrap.offsetWidth;top.style.clipPath=`inset(0 ${100-st.split}% 0 0)`;div.style.left=(w*st.split/100)+'px';rl.style.left=(w*st.split/100+8)+'px'}
+view.querySelectorAll('.split img').forEach(i=>i.complete?size():i.onload=size);view.querySelectorAll('.split video').forEach(v=>v.onloadedmetadata=size);size();
+let drag=false;div.onpointerdown=e=>{drag=true;div.setPointerCapture(e.pointerId)};div.onpointerup=()=>{drag=false;save()};
+div.onpointermove=e=>{if(!drag)return;const r=wrap.getBoundingClientRect();st.split=Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100));apply()}}
+function syncVideos(view,s){const vids=[...view.querySelectorAll('video')];const ctl=document.getElementById('vctl');ctl.style.display=vids.length?'flex':'none';if(!vids.length)return;const m=vids[0];const fps=s.fps||30;
+vids.forEach(v=>{v.loop=true});m.ontimeupdate=()=>{vids.slice(1).forEach(v=>{if(Math.abs(v.currentTime-m.currentTime)>0.05)v.currentTime=m.currentTime});ctl.querySelector('.t').textContent=m.currentTime.toFixed(2)+'s'};
+ctl.querySelector('[data-c=play]').onclick=()=>{const p=m.paused;vids.forEach(v=>{v.currentTime=m.currentTime;p?v.play().catch(()=>{}):v.pause()})};
+ctl.querySelector('[data-c=prev]').onclick=()=>{vids.forEach(v=>{v.pause();v.currentTime=Math.max(0,m.currentTime-1/fps)})};
+ctl.querySelector('[data-c=next]').onclick=()=>{const t=m.currentTime+1/fps;vids.forEach(v=>{v.pause();v.currentTime=t})};
+ctl.querySelector('[data-c=start]').onclick=()=>{vids.forEach(v=>{v.pause();v.currentTime=0})}}
+function lightbox(src){const lb=document.getElementById('lb');lb.querySelector('.c').innerHTML=isVid(src)?`<video src="${src}" controls autoplay muted></video>`:`<img src="${src}">`;lb.classList.add('on')}
+document.getElementById('lb').onclick=e=>{if(e.target.classList.contains('x')||e.target.id==='lb'){e.currentTarget.classList.remove('on');e.currentTarget.querySelector('.c').innerHTML=''}};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('lb').click()});
+const cmp=document.getElementById('cmp');if(cmp){cmp.querySelector('[data-blind]').onclick=()=>{st.blind=st.blind?0:1;renderCompare();save()};
+cmp.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{st.zoom=Math.max(.25,Math.min(8,+(st.zoom*(+b.dataset.z)).toFixed(3)));renderCompare();save()});
+cmp.querySelector('[data-export]').onclick=exportVotes}
+document.querySelector('[data-theme-toggle]').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'};
+window.addEventListener('hashchange',()=>{Object.assign(st,parseHash());tabs();renderCompare()});
+tabs();renderCompare();
+</script></body></html>

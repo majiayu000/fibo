@@ -37,10 +37,12 @@
   ],
   "available_skills": [],
   "rounds": [
-    "20261103-s1"
+    "20261103-s1",
+    "20261107-s2"
   ],
-  "stage": 1,
+  "stage": 2,
   "tiers": {
-    "20261103-s1": "standard"
+    "20261103-s1": "standard",
+    "20261107-s2": "standard"
   }
 }
