@@ -9,6 +9,7 @@
 //! - `PATH` is what a login shell finds, once per process: an app opened from the Dock
 //!   inherits only the system directories, where `node` and `gh` are missing though the
 //!   terminal the plugin was written in has them.
+use crate::process::Group;
 use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -22,7 +23,16 @@ const DRAIN: Duration = Duration::from_millis(200);
 /// How long a login shell gets to say its `PATH`.
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(3);
 /// macOS's own default, for a process started with no `PATH` at all.
+#[cfg(unix)]
 const SYSTEM_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+#[cfg(windows)]
+const SYSTEM_PATH: &str = r"C:\Windows\System32;C:\Windows";
+/// What runs a declared command. Windows has it only with Git for Windows, and only if that
+/// is on `PATH`; without it the command fails to start and says so.
+#[cfg(unix)]
+const SHELL: &str = "/bin/sh";
+#[cfg(windows)]
+const SHELL: &str = "sh";
 
 /// What is done with whatever the command leaves running once it has ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,7 +59,7 @@ impl<'a> Run<'a> {
     /// `sh -c command`, as every declared command runs.
     pub fn shell(command: &str, timeout: Duration, leftovers: Leftovers) -> Self {
         Self {
-            program: "/bin/sh".into(),
+            program: SHELL.into(),
             args: vec!["-c".into(), command.into()],
             cwd: None,
             env: vec![],
@@ -120,7 +130,6 @@ fn collect(
 
 /// Runs it to its end or its time limit. Blocks: never call it on the UI thread.
 pub fn run(spec: Run) -> Result<Finished, Failed> {
-    use std::os::unix::process::CommandExt;
     let mut cmd = Command::new(&spec.program);
     cmd.args(&spec.args)
         .env("PATH", path())
@@ -131,12 +140,11 @@ pub fn run(spec: Run) -> Result<Finished, Failed> {
             Stdio::null()
         })
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0);
+        .stderr(Stdio::piped());
     if let Some(cwd) = spec.cwd {
         cmd.current_dir(cwd);
     }
-    let mut child = cmd.spawn().map_err(|e| Failed::Start(e.to_string()))?;
+    let (mut child, group) = Group::spawn(&mut cmd).map_err(|e| Failed::Start(e.to_string()))?;
     if let (Some(mut stdin), Some(body)) = (child.stdin.take(), spec.stdin) {
         // A command that ignores its input closes it early; that is not a failure.
         std::thread::spawn(move || {
@@ -152,19 +160,19 @@ pub fn run(spec: Run) -> Result<Finished, Failed> {
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() >= deadline => {
-                crate::process::kill_group(&child);
+                group.kill();
                 let _ = child.wait();
                 return Err(Failed::TimedOut);
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(10)),
             Err(e) => {
-                crate::process::kill_group(&child);
+                group.kill();
                 return Err(Failed::Start(e.to_string()));
             }
         }
     };
     if spec.leftovers == Leftovers::End {
-        crate::process::kill_group(&child);
+        group.kill();
     }
     // One shared wait for both pipes; a closed one answers at once.
     let until = Instant::now() + DRAIN;
@@ -209,6 +217,7 @@ fn merged(first: &str, then: &str) -> String {
 }
 
 /// `$SHELL`, else the account's: an app started with a clean environment has no `$SHELL`.
+#[cfg(unix)]
 fn user_shell() -> Option<std::path::PathBuf> {
     if let Some(shell) = std::env::var_os("SHELL").filter(|s| !s.is_empty()) {
         return Some(shell.into());
@@ -224,10 +233,16 @@ fn user_shell() -> Option<std::path::PathBuf> {
     }
 }
 
+/// Windows gives a program the account's whole `PATH`, so there is no login shell to ask; a
+/// `$SHELL` there comes from something like Git Bash and writes `PATH` in its own form.
+#[cfg(windows)]
+fn user_shell() -> Option<std::path::PathBuf> {
+    None
+}
+
 /// What `shell` reports as `PATH` when started as a login shell. Anything its profile prints
 /// is told apart by a marker on the line.
 fn login_path(shell: &Path, timeout: Duration) -> Option<String> {
-    use std::os::unix::process::CommandExt;
     const MARK: &str = "__MOORING_LOGIN_PATH__";
     let name = shell.file_name()?.to_str()?;
     let (args, script): (&[&str], String) = match name {
@@ -242,15 +257,13 @@ fn login_path(shell: &Path, timeout: Duration) -> Option<String> {
         ),
         _ => return None,
     };
-    let mut child = Command::new(shell)
-        .args(args)
+    let mut cmd = Command::new(shell);
+    cmd.args(args)
         .arg(script)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .process_group(0)
-        .spawn()
-        .ok()?;
+        .stderr(Stdio::null());
+    let (mut child, group) = Group::spawn(&mut cmd).ok()?;
     let (out, closed) = collect(child.stdout.take()?, 1024 * 1024);
     let deadline = Instant::now() + timeout;
     loop {
@@ -260,13 +273,13 @@ fn login_path(shell: &Path, timeout: Duration) -> Option<String> {
                 std::thread::sleep(Duration::from_millis(20));
             }
             _ => {
-                crate::process::kill_group(&child);
+                group.kill();
                 let _ = child.wait();
                 return None;
             }
         }
     }
-    crate::process::kill_group(&child);
+    group.kill();
     let _ = closed.recv_timeout(DRAIN);
     let out = out.lock().ok()?;
     String::from_utf8_lossy(&out)
@@ -275,7 +288,7 @@ fn login_path(shell: &Path, timeout: Duration) -> Option<String> {
         .filter(|p| !p.trim().is_empty())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

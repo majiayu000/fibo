@@ -65,7 +65,7 @@ fn move_dir(old: &Path, new: &Path) -> std::io::Result<()> {
         // leaves theirs alone. The link this move leaves behind points at `new`, which
         // exists, so it never comes here.
         return match std::fs::canonicalize(old) {
-            Ok(real) if real.is_dir() => std::os::unix::fs::symlink(real, new),
+            Ok(real) if real.is_dir() => link_dir(real, new),
             _ => Ok(()),
         };
     }
@@ -73,7 +73,17 @@ fn move_dir(old: &Path, new: &Path) -> std::io::Result<()> {
         return Ok(());
     }
     std::fs::rename(old, new)?;
-    std::os::unix::fs::symlink(new, old)
+    link_dir(new, old)
+}
+
+#[cfg(unix)]
+fn link_dir(to: impl AsRef<Path>, at: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(to, at)
+}
+/// Needs Developer Mode or the right to make links; without them this reports the error.
+#[cfg(windows)]
+fn link_dir(to: impl AsRef<Path>, at: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(to, at)
 }
 
 /// The runtime directory under `home`: the new one, unless only the old one exists. A
@@ -145,6 +155,7 @@ mod tests {
 
     /// Dotfiles often make `~/.config/keepline` a link to a real directory. That is
     /// the user's config: Mooring links to the same directory and keeps their link.
+    #[cfg(unix)]
     #[test]
     fn a_linked_old_config_is_adopted_where_it_lives() {
         let base = std::env::temp_dir().join(format!("mooring-legacy-ln-{}", std::process::id()));
