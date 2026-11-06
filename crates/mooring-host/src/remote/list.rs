@@ -118,10 +118,13 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                     .or_else(|| content.and_then(|c| said(&c.permission))),
             }
         })
+        // A space put aside stays off phones and other machines, older ones included.
+        .filter(|card: &rp::Card| !w.space_quiet(&card.space))
         .collect();
     let spaces = w
         .spaces
         .iter()
+        .filter(|s| !w.space_quiet(&s.id))
         .map(|s| rp::Space {
             id: s.id.clone(),
             name: s.name.clone(),
@@ -156,6 +159,42 @@ fn outcome_key(o: &Outcome) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A space put aside stays off phones and other machines, its todos too.
+    #[test]
+    fn a_space_put_aside_is_not_listed_to_other_devices() {
+        let mut w = mooring_core::sample::every_state();
+        w.spaces.push(Space {
+            id: "other".into(),
+            name: "另一个".into(),
+            cwd: "/other".into(),
+        });
+        let dir = std::env::temp_dir().join(format!("mooring-quiet-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let read = |w: &Workspace| -> rp::List {
+            serde_json::from_value(list(w, &Default::default(), &dir.join("sock")).unwrap())
+                .unwrap()
+        };
+        let all = read(&w);
+        assert!(!all.terminals.is_empty());
+        w.edit(Edit::SetSpaceQuiet {
+            id: "space".into(),
+            quiet: true,
+        })
+        .unwrap();
+        let quiet = read(&w);
+        assert!(quiet.terminals.is_empty());
+        assert!(quiet.todos.is_empty());
+        assert_eq!(quiet.spaces.len(), 1);
+        assert_eq!(quiet.spaces[0].id, "other");
+        w.edit(Edit::SetSpaceQuiet {
+            id: "space".into(),
+            quiet: false,
+        })
+        .unwrap();
+        assert_eq!(read(&w).terminals.len(), all.terminals.len());
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     /// The phone's cards say what the window says, on every sample case.
     #[test]

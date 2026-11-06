@@ -236,6 +236,7 @@ impl Workbench {
                             this.layout.space_menu = Some((this.nav.space.clone(), event.position));
                             this.layout.space_switch = true;
                             this.layout.space_removing = false;
+                            this.layout.space_quieting = false;
                             cx.stop_propagation();
                             cx.notify();
                         }),
@@ -293,7 +294,9 @@ impl Workbench {
             .pt(px(T::S10))
             .pb(px(T::S2))
             .font_family(T::UI_FONT);
-        for space in &self.workspace.spaces {
+        let attended =
+            (self.workspace.spaces.iter()).filter(|s| !self.workspace.space_quiet(&s.id));
+        for space in attended {
             let id = space.id.clone();
             if let Some((_, field, _)) = self
                 .layout
@@ -354,7 +357,14 @@ impl Workbench {
                     .when(dimmed, |d| d.opacity(0.5))
                     .cursor_pointer()
                     .hover(|s| s.border_color(T::color(F::chip_on_line())).opacity(1.))
-                    .child(self.space_dot(&space.id, F::CHIP_DOT))
+                    .child(
+                        self.space_dot(&space.id, F::CHIP_DOT).relative().child(
+                            (self.sidebar.motion)
+                                .mark_spot(&format!("space:{id}"), false)
+                                .absolute()
+                                .size_full(),
+                        ),
+                    )
                     .child(
                         div()
                             .min_w_0()
@@ -400,6 +410,7 @@ impl Workbench {
                             this.layout.space_menu = Some((id.clone(), event.position));
                             this.layout.space_switch = false;
                             this.layout.space_removing = false;
+                            this.layout.space_quieting = false;
                             cx.stop_propagation();
                             cx.notify();
                         })

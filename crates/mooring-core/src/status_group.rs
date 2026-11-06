@@ -57,6 +57,9 @@ const DONE_FOR: u64 = 86_400;
 
 /// Which column an open or just-finished session belongs in; `None` keeps it off the board.
 pub fn column(w: &Workspace, s: &AgentSession, now: u64) -> Option<Column> {
+    if w.session_quiet(s) {
+        return None;
+    }
     if !s.outcome.needs_review(now) {
         return (s.outcome == Outcome::Completed && completed_within(w, &s.id, now, DONE_FOR))
             .then_some(Column::Done);

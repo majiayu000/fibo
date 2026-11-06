@@ -6,6 +6,26 @@
 use super::*;
 use crate::workbench::palette::Hit;
 use crate::workbench::sidebar_motion::mix;
+use std::rc::Rc;
+
+/// What a gray line's 接着管 does.
+pub(in crate::workbench) type Resume = Rc<dyn Fn(&mut Workbench, &mut Context<Workbench>)>;
+
+/// What differs between one gray line and another.
+pub(in crate::workbench) struct LineFacts {
+    pub id: String,
+    pub resume_id: String,
+    /// The key its fold is remembered under.
+    pub fold: String,
+    /// The key the flight finds its square under.
+    pub seat: String,
+    pub name: String,
+    /// All its words, starting with `name`.
+    pub words: String,
+    pub resume: Option<Resume>,
+    /// Others whose flight lands on this line, since they have none of their own showing.
+    pub also_seats: Vec<String>,
+}
 
 fn fold_key(host: &str) -> String {
     format!("quiet:{host}")
@@ -36,7 +56,7 @@ pub(in crate::workbench) fn quiet_tag(name: &str) -> gpui::Div {
 
 /// The gray line's words. The count is what its host listed last, connected or not, so a
 /// link coming and going does not change it.
-fn quiet_words(name: &str, waiting: usize) -> String {
+pub(super) fn quiet_words(name: &str, waiting: usize) -> String {
     if waiting == 0 {
         format!("{name} · 先不管")
     } else {
@@ -156,7 +176,6 @@ impl Workbench {
     /// One gray line per quiet machine, each unfolding to its sessions: in the column's foot
     /// for 会话优先, at the list's end elsewhere. Empty when you attend to all of them.
     pub(in crate::workbench) fn quiet_lines(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
-        const LINE: f32 = 34.;
         // Rows fit this many before the foot scrolls, and the height is definite (docs/
         // performance: a wrapper sized by max_h measures its content again every frame).
         const SHOWN: usize = 6;
@@ -171,64 +190,21 @@ impl Workbench {
             let name = machine_label(&host).to_owned();
             let words = quiet_words(&name, self.quiet_waiting(index));
             let state = self.sidebar.motion.line_state(&host);
-            let rest = words[name.len()..].to_owned();
-            let line = div()
-                .id(gpui::SharedString::from(format!("quiet-{index}")))
-                .relative()
-                .opacity(state.shown)
-                .when(state.glow > 0., |d| {
-                    d.bg(T::color(F::selected_line()).opacity(state.glow * 0.6))
-                })
-                .role(gpui::accesskit::Role::Button)
-                .aria_label(format!(
-                    "{words}，点一下{}",
-                    if open { "收起" } else { "展开" }
-                ))
-                .h(px(LINE))
-                .flex_shrink_0()
-                .pl(px(T::S14))
-                .pr(px(T::S10))
-                .flex()
-                .items_center()
-                .gap(px(T::S6))
-                .border_t(px(T::BORDER_WIDTH))
-                .border_color(T::color(F::line()))
-                .font_family(T::UI_FONT)
-                .cursor_pointer()
-                .hover(|s| s.bg(T::color(F::hover())))
-                .child(self.sidebar.fold_mark(&key, open))
-                .child(self.spotted_mark(&host, &name, true))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .text_size(px(F::TAG))
-                        .text_color(mix(T::color(F::third()), T::color(F::bright()), state.glow))
-                        .child(div().flex_shrink_0().child(name.clone()))
-                        .child(div().min_w_0().truncate().opacity(state.rest).child(rest)),
-                )
-                .child(
-                    div()
-                        .id(gpui::SharedString::from(format!("quiet-resume-{index}")))
-                        .role(gpui::accesskit::Role::Button)
-                        .aria_label(format!("接着管 {name}"))
-                        .flex_shrink_0()
-                        .px(px(T::S6))
-                        .rounded(px(T::S4))
-                        .text_size(px(F::TAG))
-                        .text_color(T::color(F::second()))
-                        .hover(|s| s.bg(T::color(F::selected())))
-                        .child("接着管")
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.set_machine_quiet(index, false, cx);
-                        })),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.sidebar.toggled.insert(key.clone(), !open);
-                    cx.notify();
-                }));
+            let line = self.quiet_line(
+                LineFacts {
+                    id: format!("quiet-{index}"),
+                    resume_id: format!("quiet-resume-{index}"),
+                    fold: key,
+                    seat: host.clone(),
+                    name,
+                    words,
+                    resume: Some(Rc::new(move |this, cx| {
+                        this.set_machine_quiet(index, false, cx);
+                    })),
+                    also_seats: Vec::new(),
+                },
+                cx,
+            );
             out.push(self.machine_menu_on(line, index, cx).into_any_element());
             if open {
                 let mut rows = self.remote_rows_of(index);
@@ -247,7 +223,117 @@ impl Workbench {
                 );
             }
         }
+        out.extend(self.quiet_space_lines(cx));
         out
+    }
+    /// One gray line, a machine's or a space's: its fold, its square and words, and the way
+    /// back when it has one of its own.
+    pub(in crate::workbench) fn quiet_line(
+        &self,
+        facts: LineFacts,
+        cx: &Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        const LINE: f32 = 34.;
+        let LineFacts {
+            id,
+            resume_id,
+            fold,
+            seat,
+            name,
+            words,
+            resume,
+            also_seats,
+        } = facts;
+        let open = self.sidebar.open(&fold, false);
+        let state = self.sidebar.motion.line_state(&seat);
+        let rest = words[name.len()..].to_owned();
+        let seats = also_seats.iter().map(|seat| {
+            (self.sidebar.motion.mark_spot(seat, true))
+                .absolute()
+                .size_full()
+        });
+        div()
+            .id(gpui::SharedString::from(id))
+            .relative()
+            .opacity(state.shown)
+            .when(state.glow > 0., |d| {
+                d.bg(T::color(F::selected_line()).opacity(state.glow * 0.6))
+            })
+            .role(gpui::accesskit::Role::Button)
+            .aria_label(format!(
+                "{words}，点一下{}",
+                if open { "收起" } else { "展开" }
+            ))
+            .h(px(LINE))
+            .flex_shrink_0()
+            .pl(px(T::S14))
+            .pr(px(T::S10))
+            .flex()
+            .items_center()
+            .gap(px(T::S6))
+            .border_t(px(T::BORDER_WIDTH))
+            .border_color(T::color(F::line()))
+            .font_family(T::UI_FONT)
+            .cursor_pointer()
+            .hover(|s| s.bg(T::color(F::hover())))
+            .child(self.sidebar.fold_mark(&fold, open))
+            .child(self.spotted_mark(&seat, &name, true).children(seats))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .text_size(px(F::TAG))
+                    .text_color(mix(T::color(F::third()), T::color(F::bright()), state.glow))
+                    .child(div().flex_shrink_0().child(name.clone()))
+                    .child(div().min_w_0().truncate().opacity(state.rest).child(rest)),
+            )
+            .when_some(resume, |d, resume| {
+                d.child(
+                    div()
+                        .id(gpui::SharedString::from(resume_id))
+                        .role(gpui::accesskit::Role::Button)
+                        .aria_label(format!("接着管 {name}"))
+                        .flex_shrink_0()
+                        .px(px(T::S6))
+                        .rounded(px(T::S4))
+                        .text_size(px(F::TAG))
+                        .text_color(T::color(F::second()))
+                        .hover(|s| s.bg(T::color(F::selected())))
+                        .child("接着管")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            resume(this, cx);
+                        })),
+                )
+            })
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.sidebar.toggled.insert(fold.clone(), !open);
+                cx.notify();
+            }))
+    }
+    /// A board line for something it leaves out: its words and the way back.
+    pub(in crate::workbench) fn quiet_board_line(
+        &self,
+        words: String,
+        resume_id: gpui::SharedString,
+        resume: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+    ) -> gpui::Div {
+        div()
+            .px(px(T::OVERVIEW_X))
+            .pb(px(T::S8))
+            .flex()
+            .items_center()
+            .gap(px(T::S8))
+            .text_size(px(T::SMALL))
+            .text_color(T::color(T::muted()))
+            .child(words)
+            .child(
+                button(resume_id, "接着管")
+                    .h(px(T::SEGMENT_HEIGHT))
+                    .px(px(T::S6))
+                    .on_click(resume),
+            )
     }
     /// The board's line for what it leaves out, under its header.
     pub(in crate::workbench) fn quiet_board_lines(
@@ -260,29 +346,14 @@ impl Workbench {
                 let name = machine_label(&host).to_owned();
                 let words = quiet_words(&name, self.quiet_waiting(index));
                 Some(
-                    div()
-                        .px(px(T::OVERVIEW_X))
-                        .pb(px(T::S8))
-                        .flex()
-                        .items_center()
-                        .gap(px(T::S8))
-                        .text_size(px(T::SMALL))
-                        .text_color(T::color(T::muted()))
-                        .child(words)
-                        .child(
-                            button(
-                                gpui::SharedString::from(format!("board-quiet-resume-{index}")),
-                                "接着管",
-                            )
-                            .h(px(T::SEGMENT_HEIGHT))
-                            .px(px(T::S6))
-                            .on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    this.set_machine_quiet(index, false, cx);
-                                },
-                            )),
-                        )
-                        .into_any_element(),
+                    self.quiet_board_line(
+                        words,
+                        gpui::SharedString::from(format!("board-quiet-resume-{index}")),
+                        cx.listener(move |this, _, _, cx| {
+                            this.set_machine_quiet(index, false, cx);
+                        }),
+                    )
+                    .into_any_element(),
                 )
             })
             .collect()

@@ -28,4 +28,23 @@ impl Workspace {
                     .map(|p| p.id.as_str())
             })
     }
+    /// Whether you put this space aside (先不管).
+    pub fn space_quiet(&self, id: &str) -> bool {
+        self.quiet_spaces.contains(id)
+    }
+    /// Whether the session is listed under a space you put aside. Every surface that
+    /// counts or shows sessions asks this, through `status::needs_you`,
+    /// `status_group::column` or the window's `session_hidden`.
+    pub fn session_quiet(&self, s: &AgentSession) -> bool {
+        !self.quiet_spaces.is_empty()
+            && self
+                .session_space(s)
+                .is_some_and(|space| self.space_quiet(space))
+    }
+    /// How many spaces are not put aside.
+    pub fn attended_spaces(&self) -> usize {
+        (self.spaces.iter())
+            .filter(|s| !self.space_quiet(&s.id))
+            .count()
+    }
 }
