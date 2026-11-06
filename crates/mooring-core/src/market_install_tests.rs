@@ -192,7 +192,7 @@ fn a_setup_that_fails_never_counts_as_installed() {
     const TWO: &str = r#"{"api":1,"id":"f","name":"F","version":"2.0.0","provides":["setup"]}"#;
     let fails = format!(
         r#"{{"api":1,"setup":"exit 9","teardown":"touch {}"}}"#,
-        done.display()
+        crate::plugin_command::sh_path(&done)
     );
     let works = r#"{"api":1,"setup":"true","teardown":"true"}"#;
     // First install, failing.
@@ -231,7 +231,7 @@ fn dropping_setup_in_an_update_undoes_it_first() {
     let v1 = |teardown: String| {
         format!(
             r#"{{"api":1,"setup":"touch {}","teardown":"{teardown}"}}"#,
-            wrapped.display()
+            crate::plugin_command::sh_path(&wrapped)
         )
     };
     const ONE: &str =
@@ -269,7 +269,10 @@ fn dropping_setup_in_an_update_undoes_it_first() {
         &catalog,
         ONE,
         &[
-            ("setup.json", &v1(format!("rm {}", wrapped.display()))),
+            (
+                "setup.json",
+                &v1(format!("rm {}", crate::plugin_command::sh_path(&wrapped))),
+            ),
             ("effects.json", EFFECT),
         ],
     )
