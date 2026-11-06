@@ -43,33 +43,29 @@ impl Workbench {
                     .gap(px(T::S6))
                     .text_size(px(T::META))
                     .text_color(T::color(T::muted()))
+                    // Who runs it, as on a session's card: the latest session's Agent once it
+                    // has one, since that may not be the one it was written for.
+                    .child(agent_mark(
+                        sessions.last().map_or(task.agent, |s| s.runtime),
+                        T::color(T::muted()),
+                    ))
                     .when(sessions.is_empty(), |d| d.child("还没开始"))
+                    // One thing on this row: what needs you if anything does, else how many run.
                     .when(!sessions.is_empty(), |d| {
-                        d.child(
-                            div()
-                                .flex_shrink_0()
-                                .text_color(T::color(T::secondary()))
-                                .child(if needs > 0 {
-                                    format!("在做 {} 个", sessions.len())
-                                } else {
-                                    format!("在做 · {} 个会话", sessions.len())
-                                }),
-                        )
-                        .when(needs > 0, |d| {
-                            d.child(
-                                div()
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_color(Status::Waiting.colors().1)
-                                    .child(format!(
-                                        "{needs} 个{}",
-                                        mooring_core::status::NEEDS_YOU
-                                    )),
-                            )
-                        })
+                        d.child(div().min_w_0().truncate().when_else(
+                            needs > 0,
+                            |d| {
+                                d.text_color(Status::Waiting.colors().1)
+                                    .child(format!("{needs} 个{}", mooring_core::status::NEEDS_YOU))
+                            },
+                            |d| {
+                                d.text_color(T::color(T::secondary()))
+                                    .child(format!("{} 个会话在做", sessions.len()))
+                            },
+                        ))
                     })
                     // Here, not beside 「开始」: a 200 pt card can't hold both on one row.
-                    .when(!task.acceptance.is_empty(), |d| {
+                    .when(sessions.is_empty() && !task.acceptance.is_empty(), |d| {
                         d.child(
                             div()
                                 .min_w_0()
@@ -227,10 +223,7 @@ impl Workbench {
             .map(|_| self.session_line(session))
             .filter(|q| !q.trim().is_empty() && q.trim() != title.trim());
 
-        let todo = (session.task.as_ref())
-            .and_then(|t| self.workspace.tasks.iter().find(|task| &task.id == t))
-            .map(|t| (t.id.clone(), t.title.clone()));
-        let lit = todo.is_some() && self.overview.hover_task == session.task;
+        let lit = session.task.is_some() && self.overview.hover_task == session.task;
         card_frame(gpui::SharedString::from(format!("card-{}", session.id)))
             .when(lit, |d| d.border_color(T::color(T::link())))
             .when_some(session.task.clone(), |d, t| {
@@ -301,27 +294,6 @@ impl Workbench {
             )
             .child(card_title(title.clone()))
             .when_some(quote, |d, q| d.child(card_quote(q)))
-            .when_some(todo, |d, (tid, name)| {
-                d.child(
-                    div()
-                        .id(gpui::SharedString::from(format!(
-                            "card-todo-{}",
-                            session.id
-                        )))
-                        .min_w_0()
-                        .truncate()
-                        .cursor_pointer()
-                        .text_size(px(T::META))
-                        .text_color(T::color(T::link()))
-                        .child(format!("待办 · {name} ›"))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.overview.drawer = None;
-                            this.nav.task_detail = Some(tid.clone());
-                            cx.notify();
-                        })),
-                )
-            })
             .child(
                 div()
                     .flex()

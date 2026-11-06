@@ -68,6 +68,9 @@ impl Workbench {
                     });
                 }
             }
+            "drawertask" => {
+                self.overview.drawer = self.task_sessions(arg).first().map(|s| s.id.clone());
+            }
             "detail" => self.nav.task_detail = Some(arg.to_owned()),
             "closedetail" => self.nav.task_detail = None,
             "hover" => self.hover_task(arg, true, cx),
@@ -81,7 +84,8 @@ impl Workbench {
             .map(|t| format!("{}:{}", t.title, self.task_sessions(&t.id).len()))
             .collect();
         format!(
-            "board_focus={} choosing={} naming={} filter={:?} toast={:?} top={} fresh={} overview={} detail={:?} quick={} focused={} text={:?} space={:?} draft={:?} picking={:?} tabs={} todos={todos:?}",
+            "drawer={} board_focus={} choosing={} naming={} filter={:?} toast={:?} top={} fresh={} overview={} detail={:?} quick={} focused={} text={:?} space={:?} draft={:?} picking={:?} tabs={} todos={todos:?}",
+            self.overview.drawer.is_some(),
             self.overview.focus.is_focused(window),
             quick.is_some_and(|q| q.choosing_space),
             quick.is_some_and(|q| q.new_space.is_some()),
