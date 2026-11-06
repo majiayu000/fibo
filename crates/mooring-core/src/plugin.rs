@@ -323,7 +323,6 @@ pub fn installed(id: &str) -> Option<&'static Plugin> {
 /// Held while plugins are installed, removed or switched: the app and a `mooring plugins` in
 /// a terminal must not swap the same directory at once. Released when dropped.
 pub(crate) fn lock(plugins: &Path) -> Result<std::fs::File, String> {
-    use std::os::fd::AsRawFd;
     std::fs::create_dir_all(plugins).map_err(|e| format!("建不了插件目录：{e}"))?;
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -331,10 +330,7 @@ pub(crate) fn lock(plugins: &Path) -> Result<std::fs::File, String> {
         .write(true)
         .open(plugins.join(".lock"))
         .map_err(|e| format!("打不开插件锁：{e}"))?;
-    // SAFETY: flock on a file this function just opened and returns.
-    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
-        return Err(format!("拿不到插件锁：{}", std::io::Error::last_os_error()));
-    }
+    file.lock().map_err(|e| format!("拿不到插件锁：{e}"))?;
     Ok(file)
 }
 
