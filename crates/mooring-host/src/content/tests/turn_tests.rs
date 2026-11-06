@@ -249,6 +249,7 @@ fn codex_subagent_header_names_its_parent_and_children_drive_the_parent() {
         &Children {
             running: 1,
             waiting: None,
+            ..Default::default()
         },
         3,
         s.clone(),
@@ -259,6 +260,7 @@ fn codex_subagent_header_names_its_parent_and_children_drive_the_parent() {
     let ask = Children {
         running: 1,
         waiting: Some("子 Agent Hypatia：是否运行迁移？".into()),
+        ..Default::default()
     };
     p.children(&ask, 4, s.clone());
     assert_eq!(
@@ -271,6 +273,7 @@ fn codex_subagent_header_names_its_parent_and_children_drive_the_parent() {
         &Children {
             running: 0,
             waiting: None,
+            ..Default::default()
         },
         6,
         s.clone(),
@@ -293,6 +296,7 @@ fn parent_showing_child_dialog(dialog: &str) -> Parser {
         &Children {
             running: 1,
             waiting: Some(dialog.into()),
+            subagents: Vec::new(),
         },
         1,
         Source::default(),
@@ -310,6 +314,7 @@ fn parent_official_status_cannot_dismiss_a_child_dialog() {
         let kids = Children {
             running: 1,
             waiting: Some("子 Agent：批准运行测试？".into()),
+            subagents: Vec::new(),
         };
         p.children(&kids, 3, Source::default());
         assert_eq!(p.card.waiting_episode, 1, "{status:?}: still one episode");

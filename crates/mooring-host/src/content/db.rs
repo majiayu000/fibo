@@ -4,60 +4,11 @@ use super::*;
 pub(super) fn db_err(e: impl std::error::Error + Send + Sync + 'static) -> io::Error {
     io::Error::other(e)
 }
-/// What a parent's subagents are doing, from `subagent_links`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Children {
-    pub running: u32,
-    pub waiting: Option<String>,
-}
-/// A subagent whose log has not moved for this long no longer counts as running: its
-/// process may have died mid-turn.
-pub(super) const CHILD_FRESH: u64 = 900;
-pub fn link_child(db: &Connection, path: &str, card: &Content) -> io::Result<()> {
-    db.prepare_cached("INSERT INTO subagent_links VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(path) DO UPDATE SET parent=excluded.parent,name=excluded.name,turn=excluded.turn,waiting=excluded.waiting,updated=excluded.updated")
-        .map_err(db_err)?
-        .execute(params![
-            path,
-            card.parent,
-            card.agent_name,
-            format!("{:?}", card.turn),
-            card.waiting,
-            i64::try_from(card.updated).map_err(db_err)?
-        ])
-        .map_err(db_err)?;
-    Ok(())
-}
-pub fn children(db: &Connection, parent: &str, now: u64) -> io::Result<Children> {
-    let mut q = db
-        .prepare_cached("SELECT name,turn,waiting FROM subagent_links WHERE parent=?1 AND updated>=?2 ORDER BY updated DESC")
-        .map_err(db_err)?;
-    let since = i64::try_from(now.saturating_sub(CHILD_FRESH)).map_err(db_err)?;
-    let mut rows = q.query(params![parent, since]).map_err(db_err)?;
-    let mut kids = Children::default();
-    while let Some(r) = rows.next().map_err(db_err)? {
-        let name: String = r.get(0).map_err(db_err)?;
-        let turn: String = r.get(1).map_err(db_err)?;
-        match turn.as_str() {
-            "Running" => kids.running += 1,
-            "Waiting" if kids.waiting.is_none() => {
-                let waiting: String = r.get(2).map_err(db_err)?;
-                let name = if name.is_empty() {
-                    "子 Agent".into()
-                } else {
-                    format!("子 Agent {name}")
-                };
-                kids.waiting = Some(format!("{name}：{}", short(&waiting, 500)));
-                kids.running += 1;
-            }
-            _ => (),
-        }
-    }
-    Ok(kids)
-}
 pub fn schema(db: &Connection) -> io::Result<()> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS session_content(path TEXT PRIMARY KEY,title TEXT NOT NULL,turn TEXT NOT NULL,updated INTEGER NOT NULL,projection TEXT NOT NULL,parser TEXT NOT NULL); CREATE TABLE IF NOT EXISTS subagent_links(path TEXT PRIMARY KEY,parent TEXT NOT NULL,name TEXT NOT NULL,turn TEXT NOT NULL,waiting TEXT NOT NULL,updated INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS subagent_parent ON subagent_links(parent); CREATE TABLE IF NOT EXISTS session_records(path TEXT NOT NULL,inode INTEGER NOT NULL,offset INTEGER NOT NULL,ordinal INTEGER NOT NULL,at INTEGER NOT NULL,kind TEXT NOT NULL,text TEXT NOT NULL,call_id TEXT NOT NULL,exit_code INTEGER,PRIMARY KEY(path,inode,offset,ordinal)); CREATE TABLE IF NOT EXISTS log_backfill(path TEXT PRIMARY KEY,inode INTEGER NOT NULL,origin INTEGER NOT NULL,start INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS session_records_messages ON session_records(path,inode,offset,ordinal) WHERE kind IN ('user','assistant');
         CREATE INDEX IF NOT EXISTS session_records_call ON session_records(path,call_id,kind,offset,ordinal);
+        CREATE INDEX IF NOT EXISTS session_records_turn_start ON session_records(path,at) WHERE kind='turn' AND text='Running';
         CREATE INDEX IF NOT EXISTS session_records_tools ON session_records(path,offset,ordinal) WHERE kind='tool_call';").map_err(db_err)
 }
 pub fn load(db: &Connection, path: &str) -> io::Result<Parser> {

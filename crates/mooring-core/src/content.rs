@@ -112,7 +112,7 @@ pub struct Content {
     pub approval_kind: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub approval_always: String,
-    /// A Codex subagent's parent thread id and its name, from its own session header.
+    /// A child agent's explicit parent session id and task name, supplied by its adapter.
     #[serde(default)]
     pub parent: String,
     #[serde(default)]
@@ -132,9 +132,8 @@ pub struct Content {
     /// approvals, screen prompts and open questions.
     #[serde(default)]
     pub choices: Vec<String>,
-    /// Claude's subagents of the current turn, and older ones still running, oldest first:
-    /// what the sidebar lists under the session. Read from the CLI's own files beside the
-    /// transcript (`<session>/subagents/agent-*.meta.json`).
+    /// This turn's subagents, and older ones still running, oldest first. The sidebar
+    /// shares this list across adapter metadata and child-thread logs.
     #[serde(default)]
     pub subagents: Vec<Subagent>,
     /// Subagents a task notification in this log reported as not finished, by id.

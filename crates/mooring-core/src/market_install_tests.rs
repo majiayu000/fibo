@@ -582,7 +582,7 @@ fn a_version_directory_outside_the_plugin_is_refused() {
     assert!(err.contains("不安全"), "{err}");
 }
 
-/// The OpenCode plugin in this repository: its newest version declares what only a level 4
+/// The OpenCode plugin in this repository: its newest version declares what only a level 6
 /// build reads, and a build before that gets the version it can load. Dropping `mooring` or
 /// `versions/0.1.0` leaves an older build with a plugin that does not take effect.
 #[test]
@@ -594,10 +594,10 @@ fn a_build_too_old_for_the_opencode_declarations_gets_the_version_before_them() 
         .into_iter()
         .find(|e| e.id == "opencode")
         .unwrap();
-    assert_eq!(entry.version, "0.2.1");
-    assert_eq!(entry.mooring, Some(5));
+    assert_eq!(entry.version, "0.2.2");
+    assert_eq!(entry.mooring, Some(6));
     assert!(entry.compatible(), "this build reads it");
-    assert_eq!(entry.for_this_build().version, "0.2.1");
+    assert_eq!(entry.for_this_build().version, "0.2.2");
 
     let mut older_build = entry;
     older_build.mooring = Some(plugin::LEVEL + 1);
