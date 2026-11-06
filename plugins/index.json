@@ -448,21 +448,21 @@
     {
       "id": "opencode",
       "name": "OpenCode",
-      "version": "0.2.1",
-      "description": "从 OpenCode 的 SQLite 库读会话：回合状态、权限提示和回答、中断、报错、命令与测试证据、改过的文件",
+      "version": "0.2.2",
+      "description": "从 OpenCode 的 SQLite 库读会话和子 Agent：父子归属、回合状态、权限提示和回答、中断、报错与改动证据",
       "provides": [
         "agent"
       ],
-      "mooring": 5,
+      "mooring": 6,
       "files": [
         {
           "path": "agent.json",
-          "sha256": "1520999d222c7145deae5e0c0d1f5816ee90c7fc695f7626bb702eea9e263e70",
-          "size": 5601
+          "sha256": "a107f4a033513c77575a767f271f547608084150be57c539b719f5f780d961f0",
+          "size": 5906
         },
         {
           "path": "plugin.json",
-          "sha256": "f1f2a9be963b715007baef83a6b3daa90c305cb55c20545f678f130913c1cf15",
+          "sha256": "cdfada550504b6ba98187b452995329f2e24547f98111d0ec083f50792e0dcfe",
           "size": 284
         }
       ],
