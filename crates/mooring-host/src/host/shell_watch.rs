@@ -96,6 +96,15 @@ impl ShellWatch {
                 let before = self.judged.get(&key).copied();
                 let now = shells::judge(before, seen.get(task).copied());
                 changed |= before.map(|b| b.job) != Some(now.job);
+                // Ids only: a command line may hold a secret.
+                if before.map(|b| b.why) != Some(now.why)
+                    && matches!(
+                        now.why,
+                        shells::Why::NotFound | shells::Why::NotFoundTooLong
+                    )
+                {
+                    eprintln!("background shells: {session} {task}: {}", now.why.label());
+                }
                 self.judged.insert(key, now);
             }
         }
@@ -108,6 +117,14 @@ impl ShellWatch {
         match self.judged.get(&(session.to_owned(), task.to_owned())) {
             Some(j) => j.job,
             None => self.settling() && !self.search_found_nothing(session),
+        }
+    }
+    /// Why [`Self::job`] says what it says, for `mooring explain`.
+    pub(super) fn why(&self, session: &str, task: &str) -> &'static str {
+        match self.judged.get(&(session.to_owned(), task.to_owned())) {
+            Some(j) => j.why.label(),
+            None if self.job(session, task) => "宿主刚重启，还没看过进程",
+            None => "没看过进程：认不出 Agent，或它的日志没记这条命令",
         }
     }
     fn settling(&self) -> bool {
@@ -189,6 +206,7 @@ impl Host {
             }
             for t in &mut c.shells {
                 t.job = self.shell_watch.job(&s.id, &t.id);
+                t.why = self.shell_watch.why(&s.id, &t.id).to_owned();
             }
             if let Some(b) = &mut c.background {
                 b.jobs = (c.shells.iter().filter(|t| t.job).count() as u32).min(b.shells);
@@ -445,7 +463,7 @@ mod tests {
                 shells: vec![ShellTask {
                     id: "b1".into(),
                     description: "wait".into(),
-                    job: false,
+                    ..Default::default()
                 }],
                 background: Some(Background {
                     shells: 1,

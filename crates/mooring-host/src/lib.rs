@@ -18,6 +18,7 @@ pub mod recognition;
 pub mod redact;
 pub mod screen_ask;
 pub mod screen_rules;
+mod shell_match;
 mod store;
 pub mod tool_text;
 pub use agents::hooks;

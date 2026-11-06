@@ -70,20 +70,28 @@ impl Host {
         if !self.turn_over(session) {
             return None;
         }
-        let task = |id: &str, job: bool| ShellTask {
+        let task = |id: &str, job: bool, why: &str| ShellTask {
             id: id.into(),
             description: "后台命令".into(),
             job,
+            why: why.into(),
         };
         let found = self.shell_watch.found.get(session);
         Some(match found.filter(|f| !f.is_empty()) {
             Some(f) => f
                 .iter()
-                .map(|pid| task(pid, self.shell_watch.job(session, pid)))
+                .map(|pid| {
+                    task(
+                        pid,
+                        self.shell_watch.job(session, pid),
+                        self.shell_watch.why(session, pid),
+                    )
+                })
                 .collect(),
             None => vec![task(
                 "screen",
                 since.elapsed().as_secs() < shells::JOB_LIMIT,
+                "屏幕说有后台终端，没对上具体命令",
             )],
         })
     }

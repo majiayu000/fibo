@@ -42,6 +42,7 @@ pub(super) fn explain(a: Args) -> io::Result<()> {
                 "signal": c.signal,
                 "signal_detail": c.signal_detail,
                 "screen_check": c.screen_check,
+                "shells": c.shells,
             });
         }
         let text = serde_json::to_string_pretty(&json).map_err(io::Error::other)?;
@@ -78,6 +79,13 @@ pub(super) fn explain(a: Args) -> io::Result<()> {
         println!("守护进程现在：{:?}，依据 {}", c.turn, c.signal);
         for line in c.signal_detail.lines().chain(c.screen_check.lines()) {
             println!("  {line}");
+        }
+        if !c.shells.is_empty() {
+            println!("后台 shell：");
+        }
+        for t in &c.shells {
+            let kind = if t.job { "任务" } else { "服务" };
+            println!("  {} {}：{kind}，{}", t.id, t.description, t.why);
         }
     }
     Ok(())

@@ -12,6 +12,7 @@
 //! command the Stop hook listed, or after a host restart by what the agent's log says it
 //! ran. The rules and the real cases behind them:
 //! docs/decisions/2026-11-04-background-shell-own-client.md.
+use crate::shell_match::runs;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::process::Command;
@@ -37,52 +38,103 @@ pub struct Seen {
     pub age: u64,
 }
 
+/// Which rule a judgment came from, for `mooring explain` and the host log.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Why {
+    NoPort,
+    Listening,
+    ListeningOnce,
+    OwnClient,
+    TooOld,
+    Ended,
+    NotFound,
+    NotFoundTooLong,
+}
+impl Why {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NoPort => "进程在，没有固定端口",
+            Self::Listening => "监听固定端口",
+            Self::ListeningOnce => "刚看到固定端口，连续两次才算服务",
+            Self::OwnClient => "脚本自己连自己的端口",
+            Self::TooOld => "已跑满 2 小时",
+            Self::Ended => "进程已结束，等 Agent 醒来",
+            Self::NotFound => "Claude 列着它、没说结束，但找不到进程，最多算 2 小时",
+            Self::NotFoundTooLong => "Claude 列着它，但 2 小时都没找到进程",
+        }
+    }
+}
+/// Looks at a shell never found before it stops counting as a job: about [`JOB_LIMIT`].
+/// Counted here because a process that cannot be found has no start time to read.
+const UNFOUND_LOOKS: u32 = (JOB_LIMIT / EVERY) as u32;
+
 /// The judgment carried between looks. A shell changes sides only after two looks in a
 /// row disagree with it, so a test that starts a server for a moment stays a job. The
 /// exception is its own client: one sighting settles it at once, and it stays settled
 /// while a worker is left, because such a connection comes and goes between requests.
 /// Once only the server and the shells waiting on it remain, the work is over.
+///
+/// A shell Claude lists but no process was ever found for is taken at Claude's word, up
+/// to the limit. One found and then gone has ended, which is a different thing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Judged {
     pub job: bool,
+    pub why: Why,
     against: u8,
     own_client: bool,
+    found: bool,
+    unfound: u32,
 }
 pub fn judge(before: Option<Judged>, seen: Option<Seen>) -> Judged {
-    // Too old to be a job, whatever else it shows: no second look needed.
-    if seen.is_some_and(|s| s.age >= JOB_LIMIT) {
+    let was_found = before.filter(|b| b.found);
+    if seen.is_none() && was_found.is_none() {
+        let unfound = before.map_or(0, |b| b.unfound) + 1;
+        let job = unfound < UNFOUND_LOOKS;
         return Judged {
-            job: false,
+            job,
+            why: if job {
+                Why::NotFound
+            } else {
+                Why::NotFoundTooLong
+            },
             against: 0,
             own_client: false,
+            found: false,
+            unfound,
         };
     }
+    let before = was_found;
+    let settled = |job: bool, why: Why, against: u8, own_client: bool| Judged {
+        job,
+        why,
+        against,
+        own_client,
+        found: true,
+        unfound: 0,
+    };
+    // Too old to be a job, whatever else it shows: no second look needed.
+    if seen.is_some_and(|s| s.age >= JOB_LIMIT) {
+        return settled(false, Why::TooOld, 0, false);
+    }
     if seen.is_some_and(|s| s.own_client) {
-        return Judged {
-            job: true,
-            against: 0,
-            own_client: true,
-        };
+        return settled(true, Why::OwnClient, 0, true);
     }
     let own_client = before.is_some_and(|b| b.own_client);
     let now = seen.is_some_and(|s| !s.listening || (own_client && s.worker));
-    match before {
-        None => Judged {
-            job: now,
-            against: 0,
-            own_client,
-        },
-        Some(b) if b.job == now => Judged { against: 0, ..b },
-        Some(b) if b.against >= 1 => Judged {
-            job: now,
-            against: 0,
-            own_client,
-        },
-        Some(b) => Judged {
-            against: b.against + 1,
-            ..b
-        },
-    }
+    let (job, against) = match before {
+        None => (now, 0),
+        Some(b) if b.job == now => (b.job, 0),
+        Some(b) if b.against >= 1 => (now, 0),
+        Some(b) => (b.job, b.against + 1),
+    };
+    let why = match seen {
+        None => Why::Ended,
+        Some(s) if s.listening && own_client && s.worker => Why::OwnClient,
+        Some(s) if s.listening && job => Why::ListeningOnce,
+        Some(s) if s.listening => Why::Listening,
+        Some(_) => Why::NoPort,
+    };
+    settled(job, why, against, own_client)
 }
 
 /// Looks at the shells `agent` started: for each `(task id, command)`, what its process
@@ -189,21 +241,6 @@ pub fn commands_in_log(log: &std::path::Path, ids: &[String]) -> io::Result<Vec<
 }
 pub(crate) fn contains(line: &[u8], needle: &[u8]) -> bool {
     line.windows(needle.len()).any(|w| w == needle)
-}
-
-/// Whether a shell's argv runs `command`. Claude Code passes it as `eval '<command>'`; how
-/// a `'` inside is written is its own business (`'\''`, later `'"'"'`), so quoting is left
-/// out of the comparison. The hook clips a long command with "… [+N chars]".
-fn runs(argv: &str, command: &str) -> bool {
-    let bare = |s: &str| -> String {
-        s.chars()
-            .filter(|c| !matches!(c, '\'' | '"' | '\\'))
-            .collect()
-    };
-    let command = command.split("… [+").next().unwrap_or(command);
-    let head: String = command.chars().take(60).collect();
-    let head = bare(&head);
-    !head.trim().is_empty() && bare(argv).contains(&head)
 }
 
 pub(crate) fn children(pid: u32) -> Vec<u32> {
@@ -426,6 +463,11 @@ mod tests {
                 false,
             ),
             (
+                "listed by Claude, its process never found: still a job, 2026-11-06",
+                &[None, None, None],
+                true,
+            ),
+            (
                 "tail -f: no port, past the limit",
                 &[Some(YOUNG), Some(OLD)],
                 false,
@@ -452,14 +494,50 @@ mod tests {
         assert!(!judge(None, Some(SERVER)).job, "listening at first sight");
     }
     #[test]
-    fn an_old_shell_or_one_not_found_is_no_job() {
+    fn an_old_shell_is_no_job() {
         assert!(!judge(Some(judge(None, Some(YOUNG))), Some(OLD)).job);
-        assert!(!judge(None, None).job, "no process runs the command");
         let job = judge(None, Some(YOUNG));
         assert!(
             judge(Some(job), None).job,
             "a job that just ended stays one until its agent wakes"
         );
+    }
+    /// Claude says it runs, so a shell never found counts as running, but not for ever: a
+    /// server that goes unfound must not spin past the limit every job has.
+    #[test]
+    fn a_shell_never_found_is_a_job_until_the_limit() {
+        let first = judge(None, None);
+        assert!(first.job && first.why == Why::NotFound, "{first:?}");
+        let mut judged = first;
+        for _ in 2..UNFOUND_LOOKS {
+            judged = judge(Some(judged), None);
+        }
+        assert!(judged.job, "one look before the limit");
+        let over = judge(Some(judged), None);
+        assert!(!over.job && over.why == Why::NotFoundTooLong, "{over:?}");
+        assert!(judge(Some(judged), Some(SERVER)).why == Why::Listening);
+        assert!(judge(Some(judged), Some(YOUNG)).job, "found after all");
+    }
+    /// `exec` leaves no trace of the command in the shell: found by what it ran.
+    #[test]
+    fn a_real_process_an_exec_became_is_found() {
+        let command = "cd /tmp && exec /bin/sleep 31.7";
+        let mut child = std::process::Command::new("/bin/zsh")
+            .args(["-c", command])
+            .spawn()
+            .unwrap();
+        let tasks = vec![("x".to_owned(), command.to_owned())];
+        let mut seen = HashMap::new();
+        for _ in 0..50 {
+            seen = look(&[(std::process::id(), tasks.clone())]).unwrap();
+            if seen.contains_key("x") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        child.kill().unwrap();
+        let _ = child.wait();
+        assert!(seen.contains_key("x"), "{seen:?}");
     }
     #[test]
     fn only_a_chosen_port_makes_a_server() {
@@ -485,27 +563,6 @@ mod tests {
             "a client whose server is elsewhere"
         );
     }
-    #[test]
-    fn a_command_is_found_in_the_shell_that_evals_it() {
-        let argv = "/bin/zsh -c source /x/snapshot.sh 2>/dev/null || true && eval 'python3 -m http.server 8000 --bind 127.0.0.1' < /dev/null && pwd -P >| /tmp/cwd";
-        assert!(runs(argv, "python3 -m http.server 8000 --bind 127.0.0.1"));
-        let quoted = "/bin/zsh -c eval 'echo '\\''hi'\\'' && sleep 9' < /dev/null";
-        assert!(runs(quoted, "echo 'hi' && sleep 9"));
-        assert!(runs(argv, "python3 -m http.server 8000… [+40 chars]"));
-        assert!(!runs(argv, "cargo test"));
-        assert!(!runs(argv, "  "));
-    }
-    /// Claude Code 2.1.3xx writes a `'` inside the eval as `'"'"'`. A polling loop with a
-    /// quote near its start went unfound and read as 等后台 while it ran, 2026-11-06.
-    #[test]
-    fn a_command_is_found_however_the_shell_quotes_it() {
-        let command =
-            "R=o/r; perl -e 'alarm 2400; exec @ARGV' sh -c 'while :; do gh run list; done'";
-        let argv = r#"/bin/zsh -c source /x/snapshot.sh && eval 'R=o/r; perl -e '"'"'alarm 2400; exec @ARGV'"'"' sh -c '"'"'while :; do gh run list; done'"'"'' < /dev/null && pwd -P >| /tmp/cwd"#;
-        assert!(runs(argv, command));
-        assert!(!runs(argv, "R=o/r; perl -e 'alarm 60; exec @ARGV'"));
-        assert!(!runs(argv, "''"), "nothing but quotes names no command");
-    }
     /// The whole chain on a real process: a shell quoting that way is found and is a job.
     #[test]
     fn a_real_shell_quoting_a_quote_the_new_way_is_found() {
@@ -526,7 +583,7 @@ mod tests {
         }
         child.kill().unwrap();
         let _ = child.wait();
-        assert!(judge(None, seen.get("q").copied()).job, "{seen:?}");
+        assert!(seen.contains_key("q"), "{seen:?}");
     }
     #[test]
     fn real_children_are_found_by_command_and_only_a_chosen_port_reads_as_a_server() {
