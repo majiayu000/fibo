@@ -490,3 +490,43 @@ fn list_carries_the_boards_todos() {
         json!([{ "id": "t1", "space": "s", "title": "写周报", "agent": "codex" }])
     );
 }
+
+/// What opens in a space put aside would vanish from the phone at once: it is refused and
+/// says where to go, and with no directory named it opens somewhere the phone can see.
+#[test]
+fn open_refuses_a_space_put_aside_and_otherwise_avoids_it() {
+    let h = Host::start();
+    let aside = scratch(&h, "aside");
+    let keep = scratch(&h, "keep");
+    for (id, dir) in [("a-aside", &aside), ("z-keep", &keep)] {
+        h.call(Request::Edit {
+            edit: Edit::AddSpace(Space {
+                id: id.into(),
+                name: id.into(),
+                cwd: dir.to_string_lossy().into_owned(),
+            }),
+            request: None,
+        })
+        .unwrap();
+    }
+    h.call(Request::Edit {
+        edit: Edit::SetSpaceQuiet {
+            id: "a-aside".into(),
+            quiet: true,
+        },
+        request: None,
+    })
+    .unwrap();
+    let mut r = Remote::open(&h, None, &[]);
+    let e = r.error(json!({ "op": "open", "cwd": aside.to_string_lossy(), "request": "r1" }));
+    assert!(e.contains("先不管"), "{e}");
+    let list = r.ok(json!({ "op": "list" }));
+    assert!(
+        (list["spaces"].as_array().unwrap().iter()).all(|s| s["id"] != "a-aside"),
+        "{list}"
+    );
+    let opened = r.ok(json!({ "op": "open", "request": "r2" }));
+    let terminal = opened["terminal"].as_str().unwrap();
+    let w = h.workspace();
+    assert!(!w.terminal_quiet(terminal), "opened in an attended space");
+}

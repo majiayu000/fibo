@@ -47,6 +47,17 @@ fn all_words(spaces: usize, waiting: usize) -> String {
 }
 
 impl Workbench {
+    /// `space`, or the first attended to when it is put aside: for what you are writing
+    /// new, which would leave your sight at once there.
+    pub(in crate::workbench) fn attended_or_first(&self, space: String) -> String {
+        let w = &self.workspace;
+        if !w.space_quiet(&space) {
+            return space;
+        }
+        (w.spaces.iter())
+            .find(|s| !w.space_quiet(&s.id))
+            .map_or(space, |s| s.id.clone())
+    }
     fn quiet_spaces(&self) -> Vec<&Space> {
         (self.workspace.spaces.iter())
             .filter(|s| self.workspace.space_quiet(&s.id))
@@ -58,7 +69,7 @@ impl Workbench {
         let w = &self.workspace;
         let mut rows: Vec<_> = (w.agent_sessions.iter())
             .filter(|s| {
-                w.session_space(s) == Some(id)
+                w.session_home(s) == Some(id)
                     && sessions::automation_hidden_in(w, s).is_none()
                     // A restart ends what ran: still yours to go back to, so still listed.
                     && (self.session_open(s) || w.lost_agents.values().flatten().any(|l| l == &s.id))
@@ -84,7 +95,7 @@ impl Workbench {
     fn space_running(&self, id: &str) -> usize {
         (self.workspace.agent_sessions.iter())
             .filter(|s| {
-                self.workspace.session_space(s) == Some(id)
+                self.workspace.session_home(s) == Some(id)
                     && s.managed()
                     && self.session_open(s)
                     && status_of(&self.workspace, s).working()
@@ -414,7 +425,7 @@ impl Workbench {
     /// Whether the column's rows or chips list the space's session now.
     pub fn visual_listed_in_column(&self, id: &str) -> bool {
         (self.workspace.agent_sessions.iter()).any(|s| {
-            self.workspace.session_space(s) == Some(id)
+            self.workspace.session_home(s) == Some(id)
                 && self.session_hidden(s).is_none()
                 && self.session_open(s)
         })
