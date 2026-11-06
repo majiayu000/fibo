@@ -419,6 +419,10 @@ impl Workbench {
                     .gap(px(T::S6))
                     .text_size(px(T::META))
                     .text_color(T::color(T::muted()))
+                    .child(agent_mark(
+                        (self.task_sessions(&task.id).last()).map_or(task.agent, |s| s.runtime),
+                        T::color(T::muted()),
+                    ))
                     .child({
                         let when = (self.workspace.task_logs.get(&task.id))
                             .and_then(|l| l.closed)
