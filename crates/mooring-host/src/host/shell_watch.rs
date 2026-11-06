@@ -196,17 +196,14 @@ impl Host {
         }
     }
 }
-/// A new host has seen no screen go quiet yet, and a quiet one will not again.
+/// A new host has seen no screen go quiet yet, and a quiet one will not again: a question
+/// on it, or a command it says was left running, would go unread.
 fn read_screens(shared: &Shared) {
     let Ok(screens) = lock(shared).map(|host| host.screens_to_read()) else {
         return;
     };
     for (id, live) in screens {
-        let tail = lock(&live).and_then(|l| l.vt.tail_text(usize::from(l.rows)));
-        let (Ok(tail), Ok(mut host)) = (tail, lock(shared)) else {
-            continue;
-        };
-        if let Err(e) = host.screen_background(&id, &tail) {
+        if let Err(e) = check_screen_wait(&live, shared, &id) {
             eprintln!("background shells: {e}");
         }
     }

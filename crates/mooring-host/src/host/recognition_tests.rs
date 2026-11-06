@@ -190,3 +190,54 @@ fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
     drop(index);
     fs::remove_dir_all(root).unwrap();
 }
+
+/// After a restart a screen-bound conversation has only its pane to go by. Undoing
+/// `only_cli_of_screen_bound` leaves its exit unnoticed: the pane keeps the dead session.
+#[test]
+fn a_new_host_takes_the_one_cli_in_a_pane_for_its_screen_bound_conversation() {
+    use mooring_core::model::{AgentSession, Binding, Outcome};
+    let session = |binding| AgentSession {
+        terminal: Some("t".into()),
+        binding,
+        runtime: Agent::Codex,
+        outcome: Outcome::Open,
+        ..crate::host::tests::session("s", 1, Some("t"), true)
+    };
+    let process =
+        |pid, parent, runtime: Option<Agent>, named: Option<&str>| crate::recognition::Process {
+            pid,
+            parent,
+            runtime,
+            cli_session_id: named.map(str::to_owned),
+            no_daemon: true,
+            launch: vec![],
+        };
+    let mut w = Workspace::default();
+    w.terminals.push(Terminal {
+        id: "t".into(),
+        space: "s".into(),
+        argv: vec!["sh".into()],
+        cwd: "/".into(),
+        pid: Some(100),
+        state: ProcessState::Running,
+        exit_code: None,
+        error: None,
+    });
+    let shell = process(100, 1, None, None);
+    let wrapper = process(101, 100, Some(Agent::Codex), None);
+    let native = process(102, 101, Some(Agent::Codex), None);
+    let one = [shell.clone(), wrapper.clone(), native.clone()];
+    let only = crate::recognition::only_cli_of_screen_bound;
+    let screen = session(Some(Binding::Screen));
+    assert!(only(&screen, &native, &one, &w));
+    assert!(!only(&screen, &wrapper, &one, &w), "its wrapper is not it");
+    assert!(
+        !only(&session(Some(Binding::Process)), &native, &one, &w),
+        "other evidence decides that binding"
+    );
+    let second = process(103, 100, Some(Agent::Codex), None);
+    let two = [shell.clone(), wrapper, native.clone(), second];
+    assert!(!only(&screen, &native, &two, &w), "two CLIs: no telling");
+    let named = process(104, 100, Some(Agent::Codex), Some("other"));
+    assert!(!only(&screen, &named, &[shell, named.clone()], &w));
+}

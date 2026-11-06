@@ -50,6 +50,10 @@ pub struct Rule {
     pub anchor_within: Option<usize>,
     pub menu: Menu,
     pub ask: Ask,
+    /// With `above_anchor`: the nearest line above it that fits, when the one right above
+    /// may be something else (a diff under the file it edits).
+    #[serde(default)]
+    pub ask_line: Option<Line>,
     /// Lines that rule the screen out wherever they appear in the region.
     #[serde(default)]
     pub not: Vec<Line>,
@@ -62,12 +66,16 @@ pub enum Ask {
     Anchor,
     /// The nearest line above option 1 that is not an option.
     AboveMenu,
+    /// The line above the anchor, for a prompt with no numbered menu.
+    AboveAnchor,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
     Below,
     Above,
+    /// No numbered menu: the anchor is the prompt's buttons.
+    None,
 }
 /// The numbered menu ("❯ 1. Yes") next to the anchor.
 #[derive(Debug, Deserialize)]
@@ -175,8 +183,17 @@ impl Rules {
 
 /// The rules compiled into this binary for `agent`.
 pub fn bundled(agent: Agent) -> &'static Rules {
-    loaded(agent, &BUNDLED, |agent| {
-        compile(crate::agents::adapter(agent).screen_rules())
+    loaded(agent, &BUNDLED, of_adapter)
+}
+/// A plugin's rules can be wrong; they fall back like a broken override, never panic.
+fn of_adapter(agent: Agent) -> Rules {
+    let text = crate::agents::adapter(agent).screen_rules();
+    Rules::parse(text, Source::Bundled).unwrap_or_else(|e| {
+        eprintln!(
+            "mooring: {} 的画面规则不可用，改用默认规则：{e}",
+            agent.key()
+        );
+        compile(crate::agents::DEFAULT_SCREEN_RULES)
     })
 }
 /// The rules a CLI without its own file is read with, as every CLI was before rules files.
@@ -200,9 +217,9 @@ fn active(agent: Agent, config: Option<&Path>) -> Rules {
         Some(Ok(rules)) => rules,
         Some(Err(e)) => {
             eprintln!("mooring: 画面规则覆盖文件不可用，改用内置规则：{e}");
-            compile(crate::agents::adapter(agent).screen_rules())
+            of_adapter(agent)
         }
-        None => compile(crate::agents::adapter(agent).screen_rules()),
+        None => of_adapter(agent),
     }
 }
 /// `<dir>/screen-rules/<cli>.json`: `None` when absent, an error naming the file otherwise.
@@ -533,6 +550,7 @@ fn check(rule: &Rule, lines: &[&str]) -> Result<(usize, std::ops::RangeInclusive
                 .ok_or(Miss::NoFirst)?;
             (first, anchor)
         }
+        Side::None => (anchor, anchor),
     };
     if let Some(prefix) = &menu.first_starts_with {
         if !option(lines[first]).is_some_and(|(_, _, text)| text.starts_with(prefix.as_str())) {
@@ -550,7 +568,7 @@ fn check(rule: &Rule, lines: &[&str]) -> Result<(usize, std::ops::RangeInclusive
     // Above the anchor the menu stops before it; below, at its last option.
     let options = match menu.side {
         Side::Above => &lines[first..end],
-        Side::Below => &lines[first..=end],
+        Side::Below | Side::None => &lines[first..=end],
     };
     if menu.cursor && !options.iter().any(|l| option(l).is_some_and(|(c, _, _)| c)) {
         return Err(Miss::NoCursor);
@@ -561,6 +579,11 @@ fn check(rule: &Rule, lines: &[&str]) -> Result<(usize, std::ops::RangeInclusive
             .iter()
             .rposition(|l| option(l).is_none())
             .ok_or(Miss::NoAsk)?,
+        Ask::AboveAnchor => match &rule.ask_line {
+            Some(line) => lines[..anchor].iter().rposition(|l| line.matches(l)),
+            None => anchor.checked_sub(1),
+        }
+        .ok_or(Miss::NoAsk)?,
     };
     Ok((ask, ask.min(first)..=end.max(anchor)))
 }

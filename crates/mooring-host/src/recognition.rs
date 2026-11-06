@@ -104,6 +104,30 @@ pub fn terminal_for_process(
     }
     None
 }
+/// A conversation only its screen tied to a pane has no other evidence of its process: a host
+/// that restarted finds no id on the command line, no open log and no hook. The one CLI
+/// process in that pane is it. If it runs another conversation by now, the screen moves
+/// the pane there as it would have, which takes knowing this process.
+pub fn only_cli_of_screen_bound(
+    session: &AgentSession,
+    process: &Process,
+    processes: &[Process],
+    workspace: &Workspace,
+) -> bool {
+    let terminal = session.terminal.as_deref();
+    let in_pane = |p: &&Process| {
+        p.runtime == process.runtime
+            && !processes
+                .iter()
+                .any(|c| c.parent == p.pid && c.runtime == p.runtime)
+            && terminal_for_process(p.pid, processes, workspace).as_deref() == terminal
+    };
+    let mut clis = processes.iter().filter(in_pane);
+    session.binding == Some(Binding::Screen)
+        && process.cli_session_id.is_none()
+        && clis.next().is_some_and(|only| only.pid == process.pid)
+        && clis.next().is_none()
+}
 /// Names the Agent processes whose command line names no conversation, from their CLI's
 /// own list of live sessions (`Adapter::sessions_by_pid`): those in an unbound pane, and
 /// those in a pane whose conversation has no process yet (`watched` holds the sessions

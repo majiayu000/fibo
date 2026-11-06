@@ -242,6 +242,11 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 
 这类最复杂：声明 CLI 的可执行文件、启动和恢复命令，以及怎么从它的会话记录（JSONL 或 SQLite）里读出回合状态。用户要接一个新 CLI 时才写。先找一个现成的例子照着改（Mooring 源码里的 `plugins/opencode/agent.json`），写完同样用 `mooring plugins` 检查。
 
+`agent.json` 写 `"api": 2` 时还能声明两样：
+
+- `screen_rules`：怎么从屏幕认出它在等你，格式和 `<配置>/screen-rules/<id>.json` 一样。提示没有编号时写 `"menu": {"side": "none"}`，`anchor` 认那一排按钮，`"ask": "above_anchor"` 取它上面一行当问题。不写就按 Claude Code 的样子读。规则写错时退回默认规则，并记进后台日志。
+- `interrupt`：`{"key": "esc", "presses": 2}`，中断一轮按什么、按几次，`key` 是 `esc` 或 `ctrl-c`。不写就发 Ctrl-C；有的 CLI 收到 Ctrl-C 会直接退出，要先试。
+
 ## 状态颜色
 
 写在主题文件的 `status`、`tone`、`seen` 里，见 `mooring --skill` 的「主题」。以前的 `<配置>/colors.json` 会在第一次启动时并入主题，原文件留成 `colors.json.migrated`，不要再写它。

@@ -62,6 +62,18 @@ impl Adapter for Declared {
                         .any(|suffix| s.ends_with(suffix.as_str()))
             })
     }
+    fn interrupt_key(&self) -> &'static [u8] {
+        self.spec.interrupt.as_ref().map_or(b"\x03", |i| i.key)
+    }
+    fn interrupt_presses(&self) -> u32 {
+        self.spec.interrupt.as_ref().map_or(1, |i| i.presses)
+    }
+    fn screen_rules(&self) -> &'static str {
+        self.spec
+            .screen_rules
+            .as_deref()
+            .unwrap_or(super::DEFAULT_SCREEN_RULES)
+    }
     fn process_session(&self, _pid: u32, _args: &[String]) -> (Option<String>, bool) {
         (None, false)
     }
