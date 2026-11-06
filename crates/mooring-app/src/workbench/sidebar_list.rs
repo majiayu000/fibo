@@ -9,8 +9,10 @@ mod prefs;
 mod session_list;
 mod session_menu;
 mod session_row;
+mod unlinked;
 
 pub(super) use prefs::SidebarPrefs;
+pub(super) use unlinked::Unlinked;
 
 /// How a row's second line opens when the session asks you something.
 pub(super) const ASKS: &str = "问你：";

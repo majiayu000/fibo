@@ -66,6 +66,55 @@ pub(super) fn flat_state(g: Status, unseen: bool) -> gpui::AnyElement {
     }
 }
 
+/// A row of the list, without its contents: where its state and text go, its corners, and
+/// its background selected and under the pointer. `two` is for a second line below the first.
+pub(super) fn flat_row_box(
+    id: gpui::SharedString,
+    selected: bool,
+    two: bool,
+) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .relative()
+        .mx(px(T::S8))
+        .px(px(T::S10))
+        .py(px(if two { F::ROW_PAD_Y } else { F::ONE_PAD_Y }))
+        .flex()
+        .when(!two, |d| d.items_center())
+        .gap(px(F::ROW_GAP))
+        .rounded(px(F::ROW_RADIUS))
+        .cursor_pointer()
+        .font_family(T::UI_FONT)
+        .when(selected, |d| d.bg(ink(F::selected())))
+        .hover(|s| s.bg(ink(F::selected())))
+}
+
+/// The selected row's edge, drawn over it so it never moves the row's text.
+pub(super) fn flat_selected_edge() -> gpui::Div {
+    div()
+        .absolute()
+        .inset_0()
+        .rounded(px(F::ROW_RADIUS))
+        .border(px(T::BORDER_WIDTH))
+        .border_color(ink(F::selected_line()))
+}
+
+/// A folded group's line, without its contents; its state and text sit in the rows' columns.
+pub(super) fn flat_more_box(id: gpui::SharedString) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .mt(px(T::S2))
+        .mx(px(T::S8))
+        .px(px(T::S10))
+        .py(px(F::ROW_PAD_Y))
+        .flex()
+        .items_center()
+        .gap(px(F::ROW_GAP))
+        .rounded(px(F::ROW_RADIUS))
+        .cursor_pointer()
+        .hover(|s| s.bg(ink(F::hover())))
+}
+
 impl Workbench {
     /// The column's top: the traffic lights' strip with the fold button at its right end
     /// (folded, the window keeps it beside the lights, on the same line).
@@ -219,18 +268,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let key = key.to_owned();
-        div()
-            .id(gpui::SharedString::from(format!("sidebar-fold-{key}")))
-            .mt(px(T::S2))
-            .mx(px(T::S8))
-            .px(px(T::S10))
-            .py(px(F::ROW_PAD_Y))
-            .flex()
-            .items_center()
-            .gap(px(T::S8))
-            .rounded(px(F::ROW_RADIUS))
-            .cursor_pointer()
-            .hover(|s| s.bg(ink(F::hover())))
+        flat_more_box(gpui::SharedString::from(format!("sidebar-fold-{key}")))
             .font_family(T::UI_FONT)
             .text_size(px(T::SMALL))
             .line_height(px(F::LINE_TEXT))
@@ -326,20 +364,8 @@ impl Workbench {
             },
         };
         let asks_ink = g.colors().1;
-        div()
-            .id(gpui::SharedString::from(format!("session-{}", session.id)))
-            .relative()
-            .mx(px(T::S8))
-            .px(px(T::S10))
-            .py(px(if two { F::ROW_PAD_Y } else { F::ONE_PAD_Y }))
-            .flex()
-            .when(!two, |d| d.items_center())
-            .gap(px(F::ROW_GAP))
-            .rounded(px(F::ROW_RADIUS))
-            .cursor_pointer()
-            .font_family(T::UI_FONT)
-            .when(selected, |d| d.bg(ink(F::selected())))
-            .hover(|s| s.bg(ink(F::selected())))
+        let row = gpui::SharedString::from(format!("session-{}", session.id));
+        flat_row_box(row, selected, two)
             .child(
                 div().flex_shrink_0().when(two, |d| d.mt(px(T::S4))).child(
                     self.turning_mark(g, "icons/state-run.svg", F::STATE, cx)
@@ -392,17 +418,7 @@ impl Workbench {
                     })
                     .when(unfolded, |d| d.child(self.done_card(session, cx))),
             )
-            // The selected row's edge, drawn over it so it never moves the row's text.
-            .when(selected, |d| {
-                d.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .rounded(px(F::ROW_RADIUS))
-                        .border(px(T::BORDER_WIDTH))
-                        .border_color(ink(F::selected_line())),
-                )
-            })
+            .when(selected, |d| d.child(flat_selected_edge()))
             .when(self.peek_home(&session.id), |d| {
                 d.child(super::peek::peek_home_outline())
             })

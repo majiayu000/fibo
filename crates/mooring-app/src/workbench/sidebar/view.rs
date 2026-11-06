@@ -296,10 +296,15 @@ impl Workbench {
                     .cloned()
                     .or_else(|| report.map(|(_, n)| n))
                     .expect("listed from notes or reports");
-                (terminal.clone(), (n.note, n.why, group))
+                super::sidebar_list::Unlinked {
+                    terminal: terminal.clone(),
+                    note: n.note,
+                    why: n.why,
+                    group,
+                }
             })
             .collect();
-        unread.sort_by(|a, b| a.0.cmp(&b.0));
+        unread.sort_by(|a, b| a.terminal.cmp(&b.terminal));
         if !local_hidden {
             sidebar = sidebar.child(
                 div()
@@ -321,52 +326,6 @@ impl Workbench {
         let listed = sessions.into_iter().map(|(s, g, a, _)| (s, g, a)).collect();
         let (rows, more, owns_closed) = self.session_list(listed, &ended, current.as_deref(), cx);
         sidebar = sidebar.children(self.moving_rows(rows));
-        for (terminal, (note, why, group)) in unread {
-            let focused = self.nav.focused.as_deref() == Some(terminal.as_str());
-            sidebar = sidebar.child(
-                div()
-                    .id(gpui::SharedString::from(format!("unread-row-{terminal}")))
-                    .when(recent, |d| d.mx(px(T::S8)))
-                    .h(px(T::ROW))
-                    .px(px(T::S8))
-                    .flex()
-                    .items_center()
-                    .gap(px(T::S8))
-                    .rounded(px(T::CONTROL_RADIUS))
-                    .cursor_pointer()
-                    .when(focused, |d| d.bg(T::color(T::raised())))
-                    .hover(|s| s.bg(T::color(T::raised())))
-                    .child(seen_dot(group))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .text_size(px(T::MONO_SIZE))
-                            .text_color(T::color(T::muted()))
-                            .child(note),
-                    )
-                    .tooltip(move |_, cx| {
-                        cx.new(|_| super::render::TextTip(why.clone().into()))
-                            .into()
-                    })
-                    .on_mouse_down(gpui::MouseButton::Right, {
-                        let terminal = terminal.clone();
-                        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
-                            this.layout.menu = Some(PaneMenu {
-                                terminal: terminal.clone(),
-                                position: event.position,
-                                page: MenuPage::Main,
-                                path: None,
-                            });
-                            cx.notify();
-                        })
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.focus_terminal(&terminal, window, cx);
-                    })),
-            );
-        }
         if more > 0 {
             sidebar = sidebar.child(
                 button(
@@ -405,6 +364,8 @@ impl Workbench {
                 .on_click(cx.listener(|this, _, _, cx| this.show_closed(cx))),
             );
         }
+        // Last of this machine's list, so 另有 and 已关闭 stay with the sessions they count.
+        sidebar = sidebar.children(self.unlinked_rows(unread, recent, cx));
         sidebar = sidebar.children(self.after_local_list(recent, cx));
         if recent {
             return Some(self.flat_column(sidebar, listed_count, cx));
