@@ -81,17 +81,47 @@ fn a_space_put_aside_asks_for_nothing_and_comes_back_whole() {
     assert_eq!(w.tasks, tasks);
 }
 
+/// What is in front of you decides, not what it is filed under. The "tasked" session's todo
+/// is in "space"; its tab moves between the two.
 #[test]
-fn it_follows_the_space_a_session_is_listed_under() {
+fn the_tab_a_session_runs_in_decides_not_its_todo() {
+    let at = now();
     let mut w = two_spaces();
-    // Listed under the todo's space even if its terminal is elsewhere: one owner of "where".
-    let moved = w.agent_sessions[0].clone();
-    assert_eq!(w.session_space(&moved), Some("space"));
-    set(&mut w, "other", true).unwrap();
-    assert!(!w.session_quiet(&moved));
-    set(&mut w, "other", false).unwrap();
+    let id = "tasked";
+    let session = |w: &Workspace| {
+        w.agent_sessions
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap()
+            .clone()
+    };
+    let s = session(&w);
+    assert_eq!(w.session_space(&s), Some("space"));
+    let terminal = s.terminal.clone().unwrap();
+    let tab = w.terminal_tab(&terminal).unwrap().id.clone();
+    w.tabs.iter_mut().find(|t| t.id == tab).unwrap().space = "other".into();
+
+    // Filed under the space put aside, open in one attended to: not masked.
     set(&mut w, "space", true).unwrap();
-    assert!(w.session_quiet(&moved));
+    let s = session(&w);
+    assert_eq!(w.session_space(&s), Some("space"), "still listed there");
+    assert_eq!(w.session_home(&s), Some("other"));
+    assert!(!w.session_quiet(&s));
+    assert!(!w.terminal_quiet(&terminal));
+    assert_eq!(
+        status::asks_for_you(&w, &s, at),
+        w.needs_you(&s, at),
+        "it counts"
+    );
+
+    // Filed under one attended to, open in the space put aside: masked.
+    set(&mut w, "space", false).unwrap();
+    set(&mut w, "other", true).unwrap();
+    let s = session(&w);
+    assert!(w.session_quiet(&s));
+    assert!(w.terminal_quiet(&terminal));
+    assert!(!w.needs_you(&s, at));
+    assert_eq!(status_group::column(&w, &s, at), None);
 }
 
 #[test]

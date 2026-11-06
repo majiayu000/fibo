@@ -42,6 +42,8 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
         .terminals
         .iter()
         .filter(|t| t.state == ProcessState::Running)
+        // A space put aside stays off phones and other machines, older ones included.
+        .filter(|t| !w.terminal_quiet(&t.id))
         .map(|t| {
             let session = w.current_agent(&t.id);
             let cwd = w.terminal_cwd(t);
@@ -118,8 +120,6 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                     .or_else(|| content.and_then(|c| said(&c.permission))),
             }
         })
-        // A space put aside stays off phones and other machines, older ones included.
-        .filter(|card: &rp::Card| !w.space_quiet(&card.space))
         .collect();
     let spaces = w
         .spaces

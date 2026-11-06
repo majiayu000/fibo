@@ -506,7 +506,10 @@ impl Host {
             if !self.event_subscribers.is_empty() {
                 notices.push(payload.clone().into());
             }
-            crate::plugin_hooks::command(payload);
+            // Scripts subscribed above still hear it; a plugin may notify you.
+            if !self.workspace.terminal_quiet(terminal) {
+                crate::plugin_hooks::command(payload);
+            }
         }
         self.send_events(notices);
     }

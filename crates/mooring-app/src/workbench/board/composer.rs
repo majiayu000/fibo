@@ -92,6 +92,8 @@ impl Workbench {
         let space = (draft_space.filter(|id| self.workspace.spaces.iter().any(|s| &s.id == id)))
             .or_else(|| self.overview.filter_space.clone())
             .unwrap_or_else(|| self.nav.space.clone());
+        // Written into a space put aside it would leave the board at once.
+        let space = self.attended_or_first(space);
         self.tasks.board_quick = Some(BoardQuick {
             field,
             _events: events,
@@ -332,7 +334,9 @@ impl Workbench {
             );
         if q.choosing_space {
             let mut chips = div().flex().flex_wrap().gap(px(T::S4));
-            for space in &self.workspace.spaces {
+            let attended =
+                (self.workspace.spaces.iter()).filter(|s| !self.workspace.space_quiet(&s.id));
+            for space in attended {
                 let sid = space.id.clone();
                 chips = chips.child(
                     button(
