@@ -22,21 +22,24 @@ fn screen(socket: &Path, terminal: &str) -> io::Result<String> {
     }
 }
 
+/// What a CLI's own API said it asks, as the host put it on the card. Only the card decides:
+/// this process lives on the relay and may have read the plugins before one was updated, and
+/// then asking its registry reads the wrong screen, and the phone says nothing was read.
+fn asked_over_api(c: &mooring_core::content::Content) -> Option<rp::Ask> {
+    (!c.approval.is_empty() && !c.approval_kind.is_empty()).then(|| rp::Ask {
+        question: c.approval.clone(),
+        kind: c.approval_kind.clone(),
+        subject: c.approval.clone(),
+        always: (!c.approval_always.is_empty()).then(|| c.approval_always.clone()),
+        ..Default::default()
+    })
+}
+
 fn read_ask(socket: &Path, terminal: &str) -> io::Result<rp::Ask> {
-    // A CLI that answers over its own API said what it asks; the screen has nothing to add.
     if let Reply::Workspace(w) = rpc(socket, &Request::Workspace)? {
-        let c = w.current_agent(terminal).and_then(|s| {
-            s.runtime.spec()?.answers.as_ref()?;
-            w.content.get(&s.id).filter(|c| !c.approval.is_empty())
-        });
-        if let Some(c) = c {
-            return Ok(rp::Ask {
-                question: c.approval.clone(),
-                kind: c.approval_kind.clone(),
-                subject: c.approval.clone(),
-                always: (!c.approval_always.is_empty()).then(|| c.approval_always.clone()),
-                ..Default::default()
-            });
+        let c = w.current_agent(terminal).and_then(|s| w.content.get(&s.id));
+        if let Some(ask) = c.and_then(asked_over_api) {
+            return Ok(ask);
         }
     }
     let tail = screen(socket, terminal)?;
@@ -118,4 +121,29 @@ pub(super) fn not_asking_trust(socket: &Path, terminal: &str) -> io::Result<()> 
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod api_tests {
+    use super::*;
+    use mooring_core::content::Content;
+    /// Undoing this for a registry lookup brings back 「电脑没读出它要做什么」 on a real phone
+    /// whenever the plugin was updated after the relay process started (2026-11-07).
+    #[test]
+    fn an_approval_from_the_api_is_read_off_the_card() {
+        let c = Content {
+            approval: "echo hi".into(),
+            approval_kind: "bash".into(),
+            approval_always: "以后都允许 echo *".into(),
+            ..Default::default()
+        };
+        let ask = asked_over_api(&c).unwrap();
+        assert_eq!(ask.subject, "echo hi");
+        assert_eq!(ask.always.as_deref(), Some("以后都允许 echo *"));
+        let from_screen = Content {
+            approval: "Do you want to proceed?".into(),
+            ..Default::default()
+        };
+        assert_eq!(asked_over_api(&from_screen), None, "the screen says more");
+    }
 }
