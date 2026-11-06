@@ -265,3 +265,141 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
         "the user's words stay"
     );
 }
+
+/// The real thing again, with only the installed hook to go on: a conversation nobody
+/// started from a todo writes one down when told 「记一下」, and a plain question leaves
+/// nothing behind. Run like `real_claude_writes_back_and_the_next_conversation_continues`.
+#[test]
+#[ignore = "starts the real claude binary and calls a model"]
+fn real_claude_notes_a_todo_when_told_and_only_then() {
+    let cwd = std::env::var("MOORING_REAL_CLAUDE_CWD").expect("MOORING_REAL_CLAUDE_CWD");
+    let h = Host::start();
+    let edit = |edit: Edit| {
+        h.call(Request::Edit {
+            request: None,
+            edit,
+        })
+        .unwrap()
+    };
+    edit(Edit::AddSpace(Space {
+        id: "s".into(),
+        name: "Real".into(),
+        cwd: cwd.clone(),
+    }));
+    let binary = PathBuf::from(env!("CARGO_BIN_EXE_mooring"));
+    let settings = h.root.join("hooks.json");
+    let entry = |event: &str| {
+        let command = format!(
+            "MOORING_HOOK={}; {}",
+            shell_quote(&binary.to_string_lossy()),
+            mooring_host::hooks::command_at(Agent::Claude, event)
+        );
+        serde_json::json!([{ "hooks": [{ "type": "command", "command": command, "timeout": 5 }] }])
+    };
+    fs::write(
+        &settings,
+        serde_json::json!({ "hooks": {
+            "SessionStart": entry("SessionStart"),
+            "Stop": entry("Stop"),
+            "SessionEnd": entry("SessionEnd"),
+        } })
+        .to_string(),
+    )
+    .unwrap();
+    let claude = Command::new("/bin/zsh")
+        .args(["-lc", "whence -p claude"])
+        .output()
+        .unwrap();
+    let claude = String::from_utf8(claude.stdout).unwrap().trim().to_owned();
+    h.call(Request::Launch {
+        id: "real".into(),
+        space: "s".into(),
+        argv: ["/usr/bin/env".to_owned()]
+            .into_iter()
+            .chain(
+                std::env::vars()
+                    .map(|(k, _)| k)
+                    .filter(|k| k.starts_with("CLAUDE"))
+                    .flat_map(|k| ["-u".to_owned(), k]),
+            )
+            .chain([
+                format!(
+                    "PATH={}:{}",
+                    binary.parent().unwrap().display(),
+                    std::env::var("PATH").unwrap()
+                ),
+                claude,
+                "--dangerously-skip-permissions".into(),
+                "--settings".into(),
+                settings.to_string_lossy().into_owned(),
+            ])
+            .collect(),
+        cwd,
+        cols: 120,
+        rows: 40,
+        scheme: Default::default(),
+        colors: None,
+    })
+    .unwrap();
+    edit(Edit::CreateTab {
+        tab: Tab {
+            id: "tab".into(),
+            space: "s".into(),
+            default_task: None,
+            title: "普通会话".into(),
+            layout: Some(Layout::Leaf("real".into())),
+        },
+    });
+    let until = Instant::now() + Duration::from_secs(60);
+    let session = loop {
+        if let Some(s) = h.workspace().current_agent("real") {
+            break s.id.clone();
+        }
+        assert!(Instant::now() < until, "never bound");
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    std::thread::sleep(Duration::from_secs(3));
+    let (ok, _, err) = cli(
+        &h,
+        &[
+            "prompt",
+            "real",
+            "1 加 1 等于几？直接回答。",
+            "--wait",
+            "--timeout",
+            "120",
+        ],
+    );
+    assert!(ok, "{err}");
+    assert!(
+        h.workspace().tasks.is_empty(),
+        "a plain question notes nothing"
+    );
+
+    let (ok, _, err) = cli(
+        &h,
+        &["prompt", "real", "compose 超时这个问题后面要查一下，记一下"],
+    );
+    assert!(ok, "{err}");
+    let until = Instant::now() + Duration::from_secs(180);
+    let (w, task) = loop {
+        let w = h.workspace();
+        if let Some(task) = w.tasks.first().cloned() {
+            break (w, task);
+        }
+        assert!(Instant::now() < until, "nothing was noted");
+        std::thread::sleep(Duration::from_millis(500));
+    };
+    eprintln!("noted: {} / said: {}", task.title, task.description);
+    assert!(task.title.contains("compose") || task.description.contains("compose"));
+    assert_eq!(
+        w.task_logs[&task.id].source.as_deref(),
+        Some(session.as_str())
+    );
+    assert_eq!(
+        w.current_agent("real").unwrap().task,
+        None,
+        "noted in this conversation, not tied to it"
+    );
+    assert!(!w.task_outcomes.contains_key(&task.id));
+}

@@ -18,6 +18,21 @@ pub fn command(agent: Agent) -> String {
         agent.executable()
     )
 }
+/// The one event whose output the CLI adds to the conversation: starting, resuming or
+/// compacting. The rest stay silent and in the background.
+const TOLD_AT: &str = "SessionStart";
+/// `command`, for the entry at `event`. What the Agent is told lives in the binary, so
+/// changing it never rewrites the user's settings; a build without it says nothing.
+pub fn command_at(agent: Agent, event: &str) -> String {
+    let base = command(agent);
+    if event != TOLD_AT {
+        return base;
+    }
+    let told = "\"$h\" --skill session 2>/dev/null; exit 0";
+    base.strip_suffix("exit 0")
+        .map(|start| format!("{start}{told}"))
+        .unwrap_or(base)
+}
 /// Seconds the CLI may wait on our entry; it returns at once, so this only bounds a stuck shell.
 const TIMEOUT: u64 = 5;
 fn ours(entry: &Value) -> bool {
@@ -73,10 +88,9 @@ pub fn status(agent: Agent, hooks: &Hooks) -> io::Result<Status> {
         return Ok(Status::Missing);
     }
     let count = |event: &str| found.iter().filter(|(e, ..)| *e == event).count();
-    let want = command(agent);
     let changed: Vec<_> = found
         .iter()
-        .filter(|(.., entry)| entry["command"] != want.as_str())
+        .filter(|(event, .., entry)| entry["command"] != command_at(agent, event).as_str())
         .collect();
     let mut differs = vec![];
     note(
@@ -216,7 +230,7 @@ pub fn install(agent: Agent, hooks: &Hooks) -> io::Result<bool> {
             .as_array_mut()
             .ok_or_else(|| io::Error::other(format!("hooks.{event} 不是数组，未改动")))?;
         groups.push(json!({
-            "hooks": [{ "type": "command", "command": command(agent), "timeout": TIMEOUT }]
+            "hooks": [{ "type": "command", "command": command_at(agent, event), "timeout": TIMEOUT }]
         }));
     }
     write(&hooks.settings, &settings)?;
@@ -240,6 +254,45 @@ mod tests {
             settings: dir.join("settings.json"),
             events: &["SessionStart", "Stop"],
         }
+    }
+
+    #[test]
+    fn only_session_start_speaks_and_a_build_without_the_words_stays_silent() {
+        let told = command_at(Agent::Claude, "SessionStart");
+        assert!(
+            told.contains("--skill session 2>/dev/null; exit 0"),
+            "{told}"
+        );
+        assert!(
+            told.contains("hook --agent claude >/dev/null 2>&1 &"),
+            "{told}"
+        );
+        assert_eq!(command_at(Agent::Claude, "Stop"), command(Agent::Claude));
+    }
+
+    #[test]
+    fn an_entry_from_before_session_start_spoke_is_outdated_and_install_replaces_it() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let hooks = target(&dir);
+        let entry = json!([{ "hooks": [{ "type": "command", "command": command(Agent::Claude), "timeout": TIMEOUT }] }]);
+        fs::write(
+            &hooks.settings,
+            json!({ "hooks": { "SessionStart": entry, "Stop": entry } }).to_string(),
+        )
+        .unwrap();
+        assert!(matches!(
+            status(Agent::Claude, &hooks).unwrap(),
+            Status::Outdated(_)
+        ));
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        let written: Value = serde_json::from_slice(&fs::read(&hooks.settings).unwrap()).unwrap();
+        assert_eq!(
+            written["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+            command_at(Agent::Claude, "SessionStart").as_str()
+        );
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -408,7 +461,8 @@ mod tests {
             .output()
             .unwrap();
         assert!(out.status.success());
-        for _ in 0..100 {
+        // The fake host runs in the background; a loaded machine can take seconds to start it.
+        for _ in 0..1000 {
             // The shell creates the file before it writes to it.
             if fs::read_to_string(&got).is_ok_and(|said| said.ends_with('\n')) {
                 break;

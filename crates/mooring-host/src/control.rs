@@ -212,7 +212,8 @@ mooring scan --runtime <目录>              让后台重新扫一遍 Agent 会�
         switches: &[],
         usage: "\
 mooring --skill                            给 Coding Agent 看的用法说明（Markdown）
-mooring --skill plugins                    给 Coding Agent 看的写插件、改外观说明（Markdown）",
+mooring --skill plugins                    给 Coding Agent 看的写插件、改外观说明（Markdown）
+mooring --skill session                    Mooring 在会话开始时告诉 Agent 的话",
     },
     Command {
         name: "--version",
@@ -277,6 +278,9 @@ pub(crate) fn check(cmd: &Command, args: &[String]) -> io::Result<bool> {
 pub const SKILL: &str = include_str!("skill.md");
 /// `mooring --skill plugins`: how a coding Agent changes Mooring with plugins.
 pub const PLUGINS_SKILL: &str = include_str!("plugins.md");
+/// What every conversation in a Mooring terminal is told when it starts. It costs every
+/// conversation these words, so it only says when to write something down.
+pub const SESSION_SKILL: &str = "你在 Mooring 终端里。用户说「记一下」，或有这次不处理但之后要跟进的事时：先 mooring todo list 查重，有就 mooring todo note --task <待办> 写进展，没有就 mooring todo add \"标题\" --said \"用户原话\"。当场问完答完的事不记。完成由用户标记，你不能标。\n";
 
 /// What the Agent in a terminal is doing, read like the workbench's pane states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

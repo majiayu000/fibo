@@ -139,6 +139,10 @@ if sys.argv[1] == 'prepare':
         r = rpc(root, {'Hook': {'runtime': 'Codex', 'pid': t['pid'], 'cli_session_id': f'visual-{n}', 'transcript': str(logs / f'visual-{n}.jsonl'), 'ended': False, 'event': None}}); assert 'Error' not in r, r
         session = next(s for s in rpc(root, 'Workspace')['Workspace']['agent_sessions'] if s['cli_session_id'] == f'visual-{n}')
         edit(root, {'AssignTask': {'id': session['id'], 'task': 'task0'}})
+        if n == 0:
+            edit(root, {'AddTaskNote': {'task': 'task0', 'session': session['id'], 'text': '查清了：标签名取自第一句话，恢复会话后第一句话变了。下一步改成只取一次。'}})
+        if n == 1:
+            edit(root, {'AddTaskNote': {'task': 'task0', 'session': session['id'], 'text': '改好并补了测试，恢复后名字不再变。要你定：已经改乱的旧标签要不要批量修？'}})
     if os.environ.get('MOORING_FIXTURE_BOARD'):
         # What a narrow column has to hold: a long agent name beside 「开始」, a title too long for two lines.
         edit(root, {'AddTask': {'id': 'long0', 'space': 's0', 'title': 'Eval 建立 agent的评估 质量、费用、效率 每个方面都需要单独打分并写回结果', 'description': '', 'acceptance': [], 'agent': 'Claude'}})

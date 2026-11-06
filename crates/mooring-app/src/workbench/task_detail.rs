@@ -5,6 +5,7 @@ use mooring_core::content::Evidence;
 mod criterion;
 mod evidence;
 mod head;
+mod progress;
 
 /// See `mooring_core::status::task_state`, the one place a todo's state is decided.
 pub(super) use mooring_core::status::TaskState as TaskStatus;
@@ -161,6 +162,9 @@ impl Workbench {
                     ),
             );
         }
+        if let Some(progress) = self.progress_panel(task, cx) {
+            left = left.child(progress);
+        }
         left = left.child(self.criteria_panel(task, cx));
         div()
             .id("task-detail")
@@ -214,8 +218,8 @@ impl Workbench {
                                     .child(self.sessions_panel(task, &sessions, cx))
                                     .when(!sessions.is_empty(), |d| {
                                         d.child(muted(
-                                        "标记完成不会停掉关联会话；它们各自的结局仍在鸟瞰里处理。",
-                                    ))
+                                            "标记完成会把关联会话一起收尾，但不会停掉里面的程序。",
+                                        ))
                                     }),
                             ),
                     ),

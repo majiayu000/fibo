@@ -117,9 +117,10 @@ fn run() -> std::io::Result<()> {
             match args.next().as_deref() {
                 None => print!("{}", control::SKILL),
                 Some("plugins") => print!("{}", control::PLUGINS_SKILL),
+                Some("session") => print!("{}", control::SESSION_SKILL),
                 Some(other) => {
                     return Err(std::io::Error::other(format!(
-                        "没有叫 {other} 的说明；有：mooring --skill、mooring --skill plugins"
+                        "没有叫 {other} 的说明；有：mooring --skill、mooring --skill plugins、mooring --skill session"
                     )))
                 }
             }
