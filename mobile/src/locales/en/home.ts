@@ -159,6 +159,7 @@ export const home: Record<string, Entry> = {
   '要再连这台电脑得重新扫码配对。电脑那边的配对记录不受影响。':
     "To connect again you'll need to scan to pair. The computer's pairing record is not affected.",
   移除: 'Remove',
+  '未能移除这台电脑，请重试': "Couldn't remove this computer. Try again.",
   '权限：{role}': 'Permission: {role}',
   正在连接: 'Connecting',
   '{when}在线': 'Online {when}',
