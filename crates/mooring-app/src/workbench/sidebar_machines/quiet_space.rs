@@ -112,6 +112,10 @@ impl Workbench {
         }
         self.sidebar.motion.fly(&seat_key(id), &name, quiet, false);
         if quiet {
+            // Forgotten, not just hidden: coming back must not narrow the list again.
+            if self.sidebar.space_filter.as_deref() == Some(id) {
+                self.sidebar.space_filter = None;
+            }
             let filter = self.overview.filter_space.take().filter(|f| f != id);
             let next = (w.spaces.iter())
                 .find(|s| s.id != id && !w.space_quiet(&s.id))
@@ -418,6 +422,13 @@ impl Workbench {
     pub fn visual_unfold_quiet_spaces(&mut self, open: bool, cx: &mut Context<Self>) {
         self.sidebar.toggled.insert(ALL_KEY.to_owned(), open);
         cx.notify();
+    }
+    /// The list narrowed to this space, as a click on its chip does.
+    pub fn visual_narrow_to_space(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.toggle_space_filter(id, cx);
+    }
+    pub fn visual_stored_space_filter(&self) -> Option<String> {
+        self.sidebar.space_filter.clone()
     }
     pub fn visual_quiet_space_rows(&self, id: &str) -> usize {
         self.quiet_space_sessions(id).len()
