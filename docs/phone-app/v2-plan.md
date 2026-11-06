@@ -604,7 +604,7 @@
 
 ## 手机主页（11-07）
 
-依据：[同类调研](peerscope/rounds/20261107-s2/00-README.md)，设计稿在 `docs/phone-progress` 分支的 `home-design.html`。决定：采用；手机不做审 PR 和合并。放弃条件：用一周后首页还要滚很久才找到要处理的事，改试按空间。
+依据：[同类调研](peerscope/rounds/20261107-s2/00-README.md)，设计稿见 [home-design.html](home-design.html)。决定：采用；手机不做审 PR 和合并。放弃条件：用一周后首页还要滚很久才找到要处理的事，改试按空间。
 
 真机（OPPO，真实数据）验过：主页、看板、我的切换和返回键，在跑和等你验收折叠并记住，看全部，额度一行，搜索。写操作只在临时会话上做：手机信任文件夹、左滑已处理、撤销、放回收件箱，`remote-log.jsonl` 里 outcome 都成功。
 
