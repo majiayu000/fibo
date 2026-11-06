@@ -64,8 +64,27 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
                 .filter(|s| !s.cwd.is_empty() && Path::new(cwd).starts_with(&s.cwd))
                 .max_by_key(|s| s.cwd.len())
         })
+        .or_else(|| (w.spaces.iter()).find(|s| !w.space_quiet(&s.id)))
         .or_else(|| w.spaces.first())
         .ok_or_else(|| io::Error::other("那台电脑还没有空间"))?;
+    // Asked for by hand, so it is back; and the list leaves a space put aside out, so what
+    // opened there would vanish from the phone.
+    if w.space_quiet(&space.id) {
+        let edit = Edit::SetSpaceQuiet {
+            id: space.id.clone(),
+            quiet: false,
+        };
+        match rpc(
+            socket,
+            &Request::Edit {
+                edit,
+                request: None,
+            },
+        )? {
+            Reply::Workspace(_) => (),
+            other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+        }
+    }
     // A conversation's log belongs to its directory: resumed anywhere else, the CLI would
     // not find it.
     if session.is_some() && !asked.is_some_and(|c| Path::new(c).is_dir()) {

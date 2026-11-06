@@ -147,6 +147,9 @@ pub enum PaneEvent {
     Run { command: String, cwd: String },
     /// The turn's ask scrolled out of sight or back, for the header's 「↑ 你问」.
     PinnedAsk,
+    /// You typed or pasted into this terminal of this machine. Mouse and focus reports are
+    /// not this: scrolling a full-screen program is still only looking.
+    Typed,
 }
 impl gpui::EventEmitter<PaneEvent> for Pane {}
 impl Focusable for Pane {

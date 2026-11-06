@@ -47,6 +47,8 @@ pub(super) struct LayoutState {
     pub(super) space_switch: bool,
     /// 删除空间 was pressed once in the open space menu; the second press removes it.
     pub(super) space_removing: bool,
+    /// 先不管 pressed once on a space with something running: the menu says so and asks.
+    pub(super) space_quieting: bool,
     /// A sidebar session row's right-click menu: the session and where it was opened.
     pub(super) session_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
     /// The ✓ row unfolded in place: a session you marked complete opens nothing on a

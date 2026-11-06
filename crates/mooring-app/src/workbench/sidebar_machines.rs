@@ -12,6 +12,7 @@ use mooring_core::sidebar::{Bucket, Machines, Preset, all as all_presets};
 use mooring_remote::protocol::{Card, Phase};
 
 mod quiet;
+mod quiet_space;
 
 /// What another machine's row shows, worked out once per draw.
 pub(super) struct RemoteRow {

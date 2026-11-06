@@ -177,7 +177,9 @@ impl Hooks {
                 _ => format!("{}:{}", c.turn_key, c.turn_started),
             };
             let key = format!("{}:{key}", e.name());
-            if self.seeded && self.last.get(&s.id) != Some(&key) {
+            // Seen but not told, as the banners do: coming back sends no burst, and the next
+            // new fact is told again.
+            if self.seeded && self.last.get(&s.id) != Some(&key) && !w.session_quiet(s) {
                 let space = s
                     .terminal
                     .as_ref()
@@ -357,6 +359,41 @@ mod tests {
         }
     }
     use super::*;
+
+    /// A notifying plugin keeps 先不管's promise: nothing while aside, no burst on the way
+    /// back, and the next new fact is told.
+    #[test]
+    fn a_space_put_aside_fires_no_hooks_and_no_burst_on_return() {
+        use mooring_core::content::Turn;
+        use mooring_core::model::Edit;
+        let mut w = mooring_core::sample::every_state();
+        w.spaces.push(mooring_core::model::Space {
+            id: "other".into(),
+            name: "另一个".into(),
+            cwd: "/other".into(),
+        });
+        let quiet = |w: &mut Workspace, quiet| {
+            w.edit(Edit::SetSpaceQuiet {
+                id: "space".into(),
+                quiet,
+            })
+            .unwrap();
+        };
+        let mut hooks = Hooks::default();
+        quiet(&mut w, true);
+        hooks.changes(&w);
+        let id = "review";
+        let content = w.content.get_mut(id).unwrap();
+        content.turn = Turn::Waiting;
+        content.waiting = "继续吗？".into();
+        assert!(hooks.changes(&w).is_empty(), "nothing while aside");
+        quiet(&mut w, false);
+        assert!(hooks.changes(&w).is_empty(), "no burst on the way back");
+        w.content.get_mut(id).unwrap().waiting_episode += 1;
+        let fired = hooks.changes(&w);
+        assert_eq!(fired.len(), 1, "{fired:?}");
+        assert_eq!(fired[0].session, id);
+    }
 
     /// A plugin with a burst of slow hooks: the other plugin's event runs straight away
     /// though eight of the first are ahead of it.

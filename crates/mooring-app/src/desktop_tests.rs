@@ -320,3 +320,50 @@ fn a_banner_goes_once_its_session_no_longer_needs_you() {
     assert_eq!(gone, ["answered", "closed"]);
     assert!(left(&after, &after).is_empty());
 }
+/// Nothing a space put aside does calls you, its banners go, and taking it back is not news.
+#[test]
+fn a_space_put_aside_stays_silent_and_taking_it_back_sends_no_burst() {
+    use mooring_core::content::Turn;
+    let mut w = Workspace::default();
+    w.settings.notifications = true;
+    session(&mut w, "asks", Turn::Waiting, 60);
+    w.spaces.push(Space {
+        id: "other".into(),
+        name: "另一个".into(),
+        cwd: "/other".into(),
+    });
+    let mut idle = w.clone();
+    idle.content.get_mut("asks").unwrap().turn = Turn::Running;
+    idle.content.get_mut("asks").unwrap().waiting.clear();
+    assert_eq!(entered(&idle, &w, None).len(), 1, "it would call you");
+
+    let mut quiet_idle = idle.clone();
+    quiet_idle.quiet_spaces.insert("space".into());
+    let mut quiet = w.clone();
+    quiet.quiet_spaces.insert("space".into());
+    assert!(
+        entered(&quiet_idle, &quiet, None).is_empty(),
+        "no banner while aside"
+    );
+    assert_eq!(left(&w, &quiet), ["asks"], "the banner already shown goes");
+    let value: serde_json::Value =
+        serde_json::from_str(&panel(&quiet, &Link::fresh(RecognitionPhase::Healthy))).unwrap();
+    assert!(value["rows"].as_array().unwrap().is_empty());
+    assert_eq!(value["badge"], "");
+
+    assert!(
+        entered(&quiet, &w, None).is_empty(),
+        "no burst on the way back"
+    );
+    let value: serde_json::Value =
+        serde_json::from_str(&panel(&w, &Link::fresh(RecognitionPhase::Healthy))).unwrap();
+    assert_eq!(
+        value["rows"].as_array().unwrap().len(),
+        1,
+        "it counts again"
+    );
+    // Its next new fact is a banner again.
+    let mut next = w.clone();
+    next.content.get_mut("asks").unwrap().waiting_episode += 1;
+    assert_eq!(entered(&w, &next, None).len(), 1);
+}
