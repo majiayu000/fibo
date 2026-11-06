@@ -33,7 +33,13 @@ impl Workbench {
         for c in self.workspace.content.values_mut() {
             c.hidden_reason = "visual".into();
         }
-        let Some(tab) = self.workspace.tabs.iter().find(|t| t.id == "dense").cloned() else {
+        let Some(tab) = self
+            .workspace
+            .tabs
+            .iter()
+            .find(|t| t.id == "dense")
+            .cloned()
+        else {
             return;
         };
         let now = now();
@@ -83,5 +89,14 @@ impl Workbench {
             );
         }
         self.facts.forget();
+    }
+    /// A session's turn ends, as its log would say.
+    pub fn visual_finish_turn(&mut self, session: &str, cx: &mut Context<Self>) {
+        if let Some(c) = self.workspace.content.get_mut(session) {
+            c.turn = Turn::Completed;
+            c.completed_claim = true;
+        }
+        self.facts.forget();
+        cx.notify();
     }
 }

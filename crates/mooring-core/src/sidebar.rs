@@ -108,7 +108,7 @@ pub struct Preset {
     pub fold: Vec<Bucket>,
     #[serde(default)]
     pub detail: Detail,
-    /// Session rows before the rest hand off to 鸟瞰.
+    /// Session rows before the rest hand off to 鸟瞰, where `row_limit` applies it.
     #[serde(default = "default_limit")]
     pub limit: usize,
     /// With `"group": "wasm"`: the module beside `sidebar.json` that arranges the list.
@@ -128,6 +128,15 @@ impl Preset {
     pub fn wasm_path(&self) -> Option<PathBuf> {
         let name = self.wasm.as_ref()?;
         Some(self.file.parent()?.join(name))
+    }
+    /// How many session rows a list shows. 会话优先's layouts have no such number: the
+    /// column scrolls, and a shared count let 要你处理 use up 在跑's rows (11-06).
+    pub fn row_limit(&self) -> usize {
+        if self.group == Grouping::Recent {
+            usize::MAX
+        } else {
+            self.limit
+        }
     }
     pub fn folds(&self, b: Bucket) -> bool {
         self.fold.contains(&b)
@@ -316,6 +325,14 @@ pub fn report() -> &'static [Loaded] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_layouts_that_scroll_hide_no_rows_and_the_others_keep_their_limit() {
+        for id in ["recent", "machine-rail", "machine-fold"] {
+            assert_eq!(find(id).row_limit(), usize::MAX, "{id}");
+        }
+        assert_eq!(find("directory").row_limit(), 100);
+    }
 
     #[test]
     fn plugin_presets_add_to_the_builtin_ones() {

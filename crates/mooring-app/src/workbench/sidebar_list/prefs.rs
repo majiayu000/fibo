@@ -27,6 +27,7 @@ pub(in crate::workbench) struct SidebarPrefs {
     /// 先不管这台's menu: which machine and where it was opened. Not saved.
     pub machine_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
     pub(in crate::workbench) motion: super::super::sidebar_motion::SidebarMotion,
+    pub(in crate::workbench) scroll: ListScroll,
 }
 impl SidebarPrefs {
     fn path() -> Option<PathBuf> {
@@ -55,6 +56,7 @@ impl SidebarPrefs {
             machine_space: None,
             machine_menu: None,
             motion: Default::default(),
+            scroll: Default::default(),
         }
     }
     /// Best effort: a choice that cannot be written still holds until quit.

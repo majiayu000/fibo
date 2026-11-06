@@ -73,7 +73,7 @@ pub(super) fn tab_name(
 }
 
 pub(super) struct Redraw {
-    sidebar: Entity<SidebarView>,
+    pub(super) sidebar: Entity<SidebarView>,
     /// An empty view inside the workbench: notifying it redraws the workbench (its
     /// parent) without asking the sidebar to draw again.
     tick: Entity<Tick>,
@@ -251,7 +251,7 @@ impl Workbench {
 
 /// Draws the sidebar next frame. Marked as asked, so the workbench drawing beside it
 /// in that frame sets no further catch-up: a catch-up never sets off the next one.
-fn ask(view: &Entity<SidebarView>, cx: &mut gpui::App) {
+pub(super) fn ask(view: &Entity<SidebarView>, cx: &mut gpui::App) {
     #[cfg(feature = "visual-test")]
     FIRED.store(true, std::sync::atomic::Ordering::Relaxed);
     view.update(cx, |v, cx| {
