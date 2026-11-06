@@ -195,6 +195,26 @@ PAGES = '''Main MainSpace StatusSessions HereClickOut SidebarTodos BoardDrawer B
     Overview Menubar BoardDrag BoardRefuseDrag'''.split()
 
 
+def stop_processes(pattern):
+    subprocess.run(['pkill', '-f', pattern], check=False)
+    time.sleep(1)
+    subprocess.run(['pkill', '-9', '-f', pattern], check=False)
+
+
+def perf_dirs():
+    return {p.name for p in (pathlib.Path.home() / 'Library/Caches/MooringPerf').glob('p-*')}
+
+
+def perf_step(out, work):
+    """perf-gate starts hundreds of stand-in Agents that loop forever, each on a terminal, and
+    leaves them behind: one run used 300 of the machine's 511 and failed the next run's scenes."""
+    before = perf_dirs()
+    code = step(out, 'perf-gate', [sys.executable, 'scripts/perf-gate.py', 'target/release', str(out / 'perf-gate')], work)
+    for name in perf_dirs() - before:
+        stop_processes(f'MooringPerf/{name}')
+    return code
+
+
 def step(out, name, cmd, cwd, env=ENV, timeout=2400):
     log = out / f'{name}.log'
     start = time.time()
@@ -225,10 +245,7 @@ def scene(bin_dir, name, value, out):
         return 'pass' if code == 0 and 'panicked' not in log else f'fail {code}'
     finally:
         # The host outlives the app by design, and a failed scene may not have stopped it.
-        pattern = f'serve --runtime {root}/rt'
-        subprocess.run(['pkill', '-f', pattern], check=False)
-        time.sleep(1)
-        subprocess.run(['pkill', '-9', '-f', pattern], check=False)
+        stop_processes(f'{root}/')
         shutil.rmtree(root, ignore_errors=True)
 
 
@@ -331,7 +348,7 @@ def measure(args):
     awake = subprocess.Popen(['caffeinate', '-dimsu', '-w', str(os.getpid())])
     r = {'sha': sha}
     if args.repeat:
-        r['perf-gate'] = step(out, 'perf-gate', [sys.executable, 'scripts/perf-gate.py', 'target/release', str(out / 'perf-gate')], work)
+        r['perf-gate'] = perf_step(out, work)
     elif not args.only:
         visual = ['--features', 'visual-test']
         for name, cmd, cwd in (
@@ -345,10 +362,10 @@ def measure(args):
             ('mobile-types', ['bun', 'run', 'typecheck'], work / 'mobile'),
             ('protocol', [sys.executable, '-I', 'check.py'], work / 'eval/protocol-contract'),
             ('build-release', ['cargo', 'build', '--release', '-p', 'mooring-host', '-p', 'mooring-app', '--features', 'mooring-app/visual-test'], work),
-            ('perf-gate', [sys.executable, 'scripts/perf-gate.py', 'target/release', str(out / 'perf-gate')], work),
+            ('perf-gate', None, work),
             ('theme-scenes', [sys.executable, 'scripts/theme-scenes.py', 'target/release', str(out / 'theme-scenes')], work),
         ):
-            r[name] = step(out, name, cmd, cwd)
+            r[name] = perf_step(out, work) if name == 'perf-gate' else step(out, name, cmd, cwd)
         for name, cmd in (('default', ['cargo', 'test', '--workspace', '--', '--list']), ('visual-test', ['cargo', 'test', '-p', 'mooring-app', *visual, '--', '--list'])):
             step(out, f'list-{name}', cmd, work)
         names = [f'default\t{n}' for n in test_names(out / 'list-default.log')] + [f'visual-test\t{n}' for n in test_names(out / 'list-visual-test.log')]
@@ -356,6 +373,7 @@ def measure(args):
     step(out, 'build-debug', ['cargo', 'build', '-p', 'mooring-host', '-p', 'mooring-app', '--features', 'mooring-app/visual-test'], work)
     r['scenes'] = scenes(work, out, set(args.only.split(',')) if args.only else None)
     (out / 'measure.json').write_text(json.dumps(r, indent=1, ensure_ascii=False))
+    stop_processes(f'{work}/target/')  # hosts a failed fixture run left behind
     awake.terminate()
     return 0
 
