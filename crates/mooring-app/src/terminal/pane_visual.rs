@@ -4,6 +4,9 @@ use crate::terminal::screen;
 use gpui::{Bounds, Context, EntityInputHandler, Pixels, Window};
 use mooring_core::terminal::libghostty_vt::terminal::ScrollViewport;
 
+/// What `visual_pinned_ask` reports.
+pub type PinnedAskProbe = (Vec<Option<usize>>, Option<(String, bool)>, Option<String>);
+
 impl Pane {
     pub fn visual_type(&mut self, text: &str, cx: &mut Context<Self>) {
         self.input(text.as_bytes().to_vec(), cx);
@@ -45,9 +48,7 @@ impl Pane {
     }
     /// Where each ask was found, and what is pinned: the newest ask's text and whether
     /// it scrolls back, and the text of the ask whose answer is being read.
-    pub fn visual_pinned_ask(
-        &self,
-    ) -> (Vec<Option<usize>>, Option<(String, bool)>, Option<String>) {
+    pub fn visual_pinned_ask(&self) -> PinnedAskProbe {
         (
             self.ask.ask_rows.clone(),
             self.pinned_latest(),

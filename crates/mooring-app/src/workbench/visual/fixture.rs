@@ -387,7 +387,7 @@ impl Workbench {
         &self,
         id: &str,
         cx: &gpui::App,
-    ) -> (Vec<Option<usize>>, Option<(String, bool)>, Option<String>) {
+    ) -> crate::terminal::pane::visual::PinnedAskProbe {
         self.layout.panes[id].read(cx).visual_pinned_ask()
     }
     pub fn visual_scroll_row(&self, id: &str, row: usize, cx: &mut Context<Self>) {
