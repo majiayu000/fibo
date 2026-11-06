@@ -6,10 +6,9 @@ field background	crates/mooring-app/src/terminal/screen_extras.rs	1
 field background	crates/mooring-app/src/terminal/screen_paint.rs	2
 field background	crates/mooring-app/src/ui/theme.rs	1
 field background	crates/mooring-app/src/workbench/sidebar_list/session_row.rs	1
-field background	crates/mooring-host/src/host/found_shells.rs	2
 field background	crates/mooring-host/src/host/mod.rs	1
 field background	crates/mooring-host/src/host/report_back.rs	1
-field background	crates/mooring-host/src/host/shell_watch.rs	2
+field background	crates/mooring-host/src/host/shell_watch.rs	4
 field content-name	crates/mooring-host/src/control.rs	1
 field content-name	crates/mooring-host/src/plugins_cmd.rs	1
 field content-title	crates/mooring-app/src/native.m	1

@@ -207,9 +207,9 @@ pub trait Adapter: Sync {
     fn screen_busy(&self, _tail: &str) -> Option<bool> {
         None
     }
-    /// Whether the bottom of the screen says a turn that ended left a command running.
-    fn left_running(&self, _tail: &str) -> bool {
-        false
+    /// Where the commands a turn left running are known from.
+    fn background_commands(&self) -> BackgroundCommands {
+        BackgroundCommands::Hooks
     }
     /// Whether a conversation can run outside the PTY (a shared daemon), leaving no process
     /// or open-file evidence: then a log binds to a terminal only by what its screen shows,
@@ -247,6 +247,17 @@ pub(crate) const DEFAULT_SCREEN_RULES: &str = include_str!("screen/claude.json")
 pub struct Hooks {
     pub settings: PathBuf,
     pub events: &'static [&'static str],
+}
+
+/// How a CLI tells what a turn that ended left running. Either way the commands get the
+/// same judgment, job or server (`background_shells::judge`).
+#[derive(Clone, Copy)]
+pub enum BackgroundCommands {
+    /// Its Stop hook lists them with their commands; a CLI with no such hook lists none.
+    Hooks,
+    /// Only its screen says so, read by this function. Which commands is found among the
+    /// children of its processes (`cli_commands`), claimed by the log that started them.
+    Screen(fn(&str) -> bool),
 }
 
 pub fn adapter(agent: Agent) -> &'static dyn Adapter {

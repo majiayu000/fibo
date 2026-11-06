@@ -18,6 +18,20 @@ pub(super) fn left_running(tail: &str) -> bool {
 mod tests {
     use super::left_running;
 
+    /// The strategy, not the host, says who reads the screen: the host never names a CLI.
+    #[test]
+    fn only_codex_reads_its_screen_for_background_commands() {
+        use crate::agents::{adapter, BackgroundCommands};
+        use mooring_core::model::Agent;
+        let screen = |a| {
+            matches!(
+                adapter(a).background_commands(),
+                BackgroundCommands::Screen(_)
+            )
+        };
+        assert!(screen(Agent::Codex));
+        assert!(!screen(Agent::Claude));
+    }
     /// Bottom lines as a real Codex 0.167 drew them, 2026-11-06.
     #[test]
     fn only_a_turn_that_ended_leaves_a_background_terminal() {

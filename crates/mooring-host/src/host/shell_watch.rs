@@ -3,6 +3,7 @@
 //! while such a turn exists; otherwise the thread waits for the next commit.
 use super::*;
 use crate::background_shells::{self as shells, Judged, Seen};
+use mooring_core::content::Background;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -166,12 +167,23 @@ impl Host {
             })
             .collect()
     }
-    /// Marks each listed shell of a live session a job or not, and counts the jobs.
+    /// Marks each shell of a live session a job or not, and counts the jobs: the ones its
+    /// hook listed, or for a CLI only whose screen tells, the ones found.
     pub(super) fn overlay_shells(&self, w: &mut Workspace) {
         for s in w.agent_sessions.iter().filter(|s| s.current) {
             let Some(c) = w.content.get_mut(&s.id) else {
                 continue;
             };
+            let found = s.terminal.as_ref().and_then(|t| self.found_tasks(t, &s.id));
+            if let Some(tasks) = found {
+                c.background = Some(Background {
+                    shells: tasks.len() as u32,
+                    jobs: tasks.iter().filter(|t| t.job).count() as u32,
+                    ..c.background.unwrap_or_default()
+                });
+                c.shells = tasks;
+                continue;
+            }
             if c.shells.is_empty() {
                 continue;
             }
@@ -210,12 +222,14 @@ fn look_for_commands(
         claimed.clear();
         return;
     }
-    let name = std::env::var("MOORING_CODEX_PROCESS");
-    let executable = name
-        .as_deref()
-        .unwrap_or(mooring_core::agent::Agent::Codex.executable());
-    let commands = crate::cli_commands::commands_of(executable);
-    for (session, log) in looking {
+    // Each CLI's processes once per look, whatever number of its sessions are looked for.
+    let mut of_cli: HashMap<&'static str, Vec<(u32, String)>> = HashMap::new();
+    // The system names a process by its file; a test's fake CLI is a link to the shell.
+    let fake = std::env::var("MOORING_CLI_PROCESS").ok();
+    for (session, agent, log) in looking {
+        let commands = of_cli.entry(agent.executable()).or_insert_with_key(|name| {
+            crate::cli_commands::commands_of(fake.as_deref().unwrap_or(name))
+        });
         let mine: Vec<(String, u32)> = commands
             .iter()
             .filter(|(pid, command)| {

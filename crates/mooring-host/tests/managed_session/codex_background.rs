@@ -106,7 +106,7 @@ fn a_codex_command_left_running_stays_running_across_a_new_host() {
     }
 }
 
-/// A server Codex left running is not its turn going on. Undoing `overlay_found` leaves it
+/// A server Codex left running is not its turn going on. Undoing `keep_ended_turns` or `found_tasks` leaves it
 /// 在跑 for as long as it stays up.
 #[test]
 fn a_server_codex_left_running_is_waiting_on_the_background() {

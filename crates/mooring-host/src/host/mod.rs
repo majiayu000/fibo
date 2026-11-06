@@ -211,7 +211,7 @@ impl Host {
             };
             mooring_core::program_state::apply(c, r);
         }
-        self.overlay_found(&mut w);
+        self.keep_ended_turns(&mut w);
         w
     }
     fn set_screen_wait(

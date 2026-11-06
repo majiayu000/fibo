@@ -183,8 +183,8 @@ pub(crate) fn fixture_command(root: &std::path::Path) -> Command {
         // Tests that need Claude Code's official status write this script; others have none.
         .env("MOORING_CLAUDE_AGENTS", root.join("claude-agents"))
         .env("MOORING_CODEX_CONTROL", root.join("codex-control.sock"))
-        // The fake `codex` is a link to the shell, and the system names a process by its file.
-        .env("MOORING_CODEX_PROCESS", "bash")
+        // A fake CLI is a link to the shell, and the system names a process by its file.
+        .env("MOORING_CLI_PROCESS", "bash")
         // Grok's registry of live sessions is read from its home, not the fixture roots.
         .env("GROK_HOME", root.join("grok-home"))
         // The host starts `mooring remote --relay`; here it runs inside the test binary.

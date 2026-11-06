@@ -39,6 +39,8 @@ Codex 的 hook 不报后台 shell，它上报的 `working` 也不分任务和服
 
 这是读日志文字来认归属，不是用文字判断任务还是服务，后者仍然只看端口。
 
+哪个 CLI 走哪条路只由 `Adapter::background_commands` 决定（`Hooks` 或 `Screen`），宿主里不写具体 CLI 的名字。再来一个只有屏幕能说明的 CLI，实现这一个方法就够。
+
 ## 踩过的真实案例
 
 以后再判错，就在这张表和 `background_shells.rs` 的 `known_cases` 各加一行，再改规则。规则改动不能让任何一行变红。
