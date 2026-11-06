@@ -311,6 +311,7 @@ pub fn git(dir: &Path, args: &[&str]) {
         ])
         .args(args)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
