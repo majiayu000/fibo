@@ -14,5 +14,5 @@ frames-themeimage 6.46
 frames-themepaper 6.48
 frames-turning 6.26
 pane-share 0.11
-settings-open 6.88
+settings-open 4.92
 theme-share 1.16
