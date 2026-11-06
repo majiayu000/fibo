@@ -1,22 +1,24 @@
 // The mode that stops asking: a second confirmation and Face ID first, and only then the field
 // the computer wants. Anything else that goes through here cannot carry it.
 import { beforeEach, expect, mock, test } from 'bun:test';
+import { rn } from './rn';
 
 const sent: any[] = [];
 let answer = true;
 let lock = false;
 let passes = true;
 const asked: string[] = [];
-mock.module('react-native', () => ({
-  Platform: { OS: 'ios' },
-  AppState: { addEventListener: () => ({ remove() {} }) },
-  Alert: {
+mock.module('react-native', () =>
+  rn({
+    Platform: { OS: 'ios' },
+    Alert: {
     alert: (title: string, detail: string, buttons: { text: string; onPress?: () => void }[]) => {
       asked.push(`${title}\n${detail}`);
       buttons[answer ? 1 : 0].onPress?.();
     },
-  },
-}));
+    },
+  }),
+);
 mock.module('expo-local-authentication', () => ({
   hasHardwareAsync: async () => true,
   authenticateAsync: async () => ({ success: passes }),

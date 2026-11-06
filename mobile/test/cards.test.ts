@@ -1,12 +1,10 @@
 // A busy computer used to cost the phone its whole list per event: 54–76 MB an hour measured on
 // a real phone with 25 terminals. It now sends what changed, no more often than GAP_MS.
 import { beforeEach, expect, mock, test } from 'bun:test';
+import { rn } from './rn';
 import { GAP_MS, MERGE_MS, patch, refreshWait } from '../src/remote/cards';
 
-mock.module('react-native', () => ({
-  AppState: { addEventListener: () => ({ remove() {} }) },
-  Platform: { OS: 'web' },
-}));
+mock.module('react-native', () => rn());
 mock.module('../src/store/machines', () => ({
   loadMachines: async () => [],
   saveMachine: async () => undefined,
