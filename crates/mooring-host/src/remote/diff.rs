@@ -1,7 +1,9 @@
 //! `diff`: what changed in a work tree against HEAD, untracked files included, for the
 //! phone's 改动 view. Read only: git runs with `core.fsmonitor` off and no optional locks,
-//! so it neither starts a monitor nor rewrites the index. Patches are capped per file and
-//! in all; a file past the cap still lists, with its counts and `truncated`.
+//! so it neither starts a monitor nor rewrites the index. A folder may hold what a stranger
+//! wrote: a git directory checked into a project is no repository here, since its config
+//! would run commands, and no textconv driver runs. Patches are capped per file and in all;
+//! a file past the cap still lists, with its counts and `truncated`.
 use mooring_core::model::Workspace;
 use mooring_core::protocol::*;
 use mooring_remote::protocol as rp;
@@ -35,7 +37,7 @@ pub(super) fn diff(socket: &Path, request: &Value, role: super::Role) -> io::Res
         },
         (None, None) => return Err(io::Error::other("diff 需要 terminal 或 cwd")),
     };
-    let mut diff = read(&cwd)?;
+    let mut diff = read(&cwd, role)?;
     diff.checks = checks;
     fit(&mut diff);
     Ok(json!(diff))
@@ -63,6 +65,7 @@ fn git(dir: &Path) -> Command {
     c.arg("-C")
         .arg(dir)
         .args(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false"])
+        .args(["-c", "safe.bareRepository=explicit"])
         .env("GIT_OPTIONAL_LOCKS", "0")
         .stdin(Stdio::null())
         .stderr(Stdio::null());
@@ -81,13 +84,18 @@ fn fields(bytes: &[u8]) -> Vec<String> {
 }
 
 /// The diff of the work tree holding `cwd`.
-pub(crate) fn read(cwd: &Path) -> io::Result<rp::Diff> {
+pub(crate) fn read(cwd: &Path, role: super::Role) -> io::Result<rp::Diff> {
     let not_git = || io::Error::other("这里不是 git 仓库");
     if !cwd.is_dir() {
         return Err(io::Error::other("目录不存在"));
     }
     let top = output(git(cwd).args(["rev-parse", "--show-toplevel"]))?.ok_or_else(not_git)?;
     let top = PathBuf::from(String::from_utf8_lossy(&top).trim_end());
+    // A repository holding home would show `~/.ssh` as untracked files. To a role that may
+    // not see the machine's folders, it reads as if home were no repository at all.
+    if !role.allows("dirs") && super::diff_scope::holds_home(&top) {
+        return Err(not_git());
+    }
     let branch = output(git(&top).args(["symbolic-ref", "--short", "-q", "HEAD"]))?
         .map(|b| String::from_utf8_lossy(&b).trim().to_owned())
         .unwrap_or_default();
@@ -95,7 +103,7 @@ pub(crate) fn read(cwd: &Path) -> io::Result<rp::Diff> {
     let base = if head { "HEAD" } else { EMPTY_TREE };
     let diff = |extra: &[&str]| {
         let mut c = git(&top);
-        c.args(["diff", "-M", "--no-color", "--no-ext-diff"])
+        c.args(["diff", "-M", "--no-color", "--no-ext-diff", "--no-textconv"])
             .args(extra);
         c.args([base, "--"]);
         c

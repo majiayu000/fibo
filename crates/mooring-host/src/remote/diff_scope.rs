@@ -4,7 +4,9 @@
 //! so a refusal never tells whether a path exists or is a repository.
 use mooring_core::{model::Workspace, protocol::*};
 use std::collections::BTreeSet;
+use std::fs;
 use std::io;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 const REFUSED: &str = "这个目录不在工作台里，这台设备看不了";
@@ -29,9 +31,29 @@ fn known(w: &Workspace) -> BTreeSet<PathBuf> {
         .collect()
 }
 
+/// Whether `dir` is home or holds it. No home to compare with: assume it does.
+pub(super) fn holds_home(dir: &Path) -> bool {
+    let home = super::dirs::home().and_then(|home| home.canonicalize());
+    home.map_or(true, |home| holds(dir, &home))
+}
+
+/// By file identity, not by path: `/System/Volumes/Data/Users/me` is `/Users/me` through a
+/// firmlink, and `realpath` leaves it as written. So `dir` holds home when any tail of
+/// home's path, joined to `dir`, is home: this covers home itself, each folder above it,
+/// and the data volume's root, which is no folder above it in the path.
+fn holds(dir: &Path, home: &Path) -> bool {
+    let id = |path: &Path| fs::metadata(path).map(|m| (m.dev(), m.ino())).ok();
+    let Some(home_id) = id(home) else {
+        return true;
+    };
+    (home.ancestors())
+        .filter_map(|above| home.strip_prefix(above).ok())
+        .any(|tail| id(&dir.join(tail)) == Some(home_id))
+}
+
 /// Compares real paths by component, so `..` and links can't leave a known folder. A known
-/// folder holding home (home itself, or `/`) passes only as itself: terminals often start
-/// there, and "inside it" would be the whole home. A known folder since deleted stays
+/// folder holding home passes only as itself: terminals often start there, and "inside it"
+/// would be the whole home. A known folder since deleted stays
 /// itself too, for `read` to say it is gone; it answers nothing about any other path.
 fn allowed(wanted: &Path, known: &BTreeSet<PathBuf>, home: &Path) -> Option<PathBuf> {
     let Ok(real) = wanted.canonicalize() else {
@@ -39,14 +61,13 @@ fn allowed(wanted: &Path, known: &BTreeSet<PathBuf>, home: &Path) -> Option<Path
     };
     let home = home.canonicalize().ok()?;
     (known.iter().filter_map(|dir| dir.canonicalize().ok()))
-        .any(|dir| real == dir || (real.starts_with(&dir) && !home.starts_with(&dir)))
+        .any(|dir| real == dir || (real.starts_with(&dir) && !holds(&dir, &home)))
         .then_some(real)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use std::os::unix::fs::symlink;
 
     /// A tree of its own: `home/`, `home/project/sub`, `home/projectile`, `elsewhere/`.
@@ -154,6 +175,37 @@ mod tests {
             Some(t.at("home/project/sub"))
         );
         assert_eq!(allowed(&t.at("home/projectile"), &known, &t.home()), None);
+    }
+
+    /// A firmlink names home at a path `realpath` keeps, so only identity sees through it.
+    /// The temp folder is under `/private`, which the data volume firmlinks on macOS.
+    #[test]
+    fn home_through_a_firmlink_is_still_home() {
+        let t = Tree::new("firmlink");
+        let data = Path::new("/System/Volumes/Data");
+        let alias = |path: &Path| data.join(path.strip_prefix("/").unwrap());
+        let home = t.home();
+        let (aliased, project) = (alias(&home), alias(&t.at("home/project")));
+        let id = |p: &Path| fs::metadata(p).map(|m| (m.dev(), m.ino())).ok();
+        if id(&aliased).is_none() || id(&aliased) != id(&home) {
+            eprintln!("no firmlink for {home:?} here: nothing to check");
+            return;
+        }
+        assert_eq!(
+            aliased.canonicalize().unwrap(),
+            aliased,
+            "realpath keeps it"
+        );
+        for root in [aliased.clone(), alias(&t.0), data.to_path_buf()] {
+            assert!(holds(&root, &home), "{root:?}");
+            let known = BTreeSet::from([root.clone()]);
+            assert_eq!(allowed(&project, &known, &home), None, "inside {root:?}");
+            assert_eq!(allowed(&root, &known, &home), Some(root.clone()));
+        }
+        // A project named through the firmlink is no wider than itself.
+        let known = BTreeSet::from([project.clone()]);
+        assert!(!holds(&project, &home));
+        assert_eq!(allowed(&project, &known, &home), Some(project.clone()));
     }
 
     /// `read` says "目录不存在" of a conversation's deleted folder; what was inside it,
