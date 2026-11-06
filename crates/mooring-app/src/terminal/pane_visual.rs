@@ -8,6 +8,31 @@ use mooring_core::terminal::libghostty_vt::terminal::ScrollViewport;
 pub type PinnedAskProbe = (Vec<Option<usize>>, Option<(String, bool)>, Option<String>);
 
 impl Pane {
+    pub fn visual_probe(&self) -> (bool, bool, usize, bool, Option<String>) {
+        let dirty = self
+            .connection
+            .dirty
+            .load(std::sync::atomic::Ordering::Acquire);
+        let error = self
+            .connection
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.error.clone());
+        (
+            self.visual_vt_ready(),
+            self.capture.is_some(),
+            self.screen.rows.len(),
+            dirty,
+            error,
+        )
+    }
+    pub fn visual_vt_ready(&self) -> bool {
+        self.connection.state.lock().is_ok_and(|s| s.vt.is_some())
+    }
+    pub fn visual_first_screen(&self) -> bool {
+        self.capture.is_some() && !self.screen.rows.is_empty()
+    }
     pub fn visual_type(&mut self, text: &str, cx: &mut Context<Self>) {
         self.input(text.as_bytes().to_vec(), cx);
     }
