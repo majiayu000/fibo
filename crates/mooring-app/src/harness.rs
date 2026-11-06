@@ -16,6 +16,7 @@ mod follow_input_evidence;
 mod keymap_evidence;
 mod layout_evidence;
 mod link_evidence;
+mod mouse_taken_evidence;
 mod new_space_evidence;
 mod osc7_evidence;
 mod overview_evidence;
@@ -106,6 +107,9 @@ pub fn start(
         return;
     }
     if selection_pixel_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    if mouse_taken_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
     if selection_evidence::start(handle, evidence.clone(), cx) {

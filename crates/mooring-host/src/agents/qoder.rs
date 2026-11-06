@@ -1,8 +1,8 @@
 //! Qoder CLI: `~/.qoder/projects/<encoded cwd>/<id>.jsonl`, written in Claude Code's
 //! transcript format (`user`/`assistant`/`system` records naming `sessionId` and `cwd`), so
 //! records are read as Claude's. A session opens with `workspace-directories` before any
-//! record names its cwd. Subagents and the older `transcript/` layout sit in folders beside
-//! the sessions and are not read.
+//! record names its cwd. Child logs under `<session>/subagents/` have their own agent id;
+//! the older `transcript/` layout is not read.
 use super::{claude::Claude, Adapter};
 use crate::content::Parser;
 use mooring_core::content::Source;
@@ -10,6 +10,21 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 pub struct Qoder;
+
+fn child_dir(dir: &Path) -> Option<&Path> {
+    let parent = dir.parent()?;
+    (dir.file_name()? == "subagents"
+        && parent.parent()?.parent()?.file_name()? == "projects"
+        && uuid::Uuid::parse_str(parent.file_name()?.to_str()?).is_ok())
+    .then_some(parent)
+}
+fn child_parent(path: &Path) -> Option<&Path> {
+    path.file_stem()?
+        .to_str()?
+        .strip_prefix("agent-")
+        .filter(|id| !id.is_empty())?;
+    child_dir(path.parent()?)
+}
 impl Adapter for Qoder {
     fn root(&self, home: &Path) -> PathBuf {
         home.join(".qoder").join("projects")
@@ -23,18 +38,54 @@ impl Adapter for Qoder {
     }
     fn is_transcript(&self, path: &Path) -> bool {
         path.extension().is_some_and(|e| e == "jsonl")
-            && path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok())
+            && (child_parent(path).is_some()
+                || path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok()))
     }
-    /// Only the project folders; what sits inside them belongs to a session.
+    /// Project folders, session child directories and their subagents, not old transcripts.
     fn descend(&self, dir: &Path) -> bool {
         dir.parent()
             .and_then(Path::file_name)
             .is_some_and(|n| n == "projects")
+            || (dir
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::file_name)
+                .is_some_and(|n| n == "projects")
+                && dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| uuid::Uuid::parse_str(n).is_ok()))
+            || child_dir(dir).is_some()
+    }
+    fn links_children(&self) -> bool {
+        true
+    }
+    fn observe_file(&self, parser: &mut Parser, path: &Path) {
+        if let Some(parent) = child_parent(path) {
+            parser.card.parent = parent.file_name().unwrap().to_string_lossy().into_owned();
+            parser.hide("Qoder 子代理");
+            if let Some(meta) = std::fs::read(path.with_extension("meta.json"))
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+            {
+                parser.card.agent_name = meta["description"]
+                    .as_str()
+                    .or_else(|| meta["agentType"].as_str())
+                    .unwrap_or("")
+                    .to_owned();
+            }
+        }
     }
     fn identity(&self, path: &Path, value: &Value) -> Option<(String, String)> {
+        if child_parent(path).is_some() {
+            return Some((
+                path.file_stem()?.to_str()?.strip_prefix("agent-")?.into(),
+                value["cwd"].as_str()?.into(),
+            ));
+        }
         if value["type"] == "workspace-directories" {
             return Some((
                 value["sessionId"].as_str()?.into(),
@@ -50,7 +101,15 @@ impl Adapter for Qoder {
         Claude.is_user(record)
     }
     fn add(&self, parser: &mut Parser, record: &Value, at: u64, source: &Source) {
-        Claude.add(parser, record, at, source);
+        // Qoder's separate child log owns its turns. Claude's sidechain flag normally
+        // suppresses those records, so normalize only this adapter's event for its reader.
+        if record["isSidechain"] == true {
+            let mut event = record.clone();
+            event["isSidechain"] = false.into();
+            Claude.add(parser, &event, at, source);
+        } else {
+            Claude.add(parser, record, at, source);
+        }
     }
 }
 

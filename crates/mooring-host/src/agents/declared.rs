@@ -92,11 +92,23 @@ impl Adapter for Declared {
         ))
     }
     fn metadata(&self, parser: &mut Parser, record: &Value) {
-        // Someone ran it in a terminal; a declaration cannot say otherwise.
-        parser.card.interactive = true;
+        let parent = self
+            .transcripts()
+            .and_then(|t| record.pointer(t.parent.as_deref()?))
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty());
+        if let Some(parent) = parent {
+            parser.card.parent = parent.to_owned();
+            parser.hide("子代理");
+        } else if parser.card.parent.is_empty() {
+            parser.card.interactive = true;
+        }
         if self.is_user(record) {
             parser.machine_prompt(&self.text(record));
         }
+    }
+    fn links_children(&self) -> bool {
+        self.transcripts().is_some_and(|t| t.parent.is_some())
     }
     fn is_user(&self, record: &Value) -> bool {
         self.transcripts()
@@ -123,6 +135,9 @@ impl Adapter for Declared {
             .map(str::trim)
             .filter(|n| !n.is_empty())
         {
+            if !parser.card.parent.is_empty() {
+                parser.card.agent_name = name.to_owned();
+            }
             if !parser.custom_name {
                 parser.card.name = name.to_owned();
             }

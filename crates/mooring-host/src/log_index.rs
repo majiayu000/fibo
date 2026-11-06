@@ -484,19 +484,21 @@ impl Index {
     pub fn take_touched(&mut self) -> Vec<Transcript> {
         std::mem::take(&mut self.touched)
     }
-    /// Logs of recent subagents of these Codex threads, newest first, at most `limit`.
-    pub fn child_logs(&self, parents: &[String], limit: usize) -> io::Result<Vec<String>> {
+    /// Logs of recent subagents of these threads, newest first, at most `limit`.
+    pub fn child_logs(&self, parents: &[(Agent, String)], limit: usize) -> io::Result<Vec<String>> {
         let since = mooring_core::content::now().saturating_sub(86400) as i64;
         let mut q = self
             .db
             .prepare_cached(
-                "SELECT path FROM subagent_links WHERE parent=?1 AND updated>=?2 ORDER BY updated DESC",
+                "SELECT l.path FROM subagent_links l JOIN log_files f ON f.path=l.path WHERE l.parent=?1 AND l.updated>=?2 AND f.runtime=?3 ORDER BY l.updated DESC",
             )
             .map_err(err)?;
         let mut out = Vec::new();
-        for parent in parents {
+        for (runtime, parent) in parents {
             let rows = q
-                .query_map(params![parent, since], |r| r.get::<_, String>(0))
+                .query_map(params![parent, since, runtime.executable()], |r| {
+                    r.get::<_, String>(0)
+                })
                 .map_err(err)?;
             for row in rows {
                 out.push(row.map_err(err)?);
@@ -557,19 +559,5 @@ fn agent(s: &str) -> io::Result<Agent> {
 
 /// The transcript whose subagent `path` describes: `<dir>/<session>.jsonl` for
 /// `<dir>/<session>/subagents/agent-<id>.meta.json`.
-fn subagent_parent(path: &Path) -> Option<PathBuf> {
-    let name = path.file_name()?.to_str()?;
-    if !(name.starts_with("agent-") && name.ends_with(".meta.json")) {
-        return None;
-    }
-    let dir = path.parent()?;
-    if dir.file_name()? != "subagents" {
-        return None;
-    }
-    let session = dir.parent()?;
-    let mut parent = session.as_os_str().to_owned();
-    parent.push(".jsonl");
-    Some(PathBuf::from(parent))
-}
 #[cfg(test)]
 mod tests;

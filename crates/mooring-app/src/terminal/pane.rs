@@ -10,6 +10,8 @@ mod input;
 mod links;
 #[path = "pane_mouse.rs"]
 mod mouse;
+#[path = "pane_notes.rs"]
+mod notes;
 #[path = "pane_overlays.rs"]
 mod overlays;
 #[path = "pane_paste.rs"]
@@ -108,10 +110,8 @@ pub struct Pane {
     pub bell: bool,
     /// A bell in the pane the user is looking at flashes its border once.
     flash: bool,
-    /// A short note in the corner that clears itself, e.g. how to select when the
-    /// program took the mouse.
-    toast: Option<gpui::SharedString>,
-    toast_seq: u64,
+    /// What was just copied, and how selecting works while the program holds the mouse.
+    notes: notes::Notes,
     /// The Agent running in this terminal, as the workbench last saw it.
     pub agent: Option<mooring_core::model::Agent>,
     /// Shares the tab with other panes: unless it holds focus, it fades and draws no
@@ -257,8 +257,7 @@ impl Pane {
             bells_seen: 0,
             bell: false,
             flash: false,
-            toast: None,
-            toast_seq: 0,
+            notes: notes::Notes::default(),
             agent: None,
             split: false,
             peek: false,
@@ -439,25 +438,6 @@ impl Pane {
             .lock()
             .is_ok_and(|s| s.vt.is_some() && !s.writable && !s.ended && s.error.is_none())
     }
-    fn show_toast(&mut self, text: impl Into<gpui::SharedString>, cx: &mut Context<Self>) {
-        self.toast = Some(text.into());
-        self.toast_seq += 1;
-        let seq = self.toast_seq;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(std::time::Duration::from_secs(3))
-                .await;
-            let _ = this.update(cx, |pane, cx| {
-                // A newer note restarts the clock instead of being cut short.
-                if pane.toast_seq == seq {
-                    pane.toast = None;
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
-    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HandoffState {
@@ -468,7 +448,6 @@ pub enum HandoffState {
     NotReady,
     Missing,
 }
-const SELECT_HINT: &str = "这个程序接管了鼠标：按住 Shift 再拖动来选中文字";
 /// How long woken output waits before it repaints. A pane just switched to shows nothing
 /// until its first screen, so that goes up at once; later output may share a frame.
 fn repaint_wait(first_screen: bool, echo: bool) -> std::time::Duration {

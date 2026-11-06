@@ -7,8 +7,8 @@
   "resume": "OPENCODE_SERVER_PASSWORD=$(uuidgen) opencode --port 0 --session {id}",
   "source": {
     "sqlite": "~/.local/share/opencode/opencode.db",
-    "sessions": "SELECT id AS _session, directory AS _cwd, time_updated AS _t, CASE WHEN title LIKE 'New session - %' THEN NULL ELSE title END AS _title FROM session WHERE time_updated > ?1 AND parent_id IS NULL AND time_updated > (CAST(strftime('%s','now') AS INTEGER) - 30 * 86400) * 1000 ORDER BY time_updated",
-    "records": "SELECT p.time_updated AS _t, p.id AS _id, json_extract(m.data, '$.role') AS role, json_extract(p.data, '$.type') AS type, substr(json_extract(p.data, '$.text'), 1, 4000) AS text, json_extract(p.data, '$.tool') AS tool, json_extract(p.data, '$.callID') AS call, json_extract(p.data, '$.state.status') AS status, json_extract(p.data, '$.state.input.command') AS command, json_extract(p.data, '$.state.input.filePath') AS file, json_extract(p.data, '$.state.metadata.exit') AS exit, substr(json_extract(p.data, '$.state.output'), 1, 2000) AS output, json_extract(p.data, '$.reason') AS reason, substr(json_extract(p.data, '$.state.error'), 1, 200) AS tool_error, json_extract(p.data, '$.state.input.questions[0].question') AS question FROM part p JOIN message m ON m.id = p.message_id WHERE p.session_id = ?1 AND (p.time_updated, p.id) > (?2, ?3) AND (json_extract(p.data, '$.type') IN ('step-start', 'step-finish') OR (json_extract(p.data, '$.type') = 'text' AND (json_extract(m.data, '$.role') = 'user' OR json_extract(p.data, '$.time.end') IS NOT NULL)) OR (json_extract(p.data, '$.type') = 'tool' AND (json_extract(p.data, '$.state.status') IN ('completed', 'error') OR json_extract(p.data, '$.tool') = 'question'))) UNION ALL SELECT m.time_updated, m.id, NULL, CASE json_extract(m.data, '$.error.name') WHEN 'MessageAbortedError' THEN 'message-aborted' ELSE 'message-error' END, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, json_extract(m.data, '$.error.name'), NULL, NULL FROM message m WHERE m.session_id = ?1 AND (m.time_updated, m.id) > (?2, ?3) AND json_extract(m.data, '$.error') IS NOT NULL ORDER BY 1, 2",
+    "sessions": "SELECT id AS _session, parent_id AS _parent, directory AS _cwd, time_updated AS _t, CASE WHEN title LIKE 'New session - %' THEN NULL ELSE title END AS _title FROM session WHERE time_updated > ?1 AND time_updated > (CAST(strftime('%s','now') AS INTEGER) - 30 * 86400) * 1000 ORDER BY time_updated",
+    "records": "SELECT p.time_updated AS _t, p.id AS _id, json_extract(m.data, '$.role') AS role, json_extract(p.data, '$.type') AS type, substr(json_extract(p.data, '$.text'), 1, 4000) AS text, json_extract(p.data, '$.tool') AS tool, json_extract(p.data, '$.callID') AS call, json_extract(p.data, '$.state.status') AS status, json_extract(p.data, '$.state.input.command') AS command, json_extract(p.data, '$.state.input.filePath') AS file, json_extract(p.data, '$.state.metadata.exit') AS exit, substr(json_extract(p.data, '$.state.output'), 1, 2000) AS output, json_extract(p.data, '$.reason') AS reason, substr(json_extract(p.data, '$.state.error'), 1, 200) AS tool_error, json_extract(p.data, '$.state.input.questions[0].question') AS question, CAST(p.time_updated / 1000 AS INTEGER) AS timestamp FROM part p JOIN message m ON m.id = p.message_id WHERE p.session_id = ?1 AND (p.time_updated, p.id) > (?2, ?3) AND (json_extract(p.data, '$.type') IN ('step-start', 'step-finish') OR (json_extract(p.data, '$.type') = 'text' AND (json_extract(m.data, '$.role') = 'user' OR json_extract(p.data, '$.time.end') IS NOT NULL)) OR (json_extract(p.data, '$.type') = 'tool' AND (json_extract(p.data, '$.state.status') IN ('completed', 'error') OR json_extract(p.data, '$.tool') = 'question'))) UNION ALL SELECT m.time_updated, m.id, NULL, CASE json_extract(m.data, '$.error.name') WHEN 'MessageAbortedError' THEN 'message-aborted' ELSE 'message-error' END, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, json_extract(m.data, '$.error.name'), NULL, NULL, CAST(m.time_updated / 1000 AS INTEGER) FROM message m WHERE m.session_id = ?1 AND (m.time_updated, m.id) > (?2, ?3) AND json_extract(m.data, '$.error') IS NOT NULL ORDER BY 1, 2",
     "poll_ms": 1500
   },
   "transcripts": {
@@ -84,6 +84,15 @@
       },
       {
         "when": {
+          "/type": "tool",
+          "/tool": "question",
+          "/status": "completed"
+        },
+        "turn": "running",
+        "id": "/call"
+      },
+      {
+        "when": {
           "/type": "step-finish",
           "/reason": "stop"
         },
@@ -109,7 +118,8 @@
         },
         "turn": "error"
       }
-    ]
+    ],
+    "parent": "/_parent"
   },
   "interrupt": {
     "key": "esc",

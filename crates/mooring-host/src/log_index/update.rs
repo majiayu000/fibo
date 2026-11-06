@@ -213,19 +213,17 @@ impl Index {
         })();
         self.finish(&mut held, result)
     }
-    /// `meta` is a subagent's `agent-<id>.meta.json` under `<session>/subagents/`: the
-    /// CLI writes it when the subagent starts and again when it finishes, while the
-    /// parent's own log may not move. Re-reads the list into the parent's card and
-    /// returns the parent when that changed it; `None` for any other path.
+    /// The adapter maps its own metadata layout back to the parent transcript. A child
+    /// can start or finish without appending anything to that parent's log.
     fn refresh_subagents(
         &mut self,
         held: &mut Held,
         meta: &Path,
     ) -> io::Result<Option<Transcript>> {
-        let Some(parent) = subagent_parent(meta) else {
+        let Some(runtime) = self.runtime(meta) else {
             return Ok(None);
         };
-        let Some(runtime) = self.runtime(&parent) else {
+        let Some(parent) = crate::agents::adapter(runtime).subagent_parent(meta) else {
             return Ok(None);
         };
         let Some(all) = crate::agents::adapter(runtime).subagents(&parent) else {
@@ -559,7 +557,8 @@ impl Index {
                 crate::content::link_child(&tx, &key, &parser.card)?;
                 parent = Some(parser.card.parent.clone());
             } else if let Some((id, _)) = &c.identity {
-                let kids = crate::content::children(&tx, id, now)?;
+                let kids =
+                    crate::content::children(&tx, runtime, id, now, parser.card.turn_started)?;
                 parser.children(&kids, now, live(&key));
             }
         }
@@ -583,12 +582,25 @@ impl Index {
                 .optional()
                 .map_err(err)?;
             if let Some(t) = row.filter(|t| t.path != key) {
-                let kids = crate::content::children(&tx, &parent, now)?;
                 if let Some(e) = held.entries.get_mut(&t.path) {
+                    let kids = crate::content::children(
+                        &tx,
+                        runtime,
+                        &parent,
+                        now,
+                        e.parser.card.turn_started,
+                    )?;
                     e.parser.children(&kids, now, live(&t.path));
                     e.dirty.get_or_insert_with(std::time::Instant::now);
                 } else {
                     let mut owner = crate::content::load(&tx, &t.path)?;
+                    let kids = crate::content::children(
+                        &tx,
+                        runtime,
+                        &parent,
+                        now,
+                        owner.card.turn_started,
+                    )?;
                     owner.children(&kids, now, live(&t.path));
                     crate::content::save(&tx, &t.path, &owner)?;
                 }

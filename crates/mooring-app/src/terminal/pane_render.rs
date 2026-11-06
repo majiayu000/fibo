@@ -453,11 +453,30 @@ impl Render for Pane {
                     .relative()
                     .child(content)
                     .children(self.ask_overlays(cx))
-                    .when(self.scrolled_back || self.toast.is_some(), |d| {
+                    .when(self.notes.mouse_hint(), |d| {
+                        // Along the top: a program's own status lines, such as Codex's
+                        // "Copied", sit at the bottom, and so does Mooring's copied note.
+                        d.child(
+                            div()
+                                .absolute()
+                                .right(px(T::S20))
+                                .top(px(T::S8))
+                                .px(px(T::S8))
+                                .py(px(T::S4))
+                                .rounded(px(T::CONTROL_RADIUS))
+                                .bg(T::color(T::raised()))
+                                .border(px(T::BORDER_WIDTH))
+                                .border_color(T::color(T::card_border()))
+                                .text_size(px(T::META))
+                                .text_color(T::color(T::secondary()))
+                                .child(super::notes::MOUSE_HINT),
+                        )
+                    })
+                    .when(self.scrolled_back || self.notes.copied().is_some(), |d| {
                         // Floats over the grid so it never resizes the terminal; clear of
                         // the scrollbar along the right edge. A toast stacks above the
                         // "回到底部" button instead of covering it.
-                        let toast = self.toast.clone().map(|toast| {
+                        let toast = self.notes.copied().map(|toast| {
                             div()
                                 .px(px(T::S8))
                                 .py(px(T::S4))

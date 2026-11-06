@@ -514,28 +514,36 @@ async fn redraw_check(
     format!("redraw-check: {line}")
 }
 
-/// The frame terminal output asks for while another pane has 看改动 open: the panel is a
-/// cached view, so it should add almost nothing and must not draw again.
+/// A turn of thousands of files with 看改动 open. The frame terminal output asks for: the panel
+/// is a cached view, so it should add almost nothing and must not draw again. And the panel
+/// drawing itself, as it does when scrolled: that must not grow with the number of files.
 async fn changes_frames(
     handle: WindowHandle<workbench::Workbench>,
     pane: &gpui::Entity<crate::terminal::pane::Pane>,
     cx: &mut gpui::AsyncApp,
 ) -> String {
-    use mooring_core::turn_diff::{Composer, Edit, TurnChanges};
+    use mooring_core::turn_diff::{Composer, Disk, Edit, TurnChanges, unrecorded};
     let text: String = (0..500)
         .map(|i| format!("    let line_{i} = compute({i}, \"这一行有中文\");\n"))
         .collect();
     let mut sum = Composer::default();
     sum.apply(Edit::Created(text));
-    let file = sum.finish("/tmp/fixture/module.rs", None);
+    let first = sum.finish_as("/tmp/fixture/module.rs", Disk::Same);
+    let files = (0..5000)
+        .map(|i| {
+            let mut file = unrecorded(&format!("/tmp/fixture/group_{}/file_{i}.rs", i % 40), 12, 3);
+            file.edits = 1;
+            file
+        })
+        .collect();
+    let changes = TurnChanges { log: 0, files };
     let terminal = handle
         .update(cx, |v, _, _| v.visual_shown_terminal())
         .unwrap();
-    let changes = TurnChanges {
-        files: vec![file.clone(), file],
-    };
     handle
-        .update(cx, |v, _, cx| v.visual_changes_show(&terminal, changes, cx))
+        .update(cx, |v, _, cx| {
+            v.visual_changes_show(&terminal, changes, first, cx)
+        })
         .unwrap();
     let executor = cx.background_executor().clone();
     executor.timer(Duration::from_millis(500)).await;
@@ -555,12 +563,23 @@ async fn changes_frames(
     let drew = handle
         .update(cx, |v, w, a| v.visual_changes(&terminal, w, a).drew)
         .unwrap();
+    let (draw_cpu, draw_ins) = (cpu_secs(), instructions());
+    for _ in 0..100 {
+        handle
+            .update(cx, |v, _, cx| v.visual_changes_poke(&terminal, cx))
+            .unwrap();
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    }
+    let draw_used = cpu_secs() - draw_cpu;
+    let draw_ins = (instructions() - draw_ins) as f64 / 100. / 1e6;
     handle
         .update(cx, |v, w, cx| v.close_changes(&terminal, w, cx))
         .unwrap();
     format!(
-        "frames-changes: {:.2} ms CPU per pane frame, {ins:.2} M instructions; drawn before {drawn}; drew again {}",
+        "frames-changes: {:.2} ms CPU per pane frame, {ins:.2} M instructions; drawn before {drawn}; drew again {}\nframes-changesdraw: {:.2} ms CPU per panel draw, {draw_ins:.2} M instructions",
         used / 300. * 1000.,
-        drew - drawn
+        drew - drawn,
+        draw_used / 100. * 1000.,
     )
 }
