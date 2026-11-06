@@ -91,13 +91,15 @@ fn a_new_host_finds_the_process_of_a_quiet_plain_claude() {
         assert!(Instant::now() < until, "the new host never found {}", p.pid);
         std::thread::sleep(Duration::from_millis(100));
     }
-    assert_eq!(
-        p.h.workspace()
-            .current_agent("plain")
-            .unwrap()
-            .cli_session_id,
-        p.id
-    );
+    // The stop just ended the process, so the session may no longer be current by now.
+    let w = p.h.workspace();
+    let bound: Vec<_> = w
+        .agent_sessions
+        .iter()
+        .filter(|s| s.terminal.as_deref() == Some("plain"))
+        .map(|s| s.cli_session_id.as_str())
+        .collect();
+    assert_eq!(bound, [p.id.as_str()]);
 }
 
 /// What the list says only finds the process of the pane's conversation. A pane whose
