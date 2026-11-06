@@ -34,7 +34,9 @@ impl Role {
         match op {
             // `dirs` shows the machine's folders, so it is no read for a lesser role.
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
-            | "mkdir" | "stop" | "lastsession" | "addspace" | "trust" => self == Self::Full,
+            | "mkdir" | "stop" | "lastsession" | "addspace" | "trust" | "modes" | "setmode" => {
+                self == Self::Full
+            }
             "answer" => self != Self::View,
             _ => true,
         }
@@ -56,6 +58,7 @@ pub fn acts(op: &str) -> bool {
             | "stop"
             | "addspace"
             | "trust"
+            | "setmode"
     )
 }
 
@@ -68,6 +71,7 @@ mod tests {
         for op in [
             "hello",
             "list",
+            "cards",
             "read",
             "chat",
             "watch",

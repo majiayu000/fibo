@@ -244,6 +244,7 @@ pub enum Request {
     AwaitInterrupt {
         id: String,
     },
+    Modes(crate::modes::ModeRequest),
     /// Typing, keys or an approval answer (`SendText`, `SendKeys`, `SendInput`,
     /// `AnswerApproval`, `AnswerAlways`, `AnswerTrust`, `Interrupt`) run
     /// at most once under `request`: a resend after a lost reply gets the first outcome
@@ -427,6 +428,7 @@ pub enum Reply {
     ScreenAssociated {
         session: Option<String>,
     },
+    Modes(crate::modes::ModeReply),
     /// [`Request::InputSuggestion`]: the conversation in that terminal, and what it offers.
     InputSuggestion {
         session: Option<String>,
@@ -679,6 +681,8 @@ pub struct RecognitionStatus {
     /// ends or clears it. Live state, not stored.
     #[serde(default)]
     pub terminal_reports: std::collections::HashMap<String, ProgramReport>,
+    #[serde(default)]
+    pub terminal_modes: crate::modes::Modes,
     pub workspace_revision: u64,
     /// Bumped whenever the host reloads plugins: a `mooring plugins` in a terminal changed
     /// them, or a window did, and every window has to read them again.
@@ -706,6 +710,7 @@ impl Default for RecognitionStatus {
             terminal_titles: Default::default(),
             terminal_commands: Default::default(),
             terminal_reports: Default::default(),
+            terminal_modes: Default::default(),
             workspace_revision: 0,
             plugins_revision: 0,
             official: Default::default(),

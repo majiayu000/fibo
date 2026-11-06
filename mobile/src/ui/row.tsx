@@ -5,16 +5,15 @@ import type { ReactNode } from 'react';
 import { Pressable, type StyleProp, StyleSheet, Text, type TextStyle, View } from 'react-native';
 import type { Card, Machine } from '../remote/hub';
 import { cardTitle } from './format';
+import { rowSaysFull } from './modes';
 import { SpaceMark } from './icons';
 import { TITLE_WEIGHT, mono } from './kit';
 import { useNow } from './now';
 import { runningFor } from './parse';
-import { base, rowDetail, statusColor, statusWord, tilde } from './status';
+import { rowDetail, spaceName, statusColor, statusWord, tilde } from './status';
 import { useTheme } from './theme';
 
-export function spaceName(m: Machine, c: Card) {
-  return m.spaces[c.space] || base(c.cwd) || c.space;
-}
+export { spaceName };
 
 /** 「在跑 · 12 分钟」. Its own component: the clock redraws this word, not the row. */
 export function RunningWord({ c, color, style }: { c: Card; color: string; style?: StyleProp<TextStyle> }) {
@@ -70,7 +69,7 @@ export function Row({
       </Text>
       {children ?? (
         <Text numberOfLines={1} style={[s.l3, { color: t.dim }, stale && { opacity: 0.6 }]}>
-          {[c.branch || tilde(c.cwd), rowDetail(c)].filter(Boolean).join(' · ')}
+          {[rowSaysFull(c, m.cards) ? c.permission : '', c.branch || tilde(c.cwd), rowDetail(c)].filter(Boolean).join(' · ')}
         </Text>
       )}
     </Pressable>

@@ -1,7 +1,7 @@
 // One conversation: your words in grey bubbles, the Agent's flat, its work folded into a
 // line that opens each call it made; the approval or question it waits on; a composer card whose
 // send key turns into stop while the Agent runs.
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import { approve, deny, oops } from '@/actions';
@@ -21,6 +21,8 @@ import { type Message, Mine, Theirs } from '@/ui/message';
 import { choices, questionText, partialWords, readBackWords } from '@/ui/parse';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
+import type { ModeKind } from '@/ui/modes';
+import { ModeSheet } from '@/ui/modesheet';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
 import { useTheme } from '@/ui/theme';
@@ -65,6 +67,7 @@ export default function Chat() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
   const [term, setTerm] = useState(false);
+  const [picking, setPicking] = useState<ModeKind | null>(null);
   const last = useRef(0);
   last.current = messages.at(-1)?.seq ?? 0;
 
@@ -112,8 +115,11 @@ export default function Chat() {
   }, [online, machine, terminal, cardSession, tools]);
 
   // New messages: the Agent's words mid-turn raise no event, so ask every two seconds.
+  // Only while this screen shows: a tool's page opened over it asks nothing, and the next tick
+  // after coming back asks for whatever came meanwhile.
+  const focused = useIsFocused();
   useEffect(() => {
-    if (!session || !online) return;
+    if (!session || !online || !focused) return;
     const timer = setInterval(async () => {
       const r = remote(machine);
       if (!r) return;
@@ -126,7 +132,7 @@ export default function Chat() {
       }
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [session, online, machine, tools]);
+  }, [session, online, machine, tools, focused]);
 
   // A sent message shows until the log has it, or for half a minute.
   useEffect(() => {
@@ -385,9 +391,12 @@ export default function Chat() {
           onSend={send}
           onStop={() => stop()}
           onUseSuggestion={() => suggestionStats.set(countUse)}
+          onModel={supports(m, 'setmode') ? () => setPicking('model') : undefined}
+          onPermission={supports(m, 'setmode') ? () => setPicking('permission') : undefined}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />
+      {!!picking && <ModeSheet machine={machine} terminal={terminal} kind={picking} onClose={() => setPicking(null)} />}
     </KeyboardAvoidingView>
   );
 }

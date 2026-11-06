@@ -1,10 +1,11 @@
 // A machine that answers `hello` with an error is shown by what it said, not as a
 // network that is down.
 import { describe, expect, mock, test } from 'bun:test';
+import { rn } from './rn';
 import { RemoteError } from '../src/remote/client';
 import type { Link } from '../src/remote/link';
 
-mock.module('react-native', () => ({ AppState: { addEventListener: () => ({ remove() {} }) } }));
+mock.module('react-native', () => rn());
 mock.module('../src/store/machines', () => ({
   machineId: (l: Link) => l.machine || `device-${l.device}`,
   loadMachines: async () => [],

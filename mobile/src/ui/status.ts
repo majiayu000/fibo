@@ -1,7 +1,7 @@
 // How a conversation's state reads and what colour it takes. The host decides the state
 // (`status::of` on the desktop, `status` and `status_label` on each card) and spells it;
 // a phone only pairs with hosts new enough to send both.
-import type { Card } from '../remote/hub';
+import type { Card, Machine } from '../remote/hub';
 import type { Theme } from './theme';
 
 export function statusKey(c: Card): string {
@@ -55,3 +55,6 @@ export function tilde(path: string): string {
 
 /** The last directory of a path. */
 export const base = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
+
+/** The space a conversation is listed under, by the name you see: one project on two computers is one space. */
+export const spaceName = (m: Machine, c: Card) => m.spaces[c.space] || base(c.cwd) || c.space;

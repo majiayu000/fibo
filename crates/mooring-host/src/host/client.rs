@@ -2,6 +2,7 @@
 //! newer host.
 use super::*;
 mod edit;
+mod modes;
 mod once;
 mod stop;
 mod suggestion;
@@ -526,6 +527,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             Ok(Reply::Text(text))
         }
         Request::InputSuggestion { id } => suggestion::read(shared, &id),
+        Request::Modes(ask) => modes::run(shared, ask),
         Request::AssociateScreen { id } => super::screen_match::associate_pane(shared, &id),
         Request::SendText {
             id,

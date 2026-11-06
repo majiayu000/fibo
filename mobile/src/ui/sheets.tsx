@@ -9,7 +9,7 @@ import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
 import { opensAtEnd, textRows } from './toolview';
 import { useTheme } from './theme';
 
-function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
+export function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
   const t = useTheme();
   const bottom = useBottom();
   return (

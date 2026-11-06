@@ -22,6 +22,8 @@ mod cursor;
 mod declared;
 mod grok;
 pub mod hooks;
+pub mod modes;
+pub mod modes_drive;
 pub use tool_lines::{describe_tool, Described, ToolCallLine, ToolOutput};
 pub mod mirror;
 mod permission;

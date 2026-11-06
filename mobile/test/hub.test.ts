@@ -3,17 +3,19 @@
 // the guard, and a timer forgotten by `retry.delete` fired anyway, so each lost connection came
 // back as many.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { rn } from './rn';
 
 let onAppState: ((s: string) => void) | null = null;
-mock.module('react-native', () => ({
-  AppState: {
-    addEventListener: (_: string, f: (s: string) => void) => {
-      onAppState = f;
-      return { remove() {} };
+mock.module('react-native', () =>
+  rn({
+    AppState: {
+      addEventListener: (_: string, f: (s: string) => void) => {
+        onAppState = f;
+        return { remove() {} };
+      },
     },
-  },
-  Platform: { OS: 'web' },
-}));
+  }),
+);
 mock.module('../src/store/machines', () => ({
   loadMachines: async () => [],
   saveMachine: async () => undefined,

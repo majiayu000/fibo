@@ -4,6 +4,7 @@ import { type ComponentRef, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Icon } from './icons';
 import { noOutline, useBottom } from './kit';
+import { isFull } from './modes';
 import { modelName } from './parse';
 import { useTheme } from './theme';
 
@@ -19,11 +20,16 @@ export function Composer({
   onSend,
   onStop,
   onUseSuggestion,
+  onModel,
+  onPermission,
 }: {
   agent: string;
-  /** What its log says, read only: changing them is for the terminal. */
+  /** What the computer says is on. */
   model?: string | null;
   permission?: string | null;
+  /** Each tag opens what can be picked; a computer that cannot change them leaves it a fact. */
+  onModel?: () => void;
+  onPermission?: () => void;
   running: boolean;
   canStop: boolean;
   canContinue: boolean;
@@ -75,20 +81,32 @@ export function Composer({
         accessibilityLabel="给 Agent 发消息"
       />
       <View style={s.bar}>
-        {!!permission && (
-          <View style={[s.tag, s.fact, { borderColor: t.line }]} accessibilityLabel={`权限：${permission}`}>
-            <Icon name="shield" size={13} width={2} color={t.text} />
-            <Text numberOfLines={1} style={{ color: t.text, fontSize: 12, flexShrink: 1 }}>
-              {permission}
+        {(!!permission || !!onPermission) && (
+          <Pressable
+            disabled={!onPermission}
+            onPress={onPermission}
+            accessibilityRole={onPermission ? 'button' : undefined}
+            accessibilityLabel={`权限：${permission ?? '还没读到'}`}
+            style={({ pressed }) => [s.tag, s.fact, { borderColor: isFull(permission) ? t.err : t.line }, pressed && { opacity: 0.6 }]}
+          >
+            <Icon name="shield" size={13} width={2} color={isFull(permission) ? t.err : t.text} />
+            <Text numberOfLines={1} style={{ color: isFull(permission) ? t.err : t.text, fontSize: 12, flexShrink: 1 }}>
+              {permission ?? '权限'}
             </Text>
-          </View>
+          </Pressable>
         )}
         {(!!model || !!agent) && (
-          <View style={[s.tag, s.fact, { borderColor: t.line }]}>
+          <Pressable
+            disabled={!onModel}
+            onPress={onModel}
+            accessibilityRole={onModel ? 'button' : undefined}
+            accessibilityLabel={`模型：${model ? modelName(model) : agent}`}
+            style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}
+          >
             <Text numberOfLines={1} style={{ color: t.text, fontSize: 12, flexShrink: 1 }}>
               {model ? modelName(model) : agent}
             </Text>
-          </View>
+          </Pressable>
         )}
         {canContinue && (
           <Pressable onPress={() => go('继续')} style={({ pressed }) => [s.tag, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
