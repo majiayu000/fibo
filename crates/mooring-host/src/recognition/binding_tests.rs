@@ -656,8 +656,22 @@ fn an_open_file_binding_follows_a_new_transcript_in_the_same_process() {
     assert!(files
         .get(&pid)
         .is_some_and(|paths| paths.contains(&new.path)));
-    reconcile(&mut w, &[old, new], &processes, &files).unwrap();
+    let transcripts = [old, new];
+    reconcile(&mut w, &transcripts, &processes, &files).unwrap();
     assert_eq!(w.current_agent("pty").unwrap().cli_session_id, "new-thread");
+    // Real Codex may retain the prior writer: neither open log then proves ownership.
+    let ambiguous = HashMap::from([(pid, transcripts.iter().map(|t| t.path.clone()).collect())]);
+    for binding in [Binding::OpenFile, Binding::Hook, Binding::Process] {
+        let mut check = w.clone();
+        let mut current = check.current_agent("pty").unwrap().clone();
+        current.binding = Some(binding);
+        check.observe_agent(current).unwrap();
+        reconcile(&mut check, &transcripts, &processes, &ambiguous).unwrap();
+        assert_eq!(
+            check.current_agent("pty").is_none(),
+            binding == Binding::OpenFile
+        );
+    }
     drop(held);
     std::fs::remove_dir_all(dir).unwrap();
 }

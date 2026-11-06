@@ -403,6 +403,18 @@ pub fn reconcile(
                     }
             })
             .collect();
+        // Codex can retain an old writer after /new. Ambiguous file evidence must
+        // retire the previous file-only binding, so queued sends cannot target it.
+        if matching.len() > 1 && process.cli_session_id.is_none() {
+            if let Some(mut current) = workspace
+                .current_agent(&terminal)
+                .filter(|s| s.binding == Some(Binding::OpenFile))
+                .cloned()
+            {
+                current.current = false;
+                workspace.observe_agent(current).map_err(io::Error::other)?;
+            }
+        }
         // A node wrapper and its native Codex child carry the same argv: one binding, not two.
         let binding = match process.cli_session_id {
             Some(_) => Binding::Process,
