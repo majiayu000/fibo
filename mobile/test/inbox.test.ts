@@ -2,7 +2,8 @@
 // And it reads 要你处理 off the host, so what the host brings back shows here too.
 import { describe, expect, test } from 'bun:test';
 import type { Card, Machine } from '../src/remote/hub';
-import { HOLD_NONE, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
+import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, headline, namesComputer, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
+import { spaceName } from '../src/ui/status';
 
 const card = (id: string, status: string, updated = 0, more: Partial<Card> = {}) =>
   ({ id, agent: 'claude', status, status_label: status, phase: status === 'waiting' ? 'waiting' : 'working', updated, space: 's', cwd: '/x', ...more }) as Card;
@@ -274,5 +275,76 @@ describe('the space filter hides nothing silently', () => {
     const s = shelve(arrange([m1, m2], []), 'a');
     expect(s.chips.map((c) => c.name)).toEqual([null, 'a', 'b']);
     expect(ids(s.pinned)).toEqual(['t', 'u']);
+  });
+});
+
+describe('the home screen', () => {
+  const one = (cards: Card[], status = 'online', name = 'm') => ({ ...machine(cards, name, status), name });
+
+  test('the title counts what is yours to decide, not finished work to check', () => {
+    const a = arrange([one([approval('a'), card('r', 'review'), card('run', 'running')])], []);
+    expect(headline(shelve(a, null), 1)).toBe('1 件要你决定');
+    const quiet = arrange([one([card('r', 'review')])], []);
+    expect(headline(shelve(quiet, null), 1)).toBe('没有要你决定的事');
+    expect(headline(shelve(arrange([], []), null), 0)).toBe('Mooring');
+  });
+
+  test('what runs shows a few at first, all when asked', () => {
+    const items = [1, 2, 3, 4, 5, 6];
+    expect(runningShown(items, false).length).toBe(RUNNING_PREVIEW);
+    expect(runningShown(items, true)).toEqual(items);
+    expect(runningShown([1], false)).toEqual([1]);
+  });
+
+  test('the line says which computer, how many are off, and when none can hear you', () => {
+    expect(connectionLine([])).toEqual({ text: '', alert: false });
+    expect(connectionLine([{ name: 'mac', status: 'online' }])).toEqual({ text: 'mac 在线', alert: false });
+    expect(connectionLine([{ name: 'mac', status: 'online' }, { name: 'x', status: 'offline' }, { name: 'y', status: 'offline' }]).text).toBe('mac 在线 · 2 台离线');
+    expect(connectionLine([{ name: 'a', status: 'online' }, { name: 'b', status: 'online' }]).text).toBe('2 台电脑在线');
+    expect(connectionLine([{ name: 'mac', status: 'offline' }])).toEqual({ text: 'mac不在线', alert: true });
+    expect(connectionLine([{ name: 'a', status: 'offline' }, { name: 'b', status: 'offline' }]).alert).toBe(true);
+    expect(connectionLine([{ name: 'a', status: 'online' }, { name: 'b', status: 'refused' }]).alert).toBe(true);
+  });
+
+  test('a computer that is off takes a row only when nothing else can hear you, or it refused this phone', () => {
+    const on = { name: 'a', status: 'online' as const };
+    const off = { name: 'b', status: 'offline' as const };
+    const refused = { name: 'c', status: 'refused' as const };
+    expect(offlineRows([on, off])).toEqual([]);
+    expect(offlineRows([on, off, refused])).toEqual([refused]);
+    expect(offlineRows([off])).toEqual([off]);
+    expect(offlineRows([])).toEqual([]);
+  });
+
+  test('the computer is named on a row only when more than one is online', () => {
+    expect(namesComputer([{ name: 'a', status: 'online' }, { name: 'b', status: 'offline' }])).toBe(false);
+    expect(namesComputer([{ name: 'a', status: 'online' }, { name: 'b', status: 'online' }])).toBe(true);
+  });
+
+  test('撤销 puts it back where it was', () => {
+    expect(undoTo({})).toBe('open');
+    expect(undoTo({ outcome: null })).toBe('open');
+    expect(undoTo({ outcome: 'deferred' })).toBe('deferred');
+    expect(undoTo({ outcome: 'done' })).toBe('done');
+  });
+
+  test('search finds title, space and directory, in 稍后提醒 and 已处理 too, narrowed to a space', () => {
+    const m = {
+      ...one([
+        card('a', 'running', 0, { title: '修好手机流量', cwd: '/w/mooring' }),
+        card('b', 'running', 0, { title: 'Other', cwd: '/w/her', outcome: 'deferred' }),
+        card('c', 'review', 0, { title: '流量统计', cwd: '/w/lite', outcome: 'done' }),
+      ]),
+    };
+    const a = arrange([m], []);
+    expect(ids(searchCards(a, '流量', null)).sort()).toEqual(['a', 'c']);
+    expect(ids(searchCards(a, 'OTHER', null))).toEqual(['b']);
+    expect(ids(searchCards(a, 'w/her', null))).toEqual(['b']);
+    expect(ids(searchCards(a, '  手机  流量 ', null))).toEqual(['a']);
+    expect(searchCards(a, '没有这个', null)).toEqual([]);
+    expect(searchCards(a, '', null).length).toBe(3);
+    const space = spaceName(m, m.cards[0]);
+    expect(searchCards(a, '', space).every((i) => spaceName(i.m, i.c) === space)).toBe(true);
+    expect(searchCards(a, '', '不存在的空间')).toEqual([]);
   });
 });

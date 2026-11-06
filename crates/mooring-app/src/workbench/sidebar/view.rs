@@ -363,7 +363,10 @@ impl Workbench {
                 .when(dense, |d| {
                     d.mt(px(T::S8)).px(px(T::S8)).font_family(T::UI_FONT)
                 })
-                .when(recent, |d| d.mx(px(T::S8)).px(px(T::S10)))
+                .when(recent, |d| {
+                    use crate::ui::theme::Flat as F;
+                    d.mx(px(F::ROW_EDGE)).px(px(F::ROW_PAD))
+                })
                 .text_size(px(T::META))
                 .text_color(T::color(T::muted()))
                 .on_click(cx.listener(|this, _, _, cx| this.show_closed(cx))),

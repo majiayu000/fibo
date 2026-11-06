@@ -30,6 +30,7 @@ mod permission;
 mod qoder;
 mod tool_lines;
 mod trust;
+mod turn_edits;
 mod usage_lines;
 
 /// What the host says on a terminal about an Agent it sees but cannot read: `text` is the
@@ -108,6 +109,10 @@ pub trait Adapter: Sync {
     fn interrupt_key(&self) -> &'static [u8] {
         b"\x03"
     }
+    /// How it takes answers over a local API, for one that has it.
+    fn answers(&self) -> Option<&'static mooring_core::agent_answers::Answers> {
+        None
+    }
     /// How many times to press it, for a CLI that asks to press again.
     fn interrupt_presses(&self) -> u32 {
         1
@@ -132,6 +137,14 @@ pub trait Adapter: Sync {
     /// The output of call `id` as a log line of its holds it.
     fn tool_result_line(&self, _line: &Value, _id: &str) -> Option<ToolOutput> {
         None
+    }
+    /// Bytes every log line holding a finished file edit has; `None`: its log holds none.
+    fn edit_marker(&self) -> Option<&'static [u8]> {
+        None
+    }
+    /// The file edits a log line holds, with their paths.
+    fn logged_edits(&self, _line: &Value) -> Vec<(String, mooring_core::turn_diff::Edit)> {
+        Vec::new()
     }
     /// Whether a process is this CLI: its executable, or the script an interpreter runs.
     fn runs(&self, executable: &str, script: Option<&str>) -> bool;
@@ -362,6 +375,12 @@ pub fn calling_conversations() -> Vec<(Agent, String)> {
         .filter_map(|a| Some((a, std::env::var(adapter(a).conversation_env()?).ok()?)))
         .filter(|(_, id)| !id.is_empty())
         .collect()
+}
+pub fn edit_marker(agent: Agent) -> Option<&'static [u8]> {
+    adapter(agent).edit_marker()
+}
+pub fn logged_edits(agent: Agent, line: &Value) -> Vec<(String, mooring_core::turn_diff::Edit)> {
+    adapter(agent).logged_edits(line)
 }
 pub fn reads_tools(agent: Agent) -> bool {
     adapter(agent).reads_tools()

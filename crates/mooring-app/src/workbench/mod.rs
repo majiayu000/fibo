@@ -234,6 +234,8 @@ mod forms;
 mod frame_facts;
 mod layout;
 mod machines;
+#[cfg(feature = "visual-test")]
+pub use layout::ChangesProbe;
 use layout::LayoutState;
 mod nav;
 use nav::Nav;
@@ -407,6 +409,10 @@ impl Workbench {
                 filter_space: None,
                 changed_only: false,
                 closed_only: false,
+                hover_task: None,
+                fresh_todo: None,
+                fold_on_release: false,
+                was_shown: false,
                 since,
                 show_stale: false,
                 show_closed: false,
@@ -441,6 +447,9 @@ impl Workbench {
                 editing_task: None,
                 start_after_save: None,
                 quick_task: None,
+                board_quick: None,
+                board_draft_space: None,
+                board_draft: String::new(),
                 todos_open: false,
                 picking: None,
                 last_agent: None,
@@ -474,7 +483,8 @@ impl Workbench {
                 tab_scroll: gpui::ScrollHandle::new(),
                 revealed_tab: None,
                 renaming_session: None,
-                changes_open: None,
+                changes: HashMap::new(),
+                changes_seen: 0,
                 reopened: HashSet::new(),
                 completing: HashMap::new(),
                 completing_seq: 0,

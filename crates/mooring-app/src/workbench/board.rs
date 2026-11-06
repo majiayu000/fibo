@@ -12,6 +12,8 @@ use gpui::{
 use mooring_core::model::Agent;
 use std::time::Duration;
 
+mod composer;
+pub(super) use composer::{BoardQuick, FreshTodo};
 mod card;
 mod column;
 mod pill;
@@ -36,8 +38,18 @@ impl ColumnList {
             .take_while(|(a, b)| a == b)
             .count();
         if prefix + suffix != self.ids.len() || self.ids.len() != ids.len() {
+            // A list at its top stays there: a splice moves the top along with its first
+            // item, which would leave a card that just arrived above the view.
+            let top = self.state.logical_scroll_top();
+            let at_top = top.item_ix == 0 && top.offset_in_item == px(0.);
             self.state
                 .splice(prefix..self.ids.len() - suffix, ids.len() - prefix - suffix);
+            if at_top {
+                self.state.scroll_to(gpui::ListOffset {
+                    item_ix: 0,
+                    offset_in_item: px(0.),
+                });
+            }
             self.ids = ids.to_vec();
         }
         if self.revision != revision {
@@ -257,10 +269,10 @@ impl Workbench {
             .collect()
     }
     fn board_todos(&self) -> Vec<&Task> {
-        (mooring_core::status::open_todos(&self.workspace, now()).into_iter())
+        // A todo belongs to no Agent, so filtering by one leaves it in place.
+        (mooring_core::status::unfinished_todos(&self.workspace, now()).into_iter())
             .filter(|t| {
                 (self.overview.filter_space.as_ref()).is_none_or(|id| id == &t.space)
-                    && self.overview.agent.is_none_or(|a| a == t.agent)
                     && !self.overview.changed_only
             })
             .collect()
@@ -331,7 +343,22 @@ impl Workbench {
             if c == Column::Running && !list.is_empty() {
                 self.tick_turn(cx);
             }
-            let ids: Vec<_> = self.mixed_ids(c, &list, &remote);
+            let mut ids: Vec<_> = self.mixed_ids(c, &list, &remote);
+            if c == Column::Done {
+                let mut done: Vec<&Task> = (self.workspace.tasks.iter().rev())
+                    .filter(|t| {
+                        self.workspace.task_outcomes.get(&t.id) == Some(&Outcome::Completed)
+                            && (self.overview.filter_space.as_ref()).is_none_or(|id| id == &t.space)
+                    })
+                    .collect();
+                done.sort_by_key(|t| {
+                    let log = self.workspace.task_logs.get(&t.id);
+                    std::cmp::Reverse(log.and_then(|l| l.closed).unwrap_or(0))
+                });
+                ids = (done.into_iter().map(|t| format!("todo:{}", t.id)))
+                    .chain(ids)
+                    .collect();
+            }
             let column = self.column(
                 c,
                 ids.len(),

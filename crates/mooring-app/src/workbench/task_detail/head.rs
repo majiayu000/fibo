@@ -76,6 +76,9 @@ impl Workbench {
         let outcome_button = |name: &'static str, to: Outcome| {
             let tid = tid.clone();
             button(name, name).on_click(cx.listener(move |this, _, _, cx| {
+                if to == Outcome::Completed {
+                    return this.complete_todo(&tid, cx);
+                }
                 this.edit(
                     Edit::SetTaskOutcome {
                         seen: None,

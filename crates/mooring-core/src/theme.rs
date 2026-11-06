@@ -63,7 +63,7 @@ macro_rules! with_ui_tokens {
             sidebar_selected "选中会话底色", sidebar_selected_line "选中会话边线",
             sidebar_bright "品牌和选中文字", sidebar_title "会话标题", sidebar_quiet "停着的标题",
             sidebar_second "侧栏次要文字", sidebar_third "侧栏弱文字", sidebar_done "做完的 ✓",
-            sidebar_idle "停着的圆圈", sidebar_scope "空间筛选条", sidebar_key_line "按键提示边线",
+            sidebar_idle "停着的圆圈", sidebar_key_line "按键提示边线",
         );
     };
 }

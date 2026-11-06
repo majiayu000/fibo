@@ -218,8 +218,8 @@ impl Workbench {
                                     .child(self.sessions_panel(task, &sessions, cx))
                                     .when(!sessions.is_empty(), |d| {
                                         d.child(muted(
-                                            "标记完成会把关联会话一起收尾，但不会停掉里面的程序。",
-                                        ))
+                                        "标记完成会关掉已经停下的会话的终端，之后可以从卡片恢复；没停的留着。",
+                                    ))
                                     }),
                             ),
                     ),

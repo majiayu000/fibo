@@ -310,6 +310,15 @@ impl Workbench {
                         ..Default::default()
                     },
                 )));
+        // Over the terminal, not above it: the program underneath keeps its size.
+        let body = div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .child(body)
+            .children(self.changes_over(id, session));
         let footer = other_owner.then(|| self.pane_footer(id, takeover, cx));
         let mut pane_box = div()
             .id(gpui::SharedString::from(format!("pane-{id}")))

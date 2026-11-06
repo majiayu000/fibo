@@ -46,6 +46,9 @@ export default function Layout() {
       <Pump />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="board" options={{ animation: 'none' }} />
+        <Stack.Screen name="me" options={{ animation: 'none' }} />
+        <Stack.Screen name="search" options={{ animation: 'fade' }} />
         <Stack.Screen name="pair" />
         <Stack.Screen name="chat" />
         <Stack.Screen name="approve" />

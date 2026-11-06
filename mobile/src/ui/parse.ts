@@ -233,3 +233,20 @@ export function quotaView(online: boolean, asks: boolean, saved: unknown[] | nul
   if (!asks) return 'unsupported';
   return saved ? 'live' : 'loading';
 }
+
+type Reading = { agent: string; windows: { minutes: number; used: number; resets_at: number }[] };
+export type Tight = { machine: string; agent: string; minutes: number; used: number };
+
+/** Each Agent's most used window on each computer, fullest first. Never added up: see `app/quota.tsx`. A window past its reset says nothing. */
+export function tightWindows(readings: { machine: string; agents: Reading[] | null }[], now = Date.now() / 1000): Tight[] {
+  const out: Tight[] = [];
+  for (const { machine, agents } of readings) {
+    for (const a of agents ?? []) {
+      const live = a.windows.filter((w) => !w.resets_at || w.resets_at > now);
+      if (!live.length) continue;
+      const top = live.reduce((x, y) => (y.used > x.used ? y : x));
+      out.push({ machine, agent: a.agent, minutes: top.minutes, used: top.used });
+    }
+  }
+  return out.sort((x, y) => y.used - x.used);
+}

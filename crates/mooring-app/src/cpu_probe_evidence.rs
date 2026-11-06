@@ -302,6 +302,8 @@ pub(super) fn start(
                     at.elapsed().as_secs_f64() / 300. * 1000.,
                     used / 300. * 60. * 100.
                 )
+            } else if name == "frames-changes" {
+                changes_frames(handle, &pane, cx).await
             } else if name == "frames-turning" {
                 turning::run(handle, cx).await
             } else if name == "frames-motion" {
@@ -510,4 +512,55 @@ async fn redraw_check(
     let line = lines.join("; ");
     eprintln!("CPU-PROBE redraw-check {line}");
     format!("redraw-check: {line}")
+}
+
+/// The frame terminal output asks for while another pane has 看改动 open: the panel is a
+/// cached view, so it should add almost nothing and must not draw again.
+async fn changes_frames(
+    handle: WindowHandle<workbench::Workbench>,
+    pane: &gpui::Entity<crate::terminal::pane::Pane>,
+    cx: &mut gpui::AsyncApp,
+) -> String {
+    use mooring_core::turn_diff::{Composer, Edit, TurnChanges};
+    let text: String = (0..500)
+        .map(|i| format!("    let line_{i} = compute({i}, \"这一行有中文\");\n"))
+        .collect();
+    let mut sum = Composer::default();
+    sum.apply(Edit::Created(text));
+    let file = sum.finish("/tmp/fixture/module.rs", None);
+    let terminal = handle
+        .update(cx, |v, _, _| v.visual_shown_terminal())
+        .unwrap();
+    let changes = TurnChanges {
+        files: vec![file.clone(), file],
+    };
+    handle
+        .update(cx, |v, _, cx| v.visual_changes_show(&terminal, changes, cx))
+        .unwrap();
+    let executor = cx.background_executor().clone();
+    executor.timer(Duration::from_millis(500)).await;
+    cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+        .unwrap();
+    let drawn = handle
+        .update(cx, |v, w, a| v.visual_changes(&terminal, w, a).drew)
+        .unwrap();
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..300 {
+        pane.update(cx, |_, cx| cx.notify());
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    }
+    let used = cpu_secs() - cpu;
+    let ins = (instructions() - ins) as f64 / 300. / 1e6;
+    let drew = handle
+        .update(cx, |v, w, a| v.visual_changes(&terminal, w, a).drew)
+        .unwrap();
+    handle
+        .update(cx, |v, w, cx| v.close_changes(&terminal, w, cx))
+        .unwrap();
+    format!(
+        "frames-changes: {:.2} ms CPU per pane frame, {ins:.2} M instructions; drawn before {drawn}; drew again {}",
+        used / 300. * 1000.,
+        drew - drawn
+    )
 }
