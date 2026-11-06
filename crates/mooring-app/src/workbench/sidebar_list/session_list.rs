@@ -128,11 +128,12 @@ impl Workbench {
                 // The session you are in stays in sight while its group is folded.
                 if open || current == Some(l.0.id.as_str()) {
                     let d = detail(&l);
+                    self.note_row(out.len(), &l);
                     out.push(self.session_row(l, current, d, End::State, cx));
                 }
             }
         }
-        let mut budget = preset.limit;
+        let mut budget = preset.row_limit();
         let mut more = 0;
         let mut owns_closed = false;
         let mut push = |out: &mut Vec<gpui::AnyElement>, l: Listed, d: Option<String>, e: End| {
@@ -141,6 +142,7 @@ impl Workbench {
                 return;
             }
             budget = budget.saturating_sub(1);
+            self.note_row(out.len(), &l);
             out.push(self.session_row(l, current, d, e, cx));
         };
         match preset.group {

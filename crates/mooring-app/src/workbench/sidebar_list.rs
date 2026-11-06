@@ -5,12 +5,14 @@ use super::*;
 use mooring_core::sidebar::{self as presets, Bucket, Detail, Grouping, Preset};
 
 mod dense_row;
+mod list_scroll;
 mod prefs;
 mod session_list;
 mod session_menu;
 mod session_row;
 mod unlinked;
 
+pub(super) use list_scroll::ListScroll;
 pub(super) use prefs::SidebarPrefs;
 pub(super) use unlinked::Unlinked;
 

@@ -1,5 +1,6 @@
 //! Fixture-driven layouts and pages for native visual evidence.
 use super::*;
+mod crowded;
 mod fixture;
 mod page;
 mod spaces;

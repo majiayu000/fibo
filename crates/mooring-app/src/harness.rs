@@ -42,6 +42,8 @@ mod selection_pixel_evidence;
 mod settings_evidence;
 mod shortcut_evidence;
 mod shots_evidence;
+#[path = "sidebar_rows_evidence.rs"]
+mod sidebar_rows_evidence;
 mod space_evidence;
 mod split_cli_evidence;
 mod split_evidence;
@@ -68,6 +70,7 @@ pub fn start(
         || pane_drag_evidence::start(handle, evidence.clone(), cx)
         || resume_evidence::start(handle, evidence.clone(), cx)
         || subagent_evidence::start(handle, evidence.clone(), cx)
+        || sidebar_rows_evidence::start(handle, evidence.clone(), cx)
         || pinned_ask_evidence::start(handle, evidence.clone(), cx)
         || todo_flow_evidence::start(handle, evidence.clone(), cx)
     {
