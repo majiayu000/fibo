@@ -103,7 +103,8 @@ fn revoke(socket: &Path, gone: &Device) -> io::Result<()> {
 }
 
 /// Replaces `path` whole. The temporary name is this write's alone (a process id alone can be
-/// a dead process's, whose file is still there), and no failure leaves it behind.
+/// a dead process's, whose file is still there). A write that fails removes it; a process
+/// killed mid-write cannot, and [`lock`] clears what that leaves of the device list.
 fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let tmp = path.with_extension(format!(
         "{}.{}.tmp",
@@ -126,6 +127,36 @@ fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     written
 }
 
+/// Whether `name` is a temporary [`write_private`] makes for `remote-devices.json`.
+fn is_devices_temporary(name: &str) -> bool {
+    let Some(made) = name
+        .strip_prefix("remote-devices.")
+        .and_then(|n| n.strip_suffix(".tmp"))
+    else {
+        return false;
+    };
+    made.split_once('.').is_some_and(|(pid, id)| {
+        !pid.is_empty()
+            && pid.bytes().all(|b| b.is_ascii_digit())
+            && id.len() == 32
+            && id.bytes().all(|b| b.is_ascii_hexdigit())
+    })
+}
+
+/// Removes temporaries of the device list left by a process killed mid-write: they hold every
+/// key at that moment, those of phones since unpaired too. Only for the holder of [`lock`]:
+/// `save` runs only under it, so no such file is anyone's write in progress.
+fn clear_abandoned(socket: &Path) {
+    let Some(entries) = socket.parent().and_then(|d| std::fs::read_dir(d).ok()) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_str().is_some_and(is_devices_temporary) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 /// Held from reading the phones to writing them back: the host and a `mooring remote` both
 /// change them, and a change made from a stale list brings back a phone just unpaired.
 /// Released when dropped. flock belongs to the open file, so this excludes other threads
@@ -141,6 +172,7 @@ fn lock(socket: &Path) -> io::Result<std::fs::File> {
     loop {
         // SAFETY: flock on a file this function just opened and returns.
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+            clear_abandoned(socket);
             return Ok(file);
         }
         let e = io::Error::last_os_error();

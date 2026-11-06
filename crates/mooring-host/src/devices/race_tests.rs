@@ -254,3 +254,35 @@ fn a_failed_write_leaves_no_temporary() {
     assert!(file(&socket).is_dir());
     assert_no_temporaries(&socket);
 }
+
+/// A process killed between writing and renaming cannot clean up after itself, and what it
+/// leaves holds every key, so the next change removes it, and nothing else.
+#[test]
+fn the_next_change_removes_what_a_killed_write_left_and_nothing_else() {
+    let dir = Dir::new();
+    let socket = dir.socket();
+    let id = "0123456789abcdef0123456789abcdef";
+    let abandoned = format!("remote-devices.4242.{id}.tmp");
+    let unrelated = [
+        "remote-devices.notes.tmp".to_owned(),
+        "remote-devices.4242.tmp".to_owned(),
+        "remote-devices.4242.short.tmp".to_owned(),
+        format!("remote-devices.x.{id}.tmp"),
+        format!("remote-devices.4242.{id}.tmp.bak"),
+        format!("remote-routes-revoked.4242.{id}.tmp"),
+        format!("machine-id.4242.{id}.tmp"),
+    ];
+    std::fs::write(dir.0.join(&abandoned), "keys").unwrap();
+    for name in &unrelated {
+        std::fs::write(dir.0.join(name), "other").unwrap();
+    }
+    let (device, _) = add(&socket, "iPhone", Role::Full).unwrap();
+    assert!(!dir.0.join(&abandoned).exists(), "残留的临时文件还在");
+    for name in &unrelated {
+        assert!(dir.0.join(name).exists(), "{name} 不该被删");
+    }
+    // Left again, it goes on the way out of a removal too.
+    std::fs::write(dir.0.join(&abandoned), "keys").unwrap();
+    remove(&socket, &device.id).unwrap();
+    assert!(!dir.0.join(&abandoned).exists(), "残留的临时文件还在");
+}
