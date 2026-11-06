@@ -110,6 +110,18 @@ if sys.argv[1] == 'prepare':
         elif group != 4: records.append((stamp, 'event_msg', {'type': 'turn_aborted'}))
         (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in records))
         if os.environ.get('MOORING_FIXTURE_UNLINKED'): os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
+    if os.environ.get('MOORING_FIXTURE_CODEX_CHILDREN'):
+        # Real child logs, parsed by the host in both builds; no UI-injected list.
+        parent = logs / 'visual-0.jsonl'
+        with parent.open('a') as f:
+            f.write(json.dumps({'timestamp': now - 200, 'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'children'}}) + '\n')
+        for n, (name, end) in enumerate([('review_small_prs', None), ('loom_ci', 'task_complete'), ('rui_quota_acceptance', 'turn_aborted')]):
+            cid = f'visual-child-{n}'
+            spawn = {'parent_thread_id': 'visual-0', 'depth': 1, 'agent_path': '/root/' + name}
+            records = [(now - 180 + n * 10, 'session_meta', {'id': cid, 'cwd': str(root / 'projects/工作空间'), 'source': {'subagent': {'thread_spawn': spawn}}, 'agent_nickname': name}),
+                       (now - 180 + n * 10, 'event_msg', {'type': 'task_started', 'turn_id': cid})]
+            if end: records.append((now - 50 + n * 10, 'event_msg', {'type': end}))
+            (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': kind, 'payload': payload}) + '\n' for at, kind, payload in records))
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
     host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 30

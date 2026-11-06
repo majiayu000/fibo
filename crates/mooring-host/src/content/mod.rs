@@ -612,6 +612,7 @@ impl Parser {
             }
             _ => (),
         }
+        self.card.keep_subagents(kids.subagents.clone());
         self.settle(before, "子 Agent", at, String::new());
     }
     /// `detail` is the card's `signal_detail` when the turn changed, built only then.
