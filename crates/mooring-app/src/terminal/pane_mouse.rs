@@ -1,6 +1,6 @@
 //! The mouse over a pane: reports to a program that took it, selection, the
 //! scrollbar and the wheel.
-use super::paste::copied_note;
+use super::paste::{NOT_COPIED, copied_note, copies_anything};
 use super::{Pane, SCROLLBAR_HIT, WHEEL_REPORTS};
 use crate::terminal::screen;
 use gpui::{Context, Pixels, Point, Window, px};
@@ -457,12 +457,15 @@ impl Pane {
             .flatten()
             .filter(|t| !t.is_empty())
     }
-    /// Copies the selection; with nothing selected, the visible screen.
-    /// Says what was copied in the corner, away from the text being read. Copying the
-    /// whole screen is called out, as nothing was selected.
+    /// Copies the selection; with nothing selected, the visible screen, unless the program
+    /// holds the mouse: a highlight on screen may then be its own, just copied, which this
+    /// copy would overwrite. Says what happened in the corner, away from the text being read.
     pub fn copy(&mut self, cx: &mut Context<Self>) {
         let selected = self.selected_text();
         let whole_screen = selected.is_none();
+        if !copies_anything(whole_screen, self.takes_mouse()) {
+            return self.show_toast(NOT_COPIED, cx);
+        }
         let text = selected.unwrap_or_else(|| {
             let lines: Vec<String> = self
                 .screen
@@ -475,7 +478,7 @@ impl Pane {
                 .collect();
             lines.join("\n")
         });
-        let note = copied_note(&text, whole_screen, self.takes_mouse());
+        let note = copied_note(&text, whole_screen);
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         self.show_toast(note, cx);
     }

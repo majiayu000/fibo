@@ -126,6 +126,13 @@ impl Pane {
             .clone()
             .or_else(|| self.connection.state.lock().ok()?.error.clone())
     }
+    /// The copied note, and whether the mouse hint is up.
+    pub fn visual_notes(&self) -> (Option<String>, bool) {
+        (
+            self.notes.copied().map(|note| note.to_string()),
+            self.notes.mouse_hint(),
+        )
+    }
     pub fn visual_select_hint(&mut self, cx: &mut Context<Self>) {
         self.show_toast("已复制 3 行", cx);
         self.show_mouse_hint(cx);
