@@ -41,15 +41,28 @@ const THEMES: [(&str, &str, &str, bool); 3] = [
     ),
 ];
 
-/// CPU milliseconds and millions of instructions per frame of what `frame` does.
+/// Stretches a measurement's CPU time is taken over. A shared runner's neighbours load it
+/// in bursts: one burst moved a whole measurement 2x, it moves one stretch of the median.
+const STRETCHES: u32 = 10;
+
+/// CPU milliseconds per frame of what `frame` does (the median stretch's) and millions of
+/// instructions per frame (all of them: the count does not move with load).
 fn cost(frames: u32, mut frame: impl FnMut(u32)) -> (f64, f64) {
-    let (cpu, ins) = (cpu_secs(), instructions());
-    for n in 0..frames {
-        frame(n);
-    }
+    let per = frames / STRETCHES;
+    let ins = instructions();
+    let mut ms: Vec<f64> = (0..STRETCHES)
+        .map(|s| {
+            let cpu = cpu_secs();
+            for n in s * per..(s + 1) * per {
+                frame(n);
+            }
+            (cpu_secs() - cpu) / f64::from(per) * 1000.
+        })
+        .collect();
+    ms.sort_by(f64::total_cmp);
     (
-        (cpu_secs() - cpu) / f64::from(frames) * 1000.,
-        (instructions() - ins) as f64 / f64::from(frames) / 1e6,
+        ms[ms.len() / 2],
+        (instructions() - ins) as f64 / f64::from(per * STRETCHES) / 1e6,
     )
 }
 
@@ -191,6 +204,23 @@ pub(super) async fn run(
                 worst = (style, ms, ins);
             }
         }
+    }
+    // Without a counter the costliest is picked by time, so its number from the pick is the
+    // luckiest of many short noisy runs: the one picked is measured again, on its own, over
+    // its whole run several times.
+    if !worst.0.is_empty() {
+        let id = format!("complete-{}", worst.0);
+        handle
+            .update(cx, |v, _, cx| v.visual_plugins_grid(Some(&id), cx))
+            .unwrap();
+        frame(cx);
+        (worst.1, worst.2) = {
+            let cx = &mut *cx;
+            cost(MOMENTS * 8, |n| {
+                Workbench::visual_stage_hold(Some((n % MOMENTS) as f32 / (MOMENTS - 1) as f32));
+                frame(cx);
+            })
+        };
     }
     Workbench::visual_stage_hold(None);
     out.push(format!(
