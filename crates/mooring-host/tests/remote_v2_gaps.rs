@@ -491,10 +491,10 @@ fn list_carries_the_boards_todos() {
     );
 }
 
-/// What opens in a space put aside would vanish from the phone at once: it is refused and
-/// says where to go, and with no directory named it opens somewhere the phone can see.
+/// Opening by hand in a space put aside brings it back, or what opened would vanish from the
+/// phone at once; with no directory named it opens somewhere the phone already sees.
 #[test]
-fn open_refuses_a_space_put_aside_and_otherwise_avoids_it() {
+fn open_in_a_space_put_aside_brings_it_back() {
     let h = Host::start();
     let aside = scratch(&h, "aside");
     let keep = scratch(&h, "keep");
@@ -518,15 +518,27 @@ fn open_refuses_a_space_put_aside_and_otherwise_avoids_it() {
     })
     .unwrap();
     let mut r = Remote::open(&h, None, &[]);
-    let e = r.error(json!({ "op": "open", "cwd": aside.to_string_lossy(), "request": "r1" }));
-    assert!(e.contains("先不管"), "{e}");
     let list = r.ok(json!({ "op": "list" }));
     assert!(
         (list["spaces"].as_array().unwrap().iter()).all(|s| s["id"] != "a-aside"),
         "{list}"
     );
-    let opened = r.ok(json!({ "op": "open", "request": "r2" }));
-    let terminal = opened["terminal"].as_str().unwrap();
+    let opened = r.ok(json!({ "op": "open", "request": "r1" }));
+    let terminal = opened["terminal"].as_str().unwrap().to_owned();
     let w = h.workspace();
-    assert!(!w.terminal_quiet(terminal), "opened in an attended space");
+    assert!(
+        w.space_quiet("a-aside"),
+        "opening elsewhere leaves it alone"
+    );
+    assert!(!w.terminal_quiet(&terminal), "opened in an attended space");
+
+    let opened = r.ok(json!({ "op": "open", "cwd": aside.to_string_lossy(), "request": "r2" }));
+    assert!(!h.workspace().space_quiet("a-aside"), "it is back");
+    let terminal = opened["terminal"].as_str().unwrap();
+    assert_eq!(h.workspace().terminal_home(terminal), Some("a-aside"));
+    let list = r.ok(json!({ "op": "list" }));
+    assert!(
+        (list["terminals"].as_array().unwrap().iter()).any(|t| t["id"] == terminal),
+        "and the phone sees what it opened: {list}"
+    );
 }

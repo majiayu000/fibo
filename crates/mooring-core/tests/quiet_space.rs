@@ -1,4 +1,4 @@
-//! 先不管这个空间 (docs/quiet-space/spec.md): nothing in a space put aside is lost or
+//! 先不管这个空间 (docs/quiet-space/index.html): nothing in a space put aside is lost or
 //! stopped, and none of it asks for you; taking it back returns all of it.
 use mooring_core::content::now;
 use mooring_core::model::*;

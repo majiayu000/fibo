@@ -1,5 +1,5 @@
 //! MOORING_QUIET_SPACE_EVIDENCE: 先不管这个空间 in a real window against a real host
-//! (docs/quiet-space/spec.md), with real mouse events on the chip and its menu. The outer
+//! (docs/quiet-space/index.html), with real mouse events on the chip and its menu. The outer
 //! script starts the host with two Codex sessions in space `s`: one finished for you, one working. Checks the
 //! state table: going, what stops counting, looking not ending it, ⌘P, coming back. A second
 //! launch (MOORING_QUIET_SPACE_RESTART) checks the host kept it.
@@ -283,6 +283,97 @@ pub(super) fn start(
         );
         wait(600).await;
         shot("9-back.png", cx);
+        // Looking and scrolling leave it aside; typing brings it back, and so does new work.
+        let aside = |cx: &mut gpui::AsyncApp| {
+            handle
+                .update(cx, |v, _, cx| {
+                    v.visual_set_space_quiet(SPACE, true, cx);
+                })
+                .unwrap();
+        };
+        aside(cx);
+        for _ in 0..40 {
+            wait(100).await;
+            if quiet(cx) {
+                break;
+            }
+        }
+        handle
+            .update(cx, |v, _, cx| v.visual_pick_space(SPACE, cx))
+            .unwrap();
+        wait(300).await;
+        handle
+            .update(cx, |v, _, cx| {
+                v.visual_in_shown_pane("\u{1b}[<65;1;1M", true, cx)
+            })
+            .unwrap();
+        wait(500).await;
+        assert!(quiet(cx), "a mouse report is still only looking");
+        assert_eq!(wants(cx), 0);
+        handle
+            .update(cx, |v, _, cx| v.visual_in_shown_pane("x", false, cx))
+            .unwrap();
+        assert!(!quiet(cx), "typing brings it back at once");
+        let mut agrees = false;
+        for _ in 0..40 {
+            wait(100).await;
+            if !quiet(cx) && wants(cx) == 2 {
+                agrees = true;
+                break;
+            }
+        }
+        assert!(agrees, "and the host agrees: everything counts again");
+        wait(900).await;
+        shot("13-typed.png", cx);
+        aside(cx);
+        for _ in 0..40 {
+            wait(100).await;
+            if quiet(cx) {
+                break;
+            }
+        }
+        handle
+            .update(cx, |v, _, cx| v.visual_pick_space(SPACE, cx))
+            .unwrap();
+        wait(200).await;
+        handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
+        assert!(!quiet(cx), "new work brings it back at once");
+        wait(1500).await;
+        assert!(!quiet(cx), "and the host agrees");
+        shot("14-new-work.png", cx);
+        // Typing in the peek counts the same, from a space you are attending to.
+        aside(cx);
+        for _ in 0..40 {
+            wait(100).await;
+            if quiet(cx) {
+                break;
+            }
+        }
+        handle
+            .update(cx, |v, _, cx| v.visual_pick_space("keep", cx))
+            .unwrap();
+        wait(200).await;
+        let peeked = handle
+            .update(cx, |v, w, cx| v.visual_peek_row("done", w, cx))
+            .unwrap();
+        println!("peek opened: {peeked}");
+        if peeked {
+            wait(300).await;
+            assert!(quiet(cx), "peeking is only looking");
+            let (pane, _) = handle
+                .update(cx, |v, _, _| v.visual_peek_pane())
+                .unwrap()
+                .expect("the peek's pane");
+            cx.update(|cx| pane.update(cx, |p, cx| p.visual_type("y", cx)));
+            assert!(!quiet(cx), "typing in the peek brings it back");
+            handle.update(cx, |v, _, cx| v.visual_close_peek(cx)).unwrap();
+            wait(400).await;
+        } else {
+            handle
+                .update(cx, |v, _, cx| v.visual_set_space_quiet(SPACE, false, cx))
+                .unwrap();
+            wait(400).await;
+        }
         // Many put aside share one line, in every layout of the column.
         for id in [SPACE, "a", "b"] {
             handle
