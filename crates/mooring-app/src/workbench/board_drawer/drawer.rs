@@ -184,6 +184,7 @@ impl Workbench {
                             .line_height(relative(1.6))
                             .text_color(T::color(T::body()))
                             .line_clamp(10)
+                            .text_ellipsis()
                             .child(said),
                     ),
             )
@@ -311,6 +312,7 @@ fn fact_row(who: &'static str, text: String, when: String) -> gpui::AnyElement {
                 .min_w_0()
                 .text_color(T::color(T::secondary()))
                 .line_clamp(2)
+                .text_ellipsis()
                 .child(text),
         )
         .child(

@@ -11,6 +11,40 @@ fn clamped_card_text_says_it_was_cut() {
     }
 }
 
+/// The same cut, anywhere in the window: nine more places had it after the board was fixed.
+#[test]
+fn every_line_clamp_has_an_ellipsis() {
+    fn sources(dir: &std::path::Path, found: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("source directory") {
+            let path = entry.expect("source entry").path();
+            if path.is_dir() {
+                sources(&path, found);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                found.push(path);
+            }
+        }
+    }
+    let mut files = vec![];
+    sources(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    let call = concat!(".line", "_clamp(");
+    let mark = concat!(".text", "_ellipsis()");
+    let mut bare = vec![];
+    for file in files {
+        let text = std::fs::read_to_string(&file).expect("source file");
+        for (at, _) in text.match_indices(call) {
+            let after = &text[at..];
+            let end = after.find(".child(").unwrap_or(after.len());
+            if !after[..end].contains(mark) {
+                bare.push(format!("{}:{at}", file.display()));
+            }
+        }
+    }
+    assert!(bare.is_empty(), "clamped with no ellipsis: {bare:?}");
+}
+
 #[test]
 fn branches_color_by_their_prefix() {
     assert_eq!(branch_hue("feat/peek"), Some(T::BRANCH_FEAT));

@@ -34,6 +34,7 @@ impl Workbench {
                         .min_w_0()
                         .text_color(T::color(T::body()))
                         .line_clamp(3)
+                        .text_ellipsis()
                         .child(value),
                 )
         };
@@ -90,6 +91,7 @@ impl Workbench {
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(T::color(T::primary()))
                         .line_clamp(2)
+                        .text_ellipsis()
                         .child(self.session_title(s)),
                 )
                 .child(

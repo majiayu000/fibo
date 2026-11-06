@@ -605,6 +605,6 @@ impl SettingsView {
             .text_color(color)
             .child(div().flex_shrink_0().child(mark))
             // A long path in the error is cut; the first lines say what failed.
-            .child(div().min_w_0().line_clamp(3).child(text))
+            .child(div().min_w_0().line_clamp(3).text_ellipsis().child(text))
     }
 }

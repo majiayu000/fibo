@@ -65,6 +65,7 @@ impl Workbench {
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(T::primary()))
                     .line_clamp(3)
+                    .text_ellipsis()
                     .child(self.session_title(session)),
             )
             .child(
@@ -158,7 +159,10 @@ impl Workbench {
             }
             facts = facts.child(fact("做成了", list));
         }
-        facts = facts.child(fact("停在", div().line_clamp(4).child(h.stopped)));
+        facts = facts.child(fact(
+            "停在",
+            div().line_clamp(4).text_ellipsis().child(h.stopped),
+        ));
         panel = panel.child(facts);
         let (ok, files, failed) = evidence_tally(&card.evidence);
         if ok + files + failed > 0 {

@@ -496,6 +496,7 @@ impl Workbench {
                     .line_height(px(F::SUB_LINE))
                     .text_color(ink(F::third()))
                     .line_clamp(2)
+                    .text_ellipsis()
                     .child(said),
             )
             .child(

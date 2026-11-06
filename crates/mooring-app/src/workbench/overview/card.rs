@@ -208,6 +208,7 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .text_color(T::color(T::body()))
                     .line_clamp(3)
+                    .text_ellipsis()
                     .child(line),
             )
             .child(div().flex_1())
