@@ -24,6 +24,9 @@ jobs:
   mooring:
     name: Workbench Rust checks
     runs-on: macos-latest
+    permissions:
+      contents: read
+      statuses: write
     env:
       LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
       # Incremental state is not worth its size in the target/ cache.
@@ -95,6 +98,15 @@ jobs:
           name: ci-test-retries
           path: target/ci-test-retries.txt
           if-no-files-found: ignore
+      # GitHub does not count a dispatched run's checks for a pull request, so its result is
+      # written on the commit under the same name. Only a run that got this far passed.
+      - name: Report the result to the pull request
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api repos/${{ github.repository }}/statuses/${{ github.sha }}
+          -f state=success -f context="Workbench Rust checks"
 
   window-perf:
     name: Window performance gate
