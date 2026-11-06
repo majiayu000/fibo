@@ -1,9 +1,9 @@
-// The inbox: every paired computer's conversations as flat rows, what needs you first.
-// Approvals are answered in the row; swipe left for 已处理, right for 稍后提醒. What you
-// wrote while a computer was away waits under 「未发送」. Finished work folds into one line
-// and a filter narrows to one space; the title keeps the count of what still waits for you.
+// The home screen: every paired computer's conversations, what needs you first as cards you can
+// answer here. What runs and what waits to be checked fold under them, so none of it pushes the
+// other off the screen. Swipe left for 已处理, right for 稍后提醒, with a moment to undo. What you
+// wrote while a computer was away waits under 「未发送」.
 import { router } from 'expo-router';
-import { type ComponentRef, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { approve, deny, oops, settle } from '@/actions';
 import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/hub';
@@ -11,9 +11,11 @@ import { useAsk } from '@/remote/useAsk';
 import { setInboxView, useInboxView } from '@/store/inboxView';
 import { drop, useOutbox } from '@/store/outbox';
 import { SpaceMark } from '@/ui/icons';
-import { Btn, Group, Pill, Round, TITLE_WEIGHT, Wide, mono, useBottom, useTop } from '@/ui/kit';
+import { Btn, Group, Round, TITLE_WEIGHT, Wide, mono, useTop } from '@/ui/kit';
 import { Row, rowStyles, spaceName } from '@/ui/row';
-import { type Arranged, type Chip, type Item, arrange, foldLabel, itemKey, shelve } from '@/ui/inbox';
+import { type Arranged, type Item, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
+import { Bar, QuotaWords, useTightWindows } from '@/ui/quotaLine';
+import { TabBar } from '@/ui/tabs';
 import { statusColor } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
 import { TrustAsk } from '@/ui/trust';
@@ -32,7 +34,7 @@ function run(p: Promise<unknown>) {
 }
 
 // What the row's buttons answer: a new command, or the row moving, and a tap waits again.
-function ApprovalRow({ m, c, t, place }: Item & { t: Theme; place: string }) {
+function ApprovalRow({ m, c, t, place, named }: Item & { t: Theme; place: string; named: boolean }) {
   const online = m.status === 'online';
   const ask = useAsk(m.id, c, online);
   const can = supports(m, 'answer');
@@ -52,7 +54,7 @@ function ApprovalRow({ m, c, t, place }: Item & { t: Theme; place: string }) {
     );
   };
   return (
-    <Row m={m} c={c} onPress={() => open(m, c)}>
+    <Row m={m} c={c} named={named} boxed onPress={() => open(m, c)}>
       <Text numberOfLines={3} style={[s.cmd, { backgroundColor: t.well, color: t.text }]}>
         {ask.subject}
       </Text>
@@ -78,7 +80,9 @@ function ApprovalRow({ m, c, t, place }: Item & { t: Theme; place: string }) {
   );
 }
 
-function Swiped({ m, c, t, last, nth }: Item & { t: Theme; last?: boolean; nth?: string }) {
+type Settler = (m: Machine, c: Card, outcome: 'done' | 'deferred') => void;
+
+function Swiped({ m, c, t, last, nth, named, boxed, onSettle }: Item & { t: Theme; last?: boolean; nth?: string; named: boolean; boxed?: boolean; onSettle: Settler }) {
   const can = supports(m, 'outcome') && !!c.session;
   const online = m.status === 'online';
   const buttons = online && Boolean(c.trust || c.approval);
@@ -87,10 +91,10 @@ function Swiped({ m, c, t, last, nth }: Item & { t: Theme; last?: boolean; nth?:
   const [laid, setLaid] = useState('');
   const place = `${nth}/${laid}`;
   const body = c.trust && online ? (
-    <Row m={m} c={c} onPress={() => open(m, c)}>
+    <Row m={m} c={c} named={named} boxed onPress={() => open(m, c)}>
       <TrustAsk machine={m.id} card={c} can={supports(m, 'trust')} place={place} />
     </Row>
-  ) : c.approval && online ? <ApprovalRow m={m} c={c} t={t} place={place} /> : <Row m={m} c={c} last={last} onPress={() => open(m, c)} />;
+  ) : c.approval && online ? <ApprovalRow m={m} c={c} t={t} place={place} named={named} /> : <Row m={m} c={c} last={last} named={named} boxed={boxed} onPress={() => open(m, c)} />;
   return (
     <View
       onLayout={(e) => {
@@ -100,8 +104,8 @@ function Swiped({ m, c, t, last, nth }: Item & { t: Theme; last?: boolean; nth?:
     >
       {can ? (
         <Swipe
-          left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => run(settle(m.id, c, 'done')) }}
-          right={{ label: '稍后提醒', color: t.waitBg, fg: t.wait, run: () => run(settle(m.id, c, 'deferred')) }}
+          left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}
+          right={{ label: '稍后提醒', color: t.waitBg, fg: t.wait, run: () => onSettle(m, c, 'deferred') }}
         >
           {body}
         </Swipe>
@@ -124,29 +128,14 @@ function Offline({ m, t }: { m: Machine; t: Theme }) {
   );
 }
 
-function SpaceChip({ chip, on, t, onPress }: { chip: Chip; on: boolean; t: Theme; onPress: () => void }) {
-  const label = chip.name ?? '全部';
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: on }}
-      accessibilityLabel={chip.acts > 0 ? `${label}，${chip.count} 个，${chip.acts} 件等你` : `${label}，${chip.count} 个`}
-      hitSlop={{ top: 7, bottom: 7 }}
-      onPress={onPress}
-      style={({ pressed }) => [s.chip, { borderColor: on ? t.act : t.line, backgroundColor: on ? t.act : t.card }, pressed && { opacity: 0.7 }]}
-    >
-      <Text numberOfLines={1} style={[s.chipText, { color: on ? t.onAct : t.text }]}>
-        {label}
-      </Text>
-      {chip.count > 0 && <Text style={[s.chipText, chip.acts > 0 && !on ? { color: t.wait, fontWeight: '600' } : { color: on ? t.onAct : t.dim }]}>{chip.count}</Text>}
-    </Pressable>
-  );
-}
+/** How long 撤销 stays. */
+const UNDO_MS = 7000;
+
+const UNDO_WORDS = { done: '已标记「已处理」', deferred: '一小时后再提醒你' } as const;
 
 export default function Inbox() {
   const t = useTheme();
   const top = useTop();
-  const bottom = useBottom();
   const { loaded, machines } = useHub();
   const unsent = useOutbox();
   const [showLater, setShowLater] = useState(false);
@@ -155,17 +144,26 @@ export default function Inbox() {
   const hold = useHold();
   const shown = useRef<Arranged | null>(null);
   if (!shown.current || !hold.held()) shown.current = arrange(machines, shown.current?.pins ?? []);
-  const { offline } = shown.current;
   const view = useInboxView();
-  const shelf = shelve(shown.current, view.space);
-  const { pinned, ahead, review, running, behind, later, done, chips, filter } = shelf;
-  const list = useRef<ComponentRef<typeof ScrollView>>(null);
-  const pick = (space: string | null) => {
-    setInboxView({ space });
-    list.current?.scrollTo({ y: 0, animated: false });
+  const shelf = shelve(shown.current, null);
+  const { pinned, ahead, review, running, behind, later, done } = shelf;
+  const named = namesComputer(machines);
+  const line = connectionLine(machines);
+  const offline = offlineRows(machines);
+  const tight = useTightWindows(machines);
+  const runningOpen = view.running !== false;
+  const [allRunning, setAllRunning] = useState(false);
+  const [undo, setUndo] = useState<{ text: string; back: () => void } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(undoTimer.current), []);
+  const onSettle: Settler = (m, c, outcome) => {
+    const before = undoTo(c);
+    settle(m.id, c, outcome).then(() => {
+      clearTimeout(undoTimer.current);
+      setUndo({ text: UNDO_WORDS[outcome], back: () => run(settle(m.id, c, before)) });
+      undoTimer.current = setTimeout(() => setUndo(null), UNDO_MS);
+    }, (e) => oops((e as Error).message));
   };
-  // Only the last row of all drops its hairline; `after` says something still follows this group.
-  const tail = (n: number, length: number, after: boolean) => n === length - 1 && !after && !unsent.length;
   const where = (id: string, terminal: string) => {
     const m = machines.find((x) => x.id === id);
     const c = m?.cards.find((x) => x.id === terminal);
@@ -175,40 +173,25 @@ export default function Inbox() {
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <View style={[s.hd, { paddingTop: top + 9 }]}>
-        {/* Stacked: the count must not be cut on a narrow phone, and the buttons set the height either way. */}
-        <View style={{ flexShrink: 1 }}>
-          <Text style={[s.brand, { color: t.text }]} numberOfLines={1}>
-            Mooring
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[s.title, { color: t.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+            {headline(shelf, machines.length)}
           </Text>
-          {shelf.waiting > 0 ? (
-            <Text numberOfLines={1} style={[s.waiting, { color: shelf.acts > 0 ? t.wait : t.ok }]}>{`${shelf.waiting} 件等你`}</Text>
-          ) : (
-            machines.length > 0 && <Text numberOfLines={1} style={[s.count, { color: t.dim }]}>{`${machines.length} 台电脑`}</Text>
+          {!!line.text && (
+            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/me')} style={s.line}>
+              <View style={[s.dotSmall, { backgroundColor: machines.some((m) => m.status === 'online') ? t.ok : t.dim }]} />
+              <Text numberOfLines={1} style={{ fontSize: 13, color: line.alert ? t.err : t.dim, flexShrink: 1 }}>
+                {line.text}
+              </Text>
+            </Pressable>
           )}
         </View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Pill
-            items={[
-              { icon: 'board', label: '看板', onPress: () => router.push('/board'), width: 36 },
-              { icon: 'computer', label: '电脑', onPress: () => router.push('/machines'), width: 36 },
-              { icon: 'quota', label: '额度', onPress: () => router.push('/quota'), width: 36 },
-              { icon: 'gear', label: '设置', onPress: () => router.push('/settings'), width: 36 },
-            ]}
-          />
-          <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
-        </View>
+        <Round icon="search" label="搜索" onPress={() => router.push('/search')} />
+        <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
       </View>
-      {chips.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={s.chips}>
-          {chips.map((chip) => (
-            <SpaceChip key={chip.name ?? ''} chip={chip} on={chip.name === filter} t={t} onPress={() => pick(chip.name)} />
-          ))}
-        </ScrollView>
-      )}
       <View style={{ flex: 1 }} {...hold.touch}>
       <ScrollView
-        ref={list}
-        contentContainerStyle={{ paddingBottom: bottom + 16 }}
+        contentContainerStyle={{ paddingTop: 4, paddingBottom: undo ? 72 : 16 }}
         onScroll={hold.onScroll}
         scrollEventThrottle={32}
         keyboardShouldPersistTaps="handled"
@@ -224,36 +207,50 @@ export default function Inbox() {
             </View>
           </View>
         )}
+        {/* What asks you first: a computer coming and going, or a group opening, pushes nothing you could tap. */}
         {pinned.map((i, n) => (
-          // The filter row coming or going moves the whole list: its buttons wait again too.
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={`${chips.length > 0}/${n}`} />
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={String(n)} named={named} boxed onSettle={onSettle} />
         ))}
-        {/* Under what asks you, like the bar below: an approval arriving elsewhere pushes nothing you could tap. */}
-        {shelf.elsewhere > 0 && (
-          <Pressable accessibilityRole="button" onPress={() => pick(null)} style={({ pressed }) => [s.elsewhere, { backgroundColor: t.waitBg }, pressed && { opacity: 0.7 }]}>
-            <Text style={[s.elsewhereText, { color: t.wait }]}>{`其他空间还有 ${shelf.elsewhere} 件等你`}</Text>
-            <Text style={[s.elsewhereGo, { color: t.wait }]}>看全部</Text>
-          </Pressable>
-        )}
-        {/* Under what asks you: a computer coming and going pushes nothing you could tap. */}
         {offline.map((m) => (
           <Offline key={m.id} m={m} t={t} />
         ))}
-        {ahead.map((i, n) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, ahead.length, review.length + running.length + behind.length > 0)} />
+        {ahead.map((i) => (
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
         ))}
+        {(running.length > 0 || tight.length > 0) && (
+          <View style={s.runHead}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              {running.length > 0 && <Group label={foldLabel(running)} color={statusColor(running[0].c, t)} open={runningOpen} onPress={() => setInboxView({ running: !runningOpen })} />}
+            </View>
+            {tight[0] && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="看全部额度"
+                hitSlop={{ top: 10, bottom: 10 }}
+                onPress={() => router.push('/quota')}
+                style={s.quota}
+              >
+                <QuotaWords q={tight[0]} named={named} t={t} />
+                <Bar used={tight[0].used} t={t} width={36} />
+              </Pressable>
+            )}
+          </View>
+        )}
+        {runningOpen && runningShown(running, allRunning).map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
+        {runningOpen && !allRunning && running.length > runningShown(running, false).length && (
+          <Pressable accessibilityRole="button" onPress={() => setAllRunning(true)} style={({ pressed }) => [s.more, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
+            <Text style={{ fontSize: 14, color: t.dim }}>{`看全部 ${running.length} 个`}</Text>
+          </Pressable>
+        )}
         {review.length > 0 && (
           <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />
         )}
-        {view.review && review.map((i, n) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, review.length, running.length + behind.length > 0)} />)}
-        {running.map((i, n) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, running.length, behind.length > 0)} />
-        ))}
-        {behind.map((i, n) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, behind.length, false)} />
+        {view.review && review.map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
+        {behind.map((i) => (
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
         ))}
         {loaded && machines.some((m) => m.status === 'online') && shelf.empty && (
-          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>{filter === null ? '没有要处理的事' : '这个空间没有要处理的事'}</Text>
+          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>没有要处理的事</Text>
         )}
         {unsent.length > 0 && <Group label="未发送" />}
         {unsent.map((u, i) => {
@@ -283,34 +280,52 @@ export default function Inbox() {
         {later.length > 0 && <Group label={`稍后提醒 · ${later.length}`} open={showLater} onPress={() => setShowLater(!showLater)} />}
         {showLater &&
           later.map(({ m, c }) => (
-            <Swipe key={`${m.id}/${c.id}`} left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => run(settle(m.id, c, 'done')) }}>
-              <Row m={m} c={c} dim right={{ text: '稍后提醒' }} onPress={() => open(m, c)} />
+            <Swipe key={`${m.id}/${c.id}`} left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}>
+              <Row m={m} c={c} named={named} dim right={{ text: '稍后提醒' }} onPress={() => open(m, c)} />
             </Swipe>
           ))}
         {done.length > 0 && <Group label={`已处理 · ${done.length}`} open={showDone} onPress={() => setShowDone(!showDone)} />}
         {showDone &&
           done.map(({ m, c }) => (
             <Swipe key={`${m.id}/${c.id}`} right={{ label: '放回收件箱', color: t.well, fg: t.text, run: () => run(settle(m.id, c, 'open')) }}>
-              <Row m={m} c={c} dim right={{ text: '已处理' }} onPress={() => open(m, c)} />
+              <Row m={m} c={c} named={named} dim right={{ text: '已处理' }} onPress={() => open(m, c)} />
             </Swipe>
           ))}
       </ScrollView>
+      {undo && (
+        <View style={[s.undo, { backgroundColor: t.act }]}>
+          <Text numberOfLines={1} style={{ fontSize: 14, color: t.onAct, flexShrink: 1 }}>
+            {undo.text}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => {
+              undo.back();
+              clearTimeout(undoTimer.current);
+              setUndo(null);
+            }}
+            style={s.undoGo}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '600', color: t.onAct }}>撤销</Text>
+          </Pressable>
+        </View>
+      )}
       </View>
+      <TabBar on="home" />
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  hd: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 8, gap: 8 },
-  brand: { fontSize: 22, lineHeight: 26, fontWeight: '500', letterSpacing: -0.2 },
-  count: { fontSize: 10, lineHeight: 15, letterSpacing: 1.2, fontWeight: '400' },
-  waiting: { fontSize: 12, lineHeight: 15, fontWeight: '500' },
-  chips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingBottom: 8 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 11, maxWidth: 180 },
-  chipText: { fontSize: 13, flexShrink: 1 },
-  elsewhere: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, paddingHorizontal: 18, paddingVertical: 10 },
-  elsewhereText: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
-  elsewhereGo: { fontSize: 13 },
+  hd: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
+  title: { fontSize: 26, lineHeight: 32, fontWeight: '600', letterSpacing: -0.3 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  runHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  quota: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 18, paddingBottom: 6, flexShrink: 1, maxWidth: '62%' },
+  more: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1 },
+  undo: { position: 'absolute', left: 12, right: 12, bottom: 8, minHeight: 48, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingLeft: 14, paddingRight: 4 },
+  undoGo: { minHeight: 44, minWidth: 64, alignItems: 'center', justifyContent: 'center' },
   cmd: { fontFamily: mono, fontSize: 13, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 11, marginTop: 6, overflow: 'hidden' },
   act: { flexDirection: 'row', gap: 8, marginTop: 8 },
   offline: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 10, borderBottomWidth: 1 },

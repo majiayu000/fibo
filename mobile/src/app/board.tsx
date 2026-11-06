@@ -6,7 +6,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { type Card, type Machine, type Todo, useHub } from '@/remote/hub';
 import { cardTitle } from '@/ui/format';
 import { Icon, SpaceDot } from '@/ui/icons';
-import { Nav, Notice, mono, useBottom } from '@/ui/kit';
+import { Nav, Notice, mono } from '@/ui/kit';
+import { TabBar } from '@/ui/tabs';
 import { useNow } from '@/ui/now';
 import { runningFor } from '@/ui/parse';
 import { spaceName } from '@/ui/row';
@@ -67,7 +68,6 @@ function Todos({ items, t }: { items: { m: Machine; todo: Todo }[]; t: Theme }) 
 
 export default function Board() {
   const t = useTheme();
-  const bottom = useBottom();
   const { machines } = useHub();
   const [only, setOnly] = useState<string | null>(null);
   const [col, setCol] = useState<Column>('needs');
@@ -97,6 +97,7 @@ export default function Board() {
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <Nav
         big
+        tab
         title="看板"
         right={
           machines.length > 1 ? (
@@ -130,7 +131,7 @@ export default function Board() {
           })}
         </ScrollView>
       </View>
-      <ScrollView contentContainerStyle={{ paddingBottom: bottom + 16 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
         {col === 'todo' && todos.length > 0 ? (
           <Todos items={todos} t={t} />
         ) : count(col) === 0 ? (
@@ -173,6 +174,7 @@ export default function Board() {
           ))
         )}
       </ScrollView>
+      <TabBar on="board" />
     </View>
   );
 }
