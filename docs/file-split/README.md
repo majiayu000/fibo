@@ -179,22 +179,21 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 | Keepline 老安装兼容 | `legacy.rs` 测试 | – |
 | 打包和启动 | `package-macos.py` | 干净环境启动 App（`env -i open`） |
 
-## 基线结果
+## 验收结果（2026-11-06）
 
-`eedc95a`（#2–#7、#1 合入后），固定路径的独立 worktree，全程 HEAD 没变。测量结果在本机 `~/Library/Caches/MooringVisual/split-baseline-eedc95a/{a,b}`，同一台机器验收可以直接复用；换了提交（比如 G1 合入）就要重测。
+**决定：待验证。** 代码和自动化层面通过，没有发现拆分造成的回归；真机走查（第 6 层）还没做，所以不算全部验完。
 
-| 检查 | 结果 |
+基线 `25c4cd02`（G1 合入）对比终点 `34ed7c1`，都在 `apple` 上跑。两者之间除 22 个拆分提交外还有 73 个非拆分提交，所以差异不全来自拆分。
+
+| 层 | 结果 |
 |---|---|
-| `cargo fmt --check`、默认 clippy、开 `visual-test` 的 `cargo check` | 通过 |
-| `sh ci-test.sh` | 793 通过，0 失败，26 忽略，无重跑 |
-| `cargo test -p mooring-app --features visual-test` | 215 通过，0 失败，3 忽略 |
-| `mobile`：`bun test`、`bun run typecheck` | 61 通过，0 失败；类型检查通过 |
-| `eval/protocol-contract/check.py`、`theme-scenes.py` | 通过 |
-| `perf-gate.py` | 一遍失败一遍通过：`settings-open` 超预算（+26.3%），本身波动大，其余各项稳定。不是拆分造成的 |
-| 场景和页面组 | 44 组里两遍都过的 24 组；其余见上文，受机器负载影响 |
+| 1 纯搬动审计 | 22 个拆分提交：10 个判干净，12 个标出的逐个看过，只有路径、可见性、导入和守卫清单的改动。`harness.rs` 必须重构：断言 208、场景开关 36、截图 102、等待 161 前后相等，没有一行消失 |
+| 2 测试名单 | 基线 1040，终点 1162；只少 1 条，是 #39 有意换成两条新测试 |
+| 3 全量测试 | 终点 900 通过，0 失败；fmt、clippy、visual-test、手机端、协议检查全过 |
+| 4 性能和窗口 | 14 项无变慢；主题场景通过 |
+| 5 画面 | 按基线、终点、基线跑，场景 0 回归。查过的差异都有来源：省略号修复、菜单「中断这一轮」、计时、光标闪烁 |
+| 6 真机走查 | **没做** |
 
-测试名单在 `baseline-tests.txt`，共 1037 条（默认加开 `visual-test` 的 app 测试）。同名测试保留多条，对比时按条数算。
+**没有覆盖**：`ROUTE`、`SPLIT`、`SHORTCUT`、`TAB`、`LINK`、`NEW_SPACE`、`OVERVIEW`、`PHONES`、`KEYMAP`、`SUBAGENT` 在基线上就失败；被忽略的真 Agent 用例没跑；悬停和拖动中途截图到不了；`34ed7c1` 之后合入 main 的提交不在这次对比里。
 
-**已知不稳定的用例**：`events_stream_every_change_once_in_order_and_a_stalled_reader_blocks_nobody` 单独连跑 6 遍失败 2 遍，报错位置还不同（`managed_session.rs:4658`、`:4527`）。它失败不算拆分回归，除非 PR #15、#16 修好之后还失败。
-
-**基线还没跑**：中继镜像（CI 在跑）、被忽略的用例、真机走查。
+测量结果在 `apple` 的 `~/Library/Caches/MooringAccept/{accept,aba,pages}`。
