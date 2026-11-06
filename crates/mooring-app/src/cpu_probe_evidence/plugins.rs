@@ -1,5 +1,6 @@
 //! `frames-plugins`: what 设置 › 插件 and the richer themes cost on the probe's large workspace.
-//! - `settings-open`: creating the settings view, which reads every plugin's own files.
+//! - `settings-open`: creating the settings view, which reads every plugin's own files. The
+//!   middle of several opens.
 //! - `frames-cardrest`: the page of animation cards drawn again with none playing. Nothing
 //!   asks for one by itself; this is what any other change on that page costs.
 //! - `frames-cardplay`: a frame with one card playing, the costliest animation of them all
@@ -20,6 +21,8 @@ use workbench::Workbench;
 const FRAMES: u32 = 300;
 /// Moments of each animation's run measured to find the costliest.
 const MOMENTS: u32 = 40;
+/// Times settings is opened for `settings-open`.
+const OPENS: usize = 5;
 /// Name, plugin, theme and whether the theme is a light one, which it must be set as.
 const THEMES: [(&str, &str, &str, bool); 3] = [
     (
@@ -118,14 +121,30 @@ pub(super) async fn run(
         plain.0, plain.1
     ));
 
-    let (at, ins) = (Instant::now(), instructions());
-    handle
-        .update(cx, |v, w, cx| v.show_settings(w, cx))
-        .unwrap();
-    let open_ms = at.elapsed().as_secs_f64() * 1000.;
-    let open_ins = (instructions() - ins) as f64 / 1e6;
+    // One open read 6.34 to 9.29 M from one build, more when the machine was busy: the middle
+    // of several is what the gate compares, the first stays in the log for a slower cold start.
+    let mut opens = Vec::new();
+    for n in 0..OPENS {
+        if n > 0 {
+            handle
+                .update(cx, |v, _, a| v.visual_settings_close(a))
+                .unwrap();
+        }
+        let (at, ins) = (Instant::now(), instructions());
+        handle
+            .update(cx, |v, w, cx| v.show_settings(w, cx))
+            .unwrap();
+        opens.push((
+            at.elapsed().as_secs_f64() * 1000.,
+            (instructions() - ins) as f64 / 1e6,
+        ));
+    }
+    let first = opens[0];
+    opens.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.total_cmp(&b.0)));
+    let middle = opens[OPENS / 2];
     out.push(format!(
-        "settings-open: {open_ms:.2} ms wall, {open_ins:.2} M instructions"
+        "settings-open: {:.2} ms wall, {:.2} M instructions; the middle of {OPENS}, the first {:.2} ms, {:.2} M",
+        middle.0, middle.1, first.0, first.1
     ));
     // Settings on a plain page first: what is the page's and what is settings' own.
     let plain_frame = |cx: &mut gpui::AsyncApp| {
