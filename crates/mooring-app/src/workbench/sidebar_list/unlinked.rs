@@ -181,6 +181,20 @@ mod tests {
         assert!(!row_selected(Some("other"), "t", false));
     }
 
+    /// 「两个栏不是一样宽的」: a row's box starts where the search field and the chips do,
+    /// on both sides, however its contents are placed.
+    #[test]
+    fn a_rows_box_lines_up_with_the_controls_above_it() {
+        let id = || gpui::SharedString::from("row");
+        let mut session = flat_row_box(id(), false, false);
+        let mut older = crate::workbench::sidebar_flat::flat_more_box(id());
+        for row in [&mut session, &mut older] {
+            let style = row.style();
+            assert_eq!(points(style.margin.left), T::S12);
+            assert_eq!(points(style.margin.right), T::S12);
+        }
+    }
+
     /// 「会话 7」 over 3 sessions while the same column says 「未关联的终端 4」.
     #[test]
     fn the_session_counts_leave_these_terminals_out() {
@@ -201,7 +215,7 @@ mod tests {
         let at = columns(&mut placeholder, F::STATE);
         assert_eq!(at, columns(&mut session, F::STATE));
         assert_eq!(at, columns(&mut older, F::STATE));
-        assert_eq!(at, (T::S8 + T::S10, T::S8 + T::S10 + F::STATE + F::ROW_GAP));
+        assert_eq!(at, (F::EDGE, F::EDGE + F::STATE + F::ROW_GAP));
         let TextStyleRefinement { font_size, .. } =
             row_text(Look::Flat, String::new()).style().text.clone();
         assert_eq!(font_size, Some(px(F::TITLE).into()));
