@@ -18,6 +18,10 @@ const GIT_LFS: &[(&str, &str)] = &[
     ("filter.lfs.required", "true"),
 ];
 
+/// Commands git-lfs's clean runs, so a stranger's needs no filter of its own: the machine's
+/// global `filter.lfs.*` runs them. Its subsection keeps its case in what git prints.
+const LFS_EXTENSION: &str = "lfs.extension.";
+
 /// The command printing what `foreign` reads.
 pub(super) const LIST: &[&str] = &["config", "--list", "--show-scope", "--includes", "-z"];
 
@@ -35,6 +39,7 @@ pub(super) fn foreign(list: &[u8]) -> bool {
         // arrives as `filter.x`, and `filter "LFS"` is not the name git-lfs writes.
         if key == "core.worktree"
             || (key.starts_with("filter.") && !GIT_LFS.contains(&(key, value)))
+            || key.to_ascii_lowercase().starts_with(LFS_EXTENSION)
         {
             return true;
         }
@@ -66,6 +71,9 @@ mod tests {
             "filter.lfs.clean\ngit-lfs clean -- %f; cmd",
             "filter.LFS.clean\ngit-lfs clean -- %f",
             "filter.lfs.unknown\ntrue",
+            "lfs.extension.x.clean\n./ext.sh",
+            "lfs.EXTENSION.x.clean\n./ext.sh",
+            "lfs.Extension.x.priority\n0",
         ] {
             for scope in ["local", "worktree"] {
                 assert!(foreign(&list(&[(scope, entry)])), "{scope} {entry}");
@@ -87,6 +95,8 @@ mod tests {
                 "extensions.partialclone\norigin",
                 "worktree.x\ny",
                 "notfilter.x.clean\ncmd",
+                "lfs.url\nhttps://a/b",
+                "lfs.extensions\nx",
             ]
             .map(str::to_owned),
         );

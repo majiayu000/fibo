@@ -100,14 +100,21 @@ pub(crate) fn read(cwd: &Path, role: super::Role) -> io::Result<rp::Diff> {
         c
     };
     // Before anything that could run a filter. All of it sounds the same as a plain folder.
-    if lesser {
-        let list = output(git(cwd).args(super::diff_config::LIST))?.ok_or_else(not_git)?;
-        if super::diff_config::foreign(&list) {
-            return Err(not_git());
-        }
+    let foreign = |dir: &Path| -> io::Result<bool> {
+        let list = output(git(dir).args(super::diff_config::LIST))?.ok_or_else(not_git)?;
+        Ok(super::diff_config::foreign(&list))
+    };
+    if lesser && foreign(cwd)? {
+        return Err(not_git());
     }
     let top = output(git(cwd).args(["rev-parse", "--show-toplevel"]))?.ok_or_else(not_git)?;
-    let top = PathBuf::from(String::from_utf8_lossy(&top).trim_end());
+    // Only the line's end: a folder's name may itself end in a space.
+    let top = String::from_utf8_lossy(&top);
+    let top = PathBuf::from(top.strip_suffix('\n').unwrap_or(&top));
+    // Git runs in `top` from here on, so `top` is what must be clean.
+    if lesser && foreign(&top)? {
+        return Err(not_git());
+    }
     // A repository holding home would show `~/.ssh` as untracked files. To a role that may
     // not see the machine's folders, it reads as if home were no repository at all.
     if lesser && super::diff_scope::holds_home(&top) {

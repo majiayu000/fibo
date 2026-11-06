@@ -340,3 +340,108 @@ fn ordinary_and_git_lfs_repositories_read_as_ever_for_a_lesser_role() {
         }
     }
 }
+
+/// A `git-lfs` that does what the real one does with an extension: runs its `clean` command
+/// from the repository, then passes the file through. CI need not have git-lfs installed.
+fn git_lfs_stand_in(h: &Host) -> PathBuf {
+    let bin = scratch(h, "lfs-extension-bin");
+    let stand_in = bin.join("git-lfs");
+    let script = "#!/bin/sh\n\
+        ext=$(/usr/bin/git config --get-regexp '^lfs\\.extension\\..*\\.clean$' | /usr/bin/cut -d' ' -f2-)\n\
+        [ -n \"$ext\" ] && /bin/sh -c \"$ext\" </dev/null\n\
+        exec /bin/cat\n";
+    fs::write(&stand_in, script).unwrap();
+    fs::set_permissions(&stand_in, fs::Permissions::from_mode(0o755)).unwrap();
+    PathBuf::from(format!("{}:/usr/bin:/bin", bin.display()))
+}
+
+/// git-lfs's clean runs `lfs.extension.<name>.clean`, so a stranger's config needs no filter
+/// of its own: not even `filter.lfs.*` where the machine's global config already has it.
+#[test]
+fn a_git_lfs_extension_in_a_repositorys_own_config_reads_as_no_repository() {
+    let h = Host::start();
+    let known = scratch(&h, "known");
+    h.launch("known", &known, "sleep 60");
+    let marker = h.root.join("ran");
+    let script = format!("#!/bin/sh\n/usr/bin/touch '{}'\n", marker.display());
+    let extension = |dir: &Path, section: &str| {
+        repo_with_change(dir, "filter=lfs");
+        fs::write(dir.join("ext.sh"), &script).unwrap();
+        fs::set_permissions(dir.join("ext.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+        append(
+            &dir.join(".git/config"),
+            &format!("[{section}]\n\tclean = ./ext.sh\n"),
+        );
+    };
+    let lfs_filter = "[filter \"lfs\"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\trequired = true\n";
+
+    let with_filter = known.join("with-filter");
+    extension(&with_filter, "lfs \"extension.x\"");
+    append(&with_filter.join(".git/config"), lfs_filter);
+    let no_filter = known.join("no-filter");
+    extension(&no_filter, "lfs \"extension.x\"");
+    let shouting = known.join("shouting");
+    extension(&shouting, "LFS \"EXTENSION.x\"");
+
+    let global = h.root.join("global-gitconfig");
+    fs::write(&global, lfs_filter).unwrap();
+    let path = git_lfs_stand_in(&h);
+    let env: Vec<(&str, &Path)> = vec![
+        ("GIT_CONFIG_GLOBAL", global.as_path()),
+        ("GIT_CONFIG_NOSYSTEM", Path::new("1")),
+        ("PATH", path.as_path()),
+    ];
+    h.launch("in-no-filter", &no_filter, "sleep 60");
+    let mut r = Remote::open(&h, Some("view"), &env);
+    for asked in [
+        diff(&with_filter),
+        diff(&no_filter),
+        diff(&shouting),
+        by_terminal("in-no-filter"),
+    ] {
+        let reply = r.ask(asked.clone());
+        assert!(!marker.exists(), "{asked} ran its extension: {reply}");
+        assert_eq!(reply["error"], NOT_GIT, "{asked}: {reply}");
+    }
+    let mut full = Remote::open(&h, Some("full"), &env);
+    full.ok(diff(&no_filter));
+    assert!(
+        marker.exists(),
+        "the full role reads this repository as ever"
+    );
+}
+
+/// `foo ` beside `foo`, as an archive can bring them: the name ends in a space, and git must
+/// run in that folder and no other. Whoever asks reads `foo `, and `foo`'s filter stays idle.
+#[test]
+fn a_folder_name_ending_in_a_space_is_read_as_itself() {
+    let h = Host::start();
+    let known = scratch(&h, "known");
+    h.launch("known", &known, "sleep 60");
+    let marker = h.root.join("ran");
+    let evil = known.join("foo");
+    repo_with_change(&evil, "filter=x");
+    append(
+        &evil.join(".git/config"),
+        &format!("[filter \"x\"]\n\tclean = {}\n", run_marker(&marker)),
+    );
+    let twin = known.join("foo ");
+    repo_with_change(&twin, "text");
+    let sub = twin.join("sub");
+    fs::create_dir(&sub).unwrap();
+    h.launch("in-twin", &twin, "sleep 60");
+    let top = fs::canonicalize(&twin).unwrap();
+    for role in ["view", "full"] {
+        let mut r = Remote::open(&h, Some(role), &isolated());
+        for asked in [diff(&sub), by_terminal("in-twin")] {
+            let reply = r.ask(asked.clone());
+            assert!(!marker.exists(), "{role} {asked} ran foo's filter: {reply}");
+            assert_eq!(
+                reply["ok"]["cwd"].as_str().map(Path::new),
+                Some(top.as_path()),
+                "{role} {asked}: {reply}"
+            );
+            assert_eq!(reply["ok"]["files"][0]["path"], "a.txt", "{reply}");
+        }
+    }
+}
