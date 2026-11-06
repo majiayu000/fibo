@@ -104,19 +104,28 @@ pub fn terminal_for_process(
     }
     None
 }
-/// Names the Agent processes in an unbound pane whose command line names no conversation,
-/// from their CLI's own list of live sessions (`Adapter::sessions_by_pid`). Asked once per
-/// probe per CLI, and only while such a process runs in a managed pane.
-pub fn name_by_pid(workspace: &Workspace, processes: &mut [Process]) {
+/// Names the Agent processes whose command line names no conversation, from their CLI's
+/// own list of live sessions (`Adapter::sessions_by_pid`): those in an unbound pane, and
+/// those in a pane whose conversation has no process yet (`watched` holds the sessions
+/// that do). A host that restarted has lost that link, and an Agent waiting on a background
+/// shell sends no hook to bring it back. Asked once per probe per CLI, and only while such
+/// a process runs in a managed pane.
+pub fn name_by_pid(workspace: &Workspace, processes: &mut [Process], watched: &HashSet<String>) {
     let mut unnamed: Vec<(Agent, Vec<u32>)> = vec![];
+    // Pid -> the conversation its pane is bound to.
+    let mut bound_to: HashMap<u32, String> = HashMap::new();
     for p in processes.iter() {
         let Some(runtime) = p.runtime.filter(|_| p.cli_session_id.is_none()) else {
             continue;
         };
-        if !terminal_for_process(p.pid, processes, workspace)
-            .is_some_and(|t| workspace.current_agent(&t).is_none())
-        {
+        let Some(terminal) = terminal_for_process(p.pid, processes, workspace) else {
             continue;
+        };
+        if let Some(s) = workspace.current_agent(&terminal) {
+            if s.runtime != runtime || watched.contains(&s.id) {
+                continue;
+            }
+            bound_to.insert(p.pid, s.cli_session_id.clone());
         }
         match unnamed.iter_mut().find(|(a, _)| *a == runtime) {
             Some((_, pids)) => pids.push(p.pid),
@@ -125,6 +134,11 @@ pub fn name_by_pid(workspace: &Workspace, processes: &mut [Process]) {
     }
     for (runtime, pids) in unnamed {
         for (pid, id) in crate::agents::adapter(runtime).sessions_by_pid(&pids) {
+            // A bound pane keeps its conversation: the list only finds the process that
+            // runs it. Anything else there, like a nested `claude -p`, stays unnamed.
+            if bound_to.get(&pid).is_some_and(|bound| *bound != id) {
+                continue;
+            }
             if let Some(p) = processes.iter_mut().find(|p| p.pid == pid) {
                 p.cli_session_id = Some(id);
             }

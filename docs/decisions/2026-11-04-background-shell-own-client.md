@@ -44,6 +44,7 @@ decision-makers: majiayu000
 | 11-04 | Crouton 的 `run5.sh`：客户端跑完，`wait` 卡在中转上，脚本退不出 | 等后台 | 2 不再成立，落到 3 | 本次 |
 | 11-05 | 轮询 CI 的循环，宿主中途重启（换 App）：内存里的命令丢了，下一个 Stop 又要等它跑完 | 在跑 | 重启后从 Claude 日志找回命令，再走 4 | 本次 |
 | 11-05 | 宿主刚重启、这个 shell 还没判定（实测约 50 秒）：不再先显示等后台 | 在跑 | 第 0 条 | 本次 |
+| 11-06 | 只跑 `claude`（命令行没有会话 ID）、等着后台 shell 时换 App：没有 hook 来，新宿主找不到进程，shell 没人看，宽限期一过就掉进等后台 | 在跑 | 启动时按 pid 从 `claude agents --json` 找回进程，再走 4 | 本次 |
 | — | `tail -f`、不监听的监视程序 | 2 小时前在跑，之后等后台 | 4、1 | 3fb2791 |
 
 ## Consequences
@@ -64,6 +65,7 @@ decision-makers: majiayu000
 ### Verification
 
 - [ ] `cargo test -p mooring-host --lib background_shells`：`known_cases` 是案例表，`a_real_script_using_its_own_port_differs_from_a_server_with_an_outside_client` 用真实进程验证。
+- [ ] `cargo test -p mooring-host --test managed_session restart_binding`：判定之前的一步，新宿主要先找到安静 Agent 的进程，否则这些规则根本轮不到。
 
 ## Alternatives
 

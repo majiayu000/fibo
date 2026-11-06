@@ -39,6 +39,8 @@ mod relay;
 mod remote;
 #[path = "managed_session/resources.rs"]
 mod resources;
+#[path = "managed_session/restart_binding.rs"]
+mod restart_binding;
 #[path = "managed_session/status.rs"]
 mod status;
 #[path = "managed_session/terminal_io.rs"]

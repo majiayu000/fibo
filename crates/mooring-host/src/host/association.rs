@@ -508,6 +508,10 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                 publish_recognition(&shared, &index, RecognitionPhase::Healthy, "识别正常", &[])?;
                 let mut association = Association::default();
                 association.apply(&shared, &index, &index.cached()?)?;
+                // A probe only follows new logs and panes. A host that just took over has
+                // to find the processes of the conversations it inherited, too: a quiet
+                // Agent sends no hook that would tell it.
+                refresh_agents(&shared, &index.cached()?)?;
                 follow_associated(&shared, &mut index, &mut association, &watch)?;
                 loop {
                     // Asked before it waits as well as after: a reload that came while this

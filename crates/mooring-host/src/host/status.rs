@@ -90,9 +90,14 @@ pub(super) fn refresh_agents(
     shared: &Shared,
     transcripts: &[crate::recognition::Transcript],
 ) -> io::Result<()> {
-    let workspace = lock(shared)?.workspace.clone();
+    let (workspace, watched) = {
+        let host = lock(shared)?;
+        let watched: std::collections::HashSet<String> =
+            host.agent_pids.values().cloned().collect();
+        (host.workspace.clone(), watched)
+    };
     let mut processes = crate::recognition::processes(&workspace)?;
-    crate::recognition::name_by_pid(&workspace, &mut processes);
+    crate::recognition::name_by_pid(&workspace, &mut processes, &watched);
     let files = crate::recognition::open_transcripts(&workspace, &processes)?;
     let mut host = lock(shared)?;
     let mut next = host.workspace.clone();
