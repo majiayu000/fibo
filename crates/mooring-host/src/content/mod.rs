@@ -235,7 +235,7 @@ pub struct Parser {
     completed_while_waiting: bool,
     /// The turn a subagent's dialog interrupted, restored once that dialog is gone.
     #[serde(default)]
-    child_wait_from: Option<Turn>,
+    pub(crate) child_wait_from: Option<Turn>,
     /// The card's name came from a title the user or the desktop app set, which a
     /// generated title does not replace.
     #[serde(default)]
@@ -416,6 +416,7 @@ impl Parser {
             || name.ends_with("request_user_input_async")
         {
             self.card.turn = Turn::Waiting;
+            self.child_wait_from = None;
             self.card.waiting = question_summary(&args);
             self.card.choices = question_choices(&args);
         }
@@ -559,7 +560,11 @@ impl Parser {
     }
     /// Applies `claude agents --json`. It only settles a dialog: it never starts or ends a
     /// turn the transcript and hooks have not reported, because it can lag either of them.
+    /// A parent status cannot dismiss a dialog projected from a child's own log.
     pub fn official(&mut self, status: &Official, at: u64, source: Source) {
+        if self.card.turn == Turn::Waiting && self.child_wait_from.is_some() {
+            return;
+        }
         let before = self.card.turn;
         match status {
             Official::Waiting(reason) if self.card.turn != Turn::Waiting => {
@@ -610,7 +615,11 @@ impl Parser {
                 if let Some(turn) = self.child_wait_from.take() {
                     self.card.waiting.clear();
                     self.card.choices.clear();
-                    self.card.turn = turn;
+                    self.card.turn = if self.completed_while_waiting {
+                        Turn::Completed
+                    } else {
+                        turn
+                    };
                 }
             }
             _ => (),
@@ -626,6 +635,7 @@ impl Parser {
             self.card.waiting_episode += 1;
         } else {
             self.completed_while_waiting = false;
+            self.child_wait_from = None;
         }
         self.card.signal = signal.into();
         self.card.signal_at = at;
