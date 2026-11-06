@@ -192,6 +192,10 @@ fn codex_subagent_logs_keep_the_parent_working_and_carry_its_dialog() {
         |w| {
             card(w).is_some_and(|(s, c)| {
                 c.turn == mooring_core::content::Turn::Completed
+                    && c.subagents.len() == 1
+                    && c.subagents[0].id == kid
+                    && c.subagents[0].name == "Hypatia"
+                    && c.subagents[0].running()
                     && mooring_core::status::of(w, &s, mooring_core::content::now())
                         == mooring_core::status::Status::Running
             })
@@ -232,6 +236,9 @@ fn codex_subagent_logs_keep_the_parent_working_and_carry_its_dialog() {
     wait_for(&h, "the finished subagent releases the parent", |w| {
         card(w).is_some_and(|(s, c)| {
             c.turn == mooring_core::content::Turn::Completed
+                && c.subagents.len() == 1
+                && !c.subagents[0].running()
+                && !c.subagents[0].stopped
                 && mooring_core::status::of(w, &s, mooring_core::content::now())
                     != mooring_core::status::Status::Running
         })

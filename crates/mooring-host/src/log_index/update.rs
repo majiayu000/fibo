@@ -559,7 +559,7 @@ impl Index {
                 crate::content::link_child(&tx, &key, &parser.card)?;
                 parent = Some(parser.card.parent.clone());
             } else if let Some((id, _)) = &c.identity {
-                let kids = crate::content::children(&tx, id, now)?;
+                let kids = crate::content::children(&tx, id, now, parser.card.turn_started)?;
                 parser.children(&kids, now, live(&key));
             }
         }
@@ -583,12 +583,15 @@ impl Index {
                 .optional()
                 .map_err(err)?;
             if let Some(t) = row.filter(|t| t.path != key) {
-                let kids = crate::content::children(&tx, &parent, now)?;
                 if let Some(e) = held.entries.get_mut(&t.path) {
+                    let kids =
+                        crate::content::children(&tx, &parent, now, e.parser.card.turn_started)?;
                     e.parser.children(&kids, now, live(&t.path));
                     e.dirty.get_or_insert_with(std::time::Instant::now);
                 } else {
                     let mut owner = crate::content::load(&tx, &t.path)?;
+                    let kids =
+                        crate::content::children(&tx, &parent, now, owner.card.turn_started)?;
                     owner.children(&kids, now, live(&t.path));
                     crate::content::save(&tx, &t.path, &owner)?;
                 }

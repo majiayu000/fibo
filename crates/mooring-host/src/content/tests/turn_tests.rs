@@ -249,6 +249,7 @@ fn codex_subagent_header_names_its_parent_and_children_drive_the_parent() {
         &Children {
             running: 1,
             waiting: None,
+            ..Default::default()
         },
         3,
         s.clone(),
@@ -259,6 +260,7 @@ fn codex_subagent_header_names_its_parent_and_children_drive_the_parent() {
     let ask = Children {
         running: 1,
         waiting: Some("子 Agent Hypatia：是否运行迁移？".into()),
+        ..Default::default()
     };
     p.children(&ask, 4, s.clone());
     assert_eq!(
@@ -271,6 +273,7 @@ fn codex_subagent_header_names_its_parent_and_children_drive_the_parent() {
         &Children {
             running: 0,
             waiting: None,
+            ..Default::default()
         },
         6,
         s.clone(),

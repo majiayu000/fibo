@@ -1,6 +1,8 @@
 use super::elide::STRING_KEEP;
 use super::*;
 use std::io::Write;
+#[path = "codex_children_tests.rs"]
+mod codex_children;
 #[path = "query_perf_tests.rs"]
 mod query_perf;
 struct Fixture(PathBuf);
