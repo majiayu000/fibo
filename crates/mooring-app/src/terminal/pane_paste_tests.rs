@@ -8,9 +8,16 @@ fn an_image_goes_to_the_program_as_ctrl_v() {
 }
 #[test]
 fn copied_note_counts_lines_or_characters_and_flags_a_whole_screen_copy() {
-    assert_eq!(copied_note("中文ab", false), "已复制 4 字");
-    assert_eq!(copied_note("1\n2\n3", false), "已复制 3 行");
-    assert_eq!(copied_note("a\nb", true), "没选中文字，已复制整屏 2 行");
+    assert_eq!(copied_note("中文ab", false, false), "已复制 4 字");
+    assert_eq!(copied_note("1\n2\n3", false, false), "已复制 3 行");
+    assert_eq!(
+        copied_note("a\nb", true, false),
+        "没选中文字，已复制整屏 2 行"
+    );
+    assert_eq!(
+        copied_note("a\nb", true, true),
+        "没选中文字，已复制整屏 2 行。程序里选的字要用它自己的复制键"
+    );
 }
 #[test]
 fn text_wins_over_an_image_and_an_empty_clipboard_does_nothing() {

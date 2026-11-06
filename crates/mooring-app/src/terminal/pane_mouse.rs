@@ -1,7 +1,7 @@
 //! The mouse over a pane: reports to a program that took it, selection, the
 //! scrollbar and the wheel.
 use super::paste::copied_note;
-use super::{Pane, SCROLLBAR_HIT, SELECT_HINT, WHEEL_REPORTS};
+use super::{Pane, SCROLLBAR_HIT, WHEEL_REPORTS};
 use crate::terminal::screen;
 use gpui::{Context, Pixels, Point, Window, px};
 use mooring_core::terminal::{
@@ -243,9 +243,9 @@ impl Pane {
             window.scale_factor(),
             cx,
         ) && button == Some(mouse::Button::Left)
-            && self.toast.as_deref() != Some(SELECT_HINT)
+            && !self.notes.mouse_hint()
         {
-            self.show_toast(SELECT_HINT, cx);
+            self.show_mouse_hint(cx);
         }
     }
     /// Window-wide, so a selection drag keeps extending after it leaves the pane.
@@ -475,7 +475,7 @@ impl Pane {
                 .collect();
             lines.join("\n")
         });
-        let note = copied_note(&text, whole_screen);
+        let note = copied_note(&text, whole_screen, self.takes_mouse());
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         self.show_toast(note, cx);
     }
