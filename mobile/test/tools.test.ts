@@ -53,6 +53,16 @@ describe('a long text in pieces', () => {
     expect(allText(l)).toBe(whole);
     expect(viewRows(l, end, 'text').every((r) => r.kind === 'line')).toBe(true);
   });
+  test.each(['中段🧪\n', '中段🧪\n结', '中段🧪\n结尾é\n'])('a fetched chunk may overlap the saved tail: %s', (chunk) => {
+    const head = '头🙂\n';
+    const tail = '结尾é\n';
+    const whole = head + '中段🧪\n' + tail;
+    const text = loaded({ total: utf8(whole), head, tail, tail_at: utf8(whole) - utf8(tail) });
+    const fetched = extend(text, chunk);
+    expect(allText(fetched)).toBe(whole);
+    expect(byteLength(fetched.head)).toBe(text.tailAt);
+    expect(missing(fetched, utf8(head) + utf8(chunk))).toBe(0);
+  });
   test('a whole short text has no gap and no extra empty row', () => {
     const l = loaded({ total: 4, head: 'a\nb\n', tail: '', tail_at: 4 });
     expect(viewRows(l, 4, 'text')).toEqual([
