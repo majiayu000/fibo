@@ -21,6 +21,7 @@ use std::thread;
 mod asks;
 mod chat;
 mod diff;
+mod diff_config;
 mod diff_scope;
 mod dirs;
 mod list;

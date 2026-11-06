@@ -89,11 +89,28 @@ pub(crate) fn read(cwd: &Path, role: super::Role) -> io::Result<rp::Diff> {
     if !cwd.is_dir() {
         return Err(io::Error::other("目录不存在"));
     }
+    let lesser = !role.allows("dirs");
+    // A lesser role's read fetches no object a partial clone lacks, by whatever its config
+    // says to fetch with: a missing object reads as a failed git.
+    let git = |dir: &Path| {
+        let mut c = git(dir);
+        if lesser {
+            c.env("GIT_NO_LAZY_FETCH", "1");
+        }
+        c
+    };
+    // Before anything that could run a filter. All of it sounds the same as a plain folder.
+    if lesser {
+        let list = output(git(cwd).args(super::diff_config::LIST))?.ok_or_else(not_git)?;
+        if super::diff_config::foreign(&list) {
+            return Err(not_git());
+        }
+    }
     let top = output(git(cwd).args(["rev-parse", "--show-toplevel"]))?.ok_or_else(not_git)?;
     let top = PathBuf::from(String::from_utf8_lossy(&top).trim_end());
     // A repository holding home would show `~/.ssh` as untracked files. To a role that may
     // not see the machine's folders, it reads as if home were no repository at all.
-    if !role.allows("dirs") && super::diff_scope::holds_home(&top) {
+    if lesser && super::diff_scope::holds_home(&top) {
         return Err(not_git());
     }
     let branch = output(git(&top).args(["symbolic-ref", "--short", "-q", "HEAD"]))?
@@ -105,6 +122,10 @@ pub(crate) fn read(cwd: &Path, role: super::Role) -> io::Result<rp::Diff> {
         let mut c = git(&top);
         c.args(["diff", "-M", "--no-color", "--no-ext-diff", "--no-textconv"])
             .args(extra);
+        // A submodule is a repository with its own config: don't look inside it.
+        if lesser {
+            c.args(["--ignore-submodules=dirty", "--submodule=short"]);
+        }
         c.args([base, "--"]);
         c
     };
