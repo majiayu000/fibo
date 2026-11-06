@@ -108,6 +108,15 @@ pub(super) fn start(
         let cards = handle.update(cx, |v, _, _| v.visual_board_cards()).unwrap();
         assert_eq!(cards, 2, "on the board before");
 
+        // Narrowed to this space when it goes: that must not come back with it.
+        handle
+            .update(cx, |v, _, cx| v.visual_narrow_to_space(SPACE, cx))
+            .unwrap();
+        assert_eq!(
+            handle.update(cx, |v, _, _| v.visual_stored_space_filter()).unwrap().as_deref(),
+            Some(SPACE)
+        );
+        wait(100).await;
         // Real right press on the chip opens its menu; a press on the entry only asks while
         // something runs there.
         let at = point(px(x + 4.), px(y + 4.));
@@ -178,6 +187,34 @@ pub(super) fn start(
             "leaving the space you are in shows the next"
         );
         assert!(!strip);
+        // The working one finishes while put aside: its state moves, nothing calls you.
+        let log = PathBuf::from(std::env::var("HOME").unwrap())
+            .join(".codex/sessions/busy-codex.jsonl");
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        {
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new().append(true).open(&log).unwrap();
+            writeln!(
+                file,
+                r#"{{"timestamp":{at},"type":"event_msg","payload":{{"type":"task_complete","last_agent_message":"迁移跑完了。"}}}}"#
+            )
+            .unwrap();
+        }
+        let mut waiting = 0;
+        for _ in 0..80 {
+            wait(250).await;
+            waiting = handle
+                .update(cx, |v, _, _| v.visual_quiet_space_waiting(SPACE))
+                .unwrap();
+            if waiting == 2 {
+                break;
+            }
+        }
+        assert_eq!(waiting, 2, "the line sees it finish");
+        assert_eq!(wants(cx), 0, "and the window still counts none of it");
         wait(1200).await; // The flight lands and the glow fades.
         shot("4-quiet.png", cx);
         handle
@@ -224,12 +261,17 @@ pub(super) fn start(
         assert_eq!(title.as_deref(), Some("接着管 空间 工作"));
         for _ in 0..40 {
             wait(100).await;
-            if !quiet(cx) && wants(cx) == 1 {
+            if !quiet(cx) && wants(cx) == 2 {
                 break;
             }
         }
         assert!(!quiet(cx));
-        assert_eq!(wants(cx), 1, "what waited is counted again");
+        assert_eq!(wants(cx), 2, "what waited, and what finished meanwhile, is counted");
+        assert_eq!(
+            handle.update(cx, |v, _, _| v.visual_stored_space_filter()).unwrap(),
+            None,
+            "coming back does not narrow the list again"
+        );
         assert_eq!(
             handle.update(cx, |v, _, _| v.visual_board_cards()).unwrap(),
             2
