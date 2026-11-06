@@ -54,6 +54,12 @@ impl Adapter for Claude {
     fn reads_tools(&self) -> bool {
         true
     }
+    fn edit_marker(&self) -> Option<&'static [u8]> {
+        Some(b"\"structuredPatch\"")
+    }
+    fn logged_edits(&self, line: &Value) -> Vec<(String, mooring_core::turn_diff::Edit)> {
+        super::turn_edits::claude(line)
+    }
     fn tool_call_line(&self, line: &Value, id: &str) -> Option<super::ToolCallLine> {
         super::tool_lines::claude_call(line, id)
     }
