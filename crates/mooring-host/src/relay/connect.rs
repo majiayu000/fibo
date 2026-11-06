@@ -42,7 +42,7 @@ pub(super) async fn stay_connected(
                     wait = Duration::from_secs(1);
                 }
                 let again = format!("{why}，{} 秒后重连", wait.as_secs());
-                eprintln!("mooring remote: 和中继断开：{again}");
+                eprintln!("mooring remote: 和中继断开：{again:?}");
                 live.state(RemoteState::Connecting, again);
                 tokio::time::sleep(wait).await;
                 wait = (wait * 2).min(Duration::from_secs(30));
@@ -101,7 +101,7 @@ async fn connect(
                     Some(why) => return (Ended::Refused(why), false),
                     None => break proto.unwrap_or(1),
                 },
-                Ok(Frame::Error { message }) => refusal = Some(message),
+                Ok(Frame::Error { message }) => refusal = Some(format!("{message:?}")),
                 _ => (),
             },
             Ok(Some(Ok(Message::Close(f)))) => {
@@ -121,7 +121,7 @@ async fn connect(
             Err(_) => return (Ended::Lost("中继没有回应注册".into()), false),
         }
     };
-    eprintln!("mooring remote: 已连上中继 {base}");
+    eprintln!("mooring remote: 已连上中继 {base:?}");
     live.state(RemoteState::Connected, String::new());
 
     let (out, mut outbox) = mpsc::channel::<Message>(64);
@@ -149,7 +149,7 @@ async fn connect(
             _ = &mut writer => break Ended::Lost("中继发送连接已结束".into()),
             // A phone paired or unpaired since is told to the relay; an unpaired one on
             // now is dropped within RECHECK, and one that never finishes its handshake
-            // within HANDSHAKE_LIMIT.
+            // within HANDSHAKE_LIMIT, including proof of the channel key afterward.
             _ = recheck.tick() => {
                 let routes = (devices::routes(paired.load(socket)), devices::revoked(socket));
                 if routes != sent {
@@ -161,8 +161,11 @@ async fn connect(
                 let gone: Vec<(String, Dropped)> = sessions
                     .iter()
                     .filter_map(|(id, s)| match s {
-                        Session::Open { device, role, since, .. } => {
-                            dropped(now, device, *role, *since).map(|why| (id.clone(), why))
+                        Session::Open { device, role, since, first_message, .. } => {
+                            dropped(now, device, *role, *since)
+                                .or_else(|| first_message.filter(|at| tokio::time::Instant::now() >= *at)
+                                    .map(|_| Dropped::Handshake))
+                                .map(|why| (id.clone(), why))
                         }
                         Session::Pairing(_, at) => (at.elapsed() > HANDSHAKE_LIMIT)
                             .then(|| (id.clone(), Dropped::Handshake)),
@@ -174,7 +177,7 @@ async fn connect(
                     close(&out, &id, code, reason).await;
                     if let Some(Session::Open { device, .. }) = sessions.remove(&id) {
                         live.left(&id);
-                        eprintln!("mooring remote: 设备 {device} {}", why.label());
+                        eprintln!("mooring remote: 设备 {device:?} {}", why.label());
                         devices::log(
                             &log,
                             json!({ "event": "dropped", "device": device, "why": reason }),
@@ -225,37 +228,50 @@ async fn connect(
                     });
                     match answered {
                         Some((d, (channel, answer))) => {
-                            if out.send(to_phone(proto, &id, &answer)).await.is_err() {
-                                break Ended::Lost("写不进中继".into());
-                            }
-                            eprintln!("mooring remote: 「{}」已连上（{}）", d.name, d.role.label());
-                            devices::log(
-                                &log,
-                                json!({ "event": "connected", "device": d.id, "name": d.name, "role": d.role }),
-                            );
-                            live.joined(&id, &d.id);
                             let access = Access {
                                 role: d.role,
                                 device: Some((d.id.clone(), d.name.clone())),
                                 log: Some(log.clone()),
                                 observer: Some(live.observer(&id)),
                             };
+                            let bridge = match Bridge::start(
+                                &id,
+                                channel,
+                                out.clone(),
+                                socket,
+                                proto,
+                                access,
+                            ) {
+                                Ok(bridge) => bridge,
+                                Err(e) => {
+                                    eprintln!("mooring remote: 手机 {id:?} 无法启动会话：{e:?}");
+                                    close(&out, &id, close::NORMAL, "session unavailable").await;
+                                    continue;
+                                }
+                            };
+                            if out.send(to_phone(proto, &id, &answer)).await.is_err() {
+                                break Ended::Lost("写不进中继".into());
+                            }
+                            eprintln!(
+                                "mooring remote: 「{:?}」已连上（{}）",
+                                d.name,
+                                d.role.label()
+                            );
+                            devices::log(
+                                &log,
+                                json!({ "event": "connected", "device": d.id, "name": d.name, "role": d.role }),
+                            );
+                            live.joined(&id, &d.id);
                             Some(Session::Open {
                                 since: devices::now_ms(),
-                                bridge: Bridge::start(
-                                    &id,
-                                    channel,
-                                    out.clone(),
-                                    socket,
-                                    proto,
-                                    access,
-                                ),
+                                first_message: Some(tokio::time::Instant::now() + HANDSHAKE_LIMIT),
+                                bridge,
                                 device: d.id.clone(),
                                 role: d.role,
                             })
                         }
                         None => {
-                            eprintln!("mooring remote: 设备 {device} 没有配对或密钥不对，已拒绝");
+                            eprintln!("mooring remote: 设备 {device:?} 没有配对或密钥不对，已拒绝");
                             devices::log(&log, json!({ "event": "refused", "device": device }));
                             close(&out, &id, close::UNPAIRED, "not paired").await;
                             None
@@ -267,15 +283,17 @@ async fn connect(
                     device,
                     role,
                     since,
+                    ..
                 }) => match bridge.receive(payload) {
                     Ok(()) => Some(Session::Open {
                         bridge,
                         device,
                         role,
                         since,
+                        first_message: None,
                     }),
                     Err(e) => {
-                        eprintln!("mooring remote: 手机 {id} 断开：{e}");
+                        eprintln!("mooring remote: 手机 {id:?} 断开：{e:?}");
                         live.left(&id);
                         close(&out, &id, close::BAD_MESSAGE, "bad message").await;
                         None
@@ -312,7 +330,7 @@ async fn connect(
                     } else {
                         sessions.insert(
                             id.clone(),
-                            Session::Pairing(query(&path, "d"), std::time::Instant::now()),
+                            Session::Pairing(query(&path, "d"), tokio::time::Instant::now()),
                         );
                         Frame::Wopened { id }
                     };
@@ -321,7 +339,7 @@ async fn connect(
                 Ok(Frame::Wclose { id, .. }) => {
                     if let Some(Session::Open { device, .. }) = sessions.remove(&id) {
                         live.left(&id);
-                        eprintln!("mooring remote: 设备 {device} 已离开");
+                        eprintln!("mooring remote: 设备 {device:?} 已离开");
                         devices::log(&log, json!({ "event": "left", "device": device }));
                     }
                 }
@@ -389,7 +407,7 @@ async fn close(out: &mpsc::Sender<Message>, id: &str, code: u16, reason: &str) {
 enum Session {
     /// Opened by the device the path names; its first message is its half of the handshake.
     /// When it opened: one that never finishes is closed after `HANDSHAKE_LIMIT`.
-    Pairing(String, std::time::Instant),
+    Pairing(String, tokio::time::Instant),
     Open {
         bridge: Bridge,
         device: String,
@@ -397,6 +415,8 @@ enum Session {
         role: Role,
         /// Unix milliseconds; a "disconnect now" after it drops the session.
         since: u64,
+        /// A replayed handshake cannot prove the channel key; require its first message.
+        first_message: Option<tokio::time::Instant>,
     },
 }
 

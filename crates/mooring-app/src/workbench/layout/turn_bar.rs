@@ -135,7 +135,7 @@ impl Workbench {
         let Some(c) = self.workspace.content.get(&s.id) else {
             return 0;
         };
-        c.turn_files().count()
+        c.turn_file_count()
     }
     /// The todo a pane's work counts toward: its conversation's own, else its tab's.
     pub(in crate::workbench) fn pane_task(

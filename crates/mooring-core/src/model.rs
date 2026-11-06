@@ -27,6 +27,10 @@ pub struct Workspace {
     /// resume repeats (model, permissions, config), never a prompt or an old resume.
     #[serde(default)]
     pub agent_launch: std::collections::HashMap<String, Vec<String>>,
+    /// Spaces you put aside (先不管): everything in them stays and keeps running, and none
+    /// of it asks for you until you take the space back.
+    #[serde(default)]
+    pub quiet_spaces: std::collections::BTreeSet<String>,
     pub spaces: Vec<Space>,
     pub tasks: Vec<Task>,
     pub tabs: Vec<Tab>,

@@ -15,6 +15,7 @@ mod follow_input_evidence;
 mod keymap_evidence;
 mod layout_evidence;
 mod link_evidence;
+mod mouse_taken_evidence;
 mod new_space_evidence;
 mod osc7_evidence;
 mod overview_evidence;
@@ -27,6 +28,8 @@ mod phones_evidence;
 #[path = "pinned_ask_evidence.rs"]
 mod pinned_ask_evidence;
 mod program_status_evidence;
+#[path = "quiet_space_evidence.rs"]
+mod quiet_space_evidence;
 mod reason_evidence;
 mod reconnect_evidence;
 #[path = "remote_typing_evidence.rs"]
@@ -72,6 +75,7 @@ pub fn start(
         || resume_evidence::start(handle, evidence.clone(), cx)
         || subagent_evidence::start(handle, evidence.clone(), cx)
         || sidebar_rows_evidence::start(handle, evidence.clone(), cx)
+        || quiet_space_evidence::start(handle, evidence.clone(), cx)
         || pinned_ask_evidence::start(handle, evidence.clone(), cx)
         || todo_flow_evidence::start(handle, evidence.clone(), cx)
     {
@@ -99,6 +103,9 @@ pub fn start(
         return;
     }
     if selection_pixel_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    if mouse_taken_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
     if selection_evidence::start(handle, evidence.clone(), cx) {

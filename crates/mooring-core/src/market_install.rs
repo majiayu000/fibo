@@ -220,10 +220,8 @@ pub(super) fn replacing(
 /// replaced copy whose plugin never came back is put back.
 pub fn recover(plugins: &Path) {
     let alive = |pid: &str| {
-        pid.parse::<i32>().is_ok_and(|p| {
-            // SAFETY: signal 0 only asks whether the process exists.
-            p != std::process::id() as i32 && unsafe { libc::kill(p, 0) } == 0
-        })
+        pid.parse::<i32>()
+            .is_ok_and(|p| p != std::process::id() as i32 && crate::process::exists(p))
     };
     let Ok(_held) = plugin::lock(plugins) else {
         return;

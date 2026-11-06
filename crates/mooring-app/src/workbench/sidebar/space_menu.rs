@@ -14,11 +14,15 @@ impl Workbench {
         let folder = id.to_owned();
         let remove = id.to_owned();
         let tabs = self.workspace.tabs.iter().filter(|t| t.space == id).count();
-        let last = self.workspace.spaces.len() <= 1;
+        // Removing it would leave no space attended to, or none at all.
+        let last = self.workspace.spaces.len() <= 1
+            || (!self.workspace.space_quiet(id) && self.workspace.attended_spaces() <= 1);
         // From the dense presets' space line: every space to switch to, and a new one.
         let mut picks = vec![];
         if self.layout.space_switch {
-            for space in &self.workspace.spaces {
+            let attended =
+                (self.workspace.spaces.iter()).filter(|s| !self.workspace.space_quiet(&s.id));
+            for space in attended {
                 let pick = space.id.clone();
                 let SpaceCounts {
                     count,
@@ -121,6 +125,7 @@ impl Workbench {
                 this.choose_space_dir(Some(folder.clone()), window, cx);
             }))
             .into_any_element(),
+            self.space_quiet_entry(id, cx),
             // Two presses: the first says what goes with it, the second removes it.
             button(
                 "space-menu-remove",

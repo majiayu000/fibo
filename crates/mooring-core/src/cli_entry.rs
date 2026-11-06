@@ -35,7 +35,7 @@ pub fn link(dirs: &[impl AsRef<Path>], exe: &Path) -> io::Result<Option<PathBuf>
         // Replaced in one step: an Agent running it right now finds the old or the new one.
         let fresh = dir.join(format!(".{NAME}.{}", std::process::id()));
         let _ = fs::remove_file(&fresh);
-        match std::os::unix::fs::symlink(exe, &fresh) {
+        match make_link(exe, &fresh) {
             Ok(()) => {
                 fs::rename(&fresh, &entry)?;
                 return Ok(Some(entry));
@@ -45,6 +45,20 @@ pub fn link(dirs: &[impl AsRef<Path>], exe: &Path) -> io::Result<Option<PathBuf>
         }
     }
     Ok(None)
+}
+
+#[cfg(unix)]
+fn make_link(exe: &Path, at: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(exe, at)
+}
+/// `DIRS` and `in_bundle` describe a Mac: where a Windows install puts the command is not
+/// decided yet (docs/windows/plan.md).
+#[cfg(windows)]
+fn make_link(_exe: &Path, _at: &Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Windows 上还不能把 mooring 放到 PATH",
+    ))
 }
 
 /// Whether the name `mooring` reaches `exe`: the first directory that has one decides.
@@ -79,7 +93,7 @@ pub fn by_name_reaches(exe: &Path, runtime: &Path) -> bool {
     reaches(&DIRS, exe) && is_default_runtime(runtime)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

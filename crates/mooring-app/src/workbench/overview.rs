@@ -358,7 +358,7 @@ impl Workbench {
             .workspace
             .agent_sessions
             .iter()
-            .filter(|s| self.session_hidden(s).is_some())
+            .filter(|s| sessions::automation_hidden_in(&self.workspace, s).is_some())
             .collect();
         view = view.child(
             button(

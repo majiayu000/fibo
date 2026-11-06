@@ -169,7 +169,10 @@ impl Workbench {
             .map(space_dir_label)
             .unwrap_or_default();
         let mut row = segments();
-        for space in &self.workspace.spaces {
+        // A todo already there can stay; a new one does not go where nothing shows it.
+        let offered = (self.workspace.spaces.iter())
+            .filter(|s| !self.workspace.space_quiet(&s.id) || s.id == form.space);
+        for space in offered {
             let sid = space.id.clone();
             let missing = space_dir_missing(space);
             row = row.child(
