@@ -52,19 +52,21 @@ fn owner(path: &str) -> bool {
         || path.starts_with("crates/mooring-host/src/content/")
         || path.starts_with("crates/mooring-host/src/agents/")
         || path.ends_with("/log_index.rs")
-        || ["update.rs", "recovery.rs", "elide.rs"]
+        || ["update", "recovery", "elide"]
             .iter()
-            .any(|f| path.ends_with(&format!("/log_index/{f}")))
+            .any(|m| module(path, &format!("/log_index/{m}")))
         || path.ends_with("/store.rs")
+}
+/// `m.rs` or anything under `m/`: a file split out of a module keeps its place here.
+fn module(path: &str, m: &str) -> bool {
+    path.ends_with(&format!("{m}.rs")) || path.contains(&format!("{m}/"))
 }
 /// Tests and screenshot fixtures build raw states on purpose.
 fn fixture(path: &str) -> bool {
     path.contains("/tests/")
         || path.ends_with("tests.rs")
-        || path.ends_with("harness.rs")
-        || path.contains("/src/harness/")
-        || path.ends_with("visual.rs")
-        || path.contains("/workbench/visual/")
+        || module(path, "crates/mooring-app/src/harness")
+        || module(path, "crates/mooring-app/src/workbench/visual")
         || path.contains("/test/")
         || path.ends_with("mobile/src/fixture.ts")
 }
