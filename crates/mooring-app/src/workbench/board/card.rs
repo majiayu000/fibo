@@ -43,6 +43,12 @@ impl Workbench {
                     .gap(px(T::S6))
                     .text_size(px(T::META))
                     .text_color(T::color(T::muted()))
+                    // Who runs it, as on a session's card: the latest session's Agent once it
+                    // has one, since that may not be the one it was written for.
+                    .child(agent_mark(
+                        sessions.last().map_or(task.agent, |s| s.runtime),
+                        T::color(T::muted()),
+                    ))
                     .when(sessions.is_empty(), |d| d.child("还没开始"))
                     .when(!sessions.is_empty(), |d| {
                         d.child(
