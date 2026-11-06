@@ -16,5 +16,9 @@ test('authentication waits for settings and rejects cancellation and native erro
     beforeRead: { resolved: false, calls: 0 }, afterRead: true,
     cancelled: false, unavailable: false, approved: false, writes: 0,
     unreadable: false, unlocked: true,
+    sent: [
+      { terminal: 'terminal', session: 'original-session', text: 'feedback', enter: true },
+      { terminal: 'terminal', session: '', text: 'unidentified', enter: true },
+    ],
   });
 });

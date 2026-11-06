@@ -86,6 +86,11 @@ export async function switchMode(machine: string, terminal: string, kind: ModeKi
   return true;
 }
 
+/** Feedback belongs to the conversation shown when the action started, even after a reconnect. */
+export function sendToConversation(machine: string, card: Pick<Card, 'id' | 'session'>, text: string) {
+  return write(machine, 'send', { terminal: card.id, session: card.session ?? '', text, enter: true });
+}
+
 /** Settles a conversation: 已处理 is `done`, 稍后提醒 `deferred` (the machine brings it back in an hour), back to the inbox `open`. */
 export async function settle(machine: string, card: Card, outcome: 'done' | 'deferred' | 'abandoned' | 'open') {
   if (!card.session) throw new Error(tr('这个终端里没有 Agent 对话'));
