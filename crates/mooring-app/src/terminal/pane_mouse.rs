@@ -1,7 +1,7 @@
 //! The mouse over a pane: reports to a program that took it, selection, the
 //! scrollbar and the wheel.
-use super::paste::copied_note;
-use super::{Pane, SCROLLBAR_HIT, SELECT_HINT, WHEEL_REPORTS};
+use super::paste::{NOT_COPIED, copied_note, copies_anything};
+use super::{Pane, SCROLLBAR_HIT, WHEEL_REPORTS};
 use crate::terminal::screen;
 use gpui::{Context, Pixels, Point, Window, px};
 use mooring_core::terminal::{
@@ -243,9 +243,9 @@ impl Pane {
             window.scale_factor(),
             cx,
         ) && button == Some(mouse::Button::Left)
-            && self.toast.as_deref() != Some(SELECT_HINT)
+            && !self.notes.mouse_hint()
         {
-            self.show_toast(SELECT_HINT, cx);
+            self.show_mouse_hint(cx);
         }
     }
     /// Window-wide, so a selection drag keeps extending after it leaves the pane.
@@ -457,12 +457,15 @@ impl Pane {
             .flatten()
             .filter(|t| !t.is_empty())
     }
-    /// Copies the selection; with nothing selected, the visible screen.
-    /// Says what was copied in the corner, away from the text being read. Copying the
-    /// whole screen is called out, as nothing was selected.
+    /// Copies the selection; with nothing selected, the visible screen, unless the program
+    /// holds the mouse: a highlight on screen may then be its own, just copied, which this
+    /// copy would overwrite. Says what happened in the corner, away from the text being read.
     pub fn copy(&mut self, cx: &mut Context<Self>) {
         let selected = self.selected_text();
         let whole_screen = selected.is_none();
+        if !copies_anything(whole_screen, self.takes_mouse()) {
+            return self.show_toast(NOT_COPIED, cx);
+        }
         let text = selected.unwrap_or_else(|| {
             let lines: Vec<String> = self
                 .screen

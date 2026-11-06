@@ -1,5 +1,5 @@
 //! Probes the visual-test harness reads a pane through.
-use super::{Pane, SELECT_HINT};
+use super::Pane;
 use crate::terminal::screen;
 use gpui::{Bounds, Context, EntityInputHandler, Pixels, Window};
 use mooring_core::terminal::libghostty_vt::terminal::ScrollViewport;
@@ -129,8 +129,16 @@ impl Pane {
             .clone()
             .or_else(|| self.connection.state.lock().ok()?.error.clone())
     }
+    /// The copied note, and whether the mouse hint is up.
+    pub fn visual_notes(&self) -> (Option<String>, bool) {
+        (
+            self.notes.copied().map(|note| note.to_string()),
+            self.notes.mouse_hint(),
+        )
+    }
     pub fn visual_select_hint(&mut self, cx: &mut Context<Self>) {
-        self.show_toast(SELECT_HINT, cx);
+        self.show_toast("已复制 3 行", cx);
+        self.show_mouse_hint(cx);
     }
     /// Where the link whose target starts with `prefix` is drawn, and its cell count.
     pub fn visual_link(&self, prefix: &str) -> Option<(gpui::Point<Pixels>, u16)> {
