@@ -186,18 +186,18 @@ impl Pane {
                 // Coalesce bursts at 60 Hz; no timer exists when the terminal is idle.
                 // Output nobody is typing into waits for the shared tick instead, so
                 // several busy panes repaint in one frame rather than one frame each.
-                let echo = this
+                let (first, echo) = this
                     .read_with(cx, |pane, _| {
-                        pane.typed
-                            .is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(300))
+                        (
+                            pane.capture.is_none(),
+                            pane.typed.is_some_and(|t| {
+                                t.elapsed() < std::time::Duration::from_millis(300)
+                            }),
+                        )
                     })
-                    .unwrap_or(false);
+                    .unwrap_or((false, false));
                 cx.background_executor()
-                    .timer(if echo {
-                        std::time::Duration::from_millis(16)
-                    } else {
-                        until_shared_tick()
-                    })
+                    .timer(repaint_wait(first, echo))
                     .await;
                 while rx.try_recv().is_ok() {}
                 if this
@@ -469,6 +469,17 @@ pub enum HandoffState {
     Missing,
 }
 const SELECT_HINT: &str = "这个程序接管了鼠标：按住 Shift 再拖动来选中文字";
+/// How long woken output waits before it repaints. A pane just switched to shows nothing
+/// until its first screen, so that goes up at once; later output may share a frame.
+fn repaint_wait(first_screen: bool, echo: bool) -> std::time::Duration {
+    if first_screen {
+        std::time::Duration::ZERO
+    } else if echo {
+        std::time::Duration::from_millis(16)
+    } else {
+        until_shared_tick()
+    }
+}
 /// Time left until the next boundary of one process-wide 50 ms clock: background panes
 /// that wake at different moments all flush on the same boundary, in the same frame.
 fn until_shared_tick() -> std::time::Duration {
@@ -476,4 +487,16 @@ fn until_shared_tick() -> std::time::Duration {
     const TICK: u128 = 50_000;
     let micros = START.get_or_init(Instant::now).elapsed().as_micros();
     std::time::Duration::from_micros((TICK - micros % TICK) as u64)
+}
+#[cfg(test)]
+mod repaint_tests {
+    use super::repaint_wait;
+    use std::time::Duration;
+    #[test]
+    fn a_first_screen_never_waits_for_the_shared_tick() {
+        assert_eq!(repaint_wait(true, false), Duration::ZERO);
+        assert_eq!(repaint_wait(true, true), Duration::ZERO);
+        assert_eq!(repaint_wait(false, true), Duration::from_millis(16));
+        assert!(repaint_wait(false, false) <= Duration::from_millis(50));
+    }
 }
