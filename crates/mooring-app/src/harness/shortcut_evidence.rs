@@ -31,6 +31,8 @@ pub(super) fn start(
             wait(2000).await;
             handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
             until!(focused(cx), "the first tab's shell takes focus");
+            // A launch asked for while the first one was starting runs once it ends: count after.
+            wait(3000).await;
             let press = |keys: &str, cx: &mut gpui::AsyncApp| {
                 let keystroke = gpui::Keystroke::parse(keys).unwrap();
                 let focused = handle.update(cx, |v, w, a| v.visual_pane_focused(w, a)).unwrap();

@@ -31,6 +31,8 @@ pub(super) fn start(
                 }
                 wait(100).await;
             }
+            // A launch asked for while the first one was starting runs once it ends: count after.
+            wait(3000).await;
             let press = |keys: &str, cx: &mut gpui::AsyncApp| {
                 let keystroke = gpui::Keystroke::parse(keys).unwrap();
                 cx.update_window(handle.into(), |_, w, a| {
