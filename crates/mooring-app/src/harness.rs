@@ -26,6 +26,8 @@ mod phones_evidence;
 #[path = "pinned_ask_evidence.rs"]
 mod pinned_ask_evidence;
 mod program_status_evidence;
+#[path = "quiet_space_evidence.rs"]
+mod quiet_space_evidence;
 mod reason_evidence;
 mod reconnect_evidence;
 #[path = "remote_typing_evidence.rs"]
@@ -71,6 +73,7 @@ pub fn start(
         || resume_evidence::start(handle, evidence.clone(), cx)
         || subagent_evidence::start(handle, evidence.clone(), cx)
         || sidebar_rows_evidence::start(handle, evidence.clone(), cx)
+        || quiet_space_evidence::start(handle, evidence.clone(), cx)
         || pinned_ask_evidence::start(handle, evidence.clone(), cx)
         || todo_flow_evidence::start(handle, evidence.clone(), cx)
     {

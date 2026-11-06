@@ -567,3 +567,45 @@ fn a_todos_times_source_and_progress_survive_a_restart() {
     assert!(loaded.task_logs["t"].created.is_some());
     std::fs::remove_dir_all(dir).unwrap();
 }
+#[test]
+fn a_space_put_aside_survives_a_restart_and_so_does_taking_it_back() {
+    let root = std::env::temp_dir().join(format!("kl-quiet-space-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let (mut store, mut w) = Store::open(&root).unwrap();
+    let before = w.clone();
+    for id in ["a", "b"] {
+        w.spaces.push(Space {
+            id: id.into(),
+            name: id.into(),
+            cwd: format!("/tmp/{id}"),
+        });
+    }
+    store.save(&before, &w).unwrap();
+    let before = w.clone();
+    w.edit(Edit::SetSpaceQuiet {
+        id: "a".into(),
+        quiet: true,
+    })
+    .unwrap();
+    store.save(&before, &w).unwrap();
+    drop(store);
+    let (mut store, reopened) = Store::open(&root).unwrap();
+    assert!(reopened.space_quiet("a"));
+    assert!(!reopened.space_quiet("b"));
+    assert!(
+        reopened.spaces.iter().any(|s| s.id == "a"),
+        "nothing is gone"
+    );
+    let mut w = reopened.clone();
+    w.edit(Edit::SetSpaceQuiet {
+        id: "a".into(),
+        quiet: false,
+    })
+    .unwrap();
+    store.save(&reopened, &w).unwrap();
+    drop(store);
+    let (_, reopened) = Store::open(&root).unwrap();
+    assert!(reopened.quiet_spaces.is_empty());
+    let _ = std::fs::remove_dir_all(&root);
+}

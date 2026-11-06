@@ -584,6 +584,7 @@ impl Render for Workbench {
         if let Some(strip) = self.error_strip(cx) {
             main = main.child(strip);
         }
+        main = main.children(self.quiet_space_strip(cx));
         if let Some(form) = &self.tasks.form {
             main = main.child(self.form_panel(form, window, cx));
         } else if let Some(page) = page {

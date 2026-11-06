@@ -64,6 +64,7 @@ impl Workbench {
     ) -> Vec<gpui::AnyElement> {
         let mut out = vec![self.board_header(open, stale, empty, cx).into_any_element()];
         out.extend(self.quiet_board_lines(cx));
+        out.extend(self.quiet_space_board_lines(cx));
         out
     }
     /// Every other machine's card the board shows now. A filter for this machine's

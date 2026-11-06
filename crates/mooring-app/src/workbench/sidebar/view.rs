@@ -50,7 +50,9 @@ impl Workbench {
                     .child(label(self.workspace.spaces.len().to_string())),
             );
         }
-        for space in self.workspace.spaces.iter().filter(|_| !dense) {
+        for space in
+            (self.workspace.spaces.iter()).filter(|s| !dense && !self.workspace.space_quiet(&s.id))
+        {
             let id = space.id.clone();
             let active = self.space_active(&id);
             let SpaceCounts {

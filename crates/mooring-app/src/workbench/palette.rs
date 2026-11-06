@@ -33,6 +33,8 @@ pub(super) enum Hit {
     View(String),
     /// 先不管 or 接着管 another machine, by its index in `Workbench::machines`.
     Machine(usize),
+    /// 先不管 or 接着管 a space of this machine.
+    Space(String),
     /// 本机诊断: opens the CPU / GPU panel, otherwise only reachable from the sidebar foot.
     Diagnostics,
     /// 「再显示 N 个」: the rest of a folded group, `hidden` rows past what shows.

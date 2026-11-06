@@ -147,7 +147,8 @@ impl Workbench {
         self.layout.space_removing = false;
         self.layout.space_menu = None;
         if self.nav.space == space
-            && let Some(other) = self.workspace.spaces.iter().find(|s| s.id != space)
+            && let Some(other) = (self.workspace.spaces.iter())
+                .find(|s| s.id != space && !self.workspace.space_quiet(&s.id))
         {
             self.nav.space = other.id.clone();
             self.nav.tab = self

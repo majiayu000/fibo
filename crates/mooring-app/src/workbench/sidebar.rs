@@ -35,10 +35,9 @@ impl Workbench {
     }
     /// The space 会话优先 is narrowed to, while that space still exists.
     pub(super) fn space_filter(&self) -> Option<&str> {
-        self.sidebar
-            .space_filter
-            .as_deref()
-            .filter(|f| self.workspace.spaces.iter().any(|s| s.id == *f))
+        self.sidebar.space_filter.as_deref().filter(|f| {
+            self.workspace.spaces.iter().any(|s| s.id == *f) && !self.workspace.space_quiet(f)
+        })
     }
     /// Narrows the list to a space and shows it, or lists every space again.
     pub(super) fn toggle_space_filter(&mut self, id: &str, cx: &mut Context<Self>) {

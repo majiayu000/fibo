@@ -164,6 +164,7 @@ pub fn open_todos(w: &Workspace, now: u64) -> Vec<&Task> {
                 .agent_sessions
                 .iter()
                 .any(|s| s.task.as_ref() == Some(&t.id))
+            && !w.space_quiet(&t.space)
     };
     w.tasks.iter().filter(open).collect()
 }
@@ -177,6 +178,7 @@ pub fn unfinished_todos(w: &Workspace, now: u64) -> Vec<&Task> {
             (w.task_outcomes.get(&t.id))
                 .unwrap_or(&Outcome::Open)
                 .needs_review(now)
+                && !w.space_quiet(&t.space)
         })
         .collect();
     todos.sort_by_key(|t| {
@@ -281,6 +283,12 @@ pub const NEEDS_YOU: &str = "要你处理";
 /// The one place 要你处理 is counted: the window's chip and board, the menu bar, the
 /// phone and notifications all ask this.
 pub fn needs_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
+    asks_for_you(w, s, now) && !w.session_quiet(s)
+}
+
+/// `needs_you` without asking whether its space is put aside: what a 先不管 line counts as
+/// waiting.
+pub fn asks_for_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
     // The session's own fields first: the window asks this of every session on every
     // frame, and most fail here before the content lookup hashes their id.
     let shown = || match w.content.get(&s.id) {

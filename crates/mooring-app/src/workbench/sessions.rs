@@ -376,7 +376,13 @@ pub(super) fn session_open_in(
         .or_else(|| resume_terminal(w, resumed, s))
         .is_some_and(|t| w.terminal_tab(&t.id).is_some())
 }
+/// Why the window's lists, counts and board leave a session out: it is automation, or its
+/// space is put aside (先不管).
 pub(super) fn session_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
+    automation_hidden_in(w, s).or_else(|| w.session_quiet(s).then_some("先不管"))
+}
+/// Hidden as automation, whichever space it is in: the only hiding search looks past.
+pub(super) fn automation_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
     match w.content.get(&s.id) {
         Some(c) => c.hidden_for(s),
         // A hook can bind a new conversation before its first prompt writes anything.

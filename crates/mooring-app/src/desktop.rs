@@ -112,6 +112,9 @@ fn entered(
         .agent_sessions
         .iter()
         .filter(|s| s.managed() && (watching.is_none() || s.terminal.as_deref() != watching))
+        // Taking a space back is not news: what waited there comes back as counts, without
+        // a burst of banners; its next new fact is a banner again.
+        .filter(|s| !before.session_quiet(s))
         .filter_map(|s| {
             let (key, body) = fact(after, s)?;
             let old = before
@@ -205,7 +208,7 @@ fn panel(w: &Workspace, link: &Link) -> String {
         let Some(c) = w.content.get(&s.id) else {
             continue;
         };
-        if c.hidden_for(s).is_some() {
+        if c.hidden_for(s).is_some() || w.session_quiet(s) {
             continue;
         }
         let group = status::of(w, s, at);

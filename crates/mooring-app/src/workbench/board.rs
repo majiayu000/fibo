@@ -317,7 +317,10 @@ impl Workbench {
             .chain(remote.iter().map(|r| r.column));
         let open = columns_of.clone().filter(|c| *c != Column::Done).count();
         let stale = columns_of.filter(|c| *c == Column::Stale).count();
-        let empty = sessions.is_empty() && remote.is_empty() && todos.is_empty();
+        let empty = sessions.is_empty()
+            && remote.is_empty()
+            && todos.is_empty()
+            && self.workspace.quiet_spaces.is_empty();
         let mut grouped: HashMap<Column, Vec<&AgentSession>> = HashMap::new();
         for (column, session) in sessions {
             grouped.entry(column).or_default().push(session);
