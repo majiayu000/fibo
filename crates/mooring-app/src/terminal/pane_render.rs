@@ -124,7 +124,7 @@ impl Render for Pane {
         {
             // The program copied on its own (e.g. an Agent's /copy); say so, or the
             // user can't tell anything happened.
-            let note = format!("程序{}", copied_note(&text, false, false));
+            let note = format!("程序{}", copied_note(&text, false));
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
             self.show_toast(note, cx);
         }

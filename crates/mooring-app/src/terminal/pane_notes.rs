@@ -4,7 +4,7 @@ use super::Pane;
 use gpui::{Context, SharedString};
 use std::time::Duration;
 
-pub(super) const MOUSE_HINT: &str = "程序接管了鼠标，拖选由它处理：复制用它自己的复制键，Cmd+C 只复制整屏\n要让 Mooring 选字：按住 Shift 再拖，松手就复制";
+pub(super) const MOUSE_HINT: &str = "程序接管了鼠标，拖选由它处理：复制用它自己的复制键，Cmd+C 拿不到它选的字\n要让 Mooring 选字：按住 Shift 再拖，松手就复制";
 const NOTE_LIFETIME: Duration = Duration::from_secs(3);
 
 #[derive(Default)]
