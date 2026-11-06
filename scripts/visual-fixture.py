@@ -14,6 +14,8 @@ Pages are the harness's names, e.g. MOORING_PAGE_LIST=Dense-first-standard-light
 MOORING_VISUAL_BIN picks the build directory (default target/debug).
 MOORING_FIXTURE_BOARD=1 at prepare fills the board's worst cases: a live running turn, three
 done sessions, and a long branch on every project.
+MOORING_FIXTURE_UNLINKED=1 at prepare adds a tab of Agents no conversation is tied to, for the
+SidebarUnlinked-* pages.
 """
 import json, os, pathlib, shlex, socket, struct, subprocess, sys, tempfile, time
 
@@ -107,6 +109,7 @@ if sys.argv[1] == 'prepare':
         elif group == 2: records.extend([(stamp, 'response_item', {'type': 'function_call', 'name': 'exec_command', 'call_id': 'test', 'arguments': json.dumps({'cmd': 'bun test'})}), (stamp, 'response_item', {'type': 'function_call_output', 'call_id': 'test', 'output': 'Process exited with code 0\n31 pass 0 fail'}), (stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已完成，请核对。'})])
         elif group != 4: records.append((stamp, 'event_msg', {'type': 'turn_aborted'}))
         (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in records))
+        if os.environ.get('MOORING_FIXTURE_UNLINKED'): os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
     host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 30
@@ -132,6 +135,33 @@ if sys.argv[1] == 'prepare':
     def split(a, b, axis): return {'Split': {'axis': axis, 'ratio': 5000, 'first': a, 'second': b}}
     for id, title, task, layout in [('feedback', '标签命名依旧有问题', 'task0', split(leaf('p0'), split(leaf('p1'), leaf('p2'), 'Down'), 'Right')), ('start', '健身', 'task1', leaf('pstart'))]:
         edit(root, {'CreateTab': {'tab': {'id': id, 'space': 's0', 'title': title, 'default_task': task, 'closed': False, 'layout': layout}}})
+    if os.environ.get('MOORING_FIXTURE_UNLINKED'):
+        # The placeholder rows from the host's own recognition, not typed in here: a Claude that
+        # believes it is a child session, one yet to say anything, a Codex on the shared daemon
+        # (a title, no log), and a program reporting its own status. The child session is a small
+        # compiled program: macOS hides the environment of Apple's own /bin/sh from the host, which
+        # would then never see the variable. It starts from a script, so the shell before its
+        # `exec` does not already read as a Claude.
+        (root / 'claude').symlink_to('/bin/sh')
+        (root / 'child').mkdir()
+        (root / 'child/hold.c').write_text('#include <unistd.h>\nint main(void) { for (;;) pause(); }\n')
+        subprocess.run(['cc', '-o', str(root / 'child/claude'), str(root / 'child/hold.c')], check=True)
+        hold = 'while IFS= read -r line; do :; done'
+        report = 'printf "\\033]7501;state=working:app=deploy:progress=30:msg=6YOo572y5Lit\\033\\\\"; ' + hold
+        child = root / 'child/start.sh'
+        child.write_text(f'export CLAUDE_CODE_CHILD_SESSION=1\nexec {shlex.quote(str(root / "child/claude"))}\n')
+        terminals = [('punlinked-claude', ['/bin/sh', str(child)]),
+                     ('punlinked-first', [str(root / 'claude'), '-c', hold]),
+                     ('punlinked-codex', [str(root / 'codex'), '-c', 'printf "\\033]0;fixture\\007"; ' + hold]),
+                     ('punlinked-program', ['/bin/sh', '-c', report])]
+        for id, argv in terminals:
+            r = rpc(root, {'Launch': {'id': id, 'space': 's0', 'argv': argv, 'cwd': str(root / 'projects/工作空间'), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
+            time.sleep(1)
+        layout = split(split(leaf('punlinked-claude'), leaf('punlinked-first'), 'Down'), split(leaf('punlinked-codex'), leaf('punlinked-program'), 'Down'), 'Right')
+        # A space with such a terminal and no session at all.
+        r = rpc(root, {'Launch': {'id': 'punlinked-only', 'space': 's5', 'argv': [str(root / 'codex'), '-c', 'printf "\\033]0;fixture\\007"; ' + hold], 'cwd': str(root / 'projects/工作空间'), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
+        edit(root, {'CreateTab': {'tab': {'id': 'unlinked-only', 'space': 's5', 'title': '未关联', 'default_task': None, 'closed': False, 'layout': leaf('punlinked-only')}}})
+        edit(root, {'CreateTab': {'tab': {'id': 'unlinked', 'space': 's0', 'title': '未关联', 'default_task': None, 'closed': False, 'layout': layout}}})
     while True:
         w = rpc(root, 'Workspace')['Workspace']
         if len(w['agent_sessions']) >= 40: break
@@ -160,6 +190,18 @@ if sys.argv[1] == 'prepare':
             assert time.monotonic() < deadline + 30, 'terminal timeout'; time.sleep(.1)
         time.sleep(1)
         r = rpc(root, {'Hook': {'runtime': 'Codex', 'pid': t['pid'], 'cli_session_id': 'visual-4', 'transcript': str(logs / 'visual-4.jsonl'), 'ended': False, 'event': None}}); assert 'Error' not in r, r
+        if os.environ.get('MOORING_FIXTURE_UNLINKED'):
+            # 今天 and 更早 hold conversations whose terminal has ended: run each in one, stop it.
+            closed = [3, 5, 6, 7, 8, 10, 11, 13, 14, 15]
+            for n in closed:
+                r = rpc(root, {'Launch': {'id': f'pc{n}', 'space': f's{n // 8}', 'argv': [str(root / 'codex'), '-c', 'while IFS= read -r line; do :; done'], 'cwd': str(root / 'projects' / names[n // 8]), 'cols': 90, 'rows': 35}}); assert 'Error' not in r, r
+            time.sleep(1)
+            for n in closed:
+                t = next(t for t in rpc(root, 'Workspace')['Workspace']['terminals'] if t['id'] == f'pc{n}')
+                r = rpc(root, {'Hook': {'runtime': 'Codex', 'pid': t['pid'], 'cli_session_id': f'visual-{n}', 'transcript': str(logs / f'visual-{n}.jsonl'), 'ended': False, 'event': None}}); assert 'Error' not in r, r
+            time.sleep(1)
+            for n in closed: rpc(root, {'Stop': {'id': f'pc{n}'}})
+            time.sleep(1)
         for s in rpc(root, 'Workspace')['Workspace']['agent_sessions']:
             if s['cli_session_id'] in ('visual-9', 'visual-17', 'visual-25'):
                 edit(root, {'SetOutcome': {'id': s['id'], 'outcome': 'Completed', 'seen': None}})
