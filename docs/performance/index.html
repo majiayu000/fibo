@@ -143,7 +143,7 @@
 <h2 id="triage">6. 门禁报警的排查流程</h2>
 <ol>
   <li>看是哪项：指令数、pane-share、像素、侧栏重画、补画自我触发。像素差异的两张图在 CI 产物 <code>perf-gate</code> 里。</li>
-  <li>本机先复现：编探针版，跑 <code>perf-gate.py</code> 两三次，排除双峰和噪声。</li>
+  <li>本机先复现：编探针版，跑 <code>perf-gate.py</code> 两三次，排除双峰和噪声。门禁全机排队，一次只跑一个；直接调 <code>perf-fixture.py</code> 不排队，别和门禁同时跑，否则两边都不可信。</li>
   <li>指令数涨了：二分提交（每个点只跑 <code>probe … frames-main</code> 或 <code>frames-pane</code>），定位到提交后再用「去掉一块量一次」缩小到具体视图，最后用 sample 看是排版还是计算。</li>
   <li>像素差异：先判断是不是设计内的晚一帧（标签栏溢出）；否则检查新状态有没有在改动时让对应视图 notify（R2）。</li>
   <li>修完：门禁本机过、像素一致，再推。有意的变化才改基线。</li>
