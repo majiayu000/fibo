@@ -218,6 +218,9 @@ pub(crate) struct Call {
 #[derive(Default, Serialize, Deserialize)]
 pub struct Parser {
     pub card: Content,
+    /// The paths this turn pushed off the card's list of files, hashed.
+    #[serde(default)]
+    evicted_files: std::collections::HashSet<u64>,
     turn_id: String,
     last_user: String,
     last_user_turn: String,

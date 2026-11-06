@@ -83,9 +83,25 @@ pub struct TurnFile {
     pub disk: Disk,
 }
 
+/// A file as a list shows it. What it changed is asked for when it is chosen, from `lines`:
+/// a turn may touch thousands of files and only the one on screen costs anything.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileSummary {
+    pub path: String,
+    pub created: bool,
+    /// Edits the log holds of it; 0: the log has none, only the counts its card keeps.
+    pub edits: u32,
+    pub added: u32,
+    pub removed: u32,
+    /// Where in the log its edits are, oldest first.
+    pub lines: Vec<u64>,
+}
+
+/// The files of one turn, newest change first. `log` is the inode of the log `lines` index.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnChanges {
-    pub files: Vec<TurnFile>,
+    pub log: u64,
+    pub files: Vec<FileSummary>,
 }
 
 #[derive(Debug)]
@@ -249,6 +265,32 @@ impl Composer {
         })
     }
 
+    /// What a list shows of the file. `net` diffs each block as [`Self::finish`] would, so the
+    /// two agree; without it the counts are the logged edits' own, for when time has run out.
+    pub fn summary(&self, path: &str, lines: Vec<u64>, net: bool) -> FileSummary {
+        let (added, removed) = if net && !self.broken {
+            self.blocks.iter().fold((0, 0), |(a, r), b| {
+                let (x, y) = net_counts(b);
+                (a + x, r + y)
+            })
+        } else {
+            let of = |sign: char| {
+                (self.raw.iter().flat_map(|h| &h.lines))
+                    .filter(|l| l.starts_with(sign))
+                    .count() as u32
+            };
+            (of('+'), of('-'))
+        };
+        FileSummary {
+            path: path.to_owned(),
+            created: self.created,
+            edits: self.edits,
+            added,
+            removed,
+            lines,
+        }
+    }
+
     /// The file as the turn left it; `current` is what it holds now, `None` when it is gone.
     pub fn finish(self, path: &str, current: Option<&str>) -> TurnFile {
         let disk = match current {
@@ -284,13 +326,29 @@ impl Composer {
 }
 
 /// A file the log says nothing about: all that is known is its counts.
-pub fn unrecorded(path: &str, added: u32, removed: u32) -> TurnFile {
-    TurnFile {
+pub fn unrecorded(path: &str, added: u32, removed: u32) -> FileSummary {
+    FileSummary {
         path: path.to_owned(),
         added,
         removed,
         ..Default::default()
     }
+}
+
+fn net_counts(block: &Block) -> (u32, u32) {
+    if block.old.is_empty() || block.new.is_empty() {
+        return (block.new.len() as u32, block.old.len() as u32);
+    }
+    let deadline = Some(Instant::now() + DIFF_FOR);
+    let ops = capture_diff_slices_deadline(Algorithm::Patience, &block.old, &block.new, deadline);
+    ops.iter()
+        .filter(|op| !matches!(op, DiffOp::Equal { .. }))
+        .fold((0, 0), |(a, r), op| {
+            (
+                a + op.new_range().len() as u32,
+                r + op.old_range().len() as u32,
+            )
+        })
 }
 
 fn push(hunk: &mut Hunk, file: &mut TurnFile, left: &mut usize, line: DiffLine) {
