@@ -302,13 +302,13 @@ pub(super) fn follow_associated(
         );
     }
     // The same holds for a bound session's subagents: their logs stay open too.
-    let parents: Vec<String> = {
+    let parents: Vec<_> = {
         let host = lock(shared)?;
         host.workspace
             .agent_sessions
             .iter()
             .filter(|s| s.current && crate::agents::adapter(s.runtime).links_children())
-            .map(|s| s.cli_session_id.clone())
+            .map(|s| (s.runtime, s.cli_session_id.clone()))
             .collect()
     };
     if !parents.is_empty() {

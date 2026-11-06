@@ -13,10 +13,12 @@ use std::{
     io,
     sync::LazyLock,
 };
+mod children;
 mod db;
 mod result;
 mod rules;
-pub use db::{card, children, link_child, load, save, save_records, save_state, schema, Children};
+pub use children::{children, link_child, Children};
+pub use db::{card, load, save, save_records, save_state, schema};
 use rules::*;
 pub(crate) use rules::{claims_done, re, user_text};
 // A session_meta line may exceed the 16 KiB head budget because of base_instructions.
@@ -588,7 +590,7 @@ impl Parser {
         };
         self.settle(before, "官方状态", at, detail);
     }
-    /// Applies the state of a Codex session's subagents, read from their own logs: running
+    /// Applies the state of a session's subagents, read from their own logs: running
     /// ones keep a stopped turn working, and a subagent's dialog is the parent's dialog.
     pub fn children(&mut self, kids: &Children, at: u64, source: Source) {
         let before = self.card.turn;
