@@ -50,6 +50,8 @@ mod subagent_evidence;
 mod tab_cwd_evidence;
 mod tab_evidence;
 mod tab_overflow_evidence;
+#[path = "todo_flow_evidence.rs"]
+mod todo_flow_evidence;
 mod wheel_evidence;
 mod why_evidence;
 
@@ -67,6 +69,7 @@ pub fn start(
         || resume_evidence::start(handle, evidence.clone(), cx)
         || subagent_evidence::start(handle, evidence.clone(), cx)
         || pinned_ask_evidence::start(handle, evidence.clone(), cx)
+        || todo_flow_evidence::start(handle, evidence.clone(), cx)
     {
         return;
     }
