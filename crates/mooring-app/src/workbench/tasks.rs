@@ -10,6 +10,11 @@ pub(super) struct TaskUi {
     pub(super) form: Option<Form>,
     /// One-line capture in the sidebar; the full form is its "展开".
     pub(super) quick_task: Option<(Entity<Field>, gpui::Subscription)>,
+    /// The card open in the board's 待办 column, and what it held when it last closed.
+    pub(super) board_quick: Option<super::board::BoardQuick>,
+    /// The space a closed card's words were for.
+    pub(super) board_draft_space: Option<String>,
+    pub(super) board_draft: String,
     /// The sidebar's todo list starts folded; sessions come first.
     pub(super) todos_open: bool,
     pub(super) editing_task: Option<String>,
@@ -187,15 +192,20 @@ impl Workbench {
             .px(px(T::S8))
             .pb(px(T::S6))
             .child(
-                label(format!(
-                    "「{}」用哪个 Agent",
-                    self.workspace
-                        .tasks
-                        .iter()
-                        .find(|t| t.id == task)
-                        .map(|t| mooring_core::content::short(&t.title, 12))
-                        .unwrap_or_default()
-                ))
+                // On the board the card it opens on already says which todo.
+                label(if self.nav.overview {
+                    "用哪个 Agent".to_owned()
+                } else {
+                    format!(
+                        "「{}」用哪个 Agent",
+                        self.workspace
+                            .tasks
+                            .iter()
+                            .find(|t| t.id == task)
+                            .map(|t| mooring_core::content::short(&t.title, 12))
+                            .unwrap_or_default()
+                    )
+                })
                 .text_size(px(T::META)),
             );
         for agent in order {
@@ -211,9 +221,33 @@ impl Workbench {
                     b.bg(T::color(T::accent()))
                         .text_color(T::color(T::on_accent()))
                 })
-                .on_click(cx.listener(move |this, _, _, cx| this.choose_agent(agent, cx))),
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.choose_agent(agent, cx)
+                })),
             );
         }
+        let plain = task.to_owned();
+        // On the board only: the sidebar's todo list stays as it was.
+        row = row.when(self.nav.overview, |row| {
+            row.child(
+                button(
+                    gpui::SharedString::from(format!("pick-plain-{task}")),
+                    "普通终端",
+                )
+                .h(px(T::ICON_HEIGHT))
+                .px(px(T::S6))
+                .text_size(px(T::META))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.tasks.picking = None;
+                    if let Some(t) = this.workspace.tasks.iter().find(|t| t.id == plain) {
+                        this.nav.space = t.space.clone();
+                    }
+                    this.launch(false, None, cx);
+                })),
+            )
+        });
         Some(
             row.child(
                 button(
@@ -224,14 +258,23 @@ impl Workbench {
                 .px(px(T::S6))
                 .text_size(px(T::META))
                 .on_click(cx.listener(|this, _, _, cx| {
+                    cx.stop_propagation();
                     this.tasks.picking = None;
                     cx.notify();
                 })),
             ),
         )
     }
+    /// Writing a todo happens where you asked: on the board there, in the column here.
     pub(super) fn show_quick_task(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.nav.overview = false;
+        if self.nav.overview {
+            self.overview.closed_only = false;
+            self.overview.show_closed = false;
+            self.overview.show_hidden = false;
+            self.nav.task_detail = None;
+            self.open_board_quick(window, cx);
+            return;
+        }
         self.tasks.todos_open = true;
         self.tasks.form = None;
         self.nav.task_detail = None;

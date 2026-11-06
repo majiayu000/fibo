@@ -7,6 +7,8 @@ use super::*;
 use gpui::WindowHandle;
 use std::time::Duration;
 use workbench::Workbench;
+#[path = "todo_demo_evidence.rs"]
+mod todo_demo_evidence;
 
 pub(super) fn start(
     handle: Option<WindowHandle<Workbench>>,
@@ -16,6 +18,9 @@ pub(super) fn start(
     let (Some(handle), Some(directory)) = (handle, evidence) else {
         return false;
     };
+    if todo_demo_evidence::start(handle, &directory, cx) {
+        return true;
+    }
     if std::env::var_os("MOORING_PINNED_ASK_EVIDENCE").is_none() {
         return false;
     }
