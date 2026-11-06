@@ -274,8 +274,10 @@ def scenes(work, out, only=None):
                 break
     if only and 'pages' not in only:
         return results
-    # This checkout's fixture on every commit: each side gets the same data, as visual-check does.
-    fixture = BASE / 'scripts/visual-fixture.py'
+    # The same fixture on every commit, so each side gets the same data. It finds its helpers
+    # beside itself, so it runs from the worktree under test, not from this checkout.
+    fixture = work / 'scripts/visual-fixture.py'
+    shutil.copy(BASE / 'scripts/visual-fixture.py', fixture)
     env = {**ENV, 'MOORING_VISUAL_BIN': str(bin_dir), 'MOORING_FIXTURE_BOARD': '1'}
     for i in range(0, len(PAGES), 6):  # one run has 120 seconds
         chunk = ','.join(PAGES[i:i + 6])
