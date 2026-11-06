@@ -45,7 +45,7 @@ Claude 没列出来、认不出 Agent 进程、或日志里查不到这条命令
 
 认不出的已知写法：`exec npm run dev`（进程上是 `node /路径/npm run dev`）、`exec ~/x`（路径被展开）、`exec "$@"`。它们落到第 5 条。
 
-命令只在内存里，不写进存储（命令行可能含密钥）。宿主重启后，存储里还列着 shell 的活会话从它自己的 Claude 日志找回命令（`commands_in_log`），每个会话只读一次；日志是 Claude 已经写下的，这里不新增存储。
+命令只在内存里，不写进存储（命令行可能含密钥）。宿主重启后，存储里还列着 shell 的活会话从它自己的 Claude 日志找回命令（`shell_log::commands_in_session`），每个会话只读一次；日志是 Claude 已经写下的，这里不新增存储。子 Agent 起的 shell 和 Monitor 跟主会话一起列出来，命令却只在 `<会话>/subagents/` 下它自己的日志里（工作流的子 Agent 还要再深几层），所以主日志缺的再去那里找。
 
 不做：不按命令文字猜（名字叫 relay 的既可能是常驻服务，也可能是脚本的零件）。
 
@@ -82,6 +82,7 @@ Codex 的 hook 不报后台 shell，它上报的 `working` 也不分任务和服
 | 11-06 | `exec` 开头的命令：shell 被替换，进程上没有原命令 | 任务看 4，服务看 3 | 按 `exec` 的目标认 | 本次 |
 | 11-06 | Claude 列着、但认不出进程的 shell | 在跑，最多 2 小时 | 第 5、6 条 | 本次 |
 | 11-06 | Codex 开着 `http.server`（在守护进程下，`python3` 改写了自己的名字） | 等后台 | 对上进程后走 3 | 本次 |
+| 11-07 | 子 Agent 起的后台 Bash 和 Monitor（litellm 测试队列），中途换 App：主日志没有这两条，宿主连进程都没看就算不是任务 | 在跑 | 从子 Agent 日志找回命令，再走 4 | 本次 |
 | — | `tail -f`、不监听的监视程序 | 2 小时前在跑，之后等后台 | 4、1 | 3fb2791 |
 
 ## Consequences
@@ -97,7 +98,7 @@ Codex 的 hook 不报后台 shell，它上报的 `working` 也不分任务和服
 
 ## Implementation Plan
 
-* **Affected paths**: `crates/mooring-host/src/background_shells.rs`（`judge`、`Sockets`、`known_cases`），`crates/mooring-host/src/cli_commands.rs`、`crates/mooring-host/src/host/found_shells.rs`（Codex），状态归类仍只在 `crates/mooring-core/src/status.rs`。
+* **Affected paths**: `crates/mooring-host/src/background_shells.rs`（`judge`、`Sockets`、`known_cases`），`crates/mooring-host/src/shell_log.rs`（重启后从日志找回命令），`crates/mooring-host/src/cli_commands.rs`、`crates/mooring-host/src/host/found_shells.rs`（Codex），状态归类仍只在 `crates/mooring-core/src/status.rs`。
 * **Patterns to follow**: 探测结果只叠加在快照上（`Background.jobs`），状态只由 `status::of` 判定；每次规则改动都先加案例。
 * **Patterns to avoid**: 不要退回只数 shell 个数；不要按命令文字判断；不要用「shell 外面包了一层脚本」判断，`npm run dev` 也是这样。
 
@@ -105,6 +106,7 @@ Codex 的 hook 不报后台 shell，它上报的 `working` 也不分任务和服
 
 - [ ] `cargo test -p mooring-host --lib background_shells`：`known_cases` 是案例表，`a_real_script_using_its_own_port_differs_from_a_server_with_an_outside_client` 用真实进程验证。
 - [ ] `cargo test -p mooring-host --test managed_session codex_background`：假 Codex 接管后还在跑、开端口的算等后台。
+- [ ] `cargo test -p mooring-host --lib shell_log a_job_a_subagent`：子 Agent 的日志（含工作流那层）和 Monitor 的写法都找得回，真实进程下仍是任务。
 - [ ] `cargo test -p mooring-host --test managed_session restart_binding`：判定之前的一步，新宿主要先找到安静 Agent 的进程，否则这些规则根本轮不到。
 
 ## Alternatives
