@@ -10,7 +10,8 @@
 Measuring a commit opens real windows (isolated HOME and runtime, no real Agent).
 Exit status 1 means something needs a person; the output says what.
 
-BASE2 is the baseline measured a second time (--repeat). A check, a test or a scene that
+Measure in the order baseline, end, baseline again, so what drifts with the hour lands in the
+noise rather than on the end. BASE2 is that second baseline run (--repeat). A check, a test or a scene that
 regressed fails the report. Pictures never do: a clean move still differed outside the noise of
 two baseline runs in 20 of 93, so they are sorted for a person to look at, largest first. A
 scene failing on the baseline proves nothing. Run on an awake machine with little else going.
@@ -273,7 +274,8 @@ def scenes(work, out, only=None):
                 break
     if only and 'pages' not in only:
         return results
-    fixture = work / 'scripts/visual-fixture.py'
+    # This checkout's fixture on every commit: each side gets the same data, as visual-check does.
+    fixture = BASE / 'scripts/visual-fixture.py'
     env = {**ENV, 'MOORING_VISUAL_BIN': str(bin_dir), 'MOORING_FIXTURE_BOARD': '1'}
     for i in range(0, len(PAGES), 6):  # one run has 120 seconds
         chunk = ','.join(PAGES[i:i + 6])
