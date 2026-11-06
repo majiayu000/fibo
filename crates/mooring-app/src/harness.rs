@@ -4,6 +4,7 @@ use super::*;
 use crate::terminal::screen;
 use gpui::WindowHandle;
 use std::time::Duration;
+mod changes_evidence;
 mod complete_evidence;
 #[path = "cpu_probe_evidence.rs"]
 mod cpu_probe_evidence;
@@ -73,7 +74,9 @@ pub fn start(
     {
         return;
     }
-    if complete_evidence::start(handle, evidence.clone(), cx) {
+    if complete_evidence::start(handle, evidence.clone(), cx)
+        || changes_evidence::start(handle, evidence.clone(), cx)
+    {
         return;
     }
     reason_evidence::start(handle, evidence.clone(), cx);

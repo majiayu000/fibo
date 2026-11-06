@@ -16,3 +16,4 @@ rustc-hash = "2"
 ed25519-dalek = "2"
 getrandom = "0.3"
 libghostty-vt.workspace = true
+similar = { version = "3.2.1", default-features = false, features = ["std"] }

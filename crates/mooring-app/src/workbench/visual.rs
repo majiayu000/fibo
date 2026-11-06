@@ -410,6 +410,19 @@ impl Workbench {
         });
     }
     /// Whether a terminal pane holds input focus.
+    /// Where a pane's grid is drawn.
+    pub fn visual_terminal_bounds(
+        &self,
+        terminal: &str,
+        cx: &gpui::App,
+    ) -> Option<gpui::Bounds<gpui::Pixels>> {
+        self.layout.panes.get(terminal)?.read(cx).visual_bounds()
+    }
+    /// The shown tab's first terminal.
+    pub fn visual_shown_terminal(&self) -> String {
+        let tab = self.nav.tab.as_ref().expect("a shown tab");
+        self.workspace.tab_terminals(tab)[0].clone()
+    }
     pub fn visual_pane_focused(&self, window: &Window, cx: &gpui::App) -> bool {
         self.layout
             .panes
