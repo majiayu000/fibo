@@ -1,6 +1,6 @@
 // The composer: a big rounded card with the text on top and a row of small controls
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
-import { useState } from 'react';
+import { type ComponentRef, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Icon } from './icons';
 import { noOutline, useBottom } from './kit';
@@ -15,8 +15,10 @@ export function Composer({
   canStop,
   canContinue,
   offline,
+  suggestion,
   onSend,
   onStop,
+  onUseSuggestion,
 }: {
   agent: string;
   /** What its log says, read only: changing them is for the terminal. */
@@ -26,12 +28,16 @@ export function Composer({
   canStop: boolean;
   canContinue: boolean;
   offline: boolean;
+  /** What the Agent offers as the next prompt: a tap puts it in the box, sending is still yours. */
+  suggestion?: string | null;
   onSend: (text: string) => Promise<boolean>;
   onStop: () => void;
+  onUseSuggestion?: () => void;
 }) {
   const t = useTheme();
   const bottom = useBottom();
   const [draft, setDraft] = useState('');
+  const input = useRef<ComponentRef<typeof TextInput>>(null);
   const stop = running && canStop && !draft.trim();
   async function go(text: string) {
     if (!text.trim()) return;
@@ -40,7 +46,25 @@ export function Composer({
   }
   return (
     <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }]}>
+      {!!suggestion && !draft && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`填入建议：${suggestion}`}
+          onPress={() => {
+            setDraft(suggestion);
+            onUseSuggestion?.();
+            input.current?.focus();
+          }}
+          style={({ pressed }) => [s.suggestion, { backgroundColor: t.well }, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={{ color: t.dim, fontSize: 12 }}>建议</Text>
+          <Text numberOfLines={2} style={{ color: t.text, fontSize: 14, lineHeight: 19, flexShrink: 1 }}>
+            {suggestion}
+          </Text>
+        </Pressable>
+      )}
       <TextInput
+        ref={input}
         value={draft}
         onChangeText={setDraft}
         placeholder={offline ? '电脑没连上，写的话会在重连后发送' : '回复，或者让它接着做…'}
@@ -101,6 +125,7 @@ const s = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
   },
+  suggestion: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', maxWidth: '100%', gap: 8, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
   input: { fontSize: 15, minHeight: 24, maxHeight: 140, paddingHorizontal: 4, paddingVertical: 2 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   tag: { height: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },

@@ -4,6 +4,7 @@ use super::*;
 mod edit;
 mod once;
 mod stop;
+mod suggestion;
 mod tool_rows;
 mod typing;
 pub(super) use typing::*;
@@ -524,6 +525,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let text = lock(terminal)?.vt.tail_text(rows.clamp(1, 10_000))?;
             Ok(Reply::Text(text))
         }
+        Request::InputSuggestion { id } => suggestion::read(shared, &id),
         Request::SendText {
             id,
             text,

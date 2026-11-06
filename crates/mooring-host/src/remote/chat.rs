@@ -59,6 +59,19 @@ pub(super) fn chat(socket: &Path, request: &Value) -> io::Result<Value> {
     }
 }
 
+/// What the terminal's Agent offers as the next prompt. A phone asks every couple of seconds
+/// while it waits on you, so this names the terminal and never reads the whole `Workspace`.
+pub(super) fn suggestion(socket: &Path, terminal: &str) -> io::Result<Value> {
+    let read = Request::InputSuggestion {
+        id: terminal.to_owned(),
+    };
+    match rpc(socket, &read)? {
+        Reply::InputSuggestion { session, text } => Ok(json!(rp::Suggestion { session, text })),
+        Reply::Error(e) => Err(io::Error::other(e)),
+        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+    }
+}
+
 /// `backfill`: reads the next stretch of a conversation's log. Replies once there is about a
 /// page more of its messages, or a second has passed: the client asks until `done`.
 pub(super) fn backfill(socket: &Path, request: &Value) -> io::Result<Value> {

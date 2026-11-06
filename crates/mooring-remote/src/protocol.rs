@@ -216,6 +216,10 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
+    /// What the Agent in a terminal offers as your next prompt: [`crate::chat::Suggestion`].
+    Suggestion {
+        terminal: String,
+    },
     /// The account limits each Agent last reported, within a week: [`Quotas`].
     Quota,
     /// Reads the next stretch of a conversation's log its first read skipped (names its
@@ -289,6 +293,7 @@ impl Op {
             Self::ToolCalls { .. } => "toolcalls",
             Self::Backfill { .. } => "backfill",
             Self::ToolCall { .. } => "toolcall",
+            Self::Suggestion { .. } => "suggestion",
         }
     }
 }
@@ -324,6 +329,7 @@ pub const OPS: &[&str] = &[
     "toolcalls",
     "toolcall",
     "backfill",
+    "suggestion",
 ];
 
 /// A line from the machine.

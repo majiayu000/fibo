@@ -79,6 +79,7 @@ mod tests {
             "toolcalls",
             "toolcall",
             "backfill",
+            "suggestion",
             "ask",
         ] {
             assert!(Role::View.allows(op));
@@ -101,6 +102,6 @@ mod tests {
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
         assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
         assert!(!acts("diff") && !acts("dirs") && !acts("quota") && !acts("usage"));
-        assert!(!acts("toolcalls") && !acts("toolcall"));
+        assert!(!acts("toolcalls") && !acts("toolcall") && !acts("suggestion"));
     }
 }

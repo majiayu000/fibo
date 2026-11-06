@@ -45,6 +45,9 @@ impl Adapter for Claude {
     fn screen_rules(&self) -> &'static str {
         include_str!("screen/claude.json")
     }
+    fn input_suggestion(&self, vt: &mooring_core::terminal::Vt) -> std::io::Result<Option<String>> {
+        super::claude_suggestion::read(vt)
+    }
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CLAUDE_CONFIG_DIR", ".claude").join("projects")
     }

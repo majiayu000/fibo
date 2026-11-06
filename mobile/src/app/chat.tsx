@@ -9,7 +9,10 @@ import { catchUp } from '@/remote/gap';
 import { refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { UNSURE } from '@/remote/named';
 import { useAsk } from '@/remote/useAsk';
+import { useSuggestion } from '@/remote/useSuggestion';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
+import { countUse } from '@/store/suggestionCounts';
+import { suggestionStats } from '@/store/suggestions';
 import { Composer } from '@/ui/composer';
 import { cardTitle } from '@/ui/format';
 import { Icon } from '@/ui/icons';
@@ -228,6 +231,10 @@ export default function Chat() {
   const options = choices(waiting);
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
+  // Only Claude offers one, only between turns with nothing else being asked. The card names
+  // the turn, so this does not wait on the messages of a conversation still being read.
+  const turnEnded = online && card?.agent === 'claude' && card.phase === 'idle' && !card.trust && supports(m, 'suggestion');
+  const suggestion = useSuggestion(machine, terminal, card?.session ?? null, turnEnded ? (card.turn ?? null) : null);
   const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
   const toTools = useCallback(
     (seq?: number) => router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}) } }),
@@ -374,8 +381,10 @@ export default function Chat() {
           canStop={supports(m, 'stop')}
           canContinue={online && card?.phase === 'idle'}
           offline={!online}
+          suggestion={suggestion}
           onSend={send}
           onStop={() => stop()}
+          onUseSuggestion={() => suggestionStats.set(countUse)}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />

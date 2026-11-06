@@ -13,6 +13,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub(crate) mod claude;
+mod claude_suggestion;
 pub(crate) mod codex;
 mod codex_items;
 mod codex_script;
@@ -199,6 +200,9 @@ pub trait Adapter: Sync {
     }
     /// The same from the bottom of the screen, `tail` as `Vt::tail_text` gives it: the
     /// line a CLI ticks while a turn runs ("Working (12s • esc to interrupt)").
+    fn input_suggestion(&self, _vt: &mooring_core::terminal::Vt) -> io::Result<Option<String>> {
+        Ok(None)
+    }
     fn screen_busy(&self, _tail: &str) -> Option<bool> {
         None
     }

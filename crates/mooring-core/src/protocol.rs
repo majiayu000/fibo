@@ -184,6 +184,10 @@ pub enum Request {
         id: String,
         rows: usize,
     },
+    /// What the Agent in a terminal offers as your next prompt: [`Reply::InputSuggestion`].
+    InputSuggestion {
+        id: String,
+    },
     /// Scripts and other Agents: text placed in a terminal as a paste, then Enter when
     /// `submit`. Goes in beside whoever is typing there.
     SendText {
@@ -413,6 +417,11 @@ pub enum Reply {
     },
     Ok,
     Text(String),
+    /// [`Request::InputSuggestion`]: the conversation in that terminal, and what it offers.
+    InputSuggestion {
+        session: Option<String>,
+        text: Option<String>,
+    },
     /// [`Request::AwaitInterrupt`]: the turn ended; whether a command it left was closed too.
     Interrupted {
         closed_background: bool,

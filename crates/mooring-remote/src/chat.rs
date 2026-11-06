@@ -49,6 +49,17 @@ fn none(n: &u32) -> bool {
     *n == 0
 }
 
+/// The reply to `suggestion`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Suggestion {
+    /// The conversation it belongs to; absent when the terminal runs no Agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    /// Absent when there is none right now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
 /// The reply to `backfill`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Backfilled {

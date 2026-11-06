@@ -472,6 +472,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Val
         "ask" => asks::ask(socket, &terminal()?),
         "trust" => asks::trust(socket, request, client),
         "chat" => chat::chat(socket, request),
+        "suggestion" => chat::suggestion(socket, &terminal()?),
         "diff" => diff::diff(socket, request),
         "dirs" => dirs::dirs(socket, request),
         "quota" => quota::quota(socket),

@@ -6,6 +6,8 @@ import type { ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { oops } from '@/actions';
 import { type Settings, settings, useSettings } from '@/store/settings';
+import { statsWords } from '@/store/suggestionCounts';
+import { useSuggestionStats } from '@/store/suggestions';
 import { Icon } from '@/ui/icons';
 import { Label, Nav, Switch, TITLE_WEIGHT, useBottom } from '@/ui/kit';
 import { type Theme, useTheme } from '@/ui/theme';
@@ -37,6 +39,7 @@ export default function SettingsScreen() {
   const t = useTheme();
   const bottom = useBottom();
   const v = useSettings();
+  const stats = useSuggestionStats();
   const notify = (k: keyof Settings['notify']) => (on: boolean) => settings.set({ notify: { ...v.notify, [k]: on } });
 
   async function setLock(on: boolean) {
@@ -93,6 +96,8 @@ export default function SettingsScreen() {
             <Switch label="允许前再确认一次" on={v.confirmDanger} onChange={(on) => settings.set({ confirmDanger: on })} />
           </Item>
         </View>
+        <Label style={{ marginTop: 8 }}>输入建议</Label>
+        <Text style={{ fontSize: 12, color: t.dim, lineHeight: 18 }}>{statsWords(stats)}</Text>
         <Text style={{ textAlign: 'center', fontSize: 13, color: t.dim, marginTop: 24 }}>
           Mooring {Constants.expoConfig?.version ?? ''} · 这些设置只存在这台手机上
         </Text>

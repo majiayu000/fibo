@@ -23,7 +23,7 @@ const LINKS = [
   link('air', 'MacBook Air', 'wss://relay.example.com'),
 ];
 
-const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop', 'backfill'];
+const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop', 'backfill', 'suggestion'];
 
 const card = (o: Record<string, unknown>) => ({
   space: 's-mooring',
@@ -198,6 +198,8 @@ function remote(machine: string) {
         return { text: SCREEN };
       case 'ask':
         return { question: 'Do you want to proceed?', kind: 'Bash command', subject: 'git push origin main', note: '推送 main 到远端', always: '允许，git push 命令以后不再询问' };
+      case 'suggestion':
+        return { session: `sess-${f.terminal}`, text: '跑一下测试再提交' };
       case 'chat':
         return f.after || f.before ? { session: f.session, more: false, messages: [] } : chat(String(f.terminal));
       case 'diff':
