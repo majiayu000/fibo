@@ -19,6 +19,8 @@ mod cli;
 mod codex_daemon;
 #[path = "managed_session/codex_fixture.rs"]
 mod codex_fixture;
+#[path = "managed_session/codex_rebind.rs"]
+mod codex_rebind;
 #[path = "managed_session/common.rs"]
 mod common;
 #[path = "managed_session/events.rs"]

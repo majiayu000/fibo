@@ -119,35 +119,8 @@ impl Association {
         let (panes, workspace, released) = {
             let mut host = lock(shared)?;
             let released = std::mem::take(&mut host.released_logs);
-            let mut panes = vec![];
-            for (pid, (terminal, runtime)) in &host.unbound_pids {
-                if host.workspace.current_agent(terminal).is_none() {
-                    panes.push((*pid, terminal.clone(), *runtime, None));
-                }
-            }
-            // A session only the screen tied to its pane can move to another thread in the
-            // same TUI; one its command line, hook or open file names cannot.
-            for (pid, id) in &host.agent_pids {
-                if let Some(s) = host.workspace.agent_sessions.iter().find(|s| {
-                    &s.id == id
-                        && s.current
-                        && s.terminal.is_some()
-                        && s.binding.is_none_or(|b| b == Binding::Screen)
-                }) {
-                    panes.push((
-                        *pid,
-                        s.terminal.clone().unwrap(),
-                        s.runtime,
-                        Some(s.clone()),
-                    ));
-                }
-            }
-            panes.retain(|(_, t, ..)| host.terminals.contains_key(t));
             (
-                panes
-                    .into_iter()
-                    .map(|(pid, t, runtime, s)| (pid, host.terminals[&t].clone(), t, runtime, s))
-                    .collect::<Vec<_>>(),
+                super::screen_match::panes(&host),
                 host.workspace.clone(),
                 released,
             )
@@ -156,33 +129,21 @@ impl Association {
             return Ok(());
         }
         let window = mooring_core::content::now().saturating_sub(600);
-        let holder = |t: &crate::recognition::Transcript| {
-            workspace
-                .agent_sessions
-                .iter()
-                .find(|s| s.current && s.runtime == t.runtime && s.cli_session_id == t.cli_id)
-        };
         let unbound = |t: &crate::recognition::Transcript| {
             crate::recognition::screen_candidate(
                 t.updated >= window,
                 released.contains(&t.path),
-                holder(t),
+                super::screen_match::holder(&workspace, t),
                 panes
                     .iter()
                     .any(|(.., runtime, current)| current.is_none() && *runtime == t.runtime),
             )
         };
-        // The newest prompt: its text when long enough to be screen evidence, and its time.
-        let prompt =
-            |t: &crate::recognition::Transcript| -> io::Result<Option<(Option<String>, u64)>> {
-                Ok(index
-                    .latest_user(&t.path)?
-                    .map(|(text, at)| (crate::recognition::screen_key(&text), at)))
-            };
         // Only a prompt with comparisons left justifies reading screens.
         let mut fresh = !released.is_empty();
         for t in batch.iter().filter(|t| unbound(t)) {
-            if let Some((key, at)) = prompt(t)? {
+            if let Some((text, at)) = index.latest_user(&t.path)? {
+                let key = crate::recognition::screen_key(&text);
                 let tries = self
                     .screened
                     .entry((t.path.clone(), key.unwrap_or_else(|| at.to_string())))
@@ -200,130 +161,16 @@ impl Association {
         let submits = lock(shared)?.submits.clone();
         let mut threads = vec![];
         for t in cached.iter().filter(|t| unbound(t)) {
-            if let Some((key, at)) = prompt(t)? {
-                let began = index.turn_began(&t.path, at)?;
-                let cwd = fs::canonicalize(&t.cwd)
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|_| t.cwd.clone());
-                let thread = crate::recognition::ScreenThread {
-                    transcript: t,
-                    key,
-                    at: Some(at),
-                    began,
-                    cwd,
-                };
-                // Still on its own pane (both TUIs can follow one thread): it stays there.
-                if let Some(pane) = holder(t).and_then(|s| s.terminal.as_ref()) {
-                    let live = lock(shared)?.terminals.get(pane).cloned();
-                    let screen = match live {
-                        Some(live) => lock(&live)?.vt.tail_text(200)?,
-                        None => String::new(),
-                    };
-                    let presses: Vec<u64> = submits
-                        .get(pane)
-                        .map(|s| s.iter().copied().collect())
-                        .unwrap_or_default();
-                    if crate::recognition::prompt_evidence(
-                        &thread,
-                        &crate::recognition::screen_text(&screen),
-                        &presses,
-                    ) {
-                        continue;
-                    }
+            if let Some(thread) = super::screen_match::thread(index, t)? {
+                let held = super::screen_match::holder(&workspace, t);
+                if !super::screen_match::stays(shared, &thread, held, &submits)? {
+                    threads.push(thread);
                 }
-                threads.push(thread);
             }
         }
-        let mut terminals = vec![];
-        for (pid, live, terminal, runtime, current) in &panes {
-            let screen = lock(live)?.vt.tail_text(200)?;
-            let current = match current {
-                Some(s) => Some((
-                    s.cli_session_id.clone(),
-                    s.updated,
-                    index
-                        .latest_user_text(&s.transcript)?
-                        .and_then(|p| crate::recognition::screen_key(&p)),
-                )),
-                None => None,
-            };
-            terminals.push(crate::recognition::ScreenTerminal {
-                terminal: terminal.clone(),
-                runtime: *runtime,
-                cwd: crate::recognition::process_cwd(*pid),
-                screen: crate::recognition::screen_text(&screen),
-                current,
-                submits: submits
-                    .get(terminal)
-                    .map(|s| s.iter().copied().collect())
-                    .unwrap_or_default(),
-            });
-        }
+        let terminals = super::screen_match::terminals(index, &panes, &submits)?;
         let bindings = crate::recognition::screen_bindings(&threads, &terminals);
-        if bindings.is_empty() {
-            return Ok(());
-        }
-        let mut host = lock(shared)?;
-        let mut next = host.workspace.clone();
-        let mut bound = vec![];
-        let mut moved = false;
-        for (terminal, t) in bindings {
-            // Only a screen-tied thread gets here while bound: the evidence ended that link.
-            if let Some(old) = next
-                .agent_sessions
-                .iter_mut()
-                .find(|s| s.current && s.runtime == t.runtime && s.cli_session_id == t.cli_id)
-                .filter(|s| s.terminal.as_ref() != Some(&terminal))
-            {
-                old.current = false;
-            }
-            if next
-                .observe_agent(crate::recognition::bound(
-                    t,
-                    terminal.clone(),
-                    Binding::Screen,
-                ))
-                .is_ok()
-            {
-                bound.push(terminal);
-            }
-        }
-        if next.agent_sessions == host.workspace.agent_sessions {
-            return Ok(());
-        }
-        host.commit(next)?;
-        // The TUI pid now stands for the bound session: its exit clears `current`.
-        for terminal in bound {
-            let Some(id) = host
-                .workspace
-                .current_agent(&terminal)
-                .map(|s| s.id.clone())
-            else {
-                continue;
-            };
-            let pids: Vec<_> = panes
-                .iter()
-                .filter(|(_, _, t, ..)| t == &terminal)
-                .map(|(pid, ..)| *pid)
-                .collect();
-            // The pane it left no longer stands for it: that TUI's exit must not end this
-            // session, and it is an unbound Agent again.
-            let before = host.agent_pids.len();
-            host.agent_pids
-                .retain(|pid, session| session != &id || pids.contains(pid));
-            moved |= host.agent_pids.len() != before;
-            for pid in pids {
-                host.unbound_pids.remove(&pid);
-                host.agent_pids.insert(pid, id.clone());
-            }
-            host.unhint(&terminal);
-        }
-        host.publish_status()?;
-        drop(host);
-        if moved {
-            refresh_agents(shared, &cached)?;
-        }
-        Ok(())
+        super::screen_match::commit(shared, bindings, &panes, &cached)
     }
 }
 pub(super) fn recover_logs(

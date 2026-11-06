@@ -526,6 +526,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             Ok(Reply::Text(text))
         }
         Request::InputSuggestion { id } => suggestion::read(shared, &id),
+        Request::AssociateScreen { id } => super::screen_match::associate_pane(shared, &id),
         Request::SendText {
             id,
             text,

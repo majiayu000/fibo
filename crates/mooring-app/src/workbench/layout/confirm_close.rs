@@ -13,11 +13,13 @@ impl Workbench {
         let working = agents.iter().any(|(_, p)| *p == Some(Phase::Working));
         let host = matches!(closing, Closing::Host);
         let agent = matches!(closing, Closing::Agent(_));
+        let unmatched = matches!(closing, Closing::Unmatched(_));
         let what = match closing {
             Closing::Tab(_) => "关闭这个标签",
             Closing::Pane(_) => "关闭这个画面",
             Closing::Host => "重启后台",
             Closing::Agent(_) => "停止这个 Agent",
+            Closing::Unmatched(_) => "只关掉这个画面",
         };
         let verb = if host {
             "重启"
@@ -91,8 +93,15 @@ impl Workbench {
                             "后台还在跑旧版本，新改动要重启后台才生效。重启会停止所有终端，Mooring 会自动重新打开。",
                         ))
                     })
-                    .child(label(lines))
-                    .child(label(if host {
+                    .when(unmatched, |d| {
+                        d.child(label(
+                            "没认出这个窗格是哪条对话，所以不会记成完成。",
+                        ))
+                    })
+                    .when(!lines.is_empty(), |d| d.child(label(lines)))
+                    .child(label(if unmatched {
+                        "里面的 Agent 会退出，正在做的事也会停下。对话记录会保留，可以从左栏底部「已关闭」里接着聊。"
+                    } else if host {
                         "对话记录会保留，重启后可以原地重开终端，或从左栏「已关闭」里接着聊。"
                     } else if agent {
                         "终端会留着，回到命令行。对话记录会保留，可以从左栏底部「已关闭」里接着聊。"
@@ -113,7 +122,9 @@ impl Workbench {
                             .child(
                                 button(
                                     "confirm-close-stop",
-                                    if host {
+                                    if unmatched {
+                                        "只关掉画面"
+                                    } else if host {
                                         "重启后台"
                                     } else if agent {
                                         "停止"

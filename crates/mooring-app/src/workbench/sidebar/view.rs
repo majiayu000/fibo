@@ -350,6 +350,18 @@ impl Workbench {
                         cx.new(|_| super::render::TextTip(why.clone().into()))
                             .into()
                     })
+                    .on_mouse_down(gpui::MouseButton::Right, {
+                        let terminal = terminal.clone();
+                        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                            this.layout.menu = Some(PaneMenu {
+                                terminal: terminal.clone(),
+                                position: event.position,
+                                page: MenuPage::Main,
+                                path: None,
+                            });
+                            cx.notify();
+                        })
+                    })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.focus_terminal(&terminal, window, cx);
                     })),

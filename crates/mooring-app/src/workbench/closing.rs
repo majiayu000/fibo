@@ -30,7 +30,7 @@ impl Workbench {
     pub(super) fn running_agents(&self, closing: &Closing) -> Vec<(String, Option<Phase>)> {
         let ids = match closing {
             Closing::Tab(id) => self.workspace.tab_terminals(id),
-            Closing::Pane(id) | Closing::Agent(id) => vec![id.clone()],
+            Closing::Pane(id) | Closing::Agent(id) | Closing::Unmatched(id) => vec![id.clone()],
             Closing::Host => self.running_terminals(),
         };
         ids.into_iter()
@@ -127,7 +127,7 @@ impl Workbench {
                 let expect = Some(self.workspace.tab_terminals(&id));
                 (Some(id.clone()), Edit::CloseTab { id, expect })
             }
-            Closing::Pane(terminal) => (
+            Closing::Pane(terminal) | Closing::Unmatched(terminal) => (
                 self.workspace
                     .terminal_tab(&terminal)
                     .filter(|t| t.layout.as_ref().is_some_and(|l| l.ids().len() == 1))

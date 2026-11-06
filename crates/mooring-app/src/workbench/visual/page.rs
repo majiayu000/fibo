@@ -30,7 +30,10 @@ impl Workbench {
         self.nav.zoomed = None;
         self.nav.space = "s0".into();
         self.nav.tab = Some(
-            if matches!(name, "TodoStart" | "UnboundAgent") {
+            if matches!(
+                name,
+                "TodoStart" | "UnboundAgent" | "UnboundAgentMenu" | "UnboundAgentConfirm"
+            ) {
                 "start"
             } else {
                 "feedback"
@@ -47,6 +50,20 @@ impl Workbench {
             "StatusSessions" => self.statusbar = Some(super::statusbar::StatusPop::Sessions),
             // Main is the window as it opens (docs/ui-v3/v3-4.png); 看进度's card has its own.
             "Main" | "MainSpace" | "UnboundAgent" => {}
+            // 标记完成 on it, in its menu; asked for real, the fixture's screen names no
+            // conversation, so the host's answer opens the close-only confirmation.
+            "UnboundAgentMenu" => {
+                self.layout.menu = Some(PaneMenu {
+                    terminal: "pstart".into(),
+                    position: gpui::point(px(T::WINDOW_WIDTH / 2.), px(T::TOP * 3.)),
+                    page: MenuPage::Main,
+                    path: None,
+                })
+            }
+            "UnboundAgentConfirm" => {
+                self.layout.menu = None;
+                self.complete_unbound("pstart".into(), cx)
+            }
             "HereClickOut" => {
                 self.overview.here = self.workspace.current_agent("p0").map(|s| s.id.clone())
             }

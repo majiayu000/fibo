@@ -27,6 +27,7 @@ mod lock;
 pub(crate) mod remote;
 mod report_back;
 mod runtime;
+mod screen_match;
 mod shell_watch;
 mod status;
 use association::*;

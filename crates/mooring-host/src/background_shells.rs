@@ -217,7 +217,7 @@ fn tree(root: u32) -> Vec<u32> {
     out
 }
 /// When the process started, seconds since the epoch.
-fn started(pid: u32) -> Option<u64> {
+pub(crate) fn started(pid: u32) -> Option<u64> {
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
     let n = unsafe {

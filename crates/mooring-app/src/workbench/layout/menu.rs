@@ -191,6 +191,17 @@ impl Workbench {
                     .into_any_element(),
             );
         }
+        if self.unbound_agent(terminal) && self.completing(terminal).is_none() {
+            let t = terminal.to_owned();
+            out.push(
+                entry("accept-unbound", "标记完成")
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.layout.menu = None;
+                        this.complete_unbound(t.clone(), cx)
+                    }))
+                    .into_any_element(),
+            );
+        }
         if let Some(s) = session {
             let sid = s.id.clone();
             out.push(

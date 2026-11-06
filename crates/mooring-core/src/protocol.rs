@@ -184,6 +184,11 @@ pub enum Request {
         id: String,
         rows: usize,
     },
+    /// Which conversation an unbound Agent's screen shows, tied to it when beyond doubt:
+    /// [`Reply::ScreenAssociated`].
+    AssociateScreen {
+        id: String,
+    },
     /// What the Agent in a terminal offers as your next prompt: [`Reply::InputSuggestion`].
     InputSuggestion {
         id: String,
@@ -417,6 +422,11 @@ pub enum Reply {
     },
     Ok,
     Text(String),
+    /// [`Request::AssociateScreen`]: the conversation that terminal now holds; None when
+    /// the screen did not say which.
+    ScreenAssociated {
+        session: Option<String>,
+    },
     /// [`Request::InputSuggestion`]: the conversation in that terminal, and what it offers.
     InputSuggestion {
         session: Option<String>,

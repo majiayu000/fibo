@@ -127,6 +127,8 @@ pub(super) enum Closing {
     Host,
     /// Stopping the Agent in this terminal; the terminal and its shell stay.
     Agent(String),
+    /// A pane 标记完成 could not tie to a conversation: closing is all that is left of it.
+    Unmatched(String),
 }
 #[derive(Clone, Copy)]
 enum MenuPage {
@@ -223,6 +225,7 @@ mod board;
 mod board_drawer;
 mod cleanup;
 mod complete;
+mod complete_unbound;
 mod decorations;
 mod diagnostics;
 mod divergence;
