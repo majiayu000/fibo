@@ -277,12 +277,20 @@ pub fn env(dir: &Path) -> Vec<(String, String)> {
     out
 }
 
+#[cfg(unix)]
 pub(crate) fn create_private_dir(dir: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
     std::fs::DirBuilder::new()
         .recursive(true)
         .mode(0o700)
         .create(dir)
+}
+
+/// Not private by itself: it takes the rights of the directory it is in, which under the user
+/// profile means this account, SYSTEM and administrators. Elsewhere it may mean more people.
+#[cfg(windows)]
+pub(crate) fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)
 }
 
 /// One run of a plugin command.
@@ -358,17 +366,14 @@ fn redacted(
 }
 
 fn append(data: &Path, run: &Run) -> std::io::Result<()> {
-    use std::os::fd::AsRawFd;
     create_private_dir(data)?;
     let lock = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(data.join("runs.lock"))?;
-    // SAFETY: flock on a file this function holds open; released when it closes.
-    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
+    // Released when it closes.
+    lock.lock()?;
     let file = data.join("runs.jsonl");
     let mut lines: Vec<String> = std::fs::read_to_string(&file)
         .unwrap_or_default()
