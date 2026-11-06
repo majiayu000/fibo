@@ -86,6 +86,10 @@ impl Render for Pane {
                 }
                 Err(e) => self.local_error = Some(e.to_string()),
             }
+        } else if self.capture.is_none() {
+            // Nothing captured yet: the ground is the theme's, the same one the snapshot
+            // brings, rather than the zero an empty screen holds, which paints black.
+            self.screen.background = T::terminal_bg();
         }
         // While reattaching, the status line says so; the broken stream's error is noise.
         let error = self

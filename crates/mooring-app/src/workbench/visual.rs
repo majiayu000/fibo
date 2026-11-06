@@ -419,6 +419,16 @@ impl Workbench {
     ) -> Option<gpui::Bounds<gpui::Pixels>> {
         self.layout.panes.get(terminal)?.read(cx).visual_bounds()
     }
+    /// Shows a tab other than the current one, as clicking it does.
+    pub fn visual_show_other_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let other = self
+            .workspace
+            .tabs
+            .iter()
+            .find(|t| Some(&t.id) != self.nav.tab.as_ref());
+        let id = other.expect("a second tab").id.clone();
+        self.show_tab(&id, window, cx);
+    }
     /// The shown tab's first terminal.
     pub fn visual_shown_terminal(&self) -> String {
         let tab = self.nav.tab.as_ref().expect("a shown tab");
