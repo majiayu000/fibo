@@ -4,6 +4,15 @@ use crate::{terminal::screen, ui::theme::Theme as T};
 use gpui::{Bounds, Context, EntityInputHandler, Pixels, Point, UTF16Selection, Window};
 use std::ops::Range;
 
+impl Pane {
+    /// How far down the screen the input line is, 0 at the top and 1 at the bottom.
+    pub fn cursor_depth(&self) -> Option<f32> {
+        let (_, row) = self.cursor_anchor.get().or(self.screen.cursor)?;
+        let rows = self.screen.rows.len().max(1) as f32;
+        Some((f32::from(row) + 0.5) / rows)
+    }
+}
+
 impl EntityInputHandler for Pane {
     fn text_for_range(
         &mut self,

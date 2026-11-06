@@ -179,6 +179,10 @@ pub enum Request {
         session: String,
         call: String,
     },
+    /// What this session's current turn did to its files, read from its log when asked.
+    TurnChanges {
+        session: String,
+    },
     /// Scripts and other Agents: the last `rows` rows of a terminal as plain text.
     ReadScreen {
         id: String,
@@ -462,6 +466,7 @@ pub enum Reply {
         log: ToolLog,
         row: ToolRow,
     },
+    TurnChanges(crate::turn_diff::TurnChanges),
     /// A terminal size in cells: what a split's new pane starts at (`SplitRoom`).
     Size {
         cols: u16,
@@ -503,35 +508,7 @@ pub struct ChatTools {
     pub calls: u32,
 }
 
-/// The raw log a conversation's tool rows point into, and the CLI that wrote it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolLog {
-    pub path: String,
-    pub runtime: crate::model::Agent,
-}
-
-/// A tool call as the index has it: `text` is `Name {arguments}`, long arguments cut down
-/// to the fields read later, so the whole of it is only in its raw line at `offset`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolRow {
-    pub seq: i64,
-    pub id: String,
-    pub text: String,
-    pub at: u64,
-    pub inode: u64,
-    pub offset: u64,
-    /// Its results, oldest first: a command read back later has several.
-    pub results: Vec<ToolResultRow>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolResultRow {
-    pub seq: i64,
-    pub at: u64,
-    pub code: Option<i32>,
-    pub inode: u64,
-    pub offset: u64,
-}
+pub use crate::tool_rows::{ToolLog, ToolResultRow, ToolRow};
 
 /// A running terminal passed from one host to the next.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

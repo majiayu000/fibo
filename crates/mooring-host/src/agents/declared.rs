@@ -65,6 +65,9 @@ impl Adapter for Declared {
     fn interrupt_key(&self) -> &'static [u8] {
         self.spec.interrupt.as_ref().map_or(b"\x03", |i| i.key)
     }
+    fn answers(&self) -> Option<&'static mooring_core::agent_answers::Answers> {
+        self.spec.answers.as_ref()
+    }
     fn interrupt_presses(&self) -> u32 {
         self.spec.interrupt.as_ref().map_or(1, |i| i.presses)
     }

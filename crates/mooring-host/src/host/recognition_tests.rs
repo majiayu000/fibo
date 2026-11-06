@@ -114,6 +114,7 @@ fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
         input_probes: Default::default(),
         deadlines: None,
         myself: std::sync::Weak::new(),
+        http_asks: HashMap::new(),
         screen_waits: HashMap::new(),
         title_busy: HashMap::new(),
         screen_busy: HashMap::new(),

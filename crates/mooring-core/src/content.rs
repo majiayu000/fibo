@@ -97,6 +97,11 @@ pub struct Content {
     /// what 允许一次 / 拒绝 answer. Live only, never stored.
     #[serde(default)]
     pub approval: String,
+    /// Over a CLI's own API: its kind and what 「always」 grants. Live, never stored.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approval_kind: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approval_always: String,
     /// A Codex subagent's parent thread id and its name, from its own session header.
     #[serde(default)]
     pub parent: String,
@@ -196,11 +201,19 @@ impl Content {
     }
 }
 impl Content {
+    /// The files the current turn touched, oldest first.
+    pub fn turn_files(&self) -> impl DoubleEndedIterator<Item = &Touch> {
+        self.files.iter().filter(|t| t.at >= self.turn_started)
+    }
+    /// What tells this turn from another as far as its changes go: when it began and when
+    /// it last touched a file.
+    pub fn turn_key(&self) -> (u64, u64) {
+        let last = self.turn_files().map(|t| t.at).max().unwrap_or(0);
+        (self.turn_started, last)
+    }
     /// Lines added and removed in the current turn, over every file it touched.
     pub fn turn_lines(&self) -> (u32, u32) {
-        self.files
-            .iter()
-            .filter(|t| t.at >= self.turn_started)
+        self.turn_files()
             .fold((0, 0), |(a, r), t| (a + t.added, r + t.removed))
     }
 }

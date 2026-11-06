@@ -210,6 +210,10 @@ impl Flat {
     pub const ROW_PAD_Y: f32 = 6.;
     pub const ONE_PAD_Y: f32 = 5.;
     pub const EDGE: f32 = 18.;
+    /// Where a row's box starts: level with the search field and the chips, so a selected
+    /// row is as wide as they are. Its contents stay on `EDGE`.
+    pub const ROW_EDGE: f32 = 12.;
+    pub const ROW_PAD: f32 = Self::EDGE - Self::ROW_EDGE;
     pub const KEY_TEXT: f32 = 10.5;
     pub const FOOT_TEXT: f32 = 12.;
     pub const LINE_SMALL: f32 = 14.;
@@ -278,9 +282,6 @@ impl Flat {
         Theme::palette().sidebar_idle
     }
     /// The bar naming the one space the list is narrowed to.
-    pub fn scope() -> u32 {
-        Theme::palette().sidebar_scope
-    }
     pub fn key_line() -> u32 {
         Theme::palette().sidebar_key_line
     }

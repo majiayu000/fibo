@@ -1,5 +1,6 @@
 pub mod action;
 pub mod agent;
+pub mod agent_answers;
 pub mod cli_entry;
 pub mod decoration;
 pub mod delivery;
@@ -38,3 +39,5 @@ pub mod time;
 
 pub mod content;
 pub mod diagnostics;
+pub mod tool_rows;
+pub mod turn_diff;

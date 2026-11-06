@@ -11,6 +11,14 @@ pub(super) struct OverviewState {
     pub(super) changed_only: bool,
     /// Only this space's sessions whose terminal was closed, from the sidebar's 「已关闭」.
     pub(super) closed_only: bool,
+    /// The todo whose card or sessions the pointer is on.
+    pub(super) hover_task: Option<String>,
+    /// The todo just written on the board, while it says so.
+    pub(super) fresh_todo: Option<super::board::FreshTodo>,
+    /// The press began outside the new-todo card: its release folds the card.
+    pub(super) fold_on_release: bool,
+    /// 鸟瞰 was showing on the last frame.
+    pub(super) was_shown: bool,
     pub(super) here: Option<String>,
     /// The session whose 「你在这里」 card shows its secondary actions.
     pub(super) here_more: Option<String>,
@@ -105,6 +113,7 @@ impl Workbench {
         self.overview.cleanup.clear();
         self.overview.card_menu = None;
         self.nav.overview = false;
+        self.nav.task_detail = None;
         self.nav.pending_focus = true;
         self.sync_panes(cx);
         cx.notify();
@@ -114,6 +123,12 @@ impl Workbench {
         window: &Window,
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
+        // A todo opened from its card stays in 鸟瞰; Esc is back on the board.
+        if let Some(task) = (self.nav.task_detail.as_ref())
+            .and_then(|id| self.workspace.tasks.iter().find(|t| &t.id == id))
+        {
+            return self.task_detail_view(task, cx);
+        }
         // The board is 鸟瞰; the list stays for closed terminals and the ended or hidden.
         if !self.overview.closed_only && !self.overview.show_closed && !self.overview.show_hidden {
             return self.board_view(window, cx);

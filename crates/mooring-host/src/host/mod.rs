@@ -23,6 +23,7 @@ mod association;
 mod client;
 mod events;
 mod found_shells;
+mod http_ask;
 mod live;
 mod lock;
 pub(crate) mod remote;
@@ -79,6 +80,8 @@ struct Host {
     /// Terminal -> what its last quiet screen showed: the question and the rule that read
     /// it, or why none did. Live fallback only: never stored, cleared by the user's input;
     /// only a question appearing or going away is a new revision.
+    /// Terminal -> what its CLI's own API says it asks.
+    http_asks: HashMap<String, crate::cli_http::Asked>,
     screen_waits: HashMap<String, crate::screen_rules::Explained>,
     /// Terminal -> the conversation whose title spins there and since when (seconds since
     /// the epoch). Live evidence only, like `screen_waits`: never stored.
@@ -183,6 +186,9 @@ impl Host {
                 continue;
             };
             c.approval = seen.approval().unwrap_or_default().to_owned();
+            if let Some(t) = &s.terminal {
+                self.overlay_http_ask(t, c);
+            }
             match seen.question() {
                 Some(question) if c.turn != mooring_core::content::Turn::Waiting => {
                     c.turn = mooring_core::content::Turn::Waiting;

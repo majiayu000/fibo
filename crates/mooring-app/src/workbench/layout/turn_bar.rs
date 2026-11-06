@@ -135,7 +135,7 @@ impl Workbench {
         let Some(c) = self.workspace.content.get(&s.id) else {
             return 0;
         };
-        c.files.iter().filter(|t| t.at >= c.turn_started).count()
+        c.turn_files().count()
     }
     /// The todo a pane's work counts toward: its conversation's own, else its tab's.
     pub(in crate::workbench) fn pane_task(
@@ -216,9 +216,10 @@ impl Workbench {
         }
         let terminal = id.to_owned();
         let accept = s.id.clone();
-        let open = self.layout.changes_open.as_deref() == Some(id);
+        let open = self.changes_shown(id);
         let toggle = id.to_owned();
-        // 看改动: this turn's files, each with its own line counts, listed under the bar.
+        let shown = s.id.clone();
+        // 看改动: what this turn did to its files, over the top half of the terminal.
         let changes = (files > 0).then(|| {
             button(
                 gpui::SharedString::from(format!("turn-changes-{id}")),
@@ -230,50 +231,14 @@ impl Workbench {
             .border_color(T::color(T::control()))
             .text_color(T::color(T::primary()))
             .when(open, |d| d.bg(T::color(T::selection())))
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.layout.changes_open =
-                    if this.layout.changes_open.as_deref() == Some(toggle.as_str()) {
-                        None
-                    } else {
-                        Some(toggle.clone())
-                    };
-                cx.notify();
+            .on_click(cx.listener(move |this, _, window, cx| {
+                let session = (this.workspace.agent_sessions.iter())
+                    .find(|s| s.id == shown)
+                    .cloned();
+                if let Some(session) = session {
+                    this.toggle_changes(&toggle, &session, window, cx);
+                }
             }))
-        });
-        let list = open.then(|| {
-            let started = content.map_or(0, |c| c.turn_started);
-            let mut rows: Vec<_> = content
-                .map(|c| c.files.iter().filter(|t| t.at >= started).collect())
-                .unwrap_or_default();
-            rows.reverse();
-            div()
-                .flex_shrink_0()
-                .max_h(px(T::TURN_BAR * 6.))
-                .overflow_hidden()
-                .px(px(T::S14))
-                .py(px(T::S6))
-                .flex()
-                .flex_col()
-                .gap(px(T::S2))
-                .border_b(px(T::BORDER_WIDTH))
-                .border_color(T::color(T::border()))
-                .text_size(px(T::SMALL))
-                .font_features(T::tabular())
-                .children(rows.into_iter().map(|t| {
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(T::S8))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .truncate()
-                                .text_color(T::color(T::secondary()))
-                                .child(t.path.clone()),
-                        )
-                        .child(line_counts((t.added, t.removed)))
-                }))
         });
         let bar = div()
             .h(px(T::TURN_BAR))
@@ -299,15 +264,11 @@ impl Workbench {
                 .h(px(T::PANE_ACTION))
                 .px(px(T::S10))
                 .on_click(cx.listener(move |this, _, _, cx| {
+                    this.layout.changes.remove(&terminal);
                     this.complete_pane(terminal.clone(), accept.clone(), cx)
                 })),
             ));
-        div()
-            .flex_shrink_0()
-            .flex()
-            .flex_col()
-            .child(bar)
-            .children(list)
+        div().flex_shrink_0().flex().flex_col().child(bar)
     }
     /// `~/code/app · main`: where the pane's program is and on which branch.
     pub(super) fn pane_place(

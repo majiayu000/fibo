@@ -32,7 +32,6 @@ pub struct Palette {
     pub sidebar_third: u32,
     pub sidebar_done: u32,
     pub sidebar_idle: u32,
-    pub sidebar_scope: u32,
     pub sidebar_key_line: u32,
     /// A theme's colors for what the terminal paints past its defaults.
     pub term_cursor_text: Option<u32>,
@@ -144,7 +143,6 @@ impl Palette {
             sidebar_third: 0,
             sidebar_done: 0,
             sidebar_idle: 0,
-            sidebar_scope: 0,
             sidebar_key_line: 0,
             term_cursor_text: None,
             term_selection: None,
@@ -230,7 +228,6 @@ impl Palette {
         out.sidebar_third = ink(0x7e7e87, out.muted, light, tuned, bg, fg);
         out.sidebar_done = ink(0x6a6a72, out.muted, light, tuned, bg, fg);
         out.sidebar_idle = ink(0x45454d, out.control, light, tuned, bg, fg);
-        out.sidebar_scope = ink(0x121216, out.raised, light, tuned, bg, fg);
         out.sidebar_key_line = ink(0x2a2a31, out.control, light, tuned, bg, fg);
         out
     }
