@@ -173,3 +173,23 @@ fn a_past_conversations_folder_stays_readable_to_a_lesser_role() {
         assert_eq!(r.error(diff(&gone.join("sub"))), REFUSED);
     }
 }
+
+/// A workbench folder is taken as written: one ending in a space opens what is inside it, and
+/// says nothing about the folder whose name is the same less the space.
+#[test]
+fn a_known_folder_ending_in_a_space_is_itself_and_not_its_sibling() {
+    let h = Host::start();
+    let parent = scratch(&h, "parent");
+    let sibling = parent.join("folder");
+    repo(&sibling, SECRET);
+    let known = parent.join("folder ");
+    repo(&known, "ordinary");
+    let child = known.join("child");
+    fs::create_dir(&child).unwrap();
+    h.launch("in-known", &known, "sleep 60");
+
+    let mut r = Remote::open(&h, Some("view"), &[]);
+    let d = r.ok(diff(&child));
+    assert_eq!(d["files"][0]["path"], "note.txt", "{d}");
+    assert_eq!(r.error(diff(&sibling)), REFUSED);
+}

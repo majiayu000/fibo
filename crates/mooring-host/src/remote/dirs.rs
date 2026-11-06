@@ -29,7 +29,11 @@ pub(super) fn home() -> io::Result<PathBuf> {
 }
 /// `~` and `~/…` from home; anything else must be absolute.
 pub(super) fn expand(path: &str) -> io::Result<PathBuf> {
-    let path = path.trim();
+    expand_exact(path.trim())
+}
+
+/// As `expand`, for a path that is not typed input: a folder's name may end in a space.
+pub(super) fn expand_exact(path: &str) -> io::Result<PathBuf> {
     let full = match path.strip_prefix('~') {
         Some("") => home()?,
         Some(rest) if rest.starts_with('/') => home()?.join(rest.trim_start_matches('/')),

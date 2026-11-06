@@ -27,7 +27,7 @@ fn known(w: &Workspace) -> BTreeSet<PathBuf> {
     (w.terminals.iter().map(|t| w.terminal_cwd(t)))
         .chain(w.agent_sessions.iter().map(|s| s.cwd.clone()))
         .chain(w.spaces.iter().map(|s| s.cwd.clone()))
-        .filter_map(|dir| super::dirs::expand(&dir).ok())
+        .filter_map(|dir| super::dirs::expand_exact(&dir).ok())
         .collect()
 }
 
