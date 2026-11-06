@@ -358,6 +358,27 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
+            // `SidebarUnlinked-{all|s0|s1}-{today}{older}-{none|codex|claude}-{recent|directory}`:
+            // the terminals `MOORING_FIXTURE_UNLINKED` starts, under each fold (`o` open, `f`
+            // folded) and selection; `s1` holds none of them.
+            unlinked if unlinked.starts_with("SidebarUnlinked-") => {
+                let parts: Vec<&str> = unlinked.split('-').collect();
+                let (scope, folds, selected) = (parts[1], parts[2].as_bytes(), parts[3]);
+                self.sidebar.preset = parts[4].into();
+                self.sidebar.collapsed = false;
+                self.sidebar.space_filter = (scope != "all").then(|| scope.to_owned());
+                self.sidebar.toggled.clear();
+                for (key, fold) in [("recent:today", folds[0]), ("recent:older", folds[1])] {
+                    self.sidebar.toggled.insert(key.into(), fold == b'o');
+                }
+                self.nav.focused = Some(if selected == "none" {
+                    "p0".to_owned()
+                } else {
+                    self.nav.tab = Some("unlinked".into());
+                    format!("punlinked-{selected}")
+                });
+                self.sync_panes(cx);
+            }
             // `Dense-{directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall]`:
             // the denser presets over sessions shaped like sidebar-density.html's; `-bg`
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
