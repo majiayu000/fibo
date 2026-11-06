@@ -5,6 +5,8 @@ import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-nativ
 
 const paths = {
   back: <Path d="M15 5l-7 7 7 7" />,
+  home: <Path d="M4 11l8-7 8 7v9H4z" />,
+  person: <Path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c1.500-4 4.500-6 8-6s6.500 2 8 6" />,
   close: <Path d="M6 6l12 12M18 6L6 18" />,
   plus: <Path d="M12 5v14M5 12h14" />,
   board: (

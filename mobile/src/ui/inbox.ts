@@ -2,6 +2,7 @@
 // finger by the time it comes down: what asks you must not change places on its own, or
 // 「允许」 lands on another card. Pure, so tests run it without React Native.
 import type { Card, Machine } from '../remote/hub';
+import { cardTitle } from './format';
 import { rank, spaceName, statusKey, statusWord } from './status';
 
 export type Item = { m: Machine; c: Card };
@@ -90,12 +91,9 @@ export type Shelf = {
   pinned: Item[];
   /** Errors and reminders that came back. */
   ahead: Item[];
-  /**
-   * 等你验收: it folds into one line, still in the inbox. Above what runs: on a real phone 12 running
-   * rows pushed it two screens down, and these are what the title's count is asking about.
-   */
+  /** 等你验收: it folds into one line, still in the inbox. */
   review: Item[];
-  /** What runs: nothing to do here yet. */
+  /** What runs: nothing to do here yet, so it shows `RUNNING_PREVIEW` at first and does not push 等你验收 away. */
   running: Item[];
   /** What rests: below the fold line. */
   behind: Item[];
@@ -172,4 +170,51 @@ export function holdLeft(h: Hold, now: number): number {
   const touch = h.touching ? h.touchedAt + TOUCH_LIMIT_MS - now : 0;
   const scroll = h.scrolledAt + SCROLL_QUIET_MS - now;
   return Math.max(0, touch, scroll);
+}
+
+/** The home screen's title: what is yours to decide. Finished work to check is not counted. */
+export function headline(s: Shelf, paired: number): string {
+  if (paired === 0) return 'Mooring';
+  return s.acts > 0 ? `${s.acts} 件要你决定` : '没有要你决定的事';
+}
+
+/** How many of what runs show before 「看全部」: on a real phone 12 pushed everything else two screens down. */
+export const RUNNING_PREVIEW = 4;
+
+export const runningShown = <T>(items: T[], all: boolean) => (all ? items : items.slice(0, RUNNING_PREVIEW));
+
+type Linked = Pick<Machine, 'name' | 'status'>;
+
+/** The line under the title. `alert` when no computer can hear you or one refused this phone. */
+export function connectionLine(machines: Linked[]): { text: string; alert: boolean } {
+  const online = machines.filter((m) => m.status === 'online');
+  const off = machines.length - online.length;
+  if (machines.length === 0) return { text: '', alert: false };
+  if (online.length === 0) return { text: machines.length === 1 ? `${machines[0].name || '电脑'}不在线` : '电脑都不在线', alert: true };
+  const here = online.length === 1 ? `${online[0].name || '电脑'} 在线` : `${online.length} 台电脑在线`;
+  return { text: off > 0 ? `${here} · ${off} 台离线` : here, alert: machines.some((m) => m.status === 'refused') };
+}
+
+/** Computers that take a row on the home screen; the rest are counted in the line and listed under 我的. */
+export function offlineRows<T extends Linked>(machines: T[]): T[] {
+  const off = machines.filter((m) => m.status !== 'online');
+  return off.length === machines.length ? off : off.filter((m) => m.status === 'refused');
+}
+
+/** The computer's name beside each conversation only when it tells conversations apart. */
+export const namesComputer = (machines: Linked[]) => machines.filter((m) => m.status === 'online').length > 1;
+
+/** What 撤销 puts back: where the conversation was before it was swiped. */
+export const undoTo = (c: Pick<Card, 'outcome'>): 'done' | 'deferred' | 'open' =>
+  c.outcome === 'done' || c.outcome === 'deferred' ? c.outcome : 'open';
+
+/** Every conversation, 稍后提醒 and 已处理 too, narrowed to a space and to words in its title, space or directory. */
+export function searchCards(a: Arranged, query: string, space: string | null): Item[] {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return [...a.pinned, ...a.rest, ...a.later, ...a.done].filter((i) => {
+    const name = spaceName(i.m, i.c);
+    if (space !== null && name !== space) return false;
+    const hay = [cardTitle(i.c), name, i.c.cwd, i.c.branch].filter(Boolean).join(' ').toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
 }
