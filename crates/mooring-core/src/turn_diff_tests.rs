@@ -247,7 +247,15 @@ fn any_series_of_edits_sums_to_the_file_it_ended_as() {
             edits.push(edit(&now, &after));
             now = after;
         }
+        let mut sum = Composer::default();
+        edits.iter().cloned().for_each(|e| sum.apply(e));
+        let listed = sum.summary("f", Vec::new(), true);
         let f = compose(edits, &now);
+        assert_eq!(
+            (listed.added, listed.removed),
+            (f.added, f.removed),
+            "round {round}"
+        );
         assert!(!f.one_by_one, "round {round}");
         assert_eq!(applied(&f, &v0), now, "round {round}");
         assert_eq!(f.disk, Disk::Same, "round {round}");
@@ -255,4 +263,26 @@ fn any_series_of_edits_sums_to_the_file_it_ended_as() {
             assert!(f.hunks.is_empty(), "round {round}");
         }
     }
+}
+
+#[test]
+fn a_card_keeps_its_totals_past_the_files_it_lists() {
+    use crate::content::Content;
+    let mut card = Content::default();
+    for i in 0..5000u32 {
+        card.touch(&format!("/r/f{i}"), 10, 2, 1);
+    }
+    assert_eq!(card.turn_files().count(), 64, "the list stays small");
+    assert_eq!(card.turn_file_count(), 5000);
+    assert_eq!(card.turn_lines(), (10_000, 5000));
+    // A new turn starts counting afresh, its old files not among them.
+    card.turn_started = 11;
+    assert_eq!((card.turn_file_count(), card.turn_lines()), (0, (0, 0)));
+    card.touch("/r/new", 12, 1, 0);
+    assert_eq!((card.turn_file_count(), card.turn_lines()), (1, (1, 0)));
+    // Files from before this turn fall off without counting.
+    for i in 0..70u32 {
+        card.touch(&format!("/r/n{i}"), 12, 1, 0);
+    }
+    assert_eq!(card.turn_file_count(), 71);
 }

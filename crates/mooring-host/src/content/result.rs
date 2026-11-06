@@ -118,7 +118,7 @@ impl Parser {
             );
             for (path, added, removed) in paths {
                 if !self.inherited {
-                    self.card.touch(&path, at, added, removed);
+                    self.touch_file(&path, at, added, removed);
                 }
                 self.fact("file", format!("文件修改：{path}"), code, at, source);
             }
@@ -181,5 +181,27 @@ impl Parser {
         self.calls.remove(id);
         self.executions.retain(|_, v| v != id);
         self.card.updated = self.card.updated.max(at);
+    }
+}
+
+impl Parser {
+    /// The card lists a limited number of files; this keeps its count of the rest true when one
+    /// that fell off is touched again, without listing them all where the window would get them.
+    pub(super) fn touch_file(&mut self, path: &str, at: u64, added: u32, removed: u32) {
+        let hash = |p: &str| {
+            use std::hash::{DefaultHasher, Hash, Hasher};
+            let mut h = DefaultHasher::new();
+            p.hash(&mut h);
+            h.finish()
+        };
+        if self.card.evicted.turn != self.card.turn_started {
+            self.evicted_files.clear();
+        }
+        if self.evicted_files.remove(&hash(path)) {
+            self.card.evicted.files = self.card.evicted.files.saturating_sub(1);
+        }
+        if let Some(gone) = self.card.touch(path, at, added, removed) {
+            self.evicted_files.insert(hash(&gone));
+        }
     }
 }
