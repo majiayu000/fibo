@@ -23,3 +23,7 @@
 - 替代了之前「本地验证通过就直接合进本地 main」的做法。
 - 钩子放在本机 `.git/hooks`，新克隆要跑一次安装脚本；全局 `core.hooksPath` 要有同名入口，安装脚本会补。
 - 被拒的 `merge --no-ff` 会留下合并中的状态，要 `git merge --abort`，提示里写了。
+
+## 后来的发现
+
+2026-11-06：本地 main 只跟随远端的规则继续有效。「`git push origin HEAD:main`、不要求等 CI」和否掉服务端保护这两点已被 [main 必须走 PR 且 CI 通过](2026-11-06-main-requires-ci.md) 取代。

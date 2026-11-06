@@ -7,6 +7,8 @@ on:
   push:
     branches:
       - main
+  # Pull requests a workflow opens start no run of their own: sign-catalog asks for this one.
+  workflow_dispatch:
 
 # Each push to main runs everything on scarce macOS runners, and many sessions push: 14 runs
 # queued in one night and none finished. At most one runs and one waits; a newer push replaces
