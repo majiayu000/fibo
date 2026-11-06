@@ -65,13 +65,13 @@ a { color: inherit; text-underline-offset: 3px; }
 <body>
 <main>
 <h1>手机端进度</h1>
-<p class="sub">Mooring 手机 App 和官方中继。记录时间 2026-11-06。</p>
+<p class="sub">Mooring 手机 App 和官方中继。记录时间 2026-11-06 23:30。</p>
 
 <div class="lead">
   <p><b>手机能离开电脑处理事情了。</b>安卓真机已经走通：经公网中继连到你的 Mac，看对话和工具调用、批准或拒绝、发消息、开新任务。停下 Agent 和接着上次的对话已用真 Agent 走协议验过，最新版还没在手机上点过。</p>
   <p><b>最大的缺口是推送。</b>不开 App 就不知道有审批在等你，这要你提供账号。其余是几项只能你在手机上验的操作，以及 iPhone 版。</p>
   <div class="stats">
-    <div class="stat"><b>a4ac4fa</b><span>电脑和手机正在跑的版本，远端已更新</span></div>
+    <div class="stat"><b>69fe098</b><span>电脑端正在跑的版本（加 CI 已签名、待合入的插件目录）；手机 App 同一份手机代码</span></div>
     <div class="stat"><b>安卓</b><span>OPPO Find X9 Ultra 已安装</span></div>
     <div class="stat"><b>1 台</b><span>已配对（这台 Mac）</span></div>
     <div class="stat"><b>未开始</b><span>推送、iPhone 真机</span></div>
@@ -83,7 +83,7 @@ a { color: inherit; text-underline-offset: 3px; }
 <tr><th>#</th><th>做什么</th><th>谁</th><th>为什么排这里</th></tr>
 <tr><td>1</td><td>日常用几天，留意 4G、键盘挡输入框、Face ID 弹窗、相机扫码</td><td><span class="tag you">你</span></td><td>这几项我测不了，真实使用才会暴露问题</td></tr>
 <tr><td>2</td><td>确认中继证书能自动续期（现在的证书 11-11 10:04 到期）</td><td><span class="tag todo">我</span></td><td>到期前没续上，手机就连不上了。11-08 到 11-10 之间检查一次</td></tr>
-<tr><td>3</td><td>下次换包带上远端的新提交，并清掉用完的手机工作区</td><td><span class="tag todo">我</span></td><td>电脑和手机还在 <code>a4ac4fa</code>，远端又进了别的会话的修复。不急，攒到下一次改动一起换</td></tr>
+<tr><td>3</td><td>高峰时再量一次流量，清掉用完的手机工作区</td><td><span class="tag todo">我</span></td><td>真机 0.7 MB/时是在每分钟 10 个事件时量的，之前的峰值是每分钟 72 个，那个条件真机还没量</td></tr>
 <tr><td>4</td><td>推送通知</td><td><span class="tag you">你定账号</span> <span class="tag todo">我做</span></td><td>最大的功能缺口。需要 FCM；国内安卓可能还要接厂商推送</td></tr>
 <tr><td>5</td><td>中继换成域名 <code>relay.niannian.site</code></td><td><span class="tag you">你加解析</span> <span class="tag todo">我做</span></td><td>现在用 IP，换服务器就要重新配对。确定长期用就该换</td></tr>
 <tr><td>6</td><td>iPhone 真机</td><td><span class="tag you">你给开发者账号</span> <span class="tag todo">我做</span></td><td>只在模拟器跑过，要签名</td></tr>
@@ -97,6 +97,10 @@ a { color: inherit; text-underline-offset: 3px; }
 <tr><td>官方中继</td><td><span class="tag ok">真机验过</span></td><td><code>https://124.221.234.205</code>，腾讯云上海，内容端到端加密。续期还没实际发生过</td></tr>
 <tr><td>配对</td><td><span class="tag ok">真机验过</span></td><td>用数据线发配对链接，不扫码。App 内扫码没验</td></tr>
 <tr><td>收件箱</td><td><span class="tag ok">真机验过</span></td><td>分支、在跑时长、正在做什么，审批和等你回答固定在最上面</td></tr>
+<tr><td>收件箱折叠和筛选</td><td><span class="tag ok">真机验过</span></td><td>真实数据下折叠、展开、横滑筛选、重开记住空间都正常；真机上把折叠行挪到在跑上面。选中的空间靠右时重开不会自动滚到它</td></tr>
+<tr><td>流量</td><td><span class="tag ok">真机验过</span></td><td>新手机加新电脑 10 分钟 0.7 MB/时（每分钟 10 个事件），内容和电脑一致。之前同口径峰值 54–76 MB/时，那时每分钟 72 个事件，事件更少时也有 4.4 MB/时；峰值条件真机没量，模拟约 6.3 MB/时。改动到显示真机没量，模拟约 0.4 秒</td></tr>
+<tr><td>换模型、换权限</td><td><span class="tag ok">真机验过</span></td><td>只在临时测试会话上走过：真 Claude、真 Codex 都切成功，模型只改这次会话，配置文件没变；全部放行的二次确认弹窗亲眼看过。开着 Face ID 的情况没验</td></tr>
+<tr><td>语音输入</td><td><span class="tag ok">真机验过</span></td><td>用输入法（搜狗）的语音键，字能写进输入框。App 自己没有语音功能</td></tr>
 <tr><td>防点错</td><td><span class="tag part">只测过</span></td><td>网页版用真实触摸事件复现并修好。手指按住时重排没在真机上试</td></tr>
 <tr><td>审批</td><td><span class="tag ok">真机验过</span></td><td>写真正的命令；危险命令二次确认；允许、拒绝都生效</td></tr>
 <tr><td>一直允许某类操作</td><td><span class="tag part">部分验过</span></td><td>按钮写菜单实际内容，真机看到了。点选这一项的效果只走过协议</td></tr>
@@ -123,7 +127,8 @@ a { color: inherit; text-underline-offset: 3px; }
   <li><b>额度</b>按电脑分开、不相加；手机只从配对的电脑取。</li>
   <li><b>Markdown</b> 用 remark 解析加自绘组件。在 OPPO 上和原生库实测对比后选的，理由见 <a href="markdown.md">markdown.md</a>。</li>
   <li><b>不做</b>：审批失效时间和「推送 6 个提交」这类后果说明（电脑拿不到可靠数据）；金额（没有可信价格表）；一键回复（要猜 Agent 的话）。</li>
-  <li><b>上线流程</b>：本地 main 只跟随远端，分支变基后推到 <code>origin/main</code>，打包也从它来。</li>
+  <li><b>上线流程</b>：本地 main 只跟随远端。分支变基后开 PR 并设自动合并，CI 通过才进 main（11-06 起直接推会被拒）。打包也从 <code>origin/main</code> 来。</li>
+  <li><b>全部放行</b>：手机上可以切，切之前二次确认，开了 Face ID 再验证；Claude 启动时没带跳过权限的参数就不列这一档。</li>
 </ul>
 
 <h2>要留意的风险</h2>
@@ -132,6 +137,7 @@ a { color: inherit; text-underline-offset: 3px; }
   <li><b>有个测试在高负载下失败过。</b><code>a_dialog_gone_from_the_screen_is_settled_by_claude_official_status</code> 在负载 50 以上时失败，低负载通过。包含这些提交的 main 后来 CI 通过（<code>4b2c66c</code>），但 CI 不是高负载，也没在高负载下对比过旧版本。</li>
   <li><b>打码不是万无一失。</b>工具输出发送前在电脑上打码，但名字里不带关键词的密钥认不出。</li>
   <li><b>第一次点允许没反应</b>的现象修了三个可能原因，都是推断。再遇到请告诉我。</li>
+  <li><b>手机测试用例依赖顺序。</b><code>hub</code> 的 3 个测试在随机顺序下失败，<code>9444c03</code> 上同样存在，这轮没修。CI 用的固定顺序不受影响。</li>
   <li><b>电脑卡死。</b>11-05 拔电跑高负载卡死过一次。重任务要低优先级、一次一个、插着电。</li>
 </ul>
 
