@@ -2,7 +2,7 @@
 // And it reads 要你处理 off the host, so what the host brings back shows here too.
 import { describe, expect, test } from 'bun:test';
 import type { Card, Machine } from '../src/remote/hub';
-import { HOLD_NONE, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, holdLeft, settleLeft, settleNext, sort } from '../src/ui/inbox';
+import { HOLD_NONE, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
 
 const card = (id: string, status: string, updated = 0, more: Partial<Card> = {}) =>
   ({ id, agent: 'claude', status, status_label: status, phase: status === 'waiting' ? 'waiting' : 'working', updated, space: 's', cwd: '/x', ...more }) as Card;
@@ -146,5 +146,130 @@ describe('inbox lists', () => {
     expect(ids(a.pinned)).toEqual(['a']);
     expect(ids(a.rest)).toEqual(['back']);
     expect(ids(a.later)).toEqual([]);
+  });
+});
+
+describe('finished work folds, and does not read as nothing to do', () => {
+  const review = (id: string, more: Partial<Card> = {}) => card(id, 'review', 0, { status_label: '等你验收', needs_you: true, ...more });
+  const lay = (cards: Card[], selected: string | null = null, m = machine(cards)) => shelve(arrange([m], []), selected);
+
+  test('what is left of the list keeps its order: errors, what runs, the fold, what rests', () => {
+    const s = lay([card('paused', 'paused', 9), review('r'), card('run', 'running', 5), card('e', 'error', 1), approval('a')]);
+    expect(ids(s.pinned)).toEqual(['a']);
+    expect(ids(s.ahead)).toEqual(['e', 'run']);
+    expect(ids(s.review)).toEqual(['r']);
+    expect(ids(s.behind)).toEqual(['paused']);
+  });
+  test('only 等你验收 folds: an error, a question and 等后台 stay out', () => {
+    const s = lay([review('r'), card('e', 'error'), card('q', 'waiting'), card('bg', 'background')]);
+    expect(ids(s.review)).toEqual(['r']);
+    expect(ids(s.ahead)).toEqual(['e', 'bg']);
+    expect(ids(s.pinned)).toEqual(['q']);
+  });
+  test('an approval on a finished turn asks: it does not fold', () => {
+    const s = lay([review('r', { approval: 'Proceed?' })]);
+    expect(ids(s.pinned)).toEqual(['r']);
+    expect(s.review).toEqual([]);
+  });
+  test('a 稍后提醒 whose hour is up does not fold: it comes back ahead of what runs', () => {
+    const s = lay([review('due', { outcome: 'deferred' }), card('run', 'running', 9), card('e', 'error')]);
+    expect(ids(s.ahead)).toEqual(['e', 'due', 'run']);
+    expect(s.review).toEqual([]);
+    expect(s.acts).toBe(2);
+  });
+  test('the title counts what folded: the host says it is yours', () => {
+    const s = lay([review('r1'), review('r2'), approval('a'), card('run', 'running')]);
+    expect(s.waiting).toBe(3);
+    expect(s.acts).toBe(1);
+  });
+  test('all folded is not 没有要处理的事', () => {
+    const s = lay([review('r')]);
+    expect(s.empty).toBe(false);
+    expect(s.waiting).toBe(1);
+    expect(s.acts).toBe(0);
+    expect(lay([]).empty).toBe(true);
+    expect(lay([card('d', 'closed', 0, { outcome: 'done' })]).empty).toBe(true);
+  });
+  test('a computer that left answers nothing: it counts for nothing, and still shows', () => {
+    const away = machine([approval('a'), review('r'), card('e', 'error')], 'm', 'connecting');
+    const s = lay([], null, away);
+    expect([s.waiting, s.acts]).toEqual([0, 0]);
+    expect(ids(s.ahead)).toEqual(['a', 'e']);
+    expect(ids(s.review)).toEqual(['r']);
+  });
+  test('the fold says its word from the host, and its count', () => {
+    expect(foldLabel(lay([review('r1'), review('r2')]).review)).toBe('等你验收 · 2');
+    expect(foldLabel(lay([review('r', { status_label: 'in review' })]).review)).toBe('in review · 1');
+    expect(foldLabel(lay([review('r', { status_label: null })]).review)).toBe('1');
+  });
+});
+
+describe('the space filter hides nothing silently', () => {
+  const at = (space: string, c: Card) => ({ ...c, cwd: `/code/${space}` });
+  const two = () => [at('a', approval('ask-a')), at('b', approval('ask-b')), at('b', card('err-b', 'error')), at('a', card('run-a', 'running')), at('b', card('rev-b', 'review', 0, { needs_you: true }))];
+  const lay = (cards: Card[], selected: string | null) => shelve(arrange([machine(cards)], []), selected);
+
+  test('one space has no filter, whatever was saved', () => {
+    const s = lay([at('a', approval('x')), at('a', card('y', 'running'))], 'a');
+    expect(s.chips).toEqual([]);
+    expect(s.filter).toBeNull();
+    expect(ids(s.pinned)).toEqual(['x']);
+  });
+  test('two spaces: 全部 first, then by name, with their inbox and what is yours', () => {
+    expect(lay(two(), null).chips).toEqual([
+      { name: null, count: 5, acts: 3 },
+      { name: 'a', count: 2, acts: 1 },
+      { name: 'b', count: 3, acts: 2 },
+    ]);
+  });
+  test('a chip does not move when its space gets busier', () => {
+    const names = (cs: Card[]) => lay(cs, null).chips.map((c) => c.name);
+    expect(names([at('z', approval('1')), at('z', approval('2')), at('b', card('3', 'running'))])).toEqual([null, 'b', 'z']);
+  });
+  test('a space with only settled conversations still has its chip, without a number to act on', () => {
+    const s = lay([at('a', card('run', 'running')), at('b', card('d', 'closed', 0, { outcome: 'done' }))], 'b');
+    expect(s.chips.map((c) => [c.name, c.count])).toEqual([[null, 1], ['a', 1], ['b', 0]]);
+    expect(ids(s.done)).toEqual(['d']);
+    expect(s.empty).toBe(true);
+  });
+  test('filtered: every list narrows, and what asks elsewhere is counted', () => {
+    const cards = [...two(), at('b', card('l', 'review', 0, { outcome: 'deferred' })), at('a', card('d', 'closed', 0, { outcome: 'done' })), at('b', card('d2', 'closed', 0, { outcome: 'done' }))];
+    const s = lay(cards, 'a');
+    expect(ids(s.pinned)).toEqual(['ask-a']);
+    expect(ids(s.ahead)).toEqual(['run-a']);
+    expect(s.review).toEqual([]);
+    expect(s.later).toEqual([]);
+    expect(ids(s.done)).toEqual(['d']);
+    expect(s.elsewhere).toBe(2);
+  });
+  test('finished work elsewhere is not 等你 in the banner, but the title still counts it', () => {
+    const s = lay([at('a', card('run', 'running')), at('b', card('r', 'review', 0, { needs_you: true }))], 'a');
+    expect(s.elsewhere).toBe(0);
+    expect(s.waiting).toBe(1);
+  });
+  test('no filter, no banner', () => {
+    expect(lay(two(), null).elsewhere).toBe(0);
+  });
+  test('a saved space that has gone reads as all', () => {
+    const s = lay(two(), 'gone');
+    expect(s.filter).toBeNull();
+    expect(s.pinned.length).toBe(2);
+    expect(s.elsewhere).toBe(0);
+  });
+  test('a filter never touches the order of what asks you', () => {
+    const cards = two();
+    const a = arrange([machine(cards)], []);
+    const before = [...a.pins];
+    shelve(a, 'a');
+    expect(a.pins).toEqual(before);
+    // Switching back after the filter shows the pins as they were.
+    expect(ids(shelve(arrange([machine(cards)], a.pins), null).pinned)).toEqual(['ask-a', 'ask-b']);
+  });
+  test('one project on two computers is one chip, and a filter shows both', () => {
+    const m1 = machine([at('a', approval('t'))], 'm1');
+    const m2 = machine([at('a', approval('u')), at('b', card('v', 'running'))], 'm2');
+    const s = shelve(arrange([m1, m2], []), 'a');
+    expect(s.chips.map((c) => c.name)).toEqual([null, 'a', 'b']);
+    expect(ids(s.pinned)).toEqual(['t', 'u']);
   });
 });

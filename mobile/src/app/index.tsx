@@ -1,17 +1,20 @@
 // The inbox: every paired computer's conversations as flat rows, what needs you first.
 // Approvals are answered in the row; swipe left for 已处理, right for 稍后提醒. What you
-// wrote while a computer was away waits under 「未发送」.
+// wrote while a computer was away waits under 「未发送」. Finished work folds into one line
+// and a filter narrows to one space; the title keeps the count of what still waits for you.
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { type ComponentRef, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { approve, deny, oops, settle } from '@/actions';
 import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
+import { setInboxView, useInboxView } from '@/store/inboxView';
 import { drop, useOutbox } from '@/store/outbox';
 import { SpaceMark } from '@/ui/icons';
 import { Btn, Group, Pill, Round, TITLE_WEIGHT, Wide, mono, useBottom, useTop } from '@/ui/kit';
 import { Row, rowStyles, spaceName } from '@/ui/row';
-import { type Arranged, type Item, arrange, itemKey } from '@/ui/inbox';
+import { type Arranged, type Chip, type Item, arrange, foldLabel, itemKey, shelve } from '@/ui/inbox';
+import { statusColor } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
 import { TrustAsk } from '@/ui/trust';
 import { type Theme, useTheme } from '@/ui/theme';
@@ -75,7 +78,7 @@ function ApprovalRow({ m, c, t, place }: Item & { t: Theme; place: string }) {
   );
 }
 
-function Swiped({ m, c, t, last, nth }: Item & { t: Theme; last?: boolean; nth?: number }) {
+function Swiped({ m, c, t, last, nth }: Item & { t: Theme; last?: boolean; nth?: string }) {
   const can = supports(m, 'outcome') && !!c.session;
   const online = m.status === 'online';
   const buttons = online && Boolean(c.trust || c.approval);
@@ -121,6 +124,25 @@ function Offline({ m, t }: { m: Machine; t: Theme }) {
   );
 }
 
+function SpaceChip({ chip, on, t, onPress }: { chip: Chip; on: boolean; t: Theme; onPress: () => void }) {
+  const label = chip.name ?? '全部';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: on }}
+      accessibilityLabel={chip.acts > 0 ? `${label}，${chip.count} 个，${chip.acts} 件等你` : `${label}，${chip.count} 个`}
+      hitSlop={{ top: 7, bottom: 7 }}
+      onPress={onPress}
+      style={({ pressed }) => [s.chip, { borderColor: on ? t.act : t.line, backgroundColor: on ? t.act : t.card }, pressed && { opacity: 0.7 }]}
+    >
+      <Text numberOfLines={1} style={[s.chipText, { color: on ? t.onAct : t.text }]}>
+        {label}
+      </Text>
+      {chip.count > 0 && <Text style={[s.chipText, chip.acts > 0 && !on ? { color: t.wait, fontWeight: '600' } : { color: on ? t.onAct : t.dim }]}>{chip.count}</Text>}
+    </Pressable>
+  );
+}
+
 export default function Inbox() {
   const t = useTheme();
   const top = useTop();
@@ -133,8 +155,17 @@ export default function Inbox() {
   const hold = useHold();
   const shown = useRef<Arranged | null>(null);
   if (!shown.current || !hold.held()) shown.current = arrange(machines, shown.current?.pins ?? []);
-  const { pinned, rest, later, done, offline } = shown.current;
-  const inbox = [...pinned, ...rest];
+  const { offline } = shown.current;
+  const view = useInboxView();
+  const shelf = shelve(shown.current, view.space);
+  const { pinned, ahead, review, behind, later, done, chips, filter } = shelf;
+  const list = useRef<ComponentRef<typeof ScrollView>>(null);
+  const pick = (space: string | null) => {
+    setInboxView({ space });
+    list.current?.scrollTo({ y: 0, animated: false });
+  };
+  // Only the last row of all drops its hairline; `after` says something still follows this group.
+  const tail = (n: number, length: number, after: boolean) => n === length - 1 && !after && !unsent.length;
   const where = (id: string, terminal: string) => {
     const m = machines.find((x) => x.id === id);
     const c = m?.cards.find((x) => x.id === terminal);
@@ -144,10 +175,17 @@ export default function Inbox() {
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <View style={[s.hd, { paddingTop: top + 9 }]}>
-        <Text style={[s.brand, { color: t.text }]} numberOfLines={1}>
-          Mooring
-          {machines.length > 0 && <Text style={[s.count, { color: t.dim }]}>{`  ${machines.length} 台电脑`}</Text>}
-        </Text>
+        {/* Stacked: the count must not be cut on a narrow phone, and the buttons set the height either way. */}
+        <View style={{ flexShrink: 1 }}>
+          <Text style={[s.brand, { color: t.text }]} numberOfLines={1}>
+            Mooring
+          </Text>
+          {shelf.waiting > 0 ? (
+            <Text numberOfLines={1} style={[s.waiting, { color: shelf.acts > 0 ? t.wait : t.ok }]}>{`${shelf.waiting} 件等你`}</Text>
+          ) : (
+            machines.length > 0 && <Text numberOfLines={1} style={[s.count, { color: t.dim }]}>{`${machines.length} 台电脑`}</Text>
+          )}
+        </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pill
             items={[
@@ -160,8 +198,16 @@ export default function Inbox() {
           <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
         </View>
       </View>
+      {chips.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={s.chips}>
+          {chips.map((chip) => (
+            <SpaceChip key={chip.name ?? ''} chip={chip} on={chip.name === filter} t={t} onPress={() => pick(chip.name)} />
+          ))}
+        </ScrollView>
+      )}
       <View style={{ flex: 1 }} {...hold.touch}>
       <ScrollView
+        ref={list}
         contentContainerStyle={{ paddingBottom: bottom + 16 }}
         onScroll={hold.onScroll}
         scrollEventThrottle={32}
@@ -179,17 +225,32 @@ export default function Inbox() {
           </View>
         )}
         {pinned.map((i, n) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={n} />
+          // The filter row coming or going moves the whole list: its buttons wait again too.
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={`${chips.length > 0}/${n}`} />
         ))}
+        {/* Under what asks you, like the bar below: an approval arriving elsewhere pushes nothing you could tap. */}
+        {shelf.elsewhere > 0 && (
+          <Pressable accessibilityRole="button" onPress={() => pick(null)} style={({ pressed }) => [s.elsewhere, { backgroundColor: t.waitBg }, pressed && { opacity: 0.7 }]}>
+            <Text style={[s.elsewhereText, { color: t.wait }]}>{`其他空间还有 ${shelf.elsewhere} 件等你`}</Text>
+            <Text style={[s.elsewhereGo, { color: t.wait }]}>看全部</Text>
+          </Pressable>
+        )}
         {/* Under what asks you: a computer coming and going pushes nothing you could tap. */}
         {offline.map((m) => (
           <Offline key={m.id} m={m} t={t} />
         ))}
-        {rest.map((i, n) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={n === rest.length - 1 && !unsent.length} />
+        {ahead.map((i, n) => (
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, ahead.length, review.length + behind.length > 0)} />
         ))}
-        {loaded && machines.some((m) => m.status === 'online') && inbox.length === 0 && (
-          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>没有要处理的事</Text>
+        {review.length > 0 && (
+          <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />
+        )}
+        {view.review && review.map((i, n) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, review.length, behind.length > 0)} />)}
+        {behind.map((i, n) => (
+          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} last={tail(n, behind.length, false)} />
+        ))}
+        {loaded && machines.some((m) => m.status === 'online') && shelf.empty && (
+          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>{filter === null ? '没有要处理的事' : '这个空间没有要处理的事'}</Text>
         )}
         {unsent.length > 0 && <Group label="未发送" />}
         {unsent.map((u, i) => {
@@ -238,8 +299,15 @@ export default function Inbox() {
 
 const s = StyleSheet.create({
   hd: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 8, gap: 8 },
-  brand: { fontSize: 22, fontWeight: '500', letterSpacing: -0.2, flexShrink: 1 },
-  count: { fontSize: 10, letterSpacing: 1.2, fontWeight: '400' },
+  brand: { fontSize: 22, lineHeight: 26, fontWeight: '500', letterSpacing: -0.2 },
+  count: { fontSize: 10, lineHeight: 15, letterSpacing: 1.2, fontWeight: '400' },
+  waiting: { fontSize: 12, lineHeight: 15, fontWeight: '500' },
+  chips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingBottom: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 11, maxWidth: 180 },
+  chipText: { fontSize: 13, flexShrink: 1 },
+  elsewhere: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, paddingHorizontal: 18, paddingVertical: 10 },
+  elsewhereText: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
+  elsewhereGo: { fontSize: 13 },
   cmd: { fontFamily: mono, fontSize: 13, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 11, marginTop: 6, overflow: 'hidden' },
   act: { flexDirection: 'row', gap: 8, marginTop: 8 },
   offline: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 10, borderBottomWidth: 1 },

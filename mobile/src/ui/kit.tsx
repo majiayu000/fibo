@@ -227,11 +227,11 @@ export function Wide({
 }
 
 /** 「未发送」, 「稍后提醒 · 2」: a quiet label and a rule; a chevron when it folds. */
-export function Group({ label, open, onPress }: { label: string; open?: boolean; onPress?: () => void }) {
+export function Group({ label, open, onPress, color }: { label: string; open?: boolean; onPress?: () => void; color?: string }) {
   const t = useTheme();
   const body = (
     <>
-      <Text style={[s.groupText, { color: t.dim }]}>{label}</Text>
+      <Text style={[s.groupText, { color: color ?? t.dim }]}>{label}</Text>
       <View style={[s.groupRule, { backgroundColor: t.sep }]} />
       {onPress && (
         <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
@@ -241,7 +241,7 @@ export function Group({ label, open, onPress }: { label: string; open?: boolean;
     </>
   );
   return onPress ? (
-    <Pressable onPress={onPress} style={s.group} accessibilityRole="button">
+    <Pressable onPress={onPress} style={s.group} accessibilityRole="button" accessibilityState={{ expanded: !!open }}>
       {body}
     </Pressable>
   ) : (

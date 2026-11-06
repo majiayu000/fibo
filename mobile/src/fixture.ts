@@ -48,7 +48,7 @@ function cards(machine: string) {
     card({ id: 'a2', column: 'needs', title: '侧栏额度条换成竖条纹', agent: 'codex', cwd: '/Users/demo/code/mooring-quota', phase: 'waiting', waiting: '用竖条纹还是保持平滑？\n❯ 1. 竖条纹\n  2. 保持平滑', status: 'waiting', status_label: '等你回答', needs_you: true, updated: t - 300 }),
     card({ id: 'a3', column: 'needs', title: 'cargo test 失败 3 个用例', cwd: '/Users/demo/code/mooring-pty', status: 'error', status_label: '出错了', needs_you: true, updated: t - 500 }),
     card({ id: 'a4', column: 'running', title: '手机端键盘挡住输入框', phase: 'working', status: 'running', status_label: '在跑', updated: t - 12 * 60 }),
-    card({ id: 'a5', column: 'review', title: '合并 feat/ux-polish', status: 'review', status_label: '等你验收', updated: t - 3600 }),
+    card({ id: 'a5', column: 'review', title: '合并 feat/ux-polish', status: 'review', status_label: '等你验收', needs_you: true, updated: t - 3600 }),
     card({ id: 'a6', title: '诊断页取消采样改临时文件', status: 'review', status_label: '等你验收', outcome: 'deferred', updated: t - 7200 }),
     card({ id: 'a7', title: '中继加心跳和断线重连', agent: 'codex', status: 'review', status_label: '等你验收', outcome: 'deferred', updated: t - 9000 }),
     ...['配对链接带上电脑名', '审批条显示终端最后几行', '图标全集加第 12 轮', '修 CI 的 rustfmt', '侧栏分组标题上色'].map((title, i) =>

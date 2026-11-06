@@ -2,7 +2,7 @@
 // finger by the time it comes down: what asks you must not change places on its own, or
 // 「允许」 lands on another card. Pure, so tests run it without React Native.
 import type { Card, Machine } from '../remote/hub';
-import { rank } from './status';
+import { rank, spaceName, statusKey, statusWord } from './status';
 
 export type Item = { m: Machine; c: Card };
 
@@ -72,6 +72,75 @@ export function arrange(machines: Machine[], pins: string[]): Arranged {
     offline: machines.filter((m) => m.status !== 'online'),
   };
 }
+
+/** A 稍后提醒 whose hour is up: you asked to be reminded, so it does not go quietly into a fold. */
+const reminder = ({ c }: Item) => statusKey(c) === 'review' && c.outcome === 'deferred';
+
+/** What is yours to act on now, on a computer that can hear you. Finished work to check is not. */
+const acts = (i: Item) => i.m.status === 'online' && (rank(i.c) <= 2 || reminder(i));
+
+/** One entry of the space filter; `name` null is 全部. `count` is its inbox, `acts` what of that is yours to act on. */
+export type Chip = { name: string | null; count: number; acts: number };
+
+export type Shelf = {
+  /** The space shown, null for all. A saved choice whose space has gone reads as all. */
+  filter: string | null;
+  /** Empty with fewer than two spaces. By name, so a chip never moves under a finger. */
+  chips: Chip[];
+  pinned: Item[];
+  /** Errors, reminders that came back, then what runs. */
+  ahead: Item[];
+  /** 等你验收: it folds into one line, it is still in the inbox. */
+  review: Item[];
+  /** What rests: below the fold line. */
+  behind: Item[];
+  later: Item[];
+  done: Item[];
+  /** What is yours to act on in the spaces the filter hides. Never hidden without this. */
+  elsewhere: number;
+  /** Over all spaces: what is yours to act on, and all the host counts as yours, 等你验收 included. */
+  acts: number;
+  waiting: number;
+  /** Nothing of the inbox in the space shown; folded cards count as something. */
+  empty: boolean;
+};
+
+/**
+ * What the screen lays out from `arrange`. It takes the result and leaves `pins` alone: the
+ * filter and the fold decide what shows, never in what order what asks you stays.
+ */
+export function shelve(a: Arranged, selected: string | null): Shelf {
+  const inbox = [...a.pinned, ...a.rest];
+  const name = (i: Item) => spaceName(i.m, i.c);
+  const names = [...new Set([...inbox, ...a.later, ...a.done].map(name))].sort((x, y) => x.localeCompare(y));
+  const chip = (n: string | null, items: Item[]): Chip => ({ name: n, count: items.length, acts: items.filter(acts).length });
+  const chips = names.length < 2 ? [] : [chip(null, inbox), ...names.map((n) => chip(n, inbox.filter((i) => name(i) === n)))];
+  const filter = selected !== null && chips.some((chip) => chip.name === selected) ? selected : null;
+  const here = (i: Item) => filter === null || name(i) === filter;
+  const rest = a.rest.filter(here);
+  const first = rest.filter((i) => rank(i.c) <= 2);
+  const running = rest.filter((i) => rank(i.c) === 3);
+  return {
+    filter,
+    chips,
+    pinned: a.pinned.filter(here),
+    ahead: [...first, ...rest.filter(reminder), ...running],
+    review: rest.filter((i) => rank(i.c) === 4 && !reminder(i)),
+    behind: rest.filter((i) => rank(i.c) > 4),
+    later: a.later.filter(here),
+    done: a.done.filter(here),
+    elsewhere: inbox.filter((i) => !here(i) && acts(i)).length,
+    acts: inbox.filter(acts).length,
+    waiting: inbox.filter((i) => acts(i) || (i.m.status === 'online' && i.c.needs_you)).length,
+    empty: !inbox.some(here),
+  };
+}
+
+/** The fold's line, in the word the host gives these cards. */
+export const foldLabel = (items: Item[]) => {
+  const word = items[0] ? statusWord(items[0].c) : '';
+  return word ? `${word} · ${items.length}` : `${items.length}`;
+};
 
 /** How long after a card appears or changes a tap on its buttons does nothing. */
 export const SETTLE_MS = 600;
