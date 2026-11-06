@@ -251,7 +251,10 @@ fn a_subagent_meta_change_refreshes_its_parents_card_whose_log_did_not_move() {
     assert!(!i.card(key).unwrap().unwrap().subagents[0].running());
     // Nothing new: the parent is not reported again.
     assert!(i.update_many([meta], 4).unwrap().is_empty());
-    assert_eq!(subagent_parent(&subs.join("notes.json")), None);
+    assert_eq!(
+        crate::agents::adapter(Agent::Claude).subagent_parent(&subs.join("notes.json")),
+        None
+    );
 }
 #[test]
 fn a_removed_declarations_rows_read_back_without_failing_the_index() {

@@ -559,19 +559,5 @@ fn agent(s: &str) -> io::Result<Agent> {
 
 /// The transcript whose subagent `path` describes: `<dir>/<session>.jsonl` for
 /// `<dir>/<session>/subagents/agent-<id>.meta.json`.
-fn subagent_parent(path: &Path) -> Option<PathBuf> {
-    let name = path.file_name()?.to_str()?;
-    if !(name.starts_with("agent-") && name.ends_with(".meta.json")) {
-        return None;
-    }
-    let dir = path.parent()?;
-    if dir.file_name()? != "subagents" {
-        return None;
-    }
-    let session = dir.parent()?;
-    let mut parent = session.as_os_str().to_owned();
-    parent.push(".jsonl");
-    Some(PathBuf::from(parent))
-}
 #[cfg(test)]
 mod tests;
