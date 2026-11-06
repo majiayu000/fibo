@@ -167,6 +167,27 @@ impl Workbench {
                     .text_color(T::color(T::primary()))
                     .child(self.session_title(s)),
             )
+            // The todo it was started for; the card leaves this out to stay short.
+            .children(
+                (s.task.as_ref())
+                    .and_then(|t| self.workspace.tasks.iter().find(|task| &task.id == t))
+                    .map(|task| {
+                        let id = task.id.clone();
+                        div()
+                            .id("drawer-todo")
+                            .min_w_0()
+                            .truncate()
+                            .cursor_pointer()
+                            .text_size(px(T::META))
+                            .text_color(T::color(T::link()))
+                            .child(format!("待办 · {} ›", task.title))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.overview.drawer = None;
+                                this.nav.task_detail = Some(id.clone());
+                                cx.notify();
+                            }))
+                    }),
+            )
             .child(
                 div()
                     .p(px(T::S12))
