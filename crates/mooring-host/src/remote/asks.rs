@@ -23,6 +23,22 @@ fn screen(socket: &Path, terminal: &str) -> io::Result<String> {
 }
 
 fn read_ask(socket: &Path, terminal: &str) -> io::Result<rp::Ask> {
+    // A CLI that answers over its own API said what it asks; the screen has nothing to add.
+    if let Reply::Workspace(w) = rpc(socket, &Request::Workspace)? {
+        let c = w.current_agent(terminal).and_then(|s| {
+            s.runtime.spec()?.answers.as_ref()?;
+            w.content.get(&s.id).filter(|c| !c.approval.is_empty())
+        });
+        if let Some(c) = c {
+            return Ok(rp::Ask {
+                question: c.approval.clone(),
+                kind: c.approval_kind.clone(),
+                subject: c.approval.clone(),
+                always: (!c.approval_always.is_empty()).then(|| c.approval_always.clone()),
+                ..Default::default()
+            });
+        }
+    }
     let tail = screen(socket, terminal)?;
     // The same reading that made the card's `approval`: a question scrolled up is none.
     let seen = screen_rules::explain(screen_rules::default_rules(), &tail);

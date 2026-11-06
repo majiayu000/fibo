@@ -108,6 +108,10 @@ pub trait Adapter: Sync {
     fn interrupt_key(&self) -> &'static [u8] {
         b"\x03"
     }
+    /// How it takes answers over a local API, for one that has it.
+    fn answers(&self) -> Option<&'static mooring_core::agent_answers::Answers> {
+        None
+    }
     /// How many times to press it, for a CLI that asks to press again.
     fn interrupt_presses(&self) -> u32 {
         1
