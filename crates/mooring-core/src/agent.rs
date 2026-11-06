@@ -5,6 +5,7 @@
 //! `~/.config/mooring/agents/*.json`, loaded once per process by `install`; a later file
 //! with the same id replaces an earlier one, and a file that cannot be used is reported,
 //! never fatal. See docs/architecture/PLUGIN_SYSTEM.md.
+use crate::agent_answers::Answers;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -184,6 +185,8 @@ pub struct AgentSpec {
     pub screen_rules: Option<String>,
     /// api 2: what interrupts a turn and leaves it alive. `None`: Ctrl-C.
     pub interrupt: Option<Interrupt>,
+    /// api 2: how it takes answers over a local API. `None`: only by its screen.
+    pub answers: Option<Answers>,
 }
 
 /// Keys that interrupt a CLI's running turn, for one where Ctrl-C does something else.
@@ -376,6 +379,8 @@ struct Declaration {
     screen_rules: Option<serde_json::Value>,
     #[serde(default)]
     interrupt: Option<InterruptDeclared>,
+    #[serde(default)]
+    answers: Option<Answers>,
 }
 
 /// One declaration file's outcome, for settings and diagnostics.
@@ -443,6 +448,7 @@ fn builtin() -> Vec<AgentSpec> {
         file: None,
         screen_rules: None,
         interrupt: None,
+        answers: None,
     };
     let marked = |spec: AgentSpec, markers: &[&str], pins_own| AgentSpec {
         prompt: PromptLine {
@@ -738,8 +744,11 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             }
         }
     }
-    if d.api < 2 && (d.screen_rules.is_some() || d.interrupt.is_some()) {
-        return Err("screen_rules 和 interrupt 需要 api 2".into());
+    if d.api < 2 && (d.screen_rules.is_some() || d.interrupt.is_some() || d.answers.is_some()) {
+        return Err("screen_rules、interrupt 和 answers 需要 api 2".into());
+    }
+    if let Some(a) = &d.answers {
+        a.check()?;
     }
     let screen_rules = d.screen_rules.as_ref().map(|r| r.to_string());
     let interrupt = match d.interrupt {
@@ -777,6 +786,7 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
         file: Some(file.to_owned()),
         screen_rules,
         interrupt,
+        answers: d.answers,
     })
 }
 

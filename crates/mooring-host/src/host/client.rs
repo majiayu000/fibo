@@ -726,6 +726,9 @@ pub(super) fn answer_approval(
     allow: bool,
     always: bool,
 ) -> io::Result<()> {
+    if let Some(done) = http_ask::answer(shared, id, question, allow, always) {
+        return done;
+    }
     let (terminal, rules) = {
         let host = lock(shared)?;
         let terminal = host

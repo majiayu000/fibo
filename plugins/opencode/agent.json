@@ -3,8 +3,8 @@
   "id": "opencode",
   "name": "OpenCode",
   "executable": "opencode",
-  "start": "opencode",
-  "resume": "opencode --session {id}",
+  "start": "OPENCODE_SERVER_PASSWORD=$(uuidgen) opencode --port 0",
+  "resume": "OPENCODE_SERVER_PASSWORD=$(uuidgen) opencode --port 0 --session {id}",
   "source": {
     "sqlite": "~/.local/share/opencode/opencode.db",
     "sessions": "SELECT id AS _session, directory AS _cwd, time_updated AS _t, CASE WHEN title LIKE 'New session - %' THEN NULL ELSE title END AS _title FROM session WHERE time_updated > ?1 AND parent_id IS NULL AND time_updated > (CAST(strftime('%s','now') AS INTEGER) - 30 * 86400) * 1000 ORDER BY time_updated",
@@ -145,5 +145,30 @@
         }
       }
     ]
+  },
+  "answers": {
+    "pending": "/permission",
+    "id": "/id",
+    "subject": [
+      "/metadata/command",
+      "/metadata/filepath",
+      "/metadata/filePath",
+      "/patterns/0",
+      "/permission"
+    ],
+    "kind": "/permission",
+    "always": "/always",
+    "reply": "/permission/{id}/reply",
+    "allow": {
+      "reply": "once"
+    },
+    "allow_always": {
+      "reply": "always"
+    },
+    "deny": {
+      "reply": "reject"
+    },
+    "password_env": "OPENCODE_SERVER_PASSWORD",
+    "username": "opencode"
   }
 }

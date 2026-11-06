@@ -97,6 +97,11 @@ pub struct Content {
     /// what 允许一次 / 拒绝 answer. Live only, never stored.
     #[serde(default)]
     pub approval: String,
+    /// Over a CLI's own API: its kind and what 「always」 grants. Live, never stored.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approval_kind: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approval_always: String,
     /// A Codex subagent's parent thread id and its name, from its own session header.
     #[serde(default)]
     pub parent: String,
