@@ -1,4 +1,4 @@
-//! 先不管这个空间 (docs/quiet-space/spec.md): a space you put aside. Nothing in it is removed
+//! 先不管这个空间 (docs/quiet-space/index.html): a space you put aside. Nothing in it is removed
 //! or stopped, and none of it asks for you: it counts nowhere, ⌘J skips it, and it leaves
 //! the chips, the lists and the board for a gray line. The host keeps the state
 //! (`Workspace::quiet_spaces`) and core decides what it means; this is how it looks. Looking
@@ -144,6 +144,27 @@ impl Workbench {
             cx,
         );
         cx.notify();
+    }
+    /// You began work here, so the space is back: being told is what you want from work you
+    /// started, and one press too many costs less than a question nobody saw. Applied here
+    /// at once, or every key until the host's reply would go through this again.
+    pub(in crate::workbench) fn work_began_in_space(&mut self, id: &str, cx: &mut Context<Self>) {
+        if !self.workspace.space_quiet(id) {
+            return;
+        }
+        self.set_space_quiet(id, false, cx);
+        self.workspace.quiet_spaces.remove(id);
+        self.facts.forget();
+    }
+    pub(in crate::workbench) fn work_began_on_terminal(
+        &mut self,
+        terminal: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(space) = self.workspace.terminal_home(terminal).map(str::to_owned) else {
+            return;
+        };
+        self.work_began_in_space(&space, cx);
     }
     /// The menu's press: a first one only says what keeps running, when something does.
     fn press_space_quiet(&mut self, id: &str, cx: &mut Context<Self>) {
@@ -440,6 +461,21 @@ impl Workbench {
     }
     pub fn visual_stored_space_filter(&self) -> Option<String> {
         self.sidebar.space_filter.clone()
+    }
+    /// Into the pane in front of you: keys as you type them, or a mouse report.
+    pub fn visual_in_shown_pane(&mut self, text: &str, mouse: bool, cx: &mut Context<Self>) {
+        let tab = (self.nav.tab.as_ref()).map(|t| self.workspace.tab_terminals(t));
+        let pane = tab
+            .and_then(|ids| ids.first().cloned())
+            .and_then(|id| self.layout.panes.get(&id).cloned())
+            .expect("a pane is shown");
+        pane.update(cx, |p, cx| {
+            if mouse {
+                p.visual_pointer(text, cx);
+            } else {
+                p.visual_type(text, cx);
+            }
+        });
     }
     pub fn visual_quiet_space_rows(&self, id: &str) -> usize {
         self.quiet_space_sessions(id).len()

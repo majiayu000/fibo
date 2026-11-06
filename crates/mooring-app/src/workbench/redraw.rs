@@ -223,7 +223,13 @@ impl Workbench {
     pub(super) fn adopt_pane(pane: &Entity<Pane>, cx: &mut Context<Self>) {
         cx.observe(pane, |this, _, cx| this.pane_changed(cx))
             .detach();
-        cx.subscribe(pane, |this, _, event, cx| match event {
+        cx.subscribe(pane, |this, pane, event, cx| match event {
+            crate::terminal::pane::PaneEvent::Typed => {
+                if !this.workspace.quiet_spaces.is_empty() {
+                    let terminal = pane.read(cx).terminal_id().to_owned();
+                    this.work_began_on_terminal(&terminal, cx);
+                }
+            }
             crate::terminal::pane::PaneEvent::Run { command, cwd } => {
                 this.layout.pending_command = Some((command.clone(), cwd.clone()));
                 this.launch(false, None, cx);

@@ -50,11 +50,16 @@ impl Workspace {
                 .session_home(s)
                 .is_some_and(|space| self.space_quiet(space))
     }
+    /// The space a terminal is open in: its tab's, else the one it was started in.
+    pub fn terminal_home(&self, id: &str) -> Option<&str> {
+        (self.terminal_tab(id).map(|tab| tab.space.as_str()))
+            .or_else(|| (self.terminals.iter().find(|t| t.id == id)).map(|t| t.space.as_str()))
+    }
     /// The same for a terminal, with or without a conversation.
     pub fn terminal_quiet(&self, id: &str) -> bool {
         !self.quiet_spaces.is_empty()
-            && (self.terminal_tab(id).map(|tab| tab.space.as_str()))
-                .or_else(|| (self.terminals.iter().find(|t| t.id == id)).map(|t| t.space.as_str()))
+            && self
+                .terminal_home(id)
                 .is_some_and(|space| self.space_quiet(space))
     }
     /// How many spaces are not put aside.

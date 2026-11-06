@@ -67,12 +67,23 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         .or_else(|| (w.spaces.iter()).find(|s| !w.space_quiet(&s.id)))
         .or_else(|| w.spaces.first())
         .ok_or_else(|| io::Error::other("那台电脑还没有空间"))?;
-    // The list leaves such a space out, so what opened there would vanish from the phone.
+    // Asked for by hand, so it is back; and the list leaves a space put aside out, so what
+    // opened there would vanish from the phone.
     if w.space_quiet(&space.id) {
-        return Err(io::Error::other(format!(
-            "「{}」先不管了，回电脑上接着管再开",
-            space.name
-        )));
+        let edit = Edit::SetSpaceQuiet {
+            id: space.id.clone(),
+            quiet: false,
+        };
+        match rpc(
+            socket,
+            &Request::Edit {
+                edit,
+                request: None,
+            },
+        )? {
+            Reply::Workspace(_) => (),
+            other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+        }
     }
     // A conversation's log belongs to its directory: resumed anywhere else, the CLI would
     // not find it.

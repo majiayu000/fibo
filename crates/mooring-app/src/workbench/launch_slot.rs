@@ -72,6 +72,7 @@ impl Workbench {
         };
         let agent = self.tasks.chosen_agent.take();
         let resume = self.resuming.resume.take();
+        let new_work = replace.is_none() && resume.is_none();
         // A plugin action's command and the pane it ran for; it runs like a resume does.
         let pending = self.layout.pending_command.take();
         let resuming = resume.as_ref().map(|r| r.2.clone());
@@ -197,6 +198,11 @@ impl Workbench {
             colors: crate::lifecycle::host_colors(),
         };
         let tab_id = tab.id.clone();
+        // New work brings the space back. Showing an interrupted pane or a closed conversation
+        // restores it by itself, which is only looking until you type.
+        if new_work {
+            self.work_began_in_space(&tab.space, cx);
+        }
         self.begin_busy(None, cx);
         let spaces = new_tab.then(|| self.workspace.spaces.clone());
         let job = cx.background_spawn(self.store.launch(cwd_source, spaces, request, place));

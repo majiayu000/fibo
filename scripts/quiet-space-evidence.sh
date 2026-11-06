@@ -1,7 +1,7 @@
 #!/bin/bash
 # 先不管这个空间, end to end: a real host holding two Codex sessions, one finished for you and
 # one still working, in a space of their own and the window driven with real mouse events, then a second launch that
-# reads the state back (docs/quiet-space/spec.md).
+# reads the state back (docs/quiet-space/index.html).
 # Needs a debug build with visual tests:
 #   cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
 # Prints PASS twice and saves every step to $R/shots.
@@ -10,6 +10,7 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-qs}
 rm -rf "$R"; mkdir -p "$R/home/.config/mooring" "$R/home/.codex/sessions" "$R/claude" "$R/shots"
 printf '{"cursor_blink": false}\n' > "$R/home/.config/mooring/terminal-text.json"
+printf on > "$R/home/.config/mooring/peek"
 mkdir -m 700 "$R/rt"
 ln -s /bin/sh "$R/codex"
 env -i PATH=/usr/bin:/bin HOME="$R/home" CODEX_HOME="$R/home/.codex" CLAUDE_CONFIG_DIR="$R/claude" LANG=en_US.UTF-8 \
@@ -62,7 +63,7 @@ run() {
 }
 run env > "$R/app.log" 2>&1
 echo "app exit $?"
-grep -E "PASS|panicked|assert|left:|right:|looking at" -A1 "$R/app.log" | head -20
+grep -E "PASS|panicked|assert|left:|right:|looking at|peek opened" -A1 "$R/app.log" | head -20
 run env MOORING_QUIET_SPACE_RESTART=1 > "$R/relaunch.log" 2>&1
 echo "relaunch exit $?"
 grep -E "PASS|panicked|assert|left:|right:" -A1 "$R/relaunch.log" | head -8

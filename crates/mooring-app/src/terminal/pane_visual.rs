@@ -11,6 +11,9 @@ impl Pane {
     pub fn visual_type(&mut self, text: &str, cx: &mut Context<Self>) {
         self.input(text.as_bytes().to_vec(), cx);
     }
+    pub fn visual_pointer(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.pointer(text.as_bytes().to_vec(), cx);
+    }
     pub fn visual_cursor_shape(&self) -> screen::CursorShape {
         self.screen.cursor_shape
     }

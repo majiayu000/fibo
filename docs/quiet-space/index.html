@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>先不管空间 · 状态机</title>
+<style>
+  :root {
+    --bg: #111113; --panel: #1c1c1e; --sunk: #232325; --line: #333335;
+    --text: #ecebe9; --sec: #a3a2a0; --muted: #8a8988;
+    --ok: #199e70; --warn: #c98500; --accent: #3987e5;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14.5px/1.65 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  h2 { font-size: 18px; margin: 40px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 22px 0 6px; }
+  .muted { color: var(--sec); }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--sunk); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--sec); font-weight: 500; font-size: 12.5px; white-space: nowrap; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin: 12px 0; }
+  .card.rule { border-left: 3px solid var(--accent); }
+  ol.rules { margin: 0; padding-left: 20px; }
+  ol.rules li { margin: 8px 0; }
+  .back { color: var(--ok); white-space: nowrap; }
+  .stay { color: var(--sec); white-space: nowrap; }
+  svg { display: block; width: 100%; height: auto; margin: 12px 0; }
+  svg text { font-family: -apple-system, "PingFang SC", sans-serif; }
+  @media (max-width: 640px) { table { font-size: 12.5px; } th, td { padding: 6px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>先不管空间 · 状态机</h1>
+<p class="sub">2026-11-07 · 这是这个功能的唯一规格。代码：<code>model/space.rs</code>、<code>workbench/sidebar_machines/quiet_space.rs</code>；证据：<code>scripts/quiet-space-evidence.sh</code></p>
+
+<div class="card rule">
+  <b>一句话：</b>先不管是一层遮罩，不是一个新状态。东西都留着、进程照跑，外面不再算它；你在里面开始做事，它就回来。
+</div>
+
+<p class="muted">要支撑的决定：空间多了以后，暂时不做的空间能不能不打扰你，下周回来还能接着聊。放弃条件：用两周后真的因此漏事，或总是开了又关，再考虑定时恢复。</p>
+
+<h2>六条规则</h2>
+<p class="muted">后面每张表都能由这六条推出来。遇到表里没有的情况也按这六条判断，判断不了就是缺规则，要回来补。</p>
+<ol class="rules">
+  <li><b>空间只有两个状态：</b>在管、先不管。存在 host（<code>Workspace::quiet_spaces</code>），窗口、菜单栏、手机读同一份。</li>
+  <li><b>遮罩不改真实状态：</b>会话的「在跑、等你回答……」永远照常走（<code>status::of</code> 不读遮罩）。接着管时不用恢复任何东西，因为什么都没改过。</li>
+  <li><b>算不算被遮罩，看它开在哪个标签：</b>眼前的东西不会因为归档位置不同而不提醒。没有标签才看它列在哪（<code>session_home</code>）。</li>
+  <li><b>里面照实显示，外面不算：</b>进到先不管的空间，窗格和标签照常显示真实状态；侧栏、计数、鸟瞰、通知都不算它。</li>
+  <li><b>你开始做事，它就回来：</b>打字、回答审批、新开工作，都让整个空间接着管。只是看不算；恢复原有的东西不算；机器和 Agent 做的事不算。宁可多提醒，也不漏事。</li>
+  <li><b>只加标记：</b>不删空间、标签、终端、会话、待办，不停进程。</li>
+</ol>
+
+<h2>空间状态图</h2>
+<svg viewBox="0 0 880 330" role="img" aria-label="两个状态：在管和先不管。右键或 ⌘P 选先不管，从在管到先不管；接着管按钮、打字、回答审批、新开工作、手机打开，从先不管回到在管。只是看、恢复原有的东西、重启，都留在原状态。">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a3a2a0"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#199e70"/></marker>
+  </defs>
+  <rect x="30" y="120" width="200" height="90" rx="14" fill="#1c1c1e" stroke="#199e70" stroke-width="1.5"/>
+  <text x="130" y="160" text-anchor="middle" fill="#ecebe9" font-size="19" font-weight="600">在管</text>
+  <text x="130" y="186" text-anchor="middle" fill="#a3a2a0" font-size="13">计数、提醒、列表都算</text>
+  <rect x="650" y="120" width="200" height="90" rx="14" fill="#1c1c1e" stroke="#8a8988" stroke-width="1.5"/>
+  <text x="750" y="160" text-anchor="middle" fill="#ecebe9" font-size="19" font-weight="600">先不管</text>
+  <text x="750" y="186" text-anchor="middle" fill="#a3a2a0" font-size="13">外面不算，底部一行灰字</text>
+  <path d="M235 140H645" fill="none" stroke="#a3a2a0" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="440" y="130" text-anchor="middle" fill="#ecebe9" font-size="14">右键或 ⌘P 选「先不管」</text>
+  <path d="M645 190H235" fill="none" stroke="#199e70" stroke-width="1.5" marker-end="url(#g)"/>
+  <text x="440" y="212" text-anchor="middle" fill="#199e70" font-size="14">点「接着管」· 打字 · 回答审批</text>
+  <text x="440" y="232" text-anchor="middle" fill="#199e70" font-size="14">新开工作 · 手机在它的目录里打开</text>
+  <path d="M705 118C690 60 810 60 795 118" fill="none" stroke="#8a8988" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="750" y="30" text-anchor="middle" fill="#a3a2a0" font-size="13">只是看、切标签、滚动</text>
+  <text x="750" y="50" text-anchor="middle" fill="#a3a2a0" font-size="13">恢复被中断的会话、Agent 的动作</text>
+  <path d="M85 118C70 60 190 60 175 118" fill="none" stroke="#8a8988" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="130" y="30" text-anchor="middle" fill="#a3a2a0" font-size="13">最后一个在管的空间</text>
+  <text x="130" y="50" text-anchor="middle" fill="#a3a2a0" font-size="13">不能先不管</text>
+  <text x="440" y="290" text-anchor="middle" fill="#a3a2a0" font-size="13">两个状态下，窗口、host、电脑重启都不改变状态；会话的真实状态在两边都照常走</text>
+</svg>
+
+<h2>什么算「开始做事」</h2>
+<div class="scroll"><table>
+  <tr><th>你在先不管的空间里</th><th>结果</th><th>为什么</th></tr>
+  <tr><td>键盘打字、输入法、粘贴、Ctrl-C</td><td class="back">接着管</td><td>送进程序的是你写的内容</td></tr>
+  <tr><td>在偷看窗里回答审批</td><td class="back">接着管</td><td>你替 Agent 做了决定，它要接着跑</td></tr>
+  <tr><td>新开标签、分屏、Agent，从待办开始工作</td><td class="back">接着管</td><td>新工作</td></tr>
+  <tr><td>手机在它的目录里开终端或恢复会话</td><td class="back">接着管</td><td>否则手机列表不显示，一开就看不见</td></tr>
+  <tr><td>展开灰字行、点开会话、切标签</td><td class="stay">不变</td><td>只是看</td></tr>
+  <tr><td>滚动、选中、复制，鼠标点击和滚轮（含发给程序的鼠标上报）</td><td class="stay">不变</td><td>全屏程序里滚动也会发按键，分不清就按看算</td></tr>
+  <tr><td>窗格获得或失去焦点</td><td class="stay">不变</td><td>这是终端自动发的上报</td></tr>
+  <tr><td>点开被中断或已关闭的会话（自动恢复它）</td><td class="stay">不变</td><td>窗格显示出来就会自动恢复，这一步不是你要开工；接下来打字才算</td></tr>
+  <tr><td>在窗格上标记完成、放弃、稍后再看</td><td class="stay">不变</td><td>这是收尾，不是开工</td></tr>
+  <tr><td>Agent 自己：<code>mooring todo add</code>、<code>mooring run</code>、汇报写回</td><td class="stay">不变</td><td>不是你做的。否则后台一动空间就回来，先不管就没意义了</td></tr>
+</table></div>
+<p class="muted">接着管是整个空间回来，不是单个会话。回一句话后想继续放着，再点一次「先不管」。这是选 C 的代价：只会多提醒，不会漏。</p>
+
+<h2>状态迁移全表</h2>
+<div class="scroll"><table>
+  <tr><th>从</th><th>事件</th><th>到</th><th>同时发生</th></tr>
+  <tr><td>在管</td><td>右键空间选「先不管这个空间」，或 ⌘P</td><td>先不管</td><td>里面有在跑的会话时，右键要按第二下确认，并写明几个会继续跑；清掉「只看这个空间」的筛选；正在看它时切到下一个在管的空间</td></tr>
+  <tr><td>在管</td><td>同上，但它是最后一个在管的空间</td><td>在管</td><td>菜单项变灰，host 也拒绝</td></tr>
+  <tr><td>先不管</td><td>灰字行、提示条、鸟瞰的「接着管」；右键灰字行；⌘P</td><td>在管</td><td>计数和卡片立刻回来；不跳转、不恢复筛选、不补发通知</td></tr>
+  <tr><td>先不管</td><td>上一节里「接着管」的那些事</td><td>在管</td><td>同上。胶囊从灰字行飞回去，告诉你它回来了；你正在做的事不被打断、不换焦点</td></tr>
+  <tr><td>先不管</td><td>上一节里「不变」的那些事</td><td>先不管</td><td>进到里面时顶部有提示条和「接着管」</td></tr>
+  <tr><td>任一</td><td>窗口重启、host 重启、电脑重启</td><td>不变</td><td>启动时打开第一个在管的空间</td></tr>
+  <tr><td>先不管</td><td>删除空间</td><td>不存在</td><td>有没收尾的待办时照旧拒绝</td></tr>
+  <tr><td>在管</td><td>删除，且其余都先不管</td><td>在管</td><td>拒绝：先接着管一个别的</td></tr>
+  <tr><td>任一</td><td>改名、换目录</td><td>不变</td><td></td></tr>
+  <tr><td>任一</td><td>host 连不上时操作</td><td>不变</td><td>显示错误。已发生的跳转不撤回</td></tr>
+</table></div>
+
+<h2>接着管时，会话是什么状态</h2>
+<p>和从没先不管过时完全一样。真实状态一直在走，只是外面不算：</p>
+<div class="scroll"><table>
+  <tr><th>期间发生的事</th><th>接着管后</th></tr>
+  <tr><td>在跑的会话结束</td><td>等你验收，计入要你处理</td></tr>
+  <tr><td>Agent 提问 / 出错</td><td>等你回答 / 出错了，计入要你处理</td></tr>
+  <tr><td>什么都没发生，终端还活着，放多久都一样</td><td>原来的状态。活着的终端不会变成「很久没动」</td></tr>
+  <tr><td>终端已结束（比如电脑重启），超过 <code>stale_days</code>（默认 3 天）</td><td>很久没动，不计入要你处理，会话还能恢复</td></tr>
+  <tr><td>标了完成 / 放弃</td><td>仍是完成 / 放弃</td></tr>
+  <tr><td>「稍后再看」到期</td><td>回到待处理</td></tr>
+</table></div>
+
+<h2>每个地方算不算</h2>
+<div class="scroll"><table>
+  <tr><th>地方</th><th>先不管时</th><th>依据</th></tr>
+  <tr><td>要你处理、⌘J、状态栏、菜单栏、Dock 角标</td><td>不算</td><td><code>status::needs_you</code>、<code>session_hidden_in</code></td></tr>
+  <tr><td>系统通知和声音</td><td>不发；已弹的撤回；接着管不补发，之后的新事件照发</td><td><code>desktop::entered</code>、<code>left</code></td></tr>
+  <tr><td>通知类插件钩子（如 notify-macos）</td><td>不发；接着管不补发，之后的新事件照发</td><td><code>plugin_hooks::changes</code></td></tr>
+  <tr><td>鸟瞰卡片、鸟瞰待办</td><td>不显示，头部一行灰字和「接着管」</td><td><code>status_group::column</code>、<code>unfinished_todos</code></td></tr>
+  <tr><td>侧栏列表、空间胶囊、切换菜单</td><td>不显示，底部灰字行；不超过两个空间时各一行，更多时合成一行</td><td><code>session_hidden_in</code>、<code>quiet_lines</code></td></tr>
+  <tr><td>⌘P</td><td>搜索能找到会话和「接着管」；空查询的最近列表不列</td><td><code>palette/search.rs</code></td></tr>
+  <tr><td>新建待办的默认空间和可选空间</td><td>不选它；已经在里面的待办可以留着</td><td><code>attended_or_first</code></td></tr>
+  <tr><td>手机、另一台电脑的列表</td><td>不列</td><td><code>remote/list.rs</code></td></tr>
+  <tr><td><code>mooring todo list</code></td><td>照常列：Agent 记新待办前要查重</td><td>有意不遮罩</td></tr>
+  <tr><td><code>mooring events</code> 订阅、<code>mooring run</code> 的汇报</td><td>照常：这是脚本和 Agent 之间的事，不是找你</td><td>有意不遮罩</td></tr>
+</table></div>
+
+<h2>容易误会的边角</h2>
+<ul>
+  <li>接着管和某个新事件落在同一次刷新里：不弹通知、不触发钩子，但计数里有。</li>
+  <li>灰字行的「N 个在等」数的是真实状态（<code>status::asks_for_you</code>），和接着管后会计入的数一致。</li>
+  <li>会话挂在先不管空间的待办上、开在在管空间的标签里：照常计数和提醒，列表标签仍写待办所在的空间。反过来，开在先不管空间的标签里就被遮罩。</li>
+  <li>Agent 切到另一个有自己空间的目录：看标签，不跟着变。</li>
+  <li>Agent 用 <code>mooring todo add</code> 往先不管的空间记待办：记得进去，鸟瞰不显示，接着管后出现。</li>
+  <li>窗格自动恢复被中断的会话后，它又开始占资源，但空间仍是先不管，直到你打字。</li>
+  <li>在别的空间用偷看窗看先不管的会话时没有提示条：提示条属于当前空间。在偷看窗里打字一样会接着管。</li>
+</ul>
+
+<h2>没做</h2>
+<ul>
+  <li>定时恢复：放弃条件触发后再说。</li>
+  <li>在手机或另一台电脑上点「先不管」「接着管」。手机只有「在它的目录里打开」这一条会让它回来。</li>
+  <li>只让单个会话回来：会多出第三个状态，规则就不再简单。</li>
+</ul>
+
+<h2>不变量和守护它们的测试</h2>
+<div class="scroll"><table>
+  <tr><th>必须一直成立</th><th>测试</th></tr>
+  <tr><td>接着管后的状态、计数、鸟瞰列，和从没先不管过时相同（每个样例状态 × 9 种期间事件 × 当下 / 4 天后 / 8 天后）</td><td><code>coming_back_gives_the_state_it_would_have_had_anyway</code></td></tr>
+  <tr><td>什么都不丢，接着管后原样回来</td><td><code>a_space_put_aside_asks_for_nothing_and_comes_back_whole</code></td></tr>
+  <tr><td>标签决定遮罩，不是待办</td><td><code>the_tab_a_session_runs_in_decides_not_its_todo</code></td></tr>
+  <tr><td>至少留一个在管的空间</td><td><code>one_space_always_stays_attended_to</code></td></tr>
+  <tr><td>重启后状态还在</td><td><code>a_space_put_aside_survives_a_restart_and_so_does_taking_it_back</code></td></tr>
+  <tr><td>通知和钩子：期间不发，回来不补，之后照发</td><td><code>a_space_put_aside_stays_silent_and_taking_it_back_sends_no_burst</code>、<code>a_space_put_aside_fires_no_hooks_and_no_burst_on_return</code></td></tr>
+  <tr><td>手机看不到它；在它的目录里打开会让它回来</td><td><code>a_space_put_aside_is_not_listed_to_other_devices</code>、<code>open_in_a_space_put_aside_brings_it_back</code></td></tr>
+  <tr><td>真实窗口：模拟鼠标事件点菜单，期间会话真的结束；只是看、鼠标上报不变；窗格和偷看窗里打字、新开工作会回来；点开被中断的会话不变；重启读回</td><td><code>scripts/quiet-space-evidence.sh</code></td></tr>
+</table></div>
+</main>
+</body>
+</html>

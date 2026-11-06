@@ -19,4 +19,5 @@
 | 2026-11-05 | [工作台主库改 synchronous=NORMAL](2026-11-05-workbench-db-synchronous-normal.md) | 采用 |
 | 2026-11-05 | [本地 main 只跟随远端](2026-11-05-local-main-follows-origin.md) | 采用，推送方式已改 |
 | 2026-11-06 | [main 必须走 PR 且 CI 通过](2026-11-06-main-requires-ci.md) | 采用 |
+| 2026-11-07 | [在先不管的空间里开始做事，整个空间就接着管](2026-11-07-quiet-space-doing-work-returns.md) | 采用 |
 | 2026-11-06 | [侧栏不设行数上限，整列滚动](2026-11-06-sidebar-rows-scroll.md) | 采用 |
