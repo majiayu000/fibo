@@ -1,6 +1,7 @@
 //! Phones paired with this machine and what each may do, and the log of what they did.
 //! Both files sit next to the socket, readable only by this user:
 //! - `remote-devices.json`: one entry per phone, its own key, its role.
+//! - `remote-devices.lock`: held by whoever is changing the phones, host or command line.
 //! - `remote-log.jsonl`: connections, refusals, and every send, keys and answer.
 //! - `remote-code`: the machine's code its phones find it by on a relay.
 //! - `remote-code-retired`: token hashes of the codes `--new-code` replaced.
@@ -95,19 +96,90 @@ fn revoke(socket: &Path, gone: &Device) -> io::Result<()> {
     let mut list = revoked(socket);
     list.push(hash);
     let start = list.len().saturating_sub(wire::MAX_ROUTES);
-    write_private(&revoked_file(socket), &(list[start..].join("\n") + "\n"))
+    write_private(
+        &revoked_file(socket),
+        (list[start..].join("\n") + "\n").as_bytes(),
+    )
 }
 
-fn write_private(path: &Path, text: &str) -> io::Result<()> {
-    let tmp = path.with_extension("tmp");
-    let _ = std::fs::remove_file(&tmp);
-    std::fs::OpenOptions::new()
+/// Replaces `path` whole. The temporary name is this write's alone (a process id alone can be
+/// a dead process's, whose file is still there). A write that fails removes it; a process
+/// killed mid-write cannot, and [`lock`] clears what that leaves of the device list.
+fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let tmp = path.with_extension(format!(
+        "{}.{}.tmp",
+        std::process::id(),
+        uuid::Uuid::new_v4().simple()
+    ));
+    let written = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .mode(0o600)
-        .open(&tmp)?
-        .write_all(text.as_bytes())?;
-    std::fs::rename(&tmp, path)
+        .open(&tmp)
+        .and_then(|mut f| {
+            f.write_all(bytes)?;
+            f.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&tmp, path));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    written
+}
+
+/// Whether `name` is a temporary [`write_private`] makes for `remote-devices.json`.
+fn is_devices_temporary(name: &str) -> bool {
+    let Some(made) = name
+        .strip_prefix("remote-devices.")
+        .and_then(|n| n.strip_suffix(".tmp"))
+    else {
+        return false;
+    };
+    made.split_once('.').is_some_and(|(pid, id)| {
+        !pid.is_empty()
+            && pid.bytes().all(|b| b.is_ascii_digit())
+            && id.len() == 32
+            && id.bytes().all(|b| b.is_ascii_hexdigit())
+    })
+}
+
+/// Removes temporaries of the device list left by a process killed mid-write: they hold every
+/// key at that moment, those of phones since unpaired too. Only for the holder of [`lock`]:
+/// `save` runs only under it, so no such file is anyone's write in progress.
+fn clear_abandoned(socket: &Path) {
+    let Some(entries) = socket.parent().and_then(|d| std::fs::read_dir(d).ok()) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_str().is_some_and(is_devices_temporary) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Held from reading the phones to writing them back: the host and a `mooring remote` both
+/// change them, and a change made from a stale list brings back a phone just unpaired.
+/// Released when dropped. flock belongs to the open file, so this excludes other threads
+/// too, and whoever holds it must not ask for it again: it would wait on itself.
+fn lock(socket: &Path) -> io::Result<std::fs::File> {
+    use std::os::fd::AsRawFd;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o600)
+        .open(socket.with_file_name("remote-devices.lock"))?;
+    loop {
+        // SAFETY: flock on a file this function just opened and returns.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+            clear_abandoned(socket);
+            return Ok(file);
+        }
+        let e = io::Error::last_os_error();
+        if e.kind() != io::ErrorKind::Interrupted {
+            return Err(e);
+        }
+    }
 }
 
 fn file(socket: &Path) -> PathBuf {
@@ -125,17 +197,7 @@ pub fn load(socket: &Path) -> Vec<Device> {
 }
 
 fn save(socket: &Path, devices: &[Device]) -> io::Result<()> {
-    let path = file(socket);
-    let tmp = path.with_extension("tmp");
-    let _ = std::fs::remove_file(&tmp);
-    let mut f = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&tmp)?;
-    f.write_all(&serde_json::to_vec_pretty(devices)?)?;
-    f.sync_all()?;
-    std::fs::rename(&tmp, &path)
+    write_private(&file(socket), &serde_json::to_vec_pretty(devices)?)
 }
 
 pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> {
@@ -150,6 +212,7 @@ pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> 
         paired: now(),
         kicked: 0,
     };
+    let _held = lock(socket)?;
     let mut devices = load(socket);
     devices.push(device.clone());
     save(socket, &devices)?;
@@ -173,6 +236,7 @@ fn find(devices: &[Device], needle: &str) -> io::Result<usize> {
 
 /// Unpairs a device.
 pub fn remove(socket: &Path, needle: &str) -> io::Result<Device> {
+    let _held = lock(socket)?;
     let mut devices = load(socket);
     let gone = devices.remove(find(&devices, needle)?);
     save(socket, &devices)?;
@@ -182,6 +246,7 @@ pub fn remove(socket: &Path, needle: &str) -> io::Result<Device> {
 
 /// Gives a device another role; its open sessions end and it reconnects with the new one.
 pub fn set_role(socket: &Path, needle: &str, role: Role) -> io::Result<Device> {
+    let _held = lock(socket)?;
     let mut devices = load(socket);
     let i = find(&devices, needle)?;
     devices[i].role = role;
@@ -191,6 +256,7 @@ pub fn set_role(socket: &Path, needle: &str, role: Role) -> io::Result<Device> {
 
 /// Ends a device's open sessions now; it stays paired and may connect again.
 pub fn kick(socket: &Path, needle: &str) -> io::Result<Device> {
+    let _held = lock(socket)?;
     let mut devices = load(socket);
     let i = find(&devices, needle)?;
     devices[i].kicked = now_ms();
@@ -201,6 +267,7 @@ pub fn kick(socket: &Path, needle: &str) -> io::Result<Device> {
 /// Unpairs every device; each phone is told so (4401) instead of finding the machine
 /// offline.
 pub fn clear(socket: &Path) -> io::Result<()> {
+    let _held = lock(socket)?;
     let gone = load(socket);
     save(socket, &[])?;
     gone.iter().try_for_each(|d| revoke(socket, d))
@@ -275,7 +342,7 @@ pub fn machine(socket: &Path) -> io::Result<Machine> {
         Some(id) => id,
         None => {
             let id = uuid::Uuid::new_v4().to_string();
-            write_private(&file, &id)?;
+            write_private(&file, id.as_bytes())?;
             id
         }
     };
@@ -371,6 +438,9 @@ pub fn pair_link(
     .text();
     Ok((device, link))
 }
+
+#[cfg(test)]
+mod race_tests;
 
 #[cfg(test)]
 mod tests {
