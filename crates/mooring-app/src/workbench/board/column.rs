@@ -109,6 +109,29 @@ impl Workbench {
                             .child(count.to_string()),
                     )
                     .child(div().flex_1())
+                    .when(
+                        column == Column::Todo && self.tasks.board_quick.is_none(),
+                        |d| {
+                            d.child(
+                                button(
+                                    "overview-new-task",
+                                    if self.tasks.board_draft.is_empty() {
+                                        "＋ 新待办"
+                                    } else {
+                                        "＋ 新待办 · 有草稿"
+                                    },
+                                )
+                                .h(px(T::SEGMENT_HEIGHT))
+                                .px(px(T::S8))
+                                .border_0()
+                                .text_size(px(T::SMALL))
+                                .text_color(T::color(T::secondary()))
+                                .on_click(cx.listener(
+                                    |this, _, window, cx| this.show_quick_task(window, cx),
+                                )),
+                            )
+                        },
+                    )
                     .when(column == Column::Stale && count > 0, |d| {
                         d.child(
                             button("cleanup", "逐个清理 →")
@@ -129,6 +152,9 @@ impl Workbench {
                     }),
             )
             .children(slot)
+            .when(column == Column::Todo, |d| {
+                d.children(self.board_quick_view(cx))
+            })
             .child(
                 div()
                     .id(gpui::SharedString::from(format!("column-{}", column.key())))
@@ -147,7 +173,7 @@ impl Workbench {
             let mut columns = self.overview.columns.borrow_mut();
             let cached = columns.entry(column).or_insert_with(|| ColumnList {
                 state: gpui::ListState::new(
-                    ids.len() + usize::from(column == Column::Todo),
+                    ids.len(),
                     gpui::ListAlignment::Top,
                     px(T::CARD_ESTIMATE),
                 ),
@@ -155,33 +181,47 @@ impl Workbench {
                 revision: self.workspace.revision,
             });
             cached.sync(&ids, self.workspace.revision);
+            // Only now: a card added above where the list has scrolled to keeps the view
+            // where it was, so scrolling before it lands would leave it out of sight.
+            if column == Column::Todo
+                && let Some(fresh) = &self.overview.fresh_todo
+                && !fresh.revealed.get()
+                && ids.contains(&fresh.id)
+            {
+                fresh.revealed.set(true);
+                cached.state.scroll_to(gpui::ListOffset {
+                    item_ix: 0,
+                    offset_in_item: px(0.),
+                });
+            }
             cached.state.clone()
         };
-        let count = ids.len() + usize::from(column == Column::Todo);
+        let count = ids.len();
         let entity = cx.entity();
         gpui::list(state, move |index, window, app| {
             let animate = window.is_window_active();
             entity.update(app, |this, cx| {
                 let card = if column == Column::Todo {
-                    if let Some(id) = ids.get(index) {
-                        this.todo_card(
-                            this.workspace
-                                .tasks
-                                .iter()
-                                .find(|t| &t.id == id)
-                                .expect("board row belongs to the current workspace"),
-                            cx,
-                        )
-                        .into_any_element()
+                    let card = this.todo_card(
+                        this.workspace
+                            .tasks
+                            .iter()
+                            .find(|t| t.id == ids[index])
+                            .expect("board row belongs to the current workspace"),
+                        cx,
+                    );
+                    if (this.overview.fresh_todo.as_ref()).is_some_and(|f| f.id == ids[index]) {
+                        super::composer::fresh_card(card, &ids[index]).into_any_element()
                     } else {
-                        button("overview-new-task", "＋ 新待办")
-                            .justify_start()
-                            .text_color(T::color(T::secondary()))
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.show_quick_task(window, cx)),
-                            )
-                            .into_any_element()
+                        card.into_any_element()
                     }
+                } else if let Some(id) = ids[index].strip_prefix("todo:") {
+                    (this.workspace.tasks.iter())
+                        .find(|t| t.id == id)
+                        .map_or_else(
+                            || div().into_any_element(),
+                            |t| this.done_todo_card(t, cx).into_any_element(),
+                        )
                 } else if remote::is_remote(&ids[index]) {
                     (this.remote_board_card(&ids[index], cx))
                         .map_or_else(|| div().into_any_element(), |c| c.into_any_element())
