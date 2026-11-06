@@ -353,6 +353,12 @@ impl Host {
                     && !files
                         .get(&process.pid)
                         .is_some_and(|paths| paths.contains(&session.transcript))
+                    && !crate::recognition::only_cli_of_screen_bound(
+                        session,
+                        process,
+                        processes,
+                        &self.workspace,
+                    )
                 {
                     continue;
                 }

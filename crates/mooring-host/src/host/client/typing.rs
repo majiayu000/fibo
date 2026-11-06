@@ -219,6 +219,7 @@ pub(in crate::host) fn answer_trust(
 /// A 「Task is still running」 menu on screen is answered instead, read under the lock the
 /// key goes out under: Enter only with the cursor on 「Cancel task」, since its other
 /// options leave the task running or quit the Agent.
+const PRESS_GAP_MS: u64 = 150;
 pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
     let w = lock(shared)?.snapshot();
     let session =
@@ -230,7 +231,9 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
             state.label()
         )));
     }
-    let key = crate::agents::adapter(session.runtime).interrupt_key();
+    let cli = crate::agents::adapter(session.runtime);
+    let key = cli.interrupt_key();
+    let mut presses = 1;
     let terminal = lock(shared)?
         .terminals
         .get(id)
@@ -243,7 +246,10 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
         }
         let tail = live.vt.tail_text(usize::from(live.rows))?;
         let bytes: &[u8] = match crate::screen_ask::cancel_menu(&tail) {
-            None => key,
+            None => {
+                presses = cli.interrupt_presses();
+                key
+            }
             Some(menu) if menu.on_cancel => b"\r",
             Some(_) => {
                 return Err(io::Error::other(
@@ -253,6 +259,14 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
         };
         pty::write(&mut live.master, bytes)?;
         live.input_at = Some(Instant::now());
+    }
+    // Apart, or a CLI reads them as one Alt-Esc; the lock stays free for its output.
+    for _ in 1..presses {
+        thread::sleep(Duration::from_millis(PRESS_GAP_MS));
+        let mut live = lock(&terminal)?;
+        if !live.exited {
+            pty::write(&mut live.master, key)?;
+        }
     }
     typed(shared, id, false)
 }

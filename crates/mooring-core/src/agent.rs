@@ -180,6 +180,28 @@ pub struct AgentSpec {
     pub prompt: PromptLine,
     /// The declaration it came from; `None` for a built-in.
     pub file: Option<PathBuf>,
+    /// api 2: its screen rules, the text of a `screen_rules` file. `None`: Claude Code's.
+    pub screen_rules: Option<String>,
+    /// api 2: what interrupts a turn and leaves it alive. `None`: Ctrl-C.
+    pub interrupt: Option<Interrupt>,
+}
+
+/// Keys that interrupt a CLI's running turn, for one where Ctrl-C does something else.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Interrupt {
+    pub key: &'static [u8],
+    /// How many times, for a CLI that asks to press again.
+    pub presses: u32,
+}
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InterruptDeclared {
+    key: String,
+    #[serde(default = "one_press")]
+    presses: u32,
+}
+fn one_press() -> u32 {
+    1
 }
 
 /// How a CLI draws an ask the user sent, in the terminal's history: the mark the row
@@ -350,6 +372,10 @@ struct Declaration {
     source: Option<RecordSource>,
     #[serde(default)]
     prompt: PromptLine,
+    #[serde(default)]
+    screen_rules: Option<serde_json::Value>,
+    #[serde(default)]
+    interrupt: Option<InterruptDeclared>,
 }
 
 /// One declaration file's outcome, for settings and diagnostics.
@@ -415,6 +441,8 @@ fn builtin() -> Vec<AgentSpec> {
         source: None,
         prompt: PromptLine::default(),
         file: None,
+        screen_rules: None,
+        interrupt: None,
     };
     let marked = |spec: AgentSpec, markers: &[&str], pins_own| AgentSpec {
         prompt: PromptLine {
@@ -710,6 +738,27 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             }
         }
     }
+    if d.api < 2 && (d.screen_rules.is_some() || d.interrupt.is_some()) {
+        return Err("screen_rules 和 interrupt 需要 api 2".into());
+    }
+    let screen_rules = d.screen_rules.as_ref().map(|r| r.to_string());
+    let interrupt = match d.interrupt {
+        None => None,
+        Some(i) => {
+            let key: &'static [u8] = match i.key.as_str() {
+                "esc" => b"\x1b",
+                "ctrl-c" => b"\x03",
+                other => return Err(format!("interrupt.key 只能是 esc 或 ctrl-c，不是 {other}")),
+            };
+            if !(1..=3).contains(&i.presses) {
+                return Err("interrupt.presses 要在 1 到 3 之间".into());
+            }
+            Some(Interrupt {
+                key,
+                presses: i.presses,
+            })
+        }
+    };
     let name = if d.name.trim().is_empty() {
         d.id.clone()
     } else {
@@ -726,6 +775,8 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
         source,
         prompt: d.prompt,
         file: Some(file.to_owned()),
+        screen_rules,
+        interrupt,
     })
 }
 

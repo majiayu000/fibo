@@ -106,6 +106,10 @@ pub trait Adapter: Sync {
     fn interrupt_key(&self) -> &'static [u8] {
         b"\x03"
     }
+    /// How many times to press it, for a CLI that asks to press again.
+    fn interrupt_presses(&self) -> u32 {
+        1
+    }
     /// Its 「trust this folder?」 prompt, from a screen's last filled lines.
     fn trust_screen(&self, _lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
         None

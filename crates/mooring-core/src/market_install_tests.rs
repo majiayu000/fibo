@@ -581,3 +581,28 @@ fn a_version_directory_outside_the_plugin_is_refused() {
     let _ = std::fs::remove_dir_all(&catalog);
     assert!(err.contains("不安全"), "{err}");
 }
+
+/// The OpenCode plugin in this repository: its newest version declares what only a level 4
+/// build reads, and a build before that gets the version it can load. Dropping `mooring` or
+/// `versions/0.1.0` leaves an older build with a plugin that does not take effect.
+#[test]
+fn a_build_too_old_for_the_opencode_declarations_gets_the_version_before_them() {
+    let catalog = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+    let entry = index_of(&catalog)
+        .unwrap()
+        .plugins
+        .into_iter()
+        .find(|e| e.id == "opencode")
+        .unwrap();
+    assert_eq!(entry.version, "0.2.0");
+    assert_eq!(entry.mooring, Some(4));
+    assert!(entry.compatible(), "this build reads it");
+    assert_eq!(entry.for_this_build().version, "0.2.0");
+
+    let mut older_build = entry;
+    older_build.mooring = Some(plugin::LEVEL + 1);
+    let chosen = older_build.for_this_build();
+    assert_eq!(chosen.version, "0.1.0");
+    let old = std::fs::read_to_string(catalog.join("opencode/versions/0.1.0/agent.json")).unwrap();
+    assert!(!old.contains("screen_rules") && !old.contains("interrupt"));
+}
