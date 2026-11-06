@@ -68,6 +68,7 @@ mod tests {
         for op in [
             "hello",
             "list",
+            "cards",
             "read",
             "chat",
             "watch",

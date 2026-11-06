@@ -1,7 +1,7 @@
 // One conversation: your words in grey bubbles, the Agent's flat, its work folded into a
 // line that opens each call it made; the approval or question it waits on; a composer card whose
 // send key turns into stop while the Agent runs.
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import { approve, deny, oops } from '@/actions';
@@ -112,8 +112,11 @@ export default function Chat() {
   }, [online, machine, terminal, cardSession, tools]);
 
   // New messages: the Agent's words mid-turn raise no event, so ask every two seconds.
+  // Only while this screen shows: a tool's page opened over it asks nothing, and the next tick
+  // after coming back asks for whatever came meanwhile.
+  const focused = useIsFocused();
   useEffect(() => {
-    if (!session || !online) return;
+    if (!session || !online || !focused) return;
     const timer = setInterval(async () => {
       const r = remote(machine);
       if (!r) return;
@@ -126,7 +129,7 @@ export default function Chat() {
       }
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [session, online, machine, tools]);
+  }, [session, online, machine, tools, focused]);
 
   // A sent message shows until the log has it, or for half a minute.
   useEffect(() => {

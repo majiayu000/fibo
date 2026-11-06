@@ -7,6 +7,7 @@ import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { forgetMachine, loadMachines, machineId, saveMachine } from '../store/machines';
 import { forgetQuota } from '../store/quota';
+import { type CardsReply, patch, refreshWait } from './cards';
 import { HEARTBEAT_MS, Remote, type RemoteError } from './client';
 import { named } from './named';
 import { closeOutcome } from './close';
@@ -104,6 +105,7 @@ export function stage(links: Link[], d: Dial) {
   state = { ...state, loaded: false, machines: [] };
   remotes.clear();
   dialing.clear();
+  flights.clear();
   for (const id of [...retry.keys()]) stopRetry(id);
 }
 const listeners = new Set<() => void>();
@@ -129,22 +131,61 @@ function set(id: string, patch: Partial<Machine>) {
 
 const get = (id: string) => state.machines.find((m) => m.id === id);
 
-async function refresh(id: string) {
-  const r = remotes.get(id);
-  if (!r) return;
-  try {
+/** What `spaces` says, as a machine keeps it; only when the reply says it. */
+function listed(list: { spaces?: any[]; todos?: Todo[]; machine?: { name?: string } }, id: string): Partial<Machine> {
+  return {
+    ...(list.spaces && {
+      spaces: Object.fromEntries(list.spaces.map((s: any) => [s.id, s.name])),
+      spaceDirs: Object.fromEntries(list.spaces.filter((s: any) => s.cwd).map((s: any) => [s.cwd, s.name])),
+    }),
+    ...(list.todos && { todos: list.todos }),
+    name: list.machine?.name || get(id)?.name || '',
+    updated: Date.now() / 1000,
+  };
+}
+
+/** The `rev` each connection last gave, what its next `cards` is relative to. */
+const revs = new WeakMap<Remote, number>();
+
+/** The list from the machine: as what changed when it can say that, else whole. */
+async function load(id: string, r: Remote) {
+  if (!supports(get(id), 'cards')) {
     const list = await r.request('list');
-    set(id, {
-      cards: list.terminals,
-      spaces: Object.fromEntries((list.spaces ?? []).map((s: any) => [s.id, s.name])),
-      spaceDirs: Object.fromEntries((list.spaces ?? []).filter((s: any) => s.cwd).map((s: any) => [s.cwd, s.name])),
-      todos: list.todos ?? [],
-      name: list.machine?.name || get(id)?.name || '',
-      updated: Date.now() / 1000,
-    });
-  } catch {
-    // A failed list on a live connection shows as the connection ending.
+    set(id, { cards: list.terminals, ...listed({ ...list, spaces: list.spaces ?? [], todos: list.todos ?? [] }, id) });
+    return;
   }
+  const since = revs.get(r);
+  const reply: CardsReply<Card> & Parameters<typeof listed>[0] = await r.request('cards', since === undefined ? {} : { since });
+  if (remotes.get(id) !== r) return;
+  const cards = patch(since === undefined ? [] : (get(id)?.cards ?? []), reply);
+  if (!cards) {
+    // It named a card this phone does not have: out of step, so the whole list.
+    revs.delete(r);
+    return load(id, r);
+  }
+  revs.set(r, reply.rev);
+  set(id, { cards, ...listed(reply, id) });
+}
+
+/** The refresh on its way for a machine, and the one that follows it if more were asked for. */
+const flights = new Map<string, { done: Promise<void>; again?: Promise<void> }>();
+
+/** Reads the list now, or once more after the read in flight: their answers would race. */
+function refresh(id: string): Promise<void> {
+  const flying = flights.get(id);
+  if (flying) return (flying.again ??= flying.done.then(() => refresh(id)));
+  const r = remotes.get(id);
+  if (!r) return Promise.resolve();
+  const flight: { done: Promise<void>; again?: Promise<void> } = {
+    done: load(id, r)
+      // A failed list on a live connection shows as the connection ending.
+      .catch(() => undefined)
+      .finally(() => {
+        if (flights.get(id) === flight) flights.delete(id);
+      }),
+  };
+  flights.set(id, flight);
+  return flight.done;
 }
 
 async function connect(id: string) {
@@ -237,6 +278,7 @@ function ended(id: string, code: number | undefined, fallback?: string, reason?:
 /** Follows the machine's events, a burst of them one list; opened again if it ends alone. */
 function follow(id: string, r: Remote): Promise<unknown> {
   let queued = false;
+  let last = 0;
   return r.stream('events', {}, (m) => {
     if (m.type === 'end') {
       // The connection ending ends it too; then the reconnect opens a new one.
@@ -250,8 +292,9 @@ function follow(id: string, r: Remote): Promise<unknown> {
     queued = true;
     setTimeout(() => {
       queued = false;
+      last = Date.now();
       refresh(id);
-    }, 150);
+    }, refreshWait(Date.now(), last));
   });
 }
 

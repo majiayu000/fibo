@@ -16,6 +16,7 @@
 //! Shapes and rules are in the Keepline repo's `specs/extensions/remote-protocol.md` and
 //! `relay.md` (not moved here).
 pub mod asks;
+pub mod cards;
 pub mod chat;
 pub mod client;
 pub mod close;

@@ -19,6 +19,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 mod asks;
+mod cards;
 mod chat;
 mod diff;
 mod diff_config;
@@ -159,7 +160,13 @@ pub fn serve(
     let (out, lines) = mpsc::sync_channel::<Value>(OUT_QUEUE);
     let writer = thread::spawn(move || {
         for line in lines {
-            if writeln!(output, "{line}")
+            // One write for the line: `writeln!` on an unbuffered socket writes each JSON
+            // token apart, and over a relay each write can become its own encrypted message,
+            // its own ACK from the phone and its own TCP packet.
+            let mut bytes = line.to_string().into_bytes();
+            bytes.push(b'\n');
+            if output
+                .write_all(&bytes)
                 .and_then(|_| output.flush())
                 .is_err()
             {
@@ -172,9 +179,15 @@ pub fn serve(
     let worker = {
         let (out, socket, access) = (out.clone(), socket.to_owned(), access.clone());
         thread::spawn(move || {
+            let mut listed = cards::Listed::default();
             for (id, request, client) in jobs {
-                let result = unary(&socket, &request, client.as_deref(), access.role);
                 let op = request["op"].as_str().unwrap_or_default();
+                let result = match op {
+                    "cards" => {
+                        full_list(&socket).map(|full| listed.reply(full, request["since"].as_u64()))
+                    }
+                    _ => unary(&socket, &request, client.as_deref(), access.role),
+                };
                 if devices::acts(op) {
                     access.record(op, &request, &result);
                     if result.is_ok() {
@@ -381,21 +394,25 @@ fn ok_reply(reply: Reply) -> io::Result<Value> {
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }
+/// The whole of `list`, read from the host.
+fn full_list(socket: &Path) -> io::Result<Value> {
+    match rpc(socket, &Request::Workspace)? {
+        Reply::Workspace(w) => {
+            // Which terminals run an Agent no conversation is tied to; without it they
+            // still list, as shells.
+            let seen = match rpc(socket, &Request::RecognitionStatus) {
+                Ok(Reply::Recognition(r)) => r,
+                _ => Default::default(),
+            };
+            list::list(&w, &seen, socket)
+        }
+        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+    }
+}
 fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io::Result<Value> {
     let terminal = || text(request, "terminal").map(str::to_owned);
     match request["op"].as_str().unwrap_or_default() {
-        "list" => match rpc(socket, &Request::Workspace)? {
-            Reply::Workspace(w) => {
-                // Which terminals run an Agent no conversation is tied to; without it they
-                // still list, as shells.
-                let seen = match rpc(socket, &Request::RecognitionStatus) {
-                    Ok(Reply::Recognition(r)) => r,
-                    _ => Default::default(),
-                };
-                list::list(&w, &seen, socket)
-            }
-            other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-        },
+        "list" => full_list(socket),
         "read" => {
             let lines = request["lines"].as_u64().unwrap_or(50).clamp(1, 2000) as usize;
             match rpc(

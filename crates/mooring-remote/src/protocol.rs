@@ -9,6 +9,7 @@ use serde_json::{Map, Value};
 pub const VERSION: u32 = 1;
 pub const MAX_LINE: usize = 1 << 20;
 pub use crate::asks::*;
+pub use crate::cards::*;
 pub use crate::chat::*;
 pub use crate::tools::*;
 pub use crate::usage::*;
@@ -33,6 +34,12 @@ pub enum Op {
     },
     /// Replies [`List`].
     List,
+    /// What `list` says, sent as what changed since this connection's `since`: [`Cards`].
+    /// Without `since`, or with one this connection did not just give, all of it.
+    Cards {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        since: Option<u64>,
+    },
     /// The last `lines` (default 50, at most 2000) of a screen as plain text: [`Text`].
     Read {
         terminal: String,
@@ -294,6 +301,7 @@ impl Op {
             Self::Backfill { .. } => "backfill",
             Self::ToolCall { .. } => "toolcall",
             Self::Suggestion { .. } => "suggestion",
+            Self::Cards { .. } => "cards",
         }
     }
 }
@@ -302,6 +310,7 @@ impl Op {
 pub const OPS: &[&str] = &[
     "hello",
     "list",
+    "cards",
     "read",
     "send",
     "keys",
