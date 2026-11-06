@@ -40,7 +40,10 @@ impl Workbench {
                 keep.push(out.len());
             }
             out.push(match item {
-                Item::Here(l) => self.session_row(l, current, None, End::State, cx),
+                Item::Here(l) => {
+                    self.note_row(out.len(), &l);
+                    self.session_row(l, current, None, End::State, cx)
+                }
                 Item::There(r) => self.remote_row(r, cx),
             });
         }
@@ -116,15 +119,13 @@ impl Workbench {
                         let d = if lines && asks { second(&l) } else { None };
                         push(out, l, d, End::State);
                     }
-                    // Outside the preset's limit: another machine asking is never hidden.
                     Item::There(r) => out.push(self.remote_row(r, cx)),
                 }
             }
             self.sidebar.reveal(key, start, &keep, out);
         }
         // What is no longer moving, open in a tab or closed: today's in full, the
-        // rest folded into one line, as flat.html has it. These rows skip the
-        // preset's limit, which is there to keep 要你处理 and 在跑 on one screen.
+        // rest folded into one line, as flat.html has it.
         let history: Vec<(Item, u64)> = stopped
             .into_iter()
             .chain(quiet)

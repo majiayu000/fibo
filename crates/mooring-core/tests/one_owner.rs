@@ -255,3 +255,49 @@ fn a_todo_and_its_sessions_move_together() {
         .unwrap();
     assert_eq!(next.task, None);
 }
+
+#[test]
+fn a_started_todo_stays_unfinished_until_you_close_it() {
+    let mut w = every_state();
+    w.tasks.clear();
+    w.task_outcomes.clear();
+    w.tasks.push(Task {
+        id: "t".into(),
+        space: w.spaces[0].id.clone(),
+        title: "事".into(),
+        description: String::new(),
+        acceptance: vec![],
+        agent: Agent::default(),
+    });
+    w.agent_sessions[0].task = Some("t".into());
+    assert!(status::open_todos(&w, now()).is_empty());
+    assert_eq!(status::unfinished_todos(&w, now()).len(), 1);
+    w.task_outcomes.insert("t".into(), Outcome::Completed);
+    assert!(status::unfinished_todos(&w, now()).is_empty());
+}
+
+#[test]
+fn the_newest_todo_comes_first() {
+    let mut w = Workspace::default();
+    for (id, at) in [("old", 10), ("new", 30), ("mid", 20), ("legacy", 0)] {
+        w.tasks.push(Task {
+            id: id.into(),
+            space: "s".into(),
+            title: id.into(),
+            description: String::new(),
+            acceptance: vec![],
+            agent: Default::default(),
+        });
+        w.task_logs.insert(
+            id.into(),
+            mooring_core::model::TaskLog {
+                created: Some(at).filter(|at| *at > 0),
+                ..Default::default()
+            },
+        );
+    }
+    let order: Vec<_> = (status::unfinished_todos(&w, 100).iter())
+        .map(|t| t.id.as_str())
+        .collect();
+    assert_eq!(order, ["new", "mid", "old", "legacy"]);
+}

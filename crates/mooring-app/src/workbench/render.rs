@@ -27,6 +27,7 @@ impl Render for Workbench {
             self.layout.revealed_tab = self.nav.tab.clone();
         }
         self.before_render(window, cx);
+        self.settle_board_transients(cx);
         // The overview and 逐个清理 take the main area beside the sidebar; the top bar,
         // sidebar and tab strip stay, so leaving is a click in the same place or Esc.
         let page = if self.tasks.form.is_some() {
@@ -40,6 +41,8 @@ impl Render for Workbench {
         };
         if self.nav.pending_focus
             && page.is_some()
+            // Nothing arriving through here takes the keyboard from the card being written.
+            && self.tasks.board_quick.is_none()
             && !self.search.is_open()
             && self.diagnostics.is_none()
             && self.settings.is_none()
@@ -619,13 +622,25 @@ impl Render for Workbench {
                                 return;
                             }
                         }
+                        if k.key == "n"
+                            && !k.modifiers.modified()
+                            && this.nav.task_detail.is_none()
+                            && !this.search.is_open()
+                            && this.tasks.board_quick.is_none()
+                        {
+                            this.show_quick_task(window, cx);
+                            cx.stop_propagation();
+                            return;
+                        }
                         if k.key != "escape" || k.modifiers.modified() {
                             return;
                         }
                         // A card's menu closes first, then the drawer; 逐个清理 steps back
                         // to the overview.
-                        if this.overview.card_menu.take().is_some()
+                        if this.tasks.picking.take().is_some()
+                            || this.overview.card_menu.take().is_some()
                             || this.overview.drawer.take().is_some()
+                            || this.nav.task_detail.take().is_some()
                         {
                         } else if !this.overview.cleanup.is_empty() {
                             this.overview.cleanup.clear();
