@@ -105,7 +105,7 @@ impl Pane {
     ) {
         window.focus(&self.focus, cx);
         self.take_size(cx);
-        if event.modifiers.platform
+        if event.modifiers.secondary()
             && event.button == gpui::MouseButton::Left
             && let Some((y, x)) = self.cell_at(event.position)
             && let Some(link) = self.screen.link_at(y, x)
@@ -115,7 +115,7 @@ impl Pane {
             return;
         }
         // ⌘ opens it as iTerm2 and Ghostty do; ⌘⌥ shows it in Finder instead.
-        if event.modifiers.platform
+        if event.modifiers.secondary()
             && event.button == gpui::MouseButton::Left
             && let Some(target) = self.path_target()
         {

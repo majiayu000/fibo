@@ -577,6 +577,10 @@ impl Theme {
     pub const SEARCH_MIN: f32 = 180.;
     pub const HERE_LABEL: f32 = 96.;
     pub const FIELD_HEIGHT: f32 = 40.;
+    /// A window button drawn by the app, where the system leaves that to it.
+    pub const WINDOW_BUTTON_WIDTH: f32 = 46.;
+    pub const WINDOW_BUTTON_GLYPH: f32 = 10.;
+    pub const WINDOW_CLOSE_HOVER: u32 = 0xc42b1c;
     pub const WINDOW_WIDTH: f32 = 1440.;
     pub const WINDOW_HEIGHT: f32 = 900.;
     // workbench refresh: overview/sidebar/cleanup

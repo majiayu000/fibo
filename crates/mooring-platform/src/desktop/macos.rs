@@ -1,3 +1,6 @@
+pub const HAS_COMMAND_KEY: bool = true;
+pub const DRAWS_WINDOW_BUTTONS: bool = false;
+
 pub fn reduce_motion() -> bool {
     std::process::Command::new("defaults")
         .args(["read", "com.apple.universalaccess", "reduceMotion"])

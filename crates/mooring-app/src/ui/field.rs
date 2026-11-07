@@ -264,7 +264,7 @@ impl Field {
             return;
         }
         let m = &event.keystroke.modifiers;
-        let (cmd, alt, shift) = (m.platform, m.alt, m.shift);
+        let (cmd, alt, shift) = (m.secondary(), m.alt, m.shift);
         let head = self.head();
         match event.keystroke.key.as_str() {
             "a" if cmd => self.select_all(),

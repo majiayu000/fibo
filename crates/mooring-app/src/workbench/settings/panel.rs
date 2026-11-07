@@ -49,7 +49,7 @@ impl Render for SettingsView {
                 }),
             )
             .on_key_down(|event: &gpui::KeyDownEvent, _, cx| {
-                if event.keystroke.modifiers.platform {
+                if crate::keymap::command_key(&event.keystroke.modifiers) {
                     cx.stop_propagation();
                 }
             })
