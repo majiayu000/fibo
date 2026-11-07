@@ -1,14 +1,6 @@
 use super::*;
 use mooring_core::model::{Space, Terminal};
 #[test]
-fn process_cwd_reads_the_kernel_directory() {
-    assert_eq!(
-        process_cwd(std::process::id()).map(PathBuf::from),
-        std::env::current_dir().ok()
-    );
-}
-
-#[test]
 fn codex_wrapper_and_native_child_with_one_resume_id_bind_once() {
     let mut w = Workspace::default();
     w.terminals.push(Terminal {

@@ -38,8 +38,7 @@ pub struct Transcript {
 }
 
 mod processes;
-pub use processes::{claude_transcript_off, process_cwd, processes};
-pub(crate) use processes::{process_argv, process_env};
+pub use processes::{claude_transcript_off, processes};
 
 pub fn roots() -> io::Result<Vec<(Agent, PathBuf)>> {
     let home =

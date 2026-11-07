@@ -1,19 +1,10 @@
+use crate::myself;
 use mooring_platform::process::{Group, exists, kill};
 use std::path::Path;
-use std::process::Command;
 use std::time::{Duration, Instant};
 
 /// Set on the copies of this test program that play the part of a command.
-const PID_FILE: &str = "MOORING_CONTRACT_PID_FILE";
-
-/// This test program started again as `helper`, the one way to get a process that lasts a
-/// while without assuming any command exists on the machine.
-fn myself(helper: &str, pid_file: &Path) -> Command {
-    let mut cmd = Command::new(std::env::current_exe().unwrap());
-    cmd.args([helper, "--exact", "--ignored", "--nocapture"])
-        .env(PID_FILE, pid_file);
-    cmd
-}
+pub const PID_FILE: &str = "MOORING_CONTRACT_PID_FILE";
 
 fn wait_until(what: &str, mut ok: impl FnMut() -> bool) {
     let start = Instant::now();

@@ -10,6 +10,8 @@
 pub mod clock;
 pub mod desktop;
 pub mod dirs;
+pub mod exit_watch;
 pub mod fs;
+pub mod inspect;
 pub mod process;
 pub mod shell;

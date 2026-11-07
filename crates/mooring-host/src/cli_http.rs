@@ -32,7 +32,7 @@ pub struct Endpoint {
 pub fn endpoint(api: &Answers, pid: u32) -> Option<Endpoint> {
     let port = listening_port(pid)?;
     let auth = api.password_env.as_deref().and_then(|name| {
-        let password = crate::recognition::process_env(pid, name)?;
+        let password = mooring_platform::inspect::env_var(pid, name)?;
         let user = api.username.as_deref().unwrap_or_default();
         Some(format!(
             "Basic {}",

@@ -1,88 +1,16 @@
 use super::{Process, PS_SPAWNS};
 use mooring_core::model::{Agent, ProcessState, Workspace};
+use mooring_platform::inspect;
 use std::{
     collections::{HashMap, HashSet},
     io,
 };
 
 use std::sync::atomic::Ordering;
-/// Read argv boundaries from the kernel, never parse a prompt out of `ps command`.
-/// KERN_PROCARGS2 also returns an environment tail; stop after argc and never retain it.
-pub(crate) fn process_argv(pid: u32) -> io::Result<Vec<String>> {
-    let bytes = procargs(pid)?;
-    let Some((argc, mut pos)) = argv_start(&bytes) else {
-        return Ok(vec![]);
-    };
-    let mut args = Vec::new();
-    for _ in 0..argc {
-        let Some(end) = bytes[pos..].iter().position(|b| *b == 0) else {
-            break;
-        };
-        args.push(String::from_utf8_lossy(&bytes[pos..pos + end]).into_owned());
-        pos += end + 1;
-    }
-    Ok(args)
-}
-fn procargs(pid: u32) -> io::Result<Vec<u8>> {
-    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as i32];
-    let mut len = 0;
-    if unsafe {
-        libc::sysctl(
-            mib.as_mut_ptr(),
-            3,
-            std::ptr::null_mut(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        )
-    } != 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    let mut bytes = vec![0u8; len];
-    if unsafe {
-        libc::sysctl(
-            mib.as_mut_ptr(),
-            3,
-            bytes.as_mut_ptr().cast(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        )
-    } != 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    bytes.truncate(len);
-    Ok(bytes)
-}
-/// argc and the offset of argv[0], past the executable path and its padding.
-fn argv_start(bytes: &[u8]) -> Option<(usize, usize)> {
-    if bytes.len() < 4 {
-        return None;
-    }
-    let argc = i32::from_ne_bytes(bytes[..4].try_into().unwrap()).max(0) as usize;
-    let end = bytes[4..].iter().position(|b| *b == 0)?;
-    let mut pos = 4 + end;
-    while bytes.get(pos) == Some(&0) {
-        pos += 1;
-    }
-    Some((argc, pos))
-}
 /// Claude Code writes no transcript when it believes it is a nested child session, so
-/// nothing can ever bind it. Only the variable's name is checked; no value is kept.
+/// nothing can ever bind it. Only the variable's presence matters; its value is not kept.
 pub fn claude_transcript_off(pid: u32) -> bool {
-    procargs(pid).is_ok_and(|bytes| env_has(&bytes, "CLAUDE_CODE_CHILD_SESSION"))
-}
-/// The value of one environment variable from a KERN_PROCARGS2 buffer; nothing else of
-/// the environment is read past it or kept.
-pub(super) fn env_value(bytes: &[u8], key: &str) -> Option<String> {
-    let (argc, pos) = argv_start(bytes)?;
-    bytes[pos..]
-        .split(|b| *b == 0)
-        .skip(argc)
-        .find_map(|e| e.strip_prefix(key.as_bytes())?.strip_prefix(b"="))
-        .map(|v| String::from_utf8_lossy(v).into_owned())
+    inspect::env_var(pid, "CLAUDE_CODE_CHILD_SESSION").is_some()
 }
 /// The Agent a `MOORING_AGENT` value names, by key or executable, in any case.
 pub(super) fn agent_named(value: &str) -> Option<Agent> {
@@ -119,16 +47,6 @@ pub(super) fn hinted_roots(
         .map(|(pid, agent)| (*pid, *agent))
         .collect()
 }
-pub(super) fn env_has(bytes: &[u8], key: &str) -> bool {
-    let Some((argc, pos)) = argv_start(bytes) else {
-        return false;
-    };
-    let mut entries = bytes[pos..].split(|b| *b == 0).skip(argc);
-    entries.any(|e| {
-        e.strip_prefix(key.as_bytes())
-            .is_some_and(|rest| rest.first() == Some(&b'='))
-    })
-}
 /// Enumerate only the trees rooted at live PTYs. No global ps or process-name scan.
 pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
     let mut pending: Vec<_> = workspace
@@ -145,37 +63,9 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
             continue;
         }
         selected.push(pid);
-        let count = unsafe { libc::proc_listchildpids(pid as i32, std::ptr::null_mut(), 0) };
-        if count < 0 {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() == Some(libc::ESRCH) {
-                continue;
-            }
-            return Err(error);
-        }
-        let mut children = vec![0i32; count as usize + 32];
-        let count = unsafe {
-            libc::proc_listchildpids(
-                pid as i32,
-                children.as_mut_ptr().cast(),
-                (children.len() * std::mem::size_of::<i32>()) as i32,
-            )
-        };
-        if count < 0 {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() == Some(libc::ESRCH) {
-                continue;
-            }
-            return Err(error);
-        }
-        if count as usize >= children.len() {
-            return Err(io::Error::other(
-                "managed process tree changed during enumeration; retry on next event",
-            ));
-        }
-        for child in children[..count as usize].iter().filter(|p| **p > 0) {
-            parents.insert(*child as u32, pid);
-            pending.push(*child as u32);
+        for child in inspect::children(pid)? {
+            parents.insert(child, pid);
+            pending.push(child);
         }
     }
     if selected.is_empty() {
@@ -189,13 +79,10 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
     let mut raw = vec![];
     for pid in selected {
         let parent = parents.get(&pid).copied().unwrap_or(0);
-        let command = process_argv(pid).unwrap_or_default().join(" ");
+        let command = inspect::argv(pid).unwrap_or_default().join(" ");
         let runtime = crate::agents::from_command(&command);
         let hint = if runtime.is_none() {
-            procargs(pid)
-                .ok()
-                .and_then(|b| env_value(&b, mooring_core::protocol::AGENT_ENV))
-                .and_then(|v| agent_named(&v))
+            inspect::env_var(pid, mooring_core::protocol::AGENT_ENV).and_then(|v| agent_named(&v))
         } else {
             None
         };
@@ -206,7 +93,7 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
     for (pid, parent, runtime, _) in raw {
         let runtime = runtime.or_else(|| hinted.get(&pid).copied());
         let args = if runtime.is_some() {
-            process_argv(pid).unwrap_or_default()
+            inspect::argv(pid).unwrap_or_default()
         } else {
             vec![]
         };
@@ -226,28 +113,4 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
         });
     }
     Ok(processes)
-}
-pub fn process_cwd(pid: u32) -> Option<String> {
-    let mut info = std::mem::MaybeUninit::<libc::proc_vnodepathinfo>::zeroed();
-    let size = std::mem::size_of::<libc::proc_vnodepathinfo>() as i32;
-    // SAFETY: the kernel writes at most `size` bytes into the zeroed buffer.
-    let n = unsafe {
-        libc::proc_pidinfo(
-            pid as i32,
-            libc::PROC_PIDVNODEPATHINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            size,
-        )
-    };
-    if n != size {
-        return None;
-    }
-    let info = unsafe { info.assume_init() };
-    let path = unsafe { std::ffi::CStr::from_ptr(info.pvi_cdir.vip_path.as_ptr().cast()) };
-    Some(path.to_string_lossy().into_owned()).filter(|p| !p.is_empty())
-}
-/// A variable in a running process's environment, readable because it runs as this user.
-pub(crate) fn process_env(pid: u32, name: &str) -> Option<String> {
-    env_value(&procargs(pid).ok()?, name)
 }

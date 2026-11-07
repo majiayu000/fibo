@@ -13,6 +13,7 @@
 //! ran. The rules and the real cases behind them:
 //! docs/decisions/2026-11-04-background-shell-own-client.md.
 use crate::shell_match::runs;
+use mooring_platform::inspect;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::process::Command;
@@ -147,7 +148,7 @@ pub fn look(targets: &[(u32, Vec<(String, String)>)]) -> io::Result<HashMap<Stri
         let mut shells: Vec<(u32, String)> = children(*agent)
             .into_iter()
             .filter_map(|pid| {
-                let argv = crate::recognition::process_argv(pid).ok()?;
+                let argv = inspect::argv(pid).ok()?;
                 Some((pid, argv.join(" ")))
             })
             .collect();
@@ -172,7 +173,7 @@ pub fn look_at(pids: &[(String, u32)]) -> io::Result<HashMap<String, Seen>> {
 /// How long a process has run.
 pub fn age(pid: u32) -> u64 {
     let now = mooring_core::content::now();
-    started(pid).map_or(0, |at| now.saturating_sub(at))
+    inspect::started(pid).map_or(0, |at| now.saturating_sub(at))
 }
 fn seen_all(found: Vec<(String, u32, Vec<u32>)>, now: u64) -> io::Result<HashMap<String, Seen>> {
     let all: Vec<u32> = found
@@ -189,7 +190,7 @@ fn seen_all(found: Vec<(String, u32, Vec<u32>)>, now: u64) -> io::Result<HashMap
                 worker: tree
                     .iter()
                     .any(|p| !sockets.listening.contains_key(p) && children(*p).is_empty()),
-                age: started(pid).map_or(0, |at| now.saturating_sub(at)),
+                age: inspect::started(pid).map_or(0, |at| now.saturating_sub(at)),
             };
             (id, seen)
         })
@@ -201,22 +202,7 @@ pub(crate) fn contains(line: &[u8], needle: &[u8]) -> bool {
 }
 
 pub(crate) fn children(pid: u32) -> Vec<u32> {
-    let mut buf = vec![0i32; 256];
-    let n = unsafe {
-        libc::proc_listchildpids(
-            pid as i32,
-            buf.as_mut_ptr().cast(),
-            (buf.len() * std::mem::size_of::<i32>()) as i32,
-        )
-    };
-    if n <= 0 {
-        return vec![];
-    }
-    buf[..(n as usize).min(buf.len())]
-        .iter()
-        .filter(|p| **p > 0)
-        .map(|p| *p as u32)
-        .collect()
+    inspect::children(pid).unwrap_or_default()
 }
 fn tree(root: u32) -> Vec<u32> {
     let mut out = vec![];
@@ -229,21 +215,6 @@ fn tree(root: u32) -> Vec<u32> {
         }
     }
     out
-}
-/// When the process started, seconds since the epoch.
-pub(crate) fn started(pid: u32) -> Option<u64> {
-    let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
-    let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
-    let n = unsafe {
-        libc::proc_pidinfo(
-            pid as i32,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            (&mut info as *mut libc::proc_bsdinfo).cast(),
-            size,
-        )
-    };
-    (n == size).then_some(info.pbi_start_tvsec)
 }
 /// The TCP sockets of some processes that say what a shell is.
 #[derive(Debug, Default)]
