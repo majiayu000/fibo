@@ -70,6 +70,33 @@ fn cost(frames: u32, mut frame: impl FnMut(u32)) -> (f64, f64) {
     )
 }
 
+/// One stretch of terminal frames in the look `set` gives, after a full frame that shows it:
+/// CPU milliseconds per frame and the stretch's instructions.
+fn stretch(
+    handle: WindowHandle<Workbench>,
+    pane: &Entity<Pane>,
+    set: impl FnOnce(&mut gpui::App),
+    cx: &mut gpui::AsyncApp,
+) -> (f64, u64) {
+    cx.update(set);
+    cx.update_window(handle.into(), |_, w, a| {
+        w.refresh();
+        w.draw(a).clear(a);
+    })
+    .unwrap();
+    let per = FRAMES / STRETCHES;
+    let (cpu, ins) = (cpu_secs(), instructions());
+    for _ in 0..per {
+        pane.update(cx, |_, cx| cx.notify());
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    }
+    (
+        (cpu_secs() - cpu) / f64::from(per) * 1000.,
+        instructions() - ins,
+    )
+}
+
 fn copy_plugin(from: &std::path::Path, to: &std::path::Path) {
     std::fs::create_dir_all(to).unwrap();
     for entry in std::fs::read_dir(from).unwrap().flatten() {
@@ -108,19 +135,6 @@ pub(super) async fn run(
         "frames-probefull: {:.2} ms CPU, {:.2} M instructions",
         full.0, full.1
     ));
-    let plain = {
-        let cx = &mut *cx;
-        cost(FRAMES, |_| {
-            pane.update(cx, |_, cx| cx.notify());
-            cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
-                .unwrap();
-        })
-    };
-    out.push(format!(
-        "frames-probepane: {:.2} ms CPU, {:.2} M instructions",
-        plain.0, plain.1
-    ));
-
     // One open read 6.34 to 9.29 M from one build, more when the machine was busy: the middle
     // of several is what the gate compares, the first stays in the log for a slower cold start.
     let mut opens = Vec::new();
@@ -333,6 +347,14 @@ pub(super) async fn run(
         mooring_core::plugin::reload();
         ui::themes::reload(a);
     });
+    // Each theme against the plain look, drawn in turns stretch by stretch: one plain run
+    // seconds before the themes moved with the runner's speed, and one build read 0.73 to
+    // 2.37. A theme's picture stays decoded while the plain look shows (backdrop.rs).
+    let plain = cx.update(|a| {
+        a.try_global::<ui::appearance::Appearance>()
+            .cloned()
+            .unwrap_or_default()
+    });
     for (name, _, theme, light) in THEMES {
         cx.update(|a| ui::appearance::set_theme(theme, light, true, a))
             .unwrap();
@@ -357,15 +379,34 @@ pub(super) async fn run(
             "theme-applied {name}: {}",
             if applied { "yes" } else { "NO" }
         ));
-        let (ms, ins) = {
-            let cx = &mut *cx;
-            cost(FRAMES, |_| {
-                pane.update(cx, |_, cx| cx.notify());
-                cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
-                    .unwrap();
-            })
-        };
-        out.push(format!("{name}: {ms:.2} ms CPU, {ins:.2} M instructions"));
+        let (mut shares, mut ms, mut ins) = (Vec::new(), Vec::new(), 0);
+        for _ in 0..STRETCHES {
+            let base = plain.clone();
+            let (bare, _) = stretch(
+                handle,
+                pane,
+                |a| ui::appearance::choose(base, a).unwrap(),
+                cx,
+            );
+            let (themed, n) = stretch(
+                handle,
+                pane,
+                |a| ui::appearance::set_theme(theme, light, true, a).unwrap(),
+                cx,
+            );
+            shares.push(themed / bare);
+            ms.push(themed);
+            ins += n;
+        }
+        shares.sort_by(f64::total_cmp);
+        ms.sort_by(f64::total_cmp);
+        let mid = ms.len() / 2;
+        out.push(format!(
+            "{name}: {:.2} ms CPU, {:.2} M instructions; {:.2} of the plain look's frame",
+            ms[mid],
+            ins as f64 / f64::from(FRAMES / STRETCHES * STRETCHES) / 1e6,
+            shares[mid]
+        ));
         cx.update_window(handle.into(), |_, w, a| {
             w.refresh();
             w.draw(a).clear(a);
