@@ -337,15 +337,18 @@ fn a_claude_hook_naming_a_grok_transcript_is_refused() {
 }
 
 fn rusqlite_binding(root: &std::path::Path, session: &str) -> Option<String> {
-    let out = Command::new("/usr/bin/sqlite3")
-        .arg("-readonly")
-        .arg(root.join("workbench.sqlite"))
-        .arg(format!(
-            "SELECT evidence FROM agent_bindings WHERE session_id='{session}'"
-        ))
-        .output()
-        .unwrap();
-    Some(String::from_utf8(out.stdout).unwrap().trim().to_owned()).filter(|s| !s.is_empty())
+    let db = rusqlite::Connection::open_with_flags(
+        root.join("workbench.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    db.query_row(
+        "SELECT evidence FROM agent_bindings WHERE session_id=?1",
+        [session],
+        |r| r.get::<_, String>(0),
+    )
+    .ok()
+    .filter(|s| !s.is_empty())
 }
 
 /// Real Claude Code, no model call: its SessionStart hook fires at startup, from a settings

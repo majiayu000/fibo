@@ -96,6 +96,37 @@ pub fn started_micros(pid: u32) -> Option<u64> {
     Some(boot * 1_000_000 + ticks * 1_000_000 / per_second)
 }
 
+pub fn usage(pid: u32) -> Option<super::Usage> {
+    // Fields 14 and 15, in clock ticks.
+    let fields = stat_fields(pid)?;
+    let user: u64 = fields.get(11)?.parse().ok()?;
+    let system: u64 = fields.get(12)?.parse().ok()?;
+    let per_second = u64::try_from(unsafe { libc::sysconf(libc::_SC_CLK_TCK) })
+        .ok()
+        .filter(|t| *t > 0)?;
+    // Not everywhere readable, and a container may hide it: then no disk counts.
+    let io = std::fs::read_to_string(proc_file(pid, "io")).unwrap_or_default();
+    let count = |name: &str| {
+        io.lines()
+            .find_map(|l| l.strip_prefix(name)?.trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+    Some(super::Usage {
+        cpu: std::time::Duration::from_micros((user + system) * 1_000_000 / per_second),
+        disk_read: count("read_bytes:"),
+        disk_written: count("write_bytes:"),
+        instructions: 0,
+        syscalls: 0,
+    })
+}
+
+pub fn first_handed_out_port() -> u16 {
+    std::fs::read_to_string("/proc/sys/net/ipv4/ip_local_port_range")
+        .ok()
+        .and_then(|range| range.split_whitespace().next()?.parse().ok())
+        .unwrap_or(32768)
+}
+
 pub fn all_pids() -> Vec<u32> {
     let Ok(entries) = std::fs::read_dir("/proc") else {
         return vec![];
@@ -106,7 +137,12 @@ pub fn all_pids() -> Vec<u32> {
         .collect()
 }
 
+/// The program's file, as macOS names a process. Where that is not ours to read, or there is
+/// no file (a kernel thread), what the kernel calls it, of which it keeps 15 bytes.
 pub fn name(pid: u32) -> Option<String> {
+    if let Ok(path) = std::fs::read_link(proc_file(pid, "exe")) {
+        return Some(path.file_name()?.to_string_lossy().into_owned());
+    }
     let name = std::fs::read_to_string(proc_file(pid, "comm")).ok()?;
     Some(name.trim_end_matches('\n').to_owned())
 }

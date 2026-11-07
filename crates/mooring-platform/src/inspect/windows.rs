@@ -8,7 +8,8 @@ use windows_sys::Win32::System::ProcessStatus::{
     K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX,
 };
 use windows_sys::Win32::System::Threading::{
-    GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    GetProcessIoCounters, GetProcessTimes, IO_COUNTERS, OpenProcess,
+    PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 
 fn later() -> io::Error {
@@ -65,6 +66,11 @@ pub fn children(pid: u32) -> io::Result<Vec<u32>> {
         }
     })?;
     Ok(out)
+}
+
+/// The dynamic range's default since Windows Vista.
+pub fn first_handed_out_port() -> u16 {
+    49152
 }
 
 pub fn all_pids() -> Vec<u32> {
@@ -124,6 +130,28 @@ pub fn memory(pid: u32) -> Option<u64> {
         K32GetProcessMemoryInfo(process.as_raw_handle(), (&raw mut counters).cast(), size)
     };
     (ok != 0).then_some(counters.PrivateUsage as u64)
+}
+
+pub fn usage(pid: u32) -> Option<super::Usage> {
+    let process = open(pid)?;
+    let as_ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
+    // SAFETY: each struct is written by its call.
+    unsafe {
+        let mut times: [FILETIME; 4] = std::mem::zeroed();
+        let [created, exited, kernel, user] = &mut times;
+        if GetProcessTimes(process.as_raw_handle(), created, exited, kernel, user) == 0 {
+            return None;
+        }
+        let mut io: IO_COUNTERS = std::mem::zeroed();
+        GetProcessIoCounters(process.as_raw_handle(), &mut io);
+        Some(super::Usage {
+            cpu: std::time::Duration::from_nanos((as_ticks(times[2]) + as_ticks(times[3])) * 100),
+            disk_read: io.ReadTransferCount,
+            disk_written: io.WriteTransferCount,
+            instructions: 0,
+            syscalls: 0,
+        })
+    }
 }
 
 pub fn started_micros(pid: u32) -> Option<u64> {
