@@ -1,6 +1,6 @@
 # Windows 原生支持：现状和下一步
 
-要支撑的决定：`mooring-host` 的 Windows 工作有多大、按什么顺序做。放弃条件见「第 2 步」。
+要支撑的决定：`mooring-host` 的 Windows 工作有多大。**顺序和代码放哪里以 [多平台架构](../platform/index.html) 为准：平台代码只进 `mooring-platform`，不写进业务文件；先做 Linux，再做 Windows。**下文的步骤写于那之前。放弃条件见「第 2 步」。
 
 结论：`mooring-core` 已能编译到 Windows。host 不是小 `cfg` 能解决的，要新设计三处：终端、连接、交接。最该先做的是用真 ConPTY 验证读屏，它决定整个方案成不成立。
 
@@ -19,18 +19,18 @@
 
 `libghostty-vt-sys` 的构建脚本用 Zig 交叉编出了 `ghostty-vt.dll` 和 `.lib`，读屏用的解析库在 Windows 上至少能编出来，同样未运行。
 
-core 里的 Windows 实现，全部未运行：
+core 里的 Windows 实现（已搬到 `mooring-platform`）：
 
-- 进程组用 job object（`process.rs`）。std 不能让进程一启动就在 job 里，它刚启动时开的子进程会漏在外面。
-- 进程是否存在用 `OpenProcess`，无权打开算存在，避免误删它还在用的文件。
-- 本地时间用 CRT 的 `localtime_s` 和 `gmtime_s`。CRT 优先看 `TZ`，从 Git Bash 启动时要留意。
+- 进程组用 job object（`mooring-platform/src/process`）。std 不能让进程一启动就在 job 里，它刚启动时开的子进程会漏在外面。2026-11-07 已在真机运行，接口测试通过。
+- 进程是否存在用 `OpenProcess`，无权打开算存在，避免误删它还在用的文件。同样已运行。
+- 本地时间用 CRT 的 `localtime_s` 和 `gmtime_s`。CRT 优先看 `TZ`，从 Git Bash 启动时要留意。同样已运行。
 - 文件锁改用 std 的 `File::lock`。macOS 上它就是原来的 `flock`。
 
 core 里故意报错、还不能用的：
 
 - `delivery::attempt` 回「Windows 版后台还没有做好」。
 - `cli_entry` 放不了 PATH 链接。
-- 插件命令要 `sh`，只有 Git for Windows 且在 PATH 上才有，否则启动失败并报错。
+- 插件命令要 `sh`，只有装了 Git for Windows 才有，会到 PATH、`git.exe` 旁边和默认安装位置找；都没有时启动失败并报错。
 
 core 编译得过但在 Windows 上还不对的，第 0 步处理：
 
