@@ -19,3 +19,11 @@ pub fn link_program(_to: &Path, _at: &Path) -> io::Result<()> {
 pub fn create_private_dir(dir: &Path) -> io::Result<()> {
     std::fs::create_dir_all(dir)
 }
+
+/// std cannot count a file's names here; such a file loses its other names when replaced.
+pub fn hard_linked(_path: &Path) -> bool {
+    false
+}
+
+/// Files take the rights of their directory; there is no mode to narrow at creation.
+pub fn create_no_wider(_options: &mut std::fs::OpenOptions, _than: &std::fs::Permissions) {}

@@ -1,6 +1,7 @@
 //! Replacing a file another program owns (a CLI's settings, its skills folder) without
 //! changing anything but its bytes: its permissions may be guarding a key, and a link may
 //! be how the user keeps it in a dotfiles repository.
+use super::imp;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ const MOST_LINKS: u32 = 32;
 /// Returns whether anything was written. The same bytes leave the file untouched, since a
 /// new modification time wakes whatever watches it. A crash leaves the old file or the new
 /// one whole, except a hard-linked file: only writing in place reaches its other names.
-pub fn replace(path: &Path, bytes: &[u8]) -> io::Result<bool> {
+pub fn replace_file(path: &Path, bytes: &[u8]) -> io::Result<bool> {
     let real = through_links(path)?;
     match fs::read(&real) {
         Ok(now) if now == bytes => return Ok(false),
@@ -23,7 +24,7 @@ pub fn replace(path: &Path, bytes: &[u8]) -> io::Result<bool> {
     if let Some(dir) = real.parent() {
         fs::create_dir_all(dir)?;
     }
-    if hard_linked(&real) {
+    if imp::hard_linked(&real) {
         match fs::OpenOptions::new()
             .write(true)
             .truncate(true)
@@ -65,7 +66,7 @@ fn through_links(path: &Path) -> io::Result<PathBuf> {
                     io::ErrorKind::InvalidInput | io::ErrorKind::NotFound
                 ) =>
             {
-                return Ok(at)
+                return Ok(at);
             }
             Err(e) => return Err(e),
         }
@@ -74,16 +75,6 @@ fn through_links(path: &Path) -> io::Result<PathBuf> {
         "{} 的符号链接层数太多，未改动",
         path.display()
     )))
-}
-
-#[cfg(unix)]
-fn hard_linked(path: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    fs::metadata(path).is_ok_and(|m| m.nlink() > 1)
-}
-#[cfg(not(unix))]
-fn hard_linked(_path: &Path) -> bool {
-    false
 }
 
 /// Unique per call: two installs at once must not write into one temporary file.
@@ -106,10 +97,8 @@ fn write_new(temporary: &Path, real: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
     let keep = fs::metadata(real).ok().map(|m| m.permissions());
-    #[cfg(unix)]
     if let Some(keep) = &keep {
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-        options.mode(keep.mode() & 0o777);
+        imp::create_no_wider(&mut options, keep);
     }
     let mut file = options.open(temporary)?;
     file.write_all(bytes)?;
@@ -124,10 +113,15 @@ fn write_new(temporary: &Path, real: &Path, bytes: &[u8]) -> io::Result<()> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
-    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+    use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
 
     fn scratch() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mooring-replace-{}", uuid::Uuid::new_v4()));
+        static SCRATCH: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "mooring-replace-{}-{}",
+            std::process::id(),
+            SCRATCH.fetch_add(1, Ordering::Relaxed)
+        ));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -150,7 +144,7 @@ mod tests {
         fs::write(&file, "old").unwrap();
         for private in [0o600, 0o640, 0o664] {
             fs::set_permissions(&file, fs::Permissions::from_mode(private)).unwrap();
-            assert!(replace(&file, format!("{private}").as_bytes()).unwrap());
+            assert!(replace_file(&file, format!("{private}").as_bytes()).unwrap());
             assert_eq!(mode(&file), private);
         }
     }
@@ -162,7 +156,7 @@ mod tests {
         fs::write(&target, "old").unwrap();
         fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
         symlink("dotfiles.json", &link).unwrap();
-        assert!(replace(&link, b"new").unwrap());
+        assert!(replace_file(&link, b"new").unwrap());
         assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
         assert_eq!(fs::read(&target).unwrap(), b"new");
         assert_eq!(mode(&target), 0o600);
@@ -174,11 +168,13 @@ mod tests {
         let real = dir.join("sub/real.json");
         symlink(&real, dir.join("b.json")).unwrap();
         symlink("b.json", dir.join("a.json")).unwrap();
-        assert!(replace(&dir.join("a.json"), b"new").unwrap());
+        assert!(replace_file(&dir.join("a.json"), b"new").unwrap());
         assert_eq!(fs::read(&real).unwrap(), b"new");
-        assert!(fs::symlink_metadata(dir.join("a.json"))
-            .unwrap()
-            .is_symlink());
+        assert!(
+            fs::symlink_metadata(dir.join("a.json"))
+                .unwrap()
+                .is_symlink()
+        );
     }
 
     #[test]
@@ -186,7 +182,7 @@ mod tests {
         let dir = scratch();
         symlink("b", dir.join("a")).unwrap();
         symlink("a", dir.join("b")).unwrap();
-        assert!(replace(&dir.join("a"), b"new").is_err());
+        assert!(replace_file(&dir.join("a"), b"new").is_err());
         assert_eq!(names(&dir), ["a", "b"]);
     }
 
@@ -196,7 +192,7 @@ mod tests {
         let (one, two) = (dir.join("one"), dir.join("two"));
         fs::write(&one, "old").unwrap();
         fs::hard_link(&one, &two).unwrap();
-        assert!(replace(&two, b"new").unwrap());
+        assert!(replace_file(&two, b"new").unwrap());
         assert_eq!(fs::read(&one).unwrap(), b"new");
         assert_eq!(fs::metadata(&one).unwrap().nlink(), 2);
     }
@@ -207,7 +203,7 @@ mod tests {
         let file = dir.join("settings.json");
         fs::write(&file, "same").unwrap();
         let before = fs::metadata(&file).unwrap().ino();
-        assert!(!replace(&file, b"same").unwrap());
+        assert!(!replace_file(&file, b"same").unwrap());
         assert_eq!(fs::metadata(&file).unwrap().ino(), before);
     }
 
@@ -215,7 +211,7 @@ mod tests {
     fn a_new_file_is_made_with_its_folder_and_nothing_is_left_beside_it() {
         let dir = scratch();
         let file = dir.join("new/settings.json");
-        assert!(replace(&file, b"new").unwrap());
+        assert!(replace_file(&file, b"new").unwrap());
         assert_eq!(names(&dir.join("new")), ["settings.json"]);
         assert_eq!(fs::read(&file).unwrap(), b"new");
     }
@@ -228,7 +224,7 @@ mod tests {
         let file = locked.join("settings.json");
         fs::write(&file, "old").unwrap();
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o500)).unwrap();
-        let result = replace(&file, b"new");
+        let result = replace_file(&file, b"new");
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).unwrap();
         assert!(result.is_err());
         assert_eq!(fs::read(&file).unwrap(), b"old");

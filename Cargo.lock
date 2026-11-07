@@ -3431,6 +3431,7 @@ dependencies = [
  "libc",
  "memchr",
  "mooring-core",
+ "mooring-platform",
  "mooring-relay",
  "mooring-remote",
  "qrcode",
