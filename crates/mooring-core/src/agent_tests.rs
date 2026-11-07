@@ -1,5 +1,14 @@
 use super::*;
 
+/// A home every platform calls absolute.
+fn home() -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from(r"C:\home\u")
+    } else {
+        PathBuf::from("/home/u")
+    }
+}
+
 fn dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "mooring-agents-{name}-{}-{}",
@@ -51,7 +60,7 @@ fn a_key_no_longer_registered_reads_back_as_itself() {
 fn a_declaration_registers_after_the_built_ins() {
     let d = dir("ok");
     std::fs::write(d.join("aider.json"), AIDER).unwrap();
-    let (specs, report) = load(&d, Path::new("/home/u"));
+    let (specs, report) = load(&d, &home());
     assert_eq!(
         specs.iter().map(|s| s.key).collect::<Vec<_>>(),
         ["Codex", "Claude", "Grok", "Cursor", "Qoder", "aider"]
@@ -59,7 +68,7 @@ fn a_declaration_registers_after_the_built_ins() {
     let aider = &specs[builtin().len()];
     assert_eq!(
         aider.transcripts.as_ref().unwrap().root,
-        Path::new("/home/u/.aider/s")
+        home().join(".aider/s")
     );
     assert_eq!(render(&aider.resume, Some("a b")), "aider --restore 'a b'");
     assert_eq!(report[0].result, Ok("aider".into()));
@@ -74,7 +83,7 @@ fn a_later_file_replaces_an_earlier_one_with_the_same_id() {
         AIDER.replace("\"Aider\"", "\"Aider (mine)\""),
     )
     .unwrap();
-    let (specs, report) = load(&d, Path::new("/h"));
+    let (specs, report) = load(&d, &home());
     assert_eq!(specs.len(), builtin().len() + 1);
     assert_eq!(specs[builtin().len()].name, "Aider (mine)");
     assert!(report[0].result.as_ref().unwrap_err().contains("b.json"));
@@ -110,7 +119,7 @@ fn unusable_declarations_are_reported_and_the_rest_still_load() {
     for (name, body) in &cases {
         std::fs::write(d.join(name), body).unwrap();
     }
-    let (specs, report) = load(&d, Path::new("/h"));
+    let (specs, report) = load(&d, &home());
     assert_eq!(
         specs.len(),
         builtin().len() + 1,
@@ -134,13 +143,13 @@ fn api_2_events_load_and_are_checked() {
     let base = |api: u32, events: &str| {
         format!(
             r#"{{"api":{api},"id":"gemini","name":"Gemini","executable":"gemini","start":"gemini","resume":"gemini --resume {{id}}",
-            "transcripts":{{"root":"/tmp/c","session":"/s","cwd":"/c","events":{events}}}}}"#
+            "transcripts":{{"root":"~/c","session":"/s","cwd":"/c","events":{events}}}}}"#
         )
     };
     let ok = r#"[{"when":{"/type":"turn_end"},"turn":"completed"},
         {"when":{"/type":"tool_call"},"tool":{"id":"/id","name":"/n","kind":"command","command":"/cmd"}}]"#;
     std::fs::write(d.join("a.json"), base(2, ok)).unwrap();
-    let (specs, report) = load(&d, Path::new("/h"));
+    let (specs, report) = load(&d, &home());
     assert!(report[0].result.is_ok(), "{report:?}");
     let events = &specs.last().unwrap().transcripts.as_ref().unwrap().events;
     assert_eq!(events.len(), 2);
@@ -167,7 +176,7 @@ fn api_2_events_load_and_are_checked() {
         ),
     ] {
         std::fs::write(d.join("a.json"), &body).unwrap();
-        let (_, report) = load(&d, Path::new("/h"));
+        let (_, report) = load(&d, &home());
         let err = report[0].result.as_ref().unwrap_err();
         assert!(err.contains(why), "{why}: {err}");
     }
@@ -175,7 +184,7 @@ fn api_2_events_load_and_are_checked() {
 
 #[test]
 fn no_directory_means_built_ins_only() {
-    let (specs, report) = load(Path::new("/nonexistent/mooring/agents"), Path::new("/h"));
+    let (specs, report) = load(Path::new("/nonexistent/mooring/agents"), &home());
     assert_eq!(specs.len(), builtin().len());
     assert!(report.is_empty());
 }

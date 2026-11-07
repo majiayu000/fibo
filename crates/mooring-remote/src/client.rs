@@ -229,12 +229,14 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::io::{BufRead, BufReader, Write};
-    use std::os::unix::net::UnixStream;
+    use std::net::{TcpListener, TcpStream};
 
-    /// A fake machine on the other end of a socket pair: answers each request with
-    /// `answer(request)`, a list of lines to write back.
+    /// A fake machine on the other end of a loopback connection, which every platform has:
+    /// answers each request with `answer(request)`, a list of lines to write back.
     fn machine(answer: impl Fn(&Value) -> Vec<Value> + Send + 'static) -> Client {
-        let (ours, theirs) = UnixStream::pair().unwrap();
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let ours = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (theirs, _) = listener.accept().unwrap();
         let mut out = theirs.try_clone().unwrap();
         std::thread::spawn(move || {
             for line in BufReader::new(theirs).lines().map_while(Result::ok) {
@@ -293,12 +295,19 @@ mod tests {
 
     #[test]
     fn a_dead_child_fails_waiting_requests_with_its_last_error() {
-        let c = Client::spawn(&[
-            "sh".into(),
-            "-c".into(),
-            "read line; echo 'ssh: connect to host mac2: Connection refused' >&2".into(),
-        ])
-        .unwrap();
+        #[cfg(unix)]
+        let argv = [
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "read line; echo 'ssh: connect to host mac2: Connection refused' >&2".to_owned(),
+        ];
+        #[cfg(windows)]
+        let argv = [
+            "cmd".to_owned(),
+            "/c".to_owned(),
+            "echo ssh: connect to host mac2: Connection refused 1>&2".to_owned(),
+        ];
+        let c = Client::spawn(&argv).unwrap();
         let err = c.request(Op::List, Duration::from_secs(5)).unwrap_err();
         assert!(err.to_string().contains("Connection refused"), "{err}");
         assert!(c.ended().unwrap().contains("Connection refused"));
