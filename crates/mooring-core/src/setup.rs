@@ -88,7 +88,7 @@ pub fn run(plugins: &Path, dir: &Path, phase: Phase) -> Result<(), String> {
     }
     let s = read(&file)?;
     let data = data_dir(plugins, &p.id);
-    crate::plugin_context::create_private_dir(&data)
+    mooring_platform::fs::create_private_dir(&data)
         .map_err(|e| format!("建不了 {}：{e}", data.display()))?;
     let started = Instant::now();
     let result = run_command(dir, &s, phase);

@@ -119,6 +119,7 @@
 <p>具体函数签名在迁移每个能力时才定，届时有两个实现可以对照。这里不提前设计，避免接口被第一个平台绑死。</p>
 
 <h3>做不到的能力，用能力表说清楚</h3>
+<p>能力表要等第一个能力真正需要时再加（第 3 步的换包交接）。在那之前，做不到的调用返回 <code>Unsupported</code>，比如 Windows 上的 <code>link_program</code>。</p>
 <pre><code>// 上层只问能力，不问平台
 if platform::capabilities().handoff {
     handoff::hand_over(...)
@@ -133,7 +134,7 @@ if platform::capabilities().handoff {
 <tr><td><b>1. 平台代码不出界。</b><code>mooring-platform</code> 之外不能有 <code>cfg(target_os/unix/windows)</code>、<code>libc::</code>、<code>std::os::unix</code>、写死的 <code>/bin/sh</code>、直接读 <code>HOME</code>。</td><td>扩展现有的 guard 棘轮：现状记成基线，<strong>只能减少</strong>，新增就失败。不用一次改完。</td></tr>
 <tr><td><b>2. 行为由同一套测试约定。</b>接口的每条承诺写成一个测试，三个平台跑同一份。</td><td><code>tests/contract/</code>。这也是发现平台差异最便宜的办法，比如这次的 <code>sh</code> 缺失。</td></tr>
 <tr><td><b>3. 平台依赖不外泄。</b><code>libc</code>、<code>windows-sys</code> 只出现在 <code>mooring-platform</code> 的 <code>[target.*]</code> 依赖里。</td><td>guard 检查各 <code>Cargo.toml</code>。</td></tr>
-<tr><td><b>4. CI 按改动范围跑。</b>只改 <code>windows/</code> 只跑 Windows，改接口或共享代码三个平台全跑。</td><td>GitHub Actions 路径过滤。macOS 现有检查保持不变、继续必过。新平台先不挡合入，稳定后再改成必过。</td></tr>
+<tr><td><b>4. CI 按改动范围跑。</b>只改 Windows 实现，Linux 不跑；改接口或共享代码，三个平台全跑。</td><td>GitHub Actions 路径过滤：<code>platform-linux.yml</code>、<code>platform-windows.yml</code>，改别的平台的实现文件不会启动它们。macOS 的检查是必过项，每个 PR 都跑，不能按路径跳过，但 <code>windows.rs</code> 不参与 Mac 编译，所以它只多花时间，不会被别的平台影响。新平台先不挡合入，稳定后再改成必过。</td></tr>
 <tr><td><b>5. 协议不带平台。</b>手机和中继不解析路径、不判断系统。路径在协议里是不透明的字符串，只负责显示。</td><td>协议测试向量加入 Windows 路径的样例。</td></tr>
 </table></div>
 
@@ -148,7 +149,7 @@ if platform::capabilities().handoff {
 <p>每一步都是小 PR，先原样搬动，不改逻辑；用 macOS 现有测试和性能门禁确认没有变化，再加新平台。这样也减少和 <code>main</code> 上并行工作的冲突。</p>
 <div class="wrap"><table>
 <tr><th>步</th><th>内容</th><th>Mac 行为变化</th><th>怎么算完成</th></tr>
-<tr><td>0</td><td>建 crate，加棘轮 guard 和 CI 矩阵；把 <code>core</code> 里已写好的进程、时间、shell 搬进去；目录能力收掉 35 处 <code>HOME</code></td><td class="ok">无</td><td>guard 生效；三个平台的 <code>core</code> 测试都过</td></tr>
+<tr><td>0</td><td>建 crate，加棘轮 guard 和 CI 矩阵；把 <code>core</code> 里已写好的进程、时间、shell 搬进去（<span class="ok">已做</span>）；目录能力收掉 <code>HOME</code>（下一个 PR）</td><td class="ok">无</td><td>guard 生效；三个平台的 <code>core</code> 测试都过</td></tr>
 <tr><td>1</td><td>host 的进程、文件监听、系统信息搬入接口，Linux 实现补上</td><td class="ok">无</td><td>Linux 上 host 编译通过，测试通过</td></tr>
 <tr><td>2</td><td><strong>Linux 跑通全链路：</strong>容器和真机上配对、手机连接、真实 <code>claude</code> 和 <code>codex</code> 状态。<strong>然后复核接口</strong></td><td class="ok">无</td><td>手机能看到并操作 Linux 上的 Agent</td></tr>
 <tr><td>3</td><td>终端和本机连接：Unix 实现搬入接口，再写 ConPTY 和命名管道</td><td class="warn">原样搬动，靠测试和门禁确认</td><td>Windows 上 host 能启动，<code>list/read/send</code> 能用</td></tr>
@@ -163,6 +164,7 @@ if platform::capabilities().handoff {
   <li><b>Linux（Docker，ARM64）：</b>同样 4 个 crate 的单元测试全过；同样 3 个集成测试因环境问题失败。这一轮的代码早于本次修复，修复后没有重跑。</li>
   <li><b>host 编译错误：</b>Linux 86 个，10 个文件；Windows 251 个。都是下限。</li>
   <li><b>ConPTY：</b>OSC 7、133、7501、9、8 都能穿过；中文和 emoji 正常；<code>claude</code> 和 <code>codex</code> 能启动并录到画面。鼠标模式 <code>?1000h</code> 被吞；部分模式序列会排到文字前面；输出是整理后的屏幕，不是原始字节。</li>
+  <li><b>接口测试（第 0 步）：</b>同一份 <code>tests/contract</code> 在 macOS、Windows 真机、Linux 容器上都过。Windows 的 Job 对象第一次真正运行：结束整棵进程树、丢弃句柄不结束进程。</li>
   <li><b>Zig 和 MinGW 混用会悄悄算错：</b>静态链接 ghostty 后 <code>powf</code> 返回 0，亮度变成 NaN。改用动态库后恢复。</li>
 </ul>
 
