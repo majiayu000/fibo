@@ -452,6 +452,11 @@ pub struct CellMetrics {
     pub stroke: Pixels,
     pub ic_width: Pixels,
 }
+/// A character's width if the face really has it. Asked for one it lacks, some systems say so and
+/// others answer with the placeholder box: its width is what no character at all measures.
+fn own_glyph_width(glyph: Option<Pixels>, no_character: Option<Pixels>) -> Option<Pixels> {
+    glyph.filter(|width| *width > px(0.) && Some(*width) != no_character)
+}
 impl CellMetrics {
     pub fn measure(font: &Font, window: &Window) -> Option<Self> {
         let ts = window.text_system();
@@ -471,12 +476,9 @@ impl CellMetrics {
             * scale)
             .round()
             / scale);
-        let ic_width = ts
-            .advance(id, px(font_size()), '水')
-            .ok()
-            .filter(|s| s.width > px(0.))
-            .map(|s| s.width)
-            .unwrap_or_else(|| {
+        let width_of = |ch| ts.advance(id, px(font_size()), ch).ok().map(|s| s.width);
+        let ic_width =
+            own_glyph_width(width_of('水'), width_of('\u{10ffff}')).unwrap_or_else(|| {
                 let mut top = px(0.);
                 let mut bottom = px(0.);
                 for ch in ' '..='~' {
