@@ -47,3 +47,39 @@ fn scan_bench() {
         );
     }
 }
+
+/// What a first start costs on this account's own logs: the index goes in a directory of its own,
+/// and the logs are only read. `/usr/bin/time -l` around it gives the peak memory. By hand, in a
+/// release build: `cargo test --release -p mooring-host --lib real_first_import -- --ignored
+/// --nocapture`.
+#[test]
+#[ignore = "a measurement, by hand; reads every log this account has"]
+fn real_first_import() {
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+    let root = std::env::temp_dir().join(format!("mooring-import-{}", std::process::id()));
+    fs::create_dir_all(&root).unwrap();
+    let roots = vec![
+        (Agent::Claude, home.join(".claude/projects")),
+        (Agent::Codex, home.join(".codex/sessions")),
+    ];
+    let mut i = Index::open(&root, roots.clone()).unwrap();
+    i.initialize().unwrap();
+    let at = std::time::Instant::now();
+    i.bootstrap().unwrap();
+    eprintln!("first import took {:?} ({:?})", at.elapsed(), i.counts);
+    let scopes: Vec<_> = roots.into_iter().map(|(_, p)| p).collect();
+    i.counts = IoCounts::default();
+    i.queue_recovery(&scopes).unwrap();
+    let at = std::time::Instant::now();
+    let mut recovery = Recovery::new(&i, &scopes);
+    while !recovery.step(&mut i).unwrap().0 {}
+    eprintln!("look again: {:?} ({:?})", at.elapsed(), i.counts);
+    drop(i);
+    let size: u64 = fs::read_dir(&root)
+        .unwrap()
+        .flatten()
+        .map(|e| e.metadata().map_or(0, |m| m.len()))
+        .sum();
+    eprintln!("index on disk: {} MB", size / 1_000_000);
+    fs::remove_dir_all(&root).unwrap();
+}
