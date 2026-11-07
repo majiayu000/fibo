@@ -284,9 +284,12 @@ fn an_older_conversations_words_on_the_screen_are_not_what_the_pane_runs() {
     let stale = "这是启动之前就有的旧对话最后一句";
     let log = h.root.join(format!("logs/codex/{older}.jsonl"));
     fs::create_dir_all(log.parent().unwrap()).unwrap();
+    // Made old outside the watched folder: the index must never see it as just written, which
+    // is not what an old conversation looks like.
+    let making = h.root.join("older-log");
     let long_ago = mooring_core::content::now() - 3 * 3600;
     fs::write(
-        &log,
+        &making,
         format!(
             "{}\n{}\n",
             serde_json::json!({"type":"session_meta","payload":{"id":older,"cwd":"/tmp"}}),
@@ -300,10 +303,11 @@ fn an_older_conversations_words_on_the_screen_are_not_what_the_pane_runs() {
         .unwrap();
     assert!(std::process::Command::new("/usr/bin/touch")
         .args(["-t", String::from_utf8_lossy(&stamp.stdout).trim()])
-        .arg(&log)
+        .arg(&making)
         .status()
         .unwrap()
         .success());
+    fs::rename(&making, &log).unwrap();
     daemon_codex(&h, "d", "proj", &[], "");
     wait_unbound(&h, "d");
     type_in(&h, "d", &format!("say:› {stale}\n"));
