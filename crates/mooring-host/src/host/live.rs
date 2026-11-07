@@ -31,7 +31,7 @@ impl Subscriber {
 }
 pub(super) struct Live {
     pub(super) vt: Vt,
-    pub(super) master: File,
+    pub(super) master: term::Master,
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) pid: u32,
@@ -154,7 +154,7 @@ pub(super) fn stop_terminal(terminal: &LiveTerminal) -> io::Result<()> {
         return Ok(());
     }
     let shell = live.pid as i32;
-    let foreground = crate::pty::foreground_group(&live.master).filter(|&g| g != shell);
+    let foreground = live.master.foreground_group().filter(|&g| g != shell);
     drop(live);
     // Only this terminal's own process groups, never a name-based kill.
     let groups: Vec<i32> = std::iter::once(shell).chain(foreground).collect();
@@ -258,7 +258,7 @@ pub(super) fn release_ended(host: &mut Host) {
 /// How a terminal's process end is seen: a child this host spawned, or, after a handoff,
 /// a process the previous host started, watched by pid (its exit code is then unknown).
 pub(super) enum Reaper {
-    Child(std::process::Child),
+    Child(term::Child),
     Pid(u32),
 }
 /// Registers a running terminal and starts reading its output and waiting for its end.
@@ -267,7 +267,7 @@ pub(super) fn run_live(
     shared: &Shared,
     id: String,
     live: Live,
-    reader: File,
+    reader: term::Reader,
     replies: Arc<Mutex<Vec<u8>>>,
     reaper: Reaper,
 ) {
@@ -300,7 +300,7 @@ pub(super) fn run_live(
     match reaper {
         Reaper::Child(mut child) => {
             thread::spawn(move || match child.wait() {
-                Ok(status) => ended(status.code()),
+                Ok(code) => ended(code),
                 Err(error) => eprintln!("wait terminal: {error}"),
             });
         }
@@ -326,7 +326,7 @@ pub(super) fn run_live(
 }
 
 pub(super) fn pump(
-    mut reader: File,
+    mut reader: term::Reader,
     terminal: &LiveTerminal,
     replies: Arc<Mutex<Vec<u8>>>,
     shared: &Shared,
@@ -339,52 +339,26 @@ pub(super) fn pump(
     // while output flows, the screen is also read for that line, at most this often.
     let mut busy_read: Option<Instant> = None;
     loop {
-        let mut poll = libc::pollfd {
-            fd: reader.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let timeout = quiet_at.map_or(-1, |at| {
-            i32::try_from(at.saturating_duration_since(Instant::now()).as_millis())
-                .unwrap_or(i32::MAX)
-        });
-        let ready = unsafe { libc::poll(&mut poll, 1, timeout) };
-        if ready < 0 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
+        let wait = quiet_at.map(|at| at.saturating_duration_since(Instant::now()));
         // Only reading the PTY ends this loop. Screen checks, query replies and titles are
         // side work: if they fail, the terminal must keep streaming instead of freezing.
-        if ready == 0 {
-            quiet_at = check_screen_wait(terminal, shared, id).unwrap_or_else(|e| {
-                eprintln!("terminal {id}: screen check: {e}");
-                None
-            });
-            continue;
-        }
-        let n = match reader.read(&mut bytes) {
-            Ok(0) => return Ok(()),
-            Ok(n) => n,
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
-                ) =>
-            {
+        let n = match reader.next(&mut bytes, wait)? {
+            term::Read::Data(n) => n,
+            term::Read::Closed => return Ok(()),
+            term::Read::Quiet => {
+                quiet_at = check_screen_wait(terminal, shared, id).unwrap_or_else(|e| {
+                    eprintln!("terminal {id}: screen check: {e}");
+                    None
+                });
                 continue;
             }
-            Err(e) if e.raw_os_error() == Some(libc::EIO) => return Ok(()),
-            Err(e) => return Err(e),
         };
         quiet_at = Some(Instant::now() + SCREEN_QUIET);
         let mut live = lock(terminal)?;
         live.vt.feed(&bytes[..n]);
         let response = std::mem::take(&mut *lock(&replies)?);
         if !response.is_empty() {
-            if let Err(e) = pty::write(&mut live.master, &response) {
+            if let Err(e) = live.master.write(&response) {
                 eprintln!("terminal {id}: query reply: {e}");
             }
         }
@@ -393,7 +367,7 @@ pub(super) fn pump(
         let scan = live.reports.scan(&bytes[..n]);
         // A program asking whether we speak the status protocol gets its answer.
         if !scan.reply.is_empty() {
-            if let Err(e) = pty::write(&mut live.master, &scan.reply) {
+            if let Err(e) = live.master.write(&scan.reply) {
                 eprintln!("terminal {id}: program status probe: {e}");
             }
         }
@@ -560,12 +534,12 @@ pub(super) fn attach(
                 // a nearly full input queue it can be cut after its ESC, and the program
                 // then reads the rest as typed text ("[<65;20;10M" in Codex's input box).
                 Request::Input { lossy: true, .. }
-                    if pty::backlog(&live.master).is_some_and(|n| n > POINTER_BACKLOG) => {}
+                    if live.master.backlog().is_some_and(|n| n > POINTER_BACKLOG) => {}
                 Request::Input { bytes, lossy } => {
                     if bytes.len() > 64 * 1024 {
                         return Err(io::Error::other("单次输入超过 64 KiB"));
                     }
-                    pty::write(&mut live.master, &bytes)?;
+                    live.master.write(&bytes)?;
                     if !lossy {
                         live.input_at = Some(Instant::now());
                     }
@@ -588,7 +562,7 @@ pub(super) fn attach(
                 } => {
                     geometry(cols, rows)?;
                     live.cell.set(cell_width, cell_height);
-                    pty::resize(&live.master, cols, rows, (cell_width, cell_height))?;
+                    live.master.resize(cols, rows, (cell_width, cell_height))?;
                     live.vt.resize(cols, rows)?;
                     live.cols = cols;
                     live.rows = rows;

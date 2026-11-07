@@ -54,7 +54,7 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
 struct Taken {
     handed: Handed,
     snapshot: Vec<u8>,
-    master: File,
+    master: mooring_platform::terminal::Master,
 }
 fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
     let mut stream = UnixStream::connect(root.join("workbench.sock"))?;
@@ -95,7 +95,7 @@ fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
         .map(|((handed, snapshot), fd)| Taken {
             handed,
             snapshot,
-            master: File::from(fd),
+            master: fd.into(),
         })
         .collect())
 }
@@ -255,7 +255,7 @@ pub(super) fn serve_runtime(
         let cell = CellPixels::default();
         cell.set(t.handed.cell.0, t.handed.cell.1);
         vt.answer_queries(cell.clone())?;
-        let reader = t.master.try_clone()?;
+        let reader = t.master.reader()?;
         let mut guard = lock(&host)?;
         run_live(
             &mut guard,

@@ -462,7 +462,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                         return Err(error);
                     }
                 };
-            let reader = match master.try_clone() {
+            let reader = match master.reader() {
                 Ok(reader) => reader,
                 Err(e) => {
                     let _ = child.kill();
@@ -751,7 +751,7 @@ pub(super) fn answer_approval(
         } else {
             (if allow { "\r" } else { "\x1b" }).to_owned()
         };
-        pty::write(&mut live.master, key.as_bytes())?;
+        live.master.write(key.as_bytes())?;
         live.input_at = Some(Instant::now());
     }
     lock(shared)?.set_screen_wait(id, None)
