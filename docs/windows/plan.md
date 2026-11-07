@@ -89,7 +89,7 @@ ConPTY 不是透传。conhost 先把程序输出画到自己的缓冲区，再�
 
 全部基于 `UnixStream`（`core` 的 `delivery.rs`、host 的 `remote.rs`、`events.rs`、`status.rs` 等）。要建一层传输类型，有两个选择：
 
-- `AF_UNIX`（Win10 1803 起有，std 没封装，要加 crate 如 `uds_windows`）：改动最小，路径和 `Read`/`Write` 都保留。我倾向这个，没验证。
+- `AF_UNIX`（Win10 1803 起有，std 没封装，要加 crate 如 `uds_windows`）：改动最小，路径和 `Read`/`Write` 都保留。已在真机验证，host 用它监听，`list`、`read`、`send` 都走它。
 - 命名管道：Windows 的正路，但超时、`try_clone`、`MSG_PEEK` 都要重写。已否决，改用 AF_UNIX，见 docs/platform。
 
 身份检查（`geteuid`、`getpeereid`、`0700`、`is_socket`）要换成 ACL 和对端进程查询，这是安全边界，不能留空。
