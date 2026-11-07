@@ -32,7 +32,8 @@ pub fn stay(shell: &str) -> Vec<String> {
     imp::stay(shell)
 }
 
-/// `word` in the quoting of [`interactive`], read back as itself whatever it holds.
+/// `word` in the quoting of [`interactive`], reaching a program it starts as itself whatever it
+/// holds.
 pub fn quote(word: &str) -> String {
     imp::quote(word)
 }
