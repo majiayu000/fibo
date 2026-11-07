@@ -3,7 +3,7 @@
 //! the chips, the lists and the board for a gray line. The host keeps the state
 //! (`Workspace::quiet_spaces`) and core decides what it means; this is how it looks. Looking
 //! at or typing in its sessions never ends it: only 接着管 does.
-use super::quiet::{LineFacts, quiet_ring, quiet_words};
+use super::quiet::{LineFacts, LineKind, quiet_ring, quiet_words};
 use super::*;
 use crate::workbench::palette::Hit;
 use mooring_core::status;
@@ -121,7 +121,10 @@ impl Workbench {
             cx.notify();
             return;
         }
+        let tile = T::space_tile(self.space_mesh(id));
+        let w = &self.workspace;
         self.sidebar.motion.fly(&seat_key(id), &name, quiet, false);
+        self.sidebar.motion.fly_as_dot(tile);
         if quiet {
             // Forgotten, not just hidden: coming back must not narrow the list again.
             if self.sidebar.space_filter.as_deref() == Some(id) {
@@ -200,7 +203,12 @@ impl Workbench {
             .into_any_element()
     }
 
-    fn quiet_space_line(&self, space: &Space, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
+    fn quiet_space_line(
+        &self,
+        space: &Space,
+        first: bool,
+        cx: &Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
         let id = space.id.clone();
         let menu_id = id.clone();
         let line = self.quiet_line(
@@ -215,6 +223,10 @@ impl Workbench {
                     this.set_space_quiet(&id, false, cx);
                 })),
                 also_seats: Vec::new(),
+                kind: LineKind::Space {
+                    dots: vec![space.id.clone()],
+                    first,
+                },
             },
             cx,
         );
@@ -274,8 +286,13 @@ impl Workbench {
             .into_any_element()
     }
     /// One space's line and, unfolded, its rows; the second value is their height.
-    fn quiet_space_block(&self, space: &Space, cx: &Context<Self>) -> (Vec<gpui::AnyElement>, f32) {
-        let mut out = vec![self.quiet_space_line(space, cx).into_any_element()];
+    fn quiet_space_block(
+        &self,
+        space: &Space,
+        first: bool,
+        cx: &Context<Self>,
+    ) -> (Vec<gpui::AnyElement>, f32) {
+        let mut out = vec![self.quiet_space_line(space, first, cx).into_any_element()];
         let mut height = LINE;
         if self.sidebar.open(&fold_key(&space.id), false) {
             let rows = self.quiet_space_sessions(&space.id);
@@ -306,7 +323,8 @@ impl Workbench {
         let spaces = self.quiet_spaces();
         if spaces.len() <= OWN_LINES {
             return (spaces.iter())
-                .flat_map(|s| self.quiet_space_block(s, cx).0)
+                .enumerate()
+                .flat_map(|(i, s)| self.quiet_space_block(s, i == 0, cx).0)
                 .collect();
         }
         let waiting = spaces.iter().map(|s| self.quiet_space_waiting(&s.id)).sum();
@@ -322,6 +340,10 @@ impl Workbench {
                 words,
                 resume: None,
                 also_seats: spaces.iter().map(|s| seat_key(&s.id)).collect(),
+                kind: LineKind::Space {
+                    dots: spaces.iter().take(3).map(|s| s.id.clone()).collect(),
+                    first: true,
+                },
             },
             cx,
         );
@@ -329,7 +351,7 @@ impl Workbench {
         if self.sidebar.open(ALL_KEY, false) {
             let (mut rows, mut height) = (Vec::new(), 0.);
             for space in &spaces {
-                let (block, tall) = self.quiet_space_block(space, cx);
+                let (block, tall) = self.quiet_space_block(space, false, cx);
                 rows.extend(block);
                 height += tall;
             }
