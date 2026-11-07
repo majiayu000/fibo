@@ -82,6 +82,101 @@ pub fn memory() -> Option<Memory> {
     })
 }
 
+/// macOS announces each change through a dispatch source, so nothing polls.
+mod pressure {
+    use super::sysctl;
+    use std::ffi::c_void;
+    use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
+
+    static LEVEL: AtomicI32 = AtomicI32::new(0);
+    static SOURCE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+    static CHANGED: OnceLock<fn()> = OnceLock::new();
+
+    const NORMAL: usize = 0x1;
+    const WARN: usize = 0x2;
+    const CRITICAL: usize = 0x4;
+
+    unsafe extern "C" {
+        static _dispatch_source_type_memorypressure: c_void;
+        fn dispatch_source_create(
+            kind: *const c_void,
+            handle: usize,
+            mask: usize,
+            queue: *mut c_void,
+        ) -> *mut c_void;
+        fn dispatch_get_global_queue(identifier: isize, flags: usize) -> *mut c_void;
+        fn dispatch_source_set_event_handler_f(
+            source: *mut c_void,
+            handler: extern "C" fn(*mut c_void),
+        );
+        fn dispatch_source_get_data(source: *mut c_void) -> usize;
+        fn dispatch_resume(object: *mut c_void);
+    }
+
+    extern "C" fn changed(_: *mut c_void) {
+        let source = SOURCE.load(Ordering::Acquire);
+        if source.is_null() {
+            return;
+        }
+        let flags = unsafe { dispatch_source_get_data(source) };
+        let level = if flags & CRITICAL != 0 {
+            4
+        } else if flags & WARN != 0 {
+            2
+        } else {
+            1
+        };
+        LEVEL.store(level, Ordering::Release);
+        if let Some(changed) = CHANGED.get() {
+            changed();
+        }
+    }
+
+    pub fn watch(on_change: fn()) {
+        if CHANGED.set(on_change).is_err() {
+            return;
+        }
+        let level = sysctl::<i32>(c"kern.memorystatus_vm_pressure_level").unwrap_or(1);
+        LEVEL.store(level.clamp(0, 4), Ordering::Release);
+        unsafe {
+            let source = create();
+            if !source.is_null() {
+                SOURCE.store(source, Ordering::Release);
+                dispatch_source_set_event_handler_f(source, changed);
+                dispatch_resume(source);
+            }
+        }
+    }
+
+    pub fn announced() -> Option<i32> {
+        Some(LEVEL.load(Ordering::Acquire)).filter(|level| *level != 0)
+    }
+
+    pub(super) unsafe fn create() -> *mut c_void {
+        unsafe {
+            dispatch_source_create(
+                &raw const _dispatch_source_type_memorypressure,
+                0,
+                NORMAL | WARN | CRITICAL,
+                dispatch_get_global_queue(0, 0),
+            )
+        }
+    }
+}
+
+pub fn watch_pressure(changed: fn()) {
+    pressure::watch(changed);
+}
+
+pub fn announced_pressure() -> Option<i32> {
+    pressure::announced()
+}
+
+pub fn swap_used() -> u64 {
+    sysctl::<libc::xsw_usage>(c"vm.swapusage").map_or(0, |s| s.xsu_used)
+}
+
 pub fn host_name() -> String {
     let mut buf = [0u8; 256];
     // SAFETY: the kernel writes at most `buf.len()` bytes, NUL-terminated when it fits.

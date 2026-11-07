@@ -56,8 +56,7 @@ pub fn executable(path: &Path) -> bool {
     if ext.is_some_and(|e| RUNS.contains(&e.as_str())) {
         return true;
     }
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    mooring_platform::fs::is_program(path)
 }
 
 /// An editor's bundled command line tool, found without the user installing it on PATH.

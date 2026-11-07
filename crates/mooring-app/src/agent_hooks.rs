@@ -24,7 +24,7 @@ pub struct Hook {
 
 /// The daemon beside this app, as `lifecycle` starts it.
 fn mooring(args: &[&str]) -> io::Result<Vec<u8>> {
-    let out = Command::new(std::env::current_exe()?.with_file_name("mooring"))
+    let out = Command::new(crate::lifecycle::host_program()?)
         .args(args)
         .stdin(std::process::Stdio::null())
         .output()?;

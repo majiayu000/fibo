@@ -61,6 +61,11 @@ pub fn open_file_id(file: &std::fs::File) -> io::Result<super::FileId> {
     file_id(Path::new(""), &file.metadata()?)
 }
 
+pub fn is_program(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+}
+
 pub fn private_file() -> std::fs::OpenOptions {
     use std::os::unix::fs::OpenOptionsExt;
     let mut options = std::fs::OpenOptions::new();

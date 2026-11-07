@@ -54,6 +54,17 @@ pub fn host_name() -> String {
     String::from_utf8_lossy(&buf[..end]).into_owned()
 }
 
+/// This system's announcements are not listened to yet.
+pub fn watch_pressure(_changed: fn()) {}
+
+pub fn announced_pressure() -> Option<i32> {
+    None
+}
+
+pub fn swap_used() -> u64 {
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
