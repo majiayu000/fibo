@@ -83,3 +83,32 @@ fn real_first_import() {
     eprintln!("index on disk: {} MB", size / 1_000_000);
     fs::remove_dir_all(&root).unwrap();
 }
+
+/// A CLI nobody uses here has no log folder, and that is not an outage. A folder that held logs
+/// and went away is, and its logs are forgotten once repaired. Paths use this system's separator.
+#[test]
+fn only_a_folder_that_held_logs_is_lost_when_gone() {
+    let f = Fixture::new();
+    let logs = f.0.join("logs");
+    let used = logs.join("used");
+    fs::create_dir_all(&used).unwrap();
+    let log = used.join("a.jsonl");
+    fs::write(&log, line("x").repeat(2)).unwrap();
+    let mut i = f.index();
+    i.initialize().unwrap();
+    i.bootstrap().unwrap();
+    assert_eq!(i.cached().unwrap().len(), 1);
+
+    assert!(!i.lost_logs(&[logs.join("never-there")]).unwrap());
+    assert!(
+        !i.lost_logs(std::slice::from_ref(&used)).unwrap(),
+        "still there"
+    );
+
+    fs::remove_dir_all(&used).unwrap();
+    assert!(i.lost_logs(std::slice::from_ref(&used)).unwrap());
+    i.queue_recovery(std::slice::from_ref(&used)).unwrap();
+    i.finish_recovery(std::slice::from_ref(&used)).unwrap();
+    assert!(i.cached().unwrap().is_empty());
+    assert!(!i.lost_logs(std::slice::from_ref(&used)).unwrap());
+}

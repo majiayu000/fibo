@@ -353,22 +353,33 @@ impl Index {
             .map_err(err)?;
         rows.map(|r| r.map(PathBuf::from).map_err(err)).collect()
     }
+    /// The logs known to be inside `scope`.
+    fn logs_under(&self, scope: &Path) -> io::Result<Vec<String>> {
+        let prefix = format!("{}{}", scope.to_string_lossy(), std::path::MAIN_SEPARATOR);
+        let mut q = self
+            .db
+            .prepare("SELECT path FROM log_files WHERE substr(path,1,length(?1))=?1")
+            .map_err(err)?;
+        let rows = q
+            .query_map(params![prefix], |r| r.get::<_, String>(0))
+            .map_err(err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(err)
+    }
+    /// Whether a folder that is not there held logs. One that never did is a CLI not used here,
+    /// nothing wrong: it stays that way for as long as that CLI is not installed.
+    pub fn lost_logs(&self, scopes: &[PathBuf]) -> io::Result<bool> {
+        for scope in scopes.iter().filter(|p| !p.exists()) {
+            if !self.logs_under(scope)?.is_empty() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
     pub fn finish_recovery(&mut self, scopes: &[PathBuf]) -> io::Result<()> {
         // Reconcile deletions missed during the gap, only inside the repaired subtree.
         // Removing an index entry never deletes an AgentSession or its user-owned outcome.
         for scope in scopes {
-            let prefix = format!("{}/", scope.to_string_lossy());
-            let paths = {
-                let mut q = self
-                    .db
-                    .prepare("SELECT path FROM log_files WHERE substr(path,1,length(?1))=?1")
-                    .map_err(err)?;
-                let rows = q
-                    .query_map(params![prefix], |r| r.get::<_, String>(0))
-                    .map_err(err)?;
-                rows.collect::<Result<Vec<_>, _>>().map_err(err)?
-            };
-            for path in paths {
+            for path in self.logs_under(scope)? {
                 let remove = match fs::symlink_metadata(&path) {
                     Ok(m) => !m.is_file(),
                     Err(e) if e.kind() == io::ErrorKind::NotFound => true,

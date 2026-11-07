@@ -210,8 +210,10 @@ pub(super) fn recover_logs(
         }
         thread::yield_now();
     }
+    // Asked first: finishing forgets what was in a folder that is gone.
+    let lost = index.lost_logs(scopes)?;
     index.finish_recovery(scopes)?;
-    if scopes.iter().any(|p| !p.exists()) {
+    if lost {
         publish_recognition(
             shared,
             index,
