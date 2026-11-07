@@ -19,6 +19,8 @@
 
 | 日期 | 现象 | 类型 | 为什么之前看不到 | 修复 | 现在由什么守着 |
 |---|---|---|---|---|---|
+| 11-07 | OpenCode 有时不认：权限框弹着，手机没有卡片。提示词短能认，长到折行就认不出，看着随机 | 时序 | 换 App 不更新插件，机器上还是 0.2.1，提示词时间全是 0，「按回车的时间」这条证据失效，只剩屏幕原文，而 `┃` 把折行的提示词隔开。仓库和测试都是 0.2.2 | 更新插件到 0.2.2 后同样的长提示词能认；`mooring plugins` 看是否「可更新」。换 App 后不自动更新插件这点没改 | 无自动测试，靠真机看 |
+| 11-07 | `mooring run opencode` 必定超时「一直没有出现输入框」，任务没交 | 真 CLI | 就绪判断只认 `❯ › >`，OpenCode 的框没有箭头；插件测试没走 `run` | 插件声明 `input_hint` | `tests/opencode_plugin.rs` 的 `its_empty_input_box_counts_as_ready_and_its_output_does_not` |
 | 11-07 | 手机点「允许」多弹一个框，写「电脑没读出它要做什么」，其实读出来了 | 时序 | 手机连的 `mooring remote` 比插件更新早启动 7 秒，还记着旧插件。协议测试每次都起新进程，碰不到 | #165：只看卡片上的字段，不查本进程的注册表 | `remote::asks::api_tests::an_approval_from_the_api_is_read_off_the_card` |
 | 11-07 | OpenCode 被中断或拒绝权限后一直「在跑」；Mooring 的中断发 Ctrl-C，会把它整个退出 | 真 CLI | 只读日志时看不到；中断和拒绝不写 `step-finish`，Ctrl-C 的后果要真按才知道 | #134：插件声明中断按键，SQL 补报错和中断 | `tests/opencode_plugin.rs` |
 | 11-07 | 开了本地端口后，跨站请求能在 OpenCode 里建会话 | 真 CLI | 接口本身是好的，这是把它打开后才有的风险，要真发一个跨站请求才看得到 | #148：每次启动随机密码，无密码 401 | `cli_http::tests::credentials_go_in_the_header`（只守请求头；401 是当时实测的） |

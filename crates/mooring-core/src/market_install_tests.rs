@@ -597,16 +597,18 @@ fn a_build_too_old_for_the_opencode_declarations_gets_the_version_before_them() 
         .into_iter()
         .find(|e| e.id == "opencode")
         .unwrap();
-    assert_eq!(entry.version, "0.2.2");
-    assert_eq!(entry.mooring, Some(6));
+    assert_eq!(entry.version, "0.2.3");
+    assert_eq!(entry.mooring, Some(7));
     assert!(entry.compatible(), "this build reads it");
-    assert_eq!(entry.for_this_build().version, "0.2.2");
+    assert_eq!(entry.for_this_build().version, "0.2.3");
 
     let mut older_build = entry;
     older_build.mooring = Some(plugin::LEVEL + 1);
     let chosen = older_build.for_this_build();
-    // Level 4 builds read what 0.2.0 declares; earlier ones get 0.1.0.
-    assert_eq!(chosen.version, "0.2.0");
+    // Level 6 builds read what 0.2.2 declares, level 4 ones 0.2.0; earlier ones get 0.1.0.
+    assert_eq!(chosen.version, "0.2.2");
+    assert_eq!(chosen.mooring, Some(6));
+    assert!(chosen.versions.iter().any(|e| e.version == "0.2.0"));
     let older = chosen
         .versions
         .iter()
