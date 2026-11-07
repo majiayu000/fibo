@@ -45,23 +45,7 @@ fn session_cwd(transcript: &Path) -> Option<String> {
 
 /// When the kernel started `pid`, in microseconds, as Grok records it.
 fn started(pid: u32) -> Option<u64> {
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
-    // SAFETY: the kernel writes at most `size` bytes into the zeroed buffer.
-    let n = unsafe {
-        libc::proc_pidinfo(
-            pid as i32,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            size,
-        )
-    };
-    if n != size {
-        return None;
-    }
-    let info = unsafe { info.assume_init() };
-    Some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
+    mooring_platform::inspect::started_micros(pid)
 }
 
 /// The session the registry names for one live process. Entries outlive crashed

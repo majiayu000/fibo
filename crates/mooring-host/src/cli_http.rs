@@ -6,7 +6,6 @@ use mooring_core::agent_answers::Answers;
 use serde_json::Value;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
-use std::process::Command;
 use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_secs(3);
@@ -44,22 +43,8 @@ pub fn endpoint(api: &Answers, pid: u32) -> Option<Endpoint> {
 /// The TCP port a process listens on on this machine, if any.
 fn listening_port(pid: u32) -> Option<u16> {
     crate::recognition::LSOF_SPAWNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let out = Command::new("/usr/sbin/lsof")
-        .args([
-            "-nP",
-            "-a",
-            "-p",
-            &pid.to_string(),
-            "-iTCP",
-            "-sTCP:LISTEN",
-            "-Fn",
-        ])
-        .output()
-        .ok()?;
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|l| l.strip_prefix('n'))
-        .find_map(|name| name.rsplit(':').next()?.parse().ok())
+    let found = mooring_platform::inspect::tcp_sockets(&[pid]).ok()?;
+    found.listening.first().map(|(_, port)| *port)
 }
 /// The first thing it is asking, or `None` when it asks nothing.
 pub fn first_asked(api: &Answers, at: &Endpoint) -> io::Result<Option<Asked>> {

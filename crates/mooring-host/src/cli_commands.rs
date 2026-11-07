@@ -1,6 +1,7 @@
 //! The commands a CLI runs that nothing lists: found among its child processes, claimed by
 //! the log that started them. docs/decisions/2026-11-04-background-shell-own-client.md.
 use crate::background_shells::{children, contains};
+use mooring_platform::inspect;
 use std::io;
 
 /// Commands a CLI named `executable` runs, wherever it runs them: `(pid, command line)`
@@ -8,13 +9,16 @@ use std::io;
 /// servers and helpers, which talk to it over stdin, and not more of the CLI itself.
 pub fn commands_of(executable: &str) -> Vec<(u32, String)> {
     let mut out = vec![];
-    for cli in all_pids().into_iter().filter(|p| name(*p) == executable) {
+    for cli in inspect::all_pids()
+        .into_iter()
+        .filter(|p| inspect::name(*p).as_deref() == Some(executable))
+    {
         for pid in children(cli) {
-            let Ok(argv) = mooring_platform::inspect::argv(pid) else {
+            let Ok(argv) = inspect::argv(pid) else {
                 continue;
             };
             let line = argv.join(" ");
-            if stdin_is_a_channel(pid) || crate::agents::from_command(&line).is_some() {
+            if inspect::stdin_is_a_channel(pid) || crate::agents::from_command(&line).is_some() {
                 continue;
             }
             out.push((pid, as_logged(&argv)));
@@ -46,49 +50,6 @@ pub fn log_ran(log: &std::path::Path, command: &str) -> io::Result<bool> {
     }
     Ok(contains(&std::fs::read(log)?, head.as_bytes()))
 }
-fn all_pids() -> Vec<u32> {
-    let mut buf = vec![0i32; 8192];
-    let bytes = (buf.len() * std::mem::size_of::<i32>()) as i32;
-    let n = unsafe { libc::proc_listallpids(buf.as_mut_ptr().cast(), bytes) };
-    buf[..n.max(0) as usize]
-        .iter()
-        .filter(|p| **p > 0)
-        .map(|p| *p as u32)
-        .collect()
-}
-fn name(pid: u32) -> String {
-    let mut buf = [0u8; 256];
-    let n = unsafe { libc::proc_name(pid as i32, buf.as_mut_ptr().cast(), buf.len() as u32) };
-    String::from_utf8_lossy(&buf[..n.max(0) as usize]).into_owned()
-}
-/// Whether fd 0 is a pipe or a socket, which is how a CLI talks to its MCP servers. A
-/// command's stdin is `/dev/null` or a terminal (real Codex 0.167 processes, 2026-11-06).
-fn stdin_is_a_channel(pid: u32) -> bool {
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct FdInfo {
-        fd: i32,
-        kind: u32,
-    }
-    const PROC_PIDLISTFDS: i32 = 1;
-    const SOCKET: u32 = 2;
-    const PIPE: u32 = 6;
-    let mut fds = [FdInfo { fd: -1, kind: 0 }; 64];
-    let size = std::mem::size_of_val(&fds) as i32;
-    let n = unsafe {
-        libc::proc_pidinfo(
-            pid as i32,
-            PROC_PIDLISTFDS,
-            0,
-            fds.as_mut_ptr().cast(),
-            size,
-        )
-    };
-    let count = n.max(0) as usize / std::mem::size_of::<FdInfo>();
-    fds[..count.min(fds.len())]
-        .iter()
-        .any(|f| f.fd == 0 && matches!(f.kind, SOCKET | PIPE))
-}
 
 #[cfg(test)]
 mod tests {
@@ -111,7 +72,7 @@ mod tests {
     #[test]
     fn a_cli_commands_are_its_children_with_stdin_closed() {
         use std::process::{Command, Stdio};
-        let me = name(std::process::id());
+        let me = inspect::name(std::process::id()).unwrap();
         assert!(!me.is_empty());
         let mut command = Command::new("/bin/sh")
             .args(["-c", "sleep 20; echo found-5d2a"])
@@ -167,8 +128,8 @@ mod tests {
             .stdin(Stdio::null())
             .spawn()
             .unwrap();
-        assert!(stdin_is_a_channel(helper.id()));
-        assert!(!stdin_is_a_channel(command.id()));
+        assert!(inspect::stdin_is_a_channel(helper.id()));
+        assert!(!inspect::stdin_is_a_channel(command.id()));
         let _ = helper.kill();
         let _ = command.kill();
         let _ = helper.wait();

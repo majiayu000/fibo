@@ -1,6 +1,7 @@
 //! Which transcript belongs to which terminal: log-event subscription, recovery of
 //! missed log writes and following an associated session's log.
 use super::*;
+use mooring_platform::file_watch::flag;
 
 #[derive(Default)]
 pub(super) struct Association {
@@ -223,29 +224,31 @@ pub(super) fn recover_logs(
     }
 }
 pub(super) fn event_scopes(
-    batch: &crate::file_events::Batch,
+    batch: &mooring_platform::file_watch::Batch,
     roots: &[std::path::PathBuf],
     scopes: &mut Vec<std::path::PathBuf>,
 ) -> bool {
     let mut restart = false;
     for event in &batch.events {
-        if event.flags & 0x8 != 0 {
+        if event.flags & flag::IDS_WRAPPED != 0 {
             // IDs wrapped: the journal cannot identify a narrower lost range.
             for root in roots {
-                crate::file_events::add_scope(scopes, root, roots);
+                mooring_platform::file_watch::add_scope(scopes, root, roots);
             }
             restart = true;
-        } else if event.flags & 0x27 != 0 {
+        } else if event.flags & flag::SCAN != 0 {
             let path = if event.path.extension().is_some_and(|e| e == "jsonl") {
                 event.path.parent().unwrap_or(&event.path)
             } else {
                 &event.path
             };
-            crate::file_events::add_scope(scopes, path, roots);
-            restart |= event.flags & 0x20 != 0;
-        } else if event.flags & 0x20000 != 0 && event.flags & (0x100 | 0x800) != 0 {
+            mooring_platform::file_watch::add_scope(scopes, path, roots);
+            restart |= event.flags & flag::ROOT_CHANGED != 0;
+        } else if event.flags & flag::IS_DIR != 0
+            && event.flags & (flag::CREATED | flag::RENAMED) != 0
+        {
             // A new/renamed populated directory may produce only a directory event.
-            crate::file_events::add_scope(scopes, &event.path, roots);
+            mooring_platform::file_watch::add_scope(scopes, &event.path, roots);
         }
     }
     restart
@@ -257,7 +260,7 @@ pub(super) fn follow_associated(
     shared: &Shared,
     index: &mut crate::log_index::Index,
     association: &mut Association,
-    watch: &crate::file_events::Watch,
+    watch: &mooring_platform::file_watch::Watch,
 ) -> io::Result<()> {
     let (mut associated, unbound) = {
         let host = lock(shared)?;
@@ -349,7 +352,7 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                     .iter()
                     .map(|(_, p)| p.clone())
                     .collect::<Vec<_>>();
-                let mut watch = crate::file_events::Watch::start(&roots, checkpoint)?;
+                let mut watch = mooring_platform::file_watch::Watch::start(&roots, checkpoint)?;
                 lock(&shared)?.log_events = Some(watch.notifier());
                 index.bootstrap()?;
                 publish_recognition(&shared, &index, RecognitionPhase::Healthy, "识别正常", &[])?;
@@ -403,15 +406,18 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                     let mut scopes = watch.take_overflow();
                     let overflowed = !scopes.is_empty();
                     let restart = event_scopes(&batch, &roots, &mut scopes) || overflowed;
-                    let wrapped = batch.events.iter().any(|e| e.flags & 0x8 != 0);
+                    let wrapped = batch
+                        .events
+                        .iter()
+                        .any(|e| e.flags & flag::IDS_WRAPPED != 0);
                     if restart {
                         // Watch before repairing. Replay from the last committed checkpoint, not 'now',
                         // so restarting one stream cannot discard queued events for the other CLI root.
                         if wrapped {
-                            checkpoint = crate::file_events::Watch::current_id();
+                            checkpoint = mooring_platform::file_watch::Watch::current_id();
                             index.reset_checkpoint(checkpoint)?;
                         }
-                        watch = crate::file_events::Watch::start(&roots, checkpoint)?;
+                        watch = mooring_platform::file_watch::Watch::start(&roots, checkpoint)?;
                         lock(&shared)?.log_events = Some(watch.notifier());
                     }
                     if !scopes.is_empty() {
@@ -438,7 +444,7 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                         }
                         // The index's adapter identifies logs and subagent metadata;
                         // a declared CLI need not use the built-ins' extension.
-                        if event.flags & 0x10 == 0 {
+                        if event.flags & flag::HISTORY_DONE == 0 {
                             paths.insert(event.path);
                         }
                     }
