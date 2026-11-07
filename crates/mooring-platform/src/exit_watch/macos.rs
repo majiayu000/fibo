@@ -1,10 +1,10 @@
-//! One blocking kqueue for proved managed Agent PIDs. No polling or global process scan.
 use std::{
     io,
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
     sync::Arc,
 };
 
+/// One blocking kqueue for every watched process.
 pub struct ExitWatch {
     queue: Arc<OwnedFd>,
 }
@@ -16,36 +16,37 @@ impl ExitWatch {
         }
         let queue = Arc::new(unsafe { OwnedFd::from_raw_fd(fd) });
         let thread_queue = queue.clone();
-        std::thread::spawn(move || loop {
-            let mut event: libc::kevent = unsafe { std::mem::zeroed() };
-            let result = unsafe {
-                libc::kevent(
-                    thread_queue.as_raw_fd(),
-                    std::ptr::null(),
-                    0,
-                    &mut event,
-                    1,
-                    std::ptr::null(),
-                )
-            };
-            if result < 0 {
-                let e = io::Error::last_os_error();
-                if e.kind() == io::ErrorKind::Interrupted {
+        std::thread::spawn(move || {
+            loop {
+                let mut event: libc::kevent = unsafe { std::mem::zeroed() };
+                let result = unsafe {
+                    libc::kevent(
+                        thread_queue.as_raw_fd(),
+                        std::ptr::null(),
+                        0,
+                        &mut event,
+                        1,
+                        std::ptr::null(),
+                    )
+                };
+                if result < 0 {
+                    let e = io::Error::last_os_error();
+                    if e.kind() == io::ErrorKind::Interrupted {
+                        continue;
+                    }
+                    eprintln!("Process exit subscription failed: {e}");
+                    return;
+                }
+                if event.flags & libc::EV_ERROR != 0 {
+                    let data = event.data;
+                    eprintln!("Process exit event error: {data}");
                     continue;
                 }
-                eprintln!("Agent exit subscription failed: {e}");
-                return;
+                on_exit(event.ident as u32);
             }
-            if event.flags & libc::EV_ERROR != 0 {
-                let data = event.data;
-                eprintln!("Agent exit event error: {data}");
-                continue;
-            }
-            on_exit(event.ident as u32);
         });
         Ok(Self { queue })
     }
-    /// False closes the registration/exit race: the process already exited.
     pub fn watch(&self, pid: u32) -> io::Result<bool> {
         let event = libc::kevent {
             ident: pid as _,

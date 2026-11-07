@@ -10,7 +10,7 @@ pub fn commands_of(executable: &str) -> Vec<(u32, String)> {
     let mut out = vec![];
     for cli in all_pids().into_iter().filter(|p| name(*p) == executable) {
         for pid in children(cli) {
-            let Ok(argv) = crate::recognition::process_argv(pid) else {
+            let Ok(argv) = mooring_platform::inspect::argv(pid) else {
                 continue;
             };
             let line = argv.join(" ");
