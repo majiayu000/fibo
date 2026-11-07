@@ -2,7 +2,7 @@
 //! `machines.json` and independent of how it is connected. A quiet machine stays connected
 //! but counts nowhere, ⌘J skips it, and it leaves the chips, the rail, the sections and
 //! the board for one gray line per machine; links dropping change nothing on that line.
-//! Looking at or typing in its sessions never ends it: only 接着管 does.
+//! Looking at its sessions never ends it; 接着管 does, and so does starting work there.
 use super::*;
 use crate::workbench::palette::Hit;
 use crate::workbench::sidebar_motion::mix;
@@ -25,6 +25,25 @@ pub(in crate::workbench) struct LineFacts {
     pub resume: Option<Resume>,
     /// Others whose flight lands on this line, since they have none of their own showing.
     pub also_seats: Vec<String>,
+    pub kind: LineKind,
+}
+
+/// What a gray line is the line of, since a machine and a space are not the same size of
+/// thing: a machine reads as a folded heading beside 本机, a space as the end of its
+/// machine's list in the dot it has among the chips.
+pub(in crate::workbench) enum LineKind {
+    Machine,
+    /// The spaces whose dots it shows; `first` draws the line above the group.
+    Space {
+        dots: Vec<String>,
+        first: bool,
+    },
+}
+
+/// Whether the column's foot holds the spaces put aside, under no machine's heading: only
+/// 按机器 has one for them to end.
+pub(in crate::workbench) fn foot_holds_spaces(layout: mooring_core::sidebar::Machines) -> bool {
+    layout != mooring_core::sidebar::Machines::Sections
 }
 
 fn fold_key(host: &str) -> String {
@@ -86,6 +105,13 @@ impl Workbench {
         };
         self.machines[index].view.lock().unwrap().spec.quiet = quiet;
         self.sidebar.machine_menu = None;
+        if quiet {
+            // Its heading goes, and what was under it.
+            if self.machine_space_of(index).is_some() {
+                self.sidebar.machine_space = None;
+            }
+            self.cancel_machine_space(cx);
+        }
         let name = machine_label(&host).to_owned();
         let rail = self.machine_layout() == Machines::Rail;
         self.sidebar.motion.fly(&host, &name, quiet, rail);
@@ -97,6 +123,19 @@ impl Workbench {
             self.error = Some(format!("没存上，下次打开不会记得：{e}"));
         }
         cx.notify();
+    }
+    /// You began work there, so it is back: an answer you gave it can lead to a question
+    /// you would not hear of otherwise. One press too many costs less, as for a space.
+    pub(in crate::workbench) fn work_began_on_machine(
+        &mut self,
+        host: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let index = (0..self.machines.len())
+            .find(|i| self.machine_quiet(*i) && self.machine_host(*i).as_deref() == Some(host));
+        if let Some(index) = index {
+            self.set_machine_quiet(index, false, cx);
+        }
     }
     /// A machine's square that remembers where it was drawn, for the flight.
     pub(in crate::workbench) fn spotted_mark(
@@ -180,7 +219,11 @@ impl Workbench {
         // performance: a wrapper sized by max_h measures its content again every frame).
         const SHOWN: usize = 6;
         let row = F::ONE_PAD_Y * 2. + F::TITLE_LINE;
-        let mut out = Vec::new();
+        let mut out = if foot_holds_spaces(self.machine_layout()) {
+            self.quiet_space_lines(cx)
+        } else {
+            Vec::new()
+        };
         for index in self.quiet_indexes().collect::<Vec<_>>() {
             let Some(host) = self.machine_host(index) else {
                 continue;
@@ -202,6 +245,7 @@ impl Workbench {
                         this.set_machine_quiet(index, false, cx);
                     })),
                     also_seats: Vec::new(),
+                    kind: LineKind::Machine,
                 },
                 cx,
             );
@@ -223,7 +267,6 @@ impl Workbench {
                 );
             }
         }
-        out.extend(self.quiet_space_lines(cx));
         out
     }
     /// One gray line, a machine's or a space's: its fold, its square and words, and the way
@@ -243,15 +286,54 @@ impl Workbench {
             words,
             resume,
             also_seats,
+            kind,
         } = facts;
+        let machine = matches!(kind, LineKind::Machine);
         let open = self.sidebar.open(&fold, false);
         let state = self.sidebar.motion.line_state(&seat);
+        // A heading names itself and then how it stands.
         let rest = words[name.len()..].to_owned();
+        let rest = if machine {
+            rest.trim_start_matches(" · ").to_owned()
+        } else {
+            rest
+        };
         let seats = also_seats.iter().map(|seat| {
             (self.sidebar.motion.mark_spot(seat, true))
                 .absolute()
                 .size_full()
         });
+        let (mark, first) = match kind {
+            LineKind::Machine => (
+                self.spotted_mark(&seat, &name, true)
+                    .children(seats)
+                    .into_any_element(),
+                true,
+            ),
+            LineKind::Space { dots, first } => {
+                // A square's room around the dots, so a flight lands the same way on both.
+                let stack = dots.iter().map(|id| self.space_dot(id, F::CHIP_DOT));
+                (
+                    div()
+                        .relative()
+                        .h(px(MARK))
+                        .min_w(px(F::CHIP_DOT))
+                        .flex_shrink_0()
+                        .flex()
+                        .items_center()
+                        .gap(px(T::S2))
+                        .child(
+                            (self.sidebar.motion.mark_spot(&seat, true))
+                                .absolute()
+                                .size_full(),
+                        )
+                        .children(seats)
+                        .children(stack)
+                        .into_any_element(),
+                    first,
+                )
+            }
+        };
         div()
             .id(gpui::SharedString::from(id))
             .relative()
@@ -266,26 +348,41 @@ impl Workbench {
             ))
             .h(px(LINE))
             .flex_shrink_0()
-            .pl(px(T::S14))
+            .pl(px(if machine { T::S14 } else { F::EDGE }))
             .pr(px(T::S10))
             .flex()
             .items_center()
             .gap(px(T::S6))
-            .border_t(px(T::BORDER_WIDTH))
-            .border_color(T::color(F::line()))
+            .when(first, |d| {
+                d.border_t(px(T::BORDER_WIDTH))
+                    .border_color(T::color(F::line()))
+            })
+            .when(machine, |d| {
+                d.border_b(px(T::BORDER_WIDTH)).bg(T::color(F::hover()))
+            })
+            .when(!machine && first, |d| d.mt(px(T::S8)))
             .font_family(T::UI_FONT)
             .cursor_pointer()
             .hover(|s| s.bg(T::color(F::hover())))
-            .child(self.sidebar.fold_mark(&fold, open))
-            .child(self.spotted_mark(&seat, &name, true).children(seats))
+            .when(machine, |d| d.child(self.sidebar.fold_mark(&fold, open)))
+            .child(mark)
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .flex()
+                    .when(machine, |d| d.gap(px(T::S6)))
                     .text_size(px(F::TAG))
                     .text_color(mix(T::color(F::third()), T::color(F::bright()), state.glow))
-                    .child(div().flex_shrink_0().child(name.clone()))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .when(machine, |d| {
+                                d.font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(T::color(F::second()))
+                            })
+                            .child(name.clone()),
+                    )
                     .child(div().min_w_0().truncate().opacity(state.rest).child(rest)),
             )
             .when_some(resume, |d, resume| {
@@ -307,6 +404,7 @@ impl Workbench {
                         })),
                 )
             })
+            .when(!machine, |d| d.child(self.sidebar.fold_mark(&fold, open)))
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.sidebar.toggled.insert(fold.clone(), !open);
                 cx.notify();
@@ -446,6 +544,14 @@ mod tests {
     fn the_line_says_how_many_wait_only_when_some_do() {
         assert_eq!(quiet_words("apple", 2), "apple · 先不管 · 2 个在等");
         assert_eq!(quiet_words("apple", 0), "apple · 先不管");
+    }
+    #[test]
+    fn only_a_layout_with_a_heading_for_this_machine_takes_its_spaces_off_the_foot() {
+        use mooring_core::sidebar::Machines;
+        assert!(!foot_holds_spaces(Machines::Sections));
+        for layout in [Machines::Below, Machines::Mixed, Machines::Rail] {
+            assert!(foot_holds_spaces(layout));
+        }
     }
     #[test]
     fn the_palette_offers_the_way_back_from_where_it_is() {

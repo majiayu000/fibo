@@ -149,9 +149,9 @@ if platform::capabilities().handoff {
 <p>每一步都是小 PR，先原样搬动，不改逻辑；用 macOS 现有测试和性能门禁确认没有变化，再加新平台。这样也减少和 <code>main</code> 上并行工作的冲突。</p>
 <div class="wrap"><table>
 <tr><th>步</th><th>内容</th><th>Mac 行为变化</th><th>怎么算完成</th></tr>
-<tr><td>0</td><td>建 crate，加棘轮 guard 和 CI 矩阵；把 <code>core</code> 里已写好的进程、时间、shell 搬进去（<span class="ok">已做</span>）；目录能力收掉 <code>HOME</code>（下一个 PR）</td><td class="ok">无</td><td>guard 生效；三个平台的 <code>core</code> 测试都过</td></tr>
-<tr><td>1</td><td>host 的进程、文件监听、系统信息搬入接口，Linux 实现补上</td><td class="ok">无</td><td>Linux 上 host 编译通过，测试通过</td></tr>
-<tr><td>2</td><td><strong>Linux 跑通全链路：</strong>容器和真机上配对、手机连接、真实 <code>claude</code> 和 <code>codex</code> 状态。<strong>然后复核接口</strong></td><td class="ok">无</td><td>手机能看到并操作 Linux 上的 Agent</td></tr>
+<tr><td>0</td><td>建 crate，加棘轮 guard 和 CI 矩阵；把 <code>core</code> 里已写好的进程、时间、shell 搬进去，目录能力收掉 <code>HOME</code>（<span class="ok">已做</span>）</td><td class="ok">无</td><td>guard 生效；三个平台的 <code>core</code> 测试都过</td></tr>
+<tr><td>1</td><td>host 的进程、文件监听、系统信息搬入接口，Linux 实现补上（<span class="ok">已做</span>；<code>managed_session</code> 里 Mac 专用的资源测量留给第 2 步）</td><td class="ok">无</td><td>Linux 上 host 库编译通过，库测试通过，并由 CI 守住</td></tr>
+<tr><td>2</td><td><strong>Linux 跑通全链路：</strong>先让 <code>managed_session</code> 在 Linux 上编译和运行；然后容器和真机上配对、手机连接、真实 <code>claude</code> 和 <code>codex</code> 状态。<strong>然后复核接口</strong></td><td class="ok">无</td><td>手机能看到并操作 Linux 上的 Agent</td></tr>
 <tr><td>3</td><td>终端和本机连接：Unix 实现搬入接口，再写 ConPTY 和命名管道</td><td class="warn">原样搬动，靠测试和门禁确认</td><td>Windows 上 host 能启动，<code>list/read/send</code> 能用</td></tr>
 <tr><td>4</td><td>Windows 全链路：配对、手机、Agent 状态、钩子、读屏差异</td><td class="ok">无</td><td>你的 Windows 电脑上端到端可用</td></tr>
 <tr><td>5</td><td>窗口（<code>gpui_windows</code>、<code>gpui_linux</code>）、打包、发布；决定交接方案 B</td><td class="ok">无</td><td>按平台单独决定发不发</td></tr>
@@ -162,9 +162,10 @@ if platform::capabilities().handoff {
 <ul>
   <li><b>Windows 真机（build 26200），GNU 工具链加动态 ghostty：</b><code>core</code> 单元测试 227 过、1 个按设计忽略；<code>remote</code>、<code>relay</code>、<code>plugin-host</code> 全过。<code>core</code> 有 3 个集成测试失败，因为测试副本没有 git 记录和 <code>.deps/zed</code>，属于环境问题。</li>
   <li><b>Linux（Docker，ARM64）：</b>同样 4 个 crate 的单元测试全过；同样 3 个集成测试因环境问题失败。这一轮的代码早于本次修复，修复后没有重跑。</li>
-  <li><b>host 编译错误：</b>Linux 86 个，10 个文件；Windows 251 个。都是下限。</li>
+  <li><b>host 在 Linux 上（第 1 步后）：</b>库编译通过，库测试 313 过、4 个按设计忽略。之前是 86 个编译错误、10 个文件。Windows 的 251 个错误是移植前的数字，第 3 步再量。</li>
   <li><b>ConPTY：</b>OSC 7、133、7501、9、8 都能穿过；中文和 emoji 正常；<code>claude</code> 和 <code>codex</code> 能启动并录到画面。鼠标模式 <code>?1000h</code> 被吞；部分模式序列会排到文字前面；输出是整理后的屏幕，不是原始字节。</li>
-  <li><b>接口测试（第 0 步）：</b>同一份 <code>tests/contract</code> 在 macOS、Windows 真机、Linux 容器上都过。Windows 的 Job 对象第一次真正运行：结束整棵进程树、丢弃句柄不结束进程。</li>
+  <li><b>接口测试（第 0、1 步）：</b>同一份 <code>tests/contract</code> 在 macOS、Windows 真机、Linux 容器上都过。Windows 的 Job 对象第一次真正运行：结束整棵进程树、丢弃句柄不结束进程。Windows 上读别的进程的参数、环境变量、目录、套接字，以及文件监听，按接口约定返回 <code>Unsupported</code>，第 4 步补上。</li>
+  <li><b>接口第一次被第二个实现检验（第 1 步）：</b>Linux 的 inotify 没有日志可重放。接口没有改签名：<code>start</code> 从旧检查点开始时报 <code>MUST_SCAN</code>，由已有的补扫接手。代价是 Linux 上 host 每次重启都要扫一遍日志目录。</li>
   <li><b>Zig 和 MinGW 混用会悄悄算错：</b>静态链接 ghostty 后 <code>powf</code> 返回 0，亮度变成 NaN。改用动态库后恢复。</li>
 </ul>
 

@@ -17,9 +17,7 @@ impl Pane {
         self.clear_selection();
         self.follow_input(cx);
         self.send_input(bytes, false, cx);
-        if self.remote.is_none() {
-            cx.emit(super::PaneEvent::Typed);
-        }
+        cx.emit(super::PaneEvent::Typed);
     }
     pub fn terminal_id(&self) -> &str {
         &self.terminal

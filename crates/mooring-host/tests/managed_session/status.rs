@@ -280,6 +280,23 @@ fn quiet_agent_screen_with_an_approval_waits_on_the_user_until_they_answer() {
         detail.contains("看到：Do you want to proceed? / > 1. Yes / 2. No"),
         "{detail}"
     );
+    // What read it stays on disk: the screen itself is gone by the time a wrong card is noticed.
+    let wait_log = || {
+        fs::read_to_string(h.root.join("screen-waits.jsonl"))
+            .unwrap_or_default()
+            .lines()
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let logged = wait_log();
+    assert_eq!(logged.len(), 1, "one question, one entry: {logged:?}");
+    assert_eq!(logged[0]["event"], "waiting");
+    assert_eq!(logged[0]["terminal"], "approval");
+    assert_eq!(logged[0]["rule"], "approval");
+    assert_eq!(logged[0]["session"], id.as_str());
+    assert!(logged[0]["screen"]
+        .to_string()
+        .contains("Do you want to proceed?"));
     send(
         &mut stream,
         CONTROL,
@@ -300,6 +317,10 @@ fn quiet_agent_screen_with_an_approval_waits_on_the_user_until_they_answer() {
         check.starts_with("没认出提问框（底部没有审批或选择题的提示"),
         "{check}"
     );
+    let logged = wait_log();
+    assert_eq!(logged.len(), 2, "answered, it ends once: {logged:?}");
+    assert_eq!(logged[1]["event"], "ended");
+    assert_eq!(logged[1]["terminal"], "approval");
     assert_eq!(recognition(&h).metrics.lsof_spawns, 0);
 }
 

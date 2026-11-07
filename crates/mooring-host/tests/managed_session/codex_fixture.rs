@@ -88,7 +88,9 @@ pub(crate) fn daemon_codex(h: &Host, pane: &str, title: &str, steps: &[DaemonSte
     );
     h.call(h.launch(
         pane,
-        &format!("exec {} {} -c {}", q(&cli), extra, shell_quote(&script)),
+        // After the script, where every shell takes it for an argument: dash refuses an
+        // option it does not know.
+        &format!("exec {} -c {} {}", q(&cli), shell_quote(&script), extra),
     ))
     .unwrap();
 }

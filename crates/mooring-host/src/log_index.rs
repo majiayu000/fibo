@@ -1,9 +1,7 @@
 //! Durable identity/content index. First import is bounded; subsequent reads share one cursor.
-use crate::{
-    file_events::{normalized, Watch},
-    recognition::Transcript,
-};
+use crate::recognition::Transcript;
 use mooring_core::model::Agent;
+use mooring_platform::file_watch::{normalized, Watch};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     fs::{self, File},

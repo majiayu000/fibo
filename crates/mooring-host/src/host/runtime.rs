@@ -171,6 +171,7 @@ pub(super) fn serve_runtime(
         }
         thread::sleep(Duration::from_millis(20));
     }
+    wait_log::start(root);
     let socket = root.join("workbench.sock");
     match fs::symlink_metadata(&socket) {
         Ok(meta) if meta.file_type().is_socket() && meta.uid() == unsafe { libc::geteuid() } => {

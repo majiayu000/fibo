@@ -16,17 +16,12 @@ use crate::shell_match::runs;
 use mooring_platform::inspect;
 use std::collections::{HashMap, HashSet};
 use std::io;
-use std::process::Command;
 use std::sync::atomic::Ordering;
 
 /// A job still running after this long is taken for something that does not end.
 pub const JOB_LIMIT: u64 = 2 * 3600;
 /// Seconds between looks while some turn has shells left.
 pub const EVERY: u64 = 5;
-/// macOS hands out ports from here up (`net.inet.ip.portrange.first`) to a socket bound
-/// to port 0; a server meant to be visited is put on a port below it.
-const EPHEMERAL: u16 = 49152;
-
 /// What one look found for a shell: its process tree listens on a port, another process
 /// of the tree is connected to that port, something in the tree still works beside the
 /// listeners (a leaf that listens on nothing), and how long it has run. `None` from
@@ -243,44 +238,20 @@ fn sockets(pids: &[u32]) -> io::Result<Sockets> {
     if pids.is_empty() {
         return Ok(Sockets::default());
     }
-    let list = pids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
     crate::recognition::LSOF_SPAWNS.fetch_add(1, Ordering::Relaxed);
-    let out = Command::new("/usr/sbin/lsof")
-        .args([
-            "-nP",
-            "-a",
-            "-p",
-            &list,
-            "-iTCP",
-            "-sTCP:LISTEN,ESTABLISHED",
-            "-Fpn",
-        ])
-        .output()?;
-    // Exit 1 with no rows is "none".
-    Ok(parse_sockets(&String::from_utf8_lossy(&out.stdout)))
+    Ok(chosen(inspect::tcp_sockets(pids)?))
 }
-/// From `lsof -Fpn` rows: `p<pid>`, then one `n<addr>:<port>` per listening socket or
-/// `n<addr>:<port>-><addr>:<port>` per connection.
-fn parse_sockets(rows: &str) -> Sockets {
-    let port = |addr: &str| addr.rsplit(':').next().and_then(|n| n.parse::<u16>().ok());
-    let mut out = Sockets::default();
-    let mut pid = None;
-    for line in rows.lines() {
-        if let Some(p) = line.strip_prefix('p') {
-            pid = p.parse().ok();
-        } else if let (Some(name), Some(p)) = (line.strip_prefix('n'), pid) {
-            if let Some((_, remote)) = name.split_once("->") {
-                let here = remote.starts_with("127.") || remote.starts_with("[::1]");
-                if let (true, Some(n)) = (here, port(remote)) {
-                    out.dialing.push((p, n));
-                }
-            } else if let Some(n) = port(name).filter(|n| *n < EPHEMERAL) {
-                out.listening.entry(p).or_default().insert(n);
-            }
+/// Leaves out the ports the system handed out: only a chosen one says "server".
+fn chosen(found: inspect::TcpSockets) -> Sockets {
+    // A server meant to be visited is put on a port below what the system hands out.
+    let handed_out = inspect::first_handed_out_port();
+    let mut out = Sockets {
+        dialing: found.connected,
+        ..Sockets::default()
+    };
+    for (pid, port) in found.listening {
+        if port < handed_out {
+            out.listening.entry(pid).or_default().insert(port);
         }
     }
     out
@@ -289,6 +260,14 @@ fn parse_sockets(rows: &str) -> Sockets {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// zsh, which Agents' shells mostly are, where it is installed.
+    fn a_login_shell() -> &'static str {
+        if std::path::Path::new("/bin/zsh").exists() {
+            "/bin/zsh"
+        } else {
+            "/bin/sh"
+        }
+    }
     const YOUNG: Seen = Seen {
         listening: false,
         own_client: false,
@@ -450,7 +429,7 @@ mod tests {
     #[test]
     fn a_real_process_an_exec_became_is_found() {
         let command = "cd /tmp && exec /bin/sleep 31.7";
-        let mut child = std::process::Command::new("/bin/zsh")
+        let mut child = std::process::Command::new(a_login_shell())
             .args(["-c", command])
             .spawn()
             .unwrap();
@@ -469,19 +448,22 @@ mod tests {
     }
     #[test]
     fn only_a_chosen_port_makes_a_server() {
-        let rows = "p100\nf12\nn127.0.0.1:51174\np200\nf3\nn*:8000\np300\nf4\nn[::1]:5173\nf5\nn[::1]:60000\n";
-        let got = parse_sockets(rows).listening;
+        let got = chosen(inspect::TcpSockets {
+            listening: vec![(100, 51174), (200, 8000), (300, 5173), (300, 60000)],
+            connected: vec![],
+        })
+        .listening;
         assert!(!got.contains_key(&100), "a renderer's own ephemeral port");
         assert!(got.contains_key(&200) && got.contains_key(&300), "{got:?}");
     }
     #[test]
     fn a_client_counts_only_from_another_process_of_the_tree_on_this_machine() {
-        // Rows as lsof printed them for the Crouton script: the relay and its Python client.
-        let rows = "p28079\nf5\nn*:8898\nf6\nn127.0.0.1:8898->127.0.0.1:49848\n\
-                    p28382\nf4\nn127.0.0.1:49848->127.0.0.1:8898\n\
-                    p500\nf4\nn[::1]:49900->[::1]:8898\n\
-                    p600\nf4\nn10.0.0.2:49901->10.0.0.9:8898\n";
-        let got = parse_sockets(rows);
+        // As the Crouton script's relay and its Python client looked. Process 600 connects
+        // to another machine's 8898, which `tcp_sockets` does not list.
+        let got = chosen(inspect::TcpSockets {
+            listening: vec![(28079, 8898)],
+            connected: vec![(28079, 49848), (28382, 8898), (500, 8898)],
+        });
         assert!(got.own_client(&[28079, 28382]), "its client in the tree");
         assert!(got.own_client(&[28079, 500]), "over IPv6 too");
         assert!(!got.own_client(&[28079]), "a client outside the tree");
@@ -496,7 +478,7 @@ mod tests {
     fn a_real_shell_quoting_a_quote_the_new_way_is_found() {
         let command = "perl -e 'sleep 30' # quote-9b2e";
         let quoted = command.replace('\'', r#"'"'"'"#);
-        let mut child = std::process::Command::new("/bin/zsh")
+        let mut child = std::process::Command::new(a_login_shell())
             .args(["-c", &format!("eval '{quoted}' < /dev/null && true")])
             .spawn()
             .unwrap();
@@ -519,7 +501,7 @@ mod tests {
         // Bound to 0: the system picks an ephemeral port, as a renderer does for its browser.
         let helper = r#"python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(); time.sleep(30)' # eph-7f3a"#;
         let server = r#"python3 -c 'import socket,time
-for p in range(41000, 41200):
+for p in range(21000, 21200):
     s = socket.socket()
     try:
         s.bind(("127.0.0.1", p)); break
@@ -582,12 +564,12 @@ print(p, flush=True)
 c, _ = s.accept(); time.sleep(20)";
         let own_client = "subprocess.Popen([sys.executable, \"-c\", \"import socket,sys,time; c = socket.create_connection((sys.argv[1], int(sys.argv[2]))); time.sleep(20)\", \"127.0.0.1\", str(p)])";
         let script = bind
-            .replace("{from}", "41300")
-            .replace("{to}", "41400")
+            .replace("{from}", "21300")
+            .replace("{to}", "21400")
             .replace("{client}", own_client);
         let server = bind
-            .replace("{from}", "41400")
-            .replace("{to}", "41500")
+            .replace("{from}", "21400")
+            .replace("{to}", "21500")
             .replace("{client}", "");
         let own = format!(": own-8c1d; python3 -c '{script}'");
         let alone = format!(": srv-8c1d; python3 -c '{server}'");

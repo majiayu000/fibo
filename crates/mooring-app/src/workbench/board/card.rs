@@ -301,6 +301,7 @@ impl Workbench {
                     .gap(px(T::S6))
                     .children(left)
                     .child(div().flex_1())
+                    .when_some(self.context_ring(session), |d, ring| d.child(ring))
                     .when(column == Column::Done, |d| {
                         d.child(
                             div()

@@ -165,45 +165,17 @@ fn parse_processes(text: &str) -> io::Result<HashMap<u32, Process>> {
     Ok(out)
 }
 
-/// Activity Monitor's Memory column for one process. Only our own user's processes answer;
-/// root and system daemons return EPERM.
-fn footprint(pid: u32) -> Option<u64> {
-    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
-    let result = unsafe {
-        libc::proc_pid_rusage(
-            pid as libc::c_int,
-            libc::RUSAGE_INFO_V4,
-            (&mut info as *mut libc::rusage_info_v4).cast(),
-        )
-    };
-    (result == 0).then_some(info.ri_phys_footprint)
-}
 /// Swaps each readable process's RSS for its footprint; returns how many kept RSS.
 fn read_footprints(processes: &mut HashMap<u32, Process>) -> usize {
     let mut kept = 0;
     for (&pid, process) in processes.iter_mut() {
-        match footprint(pid) {
+        match mooring_platform::inspect::memory(pid) {
             Some(bytes) => process.memory = bytes,
             None => kept += 1,
         }
     }
     kept
 }
-fn sysctl<T: Copy>(name: &std::ffi::CStr) -> Option<T> {
-    let mut value: T = unsafe { std::mem::zeroed() };
-    let mut len = std::mem::size_of::<T>();
-    let read = unsafe {
-        libc::sysctlbyname(
-            name.as_ptr(),
-            (&mut value as *mut T).cast(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        )
-    };
-    (read == 0 && len == std::mem::size_of::<T>()).then_some(value)
-}
-
 fn parse_gpu(text: &str) -> Gpu {
     static DEVICE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r#""Device Utilization %"\s*=\s*(\d+)"#).unwrap());
@@ -230,71 +202,16 @@ fn parse_gpu(text: &str) -> Gpu {
     gpu
 }
 
-#[allow(deprecated)] // libc exposes these Mach calls; no additional Mach dependency needed.
-fn cpu_ticks() -> io::Result<[u32; 4]> {
-    extern "C" {
-        fn mach_port_deallocate(task: u32, name: u32) -> i32;
-    }
-    let mut info: libc::host_cpu_load_info = unsafe { std::mem::zeroed() };
-    let mut count = libc::HOST_CPU_LOAD_INFO_COUNT;
-    let result = unsafe {
-        let host = libc::mach_host_self();
-        let result = libc::host_statistics(
-            host,
-            libc::HOST_CPU_LOAD_INFO,
-            (&mut info as *mut libc::host_cpu_load_info).cast(),
-            &mut count,
-        );
-        mach_port_deallocate(libc::mach_task_self(), host);
-        result
-    };
-    if result != 0 {
-        return Err(io::Error::other(format!("整机 CPU 统计不可读（{result}）")));
-    }
-    Ok(info.cpu_ticks)
-}
-/// Physical memory the way Activity Monitor adds it up: app memory (anonymous pages that
-/// cannot be purged), wired and compressed. None when the kernel does not answer.
-#[allow(deprecated)]
 fn memory() -> Option<Memory> {
-    extern "C" {
-        fn mach_port_deallocate(task: u32, name: u32) -> i32;
-    }
-    let total: u64 = sysctl(c"hw.memsize").filter(|&t| t > 0)?;
-    let mut info: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
-    let mut count = libc::HOST_VM_INFO64_COUNT;
-    let result = unsafe {
-        let host = libc::mach_host_self();
-        let result = libc::host_statistics64(
-            host,
-            libc::HOST_VM_INFO64,
-            (&mut info as *mut libc::vm_statistics64).cast(),
-            &mut count,
-        );
-        mach_port_deallocate(libc::mach_task_self(), host);
-        result
-    };
-    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-    if result != 0 || page <= 0 {
-        return None;
-    }
-    let page = page as u64;
-    let app = u64::from(
-        info.internal_page_count
-            .saturating_sub(info.purgeable_count),
-    );
-    let compressed = u64::from(info.compressor_page_count) * page;
-    let wired = u64::from(info.wire_count) * page;
+    let m = mooring_platform::system::memory()?;
     Some(Memory {
-        total_bytes: total,
-        used_bytes: (app * page + wired + compressed).min(total),
-        compressed_bytes: compressed,
-        wired_bytes: wired,
-        cached_bytes: (u64::from(info.external_page_count) + u64::from(info.purgeable_count))
-            * page,
-        swap_bytes: sysctl::<libc::xsw_usage>(c"vm.swapusage").map_or(0, |s| s.xsu_used),
-        pressure: sysctl::<i32>(c"kern.memorystatus_vm_pressure_level")
-            .and_then(Pressure::from_level),
+        total_bytes: m.total,
+        used_bytes: m.used,
+        compressed_bytes: m.compressed,
+        wired_bytes: m.wired,
+        cached_bytes: m.cached,
+        swap_bytes: m.swap,
+        pressure: m.pressure.and_then(Pressure::from_level),
     })
 }
 fn snapshot(stream: &UnixStream, notes: &mut Vec<String>) -> io::Result<Snapshot> {
@@ -321,7 +238,9 @@ fn snapshot(stream: &UnixStream, notes: &mut Vec<String>) -> io::Result<Snapshot
             Gpu::default()
         }
     };
-    let ticks = cpu_ticks().map_err(|e| notes.push(e.to_string())).ok();
+    let ticks = mooring_platform::system::cpu_ticks()
+        .map_err(|e| notes.push(e.to_string()))
+        .ok();
     Ok(Snapshot {
         at,
         processes,
@@ -469,28 +388,6 @@ pub fn serve(stream: &mut UnixStream, terminals: &[Terminal]) -> io::Result<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn memory_reading_is_within_physical_memory() {
-        let m = memory().expect("macOS answers hw.memsize and HOST_VM_INFO64");
-        assert!(m.total_bytes >= 1 << 30);
-        assert!(m.used_bytes > 0 && m.used_bytes <= m.total_bytes);
-        assert!(m.compressed_bytes <= m.used_bytes);
-        assert!(m.wired_bytes > 0 && m.wired_bytes + m.compressed_bytes <= m.used_bytes);
-        assert!(
-            m.pressure.is_some(),
-            "kern.memorystatus_vm_pressure_level is readable"
-        );
-    }
-
-    #[test]
-    fn own_process_reads_its_footprint() {
-        let me = std::process::id();
-        let bytes = footprint(me).expect("our own process answers proc_pid_rusage");
-        assert!(bytes > 1 << 20);
-        // launchd belongs to root: unreadable, so the RSS from ps stays.
-        assert_eq!(footprint(1), None);
-    }
-
     #[test]
     fn process_snapshot_keeps_bundle_spaces_start_identity_and_long_cpu_time() {
         let p = parse_processes("42 1 Wed Oct 28 10:30:00 2026 123:04.50 2048 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n").unwrap();

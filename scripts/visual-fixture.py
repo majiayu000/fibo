@@ -16,6 +16,7 @@ MOORING_FIXTURE_BOARD=1 at prepare fills the board's worst cases: a live running
 done sessions, and a long branch on every project.
 MOORING_FIXTURE_QUOTA_SPARE=1 at prepare has the week's usage window renew in five hours, for
 StatusQuota.
+MOORING_FIXTURE_CONTEXT=1 at prepare states how full each session's context window is.
 MOORING_FIXTURE_UNLINKED=1 at prepare adds a tab of Agents no conversation is tied to, for the
 SidebarUnlinked-* pages.
 """
@@ -101,6 +102,11 @@ if sys.argv[1] == 'prepare':
             records.append((stamp - 700, 'event_msg', {'type': 'token_count', 'rate_limits': {
                 'primary': {'used_percent': 42.0, 'window_minutes': 300, 'resets_at': now + 7200},
                 'secondary': {'used_percent': 31.0, 'window_minutes': 10080, 'resets_at': now + (5 * 3600 if os.environ.get('MOORING_FIXTURE_QUOTA_SPARE') else 4 * 86400)}}}))
+        if os.environ.get('MOORING_FIXTURE_CONTEXT'):
+            # How full each session's context is: under the line, past it, and close to the end.
+            records.append((stamp - 600, 'event_msg', {'type': 'token_count', 'info': {
+                'model_context_window': 475000,
+                'last_token_usage': {'input_tokens': [399000, 290000, 180000][n % 3]}}}))
         if n == 1:
             records += call(cid, 1, None, patch('crates/mooring-core/src/model.rs'), stamp - 400)
             records += call(cid, 2, 'cargo test -p mooring-app tab_title_survives_exit', 'Process exited with code 0\ntest result: ok. 1 passed; 0 failed', stamp - 300)

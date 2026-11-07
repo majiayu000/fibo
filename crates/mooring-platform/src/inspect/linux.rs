@@ -81,7 +81,7 @@ fn children_by_walking(pid: u32) -> io::Result<Vec<u32>> {
     Ok(out)
 }
 
-pub fn started(pid: u32) -> Option<u64> {
+pub fn started_micros(pid: u32) -> Option<u64> {
     // Field 22, in clock ticks since boot.
     let ticks: u64 = stat_fields(pid)?.get(19)?.parse().ok()?;
     let per_second = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
@@ -93,12 +93,196 @@ pub fn started(pid: u32) -> Option<u64> {
         .trim()
         .parse()
         .ok()?;
-    Some(boot + ticks / per_second)
+    Some(boot * 1_000_000 + ticks * 1_000_000 / per_second)
+}
+
+pub fn usage(pid: u32) -> Option<super::Usage> {
+    // Fields 14 and 15, in clock ticks.
+    let fields = stat_fields(pid)?;
+    let user: u64 = fields.get(11)?.parse().ok()?;
+    let system: u64 = fields.get(12)?.parse().ok()?;
+    let per_second = u64::try_from(unsafe { libc::sysconf(libc::_SC_CLK_TCK) })
+        .ok()
+        .filter(|t| *t > 0)?;
+    // Not everywhere readable, and a container may hide it: then no disk counts.
+    let io = std::fs::read_to_string(proc_file(pid, "io")).unwrap_or_default();
+    let count = |name: &str| {
+        io.lines()
+            .find_map(|l| l.strip_prefix(name)?.trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+    Some(super::Usage {
+        cpu: std::time::Duration::from_micros((user + system) * 1_000_000 / per_second),
+        disk_read: count("read_bytes:"),
+        disk_written: count("write_bytes:"),
+        instructions: 0,
+        syscalls: 0,
+    })
+}
+
+pub fn first_handed_out_port() -> u16 {
+    std::fs::read_to_string("/proc/sys/net/ipv4/ip_local_port_range")
+        .ok()
+        .and_then(|range| range.split_whitespace().next()?.parse().ok())
+        .unwrap_or(32768)
+}
+
+pub fn all_pids() -> Vec<u32> {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return vec![];
+    };
+    entries
+        .flatten()
+        .filter_map(|e| e.file_name().to_str()?.parse().ok())
+        .collect()
+}
+
+/// The program's file, as macOS names a process. Where that is not ours to read, or there is
+/// no file (a kernel thread), what the kernel calls it, of which it keeps 15 bytes.
+pub fn name(pid: u32) -> Option<String> {
+    if let Ok(path) = std::fs::read_link(proc_file(pid, "exe")) {
+        return Some(path.file_name()?.to_string_lossy().into_owned());
+    }
+    let name = std::fs::read_to_string(proc_file(pid, "comm")).ok()?;
+    Some(name.trim_end_matches('\n').to_owned())
+}
+
+pub fn executable(pid: u32) -> io::Result<String> {
+    Ok(std::fs::read_link(proc_file(pid, "exe"))?
+        .to_string_lossy()
+        .into_owned())
+}
+
+pub fn stdin_is_a_channel(pid: u32) -> bool {
+    std::fs::read_link(proc_file(pid, "fd/0")).is_ok_and(|target| {
+        let target = target.to_string_lossy();
+        target.starts_with("pipe:") || target.starts_with("socket:")
+    })
+}
+
+/// What it holds in memory, as `top` shows it.
+pub fn memory(pid: u32) -> Option<u64> {
+    let statm = std::fs::read_to_string(proc_file(pid, "statm")).ok()?;
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    let page = u64::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok()?;
+    Some(pages * page)
+}
+
+/// /proc/<pid>/fd's targets.
+fn open_targets(pid: u32) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(proc_file(pid, "fd")) else {
+        return vec![];
+    };
+    entries
+        .flatten()
+        .filter_map(|e| std::fs::read_link(e.path()).ok())
+        .collect()
+}
+
+pub fn open_files(pids: &[u32]) -> io::Result<std::collections::HashMap<u32, Vec<String>>> {
+    Ok(pids
+        .iter()
+        .map(|pid| {
+            let files = open_targets(*pid)
+                .into_iter()
+                .filter(|t| t.is_absolute())
+                .map(|t| t.to_string_lossy().into_owned())
+                .collect();
+            (*pid, files)
+        })
+        .collect())
+}
+
+/// An address in /proc/net/tcp's hex, whose bytes run backwards in each 32-bit word.
+fn is_loopback(hex: &str) -> bool {
+    match hex.len() {
+        8 => hex.ends_with("7F"),
+        32 => {
+            hex == "00000000000000000000000001000000"
+                || (hex.starts_with("0000000000000000FFFF0000") && hex.ends_with("7F"))
+        }
+        _ => false,
+    }
+}
+
+/// One row of /proc/net/tcp: (socket's inode, listening, port it is about).
+fn parse_tcp_row(row: &str) -> Option<(u64, bool, u16)> {
+    let fields: Vec<&str> = row.split_whitespace().collect();
+    let (local, remote) = (fields.get(1)?, fields.get(2)?);
+    let inode = fields.get(9)?.parse().ok()?;
+    let port = |addr: &str| u16::from_str_radix(addr.rsplit(':').next()?, 16).ok();
+    match *fields.get(3)? {
+        "0A" => Some((inode, true, port(local)?)),
+        "01" if is_loopback(remote.split(':').next()?) => Some((inode, false, port(remote)?)),
+        _ => None,
+    }
+}
+
+pub fn tcp_sockets(pids: &[u32]) -> io::Result<super::TcpSockets> {
+    let mut out = super::TcpSockets::default();
+    for pid in pids {
+        let inodes: Vec<u64> = open_targets(*pid)
+            .iter()
+            .filter_map(|t| {
+                t.to_str()?
+                    .strip_prefix("socket:[")?
+                    .strip_suffix(']')?
+                    .parse()
+                    .ok()
+            })
+            .collect();
+        if inodes.is_empty() {
+            continue;
+        }
+        for table in ["net/tcp", "net/tcp6"] {
+            // No such table: no IPv6, or the process just ended.
+            let Ok(text) = std::fs::read_to_string(proc_file(*pid, table)) else {
+                continue;
+            };
+            for (inode, listening, port) in text.lines().skip(1).filter_map(parse_tcp_row) {
+                if inodes.contains(&inode) {
+                    let list = if listening {
+                        &mut out.listening
+                    } else {
+                        &mut out.connected
+                    };
+                    list.push((*pid, port));
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::env_value;
+    use super::{env_value, is_loopback, parse_tcp_row};
+
+    #[test]
+    fn tcp_rows_say_who_listens_and_who_connects_here() {
+        let row = |local: &str, remote: &str, state: &str| {
+            format!(
+                "  0: {local} {remote} {state} 00000000:00000000 00:00000000 00000000  1000  0 42 1"
+            )
+        };
+        let listen = row("0100007F:1F90", "00000000:0000", "0A");
+        assert_eq!(parse_tcp_row(&listen), Some((42, true, 8080)));
+        let here = row("0100007F:C000", "0100007F:1F90", "01");
+        assert_eq!(parse_tcp_row(&here), Some((42, false, 8080)));
+        let away = row("0A00020F:C000", "08080808:01BB", "01");
+        assert_eq!(parse_tcp_row(&away), None);
+        let closing = row("0100007F:C000", "0100007F:1F90", "06");
+        assert_eq!(parse_tcp_row(&closing), None);
+    }
+
+    #[test]
+    fn loopback_in_each_of_its_spellings() {
+        assert!(is_loopback("0100007F"));
+        assert!(is_loopback("00000000000000000000000001000000"));
+        assert!(is_loopback("0000000000000000FFFF00000100007F"));
+        assert!(!is_loopback("0A00020F"));
+        assert!(!is_loopback("0000000000000000FFFF00000A00020F"));
+    }
 
     #[test]
     fn a_variable_is_its_whole_name() {

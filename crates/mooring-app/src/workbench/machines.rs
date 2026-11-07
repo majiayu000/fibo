@@ -122,7 +122,7 @@ impl Workbench {
                                 .text_color(T::color(T::secondary()))
                                 .on_click(cx.listener(
                                     move |this, _, window, cx| {
-                                        this.open_remote_shell(index, window, cx)
+                                        this.open_remote_shell(index, None, window, cx)
                                     },
                                 )),
                             )
@@ -215,6 +215,14 @@ impl Workbench {
             let pane = cx.new(|cx| Pane::remote(slot, &id, cx));
             cx.observe(&pane, |this, _, cx| this.pane_changed(cx))
                 .detach();
+            // Typing here is typing: it brings a machine put aside back, as it does a space.
+            let host = remote.view.lock().unwrap().spec.host.clone();
+            cx.subscribe(&pane, move |this, _, event, cx| {
+                if matches!(event, crate::terminal::pane::PaneEvent::Typed) {
+                    this.work_began_on_machine(&host, cx);
+                }
+            })
+            .detach();
             let title = shown_title(&card);
             self.peek = Some(Peek {
                 terminal: key,
@@ -241,11 +249,12 @@ impl Workbench {
 }
 
 impl Workbench {
-    /// 「＋」 on a machine's heading: a shell in a new tab there, in its first space's
-    /// folder, then that shell in the peek. Named, so a resend opens one.
+    /// 「＋」 on a machine's heading: a shell in a new tab there, in `cwd` or its first
+    /// space's folder, then that shell in the peek. Named, so a resend opens one.
     pub(super) fn open_remote_shell(
         &mut self,
         index: usize,
+        cwd: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -260,7 +269,7 @@ impl Workbench {
             (view.machine.as_ref()).map_or_else(|| view.spec.host.clone(), |m| m.name.clone())
         };
         let op = mooring_remote::protocol::Op::Open {
-            cwd: None,
+            cwd,
             agent: None,
             prompt: None,
             resume: None,
@@ -466,7 +475,18 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open_remote_shell(index, window, cx);
+        self.open_remote_shell(index, None, window, cx);
+    }
+    /// Into the open peek: keys as you type them, or a mouse report.
+    pub fn visual_in_peek(&mut self, text: &str, mouse: bool, cx: &mut Context<Self>) {
+        let pane = self.peek.as_ref().expect("a peek is open").pane.clone();
+        pane.update(cx, |p, cx| {
+            if mouse {
+                p.visual_pointer(text, cx);
+            } else {
+                p.visual_type(text, cx);
+            }
+        });
     }
     /// The open peek's terminal key, `remote:<machine>:<terminal>` for another machine's.
     pub fn visual_peek_key(&self) -> Option<String> {
