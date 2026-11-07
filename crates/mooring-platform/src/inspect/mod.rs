@@ -1,8 +1,8 @@
 //! Reading what a running process is: its arguments, environment, directory, children and
 //! start time. Asks the kernel for one process at a time, never scans for it by name.
 //!
-//! Arguments, environment, directory, sockets and open files are refused with `Unsupported`
-//! on Windows for now: the Windows chain (step 4 in docs/platform/index.html) adds them.
+//! Open files are refused with `Unsupported` on Windows: see the reason there. On Windows the
+//! environment is what the process holds now, not what it started with.
 use std::collections::HashMap;
 use std::io;
 
@@ -26,7 +26,7 @@ pub fn env_var(pid: u32, name: &str) -> Option<String> {
     imp::env_var(pid, name)
 }
 
-/// A process's current directory.
+/// A process's current directory, in the form [`crate::fs::canonical`] gives.
 pub fn cwd(pid: u32) -> Option<String> {
     imp::cwd(pid)
 }
@@ -62,7 +62,6 @@ pub fn executable(pid: u32) -> io::Result<String> {
 }
 
 /// Whether a process's standard input is a pipe or a socket rather than a file or terminal.
-/// Windows does not say of another process: false there.
 pub fn stdin_is_a_channel(pid: u32) -> bool {
     imp::stdin_is_a_channel(pid)
 }

@@ -36,6 +36,20 @@ pub fn create_private_dir(dir: &Path) -> io::Result<()> {
 }
 
 /// Takes the rights of its directory, as `create_private_dir` says.
+pub fn canonical(path: &Path) -> io::Result<std::path::PathBuf> {
+    Ok(without_verbatim(&std::fs::canonicalize(path)?))
+}
+
+fn without_verbatim(path: &Path) -> std::path::PathBuf {
+    let text = path.to_string_lossy();
+    match text.strip_prefix(r"\\?\UNC\") {
+        Some(share) => format!(r"\\{share}").into(),
+        None => text
+            .strip_prefix(r"\\?\")
+            .map_or_else(|| path.to_owned(), Into::into),
+    }
+}
+
 pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let temp = path.with_extension(format!("tmp{}", std::process::id()));
     std::fs::write(&temp, bytes)?;
