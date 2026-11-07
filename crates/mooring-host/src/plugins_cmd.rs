@@ -610,9 +610,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
                 .ok_or_else(|| io::Error::other("找不到配置目录：HOME 没有设置"))?,
         ),
     };
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
+    let home = mooring_platform::dirs::home().unwrap_or_default();
     let checked = check(&dir, &home);
     let bad = checked
         .iter()

@@ -65,10 +65,7 @@ pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()>
     })
 }
 pub fn config_dir() -> Option<std::path::PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".config")))?;
-    Some(base.join("mooring"))
+    Some(mooring_platform::dirs::config_home()?.join("mooring"))
 }
 
 #[cfg(test)]

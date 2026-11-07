@@ -23,9 +23,7 @@ const STATUS: Duration = Duration::from_secs(3);
 const AT_ONCE: usize = 8;
 
 pub(super) fn home() -> io::Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| io::Error::other("没有家目录"))
+    mooring_platform::dirs::home().ok_or_else(|| io::Error::other("没有家目录"))
 }
 /// `~` and `~/…` from home; anything else must be absolute.
 pub(super) fn expand(path: &str) -> io::Result<PathBuf> {

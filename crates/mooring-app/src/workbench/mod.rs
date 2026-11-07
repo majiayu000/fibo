@@ -75,7 +75,7 @@ pub(super) fn usable_cwd(candidates: impl IntoIterator<Item = String>) -> String
     candidates
         .into_iter()
         .find(|d| Path::new(d).is_dir())
-        .or_else(|| std::env::var("HOME").ok())
+        .or_else(mooring_platform::dirs::home_str)
         .unwrap_or_else(|| "/".into())
 }
 /// A space whose folder was set but is gone. A space with no folder set is not missing:
@@ -171,8 +171,8 @@ fn id() -> String {
     )
 }
 fn home_relative(path: &str) -> String {
-    match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() && path.starts_with(&home) => {
+    match mooring_platform::dirs::home_str() {
+        Some(home) if !home.is_empty() && path.starts_with(&home) => {
             format!("~{}", &path[home.len()..])
         }
         _ => path.to_owned(),

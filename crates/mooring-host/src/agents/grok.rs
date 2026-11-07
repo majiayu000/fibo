@@ -162,10 +162,10 @@ impl Adapter for Grok {
         executable == "grok"
     }
     fn process_session(&self, pid: u32, _args: &[String]) -> (Option<String>, bool) {
-        let Some(home) = std::env::var_os("HOME") else {
+        let Some(home) = mooring_platform::dirs::home() else {
             return (None, false);
         };
-        let registry = grok_home(Path::new(&home)).join("active_sessions.json");
+        let registry = grok_home(&home).join("active_sessions.json");
         (registered(&registry, pid, started(pid)), false)
     }
     fn registry(&self, root: &Path) -> Option<PathBuf> {

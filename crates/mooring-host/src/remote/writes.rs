@@ -93,7 +93,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     let cwd = asked.map_or_else(|| space.cwd.clone(), str::to_owned);
     let cwd = Some(cwd)
         .filter(|c| Path::new(c).is_dir())
-        .or_else(|| std::env::var("HOME").ok())
+        .or_else(mooring_platform::dirs::home_str)
         .ok_or_else(|| io::Error::other("目录不存在"))?;
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let command = match session {
