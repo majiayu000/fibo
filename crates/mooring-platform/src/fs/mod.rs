@@ -5,6 +5,8 @@ use std::path::Path;
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod imp;
+mod replace;
+pub use replace::replace_file;
 
 /// A link at `at` to the directory `to`. May be refused where links need a right the account
 /// lacks: the error says so.

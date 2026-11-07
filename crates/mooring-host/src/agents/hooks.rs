@@ -201,15 +201,9 @@ fn strip(settings: &mut Map<String, Value>) -> bool {
     changed
 }
 fn write(path: &Path, settings: &Map<String, Value>) -> io::Result<()> {
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir)?;
-    }
     let mut text = serde_json::to_string_pretty(settings).map_err(io::Error::other)?;
     text.push('\n');
-    // Beside the original, then renamed over it: a crash leaves one or the other whole.
-    let temporary = path.with_extension("json.mooring-tmp");
-    fs::write(&temporary, text)?;
-    fs::rename(&temporary, path)
+    mooring_platform::fs::replace_file(path, text.as_bytes()).map(|_| ())
 }
 /// Returns whether the file changed. Outdated entries of ours are replaced, not added to.
 pub fn install(agent: Agent, hooks: &Hooks) -> io::Result<bool> {
@@ -254,6 +248,32 @@ mod tests {
             settings: dir.join("settings.json"),
             events: &["SessionStart", "Stop"],
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installing_and_removing_keep_a_private_linked_settings_file_as_it_was() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let hooks = target(&dir);
+        let dotfiles = dir.join("dotfiles.json");
+        fs::write(&dotfiles, r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"sk-test"}}"#).unwrap();
+        fs::set_permissions(&dotfiles, fs::Permissions::from_mode(0o600)).unwrap();
+        symlink(&dotfiles, &hooks.settings).unwrap();
+        let unchanged = |what: &str| {
+            let link = fs::symlink_metadata(&hooks.settings).unwrap();
+            assert!(link.is_symlink(), "{what} replaced the link");
+            let mode = fs::metadata(&dotfiles).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600, "{what} widened the permissions");
+        };
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        unchanged("install");
+        let written = fs::read_to_string(&dotfiles).unwrap();
+        assert!(written.contains(HOOK_ENV) && written.contains("sk-test"));
+        assert!(uninstall(&hooks).unwrap());
+        unchanged("uninstall");
+        assert!(!fs::read_to_string(&dotfiles).unwrap().contains(HOOK_ENV));
     }
 
     #[test]
