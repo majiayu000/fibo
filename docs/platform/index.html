@@ -151,7 +151,7 @@ if platform::capabilities().handoff {
 <tr><th>步</th><th>内容</th><th>Mac 行为变化</th><th>怎么算完成</th></tr>
 <tr><td>0</td><td>建 crate，加棘轮 guard 和 CI 矩阵；把 <code>core</code> 里已写好的进程、时间、shell 搬进去，目录能力收掉 <code>HOME</code>（<span class="ok">已做</span>）</td><td class="ok">无</td><td>guard 生效；三个平台的 <code>core</code> 测试都过</td></tr>
 <tr><td>1</td><td>host 的进程、文件监听、系统信息搬入接口，Linux 实现补上（<span class="ok">已做</span>；<code>managed_session</code> 里 Mac 专用的资源测量留给第 2 步）</td><td class="ok">无</td><td>Linux 上 host 库编译通过，库测试通过，并由 CI 守住</td></tr>
-<tr><td>2</td><td><strong>Linux 跑通全链路：</strong>先让 <code>managed_session</code> 在 Linux 上编译和运行；然后容器和真机上配对、手机连接、真实 <code>claude</code> 和 <code>codex</code> 状态。<strong>然后复核接口</strong></td><td class="ok">无</td><td>手机能看到并操作 Linux 上的 Agent</td></tr>
+<tr><td>2</td><td><strong>Linux 跑通全链路：</strong>先让 <code>managed_session</code> 在 Linux 上编译和运行；然后容器和真机上配对、手机连接、真实 <code>claude</code> 和 <code>codex</code> 状态。<strong>然后复核接口</strong></td><td class="ok">无</td><td>手机能看到并操作 Linux 上的 Agent。<span class="ok">测试已过</span>（模拟手机经中继、假 CLI）；真手机和已登录的真实 CLI 还没做</td></tr>
 <tr><td>3</td><td>终端和本机连接：Unix 实现搬入接口，再写 ConPTY 和命名管道</td><td class="warn">原样搬动，靠测试和门禁确认</td><td>Windows 上 host 能启动，<code>list/read/send</code> 能用</td></tr>
 <tr><td>4</td><td>Windows 全链路：配对、手机、Agent 状态、钩子、读屏差异</td><td class="ok">无</td><td>你的 Windows 电脑上端到端可用</td></tr>
 <tr><td>5</td><td>窗口（<code>gpui_windows</code>、<code>gpui_linux</code>）、打包、发布；决定交接方案 B</td><td class="ok">无</td><td>按平台单独决定发不发</td></tr>
@@ -165,6 +165,10 @@ if platform::capabilities().handoff {
   <li><b>host 在 Linux 上（第 1 步后）：</b>库编译通过，库测试 313 过、4 个按设计忽略。之前是 86 个编译错误、10 个文件。Windows 的 251 个错误是移植前的数字，第 3 步再量。</li>
   <li><b>ConPTY：</b>OSC 7、133、7501、9、8 都能穿过；中文和 emoji 正常；<code>claude</code> 和 <code>codex</code> 能启动并录到画面。鼠标模式 <code>?1000h</code> 被吞；部分模式序列会排到文字前面；输出是整理后的屏幕，不是原始字节。</li>
   <li><b>接口测试（第 0、1 步）：</b>同一份 <code>tests/contract</code> 在 macOS、Windows 真机、Linux 容器上都过。Windows 的 Job 对象第一次真正运行：结束整棵进程树、丢弃句柄不结束进程。Windows 上读别的进程的参数、环境变量、目录、套接字，以及文件监听，按接口约定返回 <code>Unsupported</code>，第 4 步补上。</li>
+  <li><b>host 全部测试在 Linux 上（第 2 步）：</b>Debian ARM64 容器 549 过、0 败、39 个按设计忽略，包括真实终端和经中继的手机协议；GitHub 的 Ubuntu x86 也全过，CI 从此守住。Ubuntu 上才冒出来的差异：<code>PROMPT_COMMAND</code> 是数组且多一个 systemd 钩子。同一份资源预算：40 个空闲终端 CPU 约 0%，4 个 Agent 写 30 秒 host 用 0.52 秒 CPU，追加的日志只读一遍。Linux 数不了指令，这项靠只读一遍来判断。</li>
+  <li><b>重启补扫（手动 <code>scan_bench</code>，调试版，按真实规模 2208 个目录、6402 个文件）：</b>Linux 装监听 38 毫秒，日志没变时补扫约 250 毫秒，不打开文件、不写库；Mac 约 400 毫秒（当时负载更高）。首次导入 3.4 到 4.2 秒，只代表文件数量的开销，真实日志正文要长得多，没量。</li>
+  <li><b>真实 CLI 在 Linux（手动 <code>real_cli</code>，不带凭据）：</b><code>claude</code> 2.1.319、<code>codex</code> 0.167.0 都能从进程认出。npm 的 <code>claude</code> 文件叫 <code>claude.exe</code>，<code>codex</code> 由 node 带起原生子进程。登录后的状态、日志和钩子没测，那需要账号。</li>
+  <li><b>第 2 步接口复核：</b>第二个实现没有让任何已有能力改签名，只新增了能力，不触发放弃条件。Linux 和 Mac 的差异都在接口之内吸收：没有重放（<code>MUST_SCAN</code>）、临时端口从 32768 开始（<code>first_handed_out_port</code>）、进程名按文件取。</li>
   <li><b>接口第一次被第二个实现检验（第 1 步）：</b>Linux 的 inotify 没有日志可重放。接口没有改签名：<code>start</code> 从旧检查点开始时报 <code>MUST_SCAN</code>，由已有的补扫接手。代价是 Linux 上 host 每次重启都要扫一遍日志目录。</li>
   <li><b>Zig 和 MinGW 混用会悄悄算错：</b>静态链接 ghostty 后 <code>powf</code> 返回 0，亮度变成 NaN。改用动态库后恢复。</li>
 </ul>

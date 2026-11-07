@@ -37,6 +37,8 @@ mod ownership;
 mod phone;
 #[path = "managed_session/phone_fixture.rs"]
 mod phone_fixture;
+#[path = "managed_session/real_cli.rs"]
+mod real_cli;
 #[path = "managed_session/relay.rs"]
 mod relay;
 #[path = "managed_session/remote.rs"]
