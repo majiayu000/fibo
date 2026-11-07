@@ -4,6 +4,8 @@ use mooring_platform::file_watch::flag;
 use std::io::Write;
 #[path = "codex_children_tests.rs"]
 mod codex_children;
+#[path = "generation_tests.rs"]
+mod generation;
 #[path = "query_perf_tests.rs"]
 mod query_perf;
 #[path = "scan_bench_tests.rs"]
