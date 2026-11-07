@@ -62,7 +62,15 @@ impl Watches {
         let text = CString::new(path.as_os_str().as_bytes()).map_err(io::Error::other)?;
         let wd = unsafe { libc::inotify_add_watch(self.inotify.as_raw_fd(), text.as_ptr(), mask) };
         if wd < 0 {
-            return Err(io::Error::last_os_error());
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::ENOSPC) {
+                return Err(io::Error::other(format!(
+                    "this account's inotify watches ran out at {} folders; raise \
+                     fs.inotify.max_user_watches",
+                    self.paths.len()
+                )));
+            }
+            return Err(error);
         }
         self.paths.insert(wd, path.to_owned());
         Ok(())
