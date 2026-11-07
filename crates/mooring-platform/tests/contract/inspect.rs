@@ -43,10 +43,6 @@ fn a_variable_comes_from_the_environment_and_is_its_whole_name() {
         .spawn()
         .unwrap();
     let pid = child.id();
-    assert_eq!(
-        argv(pid).unwrap().last().map(String::as_str),
-        Some("MOORING_CONTRACT_PROBE=from-arguments")
-    );
     // Linux fills these in a moment after the exec that ended `spawn`.
     let until = Instant::now() + Duration::from_secs(10);
     let mut probe = None;
@@ -55,9 +51,14 @@ fn a_variable_comes_from_the_environment_and_is_its_whole_name() {
         std::thread::sleep(Duration::from_millis(5));
     }
     let longer = env_var(pid, "MOORING_CONTRACT_ONLY_LONGER");
+    let given = argv(pid).unwrap();
     child.kill().unwrap();
     child.wait().unwrap();
     assert_eq!(probe.as_deref(), Some("from-environment"));
+    assert_eq!(
+        given.last().map(String::as_str),
+        Some("MOORING_CONTRACT_PROBE=from-arguments")
+    );
     assert_eq!(longer, None);
 }
 
