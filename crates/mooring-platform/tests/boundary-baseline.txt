@@ -1,11 +1,11 @@
 apple	crates/mooring-app/src/main.rs	1
+cfg	crates/mooring-app/src/desktop.rs	2
 cfg	crates/mooring-host/src/remote.rs	1
 dep libc	crates/mooring-app/Cargo.toml	1
 dep libc	crates/mooring-host/Cargo.toml	1
 libc	crates/mooring-host/src/relay/regressions.rs	8
 unix-path	crates/mooring-app/src/lifecycle.rs	1
 unix-path	crates/mooring-app/src/main.rs	1
-unix-path	crates/mooring-app/src/workbench/launch_slot.rs	1
 unix-path	crates/mooring-core/src/sample.rs	1
 unix-path	crates/mooring-core/src/secret.rs	1
 unix-path	crates/mooring-host/src/agents/mod.rs	2

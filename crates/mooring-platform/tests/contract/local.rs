@@ -232,3 +232,22 @@ fn a_socket_moved_into_place_still_takes_connections() {
     std::fs::remove_file(&socket).unwrap();
     assert!(!socket.exists());
 }
+
+/// A host that never ran has no folder yet. Whoever connects starts one on this, so it must not
+/// read as some other failure.
+#[test]
+fn connecting_where_nothing_was_ever_made_is_not_found() {
+    let dir = crate::scratch("local-missing");
+    let in_a_folder = dir.join("s.sock");
+    let without_a_folder = dir.join("not-there").join("s.sock");
+    for path in [in_a_folder, without_a_folder] {
+        let error = Stream::connect(&path).err().expect("nothing listens");
+        assert!(
+            matches!(
+                error.kind(),
+                ErrorKind::NotFound | ErrorKind::ConnectionRefused
+            ),
+            "{path:?}: {error:?}"
+        );
+    }
+}

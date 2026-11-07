@@ -12,3 +12,9 @@ pub fn default_config_home() -> Option<PathBuf> {
 pub fn user_name() -> Option<String> {
     std::env::var("USERNAME").ok()
 }
+
+pub fn is_system_start(dir: &std::path::Path) -> bool {
+    // Paths compare parts without regard to case here.
+    let system = std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into());
+    dir.parent().is_none() || dir.starts_with(system)
+}

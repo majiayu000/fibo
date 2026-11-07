@@ -22,3 +22,7 @@ pub fn user_name() -> Option<String> {
             .map(str::to_owned)
     }
 }
+
+pub fn is_system_start(dir: &std::path::Path) -> bool {
+    dir == std::path::Path::new("/")
+}
