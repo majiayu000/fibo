@@ -97,6 +97,15 @@ pub fn private_file() -> std::fs::OpenOptions {
     std::fs::OpenOptions::new()
 }
 
+pub fn is_program(path: &Path) -> bool {
+    const RUNS: &[&str] = &[
+        "exe", "com", "bat", "cmd", "ps1", "msi", "vbs", "js", "wsf", "scr",
+    ];
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| RUNS.iter().any(|run| e.eq_ignore_ascii_case(run)))
+}
+
 pub fn lock_file(path: &Path) -> io::Result<std::fs::File> {
     if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         return Err(io::Error::other("a lock file must not be a link"));

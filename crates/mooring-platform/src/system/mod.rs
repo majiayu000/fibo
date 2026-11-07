@@ -26,6 +26,22 @@ pub fn memory() -> Option<Memory> {
     imp::memory()
 }
 
+/// Calls `changed` from some other thread whenever the system announces another memory pressure
+/// level. Once per process. Where the system announces none, it is never called.
+pub fn watch_pressure(changed: fn()) {
+    imp::watch_pressure(changed)
+}
+
+/// The last pressure level announced since [`watch_pressure`], as [`Memory::pressure`] gives it.
+pub fn announced_pressure() -> Option<i32> {
+    imp::announced_pressure()
+}
+
+/// Swap in use, cheaply enough to read while drawing. Zero where it is not known this cheaply.
+pub fn swap_used() -> u64 {
+    imp::swap_used()
+}
+
 /// CPU time spent since boot over all cores, as user, system, idle, nice. Only the difference
 /// between two readings means anything, and each count may wrap.
 pub fn cpu_ticks() -> io::Result<[u32; 4]> {

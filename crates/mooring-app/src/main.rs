@@ -297,21 +297,19 @@ fn record_panics() {
             #[cfg(feature = "visual-test")]
             stop_evidence_host();
             let _ = io::Write::flush(&mut io::stderr());
-            // SAFETY: ends the process at once, as the abort that follows a panic would.
-            unsafe { libc::_exit(101) };
+            mooring_platform::process::exit_now(101);
         }
     }));
 }
 fn local_time() -> String {
-    let mut buf = [0u8; 32];
-    // SAFETY: localtime_r and strftime write only into the locals handed to them.
-    let len = unsafe {
-        let now = libc::time(std::ptr::null_mut());
-        let mut tm = std::mem::zeroed::<libc::tm>();
-        libc::localtime_r(&now, &mut tm);
-        libc::strftime(buf.as_mut_ptr().cast(), buf.len(), c"%F %T".as_ptr(), &tm)
-    };
-    String::from_utf8_lossy(&buf[..len]).into_owned()
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let t = mooring_platform::clock::local(now);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        t.year, t.month, t.day, t.hour, t.minute, t.second
+    )
 }
 fn run() -> io::Result<()> {
     // Declared CLIs first: menus, settings and commands all read the registry.
@@ -515,48 +513,7 @@ fn run() -> io::Result<()> {
 /// Register only in this process. GPUI's memory font loader skips symbol-only
 /// faces without an ASCII `m`; CoreText must see this face for its cascade.
 fn register_symbols() -> Result<(), &'static str> {
-    use std::ffi::c_void;
-    #[link(name = "CoreGraphics", kind = "framework")]
-    unsafe extern "C" {
-        fn CGDataProviderCreateWithData(
-            info: *mut c_void,
-            data: *const c_void,
-            size: usize,
-            release: Option<unsafe extern "C" fn(*mut c_void, *const c_void, usize)>,
-        ) -> *const c_void;
-        fn CGFontCreateWithDataProvider(provider: *const c_void) -> *const c_void;
-        fn CGDataProviderRelease(provider: *const c_void);
-        fn CGFontRelease(font: *const c_void);
-    }
-    #[link(name = "CoreText", kind = "framework")]
-    unsafe extern "C" {
-        fn CTFontManagerRegisterGraphicsFont(
-            font: *const c_void,
-            error: *mut *const c_void,
-        ) -> bool;
-    }
-    let bytes = include_bytes!("../assets/SymbolsNerdFontMono-Regular.ttf");
-    // Static bytes outlive the provider. CoreText retains its registered font.
-    unsafe {
-        let provider = CGDataProviderCreateWithData(
-            std::ptr::null_mut(),
-            bytes.as_ptr().cast(),
-            bytes.len(),
-            None,
-        );
-        if provider.is_null() {
-            return Err("cannot create symbol font provider");
-        }
-        let font = CGFontCreateWithDataProvider(provider);
-        CGDataProviderRelease(provider);
-        if font.is_null() {
-            return Err("cannot decode bundled symbol font");
-        }
-        let registered = CTFontManagerRegisterGraphicsFont(font, std::ptr::null_mut());
-        CGFontRelease(font);
-        if !registered {
-            return Err("cannot register bundled symbol font");
-        }
-    }
-    Ok(())
+    mooring_platform::desktop::register_font(include_bytes!(
+        "../assets/SymbolsNerdFontMono-Regular.ttf"
+    ))
 }

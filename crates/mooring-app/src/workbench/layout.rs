@@ -304,12 +304,10 @@ impl Workbench {
                 .join("scrollback");
             std::fs::create_dir_all(&dir)?;
             let path = dir.join(format!("{terminal}.txt"));
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = std::fs::OpenOptions::new()
+            let mut file = mooring_platform::fs::private_file()
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .mode(0o600)
                 .open(&path)?;
             std::io::Write::write_all(&mut file, text.trim_end().as_bytes())?;
             Ok(path)

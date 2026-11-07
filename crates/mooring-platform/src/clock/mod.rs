@@ -7,6 +7,7 @@ mod imp;
 /// One moment as this machine's clock and calendar read it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LocalTime {
+    pub year: i32,
     pub hour: i32,
     pub minute: i32,
     pub second: i32,
@@ -23,6 +24,7 @@ pub struct LocalTime {
 pub fn local(at: u64) -> LocalTime {
     let (tm, utc_offset) = imp::local(at);
     LocalTime {
+        year: tm.tm_year + 1900,
         hour: tm.tm_hour,
         minute: tm.tm_min,
         second: tm.tm_sec,
