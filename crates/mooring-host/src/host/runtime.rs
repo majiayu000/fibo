@@ -1,4 +1,5 @@
 use super::*;
+use mooring_platform::local;
 
 // One wait until an actual outcome/group deadline. No tick, no directory or process I/O.
 fn start_deadlines(shared: &Shared) -> io::Result<()> {
@@ -57,7 +58,7 @@ struct Taken {
     master: mooring_platform::terminal::Master,
 }
 fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
-    let mut stream = UnixStream::connect(root.join("workbench.sock"))?;
+    let mut stream = local::Stream::connect(root.join("workbench.sock"))?;
     stream.set_read_timeout(Some(Duration::from_secs(15)))?;
     send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
     match receive::<Reply>(&mut stream)? {
@@ -317,15 +318,15 @@ pub(super) fn serve_runtime(
         Err(e) if e.kind() == io::ErrorKind::NotFound => (),
         Err(e) => return Err(e),
     }
-    let listener = UnixListener::bind(&pending_socket)?;
+    let listener = local::Listener::bind(&pending_socket)?;
     fs::set_permissions(&pending_socket, fs::Permissions::from_mode(0o600))?;
     fs::rename(&pending_socket, &socket)?;
     eprintln!("mooring listening on {}", socket.display());
-    for (index, stream) in listener.incoming().enumerate() {
-        let stream = stream?;
+    for index in 1u64.. {
+        let stream = listener.accept()?;
         let host = Arc::clone(&host);
         thread::spawn(move || {
-            if let Err(e) = serve_client(stream, host, index as u64 + 1) {
+            if let Err(e) = serve_client(stream, host, index) {
                 if !matches!(
                     e.kind(),
                     io::ErrorKind::UnexpectedEof

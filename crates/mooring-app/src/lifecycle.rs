@@ -1,15 +1,10 @@
 //! One UI process per user. The lock lives independently of the daemon/runtime.
 use futures::channel::mpsc::{UnboundedReceiver, unbounded};
+use mooring_platform::local;
 use std::{
     fs::{File, OpenOptions},
     io,
-    os::{
-        fd::AsRawFd,
-        unix::{
-            fs::DirBuilderExt,
-            net::{UnixListener, UnixStream},
-        },
-    },
+    os::{fd::AsRawFd, unix::fs::DirBuilderExt},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -42,7 +37,7 @@ impl Instance {
                 return Err(error);
             }
             for _ in 0..40 {
-                if UnixStream::connect(&socket).is_ok() {
+                if local::Stream::connect(&socket).is_ok() {
                     return Ok(Admission::Forwarded);
                 }
                 std::thread::sleep(Duration::from_millis(25));
@@ -54,11 +49,11 @@ impl Instance {
             Err(e) if e.kind() == io::ErrorKind::NotFound => (),
             Err(e) => return Err(e),
         }
-        let listener = UnixListener::bind(&socket)?;
+        let listener = local::Listener::bind(&socket)?;
         let (tx, rx) = unbounded();
         std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                match stream {
+            loop {
+                match listener.accept() {
                     Ok(_) => {
                         if tx.unbounded_send(()).is_err() {
                             break;
@@ -143,14 +138,14 @@ pub fn stop_host(root: &Path, host: &mooring_core::protocol::Build) -> io::Resul
     };
     let socket = root.join("workbench.sock");
     // Gone already: its pid may belong to something else by now.
-    if UnixStream::connect(&socket).is_err() {
+    if local::Stream::connect(&socket).is_err() {
         return Ok(());
     }
     for (signal, wait) in [(libc::SIGTERM, 50), (libc::SIGKILL, 20)] {
         // SAFETY: kill only sends a signal to the host process found above.
         unsafe { libc::kill(pid as libc::pid_t, signal) };
         for _ in 0..wait {
-            if UnixStream::connect(&socket).is_err() {
+            if local::Stream::connect(&socket).is_err() {
                 return Ok(());
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -226,7 +221,7 @@ pub fn spawn_host(root: &Path, takeover: bool) -> io::Result<()> {
 /// The build a host reports when greeted.
 fn hello_build(socket: &Path) -> io::Result<mooring_core::protocol::Build> {
     use mooring_core::protocol::*;
-    let mut stream = UnixStream::connect(socket)?;
+    let mut stream = local::Stream::connect(socket)?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
     send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
     match receive::<Reply>(&mut stream)? {
@@ -261,7 +256,7 @@ pub fn restart_host(root: &Path) -> io::Result<()> {
 
 pub fn connected_host(socket: &Path) -> io::Result<bool> {
     use mooring_core::protocol::*;
-    let mut stream = match UnixStream::connect(socket) {
+    let mut stream = match local::Stream::connect(socket) {
         Ok(s) => s,
         Err(e)
             if matches!(
@@ -340,9 +335,9 @@ mod tests {
         for major in [1, 2] {
             let path = std::env::temp_dir()
                 .join(format!("kl-old-host-{}-{major}.sock", std::process::id()));
-            let listener = UnixListener::bind(&path).unwrap();
+            let listener = local::Listener::bind(&path).unwrap();
             let peer = std::thread::spawn(move || {
-                let (mut s, _) = listener.accept().unwrap();
+                let mut s = listener.accept().unwrap();
                 assert!(matches!(
                     receive::<Request>(&mut s).unwrap(),
                     Request::Hello { major: MAJOR }

@@ -4,7 +4,7 @@ use super::*;
 /// Event subscription: the state now, then one line per change until the host
 /// goes away or the reader stops reading.
 pub(super) fn events(a: Args) -> io::Result<()> {
-    let mut stream = std::os::unix::net::UnixStream::connect(&a.socket)?;
+    let mut stream = mooring_platform::local::Stream::connect(&a.socket)?;
     mooring_core::protocol::send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
     match receive::<Reply>(&mut stream)? {
         Reply::Hello { major: MAJOR, .. } => (),

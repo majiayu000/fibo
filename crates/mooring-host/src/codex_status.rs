@@ -3,10 +3,10 @@
 //! It never subscribes (`thread/start`, `thread/resume`): a subscriber can be handed the
 //! thread's approval requests, which belong to the user's own terminal.
 use crate::content::Official;
+use mooring_platform::local;
 use serde_json::{json, Value};
 use std::{
     io::{self, Read, Write},
-    os::unix::net::UnixStream,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -74,12 +74,12 @@ pub fn status(v: &Value) -> Option<Official> {
 /// The minimal WebSocket client the control socket needs: one text message per JSON-RPC
 /// message, client frames masked, server pings answered.
 struct Ws {
-    stream: UnixStream,
+    stream: local::Stream,
     buf: Vec<u8>,
 }
 impl Ws {
     fn connect(path: &std::path::Path) -> io::Result<Self> {
-        let mut stream = UnixStream::connect(path)?;
+        let mut stream = local::Stream::connect(path)?;
         stream.set_read_timeout(Some(TIMEOUT))?;
         stream.set_write_timeout(Some(TIMEOUT))?;
         let key = base64(uuid::Uuid::new_v4().as_bytes());
@@ -231,7 +231,6 @@ fn base64(bytes: &[u8]) -> String {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use std::os::unix::net::UnixListener;
 
     /// A fake control socket: answers `initialize` and `thread/read` from `statuses`,
     /// sends a notification and a ping first, and records every method it was asked.
@@ -239,9 +238,9 @@ pub(crate) mod tests {
         path: &std::path::Path,
         statuses: Vec<(String, Value)>,
     ) -> std::thread::JoinHandle<Vec<String>> {
-        let listener = UnixListener::bind(path).unwrap();
+        let listener = local::Listener::bind(path).unwrap();
         std::thread::spawn(move || {
-            let (mut s, _) = listener.accept().unwrap();
+            let mut s = listener.accept().unwrap();
             let mut head = Vec::new();
             while !head.ends_with(b"\r\n\r\n") {
                 let mut b = [0; 1];
@@ -250,7 +249,7 @@ pub(crate) mod tests {
             }
             s.write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
                 .unwrap();
-            let send = |s: &mut UnixStream, opcode: u8, d: &[u8]| {
+            let send = |s: &mut local::Stream, opcode: u8, d: &[u8]| {
                 let mut f = vec![0x80 | opcode];
                 if d.len() < 126 {
                     f.push(d.len() as u8);

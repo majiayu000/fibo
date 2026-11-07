@@ -1,6 +1,7 @@
 //! One client connection: request dispatch, typed input and handing the socket to a
 //! newer host.
 use super::*;
+use mooring_platform::local;
 mod edit;
 mod modes;
 mod once;
@@ -12,11 +13,11 @@ mod typing;
 pub(super) use typing::*;
 
 pub(super) fn serve_client(
-    mut stream: UnixStream,
+    mut stream: local::Stream,
     host: Shared,
     connection: u64,
 ) -> io::Result<()> {
-    if !mooring_platform::peer::is_this_account(&stream)? {
+    if !stream.peer_is_this_account()? {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "peer uid mismatch",
@@ -104,7 +105,7 @@ pub(super) fn serve_client(
 /// descriptor, and this host exits without signalling the programs. Global and terminal
 /// locks stay held to the end, so no output is fed, no state is committed and no
 /// terminal is started after the snapshots are taken.
-pub(super) fn hand_over(mut stream: UnixStream, shared: &Shared) -> io::Result<()> {
+pub(super) fn hand_over(mut stream: local::Stream, shared: &Shared) -> io::Result<()> {
     let host = lock(shared)?;
     let mut held = vec![];
     for (id, terminal) in &host.terminals {

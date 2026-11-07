@@ -10,7 +10,6 @@ use std::fs::{self, OpenOptions};
 use std::io;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering},

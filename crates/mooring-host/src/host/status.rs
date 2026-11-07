@@ -2,6 +2,7 @@
 //! process refresh, registry watch, quiet-screen questions, official status and the
 //! probe after a submission.
 use super::*;
+use mooring_platform::local;
 
 pub(super) fn recognition_status(host: &Host) -> RecognitionStatus {
     let mut status = host.recognition.clone();
@@ -49,7 +50,7 @@ pub(super) fn publish_recognition(
     Ok(())
 }
 pub(super) fn watch_recognition(
-    mut stream: UnixStream,
+    mut stream: local::Stream,
     shared: Shared,
     connection: u64,
 ) -> io::Result<()> {
