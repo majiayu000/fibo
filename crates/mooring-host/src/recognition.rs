@@ -42,9 +42,8 @@ pub use processes::{claude_transcript_off, process_cwd, processes};
 pub(crate) use processes::{process_argv, process_env};
 
 pub fn roots() -> io::Result<Vec<(Agent, PathBuf)>> {
-    let home = PathBuf::from(
-        std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
-    );
+    let home =
+        mooring_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?;
     Ok(crate::agents::roots(&home))
 }
 /// The CLI whose transcript root holds `path` (the deepest root, should one nest in

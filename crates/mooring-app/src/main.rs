@@ -147,8 +147,8 @@ fn load_workspace(root: &Path) -> io::Result<Workspace> {
 /// home directory then, and the launch directory otherwise (`run.sh`, a shell).
 fn default_space_dir() -> io::Result<PathBuf> {
     let cwd = std::env::current_dir()?;
-    Ok(match std::env::var_os("HOME") {
-        Some(home) if cwd == Path::new("/") => PathBuf::from(home),
+    Ok(match mooring_platform::dirs::home() {
+        Some(home) if cwd == Path::new("/") => home,
         _ => cwd,
     })
 }
@@ -266,8 +266,8 @@ fn stop_evidence_host() {
 /// appended to ~/Library/Logs/Mooring/crash.log. A failed visual-evidence check exits
 /// with 101 instead of aborting, so a scripted run raises no "quit unexpectedly" dialog.
 fn record_panics() {
-    let log = std::env::var_os("HOME")
-        .map(|home| PathBuf::from(home).join("Library/Logs/Mooring/crash.log"));
+    let log =
+        mooring_platform::dirs::home().map(|home| home.join("Library/Logs/Mooring/crash.log"));
     let scripted = std::env::args().any(|arg| arg == "--visual-evidence");
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -343,15 +343,14 @@ fn run() -> io::Result<()> {
                 .ok_or_else(|| io::Error::other("--runtime needs a directory"))?,
         )
     } else {
-        mooring_core::legacy::runtime_dir(&PathBuf::from(
-            std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
-        ))
+        mooring_core::legacy::runtime_dir(
+            &mooring_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?,
+        )
     };
     mooring_core::plugin_context::set_runtime(&root);
-    let instance_dir = PathBuf::from(
-        std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
-    )
-    .join(".local/share/mooring-client");
+    let instance_dir = mooring_platform::dirs::home()
+        .ok_or_else(|| io::Error::other("HOME unavailable"))?
+        .join(".local/share/mooring-client");
     // Visual evidence uses its explicitly isolated runtime without forwarding to or
     // replacing the user's running workbench.
     #[cfg(feature = "visual-test")]

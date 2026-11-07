@@ -42,7 +42,7 @@ pub mod content;
 /// Starts writing out the conversations declared CLIs keep in SQLite, so the host reads
 /// them like any transcript. Only the real daemon calls it; fixtures use their own roots.
 pub fn start_mirrors() {
-    if let Some(home) = std::env::var_os("HOME") {
-        agents::mirror::sync(std::path::Path::new(&home));
+    if let Some(home) = mooring_platform::dirs::home() {
+        agents::mirror::sync(&home);
     }
 }

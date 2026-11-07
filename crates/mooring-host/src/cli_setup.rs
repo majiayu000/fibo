@@ -29,7 +29,7 @@ pub fn install(runtime: &Path) {
         Ok(None) => eprintln!("mooring: 没有放入口：目录不可写，或那里已有别的 mooring"),
         Err(e) => eprintln!("mooring: 放入口失败：{e}"),
     }
-    let Some(home) = std::env::var_os("HOME") else {
+    let Some(home) = mooring_platform::dirs::home() else {
         return;
     };
     for agent in Agent::all() {

@@ -152,7 +152,7 @@ impl Source {
     fn path(&self) -> Option<PathBuf> {
         let f = self.file.as_deref()?;
         Some(if let Some(rest) = f.strip_prefix("~/") {
-            PathBuf::from(std::env::var_os("HOME")?).join(rest)
+            mooring_platform::dirs::home()?.join(rest)
         } else if Path::new(f).is_absolute() {
             PathBuf::from(f)
         } else {

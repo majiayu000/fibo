@@ -20,7 +20,7 @@ pub fn socket() -> Option<PathBuf> {
     }
     let home = std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")))?;
+        .or_else(|| mooring_platform::dirs::home().map(|h| h.join(".codex")))?;
     Some(home.join("app-server-control/app-server-control.sock"))
 }
 
