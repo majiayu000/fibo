@@ -35,6 +35,16 @@
 
 11-05 之前的实测详情见 [v2-plan.md](v2-plan.md) 的「真机实测查出的问题」和「真机实测后留下的四件事」。
 
+## 卡片说等审批，屏幕上却没有
+
+屏幕一变就没了，事后看不出当时读到了什么。运行目录的 `screen-waits.jsonl` 记着每次判成等待的时间、终端、命中的规则、问题和屏幕底部 16 行，以及它何时结束：
+
+```sh
+tail -20 ~/.local/share/keepline-workbench/screen-waits.jsonl
+```
+
+11-07 的一张卡片是这样：bypass 模式、记录里没有审批、也没有子 Agent，却写着「Do you want to proceed?」。怀疑是运行中命令的输出被当成了审批框，未证实。到 11-21 没再出现就关掉这件事。
+
 ## 怎么走真机（安卓）
 
 手机用 USB 连着电脑，在 App 里已经配对。`adb` 在 `~/Library/Android/sdk/platform-tools/adb`，不在 PATH 里。
