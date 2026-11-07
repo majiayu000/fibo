@@ -2,8 +2,7 @@
 //!
 //! macOS keeps a journal, so a watch can replay what changed since a checkpoint. The others
 //! have none: starting from anything but `current_id` reports `flag::MUST_SCAN` for every
-//! root instead, and looking through the roots makes up for it. Windows refuses with
-//! `Unsupported` for now (step 4 in docs/platform/index.html).
+//! root instead, and looking through the roots makes up for it.
 use std::{
     io,
     path::{Path, PathBuf},
@@ -57,7 +56,6 @@ pub(crate) struct Callback {
 }
 impl Callback {
     /// Whether an event is about the roots rather than their watched surroundings.
-    #[cfg_attr(windows, allow(dead_code))]
     pub(crate) fn wants(&self, event: &Event) -> bool {
         event.flags & (flag::SCAN | flag::IDS_WRAPPED) != 0
             || self.roots.iter().any(|root| event.path.starts_with(root))
