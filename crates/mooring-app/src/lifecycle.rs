@@ -2,9 +2,8 @@
 use futures::channel::mpsc::{UnboundedReceiver, unbounded};
 use mooring_platform::local;
 use std::{
-    fs::{File, OpenOptions},
+    fs::{File, TryLockError},
     io,
-    os::{fd::AsRawFd, unix::fs::DirBuilderExt},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -19,30 +18,22 @@ pub enum Admission {
 }
 impl Instance {
     pub fn acquire(directory: &Path) -> io::Result<Admission> {
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(directory)?;
-        let lock = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(directory.join("client.lock"))?;
+        mooring_platform::fs::create_private_dir(directory)?;
+        let lock = mooring_platform::fs::lock_file(&directory.join("client.lock"))?;
         let socket = directory.join("client.sock");
-        // flock is released by the OS even on a crash; the socket is only a wakeup channel.
-        if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::EWOULDBLOCK) {
-                return Err(error);
-            }
-            for _ in 0..40 {
-                if local::Stream::connect(&socket).is_ok() {
-                    return Ok(Admission::Forwarded);
+        // The lock is released by the OS even on a crash; the socket is only a wakeup channel.
+        match lock.try_lock() {
+            Ok(()) => (),
+            Err(TryLockError::Error(error)) => return Err(error),
+            Err(TryLockError::WouldBlock) => {
+                for _ in 0..40 {
+                    if local::Stream::connect(&socket).is_ok() {
+                        return Ok(Admission::Forwarded);
+                    }
+                    std::thread::sleep(Duration::from_millis(25));
                 }
-                std::thread::sleep(Duration::from_millis(25));
+                return Err(io::Error::other("已有 Mooring 客户端，但无法唤醒其窗口"));
             }
-            return Err(io::Error::other("已有 Mooring 客户端，但无法唤醒其窗口"));
         }
         match std::fs::remove_file(&socket) {
             Ok(()) => (),
@@ -119,6 +110,12 @@ pub fn visual_stale_host() {
     set_stale_host(Some(Default::default()));
 }
 
+/// The host program, which ships beside this one.
+pub fn host_program() -> io::Result<PathBuf> {
+    let name = format!("mooring{}", std::env::consts::EXE_SUFFIX);
+    Ok(std::env::current_exe()?.with_file_name(name))
+}
+
 /// Stops the host serving `root` and waits until its socket stops answering; the
 /// next start runs this app's host. Its terminals end with it.
 pub fn stop_host(root: &Path, host: &mooring_core::protocol::Build) -> io::Result<()> {
@@ -141,9 +138,12 @@ pub fn stop_host(root: &Path, host: &mooring_core::protocol::Build) -> io::Resul
     if local::Stream::connect(&socket).is_err() {
         return Ok(());
     }
-    for (signal, wait) in [(libc::SIGTERM, 50), (libc::SIGKILL, 20)] {
-        // SAFETY: kill only sends a signal to the host process found above.
-        unsafe { libc::kill(pid as libc::pid_t, signal) };
+    let pid = pid as i32;
+    let ask = |pid| {
+        let _ = mooring_platform::process::terminate(pid);
+    };
+    for (end, wait) in [(ask as fn(i32), 50), (mooring_platform::process::kill, 20)] {
+        end(pid);
         for _ in 0..wait {
             if local::Stream::connect(&socket).is_err() {
                 return Ok(());
@@ -156,18 +156,14 @@ pub fn stop_host(root: &Path, host: &mooring_core::protocol::Build) -> io::Resul
 /// Starts this app's own host for `root` and waits until it serves. With `takeover` it
 /// first takes the running terminals over from the host serving there now, which exits.
 pub fn spawn_host(root: &Path, takeover: bool) -> io::Result<()> {
-    use std::os::unix::{fs::DirBuilderExt, process::CommandExt};
     if !root.exists() {
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(root)?;
+        mooring_platform::fs::create_private_dir(root)?;
     }
     let log = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(root.join("host.log"))?;
-    let daemon = std::env::current_exe()?.with_file_name("mooring");
+    let daemon = host_program()?;
     let digest = mooring_core::protocol::Build::digest(&daemon);
     let mut command = std::process::Command::new(daemon);
     command
@@ -177,15 +173,7 @@ pub fn spawn_host(root: &Path, takeover: bool) -> io::Result<()> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(log);
-    // SAFETY: setsid is async-signal-safe and detaches the host from this UI process.
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() < 0 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
+    mooring_platform::process::detach(&mut command);
     let mut child = command.spawn()?;
     let socket = root.join("workbench.sock");
     let until = std::time::Instant::now() + Duration::from_secs(if takeover { 20 } else { 5 });
@@ -239,19 +227,11 @@ pub fn restart_host(root: &Path) -> io::Result<()> {
     } else {
         stop_host(root, &host)?;
     }
-    let exe = std::env::current_exe()?;
-    std::process::Command::new("/bin/sh")
-        .arg("-c")
-        .arg(r#"while kill -0 "$1" 2>/dev/null; do sleep 0.1; done; shift; exec "$@""#)
-        .arg("sh")
-        .arg(std::process::id().to_string())
-        .arg(exe)
-        .args(std::env::args_os().skip(1))
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
-    Ok(())
+    mooring_platform::process::start_after_exit(
+        std::process::id(),
+        &std::env::current_exe()?,
+        std::env::args_os().skip(1),
+    )
 }
 
 pub fn connected_host(socket: &Path) -> io::Result<bool> {
@@ -279,7 +259,7 @@ pub fn connected_host(socket: &Path) -> io::Result<bool> {
         } => {
             // An already running host keeps serving the code it started with, however
             // often its binary is rebuilt; fixes then look like they never landed.
-            let sibling = std::env::current_exe()?.with_file_name("mooring");
+            let sibling = host_program()?;
             set_stale_host(build.stale(&sibling).then_some(build));
             Ok(true)
         }

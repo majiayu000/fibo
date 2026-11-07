@@ -63,6 +63,43 @@ pub fn was_signalled(status: &std::process::ExitStatus) -> bool {
     status.signal().is_some()
 }
 
+pub fn detach(command: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: setsid is async-signal-safe.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
+
+pub fn start_after_exit(
+    pid: u32,
+    program: &std::path::Path,
+    args: Vec<std::ffi::OsString>,
+) -> io::Result<()> {
+    std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(r#"while kill -0 "$1" 2>/dev/null; do sleep 0.1; done; shift; exec "$@""#)
+        .arg("sh")
+        .arg(pid.to_string())
+        .arg(program)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    Ok(())
+}
+
+pub fn exit_now(code: i32) -> ! {
+    // SAFETY: ends the process; nothing runs after it.
+    unsafe { libc::_exit(code) }
+}
+
 pub fn give_way() {
     #[cfg(target_os = "macos")]
     // SAFETY: only changes this thread's scheduling class.

@@ -46,3 +46,14 @@ pub fn cpu_ticks() -> io::Result<[u32; 4]> {
 pub fn host_name() -> String {
     std::env::var("COMPUTERNAME").unwrap_or_default()
 }
+
+/// This system's announcements are not listened to yet.
+pub fn watch_pressure(_changed: fn()) {}
+
+pub fn announced_pressure() -> Option<i32> {
+    None
+}
+
+pub fn swap_used() -> u64 {
+    0
+}

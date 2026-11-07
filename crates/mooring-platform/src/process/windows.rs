@@ -10,6 +10,53 @@ use windows_sys::Win32::System::Threading::{
     SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL, TerminateProcess, WaitForSingleObject,
 };
 
+/// Neither a console nor a Ctrl+C to share with whatever started it.
+const DETACHED_PROCESS: u32 = 0x0000_0008;
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+pub fn detach(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+}
+
+/// In PowerShell, there being no other shell every Windows has that can wait for a process.
+pub fn start_after_exit(
+    pid: u32,
+    program: &std::path::Path,
+    args: Vec<std::ffi::OsString>,
+) -> io::Result<()> {
+    use crate::shell::quote;
+    use std::os::windows::process::CommandExt;
+    let words: Vec<String> = args.iter().map(|a| quote(&a.to_string_lossy())).collect();
+    let script = format!(
+        "Wait-Process -Id {pid} -ErrorAction Ignore; & {} {}",
+        quote(&program.to_string_lossy()),
+        words.join(" ")
+    );
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into());
+    let powershell =
+        std::path::Path::new(&root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+    Command::new(powershell)
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
+        .arg(script)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP)
+        .spawn()?;
+    Ok(())
+}
+
+pub fn exit_now(code: i32) -> ! {
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    // SAFETY: ends this process; the handle is the pseudo-handle for it.
+    unsafe {
+        TerminateProcess(GetCurrentProcess(), code as u32);
+    }
+    std::process::abort()
+}
+
 /// A job without kill-on-close: closing it leaves its processes running, as dropping a
 /// process group's id does. A job outlives its first process, so `Leftovers::End` still
 /// reaches what the command left behind.
