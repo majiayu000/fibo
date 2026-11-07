@@ -7,6 +7,7 @@ impl Workbench {
         column: Column,
         count: usize,
         cards: impl IntoElement,
+        reviewable: bool,
         active: bool,
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
@@ -132,6 +133,17 @@ impl Workbench {
                             )
                         },
                     )
+                    .when(reviewable, |d| {
+                        d.child(
+                            button("review-queue", "逐个验收 →")
+                                .h(px(T::SEGMENT_HEIGHT))
+                                .px(px(T::S8))
+                                .text_color(T::color(T::link()))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.start_review(now(), cx);
+                                })),
+                        )
+                    })
                     .when(column == Column::Stale && count > 0, |d| {
                         d.child(
                             button("cleanup", "逐个清理 →")
