@@ -209,11 +209,7 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
             _ => source.cwd.clone(),
         },
     };
-    let shell = std::env::var("SHELL")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "/bin/zsh".into());
-    let argv = split_argv(&shell, command);
+    let argv = split_argv(&mooring_platform::shell::interactive(), command);
     let id = format!(
         "split-{}-{}",
         std::process::id(),
@@ -294,18 +290,18 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
 /// A login shell, or one that runs `command` first and stays open after it, the way a
 /// resumed conversation starts, so its output stays readable and the pane stays usable.
 pub(super) fn split_argv(shell: &str, command: &[String]) -> Vec<String> {
+    use mooring_platform::shell;
     let command = match command {
-        [] => return vec![shell.into(), "-l".into()],
+        [] => return shell::stay(shell),
         // One argument is a command line already, `&&` and pipes included.
         [line] => line.clone(),
         words => words
             .iter()
-            .map(|w| shell_quote(w))
+            .map(|w| shell::quote(w))
             .collect::<Vec<_>>()
             .join(" "),
     };
-    let then = format!("{command}; exec {} -l", shell_quote(shell));
-    vec![shell.into(), "-l".into(), "-i".into(), "-c".into(), then]
+    shell::run_then_stay(shell, &command, None)
 }
 /// Closes a pane as its × does: the tab goes with its last pane, the program ends, and
 /// `events` reports `terminal_exited`.
