@@ -579,7 +579,11 @@ pub fn open_transcripts(
         return Ok(HashMap::new());
     }
     LSOF_SPAWNS.fetch_add(1, Ordering::Relaxed);
-    let mut files = mooring_platform::inspect::open_files(&pids)?;
+    // Where a system cannot say, this is one kind of evidence missing: others still bind.
+    let mut files = match mooring_platform::inspect::open_files(&pids) {
+        Err(e) if e.kind() == io::ErrorKind::Unsupported => return Ok(HashMap::new()),
+        found => found?,
+    };
     for open in files.values_mut() {
         open.retain(|path| path.ends_with(".jsonl"));
     }

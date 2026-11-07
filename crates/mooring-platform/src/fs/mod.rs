@@ -26,6 +26,13 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     imp::write_private(path, bytes)
 }
 
+/// Where `path` really is, in the form programs and people use: links resolved, and on Windows
+/// without the `\\\\?\\` prefix `std::fs::canonicalize` adds, which many programs cannot take as a
+/// directory and which never compares equal to a path from anywhere else.
+pub fn canonical(path: &Path) -> io::Result<std::path::PathBuf> {
+    imp::canonical(path)
+}
+
 /// Which file something is, whatever it is called: two paths with the same id are one file,
 /// and a file replaced under one path has a new one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
