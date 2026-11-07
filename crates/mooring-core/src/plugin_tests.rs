@@ -255,7 +255,7 @@ fn a_setup_that_fails_when_turned_on_leaves_it_off() {
         &plugins,
         "p",
         "exit 9",
-        &format!("touch {}", mark.display()),
+        &format!("touch {}", crate::plugin_command::sh_path(&mark)),
     );
     std::fs::write(switches(&plugins), r#"["p"]"#).unwrap();
     assert!(

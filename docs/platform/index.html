@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多平台架构</title>
+<style>
+  :root {
+    --bg: #f7f6f3; --panel: #ffffff; --sunk: #eeece7; --line: #d9d6cf;
+    --text: #1f1e1c; --sec: #5c5a55; --ok: #12784f; --warn: #94600a; --bad: #b83a33; --accent: #1f62b5;
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111113; --panel: #1c1c1e; --sunk: #232325; --line: #333335;
+      --text: #ecebe9; --sec: #a3a2a0; --ok: #2bb585; --warn: #d69a2d; --bad: #e5655e; --accent: #5a9de8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    font-variant-numeric: tabular-nums; }
+  main { max-width: 900px; margin: 0 auto; padding: 36px 16px 80px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 6px; }
+  h2 { font-size: 19px; margin: 42px 0 10px; }
+  h3 { font-size: 15.5px; margin: 22px 0 6px; }
+  p { margin: 8px 0; }
+  .meta { color: var(--sec); font-size: 13px; }
+  .lead { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin: 18px 0; }
+  .lead p:first-child { margin-top: 0; } .lead p:last-child { margin-bottom: 0; }
+  code { font: 13px var(--mono); background: var(--sunk); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre { font: 13px/1.55 var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 10px 0; }
+  pre code { background: none; padding: 0; }
+  .wrap { overflow-x: auto; margin: 10px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 11px; border-bottom: 1px solid var(--line); }
+  th { color: var(--sec); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  ul, ol { padding-left: 21px; margin: 8px 0; } li { margin: 4px 0; }
+  .layers { display: grid; gap: 6px; margin: 12px 0; }
+  .layer { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 13px; }
+  .layer b { display: block; } .layer span { color: var(--sec); font-size: 13px; }
+  .layer.contract { border: 2px solid var(--accent); }
+  .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .arrow { text-align: center; color: var(--sec); font-size: 12.5px; line-height: 1.1; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  @media (max-width: 560px) { .row3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+<h1>多平台架构</h1>
+<p class="meta">2026-11-07 · 状态：待验证（第 2 步做完 Linux 后复核）· 工作清单见 <a href="../windows/plan.md">Windows 计划</a></p>
+
+<div class="lead">
+<p><strong>结论：新建一个 <code>mooring-platform</code> crate，所有依赖操作系统的代码只能放在里面，上层只调它的统一接口。</strong>每个平台一个目录，Windows 的文件在 Mac 上根本不参与编译。</p>
+<p>这样改一个平台的实现，影响不到另一个平台。唯一能同时影响多个平台的地方是接口本身，而改接口时，每个平台都会编译报错或测试失败，不会悄悄出错。</p>
+<p><strong>要支撑的决定：</strong>按什么结构移植 Windows 和 Linux。<strong>放弃条件：</strong>见文末。</p>
+</div>
+
+<h2>为什么现在就要做</h2>
+<p>现在平台代码散在各处。下面是扫描仓库源码的结果（不含测试文件，正则统计，是估算）：</p>
+<div class="wrap"><table>
+<tr><th>crate</th><th class="n">碰系统的文件 / 总数</th><th class="n"><code>libc::</code></th><th class="n">Unix socket 等</th><th class="n">写死路径</th><th class="n">读 <code>HOME</code></th></tr>
+<tr><td><code>mooring-host</code></td><td class="n">50 / 116</td><td class="n">231</td><td class="n">74</td><td class="n">31</td><td class="n">13</td></tr>
+<tr><td><code>mooring-app</code></td><td class="n">35 / 244</td><td class="n">28</td><td class="n">36</td><td class="n">62</td><td class="n">14</td></tr>
+<tr><td><code>mooring-core</code></td><td class="n">18 / 51</td><td class="n">28</td><td class="n">16</td><td class="n">14</td><td class="n">8</td></tr>
+<tr><td><code>mooring-remote</code></td><td class="n">1 / 13</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+<tr><td><code>mooring-relay</code>、<code>mooring-plugin-host</code></td><td class="n">0 / 8</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+</table></div>
+<p>如果直接给这些文件加 <code>#[cfg(windows)]</code>，平台分支会散进 100 多个文件的业务逻辑里。每次改业务都要同时想三个平台，这正是要避免的情况。<code>relay</code> 和 <code>plugin-host</code> 不用改就能在 Windows 上通过测试，说明没碰系统的代码本来就跨平台，要收拢的只是那些碰系统的部分。</p>
+
+<h2>分层</h2>
+<div class="layers">
+  <div class="layer"><b>产品层：<code>mooring-app</code>、<code>mooring-host</code></b><span>窗口、状态判断、Agent 管理、远程协议处理。不写任何平台判断，不直接调系统接口。</span></div>
+  <div class="layer"><b>共享逻辑：<code>mooring-core</code>、<code>mooring-remote</code>、<code>mooring-relay</code></b><span>状态规则、协议、插件格式。手机和中继看到的内容与平台无关。</span></div>
+  <div class="arrow">↓ 只能经过这一层</div>
+  <div class="layer contract"><b>接口：<code>mooring-platform</code> 的公开 API</b><span>每个能力一组函数和类型，加一份能力表。这是唯一跨平台的代码。</span></div>
+  <div class="arrow">↓ 编译时只选一个</div>
+  <div class="row3">
+    <div class="layer"><b><code>macos/</code></b><span>kqueue、proc_pidinfo、Keychain</span></div>
+    <div class="layer"><b><code>linux/</code></b><span>inotify、/proc、Secret Service</span></div>
+    <div class="layer"><b><code>windows/</code></b><span>ConPTY、命名管道、Job、凭据管理器</span></div>
+  </div>
+  <div class="arrow">macOS 和 Linux 相同的部分放 <code>unix/</code>，只被这两个目录引用</div>
+</div>
+<pre><code>crates/mooring-platform/
+  src/lib.rs            选平台，导出接口，不写实现
+  src/terminal/         mod.rs（接口） unix.rs windows.rs
+  src/file_watch/       mod.rs macos.rs linux.rs windows.rs
+  ...                   其余能力同样的结构
+  tests/contract/       同一套行为测试，三个平台都跑
+  tests/{macos,linux,windows}/   某平台独有的细节</code></pre>
+
+<h3>为什么不用别的方案</h3>
+<div class="wrap"><table>
+<tr><th>方案</th><th>结论</th><th>原因</th></tr>
+<tr><td>散落的 <code>cfg</code></td><td class="bad">否决</td><td>分支进入业务逻辑，改业务就要碰三个平台，也无法机械检查。</td></tr>
+<tr><td>每个平台一个 crate</td><td class="warn">暂不采用</td><td>隔离和单 crate 一样（目标平台外都不编译），但多了门面层和依赖配置。将来 <code>unix/</code> 共享成为负担再拆，改动不大。</td></tr>
+<tr><td>运行时 <code>dyn Trait</code></td><td class="bad">否决</td><td>平台在编译时就确定，没有运行时切换的需求，却要多一层间接调用；终端读写还是性能敏感路径。</td></tr>
+<tr><td><strong>单 crate，按平台分目录</strong></td><td class="ok">采用</td><td>编译时选定，没有运行时开销。可以用测试检查边界，也和仓库现有的 guard 机制一致。</td></tr>
+</table></div>
+
+<h2>接口要收拢的能力</h2>
+<div class="wrap"><table>
+<tr><th>能力</th><th>macOS</th><th>Linux</th><th>Windows</th><th>现在的位置</th></tr>
+<tr><td><b>终端</b></td><td colspan="2">pty</td><td>ConPTY</td><td><code>pty.rs</code>、<code>host/live.rs</code></td></tr>
+<tr><td><b>本机连接</b></td><td colspan="2">Unix socket</td><td>命名管道</td><td><code>host/runtime.rs</code>、<code>app/connection.rs</code> 等</td></tr>
+<tr><td><b>换包交接</b></td><td colspan="2">SCM_RIGHTS</td><td class="warn">第一版不支持</td><td><code>handoff.rs</code></td></tr>
+<tr><td><b>文件监听</b></td><td>kqueue</td><td>inotify</td><td>ReadDirectoryChangesW</td><td><code>file_events.rs</code></td></tr>
+<tr><td><b>进程</b></td><td>proc_*</td><td>/proc</td><td>Toolhelp、Job</td><td><code>core/process.rs</code>、<code>recognition/processes.rs</code>、<code>process_exit.rs</code></td></tr>
+<tr><td><b>目录</b></td><td>Library、HOME</td><td>XDG</td><td>%APPDATA%</td><td>散在 35 处 <code>HOME</code></td></tr>
+<tr><td><b>Shell</b></td><td colspan="2"><code>/bin/sh</code></td><td>Git 的 <code>sh</code>，PowerShell</td><td><code>plugin_command.rs</code>、<code>background_shells.rs</code></td></tr>
+<tr><td><b>密钥</b></td><td>Keychain</td><td>Secret Service</td><td>凭据管理器</td><td><code>core/secret.rs</code></td></tr>
+<tr><td><b>系统信息</b></td><td>mach</td><td>/proc</td><td>PDH 等</td><td><code>diagnostics.rs</code>（可选能力）</td></tr>
+<tr><td><b>桌面集成</b></td><td colspan="3">通知、打开链接、开机启动，各平台实现</td><td><code>mooring-app</code>（窗口自己的 platform 模块）</td></tr>
+</table></div>
+<p>具体函数签名在迁移每个能力时才定，届时有两个实现可以对照。这里不提前设计，避免接口被第一个平台绑死。</p>
+
+<h3>做不到的能力，用能力表说清楚</h3>
+<pre><code>// 上层只问能力，不问平台
+if platform::capabilities().handoff {
+    handoff::hand_over(...)
+} else {
+    tell_user("升级后台会结束正在运行的终端")
+}</code></pre>
+<p>上层永远不写 <code>if windows</code>。将来 Windows 做了交接，只把能力表改成 <code>true</code>，上层一行都不用动。</p>
+
+<h2>五条规则，靠机器检查</h2>
+<div class="wrap"><table>
+<tr><th>规则</th><th>怎么检查</th></tr>
+<tr><td><b>1. 平台代码不出界。</b><code>mooring-platform</code> 之外不能有 <code>cfg(target_os/unix/windows)</code>、<code>libc::</code>、<code>std::os::unix</code>、写死的 <code>/bin/sh</code>、直接读 <code>HOME</code>。</td><td>扩展现有的 guard 棘轮：现状记成基线，<strong>只能减少</strong>，新增就失败。不用一次改完。</td></tr>
+<tr><td><b>2. 行为由同一套测试约定。</b>接口的每条承诺写成一个测试，三个平台跑同一份。</td><td><code>tests/contract/</code>。这也是发现平台差异最便宜的办法，比如这次的 <code>sh</code> 缺失。</td></tr>
+<tr><td><b>3. 平台依赖不外泄。</b><code>libc</code>、<code>windows-sys</code> 只出现在 <code>mooring-platform</code> 的 <code>[target.*]</code> 依赖里。</td><td>guard 检查各 <code>Cargo.toml</code>。</td></tr>
+<tr><td><b>4. CI 按改动范围跑。</b>只改 <code>windows/</code> 只跑 Windows，改接口或共享代码三个平台全跑。</td><td>GitHub Actions 路径过滤。macOS 现有检查保持不变、继续必过。新平台先不挡合入，稳定后再改成必过。</td></tr>
+<tr><td><b>5. 协议不带平台。</b>手机和中继不解析路径、不判断系统。路径在协议里是不透明的字符串，只负责显示。</td><td>协议测试向量加入 Windows 路径的样例。</td></tr>
+</table></div>
+
+<h3>同样要分开的还有三处</h3>
+<ul>
+  <li><b>读屏规则：</b>样例按平台分目录。规则默认共用，确实不同才加平台覆盖，这样改 Windows 的规则不会影响 Mac。</li>
+  <li><b>打包和发布：</b><code>packaging/{macos,linux,windows}</code> 各自独立，流水线也独立，Windows 打包失败不挡 Mac 发版。</li>
+  <li><b>测试夹具：</b>测试里不写死 Unix 路径和 <code>sh</code>，统一用共用的测试工具。这次 Windows 上 18 个单元测试失败，其中大半是这个原因。</li>
+</ul>
+
+<h2>迁移顺序</h2>
+<p>每一步都是小 PR，先原样搬动，不改逻辑；用 macOS 现有测试和性能门禁确认没有变化，再加新平台。这样也减少和 <code>main</code> 上并行工作的冲突。</p>
+<div class="wrap"><table>
+<tr><th>步</th><th>内容</th><th>Mac 行为变化</th><th>怎么算完成</th></tr>
+<tr><td>0</td><td>建 crate，加棘轮 guard 和 CI 矩阵；把 <code>core</code> 里已写好的进程、时间、shell 搬进去；目录能力收掉 35 处 <code>HOME</code></td><td class="ok">无</td><td>guard 生效；三个平台的 <code>core</code> 测试都过</td></tr>
+<tr><td>1</td><td>host 的进程、文件监听、系统信息搬入接口，Linux 实现补上</td><td class="ok">无</td><td>Linux 上 host 编译通过，测试通过</td></tr>
+<tr><td>2</td><td><strong>Linux 跑通全链路：</strong>容器和真机上配对、手机连接、真实 <code>claude</code> 和 <code>codex</code> 状态。<strong>然后复核接口</strong></td><td class="ok">无</td><td>手机能看到并操作 Linux 上的 Agent</td></tr>
+<tr><td>3</td><td>终端和本机连接：Unix 实现搬入接口，再写 ConPTY 和命名管道</td><td class="warn">原样搬动，靠测试和门禁确认</td><td>Windows 上 host 能启动，<code>list/read/send</code> 能用</td></tr>
+<tr><td>4</td><td>Windows 全链路：配对、手机、Agent 状态、钩子、读屏差异</td><td class="ok">无</td><td>你的 Windows 电脑上端到端可用</td></tr>
+<tr><td>5</td><td>窗口（<code>gpui_windows</code>、<code>gpui_linux</code>）、打包、发布；决定交接方案 B</td><td class="ok">无</td><td>按平台单独决定发不发</td></tr>
+</table></div>
+<p><b>为什么先做 Linux：</b>它的错误最少，成本最低，还能用第二个实现检验接口是不是被 macOS 绑死了。这样 Windows 这个最贵的实现开工时，接口已经验证过一次。</p>
+
+<h2>已经测到的事实</h2>
+<ul>
+  <li><b>Windows 真机（build 26200），GNU 工具链加动态 ghostty：</b><code>core</code> 单元测试 227 过、1 个按设计忽略；<code>remote</code>、<code>relay</code>、<code>plugin-host</code> 全过。<code>core</code> 有 3 个集成测试失败，因为测试副本没有 git 记录和 <code>.deps/zed</code>，属于环境问题。</li>
+  <li><b>Linux（Docker，ARM64）：</b>同样 4 个 crate 的单元测试全过；同样 3 个集成测试因环境问题失败。这一轮的代码早于本次修复，修复后没有重跑。</li>
+  <li><b>host 编译错误：</b>Linux 86 个，10 个文件；Windows 251 个。都是下限。</li>
+  <li><b>ConPTY：</b>OSC 7、133、7501、9、8 都能穿过；中文和 emoji 正常；<code>claude</code> 和 <code>codex</code> 能启动并录到画面。鼠标模式 <code>?1000h</code> 被吞；部分模式序列会排到文字前面；输出是整理后的屏幕，不是原始字节。</li>
+  <li><b>Zig 和 MinGW 混用会悄悄算错：</b>静态链接 ghostty 后 <code>powf</code> 返回 0，亮度变成 NaN。改用动态库后恢复。</li>
+</ul>
+
+<h2>还没定的事</h2>
+<ul>
+  <li><b>Windows 发布工具链：</b>计划用 MSVC，这是 Rust 在 Windows 上的标准目标，但这个组合还没跑过。真机测试需要安装 VS Build Tools（会改动系统，并要接受微软的许可），可以先走 GitHub 的 <code>windows-latest</code>。</li>
+  <li><b>ConPTY 改写输出的影响：</b>要接上 libghostty 后才知道读屏规则是否受影响。OSC 133 能穿过，可以作为补充依据。</li>
+  <li><b>Linux 真机：</b>Docker 没有桌面和登录会话，Secret Service 和通知要真机才能测。x86_64 也还没测。</li>
+</ul>
+
+<h2>放弃条件</h2>
+<ul>
+  <li><b>第 2 步复核时</b>，如果接口要为 Linux 大改（一半以上的能力要改签名），说明抽象没选对，停下来重新设计，不继续做 Windows。</li>
+  <li><b>任何一步</b>如果 macOS 的测试或性能门禁变差且一天内查不出原因，这一步回退。Mac 是现在唯一在用的平台，优先级最高。</li>
+  <li><b>第 4 步</b>如果读屏在 ConPTY 下不可靠，且钩子和日志也补不上，Windows 就只发基础终端功能，或者先不发。</li>
+</ul>
+</main>
+</body>
+</html>
