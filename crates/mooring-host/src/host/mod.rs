@@ -54,7 +54,7 @@ struct Host {
     instance: String,
     index: crate::log_index::Index,
     recognition: RecognitionStatus,
-    log_events: Option<crate::file_events::Notifier>,
+    log_events: Option<mooring_platform::file_watch::Notifier>,
     /// Transcript roots after plugins changed, for the log subscription to restart with.
     new_roots: Option<Vec<(Agent, std::path::PathBuf)>>,
     recognition_subscribers: HashMap<u64, Subscriber>,

@@ -345,7 +345,7 @@ pub fn roots_after_reload(
             .filter(|(_, root)| !root.as_os_str().is_empty())
             // As the index keeps roots: file events name the real path, not a symlink's.
             .map(|(a, root)| {
-                let real = crate::file_events::normalized(&root).unwrap_or(root);
+                let real = mooring_platform::file_watch::normalized(&root).unwrap_or(root);
                 (a, real)
             }),
     );

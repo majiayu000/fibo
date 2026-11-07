@@ -1,5 +1,6 @@
 use super::elide::STRING_KEEP;
 use super::*;
+use mooring_platform::file_watch::flag;
 use std::io::Write;
 #[path = "codex_children_tests.rs"]
 mod codex_children;
@@ -616,7 +617,11 @@ fn fsevents_delivers_new_files_and_replays_changes_after_restart() {
             .unwrap();
         let found = batch.events.iter().any(|e| e.path == first);
         for e in batch.events {
-            assert_eq!(e.flags & 0xf, 0, "event gap {e:?}");
+            assert_eq!(
+                e.flags & (flag::SCAN | flag::IDS_WRAPPED) & !flag::ROOT_CHANGED,
+                0,
+                "event gap {e:?}"
+            );
             checkpoint = checkpoint.max(e.id);
         }
         if found {

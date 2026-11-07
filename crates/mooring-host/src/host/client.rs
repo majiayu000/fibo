@@ -245,7 +245,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 }
                 std::path::PathBuf::from(&matches[0].path)
             } else {
-                crate::file_events::normalized(Path::new(&transcript))?
+                mooring_platform::file_watch::normalized(Path::new(&transcript))?
             };
             // Grok reads Claude's settings and runs its hooks as `--agent claude`; such a
             // hook would bind a Grok conversation as Claude and stamp Claude's events on it.
