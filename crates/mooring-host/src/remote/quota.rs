@@ -22,7 +22,9 @@ pub(super) fn quota(socket: &Path) -> io::Result<Value> {
             agent: crate::control::agent_label(agent),
             plan: q.plan.clone(),
             at: q.at,
+            // The account's own: a phone has one 本周 per Agent and keys its rows by length.
             windows: (q.windows.iter())
+                .filter(|w| w.name.is_empty())
                 .map(|w| rp::QuotaWindow {
                     minutes: w.minutes,
                     used: w.used,

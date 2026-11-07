@@ -10,6 +10,11 @@ pub fn home() -> Option<PathBuf> {
     imp::home()
 }
 
+/// This account's name, whatever the environment says: one started bare has none.
+pub fn user_name() -> Option<String> {
+    imp::user_name()
+}
+
 /// The home directory as text, for what shows or compares paths as text. None if it is not
 /// valid Unicode.
 pub fn home_str() -> Option<String> {

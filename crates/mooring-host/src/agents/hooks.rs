@@ -50,7 +50,7 @@ pub fn target(agent: Agent, home: &Path) -> io::Result<Hooks> {
         ))
     })
 }
-fn read(path: &Path) -> io::Result<Map<String, Value>> {
+pub(crate) fn read(path: &Path) -> io::Result<Map<String, Value>> {
     match fs::read(path) {
         Ok(bytes) if bytes.iter().all(u8::is_ascii_whitespace) => Ok(Map::new()),
         Ok(bytes) => match serde_json::from_slice(&bytes).map_err(io::Error::other)? {

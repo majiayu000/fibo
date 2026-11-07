@@ -6,7 +6,13 @@ mod remote;
 mod themes_cmd;
 
 fn main() {
-    let code = match run() {
+    let mut args = std::env::args().skip(1);
+    let ran = if args.next().as_deref() == Some("claude-quota") {
+        mooring_host::claude_quota::run(args)
+    } else {
+        run()
+    };
+    let code = match ran {
         Ok(()) => 0,
         Err(err) => {
             eprintln!("mooring: {err}");
