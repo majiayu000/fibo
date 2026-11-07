@@ -18,7 +18,6 @@ mod program_status;
 mod pty;
 pub mod recognition;
 pub mod redact;
-mod replace_file;
 pub mod screen_ask;
 pub mod screen_rules;
 mod shell_log;

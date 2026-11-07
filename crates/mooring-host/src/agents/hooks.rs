@@ -203,7 +203,7 @@ fn strip(settings: &mut Map<String, Value>) -> bool {
 fn write(path: &Path, settings: &Map<String, Value>) -> io::Result<()> {
     let mut text = serde_json::to_string_pretty(settings).map_err(io::Error::other)?;
     text.push('\n');
-    crate::replace_file::replace(path, text.as_bytes()).map(|_| ())
+    mooring_platform::fs::replace_file(path, text.as_bytes()).map(|_| ())
 }
 /// Returns whether the file changed. Outdated entries of ours are replaced, not added to.
 pub fn install(agent: Agent, hooks: &Hooks) -> io::Result<bool> {

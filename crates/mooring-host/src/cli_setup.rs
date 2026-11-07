@@ -55,7 +55,7 @@ fn write_skill(skills: &Path) -> io::Result<bool> {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
-    crate::replace_file::replace(&file, SKILL.as_bytes())?;
+    mooring_platform::fs::replace_file(&file, SKILL.as_bytes())?;
     Ok(true)
 }
 
