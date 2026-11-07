@@ -21,6 +21,9 @@ const writeText = (p, text) => {
     throw new Error('写不了 ' + p);
   }
 };
+// A copy of the settings can hold the keys they hold, whatever the original's permissions.
+const BACKUP_MODE = 0o600;
+const ownerOnly = (p) => fm.setAttributesOfItemAtPathError($({ NSFilePosixPermissions: BACKUP_MODE }), p, null);
 const remove = (p) => {
   if (exists(p)) fm.removeItemAtPathError(p, null);
 };
@@ -30,6 +33,7 @@ const home = getenv('HOME');
 const dir = getenv('MOORING_PLUGIN_DIR');
 const data = getenv('MOORING_PLUGIN_DATA');
 if (!home || !dir || !data) throw new Error('要由 Mooring 运行：缺少 HOME、MOORING_PLUGIN_DIR 或 MOORING_PLUGIN_DATA');
+const backup = data + '/settings.before.json';
 const config = getenv('CLAUDE_CONFIG_DIR') || home + '/.claude';
 // A settings file linked from a dotfiles repository is written where it lives.
 const settingsPath = $(config + '/settings.json').stringByResolvingSymlinksInPath.js;
@@ -61,6 +65,8 @@ function saveOriginal(line) {
 }
 
 function setup() {
+  // A backup from before it was kept private; nothing else would ever rewrite it.
+  if (exists(backup)) ownerOnly(backup);
   const settings = readSettings();
   const current = settings.statusLine;
   const command = MARK + 'sh ' + quote(dir + '/statusline.sh') + ' ' + quote(data);
@@ -78,7 +84,12 @@ function setup() {
     original = current;
   }
   saveOriginal(original);
-  if (exists(settingsPath)) writeText(data + '/settings.before.json', readText(settingsPath));
+  if (exists(settingsPath)) {
+    // Made private first: the atomic write keeps the mode of the file it replaces.
+    if (!exists(backup)) fm.createFileAtPathContentsAttributes(backup, $.NSData.data, $({ NSFilePosixPermissions: BACKUP_MODE }));
+    ownerOnly(backup);
+    writeText(backup, readText(settingsPath));
+  }
   const base = original && typeof original === 'object' ? original : {};
   settings.statusLine = Object.assign({}, base, { type: 'command', command });
   writeSettings(settings);
