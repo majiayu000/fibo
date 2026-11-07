@@ -17,6 +17,16 @@ pub fn create_private_dir(dir: &Path) -> io::Result<()> {
         .create(dir)
 }
 
+pub fn hard_linked(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).is_ok_and(|m| m.nlink() > 1)
+}
+
+pub fn create_no_wider(options: &mut std::fs::OpenOptions, than: &std::fs::Permissions) {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    options.mode(than.mode() & 0o777);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

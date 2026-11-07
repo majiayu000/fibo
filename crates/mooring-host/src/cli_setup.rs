@@ -55,10 +55,7 @@ fn write_skill(skills: &Path) -> io::Result<bool> {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
-    fs::create_dir_all(&dir)?;
-    let fresh = dir.join(".SKILL.md.new");
-    fs::write(&fresh, SKILL)?;
-    fs::rename(&fresh, &file)?;
+    mooring_platform::fs::replace_file(&file, SKILL.as_bytes())?;
     Ok(true)
 }
 
