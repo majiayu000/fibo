@@ -36,6 +36,21 @@ pub(super) fn quotas(w: &Workspace, now: u64) -> Rc<[(Agent, Quota)]> {
     })
 }
 
+/// Each open conversation's context reading, once a second per revision like `quotas`: every
+/// pane header asks each frame, and Claude's are files.
+pub(super) fn context_fills(w: &Workspace, now: u64) -> Rc<mooring_core::context_fill::Fills> {
+    type Seen = Option<(u64, u64, Rc<mooring_core::context_fill::Fills>)>;
+    thread_local!(static SEEN: std::cell::RefCell<Seen> = const { std::cell::RefCell::new(None) });
+    SEEN.with_borrow_mut(|seen| match seen {
+        Some((r, t, f)) if *r == w.revision && *t == now => f.clone(),
+        _ => {
+            let fills = Rc::new(mooring_core::context_fill::of(w));
+            *seen = Some((w.revision, now, fills.clone()));
+            fills
+        }
+    })
+}
+
 /// Tab names, worked out at most once a second per workspace revision, terminal titles
 /// and focus: every frame names every tab, and naming one looks at every session.
 pub(super) fn tab_name(
