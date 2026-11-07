@@ -4,6 +4,7 @@
 mod clock;
 mod dirs;
 mod exit_watch;
+mod file_watch;
 mod fs;
 mod inspect;
 mod process;

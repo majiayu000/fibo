@@ -127,9 +127,9 @@ pub(super) fn watch_registries(shared: &Shared, roots: &[(Agent, std::path::Path
         loop {
             let started = Instant::now();
             let result = (|| -> io::Result<()> {
-                let watch = crate::file_events::Watch::start(
+                let watch = mooring_platform::file_watch::Watch::start(
                     &paths,
-                    crate::file_events::Watch::current_id(),
+                    mooring_platform::file_watch::Watch::current_id(),
                 )?;
                 loop {
                     watch.rx.recv().map_err(io::Error::other)?;

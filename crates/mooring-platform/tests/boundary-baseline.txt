@@ -1,7 +1,6 @@
 apple	crates/mooring-app/src/main.rs	1
 apple	crates/mooring-host/src/agents/grok.rs	1
 apple	crates/mooring-host/src/cli_commands.rs	1
-apple	crates/mooring-host/src/file_events.rs	7
 apple	crates/mooring-host/src/host/client.rs	1
 apple	crates/mooring-host/src/official.rs	1
 cfg	crates/mooring-core/src/delivery.rs	3
@@ -17,7 +16,6 @@ libc	crates/mooring-host/src/agents/grok.rs	4
 libc	crates/mooring-host/src/cli_commands.rs	3
 libc	crates/mooring-host/src/devices.rs	3
 libc	crates/mooring-host/src/diagnostics.rs	26
-libc	crates/mooring-host/src/file_events.rs	31
 libc	crates/mooring-host/src/handoff.rs	24
 libc	crates/mooring-host/src/host/client.rs	8
 libc	crates/mooring-host/src/host/client/tool_rows.rs	4
@@ -40,7 +38,6 @@ os-api	crates/mooring-host/src/codex_status.rs	3
 os-api	crates/mooring-host/src/control/inspect.rs	2
 os-api	crates/mooring-host/src/devices.rs	2
 os-api	crates/mooring-host/src/diagnostics.rs	5
-os-api	crates/mooring-host/src/file_events.rs	4
 os-api	crates/mooring-host/src/handoff.rs	3
 os-api	crates/mooring-host/src/host/client.rs	2
 os-api	crates/mooring-host/src/host/client/turn_changes.rs	1

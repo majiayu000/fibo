@@ -52,7 +52,8 @@ pub fn transcript_owner(path: &Path, roots: &[(Agent, PathBuf)]) -> Option<Agent
     roots
         .iter()
         .filter_map(|(agent, root)| {
-            let root = crate::file_events::normalized(root).unwrap_or_else(|_| root.clone());
+            let root =
+                mooring_platform::file_watch::normalized(root).unwrap_or_else(|_| root.clone());
             (path.starts_with(&root) && crate::agents::adapter(*agent).is_transcript(path))
                 .then_some((root.components().count(), *agent))
         })
