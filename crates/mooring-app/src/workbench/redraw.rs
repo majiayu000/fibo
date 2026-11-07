@@ -26,10 +26,7 @@ pub(super) fn quotas(w: &Workspace, now: u64) -> Rc<[(Agent, Quota)]> {
         Some((r, t, q)) if *r == w.revision && *t == now => q.clone(),
         _ => {
             let plugins = mooring_core::quota::from_plugins();
-            let q: Rc<[_]> = mooring_core::quota::latest(w, &plugins, now)
-                .into_iter()
-                .map(|(a, q)| (a, q.clone()))
-                .collect();
+            let q: Rc<[_]> = mooring_core::quota::latest(w, &plugins, now).into();
             *seen = Some((w.revision, now, q.clone()));
             q
         }
@@ -398,6 +395,7 @@ mod tests {
                     minutes: 300,
                     used,
                     resets_at: 9000,
+                    name: String::new(),
                 }],
             }),
             ..Default::default()

@@ -220,6 +220,24 @@ fn trying_a_declaration_it_does_not_have_says_what_there_is() {
     assert!(err.contains("say"), "{err}");
     assert!(try_run("x", "say", Some("nonsense".into()), None, false).is_err());
     assert!(try_run("x", "say", None, None, false).is_ok());
+    // One Agent read from a file and from a command: trying it runs the command, whichever
+    // is declared first, or the only thing there is to run can't be tried.
+    let both = root.join("mooring/plugins/both");
+    write(
+        &both.join("plugin.json"),
+        r#"{"api":1,"id":"both","name":"B","provides":["quota"]}"#,
+    );
+    let ran = root.join("ran");
+    let w = r#""windows":[{"minutes":300,"used":"/u"}]"#;
+    write(
+        &both.join("quota.json"),
+        &format!(
+            r#"{{"api":1,"sources":[{{"agent":"a","file":"f.json",{w}}},{{"agent":"a","command":"echo '{{}}'; touch {}",{w}}}]}}"#,
+            ran.display()
+        ),
+    );
+    try_run("both", "a", None, None, false).unwrap();
+    assert!(ran.exists());
     unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
     std::fs::remove_dir_all(&root).unwrap();
 }

@@ -3,7 +3,7 @@
 //! from plugins (`quota.json`): a file a plugin keeps up to date (the `claude-quota`
 //! plugin saves what Claude Code hands its status line) or a command it runs. Mooring
 //! itself never asks a provider: a reading is only as fresh as its source, so every use
-//! keeps its time.
+//! keeps its time. A plugin's command may go online, and says so in its manifest.
 use crate::agent::Loaded;
 use crate::model::{Agent, Workspace};
 use serde::{Deserialize, Serialize};
@@ -42,10 +42,26 @@ pub struct Window {
     pub used: u16,
     /// Unix seconds; 0 when the CLI gave no time.
     pub resets_at: u64,
+    /// What it counts when not everything, such as one model's week. Empty for the account's own.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
 }
 impl Window {
-    /// The windows CLIs report today get their usual names; any other its length.
+    /// The windows CLIs report today get their usual names; any other its length. One with a
+    /// name of its own says it, or two weeks read the same.
     pub fn label(&self) -> String {
+        if self.name.is_empty() {
+            self.length_label()
+        } else {
+            format!("{} {}", self.name, self.length_label())
+        }
+    }
+    /// Whether the status bar has room for it: the account's own windows, and a narrower one
+    /// only once it may stop the user. The popover lists them all.
+    pub fn on_bar(&self) -> bool {
+        self.name.is_empty() || self.used >= NEAR
+    }
+    fn length_label(&self) -> String {
         match self.minutes {
             300 => "5h".into(),
             10_080 => "周".into(),
@@ -62,7 +78,9 @@ impl Window {
     /// How much of a week or longer will go unused when it renews within a day: the last
     /// reading's share, so at most this much if it was used since. None when not worth saying.
     pub fn spare(&self, now: u64) -> Option<u16> {
-        (self.minutes >= SPARE_WINDOW_MINUTES
+        // One model's week left unused is no waste: the account's own is what was paid for.
+        (self.name.is_empty()
+            && self.minutes >= SPARE_WINDOW_MINUTES
             && self.resets_at > now
             && self.resets_at - now <= SPARE_WITHIN
             && 100u16.saturating_sub(self.used) >= SPARE_FROM)
@@ -71,13 +89,10 @@ impl Window {
 }
 
 /// The newest reading of each CLI used in the last week, in the app's agent order: from
-/// its sessions and from plugins (`plugins`, what `from_plugins` returned).
-pub fn latest<'a>(
-    w: &'a Workspace,
-    plugins: &'a [(Agent, Quota)],
-    now: u64,
-) -> Vec<(Agent, &'a Quota)> {
-    let mut newest: HashMap<Agent, &Quota> = HashMap::new();
+/// its sessions and from plugins (`plugins`, what `from_plugins` returned). A named window only
+/// another recent reading knows stays beside it (`quota_merge`).
+pub fn latest(w: &Workspace, plugins: &[(Agent, Quota)], now: u64) -> Vec<(Agent, Quota)> {
+    let mut readings: HashMap<Agent, Vec<&Quota>> = HashMap::new();
     let sessions = w.agent_sessions.iter().filter_map(|s| {
         w.content
             .get(&s.id)
@@ -88,13 +103,13 @@ pub fn latest<'a>(
         if q.windows.is_empty() || now.saturating_sub(q.at) > SHOWN_FOR {
             continue;
         }
-        let slot = newest.entry(agent).or_insert(q);
-        if q.at > slot.at {
-            *slot = q;
-        }
+        readings.entry(agent).or_default().push(q);
     }
     let order = Agent::all();
-    let mut out: Vec<_> = newest.into_iter().collect();
+    let mut out: Vec<_> = readings
+        .into_iter()
+        .map(|(a, found)| (a, crate::quota_merge::newest(&found, now)))
+        .collect();
     out.sort_by_key(|(a, _)| {
         (
             order.iter().position(|o| o == a).unwrap_or(order.len()),
@@ -124,6 +139,10 @@ pub struct Source {
     pub command: Option<String>,
     #[serde(default = "default_refresh")]
     pub refresh_s: u64,
+    /// How long a command may take (plugin level 8). A CLI asked for its limits on a busy
+    /// machine can take far longer than the default.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
     /// When it was recorded, Unix seconds; without it, when the file last changed or the
     /// command ran.
     #[serde(default)]
@@ -147,6 +166,9 @@ pub struct WindowField {
     /// When it resets, Unix seconds.
     #[serde(default)]
     pub resets_at: Option<String>,
+    /// Its own name (plugin level 8), for a window counting less than the whole account.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 fn default_refresh() -> u64 {
     300
@@ -189,6 +211,13 @@ impl Source {
                         .as_deref()
                         .and_then(num)
                         .map_or(0, |t| t.max(0.) as u64),
+                    name: w
+                        .name
+                        .as_deref()
+                        .and_then(|p| doc.pointer(p))
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
                 })
             })
             .collect();
@@ -218,7 +247,8 @@ impl Source {
             keep: 1024 * 1024,
             ..Run::shell(
                 self.command.as_deref().unwrap_or_default(),
-                COMMAND_TIMEOUT,
+                self.timeout_ms
+                    .map_or(COMMAND_TIMEOUT, Duration::from_millis),
                 Leftovers::End,
             )
         }
@@ -267,13 +297,16 @@ fn read(file: &Path) -> Result<Vec<Source>, String> {
         if !(60..=86_400).contains(&s.refresh_s) {
             return Err(format!("{who}：refresh_s 要在 60 到 86400 之间"));
         }
+        if s.timeout_ms.is_some_and(|t| !(100..=300_000).contains(&t)) {
+            return Err(format!("{who}：timeout_ms 要在 100 到 300000 之间"));
+        }
         if s.windows.is_empty() {
             return Err(format!("{who}：windows 至少写一个"));
         }
         let pointers = s
             .windows
             .iter()
-            .flat_map(|w| [Some(&w.used), w.resets_at.as_ref()]);
+            .flat_map(|w| [Some(&w.used), w.resets_at.as_ref(), w.name.as_ref()]);
         if let Some(bad) = pointers
             .chain([s.at.as_ref(), s.plan.as_ref()])
             .flatten()
@@ -408,12 +441,11 @@ fn start(i: usize, source: Source, generation: u64) {
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map_or(0, |d| d.as_secs());
-                if let Some(q) = source.reading(&doc, now)
-                    && let Some((g, readings)) =
-                        RAN.lock().unwrap_or_else(|e| e.into_inner()).as_mut()
+                // A failed run never gets here: not knowing is not having none.
+                if let Some((g, readings)) = RAN.lock().unwrap_or_else(|e| e.into_inner()).as_mut()
                     && *g == generation
                 {
-                    readings.insert(i, q);
+                    crate::quota_merge::settle(readings, i, source.reading(&doc, now));
                 }
             }
             let until = Instant::now() + Duration::from_secs(source.refresh_s);
@@ -435,6 +467,7 @@ mod tests {
             minutes: 10_080,
             used,
             resets_at: now + left,
+            name: String::new(),
         };
         assert_eq!(week(40, 3600).spare(now), Some(60));
         assert_eq!(week(70, SPARE_WITHIN).spare(now), Some(30));
@@ -495,6 +528,7 @@ mod tests {
                     minutes: 300,
                     used,
                     resets_at: at + 3600,
+                    name: String::new(),
                 }],
             }),
             ..Default::default()
@@ -533,6 +567,7 @@ mod tests {
             minutes,
             used: 0,
             resets_at: 100,
+            name: String::new(),
         };
         assert_eq!(w(300).label(), "5h");
         assert_eq!(w(10_080).label(), "周");
@@ -568,13 +603,7 @@ mod tests {
         let dir = root.join("plugins/claude-quota");
         std::fs::create_dir_all(&dir).unwrap();
         let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/claude-quota");
-        for f in [
-            "plugin.json",
-            "quota.json",
-            "setup.json",
-            "statusline.sh",
-            "settings.js",
-        ] {
+        for f in ["plugin.json", "quota.json", "setup.json"] {
             std::fs::copy(shipped.join(f), dir.join(f)).unwrap();
         }
         let (sources, report) = load(vec![dir.join("quota.json")]);
@@ -600,12 +629,14 @@ mod tests {
                 Window {
                     minutes: 300,
                     used: 24,
-                    resets_at: 1_798_000_000
+                    resets_at: 1_798_000_000,
+                    name: String::new(),
                 },
                 Window {
                     minutes: 10_080,
                     used: 41,
-                    resets_at: 1_798_400_000
+                    resets_at: 1_798_400_000,
+                    name: String::new(),
                 },
             ]
         );

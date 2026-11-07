@@ -24,6 +24,7 @@ pub mod program_state;
 pub mod prompt_pin;
 pub mod protocol;
 pub mod quota;
+mod quota_merge;
 pub mod reason;
 pub mod rule;
 #[doc(hidden)]

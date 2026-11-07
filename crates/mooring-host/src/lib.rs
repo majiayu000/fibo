@@ -1,4 +1,5 @@
 mod agents;
+pub use agents::claude_quota;
 mod background_shells;
 mod cli_commands;
 mod cli_http;

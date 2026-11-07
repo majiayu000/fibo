@@ -1,0 +1,19 @@
+{
+  "api": 1,
+  "id": "claude-quota",
+  "name": "Claude 额度",
+  "version": "0.1.3",
+  "description": "接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Mooring 状态栏；原来的状态栏照常显示，卸载时还原。只读本机，不联网",
+  "provides": [
+    "setup",
+    "quota"
+  ],
+  "files": [
+    "statusline.sh",
+    "settings.js"
+  ],
+  "touches": [
+    "~/.claude/settings.json"
+  ],
+  "network": false
+}

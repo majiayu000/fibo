@@ -435,6 +435,7 @@ fn quota(v: &Value, at: u64) -> Option<Quota> {
                 minutes: u32::try_from(w["window_minutes"].as_u64()?).ok()?,
                 used: w["used_percent"].as_f64()?.round().clamp(0., 999.) as u16,
                 resets_at: w["resets_at"].as_u64().unwrap_or(0),
+                name: String::new(),
             })
         })
         .collect();

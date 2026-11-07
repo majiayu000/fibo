@@ -30,6 +30,7 @@ core 里故意报错、还不能用的：
 
 - `delivery::attempt` 回「Windows 版后台还没有做好」。
 - `cli_entry` 放不了 PATH 链接。
+- 额度：`mooring claude-quota` 是 Rust，时区库打包，但要等 host 能在 Windows 跑才测得到；`claude -p /usage` 在 Windows 上的输出、`claude.cmd` 带引号参数还没验。
 - 插件命令要 `sh`，只有装了 Git for Windows 才有，会到 PATH、`git.exe` 旁边和默认安装位置找；都没有时启动失败并报错。
 
 core 编译得过但在 Windows 上还不对的，第 0 步处理：
