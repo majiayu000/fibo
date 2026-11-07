@@ -151,7 +151,10 @@ fn a_current_conversation_keeps_the_flags_its_agent_was_started_with() {
     assert_eq!(w.agent_launch.get(&session.id), Some(&flags));
     assert_eq!(
         w.resume_command(&session),
-        format!("command codex --yolo -m gpt-5 -c a=1 resume '{id}'")
+        format!(
+            "{} --yolo -m gpt-5 -c a=1 resume '{id}'",
+            mooring_platform::shell::past_functions("codex")
+        )
     );
     // Started again without flags: nothing left to repeat.
     record_launch(&mut w, &[shell, process(103, 100, &vec![])]);

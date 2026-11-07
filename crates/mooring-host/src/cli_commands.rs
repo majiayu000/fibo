@@ -17,8 +17,7 @@ pub fn commands_of(executable: &str) -> Vec<(u32, String)> {
             let Ok(argv) = inspect::argv(pid) else {
                 continue;
             };
-            let line = argv.join(" ");
-            if inspect::stdin_is_a_channel(pid) || crate::agents::from_command(&line).is_some() {
+            if inspect::stdin_is_a_channel(pid) || crate::agents::from_argv(&argv).is_some() {
                 continue;
             }
             out.push((pid, as_logged(&argv)));

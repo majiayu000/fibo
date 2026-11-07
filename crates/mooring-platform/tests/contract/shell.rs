@@ -1,5 +1,5 @@
 use mooring_platform::shell::{
-    SYSTEM_PATH, interactive, login_env, on_path, run_then_stay, sh, stay,
+    SYSTEM_PATH, interactive, login_env, on_path, past_functions, run_then_stay, sh, stay,
 };
 use mooring_platform::terminal::{Read, Spec, spawn};
 use std::ffi::OsString;
@@ -144,4 +144,13 @@ fn the_login_environment_leaves_out_what_started_this_process() {
 fn a_directory_goes_on_an_empty_path_alone() {
     let dir = crate::scratch("shell-on-path");
     assert_eq!(on_path("".as_ref(), &dir), dir.as_os_str());
+}
+
+#[test]
+fn a_program_runs_past_a_function_of_its_name() {
+    let dir = crate::scratch("shell-past-functions");
+    let name = mooring_platform::system::host_name();
+    let line = format!("{} ", past_functions("hostname"));
+    let screen = screen_until(&run_then_stay(&interactive(), &line, None), &dir, &name);
+    assert!(screen.contains(&name), "{screen:?}");
 }

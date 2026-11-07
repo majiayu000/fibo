@@ -3,7 +3,7 @@
 #[cfg_attr(unix, path = "support/tied.rs")]
 #[cfg_attr(windows, path = "support/tied_windows.rs")]
 mod tied;
-use mooring_core::{model::*, protocol::*};
+use mooring_core::{agent::Agent, model::*, protocol::*};
 use mooring_platform::{fs, inspect, local::Stream, shell};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -435,4 +435,232 @@ fn how_fast_a_bare_terminal_is() {
         PRINTED as f64 / 1024. / 1024. / took.as_secs_f64(),
     );
     let _ = std::fs::remove_dir_all(&work);
+}
+
+/// The real CLIs, installed, in a terminal of this system's own shell, with a home of their own
+/// and no credentials: what the host can tell of them before anyone signs in. By hand, with
+/// `claude` and `codex` on PATH; `MOORING_REAL_CLI_PREFIX` goes before each, in the shell's own
+/// language, for what must be set first (their updaters, which would change the real install):
+/// `cargo test --release -p mooring-host --test terminal_chain real_clis -- --ignored --nocapture`
+#[test]
+#[ignore = "needs the real CLIs installed"]
+fn real_clis_are_recognized_in_this_system_s_shell() {
+    let host = start_host();
+    let pid = host.child.id();
+    let root = host.root.clone();
+    let socket = root.join("workbench.sock");
+    let work = root.join("work");
+    let cwd = work.to_string_lossy().into_owned();
+    let home = root.join("home");
+    // A home of their own: nothing here says who anyone is.
+    std::fs::create_dir_all(home.join(".claude")).unwrap();
+    std::fs::write(
+        home.join(".claude/settings.json"),
+        r#"{"env":{"DISABLE_AUTOUPDATER":"1"}}"#,
+    )
+    .unwrap();
+    // First-run setup checks the network and leaves when it is not there; past it, a CLI stays
+    // at its sign-in as it does on a machine in use.
+    std::fs::write(
+        home.join(".claude.json"),
+        r#"{"hasCompletedOnboarding":true,"autoUpdates":false}"#,
+    )
+    .unwrap();
+    until("host never answered", || Stream::connect(&socket).is_ok());
+    rpc(
+        &socket,
+        &Request::Edit {
+            request: None,
+            edit: Edit::AddSpace(Space {
+                id: "s".into(),
+                name: "Tests".into(),
+                cwd: cwd.clone(),
+            }),
+        },
+    );
+    let prefix = std::env::var("MOORING_REAL_CLI_PREFIX").unwrap_or_default();
+    let mut seen = vec![];
+    let mut unknown = vec![];
+    let mut logs = vec![];
+    for (id, cli, agent) in [("c", "claude", Agent::Claude), ("x", "codex", Agent::Codex)] {
+        let shell = shell::interactive();
+        let reply = rpc(
+            &socket,
+            &Request::Launch {
+                id: id.into(),
+                space: "s".into(),
+                // What was asked stays on the screen, as it does once someone has typed it.
+                argv: shell::run_then_stay(
+                    &shell,
+                    &format!("{prefix}echo '{REAL_PROMPT}'; {cli}"),
+                    None,
+                ),
+                cwd: cwd.clone(),
+                cols: 120,
+                rows: 30,
+                scheme: Default::default(),
+                colors: None,
+            },
+        );
+        assert!(!matches!(reply, Reply::Error(_)), "{reply:?}");
+        rpc(
+            &socket,
+            &Request::Edit {
+                request: None,
+                edit: Edit::CreateTab {
+                    tab: Tab {
+                        id: format!("tab-{id}"),
+                        space: "s".into(),
+                        default_task: None,
+                        title: String::new(),
+                        layout: Some(mooring_core::layout::Layout::Leaf(id.into())),
+                    },
+                },
+            },
+        );
+        // The host looks at processes when a log or a hook gives it reason to; a CLI nobody has
+        // signed in to writes no log, so this is the one it would have written.
+        let appeared = until("the CLI never started", || {
+            let Reply::Workspace(w) = rpc(&socket, &Request::Workspace) else {
+                return false;
+            };
+            mooring_host::recognition::processes(&w)
+                .unwrap()
+                .iter()
+                .any(|p| p.runtime == Some(agent))
+        });
+        eprintln!("{cli}: process there after {appeared:?}");
+        std::thread::sleep(Duration::from_secs(2));
+        let log = write_log(agent, &home, &cwd);
+        logs.push((agent, log.clone()));
+        let waited = Instant::now();
+        let mut known = false;
+        while !known && waited.elapsed() < Duration::from_secs(20) {
+            std::thread::sleep(Duration::from_millis(100));
+            // Named while it has no conversation; once it has, the conversation says.
+            if let Reply::Recognition(status) = rpc(&socket, &Request::RecognitionStatus) {
+                known = status.terminal_agents.get(id) == Some(&agent);
+            }
+            if let Reply::Workspace(w) = rpc(&socket, &Request::Workspace) {
+                known |= w.current_agent(id).is_some_and(|s| s.runtime == agent);
+            }
+        }
+        eprintln!(
+            "{cli}: host says it is here={known}, {:?} after its log",
+            waited.elapsed()
+        );
+        let Reply::Workspace(w) = rpc(&socket, &Request::Workspace) else {
+            panic!("no workspace");
+        };
+        let probing = Instant::now();
+        let found = mooring_host::recognition::processes(&w).unwrap();
+        eprintln!(
+            "{cli}: {} processes looked at in {:?}",
+            found.len(),
+            probing.elapsed()
+        );
+        for p in found.iter().filter(|p| p.parent != 0) {
+            eprintln!(
+                "{cli}: pid {} parent {} name {:?} runtime {:?} argv {:?}",
+                p.pid,
+                p.parent,
+                inspect::name(p.pid),
+                p.runtime,
+                inspect::argv(p.pid).unwrap_or_default(),
+            );
+            seen.push(p.pid);
+        }
+        std::thread::sleep(Duration::from_secs(3));
+        eprintln!(
+            "{cli}: screen: {}",
+            text(&run(&root, &["read", id, "--lines", "12"]))
+        );
+        unknown.extend((!known).then_some(cli));
+    }
+    let Reply::Workspace(w) = rpc(&socket, &Request::Workspace) else {
+        panic!("no workspace");
+    };
+    for id in ["c", "x"] {
+        let bound = w.current_agent(id).map(|s| s.cli_session_id.clone());
+        eprintln!("terminal {id}: its conversation by the screen: {bound:?}");
+    }
+    let cpu = |pid| inspect::usage(pid).map_or(Duration::ZERO, |u| u.cpu);
+    let quiet = Duration::from_secs(30);
+    let from = cpu(pid);
+    std::thread::sleep(quiet);
+    let spent = cpu(pid) - from;
+    eprintln!(
+        "both running and following, nothing written, {quiet:?}: {spent:?} of host CPU, host {} MB",
+        megabytes(inspect::memory(pid).unwrap_or(0))
+    );
+    let from = cpu(pid);
+    let writing = Instant::now();
+    while writing.elapsed() < quiet {
+        for (agent, log) in &logs {
+            use std::io::Write;
+            let line = log_line(*agent, "still working on it");
+            let mut file = std::fs::OpenOptions::new().append(true).open(log).unwrap();
+            writeln!(file, "{line}").unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let spent = cpu(pid) - from;
+    eprintln!(
+        "ten lines a second to each log, {quiet:?}: {spent:?} of host CPU, host {} MB",
+        megabytes(inspect::memory(pid).unwrap_or(0))
+    );
+    for id in ["c", "x"] {
+        let closed = run(&root, &["close", id]);
+        assert!(closed.status.success(), "{closed:?}");
+    }
+    until("what ran in the terminals outlived them", || {
+        seen.iter()
+            .all(|p| !mooring_platform::process::exists(*p as i32))
+    });
+    assert!(unknown.is_empty(), "never recognized: {unknown:?}");
+}
+
+const REAL_PROMPT: &str = "please check the rollback steps in the release script";
+
+/// A line of a log as the CLI writes it.
+fn log_line(agent: Agent, said: &str) -> String {
+    let now = mooring_core::content::now();
+    match agent {
+        Agent::Claude => serde_json::json!({"type":"assistant","timestamp":now,
+            "message":{"role":"assistant","content":[{"type":"text","text":said}]}}),
+        _ => serde_json::json!({"timestamp":now,"type":"event_msg",
+            "payload":{"type":"agent_message","message":said}}),
+    }
+    .to_string()
+}
+
+/// The log a CLI starts for a conversation, under its own home.
+fn write_log(agent: Agent, home: &Path, cwd: &str) -> PathBuf {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = mooring_core::content::now();
+    let (dir, name, lines) = match agent {
+        Agent::Claude => (
+            home.join(".claude/projects/work"),
+            format!("{id}.jsonl"),
+            vec![
+                serde_json::json!({"type":"user","sessionId":id,"uuid":"u0","cwd":cwd,
+                "entrypoint":"cli","userType":"external","timestamp":now,
+                "message":{"role":"user","content":REAL_PROMPT}}),
+            ],
+        ),
+        _ => (
+            home.join(".codex/sessions"),
+            format!("rollout-{id}.jsonl"),
+            vec![
+                serde_json::json!({"type":"session_meta","payload":{"id":id,"cwd":cwd}}),
+                serde_json::json!({"timestamp":now,"type":"event_msg",
+                    "payload":{"type":"user_message","message":REAL_PROMPT}}),
+            ],
+        ),
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(name);
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    std::fs::write(&path, text).unwrap();
+    path
 }
