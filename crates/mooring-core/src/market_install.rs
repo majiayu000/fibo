@@ -114,7 +114,7 @@ impl Prepared {
     /// Keeps where it came from, for the next time something offers to replace it.
     fn save_source(&self) {
         let data = crate::setup::data_dir(&self.plugins, &self.id);
-        let _ = crate::plugin_context::create_private_dir(&data);
+        let _ = mooring_platform::fs::create_private_dir(&data);
         if let Ok(bytes) = serde_json::to_vec_pretty(&self.source) {
             let _ = std::fs::write(data.join(SOURCE_FILE), bytes);
         }
@@ -221,7 +221,7 @@ pub(super) fn replacing(
 pub fn recover(plugins: &Path) {
     let alive = |pid: &str| {
         pid.parse::<i32>()
-            .is_ok_and(|p| p != std::process::id() as i32 && crate::process::exists(p))
+            .is_ok_and(|p| p != std::process::id() as i32 && mooring_platform::process::exists(p))
     };
     let Ok(_held) = plugin::lock(plugins) else {
         return;

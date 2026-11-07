@@ -250,7 +250,7 @@ pub fn env(dir: &Path) -> Vec<(String, String)> {
     let mut out = vec![("MOORING_PLUGIN_DIR".to_owned(), dir.display().to_string())];
     if let Some((plugins, p)) = owner(dir) {
         let data = crate::setup::data_dir(&plugins, &p.id);
-        let _ = create_private_dir(&data);
+        let _ = mooring_platform::fs::create_private_dir(&data);
         out.push(("MOORING_PLUGIN_ID".into(), p.id.clone()));
         out.push(("MOORING_PLUGIN_DATA".into(), data.display().to_string()));
         for (o, v) in values(&plugins, &p) {
@@ -275,22 +275,6 @@ pub fn env(dir: &Path) -> Vec<(String, String)> {
         ));
     }
     out
-}
-
-#[cfg(unix)]
-pub(crate) fn create_private_dir(dir: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    std::fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(dir)
-}
-
-/// Not private by itself: it takes the rights of the directory it is in, which under the user
-/// profile means this account, SYSTEM and administrators. Elsewhere it may mean more people.
-#[cfg(windows)]
-pub(crate) fn create_private_dir(dir: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)
 }
 
 /// One run of a plugin command.
@@ -366,7 +350,7 @@ fn redacted(
 }
 
 fn append(data: &Path, run: &Run) -> std::io::Result<()> {
-    create_private_dir(data)?;
+    mooring_platform::fs::create_private_dir(data)?;
     let lock = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
