@@ -89,6 +89,7 @@ impl Search {
         cx.subscribe_in(&search, window, |this, _, event, window, cx| match event {
             crate::ui::field::FieldEvent::Submit => this.open_selected_hit(window, cx),
             crate::ui::field::FieldEvent::Cancel => this.close_search(cx),
+            crate::ui::field::FieldEvent::ClickOut => {}
         })
         .detach();
         Self {

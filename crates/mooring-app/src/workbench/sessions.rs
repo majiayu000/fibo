@@ -88,13 +88,18 @@ impl Workbench {
         let field = cx.new(|cx| {
             Field::new("会话名", &current, cx)
                 .inline()
+                .ends_on_click_out()
                 .placeholder(&automatic)
         });
         field.update(cx, |f, _| f.select_all());
         let events = cx.subscribe(&field, |this, _, event, cx| match event {
-            crate::ui::field::FieldEvent::Submit => this.save_session_name(cx),
+            crate::ui::field::FieldEvent::Submit | crate::ui::field::FieldEvent::ClickOut => {
+                this.save_session_name(cx);
+                this.nav.pending_focus = true;
+            }
             crate::ui::field::FieldEvent::Cancel => {
                 this.layout.renaming_session = None;
+                this.nav.pending_focus = true;
                 cx.notify();
             }
         });

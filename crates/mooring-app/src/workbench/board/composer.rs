@@ -87,6 +87,7 @@ impl Workbench {
                 }
                 cx.notify();
             }
+            crate::ui::field::FieldEvent::ClickOut => {}
         });
         window.focus(&field.focus_handle(cx), cx);
         let space = (draft_space.filter(|id| self.workspace.spaces.iter().any(|s| &s.id == id)))
@@ -209,6 +210,7 @@ impl Workbench {
         let events = cx.subscribe_in(&field, window, |this, _, event, window, cx| match event {
             crate::ui::field::FieldEvent::Submit => this.save_board_space(window, cx),
             crate::ui::field::FieldEvent::Cancel => this.cancel_board_space(window, cx),
+            crate::ui::field::FieldEvent::ClickOut => {}
         });
         window.focus(&field.focus_handle(cx), cx);
         if let Some(q) = &mut self.tasks.board_quick {

@@ -17,10 +17,14 @@ impl Workbench {
     }
     fn start_space_rename(&mut self, space: Space, window: &mut Window, cx: &mut Context<Self>) {
         self.save_space_name(cx);
-        let field = cx.new(|cx| Field::new("空间名称", &space.name, cx).inline());
+        let field = cx.new(|cx| {
+            Field::new("空间名称", &space.name, cx)
+                .inline()
+                .ends_on_click_out()
+        });
         field.update(cx, |f, _| f.select_all());
         let events = cx.subscribe(&field, |this, _, event, cx| match event {
-            crate::ui::field::FieldEvent::Submit => {
+            crate::ui::field::FieldEvent::Submit | crate::ui::field::FieldEvent::ClickOut => {
                 this.save_space_name(cx);
                 this.nav.pending_focus = true;
             }
