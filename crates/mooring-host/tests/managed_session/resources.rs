@@ -71,36 +71,6 @@ fn forty_idle_terminals_have_no_periodic_background_io() {
     // Let startup FSEvents batches and PTY setup finish before the measurement window.
     std::thread::sleep(Duration::from_secs(2));
     let metrics_before = recognition(&h).metrics;
-    fn usage(pid: u32) -> libc::rusage_info_v2 {
-        unsafe {
-            let mut r: libc::rusage_info_v2 = std::mem::zeroed();
-            assert_eq!(
-                libc::proc_pid_rusage(
-                    pid as i32,
-                    libc::RUSAGE_INFO_V2,
-                    (&mut r as *mut libc::rusage_info_v2).cast()
-                ),
-                0
-            );
-            r
-        }
-    }
-    fn task(pid: u32) -> libc::proc_taskinfo {
-        unsafe {
-            let mut t: libc::proc_taskinfo = std::mem::zeroed();
-            assert_eq!(
-                libc::proc_pidinfo(
-                    pid as i32,
-                    libc::PROC_PIDTASKINFO,
-                    0,
-                    (&mut t as *mut libc::proc_taskinfo).cast(),
-                    std::mem::size_of_val(&t) as i32
-                ),
-                std::mem::size_of_val(&t) as i32
-            );
-            t
-        }
-    }
     // pti_syscalls_unix includes native FSEvents/libdispatch workqueue housekeeping,
     // not just file I/O. LLDB captured __workq_kernreturn after a filtered native
     // notification; parallel runs reproduced +2 with no application work. Allow
@@ -112,22 +82,19 @@ fn forty_idle_terminals_have_no_periodic_background_io() {
     let mut deltas = Vec::new();
     let cpu_percent = loop {
         let before = usage(h.child.id());
-        let calls = task(h.child.id());
         let start = Instant::now();
         std::thread::sleep(Duration::from_secs(5));
         let after = usage(h.child.id());
-        let end_calls = task(h.child.id());
-        let cpu_ticks =
-            after.ri_user_time + after.ri_system_time - before.ri_user_time - before.ri_system_time;
-        let cpu_percent = cpu_seconds(cpu_ticks) / start.elapsed().as_secs_f64() * 100.;
-        let extra_calls = end_calls.pti_syscalls_unix - calls.pti_syscalls_unix;
+        let cpu_percent =
+            (after.cpu - before.cpu).as_secs_f64() / start.elapsed().as_secs_f64() * 100.;
+        let extra_calls = after.syscalls - before.syscalls;
         eprintln!(
             "40 idle PTYs: CPU {cpu_percent:.4}%, disk read {} B, write {} B, Unix syscalls {extra_calls}",
-            after.ri_diskio_bytesread - before.ri_diskio_bytesread,
-            after.ri_diskio_byteswritten - before.ri_diskio_byteswritten,
+            after.disk_read - before.disk_read,
+            after.disk_written - before.disk_written,
         );
-        assert_eq!(after.ri_diskio_bytesread, before.ri_diskio_bytesread);
-        assert_eq!(after.ri_diskio_byteswritten, before.ri_diskio_byteswritten);
+        assert_eq!(after.disk_read, before.disk_read);
+        assert_eq!(after.disk_written, before.disk_written);
         deltas.push(extra_calls);
         if (0..=4).contains(&extra_calls) || deltas.len() == 3 {
             break cpu_percent;
@@ -283,12 +250,10 @@ read -r finish
     // Gated on retired instructions per appended line, not CPU time, which moves with
     // machine load (649-666 k a line at load 31-50 on 2026-11-04, about 1.3% of a core).
     // A VM (CI) counts none and its CPU time tracks load: there appended bytes are read once.
-    let seconds = cpu_seconds(
-        after.ri_user_time + after.ri_system_time - cpu.ri_user_time - cpu.ri_system_time,
-    );
-    let idle = control_after.ri_instructions - control_cpu.ri_instructions;
-    let per_line = (after.ri_instructions - cpu.ri_instructions).saturating_sub(idle)
-        / (4 * (1 + window * 10));
+    let seconds = (after.cpu - cpu.cpu).as_secs_f64();
+    let idle = control_after.instructions - control_cpu.instructions;
+    let per_line =
+        (after.instructions - cpu.instructions).saturating_sub(idle) / (4 * (1 + window * 10));
     let ps = stats.metrics.ps_spawns - before.metrics.ps_spawns;
     let lsof = stats.metrics.lsof_spawns - before.metrics.lsof_spawns;
     eprintln!(
@@ -297,7 +262,7 @@ read -r finish
     );
     assert_eq!((ps, lsof), (0, 0), "transcript appends spawned probes");
     assert!(idle <= 50_000_000, "idle control busy: {idle}");
-    let within = match after.ri_instructions {
+    let within = match after.instructions {
         0 => stats.metrics.log_bytes - before.metrics.log_bytes <= appended + appended / 10,
         _ => per_line <= 1_000_000,
     };

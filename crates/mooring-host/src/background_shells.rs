@@ -22,10 +22,6 @@ use std::sync::atomic::Ordering;
 pub const JOB_LIMIT: u64 = 2 * 3600;
 /// Seconds between looks while some turn has shells left.
 pub const EVERY: u64 = 5;
-/// macOS hands out ports from here up (`net.inet.ip.portrange.first`) to a socket bound
-/// to port 0; a server meant to be visited is put on a port below it.
-const EPHEMERAL: u16 = 49152;
-
 /// What one look found for a shell: its process tree listens on a port, another process
 /// of the tree is connected to that port, something in the tree still works beside the
 /// listeners (a leaf that listens on nothing), and how long it has run. `None` from
@@ -247,12 +243,14 @@ fn sockets(pids: &[u32]) -> io::Result<Sockets> {
 }
 /// Leaves out the ports the system handed out: only a chosen one says "server".
 fn chosen(found: inspect::TcpSockets) -> Sockets {
+    // A server meant to be visited is put on a port below what the system hands out.
+    let handed_out = inspect::first_handed_out_port();
     let mut out = Sockets {
         dialing: found.connected,
         ..Sockets::default()
     };
     for (pid, port) in found.listening {
-        if port < EPHEMERAL {
+        if port < handed_out {
             out.listening.entry(pid).or_default().insert(port);
         }
     }
@@ -503,7 +501,7 @@ mod tests {
         // Bound to 0: the system picks an ephemeral port, as a renderer does for its browser.
         let helper = r#"python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(); time.sleep(30)' # eph-7f3a"#;
         let server = r#"python3 -c 'import socket,time
-for p in range(41000, 41200):
+for p in range(21000, 21200):
     s = socket.socket()
     try:
         s.bind(("127.0.0.1", p)); break
@@ -566,12 +564,12 @@ print(p, flush=True)
 c, _ = s.accept(); time.sleep(20)";
         let own_client = "subprocess.Popen([sys.executable, \"-c\", \"import socket,sys,time; c = socket.create_connection((sys.argv[1], int(sys.argv[2]))); time.sleep(20)\", \"127.0.0.1\", str(p)])";
         let script = bind
-            .replace("{from}", "41300")
-            .replace("{to}", "41400")
+            .replace("{from}", "21300")
+            .replace("{to}", "21400")
             .replace("{client}", own_client);
         let server = bind
-            .replace("{from}", "41400")
-            .replace("{to}", "41500")
+            .replace("{from}", "21400")
+            .replace("{to}", "21500")
             .replace("{client}", "");
         let own = format!(": own-8c1d; python3 -c '{script}'");
         let alone = format!(": srv-8c1d; python3 -c '{server}'");

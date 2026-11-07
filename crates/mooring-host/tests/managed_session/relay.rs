@@ -12,8 +12,9 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         r"stty raw -echo; printf '\033[?1hready\r\n'; exec cat -v",
     ))
     .unwrap();
-    let (_app, mut app_vt, _) = h.attach("rt", false);
-    let (mut app, _, _) = h.attach("rt", false);
+    let (_app, _, _) = h.attach("rt", false);
+    // This stream with its own screen: what came before it is on the screen, not in the stream.
+    let (mut app, mut app_vt, _) = h.attach("rt", false);
     read_until(&mut app, &mut app_vt, "ready");
 
     let (base, stop, relay) = local_relay("127.0.0.1:0", Default::default());

@@ -53,7 +53,9 @@ impl Host {
         let space = Edit::AddSpace(Space {
             id: "s".into(),
             name: "Tests".into(),
-            cwd: "/tmp".into(),
+            // Above no test's folders: `/tmp` would hold them where the system's temporary
+            // directory is `/tmp`, and a space's folder lets a device read what is inside.
+            cwd: "/usr".into(),
         });
         h.call(Request::Edit {
             request: None,
