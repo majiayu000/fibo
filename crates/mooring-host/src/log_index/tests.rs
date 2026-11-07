@@ -6,6 +6,8 @@ use std::io::Write;
 mod codex_children;
 #[path = "query_perf_tests.rs"]
 mod query_perf;
+#[path = "scan_bench_tests.rs"]
+mod scan_bench;
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
