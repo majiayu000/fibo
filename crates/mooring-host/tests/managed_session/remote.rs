@@ -399,12 +399,20 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
             }
         }
     });
-    let read = || -> Value {
+    let read = || -> Option<Value> {
         ask.send(()).unwrap();
-        told.recv_timeout(Duration::from_secs(20))
-            .expect("the remote client went quiet")
+        told.recv_timeout(Duration::from_secs(20)).ok()
     };
-    while read()["type"] != "screen" {}
+    let b64 = base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    let mut every = Vt::new(80, 24).unwrap();
+    loop {
+        let v = read().expect("the remote client went quiet");
+        if v["type"] == "screen" {
+            every.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
+            break;
+        }
+    }
     // From here the remote client reads nothing.
     let stalled = flood(&mut app, &mut vt, "flood-done");
     eprintln!(
@@ -416,14 +424,35 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
     );
     // Reading again: the backlog it missed is skipped for the screen as it was then, and what
     // came after that follows as output, as for any phone.
-    let b64 = base64::engine::general_purpose::STANDARD;
-    use base64::Engine;
     let until = Instant::now() + Duration::from_secs(20);
     let mut screens = 0;
+    let mut outputs = 0;
+    let mut max_gap = Duration::ZERO;
     let mut phone = Vt::new(80, 24).unwrap();
     while !phone.tail_text(24).unwrap().contains("flood-done") {
         assert!(Instant::now() < until, "never caught up");
-        let v = read();
+        let asked_at = Instant::now();
+        let got = read();
+        max_gap = max_gap.max(asked_at.elapsed());
+        let Some(v) = got else {
+            // Says which of two things this was: everything arrived and only the screen did not
+            // come again, or the last output was never sent.
+            panic!(
+                "quiet with flood-done unseen: {screens} screens, {outputs} outputs, slowest read \
+                 {max_gap:?}, all output in order {} it; phone {:?}, all output {:?}",
+                if every.tail_text(24).unwrap().contains("flood-done") {
+                    "has"
+                } else {
+                    "lacks"
+                },
+                phone.tail_text(24).unwrap(),
+                every.tail_text(24).unwrap(),
+            );
+        };
+        if v["type"] == "output" {
+            outputs += 1;
+            every.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
+        }
         match v["type"].as_str() {
             Some("screen") => {
                 screens += 1;
@@ -436,6 +465,7 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
             _ => (),
         }
     }
+    eprintln!("caught up after {screens} screens, {outputs} outputs, slowest read {max_gap:?}");
     drop(stdin);
     child.wait().unwrap();
 }
