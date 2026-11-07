@@ -463,21 +463,29 @@ impl Workbench {
         for field in &form.fields {
             panel = panel.child(field.clone());
         }
-        panel.child(
-            div()
-                .flex()
-                .gap(px(T::S8))
-                .child(
-                    button("save", "保存")
-                        .on_click(cx.listener(|this, _, _, cx| this.save_form(false, cx))),
-                )
-                .child(
-                    button("cancel", "取消").on_click(cx.listener(|this, _, _, cx| {
-                        this.tasks.form = None;
-                        cx.notify();
-                    })),
-                ),
-        )
+        panel
+            .child(
+                div()
+                    .flex()
+                    .gap(px(T::S8))
+                    .child(
+                        button("save", "保存")
+                            .on_click(cx.listener(|this, _, _, cx| this.save_form(false, cx))),
+                    )
+                    .child(
+                        button("cancel", "取消").on_click(cx.listener(|this, _, _, cx| {
+                            this.tasks.form = None;
+                            cx.notify();
+                        })),
+                    ),
+            )
+            .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, _, cx| {
+                if e.keystroke.key == "escape" && !e.keystroke.modifiers.modified() {
+                    this.tasks.form = None;
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
     }
     pub(super) fn edit_task_form(
         &mut self,
