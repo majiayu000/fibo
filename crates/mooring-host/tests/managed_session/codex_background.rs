@@ -111,7 +111,8 @@ fn a_codex_command_left_running_stays_running_across_a_new_host() {
 #[test]
 fn a_server_codex_left_running_is_waiting_on_the_background() {
     let h = Host::start();
-    let port = 42000 + (std::process::id() % 900) as u16;
+    // Below where any system starts handing out ports.
+    let port = 22000 + (std::process::id() % 900) as u16;
     let server = format!("python3 -m http.server {port} --bind 127.0.0.1");
     codex_left_running(&h, "srv", &server);
     wait_shows(&h, "srv", Status::Background);

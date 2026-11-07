@@ -143,15 +143,6 @@ pub(crate) fn ack(stream: &mut UnixStream) -> Reply {
         }
     }
 }
-// proc_pid_rusage uses Mach absolute time on Apple Silicon. Dividing raw ticks
-// by 1e9 undercounts CPU by 125/3 on this host; convert using the OS timebase.
-#[allow(deprecated)] // The existing libc binding is sufficient; no extra dependency for this test.
-pub(crate) fn cpu_seconds(ticks: u64) -> f64 {
-    let mut base = libc::mach_timebase_info { numer: 0, denom: 0 };
-    assert_eq!(unsafe { libc::mach_timebase_info(&mut base) }, 0);
-    ticks as f64 * base.numer as f64 / base.denom as f64 / 1e9
-}
-
 /// Reads a terminal stream until its screen shows `marker`.
 pub(crate) fn read_until(stream: &mut UnixStream, vt: &mut Vt, marker: &str) {
     let until = Instant::now() + Duration::from_secs(10);
@@ -184,7 +175,7 @@ pub(crate) fn fixture_command(root: &std::path::Path) -> Command {
         .env("MOORING_CLAUDE_AGENTS", root.join("claude-agents"))
         .env("MOORING_CODEX_CONTROL", root.join("codex-control.sock"))
         // A fake CLI is a link to the shell, and the system names a process by its file.
-        .env("MOORING_CLI_PROCESS", "bash")
+        .env("MOORING_CLI_PROCESS", shell_process_name())
         // Grok's registry of live sessions is read from its home, not the fixture roots.
         .env("GROK_HOME", root.join("grok-home"))
         // The host starts `mooring remote --relay`; here it runs inside the test binary.
@@ -197,19 +188,8 @@ pub(crate) fn recognition(h: &Host) -> RecognitionStatus {
         other => panic!("{other:?}"),
     }
 }
-pub(crate) fn usage(pid: u32) -> libc::rusage_info_v4 {
-    unsafe {
-        let mut r: libc::rusage_info_v4 = std::mem::zeroed();
-        assert_eq!(
-            libc::proc_pid_rusage(
-                pid as i32,
-                libc::RUSAGE_INFO_V4,
-                (&mut r as *mut libc::rusage_info_v4).cast()
-            ),
-            0
-        );
-        r
-    }
+pub(crate) fn usage(pid: u32) -> mooring_platform::inspect::Usage {
+    mooring_platform::inspect::usage(pid).expect("a process this test started")
 }
 pub(crate) fn wait_for(h: &Host, what: &str, ok: impl Fn(&Workspace) -> bool) {
     let until = Instant::now() + Duration::from_secs(20);
@@ -224,4 +204,32 @@ pub(crate) fn current_is(w: &Workspace, pane: &str, thread: &str) -> bool {
 }
 pub(crate) fn ids<const N: usize>() -> [String; N] {
     std::array::from_fn(|_| uuid::Uuid::new_v4().to_string())
+}
+
+/// What the system names a process that started as `/bin/sh`: the fake CLIs are links to it,
+/// and it is bash on a Mac and something else elsewhere.
+fn shell_process_name() -> &'static str {
+    static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    NAME.get_or_init(|| {
+        let mut sh = Command::new("/bin/sh")
+            .args(["-c", "read line"])
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        // Right after the fork it is still this test program, and a Mac's `sh` then becomes
+        // bash: its name is the one that stops changing.
+        let mut name = String::new();
+        let mut same_since = Instant::now();
+        while same_since.elapsed() < Duration::from_millis(500) {
+            let now = mooring_platform::inspect::name(sh.id()).unwrap_or_default();
+            if now != name {
+                name = now;
+                same_since = Instant::now();
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let _ = sh.kill();
+        let _ = sh.wait();
+        name
+    })
 }

@@ -1,7 +1,7 @@
 use crate::myself;
 use mooring_platform::inspect::{
-    all_pids, argv, children, cwd, env_var, executable, memory, name, open_files, started,
-    started_micros, stdin_is_a_channel, tcp_sockets,
+    all_pids, argv, children, cwd, env_var, executable, first_handed_out_port, memory, name,
+    open_files, started, started_micros, stdin_is_a_channel, tcp_sockets, usage,
 };
 use std::io::ErrorKind;
 use std::process::Stdio;
@@ -200,4 +200,30 @@ fn open_files_name_what_a_process_holds() {
     let found = found.unwrap();
     let path = path.to_string_lossy().into_owned();
     assert!(found[&me].contains(&path), "{:?}", found[&me]);
+}
+
+#[test]
+fn cpu_use_grows_with_work() {
+    let me = std::process::id();
+    let first = usage(me).expect("a process may read its own");
+    let until = Instant::now() + Duration::from_secs(20);
+    let mut spin = 0u64;
+    loop {
+        for i in 0..1_000_000u64 {
+            spin = std::hint::black_box(spin.wrapping_add(i));
+        }
+        let now = usage(me).unwrap();
+        if now.cpu > first.cpu {
+            assert!(now.cpu < Duration::from_secs(3600), "{now:?}");
+            return;
+        }
+        assert!(Instant::now() < until, "still {now:?}");
+    }
+}
+
+#[test]
+fn a_port_the_system_hands_out_is_past_where_those_start() {
+    let socket = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = socket.local_addr().unwrap().port();
+    assert!(port >= first_handed_out_port(), "{port}");
 }

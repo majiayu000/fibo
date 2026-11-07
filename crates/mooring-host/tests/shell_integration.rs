@@ -476,15 +476,21 @@ fn macos_bash_3_reports_its_directory_too() {
     let st = state(
         &h,
         &mut s,
-        r#"printf '%s|%s\n' "$(set -o | grep -c 'posix[[:space:]]*on')" "$PROMPT_COMMAND" > "$HOME/state""#,
+        r#"printf '%s|%s\n' "$(set -o | grep -c 'posix[[:space:]]*on')" "${PROMPT_COMMAND[*]}" > "$HOME/state""#,
     );
-    assert_eq!(
-        st.trim(),
-        "0|_mooring_prompt;echo -n;",
-        "not in POSIX mode, the user's prompt command kept"
+    // A string on a Mac; an array where a system profile made it one, as Ubuntu's does, and
+    // that profile may add its own. What is promised: ours first, the user's kept.
+    let st = st.trim();
+    assert!(
+        st.starts_with("0|_mooring_prompt") && st.contains("echo -n;"),
+        "not in POSIX mode, the user's prompt command kept: {st}"
     );
     assert_eq!(h.loads("bash_profile"), 1);
-    // bash 3.2 has no PS0 to mark a command's start, so its commands are not heard.
+    // bash 3.2 has no PS0 to mark a command's start, so its commands are not heard. Only a
+    // Mac still ships it; a later one is covered by the Homebrew bash test.
+    if !bash_is_3() {
+        return;
+    }
     std::thread::sleep(Duration::from_millis(500));
     let _ = fs::remove_file(h.root.join("commands"));
     s.type_line("sh -c 'exit 3'");
@@ -514,4 +520,12 @@ fn fish_reports_its_directory_and_keeps_its_own_prompt_marks() {
     assert_eq!(st.trim(), "xdg=[]");
     assert_eq!(h.loads("config_fish"), 1);
     commands_reach_hooks(&h, &mut s);
+}
+
+fn bash_is_3() -> bool {
+    let out = std::process::Command::new("/bin/bash")
+        .args(["-c", "echo ${BASH_VERSINFO[0]}"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim() == "3"
 }
