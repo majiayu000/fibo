@@ -409,14 +409,11 @@ pub fn install() {
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|t| Pick::parse(&t));
     *PICKED.lock().unwrap_or_else(|e| e.into_inner()) = settled(saved, presets());
-    #[cfg(target_os = "macos")]
     std::thread::spawn(|| {
-        let on = std::process::Command::new("defaults")
-            .args(["read", "com.apple.universalaccess", "reduceMotion"])
-            .stderr(std::process::Stdio::null())
-            .output()
-            .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "1");
-        REDUCE_MOTION.store(on, Ordering::Relaxed);
+        REDUCE_MOTION.store(
+            mooring_platform::desktop::reduce_motion(),
+            Ordering::Relaxed,
+        );
     });
 }
 /// A style settings no longer offers by itself (picked before it moved into plugins)

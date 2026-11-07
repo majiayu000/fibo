@@ -460,7 +460,7 @@ mod tests {
                 ..Context::default()
             };
             let command = a.command(&ctx).unwrap();
-            let out = std::process::Command::new(crate::plugin_command::shell())
+            let out = std::process::Command::new(mooring_platform::shell::sh())
                 .arg("-c")
                 .arg(&command)
                 .output()

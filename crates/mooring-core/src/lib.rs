@@ -18,7 +18,6 @@ pub mod plugin;
 pub mod plugin_category;
 pub mod plugin_command;
 pub mod plugin_context;
-pub mod process;
 pub mod program_state;
 pub mod prompt_pin;
 pub mod protocol;

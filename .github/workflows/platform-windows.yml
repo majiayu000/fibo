@@ -1,0 +1,66 @@
+name: Windows check
+
+# The crates that already run on Windows, on Windows: what they and mooring-platform promise
+# (docs/platform/index.html). Not a required check yet (docs/decisions/2026-11-06-main-requires-ci.md),
+# so red here shows and blocks nothing. Another platform's implementation files do not start
+# it: they are not compiled here. A file of its own: ci.yml is part of the macOS cache key, and
+# changing it costs every job a rebuild.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - crates/mooring-platform/**
+      - crates/mooring-core/**
+      - crates/mooring-remote/**
+      - crates/mooring-relay/**
+      - crates/mooring-plugin-host/**
+      - Cargo.lock
+      - rust-toolchain.toml
+      - bootstrap.sh
+      - .github/workflows/platform-windows.yml
+      - '!crates/mooring-platform/src/**/unix.rs'
+      - '!crates/mooring-platform/src/**/macos.rs'
+      - '!crates/mooring-platform/src/**/linux.rs'
+  workflow_dispatch:
+
+concurrency:
+  group: platform-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Shared crates on Windows
+    runs-on: windows-latest
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      # Tests compare files byte for byte; a checkout must not rewrite line endings.
+      - name: Keep line endings
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install --no-self-update
+          rustup component add clippy
+
+      # Builds libghostty-vt for the target.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.16.0
+          use-cache: false
+
+      - name: Prepare pinned native dependencies
+        shell: bash
+        run: sh bootstrap.sh
+
+      - name: Clippy
+        run: cargo clippy -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --all-targets -- -D warnings
+
+      - name: Cargo test
+        run: cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
