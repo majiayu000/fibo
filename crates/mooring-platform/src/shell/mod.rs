@@ -37,6 +37,12 @@ pub fn quote(word: &str) -> String {
     imp::quote(word)
 }
 
+/// `program` for [`interactive`] to run as the program itself, past any function of that name:
+/// such a wrapper usually adds flags the caller is about to give, and a CLI may reject one twice.
+pub fn past_functions(program: &str) -> String {
+    imp::past_functions(program)
+}
+
 /// How to have `shell` run `command`, a line in its own language, and then stay for someone to
 /// work in. `argument` goes after the command as one word the shell does not interpret, which
 /// makes it safe for text from elsewhere.
