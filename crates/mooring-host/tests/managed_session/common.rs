@@ -216,15 +216,18 @@ fn shell_process_name() -> &'static str {
             .stdin(Stdio::piped())
             .spawn()
             .unwrap();
-        let until = Instant::now() + Duration::from_secs(5);
-        let name = loop {
-            // Right after the fork it is still this test program.
-            let name = mooring_platform::inspect::name(sh.id()).unwrap();
-            if name.ends_with("sh") || Instant::now() >= until {
-                break name;
+        // Right after the fork it is still this test program, and a Mac's `sh` then becomes
+        // bash: its name is the one that stops changing.
+        let mut name = String::new();
+        let mut same_since = Instant::now();
+        while same_since.elapsed() < Duration::from_millis(500) {
+            let now = mooring_platform::inspect::name(sh.id()).unwrap_or_default();
+            if now != name {
+                name = now;
+                same_since = Instant::now();
             }
             std::thread::sleep(Duration::from_millis(10));
-        };
+        }
         let _ = sh.kill();
         let _ = sh.wait();
         name
