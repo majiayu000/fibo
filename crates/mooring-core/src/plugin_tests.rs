@@ -268,6 +268,35 @@ fn a_setup_that_fails_when_turned_on_leaves_it_off() {
     let _ = std::fs::remove_dir_all(&config);
 }
 
+/// Switches that cannot be read are never replaced by a list holding only this plugin, which
+/// would turn every other plugin back on; and its setup does not run either.
+#[test]
+fn a_switch_file_that_cannot_be_read_is_never_saved_over() {
+    let config = tmp("bad-switches");
+    let plugins = dir(&config);
+    let ran = plugins.join("setup-ran");
+    plugin(
+        &plugins,
+        "p",
+        r#"{"api":1,"id":"p","name":"P","provides":["setup"]}"#,
+        &[(
+            "setup.json",
+            &format!(
+                r#"{{"api":1,"setup":"touch '{}'","teardown":"true"}}"#,
+                ran.display()
+            ),
+        )],
+    );
+    let bad = r#"["one","tw"#;
+    std::fs::write(switches(&plugins), bad).unwrap();
+    assert!(set_enabled_in(&plugins, "p", true, false).is_err());
+    assert!(set_enabled_in(&plugins, "p", false, true).is_err());
+    assert!(mark_off(&plugins, "p").is_err());
+    assert_eq!(std::fs::read_to_string(switches(&plugins)).unwrap(), bad);
+    assert!(!ran.exists());
+    let _ = std::fs::remove_dir_all(&config);
+}
+
 /// Taking a plugin away takes its secrets out of the keychain too.
 #[test]
 fn uninstalling_removes_its_secrets() {
