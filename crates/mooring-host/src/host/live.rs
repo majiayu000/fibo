@@ -307,7 +307,7 @@ pub(super) fn run_live(
         Reaper::Pid(pid) => {
             let ended = Arc::new(Mutex::new(Some(ended)));
             let fire = Arc::clone(&ended);
-            let watch = crate::process_exit::ExitWatch::new(move |_| {
+            let watch = mooring_platform::exit_watch::ExitWatch::new(move |_| {
                 if let Some(ended) = fire.lock().ok().and_then(|mut e| e.take()) {
                     ended(None);
                 }

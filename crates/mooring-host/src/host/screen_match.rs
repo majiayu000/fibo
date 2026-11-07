@@ -110,7 +110,7 @@ pub(super) fn terminals(
         terminals.push(ScreenTerminal {
             terminal: terminal.clone(),
             runtime: *runtime,
-            cwd: crate::recognition::process_cwd(*pid),
+            cwd: mooring_platform::inspect::cwd(*pid),
             screen: crate::recognition::screen_text(&screen),
             current,
             submits: presses(submits, terminal),
@@ -211,7 +211,7 @@ pub(super) fn associate_pane(shared: &Shared, id: &str) -> io::Result<Reply> {
     let Some((pid, _, _, runtime, _)) = panes.iter().find(|(_, _, t, ..)| t == id) else {
         return answer(None);
     };
-    let Some(started) = crate::background_shells::started(*pid) else {
+    let Some(started) = mooring_platform::inspect::started(*pid) else {
         return answer(None);
     };
     let cached = index.cached()?;
