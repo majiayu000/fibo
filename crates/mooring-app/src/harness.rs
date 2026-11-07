@@ -35,6 +35,7 @@ mod reason_evidence;
 mod reconnect_evidence;
 #[path = "remote_typing_evidence.rs"]
 mod remote_typing_evidence;
+mod rename_click_out_evidence;
 mod restart_evidence;
 #[path = "resume_evidence.rs"]
 mod resume_evidence;
@@ -80,6 +81,9 @@ pub fn start(
         || pinned_ask_evidence::start(handle, evidence.clone(), cx)
         || todo_flow_evidence::start(handle, evidence.clone(), cx)
     {
+        return;
+    }
+    if rename_click_out_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
     if complete_evidence::start(handle, evidence.clone(), cx)
