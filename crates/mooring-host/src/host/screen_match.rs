@@ -89,13 +89,33 @@ pub(super) fn stays(
         &presses(submits, pane),
     ))
 }
+/// A terminal is one screen however many of its processes look like the CLI: a helper caught
+/// between fork and exec still has the name, and stays counted until it exits. Listed twice, the
+/// screen would be two panes fitting one thread, which binds nothing. The oldest stands for it.
+fn one_per_terminal<T>(items: &[T], of: impl Fn(&T) -> (u32, &str)) -> Vec<&T> {
+    let mut oldest: HashMap<&str, &T> = HashMap::new();
+    for item in items {
+        let (pid, terminal) = of(item);
+        oldest
+            .entry(terminal)
+            .and_modify(|kept| {
+                if pid < of(kept).0 {
+                    *kept = item;
+                }
+            })
+            .or_insert(item);
+    }
+    oldest.into_values().collect()
+}
 pub(super) fn terminals(
     index: &crate::log_index::Index,
     panes: &[Pane],
     submits: &Submits,
 ) -> io::Result<Vec<ScreenTerminal>> {
     let mut terminals = vec![];
-    for (pid, live, terminal, runtime, current) in panes {
+    for (pid, live, terminal, runtime, current) in
+        one_per_terminal(panes, |(pid, _, terminal, ..)| (*pid, terminal))
+    {
         let screen = lock(live)?.vt.tail_text(200)?;
         let current = match current {
             Some(s) => Some((
@@ -259,5 +279,16 @@ mod tests {
         assert!(!touched_since(100, 101));
         assert!(!touched_since(100, 100));
         assert!(touched_since(101, 100));
+    }
+}
+
+#[cfg(test)]
+mod one_per_terminal_tests {
+    #[test]
+    fn a_terminal_listed_twice_comes_back_once_with_its_oldest_process() {
+        let panes = [(9, "a"), (3, "a"), (5, "b"), (7, "a")];
+        let mut one = super::one_per_terminal(&panes, |(pid, t)| (*pid, t));
+        one.sort();
+        assert_eq!(one, [&(3, "a"), &(5, "b")]);
     }
 }
