@@ -36,6 +36,34 @@ pub fn children(pid: u32) -> io::Result<Vec<u32>> {
     imp::children(pid)
 }
 
+/// Everything below these processes, each with its parent: the ones given, then their children
+/// and so on. Each process once, and a parent that is gone leaves its part out.
+pub fn descendants(pids: &[u32]) -> io::Result<Vec<(u32, u32)>> {
+    #[cfg(unix)]
+    return walk(pids, imp::children);
+    #[cfg(windows)]
+    return imp::descendants(pids);
+}
+
+fn walk(
+    pids: &[u32],
+    mut children: impl FnMut(u32) -> io::Result<Vec<u32>>,
+) -> io::Result<Vec<(u32, u32)>> {
+    let mut pending = pids.to_vec();
+    let mut seen = std::collections::HashSet::new();
+    let mut out = vec![];
+    while let Some(pid) = pending.pop() {
+        if !seen.insert(pid) {
+            continue;
+        }
+        for child in children(pid)? {
+            out.push((child, pid));
+            pending.push(child);
+        }
+    }
+    Ok(out)
+}
+
 /// When a process started, seconds since the epoch.
 pub fn started(pid: u32) -> Option<u64> {
     started_micros(pid).map(|at| at / 1_000_000)

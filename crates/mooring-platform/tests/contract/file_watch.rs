@@ -1,15 +1,10 @@
 use mooring_platform::file_watch::{Batch, Watch, flag, normalized};
-use std::io::{ErrorKind, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-/// The interface lets Windows refuse a watch for now.
 fn start(roots: &[PathBuf], since: u64) -> Option<Watch> {
-    match Watch::start(roots, since) {
-        Ok(watch) => Some(watch),
-        Err(e) if e.kind() == ErrorKind::Unsupported => None,
-        Err(e) => panic!("{e}"),
-    }
+    Some(Watch::start(roots, since).unwrap())
 }
 
 fn dir(name: &str) -> PathBuf {

@@ -316,14 +316,46 @@ fn each_entry(mut visit: impl FnMut(&PROCESSENTRY32W)) -> io::Result<()> {
     Ok(())
 }
 
-pub fn children(pid: u32) -> io::Result<Vec<u32>> {
+/// Whose parent each process says it is. Windows never clears that number, so a parent long
+/// gone may name a process that has since been given its number: see `below`.
+fn parents() -> io::Result<Vec<(u32, u32)>> {
     let mut out = vec![];
-    each_entry(|entry| {
-        if entry.th32ParentProcessID == pid && entry.th32ProcessID != pid {
-            out.push(entry.th32ProcessID);
-        }
-    })?;
+    each_entry(|entry| out.push((entry.th32ProcessID, entry.th32ParentProcessID)))?;
     Ok(out)
+}
+
+/// Who `parent` really started: only a process younger than its parent can be its child. One
+/// the account may not ask about is not this account's terminal's child either.
+fn below(
+    entries: &[(u32, u32)],
+    parent: u32,
+    started: &mut impl FnMut(u32) -> Option<u64>,
+) -> Vec<u32> {
+    let mut named = entries
+        .iter()
+        .filter(|(pid, of)| *of == parent && *pid != parent)
+        .map(|(pid, _)| *pid)
+        .peekable();
+    if named.peek().is_none() {
+        return vec![];
+    }
+    let Some(born) = started(parent) else {
+        return vec![];
+    };
+    named
+        .filter(|pid| started(*pid).is_some_and(|at| at >= born))
+        .collect()
+}
+
+pub fn children(pid: u32) -> io::Result<Vec<u32>> {
+    Ok(below(&parents()?, pid, &mut started_micros))
+}
+
+/// One look at the system's processes, however many there are to walk: a look costs
+/// milliseconds on any machine, so one per process added up to most of a second.
+pub fn descendants(pids: &[u32]) -> io::Result<Vec<(u32, u32)>> {
+    let entries = parents()?;
+    super::walk(pids, |pid| Ok(below(&entries, pid, &mut started_micros)))
 }
 
 /// The dynamic range's default since Windows Vista.
@@ -338,20 +370,29 @@ pub fn all_pids() -> Vec<u32> {
     out
 }
 
+/// Asks the process; only one the account may not open needs a look through all of them.
 pub fn name(pid: u32) -> Option<String> {
     if !alive(pid) {
         return None;
+    }
+    if let Ok(path) = executable(pid) {
+        let file = path.rsplit('\\').next().unwrap_or(&path);
+        return Some(strip_exe(file).to_owned());
     }
     let mut found = None;
     each_entry(|entry| {
         if entry.th32ProcessID == pid {
             let end = entry.szExeFile.iter().position(|c| *c == 0);
             let text = String::from_utf16_lossy(&entry.szExeFile[..end.unwrap_or(260)]);
-            found = Some(text.strip_suffix(".exe").map(str::to_owned).unwrap_or(text));
+            found = Some(strip_exe(&text).to_owned());
         }
     })
     .ok()?;
     found
+}
+
+fn strip_exe(file: &str) -> &str {
+    file.strip_suffix(".exe").unwrap_or(file)
 }
 
 /// A process lasts as long as anyone holds a handle to it, a virus scanner included, and until
@@ -527,5 +568,29 @@ mod tests {
     #[test]
     fn a_port_comes_out_of_network_order() {
         assert_eq!(port(u32::from(8080u16.to_be())), 8080);
+    }
+
+    /// Numbers: 10 is a terminal started at time 100. 7 started long before it and names 10 as
+    /// its parent, because its real parent died and 10 was handed out again; 8 is 7's child.
+    /// Taken at its word, that pulls most of a machine into one terminal.
+    #[test]
+    fn a_number_handed_out_again_does_not_make_a_stranger_a_child() {
+        let entries = [(7, 10), (8, 7), (11, 10), (12, 11)];
+        let mut started = |pid| match pid {
+            7 => Some(50),
+            8 => Some(60),
+            10 => Some(100),
+            11 => Some(110),
+            12 => Some(120),
+            _ => None,
+        };
+        assert_eq!(below(&entries, 10, &mut started), vec![11]);
+        assert_eq!(below(&entries, 11, &mut started), vec![12]);
+        // Started in the same tick still counts: the clock is coarser than process creation.
+        let mut same = |_| Some(100);
+        assert_eq!(below(&entries, 10, &mut same), vec![7, 11]);
+        // Gone, or not ours to ask about: not a child.
+        let mut unknown = |pid| (pid == 10).then_some(100);
+        assert!(below(&entries, 10, &mut unknown).is_empty());
     }
 }
