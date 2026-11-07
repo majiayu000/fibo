@@ -338,6 +338,7 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
     ))
     .unwrap();
     let (mut app, mut vt, _) = h.attach("flood", false);
+    app.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     // A viewer this busy falls behind too; the host then sends it the screen again.
     let flood = |app: &mut UnixStream, vt: &mut Vt, done: &str| {
         let started = Instant::now();
@@ -373,7 +374,7 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
         .spawn()
         .unwrap();
     let mut stdin = child.stdin.take().unwrap();
-    let mut stdout = io::BufReader::new(child.stdout.take().unwrap());
+    let stdout = child.stdout.take().unwrap();
     writeln!(stdin, "{}", json!({ "id": 1, "op": "hello" })).unwrap();
     writeln!(
         stdin,
@@ -381,13 +382,29 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
         json!({ "id": 2, "op": "watch", "terminal": "flood" })
     )
     .unwrap();
-    let mut line = String::new();
-    let mut read = |stdout: &mut io::BufReader<_>| -> Value {
-        line.clear();
-        stdout.read_line(&mut line).unwrap();
-        serde_json::from_str(&line).unwrap()
+    // Taken a line at a time only when asked: this is what stalls the client, and a client that
+    // has nothing more to say must fail the test, not hang it.
+    let (ask, asked) = std::sync::mpsc::channel::<()>();
+    let (tell, told) = std::sync::mpsc::channel::<Value>();
+    std::thread::spawn(move || {
+        let mut stdout = io::BufReader::new(stdout);
+        let mut line = String::new();
+        while asked.recv().is_ok() {
+            line.clear();
+            if stdout.read_line(&mut line).unwrap_or(0) == 0 {
+                return;
+            }
+            if tell.send(serde_json::from_str(&line).unwrap()).is_err() {
+                return;
+            }
+        }
+    });
+    let read = || -> Value {
+        ask.send(()).unwrap();
+        told.recv_timeout(Duration::from_secs(20))
+            .expect("the remote client went quiet")
     };
-    while read(&mut stdout)["type"] != "screen" {}
+    while read()["type"] != "screen" {}
     // From here the remote client reads nothing.
     let stalled = flood(&mut app, &mut vt, "flood-done");
     eprintln!(
@@ -397,19 +414,26 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
         stalled < alone * 2 + Duration::from_millis(500),
         "{alone:?} → {stalled:?}"
     );
-    // Reading again: the backlog it missed is skipped for the screen as it is now.
+    // Reading again: the backlog it missed is skipped for the screen as it was then, and what
+    // came after that follows as output, as for any phone.
     let b64 = base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     let until = Instant::now() + Duration::from_secs(20);
-    loop {
+    let mut screens = 0;
+    let mut phone = Vt::new(80, 24).unwrap();
+    while !phone.tail_text(24).unwrap().contains("flood-done") {
         assert!(Instant::now() < until, "never caught up");
-        let v = read(&mut stdout);
-        if v["type"] == "screen" {
-            let mut phone = Vt::new(80, 24).unwrap();
-            phone.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
-            if phone.tail_text(24).unwrap().contains("flood-done") {
-                break;
+        let v = read();
+        match v["type"].as_str() {
+            Some("screen") => {
+                screens += 1;
+                phone = Vt::new(80, 24).unwrap();
+                phone.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
             }
+            Some("output") if screens > 0 => {
+                phone.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
+            }
+            _ => (),
         }
     }
     drop(stdin);
