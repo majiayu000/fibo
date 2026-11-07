@@ -34,6 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Protocol probe disconnect regression
+        run: python3 -I eval/protocol-contract/test_check.py
+
       # Installs what rust-toolchain.toml pins: the version, rustfmt, clippy, the wasm target.
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install --no-self-update

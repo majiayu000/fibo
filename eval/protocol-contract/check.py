@@ -97,8 +97,17 @@ def codex_live():
         f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n".encode()
     )
     buf = b""
+
+    def fill(n):
+        nonlocal buf
+        while len(buf) < n:
+            chunk = s.recv(65536)
+            if not chunk:
+                raise ConnectionError("control socket closed before the reply was complete")
+            buf += chunk
+
     while b"\r\n\r\n" not in buf:
-        buf += s.recv(4096)
+        fill(len(buf) + 1)
     head, _, buf = buf.partition(b"\r\n\r\n")
     check(head.startswith(b"HTTP/1.1 101"), "control socket upgrades to WebSocket")
 
@@ -114,15 +123,15 @@ def codex_live():
     def message():
         nonlocal buf
         while True:
-            while len(buf) < 2:
-                buf += s.recv(65536)
+            fill(2)
             n, o = buf[1] & 0x7F, 2
             if n == 126:
+                fill(4)
                 n, o = struct.unpack(">H", buf[2:4])[0], 4
             elif n == 127:
+                fill(10)
                 n, o = struct.unpack(">Q", buf[2:10])[0], 10
-            while len(buf) < o + n:
-                buf += s.recv(65536)
+            fill(o + n)
             op, d, buf = buf[0] & 0xF, buf[o : o + n], buf[o + n :]
             if op == 1:
                 return json.loads(d)
