@@ -39,6 +39,25 @@ pub fn kill(pid: i32) {
     }
 }
 
+/// Lets `command` outlive this process and whatever session it runs in.
+pub fn detach(command: &mut std::process::Command) {
+    imp::detach(command)
+}
+
+/// Starts `program` with `args` once process `pid` has ended, for a program replacing itself.
+pub fn start_after_exit(
+    pid: u32,
+    program: &std::path::Path,
+    args: impl Iterator<Item = std::ffi::OsString>,
+) -> io::Result<()> {
+    imp::start_after_exit(pid, program, args.collect())
+}
+
+/// Ends this process at once, running nothing on the way out, as the abort after a panic would.
+pub fn exit_now(code: i32) -> ! {
+    imp::exit_now(code)
+}
+
 /// Asks one process to end, where that can be asked. Windows cannot: it ends there and then.
 pub fn terminate(pid: i32) -> io::Result<()> {
     if pid <= 0 {

@@ -8,3 +8,9 @@ mod imp;
 pub fn reduce_motion() -> bool {
     imp::reduce_motion()
 }
+
+/// Makes a font this process carries available to its text system, for faces GPUI's own loader
+/// passes over. It must stay loaded for as long as the process runs.
+pub fn register_font(bytes: &'static [u8]) -> Result<(), &'static str> {
+    imp::register_font(bytes)
+}

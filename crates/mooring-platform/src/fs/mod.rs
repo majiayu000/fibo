@@ -52,6 +52,12 @@ pub fn open_file_id(file: &std::fs::File) -> io::Result<FileId> {
     imp::open_file_id(file)
 }
 
+/// Whether opening `path` would run it, as far as the file itself says: its mode bits on Unix,
+/// its kind on Windows.
+pub fn is_program(path: &Path) -> bool {
+    imp::is_program(path)
+}
+
 /// For creating a file only this account may read.
 pub fn private_file() -> std::fs::OpenOptions {
     imp::private_file()
