@@ -32,6 +32,7 @@ mod runtime;
 mod screen_match;
 mod shell_watch;
 mod status;
+mod wait_log;
 use association::*;
 use client::*;
 use live::*;
@@ -227,6 +228,9 @@ impl Host {
     ) -> io::Result<()> {
         let before = self.screen_waits.get(terminal).and_then(|e| e.question());
         let changed = before != seen.as_ref().and_then(|e| e.question());
+        if let Some(question) = before.filter(|_| seen.as_ref().is_none_or(|e| !e.waiting())) {
+            wait_log::ended(terminal, question);
+        }
         match seen {
             Some(e) => self.screen_waits.insert(terminal.into(), e),
             None => self.screen_waits.remove(terminal),
