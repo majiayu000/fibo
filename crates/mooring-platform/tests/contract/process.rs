@@ -127,3 +127,83 @@ fn dropping_a_group_ends_nothing() {
     child.wait().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn terminate_and_a_group_end_a_process() {
+    use mooring_platform::process::{hang_up_group, kill_group, terminate, was_signalled};
+    let dir = crate::scratch("process-terminate");
+    let mut child = myself("process::helper_lasts", &dir.join("unused"))
+        .spawn()
+        .unwrap();
+    terminate(child.id() as i32).unwrap();
+    let status = child.wait().unwrap();
+    // Asked from outside, wherever the system can tell.
+    let _ = was_signalled(&status);
+    assert!(!status.success());
+    // No such group is fine, and so are ids that name none.
+    for ended in [hang_up_group, kill_group] {
+        ended(child.id() as i32).unwrap();
+        ended(0).unwrap();
+        ended(-1).unwrap();
+    }
+    terminate(0).unwrap();
+}
+
+#[test]
+fn a_thread_can_give_way() {
+    std::thread::spawn(mooring_platform::process::give_way)
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn this_process_has_a_parent_and_may_raise_its_file_limit() {
+    assert!(mooring_platform::process::parent() > 0);
+    mooring_platform::process::raise_open_file_limit().unwrap();
+}
+
+/// Only ever does anything as a copy that was told to follow its parent.
+#[test]
+#[ignore = "started by the test below"]
+fn helper_follows_its_parent() {
+    if std::env::var_os("MOORING_CONTRACT_FOLLOW").is_some() {
+        mooring_platform::process::exit_with_parent();
+        std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
+/// Lasts as a parent whose child should end with it, and says which child that is.
+#[test]
+#[ignore = "started by the test below"]
+fn helper_is_a_parent() {
+    let Some(file) = std::env::var_os(PID_FILE) else {
+        return;
+    };
+    let mut child = myself("process::helper_follows_its_parent", Path::new("unused"))
+        .env("MOORING_CONTRACT_FOLLOW", "1")
+        .spawn()
+        .unwrap();
+    let temp = Path::new(&file).with_extension("tmp");
+    std::fs::write(&temp, child.id().to_string()).unwrap();
+    std::fs::rename(&temp, &file).unwrap();
+    std::thread::sleep(Duration::from_secs(60));
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[test]
+fn a_process_can_end_with_its_parent() {
+    let dir = crate::scratch("process-follow");
+    let file = dir.join("pid");
+    let mut parent = myself("process::helper_is_a_parent", &file)
+        .spawn()
+        .unwrap();
+    let child = pid_in(&file);
+    assert!(exists(child));
+    // Time for it to start following.
+    std::thread::sleep(Duration::from_millis(500));
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    drop(parent);
+    wait_until("the child outlived its parent", || !exists(child));
+}

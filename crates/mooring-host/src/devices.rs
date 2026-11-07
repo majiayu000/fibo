@@ -11,7 +11,6 @@ use mooring_remote::{link::Link, protocol::Machine, secure::Code, wire};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::io::{self, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -111,10 +110,9 @@ fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
         std::process::id(),
         uuid::Uuid::new_v4().simple()
     ));
-    let written = std::fs::OpenOptions::new()
+    let written = mooring_platform::fs::private_file()
         .write(true)
         .create_new(true)
-        .mode(0o600)
         .open(&tmp)
         .and_then(|mut f| {
             f.write_all(bytes)?;
@@ -162,24 +160,14 @@ fn clear_abandoned(socket: &Path) {
 /// Released when dropped. flock belongs to the open file, so this excludes other threads
 /// too, and whoever holds it must not ask for it again: it would wait on itself.
 fn lock(socket: &Path) -> io::Result<std::fs::File> {
-    use std::os::fd::AsRawFd;
-    let file = std::fs::OpenOptions::new()
+    let file = mooring_platform::fs::private_file()
         .create(true)
         .truncate(false)
         .write(true)
-        .mode(0o600)
         .open(socket.with_file_name("remote-devices.lock"))?;
-    loop {
-        // SAFETY: flock on a file this function just opened and returns.
-        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
-            clear_abandoned(socket);
-            return Ok(file);
-        }
-        let e = io::Error::last_os_error();
-        if e.kind() != io::ErrorKind::Interrupted {
-            return Err(e);
-        }
-    }
+    file.lock()?;
+    clear_abandoned(socket);
+    Ok(file)
 }
 
 fn file(socket: &Path) -> PathBuf {
@@ -305,10 +293,9 @@ pub fn log(path: &Path, mut entry: Value) {
     if std::fs::metadata(path).is_ok_and(|m| m.len() + line.len() as u64 > LOG_LIMIT) {
         let _ = std::fs::rename(path, previous(path));
     }
-    let _ = std::fs::OpenOptions::new()
+    let _ = mooring_platform::fs::private_file()
         .append(true)
         .create(true)
-        .mode(0o600)
         .open(path)
         .and_then(|mut f| f.write_all(line.as_bytes()));
 }
@@ -352,15 +339,7 @@ pub fn machine(socket: &Path) -> io::Result<Machine> {
             id
         }
     };
-    let mut name = [0u8; 256];
-    // SAFETY: gethostname writes at most `len` bytes into the buffer it is given.
-    let ok = unsafe { libc::gethostname(name.as_mut_ptr().cast(), name.len()) } == 0;
-    let name = if ok {
-        let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
-        String::from_utf8_lossy(&name[..end]).into_owned()
-    } else {
-        String::new()
-    };
+    let name = mooring_platform::system::host_name();
     Ok(Machine { id, name })
 }
 
@@ -380,10 +359,9 @@ pub fn machine_code(socket: &Path, new: bool) -> io::Result<Code> {
     let code = Code::generate()?;
     let tmp = file.with_extension("tmp");
     let _ = std::fs::remove_file(&tmp);
-    std::fs::OpenOptions::new()
+    mooring_platform::fs::private_file()
         .write(true)
         .create_new(true)
-        .mode(0o600)
         .open(&tmp)?
         .write_all(code.text().as_bytes())?;
     std::fs::rename(&tmp, &file)?;
@@ -412,10 +390,9 @@ fn retire(socket: &Path, old: &Code) -> io::Result<()> {
     let path = retired_file(socket);
     let tmp = path.with_extension("tmp");
     let _ = std::fs::remove_file(&tmp);
-    std::fs::OpenOptions::new()
+    mooring_platform::fs::private_file()
         .write(true)
         .create_new(true)
-        .mode(0o600)
         .open(&tmp)?
         .write_all((list[start..].join("\n") + "\n").as_bytes())?;
     std::fs::rename(&tmp, &path)

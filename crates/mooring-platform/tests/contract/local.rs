@@ -197,3 +197,38 @@ fn a_listener_accepts_from_several_clients() {
     seen.sort_unstable();
     assert_eq!(seen, (0..8).collect::<Vec<_>>());
 }
+
+#[test]
+fn what_is_at_a_path_tells_a_socket_from_anything_else() {
+    use mooring_platform::local::{AtPath, at_path, restrict};
+    let dir = crate::scratch("local-at");
+    let path = dir.join("s.sock");
+    assert_eq!(at_path(&path).unwrap(), AtPath::Nothing);
+    let _listener = Listener::bind(&path).unwrap();
+    restrict(&path).unwrap();
+    assert_eq!(at_path(&path).unwrap(), AtPath::MySocket);
+    let file = dir.join("file");
+    std::fs::write(&file, "x").unwrap();
+    assert_eq!(at_path(&file).unwrap(), AtPath::Other);
+    assert_eq!(at_path(&dir).unwrap(), AtPath::Other);
+}
+
+/// How the host publishes itself: listening at a temporary name, then moved into place, so a
+/// client that sees the name can connect.
+#[test]
+fn a_socket_moved_into_place_still_takes_connections() {
+    let dir = crate::scratch("local-moved");
+    let (pending, socket) = (dir.join(".start"), dir.join("s.sock"));
+    let listener = Listener::bind(&pending).unwrap();
+    std::fs::rename(&pending, &socket).unwrap();
+    let mut client = Stream::connect(&socket).unwrap();
+    let mut server = listener.accept().unwrap();
+    client.write_all(b"y").unwrap();
+    let mut got = [0; 1];
+    server.read_exact(&mut got).unwrap();
+    assert_eq!(&got, b"y");
+    // A stale one left behind goes away with an ordinary remove.
+    drop((client, server, listener));
+    std::fs::remove_file(&socket).unwrap();
+    assert!(!socket.exists());
+}

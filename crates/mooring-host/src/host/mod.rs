@@ -6,10 +6,8 @@ use mooring_core::{
 };
 use mooring_platform::terminal as term;
 use std::collections::HashMap;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io;
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -740,13 +738,7 @@ pub fn serve_taking_over(
 
 /// This machine's name, as the shell's $HOST spells it in OSC 7 reports.
 fn hostname() -> String {
-    let mut buf = [0u8; 256];
-    // SAFETY: the kernel writes at most `buf.len()` bytes, NUL-terminated when it fits.
-    if unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) } != 0 {
-        return String::new();
-    }
-    let end = buf.iter().position(|b| *b == 0).unwrap_or(buf.len());
-    String::from_utf8_lossy(&buf[..end]).into_owned()
+    mooring_platform::system::host_name()
 }
 
 #[cfg(test)]

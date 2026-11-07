@@ -26,27 +26,10 @@ fn main() {
 /// holds a PTY plus its stream sockets, so about fifty terminals exhausted it and the host
 /// exited with EMFILE, leaving every pane black. Raise the soft limit as far as allowed.
 fn raise_open_file_limit() {
-    let mut limit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    // SAFETY: getrlimit/setrlimit only read and write the struct passed by pointer.
-    unsafe {
-        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) != 0 {
-            eprintln!("mooring: getrlimit: {}", std::io::Error::last_os_error());
-            return;
-        }
-        // macOS rejects RLIM_INFINITY for the soft limit; use a finite cap below kern.maxfilesperproc.
-        let wanted = limit.rlim_max.min(65_536);
-        if wanted <= limit.rlim_cur {
-            return;
-        }
-        limit.rlim_cur = wanted;
-        if libc::setrlimit(libc::RLIMIT_NOFILE, &limit) != 0 {
-            eprintln!("mooring: setrlimit: {}", std::io::Error::last_os_error());
-        } else {
-            eprintln!("mooring: open file limit raised to {wanted}");
-        }
+    match mooring_platform::process::raise_open_file_limit() {
+        Ok(Some(wanted)) => eprintln!("mooring: open file limit raised to {wanted}"),
+        Ok(None) => (),
+        Err(e) => eprintln!("mooring: open file limit: {e}"),
     }
 }
 
@@ -238,7 +221,7 @@ fn hook(mut args: impl Iterator<Item = String>) -> std::io::Result<()> {
     let transcript = value["transcript_path"].as_str().unwrap_or("").to_owned();
     let request = Request::Hook {
         runtime: agent,
-        pid: unsafe { libc::getppid() } as u32,
+        pid: mooring_platform::process::parent(),
         cli_session_id: cli_id.into(),
         transcript,
         ended: value["hook_event_name"] == "SessionEnd",

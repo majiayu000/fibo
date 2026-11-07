@@ -9,8 +9,6 @@
 use mooring_core::protocol::{RemoteLive, RemoteState, RemoteStatus};
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
-use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
@@ -39,10 +37,9 @@ fn save(root: &Path, config: &Config) -> io::Result<()> {
     let path = file(root);
     let tmp = path.with_extension("tmp");
     let _ = std::fs::remove_file(&tmp);
-    let mut f = std::fs::OpenOptions::new()
+    let mut f = mooring_platform::fs::private_file()
         .write(true)
         .create_new(true)
-        .mode(0o600)
         .open(&tmp)?;
     f.write_all(&serde_json::to_vec_pretty(config)?)?;
     f.sync_all()?;
@@ -113,8 +110,7 @@ impl Supervisor {
             ..Default::default()
         };
         if let Some(pid) = inner.child {
-            // SAFETY: kill(2) on a child this supervisor started and has not reaped.
-            unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+            let _ = mooring_platform::process::terminate(pid as i32);
         }
         drop(inner);
         self.changed.notify_all();
@@ -248,7 +244,7 @@ impl Supervisor {
             }
             let said = last.lock().map(|l| l.clone()).unwrap_or_default();
             match status {
-                Ok(s) if s.signal().is_some() => {
+                Ok(s) if mooring_platform::process::was_signalled(&s) => {
                     self.set(
                         generation,
                         RemoteLive {
@@ -289,8 +285,7 @@ impl Supervisor {
 impl Drop for Supervisor {
     fn drop(&mut self) {
         if let Some(pid) = self.lock().child {
-            // SAFETY: as in `configure`.
-            unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+            let _ = mooring_platform::process::terminate(pid as i32);
         }
     }
 }
