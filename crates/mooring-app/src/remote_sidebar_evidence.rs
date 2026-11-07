@@ -443,6 +443,22 @@ pub(super) fn start(
         shoot("quiet-peek.png", cx);
         assert_eq!(wants(cx), 1, "looking at a quiet machine ended 先不管");
         assert!(saved(), "looking at a quiet machine ended 先不管");
+        // A mouse report is not work; a key is: it comes back at once, the peek stays open.
+        handle.update(cx, |v, _, cx| v.visual_in_peek("\u{1b}[<0;1;1M", true, cx)).unwrap();
+        wait(300).await;
+        assert!(saved(), "a mouse report brought a quiet machine back");
+        handle.update(cx, |v, _, cx| v.visual_in_peek("x", false, cx)).unwrap();
+        wait(300).await;
+        assert!(!saved(), "typing did not bring a quiet machine back");
+        assert_eq!(wants(cx), 2, "typing did not bring its count back");
+        assert!(
+            handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap().is_some(),
+            "coming back closed the peek you were typing in"
+        );
+        shoot("quiet-typed.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_set_machine_quiet(0, true, cx)).unwrap();
+        wait(900).await;
+        assert!(saved(), "put aside again was not saved");
         handle.update(cx, |v, _, cx| v.visual_close_peek(cx)).unwrap();
         handle.update(cx, |v, _, cx| v.visual_show_board(cx)).unwrap();
         wait(400).await;

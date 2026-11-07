@@ -2,7 +2,7 @@
 //! `machines.json` and independent of how it is connected. A quiet machine stays connected
 //! but counts nowhere, ⌘J skips it, and it leaves the chips, the rail, the sections and
 //! the board for one gray line per machine; links dropping change nothing on that line.
-//! Looking at or typing in its sessions never ends it: only 接着管 does.
+//! Looking at its sessions never ends it; 接着管 does, and so does starting work there.
 use super::*;
 use crate::workbench::palette::Hit;
 use crate::workbench::sidebar_motion::mix;
@@ -123,6 +123,19 @@ impl Workbench {
             self.error = Some(format!("没存上，下次打开不会记得：{e}"));
         }
         cx.notify();
+    }
+    /// You began work there, so it is back: an answer you gave it can lead to a question
+    /// you would not hear of otherwise. One press too many costs less, as for a space.
+    pub(in crate::workbench) fn work_began_on_machine(
+        &mut self,
+        host: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let index = (0..self.machines.len())
+            .find(|i| self.machine_quiet(*i) && self.machine_host(*i).as_deref() == Some(host));
+        if let Some(index) = index {
+            self.set_machine_quiet(index, false, cx);
+        }
     }
     /// A machine's square that remembers where it was drawn, for the flight.
     pub(in crate::workbench) fn spotted_mark(
