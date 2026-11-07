@@ -106,14 +106,27 @@ fn a_codex_command_left_running_stays_running_across_a_new_host() {
     }
 }
 
-/// A server Codex left running is not its turn going on. Undoing `keep_ended_turns` or `found_tasks` leaves it
-/// 在跑 for as long as it stays up.
+/// A server Codex left running is not its turn going on, and nothing waits for it: the turn
+/// is over, with a note of what is still up. Undoing `keep_ended_turns` or `found_tasks`
+/// leaves it 在跑 for as long as it stays up.
 #[test]
-fn a_server_codex_left_running_is_waiting_on_the_background() {
+fn a_server_codex_left_running_ends_its_turn_and_names_the_port() {
     let h = Host::start();
     // Below where any system starts handing out ports.
     let port = 22000 + (std::process::id() % 900) as u16;
     let server = format!("python3 -m http.server {port} --bind 127.0.0.1");
     codex_left_running(&h, "srv", &server);
-    wait_shows(&h, "srv", Status::Background);
+    // Before the screen is read the turn already reads as over, so wait for the note too.
+    let want = format!("后台留着 1 个服务 · 端口 {port}");
+    let until = Instant::now() + Duration::from_secs(40);
+    loop {
+        let w = h.workspace();
+        let left = (w.current_agent("srv")).and_then(|s| status::left_behind(&w, s));
+        if left.as_deref() == Some(want.as_str()) {
+            break;
+        }
+        assert!(Instant::now() < until, "still says {left:?}");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    wait_shows(&h, "srv", Status::Review);
 }

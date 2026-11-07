@@ -72,7 +72,7 @@ fn bound_idle_reads_as_unbound_idle() {
 fn idle_keeps_a_background_in_flight() {
     let mut c = content(Turn::Completed);
     c.background = Some(Background {
-        shells: 1,
+        crons: 1,
         ..Default::default()
     });
     assert_eq!(bound(c, "idle"), Status::Background);
