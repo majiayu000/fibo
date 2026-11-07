@@ -31,8 +31,9 @@ const FILE: u32 =
 
 /// Ids count up from the clock, so one from an earlier run is older than any from this one.
 static LAST_ID: AtomicU64 = AtomicU64::new(0);
-/// The last id `current_id` gave out: starting from it loses nothing.
-static NOW_ID: AtomicU64 = AtomicU64::new(0);
+/// What `current_id` gave out and nothing has started from yet. Starting from one loses
+/// nothing, once: starting from it again means time passed unwatched.
+static NOW_IDS: Mutex<Option<HashSet<u64>>> = Mutex::new(None);
 
 fn next_id() -> u64 {
     let clock = std::time::SystemTime::now()
@@ -44,7 +45,8 @@ fn next_id() -> u64 {
 
 pub fn current_id() -> u64 {
     let id = next_id();
-    NOW_ID.store(id, Ordering::Relaxed);
+    let mut ids = NOW_IDS.lock().unwrap_or_else(|p| p.into_inner());
+    ids.get_or_insert_default().insert(id);
     id
 }
 
@@ -175,9 +177,11 @@ impl Watch {
         let watches = Arc::new(Mutex::new(watches));
         // Only now that the watches are in place, so a change cannot fall between this look
         // and the first event.
-        if since != NOW_ID.load(Ordering::Relaxed) {
+        let mut ids = NOW_IDS.lock().unwrap_or_else(|p| p.into_inner());
+        if !ids.get_or_insert_default().remove(&since) {
             report_scan(&callback, flag::MUST_SCAN);
         }
+        drop(ids);
         let (worker, worker_wake) = (watches.clone(), wake.clone());
         let thread = std::thread::spawn(move || run(&worker, &worker_wake, &callback));
         Ok(Self {

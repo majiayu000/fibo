@@ -12,6 +12,7 @@ on:
     paths:
       - crates/mooring-platform/**
       - crates/mooring-core/**
+      - crates/mooring-host/**
       - crates/mooring-remote/**
       - crates/mooring-relay/**
       - crates/mooring-plugin-host/**
@@ -55,7 +56,11 @@ jobs:
         run: sh bootstrap.sh
 
       - name: Clippy
-        run: cargo clippy -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --all-targets -- -D warnings
+        run: |
+          cargo clippy -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --all-targets -- -D warnings
+          cargo clippy -p mooring-host --lib -- -D warnings
 
       - name: Cargo test
-        run: cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
+        run: |
+          cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
+          cargo test -p mooring-host --lib --no-fail-fast

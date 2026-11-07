@@ -221,9 +221,94 @@ pub fn memory(pid: u32) -> Option<u64> {
     (result == 0).then_some(info.ri_phys_footprint)
 }
 
+fn pid_list(pids: &[u32]) -> String {
+    pids.iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+pub fn tcp_sockets(pids: &[u32]) -> io::Result<super::TcpSockets> {
+    let out = std::process::Command::new("/usr/sbin/lsof")
+        .args([
+            "-nP",
+            "-a",
+            "-p",
+            &pid_list(pids),
+            "-iTCP",
+            "-sTCP:LISTEN,ESTABLISHED",
+            "-Fpn",
+        ])
+        .output()?;
+    // Exit 1 with no rows is "none".
+    Ok(parse_sockets(&String::from_utf8_lossy(&out.stdout)))
+}
+
+/// From `lsof -Fpn` rows: `p<pid>`, then one `n<addr>:<port>` per listening socket or
+/// `n<addr>:<port>-><addr>:<port>` per connection.
+fn parse_sockets(rows: &str) -> super::TcpSockets {
+    let port = |addr: &str| addr.rsplit(':').next().and_then(|n| n.parse::<u16>().ok());
+    let mut out = super::TcpSockets::default();
+    let mut pid = None;
+    for line in rows.lines() {
+        if let Some(p) = line.strip_prefix('p') {
+            pid = p.parse().ok();
+        } else if let (Some(name), Some(p)) = (line.strip_prefix('n'), pid) {
+            if let Some((_, remote)) = name.split_once("->") {
+                let here = remote.starts_with("127.") || remote.starts_with("[::1]");
+                if let (true, Some(n)) = (here, port(remote)) {
+                    out.connected.push((p, n));
+                }
+            } else if let Some(n) = port(name) {
+                out.listening.push((p, n));
+            }
+        }
+    }
+    out
+}
+
+pub fn open_files(pids: &[u32]) -> io::Result<std::collections::HashMap<u32, Vec<String>>> {
+    let result = std::process::Command::new("/usr/sbin/lsof")
+        .args(["-nP", "-p", &pid_list(pids), "-Fpn"])
+        .output()?;
+    // lsof can return 1 when one process exits during enumeration; valid rows remain useful.
+    if !result.status.success() && result.stdout.is_empty() {
+        if result.status.code() == Some(1) {
+            return Ok(Default::default());
+        }
+        return Err(io::Error::other("open-file inventory failed"));
+    }
+    let mut files: std::collections::HashMap<u32, Vec<String>> = Default::default();
+    let mut pid = None;
+    for line in String::from_utf8_lossy(&result.stdout).lines() {
+        if let Some(value) = line.strip_prefix('p') {
+            pid = value.parse().ok();
+        } else if let (Some(pid), Some(path)) = (pid, line.strip_prefix('n')) {
+            files.entry(pid).or_default().push(path.into());
+        }
+    }
+    Ok(files)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{env_value, memory};
+    use super::{env_value, memory, parse_sockets};
+
+    #[test]
+    fn lsof_rows_say_who_listens_and_who_connects_here() {
+        // Rows as lsof printed them for a relay and its Python client.
+        let rows = "p28079\nf5\nn*:8898\nf6\nn127.0.0.1:8898->127.0.0.1:49848\n\
+                    p28382\nf4\nn127.0.0.1:49848->127.0.0.1:8898\n\
+                    p500\nf4\nn[::1]:49900->[::1]:8898\n\
+                    p600\nf4\nn10.0.0.2:49901->10.0.0.9:8898\n\
+                    p700\nf3\nn[::1]:5173\n";
+        let got = parse_sockets(rows);
+        assert_eq!(got.listening, vec![(28079, 8898), (700, 5173)]);
+        assert_eq!(
+            got.connected,
+            vec![(28079, 49848), (28382, 8898), (500, 8898)]
+        );
+    }
 
     #[test]
     fn launchd_belongs_to_root_so_its_memory_is_not_ours_to_read() {

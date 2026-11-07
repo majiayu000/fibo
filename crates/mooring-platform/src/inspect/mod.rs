@@ -1,9 +1,9 @@
 //! Reading what a running process is: its arguments, environment, directory, children and
 //! start time. Asks the kernel for one process at a time, never scans for it by name.
 //!
-//! Arguments, environment and directory are refused with `Unsupported` on Windows for now:
-//! reading them there means another process's memory, which the Windows chain (step 4 in
-//! docs/platform/index.html) adds.
+//! Arguments, environment, directory, sockets and open files are refused with `Unsupported`
+//! on Windows for now: the Windows chain (step 4 in docs/platform/index.html) adds them.
+use std::collections::HashMap;
 use std::io;
 
 #[cfg_attr(target_os = "macos", path = "macos.rs")]
@@ -70,4 +70,29 @@ pub fn stdin_is_a_channel(pid: u32) -> bool {
 /// it. None for what this account may not read.
 pub fn memory(pid: u32) -> Option<u64> {
     imp::memory(pid)
+}
+
+/// The TCP sockets some processes hold.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct TcpSockets {
+    /// (pid, port) it listens on.
+    pub listening: Vec<(u32, u16)>,
+    /// (pid, port): a connection from that process to a port on this machine.
+    pub connected: Vec<(u32, u16)>,
+}
+
+/// What these processes listen on and connect to. A process that ended meanwhile has none.
+pub fn tcp_sockets(pids: &[u32]) -> io::Result<TcpSockets> {
+    if pids.is_empty() {
+        return Ok(TcpSockets::default());
+    }
+    imp::tcp_sockets(pids)
+}
+
+/// The paths of the files these processes hold open. A process that ended meanwhile has none.
+pub fn open_files(pids: &[u32]) -> io::Result<HashMap<u32, Vec<String>>> {
+    if pids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    imp::open_files(pids)
 }

@@ -1,7 +1,7 @@
 use crate::myself;
 use mooring_platform::inspect::{
-    all_pids, argv, children, cwd, env_var, executable, memory, name, started, started_micros,
-    stdin_is_a_channel,
+    all_pids, argv, children, cwd, env_var, executable, memory, name, open_files, started,
+    started_micros, stdin_is_a_channel, tcp_sockets,
 };
 use std::io::ErrorKind;
 use std::process::Stdio;
@@ -169,4 +169,35 @@ fn standard_input_tells_a_pipe_from_nothing() {
     }
     assert!(!is_null);
     assert!(is_pipe || refuses);
+}
+
+#[test]
+fn sockets_say_what_a_process_listens_on_and_connects_to() {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let _client = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let me = std::process::id();
+    let found = tcp_sockets(&[me]);
+    if refused(&found) {
+        return;
+    }
+    let found = found.unwrap();
+    assert!(found.listening.contains(&(me, port)), "{found:?}");
+    assert!(found.connected.contains(&(me, port)), "{found:?}");
+    assert_eq!(tcp_sockets(&[]).unwrap(), Default::default());
+}
+
+#[test]
+fn open_files_name_what_a_process_holds() {
+    let dir = crate::scratch("inspect-open");
+    let path = std::fs::canonicalize(&dir).unwrap().join("held.jsonl");
+    let _held = std::fs::File::create(&path).unwrap();
+    let me = std::process::id();
+    let found = open_files(&[me]);
+    if refused(&found) {
+        return;
+    }
+    let found = found.unwrap();
+    let path = path.to_string_lossy().into_owned();
+    assert!(found[&me].contains(&path), "{:?}", found[&me]);
 }
