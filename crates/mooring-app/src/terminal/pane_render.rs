@@ -206,7 +206,7 @@ impl Render for Pane {
                     }
                     // Underlined only while ⌘ is held, when a click would open it.
                     let hovered: Vec<&screen::Link> = match pane.links.hover_link {
-                        _ if !pane.links.modifiers.platform => Vec::new(),
+                        _ if !pane.links.modifiers.secondary() => Vec::new(),
                         Some((y, x)) => pane.screen.link_at(y, x).map_or(Vec::new(), |hover| {
                             pane.screen
                                 .links

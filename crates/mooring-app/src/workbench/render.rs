@@ -552,7 +552,10 @@ impl Render for Workbench {
                 .child(self.title_drag_area(cx).min_w(px(T::S20 * 2.)))
             })
             .when(terminal_style, |d| d.child(self.title_drag_area(cx)))
-            .children(tail);
+            .children(tail)
+            .when(mooring_platform::desktop::DRAWS_WINDOW_BUTTONS, |d| {
+                d.pr_0().child(bars::window_buttons(window))
+            });
         let mut main = div()
             .flex_1()
             .min_w_0()

@@ -72,6 +72,8 @@ impl Workbench {
             .id("title-drag")
             .flex_1()
             .h_full()
+            // Where the system moves the window itself; macOS goes by the handlers below.
+            .window_control_area(gpui::WindowControlArea::Drag)
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, _, _| this.title_drag = true),
@@ -91,6 +93,50 @@ impl Workbench {
                 }
             })
     }
+}
+
+/// Minimize, maximize and close, where the system leaves them to the app. Marked as window
+/// controls, not given handlers: the system then treats them as its own, so hovering maximize
+/// offers its layouts and a click behaves as anywhere else.
+pub(super) fn window_buttons(window: &Window) -> gpui::Div {
+    use gpui::WindowControlArea as Area;
+    // Glyphs of the system's icon font, as its own title bars draw them.
+    let maximize = if window.is_maximized() {
+        "\u{e923}"
+    } else {
+        "\u{e922}"
+    };
+    let button = |id: &'static str, glyph: &'static str, area: Area| {
+        div()
+            .id(id)
+            .occlude()
+            .flex()
+            .items_center()
+            .justify_center()
+            .w(px(T::WINDOW_BUTTON_WIDTH))
+            .h_full()
+            .font_family("Segoe MDL2 Assets")
+            .text_size(px(T::WINDOW_BUTTON_GLYPH))
+            .text_color(T::color(T::secondary()))
+            .window_control_area(area)
+            .child(glyph)
+    };
+    div()
+        .flex()
+        .flex_shrink_0()
+        .h_full()
+        .child(
+            button("window-minimize", "\u{e921}", Area::Min)
+                .hover(|d| d.bg(T::color(T::selection()))),
+        )
+        .child(
+            button("window-maximize", maximize, Area::Max)
+                .hover(|d| d.bg(T::color(T::selection()))),
+        )
+        .child(button("window-close", "\u{e8bb}", Area::Close).hover(|d| {
+            d.bg(gpui::rgb(T::WINDOW_CLOSE_HOVER))
+                .text_color(gpui::white())
+        }))
 }
 
 impl Workbench {

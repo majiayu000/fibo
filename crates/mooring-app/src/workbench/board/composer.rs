@@ -309,7 +309,7 @@ impl Workbench {
                     return;
                 }
                 let k = &event.keystroke;
-                if k.key == "enter" && k.modifiers.platform {
+                if k.key == "enter" && k.modifiers.secondary() {
                     this.save_board_quick(true, window, cx);
                     cx.stop_propagation();
                 }
