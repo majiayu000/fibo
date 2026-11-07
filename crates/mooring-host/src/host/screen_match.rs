@@ -190,6 +190,12 @@ pub(super) fn commit(
     }
     Ok(())
 }
+/// Both are whole seconds, so a log last written in the second its TUI started may be from
+/// before it: that is a guess, and an association never guesses. The thread a TUI really runs
+/// is written again when its prompt arrives, later than that.
+fn touched_since(updated: u64, started: u64) -> bool {
+    updated > started
+}
 /// `Request::AssociateScreen`: which conversation an unbound pane shows, tied to it when the
 /// screen says so beyond doubt. Only a thread touched since this TUI started counts: an older
 /// one whose words merely appear on the screen is not what it runs. Never a guess: a thread
@@ -218,7 +224,7 @@ pub(super) fn associate_pane(shared: &Shared, id: &str) -> io::Result<Reply> {
     let mut threads = vec![];
     for t in cached
         .iter()
-        .filter(|t| t.runtime == *runtime && t.updated >= started)
+        .filter(|t| t.runtime == *runtime && touched_since(t.updated, started))
     {
         let held = holder(&workspace, t);
         if !crate::recognition::screen_candidate(true, false, held, true) {
@@ -242,4 +248,16 @@ pub(super) fn associate_pane(shared: &Shared, id: &str) -> io::Result<Reply> {
             .current_agent(id)
             .map(|s| s.id.clone()),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::touched_since;
+
+    #[test]
+    fn a_log_written_in_the_second_its_tui_started_is_not_evidence() {
+        assert!(!touched_since(100, 101));
+        assert!(!touched_since(100, 100));
+        assert!(touched_since(101, 100));
+    }
 }
