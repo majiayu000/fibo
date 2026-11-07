@@ -599,7 +599,7 @@ fn a_cli_supported_later_is_walked_once_and_only_where_transcripts_live() {
     assert_eq!(i.counts, IoCounts::default(), "the new CLI is walked once");
 }
 #[test]
-fn fsevents_delivers_new_files_and_replays_changes_after_restart() {
+fn a_change_while_the_host_was_away_is_replayed_or_scanned_for() {
     let f = Fixture::new();
     let mut i = f.index();
     let since = i.initialize().unwrap();
@@ -634,7 +634,6 @@ fn fsevents_delivers_new_files_and_replays_changes_after_restart() {
     drop(i);
     let second = paths[0].join("two.jsonl");
     fs::write(&second, line("two")).unwrap();
-    // FSEvents persists and delivers these without a directory catch-up scan.
     let mut i = f.index();
     let since = i.initialize().unwrap();
     i.bootstrap().unwrap();
@@ -646,7 +645,13 @@ fn fsevents_delivers_new_files_and_replays_changes_after_restart() {
             .rx
             .recv_timeout(until.saturating_duration_since(std::time::Instant::now()))
             .unwrap();
-        if batch.events.iter().any(|e| e.path == second) {
+        // FSEvents persists and replays it. Where the system keeps no journal, the watch
+        // asks for a look through the root instead.
+        if batch
+            .events
+            .iter()
+            .any(|e| e.path == second || (e.path == paths[0] && e.flags & flag::SCAN != 0))
+        {
             break;
         }
     }

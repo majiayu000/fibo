@@ -43,7 +43,7 @@ os-api	crates/mooring-host/src/host/runtime.rs	2
 os-api	crates/mooring-host/src/host/status.rs	1
 os-api	crates/mooring-host/src/log_index/chat/backfill.rs	1
 os-api	crates/mooring-host/src/plugins_cmd.rs	1
-os-api	crates/mooring-host/src/pty.rs	2
+os-api	crates/mooring-host/src/pty.rs	3
 os-api	crates/mooring-host/src/relay/bridge.rs	5
 os-api	crates/mooring-host/src/remote.rs	7
 os-api	crates/mooring-host/src/remote/diff_scope.rs	1

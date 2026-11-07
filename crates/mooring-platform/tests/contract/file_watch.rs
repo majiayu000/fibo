@@ -216,6 +216,29 @@ fn a_root_that_goes_away_says_so() {
 }
 
 #[test]
+fn starting_twice_from_the_same_now_asks_for_a_look_or_replays() {
+    let root = dir("watch-now-twice");
+    let now = Watch::current_id();
+    let Some(first) = start(std::slice::from_ref(&root), now) else {
+        return;
+    };
+    settle();
+    drop(first);
+    let file = root.join("while-away.jsonl");
+    std::fs::write(&file, "x\n").unwrap();
+    let watch = start(std::slice::from_ref(&root), now).unwrap();
+    wait(
+        &watch,
+        "the change was neither replayed nor asked for",
+        |b| {
+            b.events
+                .iter()
+                .any(|e| e.path == file || (e.path == root && e.flags & flag::SCAN != 0))
+        },
+    );
+}
+
+#[test]
 fn the_notifier_reports_a_file_as_if_it_changed() {
     let root = dir("watch-notifier");
     let Some(watch) = start(std::slice::from_ref(&root), Watch::current_id()) else {

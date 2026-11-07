@@ -14,8 +14,16 @@ use windows_sys::Win32::System::Threading::{
 fn later() -> io::Error {
     io::Error::new(
         io::ErrorKind::Unsupported,
-        "reading another process's arguments is not there yet on Windows",
+        "reading this of another process is not there yet on Windows",
     )
+}
+
+pub fn tcp_sockets(_pids: &[u32]) -> io::Result<super::TcpSockets> {
+    Err(later())
+}
+
+pub fn open_files(_pids: &[u32]) -> io::Result<std::collections::HashMap<u32, Vec<String>>> {
+    Err(later())
 }
 
 pub fn argv(_pid: u32) -> io::Result<Vec<String>> {
