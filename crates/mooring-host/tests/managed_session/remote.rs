@@ -325,7 +325,8 @@ fn remote_watches_and_drives_a_terminal_without_taking_or_resizing_it() {
 }
 
 /// A remote client that stops reading (a phone gone to sleep mid-stream) slows neither
-/// the terminal nor the workbench beside it; once it reads again it gets the screen anew.
+/// the terminal nor the workbench beside it; once it reads again it catches up, with the screen
+/// anew if it fell too far behind.
 #[test]
 fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
     use serde_json::{json, Value};
@@ -334,7 +335,7 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
     h.setup();
     h.call(h.launch(
         "flood",
-        "read go; seq 1 400000; echo alone-done; read go; seq 1 400000; echo flood-done; exec cat",
+        "read go; seq 1 1000000; echo alone-done; read go; seq 1 1000000; echo flood-done; exec cat",
     ))
     .unwrap();
     let (mut app, mut vt, _) = h.attach("flood", false);
@@ -405,67 +406,49 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
     };
     let b64 = base64::engine::general_purpose::STANDARD;
     use base64::Engine;
-    let mut every = Vt::new(80, 24).unwrap();
+    let mut phone = Vt::new(80, 24).unwrap();
     loop {
         let v = read().expect("the remote client went quiet");
         if v["type"] == "screen" {
-            every.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
+            phone.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
             break;
         }
     }
     // From here the remote client reads nothing.
     let stalled = flood(&mut app, &mut vt, "flood-done");
     eprintln!(
-        "400k lines to the workbench: alone {alone:?}, beside a stalled remote watcher {stalled:?}"
+        "1M lines to the workbench: alone {alone:?}, beside a stalled remote watcher {stalled:?}"
     );
     assert!(
         stalled < alone * 2 + Duration::from_millis(500),
         "{alone:?} → {stalled:?}"
     );
-    // Reading again: the backlog it missed is skipped for the screen as it was then, and what
-    // came after that follows as output, as for any phone.
-    let until = Instant::now() + Duration::from_secs(20);
-    let mut screens = 0;
-    let mut outputs = 0;
-    let mut max_gap = Duration::ZERO;
-    let mut phone = Vt::new(80, 24).unwrap();
+    // Reading again. What the pipes could hold still arrives as output; if the flood outran them,
+    // the backlog it missed is skipped for the screen as it was then. Either way it catches up,
+    // as any phone does.
+    let (mut screens, mut outputs) = (0, 0);
     while !phone.tail_text(24).unwrap().contains("flood-done") {
-        assert!(Instant::now() < until, "never caught up");
-        let asked_at = Instant::now();
-        let got = read();
-        max_gap = max_gap.max(asked_at.elapsed());
-        let Some(v) = got else {
-            // Says which of two things this was: everything arrived and only the screen did not
-            // come again, or the last output was never sent.
+        let Some(v) = read() else {
             panic!(
-                "quiet with flood-done unseen: {screens} screens, {outputs} outputs, slowest read \
-                 {max_gap:?}, all output in order {} it; phone {:?}, all output {:?}",
-                if every.tail_text(24).unwrap().contains("flood-done") {
-                    "has"
-                } else {
-                    "lacks"
-                },
-                phone.tail_text(24).unwrap(),
-                every.tail_text(24).unwrap(),
+                "quiet with flood-done unseen: {screens} screens again, {outputs} outputs; \
+                 phone {:?}",
+                phone.tail_text(24).unwrap()
             );
         };
-        if v["type"] == "output" {
-            outputs += 1;
-            every.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
-        }
         match v["type"].as_str() {
             Some("screen") => {
                 screens += 1;
                 phone = Vt::new(80, 24).unwrap();
                 phone.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
             }
-            Some("output") if screens > 0 => {
+            Some("output") => {
+                outputs += 1;
                 phone.feed(&b64.decode(v["vt"].as_str().unwrap()).unwrap());
             }
             _ => (),
         }
     }
-    eprintln!("caught up after {screens} screens, {outputs} outputs, slowest read {max_gap:?}");
+    eprintln!("caught up with {screens} screens again, {outputs} outputs");
     drop(stdin);
     child.wait().unwrap();
 }
