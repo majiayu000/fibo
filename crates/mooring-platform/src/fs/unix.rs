@@ -45,6 +45,56 @@ pub fn create_no_wider(options: &mut std::fs::OpenOptions, than: &std::fs::Permi
     options.mode(than.mode() & 0o777);
 }
 
+pub fn file_id(_path: &Path, metadata: &std::fs::Metadata) -> io::Result<super::FileId> {
+    use std::os::unix::fs::MetadataExt;
+    Ok(super::FileId {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    })
+}
+
+pub fn open_file_id(file: &std::fs::File) -> io::Result<super::FileId> {
+    file_id(Path::new(""), &file.metadata()?)
+}
+
+pub fn private_file() -> std::fs::OpenOptions {
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut options = std::fs::OpenOptions::new();
+    options.mode(0o600);
+    options
+}
+
+pub fn lock_file(path: &Path) -> io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    private_file()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+}
+
+pub fn secure_dir(dir: &Path) -> io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => (),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => (),
+        Err(e) => return Err(e),
+    }
+    let meta = std::fs::symlink_metadata(dir)?;
+    if !meta.is_dir()
+        || meta.file_type().is_symlink()
+        || meta.uid() != unsafe { libc::geteuid() }
+        || meta.mode() & 0o777 != 0o700
+    {
+        return Err(io::Error::other(
+            "runtime must be an owned, non-symlink 0700 directory",
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

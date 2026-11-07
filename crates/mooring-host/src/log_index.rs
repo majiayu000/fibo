@@ -6,7 +6,6 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::{
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     time::{Duration, UNIX_EPOCH},
 };

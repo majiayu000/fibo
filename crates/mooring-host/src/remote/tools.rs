@@ -9,7 +9,6 @@ use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
-use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -42,7 +41,7 @@ struct Log {
 impl Log {
     fn open(path: &str) -> Option<Self> {
         let file = File::open(path).ok()?;
-        let inode = file.metadata().ok()?.ino();
+        let inode = mooring_platform::fs::open_file_id(&file).ok()?.inode;
         Some(Self {
             lines: BufReader::with_capacity(1 << 16, file),
             inode,

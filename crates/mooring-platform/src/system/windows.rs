@@ -42,3 +42,7 @@ pub fn cpu_ticks() -> io::Result<[u32; 4]> {
         0,
     ])
 }
+
+pub fn host_name() -> String {
+    std::env::var("COMPUTERNAME").unwrap_or_default()
+}

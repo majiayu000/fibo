@@ -8,7 +8,6 @@ use mooring_core::model::Agent;
 use mooring_core::turn_diff::{unrecorded, Composer, Disk, TurnChanges};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -43,7 +42,7 @@ pub(super) fn read(shared: &Shared, session: &str) -> io::Result<Reply> {
     };
     let start = index.turn_start(&log, since)?;
     let until = Instant::now() + READ_FOR;
-    let log_id = std::fs::metadata(&log)?.ino();
+    let log_id = mooring_platform::fs::file_id(Path::new(&log), &std::fs::metadata(&log)?)?.inode;
     let sums = read_edits(agent, Path::new(&log), &cwd, start, since, until)?;
     let mut sums: Vec<_> = sums.into_iter().collect();
     sums.sort_by_key(|(_, (_, lines))| std::cmp::Reverse(lines.last().copied()));
@@ -90,7 +89,7 @@ fn sum_of(
     lines: &[u64],
 ) -> io::Result<Composer> {
     let file = std::fs::File::open(log)?;
-    if file.metadata()?.ino() != log_id {
+    if mooring_platform::fs::open_file_id(&file)?.inode != log_id {
         return Err(io::Error::other("记录文件已经换了"));
     }
     let mut reader = BufReader::with_capacity(1 << 16, file);
@@ -147,7 +146,7 @@ fn read_edits(
         return Ok(sums);
     };
     let file = std::fs::File::open(log)?;
-    let inode = file.metadata()?.ino();
+    let inode = mooring_platform::fs::open_file_id(&file)?.inode;
     let mut lines = BufReader::with_capacity(1 << 16, file);
     let mut at = 0;
     if let Some((_, offset)) = start.filter(|(i, _)| *i == inode) {
@@ -253,7 +252,9 @@ mod tests {
             patch(ONE, "/r/a", 5, "y", "z"),
             json!({"type":"user","timestamp":ONE,"toolUseResult":"Error"}).to_string(),
         ]);
-        let inode = std::fs::metadata(&path).unwrap().ino();
+        let inode = mooring_platform::fs::file_id(&path, &std::fs::metadata(&path).unwrap())
+            .unwrap()
+            .inode;
         let sums = read_edits(
             Agent::Claude,
             &path,
@@ -340,7 +341,9 @@ mod tests {
             patch(ONE, "/r/b", 1, "p", "q"),
             patch(ONE, "/r/a", 5, "y", "z"),
         ]);
-        let id = std::fs::metadata(&path).unwrap().ino();
+        let id = mooring_platform::fs::file_id(&path, &std::fs::metadata(&path).unwrap())
+            .unwrap()
+            .inode;
         let mut sums = read_edits(Agent::Claude, &path, "/r", None, 0, later()).unwrap();
         let (_, places) = sums.remove("/r/a").unwrap();
         assert_eq!(places, [at[0], at[2]], "where it is, not the other file");

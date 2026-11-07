@@ -6,7 +6,8 @@ use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject,
 };
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+    GetCurrentThread, INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL, TerminateProcess, WaitForSingleObject,
 };
 
 /// A job without kill-on-close: closing it leaves its processes running, as dropping a
@@ -85,4 +86,62 @@ pub fn kill(pid: i32) {
             TerminateProcess(process.as_raw_handle(), 1);
         }
     }
+}
+
+pub fn terminate(pid: i32) -> io::Result<()> {
+    kill(pid);
+    Ok(())
+}
+
+/// No signal to save on: the closed console tells console programs, this is what comes after.
+pub fn hang_up_group(group: i32) -> io::Result<()> {
+    kill_group(group)
+}
+
+/// A process and what it started, children first, since there is no group to name.
+pub fn kill_group(group: i32) -> io::Result<()> {
+    for child in crate::inspect::children(group as u32)? {
+        kill_group(child as i32)?;
+    }
+    kill(group);
+    Ok(())
+}
+
+pub fn was_signalled(_status: &std::process::ExitStatus) -> bool {
+    false
+}
+
+pub fn give_way() {
+    // SAFETY: only changes this thread's priority.
+    unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL) };
+}
+
+pub fn parent() -> u32 {
+    let mut found = 0;
+    let me = std::process::id();
+    let _ = crate::inspect::each_process(|pid, parent| {
+        if pid == me {
+            found = parent;
+        }
+    });
+    found
+}
+
+/// A wait on the parent's handle, so no looking. One already gone when this starts ends this too.
+pub fn exit_with_parent() {
+    // SAFETY: the handle goes into an owner, and is open for as long as the thread waits.
+    let raw = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, parent()) };
+    if raw.is_null() {
+        std::process::exit(0);
+    }
+    let parent = unsafe { OwnedHandle::from_raw_handle(raw) };
+    std::thread::spawn(move || {
+        unsafe { WaitForSingleObject(parent.as_raw_handle(), INFINITE) };
+        std::process::exit(0);
+    });
+}
+
+/// Windows has no such limit on handles.
+pub fn raise_open_file_limit() -> io::Result<Option<u64>> {
+    Ok(None)
 }

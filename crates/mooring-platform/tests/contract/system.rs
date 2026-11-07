@@ -25,3 +25,8 @@ fn cpu_time_moves_forward() {
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+#[test]
+fn this_machine_has_a_name() {
+    assert!(!mooring_platform::system::host_name().is_empty());
+}
