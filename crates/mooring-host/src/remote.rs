@@ -648,12 +648,13 @@ fn watch(st: &mut Stream, terminal: &str, socket: &Path, take: bool) -> io::Resu
         Reply::Error(e) => return Err(io::Error::other(e)),
         other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     };
-    st.open(&s, json!({ "stream": id, "cols": cols, "rows": rows }))?;
+    // Before the client hears the stream is open: it may resize the moment it does.
     if take {
         if let Ok(mut r) = st.streams.lock() {
             r.writers.insert(id);
         }
     }
+    st.open(&s, json!({ "stream": id, "cols": cols, "rows": rows }))?;
     let mut snapshot = Vec::new();
     let mut exited = false;
     loop {

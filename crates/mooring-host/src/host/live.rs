@@ -475,8 +475,6 @@ pub(super) fn attach(
     // (a stalled window) in the middle of a frame; a full queue marks it lagged and resyncs
     // it instead, and a viewer that goes away fails the write at once.
     stream.set_write_timeout(None)?;
-    let ready = Arc::new(AtomicBool::new(false));
-    let writer_ready = Arc::clone(&ready);
     let mut writer = stream.try_clone()?;
     let writer_guard = stream.try_clone()?;
     let writer_terminal = Arc::clone(&terminal);
@@ -487,7 +485,6 @@ pub(super) fn attach(
                 write_frame(&mut writer, SNAPSHOT, chunk)?;
             }
             write_frame(&mut writer, READY, &[])?;
-            writer_ready.store(true, Ordering::Release);
             for (kind, data) in rx.iter() {
                 if writer_lagged.load(Ordering::Acquire) {
                     // A burst outran this viewer: skip the stale backlog and send the
@@ -512,9 +509,6 @@ pub(super) fn attach(
         let typed = matches!(&request, Request::Input { .. });
         let result = (|| -> io::Result<()> {
             let mut live = lock(&terminal)?;
-            if !ready.load(Ordering::Acquire) {
-                return Err(io::Error::other("snapshot not ready"));
-            }
             if live.owner != Some(connection) || live.exited {
                 return Err(io::Error::other("只读或进程已退出；需明确接管"));
             }
