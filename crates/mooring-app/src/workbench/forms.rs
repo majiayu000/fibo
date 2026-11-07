@@ -427,7 +427,7 @@ impl Workbench {
             // ⌘⏎ from any field saves and starts, as the button says.
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
                 let k = &event.keystroke;
-                if k.key == "enter" && k.modifiers.platform {
+                if k.key == "enter" && k.modifiers.secondary() {
                     this.save_form(true, cx);
                     cx.stop_propagation();
                 }

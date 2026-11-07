@@ -69,7 +69,7 @@ impl Pane {
     }
     /// While ⌘ is held over a link or path: what a click does, and how to only show it.
     pub(super) fn click_hint(&self) -> Option<String> {
-        if !self.links.modifiers.platform {
+        if !self.links.modifiers.secondary() {
             return None;
         }
         if self.links.hover_link.is_some() {
@@ -82,7 +82,7 @@ impl Pane {
         )))
     }
     pub(super) fn set_modifiers(&mut self, modifiers: gpui::Modifiers, cx: &mut Context<Self>) {
-        let shows = |m: &gpui::Modifiers| (m.platform, m.platform && m.alt);
+        let shows = |m: &gpui::Modifiers| (m.secondary(), m.secondary() && m.alt);
         if shows(&modifiers) != shows(&self.links.modifiers) {
             cx.notify();
         }

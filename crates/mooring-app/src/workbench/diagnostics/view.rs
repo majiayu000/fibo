@@ -222,10 +222,10 @@ impl Render for DiagnosticView {
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
                 if event.keystroke.key == "escape"
-                    || (event.keystroke.key == "w" && event.keystroke.modifiers.platform)
+                    || (event.keystroke.key == "w" && event.keystroke.modifiers.secondary())
                 {
                     cx.emit(DiagnosticAction::Close);
-                } else if event.keystroke.key == "c" && event.keystroke.modifiers.platform {
+                } else if event.keystroke.key == "c" && event.keystroke.modifiers.secondary() {
                     this.copy(cx);
                 }
                 cx.stop_propagation();
