@@ -122,7 +122,7 @@ impl Workbench {
                                 .text_color(T::color(T::secondary()))
                                 .on_click(cx.listener(
                                     move |this, _, window, cx| {
-                                        this.open_remote_shell(index, window, cx)
+                                        this.open_remote_shell(index, None, window, cx)
                                     },
                                 )),
                             )
@@ -241,11 +241,12 @@ impl Workbench {
 }
 
 impl Workbench {
-    /// 「＋」 on a machine's heading: a shell in a new tab there, in its first space's
-    /// folder, then that shell in the peek. Named, so a resend opens one.
+    /// 「＋」 on a machine's heading: a shell in a new tab there, in `cwd` or its first
+    /// space's folder, then that shell in the peek. Named, so a resend opens one.
     pub(super) fn open_remote_shell(
         &mut self,
         index: usize,
+        cwd: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -260,7 +261,7 @@ impl Workbench {
             (view.machine.as_ref()).map_or_else(|| view.spec.host.clone(), |m| m.name.clone())
         };
         let op = mooring_remote::protocol::Op::Open {
-            cwd: None,
+            cwd,
             agent: None,
             prompt: None,
             resume: None,
@@ -466,7 +467,7 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open_remote_shell(index, window, cx);
+        self.open_remote_shell(index, None, window, cx);
     }
     /// The open peek's terminal key, `remote:<machine>:<terminal>` for another machine's.
     pub fn visual_peek_key(&self) -> Option<String> {

@@ -188,6 +188,8 @@ pub struct Linked {
     /// Opening and ending its terminals and settling its conversations (`open`, `end`,
     /// `outcome`).
     pub managing: bool,
+    /// Listing its folders and making a space in one (`dirs`, `addspace`).
+    pub adding_spaces: bool,
 }
 
 /// Where a machine's live connection is, if it has one now.
@@ -311,6 +313,9 @@ fn run_once(
         answering: hello.ops.iter().any(|o| o == "answer"),
         resizing: hello.ops.iter().any(|o| o == "resize"),
         managing: ["open", "end", "outcome"]
+            .iter()
+            .all(|op| hello.ops.iter().any(|o| o == op)),
+        adding_spaces: ["dirs", "addspace"]
             .iter()
             .all(|op| hello.ops.iter().any(|o| o == op)),
     });
