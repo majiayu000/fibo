@@ -187,6 +187,8 @@ pub struct AgentSpec {
     pub interrupt: Option<Interrupt>,
     /// api 2: how it takes answers over a local API. `None`: only by its screen.
     pub answers: Option<Answers>,
+    /// api 2: text its empty input box shows, for a CLI whose box has no arrow.
+    pub input_hint: Vec<String>,
 }
 
 /// Keys that interrupt a CLI's running turn, for one where Ctrl-C does something else.
@@ -330,6 +332,8 @@ struct Declaration {
     interrupt: Option<InterruptDeclared>,
     #[serde(default)]
     answers: Option<Answers>,
+    #[serde(default)]
+    input_hint: Vec<String>,
 }
 
 /// One declaration file's outcome, for settings and diagnostics.
@@ -398,6 +402,7 @@ fn builtin() -> Vec<AgentSpec> {
         screen_rules: None,
         interrupt: None,
         answers: None,
+        input_hint: vec![],
     };
     let marked = |spec: AgentSpec, markers: &[&str], pins_own| AgentSpec {
         prompt: PromptLine {
@@ -694,8 +699,16 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             }
         }
     }
-    if d.api < 2 && (d.screen_rules.is_some() || d.interrupt.is_some() || d.answers.is_some()) {
-        return Err("screen_rules、interrupt 和 answers 需要 api 2".into());
+    if d.api < 2
+        && (d.screen_rules.is_some()
+            || d.interrupt.is_some()
+            || d.answers.is_some()
+            || !d.input_hint.is_empty())
+    {
+        return Err("screen_rules、interrupt、answers 和 input_hint 需要 api 2".into());
+    }
+    if d.input_hint.iter().any(|h| h.trim().is_empty()) {
+        return Err("input_hint 不能有空字符串，否则任何画面都算输入框就绪".into());
     }
     if let Some(a) = &d.answers {
         a.check()?;
@@ -737,6 +750,7 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
         screen_rules,
         interrupt,
         answers: d.answers,
+        input_hint: d.input_hint,
     })
 }
 

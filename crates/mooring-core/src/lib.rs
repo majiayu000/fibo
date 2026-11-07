@@ -1,6 +1,7 @@
 pub mod action;
 pub mod agent;
 pub mod agent_answers;
+pub mod agent_input;
 mod agent_transcripts;
 pub mod cli_entry;
 pub mod decoration;

@@ -3,6 +3,7 @@
   "id": "opencode",
   "name": "OpenCode",
   "executable": "opencode",
+  "input_hint": ["ask anything"],
   "start": "OPENCODE_SERVER_PASSWORD=$(uuidgen) opencode --port 0",
   "resume": "OPENCODE_SERVER_PASSWORD=$(uuidgen) opencode --port 0 --session {id}",
   "source": {
