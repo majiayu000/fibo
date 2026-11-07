@@ -32,6 +32,8 @@ pub struct Seen {
     pub own_client: bool,
     pub worker: bool,
     pub age: u64,
+    /// The lowest chosen port the tree listens on, to tell you which one is left running.
+    pub port: Option<u16>,
 }
 
 /// Which rule a judgment came from, for `mooring explain` and the host log.
@@ -80,8 +82,16 @@ pub struct Judged {
     own_client: bool,
     found: bool,
     unfound: u32,
+    /// What the latest look saw, with no say in the judgment.
+    pub port: Option<u16>,
 }
 pub fn judge(before: Option<Judged>, seen: Option<Seen>) -> Judged {
+    Judged {
+        port: seen.and_then(|s| s.port),
+        ..verdict(before, seen)
+    }
+}
+fn verdict(before: Option<Judged>, seen: Option<Seen>) -> Judged {
     let was_found = before.filter(|b| b.found);
     if seen.is_none() && was_found.is_none() {
         let unfound = before.map_or(0, |b| b.unfound) + 1;
@@ -97,6 +107,7 @@ pub fn judge(before: Option<Judged>, seen: Option<Seen>) -> Judged {
             own_client: false,
             found: false,
             unfound,
+            port: None,
         };
     }
     let before = was_found;
@@ -107,6 +118,7 @@ pub fn judge(before: Option<Judged>, seen: Option<Seen>) -> Judged {
         own_client,
         found: true,
         unfound: 0,
+        port: None,
     };
     // Too old to be a job, whatever else it shows: no second look needed.
     if seen.is_some_and(|s| s.age >= JOB_LIMIT) {
@@ -186,6 +198,11 @@ fn seen_all(found: Vec<(String, u32, Vec<u32>)>, now: u64) -> io::Result<HashMap
                     .iter()
                     .any(|p| !sockets.listening.contains_key(p) && children(*p).is_empty()),
                 age: inspect::started(pid).map_or(0, |at| now.saturating_sub(at)),
+                port: (tree.iter())
+                    .filter_map(|p| sockets.listening.get(p))
+                    .flatten()
+                    .min()
+                    .copied(),
             };
             (id, seen)
         })
@@ -273,12 +290,14 @@ mod tests {
         own_client: false,
         worker: true,
         age: 60,
+        port: None,
     };
     const SERVER: Seen = Seen {
         listening: true,
         own_client: false,
         worker: false,
         age: 60,
+        port: None,
     };
     /// A script's own server with its client connected at this look.
     const OWN: Seen = Seen {
@@ -286,6 +305,7 @@ mod tests {
         own_client: true,
         worker: true,
         age: 60,
+        port: None,
     };
     /// The same script between requests: not connected, but a worker is alive.
     const BETWEEN: Seen = Seen {
@@ -293,12 +313,14 @@ mod tests {
         own_client: false,
         worker: true,
         age: 60,
+        port: None,
     };
     const OLD: Seen = Seen {
         listening: false,
         own_client: false,
         worker: true,
         age: JOB_LIMIT,
+        port: None,
     };
     /// The judgment after these looks, in order.
     fn after(looks: &[Option<Seen>]) -> Judged {
@@ -607,6 +629,7 @@ c, _ = s.accept(); time.sleep(20)";
         let _ = alone_child.wait();
         assert!(seen["o"].listening && seen["o"].own_client, "{seen:?}");
         assert!(again["a"].listening, "{again:?}");
+        assert_eq!(again["a"].port, Some(port), "the port it is told by");
         assert!(!again["a"].own_client, "{again:?}");
         assert!(
             seen["o"].worker,

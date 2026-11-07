@@ -429,7 +429,7 @@ impl Workbench {
                 self.layout.done_open =
                     (parts.get(4) == Some(&"done")).then(|| "dense-s6".to_owned());
                 // `-shell`: the same turn ended with only a server left in a background
-                // shell: 等后台, read with the finished ones.
+                // shell: 等你验收, with a note of what is left running.
                 let shell = parts.get(4) == Some(&"shell");
                 if (parts.get(4) == Some(&"bg") || shell)
                     && let Some(c) = self
@@ -442,9 +442,18 @@ impl Workbench {
                     c.completed_claim = false;
                     c.background = Some(mooring_core::content::Background {
                         agents: u32::from(!shell),
-                        shells: if shell { 2 } else { 0 },
+                        shells: u32::from(shell),
                         ..Default::default()
                     });
+                    c.shells = if shell {
+                        vec![mooring_core::content::ShellTask {
+                            id: "server".into(),
+                            port: Some(5569),
+                            ..Default::default()
+                        }]
+                    } else {
+                        vec![]
+                    };
                 }
                 if let Some(v @ ("sub" | "many" | "manyall" | "marks")) = parts.get(4).copied() {
                     self.sample_subagents(v);

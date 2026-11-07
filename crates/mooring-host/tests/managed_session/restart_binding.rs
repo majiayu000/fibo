@@ -78,7 +78,7 @@ fn stop(h: &Host) -> io::Result<Reply> {
 
 /// The Agent is waiting on a background shell, so no hook comes to tell the new host which
 /// process it is. Without the pid its shells are never looked at: a running job falls to
-/// 等后台 once the restart has settled. Undoing the naming of bound panes fails this.
+/// 等你验收 once the restart has settled. Undoing the naming of bound panes fails this.
 #[test]
 fn a_new_host_finds_the_process_of_a_quiet_plain_claude() {
     let mut p = plain_claude();

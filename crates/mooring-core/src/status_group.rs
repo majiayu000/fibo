@@ -85,8 +85,7 @@ fn completed_within(w: &Workspace, id: &str, now: u64, window: u64) -> bool {
 }
 
 /// The sidebar group a state falls in. 要你处理 holds every stopped turn that is yours
-/// (11-03): asking, failed, finished for you to check, or with work left in the
-/// background; the sidebar narrows it to what `status::needs_you` counts.
+/// (11-03): asking, failed, finished for you to check, or set to wake later; the sidebar narrows it to what `status::needs_you` counts.
 pub fn bucket(g: Status) -> Bucket {
     match g {
         _ if g.needs_you() => Bucket::Attention,
@@ -98,8 +97,8 @@ pub fn bucket(g: Status) -> Bucket {
     }
 }
 
-/// What needs you, in this order: waiting on you, failed, a finished turn, one with work
-/// left in the background.
+/// What needs you, in this order: waiting on you, failed, a finished turn, one that a
+/// monitor or a wakeup will bring back.
 const NEEDS_ORDER: [Status; 4] = [
     Status::Waiting,
     Status::Error,

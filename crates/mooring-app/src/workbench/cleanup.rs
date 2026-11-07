@@ -299,10 +299,11 @@ impl Workbench {
             page = page.child(card);
             let blocked = self.review_blocked(s);
             if let Some(status) = blocked {
-                page = page.child(label(format!(
-                    "它现在{}，这里不能标记：打开看看或跳过",
-                    status.label()
-                )));
+                let left = mooring_core::status::left_behind(&self.workspace, s);
+                page = page.child(label(match left {
+                    Some(left) => format!("{left}，这里标记会关掉它：打开看看或跳过"),
+                    None => format!("它现在{}，这里不能标记：打开看看或跳过", status.label()),
+                }));
             }
             let sid = s.id.clone();
             let mut actions = div().flex().flex_wrap().gap(px(T::S8));

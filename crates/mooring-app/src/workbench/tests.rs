@@ -229,11 +229,16 @@ fn a_live_turn_is_done_only_when_you_say_so() {
     assert!(session_status(&w, &unseen, &s) == (Status::Review, true));
     unseen.clear();
 
-    // A download in a background shell, or a wakeup that will bring it back: 等后台.
-    for background in [shell, wakeup] {
-        w.content.insert("live".into(), ended(true, background));
-        assert!(session_status(&w, &unseen, &s) == (Status::Background, false));
-    }
+    // A server left running wakes nothing: the turn is over, and the row says what is left.
+    w.content.insert("live".into(), ended(true, shell));
+    assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
+    assert_eq!(
+        mooring_core::status::left_behind(&w, &s).as_deref(),
+        Some("后台留着 1 个进程")
+    );
+    // A wakeup will bring it back: that one is really waited for.
+    w.content.insert("live".into(), ended(true, wakeup));
+    assert!(session_status(&w, &unseen, &s) == (Status::Background, false));
     assert_eq!(Status::Background.label(), "等后台");
     // 要你处理 holds it with the finished ones (11-03: 处理 and 验收 are one group).
     assert!(

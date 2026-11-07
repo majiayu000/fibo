@@ -42,7 +42,7 @@ fn every_sample_reads_one_name_one_state() {
     let sub = w.terminals.iter().find(|t| t.id == "pty-subdir").unwrap();
     assert_eq!(w.terminal_cwd(sub), "/project/web");
     // 要你处理 is every stopped turn that is yours (asking, failed, finished for you to
-    // check, work left in the background), current in a tab, not put off, closed or hidden.
+    // check, set to wake later), current in a tab, not put off, closed or hidden.
     let needs: Vec<_> = CASES
         .iter()
         .filter(|c| w.needs_you(by(c), at))

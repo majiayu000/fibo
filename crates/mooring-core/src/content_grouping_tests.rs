@@ -57,7 +57,7 @@ fn grouping_priority_and_deferred_expiry() {
     assert_eq!(status(&c, &s, now), Status::Closed);
 }
 #[test]
-fn running_subagents_keep_a_stopped_turn_working_and_the_rest_wait_on_background() {
+fn running_subagents_keep_a_stopped_turn_working_and_only_a_wakeup_waits() {
     let now = 10 * 86400;
     let s = AgentSession {
         id: "s".into(),
@@ -115,9 +115,10 @@ fn running_subagents_keep_a_stopped_turn_working_and_the_rest_wait_on_background
     assert!(!c.waking());
     assert_eq!(
         status(&c, &s, now),
-        Status::Background,
-        "a shell it started still runs"
+        Status::Review,
+        "a server it left wakes nothing: the turn is over"
     );
+    assert_eq!(c.left_behind().as_deref(), Some("后台留着 2 个进程"));
     c.background = None;
     assert_eq!(
         status(&c, &s, now),
@@ -176,4 +177,56 @@ fn a_stopped_turn_waiting_on_a_job_says_which_and_a_server_counts_apart() {
         ..Default::default()
     });
     assert_eq!(c.doing(), None, "servers alone: nothing it is doing");
+}
+#[test]
+fn a_finished_turn_names_what_it_left_running() {
+    let shell = |port, ended| ShellTask {
+        port,
+        ended,
+        ..Default::default()
+    };
+    let with = |shells: Vec<ShellTask>, count| Content {
+        turn: Turn::Completed,
+        background: Some(Background {
+            shells: count,
+            ..Default::default()
+        }),
+        shells,
+        ..Default::default()
+    };
+    let said = |c: Content| c.left_behind();
+    assert_eq!(
+        said(with(vec![shell(Some(5569), false)], 1)).as_deref(),
+        Some("后台留着 1 个服务 · 端口 5569")
+    );
+    assert_eq!(
+        said(with(
+            vec![shell(Some(8080), false), shell(Some(5569), false)],
+            2
+        ))
+        .as_deref(),
+        Some("后台留着 2 个服务 · 端口 5569、8080")
+    );
+    // Not looked at (an older host, a store just read), or no port: only a process is known.
+    assert_eq!(said(with(vec![], 1)).as_deref(), Some("后台留着 1 个进程"));
+    assert_eq!(
+        said(with(vec![shell(Some(5569), false), shell(None, false)], 2)).as_deref(),
+        Some("后台留着 2 个进程 · 端口 5569")
+    );
+    // Gone, and the agent has not said so yet: nothing is left to keep or to close.
+    assert_eq!(said(with(vec![shell(Some(5569), true)], 1)), None);
+    let mut job = with(vec![], 1);
+    job.background = Some(Background {
+        shells: 1,
+        jobs: 1,
+        ..Default::default()
+    });
+    assert_eq!(said(job), None, "a job is work, not something left behind");
+    assert_eq!(said(Content::default()), None);
+    let c = with(vec![shell(Some(5569), false)], 1);
+    assert!(
+        c.here()
+            .stopped
+            .starts_with("回合结束，后台留着 1 个服务 · 端口 5569；")
+    );
 }

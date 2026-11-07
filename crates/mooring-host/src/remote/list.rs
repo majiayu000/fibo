@@ -113,7 +113,13 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                 doing: content
                     .filter(|_| status == Some(status::Status::Running))
                     .and_then(|c| c.doing())
-                    .filter(|d| !d.starts_with("做 ")),
+                    .filter(|d| !d.starts_with("做 "))
+                    // A finished turn's row says what it left running, as the sidebar does.
+                    .or_else(|| {
+                        session
+                            .filter(|_| status == Some(status::Status::Review))
+                            .and_then(|s| status::left_behind(w, s))
+                    }),
                 model: (set.and_then(|m| TerminalModes::read(&m.model, log_model)))
                     .or_else(|| content.and_then(|c| said(&c.model))),
                 permission: (set.and_then(|m| TerminalModes::read(&m.permission, log_permission)))
@@ -237,6 +243,37 @@ mod tests {
     }
 
     /// A Codex on the shared daemon has no conversation, yet it is no plain shell.
+    /// The phone's row says what a finished turn left running, in the sidebar's words.
+    #[test]
+    fn a_card_says_what_its_finished_turn_left_running() {
+        let mut w = mooring_core::sample::every_state();
+        let session = (w.agent_sessions.iter())
+            .find(|s| status::live_terminal(&w, s).is_some() && s.id == "review")
+            .expect("the sample has a live finished turn")
+            .id
+            .clone();
+        let c = w.content.get_mut(&session).unwrap();
+        c.background = Some(mooring_core::content::Background {
+            shells: 1,
+            ..Default::default()
+        });
+        c.shells = vec![mooring_core::content::ShellTask {
+            id: "server".into(),
+            port: Some(5569),
+            ..Default::default()
+        }];
+        let dir = std::env::temp_dir().join(format!("mooring-left-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let list: rp::List =
+            serde_json::from_value(list(&w, &Default::default(), &dir.join("sock")).unwrap())
+                .unwrap();
+        let card = (list.terminals.iter())
+            .find(|c| c.session.as_deref() == Some(session.as_str()))
+            .unwrap();
+        assert_eq!(card.status.as_deref(), Some("review"));
+        assert_eq!(card.doing.as_deref(), Some("后台留着 1 个服务 · 端口 5569"));
+    }
+
     #[test]
     fn an_agent_without_a_conversation_lists_with_its_note() {
         let mut w = mooring_core::sample::every_state();

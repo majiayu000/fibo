@@ -114,8 +114,11 @@ impl Workbench {
                 }
                 match item {
                     Item::Here(l) => {
-                        // 等后台 says what it left running, or it reads as plain 等你验收.
-                        let asks = l.1.blocked() || l.1 == Status::Background;
+                        // 等后台 says what will wake it, and a finished turn what it left
+                        // running: both are worth the second line.
+                        let asks = l.1.blocked()
+                            || l.1 == Status::Background
+                            || mooring_core::status::left_behind(&self.workspace, l.0).is_some();
                         let d = if lines && asks { second(&l) } else { None };
                         push(out, l, d, End::State);
                     }

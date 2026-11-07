@@ -364,8 +364,8 @@ impl Workbench {
                     .collect();
             }
             // Only this column's own sessions are read, on frames that already draw them.
-            let reviewable = c == Column::Needs
-                && (list.iter()).any(|s| review_queue::reviewable(status_of(&self.workspace, s)));
+            let reviewable =
+                c == Column::Needs && (list.iter()).any(|s| self.session_reviewable(s));
             let column = self.column(
                 c,
                 ids.len(),
