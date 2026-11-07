@@ -368,7 +368,7 @@ fn agent_start_commands_need_no_daemon_flag_and_quote_resume_ids() {
     assert_eq!(Agent::Codex.command(), "codex");
     assert_eq!(
         Agent::Codex.resume_command("a'b", &[]),
-        format!("codex resume {}", shell_quote("a'b"))
+        format!("codex resume {}", mooring_platform::shell::quote("a'b"))
     );
     assert_eq!(
         Agent::Claude.resume_command("safe", &[]),
