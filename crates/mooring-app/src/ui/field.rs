@@ -9,6 +9,9 @@ use std::ops::Range;
 pub enum FieldEvent {
     Submit,
     Cancel,
+    /// Pressed and released outside, with the keyboard still here. Only with
+    /// `ends_on_click_out`.
+    ClickOut,
 }
 impl gpui::EventEmitter<FieldEvent> for Field {}
 pub struct Field {
@@ -25,6 +28,9 @@ pub struct Field {
     masked: bool,
     bare: bool,
     inline: bool,
+    ends_on_click_out: bool,
+    /// The press now under way began outside the field.
+    pressed_out: bool,
     /// The caret sits at the selection's start, as after Shift+Left.
     reversed: bool,
     /// A drag with the mouse is extending the selection.
@@ -53,6 +59,8 @@ impl Field {
             compact: false,
             bare: false,
             inline: false,
+            ends_on_click_out: false,
+            pressed_out: false,
             reversed: false,
             dragging: false,
             scroll: px(0.),
@@ -68,6 +76,13 @@ impl Field {
     pub fn inline(mut self) -> Self {
         self.compact = true;
         self.inline = true;
+        self
+    }
+    /// A click elsewhere ends the edit, though rows and blank space take no focus and so
+    /// never blur the field. It waits for the release: closing the field can move what
+    /// was pressed from under the pointer, and the click would be lost.
+    pub fn ends_on_click_out(mut self) -> Self {
+        self.ends_on_click_out = true;
         self
     }
     pub fn masked(mut self) -> Self {
@@ -341,6 +356,7 @@ impl Field {
         cx: &mut Context<Self>,
     ) {
         window.focus(&self.focus, cx);
+        self.pressed_out = false;
         let at = self.index_at(event.position);
         match event.click_count {
             2 => {
@@ -355,6 +371,16 @@ impl Field {
         }
         cx.stop_propagation();
         cx.notify();
+    }
+    fn released_out(
+        &mut self,
+        _: &gpui::MouseUpEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if std::mem::take(&mut self.pressed_out) && self.focus.is_focused(window) {
+            cx.emit(FieldEvent::ClickOut);
+        }
     }
     fn mouse_move(&mut self, event: &gpui::MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         if !self.dragging {
@@ -474,6 +500,17 @@ impl Render for Field {
                     })
                     .rounded(px(T::CONTROL_RADIUS))
                     .track_focus(&self.focus)
+                    .when(self.ends_on_click_out, |d| {
+                        d.on_mouse_down_out(cx.listener(|this, _, _, _| this.pressed_out = true))
+                            .on_mouse_up_out(
+                                gpui::MouseButton::Left,
+                                cx.listener(Self::released_out),
+                            )
+                            .on_mouse_up_out(
+                                gpui::MouseButton::Right,
+                                cx.listener(Self::released_out),
+                            )
+                    })
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(Self::mouse_down))
                     .on_mouse_move(cx.listener(Self::mouse_move))
                     .on_mouse_up(
