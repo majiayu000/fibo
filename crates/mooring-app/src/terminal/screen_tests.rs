@@ -446,3 +446,19 @@ fn ime_offsets_are_utf16_not_utf8_and_never_split_surrogates() {
     assert_eq!(utf16_byte_offset(text, 4), 8);
     assert_eq!(utf16_byte_offset(text, usize::MAX), text.len());
 }
+
+/// JetBrains Mono has no ideographs. Windows answered with its placeholder box, 0.6 em wide, and
+/// Chinese came out at 0.6 of its size with gaps between the characters.
+#[test]
+fn a_placeholder_box_is_not_the_width_of_a_character() {
+    let (box_width, ideograph) = (px(7.8), px(13.));
+    assert_eq!(
+        own_glyph_width(Some(ideograph), Some(box_width)),
+        Some(ideograph)
+    );
+    assert_eq!(own_glyph_width(Some(box_width), Some(box_width)), None);
+    // Where the system says it has no such character.
+    assert_eq!(own_glyph_width(None, None), None);
+    assert_eq!(own_glyph_width(Some(ideograph), None), Some(ideograph));
+    assert_eq!(own_glyph_width(Some(px(0.)), None), None);
+}
