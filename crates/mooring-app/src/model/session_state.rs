@@ -162,7 +162,7 @@ pub fn state_reasons(w: &Workspace, terminal: &str, hint: Option<&str>, now: u64
     let phase = match status {
         Status::Fresh => "新开的 / 还没开始第一轮",
         Status::Review => "等你验收 / 这一轮停了，做没做完由你定",
-        Status::Background => "等后台 / 这一轮停了，后台还有任务在跑",
+        Status::Background => "等后台 / 这一轮停了，监视任务或定时唤醒会让它接着做",
         Status::Closed => "做完了 / 你标记过完成",
         Status::Paused => "停下了 / 这一轮被打断，或 Agent 没做完就退出了",
         Status::Deferred => "稍后再看 / 你推迟到了以后",
@@ -197,7 +197,9 @@ pub fn state_reasons(w: &Workspace, terminal: &str, hint: Option<&str>, now: u64
     if !c.error.is_empty() {
         lines.push(format!("出错：{}", c.error));
     }
-    if let Some(b) = c.background.and_then(|b| b.describe()) {
+    if let Some(b) = (c.left_behind().filter(|_| status != Status::Background))
+        .or_else(|| c.background.and_then(|b| b.describe()))
+    {
         lines.push(b);
     }
     lines.extend(shared_files(w, s, now));

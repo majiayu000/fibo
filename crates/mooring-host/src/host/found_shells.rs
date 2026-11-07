@@ -75,6 +75,8 @@ impl Host {
             description: "后台命令".into(),
             job,
             why: why.into(),
+            port: self.shell_watch.port(session, id),
+            ended: self.shell_watch.ended(session, id),
         };
         let found = self.shell_watch.found.get(session);
         Some(match found.filter(|f| !f.is_empty()) {

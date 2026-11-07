@@ -174,6 +174,12 @@ pub struct ShellTask {
     /// Which rule said so, for `mooring explain`. Like `job`, set only on the live snapshot.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub why: String,
+    /// The port it listens on, the lowest if several. Live snapshot only, like `job`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    /// Its process was seen and is gone; the agent has not said so yet. Live snapshot only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ended: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Touch {
@@ -265,7 +271,8 @@ impl Content {
 /// tasks) keep a stopped turn working. A monitor or a scheduled wakeup will wake the session
 /// again, so it is not done either: it is waiting to wake, as Claude Code's agent view shows
 /// it. A shell that is a job (see [`ShellTask::job`]) keeps the turn working too: it ends
-/// and the agent carries on. The other shells (servers) are a mark on a finished turn.
+/// and the agent carries on. The other shells (servers) wake nothing: the turn is simply
+/// over, with a note that they are still there ([`Content::left_behind`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Background {
     pub agents: u32,
@@ -485,6 +492,35 @@ impl Content {
                     .is_some_and(|b| b.keeps_working() || b.wakes());
         (open && self.turn_started > 0).then_some(self.turn_started)
     }
+    /// What a finished turn left running that nothing waits for: 「后台留着 1 个服务 · 端口
+    /// 5569」. A shell with no port or not looked at yet is only known to be a process.
+    pub fn left_behind(&self) -> Option<String> {
+        let b = self.background?;
+        let gone = self.shells.iter().filter(|t| t.ended).count() as u32;
+        let left = b.shells.saturating_sub(b.jobs).saturating_sub(gone);
+        if left == 0 {
+            return None;
+        }
+        let mut ports: Vec<u16> = (self.shells.iter())
+            .filter(|t| !t.job && !t.ended)
+            .filter_map(|t| t.port)
+            .collect();
+        ports.sort_unstable();
+        ports.dedup();
+        let kind = if ports.len() as u32 == left {
+            "服务"
+        } else {
+            "进程"
+        };
+        let line = format!("后台留着 {left} 个{kind}");
+        Some(match ports.as_slice() {
+            [] => line,
+            _ => {
+                let ports: Vec<String> = ports.iter().map(u16::to_string).collect();
+                format!("{line} · 端口 {}", ports.join("、"))
+            }
+        })
+    }
     /// The turn ended and only a monitor or a scheduled wakeup will resume it.
     pub fn waking(&self) -> bool {
         self.turn == Turn::Completed
@@ -553,7 +589,8 @@ impl Content {
                     short(&self.last_reply, 220)
                 ),
                 Some(work) => format!(
-                    "回合结束，{work}；Agent 自述：{}",
+                    "回合结束，{}；Agent 自述：{}",
+                    self.left_behind().unwrap_or(work),
                     short(&self.last_reply, 220)
                 ),
                 None => format!("回合结束；Agent 自述：{}", short(&self.last_reply, 260)),

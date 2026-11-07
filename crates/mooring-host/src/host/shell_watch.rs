@@ -95,7 +95,8 @@ impl ShellWatch {
                 let key = (session.clone(), task.clone());
                 let before = self.judged.get(&key).copied();
                 let now = shells::judge(before, seen.get(task).copied());
-                changed |= before.map(|b| b.job) != Some(now.job);
+                changed |= before.map(|b| (b.job, b.port, b.why == shells::Why::Ended))
+                    != Some((now.job, now.port, now.why == shells::Why::Ended));
                 // Ids only: a command line may hold a secret.
                 if before.map(|b| b.why) != Some(now.why)
                     && matches!(
@@ -118,6 +119,15 @@ impl ShellWatch {
             Some(j) => j.job,
             None => self.settling() && !self.search_found_nothing(session),
         }
+    }
+    /// The port this task of `session` listens on, by the latest look.
+    pub(super) fn port(&self, session: &str, task: &str) -> Option<u16> {
+        (self.judged.get(&(session.to_owned(), task.to_owned()))).and_then(|j| j.port)
+    }
+    /// Whether this task's process was seen and has gone.
+    pub(super) fn ended(&self, session: &str, task: &str) -> bool {
+        (self.judged.get(&(session.to_owned(), task.to_owned())))
+            .is_some_and(|j| j.why == shells::Why::Ended)
     }
     /// Why [`Self::job`] says what it says, for `mooring explain`.
     pub(super) fn why(&self, session: &str, task: &str) -> &'static str {
@@ -207,6 +217,8 @@ impl Host {
             for t in &mut c.shells {
                 t.job = self.shell_watch.job(&s.id, &t.id);
                 t.why = self.shell_watch.why(&s.id, &t.id).to_owned();
+                t.port = self.shell_watch.port(&s.id, &t.id);
+                t.ended = self.shell_watch.ended(&s.id, &t.id);
             }
             if let Some(b) = &mut c.background {
                 b.jobs = (c.shells.iter().filter(|t| t.job).count() as u32).min(b.shells);
@@ -411,6 +423,7 @@ mod tests {
             own_client: false,
             worker: false,
             age: 60,
+            port: None,
         };
         let targets = vec![(
             "s".to_owned(),

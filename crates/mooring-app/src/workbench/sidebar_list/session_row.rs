@@ -11,7 +11,13 @@ impl Workbench {
             (!line.is_empty()).then(|| line.chars().take(T::TAB_TIP_REASON_CHARS).collect())
         };
         let content = self.workspace.content.get(&s.id);
+        if matches!(g, Status::Review | Status::Paused)
+            && let Some(left) = mooring_core::status::left_behind(&self.workspace, s)
+        {
+            return Some(left);
+        }
         match bucket(g) {
+            _ if g == Status::Background => content.and_then(|c| c.background?.describe()),
             // A question reads as one, in the v3 design's words: 「问你：侧栏参考哪两家？」.
             Bucket::Attention if g == Status::Waiting => self
                 .attention_reason(s, g)
@@ -23,7 +29,6 @@ impl Workbench {
                 .map(|r| format!("{ASKS}{r}")),
             Bucket::Attention => self.attention_reason(s, g).map(|r| format!("停在 {r}")),
             Bucket::Running => content.and_then(|c| c.doing()).map(|d| format!("正在{d}")),
-            _ if g == Status::Background => content.and_then(|c| c.background?.describe()),
             _ => content.and_then(|c| first(c.last_reply.lines().find(|l| !l.trim().is_empty())?)),
         }
     }
