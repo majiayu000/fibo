@@ -108,15 +108,7 @@ impl Access {
 /// a newer one exits without unwinding, and a crash signals nobody. Left behind, it would
 /// redial and take the machine's place on the relay from the new host's connection.
 fn exit_with_parent() {
-    // SAFETY: getppid(2) takes no arguments and cannot fail.
-    let parent = unsafe { libc::getppid() };
-    thread::spawn(move || loop {
-        thread::sleep(std::time::Duration::from_secs(1));
-        // SAFETY: as above.
-        if unsafe { libc::getppid() } != parent {
-            std::process::exit(0);
-        }
-    });
+    mooring_platform::process::exit_with_parent();
 }
 
 pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {

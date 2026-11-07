@@ -126,3 +126,20 @@ impl Listener {
         self.0.set_nonblocking(nonblocking)
     }
 }
+
+pub fn at_path(path: &Path) -> io::Result<super::AtPath> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_socket() && m.uid() == unsafe { libc::geteuid() } => {
+            Ok(super::AtPath::MySocket)
+        }
+        Ok(_) => Ok(super::AtPath::Other),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(super::AtPath::Nothing),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn restrict(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+}

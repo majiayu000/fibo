@@ -10,16 +10,7 @@ static READING_BACK: Mutex<()> = Mutex::new(());
 /// The calling thread gives way to everything else. On a thread of its own, so nothing else
 /// that runs on a client's thread is slowed by it afterwards.
 fn give_way() {
-    #[cfg(target_os = "macos")]
-    // SAFETY: only changes this thread's scheduling class.
-    unsafe {
-        libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_UTILITY, 0);
-    }
-    #[cfg(not(target_os = "macos"))]
-    // SAFETY: on Linux this names the calling thread; only lowers its priority.
-    unsafe {
-        libc::setpriority(libc::PRIO_PROCESS, 0, 10);
-    }
+    mooring_platform::process::give_way();
 }
 
 /// A conversation's raw log, and a connection to read its rows on once the lock is let go.

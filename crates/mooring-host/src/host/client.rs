@@ -106,6 +106,12 @@ pub(super) fn serve_client(
 /// locks stay held to the end, so no output is fed, no state is committed and no
 /// terminal is started after the snapshots are taken.
 pub(super) fn hand_over(mut stream: local::Stream, shared: &Shared) -> io::Result<()> {
+    if !term::CAN_HAND_OVER {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "this system cannot hand a running terminal over",
+        ));
+    }
     let host = lock(shared)?;
     let mut held = vec![];
     for (id, terminal) in &host.terminals {
@@ -133,17 +139,15 @@ pub(super) fn hand_over(mut stream: local::Stream, shared: &Shared) -> io::Resul
         }
         write_frame(&mut stream, READY, &[])?;
     }
-    let fds: Vec<_> = held
-        .iter()
-        .map(|(_, live)| live.master.as_raw_fd())
-        .collect();
-    crate::handoff::send_fds(&stream, &fds)?;
+    let masters: Vec<_> = held.iter().map(|(_, live)| &live.master).collect();
+    term::send_masters(&stream, &masters)?;
+    let count = masters.len();
     // Only a confirmed takeover lets this host go: closing our copies before the new host
     // holds its own would hang up every terminal. Anything else keeps serving.
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     match read_frame(&mut stream) {
         Ok((ACK, taken)) if taken == HANDOFF_TAKEN => {
-            eprintln!("handed {} terminals to a newer host; exiting", fds.len());
+            eprintln!("handed {count} terminals to a newer host; exiting");
             std::process::exit(0);
         }
         other => Err(io::Error::other(format!(
@@ -685,9 +689,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 return Err(io::Error::other("Agent 进程身份已变化，未发送停止信号"));
             }
             // A freshly verified Agent PID only; never kill the PTY shell or group.
-            if unsafe { libc::kill(pid as i32, libc::SIGTERM) } < 0 {
-                return Err(io::Error::last_os_error());
-            }
+            mooring_platform::process::terminate(pid as i32)?;
             Ok(Reply::Ok)
         }
         Request::Stop { id } => {

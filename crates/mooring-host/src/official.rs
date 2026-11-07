@@ -54,7 +54,7 @@ pub fn query(program: &str) -> io::Result<Vec<Entry>> {
     let output = match rx.recv_timeout(TIMEOUT) {
         Ok(output) => output?,
         Err(_) => {
-            unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+            mooring_platform::process::kill(pid as i32);
             return Err(io::Error::other("claude agents --json timed out"));
         }
     };

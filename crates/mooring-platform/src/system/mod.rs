@@ -31,3 +31,8 @@ pub fn memory() -> Option<Memory> {
 pub fn cpu_ticks() -> io::Result<[u32; 4]> {
     imp::cpu_ticks()
 }
+
+/// This machine's name. Empty when the system does not say.
+pub fn host_name() -> String {
+    imp::host_name()
+}

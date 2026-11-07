@@ -10,6 +10,8 @@ use std::io;
 #[cfg_attr(target_os = "linux", path = "linux.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod imp;
+#[cfg(windows)]
+pub(crate) use imp::each_process;
 
 /// The arguments a process was started with, split where it was given them, so a prompt
 /// is never parsed out of a command line.

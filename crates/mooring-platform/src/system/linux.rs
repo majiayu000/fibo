@@ -44,6 +44,16 @@ pub fn cpu_ticks() -> io::Result<[u32; 4]> {
         .ok_or_else(|| io::Error::other("no cpu line in /proc/stat"))
 }
 
+pub fn host_name() -> String {
+    let mut buf = [0u8; 256];
+    // SAFETY: the kernel writes at most `buf.len()` bytes, NUL-terminated when it fits.
+    if unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) } != 0 {
+        return String::new();
+    }
+    let end = buf.iter().position(|b| *b == 0).unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end]).into_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

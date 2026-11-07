@@ -320,6 +320,7 @@ impl Index {
             }
             Err(e) => return Err(e),
         };
+        let id = mooring_platform::fs::file_id(path, &meta)?;
         let updated = meta
             .modified()?
             .duration_since(UNIX_EPOCH)
@@ -336,7 +337,7 @@ impl Index {
         // Replaced or rewritten shorter: what was read from it before is gone too.
         let mut replaced = false;
         if let Some(c) = &cursor {
-            if c.dev != meta.dev() || c.inode != meta.ino() || meta.len() < c.offset {
+            if c.dev != id.device || c.inode != id.inode || meta.len() < c.offset {
                 cursor = None;
                 replaced = true;
             } else if c.offset == meta.len() && (seeded || !self.recent(updated)) {
@@ -377,8 +378,7 @@ impl Index {
             }
             Err(e) => return Err(e),
         };
-        let opened = file.metadata()?;
-        if opened.dev() != meta.dev() || opened.ino() != meta.ino() {
+        if mooring_platform::fs::open_file_id(&file)? != id {
             return Err(io::Error::other(
                 "log rotated while opening; cursor not advanced",
             ));
@@ -427,7 +427,7 @@ impl Index {
                                     line,
                                     mooring_core::content::Source {
                                         path: key.clone(),
-                                        inode: meta.ino(),
+                                        inode: id.inode,
                                         offset: parsed as u64,
                                     },
                                 );
@@ -485,7 +485,7 @@ impl Index {
                             &c.pending,
                             mooring_core::content::Source {
                                 path: key.clone(),
-                                inode: meta.ino(),
+                                inode: id.inode,
                                 offset: line_offset,
                             },
                         );
@@ -530,8 +530,8 @@ impl Index {
         if let Some(all) = &subagents {
             parser.card.keep_subagents(all.clone());
         }
-        c.dev = meta.dev();
-        c.inode = meta.ino();
+        c.dev = id.device;
+        c.inode = id.inode;
         c.updated = updated;
         let tx = self.db.savepoint().map_err(err)?;
         // Records are keyed by where they were read: written now, read again harmlessly.

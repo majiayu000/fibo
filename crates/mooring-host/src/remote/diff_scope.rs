@@ -6,7 +6,6 @@ use mooring_core::{model::Workspace, protocol::*};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 const REFUSED: &str = "这个目录不在工作台里，这台设备看不了";
@@ -42,7 +41,10 @@ pub(super) fn holds_home(dir: &Path) -> bool {
 /// home's path, joined to `dir`, is home: this covers home itself, each folder above it,
 /// and the data volume's root, which is no folder above it in the path.
 fn holds(dir: &Path, home: &Path) -> bool {
-    let id = |path: &Path| fs::metadata(path).map(|m| (m.dev(), m.ino())).ok();
+    let id = |path: &Path| {
+        let metadata = fs::metadata(path).ok()?;
+        mooring_platform::fs::file_id(path, &metadata).ok()
+    };
     let Some(home_id) = id(home) else {
         return true;
     };
@@ -186,7 +188,7 @@ mod tests {
         let alias = |path: &Path| data.join(path.strip_prefix("/").unwrap());
         let home = t.home();
         let (aliased, project) = (alias(&home), alias(&t.at("home/project")));
-        let id = |p: &Path| fs::metadata(p).map(|m| (m.dev(), m.ino())).ok();
+        let id = |p: &Path| mooring_platform::fs::file_id(p, &fs::metadata(p).ok()?).ok();
         if id(&aliased).is_none() || id(&aliased) != id(&home) {
             eprintln!("no firmlink for {home:?} here: nothing to check");
             return;

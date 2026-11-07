@@ -1,5 +1,6 @@
 use std::io;
 use std::net::Shutdown;
+use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Once};
@@ -15,11 +16,16 @@ use windows_sys::Win32::Networking::WinSock::{
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
+use windows_sys::Win32::Storage::FileSystem::{
+    FILE_ATTRIBUTE_REPARSE_POINT, FindClose, FindFirstFileW, WIN32_FIND_DATAW,
+};
 use windows_sys::Win32::System::IO::CancelIoEx;
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
+/// `IO_REPARSE_TAG_AF_UNIX`, which windows-sys does not name.
+const IO_REPARSE_TAG_AF_UNIX: u32 = 0x8000_0023;
 /// `SIO_AF_UNIX_GETPEERPID`, which windows-sys does not name.
 const GET_PEER_PID: u32 = 0x5800_0100;
 
@@ -358,4 +364,31 @@ impl Listener {
         }
         Ok(())
     }
+}
+
+/// A socket is a reparse point of its own kind. Its folder says whose it can be.
+pub fn at_path(path: &Path) -> io::Result<super::AtPath> {
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut found: WIN32_FIND_DATAW = unsafe { std::mem::zeroed() };
+    // SAFETY: the name is NUL-terminated, the data is written by the call, and the search closes.
+    let search = unsafe { FindFirstFileW(wide.as_ptr(), &mut found) };
+    if search == INVALID_HANDLE_VALUE {
+        let error = io::Error::last_os_error();
+        return if error.kind() == io::ErrorKind::NotFound {
+            Ok(super::AtPath::Nothing)
+        } else {
+            Err(error)
+        };
+    }
+    unsafe { FindClose(search) };
+    let reparse = found.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0;
+    Ok(if reparse && found.dwReserved0 == IO_REPARSE_TAG_AF_UNIX {
+        super::AtPath::MySocket
+    } else {
+        super::AtPath::Other
+    })
+}
+
+pub fn restrict(_path: &Path) -> io::Result<()> {
+    Ok(())
 }

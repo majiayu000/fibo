@@ -146,14 +146,12 @@ fn default_key() -> io::Result<PathBuf> {
 /// Writes a file only its owner can read, from the moment it exists.
 fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::OpenOptions::new()
+    mooring_platform::fs::private_file()
         .create_new(true)
         .write(true)
-        .mode(0o600)
         .open(path)?
         .write_all(bytes)
 }

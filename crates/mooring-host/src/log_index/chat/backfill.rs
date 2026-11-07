@@ -10,7 +10,6 @@ use mooring_core::model::Agent;
 use rusqlite::{params, OptionalExtension};
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom};
-use std::os::unix::fs::MetadataExt;
 use std::time::{Duration, Instant};
 
 /// One stretch read and committed at a time: memory holds this much of a log's records at most.
@@ -137,7 +136,7 @@ impl Index {
         if !fs::symlink_metadata(path)?.is_file() || meta.len() < origin {
             return Err(io::Error::other("这份日志已经变了，读不回更早的部分"));
         }
-        let inode = meta.ino();
+        let inode = mooring_platform::fs::open_file_id(&file)?.inode;
         let kept: Option<i64> = self
             .db
             .prepare_cached(

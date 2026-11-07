@@ -9,6 +9,8 @@ use std::io;
 use std::path::Path;
 use std::time::Duration;
 
+#[cfg(unix)]
+mod hand_over;
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod imp;
@@ -74,21 +76,6 @@ impl Master {
     }
 }
 
-/// A master a previous host handed over.
-#[cfg(unix)]
-impl From<std::os::fd::OwnedFd> for Master {
-    fn from(fd: std::os::fd::OwnedFd) -> Self {
-        Self(imp::Master::from(fd))
-    }
-}
-
-#[cfg(unix)]
-impl std::os::fd::AsRawFd for Master {
-    fn as_raw_fd(&self) -> std::os::fd::RawFd {
-        self.0.as_raw_fd()
-    }
-}
-
 /// What came of waiting for output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Read {
@@ -112,4 +99,48 @@ impl Reader {
 /// The size of the terminal this process runs in, as columns and rows.
 pub fn own_size() -> Option<(u16, u16)> {
     imp::own_size()
+}
+
+/// Whether a running terminal can pass to another process, so that its programs never notice.
+/// Windows has nothing to pass a pseudo console with.
+pub const CAN_HAND_OVER: bool = cfg!(unix);
+
+/// Sends these terminals over a connection. Refused where `CAN_HAND_OVER` is false.
+pub fn send_masters(stream: &crate::local::Stream, masters: &[&Master]) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsRawFd;
+        let fds: Vec<_> = masters.iter().map(|m| m.0.as_raw_fd()).collect();
+        hand_over::send_fds(stream, &fds)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (stream, masters);
+        Err(refused())
+    }
+}
+
+/// Receives `count` terminals sent with `send_masters`.
+pub fn receive_masters(stream: &crate::local::Stream, count: usize) -> io::Result<Vec<Master>> {
+    #[cfg(unix)]
+    {
+        let fds = hand_over::recv_fds(stream, count)?;
+        Ok(fds
+            .into_iter()
+            .map(|fd| Master(imp::Master::from(fd)))
+            .collect())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (stream, count);
+        Err(refused())
+    }
+}
+
+#[cfg(not(unix))]
+fn refused() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::Unsupported,
+        "a terminal cannot pass to another process here",
+    )
 }

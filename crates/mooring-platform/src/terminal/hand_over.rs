@@ -1,6 +1,6 @@
 //! Passing a running terminal's PTY to a newer host: the descriptors travel over the
 //! control socket as SCM_RIGHTS, so the shells and Agents behind them never notice.
-use mooring_platform::local;
+use crate::local;
 use std::{
     io,
     os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
