@@ -7,6 +7,7 @@ mod exit_watch;
 mod file_watch;
 mod fs;
 mod inspect;
+mod local;
 mod process;
 mod shell;
 mod system;

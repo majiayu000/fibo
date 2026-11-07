@@ -1,18 +1,16 @@
 //! Passing a running terminal's PTY to a newer host: the descriptors travel over the
 //! control socket as SCM_RIGHTS, so the shells and Agents behind them never notice.
+use mooring_platform::local;
 use std::{
     io,
-    os::{
-        fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
-        unix::net::UnixStream,
-    },
+    os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
 };
 
 /// Most descriptors one message carries; a host never runs more terminals than this.
 pub const MAX_FDS: usize = 200;
 
 /// Sends `fds` in one message with a one-byte payload.
-pub fn send_fds(stream: &UnixStream, fds: &[RawFd]) -> io::Result<()> {
+pub fn send_fds(stream: &local::Stream, fds: &[RawFd]) -> io::Result<()> {
     if fds.len() > MAX_FDS {
         return Err(io::Error::other("too many terminals to hand over"));
     }
@@ -65,7 +63,7 @@ pub fn send_fds(stream: &UnixStream, fds: &[RawFd]) -> io::Result<()> {
 const SEND_PATIENCE: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Receives the message `send_fds` sent; exactly `count` descriptors or an error.
-pub fn recv_fds(stream: &UnixStream, count: usize) -> io::Result<Vec<OwnedFd>> {
+pub fn recv_fds(stream: &local::Stream, count: usize) -> io::Result<Vec<OwnedFd>> {
     if count > MAX_FDS {
         return Err(io::Error::other("too many terminals offered"));
     }
@@ -122,12 +120,12 @@ mod tests {
     use std::io::{Read, Write};
     #[test]
     fn descriptors_survive_the_trip() {
-        let (a, b) = UnixStream::pair().unwrap();
-        let (mut left, right) = UnixStream::pair().unwrap();
+        let (a, b) = local::Stream::pair().unwrap();
+        let (mut left, right) = local::Stream::pair().unwrap();
         send_fds(&a, &[right.as_raw_fd()]).unwrap();
         drop(right);
         let fds = recv_fds(&b, 1).unwrap();
-        let mut received = UnixStream::from(fds.into_iter().next().unwrap());
+        let mut received = std::os::unix::net::UnixStream::from(fds.into_iter().next().unwrap());
         left.write_all(b"ok").unwrap();
         let mut buf = [0; 2];
         received.read_exact(&mut buf).unwrap();
@@ -139,8 +137,8 @@ mod tests {
     /// with descriptors that does not fit right now with EMSGSIZE instead of blocking).
     #[test]
     fn descriptors_wait_behind_unread_snapshots() {
-        let (mut a, b) = UnixStream::pair().unwrap();
-        let (_left, right) = UnixStream::pair().unwrap();
+        let (mut a, b) = local::Stream::pair().unwrap();
+        let (_left, right) = local::Stream::pair().unwrap();
         // Exactly one socket buffer unread: macOS then has no room left at all.
         const UNREAD: usize = 8192;
         let reader = std::thread::spawn(move || {
@@ -158,8 +156,8 @@ mod tests {
     /// starts: SCM_RIGHTS drops FD_CLOEXEC.
     #[test]
     fn received_descriptors_are_close_on_exec() {
-        let (a, b) = UnixStream::pair().unwrap();
-        let (_left, right) = UnixStream::pair().unwrap();
+        let (a, b) = local::Stream::pair().unwrap();
+        let (_left, right) = local::Stream::pair().unwrap();
         unsafe { libc::fcntl(right.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) };
         send_fds(&a, &[right.as_raw_fd()]).unwrap();
         let fds = recv_fds(&b, 1).unwrap();

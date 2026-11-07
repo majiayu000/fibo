@@ -1,13 +1,13 @@
 use super::connect::to_phone;
 use super::INPUT_QUEUE;
 use crate::remote::{self, Access};
+use mooring_platform::local;
 use mooring_remote::{
     close,
     secure::{self, Channel, Message as Secure},
     wire::Frame,
 };
 use std::io::{self, BufReader, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc as std_mpsc, Arc, Condvar, Mutex};
 use std::thread;
@@ -20,7 +20,7 @@ pub(super) struct Bridge {
     channel: Arc<Mutex<Channel>>,
     input: std_mpsc::SyncSender<Vec<u8>>,
     credit: Arc<Credit>,
-    ours: UnixStream,
+    ours: local::Stream,
 }
 
 /// DATA bytes in flight to the phone, unacknowledged.
@@ -39,7 +39,7 @@ impl Bridge {
         proto: u32,
         access: Access,
     ) -> io::Result<Self> {
-        let (ours, theirs) = UnixStream::pair()?;
+        let (ours, theirs) = local::Stream::pair()?;
         // Allocate every descriptor before starting workers, so failure drops them all.
         let remote_reader = theirs.try_clone()?;
         let mut writer = ours.try_clone()?;
@@ -115,7 +115,7 @@ impl Drop for Bridge {
 /// past that it stops reading, so the session's own streams slow down and a stalled
 /// watch is resynced by the host, while other phones keep flowing.
 fn pump(
-    reader: &mut UnixStream,
+    reader: &mut local::Stream,
     channel: &Mutex<Channel>,
     credit: &Credit,
     out: &mpsc::Sender<Message>,

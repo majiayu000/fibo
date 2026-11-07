@@ -398,16 +398,15 @@ mod tests {
     use super::*;
     use serde_json::{Value, json};
     use std::io::{BufRead, BufReader, Write};
-    use std::os::unix::net::UnixStream;
     use std::sync::mpsc::Receiver;
 
     struct Fake {
         /// Terminals the next `list` returns.
         terminals: Arc<Mutex<Vec<Value>>>,
         /// Pushes an event line into the open events stream.
-        events: Arc<Mutex<Option<(u64, UnixStream)>>>,
+        events: Arc<Mutex<Option<(u64, mooring_platform::local::Stream)>>>,
         /// The far end of every connection made; shutting one down drops that link.
-        links: Arc<Mutex<Vec<UnixStream>>>,
+        links: Arc<Mutex<Vec<mooring_platform::local::Stream>>>,
     }
 
     fn card(id: &str, status: &str) -> Value {
@@ -426,7 +425,7 @@ mod tests {
             links: Arc::clone(&links),
         };
         let connect = move |_: &Spec| {
-            let (ours, theirs) = UnixStream::pair()?;
+            let (ours, theirs) = mooring_platform::local::Stream::pair()?;
             links.lock().unwrap().push(theirs.try_clone()?);
             let (terminals, events) = (Arc::clone(&terminals), Arc::clone(&events));
             let mut out = theirs.try_clone()?;
