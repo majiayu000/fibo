@@ -107,6 +107,26 @@ fn children_are_what_the_process_started() {
 }
 
 #[test]
+fn descendants_are_children_and_theirs_with_each_parent() {
+    let dir = crate::scratch("inspect-descendants");
+    let mut child = myself("process::helper_lasts", &dir.join("unused"))
+        .spawn()
+        .unwrap();
+    let me = std::process::id();
+    let found = mooring_platform::inspect::descendants(&[me, me]).unwrap();
+    assert!(found.contains(&(child.id(), me)), "{found:?}");
+    assert_eq!(found.iter().filter(|(p, _)| *p == child.id()).count(), 1);
+    assert!(!found.iter().any(|(p, _)| *p == me), "{found:?}");
+    let _ = child.kill();
+    let _ = child.wait();
+    let gone = child.id();
+    assert_eq!(
+        mooring_platform::inspect::descendants(&[gone]).unwrap(),
+        vec![]
+    );
+}
+
+#[test]
 fn a_process_started_in_the_past_and_not_long_ago() {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -49,30 +49,25 @@ pub(super) fn hinted_roots(
 }
 /// Enumerate only the trees rooted at live PTYs. No global ps or process-name scan.
 pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
-    let mut pending: Vec<_> = workspace
+    let roots: Vec<_> = workspace
         .terminals
         .iter()
         .filter(|t| t.state == ProcessState::Running)
         .filter_map(|t| t.pid)
         .collect();
-    let mut seen = HashSet::new();
-    let mut selected = Vec::new();
-    let mut parents = HashMap::new();
-    while let Some(pid) = pending.pop() {
-        if !seen.insert(pid) {
-            continue;
-        }
-        selected.push(pid);
-        for child in inspect::children(pid)? {
-            parents.insert(child, pid);
-            pending.push(child);
-        }
-    }
+    let below = inspect::descendants(&roots)?;
+    let parents: HashMap<_, _> = below.iter().copied().collect();
+    let selected: HashSet<_> = roots
+        .iter()
+        .copied()
+        .chain(below.iter().map(|(pid, _)| *pid))
+        .collect();
     if selected.is_empty() {
         return Ok(vec![]);
     }
     // Read in-process rather than spawning `/bin/ps` per hook: the walk above already knows
     // each child's parent, and ps reads the same KERN_PROCARGS2 argv for its command.
+    let mut selected: Vec<_> = selected.into_iter().collect();
     selected.sort_unstable();
     PS_SPAWNS.fetch_add(1, Ordering::Relaxed);
     // pid, parent, the Agent its name shows, the Agent a MOORING_AGENT hint names.
