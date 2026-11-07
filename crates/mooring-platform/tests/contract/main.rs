@@ -10,6 +10,7 @@ mod inspect;
 mod process;
 mod shell;
 mod system;
+mod terminal;
 
 /// This test program started again as `helper`, the one way to get a process that lasts a
 /// while without assuming any command exists on the machine.

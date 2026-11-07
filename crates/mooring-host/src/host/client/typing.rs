@@ -41,7 +41,7 @@ pub(in crate::host) fn send_text(
             } else {
                 text.to_owned()
             };
-            pty::write(&mut live.master, bytes.as_bytes())?;
+            live.master.write(bytes.as_bytes())?;
             live.input_at = Some(Instant::now());
         }
     }
@@ -60,7 +60,7 @@ pub(in crate::host) fn send_text(
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
         }
-        pty::write(&mut live.master, b"\r")?;
+        live.master.write(b"\r")?;
     }
     record_submission(shared, id)
 }
@@ -133,7 +133,7 @@ pub(in crate::host) fn send_keys(shared: &Shared, id: &str, keys: &[String]) -> 
             .map(|k| key_bytes(k, application_cursor))
             .collect::<io::Result<Vec<_>>>()?
             .concat();
-        pty::write(&mut live.master, &bytes)?;
+        live.master.write(&bytes)?;
         live.input_at = Some(Instant::now());
     }
     typed(shared, id, keys.iter().any(|k| k == "enter"))
@@ -153,7 +153,7 @@ pub(in crate::host) fn type_input(shared: &Shared, id: &str, bytes: &[u8]) -> io
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
         }
-        pty::write(&mut live.master, bytes)?;
+        live.master.write(bytes)?;
         live.input_at = Some(Instant::now());
     }
     typed(shared, id, bytes.contains(&b'\r'))
@@ -199,7 +199,7 @@ pub(in crate::host) fn answer_trust(
                     key_bytes(seen.toward_yes, cursor)?
                 }
             };
-            pty::write(&mut live.master, &bytes)?;
+            live.master.write(&bytes)?;
             live.input_at = Some(Instant::now());
             !trust || seen.on_yes
         };
@@ -257,7 +257,7 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
                 ))
             }
         };
-        pty::write(&mut live.master, bytes)?;
+        live.master.write(bytes)?;
         live.input_at = Some(Instant::now());
     }
     // Apart, or a CLI reads them as one Alt-Esc; the lock stays free for its output.
@@ -265,7 +265,7 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
         thread::sleep(Duration::from_millis(PRESS_GAP_MS));
         let mut live = lock(&terminal)?;
         if !live.exited {
-            pty::write(&mut live.master, key)?;
+            live.master.write(key)?;
         }
     }
     typed(shared, id, false)
