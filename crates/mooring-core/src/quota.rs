@@ -19,6 +19,11 @@ pub const SHOWN_FOR: u64 = 7 * 86_400;
 pub const NEAR: u16 = 80;
 /// From here a window shows as used up.
 pub const OVER: u16 = 95;
+/// A long window this close to renewing, with this much of it left, is about to go to waste.
+pub const SPARE_WITHIN: u64 = 86_400;
+pub const SPARE_FROM: u16 = 30;
+/// Windows shorter than this renew too often for what is left of them to matter.
+const SPARE_WINDOW_MINUTES: u32 = 10_080;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quota {
@@ -53,6 +58,15 @@ impl Window {
     /// The window rolled over after the reading, so its percentage no longer applies.
     pub fn reset(&self, now: u64) -> bool {
         self.resets_at != 0 && now >= self.resets_at
+    }
+    /// How much of a week or longer will go unused when it renews within a day: the last
+    /// reading's share, so at most this much if it was used since. None when not worth saying.
+    pub fn spare(&self, now: u64) -> Option<u16> {
+        (self.minutes >= SPARE_WINDOW_MINUTES
+            && self.resets_at > now
+            && self.resets_at - now <= SPARE_WITHIN
+            && 100u16.saturating_sub(self.used) >= SPARE_FROM)
+            .then(|| 100 - self.used)
     }
 }
 
@@ -413,6 +427,46 @@ fn start(i: usize, source: Source, generation: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_long_window_renewing_soon_with_much_left_counts_as_spare() {
+        let now = 1_000_000;
+        let week = |used, left| Window {
+            minutes: 10_080,
+            used,
+            resets_at: now + left,
+        };
+        assert_eq!(week(40, 3600).spare(now), Some(60));
+        assert_eq!(week(70, SPARE_WITHIN).spare(now), Some(30));
+        // Too much used, too far off, already renewed, or no time given.
+        assert_eq!(week(71, 3600).spare(now), None);
+        assert_eq!(week(40, SPARE_WITHIN + 1).spare(now), None);
+        assert_eq!(week(40, 0).spare(now), None);
+        assert_eq!(
+            Window {
+                resets_at: 0,
+                ..week(40, 1)
+            }
+            .spare(now),
+            None
+        );
+        // Over its limit: nothing left, and no underflow.
+        assert_eq!(week(130, 3600).spare(now), None);
+        // The five-hour window renews all day long.
+        assert_eq!(
+            Window {
+                minutes: 300,
+                ..week(10, 3600)
+            }
+            .spare(now),
+            None
+        );
+        let month = Window {
+            minutes: 43_200,
+            ..week(10, 3600)
+        };
+        assert_eq!(month.spare(now), Some(90));
+    }
     use crate::content::Content;
     use crate::model::{AgentSession, Outcome};
 

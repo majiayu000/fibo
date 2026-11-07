@@ -364,6 +364,8 @@ impl Workbench {
                             "等下次使用时更新".into()
                         } else if w.resets_at == 0 {
                             String::new()
+                        } else if let Some(spare) = w.spare(now) {
+                            format!("{} 后重置 · 还有 {spare}% 没用", left(w.resets_at, now))
                         } else {
                             format!(
                                 "{} 后 · {} 重置",
