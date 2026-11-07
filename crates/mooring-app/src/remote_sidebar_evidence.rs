@@ -261,6 +261,119 @@ pub(super) fn start(
         wait(200).await;
 
 
+        // 按机器: a machine reads like this one, its spaces under its heading, and a new one
+        // can be made there. All of it through that machine's real host.
+        handle
+            .update(cx, |v, _, cx| v.visual_choose_preset("machine-fold", cx))
+            .unwrap();
+        wait(300).await;
+        shoot("spaces-fold.png", cx);
+        assert!(
+            handle.update(cx, |v, _, _| v.visual_machine_adds_spaces(0)).unwrap(),
+            "a current host offers no new space"
+        );
+        handle.update(cx, |v, _, cx| v.visual_add_space("other", "", cx)).unwrap();
+        wait(300).await;
+        handle.update(cx, |v, _, cx| v.visual_set_space_quiet("other", true, cx)).unwrap();
+        wait(900).await;
+        shoot("spaces-put-aside.png", cx);
+        let ids = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_machine_space_ids(0)).unwrap()
+        };
+        let adding = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_adding_machine_space()).unwrap()
+        };
+        let before = ids(cx).len();
+        handle.update(cx, |v, w, cx| v.visual_begin_add_machine_space(0, w, cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_some_and(|a| !a.0.is_empty()) {
+                break;
+            }
+            wait(100).await;
+        }
+        assert!(adding(cx).is_some_and(|a| !a.0.is_empty()), "its host offered no folders");
+        shoot("spaces-panel.png", cx);
+        // Refused: the panel stays and says why; nothing is made.
+        handle.update(cx, |v, _, cx| v.visual_type_machine_space("~/no-such-folder", cx)).unwrap();
+        wait(300).await;
+        handle.update(cx, |v, _, cx| v.visual_submit_machine_space(cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_some_and(|a| a.1.is_some()) {
+                break;
+            }
+            wait(100).await;
+        }
+        let why = adding(cx).and_then(|a| a.1).unwrap_or_default();
+        assert!(why.contains("目录不存在"), "a missing folder said {why:?}");
+        shoot("spaces-refused.png", cx);
+        // Enter on nothing says so, and cancelling leaves nothing behind.
+        handle.update(cx, |v, _, cx| v.visual_type_machine_space("", cx)).unwrap();
+        wait(300).await;
+        handle.update(cx, |v, _, cx| v.visual_submit_machine_space(cx)).unwrap();
+        assert!(
+            adding(cx).and_then(|a| a.1).is_some_and(|e| e.contains("先选")),
+            "Enter on nothing said nothing"
+        );
+        handle.update(cx, |v, _, cx| v.visual_cancel_machine_space(cx)).unwrap();
+        wait(200).await;
+        assert!(adding(cx).is_none(), "Esc left the panel open");
+        assert_eq!(ids(cx).len(), before, "cancelling made a space");
+        // Focus is back in the terminal, as it is once the space is made.
+        wait(200).await;
+        let spaces_right = shoot("spaces-cancelled.png", cx);
+        // Made, from a path: the chip is there, chosen, and its host's next list agrees.
+        handle.update(cx, |v, w, cx| v.visual_begin_add_machine_space(0, w, cx)).unwrap();
+        handle.update(cx, |v, _, cx| v.visual_type_machine_space("~/brandnew", cx)).unwrap();
+        wait(300).await;
+        handle.update(cx, |v, _, cx| v.visual_submit_machine_space(cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_none() {
+                break;
+            }
+            wait(100).await;
+        }
+        let left = adding(cx);
+        assert!(left.is_none(), "the panel stayed open after making the space: {left:?}");
+        let chosen = handle.update(cx, |v, _, _| v.visual_machine_space_chosen()).unwrap();
+        wait(2500).await;
+        let after = ids(cx);
+        assert_eq!(after.len(), before + 1, "its host's list has no new space: {after:?}");
+        assert!(
+            chosen.as_ref().is_some_and(|c| after.contains(c)),
+            "the new space was not chosen"
+        );
+        let made_right = shoot("spaces-made.png", cx);
+        assert!(made_right == spaces_right, "a new space moved something right of the column");
+        // By name, the folder that already is a space: nothing new, the same one chosen.
+        handle.update(cx, |v, _, cx| v.visual_machine_space(chosen.as_deref().unwrap(), cx)).unwrap();
+        handle.update(cx, |v, w, cx| v.visual_begin_add_machine_space(0, w, cx)).unwrap();
+        handle.update(cx, |v, _, cx| v.visual_type_machine_space("brandnew", cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_some_and(|a| !a.0.is_empty()) {
+                break;
+            }
+            wait(100).await;
+        }
+        shoot("spaces-known.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_submit_machine_space(cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_none() {
+                break;
+            }
+            wait(100).await;
+        }
+        wait(1500).await;
+        assert_eq!(ids(cx).len(), before + 1, "making it twice made two");
+        assert_eq!(
+            handle.update(cx, |v, _, _| v.visual_machine_space_chosen()).unwrap(),
+            chosen,
+            "the existing space was not chosen"
+        );
+        handle.update(cx, |v, _, cx| v.visual_machine_space(chosen.as_deref().unwrap(), cx)).unwrap();
+        handle.update(cx, |v, _, cx| v.visual_set_space_quiet("other", false, cx)).unwrap();
+        wait(900).await;
+        eprintln!("machine spaces PASS: chips, refused, cancelled, made, made again");
+
         // 先不管这台: out of every count, the key and the board, in every layout; looking at
         // its sessions does not end it, and the words and the file follow both ways.
         handle
