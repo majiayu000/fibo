@@ -74,8 +74,7 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
     let mut raw = vec![];
     for pid in selected {
         let parent = parents.get(&pid).copied().unwrap_or(0);
-        let command = inspect::argv(pid).unwrap_or_default().join(" ");
-        let runtime = crate::agents::from_command(&command);
+        let runtime = crate::agents::from_argv(&inspect::argv(pid).unwrap_or_default());
         let hint = if runtime.is_none() {
             inspect::env_var(pid, mooring_core::protocol::AGENT_ENV).and_then(|v| agent_named(&v))
         } else {

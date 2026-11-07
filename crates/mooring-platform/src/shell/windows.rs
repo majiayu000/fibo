@@ -60,6 +60,15 @@ pub fn quote(word: &str) -> String {
     out
 }
 
+/// npm's launchers here are scripts as well as programs, and asking for the two kinds passes over
+/// a function of the same name.
+pub fn past_functions(program: &str) -> String {
+    format!(
+        "& (Get-Command {} -CommandType ExternalScript,Application | Select-Object -First 1)",
+        quote(program)
+    )
+}
+
 /// `-Command` takes its script as text, so unlike `$1` the argument is written into it, quoted.
 /// Windows PowerShell 5 drops double quotes from an argument it hands to a program.
 pub fn run_then_stay(shell: &str, command: &str, argument: Option<&str>) -> Vec<String> {

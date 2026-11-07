@@ -48,6 +48,10 @@ pub fn quote(word: &str) -> String {
     format!("'{}'", word.replace('\'', "'\\''"))
 }
 
+pub fn past_functions(program: &str) -> String {
+    format!("command {program}")
+}
+
 /// The command and its argument never share a string: the argument stays `$1`.
 pub fn run_then_stay(shell: &str, command: &str, argument: Option<&str>) -> Vec<String> {
     let then = format!("exec {} -l", quote(shell));
