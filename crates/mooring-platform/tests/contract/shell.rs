@@ -58,16 +58,34 @@ fn screen_until(argv: &[String], dir: &Path, want: &str) -> String {
     text
 }
 
+/// Says what it was given, for the test below.
+#[test]
+#[ignore = "started by the_interactive_shell_runs_a_command_and_takes_text_as_text"]
+fn says_its_last_argument() {
+    let last = std::env::args().next_back().unwrap_or_default();
+    println!("WORD[{}]", hex(&last));
+}
+
+fn hex(text: &str) -> String {
+    text.bytes().map(|b| format!("{b:02x}")).collect()
+}
+
 #[test]
 fn the_interactive_shell_runs_a_command_and_takes_text_as_text() {
     let dir = crate::scratch("shell-run");
-    let text = "mo'or \"ing\" $HOME ; y";
-    let screen = screen_until(
-        &run_then_stay(&interactive(), "echo", Some(text)),
-        &dir,
-        text,
+    let exe = std::env::current_exe().unwrap();
+    let command = format!(
+        "{} shell::says_its_last_argument --exact --ignored --nocapture --",
+        past_functions(&exe.to_string_lossy())
     );
-    assert!(screen.contains(text), "{screen:?}");
+    let text = "mo'or \"ing\" $HOME ; y";
+    let want = format!("WORD[{}]", hex(text));
+    let screen = screen_until(
+        &run_then_stay(&interactive(), &command, Some(text)),
+        &dir,
+        &want,
+    );
+    assert!(screen.contains(&want), "{screen:?}");
 }
 
 #[test]
