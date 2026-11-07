@@ -1,6 +1,6 @@
 //! What runs a declared command, and what a process falls back on.
-use std::ffi::OsString;
-use std::path::PathBuf;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
 
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
@@ -19,6 +19,46 @@ pub fn sh() -> OsString {
 /// already gets the account's whole `PATH`.
 pub fn login_shell() -> Option<PathBuf> {
     imp::login_shell()
+}
+
+/// The shell a new terminal opens, for someone to work in. Where it cannot be found the name
+/// still comes back, so starting it fails and says so.
+pub fn interactive() -> String {
+    imp::interactive()
+}
+
+/// How to start `shell` for someone to work in.
+pub fn stay(shell: &str) -> Vec<String> {
+    imp::stay(shell)
+}
+
+/// `word` in the quoting of [`interactive`], read back as itself whatever it holds.
+pub fn quote(word: &str) -> String {
+    imp::quote(word)
+}
+
+/// How to have `shell` run `command`, a line in its own language, and then stay for someone to
+/// work in. `argument` goes after the command as one word the shell does not interpret, which
+/// makes it safe for text from elsewhere.
+pub fn run_then_stay(shell: &str, command: &str, argument: Option<&str>) -> Vec<String> {
+    imp::run_then_stay(shell, command, argument)
+}
+
+/// What a terminal's environment starts from: what logging in afresh gives, whatever started
+/// this process, not what `vars` (this process's) picked up on the way. Holds `PATH` under that
+/// spelling. What a login's own files set is left to the shell where the shell reads them.
+pub fn login_env(vars: impl Iterator<Item = (OsString, OsString)>) -> Vec<(OsString, OsString)> {
+    imp::login_env(vars.collect())
+}
+
+/// `path` with `dir` added at the end.
+pub fn on_path(path: &OsStr, dir: &Path) -> OsString {
+    let mut out = path.to_owned();
+    if !out.is_empty() {
+        out.push(imp::PATH_SEPARATOR);
+    }
+    out.push(dir);
+    out
 }
 
 /// `sh.exe` on `PATH`, else beside a `git.exe` on it: Git's installer by default puts only

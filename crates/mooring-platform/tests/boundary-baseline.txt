@@ -15,7 +15,4 @@ unix-path	crates/mooring-app/src/workbench/launch_slot.rs	1
 unix-path	crates/mooring-core/src/sample.rs	1
 unix-path	crates/mooring-core/src/secret.rs	1
 unix-path	crates/mooring-host/src/agents/mod.rs	2
-unix-path	crates/mooring-host/src/control/open.rs	1
 unix-path	crates/mooring-host/src/plugin_hooks.rs	1
-unix-path	crates/mooring-host/src/pty.rs	1
-unix-path	crates/mooring-host/src/remote/writes.rs	1

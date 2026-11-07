@@ -15,6 +15,7 @@ on:
       - crates/mooring-remote/**
       - crates/mooring-relay/**
       - crates/mooring-plugin-host/**
+      - crates/mooring-host/**
       - Cargo.lock
       - rust-toolchain.toml
       - bootstrap.sh
@@ -64,3 +65,10 @@ jobs:
 
       - name: Cargo test
         run: cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
+
+      # The host's own tests still assume Unix; this much says it builds and works here.
+      - name: Clippy on the host
+        run: cargo clippy -p mooring-host --lib --bins -- -D warnings
+
+      - name: A real terminal through the host
+        run: cargo test -p mooring-host --test terminal_chain
