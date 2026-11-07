@@ -98,13 +98,14 @@ impl Workbench {
         let field = cx.new(|cx| {
             Field::new("标签名", &current, cx)
                 .inline()
+                .ends_on_click_out()
                 .placeholder(&automatic)
         });
         field.update(cx, |f, _| f.select_all());
         let events = cx.subscribe(&field, |this, _, event, cx| match event {
-            // Enter and Esc hand the keyboard back to the terminal; a click
-            // elsewhere leaves focus where it landed.
-            crate::ui::field::FieldEvent::Submit => {
+            // These hand the keyboard back to the terminal; a click on something that
+            // takes the keyboard blurs the field instead and leaves focus where it landed.
+            crate::ui::field::FieldEvent::Submit | crate::ui::field::FieldEvent::ClickOut => {
                 this.save_tab_name(cx);
                 this.nav.pending_focus = true;
             }

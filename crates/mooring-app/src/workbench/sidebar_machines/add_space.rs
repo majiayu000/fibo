@@ -123,6 +123,7 @@ impl Workbench {
         let events = cx.subscribe(&field, |this, _, event, cx| match event {
             FieldEvent::Submit => this.submit_machine_space(None, cx),
             FieldEvent::Cancel => this.cancel_machine_space(cx),
+            FieldEvent::ClickOut => {}
         });
         // Fields notify for a blinking cursor too: only a changed text asks the host again.
         let changes = cx.observe(&field, |this, field, cx| {

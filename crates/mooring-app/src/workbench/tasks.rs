@@ -286,6 +286,7 @@ impl Workbench {
                 this.tasks.quick_task = None;
                 cx.notify();
             }
+            crate::ui::field::FieldEvent::ClickOut => {}
         });
         window.focus(&field.focus_handle(cx), cx);
         self.tasks.quick_task = Some((field, subscription));
