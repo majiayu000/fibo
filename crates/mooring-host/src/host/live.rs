@@ -147,28 +147,21 @@ pub(super) fn stop_terminal(terminal: &LiveTerminal) -> io::Result<()> {
     drop(live);
     // Only this terminal's own process groups, never a name-based kill.
     let groups: Vec<i32> = std::iter::once(shell).chain(foreground).collect();
-    signal_groups(&groups, libc::SIGHUP)?;
+    for group in &groups {
+        mooring_platform::process::hang_up_group(*group)?;
+    }
     thread::spawn(move || {
         thread::sleep(HANGUP_GRACE);
-        if let Err(e) = signal_groups(&groups, libc::SIGKILL) {
-            eprintln!("kill closed terminal's groups {groups:?}: {e}");
+        for group in &groups {
+            if let Err(e) = mooring_platform::process::kill_group(*group) {
+                eprintln!("kill closed terminal's group {group}: {e}");
+            }
         }
     });
     Ok(())
 }
 /// Long enough for an Agent to save its conversation on hangup.
 const HANGUP_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
-fn signal_groups(groups: &[i32], signal: i32) -> io::Result<()> {
-    for &group in groups {
-        if unsafe { libc::kill(-group, signal) } < 0 {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::ESRCH) {
-                return Err(error);
-            }
-        }
-    }
-    Ok(())
-}
 
 pub(super) fn record_exit(host: &Shared, terminal: &LiveTerminal, id: &str) -> io::Result<()> {
     // Always acquire global state before terminal state; PTY output never takes global state.

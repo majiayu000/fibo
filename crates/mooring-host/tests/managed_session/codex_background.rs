@@ -114,7 +114,8 @@ fn a_server_codex_left_running_ends_its_turn_and_names_the_port() {
     let h = Host::start();
     // Below where any system starts handing out ports.
     let port = 22000 + (std::process::id() % 900) as u16;
-    let server = format!("python3 -m http.server {port} --bind 127.0.0.1");
+    // `exec`: a fake CLI is a shell, so a shell left waiting on the server would be one more.
+    let server = format!("exec python3 -m http.server {port} --bind 127.0.0.1");
     codex_left_running(&h, "srv", &server);
     // Before the screen is read the turn already reads as over, so wait for the note too.
     let want = format!("后台留着 1 个服务 · 端口 {port}");

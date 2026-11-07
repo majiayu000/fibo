@@ -96,6 +96,25 @@ impl std::os::fd::AsRawFd for Stream {
     }
 }
 
+/// What is at a path a socket goes: nothing, this account's socket, or something else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtPath {
+    Nothing,
+    MySocket,
+    Other,
+}
+
+/// Looks without following a link.
+pub fn at_path(path: &Path) -> io::Result<AtPath> {
+    imp::at_path(path)
+}
+
+/// Keeps others off a socket at `path`, as far as a socket itself can: on Windows that is left
+/// to its folder (`fs::secure_dir`).
+pub fn restrict(path: &Path) -> io::Result<()> {
+    imp::restrict(path)
+}
+
 /// Where connections arrive.
 pub struct Listener(imp::Listener);
 

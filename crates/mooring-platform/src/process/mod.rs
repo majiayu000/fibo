@@ -38,3 +38,55 @@ pub fn kill(pid: i32) {
         imp::kill(pid);
     }
 }
+
+/// Asks one process to end, where that can be asked. Windows cannot: it ends there and then.
+pub fn terminate(pid: i32) -> io::Result<()> {
+    if pid <= 0 {
+        return Ok(());
+    }
+    imp::terminate(pid)
+}
+
+/// What closing a terminal does to a job in it: time to save and go, for what listens. `group`
+/// is what `terminal::Master::foreground_group` gives, or the program a terminal was started
+/// with. One already gone is fine.
+pub fn hang_up_group(group: i32) -> io::Result<()> {
+    if group <= 0 {
+        return Ok(());
+    }
+    imp::hang_up_group(group)
+}
+
+/// Ends everything in `group` at once. One already gone is fine.
+pub fn kill_group(group: i32) -> io::Result<()> {
+    if group <= 0 {
+        return Ok(());
+    }
+    imp::kill_group(group)
+}
+
+/// Whether a process was ended from outside rather than ending itself.
+pub fn was_signalled(status: &std::process::ExitStatus) -> bool {
+    imp::was_signalled(status)
+}
+
+/// The calling thread gives way to everything else, from now on.
+pub fn give_way() {
+    imp::give_way();
+}
+
+/// The process that started this one.
+pub fn parent() -> u32 {
+    imp::parent()
+}
+
+/// This process ends when the one that started it does, however that one went.
+pub fn exit_with_parent() {
+    imp::exit_with_parent();
+}
+
+/// Raises how many files this process may hold open as far as it is allowed. The new limit,
+/// if there is such a limit and it changed.
+pub fn raise_open_file_limit() -> io::Result<Option<u64>> {
+    imp::raise_open_file_limit()
+}

@@ -87,16 +87,16 @@ fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
         }
         snapshots.push(snapshot);
     }
-    let fds = crate::handoff::recv_fds(&stream, terminals.len())?;
+    let masters = term::receive_masters(&stream, terminals.len())?;
     write_frame(&mut stream, ACK, HANDOFF_TAKEN)?;
     Ok(terminals
         .into_iter()
         .zip(snapshots)
-        .zip(fds)
-        .map(|((handed, snapshot), fd)| Taken {
+        .zip(masters)
+        .map(|((handed, snapshot), master)| Taken {
             handed,
             snapshot,
-            master: fd.into(),
+            master,
         })
         .collect())
 }
@@ -104,15 +104,10 @@ fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
 /// where the listening socket goes that is not one, a store this user cannot read.
 fn ready_to_take_over(root: &Path) -> io::Result<()> {
     for name in ["workbench.sock", ".sock-start"] {
-        match fs::symlink_metadata(root.join(name)) {
-            Ok(m) if m.file_type().is_socket() && m.uid() == unsafe { libc::geteuid() } => (),
-            Ok(_) => {
-                return Err(io::Error::other(format!(
-                    "not taking over: {name} in the runtime is not this user's socket"
-                )));
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => (),
-            Err(e) => return Err(e),
+        if local::at_path(&root.join(name))? == local::AtPath::Other {
+            return Err(io::Error::other(format!(
+                "not taking over: {name} in the runtime is not this user's socket"
+            )));
         }
     }
     let db = rusqlite::Connection::open_with_flags(
@@ -133,21 +128,7 @@ pub(super) fn serve_runtime(
     takeover: bool,
 ) -> io::Result<()> {
     std::sync::LazyLock::force(&BUILD);
-    match fs::DirBuilder::new().mode(0o700).create(root) {
-        Ok(()) => (),
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(e) => return Err(e),
-    }
-    let meta = fs::symlink_metadata(root)?;
-    if !meta.is_dir()
-        || meta.file_type().is_symlink()
-        || meta.uid() != unsafe { libc::geteuid() }
-        || meta.mode() & 0o777 != 0o700
-    {
-        return Err(io::Error::other(
-            "runtime must be an owned, non-symlink 0700 directory",
-        ));
-    }
+    mooring_platform::fs::secure_dir(root)?;
     let taken = if takeover {
         // The old host lets go of every terminal once told they are taken, so what can
         // fail without it gone is tried first: failing later would hang them all up.
@@ -156,17 +137,10 @@ pub(super) fn serve_runtime(
     } else {
         vec![]
     };
-    let instance_lock = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(root.join("host.lock"))?;
+    let instance_lock = mooring_platform::fs::lock_file(&root.join("host.lock"))?;
     // After a handoff the old host exits on its own; wait for it to let go of the runtime.
     let until = Instant::now() + Duration::from_secs(if takeover { 10 } else { 0 });
-    while unsafe { libc::flock(instance_lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } < 0 {
+    while instance_lock.try_lock().is_err() {
         if Instant::now() >= until {
             return Err(io::Error::other("a daemon already owns this runtime"));
         }
@@ -174,17 +148,14 @@ pub(super) fn serve_runtime(
     }
     wait_log::start(root);
     let socket = root.join("workbench.sock");
-    match fs::symlink_metadata(&socket) {
-        Ok(meta) if meta.file_type().is_socket() && meta.uid() == unsafe { libc::geteuid() } => {
-            fs::remove_file(&socket)?
-        }
-        Ok(_) => {
+    match local::at_path(&socket)? {
+        local::AtPath::MySocket => fs::remove_file(&socket)?,
+        local::AtPath::Nothing => (),
+        local::AtPath::Other => {
             return Err(io::Error::other(
                 "refusing to replace a non-socket runtime entry",
             ));
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => (),
-        Err(e) => return Err(e),
     }
     // Without it hooks fall back to the process tree alone.
     if let Err(e) = pty::announce_host(root) {
@@ -306,20 +277,17 @@ pub(super) fn serve_runtime(
     // scheduler pressure a client seeing that pathname can get ECONNREFUSED.
     // Publish only an initialized, listening socket, while holding host.lock.
     let pending_socket = root.join(".sock-start");
-    match fs::symlink_metadata(&pending_socket) {
-        Ok(meta) if meta.file_type().is_socket() && meta.uid() == unsafe { libc::geteuid() } => {
-            fs::remove_file(&pending_socket)?;
-        }
-        Ok(_) => {
+    match local::at_path(&pending_socket)? {
+        local::AtPath::MySocket => fs::remove_file(&pending_socket)?,
+        local::AtPath::Nothing => (),
+        local::AtPath::Other => {
             return Err(io::Error::other(
                 "refusing to replace pending non-socket entry",
             ));
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => (),
-        Err(e) => return Err(e),
     }
     let listener = local::Listener::bind(&pending_socket)?;
-    fs::set_permissions(&pending_socket, fs::Permissions::from_mode(0o600))?;
+    local::restrict(&pending_socket)?;
     fs::rename(&pending_socket, &socket)?;
     eprintln!("mooring listening on {}", socket.display());
     for index in 1u64.. {

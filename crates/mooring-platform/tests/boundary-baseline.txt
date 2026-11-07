@@ -1,34 +1,14 @@
 apple	crates/mooring-app/src/main.rs	1
-cfg	crates/mooring-host/src/host/client/tool_rows.rs	2
 cfg	crates/mooring-host/src/remote.rs	1
 dep libc	crates/mooring-app/Cargo.toml	1
 dep libc	crates/mooring-host/Cargo.toml	1
 libc	crates/mooring-app/src/lifecycle.rs	9
 libc	crates/mooring-app/src/main.rs	5
 libc	crates/mooring-app/src/workbench/pressure.rs	2
-libc	crates/mooring-host/src/devices.rs	3
-libc	crates/mooring-host/src/handoff.rs	24
-libc	crates/mooring-host/src/host/client.rs	2
-libc	crates/mooring-host/src/host/client/tool_rows.rs	4
-libc	crates/mooring-host/src/host/live.rs	4
-libc	crates/mooring-host/src/host/mod.rs	1
-libc	crates/mooring-host/src/host/remote.rs	4
-libc	crates/mooring-host/src/host/runtime.rs	9
-libc	crates/mooring-host/src/main.rs	6
-libc	crates/mooring-host/src/official.rs	3
 libc	crates/mooring-host/src/relay/regressions.rs	8
-libc	crates/mooring-host/src/remote.rs	2
 os-api	crates/mooring-app/src/lifecycle.rs	1
 os-api	crates/mooring-app/src/terminal/open_path.rs	1
 os-api	crates/mooring-app/src/workbench/layout.rs	1
-os-api	crates/mooring-host/src/devices.rs	2
-os-api	crates/mooring-host/src/host/client/turn_changes.rs	1
-os-api	crates/mooring-host/src/host/mod.rs	2
-os-api	crates/mooring-host/src/host/remote.rs	2
-os-api	crates/mooring-host/src/log_index/chat/backfill.rs	1
-os-api	crates/mooring-host/src/plugins_cmd.rs	1
-os-api	crates/mooring-host/src/remote/diff_scope.rs	1
-os-api	crates/mooring-host/src/remote/tools.rs	1
 unix-path	crates/mooring-app/src/lifecycle.rs	2
 unix-path	crates/mooring-app/src/main.rs	1
 unix-path	crates/mooring-app/src/workbench/launch_slot.rs	1

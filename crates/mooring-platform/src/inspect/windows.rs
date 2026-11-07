@@ -39,8 +39,13 @@ pub fn cwd(_pid: u32) -> Option<String> {
     None
 }
 
+/// Goes through a snapshot of the system's processes, as process and parent.
+pub(crate) fn each_process(mut visit: impl FnMut(u32, u32)) -> io::Result<()> {
+    each_entry(|entry| visit(entry.th32ProcessID, entry.th32ParentProcessID))
+}
+
 /// Goes through a snapshot of the system's processes.
-fn each_process(mut visit: impl FnMut(&PROCESSENTRY32W)) -> io::Result<()> {
+fn each_entry(mut visit: impl FnMut(&PROCESSENTRY32W)) -> io::Result<()> {
     // SAFETY: a snapshot of the system's processes, closed below on every path.
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if snapshot == INVALID_HANDLE_VALUE {
@@ -60,7 +65,7 @@ fn each_process(mut visit: impl FnMut(&PROCESSENTRY32W)) -> io::Result<()> {
 
 pub fn children(pid: u32) -> io::Result<Vec<u32>> {
     let mut out = vec![];
-    each_process(|entry| {
+    each_entry(|entry| {
         if entry.th32ParentProcessID == pid && entry.th32ProcessID != pid {
             out.push(entry.th32ProcessID);
         }
@@ -75,13 +80,13 @@ pub fn first_handed_out_port() -> u16 {
 
 pub fn all_pids() -> Vec<u32> {
     let mut out = vec![];
-    let _ = each_process(|entry| out.push(entry.th32ProcessID));
+    let _ = each_entry(|entry| out.push(entry.th32ProcessID));
     out
 }
 
 pub fn name(pid: u32) -> Option<String> {
     let mut found = None;
-    each_process(|entry| {
+    each_entry(|entry| {
         if entry.th32ProcessID == pid {
             let end = entry.szExeFile.iter().position(|c| *c == 0);
             let text = String::from_utf16_lossy(&entry.szExeFile[..end.unwrap_or(260)]);
