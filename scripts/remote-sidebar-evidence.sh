@@ -17,6 +17,9 @@ if [ -n "${MOORING_EVIDENCE_THEME:-}" ]; then
   printf '%s' "${MOORING_EVIDENCE_THEME#*:}" > $R/home/.config/mooring/theme-${MOORING_EVIDENCE_THEME%%:*}
 fi
 mkdir -m 700 $R/far $R/rt
+# A folder to make a space of over there. The fake ssh keeps this HOME, so that is where the
+# other machine's side of the link looks for ~ and for names.
+mkdir -p $R/home/brandnew
 cat > $R/bin/ssh <<'SH'
 #!/bin/sh
 # Fake ssh: drops options and the host, runs the command here.

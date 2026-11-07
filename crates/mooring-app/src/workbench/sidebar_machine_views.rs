@@ -2,7 +2,7 @@
 //! one mixed list, a rail that picks one machine, or a folding section per machine. The
 //! column keeps its width in all three, so nothing right of it moves.
 use super::sidebar_list::{recent_order, split_today};
-use super::sidebar_machines::{RemoteRow, machine_label, machine_letter};
+use super::sidebar_machines::{RemoteRow, machine_label, machine_letter, quiet};
 use super::*;
 use crate::machines::Link;
 use crate::ui::theme::Flat as F;
@@ -29,6 +29,15 @@ fn need_badge(need: usize) -> gpui::Div {
         .child(need.to_string())
 }
 
+/// What the local heading says. Folded, the spaces put aside fold with it, so it names them.
+fn local_note(sessions: usize, open: bool, quiet: usize) -> String {
+    if open || quiet == 0 {
+        format!("{sessions} 个会话")
+    } else {
+        format!("{sessions} 个会话 · {quiet} 个先不管")
+    }
+}
+
 /// A folding section's heading.
 struct Heading {
     key: String,
@@ -49,7 +58,8 @@ impl Workbench {
     pub(super) fn column_top(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         match (self.machine_layout(), self.machine_scope()) {
             (Machines::Rail, Some(index)) => {
-                vec![self.remote_space_chips(index, cx).into_any_element()]
+                let rows = self.listed_remote_rows().len();
+                self.machine_spaces(index, false, rows, cx)
             }
             (Machines::Sections, _) => {
                 let open = self.sidebar.open("machine:local", true);
@@ -161,7 +171,12 @@ impl Workbench {
             .children(chips)
     }
     /// That machine's spaces, in the chips' look; they only name what is there.
-    fn remote_space_chips(&self, index: usize, cx: &Context<Self>) -> gpui::Div {
+    pub(super) fn remote_space_chips(
+        &self,
+        index: usize,
+        add: bool,
+        cx: &Context<Self>,
+    ) -> gpui::Div {
         let rows = self.remote_rows_of(index);
         let spaces = self
             .machines
@@ -224,6 +239,7 @@ impl Workbench {
             .pb(px(T::S2))
             .font_family(T::UI_FONT)
             .children(chips)
+            .when(add, |d| d.child(self.add_space_chip(index, cx)))
     }
 
     fn section_heading(&self, h: Heading, cx: &Context<Self>) -> gpui::AnyElement {
@@ -305,7 +321,7 @@ impl Workbench {
                         .child("+")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             cx.stop_propagation();
-                            this.open_remote_shell(index, window, cx);
+                            this.open_remote_shell(index, None, window, cx);
                         })),
                 )
             })
@@ -329,7 +345,15 @@ impl Workbench {
                 key: "machine:local".into(),
                 mark: None,
                 name: "本机".into(),
-                note: format!("{sessions} 个会话"),
+                note: local_note(
+                    sessions,
+                    open,
+                    self.workspace
+                        .spaces
+                        .iter()
+                        .filter(|s| self.workspace.space_quiet(&s.id))
+                        .count(),
+                ),
                 need: self.needs_you().len(),
                 open,
                 add: None,
@@ -345,7 +369,7 @@ impl Workbench {
             return Vec::new();
         };
         let link = self.machines[index].view.lock().unwrap().link.clone();
-        let rows = self.remote_rows_of(index);
+        let mut rows = self.remote_rows_of(index);
         let key = Self::machine_section_key(&host);
         let online = link == Link::Online;
         let open = self.sidebar.open(&key, online);
@@ -379,6 +403,10 @@ impl Workbench {
         if !self.sidebar.showing(&key, online) {
             return out;
         }
+        if let Some(space) = self.machine_space_of(index) {
+            rows.retain(|r| r.card.space == space.id);
+        }
+        out.extend(self.machine_spaces(index, true, rows.len(), cx));
         let keyed: Vec<(&RemoteRow, Bucket, u64)> =
             rows.iter().map(|r| (r, r.bucket, r.when)).collect();
         let order = recent_order(&keyed);
@@ -418,6 +446,14 @@ impl Workbench {
         recent: bool,
         cx: &Context<Self>,
     ) -> Vec<gpui::AnyElement> {
+        // Spaces belong to this machine: they end its list, folded away with it.
+        let mut own = Vec::new();
+        if !quiet::foot_holds_spaces(self.machine_layout())
+            && self.sidebar.showing("machine:local", true)
+        {
+            own = self.quiet_space_lines(cx);
+            self.sidebar.reveal_block("machine:local", 0, 0, &mut own);
+        }
         let mut out = match self.machine_layout() {
             Machines::Below => self.machine_rows(recent, cx),
             Machines::Sections => (0..self.machines.len())
@@ -437,6 +473,8 @@ impl Workbench {
                 .collect(),
             Machines::Mixed | Machines::Rail => Vec::new(),
         };
+        own.append(&mut out);
+        let mut out = own;
         // 会话优先 keeps them in its foot (`flat_column`); other lists end with them.
         if !recent {
             out.extend(self.quiet_lines(cx));
@@ -689,5 +727,17 @@ impl Workbench {
                 self.workspace.spaces.len()
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::local_note;
+
+    #[test]
+    fn a_folded_heading_names_the_spaces_put_aside_that_folded_with_it() {
+        assert_eq!(local_note(20, false, 1), "20 个会话 · 1 个先不管");
+        assert_eq!(local_note(20, true, 1), "20 个会话");
+        assert_eq!(local_note(20, false, 0), "20 个会话");
     }
 }

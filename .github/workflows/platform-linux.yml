@@ -12,6 +12,7 @@ on:
     paths:
       - crates/mooring-platform/**
       - crates/mooring-core/**
+      - crates/mooring-host/**
       - crates/mooring-remote/**
       - crates/mooring-relay/**
       - crates/mooring-plugin-host/**
@@ -54,8 +55,19 @@ jobs:
         shell: bash
         run: sh bootstrap.sh
 
+      # The tests that drive real shells start zsh too, which Agents' shells mostly are.
+      # A runner's shared zsh folders are writable by a group, and zsh then stops to ask.
+      - name: Install zsh
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+          sudo chmod -R go-w /usr/local/share/zsh /usr/share/zsh
+
       - name: Clippy
-        run: cargo clippy -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --all-targets -- -D warnings
+        run: |
+          cargo clippy -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --all-targets -- -D warnings
+          cargo clippy -p mooring-host --all-targets -- -D warnings
 
       - name: Cargo test
-        run: cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
+        run: |
+          cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
+          cargo test -p mooring-host --tests --no-fail-fast

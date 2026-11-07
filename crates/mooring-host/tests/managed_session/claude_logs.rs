@@ -115,13 +115,7 @@ fn claude_open_files_bind_same_cwd_without_hooks_and_append_without_probes() {
     // a re-signed copy reads like the real CLI.
     let cli = h.root.join("claude");
     fs::copy("/bin/bash", &cli).unwrap();
-    assert!(std::process::Command::new("/usr/bin/codesign")
-        .args(["-f", "-s", "-"])
-        .arg(&cli)
-        .output()
-        .unwrap()
-        .status
-        .success());
+    resign(&cli);
     for i in 0..2 {
         let path = logs.join(format!("claude-{i}.jsonl"));
         let seed = h.root.join(format!("seed-{i}"));
@@ -409,13 +403,7 @@ fn claude_without_a_transcript_says_so_until_it_exits() {
     // a re-signed copy reads like the real CLI.
     let cli = h.root.join("claude");
     fs::copy("/bin/bash", &cli).unwrap();
-    assert!(std::process::Command::new("/usr/bin/codesign")
-        .args(["-f", "-s", "-"])
-        .arg(&cli)
-        .output()
-        .unwrap()
-        .status
-        .success());
+    resign(&cli);
     let cli = shell_quote(&cli.to_string_lossy());
     // Two lines: the first is the Enter that prompts a scan, the second ends the CLI.
     let script = shell_quote("read -r a; read -r b");
@@ -481,5 +469,19 @@ fn claude_without_a_transcript_says_so_until_it_exits() {
     while recognition(&h).terminal_hints.contains_key("nested") {
         assert!(Instant::now() < until, "the hint outlives the CLI");
         std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+/// A copied program has to be signed again where the system insists.
+fn resign(cli: &std::path::Path) {
+    let codesign = std::path::Path::new("/usr/bin/codesign");
+    if codesign.exists() {
+        assert!(std::process::Command::new(codesign)
+            .args(["-f", "-s", "-"])
+            .arg(cli)
+            .output()
+            .unwrap()
+            .status
+            .success());
     }
 }

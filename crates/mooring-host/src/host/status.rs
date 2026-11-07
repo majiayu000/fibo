@@ -127,9 +127,9 @@ pub(super) fn watch_registries(shared: &Shared, roots: &[(Agent, std::path::Path
         loop {
             let started = Instant::now();
             let result = (|| -> io::Result<()> {
-                let watch = crate::file_events::Watch::start(
+                let watch = mooring_platform::file_watch::Watch::start(
                     &paths,
-                    crate::file_events::Watch::current_id(),
+                    mooring_platform::file_watch::Watch::current_id(),
                 )?;
                 loop {
                     watch.rx.recv().map_err(io::Error::other)?;
@@ -234,6 +234,10 @@ pub(super) fn check_screen_wait(
     host.screen_background(id, &tail)?;
     let seen = host.workspace.current_agent(id).is_some().then_some(seen);
     let veto = !seen.as_ref().is_some_and(|e| e.waiting());
+    if let Some(seen) = &seen {
+        let before = host.screen_waits.get(id).and_then(|e| e.question());
+        wait_log::waiting(before, id, host.workspace.current_agent(id), seen, &tail);
+    }
     host.set_screen_wait(id, seen)?;
     host.http_ask_read(shared, id, !veto)?;
     if !veto {

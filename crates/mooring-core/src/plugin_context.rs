@@ -191,10 +191,8 @@ pub fn set(plugins: &Path, id: &str, key: &str, value: Value) -> Result<(), Stri
         return Err(format!("{} 的值不对", opt.title));
     }
     let file = options_file(plugins, id);
-    let mut stored: serde_json::Map<String, Value> = std::fs::read(&file)
-        .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok())
-        .unwrap_or_default();
+    let mut stored: serde_json::Map<String, Value> =
+        crate::state_file::read_for_update(&file).map_err(|e| e.to_string())?;
     if opt.secret {
         let text = value.as_str().unwrap_or_default();
         if text.is_empty() {
@@ -397,6 +395,22 @@ pub fn runs(plugins: &Path, id: &str) -> Vec<Run> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_that_cannot_be_read_are_never_saved_over() {
+        let manifest = r#"{"api":1,"id":"bad-opts","name":"B","provides":["hooks"],"options":[
+          {"key":"on","title":"t","type":"boolean","default":false}]}"#;
+        let (root, _) = plugin_dir("bad-opts", manifest);
+        let plugins = root.join("plugins");
+        let file = options_file(&plugins, "bad-opts");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let bad = r#"{"other":"cut off"#;
+        std::fs::write(&file, bad).unwrap();
+        let why = set(&plugins, "bad-opts", "on", Value::Bool(true)).unwrap_err();
+        assert!(why.contains("格式不对"), "{why}");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), bad);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     fn plugin_dir(name: &str, manifest: &str) -> (PathBuf, PathBuf) {
         let root = std::env::temp_dir().join(format!("kl-pctx-{name}-{}", std::process::id()));

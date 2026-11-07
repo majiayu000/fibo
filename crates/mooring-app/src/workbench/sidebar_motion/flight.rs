@@ -53,6 +53,8 @@ pub(super) struct Flight {
     from: (f32, f32),
     /// From the rail, which shows a letter and no name: the name comes up on the way.
     rail: bool,
+    /// A space's colors: it flies as the dot it is at both ends, not as a machine's square.
+    dot: Option<[u32; 2]>,
     started: Instant,
 }
 impl Flight {
@@ -140,8 +142,15 @@ impl SidebarMotion {
             leaving,
             from,
             rail,
+            dot: None,
             started: now,
         });
+    }
+    /// What just took off is a space.
+    pub(in crate::workbench) fn fly_as_dot(&mut self, tile: [u32; 2]) {
+        if let Some(flight) = &mut self.flight {
+            flight.dot = Some(tile);
+        }
     }
     /// How the line for `host` draws now.
     pub(in crate::workbench) fn line_state(&self, host: &str) -> LineState {
@@ -258,7 +267,19 @@ impl SidebarMotion {
                 })
                 .text_size(px(lerp(T::SMALL, F::TAG, quiet)))
                 .text_color(ink)
-                .child(machine_mark(f.letter.clone(), quiet >= 0.5))
+                .child(match f.dot {
+                    Some([from, to]) => div()
+                        .size(px(F::CHIP_DOT))
+                        .my(px((MARK - F::CHIP_DOT) / 2.))
+                        .flex_shrink_0()
+                        .rounded_full()
+                        .bg(gpui::linear_gradient(
+                            135.,
+                            gpui::linear_color_stop(T::color(from), 0.),
+                            gpui::linear_color_stop(T::color(to), 1.),
+                        )),
+                    None => machine_mark(f.letter.clone(), quiet >= 0.5),
+                })
                 .child(div().opacity(name).child(f.name.clone())),
         )
     }
@@ -291,6 +312,7 @@ mod tests {
             leaving,
             from: (30., 200.),
             rail: false,
+            dot: None,
             started,
         }
     }

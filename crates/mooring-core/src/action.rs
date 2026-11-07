@@ -308,6 +308,8 @@ impl Action {
 /// Turns one action on or off from now on, and keeps it for the next start.
 pub fn set_enabled(id: &str, on: bool) -> Result<(), String> {
     let path = off_path().ok_or("找不到配置目录")?;
+    // What is in memory came from this file; if it no longer parses, saving would replace it.
+    crate::state_file::read_for_update::<Vec<String>>(&path).map_err(|e| e.to_string())?;
     let list = with_off(|off| {
         off.retain(|d| d != id);
         if !on {

@@ -305,7 +305,14 @@ fn an_agent_plugin_takes_effect_and_leaves_without_a_restart() {
 fn a_declared_cli_without_transcripts_is_named_on_its_terminal_until_it_exits() {
     let h = Host::start(declaration(false));
     // Two lines: the first is the Enter that prompts a scan, the second ends the CLI.
-    h.run_cli("pane", "read -r a; read -r b");
+    // Pressed once it runs: a scan comes of the Enter alone, and sees what is there by then.
+    let started = h.root.join("cli-started");
+    let script = format!(
+        ": > {}; read -r a; read -r b",
+        shell_quote(&started.to_string_lossy())
+    );
+    h.run_cli("pane", &script);
+    h.wait("the CLI never started", |_| started.exists());
     let mut stream = h.enter("pane");
     h.wait("no note for a CLI that keeps no transcript", |h| {
         h.recognition()

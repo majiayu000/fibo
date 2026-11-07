@@ -437,13 +437,11 @@ fn every_terminal_tells_its_programs_which_terminal_and_host_they_run_in() {
 }
 
 fn pty_fds(pid: u32) -> usize {
-    let out = Command::new("lsof")
-        .args(["-n", "-P", "-p", &pid.to_string()])
-        .output()
-        .unwrap();
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter(|l| l.contains("ptmx") || l.contains("/dev/ttys"))
+    let open = mooring_platform::inspect::open_files(&[pid]).unwrap();
+    open.get(&pid)
+        .into_iter()
+        .flatten()
+        .filter(|f| f.contains("ptmx") || f.contains("/dev/ttys") || f.contains("/dev/pts/"))
         .count()
 }
 fn close_in_tab(h: &Host, terminal: &str) {

@@ -11,8 +11,11 @@ use crate::ui::theme::Flat as F;
 use mooring_core::sidebar::{Bucket, Machines, Preset, all as all_presets};
 use mooring_remote::protocol::{Card, Phase};
 
-mod quiet;
+mod add_space;
+pub(super) mod quiet;
 mod quiet_space;
+
+pub(in crate::workbench) use add_space::AddingSpace;
 
 /// What another machine's row shows, worked out once per draw.
 pub(super) struct RemoteRow {

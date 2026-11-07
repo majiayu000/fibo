@@ -130,16 +130,12 @@ fn a_pane_ending_hours_after_the_last_prompt_hands_over_to_the_pane_showing_it()
         ),
     )
     .unwrap();
-    let stamp = std::process::Command::new("/bin/date")
-        .args(["-r", &long_ago.to_string(), "+%Y%m%d%H%M.%S"])
-        .output()
-        .unwrap();
-    assert!(std::process::Command::new("/usr/bin/touch")
-        .args(["-t", String::from_utf8_lossy(&stamp.stdout).trim()])
-        .arg(&log)
-        .status()
+    fs::File::options()
+        .write(true)
+        .open(&log)
         .unwrap()
-        .success());
+        .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(long_ago as u64))
+        .unwrap();
     // Its TUI holds the log open, so the old pane holds it without any recent prompt.
     let cli = h.root.join("codex");
     std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
@@ -284,9 +280,12 @@ fn an_older_conversations_words_on_the_screen_are_not_what_the_pane_runs() {
     let stale = "这是启动之前就有的旧对话最后一句";
     let log = h.root.join(format!("logs/codex/{older}.jsonl"));
     fs::create_dir_all(log.parent().unwrap()).unwrap();
+    // Made old outside the watched folder: the index must never see it as just written, which
+    // is not what an old conversation looks like.
+    let making = h.root.join("older-log");
     let long_ago = mooring_core::content::now() - 3 * 3600;
     fs::write(
-        &log,
+        &making,
         format!(
             "{}\n{}\n",
             serde_json::json!({"type":"session_meta","payload":{"id":older,"cwd":"/tmp"}}),
@@ -294,16 +293,13 @@ fn an_older_conversations_words_on_the_screen_are_not_what_the_pane_runs() {
         ),
     )
     .unwrap();
-    let stamp = std::process::Command::new("/bin/date")
-        .args(["-r", &long_ago.to_string(), "+%Y%m%d%H%M.%S"])
-        .output()
-        .unwrap();
-    assert!(std::process::Command::new("/usr/bin/touch")
-        .args(["-t", String::from_utf8_lossy(&stamp.stdout).trim()])
-        .arg(&log)
-        .status()
+    fs::File::options()
+        .write(true)
+        .open(&making)
         .unwrap()
-        .success());
+        .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(long_ago as u64))
+        .unwrap();
+    fs::rename(&making, &log).unwrap();
     daemon_codex(&h, "d", "proj", &[], "");
     wait_unbound(&h, "d");
     type_in(&h, "d", &format!("say:› {stale}\n"));

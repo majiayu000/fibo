@@ -251,6 +251,9 @@ impl Adapter for Codex {
                     parser.phase(Turn::Error, "", at, source);
                 }
                 "token_count" => {
+                    if let Some(fill) = mooring_core::context_fill::from_codex(&p["info"]) {
+                        parser.card.context = Some(fill);
+                    }
                     if let Some(q) = quota(&p["rate_limits"], at) {
                         if parser.card.quota.as_ref().is_none_or(|old| q.at >= old.at) {
                             parser.card.quota = Some(q);
