@@ -84,12 +84,12 @@ def probe(bindir, out, plan, catch_up, machine=False, running=False):
     return r.stdout
 
 
-def plugin_shares(ms):
+def plugin_shares(ms, text):
     """Costs a machine without a counter can compare: within one process, against a frame
-    the same process drew, so the machine's speed cancels out."""
-    full, pane = ms.get('frames-probefull', 1), ms.get('frames-probepane', 1)
-    worst = max(ms.get(k, 0) for k in ('frames-themeimage', 'frames-themepaper', 'frames-themeglass'))
-    return {'cardplay-share': ms.get('frames-cardplay', 0) / full, 'theme-share': worst / pane}
+    the same process drew, so the machine's speed cancels out. A theme's share is the probe's
+    own, against the plain look drawn in turns with it."""
+    themes = [float(v) for v in re.findall(r'^frames-theme\w+: [^\n]*; ([\d.]+) of the plain look', text, re.M)]
+    return {'cardplay-share': ms.get('frames-cardplay', 0) / ms.get('frames-probefull', 1), 'theme-share': max(themes, default=0)}
 
 
 def main():
@@ -145,7 +145,7 @@ def main():
     costs = dict(re.findall(r'^(frames-\w+|settings-open): [^\n]*?([\d.]+) M instructions', plugin_text, re.M))
     plugin_ms = {k: float(v) for k, v in re.findall(r'^(frames-\w+): ([\d.]+) ms CPU', plugin_text, re.M)}
     wanted = {'frames-cardplay', 'frames-cardrest', 'settings-open', 'frames-themeimage', 'frames-themepaper', 'frames-themeglass'}
-    if not wanted <= set(costs) or not {'frames-probefull', 'frames-probepane', 'frames-cardplay'} <= set(plugin_ms):
+    if not wanted <= set(costs) or not {'frames-probefull', 'frames-cardplay'} <= set(plugin_ms) or len(re.findall(r'of the plain look', plugin_text)) != 3:
         fails.append(f'no plugin page numbers in the probe output: {sorted(costs)}')
     measured.update({k: float(costs[k]) for k in wanted & set(costs)})
     if plugin_ms.get('frames-cardplay', 0) <= 0:
@@ -189,7 +189,7 @@ def main():
 
     if os.environ.get('MOORING_PERF_UPDATE'):
         assert counted, 'no instruction counter here: update the baseline on real hardware'
-        shares = plugin_shares(plugin_ms)
+        shares = plugin_shares(plugin_ms, plugin_text)
         BASELINE.write_text(''.join(f'{k} {v:.2f}\n' for k, v in sorted({**measured, 'pane-share': share, **shares}.items())))
         print(f'perf-gate: wrote {BASELINE.relative_to(ROOT)}')
     else:
@@ -200,7 +200,7 @@ def main():
             print('perf-gate: no instruction counter (virtual machine): gating the share only')
             if s > b * SHARE_BUDGET:
                 fails.append(f'pane-share: {s:.2f}, over {SHARE_BUDGET}x the baseline {b:.2f}')
-            for k, v in plugin_shares(plugin_ms).items():
+            for k, v in plugin_shares(plugin_ms, plugin_text).items():
                 print(f'perf-gate: {k} {v:.2f}, baseline {base[k]:.2f}')
                 if v > base[k] * SHARE_BUDGET:
                     fails.append(f'{k}: {v:.2f}, over {SHARE_BUDGET}x the baseline {base[k]:.2f}')
