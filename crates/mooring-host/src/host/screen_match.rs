@@ -56,7 +56,7 @@ pub(super) fn thread<'a>(
         key: crate::recognition::screen_key(&text),
         at: Some(at),
         began: index.turn_began(&t.path, at)?,
-        cwd: fs::canonicalize(&t.cwd)
+        cwd: mooring_platform::fs::canonical(std::path::Path::new(&t.cwd))
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|_| t.cwd.clone()),
     }))

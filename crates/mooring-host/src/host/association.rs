@@ -292,7 +292,7 @@ pub(super) fn follow_associated(
                 crate::agents::adapter(t.runtime).outside_pty()
                     && t.updated >= window
                     && !associated.iter().any(|p| p.as_os_str() == t.path.as_str())
-                    && fs::canonicalize(&t.cwd)
+                    && mooring_platform::fs::canonical(std::path::Path::new(&t.cwd))
                         .is_ok_and(|c| cwds.iter().any(|cwd| c.as_os_str() == cwd.as_str()))
             })
             .collect();
