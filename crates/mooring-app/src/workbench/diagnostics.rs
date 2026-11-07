@@ -5,9 +5,9 @@ use futures::{
     channel::mpsc::{UnboundedSender, unbounded},
 };
 use mooring_core::diagnostics::{AppUsage, Diagnostics, Memory, Pressure, gib, mib};
+use mooring_platform::local;
 use std::{
     io,
-    os::unix::net::UnixStream,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -36,7 +36,7 @@ pub(super) enum DiagnosticAction {
 
 /// Dropping a view (or pressing Stop) shuts its socket, including a pending connect.
 struct Sampling {
-    socket: Arc<Mutex<Option<UnixStream>>>,
+    socket: Arc<Mutex<Option<local::Stream>>>,
     cancelled: Arc<AtomicBool>,
     /// The host answered the handshake and was asked to sample.
     requested: Arc<AtomicBool>,
@@ -63,7 +63,7 @@ impl Sampling {
         let requested = result.requested.clone();
         std::thread::spawn(move || {
             let read = || -> io::Result<()> {
-                let mut stream = UnixStream::connect(path)?;
+                let mut stream = local::Stream::connect(path)?;
                 {
                     let mut slot = socket.lock().unwrap();
                     if cancelled.load(Ordering::Acquire) {

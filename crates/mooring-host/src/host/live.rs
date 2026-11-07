@@ -1,13 +1,14 @@
 //! Live PTYs and their viewers: the read pump, frame fan-out to subscribers, attach,
 //! resize and exit reaping.
 use super::*;
+use mooring_platform::local;
 
 pub(super) type Frame = (u8, Arc<Vec<u8>>);
 /// Unread input above which mouse reports are dropped; the queue holds about 1 KiB.
 pub(super) const POINTER_BACKLOG: usize = 256;
 pub(super) struct Subscriber {
     pub(super) tx: SyncSender<Frame>,
-    pub(super) socket: UnixStream,
+    pub(super) socket: local::Stream,
     /// Frames were dropped because this viewer fell behind; its writer sends a fresh
     /// snapshot once it catches up instead of the connection being cut.
     pub(super) lagged: Arc<AtomicBool>,
@@ -56,19 +57,7 @@ pub(super) struct Live {
 impl Live {
     // Event-driven handoff. No heartbeat or global process scan is needed.
     pub(super) fn reconcile_owner(&mut self) {
-        self.subscribers.retain(|_, s| {
-            let mut byte = 0u8;
-            // SAFETY: a one-byte peek on this subscriber socket never consumes input.
-            let n = unsafe {
-                libc::recv(
-                    s.socket.as_raw_fd(),
-                    (&mut byte as *mut u8).cast(),
-                    1,
-                    libc::MSG_PEEK | libc::MSG_DONTWAIT,
-                )
-            };
-            n > 0 || (n < 0 && io::Error::last_os_error().kind() == io::ErrorKind::WouldBlock)
-        });
+        self.subscribers.retain(|_, s| s.socket.is_open());
         self.watchers.retain(|id| self.subscribers.contains_key(id));
         if self
             .owner
@@ -424,7 +413,7 @@ pub(super) fn pump(
 pub(super) struct Attachment {
     pub(super) terminal: LiveTerminal,
     pub(super) connection: u64,
-    pub(super) socket: UnixStream,
+    pub(super) socket: local::Stream,
 }
 impl Drop for Attachment {
     fn drop(&mut self) {
@@ -436,7 +425,7 @@ impl Drop for Attachment {
     }
 }
 pub(super) fn attach(
-    mut stream: UnixStream,
+    mut stream: local::Stream,
     terminal: LiveTerminal,
     connection: u64,
     takeover: bool,

@@ -1,4 +1,5 @@
 use super::*;
+use mooring_platform::local;
 
 #[test]
 fn quiet_agent_identity_is_published_before_a_transcript_and_cleared_on_exit() {
@@ -24,7 +25,7 @@ fn quiet_agent_identity_is_published_before_a_transcript_and_cleared_on_exit() {
     let shell = process(100, 0, None);
     let codex = process(101, 100, Some(Agent::Codex));
     let (tx, rx) = sync_channel(16);
-    let (socket, _peer) = UnixStream::pair().unwrap();
+    let (socket, _peer) = local::Stream::pair().unwrap();
     host.recognition_subscribers.insert(
         1,
         Subscriber {
@@ -124,7 +125,7 @@ fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
         reconciled: HashMap::new(),
     }));
     let (tx, rx) = sync_channel(16);
-    let (socket, _peer) = UnixStream::pair().unwrap();
+    let (socket, _peer) = local::Stream::pair().unwrap();
     lock(&shared).unwrap().recognition_subscribers.insert(
         1,
         Subscriber {

@@ -1,5 +1,5 @@
 use super::*;
-use std::os::unix::net::UnixListener;
+use mooring_platform::local;
 
 /// A polling reply must be complete on its own: even an empty page must not ask for
 /// Workspace just to find out whether the beginning of the log is missing.
@@ -13,9 +13,9 @@ fn polling_chat_needs_only_its_chat_reply() {
     ] {
         let socket =
             std::path::PathBuf::from(format!("/tmp/mooring-chat-{}", uuid::Uuid::new_v4()));
-        let listener = UnixListener::bind(&socket).unwrap();
+        let listener = local::Listener::bind(&socket).unwrap();
         let host = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+            let mut stream = listener.accept().unwrap();
             assert!(matches!(
                 receive::<Request>(&mut stream).unwrap(),
                 Request::Hello { major: MAJOR }

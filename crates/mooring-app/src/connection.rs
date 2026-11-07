@@ -1,7 +1,7 @@
 use futures::channel::mpsc::UnboundedSender;
 use mooring_core::{protocol::*, terminal::Vt};
+use mooring_platform::local;
 use std::io;
-use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::sync::{
     Arc, Mutex,
@@ -15,7 +15,7 @@ pub struct State {
     pub error: Option<String>,
     pub cols: u16,
     pub rows: u16,
-    pub socket: Option<UnixStream>,
+    pub socket: Option<local::Stream>,
     pub ended: bool,
     /// A running terminal's stream broke after its screen arrived: the host drops a
     /// viewer that falls behind a burst of output. Attaching again restores it.
@@ -79,7 +79,7 @@ impl Connection {
         let id = id.to_owned();
         std::thread::spawn(move || {
             let work = (|| -> io::Result<()> {
-                let mut stream = UnixStream::connect(socket)?;
+                let mut stream = local::Stream::connect(socket)?;
                 stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
                 state.lock().unwrap().socket = Some(stream.try_clone()?);
                 send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
@@ -361,7 +361,7 @@ impl Connection {
 
 /// One blocking status subscription, independent of terminal output. No refresh timer.
 pub struct RecognitionConnection {
-    socket: Arc<Mutex<Option<UnixStream>>>,
+    socket: Arc<Mutex<Option<local::Stream>>>,
     closed: Arc<AtomicBool>,
 }
 impl RecognitionConnection {
@@ -381,7 +381,7 @@ impl RecognitionConnection {
             loop {
                 let mut subscribed = false;
                 let work = (|| -> io::Result<()> {
-                    let mut stream = UnixStream::connect(&path)?;
+                    let mut stream = local::Stream::connect(&path)?;
                     {
                         let mut slot = socket.lock().unwrap();
                         if closed.load(Ordering::Acquire) {
@@ -506,14 +506,13 @@ fn remote_typing(
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use std::os::unix::net::UnixListener;
 
     /// Plays one host lifetime: greets a single subscriber, reports `phase`, then exits.
     fn host_once(path: &Path, phase: RecognitionPhase) -> std::thread::JoinHandle<()> {
         let _ = std::fs::remove_file(path);
-        let listener = UnixListener::bind(path).unwrap();
+        let listener = local::Listener::bind(path).unwrap();
         std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+            let mut stream = listener.accept().unwrap();
             let _: Request = receive(&mut stream).unwrap();
             let hello = Reply::Hello {
                 major: MAJOR,
