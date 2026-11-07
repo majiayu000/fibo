@@ -95,12 +95,10 @@ pub(super) fn space_dir_label(space: &Space) -> String {
 /// lost when its pane is not on screen yet to type it; `-i` keeps the user's aliases, as
 /// typing it would, and the shell stays afterwards.
 pub(super) fn launch_argv(shell: String, resume: Option<&str>) -> Vec<String> {
+    use mooring_platform::shell;
     match resume {
-        Some(command) => {
-            let then = format!("{command}; exec {} -l", shell_quote(&shell));
-            vec![shell, "-l".into(), "-i".into(), "-c".into(), then]
-        }
-        None => vec![shell, "-l".into()],
+        Some(command) => shell::run_then_stay(&shell, command, None),
+        None => shell::stay(&shell),
     }
 }
 /// What a new shell types once it is ready: a todo's Agent with its text for the Agent's

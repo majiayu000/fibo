@@ -1,5 +1,5 @@
 //! Where an account's files are.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
@@ -27,4 +27,10 @@ pub fn config_home() -> Option<PathBuf> {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(imp::default_config_home)
+}
+
+/// Whether a program was left here by the system starting it, not by anyone choosing a folder:
+/// `/` from Finder and Dock, the Windows folder or a bare drive from Task Scheduler and the like.
+pub fn is_system_start(dir: &Path) -> bool {
+    imp::is_system_start(dir)
 }
