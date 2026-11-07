@@ -47,8 +47,8 @@ pub(super) fn usage(request: &Value) -> io::Result<Value> {
         .ok_or_else(|| io::Error::other("usage 需要 since"))?;
     let now = mooring_core::content::now();
     let since = asked.max(now.saturating_sub(MOST_DAYS * 86_400));
-    let home = std::env::var_os("HOME").ok_or_else(|| io::Error::other("没有 HOME"))?;
-    let roots: Vec<(Agent, PathBuf)> = mooring_host::agent_log_roots(Path::new(&home))
+    let home = mooring_platform::dirs::home().ok_or_else(|| io::Error::other("没有 HOME"))?;
+    let roots: Vec<(Agent, PathBuf)> = mooring_host::agent_log_roots(&home)
         .into_iter()
         .filter(|(a, _)| usage_marker(*a).is_some())
         .collect();

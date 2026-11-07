@@ -135,7 +135,7 @@ const THUMB_H: f32 = 64.;
 
 /// A path under the home folder written from `~`.
 pub(in crate::workbench) fn tilde(path: &str) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = mooring_platform::dirs::home_str().unwrap_or_default();
     match path.strip_prefix(&home) {
         Some(rest) if !home.is_empty() => format!("~{rest}"),
         _ => path.to_owned(),

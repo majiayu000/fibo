@@ -20,11 +20,10 @@ fn patch_names() -> Vec<String> {
     names.split_whitespace().map(str::to_owned).collect()
 }
 
+/// Absolute because `git apply` runs from a temp directory; not `canonicalize`, whose
+/// `\\?\` form on Windows is a path git cannot open.
 fn patch_path(name: &str) -> PathBuf {
-    root()
-        .join("patches")
-        .join(format!("gpui-{name}.patch"))
-        .canonicalize()
+    std::path::absolute(root().join("patches").join(format!("gpui-{name}.patch")))
         .unwrap_or_else(|error| panic!("patch {name}: {error}"))
 }
 

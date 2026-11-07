@@ -71,7 +71,7 @@ pub fn installed(editor: Editor) -> Option<PathBuf> {
         Editor::Cursor => (&["Cursor.app"], "Contents/Resources/app/bin/cursor"),
         _ => return None,
     };
-    let home = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Applications"));
+    let home = mooring_platform::dirs::home().map(|h| h.join("Applications"));
     [Some(PathBuf::from("/Applications")), home]
         .into_iter()
         .flatten()

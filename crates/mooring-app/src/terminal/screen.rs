@@ -291,7 +291,7 @@ pub fn split_position(word: &str) -> (&str, Option<(u32, Option<u32>)>) {
 pub fn resolve_path(word: &str, cwd: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
     let (file, _) = split_line(word);
     if let Some(rest) = file.strip_prefix("~/") {
-        return Some(std::path::PathBuf::from(std::env::var_os("HOME")?).join(rest));
+        return Some(mooring_platform::dirs::home()?.join(rest));
     }
     let path = std::path::Path::new(file);
     if path.is_absolute() {

@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 rustc-hash = "2"
 mooring-core = { path = "../mooring-core" }
+mooring-platform = { path = "../mooring-platform" }
 # Other machines, over the same remote protocol the phone speaks.
 mooring-remote = { path = "../mooring-remote" }
 base64 = "0.22"

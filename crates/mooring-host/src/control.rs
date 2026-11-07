@@ -406,9 +406,10 @@ impl Args {
             Some(r) => r,
             // Where the app keeps its host, so a script needs no flag next to it.
             // An install from before the rename keeps serving the old directory.
-            None => mooring_core::legacy::runtime_dir(&PathBuf::from(
-                std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
-            )),
+            None => mooring_core::legacy::runtime_dir(
+                &mooring_platform::dirs::home()
+                    .ok_or_else(|| io::Error::other("HOME unavailable"))?,
+            ),
         };
         Ok(Self {
             socket: runtime.join("workbench.sock"),
