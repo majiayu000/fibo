@@ -48,7 +48,7 @@ pub fn stay(shell: &str) -> Vec<String> {
 }
 
 /// Single quotes take everything literally, and the curly ones count as single quotes.
-pub fn quote(word: &str) -> String {
+fn literal(word: &str) -> String {
     let mut out = String::from("'");
     for c in word.chars() {
         if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}') {
@@ -60,17 +60,70 @@ pub fn quote(word: &str) -> String {
     out
 }
 
+/// A word for a program, as PowerShell itself passes it. Windows PowerShell 5 joins a program's
+/// arguments into a command line without escaping them, so a word must arrive already escaped:
+/// without this a double quote vanishes, an empty word goes missing and `C:\a b\` swallows what
+/// follows. PowerShell 7.3 on escapes for itself, so which one is running is asked as it runs.
+pub fn quote(word: &str) -> String {
+    let escaped = escaped_for_a_command_line(word);
+    if escaped == word {
+        return literal(word);
+    }
+    format!(
+        "$(if ((Get-Variable PSNativeCommandArgumentPassing -ValueOnly -ErrorAction Ignore) \
+         -in 'Windows','Standard') {{{}}} else {{{}}})",
+        literal(word),
+        literal(&escaped)
+    )
+}
+
+/// `word` as it must stand in a command line once PowerShell has added its own quotes, which it
+/// does around a word with white space outside the double quotes it counts, not knowing `\"`.
+/// So where there is white space a quote is doubled, keeping the count even: `\"` could leave a
+/// space looking quoted, and `k="v w"` would reach the program as two words. Without white space
+/// nothing gets added, and doubling would mean nothing.
+fn escaped_for_a_command_line(word: &str) -> String {
+    if word.is_empty() {
+        return "\"\"".into();
+    }
+    let spaced = word.chars().any(char::is_whitespace);
+    let mut out = String::with_capacity(word.len());
+    let mut backslashes = 0;
+    for c in word.chars() {
+        match c {
+            '\\' => backslashes += 1,
+            '"' if spaced => {
+                out.extend(std::iter::repeat_n('\\', backslashes * 2));
+                out.push_str("\"\"");
+                backslashes = 0;
+            }
+            '"' => {
+                out.extend(std::iter::repeat_n('\\', backslashes * 2 + 1));
+                out.push('"');
+                backslashes = 0;
+            }
+            c => {
+                out.extend(std::iter::repeat_n('\\', backslashes));
+                out.push(c);
+                backslashes = 0;
+            }
+        }
+    }
+    let closing = if spaced { backslashes * 2 } else { backslashes };
+    out.extend(std::iter::repeat_n('\\', closing));
+    out
+}
+
 /// npm's launchers here are scripts as well as programs, and asking for the two kinds passes over
 /// a function of the same name.
 pub fn past_functions(program: &str) -> String {
     format!(
         "& (Get-Command {} -CommandType ExternalScript,Application | Select-Object -First 1)",
-        quote(program)
+        literal(program)
     )
 }
 
 /// `-Command` takes its script as text, so unlike `$1` the argument is written into it, quoted.
-/// Windows PowerShell 5 drops double quotes from an argument it hands to a program.
 pub fn run_then_stay(shell: &str, command: &str, argument: Option<&str>) -> Vec<String> {
     let script = match argument {
         Some(argument) => format!("{command} {}", quote(argument)),
@@ -177,6 +230,78 @@ mod tests {
     fn quotes_of_every_shape_are_doubled() {
         assert_eq!(quote("it's"), "'it''s'");
         assert_eq!(quote("it\u{2019}s; $x"), "'it\u{2019}\u{2019}s; $x'");
+    }
+
+    /// Prints what it was given, for the test below.
+    #[test]
+    #[ignore = "started by words_reach_a_program_as_they_are"]
+    fn prints_its_last_argument() {
+        let last = std::env::args().next_back().unwrap_or_default();
+        let hex: String = last.bytes().map(|b| format!("{b:02x}")).collect();
+        println!("WORD[{hex}]");
+    }
+
+    /// Both PowerShells a machine can have, straight to a program and through a script as npm's
+    /// launchers do. The other end is a Rust program, as Codex is.
+    #[test]
+    fn words_reach_a_program_as_they_are() {
+        let dir = std::env::temp_dir().join(format!("mooring-quote-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = std::env::current_exe().unwrap();
+        let exe = literal(&exe.to_string_lossy());
+        let args = "shell::imp::tests::prints_its_last_argument --exact --ignored --nocapture --";
+        let launcher = dir.join("launcher.ps1");
+        std::fs::write(&launcher, format!("& {exe} {args} $args")).unwrap();
+        let launcher = literal(&launcher.to_string_lossy());
+        let root = std::env::var("SystemRoot").unwrap();
+        let mut shells = vec![
+            format!(r"{root}\System32\WindowsPowerShell\v1.0\powershell.exe"),
+            interactive(),
+        ];
+        shells.dedup();
+        let words = [
+            "plain",
+            "a b",
+            "",
+            "say \"hi\"",
+            "\"hi\"",
+            "\"a b\"",
+            "k=\"v w\"",
+            "model_reasoning_effort=\"high\"",
+            "\"a\" \"b c\"",
+            "\" \"",
+            "\"",
+            "\"\"",
+            r"C:\my dir\ ",
+            r"C:\my dir\",
+            "C:\\my dir\\\"q\"",
+            r#"a\"b"#,
+            r#"a\\"b c"#,
+            r"trailing\",
+            "tab\there \"q\"",
+            "中文 \"引号\"",
+            "$x `y; 'z'",
+        ];
+        for shell in &shells {
+            let script = |how: &str, word: &str| format!("{how} {}", quote(word));
+            for word in words {
+                for how in [format!("& {exe} {args}"), format!("& {launcher}")] {
+                    let out = std::process::Command::new(shell)
+                        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
+                        .arg(script(&how, word))
+                        .output()
+                        .unwrap();
+                    let text = String::from_utf8_lossy(&out.stdout);
+                    let hex: String = word.bytes().map(|b| format!("{b:02x}")).collect();
+                    assert!(
+                        text.contains(&format!("WORD[{hex}]")),
+                        "{shell}: {word:?} through {how}: {text}{}",
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
+            }
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
