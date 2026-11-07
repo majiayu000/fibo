@@ -45,7 +45,7 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
         )?)?;
     }
     let timeout = Duration::from_secs(a.number("timeout", 90)?);
-    if let Err(e) = hand_over(&a.socket, &opened.id, &task, timeout) {
+    if let Err(e) = hand_over(&a.socket, agent, &opened.id, &task, timeout) {
         return Err(io::Error::other(format!(
             "{e}（终端 {} 留着，mooring read {} 看画面）",
             opened.id, opened.id
@@ -81,8 +81,14 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
 }
 /// Types `text` into the Agent starting in `id` once its input box shows and the screen
 /// has held still, as the workbench does with a todo's text.
-fn hand_over(socket: &Path, id: &str, text: &str, timeout: Duration) -> io::Result<()> {
-    use mooring_core::terminal::{agent_input_ready, command_missing};
+fn hand_over(
+    socket: &Path,
+    agent: mooring_core::agent::Agent,
+    id: &str,
+    text: &str,
+    timeout: Duration,
+) -> io::Result<()> {
+    use mooring_core::terminal::command_missing;
     let started = Instant::now();
     let mut last = String::new();
     let mut still = 0;
@@ -107,7 +113,7 @@ fn hand_over(socket: &Path, id: &str, text: &str, timeout: Duration) -> io::Resu
             last = tail;
             still = 0;
         }
-        if still >= 2 && agent_input_ready(&last) {
+        if still >= 2 && agent.input_ready(&last) {
             return expect_ok(rpc(
                 socket,
                 &Request::SendText {

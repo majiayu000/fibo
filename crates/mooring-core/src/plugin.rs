@@ -15,9 +15,10 @@ pub const API: u32 = 1;
 /// What this build's plugin support adds up to, raised whenever a kind or a manifest field
 /// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`, 3 `themes`,
 /// an action's `agent` and a secret setting, 4 an agent's `screen_rules` and `interrupt`, 5
-/// its `answers`, 6 transcript parent links and source metadata headers. A plugin needing a higher level says so in `mooring`, and is refused with
+/// its `answers`, 6 transcript parent links and source metadata headers, 7 an agent's
+/// `input_hint`. A plugin needing a higher level says so in `mooring`, and is refused with
 /// "update Mooring".
-pub const LEVEL: u32 = 6;
+pub const LEVEL: u32 = 7;
 
 /// What a plugin can extend. The file each kind reads is fixed, so a manifest only says
 /// which kinds it means to provide and a missing file is reported rather than ignored.

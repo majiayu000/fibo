@@ -2,8 +2,10 @@
 use super::state::{Handoff, Stage};
 use super::{HandoffState, Pane};
 use gpui::Context;
+use mooring_core::agent::Agent;
+use mooring_core::agent_input::any_input_ready;
+use mooring_core::terminal::command_missing;
 use mooring_core::terminal::libghostty_vt::terminal::Mode;
-use mooring_core::terminal::{agent_input_ready, command_missing};
 use std::time::Instant;
 
 const HANDOFF_LIMIT: u64 = 60;
@@ -14,6 +16,9 @@ impl Pane {
     /// Nothing is ever typed into the shell but the command.
     pub fn start_agent(&mut self, command: &str, text: Option<String>, cx: &mut Context<Self>) {
         self.handoff = Some(Handoff {
+            agent: Agent::all()
+                .into_iter()
+                .find(|a| command.starts_with(&a.command())),
             command: Some(command.into()),
             text,
             stage: Stage::Shell,
@@ -29,6 +34,7 @@ impl Pane {
     /// into its input box and waits for the user's Enter.
     pub fn place_text(&mut self, text: String, cx: &mut Context<Self>) {
         self.handoff = Some(Handoff {
+            agent: None,
             command: None,
             text: Some(text),
             stage: Stage::Agent,
@@ -168,7 +174,12 @@ impl Pane {
                 // check the task text would land on the shell's command line.
                 if command_missing(&h.tail) {
                     h.stage = Stage::Missing;
-                } else if h.released && bracketed && h.still >= 2 && agent_input_ready(&h.tail) {
+                } else if h.released
+                    && bracketed
+                    && h.still >= 2
+                    && h.agent
+                        .map_or_else(|| any_input_ready(&h.tail), |a| a.input_ready(&h.tail))
+                {
                     let text = h.text.clone().unwrap_or_default();
                     let submit = h.submit;
                     h.stage = Stage::Placed;

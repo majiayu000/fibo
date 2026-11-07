@@ -80,3 +80,25 @@ fn a_turn_that_ended_without_finishing_shows_in_the_records() {
         .unwrap();
     assert_eq!(rejected["turn"], "interrupted");
 }
+
+/// Undoing `input_hint` leaves `mooring run opencode` and a todo's 开始 waiting for an arrow
+/// its box never shows, so the task is never handed over.
+#[test]
+fn its_empty_input_box_counts_as_ready_and_its_output_does_not() {
+    let hints: Vec<String> = serde_json::from_value(agent()["input_hint"].clone()).unwrap();
+    let ready = |screen: &str| {
+        let screen = screen.to_lowercase();
+        hints.iter().any(|h| screen.contains(&h.to_lowercase()))
+    };
+    // What OpenCode 1.19.5 draws on start.
+    let empty = "  ┃  Ask anything… \"Fix broken tests\"\n  ┃\n  ┃  Build·DeepSeek V4.1 Flash OpenCode · max\n";
+    assert!(ready(empty));
+    // While it asks, typed text would land in the prompt: not ready.
+    let asking =
+        "  ┃  △ Permission required\n  ┃  $ touch p\n  ┃   Allow once   Allow always   Reject\n";
+    assert!(!ready(asking));
+    assert!(
+        !mooring_core::terminal::agent_input_ready(empty),
+        "the arrow check alone misses it"
+    );
+}

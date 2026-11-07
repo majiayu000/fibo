@@ -69,6 +69,8 @@ pub(super) enum Stage {
     Missing,
 }
 pub(super) struct Handoff {
+    /// The CLI being started; `None` for one started by hand, which any input box fits.
+    pub(super) agent: Option<mooring_core::agent::Agent>,
     pub(super) command: Option<String>,
     pub(super) text: Option<String>,
     pub(super) stage: Stage,
