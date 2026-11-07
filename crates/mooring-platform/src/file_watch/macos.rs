@@ -1,14 +1,13 @@
-//! macOS file events, including replay from a durable checkpoint. No polling backend.
+//! FSEvents for what changes under the roots, including replay from a durable checkpoint,
+//! and a vnode watch per followed file. No polling.
+use super::{Batch, Callback, Event, add_scope, deliver, flag};
 use std::{
-    ffi::{c_char, c_void, CStr, CString},
+    ffi::{CStr, CString, c_char, c_void},
     io,
     os::unix::ffi::{OsStrExt, OsStringExt},
-    path::{Path, PathBuf},
+    path::PathBuf,
     ptr,
-    sync::{
-        mpsc::{sync_channel, Receiver, SyncSender},
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
 };
 type Ref = *const c_void;
 #[repr(C)]
@@ -59,42 +58,12 @@ unsafe extern "C" {
     );
     fn dispatch_release(queue: Ref);
 }
-#[derive(Debug)]
-pub struct Event {
-    pub path: PathBuf,
-    pub flags: u32,
-    pub id: u64,
-}
-pub struct Batch {
-    pub events: Vec<Event>,
-}
-struct Callback {
-    tx: SyncSender<Batch>,
-    overflow: Arc<Mutex<Vec<PathBuf>>>,
-    roots: Vec<PathBuf>,
-}
-#[derive(Clone)]
-pub struct Notifier(Arc<Callback>);
-impl Notifier {
-    pub fn file(&self, path: PathBuf) {
-        deliver(
-            &self.0,
-            Batch {
-                events: vec![Event {
-                    path,
-                    flags: 0,
-                    id: 0,
-                }],
-            },
-        );
-    }
-}
 pub struct Watch {
     stream: Ref,
     queue: Ref,
-    callback: Arc<Callback>,
+    /// The stream's context points in here, so it lives as long as the stream.
+    _callback: Arc<Callback>,
     vnodes: Vnodes,
-    pub rx: Receiver<Batch>,
 }
 unsafe extern "C" fn callback(
     _: Ref,
@@ -107,7 +76,7 @@ unsafe extern "C" fn callback(
     // FSEvents owns these arrays until this callback returns. Do not retain pointers.
     let context = unsafe { &*(info as *const Callback) };
     if count > 16_384 {
-        let mut scopes = context.overflow.lock().unwrap_or_else(|p| p.into_inner());
+        let mut scopes = context.overflow();
         for i in 16_384..count {
             let path = unsafe { CStr::from_ptr(*(paths as *const *const c_char).add(i)) };
             let path = PathBuf::from(std::ffi::OsString::from_vec(path.to_bytes().to_vec()));
@@ -123,74 +92,17 @@ unsafe extern "C" fn callback(
                 id: *ids.add(i),
             }
         })
-        .filter(|e| {
-            e.flags & 0x2f != 0 || context.roots.iter().any(|root| e.path.starts_with(root))
-        })
+        .filter(|e| context.wants(e))
         .collect();
     deliver(context, Batch { events });
 }
-fn deliver(context: &Callback, batch: Batch) {
-    if batch.events.is_empty()
-        && context
-            .overflow
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .is_empty()
-    {
-        return;
-    }
-    if let Err(error) = context.tx.try_send(batch) {
-        let mut scopes = context.overflow.lock().unwrap_or_else(|p| p.into_inner());
-        let batch = match error {
-            std::sync::mpsc::TrySendError::Full(batch)
-            | std::sync::mpsc::TrySendError::Disconnected(batch) => batch,
-        };
-        for event in batch.events {
-            let path = if event.flags & 0x20000 != 0 {
-                event.path.as_path()
-            } else {
-                event.path.parent().unwrap_or(&event.path)
-            };
-            add_scope(&mut scopes, path, &context.roots);
-        }
-        // A full queue already contains a wakeup. The worker consumes these scopes atomically.
-    }
-}
-/// Keep disjoint scopes inside configured roots. An event for an ancestor is clipped to its CLI root.
-/// Queue memory is bounded; only overflow of scope storage widens recovery to the affected CLI root.
-pub fn add_scope(scopes: &mut Vec<PathBuf>, path: &Path, roots: &[PathBuf]) {
-    for root in roots {
-        let scope = if path.starts_with(root) {
-            path.to_owned()
-        } else if root.starts_with(path) {
-            root.clone()
-        } else {
-            continue;
-        };
-        if scopes.iter().any(|old| scope.starts_with(old)) {
-            continue;
-        }
-        scopes.retain(|old| !old.starts_with(&scope));
-        scopes.push(scope);
-        if scopes.len() > 64 {
-            scopes.retain(|old| !old.starts_with(root));
-            scopes.push(root.clone());
-        }
-    }
-}
-
 unsafe extern "C" fn barrier(_: *mut c_void) {}
+pub fn current_id() -> u64 {
+    unsafe { FSEventsGetCurrentEventId() }
+}
 impl Watch {
-    pub fn current_id() -> u64 {
-        unsafe { FSEventsGetCurrentEventId() }
-    }
-    pub fn start(paths: &[PathBuf], since: u64) -> io::Result<Self> {
-        let (tx, rx) = sync_channel(16);
-        let callback_context = Arc::new(Callback {
-            tx,
-            overflow: Arc::new(Mutex::new(vec![])),
-            roots: paths.to_vec(),
-        });
+    pub fn start(callback_context: Arc<Callback>, since: u64) -> io::Result<Self> {
+        let paths = callback_context.roots.clone();
         // Watch an existing ancestor if the CLI has not created its log directory yet.
         // Callback filtering excludes sibling paths (including our own SQLite WAL).
         let watched: std::collections::BTreeSet<_> = paths
@@ -265,9 +177,8 @@ impl Watch {
             let watch = Self {
                 stream,
                 queue,
-                callback: callback_context,
+                _callback: callback_context,
                 vnodes,
-                rx,
             };
             if FSEventStreamStart(stream) == 0 {
                 return Err(io::Error::other("FSEventStreamStart failed"));
@@ -275,20 +186,8 @@ impl Watch {
             Ok(watch)
         }
     }
-    pub fn notifier(&self) -> Notifier {
-        Notifier(self.callback.clone())
-    }
     pub fn follow(&self, paths: &[PathBuf]) -> io::Result<Vec<PathBuf>> {
         self.vnodes.follow(paths)
-    }
-    pub fn take_overflow(&self) -> Vec<PathBuf> {
-        std::mem::take(
-            &mut *self
-                .callback
-                .overflow
-                .lock()
-                .unwrap_or_else(|p| p.into_inner()),
-        )
     }
 }
 impl Drop for Watch {
@@ -369,7 +268,7 @@ impl Vnodes {
                                 .iter()
                                 .map(|p| Event {
                                     path: p.clone(),
-                                    flags: 0x20,
+                                    flags: flag::ROOT_CHANGED,
                                     id: 0,
                                 })
                                 .collect(),
@@ -388,7 +287,7 @@ impl Vnodes {
                         batch.push(Event {
                             path: path.clone(),
                             flags: if event.fflags & libc::NOTE_REVOKE != 0 {
-                                1
+                                flag::MUST_SCAN
                             } else {
                                 0
                             },
@@ -477,53 +376,5 @@ impl Drop for Vnodes {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
-    }
-}
-
-/// Canonicalize existing ancestors too, e.g. /tmp -> /private/tmp, even before roots exist.
-pub fn normalized(path: &Path) -> io::Result<PathBuf> {
-    match path.canonicalize() {
-        Ok(p) => Ok(p),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            let parent = path.parent().ok_or(e)?;
-            Ok(normalized(parent)?.join(
-                path.file_name()
-                    .ok_or_else(|| io::Error::other("missing path name"))?,
-            ))
-        }
-        Err(e) => Err(e),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn overflow_keeps_only_affected_subtree_and_does_not_latch() {
-        let (tx, rx) = sync_channel(1);
-        let context = Callback {
-            tx,
-            overflow: Arc::new(Mutex::new(vec![])),
-            roots: vec![PathBuf::from("/logs")],
-        };
-        let event = |path: &str| Batch {
-            events: vec![Event {
-                path: PathBuf::from(path),
-                flags: 0,
-                id: 1,
-            }],
-        };
-        deliver(&context, event("/logs/a/one.jsonl"));
-        deliver(&context, event("/logs/b/two.jsonl"));
-        deliver(&context, event("/logs/b/deep/three.jsonl"));
-        let scopes = std::mem::take(&mut *context.overflow.lock().unwrap());
-        assert_eq!(scopes, vec![PathBuf::from("/logs/b")]);
-        rx.recv().unwrap();
-        deliver(&context, event("/logs/c/four.jsonl"));
-        assert_eq!(
-            rx.recv().unwrap().events[0].path,
-            PathBuf::from("/logs/c/four.jsonl")
-        );
-        assert!(context.overflow.lock().unwrap().is_empty());
     }
 }

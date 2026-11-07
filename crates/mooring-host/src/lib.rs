@@ -7,7 +7,6 @@ mod codex_status;
 mod command_marks;
 pub mod devices;
 mod diagnostics;
-mod file_events;
 mod handoff;
 mod host;
 pub mod log_index;

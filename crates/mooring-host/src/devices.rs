@@ -567,6 +567,11 @@ mod tests {
             .mode();
         assert_eq!(mode & 0o777, 0o600);
         // Where the id cannot be written, say so instead of handing out a new one each time.
+        // Root writes anywhere (a container, say), so there it has nothing to report.
+        if unsafe { libc::geteuid() } == 0 {
+            std::fs::remove_dir_all(dir).unwrap();
+            return;
+        }
         std::fs::remove_file(dir.join("machine-id")).unwrap();
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
         let unwritable = machine(&socket);

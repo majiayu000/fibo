@@ -132,7 +132,7 @@ pub fn children(pid: u32) -> io::Result<Vec<u32>> {
         .collect())
 }
 
-pub fn started(pid: u32) -> Option<u64> {
+pub fn started_micros(pid: u32) -> Option<u64> {
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
     let n = unsafe {
@@ -144,12 +144,176 @@ pub fn started(pid: u32) -> Option<u64> {
             size,
         )
     };
-    (n == size).then_some(info.pbi_start_tvsec)
+    (n == size).then_some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
+}
+
+pub fn all_pids() -> Vec<u32> {
+    let mut buf = vec![0i32; 8192];
+    let bytes = (buf.len() * std::mem::size_of::<i32>()) as i32;
+    let n = unsafe { libc::proc_listallpids(buf.as_mut_ptr().cast(), bytes) };
+    buf[..n.max(0) as usize]
+        .iter()
+        .filter(|p| **p > 0)
+        .map(|p| *p as u32)
+        .collect()
+}
+
+pub fn name(pid: u32) -> Option<String> {
+    let mut buf = [0u8; 256];
+    let n = unsafe { libc::proc_name(pid as i32, buf.as_mut_ptr().cast(), buf.len() as u32) };
+    Some(String::from_utf8_lossy(&buf[..n.max(0) as usize]).into_owned())
+}
+
+pub fn executable(pid: u32) -> io::Result<String> {
+    let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let n = unsafe {
+        libc::proc_pidpath(
+            pid as libc::c_int,
+            buf.as_mut_ptr().cast(),
+            buf.len() as u32,
+        )
+    };
+    if n <= 0 {
+        return Err(io::Error::last_os_error());
+    }
+    buf.truncate(n as usize);
+    String::from_utf8(buf).map_err(io::Error::other)
+}
+
+pub fn stdin_is_a_channel(pid: u32) -> bool {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct FdInfo {
+        fd: i32,
+        kind: u32,
+    }
+    const PROC_PIDLISTFDS: i32 = 1;
+    const SOCKET: u32 = 2;
+    const PIPE: u32 = 6;
+    let mut fds = [FdInfo { fd: -1, kind: 0 }; 64];
+    let size = std::mem::size_of_val(&fds) as i32;
+    let n = unsafe {
+        libc::proc_pidinfo(
+            pid as i32,
+            PROC_PIDLISTFDS,
+            0,
+            fds.as_mut_ptr().cast(),
+            size,
+        )
+    };
+    let count = n.max(0) as usize / std::mem::size_of::<FdInfo>();
+    fds[..count.min(fds.len())]
+        .iter()
+        .any(|f| f.fd == 0 && matches!(f.kind, SOCKET | PIPE))
+}
+
+/// Activity Monitor's Memory column. Only our own user's processes answer; root and system
+/// daemons return EPERM.
+pub fn memory(pid: u32) -> Option<u64> {
+    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    let result = unsafe {
+        libc::proc_pid_rusage(
+            pid as libc::c_int,
+            libc::RUSAGE_INFO_V4,
+            (&mut info as *mut libc::rusage_info_v4).cast(),
+        )
+    };
+    (result == 0).then_some(info.ri_phys_footprint)
+}
+
+fn pid_list(pids: &[u32]) -> String {
+    pids.iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+pub fn tcp_sockets(pids: &[u32]) -> io::Result<super::TcpSockets> {
+    let out = std::process::Command::new("/usr/sbin/lsof")
+        .args([
+            "-nP",
+            "-a",
+            "-p",
+            &pid_list(pids),
+            "-iTCP",
+            "-sTCP:LISTEN,ESTABLISHED",
+            "-Fpn",
+        ])
+        .output()?;
+    // Exit 1 with no rows is "none".
+    Ok(parse_sockets(&String::from_utf8_lossy(&out.stdout)))
+}
+
+/// From `lsof -Fpn` rows: `p<pid>`, then one `n<addr>:<port>` per listening socket or
+/// `n<addr>:<port>-><addr>:<port>` per connection.
+fn parse_sockets(rows: &str) -> super::TcpSockets {
+    let port = |addr: &str| addr.rsplit(':').next().and_then(|n| n.parse::<u16>().ok());
+    let mut out = super::TcpSockets::default();
+    let mut pid = None;
+    for line in rows.lines() {
+        if let Some(p) = line.strip_prefix('p') {
+            pid = p.parse().ok();
+        } else if let (Some(name), Some(p)) = (line.strip_prefix('n'), pid) {
+            if let Some((_, remote)) = name.split_once("->") {
+                let here = remote.starts_with("127.") || remote.starts_with("[::1]");
+                if let (true, Some(n)) = (here, port(remote)) {
+                    out.connected.push((p, n));
+                }
+            } else if let Some(n) = port(name) {
+                out.listening.push((p, n));
+            }
+        }
+    }
+    out
+}
+
+pub fn open_files(pids: &[u32]) -> io::Result<std::collections::HashMap<u32, Vec<String>>> {
+    let result = std::process::Command::new("/usr/sbin/lsof")
+        .args(["-nP", "-p", &pid_list(pids), "-Fpn"])
+        .output()?;
+    // lsof can return 1 when one process exits during enumeration; valid rows remain useful.
+    if !result.status.success() && result.stdout.is_empty() {
+        if result.status.code() == Some(1) {
+            return Ok(Default::default());
+        }
+        return Err(io::Error::other("open-file inventory failed"));
+    }
+    let mut files: std::collections::HashMap<u32, Vec<String>> = Default::default();
+    let mut pid = None;
+    for line in String::from_utf8_lossy(&result.stdout).lines() {
+        if let Some(value) = line.strip_prefix('p') {
+            pid = value.parse().ok();
+        } else if let (Some(pid), Some(path)) = (pid, line.strip_prefix('n')) {
+            files.entry(pid).or_default().push(path.into());
+        }
+    }
+    Ok(files)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::env_value;
+    use super::{env_value, memory, parse_sockets};
+
+    #[test]
+    fn lsof_rows_say_who_listens_and_who_connects_here() {
+        // Rows as lsof printed them for a relay and its Python client.
+        let rows = "p28079\nf5\nn*:8898\nf6\nn127.0.0.1:8898->127.0.0.1:49848\n\
+                    p28382\nf4\nn127.0.0.1:49848->127.0.0.1:8898\n\
+                    p500\nf4\nn[::1]:49900->[::1]:8898\n\
+                    p600\nf4\nn10.0.0.2:49901->10.0.0.9:8898\n\
+                    p700\nf3\nn[::1]:5173\n";
+        let got = parse_sockets(rows);
+        assert_eq!(got.listening, vec![(28079, 8898), (700, 5173)]);
+        assert_eq!(
+            got.connected,
+            vec![(28079, 49848), (28382, 8898), (500, 8898)]
+        );
+    }
+
+    #[test]
+    fn launchd_belongs_to_root_so_its_memory_is_not_ours_to_read() {
+        assert_eq!(memory(1), None);
+    }
 
     fn procargs_of(argv: &[&str], env: &[&str]) -> Vec<u8> {
         let mut b = (argv.len() as i32).to_ne_bytes().to_vec();

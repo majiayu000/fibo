@@ -4,7 +4,6 @@ use std::{
     collections::{HashMap, HashSet},
     io,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -52,7 +51,8 @@ pub fn transcript_owner(path: &Path, roots: &[(Agent, PathBuf)]) -> Option<Agent
     roots
         .iter()
         .filter_map(|(agent, root)| {
-            let root = crate::file_events::normalized(root).unwrap_or_else(|_| root.clone());
+            let root =
+                mooring_platform::file_watch::normalized(root).unwrap_or_else(|_| root.clone());
             (path.starts_with(&root) && crate::agents::adapter(*agent).is_transcript(path))
                 .then_some((root.components().count(), *agent))
         })
@@ -573,36 +573,17 @@ pub fn open_transcripts(
                 && terminal_for_process(p.pid, processes, workspace)
                     .is_some_and(|id| workspace.current_agent(&id).is_none())
         })
-        .map(|p| p.pid.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+        .map(|p| p.pid)
+        .collect::<Vec<u32>>();
     if pids.is_empty() {
         return Ok(HashMap::new());
     }
     LSOF_SPAWNS.fetch_add(1, Ordering::Relaxed);
-    let result = Command::new("/usr/sbin/lsof")
-        .args(["-nP", "-p", &pids, "-Fpn"])
-        .output()?;
-    // lsof can return 1 when one process exits during enumeration; valid rows remain useful.
-    if !result.status.success() && result.stdout.is_empty() {
-        if result.status.code() == Some(1) {
-            return Ok(HashMap::new());
-        }
-        return Err(io::Error::other(
-            "open-file inventory failed; no association was inferred",
-        ));
+    let mut files = mooring_platform::inspect::open_files(&pids)?;
+    for open in files.values_mut() {
+        open.retain(|path| path.ends_with(".jsonl"));
     }
-    let mut files: HashMap<u32, Vec<String>> = HashMap::new();
-    let mut pid = None;
-    for line in String::from_utf8_lossy(&result.stdout).lines() {
-        if let Some(value) = line.strip_prefix('p') {
-            pid = value.parse().ok();
-        } else if let (Some(pid), Some(path)) = (pid, line.strip_prefix('n')) {
-            if path.ends_with(".jsonl") {
-                files.entry(pid).or_default().push(path.into());
-            }
-        }
-    }
+    files.retain(|_, open| !open.is_empty());
     Ok(files)
 }
 

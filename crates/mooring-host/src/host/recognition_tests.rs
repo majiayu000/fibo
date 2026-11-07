@@ -142,10 +142,10 @@ fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
         )
         .unwrap();
     }
-    let batch = crate::file_events::Batch {
-        events: vec![crate::file_events::Event {
+    let batch = mooring_platform::file_watch::Batch {
+        events: vec![mooring_platform::file_watch::Event {
             path: root.join("logs/a"),
-            flags: 1,
+            flags: mooring_platform::file_watch::flag::MUST_SCAN,
             id: 1,
         }],
     };

@@ -16,11 +16,7 @@ pub(super) fn serve_client(
     host: Shared,
     connection: u64,
 ) -> io::Result<()> {
-    let mut uid = 0;
-    let mut gid = 0;
-    if unsafe { libc::getpeereid(stream.as_raw_fd(), &mut uid, &mut gid) } != 0
-        || uid != unsafe { libc::geteuid() }
-    {
+    if !mooring_platform::peer::is_this_account(&stream)? {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "peer uid mismatch",
@@ -245,7 +241,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 }
                 std::path::PathBuf::from(&matches[0].path)
             } else {
-                crate::file_events::normalized(Path::new(&transcript))?
+                mooring_platform::file_watch::normalized(Path::new(&transcript))?
             };
             // Grok reads Claude's settings and runs its hooks as `--agent claude`; such a
             // hook would bind a Grok conversation as Claude and stamp Claude's events on it.
@@ -662,24 +658,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 .and_then(|t| t.pid)
                 .ok_or_else(|| io::Error::other("terminal PID missing"))?;
             // Explicit split action only, querying this managed shell, never polling.
-            let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
-            let len = std::mem::size_of_val(&info) as i32;
-            let n = unsafe {
-                libc::proc_pidinfo(
-                    pid as i32,
-                    libc::PROC_PIDVNODEPATHINFO,
-                    0,
-                    (&mut info as *mut libc::proc_vnodepathinfo).cast(),
-                    len,
-                )
-            };
-            if n != len {
-                return Err(io::Error::last_os_error());
-            }
-            let path = unsafe { std::ffi::CStr::from_ptr(info.pvi_cdir.vip_path.as_ptr().cast()) }
-                .to_str()
-                .map_err(io::Error::other)?
-                .to_owned();
+            let path = mooring_platform::inspect::cwd(pid).ok_or_else(io::Error::last_os_error)?;
             Ok(Reply::Cwd(path))
         }
         Request::StopAgent { id } => {

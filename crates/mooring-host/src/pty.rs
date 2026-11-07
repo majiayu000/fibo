@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::os::unix::{ffi::OsStrExt, fs::OpenOptionsExt, process::CommandExt};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
@@ -171,7 +171,7 @@ pub fn spawn(
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut size,
+            &raw mut size,
         )
     } < 0
     {
@@ -260,6 +260,7 @@ pub fn resize(master: &File, cols: u16, rows: u16, cell: (u32, u32)) -> io::Resu
 pub fn backlog(master: &File) -> Option<usize> {
     #[cfg(target_os = "macos")]
     {
+        use std::os::unix::{ffi::OsStrExt, fs::OpenOptionsExt};
         let mut name = [0 as libc::c_char; 128];
         // SAFETY: TIOCPTYGNAME writes a NUL-terminated path of at most 128 bytes.
         if unsafe {

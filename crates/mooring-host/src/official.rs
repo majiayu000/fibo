@@ -37,22 +37,7 @@ fn program_for(exe: &str) -> String {
         exe.into()
     }
 }
-/// Absolute path of a running process's executable.
-pub fn executable(pid: u32) -> io::Result<String> {
-    let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
-    let n = unsafe {
-        libc::proc_pidpath(
-            pid as libc::c_int,
-            buf.as_mut_ptr().cast(),
-            buf.len() as u32,
-        )
-    };
-    if n <= 0 {
-        return Err(io::Error::last_os_error());
-    }
-    buf.truncate(n as usize);
-    String::from_utf8(buf).map_err(io::Error::other)
-}
+pub use mooring_platform::inspect::executable;
 
 pub fn query(program: &str) -> io::Result<Vec<Entry>> {
     let child = Command::new(program)
