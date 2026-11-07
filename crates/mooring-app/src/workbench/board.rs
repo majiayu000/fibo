@@ -331,6 +331,7 @@ impl Workbench {
                 Column::Todo,
                 todo_ids.len(),
                 self.card_list(Column::Todo, todo_ids, cx),
+                false,
                 window.is_window_active(),
                 cx,
             )
@@ -362,10 +363,14 @@ impl Workbench {
                     .chain(ids)
                     .collect();
             }
+            // Only this column's own sessions are read, on frames that already draw them.
+            let reviewable = c == Column::Needs
+                && (list.iter()).any(|s| review_queue::reviewable(status_of(&self.workspace, s)));
             let column = self.column(
                 c,
                 ids.len(),
                 self.card_list(c, ids, cx),
+                reviewable,
                 window.is_window_active(),
                 cx,
             );

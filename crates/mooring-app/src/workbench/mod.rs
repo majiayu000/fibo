@@ -234,6 +234,7 @@ mod forms;
 mod frame_facts;
 mod layout;
 mod machines;
+mod review_queue;
 #[cfg(feature = "visual-test")]
 pub use layout::ChangesProbe;
 use layout::LayoutState;
@@ -437,6 +438,8 @@ impl Workbench {
                 cleanup: vec![],
                 cleanup_index: 0,
                 cleanup_results: HashMap::new(),
+                cleanup_review: false,
+                review_closing: None,
                 scroll: gpui::ScrollHandle::new(),
                 columns: Default::default(),
                 welcome: overview,
@@ -531,6 +534,7 @@ impl Workbench {
         }
         self.workspace = w;
         self.facts.forget();
+        self.close_reviewed(cx);
         if let Some(view) = &self.settings {
             view.update(cx, |v, cx| {
                 v.values = self.workspace.settings.clone();

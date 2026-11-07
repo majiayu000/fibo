@@ -28,6 +28,7 @@ impl Render for Workbench {
         }
         self.before_render(window, cx);
         self.settle_board_transients(cx);
+        self.return_to_queue(cx);
         // The overview and 逐个清理 take the main area beside the sidebar; the top bar,
         // sidebar and tab strip stay, so leaving is a click in the same place or Esc.
         let page = if self.tasks.form.is_some() {
