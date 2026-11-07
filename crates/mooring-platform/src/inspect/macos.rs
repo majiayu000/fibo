@@ -132,7 +132,7 @@ pub fn children(pid: u32) -> io::Result<Vec<u32>> {
         .collect())
 }
 
-pub fn started(pid: u32) -> Option<u64> {
+pub fn started_micros(pid: u32) -> Option<u64> {
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
     let n = unsafe {
@@ -144,12 +144,91 @@ pub fn started(pid: u32) -> Option<u64> {
             size,
         )
     };
-    (n == size).then_some(info.pbi_start_tvsec)
+    (n == size).then_some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
+}
+
+pub fn all_pids() -> Vec<u32> {
+    let mut buf = vec![0i32; 8192];
+    let bytes = (buf.len() * std::mem::size_of::<i32>()) as i32;
+    let n = unsafe { libc::proc_listallpids(buf.as_mut_ptr().cast(), bytes) };
+    buf[..n.max(0) as usize]
+        .iter()
+        .filter(|p| **p > 0)
+        .map(|p| *p as u32)
+        .collect()
+}
+
+pub fn name(pid: u32) -> Option<String> {
+    let mut buf = [0u8; 256];
+    let n = unsafe { libc::proc_name(pid as i32, buf.as_mut_ptr().cast(), buf.len() as u32) };
+    Some(String::from_utf8_lossy(&buf[..n.max(0) as usize]).into_owned())
+}
+
+pub fn executable(pid: u32) -> io::Result<String> {
+    let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let n = unsafe {
+        libc::proc_pidpath(
+            pid as libc::c_int,
+            buf.as_mut_ptr().cast(),
+            buf.len() as u32,
+        )
+    };
+    if n <= 0 {
+        return Err(io::Error::last_os_error());
+    }
+    buf.truncate(n as usize);
+    String::from_utf8(buf).map_err(io::Error::other)
+}
+
+pub fn stdin_is_a_channel(pid: u32) -> bool {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct FdInfo {
+        fd: i32,
+        kind: u32,
+    }
+    const PROC_PIDLISTFDS: i32 = 1;
+    const SOCKET: u32 = 2;
+    const PIPE: u32 = 6;
+    let mut fds = [FdInfo { fd: -1, kind: 0 }; 64];
+    let size = std::mem::size_of_val(&fds) as i32;
+    let n = unsafe {
+        libc::proc_pidinfo(
+            pid as i32,
+            PROC_PIDLISTFDS,
+            0,
+            fds.as_mut_ptr().cast(),
+            size,
+        )
+    };
+    let count = n.max(0) as usize / std::mem::size_of::<FdInfo>();
+    fds[..count.min(fds.len())]
+        .iter()
+        .any(|f| f.fd == 0 && matches!(f.kind, SOCKET | PIPE))
+}
+
+/// Activity Monitor's Memory column. Only our own user's processes answer; root and system
+/// daemons return EPERM.
+pub fn memory(pid: u32) -> Option<u64> {
+    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    let result = unsafe {
+        libc::proc_pid_rusage(
+            pid as libc::c_int,
+            libc::RUSAGE_INFO_V4,
+            (&mut info as *mut libc::rusage_info_v4).cast(),
+        )
+    };
+    (result == 0).then_some(info.ri_phys_footprint)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::env_value;
+    use super::{env_value, memory};
+
+    #[test]
+    fn launchd_belongs_to_root_so_its_memory_is_not_ours_to_read() {
+        assert_eq!(memory(1), None);
+    }
 
     fn procargs_of(argv: &[&str], env: &[&str]) -> Vec<u8> {
         let mut b = (argv.len() as i32).to_ne_bytes().to_vec();

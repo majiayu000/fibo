@@ -81,7 +81,7 @@ fn children_by_walking(pid: u32) -> io::Result<Vec<u32>> {
     Ok(out)
 }
 
-pub fn started(pid: u32) -> Option<u64> {
+pub fn started_micros(pid: u32) -> Option<u64> {
     // Field 22, in clock ticks since boot.
     let ticks: u64 = stat_fields(pid)?.get(19)?.parse().ok()?;
     let per_second = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
@@ -93,7 +93,43 @@ pub fn started(pid: u32) -> Option<u64> {
         .trim()
         .parse()
         .ok()?;
-    Some(boot + ticks / per_second)
+    Some(boot * 1_000_000 + ticks * 1_000_000 / per_second)
+}
+
+pub fn all_pids() -> Vec<u32> {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return vec![];
+    };
+    entries
+        .flatten()
+        .filter_map(|e| e.file_name().to_str()?.parse().ok())
+        .collect()
+}
+
+pub fn name(pid: u32) -> Option<String> {
+    let name = std::fs::read_to_string(proc_file(pid, "comm")).ok()?;
+    Some(name.trim_end_matches('\n').to_owned())
+}
+
+pub fn executable(pid: u32) -> io::Result<String> {
+    Ok(std::fs::read_link(proc_file(pid, "exe"))?
+        .to_string_lossy()
+        .into_owned())
+}
+
+pub fn stdin_is_a_channel(pid: u32) -> bool {
+    std::fs::read_link(proc_file(pid, "fd/0")).is_ok_and(|target| {
+        let target = target.to_string_lossy();
+        target.starts_with("pipe:") || target.starts_with("socket:")
+    })
+}
+
+/// What it holds in memory, as `top` shows it.
+pub fn memory(pid: u32) -> Option<u64> {
+    let statm = std::fs::read_to_string(proc_file(pid, "statm")).ok()?;
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    let page = u64::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok()?;
+    Some(pages * page)
 }
 
 #[cfg(test)]

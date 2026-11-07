@@ -36,5 +36,38 @@ pub fn children(pid: u32) -> io::Result<Vec<u32>> {
 
 /// When a process started, seconds since the epoch.
 pub fn started(pid: u32) -> Option<u64> {
-    imp::started(pid)
+    started_micros(pid).map(|at| at / 1_000_000)
+}
+
+/// When a process started, microseconds since the epoch, as finely as the system keeps it.
+pub fn started_micros(pid: u32) -> Option<u64> {
+    imp::started_micros(pid)
+}
+
+/// Every process there is, this account's or not. For asking once, not for looping.
+pub fn all_pids() -> Vec<u32> {
+    imp::all_pids()
+}
+
+/// The name the system lists a process under, without a path or `.exe`. Linux keeps only
+/// the first 15 bytes of it.
+pub fn name(pid: u32) -> Option<String> {
+    imp::name(pid).filter(|n| !n.is_empty())
+}
+
+/// The absolute path of the program a process runs.
+pub fn executable(pid: u32) -> io::Result<String> {
+    imp::executable(pid)
+}
+
+/// Whether a process's standard input is a pipe or a socket rather than a file or terminal.
+/// Windows does not say of another process: false there.
+pub fn stdin_is_a_channel(pid: u32) -> bool {
+    imp::stdin_is_a_channel(pid)
+}
+
+/// The memory a process accounts for, in bytes, the way the system's own monitor counts
+/// it. None for what this account may not read.
+pub fn memory(pid: u32) -> Option<u64> {
+    imp::memory(pid)
 }
