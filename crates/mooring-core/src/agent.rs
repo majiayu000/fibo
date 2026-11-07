@@ -1,7 +1,7 @@
 //! Which CLIs Mooring knows, as data. The rest of Mooring asks here or the daemon's
 //! `agents` adapters and never names a CLI itself (`tests/architecture_boundary.rs`).
 //!
-//! The built-in three are compiled in. Any other comes from a declaration in
+//! Built-in adapters are compiled in. Any other comes from a declaration in
 //! `~/.config/mooring/agents/*.json`, loaded once per process by `install`; a later file
 //! with the same id replaces an earlier one, and a file that cannot be used is reported,
 //! never fatal. See docs/architecture/PLUGIN_SYSTEM.md.
@@ -25,6 +25,8 @@ impl Agent {
     pub const Grok: Agent = Agent("Grok");
     pub const Cursor: Agent = Agent("Cursor");
     pub const Qoder: Agent = Agent("Qoder");
+    pub const Kimi: Agent = Agent("Kimi");
+    pub const Gemini: Agent = Agent("Gemini");
 
     /// Every registered CLI, built-in first, in the order the app offers them.
     pub fn all() -> Vec<Agent> {
@@ -444,6 +446,14 @@ fn builtin() -> Vec<AgentSpec> {
             "qodercli",
             "qodercli",
             "qodercli --resume {id}",
+        ),
+        spec("Kimi", "Kimi Code", "kimi", "kimi", "kimi --session {id}"),
+        spec(
+            "Gemini",
+            "Gemini CLI",
+            "gemini",
+            "gemini",
+            "gemini --resume {id}",
         ),
     ]
 }
