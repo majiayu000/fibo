@@ -1,4 +1,4 @@
-use super::processes::{agent_named, env_has, env_value, hinted_roots};
+use super::processes::{agent_named, hinted_roots};
 use super::*;
 use crate::agents::{claude::claude_session_id, codex::codex_args};
 #[test]
@@ -15,38 +15,8 @@ fn a_hook_transcript_belongs_to_the_cli_whose_root_holds_it() {
         None
     );
 }
-fn procargs_of(argv: &[&str], env: &[&str]) -> Vec<u8> {
-    let mut b = (argv.len() as i32).to_ne_bytes().to_vec();
-    b.extend(b"/usr/bin/nono\0\0\0");
-    for a in argv.iter().chain(env) {
-        b.extend(a.as_bytes());
-        b.push(0);
-    }
-    b.extend(b"\0executable_path=/usr/bin/nono\0");
-    b
-}
 #[test]
-fn agent_hint_reads_only_its_own_variable_after_argv() {
-    let b = procargs_of(
-        &["nono", "MOORING_AGENT=codex"],
-        &["HOME=/x", "MOORING_AGENT=Claude"],
-    );
-    assert_eq!(
-        env_value(&b, "MOORING_AGENT").as_deref(),
-        Some("Claude"),
-        "argv is not the environment"
-    );
-    assert_eq!(
-        env_value(&procargs_of(&["nono"], &["HOME=/x"]), "MOORING_AGENT"),
-        None
-    );
-    assert_eq!(
-        env_value(
-            &procargs_of(&["nono"], &["MOORING_AGENTX=claude"]),
-            "MOORING_AGENT"
-        ),
-        None
-    );
+fn an_agent_hint_is_a_key_or_an_executable_in_any_case() {
     assert_eq!(agent_named("Claude"), Some(Agent::Claude));
     assert_eq!(agent_named(" codex "), Some(Agent::Codex));
     assert_eq!(agent_named("vim"), None);
@@ -105,36 +75,7 @@ fn screen_wait_reads_only_strict_approval_and_choice_shapes() {
     }
 }
 #[test]
-fn transcript_off_reads_only_the_environment_tail() {
-    let procargs = |argv: &[&str], env: &[&str]| {
-        let mut b = (argv.len() as i32).to_ne_bytes().to_vec();
-        b.extend_from_slice(b"/usr/local/bin/claude\0\0\0");
-        for part in argv.iter().chain(env) {
-            b.extend_from_slice(part.as_bytes());
-            b.push(0);
-        }
-        b
-    };
-    let key = "CLAUDE_CODE_CHILD_SESSION";
-    assert!(env_has(
-        &procargs(&["claude"], &["HOME=/u", "CLAUDE_CODE_CHILD_SESSION=1"]),
-        key
-    ));
-    // A prompt that names the variable, a longer name, or no marker at all.
-    for (argv, env) in [
-        (
-            &["claude", "CLAUDE_CODE_CHILD_SESSION=1"][..],
-            &["HOME=/u"][..],
-        ),
-        (&["claude"], &["CLAUDE_CODE_CHILD_SESSION_X=1"]),
-        (&["claude"], &[]),
-    ] {
-        assert!(!env_has(&procargs(argv, env), key), "{argv:?} {env:?}");
-    }
-    assert!(!env_has(b"\0\0", key));
-}
-#[test]
-fn explicit_claude_id_uses_argv_boundaries_and_kernel_arguments() {
+fn explicit_claude_id_uses_argv_boundaries() {
     let id = uuid::Uuid::new_v4().to_string();
     for flag in ["--session-id", "--resume", "-r"] {
         let args = vec!["claude".into(), flag.into(), id.clone(), "say ok".into()];
@@ -163,10 +104,6 @@ fn explicit_claude_id_uses_argv_boundaries_and_kernel_arguments() {
     ] {
         assert_eq!(claude_session_id(&args), None);
     }
-    assert_eq!(
-        process_argv(std::process::id()).unwrap(),
-        std::env::args().collect::<Vec<_>>()
-    );
 }
 
 #[test]

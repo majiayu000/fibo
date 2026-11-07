@@ -279,7 +279,7 @@ pub(super) fn follow_associated(
     if !unbound.is_empty() {
         let cwds: Vec<_> = unbound
             .iter()
-            .filter_map(|pid| crate::recognition::process_cwd(*pid))
+            .filter_map(|pid| mooring_platform::inspect::cwd(*pid))
             .collect();
         let window = mooring_core::content::now().saturating_sub(600);
         let mut candidates: Vec<_> = index

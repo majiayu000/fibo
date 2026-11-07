@@ -235,7 +235,7 @@ pub(super) fn serve_runtime(
     }));
     lock(&host)?.myself = Arc::downgrade(&host);
     let weak = Arc::downgrade(&host);
-    lock(&host)?.exits = Some(crate::process_exit::ExitWatch::new(move |pid| {
+    lock(&host)?.exits = Some(mooring_platform::exit_watch::ExitWatch::new(move |pid| {
         if let Some(host) = weak.upgrade() {
             if let Err(e) = lock(&host).and_then(|mut h| h.agent_exited(pid)) {
                 eprintln!("persist Agent exit: {e}");

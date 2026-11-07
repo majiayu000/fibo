@@ -61,7 +61,7 @@ struct Host {
     /// `mooring events` connections, and what they were last told.
     event_subscribers: HashMap<u64, events::EventSubscriber>,
     events: events::Tracker,
-    exits: Option<crate::process_exit::ExitWatch>,
+    exits: Option<mooring_platform::exit_watch::ExitWatch>,
     agent_pids: HashMap<u32, String>,
     /// Agent processes no evidence has tied to a conversation yet: their terminal and CLI.
     unbound_pids: HashMap<u32, (String, Agent)>,

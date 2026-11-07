@@ -13,7 +13,6 @@ mod host;
 pub mod log_index;
 mod official;
 pub mod plugin_hooks;
-mod process_exit;
 mod program_status;
 mod pty;
 pub mod recognition;
