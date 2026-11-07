@@ -24,6 +24,7 @@ const AIDER: &str = r#"{"api":1,"id":"aider","name":"Aider","executable":"aider"
 
 #[test]
 fn built_in_keys_and_commands_are_what_was_stored_before() {
+    use mooring_platform::shell::{past_functions, quote};
     assert_eq!(serde_json::to_string(&Agent::Claude).unwrap(), "\"Claude\"");
     assert_eq!(
         serde_json::from_str::<Agent>("\"Grok\"").unwrap(),
@@ -38,11 +39,20 @@ fn built_in_keys_and_commands_are_what_was_stored_before() {
     let launch = ["-c", "model_reasoning_effort=\"high\"", "-m", "gpt-5"].map(String::from);
     assert_eq!(
         Agent::Codex.resume_command("id", &launch),
-        "command codex -c 'model_reasoning_effort=\"high\"' -m gpt-5 resume 'id'"
+        format!(
+            "{} -c {} -m gpt-5 resume {}",
+            past_functions("codex"),
+            quote("model_reasoning_effort=\"high\""),
+            quote("id")
+        )
     );
     assert_eq!(
         Agent::Claude.resume_command("id", &["--dangerously-skip-permissions".into()]),
-        "command claude --dangerously-skip-permissions --resume 'id'"
+        format!(
+            "{} --dangerously-skip-permissions --resume {}",
+            past_functions("claude"),
+            quote("id")
+        )
     );
     assert_eq!(Agent::Claude.command(), "claude");
 }

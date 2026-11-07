@@ -48,6 +48,10 @@ pub fn quote(word: &str) -> String {
     format!("'{}'", word.replace('\'', "'\\''"))
 }
 
+pub fn past_functions(program: &str) -> String {
+    format!("command {program}")
+}
+
 /// The command and its argument never share a string: the argument stays `$1`.
 pub fn run_then_stay(shell: &str, command: &str, argument: Option<&str>) -> Vec<String> {
     let then = format!("exec {} -l", quote(shell));
@@ -83,4 +87,33 @@ pub fn login_env(vars: Vec<(OsString, OsString)>) -> Vec<(OsString, OsString)> {
         .collect();
     env.push(("PATH".into(), SYSTEM_PATH.into()));
     env
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What runs in people's shells, and what older conversations were resumed with.
+    #[test]
+    fn commands_are_written_as_they_always_were() {
+        assert_eq!(past_functions("codex"), "command codex");
+        assert_eq!(quote("a'b"), r"'a'\''b'");
+        assert_eq!(stay("/bin/zsh"), ["/bin/zsh", "-l"]);
+        assert_eq!(
+            run_then_stay("/bin/zsh", "codex", None),
+            ["/bin/zsh", "-l", "-i", "-c", "codex; exec '/bin/zsh' -l"]
+        );
+        assert_eq!(
+            run_then_stay("/bin/zsh", "codex", Some("hi")),
+            [
+                "/bin/zsh",
+                "-l",
+                "-i",
+                "-c",
+                "codex \"$1\"; exec '/bin/zsh' -l",
+                "/bin/zsh",
+                "hi"
+            ]
+        );
+    }
 }

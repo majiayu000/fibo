@@ -94,7 +94,8 @@ impl Agent {
         {
             Some(rest) => {
                 let flags: Vec<_> = launch.iter().map(|a| shell_word(a)).collect();
-                format!("command {} {}{rest}", s.executable, flags.join(" "))
+                let program = mooring_platform::shell::past_functions(&s.executable);
+                format!("{program} {}{rest}", flags.join(" "))
             }
             None => plain,
         }
@@ -126,7 +127,7 @@ impl<'de> Deserialize<'de> for Agent {
 fn render(template: &str, id: Option<&str>) -> String {
     let mut out = template.replace("{uuid}", &uuid::Uuid::new_v4().to_string());
     if let Some(id) = id {
-        out = out.replace("{id}", &crate::model::shell_quote(id));
+        out = out.replace("{id}", &mooring_platform::shell::quote(id));
     }
     out
 }
@@ -140,7 +141,7 @@ fn shell_word(value: &str) -> String {
     if plain {
         value.to_owned()
     } else {
-        crate::model::shell_quote(value)
+        mooring_platform::shell::quote(value)
     }
 }
 

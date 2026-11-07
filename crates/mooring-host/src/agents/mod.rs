@@ -407,15 +407,32 @@ pub fn roots(home: &Path) -> Vec<(Agent, PathBuf)> {
 }
 
 /// The CLI a `ps` command line runs, if any.
-pub fn from_command(command: &str) -> Option<Agent> {
-    let mut args = command.split_whitespace();
-    let executable = Path::new(args.next()?).file_name()?.to_str()?;
-    let interpreter = matches!(executable, "node" | "bun")
-        || executable.to_ascii_lowercase().starts_with("python");
-    let script = interpreter.then(|| args.next()).flatten();
+pub fn from_argv(argv: &[String]) -> Option<Agent> {
+    let executable = program_name(argv.first()?);
+    // Windows gives a script's path in either slash, often both.
+    let script = is_interpreter(executable)
+        .then(|| argv.get(1).map(|s| s.replace('\\', "/")))
+        .flatten();
     Agent::all()
         .into_iter()
-        .find(|a| adapter(*a).runs(executable, script))
+        .find(|a| adapter(*a).runs(executable, script.as_deref()))
+}
+
+/// What a program is called, from a path as any system writes it: no directory, no `.exe`.
+fn program_name(path: &str) -> &str {
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    match name
+        .len()
+        .checked_sub(4)
+        .filter(|at| name.is_char_boundary(*at))
+    {
+        Some(at) if name[at..].eq_ignore_ascii_case(".exe") => &name[..at],
+        _ => name,
+    }
+}
+
+fn is_interpreter(program: &str) -> bool {
+    matches!(program, "node" | "bun") || program.to_ascii_lowercase().starts_with("python")
 }
 
 /// The conversation id and working directory a transcript line names.
@@ -465,10 +482,14 @@ pub(crate) fn carried(
     values: &[&str],
     lists: &[&str],
 ) -> Vec<String> {
-    let Some(start) = args
-        .iter()
-        .position(|a| Path::new(a).file_name().is_some_and(|n| n == executable))
-    else {
+    // Where the CLI's own arguments start: past its name, or past the script an interpreter
+    // runs, which on Windows is the package's own file and not named after the CLI.
+    let by_name = args.iter().position(|a| program_name(a) == executable);
+    let by_script = args
+        .first()
+        .filter(|program| is_interpreter(program_name(program)) && args.len() > 1)
+        .map(|_| 1);
+    let Some(start) = by_name.or(by_script) else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -499,3 +520,5 @@ pub(crate) fn carried(
 
 #[cfg(test)]
 mod codex_header_tests;
+#[cfg(test)]
+mod program_tests;
