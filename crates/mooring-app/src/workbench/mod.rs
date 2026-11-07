@@ -481,6 +481,7 @@ impl Workbench {
                 space_menu: None,
                 space_removing: false,
                 space_quieting: false,
+                adding_machine_space: None,
                 space_switch: false,
                 renaming_space: None,
                 icon_menu: None,

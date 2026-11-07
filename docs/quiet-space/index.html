@@ -69,7 +69,7 @@
   <text x="130" y="186" text-anchor="middle" fill="#a3a2a0" font-size="13">计数、提醒、列表都算</text>
   <rect x="650" y="120" width="200" height="90" rx="14" fill="#1c1c1e" stroke="#8a8988" stroke-width="1.5"/>
   <text x="750" y="160" text-anchor="middle" fill="#ecebe9" font-size="19" font-weight="600">先不管</text>
-  <text x="750" y="186" text-anchor="middle" fill="#a3a2a0" font-size="13">外面不算，底部一行灰字</text>
+  <text x="750" y="186" text-anchor="middle" fill="#a3a2a0" font-size="13">外面不算，只留一行灰字</text>
   <path d="M235 140H645" fill="none" stroke="#a3a2a0" stroke-width="1.5" marker-end="url(#a)"/>
   <text x="440" y="130" text-anchor="middle" fill="#ecebe9" font-size="14">右键或 ⌘P 选「先不管」</text>
   <path d="M645 190H235" fill="none" stroke="#199e70" stroke-width="1.5" marker-end="url(#g)"/>
@@ -134,7 +134,7 @@
   <tr><td>系统通知和声音</td><td>不发；已弹的撤回；接着管不补发，之后的新事件照发</td><td><code>desktop::entered</code>、<code>left</code></td></tr>
   <tr><td>通知类插件钩子（如 notify-macos）</td><td>不发；接着管不补发，之后的新事件照发</td><td><code>plugin_hooks::changes</code></td></tr>
   <tr><td>鸟瞰卡片、鸟瞰待办</td><td>不显示，头部一行灰字和「接着管」</td><td><code>status_group::column</code>、<code>unfinished_todos</code></td></tr>
-  <tr><td>侧栏列表、空间胶囊、切换菜单</td><td>不显示，底部灰字行；不超过两个空间时各一行，更多时合成一行</td><td><code>session_hidden_in</code>、<code>quiet_lines</code></td></tr>
+  <tr><td>侧栏列表、空间胶囊、切换菜单</td><td>不显示，一行灰字：「按机器」布局在本机列表末尾，跟本机一起折叠；其他布局在底部，排在先不管的电脑上面。不超过两个空间时各一行，更多时合成一行</td><td><code>session_hidden_in</code>、<code>quiet_lines</code></td></tr>
   <tr><td>⌘P</td><td>搜索能找到会话和「接着管」；空查询的最近列表不列</td><td><code>palette/search.rs</code></td></tr>
   <tr><td>新建待办的默认空间和可选空间</td><td>不选它；已经在里面的待办可以留着</td><td><code>attended_or_first</code></td></tr>
   <tr><td>手机、另一台电脑的列表</td><td>不列</td><td><code>remote/list.rs</code></td></tr>
