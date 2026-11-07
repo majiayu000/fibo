@@ -1,21 +1,24 @@
 //! The whole way through on whatever system this runs on: a host starts, opens this system's
 //! own shell in a terminal, and the command line lists it, reads its screen and types into it.
+#[cfg_attr(unix, path = "support/tied.rs")]
+#[cfg_attr(windows, path = "support/tied_windows.rs")]
+mod tied;
 use mooring_core::{model::*, protocol::*};
 use mooring_platform::{fs, inspect, local::Stream, shell};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
+use tied::{SpawnTied, Tied};
 
 const PATIENCE: Duration = Duration::from_secs(60);
 
 struct Host {
-    child: Child,
+    child: Tied,
     root: PathBuf,
 }
 impl Drop for Host {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.kill_tree();
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }
@@ -31,7 +34,7 @@ fn start_host() -> Host {
         .arg(&root)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .spawn()
+        .spawn_tied()
         .unwrap();
     Host { child, root }
 }
