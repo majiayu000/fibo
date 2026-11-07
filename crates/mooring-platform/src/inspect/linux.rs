@@ -141,7 +141,9 @@ pub fn all_pids() -> Vec<u32> {
 /// no file (a kernel thread), what the kernel calls it, of which it keeps 15 bytes.
 pub fn name(pid: u32) -> Option<String> {
     if let Ok(path) = std::fs::read_link(proc_file(pid, "exe")) {
-        return Some(path.file_name()?.to_string_lossy().into_owned());
+        // npm's `claude` is a native file called `claude.exe`, on Linux too.
+        let file = path.file_name()?.to_string_lossy();
+        return Some(file.strip_suffix(".exe").unwrap_or(&file).to_owned());
     }
     let name = std::fs::read_to_string(proc_file(pid, "comm")).ok()?;
     Some(name.trim_end_matches('\n').to_owned())
