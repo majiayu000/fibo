@@ -234,6 +234,10 @@ pub(super) fn check_screen_wait(
     host.screen_background(id, &tail)?;
     let seen = host.workspace.current_agent(id).is_some().then_some(seen);
     let veto = !seen.as_ref().is_some_and(|e| e.waiting());
+    if let Some(seen) = &seen {
+        let before = host.screen_waits.get(id).and_then(|e| e.question());
+        wait_log::waiting(before, id, host.workspace.current_agent(id), seen, &tail);
+    }
     host.set_screen_wait(id, seen)?;
     host.http_ask_read(shared, id, !veto)?;
     if !veto {
