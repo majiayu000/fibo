@@ -9,9 +9,9 @@ use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Networking::WinSock::{
     AF_UNIX, FD_SET, FIONBIO, INVALID_SOCKET, MSG_PEEK, SD_BOTH, SD_RECEIVE, SD_SEND, SO_RCVTIMEO,
     SO_SNDTIMEO, SOCK_STREAM, SOCKADDR, SOCKADDR_UN, SOCKET, SOCKET_ERROR, SOL_SOCKET, TIMEVAL,
-    WSA_FLAG_NO_HANDLE_INHERIT, WSA_FLAG_OVERLAPPED, WSADATA, WSAETIMEDOUT, WSAEWOULDBLOCK,
-    WSAGetLastError, WSAIoctl, WSASocketW, WSAStartup, accept, bind, closesocket, connect,
-    ioctlsocket, listen, recv, select, send, setsockopt, shutdown,
+    WSA_FLAG_NO_HANDLE_INHERIT, WSA_FLAG_OVERLAPPED, WSADATA, WSAENETDOWN, WSAETIMEDOUT,
+    WSAEWOULDBLOCK, WSAGetLastError, WSAIoctl, WSASocketW, WSAStartup, accept, bind, closesocket,
+    connect, ioctlsocket, listen, recv, select, send, setsockopt, shutdown,
 };
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
@@ -123,7 +123,13 @@ impl Stream {
         if unsafe { connect(raw.raw, (&raw const sun).cast::<SOCKADDR>(), ADDRESS_SIZE) }
             == SOCKET_ERROR
         {
-            return Err(last_error());
+            let error = last_error();
+            // What this socket type says when the folder is not there. There is no network to
+            // be down; Unix calls this not found, and callers start the server on that.
+            if error.raw_os_error() == Some(WSAENETDOWN) {
+                return Err(io::Error::from(io::ErrorKind::NotFound));
+            }
+            return Err(error);
         }
         Ok(Self(Arc::new(raw)))
     }

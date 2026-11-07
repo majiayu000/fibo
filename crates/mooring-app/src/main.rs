@@ -143,12 +143,12 @@ fn load_workspace(root: &Path) -> io::Result<Workspace> {
     }
     Ok(workspace)
 }
-/// Finder and Dock start apps in "/", where nobody means to open a terminal: use the
-/// home directory then, and the launch directory otherwise (`run.sh`, a shell).
+/// The desktop starts apps somewhere nobody means to open a terminal: use the home directory
+/// then, and the launch directory otherwise (`run.sh`, a shell).
 fn default_space_dir() -> io::Result<PathBuf> {
     let cwd = std::env::current_dir()?;
     Ok(match mooring_platform::dirs::home() {
-        Some(home) if cwd == Path::new("/") => home,
+        Some(home) if mooring_platform::dirs::is_system_start(&cwd) => home,
         _ => cwd,
     })
 }

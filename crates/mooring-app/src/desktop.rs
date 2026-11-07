@@ -13,7 +13,7 @@ use mooring_core::{
 };
 use serde_json::json;
 use std::{
-    ffi::{CStr, CString, c_char},
+    ffi::{CStr, c_char},
     path::Path,
     sync::OnceLock,
 };
@@ -29,39 +29,14 @@ pub const DIAGNOSTICS: &str = "diagnostics:";
 pub struct Watching(pub Option<String>);
 impl Global for Watching {}
 static EVENTS: OnceLock<UnboundedSender<String>> = OnceLock::new();
-unsafe extern "C" {
-    fn kl_desktop_route_applied(
-        session: *const c_char,
-        terminal: *const c_char,
-        tab: *const c_char,
-    );
-    fn kl_desktop_install(callback: extern "C" fn(*const c_char));
-    fn kl_desktop_update(json: *const c_char);
-    fn kl_notifications_enable();
-    fn kl_desktop_show();
-    fn kl_request_attention();
-    fn kl_set_dock_icon(png: *const u8, length: usize);
-    fn kl_desktop_notify(
-        session: *const c_char,
-        title: *const c_char,
-        body: *const c_char,
-        sound: i32,
-    );
-    fn kl_play_sound();
-    fn kl_desktop_withdraw(session: *const c_char);
-}
-pub fn set_dock_icon(png: &[u8]) {
-    unsafe { kl_set_dock_icon(png.as_ptr(), png.len()) }
-}
-pub fn route_applied(session: &str, terminal: &str, tab: &str) {
-    unsafe {
-        kl_desktop_route_applied(
-            cstring(session).as_ptr(),
-            cstring(terminal).as_ptr(),
-            cstring(tab).as_ptr(),
-        );
-    }
-}
+/// The menu bar, notifications and Dock. macOS has them through AppKit; elsewhere they do not
+/// exist yet, and the window does not depend on them.
+#[cfg_attr(target_os = "macos", path = "desktop_macos.rs")]
+#[cfg_attr(not(target_os = "macos"), path = "desktop_other.rs")]
+mod native;
+#[cfg(feature = "visual-test")]
+pub use native::snapshot;
+pub use native::{request_attention, route_applied, set_dock_icon, show};
 extern "C" fn event(value: *const c_char) {
     if value.is_null() {
         return;
@@ -73,9 +48,6 @@ extern "C" fn event(value: *const c_char) {
     if let Some(tx) = EVENTS.get() {
         let _ = tx.unbounded_send(value);
     }
-}
-fn cstring(value: &str) -> CString {
-    CString::new(value.replace('\0', " ")).expect("removed NUL")
 }
 fn fact(w: &Workspace, s: &AgentSession) -> Option<(String, String)> {
     let c = w.content.get(&s.id)?;
@@ -337,27 +309,13 @@ fn panel(w: &Workspace, link: &Link) -> String {
     })
     .to_string()
 }
-pub fn show() {
-    unsafe {
-        kl_desktop_show();
-    }
-}
-pub fn request_attention() {
-    unsafe {
-        kl_request_attention();
-    }
-}
 pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiver<String> {
     let (tx, events) = unbounded();
     let _ = EVENTS.set(tx);
     cx.set_global(Status::default());
     // All AppKit entry points run on the GPUI/main thread.
-    unsafe {
-        kl_desktop_install(event);
-        kl_desktop_update(
-            cstring(&panel(&initial, &Link::fresh(RecognitionPhase::Starting))).as_ptr(),
-        );
-    }
+    native::install(event);
+    native::update(&panel(&initial, &Link::fresh(RecognitionPhase::Starting)));
     let (status_tx, mut status_rx) = unbounded();
     let connection = RecognitionConnection::new(socket, status_tx);
     let socket = socket.to_owned();
@@ -382,9 +340,7 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                 link.error = Some(e.to_string());
                 let value = panel(&before, &link);
                 if previous_panel != value {
-                    cx.update(|_| unsafe {
-                        kl_desktop_update(cstring(&value).as_ptr());
-                    });
+                    cx.update(|_| native::update(&value));
                     previous_panel = value;
                 }
             }
@@ -410,17 +366,15 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
             }
             let value = panel(&after, &link);
             if previous_panel != value {
-                cx.update(|_| unsafe {
-                    kl_desktop_update(cstring(&value).as_ptr());
-                });
+                cx.update(|_| native::update(&value));
                 previous_panel = value;
             }
             if !before.settings.notifications && after.settings.notifications {
-                cx.update(|_| unsafe { kl_notifications_enable() });
+                cx.update(|_| native::notifications_enable());
             }
             if ready {
                 for session in left(&before, &after) {
-                    cx.update(|_| unsafe { kl_desktop_withdraw(cstring(&session).as_ptr()) });
+                    cx.update(|_| native::withdraw(&session));
                 }
                 let watching =
                     cx.update(|cx| cx.try_global::<Watching>().and_then(|w| w.0.clone()));
@@ -441,16 +395,11 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                     {
                         Ok(Reply::NotificationClaimed(true)) => {
                             let settings = &after.settings;
-                            cx.update(|_| unsafe {
+                            cx.update(|_| {
                                 if settings.notifications {
-                                    kl_desktop_notify(
-                                        cstring(&session).as_ptr(),
-                                        cstring(&title).as_ptr(),
-                                        cstring(&body).as_ptr(),
-                                        i32::from(settings.sound),
-                                    );
+                                    native::notify(&session, &title, &body, settings.sound);
                                 } else {
-                                    kl_play_sound();
+                                    native::play_sound();
                                 }
                             });
                         }
@@ -471,14 +420,3 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
 #[cfg(test)]
 #[path = "desktop_tests.rs"]
 mod tests;
-
-#[cfg(feature = "visual-test")]
-pub fn snapshot(path: &Path) {
-    unsafe extern "C" {
-        fn kl_desktop_snapshot(path: *const c_char) -> bool;
-    }
-    assert!(
-        unsafe { kl_desktop_snapshot(cstring(&path.to_string_lossy()).as_ptr()) },
-        "native menu panel export"
-    );
-}
