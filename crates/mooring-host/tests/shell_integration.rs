@@ -476,12 +476,14 @@ fn macos_bash_3_reports_its_directory_too() {
     let st = state(
         &h,
         &mut s,
-        r#"printf '%s|%s\n' "$(set -o | grep -c 'posix[[:space:]]*on')" "$PROMPT_COMMAND" > "$HOME/state""#,
+        r#"printf '%s|%s\n' "$(set -o | grep -c 'posix[[:space:]]*on')" "${PROMPT_COMMAND[*]}" > "$HOME/state""#,
     );
-    assert_eq!(
-        st.trim(),
-        "0|_mooring_prompt;echo -n;",
-        "not in POSIX mode, the user's prompt command kept"
+    // A string on a Mac; an array where a system profile made it one, as Ubuntu's does, and
+    // that profile may add its own. What is promised: ours first, the user's kept.
+    let st = st.trim();
+    assert!(
+        st.starts_with("0|_mooring_prompt") && st.contains("echo -n;"),
+        "not in POSIX mode, the user's prompt command kept: {st}"
     );
     assert_eq!(h.loads("bash_profile"), 1);
     // bash 3.2 has no PS0 to mark a command's start, so its commands are not heard. Only a

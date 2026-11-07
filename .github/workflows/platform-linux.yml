@@ -56,8 +56,11 @@ jobs:
         run: sh bootstrap.sh
 
       # The tests that drive real shells start zsh too, which Agents' shells mostly are.
+      # A runner's shared zsh folders are writable by a group, and zsh then stops to ask.
       - name: Install zsh
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+          sudo chmod -R go-w /usr/local/share/zsh /usr/share/zsh
 
       - name: Clippy
         run: |
