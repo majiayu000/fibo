@@ -20,6 +20,17 @@ pub fn create_private_dir(dir: &Path) -> io::Result<()> {
     std::fs::create_dir_all(dir)
 }
 
+/// Takes the rights of its directory, as `create_private_dir` says.
+pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let temp = path.with_extension(format!("tmp{}", std::process::id()));
+    std::fs::write(&temp, bytes)?;
+    let renamed = std::fs::rename(&temp, path);
+    if renamed.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    renamed
+}
+
 /// std cannot count a file's names here; such a file loses its other names when replaced.
 pub fn hard_linked(_path: &Path) -> bool {
     false

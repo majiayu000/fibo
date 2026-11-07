@@ -521,7 +521,9 @@ fn try_run(
         mooring_host::plugin_hooks::command_for(h, &payload).map_err(io::Error::other)?
     } else if let Some(d) = decorations.iter().find(|d| d.id == declaration) {
         d.spec(&pane)
-    } else if let Some(s) = sources.iter().find(|s| s.agent == declaration) {
+    } else if let Some(s) =
+        (sources.iter().filter(|s| s.agent == declaration)).max_by_key(|s| s.command.is_some())
+    {
         if s.command.is_none() {
             return Err(io::Error::other(format!(
                 "{declaration} 的额度来自文件 {}，没有命令可跑",

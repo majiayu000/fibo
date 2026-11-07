@@ -15,6 +15,9 @@ regex = "1"
 memchr = "2"
 shlex = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
+# `/usage` names the zone a window resets in. The system's zone database, and a bundled one only
+# on Windows, which has none.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
 mooring-core = { path = "../mooring-core" }
 mooring-platform = { path = "../mooring-platform" }
 rusqlite = { version = "0.38", features = ["bundled"] }

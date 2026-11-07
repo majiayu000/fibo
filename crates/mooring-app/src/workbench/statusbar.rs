@@ -202,7 +202,9 @@ impl Workbench {
                 .when(stale, |d| {
                     d.child(div().text_color(T::color(T::muted())).child("*"))
                 });
-            let windows: Vec<_> = quota.windows.iter().filter(|w| !w.reset(now)).collect();
+            let windows: Vec<_> = (quota.windows.iter())
+                .filter(|w| !w.reset(now) && w.on_bar())
+                .collect();
             if windows.is_empty() {
                 cell = cell.child(div().text_color(T::color(T::muted())).child("已重置"));
             }
@@ -327,6 +329,9 @@ impl Workbench {
                 .gap(px(T::S4))
                 .py(px(T::S4))
                 .child(head);
+            let named =
+                (readings.iter()).any(|(_, q, _)| q.windows.iter().any(|w| !w.name.is_empty()));
+            let label_w = T::S20 + if named { T::S20 + T::S20 } else { T::S10 };
             for w in &quota.windows {
                 let (fill, ink) = colors(w, stale);
                 let reset = w.reset(now);
@@ -338,7 +343,7 @@ impl Workbench {
                         .text_size(px(T::CHIP_SIZE))
                         .child(
                             div()
-                                .w(px(T::S20 + T::S10))
+                                .w(px(label_w))
                                 .text_color(T::color(T::muted()))
                                 .child(w.label()),
                         )
@@ -382,7 +387,7 @@ impl Workbench {
             );
         }
         panel.child(
-            label("只读各家在本机留下的记录，不联网。* 表示读数超过 1 小时")
+            label("读各家留在本机的记录和插件的读数。* 表示读数超过 1 小时")
                 .pt(px(T::S4))
                 .border_t(px(T::BORDER_WIDTH))
                 .border_color(T::color(T::border())),
