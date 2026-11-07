@@ -48,6 +48,8 @@ impl Workbench {
         match name {
             // The status bar's 工作中 popover beside the sidebar: one session, one color.
             "StatusSessions" => self.statusbar = Some(super::statusbar::StatusPop::Sessions),
+            // 额度's popover, with MOORING_FIXTURE_QUOTA_SPARE a week about to go unused.
+            "StatusQuota" => self.statusbar = Some(super::statusbar::StatusPop::Quota),
             // Main is the window as it opens (docs/ui-v3/v3-4.png); 看进度's card has its own.
             "Main" | "MainSpace" | "UnboundAgent" => {}
             // 标记完成 on it, in its menu; asked for real, the fixture's screen names no
