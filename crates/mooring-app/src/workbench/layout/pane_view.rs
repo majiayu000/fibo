@@ -232,6 +232,9 @@ impl Workbench {
                         .child(alert),
                 )
             })
+            .when_some(session.and_then(|s| self.context_ring(s)), |d, ring| {
+                d.child(ring)
+            })
             .when_some(completing, |d, (style, t)| {
                 d.child(self.completing_button(id, style, t))
             })

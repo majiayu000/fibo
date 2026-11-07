@@ -4,6 +4,7 @@ pub mod agent_answers;
 pub mod agent_input;
 mod agent_transcripts;
 pub mod cli_entry;
+pub mod context_fill;
 pub mod decoration;
 pub mod delivery;
 pub mod effect;

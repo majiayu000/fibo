@@ -120,6 +120,9 @@ pub struct Content {
     /// The account's usage limits as this conversation's log last recorded them.
     #[serde(default)]
     pub quota: Option<crate::quota::Quota>,
+    /// How full the context window was at the last request, when the log states the window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<crate::context_fill::Fill>,
     /// Files this session changed, each with when it last did, newest last. Paths are as the
     /// tool call named them: absolute, or relative to the session's cwd.
     #[serde(default)]
