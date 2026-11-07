@@ -1,0 +1,35 @@
+name: Publish Mooring website
+on:
+  push:
+    branches: [main]
+    paths: ['docs/site/**', 'assets/mooring-1024.png', '.github/workflows/pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mooring-pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Stage only public website files
+        run: |
+          mkdir -p _site/assets
+          cp docs/site/index.html docs/site/sitemap.xml _site/
+          cp assets/mooring-1024.png _site/assets/
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
+        id: deployment
