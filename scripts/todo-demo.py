@@ -120,7 +120,7 @@ if cmd == 'start':
     if os.environ.get('NOAPP'):
         STATE.write_text(json.dumps({'root': str(root), 'home': str(home), 'host': host.pid, 'app': 0})); print('host only', root); sys.exit()
     evidence = sys.argv[3:] and ['--visual-evidence', str(pathlib.Path(sys.argv[3]).resolve())]
-    if evidence: env['MOORING_TODO_DEMO_EVIDENCE'] = '1'
+    if evidence: env['MOORING_REVIEW_QUEUE_EVIDENCE' if os.environ.get('MOORING_REVIEW_QUEUE_EVIDENCE') else 'MOORING_TODO_DEMO_EVIDENCE'] = '1'
     if os.environ.get('MOORING_TODO_FUZZ_SEED'): env['MOORING_TODO_FUZZ_SEED'] = os.environ['MOORING_TODO_FUZZ_SEED']
     app = subprocess.Popen([str(bindir / 'mooring-app'), '--runtime', str(root / 'runtime'), *evidence], env=env, stdout=open(root / 'app.log', 'w'), stderr=subprocess.STDOUT, start_new_session=True)
     STATE.write_text(json.dumps({'root': str(root), 'home': str(home), 'host': host.pid, 'app': app.pid}))

@@ -28,6 +28,10 @@ pub(super) struct OverviewState {
     pub(super) cleanup_index: usize,
     /// What each queued session became while this round of 逐个清理 ran, by session id.
     pub(super) cleanup_results: HashMap<String, Outcome>,
+    /// The queue is 逐个验收: 要你处理's finished turns, not 逐个清理's leftovers.
+    pub(super) cleanup_review: bool,
+    /// Marked complete in 逐个验收: its terminal closes when the host has accepted the mark.
+    pub(super) review_closing: Option<String>,
     pub(super) show_running: bool,
     pub(super) show_review: bool,
     /// The overview's scroll, so a group's pill can bring that group into view.
@@ -76,6 +80,8 @@ impl Workbench {
         self.overview.cleanup = queue;
         self.overview.cleanup_index = 0;
         self.overview.cleanup_results.clear();
+        self.overview.cleanup_review = false;
+        self.overview.review_closing = None;
         self.overview.here = None;
         cx.notify();
     }

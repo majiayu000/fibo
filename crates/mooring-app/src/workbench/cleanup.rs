@@ -41,16 +41,16 @@ impl Workbench {
         else {
             return false;
         };
+        if self.review_blocked(&s).is_some() && matches!(key, "enter" | "backspace" | "l") {
+            return true;
+        }
         match key {
-            "enter" | "backspace" => self.edit(
+            "enter" => self.complete_queued(s.id.clone(), cx),
+            "backspace" => self.edit(
                 Edit::SetOutcome {
                     seen: None,
                     id: s.id.clone(),
-                    outcome: if key == "enter" {
-                        Outcome::Completed
-                    } else {
-                        Outcome::Abandoned
-                    },
+                    outcome: Outcome::Abandoned,
                 },
                 cx,
             ),
@@ -151,7 +151,9 @@ impl Workbench {
                         div()
                             .text_size(px(T::FORM_TITLE))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(if self.overview.closed_only {
+                            .child(if self.overview.cleanup_review {
+                                "逐个验收"
+                            } else if self.overview.closed_only {
                                 "清理已关闭的会话"
                             } else {
                                 "清理很久没动的会话"
@@ -295,19 +297,20 @@ impl Workbench {
                 }
             }
             page = page.child(card);
+            let blocked = self.review_blocked(s);
+            if let Some(status) = blocked {
+                page = page.child(label(format!(
+                    "它现在{}，这里不能标记：打开看看或跳过",
+                    status.label()
+                )));
+            }
             let sid = s.id.clone();
-            let mut actions = div().flex().flex_wrap().gap(px(T::S8)).child(
-                solid(button("完成", "完成 ⏎")).on_click(cx.listener(move |this, _, _, cx| {
-                    this.edit(
-                        Edit::SetOutcome {
-                            seen: None,
-                            id: sid.clone(),
-                            outcome: Outcome::Completed,
-                        },
-                        cx,
-                    )
-                })),
-            );
+            let mut actions = div().flex().flex_wrap().gap(px(T::S8));
+            if blocked.is_none() {
+                actions = actions.child(solid(button("完成", "完成 ⏎")).on_click(
+                    cx.listener(move |this, _, _, cx| this.complete_queued(sid.clone(), cx)),
+                ));
+            }
             let resume = s.clone();
             actions = actions.child(quiet(button("cleanup-continue", "继续 C")).on_click(
                 cx.listener(move |this, _, window, cx| {
@@ -315,26 +318,28 @@ impl Workbench {
                     this.open_session(&resume, window, cx);
                 }),
             ));
-            let sid = s.id.clone();
-            actions = actions.child(quiet(button("cleanup-defer", "稍后再看… L")).on_click(
-                cx.listener(move |this, _, window, cx| {
-                    this.overview.here = Some(sid.clone());
-                    this.show_form(FormKind::Defer, window, cx);
-                }),
-            ));
-            let sid = s.id.clone();
-            actions = actions.child(quiet(button("cleanup-abandon", "放弃 ⌫")).on_click(
-                cx.listener(move |this, _, _, cx| {
-                    this.edit(
-                        Edit::SetOutcome {
-                            seen: None,
-                            id: sid.clone(),
-                            outcome: Outcome::Abandoned,
-                        },
-                        cx,
-                    )
-                }),
-            ));
+            if blocked.is_none() {
+                let sid = s.id.clone();
+                actions = actions.child(quiet(button("cleanup-defer", "稍后再看… L")).on_click(
+                    cx.listener(move |this, _, window, cx| {
+                        this.overview.here = Some(sid.clone());
+                        this.show_form(FormKind::Defer, window, cx);
+                    }),
+                ));
+                let sid = s.id.clone();
+                actions = actions.child(quiet(button("cleanup-abandon", "放弃 ⌫")).on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        this.edit(
+                            Edit::SetOutcome {
+                                seen: None,
+                                id: sid.clone(),
+                                outcome: Outcome::Abandoned,
+                            },
+                            cx,
+                        )
+                    }),
+                ));
+            }
             page = page.child(actions);
         } else {
             page = page.child(

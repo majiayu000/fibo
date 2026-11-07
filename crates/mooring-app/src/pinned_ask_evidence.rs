@@ -7,6 +7,8 @@ use super::*;
 use gpui::WindowHandle;
 use std::time::Duration;
 use workbench::Workbench;
+#[path = "review_queue_evidence.rs"]
+mod review_queue_evidence;
 #[path = "todo_demo_evidence.rs"]
 mod todo_demo_evidence;
 
@@ -18,6 +20,9 @@ pub(super) fn start(
     let (Some(handle), Some(directory)) = (handle, evidence) else {
         return false;
     };
+    if review_queue_evidence::start(handle, &directory, cx) {
+        return true;
+    }
     if todo_demo_evidence::start(handle, &directory, cx) {
         return true;
     }
