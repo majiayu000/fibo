@@ -226,6 +226,7 @@ mod board_drawer;
 mod cleanup;
 mod complete;
 mod complete_unbound;
+mod context_ring;
 mod decorations;
 mod diagnostics;
 mod divergence;
