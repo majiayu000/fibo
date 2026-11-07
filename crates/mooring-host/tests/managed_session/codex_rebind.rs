@@ -130,16 +130,12 @@ fn a_pane_ending_hours_after_the_last_prompt_hands_over_to_the_pane_showing_it()
         ),
     )
     .unwrap();
-    let stamp = std::process::Command::new("/bin/date")
-        .args(["-r", &long_ago.to_string(), "+%Y%m%d%H%M.%S"])
-        .output()
-        .unwrap();
-    assert!(std::process::Command::new("/usr/bin/touch")
-        .args(["-t", String::from_utf8_lossy(&stamp.stdout).trim()])
-        .arg(&log)
-        .status()
+    fs::File::options()
+        .write(true)
+        .open(&log)
         .unwrap()
-        .success());
+        .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(long_ago as u64))
+        .unwrap();
     // Its TUI holds the log open, so the old pane holds it without any recent prompt.
     let cli = h.root.join("codex");
     std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
@@ -297,16 +293,12 @@ fn an_older_conversations_words_on_the_screen_are_not_what_the_pane_runs() {
         ),
     )
     .unwrap();
-    let stamp = std::process::Command::new("/bin/date")
-        .args(["-r", &long_ago.to_string(), "+%Y%m%d%H%M.%S"])
-        .output()
-        .unwrap();
-    assert!(std::process::Command::new("/usr/bin/touch")
-        .args(["-t", String::from_utf8_lossy(&stamp.stdout).trim()])
-        .arg(&making)
-        .status()
+    fs::File::options()
+        .write(true)
+        .open(&making)
         .unwrap()
-        .success());
+        .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(long_ago as u64))
+        .unwrap();
     fs::rename(&making, &log).unwrap();
     daemon_codex(&h, "d", "proj", &[], "");
     wait_unbound(&h, "d");

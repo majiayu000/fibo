@@ -147,6 +147,60 @@ pub fn started_micros(pid: u32) -> Option<u64> {
     (n == size).then_some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
 }
 
+/// proc_pid_rusage counts in Mach absolute time, which on Apple Silicon is not nanoseconds.
+#[allow(deprecated)] // libc's binding is enough; no extra dependency for one call.
+fn mach_time(ticks: u64) -> std::time::Duration {
+    let mut base = libc::mach_timebase_info { numer: 0, denom: 0 };
+    if unsafe { libc::mach_timebase_info(&mut base) } != 0 || base.denom == 0 {
+        return std::time::Duration::from_nanos(ticks);
+    }
+    let nanos = u128::from(ticks) * u128::from(base.numer) / u128::from(base.denom);
+    std::time::Duration::from_nanos(nanos as u64)
+}
+
+pub fn usage(pid: u32) -> Option<super::Usage> {
+    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    // SAFETY: the kernel fills the struct the flavor names.
+    let read = unsafe {
+        libc::proc_pid_rusage(
+            pid as libc::c_int,
+            libc::RUSAGE_INFO_V4,
+            (&raw mut info).cast(),
+        )
+    };
+    if read != 0 {
+        return None;
+    }
+    let mut task: libc::proc_taskinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of_val(&task) as i32;
+    // SAFETY: the kernel writes at most `size` bytes.
+    let n = unsafe {
+        libc::proc_pidinfo(
+            pid as i32,
+            libc::PROC_PIDTASKINFO,
+            0,
+            (&raw mut task).cast(),
+            size,
+        )
+    };
+    Some(super::Usage {
+        cpu: mach_time(info.ri_user_time + info.ri_system_time),
+        disk_read: info.ri_diskio_bytesread,
+        disk_written: info.ri_diskio_byteswritten,
+        instructions: info.ri_instructions,
+        syscalls: if n == size {
+            u64::from(task.pti_syscalls_unix as u32)
+        } else {
+            0
+        },
+    })
+}
+
+/// `net.inet.ip.portrange.first`, whose default nobody changes.
+pub fn first_handed_out_port() -> u16 {
+    49152
+}
+
 pub fn all_pids() -> Vec<u32> {
     let mut buf = vec![0i32; 8192];
     let bytes = (buf.len() * std::mem::size_of::<i32>()) as i32;

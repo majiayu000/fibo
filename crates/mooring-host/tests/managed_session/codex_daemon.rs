@@ -534,7 +534,8 @@ fn unbound_daemon_codex_shows_title_state_and_no_daemon_shows_nothing() {
             },
         )
         .unwrap();
-        assert!(matches!(ack(&mut stream), Reply::Ok));
+        let reply = ack(&mut stream);
+        assert!(matches!(reply, Reply::Ok), "{pane}: {reply:?}");
     }
     let until = Instant::now() + Duration::from_secs(10);
     loop {

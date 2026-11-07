@@ -49,8 +49,7 @@ pub fn all_pids() -> Vec<u32> {
     imp::all_pids()
 }
 
-/// The name the system lists a process under, without a path or `.exe`. Linux keeps only
-/// the first 15 bytes of it.
+/// The name of the file a process runs, without a path or `.exe`.
 pub fn name(pid: u32) -> Option<String> {
     imp::name(pid).filter(|n| !n.is_empty())
 }
@@ -95,4 +94,27 @@ pub fn open_files(pids: &[u32]) -> io::Result<HashMap<u32, Vec<String>>> {
         return Ok(HashMap::new());
     }
     imp::open_files(pids)
+}
+
+/// What a process has used since it started, for telling how heavy some work was by the
+/// difference between two readings. What a system does not count stays zero: instructions
+/// and system calls are macOS only, and in a virtual machine there are no instructions either.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Usage {
+    pub cpu: std::time::Duration,
+    pub disk_read: u64,
+    pub disk_written: u64,
+    pub instructions: u64,
+    pub syscalls: u64,
+}
+
+/// None for what this account may not read, and for a process that is gone.
+pub fn usage(pid: u32) -> Option<Usage> {
+    imp::usage(pid)
+}
+
+/// Where the ports start that the system hands out to a socket bound to port 0. A port below
+/// it was chosen by someone.
+pub fn first_handed_out_port() -> u16 {
+    imp::first_handed_out_port()
 }
