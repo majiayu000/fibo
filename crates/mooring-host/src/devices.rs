@@ -196,6 +196,12 @@ pub fn load(socket: &Path) -> Vec<Device> {
         .unwrap_or_default()
 }
 
+/// For a change that is written back: a file that cannot be understood stays as it is, since
+/// saving over it would unpair every phone it holds.
+fn load_for_update(socket: &Path) -> io::Result<Vec<Device>> {
+    mooring_core::state_file::read_for_update(&file(socket))
+}
+
 fn save(socket: &Path, devices: &[Device]) -> io::Result<()> {
     write_private(&file(socket), &serde_json::to_vec_pretty(devices)?)
 }
@@ -213,7 +219,7 @@ pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> 
         kicked: 0,
     };
     let _held = lock(socket)?;
-    let mut devices = load(socket);
+    let mut devices = load_for_update(socket)?;
     devices.push(device.clone());
     save(socket, &devices)?;
     Ok((device, key))
@@ -237,7 +243,7 @@ fn find(devices: &[Device], needle: &str) -> io::Result<usize> {
 /// Unpairs a device.
 pub fn remove(socket: &Path, needle: &str) -> io::Result<Device> {
     let _held = lock(socket)?;
-    let mut devices = load(socket);
+    let mut devices = load_for_update(socket)?;
     let gone = devices.remove(find(&devices, needle)?);
     save(socket, &devices)?;
     revoke(socket, &gone)?;
@@ -247,7 +253,7 @@ pub fn remove(socket: &Path, needle: &str) -> io::Result<Device> {
 /// Gives a device another role; its open sessions end and it reconnects with the new one.
 pub fn set_role(socket: &Path, needle: &str, role: Role) -> io::Result<Device> {
     let _held = lock(socket)?;
-    let mut devices = load(socket);
+    let mut devices = load_for_update(socket)?;
     let i = find(&devices, needle)?;
     devices[i].role = role;
     save(socket, &devices)?;
@@ -257,7 +263,7 @@ pub fn set_role(socket: &Path, needle: &str, role: Role) -> io::Result<Device> {
 /// Ends a device's open sessions now; it stays paired and may connect again.
 pub fn kick(socket: &Path, needle: &str) -> io::Result<Device> {
     let _held = lock(socket)?;
-    let mut devices = load(socket);
+    let mut devices = load_for_update(socket)?;
     let i = find(&devices, needle)?;
     devices[i].kicked = now_ms();
     save(socket, &devices)?;
@@ -268,7 +274,7 @@ pub fn kick(socket: &Path, needle: &str) -> io::Result<Device> {
 /// offline.
 pub fn clear(socket: &Path) -> io::Result<()> {
     let _held = lock(socket)?;
-    let gone = load(socket);
+    let gone = load_for_update(socket)?;
     save(socket, &[])?;
     gone.iter().try_for_each(|d| revoke(socket, d))
 }
@@ -445,6 +451,22 @@ mod race_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_device_file_that_cannot_be_read_is_never_saved_over() {
+        let socket = std::env::temp_dir()
+            .join(format!("kl-devices-bad-{}", uuid::Uuid::new_v4()))
+            .join("host.sock");
+        std::fs::create_dir_all(socket.parent().unwrap()).unwrap();
+        let bad = r#"[{"id":"cut off"#;
+        std::fs::write(file(&socket), bad).unwrap();
+        assert!(add(&socket, "phone", Role::Full).is_err());
+        assert!(remove(&socket, "phone").is_err());
+        assert!(set_role(&socket, "phone", Role::View).is_err());
+        assert!(kick(&socket, "phone").is_err());
+        assert!(clear(&socket).is_err());
+        assert_eq!(std::fs::read_to_string(file(&socket)).unwrap(), bad);
+    }
 
     #[test]
     fn devices_are_added_found_removed_and_kept_private() {
