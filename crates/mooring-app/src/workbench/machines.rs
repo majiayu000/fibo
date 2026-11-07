@@ -215,6 +215,14 @@ impl Workbench {
             let pane = cx.new(|cx| Pane::remote(slot, &id, cx));
             cx.observe(&pane, |this, _, cx| this.pane_changed(cx))
                 .detach();
+            // Typing here is typing: it brings a machine put aside back, as it does a space.
+            let host = remote.view.lock().unwrap().spec.host.clone();
+            cx.subscribe(&pane, move |this, _, event, cx| {
+                if matches!(event, crate::terminal::pane::PaneEvent::Typed) {
+                    this.work_began_on_machine(&host, cx);
+                }
+            })
+            .detach();
             let title = shown_title(&card);
             self.peek = Some(Peek {
                 terminal: key,
@@ -468,6 +476,17 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         self.open_remote_shell(index, None, window, cx);
+    }
+    /// Into the open peek: keys as you type them, or a mouse report.
+    pub fn visual_in_peek(&mut self, text: &str, mouse: bool, cx: &mut Context<Self>) {
+        let pane = self.peek.as_ref().expect("a peek is open").pane.clone();
+        pane.update(cx, |p, cx| {
+            if mouse {
+                p.visual_pointer(text, cx);
+            } else {
+                p.visual_type(text, cx);
+            }
+        });
     }
     /// The open peek's terminal key, `remote:<machine>:<terminal>` for another machine's.
     pub fn visual_peek_key(&self) -> Option<String> {

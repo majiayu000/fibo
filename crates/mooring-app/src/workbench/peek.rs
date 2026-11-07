@@ -142,7 +142,9 @@ impl Workbench {
         peek.answering = true;
         peek.note = None;
         let terminal = peek.terminal.clone();
-        let local = peek.remote.is_none();
+        let machine = (peek.remote.as_ref())
+            .and_then(|r| self.machines.get(r.machine))
+            .map(|m| m.view.lock().unwrap().spec.host.clone());
         let task = match &peek.remote {
             Some(r) => cx.background_spawn(super::machines::answer_remote(r, question, allow)),
             None => cx.background_spawn(self.store.send(Request::AnswerApproval {
@@ -151,8 +153,9 @@ impl Workbench {
                 allow,
             })),
         };
-        if local {
-            self.work_began_on_terminal(&terminal, cx);
+        match machine {
+            Some(host) => self.work_began_on_machine(&host, cx),
+            None => self.work_began_on_terminal(&terminal, cx),
         }
         cx.spawn(async move |this, cx| {
             let result = task.await;
