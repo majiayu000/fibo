@@ -14,8 +14,7 @@ pub mod exit_watch;
 pub mod file_watch;
 pub mod fs;
 pub mod inspect;
-#[cfg(unix)]
-pub mod peer;
+pub mod local;
 pub mod process;
 pub mod shell;
 pub mod system;

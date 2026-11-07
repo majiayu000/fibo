@@ -9,11 +9,11 @@ use crate::control::{self, Args};
 use base64::Engine;
 use mooring_core::{model::*, protocol::*, terminal::Vt};
 use mooring_host::devices::{self, Role};
+use mooring_platform::local;
 use mooring_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -45,7 +45,7 @@ type Streams = Arc<Mutex<Registry>>;
 #[derive(Default)]
 struct Registry {
     /// `None`: closed by the client before it had opened.
-    open: HashMap<u64, Option<UnixStream>>,
+    open: HashMap<u64, Option<local::Stream>>,
     /// Streams that took their terminal over (`watch` with `take`): `resize` sizes them.
     writers: std::collections::HashSet<u64>,
     /// The client has gone; a stream still connecting must not open.
@@ -544,8 +544,8 @@ fn resize(streams: &Streams, request: &Value) -> io::Result<()> {
         },
     )
 }
-fn connect(socket: &Path, request: &Request) -> io::Result<UnixStream> {
-    let mut stream = UnixStream::connect(socket)?;
+fn connect(socket: &Path, request: &Request) -> io::Result<local::Stream> {
+    let mut stream = local::Stream::connect(socket)?;
     send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
     match receive::<Reply>(&mut stream)? {
         Reply::Hello { major: MAJOR, .. } => (),
@@ -563,7 +563,7 @@ struct Stream<'a> {
 }
 impl Stream<'_> {
     /// Registers the stream and tells the client it is open, before its first message.
-    fn open(&mut self, socket: &UnixStream, ok: Value) -> io::Result<()> {
+    fn open(&mut self, socket: &local::Stream, ok: Value) -> io::Result<()> {
         let mut r = self
             .streams
             .lock()
@@ -614,7 +614,7 @@ fn stream(id: u64, request: &Value, socket: &Path, out: &Out, streams: &Streams,
         _ => out.send(json!({ "stream": id, "type": "end", "reason": "closed" })),
     };
 }
-fn events(s: &mut Stream, mut socket: UnixStream) -> io::Result<()> {
+fn events(s: &mut Stream, mut socket: local::Stream) -> io::Result<()> {
     let id = s.id;
     s.open(&socket, json!({ "stream": id }))?;
     loop {

@@ -81,7 +81,7 @@
   <div class="row3">
     <div class="layer"><b><code>macos/</code></b><span>kqueue、proc_pidinfo、Keychain</span></div>
     <div class="layer"><b><code>linux/</code></b><span>inotify、/proc、Secret Service</span></div>
-    <div class="layer"><b><code>windows/</code></b><span>ConPTY、命名管道、Job、凭据管理器</span></div>
+    <div class="layer"><b><code>windows/</code></b><span>ConPTY、Windows 的 Unix 套接字、Job、凭据管理器</span></div>
   </div>
   <div class="arrow">macOS 和 Linux 相同的部分放 <code>unix/</code>，只被这两个目录引用</div>
 </div>
@@ -106,7 +106,7 @@
 <div class="wrap"><table>
 <tr><th>能力</th><th>macOS</th><th>Linux</th><th>Windows</th><th>现在的位置</th></tr>
 <tr><td><b>终端</b></td><td colspan="2">pty</td><td>ConPTY</td><td><code>pty.rs</code>、<code>host/live.rs</code></td></tr>
-<tr><td><b>本机连接</b></td><td colspan="2">Unix socket</td><td>命名管道</td><td><code>host/runtime.rs</code>、<code>app/connection.rs</code> 等</td></tr>
+<tr><td><b>本机连接</b></td><td colspan="2">Unix socket</td><td>Windows 的 Unix 套接字</td><td><code>host/runtime.rs</code>、<code>app/connection.rs</code> 等</td></tr>
 <tr><td><b>换包交接</b></td><td colspan="2">SCM_RIGHTS</td><td class="warn">第一版不支持</td><td><code>handoff.rs</code></td></tr>
 <tr><td><b>文件监听</b></td><td>kqueue</td><td>inotify</td><td>ReadDirectoryChangesW</td><td><code>file_events.rs</code></td></tr>
 <tr><td><b>进程</b></td><td>proc_*</td><td>/proc</td><td>Toolhelp、Job</td><td><code>core/process.rs</code>、<code>recognition/processes.rs</code>、<code>process_exit.rs</code></td></tr>
@@ -152,7 +152,7 @@ if platform::capabilities().handoff {
 <tr><td>0</td><td>建 crate，加棘轮 guard 和 CI 矩阵；把 <code>core</code> 里已写好的进程、时间、shell 搬进去，目录能力收掉 <code>HOME</code>（<span class="ok">已做</span>）</td><td class="ok">无</td><td>guard 生效；三个平台的 <code>core</code> 测试都过</td></tr>
 <tr><td>1</td><td>host 的进程、文件监听、系统信息搬入接口，Linux 实现补上（<span class="ok">已做</span>；<code>managed_session</code> 里 Mac 专用的资源测量留给第 2 步）</td><td class="ok">无</td><td>Linux 上 host 库编译通过，库测试通过，并由 CI 守住</td></tr>
 <tr><td>2</td><td><strong>Linux 跑通全链路：</strong>先让 <code>managed_session</code> 在 Linux 上编译和运行；然后容器和真机上配对、手机连接、真实 <code>claude</code> 和 <code>codex</code> 状态。<strong>然后复核接口</strong></td><td class="ok">无</td><td>手机能看到并操作 Linux 上的 Agent。<span class="ok">测试已过</span>（模拟手机经中继、假 CLI）；真手机和已登录的真实 CLI 还没做</td></tr>
-<tr><td>3</td><td>终端和本机连接：Unix 实现搬入接口，再写 ConPTY 和命名管道</td><td class="warn">原样搬动，靠测试和门禁确认</td><td>Windows 上 host 能启动，<code>list/read/send</code> 能用</td></tr>
+<tr><td>3</td><td>终端和本机连接：Unix 实现搬入接口，再写 ConPTY 和 Windows 的 Unix 套接字</td><td class="warn">原样搬动，靠测试和门禁确认</td><td>Windows 上 host 能启动，<code>list/read/send</code> 能用</td></tr>
 <tr><td>4</td><td>Windows 全链路：配对、手机、Agent 状态、钩子、读屏差异</td><td class="ok">无</td><td>你的 Windows 电脑上端到端可用</td></tr>
 <tr><td>5</td><td>窗口（<code>gpui_windows</code>、<code>gpui_linux</code>）、打包、发布；决定交接方案 B</td><td class="ok">无</td><td>按平台单独决定发不发</td></tr>
 </table></div>
@@ -168,6 +168,8 @@ if platform::capabilities().handoff {
   <li><b>host 全部测试在 Linux 上（第 2 步）：</b>Debian ARM64 容器 549 过、0 败、39 个按设计忽略，包括真实终端和经中继的手机协议；GitHub 的 Ubuntu x86 也全过，CI 从此守住。Ubuntu 上才冒出来的差异：<code>PROMPT_COMMAND</code> 是数组且多一个 systemd 钩子。同一份资源预算：40 个空闲终端 CPU 约 0%，4 个 Agent 写 30 秒 host 用 0.52 秒 CPU，追加的日志只读一遍。Linux 数不了指令，这项靠只读一遍来判断。</li>
   <li><b>重启补扫（手动 <code>scan_bench</code>，调试版，按真实规模 2208 个目录、6402 个文件）：</b>Linux 装监听 38 毫秒，日志没变时补扫约 250 毫秒，不打开文件、不写库；Mac 约 400 毫秒（当时负载更高）。首次导入 3.4 到 4.2 秒，只代表文件数量的开销，真实日志正文要长得多，没量。</li>
   <li><b>真实 CLI 在 Linux（手动 <code>real_cli</code>，不带凭据）：</b><code>claude</code> 2.1.319、<code>codex</code> 0.167.0 都能从进程认出。npm 的 <code>claude</code> 文件叫 <code>claude.exe</code>，<code>codex</code> 由 node 带起原生子进程。登录后的状态、日志和钩子没测，那需要账号。</li>
+  <li><b>第 3 步，本机连接改用 AF_UNIX，不用命名管道（决定）：</b>host 依赖克隆后一边读一边写、读超时、<code>shutdown</code> 叫醒读、<code>peek</code>，这些都是套接字的语义，命名管道要用重叠 I/O 一项项模拟。Windows 1803 起有 AF_UNIX，ConPTY 本来就要 1809，不多添限制。实机结果：同一份接口测试过，16 MiB 约 70 毫秒。两个差异在接口内吸收：套接字必须带 <code>WSA_FLAG_OVERLAPPED</code>，否则读会挡住写、超时不生效；Winsock 的 <code>shutdown</code> 不叫醒读，靠 <code>CancelIoEx</code>，没有轮询。放弃条件：真实 host 在 Windows 上跑不稳就回到命名管道，接口不用改。</li>
+  <li><b>第 3 步，ConPTY：</b>同一份终端接口测试在 Windows 实机上过（输出、输入、改大小、退出码、关闭）。Mac 的主路径搬动后，CI 的完整检查和窗口性能门禁都过。</li>
   <li><b>第 2 步接口复核：</b>第二个实现没有让任何已有能力改签名，只新增了能力，不触发放弃条件。Linux 和 Mac 的差异都在接口之内吸收：没有重放（<code>MUST_SCAN</code>）、临时端口从 32768 开始（<code>first_handed_out_port</code>）、进程名按文件取。</li>
   <li><b>接口第一次被第二个实现检验（第 1 步）：</b>Linux 的 inotify 没有日志可重放。接口没有改签名：<code>start</code> 从旧检查点开始时报 <code>MUST_SCAN</code>，由已有的补扫接手。代价是 Linux 上 host 每次重启都要扫一遍日志目录。</li>
   <li><b>Zig 和 MinGW 混用会悄悄算错：</b>静态链接 ghostty 后 <code>powf</code> 返回 0，亮度变成 NaN。改用动态库后恢复。</li>

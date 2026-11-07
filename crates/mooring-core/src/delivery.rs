@@ -3,7 +3,6 @@
 //! however often it is sent, and the reads change nothing, so a dropped link or a host
 //! restarting is waited out by sending the same request again; only after the patience
 //! runs out does the sender hear that the outcome is unknown, never nothing.
-#[cfg(unix)]
 use crate::protocol::{CONTROL, MAJOR, receive, send};
 use crate::protocol::{Reply, Request};
 use std::io;
@@ -66,14 +65,13 @@ pub fn resendable(request: &Request) -> bool {
 }
 
 /// One try. The error keeps its kind and says at which step it failed.
-#[cfg(unix)]
 pub fn attempt(socket: &Path, request: &Request) -> Settled {
     let stage = |name, e: io::Error| io::Error::new(e.kind(), format!("RPC {name}: {e}"));
     let unsent = |name, e| Settled::Unknown {
         sent: false,
         error: stage(name, e),
     };
-    let mut stream = match std::os::unix::net::UnixStream::connect(socket) {
+    let mut stream = match mooring_platform::local::Stream::connect(socket) {
         Ok(s) => s,
         Err(e) => return unsent("connect", e),
     };
@@ -107,13 +105,6 @@ pub fn attempt(socket: &Path, request: &Request) -> Settled {
     }
 }
 
-/// There is no host to reach on Windows yet (docs/windows/plan.md), and waiting will not
-/// bring one: refused, so `deliver` does not spend its patience on it.
-#[cfg(windows)]
-pub fn attempt(_socket: &Path, _request: &Request) -> Settled {
-    Settled::Refused("Windows 版后台还没有做好，连不上".to_owned())
-}
-
 /// Tries until it is settled, resending while that is safe and `patience` lasts.
 pub fn deliver(socket: &Path, request: &Request, patience: Duration) -> Settled {
     let start = Instant::now();
@@ -137,27 +128,27 @@ pub fn deliver(socket: &Path, request: &Request, patience: Duration) -> Settled 
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::Edit;
     use crate::protocol::{RequestId, read_frame};
-    use std::os::unix::net::UnixListener;
+    use mooring_platform::local;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// A host that answers the handshake, reads the request, then does `then`.
     fn host(
-        then: fn(&mut std::os::unix::net::UnixStream),
+        then: fn(&mut mooring_platform::local::Stream),
     ) -> (std::path::PathBuf, Arc<AtomicUsize>) {
         let dir = std::env::temp_dir().join(format!("kl-dl-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir_all(&dir).unwrap();
         let socket = dir.join("s");
-        let listener = UnixListener::bind(&socket).unwrap();
+        let listener = local::Listener::bind(&socket).unwrap();
         let tries = Arc::new(AtomicUsize::new(0));
         let counted = Arc::clone(&tries);
         std::thread::spawn(move || {
-            for mut stream in listener.incoming().flatten() {
+            while let Ok(mut stream) = listener.accept() {
                 counted.fetch_add(1, Ordering::SeqCst);
                 let _ = read_frame(&mut stream);
                 let hello = Reply::Hello {
@@ -215,10 +206,10 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kl-dl-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let socket = root.join("s");
-        let listener = UnixListener::bind(&socket).unwrap();
+        let listener = local::Listener::bind(&socket).unwrap();
         let gone = socket.clone();
         let server = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+            let mut stream = listener.accept().unwrap();
             receive::<Request>(&mut stream).unwrap();
             send(
                 &mut stream,

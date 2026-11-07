@@ -4,6 +4,7 @@
 //! subscribed nothing here runs.
 use super::*;
 use mooring_core::hook::Notice;
+use mooring_platform::local;
 use std::collections::HashSet;
 use std::sync::Condvar;
 
@@ -263,7 +264,7 @@ impl Host {
 }
 
 /// Writes what is waiting, all of it as one frame, each time the queue wakes it.
-fn write_events(mut writer: UnixStream, first: Vec<u8>, queue: &Queue) -> io::Result<()> {
+fn write_events(mut writer: local::Stream, first: Vec<u8>, queue: &Queue) -> io::Result<()> {
     write_frame(&mut writer, CONTROL, &first)?;
     let (backlog, wake) = &**queue;
     loop {
@@ -296,7 +297,11 @@ fn write_events(mut writer: UnixStream, first: Vec<u8>, queue: &Queue) -> io::Re
     }
 }
 
-pub(super) fn subscribe(mut stream: UnixStream, shared: Shared, connection: u64) -> io::Result<()> {
+pub(super) fn subscribe(
+    mut stream: local::Stream,
+    shared: Shared,
+    connection: u64,
+) -> io::Result<()> {
     // A subscriber that stops reading is marked lagged, not cut by the connection's write
     // timeout in the middle of a frame; one that goes away fails the write at once.
     stream.set_write_timeout(None)?;

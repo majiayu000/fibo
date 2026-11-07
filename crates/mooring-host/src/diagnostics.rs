@@ -4,11 +4,11 @@ use mooring_core::{
     model::Terminal,
     protocol::*,
 };
+use mooring_platform::local;
 use regex::Regex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     io::{self, Read},
-    os::{fd::AsRawFd, unix::net::UnixStream},
     process::{Command, Stdio},
     sync::LazyLock,
     time::{Duration, Instant},
@@ -44,40 +44,21 @@ struct Total {
     gpu: u64,
 }
 
-/// poll sleeps in the kernel and wakes immediately on client cancellation. There is
+/// This sleeps in the kernel and wakes immediately on client cancellation. There is
 /// no sampling timer or worker once this one request has returned.
-fn wait(stream: &UnixStream, duration: Duration) -> io::Result<()> {
-    let mut fd = libc::pollfd {
-        fd: stream.as_raw_fd(),
-        events: libc::POLLIN,
-        revents: 0,
-    };
-    let deadline = Instant::now() + duration;
-    loop {
-        let ms = deadline
-            .saturating_duration_since(Instant::now())
-            .as_millis()
-            .min(i32::MAX as u128) as i32;
-        let result = unsafe { libc::poll(&mut fd, 1, ms) };
-        if result == 0 {
-            return Ok(());
-        }
-        if result > 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                "诊断已取消",
-            ));
-        }
-        let error = io::Error::last_os_error();
-        if error.kind() != io::ErrorKind::Interrupted {
-            return Err(error);
-        }
+fn wait(stream: &local::Stream, duration: Duration) -> io::Result<()> {
+    if stream.wait_readable(duration)? {
+        return Err(io::Error::new(
+            io::ErrorKind::ConnectionAborted,
+            "诊断已取消",
+        ));
     }
+    Ok(())
 }
 
 /// Drain stdout while the child runs, so a large process list cannot fill a pipe.
 /// Only our own transient ps/ioreg child is killed on cancellation or timeout.
-fn capture(command: &mut Command, stream: &UnixStream) -> io::Result<String> {
+fn capture(command: &mut Command, stream: &local::Stream) -> io::Result<String> {
     wait(stream, Duration::ZERO)?;
     let mut child = command
         .env("LC_ALL", "C")
@@ -214,7 +195,7 @@ fn memory() -> Option<Memory> {
         pressure: m.pressure.and_then(Pressure::from_level),
     })
 }
-fn snapshot(stream: &UnixStream, notes: &mut Vec<String>) -> io::Result<Snapshot> {
+fn snapshot(stream: &local::Stream, notes: &mut Vec<String>) -> io::Result<Snapshot> {
     let mut processes = parse_processes(&capture(
         Command::new("/bin/ps").args(["-axo", "pid=,ppid=,lstart=,time=,rss=,comm="]),
         stream,
@@ -273,7 +254,7 @@ fn terminal_for(
     None
 }
 
-pub fn serve(stream: &mut UnixStream, terminals: &[Terminal]) -> io::Result<()> {
+pub fn serve(stream: &mut local::Stream, terminals: &[Terminal]) -> io::Result<()> {
     let mut report = Diagnostics {
         started_at: mooring_core::content::now(),
         cpu_cores: std::thread::available_parallelism().ok().map(|n| n.get()),
@@ -416,7 +397,7 @@ mod tests {
     }
     #[test]
     fn cancellation_interrupts_the_wait_without_a_refresh_poll() {
-        let (a, b) = UnixStream::pair().unwrap();
+        let (a, b) = local::Stream::pair().unwrap();
         drop(b);
         let start = Instant::now();
         assert_eq!(
@@ -458,7 +439,7 @@ mod tests {
 
     #[test]
     fn cancelling_during_a_command_reaps_our_child() {
-        let (a, b) = UnixStream::pair().unwrap();
+        let (a, b) = local::Stream::pair().unwrap();
         let root =
             std::env::temp_dir().join(format!("kl-diagnostic-cancel-{}", uuid::Uuid::new_v4()));
         // Written aside and renamed: `>` creates the file empty before the pid lands in it.
