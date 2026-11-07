@@ -4,9 +4,10 @@ use mooring_core::{
     protocol::*,
     terminal::{CellPixels, Vt},
 };
+use mooring_platform::terminal as term;
 use std::collections::HashMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read};
+use std::fs::{self, OpenOptions};
+use std::io;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
