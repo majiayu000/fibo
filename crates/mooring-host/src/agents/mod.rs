@@ -20,9 +20,11 @@ mod codex_items;
 mod codex_script;
 mod cursor;
 mod declared;
+mod gemini;
 mod grok;
 mod grok_subagents;
 pub mod hooks;
+mod kimi;
 pub mod modes;
 pub mod modes_drive;
 pub use tool_lines::{describe_tool, Described, ToolCallLine, ToolOutput};
@@ -300,6 +302,8 @@ pub fn adapter(agent: Agent) -> &'static dyn Adapter {
         Agent::Grok => &grok::Grok,
         Agent::Cursor => &cursor::Cursor,
         Agent::Qoder => &qoder::Qoder,
+        Agent::Kimi => &kimi::Kimi,
+        Agent::Gemini => &gemini::Gemini,
         _ => declared()
             .iter()
             .find(|d| d.agent() == agent)
