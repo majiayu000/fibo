@@ -157,7 +157,7 @@ pub fn every_state() -> Workspace {
             let mut c = content(turn, at);
             if case == "background" {
                 c.background = Some(Background {
-                    shells: 1,
+                    crons: 1,
                     ..Default::default()
                 });
             }

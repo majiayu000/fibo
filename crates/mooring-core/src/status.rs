@@ -109,8 +109,8 @@ impl Status {
     pub fn blocked(self) -> bool {
         matches!(self, Self::Waiting | Self::Error)
     }
-    /// Work in flight: a turn under way. 等后台 is not: its turn ended and only a server
-    /// or a wakeup it left behind is still alive, so it waits for you with 等你验收.
+    /// Work in flight: a turn under way. 等后台 is not: its turn ended and only a monitor
+    /// or a scheduled wakeup will bring it back, so it waits for you with 等你验收.
     pub fn working(self) -> bool {
         matches!(self, Self::Running)
     }
@@ -314,6 +314,13 @@ pub fn of_terminal(w: &Workspace, terminal: &str, asks_trust: bool, now: u64) ->
     w.current_agent(terminal).map(|s| of(w, s, now))
 }
 
+/// What this session's finished turn left running in its live terminal: a note on its
+/// state, not a state. Closing that terminal may end it, so 逐个验收 keeps out of it.
+pub fn left_behind(w: &Workspace, s: &AgentSession) -> Option<String> {
+    live_terminal(w, s)?;
+    w.content.get(&s.id)?.left_behind()
+}
+
 /// The session's state now. The only place that decides it.
 pub fn of(w: &Workspace, s: &AgentSession, now: u64) -> Status {
     let content = w.content.get(&s.id);
@@ -356,7 +363,8 @@ fn live(w: &Workspace, s: &AgentSession, c: Option<&Content>, now: u64) -> Statu
     }
     match turn {
         Turn::Error => Status::Error,
-        _ if background.wakes() || background.shells > 0 => Status::Background,
+        // Only what will wake it. A server wakes nothing, so that turn is simply over.
+        _ if background.wakes() => Status::Background,
         Turn::Interrupted => Status::Paused,
         _ => Status::Review,
     }
@@ -406,10 +414,7 @@ fn recorded(w: &Workspace, s: &AgentSession, c: Option<&Content>, now: u64) -> S
         Status::Error
     } else if c.turn == Turn::Completed && s.current && background.keeps_working() {
         Status::Running
-    } else if c.turn == Turn::Completed
-        && s.current
-        && (background.wakes() || background.shells > 0)
-    {
+    } else if c.turn == Turn::Completed && s.current && background.wakes() {
         Status::Background
     } else if c.turn == Turn::Completed {
         Status::Review
@@ -510,7 +515,8 @@ mod tests {
                 shells: 1,
                 ..Default::default()
             }),
-            Status::Background
+            Status::Review,
+            "a server wakes nothing: the turn is over"
         );
         assert_eq!(
             with(Background {
@@ -520,7 +526,7 @@ mod tests {
             Status::Background
         );
         // Of three shells, one a job it waits for (a test run): the turn is not over.
-        // Only servers left (an http.server, a relay): it is.
+        // Only servers left (an http.server, a relay): it is, and nothing is being waited on.
         assert_eq!(
             with(Background {
                 shells: 3,
@@ -535,7 +541,7 @@ mod tests {
                 jobs: 0,
                 ..Default::default()
             }),
-            Status::Background
+            Status::Review
         );
     }
 

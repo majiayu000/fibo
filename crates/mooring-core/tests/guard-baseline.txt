@@ -87,7 +87,7 @@ word 出错(无了)	crates/mooring-core/src/market.rs	1
 word 出错了	crates/mooring-host/src/host/report_back.rs	1
 word 出错了	mobile/src/app/settings.tsx	2
 word 在跑	crates/mooring-app/src/desktop.rs	1
-word 在跑	crates/mooring-app/src/model/session_state.rs	4
+word 在跑	crates/mooring-app/src/model/session_state.rs	3
 word 在跑	crates/mooring-app/src/workbench/layout/confirm_close.rs	1
 word 在跑	crates/mooring-host/src/agents/mod.rs	1
 word 在跑	crates/mooring-host/src/host/mod.rs	2

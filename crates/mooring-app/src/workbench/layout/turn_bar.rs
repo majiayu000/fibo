@@ -302,7 +302,7 @@ impl Workbench {
             .map(|t| mooring_core::content::short(&mooring_core::content::plain_line(&t), 240))
             .or_else(|| self.row_detail(s, g))
             .map(|d| {
-                if d.starts_with("停在") || d.starts_with("正在") {
+                if d.starts_with("停在") || d.starts_with("正在") || d.starts_with("后台") {
                     d
                 } else {
                     format!("停在 {d}")

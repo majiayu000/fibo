@@ -1,15 +1,15 @@
 //! 逐个验收: the finished turns in 要你处理, one at a time on 逐个清理's page.
 //!
 //! Only 等你验收 goes in. Enter closes the terminal, so a question (等你回答), a failure
-//! (出错了) or work left behind (等后台) stays out: one key must not skip an answer or end
-//! a server. A session that leaves 等你验收 while queued stays in the queue, can only be
+//! (出错了), a wakeup (等后台) or a turn that left a server running stays out: one key must
+//! not skip an answer or end a server. A session that leaves 等你验收 while queued stays in the queue, can only be
 //! opened or skipped, and is never marked.
 use super::board::Column;
 use super::*;
 
 /// What 逐个验收 may mark and queue.
-pub(super) fn reviewable(status: Status) -> bool {
-    status == Status::Review
+pub(super) fn reviewable(status: Status, left_behind: bool) -> bool {
+    status == Status::Review && !left_behind
 }
 
 /// The terminal to close once the mark is in: the session's live one, unless closing it
@@ -19,9 +19,16 @@ pub(super) fn terminal_to_close(session: Option<&str>, interrupted: bool) -> Opt
 }
 
 impl Workbench {
+    /// What 逐个验收 may mark and queue, of this workspace's sessions.
+    pub(super) fn session_reviewable(&self, s: &AgentSession) -> bool {
+        reviewable(
+            status_of(&self.workspace, s),
+            mooring_core::status::left_behind(&self.workspace, s).is_some(),
+        )
+    }
     pub(super) fn start_review(&mut self, at: u64, cx: &mut Context<Self>) {
         let queue = (self.column_sessions(Column::Needs, at).into_iter())
-            .filter(|s| reviewable(status_of(&self.workspace, s)))
+            .filter(|s| self.session_reviewable(s))
             .map(|s| s.id.clone())
             .collect();
         self.start_cleanup(queue, cx);
@@ -38,8 +45,8 @@ impl Workbench {
     }
     /// The state that keeps this queued session from being marked here, if any.
     pub(super) fn review_blocked(&self, s: &AgentSession) -> Option<Status> {
-        let status = status_of(&self.workspace, s);
-        (self.overview.cleanup_review && !reviewable(status)).then_some(status)
+        (self.overview.cleanup_review && !self.session_reviewable(s))
+            .then(|| status_of(&self.workspace, s))
     }
     /// 完成 on the queue's page. In 逐个验收 the terminal closes after the host accepts the
     /// mark, as it refuses one made on a turn the window had not seen start yet.
@@ -123,9 +130,7 @@ impl Workbench {
                 .and_then(|s| self.review_blocked(s))
                 .map(Status::key),
             self.tasks.form.is_some(),
-            needs
-                .iter()
-                .any(|s| reviewable(status_of(&self.workspace, s))),
+            needs.iter().any(|s| self.session_reviewable(s)),
         )
     }
     /// The transcript of the queue's current session, to start a turn in it from outside.
@@ -144,7 +149,15 @@ mod tests {
     #[test]
     fn only_a_finished_turn_can_be_marked_with_one_key() {
         for status in Status::ALL {
-            assert_eq!(reviewable(status), status == Status::Review, "{status:?}");
+            assert_eq!(
+                reviewable(status, false),
+                status == Status::Review,
+                "{status:?}"
+            );
+            assert!(
+                !reviewable(status, true),
+                "enter would end a server: {status:?}"
+            );
         }
     }
     #[test]
