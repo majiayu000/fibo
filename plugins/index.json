@@ -4,42 +4,77 @@
     {
       "id": "claude-quota",
       "name": "Claude 额度",
-      "version": "0.1.3",
-      "description": "接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Mooring 状态栏；原来的状态栏照常显示，卸载时还原。只读本机，不联网",
+      "version": "0.2.0",
+      "description": "接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Mooring 状态栏；原来的状态栏照常显示，卸载时还原。默认只读本机；打开「联网读 /usage」后，让 Claude Code 自己查额度，不用等状态栏刷新，还能看到按模型的周额度，不花钱也不留会话",
       "provides": [
         "setup",
         "quota"
       ],
-      "mooring": 2,
+      "mooring": 8,
       "touches": [
         "~/.claude/settings.json"
       ],
-      "network": false,
+      "network": true,
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "abe90ff049346848d62a205e22010ce35b2e52990bba2192eaee8a3aecee84d1",
-          "size": 457
+          "sha256": "3277ac0cb171e958fac21a0100c7d1521fee66f5a33a603d7bc0b0342f74e680",
+          "size": 891
         },
         {
           "path": "quota.json",
-          "sha256": "79a6836b947c73704a19cefeb97011ad31af81355d7b074d148d44e5e4b7fa31",
-          "size": 383
-        },
-        {
-          "path": "settings.js",
-          "sha256": "1ecbd66263b126bdd3a4485c00435aec92eb1e611c6b25ff51592c1a3986420a",
-          "size": 5339
+          "sha256": "16dff3dfe32cdc8a3688928c75dfa37f2ad4d44923774a34f7d303be450d3c24",
+          "size": 1398
         },
         {
           "path": "setup.json",
-          "sha256": "4c0deb4d8100072341e98128f4ae9495dc3fd0a075416fd1fbdf12f4d6680473",
-          "size": 151
-        },
+          "sha256": "2449543a11d3c5964bd6b9fe3252b3018510646596774ba38d56a37f2ede4b94",
+          "size": 121
+        }
+      ],
+      "versions": [
         {
-          "path": "statusline.sh",
-          "sha256": "0041ae450d935b0d05de0724928a285716c3bcafefa66646f25f3396fa601f57",
-          "size": 1232
+          "id": "claude-quota",
+          "name": "Claude 额度",
+          "version": "0.1.3",
+          "description": "接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Mooring 状态栏；原来的状态栏照常显示，卸载时还原。只读本机，不联网",
+          "provides": [
+            "setup",
+            "quota"
+          ],
+          "mooring": 2,
+          "touches": [
+            "~/.claude/settings.json"
+          ],
+          "network": false,
+          "files": [
+            {
+              "path": "plugin.json",
+              "sha256": "abe90ff049346848d62a205e22010ce35b2e52990bba2192eaee8a3aecee84d1",
+              "size": 457
+            },
+            {
+              "path": "quota.json",
+              "sha256": "79a6836b947c73704a19cefeb97011ad31af81355d7b074d148d44e5e4b7fa31",
+              "size": 383
+            },
+            {
+              "path": "settings.js",
+              "sha256": "1ecbd66263b126bdd3a4485c00435aec92eb1e611c6b25ff51592c1a3986420a",
+              "size": 5339
+            },
+            {
+              "path": "setup.json",
+              "sha256": "4c0deb4d8100072341e98128f4ae9495dc3fd0a075416fd1fbdf12f4d6680473",
+              "size": 151
+            },
+            {
+              "path": "statusline.sh",
+              "sha256": "0041ae450d935b0d05de0724928a285716c3bcafefa66646f25f3396fa601f57",
+              "size": 1232
+            }
+          ],
+          "dir": "versions/0.1.3"
         }
       ]
     },
