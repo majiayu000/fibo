@@ -329,7 +329,7 @@ impl Workbench {
             // Typing into the terminal is how you carry on; its card steps out of the way.
             // Captured on the way down, so the keystroke still reaches the terminal.
             .capture_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, _, cx| {
-                if !event.keystroke.modifiers.platform
+                if !crate::keymap::command_key(&event.keystroke.modifiers)
                     && card_id.is_some()
                     && this.overview.here == card_id
                 {

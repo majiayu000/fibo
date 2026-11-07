@@ -111,12 +111,12 @@ impl Pane {
         cx: &mut Context<Self>,
     ) {
         let k = &event.keystroke;
-        if k.modifiers.platform && k.key == "c" {
+        if crate::keymap::command_key(&k.modifiers) && k.key.eq_ignore_ascii_case("c") {
             self.copy(cx);
             cx.stop_propagation();
             return;
         }
-        if k.modifiers.platform && k.key == "v" {
+        if crate::keymap::command_key(&k.modifiers) && k.key.eq_ignore_ascii_case("v") {
             self.paste(cx);
             cx.stop_propagation();
             return;

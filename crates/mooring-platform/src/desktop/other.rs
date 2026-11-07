@@ -1,3 +1,6 @@
+pub const HAS_COMMAND_KEY: bool = false;
+pub const DRAWS_WINDOW_BUTTONS: bool = cfg!(windows);
+
 /// Not read on these systems yet.
 pub fn reduce_motion() -> bool {
     false
