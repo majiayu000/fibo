@@ -16,6 +16,7 @@ memchr = "2"
 shlex = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 mooring-core = { path = "../mooring-core" }
+mooring-platform = { path = "../mooring-platform" }
 rusqlite = { version = "0.38", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 libc.workspace = true

@@ -455,10 +455,7 @@ fn builtin() -> Vec<AgentSpec> {
 
 /// `$XDG_CONFIG_HOME/mooring`, else `~/.config/mooring`.
 pub fn config_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| Path::new(&h).join(".config")))
-        .map(|base| base.join("mooring"))
+    mooring_platform::dirs::config_home().map(|base| base.join("mooring"))
 }
 
 /// Registers the declarations in `<config_dir>/agents` and in every plugin that provides
@@ -466,17 +463,17 @@ pub fn config_dir() -> Option<PathBuf> {
 /// any agent is looked up; a process that never calls it knows the built-ins only.
 /// Returns false when the registry was already in use.
 pub fn install() -> bool {
-    let (Some(dir), Some(home)) = (config_dir(), std::env::var_os("HOME")) else {
+    let (Some(dir), Some(home)) = (config_dir(), mooring_platform::dirs::home()) else {
         return false;
     };
     crate::plugin::install(&dir);
     let mut files = json_files(&dir.join("agents"));
     files.extend(crate::plugin::files(crate::plugin::Kind::Agent));
-    let (specs, report) = load_files(files, Path::new(&home));
+    let (specs, report) = load_files(files, &home);
     if REGISTRY.get().is_some() {
         return false;
     }
-    let _ = FROM.set((dir.join("agents"), PathBuf::from(home)));
+    let _ = FROM.set((dir.join("agents"), home));
     REGISTRY.set(Registry { specs, report });
     true
 }

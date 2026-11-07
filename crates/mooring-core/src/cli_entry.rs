@@ -64,10 +64,10 @@ pub fn reaches(dirs: &[impl AsRef<Path>], exe: &Path) -> bool {
 
 /// Whether `runtime` is where the command looks when told nothing.
 pub fn is_default_runtime(runtime: &Path) -> bool {
-    let Some(home) = std::env::var_os("HOME") else {
+    let Some(home) = mooring_platform::dirs::home() else {
         return false;
     };
-    let default = crate::legacy::runtime_dir(Path::new(&home));
+    let default = crate::legacy::runtime_dir(&home);
     match (runtime.canonicalize(), default.canonicalize()) {
         (Ok(a), Ok(b)) => a == b,
         _ => false,

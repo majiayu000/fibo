@@ -10,6 +10,12 @@ pub fn home() -> Option<PathBuf> {
     imp::home()
 }
 
+/// The home directory as text, for what shows or compares paths as text. None if it is not
+/// valid Unicode.
+pub fn home_str() -> Option<String> {
+    home()?.into_os_string().into_string().ok()
+}
+
 /// Where this account's programs keep their settings. `XDG_CONFIG_HOME` wins everywhere: it is
 /// what a test or a user points elsewhere on purpose.
 pub fn config_home() -> Option<PathBuf> {

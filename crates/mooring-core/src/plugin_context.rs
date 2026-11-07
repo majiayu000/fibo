@@ -242,7 +242,7 @@ pub fn runtime() -> Option<PathBuf> {
         .get()
         .cloned()
         .or_else(|| std::env::var_os(crate::protocol::RUNTIME_ENV).map(PathBuf::from))
-        .or_else(|| std::env::var_os("HOME").map(|h| crate::legacy::runtime_dir(Path::new(&h))))
+        .or_else(|| mooring_platform::dirs::home().map(|h| crate::legacy::runtime_dir(&h)))
 }
 
 /// The variables every command of the plugin in `dir` runs with.

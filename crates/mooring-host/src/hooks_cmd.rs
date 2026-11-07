@@ -24,9 +24,8 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
             _ => return Err(io::Error::other(USAGE)),
         }
     }
-    let home = std::path::PathBuf::from(
-        std::env::var_os("HOME").ok_or_else(|| io::Error::other("HOME unavailable"))?,
-    );
+    let home =
+        mooring_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?;
     let named = !agents.is_empty();
     if !named {
         agents = Agent::all();

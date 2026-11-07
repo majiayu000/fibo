@@ -13,29 +13,6 @@ cfg	crates/mooring-host/src/pty.rs	2
 cfg	crates/mooring-host/src/remote.rs	1
 dep libc	crates/mooring-app/Cargo.toml	1
 dep libc	crates/mooring-host/Cargo.toml	1
-home	crates/mooring-app/src/main.rs	4
-home	crates/mooring-app/src/terminal/open_path.rs	1
-home	crates/mooring-app/src/terminal/screen.rs	1
-home	crates/mooring-app/src/ui/status_colors.rs	2
-home	crates/mooring-app/src/workbench/mod.rs	2
-home	crates/mooring-app/src/workbench/settings/plugins.rs	1
-home	crates/mooring-core/src/agent.rs	3
-home	crates/mooring-core/src/cli_entry.rs	1
-home	crates/mooring-core/src/market_install.rs	3
-home	crates/mooring-core/src/plugin_context.rs	1
-home	crates/mooring-core/src/quota.rs	1
-home	crates/mooring-host/src/agents/grok.rs	1
-home	crates/mooring-host/src/cli_setup.rs	1
-home	crates/mooring-host/src/codex_status.rs	1
-home	crates/mooring-host/src/control.rs	1
-home	crates/mooring-host/src/hooks_cmd.rs	1
-home	crates/mooring-host/src/host/client.rs	1
-home	crates/mooring-host/src/lib.rs	1
-home	crates/mooring-host/src/plugins_cmd.rs	1
-home	crates/mooring-host/src/recognition.rs	1
-home	crates/mooring-host/src/remote/dirs.rs	1
-home	crates/mooring-host/src/remote/usage.rs	1
-home	crates/mooring-host/src/remote/writes.rs	1
 libc	crates/mooring-app/src/lifecycle.rs	9
 libc	crates/mooring-app/src/main.rs	5
 libc	crates/mooring-app/src/workbench/pressure.rs	2

@@ -250,9 +250,7 @@ pub fn recover(plugins: &Path) {
 
 /// Every file of the kinds it provides through the loader that will read it.
 pub(super) fn loadable(p: &Plugin) -> Result<(), String> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
+    let home = mooring_platform::dirs::home().unwrap_or_default();
     for kind in &p.provides {
         for loaded in plugin::load_kind(*kind, kind.files(&p.dir), &home) {
             if let Err(why) = loaded.result {
@@ -284,9 +282,7 @@ pub(super) fn loadable(p: &Plugin) -> Result<(), String> {
 /// sidebar), so their ids stay global. A package reusing one is refused here, rather than
 /// breaking whichever plugin happens to load second.
 pub(super) fn no_conflict(plugins: &Path, p: &Plugin) -> Result<(), String> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
+    let home = mooring_platform::dirs::home().unwrap_or_default();
     for kind in [Kind::Actions, Kind::Sidebar] {
         if !p.provides.contains(&kind) {
             continue;
@@ -312,9 +308,7 @@ pub(super) fn no_conflict(plugins: &Path, p: &Plugin) -> Result<(), String> {
 
 /// The commands and webhook addresses a plugin declares, as written.
 fn declared(p: &Plugin) -> (Vec<String>, Vec<String>) {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
+    let home = mooring_platform::dirs::home().unwrap_or_default();
     let (mut commands, mut webhooks) = (Vec::new(), Vec::new());
     for kind in &p.provides {
         let files = kind.files(&p.dir);

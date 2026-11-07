@@ -357,8 +357,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         }
         Request::ReloadPlugins => {
             mooring_core::plugin::reload();
-            let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-            let home = home.unwrap_or_default();
+            let home = mooring_platform::dirs::home().unwrap_or_default();
             crate::agents::mirror::sync(&home);
             let mut host = lock(shared)?;
             // A CLI that arrived or left changes which directories are read. The subscription
