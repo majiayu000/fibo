@@ -16,6 +16,8 @@ MOORING_FIXTURE_BOARD=1 at prepare fills the board's worst cases: a live running
 done sessions, and a long branch on every project.
 MOORING_FIXTURE_QUOTA_SPARE=1 at prepare has the week's usage window renew in five hours, for
 StatusQuota.
+MOORING_FIXTURE_QUOTA_NAMED=1 at prepare adds a plugin giving Codex one model's week beside the
+account's, for StatusQuota; =near has it at 91%, so the bar shows it too.
 MOORING_FIXTURE_CONTEXT=1 at prepare states how full each session's context window is.
 MOORING_FIXTURE_UNLINKED=1 at prepare adds a tab of Agents no conversation is tied to, for the
 SidebarUnlinked-* pages.
@@ -87,6 +89,17 @@ if sys.argv[1] == 'prepare':
     parent = STATE.parent; parent.mkdir(parents=True, exist_ok=True)
     root = pathlib.Path(tempfile.mkdtemp(prefix='todo-', dir=parent)); home = pathlib.Path(tempfile.mkdtemp(prefix='kltodo-home-', dir='/tmp'))
     logs = home / '.codex/sessions'; logs.mkdir(parents=True); (home / '.claude/projects').mkdir(parents=True)
+    named = os.environ.get('MOORING_FIXTURE_QUOTA_NAMED')
+    if named:
+        # What claude-quota's /usage source gives, from a plugin of its own: Codex is what has
+        # sessions here. The reading is kept beside the newer one its logs give.
+        plugin = home / '.config/mooring/plugins/fixture-quota'; plugin.mkdir(parents=True)
+        (plugin / 'plugin.json').write_text(json.dumps({'api': 1, 'id': 'fixture-quota', 'name': 'fixture', 'provides': ['quota'], 'mooring': 8}))
+        (plugin / 'quota.json').write_text(json.dumps({'api': 1, 'sources': [{'agent': 'codex', 'file': 'named.json', 'at': '/at', 'windows': [
+            {'minutes': 10080, 'name': '/name', 'used': '/used', 'resets_at': '/resets_at'}]}]}))
+        data = home / '.config/mooring/plugin-data/fixture-quota'; data.mkdir(parents=True)
+        at = int(time.time())
+        (data / 'named.json').write_text(json.dumps({'at': at - 800, 'name': 'Fable', 'used': 91 if named == 'near' else 12, 'resets_at': at + 5 * 86400}))
     now = int(time.time())
     for n in range(40):
         project = root / 'projects' / names[n // 8]; project.mkdir(parents=True, exist_ok=True)

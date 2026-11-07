@@ -8,3 +8,7 @@ pub fn home() -> Option<PathBuf> {
 pub fn default_config_home() -> Option<PathBuf> {
     std::env::var_os("APPDATA").map(PathBuf::from)
 }
+
+pub fn user_name() -> Option<String> {
+    std::env::var("USERNAME").ok()
+}

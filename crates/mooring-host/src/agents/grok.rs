@@ -345,6 +345,7 @@ fn credits_quota(v: &Value) -> Option<Quota> {
                 .round()
                 .clamp(0., 999.) as u16,
             resets_at: end,
+            name: String::new(),
         }],
     })
 }
@@ -397,7 +398,8 @@ mod tests {
             [Window {
                 minutes: 10_080,
                 used: 52,
-                resets_at: 1_793_728_819
+                resets_at: 1_793_728_819,
+                name: String::new(),
             }]
         );
         assert_eq!(q.windows[0].label(), "周");

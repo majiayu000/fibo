@@ -20,6 +20,12 @@ pub fn link_program(to: &Path, at: &Path) -> io::Result<()> {
     imp::link_program(to, at)
 }
 
+/// Replaces `path` whole with `bytes`, for this account's eyes as far as the platform allows:
+/// a crash leaves the old file or the new one, never part of either.
+pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    imp::write_private(path, bytes)
+}
+
 /// Creates `dir` and its parents, for this account's eyes as far as the platform allows.
 pub fn create_private_dir(dir: &Path) -> io::Result<()> {
     imp::create_private_dir(dir)
