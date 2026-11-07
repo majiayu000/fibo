@@ -458,6 +458,10 @@ fn disabled(plugins: &Path) -> Vec<String> {
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default()
 }
+/// For a change that is written back: what is turned off, or why that cannot be known.
+fn disabled_for_update(plugins: &Path) -> std::io::Result<Vec<String>> {
+    crate::state_file::read_for_update(&switches(plugins))
+}
 /// Whether the plugin with this id is turned off in the plugins directory `plugins`.
 pub fn turned_off(plugins: &Path, id: &str) -> bool {
     disabled(plugins).iter().any(|d| d == id)
@@ -484,7 +488,7 @@ pub fn set_enabled_in(
 ) -> Result<Option<String>, String> {
     use crate::setup::Phase;
     let _held = lock(plugins)?;
-    let mut off = disabled(plugins);
+    let mut off = disabled_for_update(plugins).map_err(|e| e.to_string())?;
     let was_on = !off.iter().any(|d| d == id);
     let mut warning = None;
     if was_on != on
@@ -516,7 +520,7 @@ pub fn set_enabled_in(
 /// Marks it off without running anything: its setup just failed, so its teardown has had
 /// its chance and turning it on later runs the setup again.
 pub(crate) fn mark_off(plugins: &Path, id: &str) -> std::io::Result<()> {
-    let mut off = disabled(plugins);
+    let mut off = disabled_for_update(plugins)?;
     if !off.iter().any(|d| d == id) {
         off.push(id.to_owned());
     }

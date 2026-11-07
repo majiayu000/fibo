@@ -31,6 +31,7 @@ pub mod scheme;
 pub mod secret;
 pub mod setup;
 pub mod sidebar;
+pub mod state_file;
 pub mod status;
 pub mod status_group;
 pub mod subagents;
