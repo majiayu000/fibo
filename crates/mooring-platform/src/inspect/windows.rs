@@ -81,10 +81,14 @@ pub fn first_handed_out_port() -> u16 {
 pub fn all_pids() -> Vec<u32> {
     let mut out = vec![];
     let _ = each_entry(|entry| out.push(entry.th32ProcessID));
+    out.retain(|pid| alive(*pid));
     out
 }
 
 pub fn name(pid: u32) -> Option<String> {
+    if !alive(pid) {
+        return None;
+    }
     let mut found = None;
     each_entry(|entry| {
         if entry.th32ProcessID == pid {
@@ -97,8 +101,17 @@ pub fn name(pid: u32) -> Option<String> {
     found
 }
 
+/// A process lasts as long as anyone holds a handle to it, a virus scanner included, and until
+/// then the system still lists it and still answers about it.
+fn alive(pid: u32) -> bool {
+    i32::try_from(pid).is_ok_and(crate::process::exists)
+}
+
 /// A handle that closes itself.
 fn open(pid: u32) -> Option<OwnedHandle> {
+    if !alive(pid) {
+        return None;
+    }
     // SAFETY: the handle goes straight into an OwnedHandle.
     unsafe {
         let raw = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);

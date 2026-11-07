@@ -6,6 +6,7 @@
 use super::{named, named_id, ok_reply, text};
 use crate::control;
 use mooring_core::{agent::Agent, model::*, protocol::*, status};
+use mooring_platform::shell;
 use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
@@ -95,7 +96,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         .filter(|c| Path::new(c).is_dir())
         .or_else(mooring_platform::dirs::home_str)
         .ok_or_else(|| io::Error::other("目录不存在"))?;
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let shell = shell::interactive();
     let command = match session {
         Some(s) => Some(w.resume_command(s)),
         None => agent.map(|a| a.command()),
@@ -103,10 +104,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     let launch = Request::Launch {
         id: terminal.clone(),
         space: space.id.clone(),
-        argv: command.map_or_else(
-            || vec![shell.clone(), "-l".into()],
-            |c| agent_argv(&shell, &c, prompt),
-        ),
+        argv: command.map_or_else(|| shell::stay(&shell), |c| agent_argv(&shell, &c, prompt)),
         cwd,
         cols: 100,
         rows: 30,
@@ -170,21 +168,14 @@ pub(super) fn add_space(socket: &Path, request: &Value, client: Option<&str>) ->
 }
 
 /// The shell running `command` and then itself, as the window's resume does (`launch_argv`).
-/// The prompt goes as an argument of its own (`$1`), never into the script: nothing in it
-/// is read by the shell.
+/// The prompt goes as an argument the shell does not read.
 fn agent_argv(shell: &str, command: &str, prompt: Option<&str>) -> Vec<String> {
-    let then = format!("exec {} -l", shell_quote(shell));
-    let script = match prompt {
-        // `--`: a prompt starting with `-` is not read as a flag.
-        Some(p) if p.starts_with('-') => format!("{command} -- \"$1\"; {then}"),
-        Some(_) => format!("{command} \"$1\"; {then}"),
-        None => format!("{command}; {then}"),
+    // `--`: a prompt starting with `-` is not read as a flag.
+    let command = match prompt {
+        Some(p) if p.starts_with('-') => format!("{command} --"),
+        _ => command.to_owned(),
     };
-    let mut argv = vec![shell.into(), "-l".into(), "-i".into(), "-c".into(), script];
-    if let Some(p) = prompt {
-        argv.extend([shell.to_owned(), p.to_owned()]);
-    }
-    argv
+    shell::run_then_stay(shell, &command, prompt)
 }
 
 /// `stop`: interrupts the Agent's turn, as the window's 中断这一轮 does. The host checks it is

@@ -1,4 +1,4 @@
-use mooring_platform::terminal as term;
+use mooring_platform::{shell, terminal as term};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io;
@@ -18,16 +18,17 @@ pub fn announce_host(root: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// The system default `PATH` a shell starts from, before its login profile adds to it.
-const SYSTEM_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
-
 /// What a terminal's programs learn about the host: that they run in Mooring, in which
 /// terminal, the runtime to reach, and the executable whose `hook` subcommand reports to it.
-/// That executable's directory also goes on `PATH`, after the system default, so an
+/// That executable's directory also goes on `PATH`, after `login_path`, so an
 /// Agent in the terminal can run `mooring list` / `split` by name, as its usage says.
 /// The login profile keeps it: macOS's path_helper keeps entries it does not know, and
 /// profiles add to `PATH` rather than replace it.
-fn host_env(terminal: &str, host: Option<&(PathBuf, PathBuf)>) -> Vec<(OsString, OsString)> {
+fn host_env(
+    terminal: &str,
+    host: Option<&(PathBuf, PathBuf)>,
+    login_path: &std::ffi::OsStr,
+) -> Vec<(OsString, OsString)> {
     use mooring_core::protocol::{HOOK_ENV, MARKER_ENV, RUNTIME_ENV, TERMINAL_ENV};
     let mut env: Vec<(OsString, OsString)> = vec![
         (MARKER_ENV.into(), "1".into()),
@@ -37,10 +38,7 @@ fn host_env(terminal: &str, host: Option<&(PathBuf, PathBuf)>) -> Vec<(OsString,
         env.push((RUNTIME_ENV.into(), root.as_os_str().to_owned()));
         env.push((HOOK_ENV.into(), exe.as_os_str().to_owned()));
         if let Some(dir) = exe.parent().filter(|d| !d.as_os_str().is_empty()) {
-            let mut path = OsString::from(SYSTEM_PATH);
-            path.push(":");
-            path.push(dir);
-            env.push(("PATH".into(), path));
+            env.push(("PATH".into(), shell::on_path(login_path, dir)));
         }
     }
     // Agents and hooks set up under the old name (Keepline) read these too.
@@ -161,7 +159,12 @@ pub fn spawn(
     env.insert("COLORTERM".into(), "truecolor".into());
     env.insert("COLORFGBG".into(), colorfgbg.into());
     env.extend(shell_env);
-    env.extend(host_env(terminal, HOST.get()));
+    let login_path = env.get(std::ffi::OsStr::new("PATH")).cloned();
+    env.extend(host_env(
+        terminal,
+        HOST.get(),
+        &login_path.unwrap_or_default(),
+    ));
     env.remove(std::ffi::OsStr::new("COLUMNS"));
     env.remove(std::ffi::OsStr::new("LINES"));
     term::spawn(&term::Spec {
@@ -180,30 +183,19 @@ pub fn spawn(
 /// state into every later shell. Started from inside Claude Code, for example,
 /// `CLAUDE_CODE_CHILD_SESSION` reached every shell; Claude launched there believed it
 /// was a nested child and stopped saving its transcript, so Mooring lost track of it.
-/// A launcher's `PATH` is its own state too, so it falls back to the system default.
+/// A launcher's `PATH` is its own state too, so it falls back to the login's.
 /// Agent home overrides pass: this host reads transcripts where they point, so the
 /// Agents it starts must write there too.
 fn baseline_env(vars: impl Iterator<Item = (OsString, OsString)>) -> Vec<(OsString, OsString)> {
-    const PASS: [&str; 11] = [
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "SHELL",
-        "TMPDIR",
-        "LANG",
-        "SSH_AUTH_SOCK",
-        "__CF_USER_TEXT_ENCODING",
-        "CLAUDE_CONFIG_DIR",
-        "CODEX_HOME",
-        "GROK_HOME",
-    ];
-    let mut env: Vec<_> = vars
-        .filter(|(k, _)| {
-            k.to_str()
-                .is_some_and(|k| PASS.contains(&k) || k.starts_with("LC_"))
-        })
-        .collect();
-    env.push(("PATH".into(), SYSTEM_PATH.into()));
+    const AGENT_HOMES: [&str; 3] = ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "GROK_HOME"];
+    let vars: Vec<_> = vars.collect();
+    let homes = vars
+        .iter()
+        .filter(|(k, _)| k.to_str().is_some_and(|k| AGENT_HOMES.contains(&k)))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut env = shell::login_env(vars.into_iter());
+    env.extend(homes);
     env
 }
 
@@ -213,7 +205,6 @@ mod env_tests {
     fn only_the_login_baseline_passes_whatever_launched_the_host() {
         let launcher = [
             ("HOME", "/Users/u"),
-            ("USER", "u"),
             ("LANG", "zh_CN.UTF-8"),
             ("LC_CTYPE", "UTF-8"),
             ("PATH", "/agent/bin:/usr/bin"),
@@ -226,12 +217,20 @@ mod env_tests {
         ]
         .map(|(k, v)| (k.into(), v.into()));
         let env = super::baseline_env(launcher.into_iter());
-        let keys: Vec<_> = env.iter().map(|(k, _)| k.to_str().unwrap()).collect();
-        assert_eq!(
-            keys,
-            ["HOME", "USER", "LANG", "LC_CTYPE", "GROK_HOME", "PATH"]
-        );
-        assert_eq!(env.last().unwrap().1, "/usr/bin:/bin:/usr/sbin:/sbin");
+        let found = |name: &str| env.iter().find(|(k, _)| k == name).map(|(_, v)| v);
+        for kept in ["HOME", "LANG", "LC_CTYPE", "GROK_HOME"] {
+            assert!(found(kept).is_some(), "{kept}: {env:?}");
+        }
+        for dropped in [
+            "CLAUDE_CODE_CHILD_SESSION",
+            "CLAUDECODE",
+            "CODEX_SANDBOX",
+            "SOME_FUTURE_AGENT_MARKER",
+            "COLUMNS",
+        ] {
+            assert!(found(dropped).is_none(), "{dropped}: {env:?}");
+        }
+        assert_ne!(found("PATH").unwrap(), "/agent/bin:/usr/bin");
     }
     #[test]
     fn a_spawned_shell_does_not_see_the_hosts_launcher_state() {
@@ -410,7 +409,7 @@ mod host_env_tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(
-            names(super::host_env("t1", None)),
+            names(super::host_env("t1", None, "/sys".as_ref())),
             [
                 "MOORING_ENV=1",
                 "MOORING_TERMINAL=t1",
@@ -420,14 +419,18 @@ mod host_env_tests {
             ]
         );
         let host = ("/run/k".into(), "/app/mooring".into());
+        let path = format!(
+            "PATH={}",
+            super::shell::on_path("/sys".as_ref(), "/app".as_ref()).to_string_lossy()
+        );
         assert_eq!(
-            names(super::host_env("t2", Some(&host))),
+            names(super::host_env("t2", Some(&host), "/sys".as_ref())),
             [
                 "MOORING_ENV=1",
                 "MOORING_TERMINAL=t2",
                 "MOORING_RUNTIME=/run/k",
                 "MOORING_HOOK=/app/mooring",
-                "PATH=/usr/bin:/bin:/usr/sbin:/sbin:/app",
+                &path,
                 "KEEPLINE_ENV=1",
                 "KEEPLINE_TERMINAL=t2",
                 "KEEPLINE_RUNTIME=/run/k",
