@@ -101,7 +101,16 @@ fn a_lock_is_held_by_one_opener_at_a_time() {
     first.try_lock().unwrap();
     assert!(second.try_lock().is_err());
     drop(first);
-    second.try_lock().unwrap();
+    // A test running beside this one may be starting a process, which holds a copy of the
+    // descriptor, and so the lock, until it execs.
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while second.try_lock().is_err() {
+        assert!(
+            std::time::Instant::now() < until,
+            "the lock never came free"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
 }
 
 #[test]
@@ -117,4 +126,17 @@ fn a_secure_folder_is_usable_again_and_again_and_a_file_is_not_one() {
     let file = dir.join("file");
     std::fs::write(&file, "x").unwrap();
     assert!(mooring_platform::fs::secure_dir(&file).is_err());
+}
+
+#[test]
+fn a_canonical_path_compares_equal_to_one_a_process_reports_and_can_be_a_directory() {
+    let dir = crate::scratch("fs-canonical");
+    let real = mooring_platform::fs::canonical(&dir).unwrap();
+    assert!(real.is_dir());
+    assert!(!real.to_string_lossy().starts_with(r"\\?\"), "{real:?}");
+    assert_eq!(
+        mooring_platform::fs::canonical(&real.join(".")).unwrap(),
+        real
+    );
+    assert!(mooring_platform::fs::canonical(&dir.join("not-there")).is_err());
 }

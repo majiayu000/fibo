@@ -27,6 +27,15 @@ fn pid_in(file: &Path) -> i32 {
 
 /// Only ever does anything as a copy started by `myself`.
 #[test]
+#[ignore = "started by the tests of inspect"]
+fn helper_reads_its_input() {
+    if std::env::var_os(PID_FILE).is_some() {
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+    }
+}
+
+#[test]
 #[ignore = "started by the tests in this file"]
 fn helper_lasts() {
     if std::env::var_os(PID_FILE).is_some() {

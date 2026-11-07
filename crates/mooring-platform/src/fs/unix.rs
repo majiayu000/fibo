@@ -17,6 +17,10 @@ pub fn create_private_dir(dir: &Path) -> io::Result<()> {
         .create(dir)
 }
 
+pub fn canonical(path: &Path) -> io::Result<std::path::PathBuf> {
+    std::fs::canonicalize(path)
+}
+
 pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;

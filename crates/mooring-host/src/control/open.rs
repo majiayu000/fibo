@@ -199,7 +199,7 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
         None => side_placement(&a.socket, &w, &side_owner(&w, tab, &target), &target)?,
     };
     let cwd = match a.value("cwd") {
-        Some(dir) => std::fs::canonicalize(dir)
+        Some(dir) => mooring_platform::fs::canonical(Path::new(dir))
             .map_err(|e| io::Error::other(format!("--cwd {dir}：{e}")))?
             .to_string_lossy()
             .into_owned(),

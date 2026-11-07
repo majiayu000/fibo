@@ -7,18 +7,15 @@ use std::io::ErrorKind;
 use std::process::Stdio;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-/// The interface lets Windows refuse this one for now.
+/// The interface lets Windows refuse open files.
 fn refused<T>(result: &std::io::Result<T>) -> bool {
     matches!(result, Err(e) if e.kind() == ErrorKind::Unsupported)
 }
 
 #[test]
 fn arguments_are_the_ones_the_process_was_given() {
-    let mine = argv(std::process::id());
-    if refused(&mine) {
-        return;
-    }
-    assert_eq!(mine.unwrap(), std::env::args().collect::<Vec<_>>());
+    let mine = argv(std::process::id()).unwrap();
+    assert_eq!(mine, std::env::args().collect::<Vec<_>>());
 }
 
 #[test]
@@ -46,32 +43,51 @@ fn a_variable_comes_from_the_environment_and_is_its_whole_name() {
         .spawn()
         .unwrap();
     let pid = child.id();
-    let refuses = refused(&argv(pid));
+    assert_eq!(
+        argv(pid).unwrap().last().map(String::as_str),
+        Some("MOORING_CONTRACT_PROBE=from-arguments")
+    );
     // Linux fills these in a moment after the exec that ended `spawn`.
     let until = Instant::now() + Duration::from_secs(10);
     let mut probe = None;
-    while !refuses && probe.is_none() && Instant::now() < until {
+    while probe.is_none() && Instant::now() < until {
         probe = env_var(pid, "MOORING_CONTRACT_PROBE");
         std::thread::sleep(Duration::from_millis(5));
     }
     let longer = env_var(pid, "MOORING_CONTRACT_ONLY_LONGER");
     child.kill().unwrap();
     child.wait().unwrap();
-    if refuses {
-        return;
-    }
     assert_eq!(probe.as_deref(), Some("from-environment"));
     assert_eq!(longer, None);
 }
 
 #[test]
 fn the_directory_is_where_the_process_is() {
-    if refused(&argv(std::process::id())) {
-        return;
-    }
     assert_eq!(
         cwd(std::process::id()).map(std::path::PathBuf::from),
         std::env::current_dir().ok()
+    );
+}
+
+#[test]
+fn the_directory_of_another_process_is_where_it_was_started() {
+    let dir = crate::scratch("inspect-other-cwd");
+    let mut child = myself("process::helper_lasts", &dir.join("unused"))
+        .current_dir(&dir)
+        .spawn()
+        .unwrap();
+    let pid = child.id();
+    // Linux fills this in a moment after the exec that ended `spawn`.
+    let until = Instant::now() + Duration::from_secs(10);
+    let mut found = None;
+    while found.is_none() && Instant::now() < until {
+        found = cwd(pid);
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert_eq!(
+        found.map(std::path::PathBuf::from),
+        Some(mooring_platform::fs::canonical(&dir).unwrap())
     );
 }
 
@@ -162,13 +178,31 @@ fn standard_input_tells_a_pipe_from_nothing() {
         stdin_is_a_channel(piped.id()),
         stdin_is_a_channel(empty.id()),
     );
-    let refuses = refused(&argv(piped.id()));
     for child in [&mut piped, &mut empty] {
         child.kill().unwrap();
         child.wait().unwrap();
     }
     assert!(!is_null);
-    assert!(is_pipe || refuses);
+    assert!(is_pipe);
+}
+
+/// Windows answers about a pipe only once a read blocked on it ends, which may be never.
+#[test]
+fn a_process_blocked_reading_a_pipe_is_answered_for_at_once() {
+    let dir = crate::scratch("inspect-stdin-blocked");
+    let mut reading = myself("process::helper_reads_its_input", &dir.join("unused"))
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(1000));
+    let asked = Instant::now();
+    let first = stdin_is_a_channel(reading.id());
+    let second = stdin_is_a_channel(reading.id());
+    let took = asked.elapsed();
+    reading.kill().unwrap();
+    reading.wait().unwrap();
+    assert!(first && second);
+    assert!(took < Duration::from_secs(2), "{took:?}");
 }
 
 #[test]
@@ -177,11 +211,7 @@ fn sockets_say_what_a_process_listens_on_and_connects_to() {
     let port = listener.local_addr().unwrap().port();
     let _client = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
     let me = std::process::id();
-    let found = tcp_sockets(&[me]);
-    if refused(&found) {
-        return;
-    }
-    let found = found.unwrap();
+    let found = tcp_sockets(&[me]).unwrap();
     assert!(found.listening.contains(&(me, port)), "{found:?}");
     assert!(found.connected.contains(&(me, port)), "{found:?}");
     assert_eq!(tcp_sockets(&[]).unwrap(), Default::default());
