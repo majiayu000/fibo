@@ -664,3 +664,70 @@ fn write_log(agent: Agent, home: &Path, cwd: &str) -> PathBuf {
     std::fs::write(&path, text).unwrap();
     path
 }
+
+/// For driving a real CLI by hand with `mooring read` and `send`: what the command line has no
+/// verb for. `MOORING_RUNTIME` says which host; `HAND` is `open <id> <directory>` or
+/// `interrupt <id>`. `cargo test -p mooring-host --test terminal_chain by_hand -- --ignored`
+#[test]
+#[ignore = "by hand"]
+fn by_hand() {
+    let runtime = PathBuf::from(std::env::var_os("MOORING_RUNTIME").unwrap());
+    let socket = runtime.join("workbench.sock");
+    let hand = std::env::var("HAND").unwrap();
+    let words: Vec<_> = hand.splitn(3, ' ').collect();
+    match words[..] {
+        ["open", id, cwd] => {
+            let edit = |edit| {
+                rpc(
+                    &socket,
+                    &Request::Edit {
+                        request: None,
+                        edit,
+                    },
+                )
+            };
+            edit(Edit::AddSpace(Space {
+                id: "s".into(),
+                name: "By hand".into(),
+                cwd: cwd.into(),
+            }));
+            let reply = rpc(
+                &socket,
+                &Request::Launch {
+                    id: id.into(),
+                    space: "s".into(),
+                    argv: shell::stay(&shell::interactive()),
+                    cwd: cwd.into(),
+                    cols: 120,
+                    rows: 40,
+                    scheme: Default::default(),
+                    colors: None,
+                },
+            );
+            eprintln!("{reply:?}");
+            edit(Edit::CreateTab {
+                tab: Tab {
+                    id: format!("tab-{id}"),
+                    space: "s".into(),
+                    default_task: None,
+                    title: String::new(),
+                    layout: Some(mooring_core::layout::Layout::Leaf(id.into())),
+                },
+            });
+        }
+        ["interrupt", id] => {
+            let reply = rpc(&socket, &Request::Interrupt { id: id.into() });
+            eprintln!(
+                "{}",
+                format!("{reply:?}").chars().take(300).collect::<String>()
+            );
+        }
+        ["bound", id] => {
+            let Reply::Workspace(w) = rpc(&socket, &Request::Workspace) else {
+                panic!("no workspace");
+            };
+            eprintln!("{:?}", w.current_agent(id).map(|s| (s.runtime, s.binding)));
+        }
+        _ => panic!("{hand}"),
+    }
+}
