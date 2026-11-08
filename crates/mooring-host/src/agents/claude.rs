@@ -239,6 +239,22 @@ impl Adapter for Claude {
             }
             return;
         }
+        // What you type while a turn runs: Claude Code queues it and hands it over mid-turn as
+        // an attachment, never as a `user` line. Without this a phone's message sent then
+        // vanishes once its 「发送中」 runs out. Task notifications and other sessions'
+        // messages come the same way, but without `humanTurn`.
+        if ty == "attachment" {
+            let a = &v["attachment"];
+            if a["type"] == "queued_command"
+                && a["commandMode"] == "prompt"
+                && a["humanTurn"] == true
+                && a["isMeta"] != true
+                && v["isMeta"] != true
+            {
+                parser.message(true, text(&a["prompt"]), at, source, false);
+            }
+            return;
+        }
         let msg = &v["message"];
         let blocks = &msg["content"];
         // The summary a compaction writes is shaped like a prompt but asks nothing:
@@ -554,6 +570,59 @@ mod tests {
             "content": "<task-notification><task-id>a1</task-id><status>completed</status>"}}),
         );
         assert_eq!(p.card.stopped_subagents, ["a2"]);
+    }
+
+    #[test]
+    fn what_you_type_mid_turn_is_your_message_and_notifications_are_not() {
+        let mut p = crate::content::Parser::default();
+        let s = Source::default();
+        let queued = |prompt: Value, extra: Value| {
+            let mut a = serde_json::json!({"type": "queued_command", "commandMode": "prompt", "prompt": prompt});
+            a.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            serde_json::json!({"type": "attachment", "timestamp": "2026-11-08T10:58:45.182Z", "attachment": a})
+        };
+        for v in [
+            serde_json::json!({"type": "user", "uuid": "u", "timestamp": "2026-11-08T10:50:00Z", "message": {"content": "先看看在跑"}}),
+            queued(
+                serde_json::json!("顺便看下消息为什么不显示"),
+                serde_json::json!({"humanTurn": true}),
+            ),
+            queued(
+                serde_json::json!([{"type": "text", "text": "[Image #2] 这张也看"}, {"type": "image", "source": {}}]),
+                serde_json::json!({"humanTurn": true}),
+            ),
+            // Not typed by you: a background task's report, another session's message.
+            serde_json::json!({"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "task-notification", "prompt": "<task-notification>done</task-notification>"}}),
+            queued(
+                serde_json::json!("<cross-session-message>hi</cross-session-message>"),
+                serde_json::json!({"isMeta": true}),
+            ),
+            queued(
+                serde_json::json!("没有 humanTurn 的提醒"),
+                serde_json::json!({}),
+            ),
+        ] {
+            p.add(
+                mooring_core::model::Agent::Claude,
+                &serde_json::to_vec(&v).unwrap(),
+                s.clone(),
+            );
+        }
+        let said: Vec<_> = (p.records.iter())
+            .filter(|r| r.kind == "user")
+            .map(|r| r.text.as_str())
+            .collect();
+        assert_eq!(
+            said,
+            [
+                "先看看在跑",
+                "顺便看下消息为什么不显示",
+                "[Image #2] 这张也看"
+            ]
+        );
+        assert_eq!(p.card.turn, Turn::Running);
     }
 
     #[test]

@@ -73,7 +73,7 @@ export function Composer({
         ref={input}
         value={draft}
         onChangeText={setDraft}
-        placeholder={offline ? '电脑没连上，写的话会在重连后发送' : '回复，或者让它接着做…'}
+        placeholder={offline ? '电脑没连上，写的话会在重连后发送' : running ? '它还在做事：现在发的，做完手头这一步就会看到' : '回复，或者让它接着做…'}
         placeholderTextColor={t.dim}
         multiline
         numberOfLines={Platform.OS === 'web' ? 1 : undefined}
