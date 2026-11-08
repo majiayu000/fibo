@@ -494,8 +494,8 @@ fn menu_rule(i: usize) -> gpui::AnyElement {
 fn menu_shortcut(title: &str, keys: &crate::keymap::Keymap) -> Option<String> {
     use crate::keymap::Action;
     let action = match title {
-        "复制" => return Some("⌘C".into()),
-        "粘贴" => return Some("⌘V".into()),
+        "复制" => return Some(crate::ui::words::local("⌘C")),
+        "粘贴" => return Some(crate::ui::words::local("⌘V")),
         "向右分屏" => Action::SplitRight,
         "向下分屏" => Action::SplitDown,
         "搜索滚动内容" => Action::Find,

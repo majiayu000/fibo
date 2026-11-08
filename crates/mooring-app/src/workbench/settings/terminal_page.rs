@@ -173,7 +173,7 @@ impl SettingsView {
                 self.row(
                     size.is_empty(),
                     "字号",
-                    "与 ⌘+ / ⌘− 缩放共用，重开应用后保留",
+                    &crate::ui::words::local("与 ⌘+ / ⌘− 缩放共用，重开应用后保留"),
                     stepper,
                 )
                 .into_any_element(),
@@ -261,7 +261,9 @@ impl SettingsView {
                 self.row(
                     true,
                     "用哪个编辑器打开行号",
-                    "⌘ 点击 pane.rs:651 这类路径跳到那一行；自动选 Zed、VS Code、Cursor 中第一个装了的",
+                    &crate::ui::words::local(
+                        "⌘ 点击 pane.rs:651 这类路径跳到那一行；自动选 Zed、VS Code、Cursor 中第一个装了的",
+                    ),
                     choices,
                 )
                 .into_any_element(),

@@ -140,7 +140,7 @@ impl SettingsView {
             );
         if recording {
             row = row.child(div().pb(px(T::S10)).flex().child(note(
-                "按下新的组合键，需包含 ⌘；Esc 取消".into(),
+                crate::ui::words::local("按下新的组合键，需包含 ⌘；Esc 取消"),
                 T::color(T::secondary()),
             )));
         }
@@ -149,7 +149,7 @@ impl SettingsView {
                 div()
                     .pb(px(T::S10))
                     .flex()
-                    .child(note(why.into(), Tone::Danger.ink())),
+                    .child(note(crate::ui::words::local(why), Tone::Danger.ink())),
             );
         }
         if let Some((_, chord, holder)) = taken {
@@ -204,9 +204,9 @@ impl SettingsView {
                             .text_color(T::color(T::primary()))
                             .child("切换到第几个标签"),
                     )
-                    .child(label("⌘9 为最后一个；固定")),
+                    .child(label(crate::ui::words::local("⌘9 为最后一个；固定"))),
             )
-            .child(keycap("⌘1 – ⌘9", true))
+            .child(keycap(crate::ui::words::local("⌘1 – ⌘9"), true))
     }
     pub(super) fn keys_page(&self, cx: &Context<Self>) -> gpui::Div {
         let map = keymap::current(cx);

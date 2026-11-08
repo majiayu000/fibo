@@ -110,7 +110,7 @@ impl Workbench {
         ];
         let items: [(&str, String, bool); 4] = [
             ("open", Pane::open_title(target), true),
-            ("reveal", "在访达中显示".into(), true),
+            ("reveal", crate::ui::words::local("在访达中显示"), true),
             ("copy", "复制路径".into(), true),
             ("copy-relative", "复制相对路径".into(), relative.is_some()),
         ];

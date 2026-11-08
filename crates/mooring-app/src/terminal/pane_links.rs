@@ -73,12 +73,11 @@ impl Pane {
             return None;
         }
         if self.links.hover_link.is_some() {
-            return Some("⌘ 点击在浏览器打开".into());
+            return Some(crate::ui::words::local("⌘ 点击在浏览器打开"));
         }
         let target = self.shown_target()?;
-        Some(super::super::open_path::hint(&Self::open_plan(
-            target,
-            self.links.modifiers.alt,
+        Some(crate::ui::words::local(&super::super::open_path::hint(
+            &Self::open_plan(target, self.links.modifiers.alt),
         )))
     }
     pub(super) fn set_modifiers(&mut self, modifiers: gpui::Modifiers, cx: &mut Context<Self>) {
@@ -101,8 +100,8 @@ impl Pane {
     pub fn open_title(target: &Hovered) -> String {
         use super::super::open_path::Plan;
         match Self::open_plan(target, false) {
-            Plan::Reveal { .. } => "在访达中显示（可执行文件不运行）".into(),
-            Plan::OpenFolder => "在访达中打开".into(),
+            Plan::Reveal { .. } => crate::ui::words::local("在访达中显示（可执行文件不运行）"),
+            Plan::OpenFolder => crate::ui::words::local("在访达中打开"),
             Plan::OpenFile => "打开".into(),
             Plan::Editor { name, line, .. } => format!("在 {name} 打开第 {line} 行"),
             Plan::Terminal { line, .. } => format!("用 $EDITOR 打开第 {line} 行"),
@@ -115,7 +114,10 @@ impl Pane {
             Plan::Reveal { executable } => {
                 cx.reveal_path(&target.path);
                 if executable {
-                    self.show_toast("可执行文件只在访达中显示，不会运行", cx);
+                    self.show_toast(
+                        crate::ui::words::local("可执行文件只在访达中显示，不会运行"),
+                        cx,
+                    );
                 }
             }
             Plan::OpenFolder | Plan::OpenFile => cx.open_with_system(&target.path),

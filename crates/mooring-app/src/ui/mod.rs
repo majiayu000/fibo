@@ -17,3 +17,4 @@ pub mod theme;
 pub mod themes;
 pub mod tone;
 pub mod widgets;
+pub mod words;

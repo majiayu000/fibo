@@ -61,21 +61,13 @@ pub fn executable(path: &Path) -> bool {
 
 /// An editor's bundled command line tool, found without the user installing it on PATH.
 pub fn installed(editor: Editor) -> Option<PathBuf> {
-    let (bundles, tool): (&[&str], &str) = match editor {
-        Editor::Zed => (&["Zed.app", "Zed Preview.app"], "Contents/MacOS/cli"),
-        Editor::VsCode => (
-            &["Visual Studio Code.app"],
-            "Contents/Resources/app/bin/code",
-        ),
-        Editor::Cursor => (&["Cursor.app"], "Contents/Resources/app/bin/cursor"),
+    use mooring_platform::desktop::{Editor as Cli, editor_cli};
+    editor_cli(match editor {
+        Editor::Zed => Cli::Zed,
+        Editor::VsCode => Cli::VsCode,
+        Editor::Cursor => Cli::Cursor,
         _ => return None,
-    };
-    let home = mooring_platform::dirs::home().map(|h| h.join("Applications"));
-    [Some(PathBuf::from("/Applications")), home]
-        .into_iter()
-        .flatten()
-        .flat_map(|dir| bundles.iter().map(move |b| dir.join(b).join(tool)))
-        .find(|p| p.is_file())
+    })
 }
 
 pub fn editor_name(editor: Editor) -> &'static str {
