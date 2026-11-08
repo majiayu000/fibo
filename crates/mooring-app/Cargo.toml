@@ -25,6 +25,10 @@ libc.workspace = true
 # The pairing QR code a phone scans.
 qrcode = { version = "0.14", default-features = false }
 
+# Without a display server feature GPUI on Linux runs headless: a live app with no window.
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui_platform = { path = "../../.deps/zed/crates/gpui_platform", features = ["font-kit", "x11", "wayland"] }
+
 [features]
 visual-test = ["gpui/test-support", "gpui_platform/test-support"]
 

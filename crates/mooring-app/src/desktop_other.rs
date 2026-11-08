@@ -1,4 +1,5 @@
-//! Nothing here has a menu bar, notifications or a Dock icon of ours yet.
+//! Nothing here has a menu bar or a Dock icon of ours yet; notifications go through the
+//! system's own center, without a way back to the session they name.
 use std::ffi::c_char;
 
 pub fn set_dock_icon(_png: &[u8]) {}
@@ -9,7 +10,11 @@ pub fn install(_callback: extern "C" fn(*const c_char)) {}
 pub fn update(_json: &str) {}
 pub fn notifications_enable() {}
 pub fn withdraw(_session: &str) {}
-pub fn notify(_session: &str, _title: &str, _body: &str, _sound: bool) {}
+pub fn notify(_session: &str, title: &str, body: &str, sound: bool) {
+    if let Err(e) = mooring_platform::desktop::notify(title, body, sound) {
+        eprintln!("mooring: notification not shown: {e}");
+    }
+}
 pub fn play_sound() {}
 #[cfg(feature = "visual-test")]
 pub fn snapshot(_path: &std::path::Path) {}

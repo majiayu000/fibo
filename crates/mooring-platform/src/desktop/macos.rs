@@ -30,6 +30,11 @@ pub fn editor_cli(editor: super::Editor) -> Option<std::path::PathBuf> {
         .find(|p| p.is_file())
 }
 
+/// The app posts its own through UserNotifications.
+pub fn notify(_title: &str, _body: &str, _sound: bool) -> std::io::Result<()> {
+    Ok(())
+}
+
 pub fn reduce_motion() -> bool {
     std::process::Command::new("defaults")
         .args(["read", "com.apple.universalaccess", "reduceMotion"])
