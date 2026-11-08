@@ -27,6 +27,7 @@ import type { ModeKind } from '@/ui/modes';
 import { ModeSheet } from '@/ui/modesheet';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
+import { sameWords } from '@/ui/sent';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 
@@ -40,12 +41,6 @@ function merge(have: Message[], got: Message[]): Message[] {
   const seen = new Set(have.map(key));
   const fresh = got.filter((m) => !seen.has(key(m)));
   return fresh.length ? [...have, ...fresh].sort((a, b) => a.seq - b.seq) : have;
-}
-
-/** A sent message is in the log: the same words, after the pictures' `[Image #1]` when it had some. */
-function sameWords(logged: string, sent: Pending) {
-  const said = logged.trim();
-  return sent.pictures ? !!sent.text.trim() && said.endsWith(sent.text.trim()) : said === sent.text.trim();
 }
 
 const POLL_MS = 2000;
@@ -154,7 +149,7 @@ export default function Chat() {
       p.filter(
         (x) =>
           Date.now() / 1000 - Math.max(x.at, ranAt.current) < 30 &&
-          !messages.some((m) => m.role === 'user' && m.at >= x.at - 5 && sameWords(m.text, x)),
+          !messages.some((m) => m.role === 'user' && m.at >= x.at - 5 && sameWords(m.text, x.text, x.pictures)),
       ),
     );
   }, [messages, working]);
