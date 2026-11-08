@@ -105,59 +105,59 @@ impl SettingsView {
                 .iter()
                 .map(|t| mock_line(&format!("› {t}"), ink))
                 .collect();
-            return frame(lines(rows), "它的内容，右键菜单和命令面板里出现");
+            return frame(lines(rows), t!("它的内容，右键菜单和命令面板里出现"));
         }
         if !show.checks.is_empty() {
-            let mut rows = vec![mock_line("这些命令跑过，算验证过：", soft)];
+            let mut rows = vec![mock_line(t!("这些命令跑过，算验证过："), soft)];
             rows.extend(
                 show.checks
                     .iter()
                     .map(|c| mock_line(&format!("$ {c}"), ink)),
             );
-            return frame(lines(rows), "它的内容");
+            return frame(lines(rows), t!("它的内容"));
         }
         if let Some((db, resume)) = &show.agent {
             let rows = vec![
-                mock_line("从这里读会话：", soft),
+                mock_line(t!("从这里读会话："), soft),
                 mock_line(db, ink),
-                mock_line("接着某个会话：", soft),
+                mock_line(t!("接着某个会话："), soft),
                 mock_line(resume, ink),
             ];
-            return frame(lines(rows), "它的内容");
+            return frame(lines(rows), t!("它的内容"));
         }
         let (rows, note) = if has(Kind::Quota) {
             (
-                vec![mock_line("状态栏　5 小时 42% · 每周 18%", ink)],
-                "示意，百分比是编的",
+                vec![mock_line(t!("状态栏　5 小时 42% · 每周 18%"), ink)],
+                t!("示意，百分比是编的"),
             )
         } else if has(Kind::Hooks) {
             (
                 vec![
-                    mock_line("mooring · 修登录 bug", ink),
-                    mock_line("error · cargo test 失败", soft),
+                    mock_line(t!("mooring · 修登录 bug"), ink),
+                    mock_line(t!("error · cargo test 失败"), soft),
                 ],
-                "示意，通知的文字是编的",
+                t!("示意，通知的文字是编的"),
             )
         } else if has(Kind::Decorations) {
             (
                 vec![
-                    mock_line("~/mooring　　✗ 退出 1　改动 3", ink),
-                    mock_line("悬停标题：上一条命令用时 12 秒，退出码 1", soft),
+                    mock_line(t!("~/mooring　　✗ 退出 1　改动 3"), ink),
+                    mock_line(t!("悬停标题：上一条命令用时 12 秒，退出码 1"), soft),
                 ],
-                "示意，数字是编的",
+                t!("示意，数字是编的"),
             )
         } else if has(Kind::Sidebar) {
             (
                 vec![
-                    mock_line("修登录 bug", ink),
+                    mock_line(t!("修登录 bug"), ink),
                     mock_line(
-                        &format!("{} · 要不要改接口？", Status::Waiting.label()),
+                        &t!("{label} · 要不要改接口？", label = Status::Waiting.label()),
                         soft,
                     ),
-                    mock_line("发布脚本", ink),
-                    mock_line("其余 12 个 ▸", soft),
+                    mock_line(t!("发布脚本"), ink),
+                    mock_line(t!("其余 12 个 ▸"), soft),
                 ],
-                "示意，会话是编的",
+                t!("示意，会话是编的"),
             )
         } else {
             (
@@ -198,17 +198,17 @@ impl SettingsView {
             .children(kin.map(|i| {
                 let id = i.id.clone();
                 let state = if i.update {
-                    "可更新"
+                    t!("可更新")
                 } else if i.pick.as_ref().is_some_and(|p| *p == playing()) {
-                    "正在用"
+                    t!("正在用")
                 } else if i.builtin() {
-                    "内置"
+                    t!("内置")
                 } else if !i.installed() {
-                    "未安装"
+                    t!("未安装")
                 } else if i.enabled() {
-                    "已安装"
+                    t!("已安装")
                 } else {
-                    "已停用"
+                    t!("已停用")
                 };
                 div()
                     .id(gpui::SharedString::from(format!("plugin-kin-{}", i.id)))
@@ -242,7 +242,7 @@ impl SettingsView {
         let mut manage = div().flex().flex_wrap().items_center().gap(px(T::S8));
         if let Some(complete) = item.complete {
             manage = manage.child(
-                secondary(format!("complete-try-{}", item.id), "在窗格上试播").on_click(
+                secondary(format!("complete-try-{}", item.id), t!("在窗格上试播")).on_click(
                     cx.listener(move |_, _, _, cx| {
                         cx.emit(SettingsAction::PreviewComplete(Some(complete)));
                     }),
@@ -258,7 +258,7 @@ impl SettingsView {
             manage = manage.child(
                 secondary(
                     format!("plugin-switch-{}", p.id),
-                    if on { "停用" } else { "启用" },
+                    if on { t!("停用") } else { t!("启用") },
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     if this.market.working.is_none() {
@@ -273,7 +273,7 @@ impl SettingsView {
             if removable {
                 let (id, name) = (p.id.clone(), p.name.clone());
                 manage = manage.child(
-                    secondary(format!("plugin-remove-{}", p.id), "卸载").on_click(cx.listener(
+                    secondary(format!("plugin-remove-{}", p.id), t!("卸载")).on_click(cx.listener(
                         move |this, _, _, cx| {
                             if this.market.working.is_none() {
                                 this.uninstall(id.clone(), name.clone(), false, cx);
@@ -291,19 +291,22 @@ impl SettingsView {
             .flex_col()
             .gap(px(T::S4));
         facts = facts.child(fact(
-            "版本",
+            t!("版本"),
             match (&item.plugin, &item.offer) {
-                (Some(p), Some(o)) if item.update => format!(
-                    "{}，{}有 {}",
-                    p.version.as_deref().unwrap_or("未标"),
-                    o.origin(),
-                    o.entry.version
+                (Some(p), Some(o)) if item.update => t!(
+                    "{current}，{origin}有 {version}",
+                    current = p.version.as_deref().unwrap_or(t!("未标")),
+                    origin = o.origin(),
+                    version = o.entry.version
                 ),
-                _ => item.version.clone().unwrap_or_else(|| "内置".to_owned()),
+                _ => item
+                    .version
+                    .clone()
+                    .unwrap_or_else(|| t!("内置").to_owned()),
             },
         ));
-        facts = facts.child(fact("作用于", kinds(&item.provides)));
-        facts = facts.child(fact("安全", item.safety()));
+        facts = facts.child(fact(t!("作用于"), kinds(&item.provides)));
+        facts = facts.child(fact(t!("安全"), item.safety()));
         let mut extra = Vec::new();
         if let Some(p) = item.plugin.as_ref().filter(|p| p.enabled) {
             if let Some(plugins) = plugin::config().map(plugin::dir) {
@@ -389,8 +392,8 @@ impl SettingsView {
                     secondary(
                         "plugin-back",
                         match tab {
-                            Tab::Installed => "← 已安装",
-                            Tab::Discover => "← 发现",
+                            Tab::Installed => t!("← 已安装"),
+                            Tab::Discover => t!("← 发现"),
                         },
                     )
                     .on_click(cx.listener(|this, _, _, cx| this.close_item(cx))),

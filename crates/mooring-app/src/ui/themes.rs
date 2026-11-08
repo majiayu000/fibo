@@ -71,7 +71,7 @@ impl Themes {
                 .into_iter()
                 .map(|scheme| Entry {
                     id: scheme.name().to_owned(),
-                    name: scheme.label().to_owned(),
+                    name: mooring_core::i18n::say(scheme.label()).to_owned(),
                     palette: Palette::of_scheme(scheme),
                     file: None,
                     read_only: false,

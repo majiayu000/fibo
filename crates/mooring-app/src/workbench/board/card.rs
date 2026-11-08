@@ -19,7 +19,7 @@ impl Workbench {
             .spaces
             .iter()
             .find(|s| s.id == task.space)
-            .map_or("外部", |s| s.name.as_str());
+            .map_or(t!("外部"), |s| s.name.as_str());
         card_frame(gpui::SharedString::from(format!("board-todo-{id}")))
             .when(lit, |d| d.border_color(T::color(T::link())))
             .on_hover(cx.listener(move |this, on: &bool, _, cx| this.hover_task(&hover, *on, cx)))
@@ -49,18 +49,21 @@ impl Workbench {
                         sessions.last().map_or(task.agent, |s| s.runtime),
                         T::color(T::muted()),
                     ))
-                    .when(sessions.is_empty(), |d| d.child("还没开始"))
+                    .when(sessions.is_empty(), |d| d.child(t!("还没开始")))
                     // One thing on this row: what needs you if anything does, else how many run.
                     .when(!sessions.is_empty(), |d| {
                         d.child(div().min_w_0().truncate().when_else(
                             needs > 0,
                             |d| {
-                                d.text_color(Status::Waiting.colors().1)
-                                    .child(format!("{needs} 个{}", mooring_core::status::NEEDS_YOU))
+                                d.text_color(Status::Waiting.colors().1).child(t!(
+                                    "{needs} 个{needs_you_word}",
+                                    needs,
+                                    needs_you_word = mooring_core::status::needs_you_word()
+                                ))
                             },
                             |d| {
                                 d.text_color(T::color(T::secondary()))
-                                    .child(format!("{} 个会话在做", sessions.len()))
+                                    .child(t!("{len} 个会话在做", len = sessions.len()))
                             },
                         ))
                     })
@@ -70,7 +73,7 @@ impl Workbench {
                             div()
                                 .min_w_0()
                                 .truncate()
-                                .child(format!("· {} 条验收", task.acceptance.len())),
+                                .child(t!("· {len} 条验收", len = task.acceptance.len())),
                         )
                     })
                     .child(div().flex_1())
@@ -100,7 +103,7 @@ impl Workbench {
                     .gap(px(T::S6))
                     .child(div().flex_1())
                     .child(
-                        button(gpui::SharedString::from(format!("done-{id}")), "完成")
+                        button(gpui::SharedString::from(format!("done-{id}")), t!("完成"))
                             .flex_shrink_0()
                             .h(px(PILL + 4.))
                             .px(px(T::S8))
@@ -116,9 +119,9 @@ impl Workbench {
                         button(
                             gpui::SharedString::from(format!("start-{id}")),
                             if started {
-                                "再开一个"
+                                t!("再开一个")
                             } else {
-                                "开始 →"
+                                t!("开始 →")
                             },
                         )
                         .flex_shrink_0()
@@ -159,13 +162,16 @@ impl Workbench {
         // 要你处理's cards say what they wait on: the status, its age and the question.
         let asks_you = (column == Column::Needs).then(|| status_of(&self.workspace, session));
         let content = self.workspace.content.get(&session.id);
-        let space_id = self.workspace.session_space(session).unwrap_or("外部");
+        let space_id = self
+            .workspace
+            .session_space(session)
+            .unwrap_or(not_ui!("外部"));
         let space_name = self
             .workspace
             .spaces
             .iter()
             .find(|s| s.id == space_id)
-            .map_or("外部", |s| s.name.as_str());
+            .map_or(t!("外部"), |s| s.name.as_str());
         // The id's tail: ids share prefixes (dates, `visual-`), their ends differ.
         let alnum: Vec<char> = session
             .cli_session_id
@@ -230,9 +236,9 @@ impl Workbench {
                 d.on_hover(cx.listener(move |this, on: &bool, _, cx| this.hover_task(&t, *on, cx)))
             })
             .group(hover_group.clone())
-            .aria_label(gpui::SharedString::from(format!(
-                "会话：{}",
-                self.session_title(session)
+            .aria_label(gpui::SharedString::from(t!(
+                "会话：{title}",
+                title = self.session_title(session)
             )))
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.overview.card_menu = None;

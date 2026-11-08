@@ -24,18 +24,18 @@ impl Workbench {
                 .border(px(if borders { T::BORDER_WIDTH } else { 0. }))
                 .border_color(T::color(T::border()))
                 .bg(T::color(T::pane()))
-                .child(label("已中断（后台重启，原进程已结束）"))
+                .child(label(t!("已中断（后台重启，原进程已结束）")))
                 .child(
                     button(
                         gpui::SharedString::from(format!("reopen-{id}")),
-                        "在这里重新开一个终端",
+                        t!("在这里重新开一个终端"),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| this.reopen(reopen.clone(), cx))),
                 )
                 .child(
                     button(
                         gpui::SharedString::from(format!("close-interrupted-{id}")),
-                        "关闭",
+                        t!("关闭"),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| this.close_pane(&close, cx))),
                 )
@@ -60,7 +60,7 @@ impl Workbench {
         let title = session
             .map(|s| self.session_title(s))
             .or_else(|| pane.read(cx).program_title())
-            .unwrap_or_else(|| "空终端".into());
+            .unwrap_or_else(|| t!("空终端").into());
         let rang = pane.read(cx).bell;
         // What the Agent's adapter says about one it sees here but cannot read.
         let recognition = self.store.recognition();
@@ -117,7 +117,7 @@ impl Workbench {
             None => pane
                 .read(cx)
                 .program_title()
-                .unwrap_or_else(|| "终端".into()),
+                .unwrap_or_else(|| t!("终端").into()),
         };
         let place = self.pane_cwd(id, session, cx).map(|c| short_place(&c));
         let left = div()
@@ -182,14 +182,17 @@ impl Workbench {
                     let target = pane.clone();
                     let tip = gpui::SharedString::from(text);
                     d.child(
-                        button(gpui::SharedString::from(format!("ask-back-{id}")), "↑ 你问")
-                            .pane_action()
-                            .tooltip(move |_, cx| {
-                                cx.new(|_| super::render::TextTip(tip.clone())).into()
-                            })
-                            .on_click(cx.listener(move |_, _, _, cx| {
-                                target.update(cx, |p, cx| p.back_to_latest_ask(cx));
-                            })),
+                        button(
+                            gpui::SharedString::from(format!("ask-back-{id}")),
+                            t!("↑ 你问"),
+                        )
+                        .pane_action()
+                        .tooltip(move |_, cx| {
+                            cx.new(|_| super::render::TextTip(tip.clone())).into()
+                        })
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            target.update(cx, |p, cx| p.back_to_latest_ask(cx));
+                        })),
                     )
                 },
             )
@@ -260,7 +263,7 @@ impl Workbench {
             // 放入待办, 标记完成, 待办详情 and 关闭画面 among the rest.
             .child(
                 button(gpui::SharedString::from(format!("pane-more-{id}")), "⋯")
-                    .aria_label("更多操作")
+                    .aria_label(t!("更多操作"))
                     .pane_action()
                     .text_color(T::color(T::muted()))
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())

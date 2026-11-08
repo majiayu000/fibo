@@ -105,15 +105,15 @@ impl Render for Pane {
             && !self.tint_note_dismissed
             && self.started_under.is_some_and(|s| s != T::term());
         let status = if state.ended {
-            "进程已退出"
+            t!("进程已退出")
         } else if state.dropped || self.reconnect_delay > 0 {
-            "连接断开 · 正在重连…"
+            t!("连接断开 · 正在重连…")
         } else if state.vt.is_none() {
-            "正在恢复终端…"
+            t!("正在恢复终端…")
         } else if state.writable {
-            "终端已连接"
+            t!("终端已连接")
         } else {
-            "只读 · 可明确接管"
+            t!("只读 · 可明确接管")
         };
         let writable = state.writable;
         drop(state);
@@ -128,7 +128,7 @@ impl Render for Pane {
         {
             // The program copied on its own (e.g. an Agent's /copy); say so, or the
             // user can't tell anything happened.
-            let note = format!("程序{}", copied_note(&text, false));
+            let note = t!("程序{v1}", v1 = copied_note(&text, false));
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
             self.show_toast(note, cx);
         }
@@ -352,7 +352,7 @@ impl Render for Pane {
                 window.focus(&this.focus, cx);
                 this.drop_paths(paths, cx);
             }))
-            .when(status != "终端已连接", |d| {
+            .when(status != t!("终端已连接"), |d| {
                 d.child(
                     div()
                         .px(px(T::S12))
@@ -366,10 +366,10 @@ impl Render for Pane {
                 d.child(div().px(px(T::S12)).py(px(T::S8)).flex().items_center().gap(px(T::S12))
                     .bg(T::color(T::panel())).text_size(px(T::META))
                     .child(div().flex_1().text_color(T::color(T::secondary()))
-                        .child(format!("这个程序没有启用安全粘贴：要粘贴的 {lines} 行会逐行立即执行。")))
-                    .child(div().id("paste-anyway").cursor_pointer().text_color(T::color(T::link())).child(format!("仍然粘贴 {lines} 行"))
+                        .child(t!("这个程序没有启用安全粘贴：要粘贴的 {lines} 行会逐行立即执行。", lines)))
+                    .child(div().id("paste-anyway").cursor_pointer().text_color(T::color(T::link())).child(t!("仍然粘贴 {lines} 行", lines))
                         .on_click(cx.listener(|this,_,_,cx|this.confirm_paste(cx))))
-                    .child(div().id("paste-cancel").cursor_pointer().child("取消")
+                    .child(div().id("paste-cancel").cursor_pointer().child(t!("取消"))
                         .on_click(cx.listener(|this,_,_,cx|{this.paste_confirm=None;cx.notify();}))))
             })
             .when(tint_stale, |d| {
@@ -382,14 +382,14 @@ impl Render for Pane {
                         .gap(px(T::S12))
                         .text_size(px(T::META))
                         .child(div().flex_1().text_color(T::color(T::secondary())).child(
-                            "这个终端在切换外观前就开着，程序自己画的底色要退出重开（如 codex resume）才会跟上。",
+                            t!("这个终端在切换外观前就开着，程序自己画的底色要退出重开（如 codex resume）才会跟上。"),
                         ))
                         .child(
                             div()
                                 .id("tint-note-dismiss")
                                 .cursor_pointer()
                                 .text_color(T::color(T::link()))
-                                .child("知道了")
+                                .child(t!("知道了"))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.tint_note_dismissed = true;
                                     cx.notify();
@@ -414,20 +414,20 @@ impl Render for Pane {
                             .flex()
                             .items_center()
                             .gap(px(T::S12))
-                            .child(link("find", "查找").on_click(cx.listener(|this, _, _, cx| this.find_text(cx))))
+                            .child(link("find", t!("查找")).on_click(cx.listener(|this, _, _, cx| this.find_text(cx))))
                             .when(count > 0, |d| {
-                                d.child(link("prev-match", "↑ 上一个").on_click(cx.listener(|this, _, _, cx| this.step_match(-1, cx))))
-                                    .child(link("next-match", "↓ 下一个").on_click(cx.listener(|this, _, _, cx| this.step_match(1, cx))))
+                                d.child(link("prev-match", t!("↑ 上一个")).on_click(cx.listener(|this, _, _, cx| this.step_match(-1, cx))))
+                                    .child(link("next-match", t!("↓ 下一个")).on_click(cx.listener(|this, _, _, cx| this.step_match(1, cx))))
                             })
                             .child(div().text_color(T::color(T::secondary())).child(if self.search.searched.is_none() {
-                                "按回车查找".to_owned()
+                                t!("按回车查找").to_owned()
                             } else if count == 0 {
-                                "没有匹配".to_owned()
+                                t!("没有匹配").to_owned()
                             } else {
-                                format!("第 {at} / {count} 处")
+                                t!("第 {at} / {count} 处", at, count)
                             }))
                             .child(div().flex_1())
-                            .child(link("close-find", "关闭搜索").on_click(cx.listener(|this, _, window, cx| this.close_search(window, cx)))),
+                            .child(link("close-find", t!("关闭搜索")).on_click(cx.listener(|this, _, window, cx| this.close_search(window, cx)))),
                     );
                 // The newest 20 matches, newest first; clicking one goes to it.
                 for (i, m) in self.search.matches.iter().enumerate().rev().take(20) {
@@ -498,7 +498,7 @@ impl Render for Pane {
                                 .text_size(px(T::META))
                                 .text_color(T::color(T::on_accent()))
                                 .cursor_pointer()
-                                .child("回到底部 ↓")
+                                .child(t!("回到底部 ↓"))
                                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
                                     cx.stop_propagation()
                                 })

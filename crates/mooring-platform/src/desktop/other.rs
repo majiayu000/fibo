@@ -5,6 +5,11 @@ pub const FILE_MANAGER: &str = if cfg!(windows) {
 } else {
     "文件管理器"
 };
+pub const FILE_MANAGER_EN: &str = if cfg!(windows) {
+    "File Explorer"
+} else {
+    "file manager"
+};
 
 /// Notepad on Windows, which every install has; elsewhere the desktop's handler for the file.
 pub fn open_as_text(path: &std::path::Path) -> std::io::Result<()> {
@@ -113,4 +118,22 @@ pub fn reduce_motion() -> bool {
 /// Nothing yet: a symbol this leaves out shows as a blank box, and nothing else depends on it.
 pub fn register_font(_bytes: &'static [u8]) -> Result<(), &'static str> {
     Ok(())
+}
+
+/// The account's language: Windows' display language, elsewhere the locale variables.
+pub fn preferred_languages() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        // The primary language of the display language; Chinese is 0x04.
+        let id = unsafe { windows_sys::Win32::Globalization::GetUserDefaultUILanguage() };
+        return vec![if id & 0x3ff == 0x04 { "zh" } else { "en" }.to_string()];
+    }
+    #[allow(unreachable_code)]
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .filter_map(|k| std::env::var(k).ok())
+        .find(|v| !v.is_empty() && v != "C" && v != "POSIX")
+        .map(|v| v.replace('_', "-"))
+        .into_iter()
+        .collect()
 }

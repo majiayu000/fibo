@@ -26,9 +26,9 @@ impl Workbench {
                     Some(super::super::layout::ask_prompt(text.lines().next()?).to_owned())
                 })
                 .filter(|r| !r.is_empty())
-                .map(|r| format!("{ASKS}{r}")),
-            Bucket::Attention => self.attention_reason(s, g).map(|r| format!("停在 {r}")),
-            Bucket::Running => content.and_then(|c| c.doing()).map(|d| format!("正在{d}")),
+                .map(|r| format!("{}{r}", mooring_core::i18n::say(ASKS))),
+            Bucket::Attention => self.attention_reason(s, g).map(|r| t!("停在 {r}", r)),
+            Bucket::Running => content.and_then(|c| c.doing()).map(|d| t!("正在{d}", d)),
             _ => content.and_then(|c| first(c.last_reply.lines().find(|l| !l.trim().is_empty())?)),
         }
     }

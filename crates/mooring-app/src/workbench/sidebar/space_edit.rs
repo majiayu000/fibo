@@ -18,7 +18,7 @@ impl Workbench {
     fn start_space_rename(&mut self, space: Space, window: &mut Window, cx: &mut Context<Self>) {
         self.save_space_name(cx);
         let field = cx.new(|cx| {
-            Field::new("空间名称", &space.name, cx)
+            Field::new(t!("空间名称"), &space.name, cx)
                 .inline()
                 .ends_on_click_out()
         });
@@ -102,7 +102,7 @@ impl Workbench {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("选择".into()),
+            prompt: Some(t!("选择").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             let Ok(Ok(Some(paths))) = picked.await else {

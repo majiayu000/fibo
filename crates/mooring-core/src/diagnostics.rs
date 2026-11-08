@@ -85,9 +85,9 @@ impl Pressure {
     }
     pub fn label(self) -> &'static str {
         match self {
-            Self::Normal => "正常",
-            Self::Warn => "偏紧",
-            Self::Critical => "紧张",
+            Self::Normal => crate::t!("正常"),
+            Self::Warn => crate::t!("偏紧"),
+            Self::Critical => crate::t!("紧张"),
         }
     }
 }

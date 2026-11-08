@@ -66,9 +66,9 @@ impl Workbench {
                 match pane {
                     Some(id) => {
                         let label = if action == Action::SplitDown {
-                            "向下分屏"
+                            tk!("向下分屏")
                         } else {
-                            "向右分屏"
+                            tk!("向右分屏")
                         };
                         self.menu_action(&id, label, window, cx);
                     }

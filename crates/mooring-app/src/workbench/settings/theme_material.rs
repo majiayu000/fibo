@@ -3,11 +3,13 @@ use super::theme_editor::Editor;
 use super::*;
 use crate::ui::appearance;
 use crate::ui::backdrop::Backdrop;
+use crate::ui::theme::contrast;
 use crate::ui::themes;
+use crate::ui::tone::Tone;
 use mooring_core::theme::{BackgroundImage, DEFAULT_IMAGE_STRENGTH, ImageMode};
 
 const OPACITIES: [(u8, &str); 5] = [
-    (100, "不透明"),
+    (100, tk!("不透明")),
     (95, "95%"),
     (90, "90%"),
     (80, "80%"),
@@ -22,10 +24,10 @@ const STRENGTHS: [(u8, &str); 5] = [
 ];
 fn mode_label(mode: ImageMode) -> &'static str {
     match mode {
-        ImageMode::Fill => "铺满",
-        ImageMode::Fit => "完整显示",
-        ImageMode::Stretch => "拉伸",
-        ImageMode::Tile => "平铺",
+        ImageMode::Fill => t!("铺满"),
+        ImageMode::Fit => t!("完整显示"),
+        ImageMode::Stretch => t!("拉伸"),
+        ImageMode::Tile => t!("平铺"),
     }
 }
 impl SettingsView {
@@ -48,7 +50,7 @@ impl SettingsView {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("用作背景".into()),
+            prompt: Some(t!("用作背景").into()),
         });
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = picked.await else {
@@ -86,11 +88,14 @@ impl SettingsView {
         let mut opacity = segments();
         for (value, name) in OPACITIES {
             opacity = opacity.child(
-                segment(format!("opacity-{value}"), name, material.opacity == value).on_click(
-                    cx.listener(move |this, _, _, cx| {
-                        this.change_material(|m| m.opacity = value, cx);
-                    }),
-                ),
+                segment(
+                    format!("opacity-{value}"),
+                    mooring_core::i18n::say(name),
+                    material.opacity == value,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.change_material(|m| m.opacity = value, cx);
+                })),
             );
         }
         let mut rows = div()
@@ -101,14 +106,14 @@ impl SettingsView {
             .border_color(T::color(T::card_border()))
             .child(self.row(
                 true,
-                "窗口不透明度",
-                "终端文字始终不透明，只有窗口的底变透；程序自己涂的底色不变",
+                t!("窗口不透明度"),
+                t!("终端文字始终不透明，只有窗口的底变透；程序自己涂的底色不变"),
                 opacity,
             ));
         if material.opacity != 100 {
             let blur = material.blur;
             let mut choices = segments();
-            for (value, name) in [(false, "不模糊"), (true, "模糊")] {
+            for (value, name) in [(false, t!("不模糊")), (true, t!("模糊"))] {
                 choices = choices.child(
                     segment(format!("blur-{value}"), name, blur == value).on_click(cx.listener(
                         move |this, _, _, cx| {
@@ -117,21 +122,26 @@ impl SettingsView {
                     )),
                 );
             }
-            rows = rows.child(self.row(false, "背后模糊", "透过窗口看到的内容是否模糊", choices));
+            rows = rows.child(self.row(
+                false,
+                t!("背后模糊"),
+                t!("透过窗口看到的内容是否模糊"),
+                choices,
+            ));
         }
         let mut actions = div().flex().items_center().gap(px(T::S8)).child(
             secondary(
                 "picture-pick",
                 if material.image.is_some() {
-                    "换一张"
+                    t!("换一张")
                 } else {
-                    "选择图片"
+                    t!("选择图片")
                 },
             )
             .on_click(cx.listener(|this, _, _, cx| this.pick_picture(cx))),
         );
         if material.image.is_some() {
-            actions = actions.child(secondary("picture-remove", "移除").on_click(
+            actions = actions.child(secondary("picture-remove", t!("移除")).on_click(
                 cx.listener(|this, _, _, cx| this.change_material(|m| m.image = None, cx)),
             ));
         }
@@ -140,8 +150,8 @@ impl SettingsView {
             .as_ref()
             .and_then(|image| Backdrop::of(image).picture.error())
             .or_else(|| material.image.as_ref().map(|image| image.path.clone()))
-            .unwrap_or_else(|| "PNG、JPEG 或 WebP，放在每个终端后面".to_owned());
-        rows = rows.child(self.row(false, "背景图", &note, actions));
+            .unwrap_or_else(|| t!("PNG、JPEG 或 WebP，放在每个终端后面").to_owned());
+        rows = rows.child(self.row(false, t!("背景图"), &note, actions));
         if let Some(image) = &material.image {
             let (mode, strength) = (image.mode, image.strength);
             let mut modes = segments();
@@ -161,7 +171,7 @@ impl SettingsView {
                     ),
                 );
             }
-            rows = rows.child(self.row(false, "缩放", "图片怎样填满终端", modes));
+            rows = rows.child(self.row(false, t!("缩放"), t!("图片怎样填满终端"), modes));
             let mut strengths = segments();
             for (value, name) in STRENGTHS {
                 strengths = strengths.child(
@@ -179,7 +189,12 @@ impl SettingsView {
                     ),
                 );
             }
-            rows = rows.child(self.row(false, "图片强度", "越高图片越明显，文字越难读", strengths));
+            rows = rows.child(self.row(
+                false,
+                t!("图片强度"),
+                t!("越高图片越明显，文字越难读"),
+                strengths,
+            ));
         }
         rows
     }
@@ -195,4 +210,31 @@ impl Workbench {
         let view = self.settings.as_ref()?.read(cx);
         view.visual_slider_point(channel, to)
     }
+}
+/// Below this the theme's text is called hard to read.
+const READABLE: f32 = 4.5;
+pub(super) fn contrast_note(editor: &Editor) -> gpui::Div {
+    let ratio = contrast(editor.draft.fg, editor.draft.bg);
+    let low = ratio < READABLE;
+    let light = editor.draft.term_colors().light;
+    let kind = if light { t!("亮色") } else { t!("暗色") };
+    let ratio = format!("{ratio:.1}");
+    let text = if low {
+        t!(
+            "{kind}主题，文字对比度 {ratio}:1，低于 {READABLE}:1，文字可能看不清",
+            kind,
+            ratio,
+            READABLE
+        )
+    } else {
+        t!("{kind}主题，文字对比度 {ratio}:1", kind, ratio)
+    };
+    div()
+        .text_size(px(T::SMALL))
+        .text_color(if low {
+            Tone::Warn.ink()
+        } else {
+            T::color(T::secondary())
+        })
+        .child(text)
 }

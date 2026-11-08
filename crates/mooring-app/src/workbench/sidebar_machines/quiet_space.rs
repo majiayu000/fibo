@@ -27,22 +27,27 @@ const ALL_KEY: &str = "quiet-spaces";
 /// The menu's words: the second press names what keeps running, so nothing surprises you.
 fn menu_words(quiet: bool, confirming: bool, running: usize) -> String {
     match (quiet, confirming) {
-        (true, _) => "接着管这个空间".to_owned(),
-        (false, true) => format!(
-            "确认：{running} 个{}会继续，不再提醒",
-            Status::Running.label()
+        (true, _) => t!("接着管这个空间").to_owned(),
+        (false, true) => t!(
+            "确认：{running} 个{label}会继续，不再提醒",
+            running,
+            label = Status::Running.label()
         ),
-        (false, false) => "先不管这个空间".to_owned(),
+        (false, false) => t!("先不管这个空间").to_owned(),
     }
 }
 fn switch_words(name: &str, quiet: bool) -> String {
-    format!("{} 空间 {name}", if quiet { "接着管" } else { "先不管" })
+    if quiet {
+        t!("接着管 空间 {name}", name)
+    } else {
+        t!("先不管 空间 {name}", name)
+    }
 }
 fn all_words(spaces: usize, waiting: usize) -> String {
     if waiting == 0 {
-        format!("{spaces} 个空间")
+        t!("{spaces} 个空间", spaces)
     } else {
-        format!("{spaces} 个空间 · {waiting} 个在等")
+        t!("{spaces} 个空间 · {waiting} 个在等", spaces, waiting)
     }
 }
 
@@ -117,7 +122,7 @@ impl Workbench {
             return;
         };
         if quiet && !w.space_quiet(id) && w.attended_spaces() <= 1 {
-            self.error = Some("至少要留一个在管的空间".to_owned());
+            self.error = Some(t!("至少要留一个在管的空间").to_owned());
             cx.notify();
             return;
         }
@@ -328,7 +333,7 @@ impl Workbench {
                 .collect();
         }
         let waiting = spaces.iter().map(|s| self.quiet_space_waiting(&s.id)).sum();
-        let name = "先不管".to_owned();
+        let name = t!("先不管").to_owned();
         let words = format!("{name} · {}", all_words(spaces.len(), waiting));
         let line = self.quiet_line(
             LineFacts {
@@ -414,11 +419,11 @@ impl Workbench {
                     div()
                         .min_w_0()
                         .truncate()
-                        .child(format!("「{name}」先不管中：不计数，也不提醒")),
+                        .child(t!("「{name}」先不管中：不计数，也不提醒", name)),
                 )
                 .child(div().flex_1())
                 .child(
-                    button("quiet-space-strip-resume", "接着管")
+                    button("quiet-space-strip-resume", t!("接着管"))
                         .flex_shrink_0()
                         .h(px(T::SEGMENT_HEIGHT))
                         .px(px(T::S6))
@@ -434,7 +439,7 @@ impl Workbench {
         let query = query.to_lowercase();
         (self.workspace.spaces.iter())
             .filter(|s| {
-                format!("先不管 接着管 恢复 空间 {}", s.name)
+                t!("先不管 接着管 恢复 空间 {name}", name = s.name)
                     .to_lowercase()
                     .contains(&query)
             })

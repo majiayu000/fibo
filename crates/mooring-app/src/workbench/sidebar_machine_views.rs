@@ -32,9 +32,9 @@ fn need_badge(need: usize) -> gpui::Div {
 /// What the local heading says. Folded, the spaces put aside fold with it, so it names them.
 fn local_note(sessions: usize, open: bool, quiet: usize) -> String {
     if open || quiet == 0 {
-        format!("{sessions} 个会话")
+        t!("{sessions} 个会话", sessions)
     } else {
-        format!("{sessions} 个会话 · {quiet} 个先不管")
+        t!("{sessions} 个会话 · {quiet} 个先不管", sessions, quiet)
     }
 }
 
@@ -98,9 +98,9 @@ impl Workbench {
                 .id(gpui::SharedString::from(format!("machine-chip-{index}")))
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(if on {
-                    format!("正在只看 {name}，点一下看全部")
+                    t!("正在只看 {name}，点一下看全部", name)
                 } else {
-                    format!("只看 {name}")
+                    t!("只看 {name}", name)
                 })
                 .h(px(F::CHIP))
                 .max_w_full()
@@ -140,7 +140,7 @@ impl Workbench {
                         .child(if online {
                             name.clone()
                         } else {
-                            format!("{name} · 断开")
+                            t!("{name} · 断开", name)
                         }),
                 )
                 .when(need > 0, |d| d.child(need_badge(need)))
@@ -196,9 +196,9 @@ impl Workbench {
                 )))
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(if on {
-                    format!("{}，点一下看全部空间", space.name)
+                    t!("{name}，点一下看全部空间", name = space.name)
                 } else {
-                    format!("只看 {}", space.name)
+                    t!("只看 {name}", name = space.name)
                 })
                 .h(px(F::CHIP))
                 .max_w_full()
@@ -263,14 +263,11 @@ impl Workbench {
             .id(gpui::SharedString::from(format!("section-{key}")))
             .opacity(shown)
             .role(gpui::accesskit::Role::Button)
-            .aria_label(format!(
-                "{name}，{}",
-                if open {
-                    "点一下收起"
-                } else {
-                    "点一下展开"
-                }
-            ))
+            .aria_label(if open {
+                t!("{name}，点一下收起", name)
+            } else {
+                t!("{name}，点一下展开", name)
+            })
             .mt(px(T::S10))
             .h(px(HEADING))
             .flex_shrink_0()
@@ -310,7 +307,7 @@ impl Workbench {
                     div()
                         .id(gpui::SharedString::from(format!("machine-open-{index}")))
                         .role(gpui::accesskit::Role::Button)
-                        .aria_label(format!("在 {name} 上开一个新终端"))
+                        .aria_label(t!("在 {name} 上开一个新终端", name))
                         .size(px(T::S16 + T::S4))
                         .flex()
                         .items_center()
@@ -344,7 +341,7 @@ impl Workbench {
             Heading {
                 key: "machine:local".into(),
                 mark: None,
-                name: "本机".into(),
+                name: t!("本机").into(),
                 note: local_note(
                     sessions,
                     open,
@@ -376,11 +373,11 @@ impl Workbench {
         let name = machine_label(&host).to_owned();
         let note = match &link {
             Link::Online => match self.machine_limit(index) {
-                Some(limit) => format!("{} 个会话 · {limit}", rows.len()),
-                None => format!("{} 个会话", rows.len()),
+                Some(limit) => t!("{len} 个会话 · {limit}", len = rows.len(), limit),
+                None => t!("{len} 个会话", len = rows.len()),
             },
-            Link::Connecting => "连接中…".to_owned(),
-            Link::Offline(why) => format!("断开：{why}"),
+            Link::Connecting => t!("连接中…").to_owned(),
+            Link::Offline(why) => t!("断开：{why}", why),
         };
         let mut out = vec![
             self.section_heading(
@@ -418,10 +415,10 @@ impl Workbench {
             .collect();
         let (today, older) = split_today(history, crate::model::time::now());
         for (part, title, rows) in [
-            ("need", mooring_core::status::NEEDS_YOU, order.need),
+            ("need", mooring_core::status::needs_you_word(), order.need),
             ("running", Status::Running.label(), order.running),
-            ("today", "今天", today),
-            ("older", "更早", older),
+            ("today", t!("今天"), today),
+            ("older", t!("更早"), older),
         ] {
             let part = format!("{key}:{part}");
             if !rows.is_empty() {
@@ -487,7 +484,7 @@ impl Workbench {
         let view = index.and_then(|i| Some(self.machines.get(i)?.view.lock().unwrap().clone()));
         let online = view.as_ref().is_none_or(|v| v.link == Link::Online);
         let host = view.as_ref().map(|v| v.spec.host.clone());
-        let name = host.as_deref().map_or("本机", machine_label).to_owned();
+        let name = host.as_deref().map_or(t!("本机"), machine_label).to_owned();
         // While the mark slides to it the mark says so.
         let on = self.machine_scope() == index;
         let lit = on && self.sidebar.motion.rail_at().is_none();
@@ -514,7 +511,7 @@ impl Workbench {
         let label = if online {
             name.clone()
         } else {
-            format!("{name}，断开")
+            t!("{name}，断开", name)
         };
         let button = div()
             .id(gpui::SharedString::from(format!(
@@ -626,7 +623,7 @@ impl Workbench {
         div()
             .id("rail-add")
             .role(gpui::accesskit::Role::Button)
-            .aria_label("添加一台电脑")
+            .aria_label(t!("添加一台电脑"))
             .size(px(RAIL_BUTTON))
             .mb(px(T::S10))
             .flex_shrink_0()
@@ -640,7 +637,7 @@ impl Workbench {
             .text_color(T::color(F::third()))
             .cursor_pointer()
             .hover(|s| s.bg(T::color(F::hover())))
-            .tooltip(super::diagnostics::tip(vec!["添加一台电脑".to_owned()]))
+            .tooltip(super::diagnostics::tip(vec![t!("添加一台电脑").to_owned()]))
             .child("+")
             .on_click(cx.listener(|this, _, window, cx| {
                 this.show_settings_page(settings::Page::Phones, window, cx);
@@ -706,10 +703,10 @@ impl Workbench {
                 Some(if view.link == Link::Online {
                     (name, true)
                 } else {
-                    (format!("{name} · 断开"), false)
+                    (t!("{name} · 断开", name), false)
                 })
             })
-            .unwrap_or_else(|| ("本机".to_owned(), true))
+            .unwrap_or_else(|| (t!("本机").to_owned(), true))
     }
     /// The foot's first words.
     pub(super) fn column_foot(&self, sessions: usize) -> String {
@@ -717,14 +714,15 @@ impl Workbench {
             .machine_scope()
             .filter(|_| self.machine_layout() == Machines::Rail)
         {
-            Some(i) => format!(
-                "{} · {} 个会话",
-                self.column_machine().0,
-                self.remote_rows_of(i).len()
+            Some(i) => t!(
+                "{machine} · {len} 个会话",
+                machine = self.column_machine().0,
+                len = self.remote_rows_of(i).len()
             ),
-            None => format!(
-                "本机 · {} 个空间 · {sessions} 个会话",
-                self.workspace.spaces.len()
+            None => t!(
+                "本机 · {len} 个空间 · {sessions} 个会话",
+                len = self.workspace.spaces.len(),
+                sessions
             ),
         }
     }

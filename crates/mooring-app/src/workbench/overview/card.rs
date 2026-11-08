@@ -4,13 +4,13 @@ use super::*;
 /// 很久没动's mini chart: last-activity ages, each bucket ending below its bound.
 const DAY_SECS: u64 = 86_400;
 const AGE_BUCKETS: [(u64, &str); 7] = [
-    (DAY_SECS, "1 天内"),
-    (3 * DAY_SECS, "1–3 天"),
-    (7 * DAY_SECS, "3–7 天"),
-    (14 * DAY_SECS, "1–2 周"),
-    (30 * DAY_SECS, "2–4 周"),
-    (90 * DAY_SECS, "1–3 月"),
-    (u64::MAX, "3 月以上"),
+    (DAY_SECS, tk!("1 天内")),
+    (3 * DAY_SECS, tk!("1–3 天")),
+    (7 * DAY_SECS, tk!("3–7 天")),
+    (14 * DAY_SECS, tk!("1–2 周")),
+    (30 * DAY_SECS, tk!("2–4 周")),
+    (90 * DAY_SECS, tk!("1–3 月")),
+    (u64::MAX, tk!("3 月以上")),
 ];
 
 impl Workbench {
@@ -36,7 +36,7 @@ impl Workbench {
             .items_end()
             .gap(px(T::S2))
             .h(px(T::AGE_CHART_HEIGHT))
-            .aria_label("按最后活动时间分布：从 1 天内到 3 个月以上");
+            .aria_label(t!("按最后活动时间分布：从 1 天内到 3 个月以上"));
         let hue = Status::Stale.colors().0;
         for (i, (n, (_, when))) in counts.iter().zip(AGE_BUCKETS).enumerate() {
             chart = chart.child(
@@ -50,8 +50,8 @@ impl Workbench {
                     .bg(hue)
                     .opacity(if *n == 0 { 0.25 } else { 0.7 })
                     .tooltip(super::super::diagnostics::tip(vec![
-                        when.to_string(),
-                        format!("{n} 个"),
+                        mooring_core::i18n::say(when).to_string(),
+                        t!("{n} 个", n),
                     ])),
             );
         }
@@ -59,12 +59,12 @@ impl Workbench {
             .iter()
             .zip(AGE_BUCKETS)
             .filter(|(n, _)| **n > 0)
-            .map(|(n, (_, when))| format!("{when} {n}"))
+            .map(|(n, (_, when))| format!("{} {n}", mooring_core::i18n::say(when)))
             .collect::<Vec<_>>()
             .join(" · ");
         vec![
             chart.into_any_element(),
-            label(format!("按最后活动：{summary}"))
+            label(t!("按最后活动：{summary}", summary))
                 .text_size(px(T::SMALL))
                 .text_color(T::color(T::muted()))
                 .into_any_element(),
@@ -86,38 +86,38 @@ impl Workbench {
         let meta = format!(
             "{} · {} · {}{}{}",
             if session.terminal.is_none() {
-                "外部·只读"
+                t!("外部·只读")
             } else {
-                "托管"
+                t!("托管")
             },
             session.runtime.executable(),
             (self.workspace.session_space(&session))
                 .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
-                .map_or("外部", |s| s.name.as_str()),
+                .map_or(t!("外部"), |s| s.name.as_str()),
             if self
                 .workspace
                 .outcome_history
                 .iter()
                 .rev()
                 .find(|h| h.session == session.id)
-                .is_some_and(|h| h.reason == "暂存到期")
+                .is_some_and(|h| h.reason == not_ui!("暂存到期"))
             {
-                " · 到期"
+                t!(" · 到期")
             } else {
                 ""
             },
             if changed_since(&self.workspace, &session, self.overview.since) {
-                " · 新"
+                t!(" · 新")
             } else {
                 ""
             }
         );
         // The last thing said, in body text; a muted lead says what it is.
         let line = if self.workspace.content.contains_key(&session.id) {
-            const LEAD: &str = "最后一句  ";
-            gpui::StyledText::new(format!("{LEAD}{}", self.session_line(&session))).with_highlights(
+            let lead = format!("{}  ", t!("最后一句"));
+            gpui::StyledText::new(format!("{lead}{}", self.session_line(&session))).with_highlights(
                 [(
-                    0..LEAD.len(),
+                    0..lead.len(),
                     gpui::HighlightStyle {
                         color: Some(T::color(T::muted())),
                         ..Default::default()
@@ -132,9 +132,9 @@ impl Workbench {
         div()
             .id(gpui::SharedString::from(format!("card-{}", session.id)))
             .role(gpui::accesskit::Role::Button)
-            .aria_label(gpui::SharedString::from(format!(
-                "会话：{}",
-                self.session_title(&session)
+            .aria_label(gpui::SharedString::from(t!(
+                "会话：{title}",
+                title = self.session_title(&session)
             )))
             .relative()
             .w(px(width))
@@ -223,11 +223,11 @@ impl Workbench {
                         button(
                             gpui::SharedString::from(format!("primary-{}", session.id)),
                             if closed_only {
-                                "接着聊 →"
+                                t!("接着聊 →")
                             } else if primary_continue {
-                                "继续 →"
+                                t!("继续 →")
                             } else {
-                                "看进度"
+                                t!("看进度")
                             },
                         )
                         .h(px(T::SEGMENT_HEIGHT))

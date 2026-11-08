@@ -22,12 +22,12 @@ impl Category {
     ];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Effects => "完成动画",
-            Self::Look => "外观",
-            Self::Sidebar => "左栏",
-            Self::Status => "状态和提醒",
-            Self::Commands => "命令和检查",
-            Self::Agents => "接入 Agent",
+            Self::Effects => crate::t!("完成动画"),
+            Self::Look => crate::t!("外观"),
+            Self::Sidebar => crate::t!("左栏"),
+            Self::Status => crate::t!("状态和提醒"),
+            Self::Commands => crate::t!("命令和检查"),
+            Self::Agents => crate::t!("接入 Agent"),
         }
     }
     /// A plugin with several kinds goes by what you would look for it as: what it shows

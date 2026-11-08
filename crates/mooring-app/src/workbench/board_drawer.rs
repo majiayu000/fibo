@@ -99,14 +99,30 @@ pub(super) fn legal(from: Column, to: Column) -> bool {
 }
 /// Why a card cannot go where it was dropped, named by where it came from.
 pub(super) fn refusal(from: Column) -> String {
-    let (needs, done) = (mooring_core::status::NEEDS_YOU, Status::Closed.label());
+    let (needs, done) = (
+        mooring_core::status::needs_you_word(),
+        Status::Closed.label(),
+    );
     match from {
-        Column::Needs => format!("{needs}只能拖到「{done}」，表示做完了"),
-        Column::Running => format!("{}的状态由 Agent 自己决定", Status::Running.label()),
-        Column::Review => format!("{}只能拖到「{done}」", Status::Paused.label()),
-        Column::Todo => format!("待办只能拖到「{}」来开始", Status::Running.label()),
-        Column::Done => format!("{done}只能拖回「{needs}」"),
-        Column::Stale => format!("{}的会话用「逐个清理」处理", Status::Stale.label()),
+        Column::Needs => t!("{needs}只能拖到「{done}」，表示做完了", needs, done),
+        Column::Running => t!(
+            "{label}的状态由 Agent 自己决定",
+            label = Status::Running.label()
+        ),
+        Column::Review => t!(
+            "{label}只能拖到「{done}」",
+            label = Status::Paused.label(),
+            done
+        ),
+        Column::Todo => t!(
+            "待办只能拖到「{label}」来开始",
+            label = Status::Running.label()
+        ),
+        Column::Done => t!("{done}只能拖回「{needs}」", done, needs),
+        Column::Stale => t!(
+            "{label}的会话用「逐个清理」处理",
+            label = Status::Stale.label()
+        ),
     }
 }
 
@@ -178,7 +194,7 @@ impl Workbench {
             Column::Running => {
                 self.ask_agent(card.id.clone(), false, cx);
                 self.show_toast(
-                    format!("选一个 Agent 开始「{}」", card.title),
+                    t!("选一个 Agent 开始「{title}」", title = card.title),
                     None,
                     false,
                     cx,
@@ -188,12 +204,20 @@ impl Workbench {
             Column::Done => (
                 Outcome::Completed,
                 Outcome::Open,
-                format!("「{}」移到{}", card.title, Status::Closed.label()),
+                t!(
+                    "「{title}」移到{label}",
+                    title = card.title,
+                    label = Status::Closed.label()
+                ),
             ),
             _ => (
                 Outcome::Open,
                 Outcome::Completed,
-                format!("「{}」退回{}", card.title, mooring_core::status::NEEDS_YOU),
+                t!(
+                    "「{title}」退回{needs_you_word}",
+                    title = card.title,
+                    needs_you_word = mooring_core::status::needs_you_word()
+                ),
             ),
         };
         self.edit(
@@ -388,7 +412,7 @@ impl Workbench {
             .child(toast.text.clone())
             .when_some(toast.undo.clone(), |d, (id, outcome)| {
                 d.child(
-                    button("board-undo", "撤销")
+                    button("board-undo", t!("撤销"))
                         .h(px(T::SEGMENT_HEIGHT))
                         .bg(T::color(T::button()))
                         .text_color(T::color(T::primary()))

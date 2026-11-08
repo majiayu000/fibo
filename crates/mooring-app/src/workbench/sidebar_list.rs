@@ -17,7 +17,7 @@ pub(super) use prefs::SidebarPrefs;
 pub(super) use unlinked::Unlinked;
 
 /// How a row's second line opens when the session asks you something.
-pub(super) const ASKS: &str = "问你：";
+pub(super) const ASKS: &str = tk!("问你：");
 
 /// A session the column lists: its shown state and whether it still asks for a look.
 pub(super) type Listed<'a> = (&'a AgentSession, Status, bool);
@@ -289,7 +289,10 @@ impl Workbench {
                         .text_size(px(T::CHIP_SIZE))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(Tone::Danger.ink())
-                        .child(format!("{needs} {}", mooring_core::status::NEEDS_YOU)),
+                        .child(format!(
+                            "{needs} {}",
+                            mooring_core::status::needs_you_word()
+                        )),
                 )
             })
             .child(
@@ -315,7 +318,7 @@ impl Workbench {
         let icon = div()
             .id("sidebar-view")
             .role(gpui::accesskit::Role::Button)
-            .aria_label("选择视图")
+            .aria_label(t!("选择视图"))
             .my(px(-T::S4))
             .size(px(T::ICON_HEIGHT))
             .flex_shrink_0()
@@ -351,7 +354,7 @@ impl Workbench {
             div()
         } else if self.sidebar.dense() {
             // 会话 3 on the left as the dense presets write it; the ≑ at the right end.
-            Self::group_title("会话".into(), Some(count), cx)
+            Self::group_title(t!("会话").into(), Some(count), cx)
                 .child(div().flex_1())
                 .child(icon)
         } else {
@@ -362,7 +365,7 @@ impl Workbench {
                 .px(px(T::S8))
                 .mt(px(T::S12))
                 .mb(px(T::S2))
-                .child(label("会话").flex_1().text_size(px(T::CHIP_SIZE)))
+                .child(label(t!("会话")).flex_1().text_size(px(T::CHIP_SIZE)))
                 .child(icon.mr(px(T::S4)))
                 .child(label(count.to_string()).text_size(px(T::CHIP_SIZE)))
         };
@@ -384,7 +387,7 @@ impl Workbench {
                 div()
                     .id(gpui::SharedString::from(format!("sidebar-preset-{}", p.id)))
                     .role(gpui::accesskit::Role::Button)
-                    .aria_label(p.name.clone())
+                    .aria_label(mooring_core::i18n::say(&p.name).to_owned())
                     .h(px(T::ROW))
                     .px(px(T::S8))
                     .flex()
@@ -394,7 +397,11 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .cursor_pointer()
                     .hover(|s| s.bg(T::color(T::button_hover())))
-                    .child(div().flex_1().child(p.name.clone()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(mooring_core::i18n::say(&p.name).to_owned()),
+                    )
                     .when(on, |d| {
                         d.child(div().text_color(T::color(T::link())).child("✓"))
                     })

@@ -18,8 +18,8 @@ impl Style {
     pub const ALL: [Self; 2] = [Self::Standard, Self::Terminal];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Standard => "标准",
-            Self::Terminal => "终端原生",
+            Self::Standard => t!("标准"),
+            Self::Terminal => t!("终端原生"),
         }
     }
     fn name(self) -> &'static str {

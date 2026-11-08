@@ -74,9 +74,9 @@ impl Workbench {
         let draft = std::mem::take(&mut self.tasks.board_draft);
         let draft_space = self.tasks.board_draft_space.take();
         let field = cx.new(|cx| {
-            Field::new("要做什么", &draft, cx)
+            Field::new(t!("要做什么"), &draft, cx)
                 .compact()
-                .placeholder("要做什么")
+                .placeholder(t!("要做什么"))
         });
         let events = cx.subscribe_in(&field, window, |this, _, event, window, cx| match event {
             crate::ui::field::FieldEvent::Submit => this.save_board_quick(false, window, cx),
@@ -158,9 +158,10 @@ impl Workbench {
             || (self.overview.filter_space.as_ref()).is_some_and(|id| id != &q.space);
         let toast = hidden.then(|| {
             let space = (self.workspace.spaces.iter()).find(|s| s.id == q.space);
-            format!(
-                "「{title}」记到了「{}」，现在的筛选下看不到",
-                space.map_or("外部", |s| s.name.as_str())
+            t!(
+                "「{title}」记到了「{space}」，现在的筛选下看不到",
+                title,
+                space = space.map_or(t!("外部"), |s| s.name.as_str())
             )
         });
         let task = Task {
@@ -203,7 +204,7 @@ impl Workbench {
     fn begin_board_space(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = super::super::sidebar_spaces::new_space_name(&self.workspace.spaces);
         let field = cx.new(|cx| {
-            let mut f = Field::new("新空间的名字", &name, cx).compact();
+            let mut f = Field::new(t!("新空间的名字"), &name, cx).compact();
             f.select_all();
             f
         });
@@ -318,7 +319,7 @@ impl Workbench {
             .child(
                 div().flex().child(
                     button("board-quick-space", "")
-                        .aria_label("这条待办记到哪个空间")
+                        .aria_label(t!("这条待办记到哪个空间"))
                         .h(px(PILL + 2.))
                         .px(px(T::S8))
                         .gap(px(T::S6))
@@ -361,7 +362,7 @@ impl Workbench {
             }
             body = body.child(
                 chips.child(
-                    button("board-quick-new-space", "＋ 新建空间")
+                    button("board-quick-new-space", t!("＋ 新建空间"))
                         .h(px(PILL + 2.))
                         .px(px(T::S8))
                         .text_size(px(T::META))
@@ -383,7 +384,7 @@ impl Workbench {
                         div()
                             .text_size(px(T::META))
                             .text_color(T::color(T::muted()))
-                            .child("回车建好 · Esc 取消 · 目录以后再设，没设时从 ~ 开始"),
+                            .child(t!("回车建好 · Esc 取消 · 目录以后再设，没设时从 ~ 开始")),
                     ),
             );
         }
@@ -394,13 +395,13 @@ impl Workbench {
                     .items_center()
                     .gap(px(T::S4))
                     .child(div().flex_1())
-                    .child(small("board-quick-save", "记下 ↵".into()).on_click(
+                    .child(small("board-quick-save", t!("记下 ↵").into()).on_click(
                         cx.listener(|this, _, window, cx| this.save_board_quick(false, window, cx)),
                     ))
                     .child(
                         small(
                             "board-quick-start",
-                            crate::ui::words::local_field("开始 ⌘↵"),
+                            crate::ui::words::local_field(t!("开始 ⌘↵")),
                         )
                         .bg(T::color(T::accent()))
                         .text_color(T::color(T::on_accent()))
@@ -437,9 +438,9 @@ impl Workbench {
                             .and_then(|l| l.closed)
                             .map_or_else(String::new, |at| format!(" · {}", short_ago(at, now())));
                         if sessions > 0 {
-                            format!("✓ 你标完成 · {sessions} 个会话{when}")
+                            t!("✓ 你标完成 · {sessions} 个会话{when}", sessions, when)
                         } else {
-                            format!("✓ 自己完成{when}")
+                            t!("✓ 自己完成{when}", when)
                         }
                     })
                     .child(div().flex_1())
@@ -450,7 +451,7 @@ impl Workbench {
                 div().flex().child(div().flex_1()).child(
                     button(
                         gpui::SharedString::from(format!("todo-undo-{}", task.id)),
-                        "撤销",
+                        t!("撤销"),
                     )
                     .h(px(PILL + 4.))
                     .px(px(T::S8))
@@ -486,7 +487,7 @@ impl Workbench {
         }
         if kept > 0 {
             self.show_toast(
-                format!("待办完成了；还有 {kept} 个 Agent 没停，终端留着"),
+                t!("待办完成了；还有 {kept} 个 Agent 没停，终端留着", kept),
                 None,
                 false,
                 cx,

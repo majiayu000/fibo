@@ -96,7 +96,7 @@ impl Workbench {
             cx,
         );
         let field = cx.new(|cx| {
-            Field::new("标签名", &current, cx)
+            Field::new(t!("标签名"), &current, cx)
                 .inline()
                 .ends_on_click_out()
                 .placeholder(&automatic)

@@ -56,7 +56,7 @@ pub(super) fn row_element(row: &Row, font: &gpui::Font) -> gpui::AnyElement {
             .px(px(T::S14))
             .bg(T::color(T::chip()))
             .text_color(T::color(T::muted()))
-            .child(format!("第 {line} 行"))
+            .child(t!("第 {line} 行", line))
             .into_any_element(),
         Row::Line {
             kind,
@@ -107,15 +107,15 @@ pub(super) fn row_element(row: &Row, font: &gpui::Font) -> gpui::AnyElement {
 /// The line under the title: what about this file needs saying.
 pub(super) fn warning(file: &TurnFile) -> Option<&'static str> {
     if file.one_by_one {
-        return Some("这个文件中途被别的程序改过，这里按次显示每一次编辑。");
+        return Some(t!("这个文件中途被别的程序改过，这里按次显示每一次编辑。"));
     }
     match file.disk {
         Disk::Same => None,
-        Disk::Changed if file.edits > 0 => {
-            Some("这是 Agent 当时的改动。文件后来又变了，和磁盘上的内容可能不一样。")
-        }
+        Disk::Changed if file.edits > 0 => Some(t!(
+            "这是 Agent 当时的改动。文件后来又变了，和磁盘上的内容可能不一样。"
+        )),
         Disk::Changed => None,
-        Disk::Gone if file.edits > 0 => Some("这个文件后来被删了。"),
+        Disk::Gone if file.edits > 0 => Some(t!("这个文件后来被删了。")),
         Disk::Gone => None,
     }
 }
@@ -123,11 +123,11 @@ pub(super) fn warning(file: &TurnFile) -> Option<&'static str> {
 /// What to say instead of a diff, for a file with none to draw.
 pub(super) fn empty_words(summary: &FileSummary, file: Option<&TurnFile>) -> Option<&'static str> {
     if summary.edits == 0 {
-        Some("这个文件只有行数，没有改动内容")
+        Some(t!("这个文件只有行数，没有改动内容"))
     } else if file.is_some_and(|f| f.edits == 0) {
-        Some("记录里已经找不到这个文件的改动")
+        Some(t!("记录里已经找不到这个文件的改动"))
     } else if file.is_some_and(|f| f.hunks.is_empty()) {
-        Some("这一轮改完又改回去了，净改动为零")
+        Some(t!("这一轮改完又改回去了，净改动为零"))
     } else {
         None
     }

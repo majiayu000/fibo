@@ -39,17 +39,17 @@ impl Item {
     /// What it adds and whether it goes online, in the words the install question uses.
     pub(super) fn safety(&self) -> String {
         let change = if self.touches.is_empty() {
-            "不改别的程序的文件".to_owned()
+            t!("不改别的程序的文件").to_owned()
         } else {
-            format!("会改 {}", self.touches.join("、"))
+            t!("会改 {files}", files = self.touches.join(t!("、")))
         };
         let online = match self.network {
-            Some(true) => "要联网",
-            Some(false) => "声明不联网",
-            None if market::runs_commands(&self.provides) => "没说是否联网",
-            None => "不联网",
+            Some(true) => t!("要联网"),
+            Some(false) => t!("声明不联网"),
+            None if market::runs_commands(&self.provides) => t!("没说是否联网"),
+            None => t!("不联网"),
         };
-        format!("{change}，{online}")
+        t!("{change}，{online}", change, online)
     }
     pub(super) fn answers(&self, query: &str) -> bool {
         query.is_empty()
@@ -134,8 +134,8 @@ pub(super) fn items(offers: &[Offer]) -> Vec<Item> {
             name: s.label().to_owned(),
             description: Some(
                 match s {
-                    Style::Fade => "内置；系统开了「减弱动态效果」时都播它",
-                    _ => "内置；按钮填满，印章盖在窗格上，窗格淡出",
+                    Style::Fade => t!("内置；系统开了「减弱动态效果」时都播它"),
+                    _ => t!("内置；按钮填满，印章盖在窗格上，窗格淡出"),
                 }
                 .to_owned(),
             ),

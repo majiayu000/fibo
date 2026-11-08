@@ -296,11 +296,11 @@ impl Workbench {
                 },
             )?
             else {
-                return Err(std::io::Error::other("后台没有返回文字"));
+                return Err(std::io::Error::other(t!("后台没有返回文字")));
             };
             let dir = socket
                 .parent()
-                .ok_or_else(|| std::io::Error::other("运行目录未知"))?
+                .ok_or_else(|| std::io::Error::other(t!("运行目录未知")))?
                 .join("scrollback");
             std::fs::create_dir_all(&dir)?;
             let path = dir.join(format!("{terminal}.txt"));
@@ -325,7 +325,7 @@ impl Workbench {
                     this.launch(false, None, cx);
                 }
                 Err(e) => {
-                    this.error = Some(format!("在编辑器里看滚动内容失败：{e}"));
+                    this.error = Some(t!("在编辑器里看滚动内容失败：{e}", e));
                     cx.notify();
                 }
             })
@@ -494,12 +494,12 @@ fn menu_rule(i: usize) -> gpui::AnyElement {
 fn menu_shortcut(title: &str, keys: &crate::keymap::Keymap) -> Option<String> {
     use crate::keymap::Action;
     let action = match title {
-        "复制" => return Some(crate::ui::words::local("⌘C")),
-        "粘贴" => return Some(crate::ui::words::local("⌘V")),
-        "向右分屏" => Action::SplitRight,
-        "向下分屏" => Action::SplitDown,
-        "搜索滚动内容" => Action::Find,
-        "关闭画面" => Action::Close,
+        tk!("复制") => return Some(crate::ui::words::local("⌘C")),
+        tk!("粘贴") => return Some(crate::ui::words::local("⌘V")),
+        tk!("向右分屏") => Action::SplitRight,
+        tk!("向下分屏") => Action::SplitDown,
+        tk!("搜索滚动内容") => Action::Find,
+        tk!("关闭画面") => Action::Close,
         _ => return None,
     };
     keys.chords(action).first().map(|c| c.display())

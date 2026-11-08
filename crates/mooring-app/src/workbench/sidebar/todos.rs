@@ -37,9 +37,11 @@ impl Workbench {
                         .items_center()
                         .cursor_pointer()
                         .child(
-                            label(format!(
-                                "{} {space_name} 的待办 · {todo_count}",
-                                if open { "▾" } else { "▸" }
+                            label(t!(
+                                "{arrow} {space_name} 的待办 · {todo_count}",
+                                arrow = if open { "▾" } else { "▸" },
+                                space_name,
+                                todo_count
                             ))
                             .flex_1(),
                         )
@@ -48,8 +50,8 @@ impl Workbench {
                             cx.notify();
                         }))
                         .child(
-                            button("sidebar-new-task", "＋")
-                                .aria_label("新待办")
+                            button("sidebar-new-task", t!("＋"))
+                                .aria_label(t!("新待办"))
                                 .border_0()
                                 .text_color(T::color(T::link()))
                                 .on_click(cx.listener(|this, _, window, cx| {
@@ -79,11 +81,11 @@ impl Workbench {
                     .flex_col()
                     .items_start()
                     .gap(px(T::S6))
-                    .child(label(
-                        "还没有待办。先记下要做的事，再点「开始」派给 agent。",
-                    ))
+                    .child(label(t!(
+                        "还没有待办。先记下要做的事，再点「开始」派给 agent。"
+                    )))
                     .child(
-                        button("empty-new-task", "＋ 新建待办")
+                        button("empty-new-task", t!("＋ 新建待办"))
                             .h(px(T::ICON_HEIGHT))
                             .px(px(T::S6))
                             .text_size(px(T::META))
@@ -114,7 +116,7 @@ impl Workbench {
                 mooring_core::status::TaskState::Working
                 | mooring_core::status::TaskState::Settled
                 | mooring_core::status::TaskState::Proven => {
-                    format!("{} · {count} 个会话", status.label())
+                    t!("{label} · {count} 个会话", label = status.label(), count)
                 }
                 _ => status.label().to_owned(),
             };
@@ -155,7 +157,7 @@ impl Workbench {
                     .child(
                         button(
                             gpui::SharedString::from(format!("start-task-{tid}")),
-                            "开始",
+                            t!("开始"),
                         )
                         .h(px(T::ICON_HEIGHT))
                         .px(px(T::S6))

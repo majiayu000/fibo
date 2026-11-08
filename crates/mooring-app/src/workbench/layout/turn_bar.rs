@@ -46,7 +46,7 @@ impl Workbench {
         let when = match started {
             Some(at) => {
                 self.tick_turn(cx);
-                format!("本轮 {}", turn_clock(now().saturating_sub(at)))
+                t!("本轮 {v1}", v1 = turn_clock(now().saturating_sub(at)))
             }
             None => crate::model::time::short_ago(content.map_or(s.updated, |c| c.updated), now()),
         };
@@ -125,7 +125,7 @@ impl Workbench {
         Some(match started {
             Some(at) => {
                 self.tick_turn(cx);
-                format!("本轮 {}", turn_clock(now().saturating_sub(at)))
+                t!("本轮 {v1}", v1 = turn_clock(now().saturating_sub(at)))
             }
             None => crate::model::time::short_ago(content.map_or(s.updated, |c| c.updated), now()),
         })
@@ -179,9 +179,9 @@ impl Workbench {
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(ink)
                 .child(if files > 0 {
-                    format!("这一轮改了 {files} 个文件")
+                    t!("这一轮改了 {files} 个文件", files)
                 } else {
-                    "这一轮做完了".to_owned()
+                    t!("这一轮做完了").to_owned()
                 }),
         );
         let content = self.workspace.content.get(&s.id);
@@ -199,13 +199,13 @@ impl Workbench {
                         .cursor_pointer()
                         .text_color(T::color(T::secondary()))
                         .hover(|d| d.text_color(T::color(T::primary())))
-                        .child(format!(
-                            "验收标准 {}/{}",
-                            task.proven(),
-                            task.acceptance.len()
+                        .child(t!(
+                            "验收标准 {proven}/{len}",
+                            proven = task.proven(),
+                            len = task.acceptance.len()
                         ))
                         .tooltip(|_, cx| {
-                            cx.new(|_| super::render::TextTip("打开待办详情".into()))
+                            cx.new(|_| super::render::TextTip(t!("打开待办详情").into()))
                                 .into()
                         })
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -223,7 +223,7 @@ impl Workbench {
         let changes = (files > 0).then(|| {
             button(
                 gpui::SharedString::from(format!("turn-changes-{id}")),
-                "看改动",
+                t!("看改动"),
             )
             .h(px(T::PANE_ACTION))
             .px(px(T::S10))
@@ -259,7 +259,7 @@ impl Workbench {
             .child(super::forms::solid(
                 button(
                     gpui::SharedString::from(format!("accept-pane-{id}")),
-                    "标记完成",
+                    t!("标记完成"),
                 )
                 .h(px(T::PANE_ACTION))
                 .px(px(T::S10))
@@ -292,9 +292,9 @@ impl Workbench {
             .get(&s.id)
             .and_then(|c| c.asks.first())
             .map(|q| {
-                format!(
-                    "你要它 {}",
-                    mooring_core::content::short(q.text.trim(), 240)
+                t!(
+                    "你要它 {v1}",
+                    v1 = mooring_core::content::short(q.text.trim(), 240)
                 )
             });
         let at = self
@@ -302,10 +302,19 @@ impl Workbench {
             .map(|t| mooring_core::content::short(&mooring_core::content::plain_line(&t), 240))
             .or_else(|| self.row_detail(s, g))
             .map(|d| {
-                if d.starts_with("停在") || d.starts_with("正在") || d.starts_with("后台") {
+                // The sidebar's lines already say where it stands; their lead word in
+                // either language is what comes before the first `{` of its key.
+                let leads = [not_ui!("停在 {r}"), not_ui!("正在{d}"), not_ui!("后台")];
+                if leads.iter().any(|key| {
+                    let said = mooring_core::i18n::say(key);
+                    [key, said].iter().any(|k| {
+                        let lead = k.split('{').next().unwrap_or(k).trim_end();
+                        !lead.is_empty() && d.starts_with(lead)
+                    })
+                }) {
                     d
                 } else {
-                    format!("停在 {d}")
+                    t!("停在 {d}", d)
                 }
             });
         ask.into_iter().chain(at).collect()
@@ -322,11 +331,11 @@ impl Workbench {
             .border_color(T::color(T::border()))
             .text_size(px(T::PANE_FOOTER_SIZE))
             .text_color(T::color(T::muted()))
-            .child(div().flex_1().child("另一个窗口在输入"))
+            .child(div().flex_1().child(t!("另一个窗口在输入")))
             .child(
                 button(
                     gpui::SharedString::from(format!("takeover-{id}")),
-                    "点击接管输入",
+                    t!("点击接管输入"),
                 )
                 .flex_shrink_0()
                 .h(px(T::ICON_HEIGHT))

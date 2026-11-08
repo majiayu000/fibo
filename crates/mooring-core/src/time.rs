@@ -24,60 +24,68 @@ pub fn upcoming(at: u64, now: u64) -> String {
     // Day numbers since the epoch in local time, so midnight is the boundary.
     let day = |t: u64, offset: i64| (t as i64 + offset) / DAY as i64;
     match day(at, then.utc_offset) - day(now, now_offset) {
-        d if d <= 0 => format!("今天 {hm}"),
-        1 => format!("明天 {hm}"),
+        d if d <= 0 => crate::t!("今天 {hm}", hm),
+        1 => crate::t!("明天 {hm}", hm),
         d if d < 7 => {
-            let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+            let names = [
+                crate::t!("周日"),
+                crate::t!("周一"),
+                crate::t!("周二"),
+                crate::t!("周三"),
+                crate::t!("周四"),
+                crate::t!("周五"),
+                crate::t!("周六"),
+            ];
             format!("{} {hm}", names[then.weekday.clamp(0, 6) as usize])
         }
-        _ => format!("{}月{}日", then.month, then.day),
+        _ => crate::t!("{month}月{day}日", month = then.month, day = then.day),
     }
 }
 pub fn age(at: u64) -> String {
     let minutes = now().saturating_sub(at) / 60;
     if minutes == 0 {
-        "刚刚".into()
+        crate::t!("刚刚").into()
     } else if minutes < 60 {
-        format!("{minutes} 分钟")
+        crate::t!("{minutes} 分钟", minutes)
     } else if minutes < 1440 {
-        format!("{} 小时", minutes / 60)
+        crate::t!("{h} 小时", h = minutes / 60)
     } else {
-        format!("{} 天", minutes / 1440)
+        crate::t!("{d} 天", d = minutes / 1440)
     }
 }
 /// How long ago, in a row's few columns and on a pane's state: `4分`, `2时`, `1天`, or
 /// 刚刚, as the v3 design writes it everywhere.
 pub fn short_ago(updated: u64, now: u64) -> String {
     match now.saturating_sub(updated) {
-        age if age < 60 => "刚刚".into(),
-        age if age < 3600 => format!("{}分", age / 60),
-        age if age < DAY => format!("{}时", age / 3600),
-        age => format!("{}天", age / DAY),
+        age if age < 60 => crate::t!("刚刚").into(),
+        age if age < 3600 => crate::t!("{m}分", m = age / 60),
+        age if age < DAY => crate::t!("{h}时", h = age / 3600),
+        age => crate::t!("{d}天", d = age / DAY),
     }
 }
 /// A stretch of time, as `86 分钟` or `3 小时 5 分`.
 pub fn span_label(secs: u64) -> String {
     match secs / 60 {
-        0 => format!("{secs} 秒"),
-        m if m < 120 => format!("{m} 分钟"),
-        m if m < 2 * 1440 => format!("{} 小时 {} 分", m / 60, m % 60),
-        m => format!("{} 天", m / 1440),
+        0 => crate::t!("{secs} 秒", secs),
+        m if m < 120 => crate::t!("{minutes} 分钟", minutes = m),
+        m if m < 2 * 1440 => crate::t!("{h} 小时 {m} 分", h = m / 60, m = m % 60),
+        m => crate::t!("{d} 天", d = m / 1440),
     }
 }
 pub fn recency(updated: u64, now: u64) -> &'static str {
     match now.saturating_sub(updated) {
-        age if age < DAY => "最近 24 小时",
-        age if age < 7 * DAY => "最近 7 天",
-        _ => "更早",
+        age if age < DAY => crate::t!("最近 24 小时"),
+        age if age < 7 * DAY => crate::t!("最近 7 天"),
+        _ => crate::t!("更早"),
     }
 }
 pub fn ago(updated: u64, now: u64) -> String {
     match now.saturating_sub(updated) {
-        age if age < 60 => "刚刚".into(),
-        age if age < 3600 => format!("{} 分钟前", age / 60),
-        age if age < DAY => format!("{} 小时前", age / 3600),
-        age if age < 30 * DAY => format!("{} 天前", age / DAY),
-        _ => "超过 30 天".into(),
+        age if age < 60 => crate::t!("刚刚").into(),
+        age if age < 3600 => crate::t!("{m} 分钟前", m = age / 60),
+        age if age < DAY => crate::t!("{h} 小时前", h = age / 3600),
+        age if age < 30 * DAY => crate::t!("{d} 天前", d = age / DAY),
+        _ => crate::t!("超过 30 天").into(),
     }
 }
 

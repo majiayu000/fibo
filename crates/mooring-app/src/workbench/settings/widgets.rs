@@ -87,7 +87,7 @@ pub(super) fn switch(id: impl Into<gpui::ElementId>, on: bool) -> gpui::Stateful
     div()
         .id(id)
         .role(gpui::accesskit::Role::Switch)
-        .aria_label(if on { "已开启" } else { "已关闭" })
+        .aria_label(if on { t!("已开启") } else { t!("已关闭") })
         .w(px(SWITCH_WIDTH))
         .h(px(SWITCH_HEIGHT))
         .flex_shrink_0()

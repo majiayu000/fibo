@@ -168,11 +168,11 @@ impl Workbench {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(T::color(T::primary()))
                             .child(if closed_only {
-                                "已关闭的会话"
+                                t!("已关闭的会话")
                             } else if self.overview.welcome {
-                                "欢迎回来"
+                                t!("欢迎回来")
                             } else {
-                                "鸟瞰全部"
+                                t!("鸟瞰全部")
                             }),
                     )
                     .child(label(if closed_only {
@@ -180,19 +180,24 @@ impl Workbench {
                             .iter()
                             .filter(|s| !closed_recently(&self.workspace, s))
                             .count();
-                        format!(
-                            "{} 个 · 终端已关，对话还在，点卡片在新画面里接着聊{} · Esc 回到工作区",
-                            open.len(),
-                            if quiet > 0 {
-                                format!(" · 其中 {quiet} 个很久没动，左栏不再计数")
-                            } else {
-                                String::new()
-                            }
+                        let stale = if quiet > 0 {
+                            t!(
+                                " · 其中 {quiet} 个{state}，左栏不再计数",
+                                quiet,
+                                state = Status::Stale.label()
+                            )
+                        } else {
+                            String::new()
+                        };
+                        t!(
+                            "{len} 个 · 终端已关，对话还在，点卡片在新画面里接着聊{stale} · Esc 回到工作区",
+                            len = open.len(),
+                            stale
                         )
                     } else {
-                        format!(
-                            "{} 个会话还没收尾 · 按要你做什么分好了组 · Esc 回到工作区",
-                            open.len()
+                        t!(
+                            "{len} 个会话还没收尾 · 按要你做什么分好了组 · Esc 回到工作区",
+                            len = open.len()
                         )
                     })),
             )
@@ -205,7 +210,7 @@ impl Workbench {
             before.push(
                 div()
                     .flex()
-                    .child(solid(button("cleanup-closed", "逐个清理 →")).on_click(
+                    .child(solid(button("cleanup-closed", t!("逐个清理 →"))).on_click(
                         cx.listener(move |this, _, _, cx| this.start_cleanup(queue.clone(), cx)),
                     ))
                     .into_any_element(),
@@ -279,9 +284,9 @@ impl Workbench {
             .children(sections);
         if closed_only {
             return view.when(open.is_empty(), |d| {
-                d.child(label(
-                    "这里没有关掉的会话。关掉画面后，它的对话会留在这里，随时能接着聊。",
-                ))
+                d.child(label(t!(
+                    "这里没有关掉的会话。关掉画面后，它的对话会留在这里，随时能接着聊。"
+                )))
             });
         }
         let completed = self
@@ -312,12 +317,16 @@ impl Workbench {
                 .child(
                     button(
                         "closed-toggle",
-                        format!(
-                            "稍后再看 {deferred} · 已完成 {completed} · 已放弃 {abandoned} · {}",
-                            if self.overview.show_closed {
-                                "收起"
+                        t!(
+                            "{later} {deferred} · 已完成 {completed} · 已放弃 {abandoned} · {toggle}",
+                            later = Status::Deferred.label(),
+                            deferred,
+                            completed,
+                            abandoned,
+                            toggle = if self.overview.show_closed {
+                                t!("收起")
                             } else {
-                                "展开"
+                                t!("展开")
                             }
                         ),
                     )
@@ -369,13 +378,13 @@ impl Workbench {
         view = view.child(
             button(
                 "toggle-hidden",
-                format!(
-                    "已隐藏 {} 个自动化会话 · {}",
-                    hidden.len(),
-                    if self.overview.show_hidden {
-                        "收起"
+                t!(
+                    "已隐藏 {len} 个自动化会话 · {toggle}",
+                    len = hidden.len(),
+                    toggle = if self.overview.show_hidden {
+                        t!("收起")
                     } else {
-                        "展开查看"
+                        t!("展开查看")
                     }
                 ),
             )

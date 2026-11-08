@@ -68,11 +68,11 @@ fn offered(reply: &Dirs, text: &str) -> Vec<String> {
 fn target(text: &str, offered: &[String]) -> Result<String, &'static str> {
     let text = text.trim();
     if text.is_empty() {
-        Err("先选或写一个目录")
+        Err(t!("先选或写一个目录"))
     } else if is_path(text) {
         Ok(text.to_owned())
     } else {
-        (offered.first().cloned()).ok_or("没有找到这个目录")
+        (offered.first().cloned()).ok_or(t!("没有找到这个目录"))
     }
 }
 fn shorter(path: &str, home: &str) -> String {
@@ -116,9 +116,9 @@ impl Workbench {
             return;
         };
         let field = cx.new(|cx| {
-            Field::new("目录", "", cx)
+            Field::new(t!("目录"), "", cx)
                 .inline()
-                .placeholder("~/code/项目，或名字")
+                .placeholder(t!("~/code/项目，或名字"))
         });
         let events = cx.subscribe(&field, |this, _, event, cx| match event {
             FieldEvent::Submit => this.submit_machine_space(None, cx),
@@ -333,7 +333,7 @@ impl Workbench {
                 "machine-add-space-{index}"
             )))
             .role(gpui::accesskit::Role::Button)
-            .aria_label("在这台电脑上新建空间")
+            .aria_label(t!("在这台电脑上新建空间"))
             .size(px(F::CHIP))
             .flex()
             .items_center()
@@ -366,7 +366,7 @@ impl Workbench {
                 div()
                     .text_size(px(F::TAG))
                     .text_color(T::color(F::third()))
-                    .child("新建空间"),
+                    .child(t!("新建空间")),
             )
     }
     fn add_space_panel(&self, index: usize, adding: &AddingSpace, cx: &Context<Self>) -> gpui::Div {
@@ -380,7 +380,7 @@ impl Workbench {
                 .id(gpui::SharedString::from(format!("machine-dir-{path}")))
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(if known {
-                    format!("{path}，已是空间")
+                    t!("{path}，已是空间", path)
                 } else {
                     path.clone()
                 })
@@ -409,7 +409,7 @@ impl Workbench {
                             .flex_shrink_0()
                             .text_size(px(F::TAG))
                             .text_color(T::color(F::third()))
-                            .child("已是空间"),
+                            .child(t!("已是空间")),
                     )
                 })
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -418,7 +418,7 @@ impl Workbench {
         });
         let shown = adding.offered.len().min(SHOWN);
         let words = if adding.sending {
-            Some((format!("正在 {name} 上建…"), T::color(F::third())))
+            Some((t!("正在 {name} 上建…", name), T::color(F::third())))
         } else {
             adding.error.clone().map(|e| (e, Tone::Danger.colors().1))
         };
@@ -441,7 +441,7 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(F::bright()))
-                    .child(format!("在 {name} 上新建空间")),
+                    .child(t!("在 {name} 上新建空间", name)),
             )
             .child(
                 div()
@@ -483,7 +483,7 @@ impl Workbench {
                 div()
                     .flex_shrink_0()
                     .text_color(T::color(F::third()))
-                    .child("只看"),
+                    .child(t!("只看")),
             )
             .child(
                 div()
@@ -498,7 +498,7 @@ impl Workbench {
                 div()
                     .id("machine-space-clear")
                     .role(gpui::accesskit::Role::Button)
-                    .aria_label("看全部空间")
+                    .aria_label(t!("看全部空间"))
                     .flex_shrink_0()
                     .h(px(T::ICON_HEIGHT))
                     .flex()
@@ -507,7 +507,7 @@ impl Workbench {
                     .text_color(T::color(F::third()))
                     .cursor_pointer()
                     .hover(|s| s.text_color(T::color(F::bright())))
-                    .child("看全部")
+                    .child(t!("看全部"))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.sidebar.machine_space = None;
                         cx.notify();
@@ -526,7 +526,7 @@ impl Workbench {
             .font_family(T::UI_FONT)
             .text_size(px(F::TAG))
             .text_color(T::color(F::third()))
-            .child("这个空间还没有会话。")
+            .child(t!("这个空间还没有会话。"))
             .when(self.machine_manages(index), |d| {
                 d.child(
                     div()
@@ -542,7 +542,7 @@ impl Workbench {
                         .text_color(T::color(F::second()))
                         .cursor_pointer()
                         .hover(|s| s.border_color(T::color(F::chip_on_line())))
-                        .child("在这里开一个终端")
+                        .child(t!("在这里开一个终端"))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.open_remote_shell(index, Some(cwd.clone()), window, cx);
                         })),

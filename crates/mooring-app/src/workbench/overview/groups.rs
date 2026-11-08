@@ -37,8 +37,9 @@ impl Workbench {
             .flex()
             .gap(px(T::S2))
             .h(px(T::DIST_BAR))
-            .aria_label(gpui::SharedString::from(format!(
-                "{total} 个会话按状态分布"
+            .aria_label(gpui::SharedString::from(t!(
+                "{total} 个会话按状态分布",
+                total
             )));
         let last = filled.len().saturating_sub(1);
         for (i, (group, sessions)) in filled.iter().enumerate() {
@@ -53,7 +54,11 @@ impl Workbench {
                 .cursor_pointer()
                 .tooltip(super::super::diagnostics::tip(vec![
                     group.label().to_owned(),
-                    format!("{n} 个 · {:.0}%", n as f32 / total.max(1) as f32 * 100.),
+                    t!(
+                        "{n} 个 · {pct}%",
+                        n,
+                        pct = format!("{:.0}", n as f32 / total.max(1) as f32 * 100.)
+                    ),
                 ]));
             segment = if group == Status::Stale {
                 segment
@@ -181,10 +186,10 @@ impl Workbench {
                                             .child(task.title.clone()),
                                     )
                                     .child(
-                                        label(format!(
-                                            "{} · {} 条验收标准",
-                                            task.agent.executable(),
-                                            task.acceptance.len()
+                                        label(t!(
+                                            "{executable} · {len} 条验收标准",
+                                            executable = task.agent.executable(),
+                                            len = task.acceptance.len()
                                         ))
                                         .text_color(T::color(T::muted())),
                                     ),
@@ -192,7 +197,7 @@ impl Workbench {
                             .child(
                                 quiet(button(
                                     gpui::SharedString::from(format!("start-{id}")),
-                                    "开始 →",
+                                    t!("开始 →"),
                                 ))
                                 .flex_shrink_0()
                                 .on_click(cx.listener(
@@ -209,11 +214,11 @@ impl Workbench {
             .gap(px(T::S10))
             .child(section_head(
                 None,
-                "待办 · 还没开始",
+                t!("待办 · 还没开始"),
                 unstarted.len(),
-                Some("命令只预填，按回车才启动"),
+                Some(t!("命令只预填，按回车才启动")),
                 vec![
-                    quiet(button("overview-new-task", "＋ 新待办"))
+                    quiet(button("overview-new-task", t!("＋ 新待办")))
                         .on_click(
                             cx.listener(|this, _, window, cx| this.show_quick_task(window, cx)),
                         )
@@ -235,9 +240,9 @@ impl Workbench {
         let foldable = !self.overview.closed_only
             && matches!(group, Status::Running | Status::Stale | Status::Review);
         let note = match group {
-            Status::Error => Some("先看这些：Agent 停在了报错上"),
-            Status::Review => Some("等你核对后标记完成"),
-            Status::Stale if !self.overview.closed_only => Some("左栏不再计数"),
+            Status::Error => Some(t!("先看这些：Agent 停在了报错上")),
+            Status::Review => Some(t!("等你核对后标记完成")),
+            Status::Stale if !self.overview.closed_only => Some(t!("左栏不再计数")),
             _ => None,
         };
         let mut section = div().flex().flex_col().gap(px(T::S10)).child(section_head(
@@ -254,24 +259,31 @@ impl Workbench {
                 _ => "toggle-review",
             };
             let open_label = if group == Status::Stale {
-                "展开核对"
+                t!("展开核对")
             } else {
-                "展开"
+                t!("展开")
             };
-            let toggle = quiet(button(toggle_id, if folded { open_label } else { "收起" }))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    let flag = match group {
-                        Status::Running => &mut this.overview.show_running,
-                        Status::Stale => &mut this.overview.show_stale,
-                        _ => &mut this.overview.show_review,
-                    };
-                    *flag = !*flag;
-                    cx.notify();
-                }));
+            let toggle = quiet(button(
+                toggle_id,
+                if folded { open_label } else { t!("收起") },
+            ))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                let flag = match group {
+                    Status::Running => &mut this.overview.show_running,
+                    Status::Stale => &mut this.overview.show_stale,
+                    _ => &mut this.overview.show_review,
+                };
+                *flag = !*flag;
+                cx.notify();
+            }));
             let mut right = vec![toggle.into_any_element()];
             let content: Vec<gpui::AnyElement> = match group {
                 Status::Review => {
-                    let mut counts = [("最近 24 小时", 0), ("最近 7 天", 0), ("更早", 0)];
+                    let mut counts = [
+                        (t!("最近 24 小时"), 0),
+                        (t!("最近 7 天"), 0),
+                        (t!("更早"), 0),
+                    ];
                     for s in sessions {
                         let bucket = recency(self.session_updated(s), now);
                         if let Some(c) = counts.iter_mut().find(|(name, _)| *name == bucket) {
@@ -292,14 +304,17 @@ impl Workbench {
                     ]
                 }
                 Status::Running => vec![
-                    label("不用管，跑完会挪到「等你验收」")
-                        .text_size(px(T::SMALL))
-                        .text_color(T::color(T::muted()))
-                        .into_any_element(),
+                    label(t!(
+                        "不用管，跑完会挪到「{state}」",
+                        state = Status::Review.label()
+                    ))
+                    .text_size(px(T::SMALL))
+                    .text_color(T::color(T::muted()))
+                    .into_any_element(),
                 ],
                 _ => {
                     right.push(
-                        solid(button("cleanup", "逐个清理 →"))
+                        solid(button("cleanup", t!("逐个清理 →")))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 let queue = this
                                     .workspace

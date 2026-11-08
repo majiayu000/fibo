@@ -3,36 +3,37 @@
 //! quit an idle one; in a shell it is what the row says.
 use super::*;
 
-pub(super) const INTERRUPT_TURN: &str = "中断这一轮";
-pub(super) const INTERRUPT_SHELL: &str = "中断（Ctrl-C）";
+pub(super) const INTERRUPT_TURN: &str = tk!("中断这一轮");
+pub(super) const INTERRUPT_SHELL: &str = tk!("中断（Ctrl-C）");
 
 /// The pane menu's items in four groups (None draws a rule between them): layout,
-/// text, the session and its todo, then what stops or closes something.
+/// text, the session and its todo, then what stops or closes something. Items are Chinese
+/// keys, which are also the action ids; the menu shows them with `i18n::say`.
 /// `agent`: the terminal holds a conversation.
 pub(super) fn menu_rows(zoomed: bool, agent: bool) -> Vec<Option<&'static str>> {
     vec![
-        Some("向右分屏"),
-        Some("向下分屏"),
-        Some(if zoomed { "还原" } else { "放大" }),
-        Some("移到标签…"),
+        Some(tk!("向右分屏")),
+        Some(tk!("向下分屏")),
+        Some(if zoomed { tk!("还原") } else { tk!("放大") }),
+        Some(tk!("移到标签…")),
         None,
-        Some("复制"),
-        Some("粘贴"),
-        Some("搜索滚动内容"),
-        Some("在编辑器里看滚动内容"),
+        Some(tk!("复制")),
+        Some(tk!("粘贴")),
+        Some(tk!("搜索滚动内容")),
+        Some(tk!("在编辑器里看滚动内容")),
         None,
-        Some("为什么是这个状态"),
-        Some("为这个待办开一个会话"),
-        Some("挂到待办…"),
-        Some("取消关联"),
+        Some(tk!("为什么是这个状态")),
+        Some(tk!("为这个待办开一个会话")),
+        Some(tk!("挂到待办…")),
+        Some(tk!("取消关联")),
         None,
         Some(if agent {
             INTERRUPT_TURN
         } else {
             INTERRUPT_SHELL
         }),
-        Some("停止 Agent"),
-        Some("关闭画面"),
+        Some(tk!("停止 Agent")),
+        Some(tk!("关闭画面")),
     ]
 }
 
@@ -40,9 +41,9 @@ pub(super) fn menu_rows(zoomed: bool, agent: bool) -> Vec<Option<&'static str>> 
 /// meant for one could quit it. None: it is on.
 pub(super) fn interrupt_off(phase: Option<Phase>, interrupting: bool) -> Option<&'static str> {
     if interrupting {
-        return Some("正在中断，等它停下");
+        return Some(t!("正在中断，等它停下"));
     }
-    (phase != Some(Phase::Working)).then_some("它这会儿没在干活，没有要中断的")
+    (phase != Some(Phase::Working)).then_some(t!("它这会儿没在干活，没有要中断的"))
 }
 
 impl Workbench {

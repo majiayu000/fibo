@@ -104,7 +104,7 @@ impl SettingsView {
     pub(super) fn look_page(&self, cx: &Context<Self>) -> gpui::Div {
         let theme = self.theme_rows(cx);
         let mut style = Vec::new();
-        if self.shows(Page::Look, "界面样式", cx) {
+        if self.shows(Page::Look, t!("界面样式"), cx) {
             use crate::ui::style::{self, Style};
             let chosen = style::current(cx);
             let mut choices = segments();
@@ -121,15 +121,15 @@ impl SettingsView {
             style.push(
                 self.row(
                     true,
-                    "界面样式",
-                    "标准：现在的布局去掉重复；终端原生：外壳退成细线，等宽字，标签在底部",
+                    t!("界面样式"),
+                    t!("标准：现在的布局去掉重复；终端原生：外壳退成细线，等宽字，标签在底部"),
                     choices,
                 )
                 .into_any_element(),
             );
         }
         let mut icon = Vec::new();
-        if self.shows(Page::Look, "应用图标", cx) {
+        if self.shows(Page::Look, t!("应用图标"), cx) {
             let current = cx.global::<Chosen>().icon;
             let mut tiles = div().flex().gap(px(T::S16)).p(px(T::S16));
             for choice in AppIcon::ALL {
@@ -159,23 +159,23 @@ impl SettingsView {
                 div()
                     .px(px(T::S16))
                     .pb(px(T::S12))
-                    .child(label("标题栏和程序坞一起更换，下次启动仍保留"))
+                    .child(label(t!("标题栏和程序坞一起更换，下次启动仍保留")))
                     .into_any_element(),
             );
         }
         let mut motion = Vec::new();
-        if self.shows(Page::Look, "标记完成动画", cx) {
+        if self.shows(Page::Look, t!("标记完成动画"), cx) {
             use mooring_core::effect;
             let note = if effect::reduce_motion() {
-                "系统开了「减弱动态效果」，现在不管选哪种都只淡出"
+                t!("系统开了「减弱动态效果」，现在不管选哪种都只淡出")
             } else {
-                "在 插件 › 完成动画 里试播、换一个或装新的；试播在当前窗格播一次，不会标记完成"
+                t!("在 插件 › 完成动画 里试播、换一个或装新的；试播在当前窗格播一次，不会标记完成")
             };
             let now = effect::picked_label(effect::picked().as_ref(), effect::presets());
             motion.push(
                 self.row(
                     true,
-                    "标记完成动画",
+                    t!("标记完成动画"),
                     note,
                     div()
                         .flex()
@@ -187,27 +187,31 @@ impl SettingsView {
                                 .text_color(T::color(T::primary()))
                                 .child(now),
                         )
-                        .child(secondary("complete-preview", "试播").on_click(cx.listener(
-                            |_, _, _, cx| cx.emit(SettingsAction::PreviewComplete(None)),
-                        )))
-                        .child(secondary("complete-change", "换一个").on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.show_page(Page::Plugins, cx);
-                            },
-                        ))),
+                        .child(
+                            secondary("complete-preview", t!("试播")).on_click(cx.listener(
+                                |_, _, _, cx| cx.emit(SettingsAction::PreviewComplete(None)),
+                            )),
+                        )
+                        .child(
+                            secondary("complete-change", t!("换一个")).on_click(cx.listener(
+                                |this, _, _, cx| {
+                                    this.show_page(Page::Plugins, cx);
+                                },
+                            )),
+                        ),
                 )
                 .into_any_element(),
             );
         }
-        if self.shows(Page::Look, "状态圆圈转动", cx) {
+        if self.shows(Page::Look, t!("状态圆圈转动"), cx) {
             use crate::ui::running_spin;
             let on = running_spin::current(cx);
             let note = if mooring_core::effect::reduce_motion() {
-                "系统开了「减弱动态效果」，现在不会转".to_owned()
+                t!("系统开了「减弱动态效果」，现在不会转").to_owned()
             } else {
-                format!(
-                    "有「{}」的会话时窗口每秒多画约 30 次，共多占约 15–20% 个核（含系统合成），更耗电；被挡住时不转",
-                    Status::Running.label()
+                t!(
+                    "有「{state}」的会话时窗口每秒多画约 30 次，共多占约 15–20% 个核（含系统合成），更耗电；被挡住时不转",
+                    state = Status::Running.label()
                 )
             };
             let toggle = switch("running-spin", on).on_click(cx.listener(move |this, _, _, cx| {
@@ -216,19 +220,23 @@ impl SettingsView {
                 cx.notify();
             }));
             motion.push(
-                self.row(motion.is_empty(), "状态圆圈转动", &note, toggle)
+                self.row(motion.is_empty(), t!("状态圆圈转动"), &note, toggle)
                     .into_any_element(),
             );
         }
         let mut asks = Vec::new();
-        if self.shows(Page::Look, "钉住这一轮的提问", cx) {
+        if self.shows(Page::Look, t!("钉住这一轮的提问"), cx) {
             use crate::ui::pinned_ask::{self, PinnedAsk};
             let chosen = pinned_ask::current(cx);
             type Way = fn(&mut PinnedAsk) -> &mut bool;
             let ways: [(&str, &str, Way); 3] = [
-                ("pinned-ask-bar", "终端顶部钉一条", |c| &mut c.bar),
-                ("pinned-ask-float", "往回翻时浮出", |c| &mut c.float),
-                ("pinned-ask-button", "标题栏「↑ 你问」", |c| {
+                ("pinned-ask-bar", t!("终端顶部钉一条"), |c| {
+                    &mut c.bar
+                }),
+                ("pinned-ask-float", t!("往回翻时浮出"), |c| {
+                    &mut c.float
+                }),
+                ("pinned-ask-button", t!("标题栏「↑ 你问」"), |c| {
                     &mut c.button
                 }),
             ];
@@ -248,30 +256,32 @@ impl SettingsView {
                 )));
             }
             let note = if !chosen.any() {
-                "都没选：回答再长也不钉提问"
+                t!("都没选：回答再长也不钉提问")
             } else if chosen.bar && chosen.button {
-                "可多选；顶部条和标题栏按钮同时开时只显示顶部条。自己会钉提问的 Agent（Codex）不画"
+                t!(
+                    "可多选；顶部条和标题栏按钮同时开时只显示顶部条。自己会钉提问的 Agent（Codex）不画"
+                )
             } else {
-                "可多选；提问还在屏幕上时不画，自己会钉提问的 Agent（Codex）也不画"
+                t!("可多选；提问还在屏幕上时不画，自己会钉提问的 Agent（Codex）也不画")
             };
             asks.push(
-                self.row(true, "钉住这一轮的提问", note, choices)
+                self.row(true, t!("钉住这一轮的提问"), note, choices)
                     .into_any_element(),
             );
         }
         self.cards(vec![
-            ("主题", theme),
-            ("界面样式", style),
-            ("应用图标", icon),
-            ("动效", motion),
-            ("对话", asks),
+            (t!("主题"), theme),
+            (t!("界面样式"), style),
+            (t!("应用图标"), icon),
+            (t!("动效"), motion),
+            (t!("对话"), asks),
         ])
     }
     /// 明暗 on one row, then each side's themes. Light and dark show only their own side,
     /// so a tile always means what clicking it will show.
     fn theme_rows(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         let mut rows = Vec::new();
-        if !self.shows(Page::Look, "主题", cx) {
+        if !self.shows(Page::Look, t!("主题"), cx) {
             return rows;
         }
         let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
@@ -292,13 +302,13 @@ impl SettingsView {
         }
         let terminal = crate::ui::style::current(cx) == crate::ui::style::Style::Terminal;
         let note = if chosen.mode != Mode::System {
-            "窗口与终端一起切换"
+            t!("窗口与终端一起切换")
         } else if terminal {
-            "终端原生样式下跟随系统按暗色显示"
+            t!("终端原生样式下跟随系统按暗色显示")
         } else {
-            "macOS 变换时，在下面两组之间切换"
+            t!("macOS 变换时，在下面两组之间切换")
         };
-        rows.push(self.row(true, "明暗", note, modes).into_any_element());
+        rows.push(self.row(true, t!("明暗"), note, modes).into_any_element());
         if let Some(shown) = appearance::shown(cx)
             && shown.source == appearance::Source::Space
             && let Some(entry) = shown.entry
@@ -306,14 +316,14 @@ impl SettingsView {
             rows.push(
                 self.row(
                     false,
-                    &format!("当前空间单独用着「{}」", entry.name),
-                    "下面选的主题在其他空间生效；右键空间也能换",
-                    secondary("space-theme-release", "让这个空间跟随外观").on_click(cx.listener(
-                        |this, _, _, cx| {
+                    &t!("当前空间单独用着「{name}」", name = entry.name),
+                    t!("下面选的主题在其他空间生效；右键空间也能换"),
+                    secondary("space-theme-release", t!("让这个空间跟随外观")).on_click(
+                        cx.listener(|this, _, _, cx| {
                             this.text_error = crate::ui::space_themes::release_current(cx).err();
                             cx.notify();
-                        },
-                    )),
+                        }),
+                    ),
                 )
                 .into_any_element(),
             );
@@ -326,9 +336,9 @@ impl SettingsView {
         };
         for &light in sides {
             let title = if light {
-                "亮色主题"
+                t!("亮色主题")
             } else {
-                "暗色主题"
+                t!("暗色主题")
             };
             let on = chosen.entry(themes, light).map(|e| e.id.clone());
             let in_use = chosen.mode == Mode::System && shows_light == light;
@@ -393,7 +403,7 @@ impl SettingsView {
                             .text_color(T::color(T::primary()))
                             .child(title),
                     )
-                    .when(in_use, |d| d.child(label("正在用"))),
+                    .when(in_use, |d| d.child(label(t!("正在用")))),
             )
             .child(grid)
     }
@@ -407,7 +417,7 @@ impl SettingsView {
                     div()
                         .text_size(px(T::SMALL))
                         .text_color(crate::ui::tone::Tone::Warn.ink())
-                        .child(format!("{file}：{why}")),
+                        .child(t!("{file}：{why}", file, why)),
                 )
             });
         div()
@@ -421,15 +431,15 @@ impl SettingsView {
                     .flex()
                     .gap(px(T::S8))
                     .child(
-                        secondary("theme-edit", "调整当前主题")
+                        secondary("theme-edit", t!("调整当前主题"))
                             .on_click(cx.listener(|this, _, _, cx| this.open_editor(cx))),
                     )
                     .child(
-                        secondary("theme-import", "导入主题或 .itermcolors")
+                        secondary("theme-import", t!("导入主题或 .itermcolors"))
                             .on_click(cx.listener(|this, _, _, cx| this.import_theme(cx))),
                     )
                     .child(
-                        secondary("theme-folder", "打开主题文件夹").on_click(cx.listener(
+                        secondary("theme-folder", t!("打开主题文件夹")).on_click(cx.listener(
                             |this, _, _, cx| {
                                 if let Some(dir) = themes::dir() {
                                     let _ = std::fs::create_dir_all(&dir);
@@ -455,7 +465,7 @@ impl SettingsView {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("导入".into()),
+            prompt: Some(t!("导入").into()),
         });
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = picked.await else {

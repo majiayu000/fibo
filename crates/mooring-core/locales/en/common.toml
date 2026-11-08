@@ -1,0 +1,3 @@
+# Words used across the window (errors saving a choice, the language setting).
+"找不到配置目录" = "Can't find the config folder"
+"无法保存 {path}：{e}" = "Can't save {path}: {e}"

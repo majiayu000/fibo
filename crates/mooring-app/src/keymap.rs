@@ -51,9 +51,9 @@ impl Section {
     pub const ALL: [Self; 3] = [Self::Tabs, Self::Terminal, Self::Workbench];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Tabs => "标签与分屏",
-            Self::Terminal => "终端",
-            Self::Workbench => "工作台",
+            Self::Tabs => t!("标签与分屏"),
+            Self::Terminal => t!("终端"),
+            Self::Workbench => t!("工作台"),
         }
     }
 }
@@ -129,34 +129,34 @@ impl Action {
     }
     pub fn label(self) -> String {
         match self {
-            Self::NewTab => "新建标签".into(),
-            Self::Close => "关闭画面".into(),
-            Self::SplitRight => "向右分屏".into(),
-            Self::SplitDown => "向下分屏".into(),
-            Self::PrevTab => "上一个标签".into(),
-            Self::NextTab => "下一个标签".into(),
-            Self::PrevPane => "上一个画面".into(),
-            Self::NextPane => "下一个画面".into(),
-            Self::PaneLeft => "左边的画面".into(),
-            Self::PaneRight => "右边的画面".into(),
-            Self::PaneUp => "上面的画面".into(),
-            Self::PaneDown => "下面的画面".into(),
-            Self::Tab(n) => format!("第 {n} 个标签"),
-            Self::LastTab => "最后一个标签".into(),
-            Self::Search => "搜索".into(),
-            Self::Settings => "设置".into(),
-            Self::NextWaiting => "下一个等你的".into(),
-            Self::ToggleSidebar => "收起 / 展开左栏".into(),
-            Self::Find => "在终端里查找".into(),
-            Self::Clear => "清屏".into(),
-            Self::SelectAll => "全选".into(),
-            Self::ZoomIn => "放大字号".into(),
-            Self::ZoomOut => "缩小字号".into(),
-            Self::ZoomReset => "还原字号".into(),
-            Self::ScrollTop => "滚到最上面".into(),
-            Self::ScrollBottom => "回到底部".into(),
-            Self::PageUp => "向上翻一页".into(),
-            Self::PageDown => "向下翻一页".into(),
+            Self::NewTab => t!("新建标签").into(),
+            Self::Close => t!("关闭画面").into(),
+            Self::SplitRight => t!("向右分屏").into(),
+            Self::SplitDown => t!("向下分屏").into(),
+            Self::PrevTab => t!("上一个标签").into(),
+            Self::NextTab => t!("下一个标签").into(),
+            Self::PrevPane => t!("上一个画面").into(),
+            Self::NextPane => t!("下一个画面").into(),
+            Self::PaneLeft => t!("左边的画面").into(),
+            Self::PaneRight => t!("右边的画面").into(),
+            Self::PaneUp => t!("上面的画面").into(),
+            Self::PaneDown => t!("下面的画面").into(),
+            Self::Tab(n) => t!("第 {n} 个标签", n),
+            Self::LastTab => t!("最后一个标签").into(),
+            Self::Search => t!("搜索").into(),
+            Self::Settings => t!("设置").into(),
+            Self::NextWaiting => t!("下一个等你的").into(),
+            Self::ToggleSidebar => t!("收起 / 展开左栏").into(),
+            Self::Find => t!("在终端里查找").into(),
+            Self::Clear => t!("清屏").into(),
+            Self::SelectAll => t!("全选").into(),
+            Self::ZoomIn => t!("放大字号").into(),
+            Self::ZoomOut => t!("缩小字号").into(),
+            Self::ZoomReset => t!("还原字号").into(),
+            Self::ScrollTop => t!("滚到最上面").into(),
+            Self::ScrollBottom => t!("回到底部").into(),
+            Self::PageUp => t!("向上翻一页").into(),
+            Self::PageDown => t!("向下翻一页").into(),
         }
     }
     pub fn section(self) -> Section {
@@ -373,7 +373,7 @@ impl Chord {
             }
         }
         let key = match self.key.as_str() {
-            "space" => "空格".into(),
+            "space" => t!("空格").into(),
             "enter" => "Enter".into(),
             "tab" => "Tab".into(),
             "backspace" => "Backspace".into(),
@@ -404,7 +404,7 @@ impl Chord {
             }
         }
         let key = match self.key.as_str() {
-            "space" => "空格".into(),
+            "space" => t!("空格").into(),
             "enter" => "↩".into(),
             "tab" => "⇥".into(),
             "backspace" => "⌫".into(),
@@ -432,16 +432,16 @@ impl Chord {
     /// Why this chord cannot be bound, if it cannot.
     pub fn refusal(&self) -> Option<&'static str> {
         if !self.cmd {
-            return Some("快捷键需要包含 ⌘；其他组合键留给终端里的程序");
+            return Some(t!("快捷键需要包含 ⌘；其他组合键留给终端里的程序"));
         }
         if !self.ctrl && !self.alt && !self.shift && matches!(self.key.as_str(), "c" | "v" | "q") {
-            return Some("⌘C、⌘V、⌘Q 保留给复制、粘贴和退出");
+            return Some(t!("⌘C、⌘V、⌘Q 保留给复制、粘贴和退出"));
         }
         if self.key == "escape" {
-            return Some("Esc 用来取消录制");
+            return Some(t!("Esc 用来取消录制"));
         }
         if self.is_tab_number() {
-            return Some("⌘1–⌘9 固定用于切换标签");
+            return Some(t!("⌘1–⌘9 固定用于切换标签"));
         }
         None
     }

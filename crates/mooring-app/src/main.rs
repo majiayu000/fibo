@@ -1,6 +1,10 @@
 // A window, not a console program: Windows opens no command prompt beside it. Other systems
 // ignore the attribute.
 #![windows_subsystem = "windows"]
+// `t!` and `not_ui!` (mooring_core::i18n) in every module.
+#[macro_use]
+extern crate mooring_core;
+
 mod agent_hooks;
 mod connection;
 mod desktop;
@@ -75,7 +79,7 @@ pub(crate) fn set_menus(cx: &mut App) {
     {
         looks.push(gpui::MenuItem::separator());
         looks.push(gpui::MenuItem::action(
-            format!("当前空间单独用着「{}」", entry.name),
+            t!("当前空间单独用着「{name}」", name = entry.name),
             ShowSettings,
         ));
     }
@@ -98,11 +102,11 @@ pub(crate) fn set_menus(cx: &mut App) {
         }
     }
     cx.set_menus([gpui::Menu::new("Mooring").items([
-        gpui::MenuItem::action("设置…", ShowSettings),
-        gpui::MenuItem::action("菜单栏面板", ShowMenuPanel),
-        gpui::MenuItem::submenu(gpui::Menu::new("外观").items(looks)),
+        gpui::MenuItem::action(t!("设置…"), ShowSettings),
+        gpui::MenuItem::action(t!("菜单栏面板"), ShowMenuPanel),
+        gpui::MenuItem::submenu(gpui::Menu::new(t!("外观")).items(looks)),
         gpui::MenuItem::separator(),
-        gpui::MenuItem::action("退出 Mooring", Quit),
+        gpui::MenuItem::action(t!("退出 Mooring"), Quit),
     ])]);
 }
 
@@ -229,6 +233,7 @@ fn main() {
         std::env::set_var("GPUI_RETAINED_BACKBUFFER", "1");
     }
     record_panics();
+    ui::language::apply();
     if let Err(error) = run() {
         eprintln!("Mooring: {error}");
         std::process::exit(1);

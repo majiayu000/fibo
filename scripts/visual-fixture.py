@@ -19,6 +19,8 @@ StatusQuota.
 MOORING_FIXTURE_QUOTA_NAMED=1 at prepare adds a plugin giving Codex one model's week beside the
 account's, for StatusQuota; =near has it at 91%, so the bar shows it too.
 MOORING_FIXTURE_CONTEXT=1 at prepare states how full each session's context window is.
+MOORING_LANG=en (or zh) at capture renders the window in that language; Settings-<Page> pages
+(Settings-General, Settings-Look, …) open the settings window.
 MOORING_FIXTURE_UNLINKED=1 at prepare adds a tab of Agents no conversation is tied to, for the
 SidebarUnlinked-* pages.
 """
@@ -256,6 +258,9 @@ else:
         directory = pathlib.Path(sys.argv[2]).resolve(); directory.mkdir(parents=True, exist_ok=True)
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8', 'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', 'MOORING_PAGE_EVIDENCE': '1',
                'MOORING_PAGE_LIST': os.environ.get('MOORING_PAGE_LIST', 'TodoNew,TodoNewBare,TodoNewChecks,TodoDetail,TodoDetailAttach,TodoDetailFull,TodoDetailDone')}
+        # MOORING_LANG=en|zh renders the window in that language; without it the private HOME
+        # has no choice saved and the window follows this Mac's language.
+        if os.environ.get('MOORING_LANG'): env['MOORING_LANG'] = os.environ['MOORING_LANG']
         result = subprocess.run([str(BIN / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
         (directory / 'native-render.log').write_bytes(result.stdout); assert result.returncode == 0, result.stdout.decode()[-4000:]
         print('native captures', sorted(p.name for p in directory.glob('*-native.png')))

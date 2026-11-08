@@ -3,7 +3,7 @@
 use mooring_core::content::now;
 use mooring_core::model::*;
 use mooring_core::sample::every_state;
-use mooring_core::status::{self, NEEDS_YOU};
+use mooring_core::status::{self, needs_you_word};
 use mooring_core::status_group;
 
 /// The sample's every state in "space", beside a second space to stay attended to.
@@ -56,7 +56,7 @@ fn a_space_put_aside_asks_for_nothing_and_comes_back_whole() {
         .collect();
 
     set(&mut w, "space", true).unwrap();
-    assert_eq!(needs(&w), 0, "{NEEDS_YOU} counts none of them");
+    assert_eq!(needs(&w), 0, "{} counts none of them", needs_you_word());
     assert_eq!(columns(&w), 0, "the board shows none of them");
     assert!(status::unfinished_todos(&w, at).is_empty());
     assert!(status::open_todos(&w, at).is_empty());

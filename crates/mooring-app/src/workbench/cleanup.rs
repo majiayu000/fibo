@@ -138,7 +138,7 @@ impl Workbench {
                     .items_center()
                     .gap(px(T::S12))
                     .child(
-                        button("cleanup-exit", "← 返回鸟瞰")
+                        button("cleanup-exit", t!("← 返回鸟瞰"))
                             .px(px(T::S10))
                             .text_color(T::color(T::body()))
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -152,18 +152,20 @@ impl Workbench {
                             .text_size(px(T::FORM_TITLE))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child(if self.overview.cleanup_review {
-                                "逐个验收"
+                                t!("逐个验收")
                             } else if self.overview.closed_only {
-                                "清理已关闭的会话"
+                                t!("清理已关闭的会话")
                             } else {
-                                "清理很久没动的会话"
+                                t!("清理很久没动的会话")
                             }),
                     )
                     .child(div().flex_1())
                     .child(
-                        label(format!(
-                            "第 {position} / {} 个 · 剩 {untouched}",
-                            queue.len()
+                        label(t!(
+                            "第 {position} / {len} 个 · 剩 {untouched}",
+                            position,
+                            len = queue.len(),
+                            untouched
                         ))
                         .text_size(px(T::SMALL))
                         .text_color(T::color(T::secondary())),
@@ -177,10 +179,10 @@ impl Workbench {
                     .gap(px(T::S14))
                     .text_size(px(T::SMALL))
                     .text_color(T::color(T::secondary()))
-                    .child(swatch(Step::Completed, format!("完成 {completed}")))
-                    .child(swatch(Step::Deferred, format!("稍后再看 {deferred}")))
-                    .child(swatch(Step::Abandoned, format!("放弃 {abandoned}")))
-                    .child(swatch(Step::Pending, format!("还没处理 {untouched}"))),
+                    .child(swatch(Step::Completed, t!("完成 {completed}", completed)))
+                    .child(swatch(Step::Deferred, t!("稍后再看 {deferred}", deferred)))
+                    .child(swatch(Step::Abandoned, t!("放弃 {abandoned}", abandoned)))
+                    .child(swatch(Step::Pending, t!("还没处理 {untouched}", untouched))),
             );
         if let Some(s) = queue
             .get(self.overview.cleanup_index)
@@ -225,9 +227,9 @@ impl Workbench {
                         "{} · {} · {}",
                         s.runtime.executable(),
                         if s.terminal.is_none() {
-                            "外部·只读"
+                            t!("外部·只读")
                         } else {
-                            "托管"
+                            t!("托管")
                         },
                         s.cwd
                     ))
@@ -242,7 +244,7 @@ impl Workbench {
                         .gap(px(T::S10))
                         .text_size(px(T::META))
                         .text_color(T::color(T::muted()))
-                        .child("最后活动")
+                        .child(t!("最后活动"))
                         .child(
                             div()
                                 .flex_1()
@@ -268,13 +270,16 @@ impl Workbench {
                 // The title already is the first ask when nothing better names the session.
                 let title = self.session_title(s);
                 // As in the 你在这里 card: no empty evidence line, no template next step.
-                for (name, text) in [("你要它", h.ask), ("做成了", h.done), ("停在", h.stopped)]
-                    .into_iter()
-                    .filter(|(name, text)| {
-                        (*name != "你要它" || text.trim() != title.trim())
-                            && (*name != "做成了" || text != mooring_core::content::NO_DONE)
-                    })
-                {
+                for (name, text) in [
+                    (t!("你要它"), h.ask),
+                    (t!("做成了"), h.done),
+                    (t!("停在"), h.stopped),
+                ]
+                .into_iter()
+                .filter(|(name, text)| {
+                    (*name != t!("你要它") || text.trim() != title.trim())
+                        && (*name != t!("做成了") || text != mooring_core::content::NO_DONE)
+                }) {
                     card = card.child(
                         div()
                             .flex()
@@ -301,19 +306,22 @@ impl Workbench {
             if let Some(status) = blocked {
                 let left = mooring_core::status::left_behind(&self.workspace, s);
                 page = page.child(label(match left {
-                    Some(left) => format!("{left}，这里标记会关掉它：打开看看或跳过"),
-                    None => format!("它现在{}，这里不能标记：打开看看或跳过", status.label()),
+                    Some(left) => t!("{left}，这里标记会关掉它：打开看看或跳过", left),
+                    None => t!(
+                        "它现在{label}，这里不能标记：打开看看或跳过",
+                        label = status.label()
+                    ),
                 }));
             }
             let sid = s.id.clone();
             let mut actions = div().flex().flex_wrap().gap(px(T::S8));
             if blocked.is_none() {
-                actions = actions.child(solid(button("完成", "完成 ⏎")).on_click(
+                actions = actions.child(solid(button(not_ui!("完成"), t!("完成 ⏎"))).on_click(
                     cx.listener(move |this, _, _, cx| this.complete_queued(sid.clone(), cx)),
                 ));
             }
             let resume = s.clone();
-            actions = actions.child(quiet(button("cleanup-continue", "继续 C")).on_click(
+            actions = actions.child(quiet(button("cleanup-continue", t!("继续 C"))).on_click(
                 cx.listener(move |this, _, window, cx| {
                     this.overview.cleanup.clear();
                     this.open_session(&resume, window, cx);
@@ -321,14 +329,15 @@ impl Workbench {
             ));
             if blocked.is_none() {
                 let sid = s.id.clone();
-                actions = actions.child(quiet(button("cleanup-defer", "稍后再看… L")).on_click(
-                    cx.listener(move |this, _, window, cx| {
-                        this.overview.here = Some(sid.clone());
-                        this.show_form(FormKind::Defer, window, cx);
-                    }),
-                ));
+                actions =
+                    actions.child(quiet(button("cleanup-defer", t!("稍后再看… L"))).on_click(
+                        cx.listener(move |this, _, window, cx| {
+                            this.overview.here = Some(sid.clone());
+                            this.show_form(FormKind::Defer, window, cx);
+                        }),
+                    ));
                 let sid = s.id.clone();
-                actions = actions.child(quiet(button("cleanup-abandon", "放弃 ⌫")).on_click(
+                actions = actions.child(quiet(button("cleanup-abandon", t!("放弃 ⌫"))).on_click(
                     cx.listener(move |this, _, _, cx| {
                         this.edit(
                             Edit::SetOutcome {
@@ -346,7 +355,7 @@ impl Workbench {
             page = page.child(
                 div()
                     .text_color(T::color(T::secondary()))
-                    .child("这一轮已处理完，可以返回鸟瞰。"),
+                    .child(t!("这一轮已处理完，可以返回鸟瞰。")),
             );
         }
         page = page.child(
@@ -354,7 +363,7 @@ impl Workbench {
                 .flex()
                 .gap(px(T::S8))
                 .child(
-                    button("cleanup-previous", "← 上一个")
+                    button("cleanup-previous", t!("← 上一个"))
                         .text_color(T::color(T::secondary()))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.overview.cleanup_index =
@@ -363,7 +372,7 @@ impl Workbench {
                         })),
                 )
                 .child(
-                    button("cleanup-skip", "跳过 →")
+                    button("cleanup-skip", t!("跳过 →"))
                         .text_color(T::color(T::secondary()))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.overview.cleanup_index =

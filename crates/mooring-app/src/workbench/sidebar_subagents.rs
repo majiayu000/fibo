@@ -49,16 +49,23 @@ impl Counts {
         self != Self::default()
     }
 }
-/// "3 在跑 · 1 中断 · 1 完成", or with `each` = "个" and `done` = "已完成" for the fold line.
-fn tally(n: Counts, each: &str, done: &str) -> String {
+/// "3 在跑 · 1 中断 · 1 完成", or with `each` (个 before each word) and `done` = "已完成"
+/// for the fold line.
+fn tally(n: Counts, each: bool, done: &str) -> String {
     [
         (n.running, Status::Running.label()),
-        (n.stopped, "中断"),
+        (n.stopped, t!("中断")),
         (n.ended, done),
     ]
     .into_iter()
     .filter(|(count, _)| *count > 0)
-    .map(|(count, word)| format!("{count} {each}{word}"))
+    .map(|(count, word)| {
+        if each {
+            t!("{count} 个{word}", count, word)
+        } else {
+            format!("{count} {word}")
+        }
+    })
     .collect::<Vec<_>>()
     .join(" · ")
 }
@@ -154,14 +161,14 @@ impl Workbench {
             .line_height(px(F::SUB_LINE))
             .text_color(ink(F::second()))
             .cursor_pointer()
-            .child("子代理")
+            .child(t!("子代理"))
             .child(marks.flex_shrink_0())
             .child(
                 div()
                     .flex_1()
                     .truncate()
                     .text_color(if counts.running > 0 { run } else { quiet })
-                    .child(tally(counts, "", "完成")),
+                    .child(tally(counts, false, t!("完成"))),
             )
             .child(super::sidebar_flat::fold_mark(open))
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -186,9 +193,12 @@ impl Workbench {
         let whole = self.layout.subagents_all.contains(session);
         let shown = shown(subs, live, whole);
         let fold = if shown.folded.any() {
-            Some(format!("还有 {}", tally(shown.folded, "个", "已完成")))
+            Some(t!(
+                "还有 {more}",
+                more = tally(shown.folded, true, t!("已完成"))
+            ))
         } else {
-            (whole && subs.len() > SHOWN + 1).then(|| "收起".to_owned())
+            (whole && subs.len() > SHOWN + 1).then(|| t!("收起").to_owned())
         };
         let (now, run, line) = (
             mooring_core::content::now(),
@@ -276,7 +286,7 @@ impl Workbench {
                                 .text_size(px(F::TAG - 1.))
                                 .line_height(px(MARK_LINE))
                                 .text_color(run)
-                                .child("前台"),
+                                .child(t!("前台")),
                         )
                     })
                     .child(
@@ -382,9 +392,9 @@ mod tests {
         assert_eq!(s.folded, counts(16, 0, 0));
         // Once the session stopped, unfinished ones count as ended.
         assert_eq!(shown(&many, false, false).folded, counts(0, 0, 16));
-        assert_eq!(tally(counts(2, 0, 1), "", "完成"), "2 在跑 · 1 完成");
+        assert_eq!(tally(counts(2, 0, 1), false, "完成"), "2 在跑 · 1 完成");
         assert_eq!(
-            tally(counts(1, 2, 3), "个", "已完成"),
+            tally(counts(1, 2, 3), true, "已完成"),
             "1 个在跑 · 2 个中断 · 3 个已完成"
         );
     }

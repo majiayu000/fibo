@@ -82,9 +82,9 @@ impl SettingsView {
         };
         let mut caps = div().flex().gap(px(T::S4)).justify_end();
         if recording {
-            caps = caps.child(keycap("按下组合键…", true).border_color(T::color(T::focus())));
+            caps = caps.child(keycap(t!("按下组合键…"), true).border_color(T::color(T::focus())));
         } else if chords.is_empty() {
-            caps = caps.child(keycap("未设置", true));
+            caps = caps.child(keycap(t!("未设置"), true));
         } else {
             for chord in chords {
                 caps = caps.child(keycap(chord.display(), false));
@@ -116,7 +116,7 @@ impl SettingsView {
                     .child(div().w(px(RESET_WIDTH)).flex().justify_end().when(
                         !map.is_default(action),
                         |d| {
-                            d.child(secondary(format!("reset-{name}"), "恢复").on_click(
+                            d.child(secondary(format!("reset-{name}"), t!("恢复")).on_click(
                                 cx.listener(move |this, _, _, cx| this.reset(Some(action), cx)),
                             ))
                         },
@@ -140,7 +140,7 @@ impl SettingsView {
             );
         if recording {
             row = row.child(div().pb(px(T::S10)).flex().child(note(
-                crate::ui::words::local("按下新的组合键，需包含 ⌘；Esc 取消"),
+                crate::ui::words::local(t!("按下新的组合键，需包含 ⌘；Esc 取消")),
                 T::color(T::secondary()),
             )));
         }
@@ -160,17 +160,21 @@ impl SettingsView {
                     .items_center()
                     .gap(px(T::S8))
                     .child(note(
-                        format!("{} 已被「{}」使用", chord.display(), holder.label()),
+                        t!(
+                            "{chord} 已被「{action}」使用",
+                            chord = chord.display(),
+                            action = holder.label()
+                        ),
                         Tone::Warn.ink(),
                     ))
                     .child(
-                        button("take-chord", "仍然使用")
+                        button("take-chord", t!("仍然使用"))
                             .h(px(SEGMENT_HEIGHT))
                             .bg(T::color(T::accent()))
                             .text_color(T::color(T::on_accent()))
                             .on_click(cx.listener(|this, _, _, cx| this.take(cx))),
                     )
-                    .child(secondary("keep-chord", "取消").on_click(cx.listener(
+                    .child(secondary("keep-chord", t!("取消")).on_click(cx.listener(
                         |this, _, _, cx| {
                             this.taken = None;
                             cx.notify();
@@ -202,9 +206,9 @@ impl SettingsView {
                         div()
                             .text_size(px(T::BODY_SIZE))
                             .text_color(T::color(T::primary()))
-                            .child("切换到第几个标签"),
+                            .child(t!("切换到第几个标签")),
                     )
-                    .child(label(crate::ui::words::local("⌘9 为最后一个；固定"))),
+                    .child(label(crate::ui::words::local(t!("⌘9 为最后一个；固定")))),
             )
             .child(keycap(crate::ui::words::local("⌘1 – ⌘9"), true))
     }
@@ -221,7 +225,8 @@ impl SettingsView {
                         .into_any_element(),
                 );
             }
-            if section == Section::Tabs && self.matches(Page::Keys, "切换到第几个标签", "⌘1 ⌘9", cx)
+            if section == Section::Tabs
+                && self.matches(Page::Keys, t!("切换到第几个标签"), "⌘1 ⌘9", cx)
             {
                 rows.push(self.tab_numbers_row(rows.is_empty()).into_any_element());
             }
@@ -229,7 +234,7 @@ impl SettingsView {
         }
         self.cards(groups).child(
             div().pt(px(T::S12)).flex().justify_end().child(
-                secondary("settings-reset-all", "全部恢复默认")
+                secondary("settings-reset-all", t!("全部恢复默认"))
                     .on_click(cx.listener(|this, _, _, cx| this.reset(None, cx))),
             ),
         )

@@ -23,7 +23,10 @@ impl Workbench {
                 .text_size(px(T::SMALL))
                 .child(
                     div()
-                        .w(px(T::PALETTE_FACT))
+                        // At least the column's width; a longer (English) name widens it
+                        // rather than breaking mid-word.
+                        .min_w(px(T::PALETTE_FACT))
+                        .whitespace_nowrap()
                         .flex_none()
                         .text_color(T::color(T::muted()))
                         .child(name),
@@ -41,7 +44,7 @@ impl Workbench {
         let mut facts = div().flex().flex_col().gap(px(T::S6));
         if let Some(q) = quote.filter(|_| !query.is_empty()) {
             facts = facts.child(fact(
-                "命中",
+                t!("命中"),
                 highlighted(&format!("“{}”", excerpt(q, query, EXCERPT * 2)), query)
                     .into_any_element(),
             ));
@@ -52,20 +55,23 @@ impl Workbench {
                 .child(if c.first_ask_known {
                     short(&line(&first.text), 120)
                 } else {
-                    format!("（最初要求未覆盖）{}", short(&line(&first.text), 100))
+                    t!(
+                        "（最初要求未覆盖）{first}",
+                        first = short(&line(&first.text), 100)
+                    )
                 })
-                .child(div().text_color(T::color(T::muted())).child(format!(
-                    "追加 {} 句，最后：{}",
-                    c.asks.len() - 1,
-                    short(&line(&last.text), 40)
+                .child(div().text_color(T::color(T::muted())).child(t!(
+                    "追加 {n} 句，最后：{last}",
+                    n = c.asks.len() - 1,
+                    last = short(&line(&last.text), 40)
                 ))),
             Some((_, [only])) => div().child(short(&line(&only.text), 160)),
-            _ => div().child(content.map_or("内容尚未索引".into(), |c| c.here().ask)),
+            _ => div().child(content.map_or(t!("内容尚未索引").into(), |c| c.here().ask)),
         };
-        facts = facts.child(fact("你要它", ask.into_any_element()));
+        facts = facts.child(fact(t!("你要它"), ask.into_any_element()));
         if let Some(c) = content {
             facts = facts.child(fact(
-                "停在",
+                t!("停在"),
                 div().child(c.here().stopped).into_any_element(),
             ));
         }
@@ -128,9 +134,9 @@ impl Workbench {
                         .gap(px(T::S6))
                         .child(
                             solid(button("search-open", ""))
-                                .aria_label("打开")
+                                .aria_label(t!("打开"))
                                 .gap(px(T::S6))
-                                .child("打开")
+                                .child(t!("打开"))
                                 .child(kbd("↵").text_color(T::color(T::on_accent())))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.search.open = false;
@@ -142,7 +148,7 @@ impl Workbench {
                         .child(
                             quiet(button(
                                 "search-copy",
-                                self.copy_label("search-copy", "复制恢复命令"),
+                                self.copy_label("search-copy", t!("复制恢复命令")),
                             ))
                             .on_click(cx.listener(
                                 move |this, _, _, cx| {
@@ -204,10 +210,10 @@ fn ask_track(asks: &[mooring_core::content::Quote]) -> Option<gpui::Div> {
                         div()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(T::color(T::secondary()))
-                            .child(format!("你说过 {} 句", asks.len())),
+                            .child(t!("你说过 {len} 句", len = asks.len())),
                     )
                     .child(div().flex_1())
-                    .child(format!("共 {}", span_label(span))),
+                    .child(t!("共 {span}", span = span_label(span))),
             )
             .child(track)
             .child(

@@ -55,9 +55,9 @@ impl Workbench {
                 "icons/sidebar.svg"
             },
             if self.sidebar.collapsed {
-                "展开左栏"
+                t!("展开左栏")
             } else {
-                "收起左栏"
+                t!("收起左栏")
             },
         )
         .on_click(cx.listener(|this, _, _, cx| this.toggle_sidebar(cx)))
@@ -181,9 +181,9 @@ impl Workbench {
             .child(div().flex_1())
             .when(reconnect, |d| {
                 let text = if self.reconnecting {
-                    "连接中…"
+                    t!("连接中…")
                 } else {
-                    "重新连接"
+                    t!("重新连接")
                 };
                 d.child(
                     button("reconnect-host", text)
@@ -209,14 +209,14 @@ impl Workbench {
                     }
                     let root = socket
                         .parent()
-                        .ok_or_else(|| std::io::Error::other("找不到运行目录"))?;
+                        .ok_or_else(|| std::io::Error::other(t!("找不到运行目录")))?;
                     crate::lifecycle::spawn_host(root, false)
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.reconnecting = false;
                 if let Err(e) = result {
-                    this.error = Some(format!("没能启动后台：{e}"));
+                    this.error = Some(t!("没能启动后台：{e}", e));
                 }
                 cx.notify();
             });
@@ -260,7 +260,7 @@ impl Workbench {
             );
         }
         others.push(
-            link("empty-tab-new".into(), "空终端".into())
+            link("empty-tab-new".into(), t!("空终端").into())
                 .on_click(cx.listener(|this, _, _, cx| this.launch(false, None, cx)))
                 .into_any_element(),
         );
@@ -286,8 +286,8 @@ impl Workbench {
                             .text_size(px(T::CARD_TITLE))
                             .text_color(T::color(T::primary()))
                             .child(match space {
-                                Some(s) => format!("在 {} 里开始", s.name),
-                                None => "在这里开始".to_owned(),
+                                Some(s) => t!("在 {name} 里开始", name = s.name),
+                                None => t!("在这里开始").to_owned(),
                             }),
                     )
                     .when_some(space, |d, s| {
@@ -297,7 +297,7 @@ impl Workbench {
             .child(
                 super::super::overview::solid(button(
                     gpui::SharedString::from(format!("empty-tab-{}", first.executable())),
-                    format!("运行 {}", first.name()),
+                    t!("运行 {name}", name = first.name()),
                 ))
                 .px(px(T::S16))
                 .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(first, cx))),
@@ -319,7 +319,7 @@ impl Workbench {
                     })),
             )
             .when_some(split, |d, keys| {
-                d.child(label(format!("打开后可以右键分屏，或按 {keys} 向右分屏")))
+                d.child(label(t!("打开后可以右键分屏，或按 {keys} 向右分屏", keys)))
             })
     }
 }

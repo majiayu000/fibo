@@ -73,7 +73,7 @@ impl RemoteRow {
             .then(|| self.card.approval.as_ref().or(self.card.waiting.as_ref()))
             .flatten()
             .and_then(|t| t.lines().find(|l| !l.trim().is_empty()))
-            .map(|t| t.replacen(ASKS, "问：", 1))
+            .map(|t| t.replacen(mooring_core::i18n::say(ASKS), t!("问："), 1))
     }
 }
 
@@ -144,8 +144,8 @@ impl Workbench {
         let slot = self.machines.get(index)?.slot();
         let linked = slot.lock().unwrap();
         match linked.as_ref()? {
-            l if !l.typing => Some("旧版，只能看"),
-            l if !l.managing => Some("旧版，不能开关终端"),
+            l if !l.typing => Some(t!("旧版，只能看")),
+            l if !l.managing => Some(t!("旧版，不能开关终端")),
             _ => None,
         }
     }
@@ -240,7 +240,7 @@ impl Workbench {
         let asks = r.asks();
         let two = asks.is_some();
         let time = if !r.online && !r.quiet {
-            "断开".to_owned()
+            t!("断开").to_owned()
         } else {
             card.updated
                 .map_or_else(String::new, |at| short_ago(at, now()))
@@ -270,9 +270,11 @@ impl Workbench {
             .online
             .then(|| (r.index, card.clone(), r.host_name.clone()));
         let tip = match (&r.why, r.online) {
-            (Some(_), _) | (None, false) if r.quiet => format!("{} 现在没连上", r.machine),
-            (Some(why), _) => format!("{} 没连上：{why}", r.machine),
-            (None, false) => format!("正在连 {}", r.machine),
+            (Some(_), _) | (None, false) if r.quiet => {
+                t!("{machine} 现在没连上", machine = r.machine)
+            }
+            (Some(why), _) => t!("{machine} 没连上：{why}", machine = r.machine, why),
+            (None, false) => t!("正在连 {machine}", machine = r.machine),
             (None, true) => format!("{} · {}", r.machine, card.cwd),
         };
         let row = div()
@@ -418,14 +420,14 @@ impl Workbench {
         } else {
             Status::Review
         };
-        let text = mooring_core::status::NEEDS_YOU;
+        let text = mooring_core::status::needs_you_word();
         let (dot_color, ink, wash) = group.colors();
         let key = crate::keymap::current(cx)
             .chords(crate::keymap::Action::NextWaiting)
             .first()
             .map(|c| c.display());
         button("next-waiting", "")
-            .aria_label(format!("{text}，共 {count} 个"))
+            .aria_label(t!("{text}，共 {count} 个", text, count))
             .h(px(T::NEXT_CHIP))
             .pl(px(T::S8))
             .pr(px(T::S10))

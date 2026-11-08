@@ -114,7 +114,10 @@ impl SettingsView {
                                         ("codex", fg),
                                         (" resume --last", quiet),
                                     ]),
-                                    line(&[("▸ 准备继续你的工作", fg), ("  0123456789", quiet)]),
+                                    line(&[
+                                        (t!("▸ 准备继续你的工作"), fg),
+                                        ("  0123456789", quiet),
+                                    ]),
                                     line(&[("✓ ", green), ("3 files changed, 0 errors", fg)]),
                                 ],
                                 ..Default::default()
@@ -140,11 +143,11 @@ impl SettingsView {
         let text = terminal_text::current();
         let shows = |title| self.shows(Page::Terminal, title, cx);
         let mut page = div().flex().flex_col();
-        if shows("终端字体") || shows("字号") || shows("行距") {
-            page = page.child(heading("预览")).child(self.preview(&text));
+        if shows(t!("终端字体")) || shows(t!("字号")) || shows(t!("行距")) {
+            page = page.child(heading(t!("预览"))).child(self.preview(&text));
         }
         let mut size = Vec::new();
-        if shows("字号") {
+        if shows(t!("字号")) {
             let stepper = segments()
                 .child(segment("font-smaller", "−", false).on_click(cx.listener(
                     |this, _, _, cx| {
@@ -172,22 +175,22 @@ impl SettingsView {
             size.push(
                 self.row(
                     size.is_empty(),
-                    "字号",
-                    &crate::ui::words::local("与 ⌘+ / ⌘− 缩放共用，重开应用后保留"),
+                    t!("字号"),
+                    &crate::ui::words::local(t!("与 ⌘+ / ⌘− 缩放共用，重开应用后保留")),
                     stepper,
                 )
                 .into_any_element(),
             );
         }
-        if shows("行距") {
+        if shows(t!("行距")) {
             let line_height = text.line_height;
             let choices = self.text_choices(
                 "line",
                 &[
-                    (1., "紧凑 1.0×"),
-                    (1.2, "标准 1.2×"),
-                    (1.4, "舒适 1.4×"),
-                    (1.6, "宽松 1.6×"),
+                    (1., t!("紧凑 1.0×")),
+                    (1.2, t!("标准 1.2×")),
+                    (1.4, t!("舒适 1.4×")),
+                    (1.6, t!("宽松 1.6×")),
                 ],
                 |h: f32| (line_height - h).abs() < 0.01,
                 |t, h| t.line_height = h,
@@ -196,15 +199,15 @@ impl SettingsView {
             size.push(
                 self.row(
                     size.is_empty(),
-                    "行距",
-                    "相对字体自然行高，文字始终居中",
+                    t!("行距"),
+                    t!("相对字体自然行高，文字始终居中"),
                     choices,
                 )
                 .into_any_element(),
             );
         }
         let mut font = Vec::new();
-        if shows("终端字体") {
+        if shows(t!("终端字体")) {
             font.push(self.font_list(&text, cx).into_any_element());
         }
         font.extend(self.face_rows(font.is_empty(), &text, cx));
@@ -212,14 +215,14 @@ impl SettingsView {
         let reading = self.reading_rows(&text, cx);
         let frame = self.frame_rows(&text, cx);
         let mut keys = Vec::new();
-        if shows("Option 键") {
+        if shows(t!("Option 键")) {
             let option = text.option_key;
             let choices = self.text_choices(
                 "option-key",
                 &[
-                    (OptionKey::Auto, "自动"),
-                    (OptionKey::Alt, "当 Alt"),
-                    (OptionKey::Text, "打字符"),
+                    (OptionKey::Auto, t!("自动")),
+                    (OptionKey::Alt, t!("当 Alt")),
+                    (OptionKey::Text, t!("打字符")),
                 ],
                 |o| o == option,
                 |t, o| t.option_key = o,
@@ -228,15 +231,15 @@ impl SettingsView {
             keys.push(
                 self.row(
                     true,
-                    "Option 键",
-                    "自动：键盘在这里有 @ [ | 这类符号时打出来，其余当 Alt；要打 ą é 这类字母选「打字符」",
+                    t!("Option 键"),
+                    t!("自动：键盘在这里有 @ [ | 这类符号时打出来，其余当 Alt；要打 ą é 这类字母选「打字符」"),
                     choices,
                 )
                 .into_any_element(),
             );
         }
         let mut paths = Vec::new();
-        if shows("用哪个编辑器打开行号") {
+        if shows(t!("用哪个编辑器打开行号")) {
             let editor = text.editor;
             // Only the editors on this Mac, besides the automatic and fallback choices.
             let options: Vec<(Editor, &'static str)> = [
@@ -260,9 +263,9 @@ impl SettingsView {
             paths.push(
                 self.row(
                     true,
-                    "用哪个编辑器打开行号",
+                    t!("用哪个编辑器打开行号"),
                     &crate::ui::words::local(
-                        "⌘ 点击 pane.rs:651 这类路径跳到那一行；自动选 Zed、VS Code、Cursor 中第一个装了的",
+                        t!("⌘ 点击 pane.rs:651 这类路径跳到那一行；自动选 Zed、VS Code、Cursor 中第一个装了的"),
                     ),
                     choices,
                 )
@@ -271,13 +274,13 @@ impl SettingsView {
         }
         let typing = !size.is_empty() || !font.is_empty();
         page.child(self.cards(vec![
-            ("文字大小", size),
-            ("终端字体", font),
-            ("光标与分屏", cursor),
-            ("可读性", reading),
-            ("边距", frame),
-            ("键盘", keys),
-            ("点击路径", paths),
+            (t!("文字大小"), size),
+            (t!("终端字体"), font),
+            (t!("光标与分屏"), cursor),
+            (t!("可读性"), reading),
+            (t!("边距"), frame),
+            (t!("键盘"), keys),
+            (t!("点击路径"), paths),
         ]))
         .when(typing, |d| {
             d.child(
@@ -285,8 +288,8 @@ impl SettingsView {
                     .pt(px(T::S12))
                     .flex()
                     .items_center()
-                    .child(label("只列出本机已安装的等宽字体；缺的字自动回退").flex_1())
-                    .child(secondary("reset-text", "恢复文字默认值").on_click(
+                    .child(label(t!("只列出本机已安装的等宽字体；缺的字自动回退")).flex_1())
+                    .child(secondary("reset-text", t!("恢复文字默认值")).on_click(
                         // Only the type: the cursor and split choices stay as they were.
                         cx.listener(|this, _, _, cx| {
                             let fresh = TerminalText::default();

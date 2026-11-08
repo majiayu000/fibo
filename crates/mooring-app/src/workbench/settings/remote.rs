@@ -9,7 +9,7 @@ impl SettingsView {
     fn send_remote(&mut self, enabled: bool, cx: &mut Context<Self>) {
         let relay = self.relay.read(cx).text.trim().to_owned();
         if enabled && relay.is_empty() {
-            self.remote_error = Some("先填中继地址");
+            self.remote_error = Some(t!("先填中继地址"));
             cx.notify();
             return;
         }
@@ -28,12 +28,12 @@ impl SettingsView {
     pub(super) fn phones_page(&self, cx: &Context<Self>) -> gpui::Div {
         let r = &self.remote;
         let mut link = Vec::new();
-        if self.shows(Page::Phones, "让手机连过来", cx) {
+        if self.shows(Page::Phones, t!("让手机连过来"), cx) {
             link.push(
                 self.row(
                     true,
-                    "让手机连过来",
-                    "这台 Mac 一直挂在中继上，配对过的手机在哪都能连过来；关掉后手机暂时连不上，配对还在。",
+                    t!("让手机连过来"),
+                    t!("这台 Mac 一直挂在中继上，配对过的手机在哪都能连过来；关掉后手机暂时连不上，配对还在。"),
                     switch("remote-on", r.enabled).on_click(cx.listener(|this, _, _, cx| {
                         let on = !this.remote.enabled;
                         this.send_remote(on, cx)
@@ -42,13 +42,13 @@ impl SettingsView {
                 .into_any_element(),
             );
         }
-        if self.shows(Page::Phones, "中继地址", cx) {
+        if self.shows(Page::Phones, t!("中继地址"), cx) {
             let field = |f: &Entity<Field>| div().w(px(T::FORM_WIDTH * 0.6)).child(f.clone());
             link.push(
                 self.row(
                     link.is_empty(),
-                    "中继地址",
-                    "自己部署的 mooring-relay，或部署好的 alma-relay",
+                    t!("中继地址"),
+                    t!("自己部署的 mooring-relay，或部署好的 alma-relay"),
                     field(&self.relay),
                 )
                 .into_any_element(),
@@ -56,11 +56,11 @@ impl SettingsView {
             link.push(
                 self.row(
                     false,
-                    "中继密钥",
+                    t!("中继密钥"),
                     if r.keyed {
-                        "已保存，不显示；要换就填新的"
+                        t!("已保存，不显示；要换就填新的")
                     } else {
-                        "中继要求注册密钥时才填"
+                        t!("中继要求注册密钥时才填")
                     },
                     field(&self.relay_key),
                 )
@@ -71,12 +71,14 @@ impl SettingsView {
                 link.push(
                     self.row(
                         false,
-                        "改过的地址或密钥",
-                        "保存后后台按新的设置重新连接",
-                        secondary("remote-save", "保存").on_click(cx.listener(|this, _, _, cx| {
-                            let on = this.remote.enabled;
-                            this.send_remote(on, cx)
-                        })),
+                        t!("改过的地址或密钥"),
+                        t!("保存后后台按新的设置重新连接"),
+                        secondary("remote-save", t!("保存")).on_click(cx.listener(
+                            |this, _, _, cx| {
+                                let on = this.remote.enabled;
+                                this.send_remote(on, cx)
+                            },
+                        )),
                     )
                     .into_any_element(),
                 );
@@ -85,7 +87,7 @@ impl SettingsView {
             link.push(
                 self.row(
                     false,
-                    "状态",
+                    t!("状态"),
                     self.remote_error.unwrap_or(""),
                     div()
                         .flex()
@@ -99,32 +101,32 @@ impl SettingsView {
             );
         }
         let mut phones = Vec::new();
-        if self.shows(Page::Phones, "操作记录", cx) {
+        if self.shows(Page::Phones, t!("操作记录"), cx) {
             phones.push(
                 self.row(
                     true,
-                    "配对的手机",
-                    "在标题栏的手机按钮里配对、断开、改权限或取消配对",
-                    label(format!("{} 台", r.devices.len())),
+                    t!("配对的手机"),
+                    t!("在标题栏的手机按钮里配对、断开、改权限或取消配对"),
+                    label(t!("{len} 台", len = r.devices.len())),
                 )
                 .into_any_element(),
             );
             phones.push(self.path_row(
                 false,
-                "操作记录",
+                t!("操作记录"),
                 self.runtime.as_ref().map(|r| r.join("remote-log.jsonl")),
                 cx,
             ));
         }
-        let machines = if self.shows(Page::Phones, "其他电脑", cx) {
+        let machines = if self.shows(Page::Phones, t!("其他电脑"), cx) {
             self.machine_rows(cx)
         } else {
             Vec::new()
         };
         self.cards(vec![
-            ("连接", link),
-            ("手机", phones),
-            ("其他电脑", machines),
+            (t!("连接"), link),
+            (t!("手机"), phones),
+            (t!("其他电脑"), machines),
         ])
     }
     /// 其他电脑: each saved machine with 移除, then a field to add one. Looked at only
@@ -135,13 +137,13 @@ impl SettingsView {
             let note = spec
                 .path
                 .clone()
-                .unwrap_or_else(|| "自动找那台电脑上的 mooring".into());
+                .unwrap_or_else(|| t!("自动找那台电脑上的 mooring").into());
             rows.push(
                 self.row(
                     rows.is_empty(),
                     &spec.host,
                     &note,
-                    secondary(("machine-remove", index), "移除").on_click(cx.listener(
+                    secondary(("machine-remove", index), t!("移除")).on_click(cx.listener(
                         move |this, _, _, cx| {
                             let mut next = this.machines.clone();
                             next.remove(index);
@@ -156,10 +158,10 @@ impl SettingsView {
         rows.push(
             self.row(
                 rows.is_empty(),
-                "加一台电脑",
-                self.machines_error.as_deref().unwrap_or(
-                    "填 ssh 能免密登录的主机名；那台电脑上要装着 Mooring。侧栏里只看，不能打字",
-                ),
+                t!("加一台电脑"),
+                self.machines_error.as_deref().unwrap_or(t!(
+                    "填 ssh 能免密登录的主机名；那台电脑上要装着 Mooring。侧栏里只看，不能打字"
+                )),
                 div()
                     .flex()
                     .items_center()
@@ -170,7 +172,7 @@ impl SettingsView {
                             .child(self.machine_field.clone()),
                     )
                     .child(
-                        secondary("machine-add", "添加")
+                        secondary("machine-add", t!("添加"))
                             .when(typed.is_empty(), |b| b.opacity(0.5))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 let host = this.machine_field.read(cx).text.trim().to_owned();
@@ -178,7 +180,7 @@ impl SettingsView {
                                     return;
                                 }
                                 if this.machines.iter().any(|m| m.host == host) {
-                                    this.machines_error = Some(format!("{host} 已经加过了"));
+                                    this.machines_error = Some(t!("{host} 已经加过了", host));
                                     cx.notify();
                                     return;
                                 }
@@ -200,7 +202,7 @@ impl SettingsView {
                 self.machines_error = None;
                 cx.emit(SettingsAction::MachinesChanged);
             }
-            Err(e) => self.machines_error = Some(format!("没存上：{e}")),
+            Err(e) => self.machines_error = Some(t!("没存上：{e}", e)),
         }
         cx.notify();
     }

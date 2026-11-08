@@ -19,9 +19,9 @@ const GLYPH_EDGE: f32 = 1.5;
 const GLYPH_DOT: f32 = 6.;
 const GLYPH_DOT_OUT: f32 = -4.;
 const ROLES: [(&str, &str); 3] = [
-    ("view", "只看"),
-    ("answer", "能答审批"),
-    ("full", "完全控制"),
+    ("view", tk!("只看#role")),
+    ("answer", tk!("能答审批")),
+    ("full", tk!("完全控制")),
 ];
 
 #[derive(Default)]
@@ -52,7 +52,7 @@ pub(super) fn role_label(role: &str) -> &'static str {
     ROLES
         .iter()
         .find(|(r, _)| *r == role)
-        .map_or("", |(_, l)| *l)
+        .map_or("", |(_, l)| mooring_core::i18n::say(l))
 }
 
 fn ago(ms_or_s: u64, millis: bool) -> String {
@@ -62,10 +62,10 @@ fn ago(ms_or_s: u64, millis: bool) -> String {
 
 fn act_label(op: &str) -> &'static str {
     match op {
-        "keys" => "按了键",
-        "send" => "发了文字",
-        "answer" => "答了审批",
-        _ => "操作过",
+        "keys" => t!("按了键"),
+        "send" => t!("发了文字"),
+        "answer" => t!("答了审批"),
+        _ => t!("操作过"),
     }
 }
 
@@ -99,13 +99,16 @@ fn live_color() -> gpui::Hsla {
 /// The connection in a few words, with the color of its dot.
 pub(super) fn state_line(r: &RemoteStatus) -> (gpui::Hsla, String) {
     match r.live.state {
-        RemoteState::Connected => (live_color(), "中继已连上".into()),
+        RemoteState::Connected => (live_color(), t!("中继已连上").into()),
         RemoteState::Connecting if r.live.detail.is_empty() => {
-            (T::color(T::secondary()), "正在连中继…".into())
+            (T::color(T::secondary()), t!("正在连中继…").into())
         }
         RemoteState::Connecting => (T::color(T::secondary()), r.live.detail.clone()),
-        RemoteState::Failed => (Tone::Danger.dot(), format!("没连上：{}", r.live.detail)),
-        RemoteState::Off => (T::color(T::muted()), "已关闭".into()),
+        RemoteState::Failed => (
+            Tone::Danger.dot(),
+            t!("没连上：{detail}", detail = r.live.detail),
+        ),
+        RemoteState::Off => (T::color(T::muted()), t!("已关闭").into()),
     }
 }
 
@@ -126,9 +129,9 @@ impl Workbench {
         Some(
             button("phones", "")
                 .aria_label(if online > 0 {
-                    format!("手机：{online} 台在线")
+                    t!("手机：{online} 台在线", online)
                 } else {
-                    "手机".into()
+                    t!("手机").into()
                 })
                 .gap(px(T::S6))
                 .px(px(T::S8))
@@ -202,9 +205,9 @@ impl Workbench {
 
     fn start_pairing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = cx.new(|cx| {
-            Field::new("手机名字", "", cx)
+            Field::new(t!("手机名字"), "", cx)
                 .compact()
-                .placeholder("这台手机叫什么，比如 iPhone")
+                .placeholder(t!("这台手机叫什么，比如 iPhone"))
         });
         cx.observe(&name, |_, _, cx| cx.notify()).detach();
         window.focus(&name.focus_handle(cx), cx);
@@ -285,17 +288,17 @@ impl Workbench {
             Some(p) => {
                 let mut parts = vec![];
                 if let Some(t) = p.watching.first() {
-                    parts.push(format!("在看「{}」", self.terminal_name(t)));
+                    parts.push(t!("在看「{name}」", name = self.terminal_name(t)));
                 } else {
-                    parts.push("在线".into());
+                    parts.push(t!("在线").into());
                 }
                 if let Some(a) = &p.last {
                     parts.push(format!("{}{}", ago(a.at, true), act_label(&a.op)));
                 }
                 parts.join(" · ")
             }
-            None => d.last_seen.map_or("还没连过".into(), |at| {
-                format!("{}连过", ago(at, false))
+            None => d.last_seen.map_or(t!("还没连过").into(), |at| {
+                t!("{ago}连过", ago = ago(at, false))
             }),
         };
         let id = d.id.clone();
@@ -327,7 +330,7 @@ impl Workbench {
             .when(phone.is_some(), |r| {
                 let id = id.clone();
                 r.child(
-                    button(format!("kick-{id}"), "断开")
+                    button(format!("kick-{id}"), t!("断开#button"))
                         .h(px(T::PILL_HEIGHT))
                         .px(px(T::S8))
                         .border(px(T::BORDER_WIDTH))
@@ -340,7 +343,7 @@ impl Workbench {
             .child({
                 let id = id.clone();
                 button(format!("more-{id}"), "…")
-                    .aria_label("改权限或取消配对")
+                    .aria_label(t!("改权限或取消配对"))
                     .h(px(T::PILL_HEIGHT))
                     .px(px(T::S6))
                     .text_color(T::color(T::secondary()))
@@ -360,7 +363,7 @@ impl Workbench {
                 let on = d.role == role;
                 let id = id.clone();
                 roles = roles.child(
-                    button(format!("role-{id}-{role}"), text)
+                    button(format!("role-{id}-{role}"), mooring_core::i18n::say(text))
                         .h(px(T::PILL_HEIGHT))
                         .px(px(T::S8))
                         .text_size(px(T::META))
@@ -382,7 +385,7 @@ impl Workbench {
                     .px(px(T::S8))
                     .child(roles)
                     .child(
-                        button(format!("revoke-{id}"), "取消配对")
+                        button(format!("revoke-{id}"), t!("取消配对"))
                             .h(px(T::PILL_HEIGHT))
                             .px(px(T::S8))
                             .text_size(px(T::META))
@@ -435,28 +438,28 @@ impl Workbench {
                         .flex_col()
                         .gap(px(T::S4))
                         .text_size(px(T::SMALL))
-                        .child(format!(
-                            "用 Mooring 手机 App 扫这个码：「{}」 · {}",
-                            p.name.read(cx).text.trim(),
-                            role_label(p.role)
+                        .child(t!(
+                            "用 Mooring 手机 App 扫这个码：「{name}」 · {role}",
+                            name = p.name.read(cx).text.trim(),
+                            role = role_label(p.role)
                         ))
-                        .child(label(
-                            "这个码只给这一台手机，别截图发给别人；关掉后不再显示。",
-                        )),
+                        .child(label(t!(
+                            "这个码只给这一台手机，别截图发给别人；关掉后不再显示。"
+                        ))),
                 )
                 .child(
                     div()
                         .flex()
                         .justify_between()
                         .child(
-                            button("copy-link", self.copy_label("copy-link", "复制链接"))
+                            button("copy-link", self.copy_label("copy-link", t!("复制链接")))
                                 .border(px(T::BORDER_WIDTH))
                                 .border_color(T::color(T::control()))
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.copy_text("copy-link", link.clone(), cx)
                                 })),
                         )
-                        .child(button("pair-done", "完成").on_click(cx.listener(
+                        .child(button("pair-done", t!("完成")).on_click(cx.listener(
                             |this, _, _, cx| {
                                 this.phones.pairing = None;
                                 cx.notify();
@@ -468,7 +471,7 @@ impl Workbench {
         for (role, text) in ROLES {
             let on = p.role == role;
             roles = roles.child(
-                button(format!("pair-role-{role}"), text)
+                button(format!("pair-role-{role}"), mooring_core::i18n::say(text))
                     .h(px(T::PILL_HEIGHT))
                     .px(px(T::S8))
                     .text_size(px(T::META))
@@ -487,26 +490,26 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap(px(T::S10))
-            .child(div().text_size(px(T::SMALL)).child("配对新手机"))
+            .child(div().text_size(px(T::SMALL)).child(t!("配对新手机")))
             .child(p.name.clone())
             .child(roles)
             .child(
                 div()
                     .flex()
                     .justify_between()
-                    .child(
-                        button("pair-cancel", "取消").on_click(cx.listener(|this, _, _, cx| {
+                    .child(button("pair-cancel", t!("取消")).on_click(cx.listener(
+                        |this, _, _, cx| {
                             this.phones.pairing = None;
                             cx.notify();
-                        })),
-                    )
+                        },
+                    )))
                     .child(
                         button(
                             "pair-go",
                             if p.busy {
-                                "正在生成…"
+                                t!("正在生成…")
                             } else {
-                                "生成二维码"
+                                t!("生成二维码")
                             },
                         )
                         .bg(T::color(T::accent()))
@@ -525,7 +528,7 @@ impl Workbench {
             body = body.child(self.pairing_view(p, cx));
         } else {
             if r.devices.is_empty() {
-                body = body.child(label("还没有配对的手机"));
+                body = body.child(label(t!("还没有配对的手机")));
             }
             for d in &r.devices {
                 let phone = r.live.online.iter().find(|p| p.device == d.id);
@@ -539,7 +542,7 @@ impl Workbench {
                     .justify_between()
                     .pt(px(T::S4))
                     .child(
-                        button("pair-new", "配对新手机…")
+                        button("pair-new", t!("配对新手机…"))
                             .when(can_pair, |b| {
                                 b.bg(T::color(T::accent()))
                                     .text_color(T::color(T::on_accent()))
@@ -550,7 +553,7 @@ impl Workbench {
                             .when(!can_pair, |b| b.opacity(T::DISABLED_OPACITY)),
                     )
                     .child(
-                        button("phones-settings", "设置与记录")
+                        button("phones-settings", t!("设置与记录"))
                             .text_color(T::color(T::secondary()))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.close_phones(cx);
@@ -559,7 +562,7 @@ impl Workbench {
                     ),
             );
             if !can_pair {
-                body = body.child(label("先在「设置与记录」里填中继地址"));
+                body = body.child(label(t!("先在「设置与记录」里填中继地址")));
             }
         }
         if let Some(note) = &self.phones.note {
@@ -601,7 +604,7 @@ impl Workbench {
                                     div()
                                         .text_size(px(T::SMALL))
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .child("手机"),
+                                        .child(t!("手机")),
                                 )
                                 .child(
                                     div()

@@ -1,6 +1,7 @@
 pub const HAS_COMMAND_KEY: bool = true;
 pub const DRAWS_WINDOW_BUTTONS: bool = false;
 pub const FILE_MANAGER: &str = "访达";
+pub const FILE_MANAGER_EN: &str = "Finder";
 
 /// TextEdit, or whatever the account set for plain text.
 pub fn open_as_text(path: &std::path::Path) -> std::io::Result<()> {
@@ -88,4 +89,44 @@ pub fn register_font(bytes: &'static [u8]) -> Result<(), &'static str> {
         }
     }
     Ok(())
+}
+
+/// The account's languages in order (System Settings › Language & Region), as BCP 47 tags.
+pub fn preferred_languages() -> Vec<String> {
+    use std::ffi::{c_char, c_void};
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFLocaleCopyPreferredLanguages() -> *const c_void;
+        fn CFArrayGetCount(array: *const c_void) -> isize;
+        fn CFArrayGetValueAtIndex(array: *const c_void, index: isize) -> *const c_void;
+        fn CFStringGetCString(
+            string: *const c_void,
+            buffer: *mut c_char,
+            size: isize,
+            encoding: u32,
+        ) -> bool;
+        fn CFRelease(cf: *const c_void);
+    }
+    const UTF8: u32 = 0x0800_0100;
+    let mut out = vec![];
+    // The array is ours to release; its strings belong to it.
+    unsafe {
+        let array = CFLocaleCopyPreferredLanguages();
+        if array.is_null() {
+            return out;
+        }
+        for i in 0..CFArrayGetCount(array) {
+            let mut buffer = [0 as c_char; 64];
+            let s = CFArrayGetValueAtIndex(array, i);
+            if !s.is_null() && CFStringGetCString(s, buffer.as_mut_ptr(), 64, UTF8) {
+                out.push(
+                    std::ffi::CStr::from_ptr(buffer.as_ptr())
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+        CFRelease(array);
+    }
+    out
 }

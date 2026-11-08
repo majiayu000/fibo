@@ -14,19 +14,44 @@ impl Workbench {
         let host = matches!(closing, Closing::Host);
         let agent = matches!(closing, Closing::Agent(_));
         let unmatched = matches!(closing, Closing::Unmatched(_));
-        let what = match closing {
-            Closing::Tab(_) => "关闭这个标签",
-            Closing::Pane(_) => "关闭这个画面",
-            Closing::Host => "重启后台",
-            Closing::Agent(_) => "停止这个 Agent",
-            Closing::Unmatched(_) => "只关掉这个画面",
+        // Whole questions: English cannot glue 停止并 in front of the action.
+        let question = match (closing, working) {
+            (Closing::Host, _) => t!("重启后台，换上新版本？"),
+            (Closing::Agent(_), _) => t!("停止这个 Agent？"),
+            (Closing::Tab(_), false) => t!("关闭这个标签？"),
+            (Closing::Tab(_), true) => t!("停止并关闭这个标签？"),
+            (Closing::Pane(_), false) => t!("关闭这个画面？"),
+            (Closing::Pane(_), true) => t!("停止并关闭这个画面？"),
+            (Closing::Unmatched(_), false) => t!("只关掉这个画面？"),
+            (Closing::Unmatched(_), true) => t!("停止并只关掉这个画面？"),
         };
-        let verb = if host {
-            "重启"
-        } else if agent {
-            "停止"
-        } else {
-            "关闭"
+        // One whole sentence per action and phase: the verb's form differs in English.
+        let say = |title: &str, phase: &Option<Phase>| {
+            let working = *phase == Some(Phase::Working);
+            let waiting = *phase == Some(Phase::Waiting);
+            match (host, agent, working, waiting) {
+                (true, _, true, _) => t!("「{title}」还在工作，重启会打断这一轮。", title),
+                (true, _, _, true) => t!(
+                    "「{title}」在{state}，重启后它会退出。",
+                    title,
+                    state = Status::Waiting.label()
+                ),
+                (true, ..) => t!("「{title}」这一轮已经结束，重启后它会退出。", title),
+                (_, true, true, _) => t!("「{title}」还在工作，停止会打断这一轮。", title),
+                (_, true, _, true) => t!(
+                    "「{title}」在{state}，停止后它会退出。",
+                    title,
+                    state = Status::Waiting.label()
+                ),
+                (_, true, ..) => t!("「{title}」这一轮已经结束，停止后它会退出。", title),
+                (.., true, _) => t!("「{title}」还在工作，关闭会打断这一轮。", title),
+                (.., true) => t!(
+                    "「{title}」在{state}，关闭后它会退出。",
+                    title,
+                    state = Status::Waiting.label()
+                ),
+                _ => t!("「{title}」这一轮已经结束，关闭后它会退出。", title),
+            }
         };
         let shells = if host {
             self.running_terminals().len().saturating_sub(agents.len())
@@ -36,14 +61,10 @@ impl Workbench {
         let splits = splits_closed(&self.workspace, closing);
         let lines = agents
             .iter()
-            .map(|(title, phase)| match phase {
-                Some(Phase::Working) => format!("「{title}」还在工作，{verb}会打断这一轮。"),
-                Some(Phase::Waiting) => format!("「{title}」在等你回答，{verb}后它会退出。"),
-                _ => format!("「{title}」这一轮已经结束，{verb}后它会退出。"),
-            })
-            .chain((shells > 0).then(|| format!("另有 {shells} 个普通终端会停止。")));
+            .map(|(title, phase)| say(title, phase))
+            .chain((shells > 0).then(|| t!("另有 {shells} 个普通终端会停止。", shells)));
         let lines = (splits > 0)
-            .then(|| format!("这个标签有 {splits} 个分屏，会一起关闭。"))
+            .then(|| t!("这个标签有 {splits} 个分屏，会一起关闭。", splits))
             .into_iter()
             .chain(lines)
             .collect::<Vec<_>>()
@@ -80,40 +101,34 @@ impl Workbench {
                     .child(
                         div()
                             .text_size(px(T::CARD_TITLE))
-                            .child(if host {
-                                "重启后台，换上新版本？".to_owned()
-                            } else if agent {
-                                format!("{what}？")
-                            } else {
-                                format!("{}{what}？", if working { "停止并" } else { "" })
-                            }),
+                            .child(question),
                     )
                     .when(host, |d| {
                         d.child(label(
-                            "后台还在跑旧版本，新改动要重启后台才生效。重启会停止所有终端，Mooring 会自动重新打开。",
+                            t!("后台还在跑旧版本，新改动要重启后台才生效。重启会停止所有终端，Mooring 会自动重新打开。"),
                         ))
                     })
                     .when(unmatched, |d| {
                         d.child(label(
-                            "没认出这个窗格是哪条对话，所以不会记成完成。",
+                            t!("没认出这个窗格是哪条对话，所以不会记成完成。"),
                         ))
                     })
                     .when(!lines.is_empty(), |d| d.child(label(lines)))
                     .child(label(if unmatched {
-                        "里面的 Agent 会退出，正在做的事也会停下。对话记录会保留，可以从左栏底部「已关闭」里接着聊。"
+                        t!("里面的 Agent 会退出，正在做的事也会停下。对话记录会保留，可以从左栏底部「已关闭」里接着聊。")
                     } else if host {
-                        "对话记录会保留，重启后可以原地重开终端，或从左栏「已关闭」里接着聊。"
+                        t!("对话记录会保留，重启后可以原地重开终端，或从左栏「已关闭」里接着聊。")
                     } else if agent {
-                        "终端会留着，回到命令行。对话记录会保留，可以从左栏底部「已关闭」里接着聊。"
+                        t!("终端会留着，回到命令行。对话记录会保留，可以从左栏底部「已关闭」里接着聊。")
                     } else {
-                        "对话记录会保留，可以从左栏底部「已关闭」里接着聊。"
+                        t!("对话记录会保留，可以从左栏底部「已关闭」里接着聊。")
                     }))
                     .child(
                         div()
                             .flex()
                             .justify_end()
                             .gap(px(T::S8))
-                            .child(button("confirm-close-cancel", "取消").on_click(cx.listener(
+                            .child(button("confirm-close-cancel", t!("取消")).on_click(cx.listener(
                                 |this, _, _, cx| {
                                     this.layout.confirm_close = None;
                                     cx.notify();
@@ -123,15 +138,15 @@ impl Workbench {
                                 button(
                                     "confirm-close-stop",
                                     if unmatched {
-                                        "只关掉画面"
+                                        t!("只关掉画面")
                                     } else if host {
-                                        "重启后台"
+                                        t!("重启后台")
                                     } else if agent {
-                                        "停止"
+                                        t!("停止")
                                     } else if working {
-                                        "停止并关闭"
+                                        t!("停止并关闭")
                                     } else {
-                                        "关闭"
+                                        t!("关闭")
                                     },
                                 )
                                 .when(working || host || agent, |b| {

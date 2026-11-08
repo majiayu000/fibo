@@ -65,7 +65,7 @@ impl ChangesPanel {
                 .justify_center()
                 .text_size(px(T::SMALL))
                 .text_color(T::color(T::muted()))
-                .child("没有匹配的文件")
+                .child(t!("没有匹配的文件"))
                 .into_any_element()
         } else {
             gpui::uniform_list(
@@ -98,7 +98,7 @@ impl ChangesPanel {
                         .text_color(T::color(T::muted()))
                         .font_features(T::tabular())
                         .child(if shown == total {
-                            format!("{total} 个")
+                            t!("{total} 个", total)
                         } else {
                             format!("{shown} / {total}")
                         }),
