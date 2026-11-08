@@ -24,6 +24,7 @@ mod terminal_look;
 mod terminal_page;
 mod theme_editor;
 mod theme_material;
+mod updates;
 mod widgets;
 use widgets::{card, heading, keycap, secondary, segment, segments, switch};
 
@@ -122,7 +123,7 @@ impl Page {
     }
 }
 /// Every searchable setting: its page, its title and the words that find it.
-const ENTRIES: [(Page, &str, &str); 37] = [
+const ENTRIES: [(Page, &str, &str); 39] = [
     (
         Page::Phones,
         "其他电脑",
@@ -233,6 +234,16 @@ const ENTRIES: [(Page, &str, &str); 37] = [
         "plugin 扩展 市场 安装 卸载 更新 声明 agent json 动作 验证规则 左栏 sidebar 动画",
     ),
     (Page::About, "版本", "关于 mooring version"),
+    (
+        Page::About,
+        "检查更新",
+        "更新 升级 新版本 update release 发布页",
+    ),
+    (
+        Page::About,
+        "自动检查更新",
+        "更新 联网 网络 隐私 自动 update",
+    ),
     (Page::About, "运行数据", "数据目录 数据库 runtime 后台 访达"),
     (
         Page::About,
@@ -327,6 +338,8 @@ impl SettingsView {
                 .placeholder("搜索设置")
         });
         cx.observe(&query, |_, _, cx| cx.notify()).detach();
+        cx.observe_global::<crate::update::Updates>(|_, cx| cx.notify())
+            .detach();
         // Closing 设置 mid-edit puts the saved theme back.
         cx.on_release(|this, cx| {
             if this.editor.is_some() {

@@ -13,6 +13,7 @@ mod machines;
 mod model;
 mod terminal;
 mod ui;
+mod update;
 mod workbench;
 
 use ui::theme;
@@ -424,6 +425,7 @@ fn run() -> io::Result<()> {
         cx.set_global(ui::running_spin::RunningSpin::load());
         cx.set_global(keymap::Keymap::load());
         ui::appearance::apply(cx);
+        update::start(cx);
         set_menus(cx);
         let wake_root = root.clone();
         cx.spawn(async move |cx| {

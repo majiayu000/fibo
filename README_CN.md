@@ -84,6 +84,11 @@ mooring plugins          # 哪些插件生效了，没生效的为什么
 **数据放在哪，会不会传出去？**
 终端和会话索引在 `~/.local/share/mooring-workbench`，设置和插件在 `~/.config/mooring`。Mooring 只读 Agent 自己的对话记录，不上传。手机中继要你自己开启，内容端到端加密。
 
+检查更新是 App 唯一会自己发出的网络请求：每天最多一次，向 GitHub API 要一次最新发布的信息；在「设置 › 关于 › 自动检查更新」里关掉。手机中继要你开启后才连；其余联网都等你动手：获取远程插件目录、你加的 webhook 和 SSH 电脑、你装的插件。
+
+**怎么更新？**
+发布版每天向 GitHub 查一次，有新版本时状态栏会显示，点它或在「设置 › 关于 › 检查更新」里更新。Mooring 下载发布的 zip，按发布里的 `SHA256SUMS` 校验，确认是 Mooring 的 Developer ID（团队 `C5UWZ934C2`）签名并通过 Gatekeeper，再把它换到正在运行的 App 的位置并重启；终端都继续运行。任何一项校验不通过都不会安装。用 Homebrew 装的请运行 `brew upgrade --cask mooring`；App 所在的文件夹没有写权限（比如 App 属于 root）时请从发布页下载。从源码运行的版本不自动更新，`git pull` 后重新构建。
+
 **Mooring 会改我的 Agent 配置吗？**
 只有安装 hook（`mooring hooks install`）时会在 Agent 的配置文件里加上 Mooring 的条目，`mooring hooks uninstall` 会移除。不装 hook 时，状态从对话记录和画面读。
 

@@ -3,6 +3,7 @@
 //! each with its 5h and week windows and a thin bar (decided 11-03, replacing the single
 //! fixed-width quota button); past `BAR_CELLS` the rest fold into `+N ▴`, and the popover
 //! lists them all.
+use super::statusbar_update::divider;
 use super::*;
 use crate::ui::widgets::gauge;
 use mooring_core::quota::{NEAR, OVER, Quota, Window as QuotaWindow};
@@ -80,6 +81,7 @@ impl Workbench {
             .whitespace_nowrap()
             .child(host)
             .child(div().flex_1())
+            .children(self.update_item(cx))
             .child(self.quota_cells(cx))
             // Only while memory is tight: a click opens 本机诊断, memory row first.
             .when_some(super::pressure::tight(), |d, (pressure, swap)| {
@@ -682,7 +684,7 @@ impl Fit {
     }
 }
 
-fn item(id: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
+pub(super) fn item(id: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .role(gpui::accesskit::Role::Button)
@@ -699,14 +701,6 @@ fn item(id: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
             d.bg(T::color(T::selection()))
                 .text_color(T::color(T::primary()))
         })
-}
-
-fn divider() -> gpui::Div {
-    div()
-        .w(px(T::BORDER_WIDTH))
-        .h(px(T::S14))
-        .mx(px(T::S4))
-        .bg(T::color(T::border()))
 }
 
 fn caret() -> gpui::Div {

@@ -268,6 +268,7 @@ mod sidebar_spaces;
 mod sidebar_subagents;
 mod sidebar_wasm;
 mod statusbar;
+mod statusbar_update;
 mod tabs;
 mod task_detail;
 mod tasks;
@@ -341,6 +342,8 @@ impl Workbench {
         })
         .detach();
         cx.observe_global::<crate::desktop::Status>(|_, cx| cx.notify())
+            .detach();
+        cx.observe_global::<crate::update::Updates>(|_, cx| cx.notify())
             .detach();
         pressure::watch(cx);
         let since = workspace.last_left;
