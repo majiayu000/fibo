@@ -316,7 +316,13 @@ impl Host {
             self.unhint(&terminal);
             self.publish_status()?;
         }
-        if let Some(id) = self.agent_pids.remove(&pid) {
+        // A fork that carries the CLI's command line (a shell's subshell, a node wrapper's
+        // child) can end first: the conversation ends with the last process running it.
+        if let Some(id) = self
+            .agent_pids
+            .remove(&pid)
+            .filter(|id| !self.agent_pids.values().any(|other| other == id))
+        {
             let mut next = self.workspace.clone();
             if let Some(s) = next
                 .agent_sessions
