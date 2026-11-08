@@ -255,7 +255,7 @@ impl Workbench {
     }
     pub(super) fn board_quick_view(&self, cx: &Context<Self>) -> Option<gpui::AnyElement> {
         let q = self.tasks.board_quick.as_ref()?;
-        let small = |id: &'static str, text: &'static str| {
+        let small = |id: &'static str, text: String| {
             button(id, text)
                 .h(px(PILL + 4.))
                 .px(px(T::S8))
@@ -394,16 +394,19 @@ impl Workbench {
                     .items_center()
                     .gap(px(T::S4))
                     .child(div().flex_1())
-                    .child(small("board-quick-save", "记下 ↵").on_click(
+                    .child(small("board-quick-save", "记下 ↵".into()).on_click(
                         cx.listener(|this, _, window, cx| this.save_board_quick(false, window, cx)),
                     ))
                     .child(
-                        small("board-quick-start", "开始 ⌘↵")
-                            .bg(T::color(T::accent()))
-                            .text_color(T::color(T::on_accent()))
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.save_board_quick(true, window, cx)
-                            })),
+                        small(
+                            "board-quick-start",
+                            crate::ui::words::local_field("开始 ⌘↵"),
+                        )
+                        .bg(T::color(T::accent()))
+                        .text_color(T::color(T::on_accent()))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.save_board_quick(true, window, cx)
+                        })),
                     ),
             )
             .into_any_element(),

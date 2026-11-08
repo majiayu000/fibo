@@ -713,7 +713,7 @@ impl SettingsView {
             };
             let mut detail = Vec::new();
             detail.extend(report(mooring_core::action::report(), |t| {
-                format!("加进右键菜单和 ⌘P：{t}")
+                crate::ui::words::local(&format!("加进右键菜单和 ⌘P：{t}"))
             }));
             detail.extend(report(mooring_core::rule::report(), |t| {
                 format!("这些命令算跑过验证：{t}")
