@@ -25,6 +25,9 @@ def run(scene):
             (root / name).mkdir(parents=True)
         runtime = root / 'rt'
         runtime.mkdir(mode=0o700)
+        # The scenes look at themes in a workbench already in use: a fresh config would be
+        # greeted with the first-run page instead of the shell tab they type into.
+        (root / 'cfg/mooring/first-run-done').write_text('')
         if scene == 'migrate':
             (root / 'cfg/mooring/colors.json').write_text(json.dumps(COLORS))
         out = OUT / scene
