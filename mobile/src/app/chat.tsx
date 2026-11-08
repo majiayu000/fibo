@@ -28,7 +28,8 @@ import { TrustAsk } from '@/ui/trust';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 
-type Pending = { text: string; at: number };
+/** `queued`: sent while the Agent worked, so it waits for the step at hand. */
+type Pending = { text: string; at: number; queued?: boolean };
 
 /** A reindexed log gives its messages new seqs; the same words at the same time are one. */
 const key = (m: Message) => `${m.at}|${m.role}|${m.text}`;
@@ -134,16 +135,21 @@ export default function Chat() {
     return () => clearInterval(timer);
   }, [session, online, machine, tools, focused]);
 
-  // A sent message shows until the log has it, or for half a minute.
+  // A sent message shows until the log has it. Sent while the Agent works, it waits in the
+  // Agent's own queue until the step at hand is done, which can take minutes: it stays as long
+  // as the turn runs, and half a minute after.
+  const working = online && card?.phase === 'working';
+  const ranAt = useRef(0);
+  if (working) ranAt.current = Date.now() / 1000;
   useEffect(() => {
     setPending((p) =>
       p.filter(
         (x) =>
-          Date.now() / 1000 - x.at < 30 &&
+          Date.now() / 1000 - Math.max(x.at, ranAt.current) < 30 &&
           !messages.some((m) => m.role === 'user' && m.at >= x.at - 5 && m.text.trim() === x.text.trim()),
       ),
     );
-  }, [messages]);
+  }, [messages, working]);
 
   const canReadBack = partial && !more && !readAll && supports(m, 'backfill');
   // Scrolled to the top: the next page, or when the index ends, the next stretch of the log.
@@ -188,7 +194,7 @@ export default function Chat() {
       enqueue({ machine, terminal, session, text });
       return true;
     }
-    setPending((p) => [...p, { text, at: Date.now() / 1000 }]);
+    setPending((p) => [...p, { text, at: Date.now() / 1000, queued: working }]);
     try {
       await write(machine, 'send', { terminal, session, text, enter: true });
       setError('');
@@ -256,7 +262,7 @@ export default function Chat() {
           <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
       ) : l.kind === 'pending' ? (
-        <Mine text={l.p.text} note="发送中…" tone="pending" />
+        <Mine text={l.p.text} note={l.p.queued ? '已排队 · 它做完手头这一步就会看到' : '发送中…'} tone="pending" />
       ) : (
         <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
           <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
@@ -308,10 +314,20 @@ export default function Chat() {
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
           ListHeaderComponent={
-            running && session && supports(m, 'toolcalls') ? (
-              <Pressable accessibilityRole="button" onPress={() => toTools()} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 6 }}>
-                <Text style={{ flex: 1, fontSize: 13, color: t.dim }}>看它到现在做了什么</Text>
-                <Icon name="right" size={14} width={2} color={t.dim} />
+            running && session && (card?.doing || supports(m, 'toolcalls')) ? (
+              // What it is doing now, as the desktop's card says it: between its messages a turn
+              // can work for minutes, and a bare link read as nothing happening.
+              <Pressable
+                accessibilityRole="button"
+                disabled={!supports(m, 'toolcalls')}
+                onPress={() => toTools()}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 6 }}
+              >
+                <ActivityIndicator size="small" color={t.dim} />
+                <Text numberOfLines={2} style={{ flex: 1, fontSize: 13, lineHeight: 18, color: t.dim }}>
+                  {card?.doing ? `正在${card.doing}` : '看它到现在做了什么'}
+                </Text>
+                {supports(m, 'toolcalls') && <Icon name="right" size={14} width={2} color={t.dim} />}
               </Pressable>
             ) : undefined
           }
