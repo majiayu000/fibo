@@ -296,14 +296,7 @@ impl Host {
             serde_json::to_vec(&Reply::Recognition(recognition_status(self)))
                 .map_err(io::Error::other)?,
         );
-        self.recognition_subscribers.retain(|_, s| {
-            if s.tx.try_send((CONTROL, payload.clone())).is_err() {
-                let _ = s.socket.shutdown(std::net::Shutdown::Both);
-                false
-            } else {
-                true
-            }
-        });
+        status::offer_recognition(self, payload);
         Ok(())
     }
     fn agent_exited(&mut self, pid: u32) -> io::Result<()> {

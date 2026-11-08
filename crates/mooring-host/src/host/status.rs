@@ -38,23 +38,45 @@ pub(super) fn publish_recognition(
             serde_json::to_vec(&Reply::Recognition(recognition_status(&host)))
                 .map_err(io::Error::other)?,
         );
-        host.recognition_subscribers.retain(|_, subscriber| {
-            if subscriber.tx.try_send((CONTROL, payload.clone())).is_err() {
-                let _ = subscriber.socket.shutdown(std::net::Shutdown::Both);
-                false
-            } else {
-                true
-            }
-        });
+        offer_recognition(&mut host, payload);
     }
     Ok(())
+}
+/// Queues a status for every window. Each status is a whole snapshot, so a window that
+/// falls behind is marked lagged and later sent the current one; cutting it would show
+/// 「后台连接断开」 for a window that is only busy. Only a window that left is dropped.
+pub(super) fn offer_recognition(host: &mut Host, payload: Arc<Vec<u8>>) {
+    host.recognition_subscribers
+        .retain(|_, subscriber| subscriber.offer((CONTROL, payload.clone())));
+}
+/// The status a lagged window needs, taken under the host lock with its stale queue
+/// emptied: those statuses are older than this one.
+fn resync_recognition(
+    shared: &Shared,
+    connection: u64,
+    rx: &std::sync::mpsc::Receiver<Frame>,
+) -> io::Result<Arc<Vec<u8>>> {
+    let host = lock(shared)?;
+    while rx.try_recv().is_ok() {}
+    if let Some(s) = host.recognition_subscribers.get(&connection) {
+        s.lagged.store(false, Ordering::Release);
+    }
+    let mut status = recognition_status(&host);
+    status.workspace_revision = host.workspace.revision;
+    Ok(Arc::new(
+        serde_json::to_vec(&Reply::Recognition(status)).map_err(io::Error::other)?,
+    ))
 }
 pub(super) fn watch_recognition(
     mut stream: local::Stream,
     shared: Shared,
     connection: u64,
 ) -> io::Result<()> {
+    // A window that stops reading for a while is marked lagged, not cut by the
+    // connection's write timeout; one that goes away fails the write at once.
+    stream.set_write_timeout(None)?;
     let (tx, rx) = sync_channel::<Frame>(16);
+    let lagged = Arc::<AtomicBool>::default();
     {
         let mut host = lock(&shared)?;
         let payload = Arc::new(
@@ -67,15 +89,25 @@ pub(super) fn watch_recognition(
             Subscriber {
                 tx,
                 socket: stream.try_clone()?,
-                lagged: Default::default(),
+                lagged: Arc::clone(&lagged),
             },
         );
     }
     let mut writer = stream.try_clone()?;
+    let weak = Arc::downgrade(&shared);
     thread::spawn(move || {
-        for (kind, bytes) in rx {
+        while let Ok((kind, bytes)) = rx.recv() {
             if write_frame(&mut writer, kind, &bytes).is_err() {
                 break;
+            }
+            if lagged.load(Ordering::Acquire) {
+                let Some(shared) = weak.upgrade() else { break };
+                let Ok(current) = resync_recognition(&shared, connection, &rx) else {
+                    break;
+                };
+                if write_frame(&mut writer, CONTROL, &current).is_err() {
+                    break;
+                }
             }
         }
         let _ = writer.shutdown(std::net::Shutdown::Both);

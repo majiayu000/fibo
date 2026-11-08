@@ -243,3 +243,60 @@ fn a_new_host_takes_the_one_cli_in_a_pane_for_its_screen_bound_conversation() {
     let named = process(104, 100, Some(Agent::Codex), Some("other"));
     assert!(!only(&screen, &named, &[shell, named.clone()], &w));
 }
+
+#[test]
+fn a_window_that_stops_reading_is_caught_up_not_cut_off() {
+    let (host, _root) = super::tests::fixture();
+    let shared = Arc::new(Mutex::new(host));
+    let (server, mut window) = local::Stream::pair().unwrap();
+    {
+        let shared = Arc::clone(&shared);
+        thread::spawn(move || status::watch_recognition(server, shared, 7));
+    }
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !lock(&shared)
+        .unwrap()
+        .recognition_subscribers
+        .contains_key(&7)
+    {
+        assert!(Instant::now() < deadline, "window never subscribed");
+        thread::sleep(Duration::from_millis(5));
+    }
+    // Far more than the queue and the socket buffer hold while the window reads nothing.
+    let stale = |n: usize| {
+        let status = RecognitionStatus {
+            detail: format!("{n}:{}", "x".repeat(64 * 1024)),
+            ..RecognitionStatus::default()
+        };
+        Arc::new(serde_json::to_vec(&Reply::Recognition(status)).unwrap())
+    };
+    for n in 0..64 {
+        status::offer_recognition(&mut lock(&shared).unwrap(), stale(n));
+    }
+    {
+        let mut host = lock(&shared).unwrap();
+        assert!(
+            host.recognition_subscribers.contains_key(&7),
+            "a full queue must not cut the window"
+        );
+        host.recognition.detail = "current".into();
+    }
+    window
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut seen = 0;
+    loop {
+        let (_, bytes) = read_frame(&mut window).expect("window was cut off");
+        seen += 1;
+        let Reply::Recognition(status) = serde_json::from_slice(&bytes).unwrap() else {
+            panic!()
+        };
+        if status.detail == "current" {
+            break;
+        }
+    }
+    assert!(
+        seen < 65,
+        "stale statuses are skipped once the window catches up"
+    );
+}
