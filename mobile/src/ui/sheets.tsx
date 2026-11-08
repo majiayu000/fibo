@@ -1,23 +1,24 @@
 // Two bottom sheets: one asks for a sentence (要求修改, 拒绝并告诉它), one shows a
 // terminal's last lines.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, TextInput, View } from 'react-native';
 import { remote } from '../remote/hub';
 import { CodeView, LINE } from './codeview';
 import { copyWithNote } from './copy';
+import { KeyboardSafe, useBottomOverKeyboard } from './keyboard';
 import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
 import { opensAtEnd, textRows } from './toolview';
 import { useTheme } from './theme';
 
 export function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
   const t = useTheme();
-  const bottom = useBottom();
+  const bottom = useBottomOverKeyboard();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardSafe>
         <Pressable style={s.scrim} onPress={onClose} />
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line, paddingBottom: bottom + 12 }]}>{children}</View>
-      </KeyboardAvoidingView>
+      </KeyboardSafe>
     </Modal>
   );
 }

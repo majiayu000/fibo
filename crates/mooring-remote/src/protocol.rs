@@ -57,6 +57,9 @@ pub enum Op {
         /// See [`Hello::requests`]; on `keys` and `answer` too.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
+        /// Paths `image` answered, each pasted on its own before `text`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
     },
     /// Presses named keys, all or none: `enter` `esc` `tab` `shift-tab` `backspace`
     /// `space` `up` `down` `left` `right` `home` `end` `page-up` `page-down` `delete`,
@@ -364,6 +367,7 @@ pub const OPS: &[&str] = &[
     "suggestion",
     "modes",
     "setmode",
+    "image",
 ];
 
 /// A line from the machine.

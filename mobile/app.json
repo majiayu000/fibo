@@ -38,6 +38,14 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "选图片发给电脑上的 Agent",
+          "cameraPermission": "拍照发给电脑上的 Agent",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "允许审批和打开 Mooring 前用 Face ID 确认是你"

@@ -9,13 +9,14 @@ import { oops } from '@/actions';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { resetDraft, setDraft, useDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
-import { Btn, Label, Nav, Notice, Wide, mono, noOutline, useBottom } from '@/ui/kit';
+import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
+import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
 import { agentName, tilde } from '@/ui/status';
 import { ago, useTheme } from '@/ui/theme';
 
 export default function NewTask() {
   const t = useTheme();
-  const bottom = useBottom();
+  const bottom = useBottomOverKeyboard();
   const { machines } = useHub();
   const draft = useDraft();
   const [picking, setPicking] = useState(false);
@@ -71,7 +72,7 @@ export default function NewTask() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <KeyboardSafe style={{ backgroundColor: t.bg }}>
       <Nav close big title="新任务" sub="在电脑上开一个新终端，运行 Agent" />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
         <View style={s.field}>
@@ -177,7 +178,7 @@ export default function NewTask() {
         <Wide label={busy ? '正在打开…' : draft.resume ? '接着做' : '开始'} disabled={!ready} onPress={start} />
         <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>电脑上会出现一个新标签页，你回到电脑前可以直接接着用</Text>
       </View>
-    </View>
+    </KeyboardSafe>
   );
 }
 

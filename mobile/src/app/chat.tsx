@@ -3,7 +3,7 @@
 // send key turns into stop while the Agent runs.
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { approve, deny, oops } from '@/actions';
 import { catchUp } from '@/remote/gap';
 import { refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
@@ -14,6 +14,8 @@ import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { countUse } from '@/store/suggestionCounts';
 import { suggestionStats } from '@/store/suggestions';
 import { Composer } from '@/ui/composer';
+import { KeyboardSafe } from '@/ui/keyboard';
+import type { Picture } from '@/ui/pictures';
 import { cardTitle } from '@/ui/format';
 import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
@@ -29,7 +31,7 @@ import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 
 /** `queued`: sent while the Agent worked, so it waits for the step at hand. */
-type Pending = { text: string; at: number; queued?: boolean };
+type Pending = { text: string; at: number; queued?: boolean; pictures?: number };
 
 /** A reindexed log gives its messages new seqs; the same words at the same time are one. */
 const key = (m: Message) => `${m.at}|${m.role}|${m.text}`;
@@ -38,6 +40,12 @@ function merge(have: Message[], got: Message[]): Message[] {
   const seen = new Set(have.map(key));
   const fresh = got.filter((m) => !seen.has(key(m)));
   return fresh.length ? [...have, ...fresh].sort((a, b) => a.seq - b.seq) : have;
+}
+
+/** A sent message is in the log: the same words, after the pictures' `[Image #1]` when it had some. */
+function sameWords(logged: string, sent: Pending) {
+  const said = logged.trim();
+  return sent.pictures ? !!sent.text.trim() && said.endsWith(sent.text.trim()) : said === sent.text.trim();
 }
 
 const POLL_MS = 2000;
@@ -146,7 +154,7 @@ export default function Chat() {
       p.filter(
         (x) =>
           Date.now() / 1000 - Math.max(x.at, ranAt.current) < 30 &&
-          !messages.some((m) => m.role === 'user' && m.at >= x.at - 5 && m.text.trim() === x.text.trim()),
+          !messages.some((m) => m.role === 'user' && m.at >= x.at - 5 && sameWords(m.text, x)),
       ),
     );
   }, [messages, working]);
@@ -184,19 +192,30 @@ export default function Chat() {
     }
   }, [machine, session, more, messages, tools, canReadBack]);
 
-  /** Sends `text`; while the computer is away it waits in the outbox instead. */
-  async function send(text: string): Promise<boolean> {
+  /**
+   * Sends `text`; while the computer is away it waits in the outbox instead. Pictures go to the
+   * computer first, which then pastes each before the words; they need it online.
+   */
+  async function send(text: string, pictures: Picture[] = []): Promise<boolean> {
     if (!session) {
       setError('尚未识别对话，暂时不能发送');
+      return false;
+    }
+    if (!online && pictures.length) {
+      setError('电脑没连上，图片要连上后才能发');
       return false;
     }
     if (!online) {
       enqueue({ machine, terminal, session, text });
       return true;
     }
-    setPending((p) => [...p, { text, at: Date.now() / 1000, queued: working }]);
+    setPending((p) => [...p, { text, at: Date.now() / 1000, queued: working, pictures: pictures.length }]);
     try {
-      await write(machine, 'send', { terminal, session, text, enter: true });
+      const images: string[] = [];
+      for (const p of pictures) images.push((await write(machine, 'image', { terminal, data: p.base64 })).path);
+      // A line separate from the pictures: each CLI shows them as [Image #1] right before it.
+      const words = images.length && text ? ` ${text}` : text;
+      await write(machine, 'send', { terminal, session, text: words, enter: true, ...(images.length ? { images } : {}) });
       setError('');
       return true;
     } catch (e) {
@@ -262,7 +281,7 @@ export default function Chat() {
           <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
       ) : l.kind === 'pending' ? (
-        <Mine text={l.p.text} note={l.p.queued ? '已排队 · 它做完手头这一步就会看到' : '发送中…'} tone="pending" />
+        <Mine text={l.p.pictures ? `[${l.p.pictures} 张图片] ${l.p.text}`.trim() : l.p.text} note={l.p.queued ? '已排队 · 它做完手头这一步就会看到' : '发送中…'} tone="pending" />
       ) : (
         <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
           <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
@@ -272,7 +291,7 @@ export default function Chat() {
   );
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.bg }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+    <KeyboardSafe style={{ backgroundColor: t.bg }}>
       <Nav
         rule
         title={card ? cardTitle(card) : '对话'}
@@ -405,6 +424,8 @@ export default function Chat() {
           offline={!online}
           suggestion={suggestion}
           onSend={send}
+          canAttach={supports(m, 'image')}
+          onError={setError}
           onStop={() => stop()}
           onUseSuggestion={() => suggestionStats.set(countUse)}
           onModel={supports(m, 'setmode') ? () => setPicking('model') : undefined}
@@ -413,7 +434,7 @@ export default function Chat() {
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />
       {!!picking && <ModeSheet machine={machine} terminal={terminal} kind={picking} onClose={() => setPicking(null)} />}
-    </KeyboardAvoidingView>
+    </KeyboardSafe>
   );
 }
 
