@@ -10,6 +10,7 @@
 //!   [`mooring_remote::secure::WINDOW`] per phone in flight, so only a phone that stops
 //!   acknowledging gets there.
 use crate::limit::{Limits, Rules, Slot};
+use crate::usage::Usage;
 use axum::{
     extract::{
         ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
@@ -59,6 +60,9 @@ pub struct Config {
     pub ping: Duration,
     /// Sockets per address, open at once and opened per minute.
     pub limits: Rules,
+    /// Bytes per machine, printed as `usage` lines every `usage_every`.
+    pub usage: Arc<Usage>,
+    pub usage_every: Duration,
 }
 
 impl Default for Config {
@@ -73,6 +77,8 @@ impl Default for Config {
             register_timeout: Duration::from_secs(10),
             ping: Duration::from_secs(25),
             limits: Rules::default(),
+            usage: Arc::default(),
+            usage_every: Duration::from_secs(3600),
         }
     }
 }
@@ -81,6 +87,17 @@ const AGENT_MAX_FRAME: usize = 32 << 20;
 const PHONE_MAX_MESSAGE: usize = 24 << 20;
 
 pub async fn serve(listener: TcpListener, config: Config) -> io::Result<()> {
+    let (usage, every) = (config.usage.clone(), config.usage_every);
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(every);
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            for line in usage.report() {
+                println!("{line}");
+            }
+        }
+    });
     let relay = Arc::new(Relay {
         limits: Limits::new(config.limits.clone()),
         config,
@@ -205,14 +222,13 @@ impl Agent {
     }
 }
 
-async fn health(State(relay): State<Arc<Relay>>) -> Json<serde_json::Value> {
-    let agents = relay.agents.lock().map(|a| a.len()).unwrap_or(0);
+/// Says it is up and what it speaks; how many machines are on is for whoever runs it.
+async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "ok": true,
         "edition": "keepline",
         "version": VERSION,
         "protocol": wire::PROTOCOL,
-        "agents": agents,
     }))
 }
 
@@ -374,10 +390,11 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
     }
     agent.send(&Frame::Registered { proto: Some(proto) });
 
+    let meter = config.usage.meter(&token_hash);
     let seen = Arc::new(Mutex::new(Instant::now()));
     let ping = config.ping;
     let writer = {
-        let seen = seen.clone();
+        let (seen, meter) = (seen.clone(), meter.clone());
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(ping);
             tick.tick().await;
@@ -385,6 +402,7 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
                 tokio::select! {
                     next = outbox.recv() => match next {
                         Some(Out::Msg(m, _permit)) => {
+                            meter.to_machine(size(&m));
                             if sink.send(m).await.is_err() { break }
                         }
                         Some(Out::Close(code, reason)) => {
@@ -413,6 +431,7 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
         if let Ok(mut s) = seen.lock() {
             *s = Instant::now();
         }
+        meter.from_machine(size(&m));
         match m {
             Message::Binary(b) if proto >= 2 => {
                 if let Some((kind @ (bin::WBIN | bin::WTEXT), id, payload)) = wire::decode(&b) {
