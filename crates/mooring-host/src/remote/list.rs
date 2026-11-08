@@ -143,22 +143,21 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
             }
         })
         .collect();
-    let spaces = w
-        .spaces
-        .iter()
-        .filter(|s| !w.space_quiet(&s.id))
-        .map(|s| rp::Space {
-            id: s.id.clone(),
-            name: s.name.clone(),
-            cwd: s.cwd.clone(),
-        })
-        .collect();
+    let space = |s: &mooring_core::model::Space| rp::Space {
+        id: s.id.clone(),
+        name: s.name.clone(),
+        cwd: s.cwd.clone(),
+    };
+    let (quiet, spaces): (Vec<_>, Vec<_>) = w.spaces.iter().partition(|s| w.space_quiet(&s.id));
+    let spaces = spaces.into_iter().map(space).collect();
+    let quiet = quiet.into_iter().map(space).collect();
     let todos = (status::unfinished_todos(w, now).into_iter())
         .map(|t| todo(w, t, now))
         .collect();
     Ok(json!(rp::List {
         machine: super::machine(socket)?,
         spaces,
+        quiet,
         terminals,
         todos,
     }))
@@ -253,6 +252,9 @@ mod tests {
         assert!(quiet.todos.is_empty());
         assert_eq!(quiet.spaces.len(), 1);
         assert_eq!(quiet.spaces[0].id, "other");
+        // Named, so a phone can take it back; nothing of what runs in it.
+        let aside: Vec<&str> = quiet.quiet.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(aside, ["space"]);
         w.edit(Edit::SetSpaceQuiet {
             id: "space".into(),
             quiet: false,

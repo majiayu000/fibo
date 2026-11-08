@@ -94,6 +94,8 @@ export type Machine = {
   spaceDirs?: Record<string, string>;
   /** The spaces in the computer's order, the ones put aside left out: where a new task can go. */
   spaceList?: Space[];
+  /** Spaces put aside on the computer (先不管): their conversations do not come here. */
+  quietSpaces?: Space[];
   todos?: Todo[];
   /** Seconds since the epoch of the last list. */
   updated?: number;
@@ -153,13 +155,14 @@ function set(id: string, patch: Partial<Machine>) {
 const get = (id: string) => state.machines.find((m) => m.id === id);
 
 /** What `spaces` says, as a machine keeps it; only when the reply says it. */
-function listed(list: { spaces?: any[]; todos?: Todo[]; machine?: { name?: string } }, id: string): Partial<Machine> {
+function listed(list: { spaces?: any[]; quiet?: any[] | null; todos?: Todo[]; machine?: { name?: string } }, id: string): Partial<Machine> {
   return {
     ...(list.spaces && {
       spaces: Object.fromEntries(list.spaces.map((s: any) => [s.id, s.name])),
       spaceDirs: Object.fromEntries(list.spaces.filter((s: any) => s.cwd).map((s: any) => [s.cwd, s.name])),
       spaceList: list.spaces.map((s: any) => ({ id: String(s.id), name: String(s.name ?? ''), cwd: String(s.cwd ?? '') })),
     }),
+    ...(Array.isArray(list.quiet) && { quietSpaces: list.quiet.map((s: any) => ({ id: String(s.id), name: String(s.name ?? ''), cwd: String(s.cwd ?? '') })) }),
     ...(list.todos && { todos: list.todos }),
     name: list.machine?.name || get(id)?.name || '',
     updated: Date.now() / 1000,

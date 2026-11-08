@@ -503,6 +503,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         "quota" => quota::quota(socket),
         "lastsession" => resume::last_session(socket, request),
         "addspace" => writes::add_space(socket, request, client),
+        "spacequiet" => writes::space_quiet(socket, request, client),
         "mkdir" => writes::mkdir(request),
         "stop" => writes::stop(socket, request, client),
         "open" => writes::open(socket, request, client),
