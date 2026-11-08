@@ -199,3 +199,29 @@ fn an_unknown_codex_row_counts_as_full_until_read() {
     assert!(!codex_is_full("Approve for me"));
     assert!(!codex_is_full("Read Only"));
 }
+
+#[test]
+fn a_detail_wrapped_by_a_narrow_terminal_reads_whole() {
+    let narrow = include_str!("../../tests/fixtures/mode-screens/claude-model-narrow.txt");
+    let m = menu(narrow, "Select model").unwrap();
+    assert_eq!(
+        labels(&m),
+        ["Default (recommended)", "Opus", "Fable", "Sonnet", "Haiku"]
+    );
+    assert_eq!(
+        m.rows[1].detail,
+        "Opus 5.5 · Best for everyday, complex tasks · $4/$20 per Mtok"
+    );
+    assert!(m.rows[1].current);
+    assert_eq!(
+        m.rows[2].detail,
+        "Fable 5.1 · Most capable for your hardest and longest-running tasks"
+    );
+    // The effort line under the rows is not a row's detail.
+    assert!(
+        m.rows[4].detail.ends_with("for prompts over 100k)"),
+        "{}",
+        m.rows[4].detail
+    );
+    assert!(offers_session(&m.keys), "{}", m.keys);
+}

@@ -1,15 +1,30 @@
 // What a composer's tag opens: what the computer read off the CLI, one row each. It says when it
-// cannot: the Agent is busy, asking something, or a CLI it does not know.
+// cannot: the Agent is busy, asking something, or a CLI it does not know. The model sheet also
+// holds its effort, as the CLI's own /model does.
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { oops, switchMode } from '../actions';
 import { remote } from '../remote/hub';
+import { EffortRow } from './effortrow';
 import { Frame } from './sheets';
 import { kindName, type ModeKind, type ModeOption, type ModeOptions } from './modes';
 import { Icon } from './icons';
 import { useTheme } from './theme';
 
-export function ModeSheet({ machine, terminal, kind, onClose }: { machine: string; terminal: string; kind: ModeKind; onClose: () => void }) {
+export function ModeSheet({
+  machine,
+  terminal,
+  kind,
+  effort,
+  onClose,
+}: {
+  machine: string;
+  terminal: string;
+  kind: ModeKind;
+  /** Show its effort under the models: the computer and the CLI can change it. */
+  effort?: boolean;
+  onClose: () => void;
+}) {
   const t = useTheme();
   const [got, setGot] = useState<ModeOptions | null>(null);
   const [error, setError] = useState('');
@@ -74,6 +89,7 @@ export function ModeSheet({ machine, terminal, kind, onClose }: { machine: strin
           </Pressable>
         ))}
       </ScrollView>
+      {effort && <EffortRow machine={machine} terminal={terminal} start={!!got || !!error} />}
       {!!got?.note && <Text style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>{got.note}</Text>}
     </Frame>
   );

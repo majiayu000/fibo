@@ -1,7 +1,7 @@
 // The composer: a big rounded card with the text on top and a row of small controls
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
 // The + opens a sheet: take a photo or pick pictures (they wait as thumbnails above the text),
-// and this conversation's permission and effort. The row under the text keeps only +, the model and send.
+// and this conversation's permission. The row under the text keeps only +, the model and send.
 import { type ComponentRef, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AttachSheet } from './attachsheet';
@@ -27,7 +27,6 @@ export function Composer({
   onUseSuggestion,
   onModel,
   onPermission,
-  onEffort,
   canAttach,
   canSteer,
   onError,
@@ -39,7 +38,6 @@ export function Composer({
   /** Each tag opens what can be picked; a computer that cannot change them leaves it a fact. */
   onModel?: () => void;
   onPermission?: () => void;
-  onEffort?: () => void;
   running: boolean;
   /** What a message sent while it works becomes, for this Agent (ui/busy.ts). */
   busyPlaceholder: string;
@@ -90,7 +88,7 @@ export function Composer({
     }
   }
   // The + opens pictures and this conversation's settings: shown when either is there.
-  const sheetable = !!canAttach || pictures.length > 0 || !!permission || !!onPermission || !!onEffort;
+  const sheetable = !!canAttach || pictures.length > 0 || !!permission || !!onPermission;
   return (
     <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }]}>
       {!!suggestion && !draft && (
@@ -211,13 +209,6 @@ export function Composer({
             (() => {
               setChoosing(false);
               onPermission();
-            })
-          }
-          onEffort={
-            onEffort &&
-            (() => {
-              setChoosing(false);
-              onEffort();
             })
           }
         />
