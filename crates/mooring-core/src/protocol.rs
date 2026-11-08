@@ -550,7 +550,8 @@ impl Build {
             digest: Self::digest(&binary).unwrap_or_default(),
             binary: binary.to_string_lossy().into_owned(),
             pid: std::process::id(),
-            handoff: true,
+            // Windows cannot pass a running console over: a newer host there waits for a restart.
+            handoff: mooring_platform::terminal::CAN_HAND_OVER,
         }
     }
     /// Identifies a file by its bytes (FNV-1a and length), so a re-signed or copied
