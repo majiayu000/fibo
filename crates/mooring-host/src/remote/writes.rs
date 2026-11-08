@@ -73,8 +73,8 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
             (w.spaces.iter().find(|s| s.id == space)).map(|s| s.cwd.as_str())
         })
         .filter(|c| !c.is_empty());
-    // Picked on the phone: that space and no other. Without one (an older phone), the
-    // space whose folder holds the directory, else the first not put aside.
+    // Picked on the phone: that space and no other. Without one, a todo's own space; else
+    // (an older phone) the space whose folder holds the directory, else the first not put aside.
     let picked = request["space"].as_str().filter(|s| !s.is_empty());
     let picked = picked
         .map(|id| {
@@ -83,6 +83,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         })
         .transpose()?;
     let space = picked
+        .or_else(|| task.and_then(|t| w.spaces.iter().find(|s| s.id == t.space)))
         .or_else(|| {
             asked.and_then(|cwd| {
                 (w.spaces.iter())

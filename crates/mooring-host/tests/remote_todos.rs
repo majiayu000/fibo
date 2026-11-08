@@ -161,4 +161,12 @@ fn open_with_a_todo_starts_it_in_its_space_for_that_todo() {
             .and_then(|t| t.default_task.as_deref()),
         Some("t1")
     );
+    // A folder from elsewhere does not move it out of its space; a space picked by hand does.
+    let elsewhere = r
+        .ok(json!({ "op": "open", "task": "t1", "cwd": first.to_string_lossy(), "request": "o2" }));
+    let elsewhere = elsewhere["terminal"].as_str().unwrap();
+    assert_eq!(h.workspace().terminal_home(elsewhere), Some("p"));
+    let picked = r.ok(json!({ "op": "open", "task": "t1", "space": "a-first", "request": "o3" }));
+    let picked = picked["terminal"].as_str().unwrap();
+    assert_eq!(h.workspace().terminal_home(picked), Some("a-first"));
 }
