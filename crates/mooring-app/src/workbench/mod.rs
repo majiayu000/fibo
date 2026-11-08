@@ -60,6 +60,8 @@ pub struct Workbench {
     /// seen to have done something; the number tells a newer copy from an older timer.
     copied: Option<(&'static str, u64)>,
     copied_seq: u64,
+    /// A fresh install's welcome where an empty tab would be.
+    first_run: first_run::FirstRun,
 }
 #[derive(Clone)]
 struct PaneMenu {
@@ -229,6 +231,7 @@ mod decorations;
 mod diagnostics;
 mod divergence;
 mod filters;
+mod first_run;
 mod forms;
 mod frame_facts;
 mod layout;
@@ -388,6 +391,7 @@ impl Workbench {
             quota_pin: statusbar::load_quota_pin(),
             copied: None,
             copied_seq: 0,
+            first_run: first_run::FirstRun::load(&workspace),
             search,
             store,
             workspace,
@@ -506,7 +510,10 @@ impl Workbench {
             },
         };
         this.sync_panes(cx);
-        if this.workspace.terminals.is_empty() && !this.nav.overview {
+        // A fresh install is greeted where the empty tab is, instead of with a bare shell.
+        if this.first_run.on {
+            this.start_first_run(cx);
+        } else if this.workspace.terminals.is_empty() && !this.nav.overview {
             this.launch(false, None, cx);
         }
         this
@@ -535,6 +542,7 @@ impl Workbench {
         self.workspace = w;
         self.facts.forget();
         self.close_reviewed(cx);
+        self.first_run_follow(cx);
         if let Some(view) = &self.settings {
             view.update(cx, |v, cx| {
                 v.values = self.workspace.settings.clone();

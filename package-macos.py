@@ -78,6 +78,11 @@ shutil.copy2(catalog / 'index.json', resources / 'plugins/index.json')
     'CFBundleIdentifier': 'local.mooring.workbench', 'CFBundleExecutable': 'mooring-app',
     'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'Mooring', **icon_name, 'CFBundleVersion': '1', 'CFBundleShortVersionString': '0.1.0',
     'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '14.0',
+    # macOS names the app, not the Agent in its terminal, when a program there first opens
+    # 桌面, 文稿 or 下载; without these it asks with no reason given.
+    'NSDesktopFolderUsageDescription': 'Mooring 终端里运行的程序（例如 Claude Code、Codex）要读写桌面上的项目。',
+    'NSDocumentsFolderUsageDescription': 'Mooring 终端里运行的程序（例如 Claude Code、Codex）要读写文稿里的项目。',
+    'NSDownloadsFolderUsageDescription': 'Mooring 终端里运行的程序（例如 Claude Code、Codex）要读写下载里的文件。',
 }))
 subprocess.run([*sign, str(stage)], check=True)
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(stage)], check=True)
