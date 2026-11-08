@@ -26,6 +26,10 @@ pub struct HookFacts {
     /// descriptions alone, since a command line may hold a secret.
     #[serde(default)]
     pub shells: Vec<HookShell>,
+    /// A question tool's question and option labels, from a PermissionRequest's
+    /// `tool_input`: Claude Code writes the call to its log only once it is answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question: Option<(String, Vec<String>)>,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HookShell {

@@ -12,6 +12,22 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+/// A question tool's question with its options as numbered lines (`1. 新对话继续`), the
+/// way a phone offers a screen's options as buttons and answers one with its number key.
+/// The card keeps them apart; as one text, a phone from before this reads them too.
+fn asked(c: &mooring_core::content::Content) -> Option<String> {
+    if c.choices.is_empty() || c.waiting.is_empty() {
+        return None;
+    }
+    let first = c.waiting.lines().next().unwrap_or_default();
+    let listed = format!("（{}）", c.choices.join(" / "));
+    let question = first.strip_suffix(listed.as_str()).unwrap_or(first);
+    let options = (c.choices.iter().take(9).enumerate())
+        .map(|(i, o)| format!("{}. {}", i + 1, o.replace('\n', " ")))
+        .collect::<Vec<_>>();
+    Some(format!("{question}\n{}", options.join("\n")))
+}
+
 /// How long a directory's branch is believed: a checkout shows within this.
 const BRANCH_FOR: Duration = Duration::from_secs(3);
 /// Directories kept; past this the cache starts over.
@@ -90,7 +106,7 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                 session: session.map(|s| s.id.clone()),
                 title: session.map(|s| w.session_title(s)),
                 approval: content.and_then(|c| said(&c.approval)),
-                waiting: content.and_then(|c| said(&c.waiting)),
+                waiting: content.and_then(|c| asked(c).or_else(|| said(&c.waiting))),
                 status: status.map(|s| s.key().to_owned()),
                 status_label: status.map(|s| s.label().to_owned()),
                 needs_you: trust.is_some() || session.is_some_and(|s| w.needs_you(s, now)),
@@ -190,6 +206,25 @@ fn outcome_key(o: &Outcome) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The phone turns numbered lines into buttons (`choices` in mobile/src/ui/parse.ts).
+    #[test]
+    fn a_question_reaches_the_phone_with_numbered_options() {
+        let c = mooring_core::content::Content {
+            waiting: "【下一步】接下来怎么继续？（新对话继续 / 就在这里继续）".into(),
+            choices: vec!["新对话继续".into(), "就在这里继续".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            asked(&c).as_deref(),
+            Some("【下一步】接下来怎么继续？\n1. 新对话继续\n2. 就在这里继续")
+        );
+        let approval = mooring_core::content::Content {
+            waiting: "CLI 请求工具审批（Hook）".into(),
+            ..Default::default()
+        };
+        assert_eq!(asked(&approval), None, "no options: the text as it is");
+    }
 
     /// A space put aside stays off phones and other machines, its todos too.
     #[test]

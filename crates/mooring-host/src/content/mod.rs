@@ -153,6 +153,12 @@ pub(crate) fn question_choices(v: &Value) -> Vec<String> {
         })
         .unwrap_or_default()
 }
+/// A tool that asks the person a question with options, rather than asking to run something.
+fn is_question_tool(name: &str) -> bool {
+    name == "AskUserQuestion"
+        || name.ends_with("request_user_input")
+        || name.ends_with("request_user_input_async")
+}
 pub(crate) fn question_summary(v: &Value) -> String {
     let questions = v.get("questions").and_then(Value::as_array);
     if let Some(questions) = questions {
@@ -413,10 +419,7 @@ impl Parser {
             at,
             source,
         );
-        if name == "AskUserQuestion"
-            || name.ends_with("request_user_input")
-            || name.ends_with("request_user_input_async")
-        {
+        if is_question_tool(name) {
             self.card.turn = Turn::Waiting;
             self.child_wait_from = None;
             self.card.waiting = question_summary(&args);
@@ -506,6 +509,16 @@ impl Parser {
             .background
             .is_some_and(|b| b.keeps_working() || b.wakes());
         match event {
+            // A question, not an approval: what it asks, as its log would say once answered.
+            "PermissionRequest" if facts.question.is_some() => {
+                let (question, choices) = facts.question.clone().unwrap_or_default();
+                if self.card.turn != Turn::Waiting {
+                    self.phase(Turn::Waiting, "", at, source);
+                }
+                self.child_wait_from = None;
+                self.card.waiting = question;
+                self.card.choices = choices;
+            }
             "PermissionRequest" => self.wait("CLI 请求工具审批（Hook）", at, source),
             "Notification" => match facts.notification.as_deref() {
                 Some("permission_prompt") => self.wait("CLI 请求工具审批（Hook）", at, source),
@@ -738,6 +751,11 @@ pub fn hook_facts(v: &Value) -> HookFacts {
         notification: v["notification_type"].as_str().map(str::to_owned),
         subagent: v["agent_id"].as_str().is_some_and(|id| !id.is_empty()),
         shells,
+        question: (v["tool_name"].as_str())
+            .filter(|n| is_question_tool(n))
+            .map(|_| question_summary(&v["tool_input"]))
+            .filter(|q| !q.is_empty())
+            .map(|q| (q, question_choices(&v["tool_input"]))),
     }
 }
 #[cfg(test)]
