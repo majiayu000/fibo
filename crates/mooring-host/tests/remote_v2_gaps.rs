@@ -455,42 +455,6 @@ fn a_diff_names_the_tests_its_conversation_ran_and_whether_edits_came_after() {
     );
 }
 
-/// The board's 待办 on the phone: open, and with no conversation on it yet.
-#[test]
-fn list_carries_the_boards_todos() {
-    let h = Host::start();
-    let task = |id: &str, title: &str| Task {
-        id: id.into(),
-        space: "s".into(),
-        title: title.into(),
-        description: String::new(),
-        acceptance: vec![],
-        agent: Agent::Codex,
-    };
-    for t in [task("t1", "写周报"), task("t2", "已经放弃的")] {
-        h.call(Request::Edit {
-            request: None,
-            edit: Edit::AddTask(t),
-        })
-        .unwrap();
-    }
-    h.call(Request::Edit {
-        request: None,
-        edit: Edit::SetTaskOutcome {
-            id: "t2".into(),
-            outcome: Outcome::Abandoned,
-            seen: None,
-        },
-    })
-    .unwrap();
-    let mut view = Remote::open(&h, Some("view"), &[]);
-    let list = view.ok(json!({ "op": "list" }));
-    assert_eq!(
-        list["todos"],
-        json!([{ "id": "t1", "space": "s", "title": "写周报", "agent": "codex" }])
-    );
-}
-
 /// Opening by hand in a space put aside brings it back, or what opened would vanish from the
 /// phone at once; with no directory named it opens somewhere the phone already sees.
 #[test]

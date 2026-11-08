@@ -359,6 +359,8 @@ pub const OPS: &[&str] = &[
     "toolcalls",
     "toolcall",
     "backfill",
+    "todoadd",
+    "todooutcome",
     "suggestion",
     "modes",
     "setmode",
@@ -474,13 +476,38 @@ pub struct List {
     pub todos: Vec<Todo>,
 }
 
-/// A todo no conversation works on yet.
+/// A todo you have not closed. Hosts before 11-08 sent only those no conversation worked
+/// on yet, with only the first four fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Todo {
     pub id: String,
     pub space: String,
     pub title: String,
     pub agent: String,
+    /// `status::TaskState::key`, and its words (`label`).
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub state_label: Option<String>,
+    /// What you wrote when you noted it.
+    #[serde(default)]
+    pub said: String,
+    #[serde(default)]
+    pub acceptance: Vec<String>,
+    /// Progress written back, oldest first.
+    #[serde(default)]
+    pub notes: Vec<TodoNote>,
+    #[serde(default)]
+    pub created: Option<u64>,
+    /// The open terminal of a conversation working on it, to go to instead of starting one.
+    #[serde(default)]
+    pub terminal: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TodoNote {
+    pub at: u64,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

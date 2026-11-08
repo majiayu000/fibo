@@ -34,9 +34,8 @@ impl Role {
         match op {
             // `dirs` shows the machine's folders, so it is no read for a lesser role.
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
-            | "mkdir" | "stop" | "lastsession" | "addspace" | "trust" | "modes" | "setmode" => {
-                self == Self::Full
-            }
+            | "mkdir" | "stop" | "lastsession" | "addspace" | "trust" | "modes" | "setmode"
+            | "todoadd" | "todooutcome" => self == Self::Full,
             "answer" => self != Self::View,
             _ => true,
         }
@@ -59,6 +58,8 @@ pub fn acts(op: &str) -> bool {
             | "addspace"
             | "trust"
             | "setmode"
+            | "todoadd"
+            | "todooutcome"
     )
 }
 
@@ -96,6 +97,8 @@ mod tests {
             "lastsession",
             "addspace",
             "trust",
+            "todoadd",
+            "todooutcome",
         ] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }
@@ -105,6 +108,7 @@ mod tests {
         assert_eq!(Role::parse("admin"), None);
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
         assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
+        assert!(acts("todoadd") && acts("todooutcome"));
         assert!(!acts("diff") && !acts("dirs") && !acts("quota") && !acts("usage"));
         assert!(!acts("toolcalls") && !acts("toolcall") && !acts("suggestion"));
     }

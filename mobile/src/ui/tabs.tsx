@@ -1,4 +1,4 @@
-// The bottom tabs: 主页, 看板, 我的. They sit on the screens rather than a tab navigator, so
+// The bottom tabs: 主页, 待办, 我的. They sit on the screens rather than a tab navigator, so
 // routes and links into a conversation stay as they are: home stays mounted underneath,
 // the system back from a tab returns to it.
 import { router } from 'expo-router';
@@ -7,11 +7,11 @@ import { Icon, type IconName } from './icons';
 import { back, useBottom } from './kit';
 import { useTheme } from './theme';
 
-export type Tab = 'home' | 'board' | 'me';
+export type Tab = 'home' | 'todos' | 'me';
 
-const TABS: { key: Tab; label: string; icon: IconName; path: '/' | '/board' | '/me' }[] = [
+const TABS: { key: Tab; label: string; icon: IconName; path: '/' | '/todos' | '/me' }[] = [
   { key: 'home', label: '主页', icon: 'home', path: '/' },
-  { key: 'board', label: '看板', icon: 'board', path: '/board' },
+  { key: 'todos', label: '待办', icon: 'todo', path: '/todos' },
   { key: 'me', label: '我的', icon: 'person', path: '/me' },
 ];
 

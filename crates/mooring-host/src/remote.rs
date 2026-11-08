@@ -29,6 +29,7 @@ mod list;
 mod modes;
 mod quota;
 mod resume;
+mod todos;
 mod tools;
 mod usage;
 mod writes;
@@ -498,6 +499,8 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         "open" => writes::open(socket, request, client),
         "end" => writes::end(socket, request, client),
         "outcome" => writes::outcome(socket, request, client),
+        "todoadd" => todos::add(socket, request, client),
+        "todooutcome" => todos::outcome(socket, request, client),
         op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
     }
 }

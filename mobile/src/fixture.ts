@@ -23,7 +23,7 @@ const LINKS = [
   link('air', 'MacBook Air', 'wss://relay.example.com'),
 ];
 
-const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop', 'backfill', 'suggestion'];
+const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop', 'backfill', 'suggestion', 'todoadd', 'todooutcome'];
 
 const card = (o: Record<string, unknown>) => ({
   space: 's-mooring',
@@ -54,6 +54,7 @@ function cards(machine: string) {
     ...['配对链接带上电脑名', '审批条显示终端最后几行', '图标全集加第 12 轮', '修 CI 的 rustfmt', '侧栏分组标题上色'].map((title, i) =>
       card({ id: `d${i}`, column: 'done', title, status: 'closed', status_label: '做完了', outcome: 'done', updated: t - 1800 * (i + 1) }),
     ),
+    card({ id: 's1', column: 'stale', title: '旧的图标草稿', status: 'stale', status_label: '很久没动', updated: t - 9 * 86400 }),
     card({ id: 'sh', agent: null, session: null, phase: 'shell', title: null }),
   ];
 }
@@ -168,6 +169,19 @@ function quota() {
   };
 }
 
+/** The 待办 tab's todos: one of each state, one from a computer before 11-08 (four fields). */
+const TODOS = () => {
+  const t = Date.now() / 1000;
+  const todo = (o: Record<string, unknown>) => ({ space: 's-mooring', agent: 'claude', said: '', acceptance: [], notes: [], ...o });
+  return [
+    todo({ id: 'td1', title: '侧栏：在跑全在屏幕下方时要不要加底部提示', state: 'settled', state_label: '会话都做完了', created: t - 3 * 86400, notes: [{ at: t - 20 * 3600, text: '已修三种布局整列滚动；底部提示要不要加，等你看过再定。' }] }),
+    todo({ id: 'td2', title: '完成开源项目 Search Console 收录验证，并在上线 2–4 周后复查搜索数据', state: 'working', state_label: '进行中', terminal: 'a1', created: t - 86400, said: '站点上线了，先让 Google 收录，过两周看搜索数据。', acceptance: ['Search Console 显示已验证', '两周后有一次搜索数据复查'], notes: [{ at: t - 86400, text: '先在本地生成 sitemap。' }, { at: t - 2 * 3600, text: '站点已提交，等 Google 验证通过。' }] }),
+    todo({ id: 'td3', title: '11-20 复盘手机下一句建议，并决定收尾卡片做不做', state: 'not_started', state_label: '未开始', created: t - 2 * 86400 }),
+    todo({ id: 'td4', space: 's-blog', title: '整理十月的周报草稿', agent: 'codex', state: 'not_started', state_label: '未开始', created: t - 5 * 3600 }),
+    { id: 'td5', space: 's-blog', title: '老电脑发来的待办，只有标题', agent: 'claude' },
+  ];
+};
+
 /** For a browser driving the fixture: cards it sets show on `refresh`, answers land in `answers`. */
 const driver: { cards?: Record<string, unknown>[]; answers: unknown[]; asks?: Record<string, unknown>; refresh: () => void; card: typeof card } = {
   answers: [],
@@ -193,6 +207,7 @@ function remote(machine: string) {
             { id: 's-blog', name: 'blog', cwd: '/home/demo/blog' },
           ],
           terminals: cards(machine),
+          todos: machine === 'agent-os' ? TODOS() : [],
         };
       case 'read':
         return { text: SCREEN };

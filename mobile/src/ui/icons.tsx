@@ -9,11 +9,11 @@ const paths = {
   person: <Path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c1.500-4 4.500-6 8-6s6.500 2 8 6" />,
   close: <Path d="M6 6l12 12M18 6L6 18" />,
   plus: <Path d="M12 5v14M5 12h14" />,
-  board: (
+  /** The 待办 tab: a ticked box. */
+  todo: (
     <>
-      <Rect x="3" y="4" width="5" height="16" rx="1.5" />
-      <Rect x="10" y="4" width="5" height="11" rx="1.5" />
-      <Rect x="17" y="4" width="4" height="7" rx="1.5" />
+      <Rect x="4" y="4" width="16" height="16" rx="3" />
+      <Path d="M8.5 12.5l2.5 2.5 4.5-5.5" />
     </>
   ),
   computer: (
