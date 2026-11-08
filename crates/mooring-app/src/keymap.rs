@@ -359,7 +359,7 @@ impl Chord {
         }
     }
     /// Ctrl+Shift+T, the keys to actually press where there is no ⌘.
-    fn display_in_words(&self) -> String {
+    pub(crate) fn display_in_words(&self) -> String {
         let (ctrl, shift, alt) = match (self.cmd, self.shift, self.alt) {
             (true, true, _) => (true, true, true),
             (true, false, true) => (true, false, true),

@@ -148,7 +148,8 @@ fn count(root: &Path) -> BTreeMap<String, usize> {
                 }
             }
         }
-        if !rel.ends_with("keymap.rs") {
+        // The keymap reads chords; ui/words.rs says a label's Mac spelling in this system's words.
+        if !rel.ends_with("keymap.rs") && !rel.ends_with("ui/words.rs") {
             let n = key.find_iter(&body).count();
             if n > 0 {
                 out.insert(format!("keycap\t{rel}"), n);

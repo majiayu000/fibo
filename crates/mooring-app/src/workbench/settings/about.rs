@@ -12,22 +12,22 @@ impl SettingsView {
         let shown = path
             .as_ref()
             .map_or_else(|| "未知".into(), |p| tilde(&p.display().to_string()));
-        let control = secondary(format!("reveal-{title}"), "在访达中显示")
-            .when(path.is_none(), |b| b.opacity(0.5))
-            .on_click(cx.listener(move |this, _, _, cx| {
-                let Some(path) = &path else {
-                    return;
-                };
-                // A file is selected in its folder; a folder opens itself.
-                let mut open = std::process::Command::new("open");
-                if path.is_file() {
-                    open.arg("-R");
-                }
-                if let Err(e) = open.arg(path).spawn() {
-                    this.text_error = Some(format!("无法打开访达：{e}"));
-                    cx.notify();
-                }
-            }));
+        let control = secondary(
+            format!("reveal-{title}"),
+            crate::ui::words::local("在访达中显示"),
+        )
+        .when(path.is_none(), |b| b.opacity(0.5))
+        .on_click(cx.listener(move |_, _, _, cx| {
+            let Some(path) = &path else {
+                return;
+            };
+            // A file is selected in its folder; a folder opens itself.
+            if path.is_file() {
+                cx.reveal_path(path);
+            } else {
+                cx.open_with_system(path);
+            }
+        }));
         self.file_row(first, title, shown, None, control, cx)
     }
     /// A file Mooring uses: its title, the path in mono below it, then an optional note,

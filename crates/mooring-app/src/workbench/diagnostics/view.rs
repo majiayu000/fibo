@@ -342,9 +342,9 @@ impl Render for DiagnosticView {
                         button(
                             "diagnostic-copy",
                             if self.copied {
-                                "已复制 ✓"
+                                "已复制 ✓".to_string()
                             } else {
-                                "复制摘要给 Agent · ⌘C"
+                                crate::ui::words::local_field("复制摘要给 Agent · ⌘C")
                             },
                         )
                         .bg(T::color(T::accent()))

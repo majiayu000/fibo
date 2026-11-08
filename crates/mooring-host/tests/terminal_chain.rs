@@ -666,7 +666,7 @@ fn write_log(agent: Agent, home: &Path, cwd: &str) -> PathBuf {
 }
 
 /// For driving a real CLI by hand with `mooring read` and `send`: what the command line has no
-/// verb for. `MOORING_RUNTIME` says which host; `HAND` is `open <id> <directory>` or
+/// verb for. `MOORING_RUNTIME` says which host; `HAND` is `open <id> <directory>`, `answer <id> allow|deny`, `card <id>` or
 /// `interrupt <id>`. `cargo test -p mooring-host --test terminal_chain by_hand -- --ignored`
 #[test]
 #[ignore = "by hand"]
@@ -720,6 +720,42 @@ fn by_hand() {
             eprintln!(
                 "{}",
                 format!("{reply:?}").chars().take(300).collect::<String>()
+            );
+        }
+        // What the phone's and the window's 允许 / 拒绝 send, for the approval on screen now.
+        ["answer", id, choice] => {
+            let Reply::Workspace(w) = rpc(&socket, &Request::Workspace) else {
+                panic!("no workspace");
+            };
+            let question = w
+                .current_agent(id)
+                .and_then(|s| w.content.get(&s.id))
+                .map(|c| c.approval.clone())
+                .unwrap_or_default();
+            eprintln!("approval on screen: {question:?}");
+            let reply = rpc(
+                &socket,
+                &Request::AnswerApproval {
+                    id: id.into(),
+                    question,
+                    allow: choice == "allow",
+                },
+            );
+            eprintln!(
+                "{}",
+                format!("{reply:?}").chars().take(300).collect::<String>()
+            );
+        }
+        // What a phone is offered: the approval or the question's choices.
+        ["card", id] => {
+            let Reply::Workspace(w) = rpc(&socket, &Request::Workspace) else {
+                panic!("no workspace");
+            };
+            let card = w.current_agent(id).and_then(|s| w.content.get(&s.id));
+            eprintln!(
+                "approval {:?} choices {:?}",
+                card.map(|c| c.approval.clone()),
+                card.map(|c| c.choices.clone())
             );
         }
         ["bound", id] => {

@@ -123,7 +123,7 @@ impl Workbench {
                     .border_color(T::color(T::on_accent()))
                     .opacity(T::KBD_OPACITY)
                     .text_size(px(T::KBD_SIZE))
-                    .child("⌘⏎"),
+                    .child(crate::ui::words::local_field("⌘⏎")),
             )
             .aria_label("保存并开始");
         card.child(

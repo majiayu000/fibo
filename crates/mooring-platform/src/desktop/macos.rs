@@ -1,5 +1,34 @@
 pub const HAS_COMMAND_KEY: bool = true;
 pub const DRAWS_WINDOW_BUTTONS: bool = false;
+pub const FILE_MANAGER: &str = "访达";
+
+/// TextEdit, or whatever the account set for plain text.
+pub fn open_as_text(path: &std::path::Path) -> std::io::Result<()> {
+    std::process::Command::new("open")
+        .arg("-t")
+        .arg(path)
+        .spawn()
+        .map(drop)
+}
+
+/// In the app bundle, under /Applications or ~/Applications.
+pub fn editor_cli(editor: super::Editor) -> Option<std::path::PathBuf> {
+    use super::Editor;
+    let (bundles, tool): (&[&str], &str) = match editor {
+        Editor::Zed => (&["Zed.app", "Zed Preview.app"], "Contents/MacOS/cli"),
+        Editor::VsCode => (
+            &["Visual Studio Code.app"],
+            "Contents/Resources/app/bin/code",
+        ),
+        Editor::Cursor => (&["Cursor.app"], "Contents/Resources/app/bin/cursor"),
+    };
+    let home = crate::dirs::home().map(|h| h.join("Applications"));
+    [Some(std::path::PathBuf::from("/Applications")), home]
+        .into_iter()
+        .flatten()
+        .flat_map(|dir| bundles.iter().map(move |b| dir.join(b).join(tool)))
+        .find(|p| p.is_file())
+}
 
 pub fn reduce_motion() -> bool {
     std::process::Command::new("defaults")

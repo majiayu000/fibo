@@ -100,10 +100,9 @@ impl Workbench {
                             .child("看原文 ↗")
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 // The session log itself, opened as text where the record sits.
-                                if let Err(e) = std::process::Command::new("open")
-                                    .args(["-t", &path])
-                                    .spawn()
-                                {
+                                if let Err(e) = mooring_platform::desktop::open_as_text(
+                                    std::path::Path::new(&path),
+                                ) {
                                     this.error = Some(format!("无法打开会话原文：{e}"));
                                     cx.notify();
                                 }

@@ -11,6 +11,27 @@ pub const HAS_COMMAND_KEY: bool = imp::HAS_COMMAND_KEY;
 /// Whether a window with its title bar hidden must draw minimize, maximize and close itself.
 pub const DRAWS_WINDOW_BUTTONS: bool = imp::DRAWS_WINDOW_BUTTONS;
 
+/// What this system calls the app that shows files in their folders, as a label names it.
+pub const FILE_MANAGER: &str = imp::FILE_MANAGER;
+
+/// Opens a file as plain text in the system's own editor, whatever its extension says.
+pub fn open_as_text(path: &std::path::Path) -> std::io::Result<()> {
+    imp::open_as_text(path)
+}
+
+/// Editors a `file:line` can open in, by the command line tool each installs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Editor {
+    Zed,
+    VsCode,
+    Cursor,
+}
+
+/// Where this editor's command line tool is, if it is installed where it installs itself.
+pub fn editor_cli(editor: Editor) -> Option<std::path::PathBuf> {
+    imp::editor_cli(editor)
+}
+
 /// Whether the system is set to reduce motion. May take a while: off the main thread.
 pub fn reduce_motion() -> bool {
     imp::reduce_motion()
