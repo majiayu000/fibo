@@ -138,11 +138,16 @@ pub(crate) fn patch_lines(patch: &str) -> Vec<(String, u32, u32)> {
     }
     out
 }
-/// The first question's option labels, in order, for a question tool's arguments.
+/// The option labels, in order, of a question tool asking one single-choice question. Several
+/// questions, or one taking several answers, are a form: a number key ticks one item there
+/// and sends nothing, so buttons that each send a number would answer wrong. None then: a
+/// phone shows the terminal and the keys instead.
 pub(crate) fn question_choices(v: &Value) -> Vec<String> {
     v.get("questions")
         .and_then(Value::as_array)
+        .filter(|q| q.len() == 1)
         .and_then(|q| q.first())
+        .filter(|q| !q["multiSelect"].as_bool().unwrap_or(false))
         .and_then(|q| q["options"].as_array())
         .map(|items| {
             items
@@ -751,12 +756,10 @@ pub fn hook_facts(v: &Value) -> HookFacts {
         notification: v["notification_type"].as_str().map(str::to_owned),
         subagent: v["agent_id"].as_str().is_some_and(|id| !id.is_empty()),
         shells,
-        question: (v["tool_name"].as_str())
-            .filter(|n| is_question_tool(n))
-            .map(|_| question_summary(&v["tool_input"]))
-            .filter(|q| !q.is_empty())
-            .map(|q| (q, question_choices(&v["tool_input"]))),
+        question: hook_question(v),
     }
 }
+mod hook_question;
+use hook_question::hook_question;
 #[cfg(test)]
 mod tests;

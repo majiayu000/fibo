@@ -20,7 +20,9 @@ import { cardTitle } from '@/ui/format';
 import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
-import { choices, questionText, partialWords, readBackWords } from '@/ui/parse';
+import { partialWords, readBackWords } from '@/ui/parse';
+import { WaitPanel } from '@/ui/waitpanel';
+import { STARTING, sendBlocked, waitView } from '@/ui/waits';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
 import type { ModeKind } from '@/ui/modes';
@@ -73,6 +75,8 @@ export default function Chat() {
   const [term, setTerm] = useState(false);
   const [picking, setPicking] = useState<ModeKind | null>(null);
   const last = useRef(0);
+  /** The text a send was just held back for: sent again, it goes. */
+  const warned = useRef('');
   last.current = messages.at(-1)?.seq ?? 0;
 
   // The newest page; again whenever the connection comes back, and when the terminal's
@@ -192,6 +196,12 @@ export default function Chat() {
    * computer first, which then pastes each before the words; they need it online.
    */
   async function send(text: string, pictures: Picture[] = []): Promise<boolean> {
+    const blocked = sendBlocked(view, waiting, warned.current === text);
+    warned.current = blocked ? text : '';
+    if (blocked) {
+      setError(blocked);
+      return false;
+    }
     if (!session) {
       setError('尚未识别对话，暂时不能发送');
       return false;
@@ -254,7 +264,8 @@ export default function Chat() {
   const ask = useAsk(machine, card, online);
   const settled = useSettled(`${ask.subject}|${ask.note}`);
   const waiting = online && card?.phase === 'waiting' && !card.approval ? card.waiting : null;
-  const options = choices(waiting);
+  const starting = online && card?.phase === 'shell' && !!card.agent && !card.trust;
+  const view = waitView(waiting) ?? (starting ? STARTING : null);
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
   // Only Claude offers one, only between turns with nothing else being asked. The card names
@@ -388,20 +399,8 @@ export default function Chat() {
           <TrustAsk machine={machine} card={card} can={supports(m, 'trust')} />
         </View>
       )}
-      {!!waiting && (
-        <View style={{ paddingHorizontal: 18, paddingBottom: 10, gap: 8 }}>
-          <Text numberOfLines={6} style={{ color: t.wait, fontSize: 13, lineHeight: 19 }}>
-            {questionText(waiting) || '等你回答'}
-          </Text>
-          {supports(m, 'keys') && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {options.map((o) => (
-                <Btn key={o.key} label={o.label} onPress={() => act('keys', { keys: [o.key] })} />
-              ))}
-              <Btn label="Esc" onPress={() => act('keys', { keys: ['esc'] })} />
-            </View>
-          )}
-        </View>
+      {!!view && (
+        <WaitPanel view={view} canKey={supports(m, 'keys')} onKeys={(keys) => act('keys', { keys })} onTerminal={() => setTerm(true)} />
       )}
       {!!error && <Notice tone="danger" text={error} />}
       {online && !card ? (
