@@ -13,6 +13,7 @@ import { useSuggestion } from '@/remote/useSuggestion';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { countUse } from '@/store/suggestionCounts';
 import { suggestionStats } from '@/store/suggestions';
+import { HOW_NOTE, type How, steerable, whileBusy } from '@/ui/busy';
 import { Composer } from '@/ui/composer';
 import { KeyboardSafe } from '@/ui/keyboard';
 import type { Picture } from '@/ui/pictures';
@@ -25,7 +26,7 @@ import { WaitPanel } from '@/ui/waitpanel';
 import { STARTING, sendBlocked, waitView } from '@/ui/waits';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
-import type { ModeKind } from '@/ui/modes';
+import { hasEffort, type ModeKind } from '@/ui/modes';
 import { ModeSheet } from '@/ui/modesheet';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
@@ -33,8 +34,8 @@ import { sameWords } from '@/ui/sent';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 
-/** `queued`: sent while the Agent worked, so it waits for the step at hand. */
-type Pending = { text: string; at: number; queued?: boolean; pictures?: number };
+/** `queued`: sent while the Agent worked; what that means depends on the CLI (ui/busy.ts). */
+type Pending = { text: string; at: number; queued?: boolean; pictures?: number; how?: How };
 
 /** A reindexed log gives its messages new seqs; the same words at the same time are one. */
 const key = (m: Message) => `${m.at}|${m.role}|${m.text}`;
@@ -195,7 +196,7 @@ export default function Chat() {
    * Sends `text`; while the computer is away it waits in the outbox instead. Pictures go to the
    * computer first, which then pastes each before the words; they need it online.
    */
-  async function send(text: string, pictures: Picture[] = []): Promise<boolean> {
+  async function send(text: string, pictures: Picture[] = [], how?: How): Promise<boolean> {
     const blocked = sendBlocked(view, waiting, warned.current === text);
     warned.current = blocked ? text : '';
     if (blocked) {
@@ -214,13 +215,13 @@ export default function Chat() {
       enqueue({ machine, terminal, session, text });
       return true;
     }
-    setPending((p) => [...p, { text, at: Date.now() / 1000, queued: working, pictures: pictures.length }]);
+    setPending((p) => [...p, { text, at: Date.now() / 1000, queued: working, pictures: pictures.length, how }]);
     try {
       const images: string[] = [];
       for (const p of pictures) images.push((await write(machine, 'image', { terminal, data: p.base64 })).path);
       // A line separate from the pictures: each CLI shows them as [Image #1] right before it.
       const words = images.length && text ? ` ${text}` : text;
-      await write(machine, 'send', { terminal, session, text: words, enter: true, ...(images.length ? { images } : {}) });
+      await write(machine, 'send', { terminal, session, text: words, enter: true, ...(images.length ? { images } : {}), ...(how ? { how } : {}) });
       setError('');
       return true;
     } catch (e) {
@@ -287,13 +288,13 @@ export default function Chat() {
           <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
       ) : l.kind === 'pending' ? (
-        <Mine text={l.p.pictures ? `[${l.p.pictures} 张图片] ${l.p.text}`.trim() : l.p.text} note={l.p.queued ? '已排队 · 它做完手头这一步就会看到' : '发送中…'} tone="pending" />
+        <Mine text={l.p.pictures ? `[${l.p.pictures} 张图片] ${l.p.text}`.trim() : l.p.text} note={l.p.how ? HOW_NOTE[l.p.how] : l.p.queued ? whileBusy(card?.agent).note : '发送中…'} tone="pending" />
       ) : (
         <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
           <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, toTools],
+    [agent, card?.agent, toTools],
   );
 
   return (
@@ -413,17 +414,19 @@ export default function Chat() {
           model={card?.model}
           permission={card?.permission}
           running={!!running}
+          busyPlaceholder={whileBusy(card?.agent).placeholder}
           canStop={supports(m, 'stop')}
-          canContinue={online && card?.phase === 'idle'}
           offline={!online}
           suggestion={suggestion}
           onSend={send}
           canAttach={supports(m, 'image')}
+          canSteer={supports(m, 'steer') && steerable(card?.agent)}
           onError={setError}
           onStop={() => stop()}
           onUseSuggestion={() => suggestionStats.set(countUse)}
           onModel={supports(m, 'setmode') ? () => setPicking('model') : undefined}
           onPermission={supports(m, 'setmode') ? () => setPicking('permission') : undefined}
+          onEffort={supports(m, 'setmode') && supports(m, 'effort') && hasEffort(card?.agent) ? () => setPicking('effort') : undefined}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />

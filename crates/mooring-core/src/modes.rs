@@ -8,6 +8,9 @@ use std::collections::HashMap;
 pub enum ModeKind {
     Model,
     Permission,
+    /// How hard it thinks: Claude Code's `/effort`, Codex's second step of `/model`. Hosts
+    /// before it refuse the kind; clients ask only a host whose `hello` lists `effort`.
+    Effort,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +35,9 @@ pub enum ModeReply {
     Now {
         model: String,
         permission: String,
+        /// Clients before it never asked for one, so never miss it.
+        #[serde(default)]
+        effort: String,
     },
 }
 

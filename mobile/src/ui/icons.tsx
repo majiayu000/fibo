@@ -72,8 +72,28 @@ const paths = {
       <Path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
     </>
   ),
+  // A dial, its needle past the middle: how hard it thinks.
+  gauge: (
+    <>
+      <Path d="M4.5 17a8 8 0 1 1 15 0" />
+      <Path d="M12 14l4-5" />
+    </>
+  ),
   shield: <Path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z" />,
   stop: <Rect x="7" y="7" width="10" height="10" rx="1.5" />,
+  camera: (
+    <>
+      <Path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+      <Circle cx="12" cy="13" r="3.5" />
+    </>
+  ),
+  image: (
+    <>
+      <Rect x="4" y="4" width="16" height="16" rx="3" />
+      <Circle cx="9" cy="9.5" r="1.6" />
+      <Path d="M20 15l-4.5-4.5L6 20" />
+    </>
+  ),
   alert: (
     <>
       <Path d="M12 8v5M12 16.5v.5" />

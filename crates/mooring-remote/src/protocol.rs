@@ -11,6 +11,7 @@ pub const MAX_LINE: usize = 1 << 20;
 pub use crate::asks::*;
 pub use crate::cards::*;
 pub use crate::chat::*;
+pub use crate::ops::OPS;
 pub use crate::tools::*;
 pub use crate::usage::*;
 
@@ -232,7 +233,7 @@ pub enum Op {
     Suggestion {
         terminal: String,
     },
-    /// What the terminal's Agent offers as `kind` (`model` or `permission`) and which is on:
+    /// What the terminal's Agent offers as `kind` (`model`, `permission` or `effort`) and which is on:
     /// [`crate::protocol::ModeOptions`]. The machine opens the CLI's own menu to read it, so an
     /// error says when it cannot: the Agent is busy, asking something, or no CLI it knows.
     Modes {
@@ -331,46 +332,6 @@ impl Op {
         }
     }
 }
-
-/// Every op, in the order `hello` lists them.
-pub const OPS: &[&str] = &[
-    "hello",
-    "list",
-    "cards",
-    "read",
-    "send",
-    "keys",
-    "input",
-    "answer",
-    "ask",
-    "trust",
-    "chat",
-    "events",
-    "watch",
-    "resize",
-    "open",
-    "end",
-    "outcome",
-    "close",
-    "ping",
-    "diff",
-    "dirs",
-    "mkdir",
-    "stop",
-    "quota",
-    "lastsession",
-    "addspace",
-    "usage",
-    "toolcalls",
-    "toolcall",
-    "backfill",
-    "todoadd",
-    "todooutcome",
-    "suggestion",
-    "modes",
-    "setmode",
-    "image",
-];
 
 /// A line from the machine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

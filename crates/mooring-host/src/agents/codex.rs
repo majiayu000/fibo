@@ -23,6 +23,14 @@ pub struct Codex;
 use super::codex_items::codex_state;
 
 impl Adapter for Codex {
+    /// Enter goes into the running turn; Tab queues (「tab to queue message」), shown under
+    /// 「Queued follow-up inputs」: real runs, 11-09.
+    fn turn_keys(&self) -> Option<super::TurnKeys> {
+        Some(super::TurnKeys {
+            queue: b"\t",
+            steer: b"\r",
+        })
+    }
     fn screen_rules(&self) -> &'static str {
         include_str!("screen/codex.json")
     }

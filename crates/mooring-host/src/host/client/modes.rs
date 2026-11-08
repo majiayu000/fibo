@@ -91,7 +91,11 @@ impl<'a> Steps<'a> {
 
     /// Keeps what the CLI said for the cards, beside what the log said then.
     fn record(&self, changed: Changed) -> io::Result<Reply> {
-        let Changed { model, permission } = changed;
+        let Changed {
+            model,
+            permission,
+            effort,
+        } = changed;
         let mut host = lock(self.shared)?;
         let w = host.workspace.clone();
         let session = w.current_agent(self.id);
@@ -120,6 +124,8 @@ impl<'a> Steps<'a> {
         Ok(Reply::Modes(ModeReply::Now {
             model: model.unwrap_or_default(),
             permission: permission.unwrap_or_default(),
+            // Cards say no effort: nothing to keep it for.
+            effort: effort.unwrap_or_default(),
         }))
     }
 }

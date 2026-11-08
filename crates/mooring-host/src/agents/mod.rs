@@ -94,6 +94,14 @@ pub fn unbound_hint(agent: Agent) -> Hint {
 /// answered for, that session's status.
 pub type OfficialAnswer = (&'static str, io::Result<Vec<(usize, Official)>>);
 
+/// The keys that send a typed message while the turn runs: after the step at hand (queue), or
+/// into it now (steer). Measured per CLI: docs/phone-app/cli-turn-input.md.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TurnKeys {
+    pub queue: &'static [u8],
+    pub steer: &'static [u8],
+}
+
 pub trait Adapter: Sync {
     /// The directory this CLI writes transcripts under, honouring its own home override.
     fn root(&self, home: &Path) -> PathBuf;
@@ -110,6 +118,10 @@ pub trait Adapter: Sync {
     /// CLIs; on one where it does something else this says which key does.
     fn interrupt_key(&self) -> &'static [u8] {
         b"\x03"
+    }
+    /// Its keys for queueing or steering a message, for a CLI measured to have both.
+    fn turn_keys(&self) -> Option<TurnKeys> {
+        None
     }
     /// How it takes answers over a local API, for one that has it.
     fn answers(&self) -> Option<&'static mooring_core::agent_answers::Answers> {

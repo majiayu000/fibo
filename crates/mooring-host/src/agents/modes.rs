@@ -175,11 +175,13 @@ pub fn codex_footer(tail: &str) -> Option<String> {
 /// is checked by what it becomes, not assumed empty (`host/client/modes.rs`).
 pub fn composer(agent: Agent, tail: &str) -> Option<String> {
     let filled: Vec<&str> = tail.lines().filter(|l| !l.trim().is_empty()).collect();
-    let mark = match agent {
-        Agent::Claude => '❯',
-        _ => '›',
+    // Codex draws `»` instead of `›` while its level is Ultra.
+    let marks: &[char] = match agent {
+        Agent::Claude => &['❯'],
+        _ => &['›', '»'],
     };
-    let at = filled.iter().rposition(|l| l.starts_with(mark))?;
+    let at = filled.iter().rposition(|l| l.starts_with(marks))?;
+    let mark = filled[at].chars().next()?;
     // A dialog's pointer also opens a row: what stands below it says which this is.
     let dialog = filled[at + 1..].iter().any(|l| {
         let l = l.trim().to_ascii_lowercase();
@@ -252,7 +254,9 @@ pub fn claude_crosses_full(from: &str, to: &str) -> bool {
 /// Whether a menu's hint offers picking for this session alone.
 pub fn offers_session(keys: &str) -> bool {
     let k = keys.to_ascii_lowercase();
-    k.contains("s to use this session") || k.contains("s session")
+    k.contains("s to use this session")
+        || k.contains("s session")
+        || k.contains("s for this session")
 }
 
 #[cfg(test)]

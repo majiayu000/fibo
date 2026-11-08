@@ -1,12 +1,14 @@
 // The composer: a big rounded card with the text on top and a row of small controls
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
-// The + on the left takes a photo or picks pictures; they wait as thumbnails above the text.
+// The + opens a sheet: take a photo or pick pictures (they wait as thumbnails above the text),
+// and this conversation's permission and effort. The row under the text keeps only +, the model and send.
 import { type ComponentRef, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AttachSheet } from './attachsheet';
 import { Icon } from './icons';
+import type { How } from './busy';
 import { useBottomOverKeyboard } from './keyboard';
 import { noOutline } from './kit';
-import { isFull } from './modes';
 import { modelName } from './parse';
 import { MAX_PICTURES, type Picture, pick } from './pictures';
 import { useTheme } from './theme';
@@ -16,8 +18,8 @@ export function Composer({
   model,
   permission,
   running,
+  busyPlaceholder,
   canStop,
-  canContinue,
   offline,
   suggestion,
   onSend,
@@ -25,7 +27,9 @@ export function Composer({
   onUseSuggestion,
   onModel,
   onPermission,
+  onEffort,
   canAttach,
+  canSteer,
   onError,
 }: {
   agent: string;
@@ -35,13 +39,17 @@ export function Composer({
   /** Each tag opens what can be picked; a computer that cannot change them leaves it a fact. */
   onModel?: () => void;
   onPermission?: () => void;
+  onEffort?: () => void;
   running: boolean;
+  /** What a message sent while it works becomes, for this Agent (ui/busy.ts). */
+  busyPlaceholder: string;
   canStop: boolean;
-  canContinue: boolean;
   offline: boolean;
   /** What the Agent offers as the next prompt: a tap puts it in the box, sending is still yours. */
   suggestion?: string | null;
-  onSend: (text: string, pictures: Picture[]) => Promise<boolean>;
+  onSend: (text: string, pictures: Picture[], how?: How) => Promise<boolean>;
+  /** It works and this computer and CLI can queue or steer: offer the choice once something is typed. */
+  canSteer?: boolean;
   /** The computer keeps pictures (`image`) and is online; without it there is no +. */
   canAttach?: boolean;
   onError?: (why: string) => void;
@@ -54,6 +62,7 @@ export function Composer({
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [choosing, setChoosing] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [how, setHow] = useState<How>('queue');
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const empty = !draft.trim() && !pictures.length;
   const stop = running && canStop && empty;
@@ -61,7 +70,9 @@ export function Composer({
     if (!text.trim() && !with_.length) return;
     setDraft('');
     setPictures([]);
-    if (!(await onSend(text.trim(), with_))) {
+    const choose = running && canSteer ? how : undefined;
+    setHow('queue');
+    if (!(await onSend(text.trim(), with_, choose))) {
       setDraft(text);
       setPictures(with_);
     }
@@ -78,7 +89,8 @@ export function Composer({
       setPicking(false);
     }
   }
-  const attach = canAttach || pictures.length > 0;
+  // The + opens pictures and this conversation's settings: shown when either is there.
+  const sheetable = !!canAttach || pictures.length > 0 || !!permission || !!onPermission || !!onEffort;
   return (
     <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }]}>
       {!!suggestion && !draft && (
@@ -116,54 +128,43 @@ export function Composer({
           ))}
         </View>
       )}
+      {running && canSteer && !empty && (
+        <View accessibilityRole="radiogroup" style={[s.how, { borderColor: t.line }]}>
+          {(['queue', 'steer'] as const).map((h) => (
+            <Pressable
+              key={h}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: how === h }}
+              onPress={() => setHow(h)}
+              style={[s.howOne, how === h && { backgroundColor: t.act }]}
+            >
+              <Text style={{ color: how === h ? t.onAct : t.text, fontSize: 13, fontWeight: '600' }}>{h === 'queue' ? '排队' : '引导'}</Text>
+              <Text style={{ color: how === h ? t.onAct : t.dim, fontSize: 11 }}>{h === 'queue' ? '做完这一步再看' : '先停下，马上看这句'}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <TextInput
         ref={input}
         value={draft}
         onChangeText={setDraft}
-        placeholder={offline ? '电脑没连上，写的话会在重连后发送' : running ? '它还在做事：现在发的，做完手头这一步就会看到' : '回复，或者让它接着做…'}
+        placeholder={offline ? '电脑没连上，写的话会在重连后发送' : running ? busyPlaceholder : '回复，或者让它接着做…'}
         placeholderTextColor={t.dim}
         multiline
         numberOfLines={Platform.OS === 'web' ? 1 : undefined}
         style={[s.input, { color: t.text }, noOutline]}
         accessibilityLabel="给 Agent 发消息"
       />
-      {choosing && (
-        <View style={s.bar}>
-          <Pressable accessibilityRole="button" onPress={() => add('camera')} style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
-            <Text style={{ color: t.text, fontSize: 12 }}>拍照</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => add('library')} style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
-            <Text style={{ color: t.text, fontSize: 12 }}>从相册选</Text>
-          </Pressable>
-        </View>
-      )}
       <View style={s.bar}>
-        {attach && (
+        {sheetable && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={choosing ? '收起' : '拍照或选图片'}
-            disabled={!canAttach || picking || pictures.length >= MAX_PICTURES}
-            onPress={() => setChoosing((c) => !c)}
-            style={({ pressed }) => [
-              s.round,
-              { borderColor: t.line, opacity: !canAttach || picking || pictures.length >= MAX_PICTURES ? 0.35 : pressed ? 0.6 : 1 },
-            ]}
+            accessibilityLabel="添加图片和这个对话的设置"
+            disabled={picking}
+            onPress={() => setChoosing(true)}
+            style={({ pressed }) => [s.round, { backgroundColor: t.well, opacity: picking ? 0.35 : pressed ? 0.6 : 1 }]}
           >
-            <Icon name={choosing ? 'close' : 'plus'} size={15} width={2.2} color={t.text} />
-          </Pressable>
-        )}
-        {(!!permission || !!onPermission) && (
-          <Pressable
-            disabled={!onPermission}
-            onPress={onPermission}
-            accessibilityRole={onPermission ? 'button' : undefined}
-            accessibilityLabel={`权限：${permission ?? '还没读到'}`}
-            style={({ pressed }) => [s.tag, s.fact, { borderColor: isFull(permission) ? t.err : t.line }, pressed && { opacity: 0.6 }]}
-          >
-            <Icon name="shield" size={13} width={2} color={isFull(permission) ? t.err : t.text} />
-            <Text numberOfLines={1} style={{ color: isFull(permission) ? t.err : t.text, fontSize: 12, flexShrink: 1 }}>
-              {permission ?? '权限'}
-            </Text>
+            <Icon name="plus" size={17} width={2.2} color={t.text} />
           </Pressable>
         )}
         {(!!model || !!agent) && (
@@ -172,20 +173,21 @@ export function Composer({
             onPress={onModel}
             accessibilityRole={onModel ? 'button' : undefined}
             accessibilityLabel={`模型：${model ? modelName(model) : agent}`}
-            style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}
+            style={({ pressed }) => [s.model, { backgroundColor: t.well }, pressed && { opacity: 0.6 }]}
           >
-            <Text numberOfLines={1} style={{ color: t.text, fontSize: 12, flexShrink: 1 }}>
+            <Text numberOfLines={1} style={{ color: t.text, fontSize: 13, flexShrink: 1 }}>
               {model ? modelName(model) : agent}
             </Text>
           </Pressable>
         )}
-        {canContinue && (
-          <Pressable onPress={() => go('继续')} style={({ pressed }) => [s.tag, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
-            <Text style={{ color: t.text, fontSize: 12 }}>继续</Text>
+        <View style={{ flex: 1 }} />
+        {running && canStop && !empty && (
+          <Pressable accessibilityRole="button" accessibilityLabel="停下" onPress={onStop} style={({ pressed }) => [s.send, { borderWidth: 1, borderColor: t.line, backgroundColor: t.card }, pressed && { opacity: 0.6 }]}>
+            <Icon name="stop" size={14} width={2.4} color={t.text} />
           </Pressable>
         )}
-        <View style={{ flex: 1 }} />
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel={stop ? '停下' : '发送'}
           disabled={!stop && (empty || picking)}
           onPress={() => (stop ? onStop() : go(draft, pictures))}
@@ -197,6 +199,29 @@ export function Composer({
           <Icon name={stop ? 'stop' : 'up'} size={stop ? 14 : 16} width={2.4} color={t.onAct} />
         </Pressable>
       </View>
+      {choosing && (
+        <AttachSheet
+          onClose={() => setChoosing(false)}
+          pictures={canAttach ? (pictures.length >= MAX_PICTURES ? `已经选了 ${MAX_PICTURES} 张，发出去再加` : null) : pictures.length ? '电脑没连上，图片要连上后才能发' : undefined}
+          onCamera={() => add('camera')}
+          onLibrary={() => add('library')}
+          permission={permission}
+          onPermission={
+            onPermission &&
+            (() => {
+              setChoosing(false);
+              onPermission();
+            })
+          }
+          onEffort={
+            onEffort &&
+            (() => {
+              setChoosing(false);
+              onEffort();
+            })
+          }
+        />
+      )}
     </View>
   );
 }
@@ -216,12 +241,13 @@ const s = StyleSheet.create({
   },
   suggestion: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', maxWidth: '100%', gap: 8, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
   input: { fontSize: 15, minHeight: 24, maxHeight: 140, paddingHorizontal: 4, paddingVertical: 2 },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tag: { height: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
-  fact: { flexDirection: 'row', gap: 5, flexShrink: 1 },
-  round: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  model: { height: 36, borderRadius: 18, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
+  how: { flexDirection: 'row', borderWidth: 1, borderRadius: 14, padding: 3, gap: 3 },
+  howOne: { flex: 1, minHeight: 44, borderRadius: 11, alignItems: 'center', justifyContent: 'center', gap: 1 },
   pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingRight: 4 },
   thumb: { width: 56, height: 56, borderRadius: 12 },
   unpick: { position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  send: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 });

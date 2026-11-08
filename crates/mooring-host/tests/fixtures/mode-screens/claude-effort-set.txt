@@ -1,0 +1,12 @@
+ ▝▝   ▝▝   /private/tmp/claude-502/cli-test
+
+
+❯ /effort
+  ⎿  Set effort level to high (this session only): Comprehensive implementation with extensive testing and
+     documentation
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  🪞🔴🔴🟢 🔥6天 晋升保留退出
+  ⏵⏵ auto mode on (shift+tab to cycle)

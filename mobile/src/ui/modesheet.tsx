@@ -54,7 +54,13 @@ export function ModeSheet({ machine, terminal, kind, onClose }: { machine: strin
             accessibilityLabel={`${o.label}${o.current ? '，正在用' : ''}`}
             disabled={!!o.current || !!busy}
             onPress={() => pick(o)}
-            style={({ pressed }) => [s.row, { borderColor: t.sep }, pressed && { backgroundColor: t.well }, !!busy && busy !== o.key && { opacity: 0.5 }]}
+            style={({ pressed }) => [
+              s.row,
+              { borderColor: t.sep },
+              o.current && o.full && { backgroundColor: t.errBg },
+              pressed && { backgroundColor: t.well },
+              !!busy && busy !== o.key && { opacity: 0.5 },
+            ]}
           >
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={{ color: o.full ? t.err : t.text, fontSize: 15 }}>{o.label}</Text>
@@ -75,5 +81,5 @@ export function ModeSheet({ machine, terminal, kind, onClose }: { machine: strin
 
 const s = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '600', marginBottom: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderRadius: 10 },
 });

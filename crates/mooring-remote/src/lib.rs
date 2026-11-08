@@ -21,6 +21,7 @@ pub mod chat;
 pub mod client;
 pub mod close;
 pub mod link;
+pub mod ops;
 pub mod protocol;
 pub mod role;
 pub mod secure;
