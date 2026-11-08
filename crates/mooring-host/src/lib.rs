@@ -28,7 +28,8 @@ pub use agents::mirror;
 pub use agents::modes_drive::switches as agent_modes_switch;
 pub use agents::{
     adapter as agent_adapter, describe_tool, reads_tools, roots as agent_log_roots, tool_call_line,
-    tool_result_line, usage_line, usage_marker, Described, ToolCallLine, ToolOutput, UsageState,
+    tool_result_line, usage_line, usage_marker, Described, ToolCallLine, ToolOutput, TurnKeys,
+    UsageState,
 };
 pub use host::remote::{load as remote_config, Config as RemoteConfig};
 pub use host::{serve, serve_taking_over, serve_with_options, serve_with_roots};

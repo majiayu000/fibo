@@ -12,6 +12,14 @@ const CONTINUED: &str = "Claude 会话已转到另一个会话接着跑";
 
 pub struct Claude;
 impl Adapter for Claude {
+    /// Enter queues while it works (「Press up to edit queued messages」); Ctrl+Enter, the kitty
+    /// code it reads, sends now: a real run changed its answer mid-turn (2.1.319, 11-09).
+    fn turn_keys(&self) -> Option<super::TurnKeys> {
+        Some(super::TurnKeys {
+            queue: b"\r",
+            steer: b"\x1b[13;5u",
+        })
+    }
     fn trust_screen(&self, lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
         super::trust::claude(lines)
     }

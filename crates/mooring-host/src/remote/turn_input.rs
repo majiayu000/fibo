@@ -1,7 +1,5 @@
 //! A message sent while the Agent works: queue it for after the step at hand, or put it into
-//! the step now (steer). Each CLI has both, on different keys, measured on the real CLIs
-//! (docs/phone-app/cli-turn-input.md): Claude Code queues on Enter and steers on Ctrl+Enter
-//! (`ESC[13;5u`, the kitty key code it reads); Codex steers on Enter and queues on Tab.
+//! the step now (steer). Each CLI's adapter says which keys do which (`Adapter::turn_keys`).
 //! `send` with `how` pastes the text, then presses that Agent's key for it; without `how` it
 //! presses Enter as before.
 use super::{named, ok_reply, text};
@@ -10,29 +8,6 @@ use mooring_core::protocol::*;
 use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
-
-/// The keys for each way, for a CLI measured to have both.
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct TurnKeys {
-    pub queue: &'static [u8],
-    pub steer: &'static [u8],
-}
-
-pub(super) fn keys(agent: Agent) -> Option<TurnKeys> {
-    if agent == Agent::Claude {
-        Some(TurnKeys {
-            queue: b"\r",
-            steer: b"\x1b[13;5u",
-        })
-    } else if agent == Agent::Codex {
-        Some(TurnKeys {
-            queue: b"\t",
-            steer: b"\r",
-        })
-    } else {
-        None
-    }
-}
 
 /// `how` on a `send`: None when absent, so the send presses Enter as it always did.
 pub(super) fn how(request: &Value) -> io::Result<Option<bool>> {
@@ -71,7 +46,7 @@ pub(super) fn send(
     let terminal = text(request, "terminal")?.to_owned();
     let agent = agent_in(socket, &terminal)?;
     let keys = agent
-        .and_then(keys)
+        .and_then(|a| mooring_host::agent_adapter(a).turn_keys())
         .ok_or_else(|| io::Error::other("这个 Agent 分不出排队和马上发，直接发送就好"))?;
     let paste = Request::SendText {
         session,
@@ -94,16 +69,21 @@ pub(super) fn send(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mooring_host::{agent_adapter, TurnKeys};
 
     #[test]
     fn each_measured_cli_queues_and_steers_on_its_own_keys() {
-        let claude = keys(Agent::Claude).unwrap();
-        assert_eq!(
-            (claude.queue, claude.steer),
-            (&b"\r"[..], &b"\x1b[13;5u"[..])
-        );
-        let codex = keys(Agent::Codex).unwrap();
-        assert_eq!((codex.queue, codex.steer), (&b"\t"[..], &b"\r"[..]));
+        let keys = |a| agent_adapter(a).turn_keys();
+        let claude = TurnKeys {
+            queue: b"\r",
+            steer: b"\x1b[13;5u",
+        };
+        assert_eq!(keys(Agent::Claude), Some(claude));
+        let codex = TurnKeys {
+            queue: b"\t",
+            steer: b"\r",
+        };
+        assert_eq!(keys(Agent::Codex), Some(codex));
         assert_eq!(keys(Agent::Grok), None);
     }
 
