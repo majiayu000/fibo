@@ -20,6 +20,7 @@
 | 日期 | 现象 | 类型 | 为什么之前看不到 | 修复 | 现在由什么守着 |
 |---|---|---|---|---|---|
 | 11-08 | 键盘挡住「新任务」的开始键、「记一件待办」的记下键和底部弹出的输入框（要求修改、新建文件夹）；聊天页输入框和键盘之间多空一截 | 平台 | RN 0.88 安卓全屏绘制，窗口不再为键盘缩小；只有聊天页包了 `KeyboardAvoidingView`，弹框只在 iOS 生效。网页版和 iOS 看不到。用户在真手机（搜狗输入法）上报的 | 所有带输入框的页面统一包 `KeyboardSafe`（`mobile/src/ui/keyboard.tsx`），键盘弹起时不再留系统栏的空 | 无自动测试，靠真机看：11-08 OPPO PMA110（安卓 16）＋搜狗九宫格，旧包在「新任务」复现（开始键整个不见），新包修好；同一台上旧包的聊天页没被挡，搜狗拼音候选出来也没挡 |
+| 11-08 | Claude 用提问框问三选一，手机只写「等你回答」，点进去只有「CLI 请求工具审批（Hook）」和 Esc，会话卡住 | 真 CLI | 这一版 Claude Code 答完才把 AskUserQuestion 写进日志，答之前只有 PermissionRequest hook；测试里的提问都从日志读 | `b7b9b93`：读 hook 的 tool_input，给手机编号选项 | `turn_tests::a_question_asked_through_the_permission_hook_keeps_its_question_and_choices` |
 | 11-07 | OpenCode 有时不认：权限框弹着，手机没有卡片。提示词短能认，长到折行就认不出，看着随机 | 时序 | 换 App 不更新插件，机器上还是 0.2.1，提示词时间全是 0，「按回车的时间」这条证据失效，只剩屏幕原文，而 `┃` 把折行的提示词隔开。仓库和测试都是 0.2.2 | 更新插件到 0.2.2 后同样的长提示词能认；`mooring plugins` 看是否「可更新」。换 App 后不自动更新插件这点没改 | 无自动测试，靠真机看 |
 | 11-07 | `mooring run opencode` 必定超时「一直没有出现输入框」，任务没交 | 真 CLI | 就绪判断只认 `❯ › >`，OpenCode 的框没有箭头；插件测试没走 `run` | 插件声明 `input_hint` | `tests/opencode_plugin.rs` 的 `its_empty_input_box_counts_as_ready_and_its_output_does_not` |
 | 11-07 | 手机点「允许」多弹一个框，写「电脑没读出它要做什么」，其实读出来了 | 时序 | 手机连的 `mooring remote` 比插件更新早启动 7 秒，还记着旧插件。协议测试每次都起新进程，碰不到 | #165：只看卡片上的字段，不查本进程的注册表 | `remote::asks::api_tests::an_approval_from_the_api_is_read_off_the_card` |
