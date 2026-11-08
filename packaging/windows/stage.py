@@ -22,7 +22,28 @@ bin_dir = stage / 'bin'
 resources = stage / 'Resources'
 bin_dir.mkdir(parents=True)
 resources.mkdir(parents=True)
-for binary in ('mooring-app.exe', 'mooring.exe'):
+GUI, CONSOLE = 2, 3
+
+
+def subsystem(exe: pathlib.Path) -> int:
+    """The PE optional header's Subsystem field (same offset in PE32 and PE32+)."""
+    data = exe.read_bytes()
+    pe = int.from_bytes(data[0x3C:0x40], 'little')
+    if data[:2] != b'MZ' or data[pe:pe + 4] != b'PE\0\0':
+        raise SystemExit(f'{exe} 不是 Windows 程序')
+    return int.from_bytes(data[pe + 24 + 68:pe + 24 + 70], 'little')
+
+
+# A console program double-clicked gets a command prompt opened beside it, which only shows
+# on Windows: the window must be a GUI program (`windows_subsystem` in mooring-app's
+# main.rs), and the CLI that Agents run inside terminals must stay a console one.
+for binary, want, words in (
+    ('mooring-app.exe', GUI, '窗口程序，否则打开时旁边会多一个命令行窗口'),
+    ('mooring.exe', CONSOLE, '命令行程序，否则在终端里敲 mooring 没有输出'),
+):
+    got = subsystem(args.release_dir / binary)
+    if got != want:
+        raise SystemExit(f'{binary} 应该是{words}（PE Subsystem 是 {got}，应为 {want}）')
     shutil.copy2(args.release_dir / binary, bin_dir / binary)
 # A build linked against a shared libghostty-vt needs it beside the programs.
 for dll in args.release_dir.glob('ghostty-vt*.dll'):
