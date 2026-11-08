@@ -17,6 +17,7 @@ export function Composer({
   model,
   permission,
   running,
+  busyPlaceholder,
   canStop,
   offline,
   suggestion,
@@ -36,6 +37,8 @@ export function Composer({
   onModel?: () => void;
   onPermission?: () => void;
   running: boolean;
+  /** What a message sent while it works becomes, for this Agent (ui/busy.ts). */
+  busyPlaceholder: string;
   canStop: boolean;
   offline: boolean;
   /** What the Agent offers as the next prompt: a tap puts it in the box, sending is still yours. */
@@ -120,7 +123,7 @@ export function Composer({
         ref={input}
         value={draft}
         onChangeText={setDraft}
-        placeholder={offline ? '电脑没连上，写的话会在重连后发送' : running ? '它还在做事：现在发的，做完手头这一步就会看到' : '回复，或者让它接着做…'}
+        placeholder={offline ? '电脑没连上，写的话会在重连后发送' : running ? busyPlaceholder : '回复，或者让它接着做…'}
         placeholderTextColor={t.dim}
         multiline
         numberOfLines={Platform.OS === 'web' ? 1 : undefined}

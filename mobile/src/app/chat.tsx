@@ -13,6 +13,7 @@ import { useSuggestion } from '@/remote/useSuggestion';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { countUse } from '@/store/suggestionCounts';
 import { suggestionStats } from '@/store/suggestions';
+import { whileBusy } from '@/ui/busy';
 import { Composer } from '@/ui/composer';
 import { KeyboardSafe } from '@/ui/keyboard';
 import type { Picture } from '@/ui/pictures';
@@ -33,7 +34,7 @@ import { sameWords } from '@/ui/sent';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 
-/** `queued`: sent while the Agent worked, so it waits for the step at hand. */
+/** `queued`: sent while the Agent worked; what that means depends on the CLI (ui/busy.ts). */
 type Pending = { text: string; at: number; queued?: boolean; pictures?: number };
 
 /** A reindexed log gives its messages new seqs; the same words at the same time are one. */
@@ -287,13 +288,13 @@ export default function Chat() {
           <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
       ) : l.kind === 'pending' ? (
-        <Mine text={l.p.pictures ? `[${l.p.pictures} 张图片] ${l.p.text}`.trim() : l.p.text} note={l.p.queued ? '已排队 · 它做完手头这一步就会看到' : '发送中…'} tone="pending" />
+        <Mine text={l.p.pictures ? `[${l.p.pictures} 张图片] ${l.p.text}`.trim() : l.p.text} note={l.p.queued ? whileBusy(card?.agent).note : '发送中…'} tone="pending" />
       ) : (
         <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
           <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, toTools],
+    [agent, card?.agent, toTools],
   );
 
   return (
@@ -413,6 +414,7 @@ export default function Chat() {
           model={card?.model}
           permission={card?.permission}
           running={!!running}
+          busyPlaceholder={whileBusy(card?.agent).placeholder}
           canStop={supports(m, 'stop')}
           offline={!online}
           suggestion={suggestion}
