@@ -25,6 +25,7 @@ mod diff;
 mod diff_config;
 mod diff_scope;
 mod dirs;
+mod images;
 mod list;
 mod modes;
 mod quota;
@@ -426,12 +427,15 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         }
         "send" => {
             asks::not_asking_trust(socket, &terminal()?)?;
+            let session = match request.get("session") {
+                None => None,
+                Some(serde_json::Value::String(s)) => Some(s.clone()),
+                Some(_) => return Err(io::Error::other("session 需要字符串")),
+            };
+            let pictures = images::wanted(socket, request)?;
+            images::paste(socket, request, client, &terminal()?, &session, &pictures)?;
             let send = Request::SendText {
-                session: match request.get("session") {
-                    None => None,
-                    Some(serde_json::Value::String(s)) => Some(s.clone()),
-                    Some(_) => return Err(io::Error::other("session 需要字符串")),
-                },
+                session,
                 id: terminal()?,
                 text: text(request, "text")?.to_owned(),
                 submit: request["enter"].as_bool().unwrap_or(false),
@@ -501,6 +505,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         "outcome" => writes::outcome(socket, request, client),
         "todoadd" => todos::add(socket, request, client),
         "todooutcome" => todos::outcome(socket, request, client),
+        "image" => images::upload(socket, request),
         op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
     }
 }

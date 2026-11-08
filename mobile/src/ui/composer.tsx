@@ -1,11 +1,14 @@
 // The composer: a big rounded card with the text on top and a row of small controls
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
+// The + on the left takes a photo or picks pictures; they wait as thumbnails above the text.
 import { type ComponentRef, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Icon } from './icons';
-import { noOutline, useBottom } from './kit';
+import { useBottomOverKeyboard } from './keyboard';
+import { noOutline } from './kit';
 import { isFull } from './modes';
 import { modelName } from './parse';
+import { MAX_PICTURES, type Picture, pick } from './pictures';
 import { useTheme } from './theme';
 
 export function Composer({
@@ -22,6 +25,8 @@ export function Composer({
   onUseSuggestion,
   onModel,
   onPermission,
+  canAttach,
+  onError,
 }: {
   agent: string;
   /** What the computer says is on. */
@@ -36,20 +41,44 @@ export function Composer({
   offline: boolean;
   /** What the Agent offers as the next prompt: a tap puts it in the box, sending is still yours. */
   suggestion?: string | null;
-  onSend: (text: string) => Promise<boolean>;
+  onSend: (text: string, pictures: Picture[]) => Promise<boolean>;
+  /** The computer keeps pictures (`image`) and is online; without it there is no +. */
+  canAttach?: boolean;
+  onError?: (why: string) => void;
   onStop: () => void;
   onUseSuggestion?: () => void;
 }) {
   const t = useTheme();
-  const bottom = useBottom();
+  const bottom = useBottomOverKeyboard();
   const [draft, setDraft] = useState('');
+  const [pictures, setPictures] = useState<Picture[]>([]);
+  const [choosing, setChoosing] = useState(false);
+  const [picking, setPicking] = useState(false);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
-  const stop = running && canStop && !draft.trim();
-  async function go(text: string) {
-    if (!text.trim()) return;
+  const empty = !draft.trim() && !pictures.length;
+  const stop = running && canStop && empty;
+  async function go(text: string, with_: Picture[] = []) {
+    if (!text.trim() && !with_.length) return;
     setDraft('');
-    if (!(await onSend(text.trim()))) setDraft(text);
+    setPictures([]);
+    if (!(await onSend(text.trim(), with_))) {
+      setDraft(text);
+      setPictures(with_);
+    }
   }
+  async function add(from: 'camera' | 'library') {
+    setChoosing(false);
+    setPicking(true);
+    try {
+      const got = await pick(from, MAX_PICTURES - pictures.length);
+      if (got) setPictures((p) => [...p, ...got].slice(0, MAX_PICTURES));
+    } catch (e) {
+      onError?.((e as Error).message);
+    } finally {
+      setPicking(false);
+    }
+  }
+  const attach = canAttach || pictures.length > 0;
   return (
     <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }]}>
       {!!suggestion && !draft && (
@@ -69,6 +98,24 @@ export function Composer({
           </Text>
         </Pressable>
       )}
+      {pictures.length > 0 && (
+        <View style={s.pictures}>
+          {pictures.map((p, i) => (
+            <View key={p.uri}>
+              <Image source={{ uri: p.uri }} style={[s.thumb, { backgroundColor: t.well }]} accessibilityLabel={`第 ${i + 1} 张图片`} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`去掉第 ${i + 1} 张图片`}
+                hitSlop={8}
+                onPress={() => setPictures((all) => all.filter((x) => x !== p))}
+                style={[s.unpick, { backgroundColor: t.text }]}
+              >
+                <Icon name="close" size={10} width={2.6} color={t.card} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
       <TextInput
         ref={input}
         value={draft}
@@ -80,7 +127,31 @@ export function Composer({
         style={[s.input, { color: t.text }, noOutline]}
         accessibilityLabel="给 Agent 发消息"
       />
+      {choosing && (
+        <View style={s.bar}>
+          <Pressable accessibilityRole="button" onPress={() => add('camera')} style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
+            <Text style={{ color: t.text, fontSize: 12 }}>拍照</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => add('library')} style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
+            <Text style={{ color: t.text, fontSize: 12 }}>从相册选</Text>
+          </Pressable>
+        </View>
+      )}
       <View style={s.bar}>
+        {attach && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={choosing ? '收起' : '拍照或选图片'}
+            disabled={!canAttach || picking || pictures.length >= MAX_PICTURES}
+            onPress={() => setChoosing((c) => !c)}
+            style={({ pressed }) => [
+              s.round,
+              { borderColor: t.line, opacity: !canAttach || picking || pictures.length >= MAX_PICTURES ? 0.35 : pressed ? 0.6 : 1 },
+            ]}
+          >
+            <Icon name={choosing ? 'close' : 'plus'} size={15} width={2.2} color={t.text} />
+          </Pressable>
+        )}
         {(!!permission || !!onPermission) && (
           <Pressable
             disabled={!onPermission}
@@ -116,11 +187,11 @@ export function Composer({
         <View style={{ flex: 1 }} />
         <Pressable
           accessibilityLabel={stop ? '停下' : '发送'}
-          disabled={!stop && !draft.trim()}
-          onPress={() => (stop ? onStop() : go(draft))}
+          disabled={!stop && (empty || picking)}
+          onPress={() => (stop ? onStop() : go(draft, pictures))}
           style={({ pressed }) => [
             s.send,
-            { backgroundColor: t.act, opacity: !stop && !draft.trim() ? 0.35 : pressed ? 0.7 : 1 },
+            { backgroundColor: t.act, opacity: !stop && (empty || picking) ? 0.35 : pressed ? 0.7 : 1 },
           ]}
         >
           <Icon name={stop ? 'stop' : 'up'} size={stop ? 14 : 16} width={2.4} color={t.onAct} />
@@ -148,5 +219,9 @@ const s = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   tag: { height: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
   fact: { flexDirection: 'row', gap: 5, flexShrink: 1 },
+  round: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingRight: 4 },
+  thumb: { width: 56, height: 56, borderRadius: 12 },
+  unpick: { position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   send: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
 });

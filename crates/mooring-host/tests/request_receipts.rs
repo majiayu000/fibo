@@ -354,6 +354,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
         text: text.into(),
         enter: true,
         request: request.map(str::to_owned),
+        images: vec![],
     };
     // The reply is lost with the connection; the phone reconnects and sends it again.
     let first = connect();
@@ -367,6 +368,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
         text: "must-not-reach-shell".into(),
         enter: true,
         request: Some("stale-chat".into()),
+        images: vec![],
     };
     let refusal = again.request(refused_chat, t).unwrap_err().to_string();
     assert!(refusal.contains("原对话"), "{refusal}");

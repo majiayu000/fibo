@@ -5,12 +5,13 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
 import { refresh, supports, useHub, write } from '@/remote/hub';
-import { Label, Nav, Wide, noOutline, useBottom } from '@/ui/kit';
+import { Label, Nav, Wide, noOutline } from '@/ui/kit';
+import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
 import { useTheme } from '@/ui/theme';
 
 export default function TodoNew() {
   const t = useTheme();
-  const bottom = useBottom();
+  const bottom = useBottomOverKeyboard();
   const { machines } = useHub();
   const able = machines.filter((m) => supports(m, 'todoadd'));
   const [machine, setMachine] = useState(able[0]?.id ?? '');
@@ -50,7 +51,7 @@ export default function TodoNew() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <KeyboardSafe style={{ backgroundColor: t.bg }}>
       <Nav close big title="记一件待办" sub="记在电脑的待办里，要做时点「接着做」" />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
         {!m && <Text style={{ fontSize: 14, color: t.dim }}>没有能记待办的电脑：电脑要在线、更新到新版本，这台手机要有完全控制权限。</Text>}
@@ -94,7 +95,7 @@ export default function TodoNew() {
       <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: bottom + 12 }}>
         <Wide label={busy ? '正在记…' : '记下'} disabled={!ready} onPress={save} />
       </View>
-    </View>
+    </KeyboardSafe>
   );
 }
 
