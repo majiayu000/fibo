@@ -10,6 +10,7 @@
 git clone https://github.com/majiayu000/mooring && cd mooring
 docker build -f crates/mooring-relay/Dockerfile -t mooring-relay .
 docker run -d --name mooring-relay --restart unless-stopped \
+  --log-opt max-size=20m --log-opt max-file=10 \
   -p 127.0.0.1:8787:8787 \
   -e RELAY_REGISTRATION_KEY="$(openssl rand -hex 24)" \
   -e RELAY_TRUST_PROXY=1 \
@@ -83,3 +84,21 @@ docker rm -f mooring-relay   # 然后用第 1 步同样的 docker run 启动，�
 - 手机落后超过 16 MB 时会被断开，重连后从最新画面接着看。
 
 后两项在 `crates/mooring-relay/src/server.rs` 的 `Config` 里，要改就改源码重新构建。还没有按流量计的配额：对所有人开放的中继，先用注册密钥控制谁能挂上来。
+
+## 看每台电脑用了多少流量
+
+中继每小时往日志里写一行，每台这一小时有流量的电脑一行，不记内容：
+
+```
+usage machine=3f9a1c0b7d2e from_machine=1834221 to_machine=402117
+```
+
+`machine` 是这台电脑令牌哈希的前 12 位，`from_machine` / `to_machine` 是这一小时电脑发出 / 收到的字节，它的手机的流量都算在里面。服务器实际出入的流量约是两者之和的两倍。中继自己不存历史，按天或按月汇总就加日志：
+
+```sh
+docker logs mooring-relay 2>/dev/null | awk -F'[ =]' '/^usage /{b[$3]+=$5+$7} END{for(m in b) printf "%s %.1f MB\n", m, b[m]/1e6}'
+```
+
+日志会一直涨，`docker run` 时加 `--log-opt max-size=20m --log-opt max-file=10` 让它轮转（每行约 80 字节，挂 100 台电脑时约能存两年多的用量行）。容器删掉重建后，旧日志也跟着没了，要长期留就定期把上面的汇总存下来。
+
+`/healthz` 不说现在挂了几台电脑：谁都能访问它，这个数只该给运行中继的人看。

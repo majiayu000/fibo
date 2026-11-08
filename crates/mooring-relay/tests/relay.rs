@@ -170,7 +170,6 @@ async fn a_phone_reaches_its_machine_both_ways_and_closes_reach_the_other_side()
         serde_json::from_str(body.split("\r\n\r\n").nth(1).unwrap()).unwrap()
     };
     assert_eq!(health["ok"], true);
-    assert_eq!(health["agents"], 1);
     assert_eq!(health["protocol"], wire::PROTOCOL);
 }
 
