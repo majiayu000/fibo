@@ -9,6 +9,7 @@ pub(super) struct Listed {
     rev: u64,
     machine: Value,
     spaces: Value,
+    quiet: Value,
     todos: Value,
     order: Vec<String>,
     cards: HashMap<String, Value>,
@@ -39,6 +40,7 @@ impl Listed {
             &mut out,
         );
         same("spaces", &mut self.spaces, full["spaces"].take(), &mut out);
+        same("quiet", &mut self.quiet, full["quiet"].take(), &mut out);
         same("todos", &mut self.todos, full["todos"].take(), &mut out);
         let terminals = match full["terminals"].take() {
             Value::Array(all) => all,
@@ -112,6 +114,21 @@ mod tests {
 
         let one = l.reply(full(vec![card("a", "x"), card("b", "z")]), Some(2));
         assert_eq!(one, json!({ "rev": 3, "changed": [card("b", "z")] }));
+    }
+
+    #[test]
+    fn a_space_put_aside_or_taken_back_says_the_spaces_put_aside() {
+        let mut l = Listed::default();
+        let with = |quiet: Value| {
+            let mut f = full(vec![card("a", "")]);
+            f["quiet"] = quiet;
+            f
+        };
+        l.reply(with(json!([])), None);
+        let aside = l.reply(with(json!([{ "id": "q" }])), Some(1));
+        assert_eq!(aside, json!({ "rev": 2, "quiet": [{ "id": "q" }] }));
+        let back = l.reply(with(json!([])), Some(2));
+        assert_eq!(back, json!({ "rev": 3, "quiet": [] }));
     }
 
     #[test]

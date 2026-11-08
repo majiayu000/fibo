@@ -105,3 +105,9 @@ export function oops(text: string) {
   if (Platform.OS === 'web') globalThis.alert?.(text);
   else Alert.alert(text);
 }
+
+/** 先不管 a space on the computer, or take it back (`spacequiet`); the list then says so. */
+export async function setSpaceQuiet(machine: string, space: string, quiet: boolean) {
+  await write(machine, 'spacequiet', { space, quiet });
+  setTimeout(() => refresh(machine), 200);
+}

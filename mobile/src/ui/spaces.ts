@@ -67,3 +67,14 @@ export function ignoredPick(spaces: Space[], sent: string | undefined, cwd: stri
   if (!went || went.id === sent) return '';
   return `电脑上的 Mooring 版本较旧，任务放进了「${went.name}」。换新版后可以选空间`;
 }
+
+/** A space put aside on a computer (先不管), with the computer it is on. */
+export type Aside<M> = { m: M; id: string; name: string };
+
+/** Every online computer's spaces put aside, by name; a computer that says none lists none. */
+export function asideSpaces<M extends { status: string; quietSpaces?: Space[] }>(machines: M[]): Aside<M>[] {
+  return machines
+    .filter((m) => m.status === 'online')
+    .flatMap((m) => (m.quietSpaces ?? []).map((s) => ({ m, id: s.id, name: s.name })))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

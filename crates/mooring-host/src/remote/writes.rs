@@ -224,6 +224,20 @@ pub(super) fn add_space(socket: &Path, request: &Value, client: Option<&str>) ->
     Ok(json!({ "id": space.id, "name": space.name, "cwd": space.cwd }))
 }
 
+/// 先不管 a space, or take it back: the same switch as the window's. Its conversations come
+/// back to the phone on the next `list`.
+pub(super) fn space_quiet(
+    socket: &Path,
+    request: &Value,
+    client: Option<&str>,
+) -> io::Result<Value> {
+    let id = super::text(request, "space")?.to_owned();
+    let quiet =
+        (request["quiet"].as_bool()).ok_or_else(|| io::Error::other("quiet 要是 true 或 false"))?;
+    edit_once(socket, request, client, Edit::SetSpaceQuiet { id, quiet })?;
+    Ok(json!({}))
+}
+
 /// The shell running `command` and then itself, as the window's resume does (`launch_argv`).
 /// The prompt goes as an argument the shell does not read.
 fn agent_argv(shell: &str, command: &str, prompt: Option<&str>) -> Vec<String> {

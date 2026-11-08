@@ -437,6 +437,10 @@ pub struct Hello {
 pub struct List {
     pub machine: Machine,
     pub spaces: Vec<Space>,
+    /// Spaces put aside (先不管): their conversations stay off the phone, the space itself is
+    /// named so a phone can take it back (`spacequiet`). Absent from hosts before 11-09.
+    #[serde(default)]
+    pub quiet: Vec<Space>,
     pub terminals: Vec<Card>,
     /// What the board's 待办 holds; absent from hosts before 11-05.
     #[serde(default)]

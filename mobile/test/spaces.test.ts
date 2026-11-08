@@ -1,7 +1,7 @@
 // Where a new task lands: what the phone shows is what it sends, and a folder in no space
 // says where it is going instead of quietly going to the first space.
 import { describe, expect, test } from 'bun:test';
-import { holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf } from '../src/ui/spaces';
+import { asideSpaces, holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf } from '../src/ui/spaces';
 
 const work = { id: 'w', name: '工作空间', cwd: '/Users/me' };
 const app = { id: 'a', name: 'mooring', cwd: '/Users/me/code/mooring' };
@@ -55,5 +55,14 @@ describe('an older computer that does not read the space', () => {
     expect(ignoredPick([work, app], 'a', '/tmp', {})).toContain('工作空间');
     expect(ignoredPick([work, app], 'a', '/Users/me/code/mooring', {})).toBe('');
     expect(ignoredPick([work, app], 'a', '/tmp', { space: 'a' })).toBe('');
+  });
+});
+
+describe('the spaces put aside', () => {
+  test('every online computer names its own, by name; one gone away or saying none lists none', () => {
+    const on = { name: 'mac', status: 'online', quietSpaces: [{ id: 'y', name: 'youtube', cwd: '/y' }, { id: 'h', name: 'her', cwd: '/h' }] };
+    const old = { name: 'old', status: 'online' };
+    const away = { name: 'away', status: 'offline', quietSpaces: [{ id: 'v', name: 'vsr', cwd: '/v' }] };
+    expect(asideSpaces([on, old, away]).map((a) => `${a.m.name}/${a.name}`)).toEqual(['mac/her', 'mac/youtube']);
   });
 });

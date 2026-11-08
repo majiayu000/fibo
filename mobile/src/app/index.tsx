@@ -1,7 +1,8 @@
 // The home screen: every paired computer's conversations, what needs you first as cards you can
 // answer here. What runs and what waits to be checked fold under them, so none of it pushes the
 // other off the screen. Swipe left for 已处理, right for 稍后提醒, with a moment to undo. What you
-// wrote while a computer was away waits under 「未发送」.
+// wrote while a computer was away waits under 「未发送」. Chips under the title show one space
+// alone; spaces put aside on the computer are named at the foot, each can be taken back.
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -12,7 +13,9 @@ import { setInboxView, useInboxView } from '@/store/inboxView';
 import { drop, useOutbox } from '@/store/outbox';
 import { SpaceMark } from '@/ui/icons';
 import { Btn, Group, Round, TITLE_WEIGHT, Wide, mono, useTop } from '@/ui/kit';
+import { QuietSpaces } from '@/ui/quietspaces';
 import { Row, rowStyles, spaceName } from '@/ui/row';
+import { SpaceChips } from '@/ui/spacechips';
 import { type Arranged, type Item, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
 import { Bar, QuotaWords, useTightWindows } from '@/ui/quotaLine';
 import { TabBar } from '@/ui/tabs';
@@ -145,7 +148,7 @@ export default function Inbox() {
   const shown = useRef<Arranged | null>(null);
   if (!shown.current || !hold.held()) shown.current = arrange(machines, shown.current?.pins ?? []);
   const view = useInboxView();
-  const shelf = shelve(shown.current, null);
+  const shelf = shelve(shown.current, view.space);
   const { pinned, ahead, review, running, behind, later, done } = shelf;
   const named = namesComputer(machines);
   const line = connectionLine(machines);
@@ -189,6 +192,7 @@ export default function Inbox() {
         <Round icon="search" label="搜索" onPress={() => router.push('/search')} />
         <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
       </View>
+      <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
       <View style={{ flex: 1 }} {...hold.touch}>
       <ScrollView
         contentContainerStyle={{ paddingTop: 4, paddingBottom: undo ? 72 : 16 }}
@@ -214,6 +218,12 @@ export default function Inbox() {
         {offline.map((m) => (
           <Offline key={m.id} m={m} t={t} />
         ))}
+        {shelf.filter !== null && shelf.elsewhere > 0 && (
+          <Pressable accessibilityRole="button" onPress={() => setInboxView({ space: null })} style={({ pressed }) => [s.elsewhere, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
+            <Text style={{ fontSize: 14, color: t.wait, flex: 1 }}>{`其他空间还有 ${shelf.elsewhere} 件等你`}</Text>
+            <Text style={{ fontSize: 13, color: t.dim }}>看全部</Text>
+          </Pressable>
+        )}
         {ahead.map((i) => (
           <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
         ))}
@@ -251,7 +261,7 @@ export default function Inbox() {
           <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
         ))}
         {loaded && machines.some((m) => m.status === 'online') && shelf.empty && (
-          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>没有要处理的事</Text>
+          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>{shelf.filter === null ? '没有要处理的事' : '这个空间没有要处理的事'}</Text>
         )}
         {unsent.length > 0 && <Group label="未发送" />}
         {unsent.map((u, i) => {
@@ -292,6 +302,7 @@ export default function Inbox() {
               <Row m={m} c={c} named={named} dim right={{ text: '已处理' }} onPress={() => open(m, c)} />
             </Swipe>
           ))}
+        <QuietSpaces machines={machines} open={view.quiet} onToggle={() => setInboxView({ quiet: !view.quiet })} named={named} />
       </ScrollView>
       {undo && (
         <View style={[s.undo, { backgroundColor: t.act }]}>
@@ -320,6 +331,7 @@ export default function Inbox() {
 
 const s = StyleSheet.create({
   hd: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
+  elsewhere: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 18, borderBottomWidth: 1 },
   title: { fontSize: 26, lineHeight: 32, fontWeight: '600', letterSpacing: -0.3 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   runHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },

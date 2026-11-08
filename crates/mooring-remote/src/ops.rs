@@ -1,6 +1,7 @@
 //! The ops a machine may list in `hello`. `image` keeps a picture for a later `send`;
 //! `steer` says `send` takes `how` (`queue` or `steer`, see the host's `turn_input`); `effort`
-//! says `modes` and `setmode` take the kind `effort`.
+//! says `modes` and `setmode` take the kind `effort`; `spacequiet` puts a space aside or takes it
+//! back, and `list` names the ones put aside in `quiet`.
 
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
@@ -42,4 +43,5 @@ pub const OPS: &[&str] = &[
     "image",
     "steer",
     "effort",
+    "spacequiet",
 ];
