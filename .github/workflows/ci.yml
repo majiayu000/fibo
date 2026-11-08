@@ -34,6 +34,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 2026-11-08 history was rewritten from d32157e on (docs/decisions/2026-11-08-scrub-relay-address.md).
+      # A branch still built on the old history would bring the old commits back. The compare API
+      # says "ahead"/"identical" when d32157e is an ancestor; once GitHub purges it, a 404 passes.
+      - name: Old history before the 2026-11-08 rewrite stays out
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(gh api "repos/${{ github.repository }}/compare/d32157efe3f5acda9f5ede4b3a6c8b0df1753201...${{ github.sha }}" --jq .status 2>/dev/null || echo gone)
+          echo "d32157e vs ${{ github.sha }}: $status"
+          case "$status" in
+            ahead|identical)
+              echo "::error::This branch is built on the history from before 2026-11-08. Rebase it: git rebase --onto origin/main <old base> (see docs/decisions/2026-11-08-scrub-relay-address.md)."
+              exit 1 ;;
+          esac
+
       - name: Protocol probe disconnect regression
         run: python3 -I eval/protocol-contract/test_check.py
 
