@@ -117,7 +117,6 @@ word 空闲	crates/mooring-host/src/agents/codex_items.rs	1
 word 空闲	crates/mooring-host/src/content/mod.rs	1
 word 等你回答	crates/mooring-app/src/workbench/layout/confirm_close.rs	1
 word 等你回答	crates/mooring-host/src/control/prompt.rs	1
-word 等你回答	mobile/src/app/chat.tsx	1
 word 等你回答	mobile/src/app/settings.tsx	2
 word 等你验收	crates/mooring-app/src/model/session_state.rs	1
 word 等你验收	crates/mooring-app/src/workbench/overview/groups.rs	1

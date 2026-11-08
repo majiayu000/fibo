@@ -1,6 +1,6 @@
 // Two bottom sheets: one asks for a sentence (要求修改, 拒绝并告诉它), one shows a
 // terminal's last lines.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, TextInput, View } from 'react-native';
 import { remote } from '../remote/hub';
 import { CodeView, LINE } from './codeview';
@@ -10,11 +10,11 @@ import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
 import { opensAtEnd, textRows } from './toolview';
 import { useTheme } from './theme';
 
-export function Frame({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
+export function Frame({ visible, onClose, onShow, children }: { visible: boolean; onClose: () => void; onShow?: () => void; children: React.ReactNode }) {
   const t = useTheme();
   const bottom = useBottomOverKeyboard();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} onShow={onShow}>
       <KeyboardSafe>
         <Pressable style={s.scrim} onPress={onClose} />
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line, paddingBottom: bottom + 12 }]}>{children}</View>
@@ -45,30 +45,42 @@ export function SayDialog({
   action,
   onSend,
   onClose,
+  name,
 }: {
   visible: boolean;
   title: string;
   placeholder: string;
   action: string;
+  /** A name or path, not a sentence: no capital letter, no autocorrect, one line. */
+  name?: boolean;
   onSend: (text: string) => void;
   onClose: () => void;
 }) {
   const t = useTheme();
   const [text, setText] = useState('');
+  const box = useRef<ComponentRef<typeof TextInput>>(null);
   useEffect(() => {
     if (visible) setText('');
   }, [visible]);
   return (
-    <Frame visible={visible} onClose={onClose}>
+    // Inside a Modal, Android ignores autoFocus while the sheet slides in: ask once it is up.
+    <Frame visible={visible} onClose={onClose} onShow={() => setTimeout(() => (box.current?.blur(), box.current?.focus()), 350)}>
       <Text style={[s.title, { color: t.text }]}>{title}</Text>
       <TextInput
+        ref={box}
         autoFocus
-        multiline
+        multiline={!name}
+        autoCapitalize={name ? 'none' : undefined}
+        autoCorrect={name ? false : undefined}
         value={text}
         onChangeText={setText}
         placeholder={placeholder}
         placeholderTextColor={t.dim}
-        style={[s.input, { color: t.text, backgroundColor: t.well }, noOutline]}
+        // Return sends, as the new task's box does; with nothing written it puts the keyboard away.
+        returnKeyType="send"
+        submitBehavior="blurAndSubmit"
+        onSubmitEditing={() => text.trim() && onSend(text.trim())}
+        style={[s.input, name && s.name, { color: t.text, backgroundColor: t.well }, noOutline]}
       />
       <Wide label={action} disabled={!text.trim()} onPress={() => onSend(text.trim())} />
     </Frame>
@@ -128,5 +140,6 @@ const s = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 17, fontWeight: '600' },
   input: { minHeight: 96, borderRadius: 14, padding: 12, fontSize: 15, textAlignVertical: 'top' },
+  name: { minHeight: 48 },
   screen: { height: SCREEN_HEIGHT, borderRadius: 12, overflow: 'hidden' },
 });

@@ -9,7 +9,7 @@ import { rowSaysFull } from './modes';
 import { SpaceMark } from './icons';
 import { TITLE_WEIGHT, mono } from './kit';
 import { useNow } from './now';
-import { runningFor } from './parse';
+import { questionText, runningFor } from './parse';
 import { rowDetail, spaceName, statusColor, statusWord, tilde } from './status';
 import { useTheme } from './theme';
 
@@ -51,6 +51,8 @@ export function Row({
   const word = right?.text ?? (stale ? `断开前：${statusWord(c)}` : statusWord(c));
   const color = right ? (right.color ?? t.dim) : stale ? t.dim : statusColor(c, t);
   const space = spaceName(m, c);
+  // 等你回答 says nothing on its own: what it asks, so the row is worth opening from here.
+  const asking = !stale && c.phase === 'waiting' && !c.approval && c.waiting ? questionText(c.waiting) : '';
   return (
     <Pressable
       // With buttons inside, the row must not swallow them for screen readers.
@@ -74,6 +76,11 @@ export function Row({
       <Text numberOfLines={2} style={[s.title, { color: dim ? t.dim : t.text }, stale && { opacity: 0.6 }]}>
         {cardTitle(c)}
       </Text>
+      {!children && !!asking && (
+        <Text numberOfLines={2} style={{ color: t.wait, fontSize: 13, lineHeight: 18 }}>
+          {asking}
+        </Text>
+      )}
       {children ?? (
         <Text numberOfLines={1} style={[s.l3, { color: t.dim }, stale && { opacity: 0.6 }]}>
           {[rowSaysFull(c, m.cards) ? c.permission : '', c.branch || tilde(c.cwd), rowDetail(c)].filter(Boolean).join(' · ')}

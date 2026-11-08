@@ -137,12 +137,14 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         take: bool,
     },
-    /// A shell in a new tab, in `cwd` (else its space's directory): `{terminal, tab}`.
-    /// With `agent` (as cards name it: `claude`, `codex`…) the shell runs that Agent,
-    /// `prompt` its first message; the shell stays once it exits.
+    /// A shell in a new tab of `space` (else the todo's, the one holding `cwd`, the first), in
+    /// `cwd`: `{terminal, tab, space}` (older hosts: no `space`). With `agent` (`claude`…) the
+    /// shell runs that Agent, `prompt` its first message; the shell stays once it exits.
     Open {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cwd: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        space: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

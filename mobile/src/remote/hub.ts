@@ -12,6 +12,7 @@ import { HEARTBEAT_MS, Remote, type RemoteError } from './client';
 import { named } from './named';
 import { closeOutcome } from './close';
 import type { Link } from './link';
+import type { Space } from '../ui/spaces';
 
 export type Phase = 'working' | 'waiting' | 'idle' | 'shell';
 
@@ -91,6 +92,8 @@ export type Machine = {
   spaces: Record<string, string>;
   /** A space's directory to its name. */
   spaceDirs?: Record<string, string>;
+  /** The spaces in the computer's order, the ones put aside left out: where a new task can go. */
+  spaceList?: Space[];
   todos?: Todo[];
   /** Seconds since the epoch of the last list. */
   updated?: number;
@@ -155,6 +158,7 @@ function listed(list: { spaces?: any[]; todos?: Todo[]; machine?: { name?: strin
     ...(list.spaces && {
       spaces: Object.fromEntries(list.spaces.map((s: any) => [s.id, s.name])),
       spaceDirs: Object.fromEntries(list.spaces.filter((s: any) => s.cwd).map((s: any) => [s.cwd, s.name])),
+      spaceList: list.spaces.map((s: any) => ({ id: String(s.id), name: String(s.name ?? ''), cwd: String(s.cwd ?? '') })),
     }),
     ...(list.todos && { todos: list.todos }),
     name: list.machine?.name || get(id)?.name || '',

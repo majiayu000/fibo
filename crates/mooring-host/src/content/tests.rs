@@ -23,12 +23,21 @@ fn edits_and_patches_count_their_lines() {
     );
 }
 #[test]
-fn a_question_tool_keeps_its_first_question_choices() {
-    let args = json!({"questions": [
+fn a_question_tool_offers_buttons_only_for_one_single_choice_question() {
+    let one = json!({"questions": [
+        {"question": "侧栏参考哪两家？", "options": [{"label": "按状态分组"}, {"label": "按空间分组"}]}
+    ]});
+    assert_eq!(question_choices(&one), vec!["按状态分组", "按空间分组"]);
+    // A form: a number key ticks an item or moves to the next question, it answers nothing.
+    let two = json!({"questions": [
         {"question": "侧栏参考哪两家？", "options": [{"label": "按状态分组"}, {"label": "按空间分组"}]},
         {"question": "第二问", "options": ["x"]}
     ]});
-    assert_eq!(question_choices(&args), vec!["按状态分组", "按空间分组"]);
+    assert!(question_choices(&two).is_empty());
+    let many = json!({"questions": [
+        {"question": "要哪些？", "multiSelect": true, "options": ["a", "b"]}
+    ]});
+    assert!(question_choices(&many).is_empty());
     assert!(question_choices(&json!({"command": "ls"})).is_empty());
 }
 fn add(p: &mut Parser, v: Value) {

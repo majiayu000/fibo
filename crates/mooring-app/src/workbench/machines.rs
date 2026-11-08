@@ -270,6 +270,7 @@ impl Workbench {
         };
         let op = mooring_remote::protocol::Op::Open {
             cwd,
+            space: None,
             agent: None,
             prompt: None,
             resume: None,

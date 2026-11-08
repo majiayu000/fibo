@@ -6,11 +6,12 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
 import { NOT_YET, refresh, remote, supports, useHub, write } from '@/remote/hub';
-import { setDraft } from '@/store/draft';
+import { setDraft, useDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
 import { Label, Nav, Notice, Wide, mono, noOutline, useBottom } from '@/ui/kit';
 import { trail } from '@/ui/parse';
 import { SayDialog } from '@/ui/sheets';
+import { pickDir } from '@/ui/spaces';
 import { tilde } from '@/ui/status';
 import { type Theme, useTheme } from '@/ui/theme';
 
@@ -49,12 +50,14 @@ function Mark({ text, query, t }: { text: string; query: string; t: Theme }) {
 export default function Dirs() {
   const t = useTheme();
   const bottom = useBottom();
-  const { machine } = useLocalSearchParams<{ machine: string }>();
+  // `at`: the directory already chosen, so the picker opens there rather than at ~ again.
+  const { machine, at } = useLocalSearchParams<{ machine: string; at?: string }>();
   const { machines } = useHub();
+  const draft = useDraft();
   const m = machines.find((x) => x.id === machine);
   const online = m?.status === 'online';
   const can = supports(m, 'dirs');
-  const [path, setPath] = useState<string | undefined>(undefined);
+  const [path, setPath] = useState<string | undefined>(at || undefined);
   const [list, setList] = useState<Listing | null>(null);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<Dir[] | null>(null);
@@ -78,7 +81,12 @@ export default function Dirs() {
         setList(l);
         setError('');
       })
-      .catch((e) => live && setError((e as Error).message))
+      .catch((e) => {
+        if (!live) return;
+        // The directory it opened at is gone: home, not a screen with nowhere to go.
+        if (path && path === at && !list) setPath(undefined);
+        else setError((e as Error).message);
+      })
       .finally(() => live && setBusy(false));
     return () => {
       live = false;
@@ -111,7 +119,7 @@ export default function Dirs() {
   function choose(cwd: string, d?: Dir | null) {
     const space = m?.spaceDirs?.[cwd];
     const known = [d && about(d), space && `空间 ${space}`].filter(Boolean).join(' · ');
-    setDraft({ machine, cwd, about: known || undefined });
+    setDraft({ machine, cwd, about: known || undefined, space: pickDir(m?.spaceList ?? [], draft.space, cwd) });
     router.back();
   }
 
@@ -139,6 +147,8 @@ export default function Dirs() {
   }
 
   const crumbs = list ? trail(list.path, list.home) : [];
+  /** `~` for the computer's own home, whatever it is called there. */
+  const home = (p: string) => (list?.home && (p === list.home || p.startsWith(`${list.home}/`)) ? `~${p.slice(list.home.length)}` : tilde(p));
   const here = picked?.path ?? list?.path;
   const recent = (list?.recent ?? []).slice(0, 6);
   const spaceHere = here ? m?.spaceDirs?.[here] : undefined;
@@ -299,7 +309,8 @@ export default function Dirs() {
           {!query && <View style={[s.foot, { borderColor: t.sep, paddingBottom: bottom + 4 }]}>
             <Wide
               disabled={!here}
-              label={here ? `在 ${tilde(here)} 开始` : '选一个文件夹'}
+              label={here ? `在 ${home(here)} 开始` : '选一个文件夹'}
+              cut="head"
               onPress={() => here && choose(here, picked)}
               textStyle={{ fontFamily: mono, fontSize: 15 }}
             />
@@ -323,7 +334,8 @@ export default function Dirs() {
       )}
       <SayDialog
         visible={making}
-        title={`在 ${list ? tilde(list.path) : '~'} 里新建文件夹`}
+        name
+        title={`在 ${list ? home(list.path) : '~'} 里新建文件夹`}
         placeholder={typedPath ? query.trim() : '文件夹名，或者完整路径'}
         action="新建并在这里开始"
         onClose={() => setMaking(false)}

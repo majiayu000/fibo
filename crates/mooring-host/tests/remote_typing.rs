@@ -277,6 +277,7 @@ fn another_desktop_opens_settles_and_ends() {
     let c = connect(&m.remote());
     let open = || Op::Open {
         cwd: Some("/tmp".into()),
+        space: None,
         agent: None,
         prompt: None,
         resume: None,

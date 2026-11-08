@@ -138,11 +138,16 @@ pub(crate) fn patch_lines(patch: &str) -> Vec<(String, u32, u32)> {
     }
     out
 }
-/// The first question's option labels, in order, for a question tool's arguments.
+/// The option labels, in order, of a question tool asking one single-choice question. Several
+/// questions, or one taking several answers, are a form: a number key ticks one item there
+/// and sends nothing, so buttons that each send a number would answer wrong. None then: a
+/// phone shows the terminal and the keys instead.
 pub(crate) fn question_choices(v: &Value) -> Vec<String> {
     v.get("questions")
         .and_then(Value::as_array)
+        .filter(|q| q.len() == 1)
         .and_then(|q| q.first())
+        .filter(|q| !q["multiSelect"].as_bool().unwrap_or(false))
         .and_then(|q| q["options"].as_array())
         .map(|items| {
             items
@@ -152,6 +157,12 @@ pub(crate) fn question_choices(v: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+/// A tool that asks the person a question with options, rather than asking to run something.
+fn is_question_tool(name: &str) -> bool {
+    name == "AskUserQuestion"
+        || name.ends_with("request_user_input")
+        || name.ends_with("request_user_input_async")
 }
 pub(crate) fn question_summary(v: &Value) -> String {
     let questions = v.get("questions").and_then(Value::as_array);
@@ -413,10 +424,7 @@ impl Parser {
             at,
             source,
         );
-        if name == "AskUserQuestion"
-            || name.ends_with("request_user_input")
-            || name.ends_with("request_user_input_async")
-        {
+        if is_question_tool(name) {
             self.card.turn = Turn::Waiting;
             self.child_wait_from = None;
             self.card.waiting = question_summary(&args);
@@ -506,6 +514,16 @@ impl Parser {
             .background
             .is_some_and(|b| b.keeps_working() || b.wakes());
         match event {
+            // A question, not an approval: what it asks, as its log would say once answered.
+            "PermissionRequest" if facts.question.is_some() => {
+                let (question, choices) = facts.question.clone().unwrap_or_default();
+                if self.card.turn != Turn::Waiting {
+                    self.phase(Turn::Waiting, "", at, source);
+                }
+                self.child_wait_from = None;
+                self.card.waiting = question;
+                self.card.choices = choices;
+            }
             "PermissionRequest" => self.wait("CLI 请求工具审批（Hook）", at, source),
             "Notification" => match facts.notification.as_deref() {
                 Some("permission_prompt") => self.wait("CLI 请求工具审批（Hook）", at, source),
@@ -738,7 +756,10 @@ pub fn hook_facts(v: &Value) -> HookFacts {
         notification: v["notification_type"].as_str().map(str::to_owned),
         subagent: v["agent_id"].as_str().is_some_and(|id| !id.is_empty()),
         shells,
+        question: hook_question(v),
     }
 }
+mod hook_question;
+use hook_question::hook_question;
 #[cfg(test)]
 mod tests;

@@ -193,3 +193,15 @@ describe('tightWindows', () => {
     expect(tightWindows([{ machine: 'a', agents: null }], now)).toEqual([]);
   });
 });
+
+// The computer sends a question tool's options as numbered lines (remote/list.rs `asked`).
+test('a question from the computer comes apart into its text and one button per option', () => {
+  const sent = '【下一步】接下来怎么继续？\n1. 新对话继续\n2. 就在这里继续\n3. 先做第 0 幕看效果';
+  expect(choices(sent)).toEqual([
+    { key: '1', label: '新对话继续' },
+    { key: '2', label: '就在这里继续' },
+    { key: '3', label: '先做第 0 幕看效果' },
+  ]);
+  expect(questionText(sent)).toBe('【下一步】接下来怎么继续？');
+  expect(choices('CLI 请求工具审批（Hook）')).toEqual([]);
+});

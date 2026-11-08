@@ -524,3 +524,59 @@ fn claude_continued_in_ends_the_turn_here_and_hides_this_copy() {
     assert!(p.card.continued_in.is_empty());
     assert!(p.card.hidden_reason().is_none());
 }
+
+/// Claude Code writes an AskUserQuestion call to its log only once it is answered; until
+/// then only the PermissionRequest hook knows the question. Without reading its
+/// `tool_input` the card said 「CLI 请求工具审批（Hook）」 and the phone had nothing to pick
+/// (2026-11-08, a real session stuck on 「下一步」).
+#[test]
+fn a_question_asked_through_the_permission_hook_keeps_its_question_and_choices() {
+    let mut p = Parser::default();
+    let s = Source::default();
+    let payload = json!({
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {"questions": [{
+            "header": "下一步",
+            "question": "接下来怎么继续？",
+            "options": [{"label": "新对话继续"}, {"label": "就在这里继续"}, {"label": "先做第 0 幕看效果"}]
+        }]}
+    });
+    // The notification about the same dialog may come first; the question still wins.
+    let note = HookFacts {
+        notification: Some("permission_prompt".into()),
+        ..Default::default()
+    };
+    p.hook("Notification", &note, 1, s.clone());
+    p.hook("PermissionRequest", &hook_facts(&payload), 2, s.clone());
+    assert_eq!(p.card.turn, Turn::Waiting);
+    assert!(
+        p.card.waiting.contains("接下来怎么继续？"),
+        "{}",
+        p.card.waiting
+    );
+    assert_eq!(
+        p.card.choices,
+        ["新对话继续", "就在这里继续", "先做第 0 幕看效果"]
+    );
+    // Answered: the tool finishes and the question is gone.
+    p.hook("PostToolUse", &HookFacts::default(), 3, s.clone());
+    assert_eq!(p.card.turn, Turn::Running);
+    assert!(p.card.waiting.is_empty() && p.card.choices.is_empty());
+    // An approval for any other tool is still an approval.
+    let bash = json!({"tool_name": "Bash", "tool_input": {"command": "ls"}});
+    assert_eq!(hook_facts(&bash).question, None);
+    // A plan to approve says what it is, and the plan; its menu is read off the terminal.
+    let plan = json!({"tool_name": "ExitPlanMode", "tool_input": {"plan": "# 建 hello.txt\n1. 写入 hi\n  2) 读回来"}});
+    let (asked, choices) = hook_facts(&plan).question.unwrap();
+    assert!(
+        asked.starts_with("【计划】") && asked.contains("建 hello.txt"),
+        "{asked}"
+    );
+    // Its steps never read as numbered options a phone would turn into buttons.
+    assert!(
+        asked.contains("1、写入 hi") && asked.contains("  2、读回来"),
+        "{asked}"
+    );
+    assert!(choices.is_empty());
+}
