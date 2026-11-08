@@ -21,21 +21,31 @@ pub(super) fn agent_named(name: &str) -> io::Result<Agent> {
 /// `open`: a shell in a new tab of the space that holds `cwd` (else the first space),
 /// started in `cwd` (else the space's directory). Replies `{terminal, tab}`. With `agent`
 /// the shell runs it, `prompt` its first message, as the window resumes a conversation;
-/// with `resume` it picks that conversation back up, in its own directory.
+/// with `resume` it picks that conversation back up, in its own directory; with `task` it
+/// starts that todo's Agent in its space, handed the todo.
 pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
     let agent = match request["agent"].as_str().filter(|a| !a.is_empty()) {
         None => None,
         Some(name) => Some(agent_named(name)?),
     };
-    let prompt = request["prompt"].as_str().filter(|p| !p.trim().is_empty());
+    let w = super::todos::workspace(socket)?;
+    // A todo to work on: its Agent, in its space, handed its words and progress so far,
+    // and the conversation started is counted as working for it.
+    let task = match request["task"].as_str().filter(|t| !t.is_empty()) {
+        None => None,
+        Some(id) => Some(
+            (w.tasks.iter().find(|t| t.id == id))
+                .ok_or_else(|| io::Error::other("这个待办不在了"))?,
+        ),
+    };
+    let agent = agent.or(task.map(|t| t.agent));
+    let handoff = task.map(|t| w.task_handoff(t, "mooring todo note"));
+    let prompt =
+        (request["prompt"].as_str().filter(|p| !p.trim().is_empty())).or(handoff.as_deref());
     let resume = request["resume"].as_str().filter(|r| !r.is_empty());
     if prompt.is_some() && agent.is_none() && resume.is_none() {
         return Err(io::Error::other("prompt 要和 agent 一起"));
     }
-    let w = match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => w,
-        other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    };
     // Named after the request, a resend finds what the first one opened.
     let name = named_id(client, request).map_or_else(
         || uuid::Uuid::new_v4().simple().to_string(),
@@ -58,6 +68,10 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     let asked = session
         .map(|s| s.cwd.as_str())
         .or_else(|| request["cwd"].as_str())
+        .or_else(|| {
+            let space = task.map(|t| t.space.as_str())?;
+            (w.spaces.iter().find(|s| s.id == space)).map(|s| s.cwd.as_str())
+        })
         .filter(|c| !c.is_empty());
     let space = asked
         .and_then(|cwd| {
@@ -117,7 +131,8 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
             tab: Tab {
                 id: tab.clone(),
                 space: space.id.clone(),
-                default_task: session.and_then(|s| s.task.clone()),
+                default_task: (task.map(|t| t.id.clone()))
+                    .or_else(|| session.and_then(|s| s.task.clone())),
                 title: String::new(),
                 layout: Some(mooring_core::layout::Layout::Leaf(terminal.clone())),
             },
@@ -267,7 +282,7 @@ pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> i
     )
 }
 
-fn edit_once(
+pub(super) fn edit_once(
     socket: &Path,
     request: &Value,
     client: Option<&str>,

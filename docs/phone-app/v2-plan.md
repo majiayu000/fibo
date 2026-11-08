@@ -122,7 +122,7 @@
 | op / 字段 | 内容 | 权限 |
 |---|---|---|
 | `list` 的卡片 | `branch`、`running_since`、`doing`、`model`、`permission` | 三档 |
-| `list` | `todos:[{id, space, title, agent}]`，和桌面看板的「待办」同一个函数（`status::open_todos`） | 三档 |
+| `list` | `todos:[{id, space, title, agent}]`，和桌面看板的「待办」同一个函数（`status::open_todos`）。11-08 起改为所有没收尾的待办（`status::unfinished_todos`），加 `state`、`state_label`、`said`、`acceptance`、`notes`、`created`、`terminal`，给手机的「待办」标签用；写操作 `todoadd`、`todooutcome` 和 `open` 的 `task` 只给完全控制 | 三档 |
 | `chat` 的 `tools` | 加 `took`（秒，不知道时不写） | 三档 |
 | `diff`（带 `terminal`） | 加 `checks:[{command, counts, ok, at, stale}]` | 三档 |
 | `open` | 加 `resume`（会话 id）。在这段对话自己的目录里跑 `Workspace::resume_command`（和桌面同一个）；用户的话走 `$1`，不进脚本；还在跑就回 `{terminal, existing:true}`，不开第二份；目录不在了就报错，不换目录 | full |

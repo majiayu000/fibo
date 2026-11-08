@@ -137,13 +137,8 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
             cwd: s.cwd.clone(),
         })
         .collect();
-    let todos = (status::open_todos(w, now).into_iter())
-        .map(|t| rp::Todo {
-            id: t.id.clone(),
-            space: t.space.clone(),
-            title: t.title.clone(),
-            agent: control::agent_label(t.agent),
-        })
+    let todos = (status::unfinished_todos(w, now).into_iter())
+        .map(|t| todo(w, t, now))
         .collect();
     Ok(json!(rp::List {
         machine: super::machine(socket)?,
@@ -151,6 +146,36 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
         terminals,
         todos,
     }))
+}
+
+/// A todo with what the phone shows of it: its state, your words, the progress so far, and
+/// the terminal of a conversation working on it.
+fn todo(w: &Workspace, t: &Task, now: u64) -> rp::Todo {
+    let state = status::task_state(w, t, now);
+    let log = w.task_logs.get(&t.id);
+    let terminal = (w.agent_sessions.iter())
+        .filter(|s| s.task.as_ref() == Some(&t.id))
+        .filter_map(|s| status::live_terminal(w, s))
+        .map(|term| term.id.clone())
+        .next();
+    rp::Todo {
+        id: t.id.clone(),
+        space: t.space.clone(),
+        title: t.title.clone(),
+        agent: control::agent_label(t.agent),
+        state: Some(state.key().to_owned()),
+        state_label: Some(state.label().to_owned()),
+        said: t.description.trim().to_owned(),
+        acceptance: t.acceptance.iter().map(|c| c.description.clone()).collect(),
+        notes: (log.map(|l| l.notes.as_slice()).unwrap_or_default().iter())
+            .map(|n| rp::TodoNote {
+                at: n.at,
+                text: n.text.clone(),
+            })
+            .collect(),
+        created: log.and_then(|l| l.created),
+        terminal,
+    }
 }
 
 fn outcome_key(o: &Outcome) -> &'static str {
@@ -200,6 +225,34 @@ mod tests {
         .unwrap();
         assert_eq!(read(&w).terminals.len(), all.terminals.len());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// 接着做 goes to the conversation working on a todo while its terminal is open.
+    #[test]
+    fn a_todo_names_the_open_terminal_working_on_it() {
+        let mut w = mooring_core::sample::every_state();
+        let session = (w.agent_sessions.iter())
+            .position(|s| status::live_terminal(&w, s).is_some())
+            .expect("a sample session in an open terminal");
+        let space = w.spaces[0].id.clone();
+        w.tasks.push(Task {
+            id: "phone-todo".into(),
+            space,
+            title: "修键盘".into(),
+            description: String::new(),
+            acceptance: vec![],
+            agent: Agent::Claude,
+        });
+        let now = mooring_core::content::now();
+        assert_eq!(todo(&w, w.tasks.last().unwrap(), now).terminal, None);
+        w.agent_sessions[session].task = Some("phone-todo".into());
+        let live = status::live_terminal(&w, &w.agent_sessions[session]).map(|t| t.id.clone());
+        let t = todo(&w, w.tasks.last().unwrap(), now);
+        assert_eq!(t.terminal, live);
+        assert_eq!(
+            t.state_label.as_deref(),
+            Some(status::task_state(&w, w.tasks.last().unwrap(), now).label())
+        );
     }
 
     /// The phone's cards say what the window says, on every sample case.

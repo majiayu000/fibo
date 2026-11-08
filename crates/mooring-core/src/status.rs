@@ -221,6 +221,18 @@ pub enum TaskState {
     Abandoned,
 }
 impl TaskState {
+    /// What a client keys its look on; `label` is what it shows.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::NotStarted => "not_started",
+            Self::Working => "working",
+            Self::Settled => "settled",
+            Self::Proven => "proven",
+            Self::Completed => "completed",
+            Self::Deferred => "deferred",
+            Self::Abandoned => "abandoned",
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
             Self::NotStarted => "未开始",

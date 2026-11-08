@@ -56,8 +56,26 @@ export type Card = {
   permission?: string | null;
 };
 
-/** A todo no conversation works on yet, the board's 待办. */
-export type Todo = { id: string; space: string; title: string; agent: string };
+/** A todo you have not closed. Hosts before 11-08 send the first four fields only, and only
+ *  todos nobody started. */
+export type Todo = {
+  id: string;
+  space: string;
+  title: string;
+  agent: string;
+  /** `TaskState::key` on the computer: not_started, working, settled, proven, deferred. */
+  state?: string | null;
+  /** Its words for that state, shown as they are. */
+  state_label?: string | null;
+  /** What you wrote when you noted it. */
+  said?: string;
+  acceptance?: string[];
+  /** Progress written back, oldest first. */
+  notes?: { at: number; text: string }[];
+  created?: number | null;
+  /** The open terminal of a conversation working on it. */
+  terminal?: string | null;
+};
 
 export type Machine = {
   id: string;
