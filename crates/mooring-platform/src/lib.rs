@@ -7,6 +7,7 @@
 //!
 //! Above this crate nothing asks which system it is on (`tests/boundary.rs` checks).
 //! See docs/platform/index.html.
+pub mod app_bundle;
 pub mod clock;
 pub mod desktop;
 pub mod dirs;

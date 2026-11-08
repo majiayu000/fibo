@@ -84,6 +84,11 @@ Quitting or updating the app leaves every terminal running. Restarting the machi
 **Where is my data, and does anything leave my machine?**
 Terminals and the session index live in `~/.local/share/mooring-workbench`, settings and plugins in `~/.config/mooring`. Mooring reads the agents' own transcripts and never uploads them. The phone relay is opt-in and end-to-end encrypted.
 
+The update check is the only network request the app makes on its own: at most once a day, one `GET` to the GitHub API for the latest release, turned off under Settings › About › Check for updates automatically. The phone relay connects only after you turn it on; everything else that goes online waits for you: fetching the remote plugin catalog, a webhook or an SSH machine you added, a plugin you installed.
+
+**How do I update?**
+A release build checks GitHub once a day and shows the new version in the status bar; click it, or use Settings › About › Check for updates. Mooring downloads the release zip, checks it against the release's `SHA256SUMS`, checks that it is signed by Mooring's Developer ID (team `C5UWZ934C2`) and passes Gatekeeper, swaps it in place of the running app and restarts; every terminal keeps running. Nothing is installed if a check fails. Installed with Homebrew: run `brew upgrade --cask mooring`. In a folder you cannot write to (an app owned by root): download it from the release page. A build from source never updates itself; `git pull` and rebuild.
+
 **Does Mooring change my agent settings?**
 Only when you install hooks (`mooring hooks install`), which adds Mooring's entries to the agent's settings file; `mooring hooks uninstall` removes them. Without hooks, state comes from transcripts and the screen.
 

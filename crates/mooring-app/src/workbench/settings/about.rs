@@ -193,10 +193,10 @@ impl SettingsView {
         if self.shows(Page::About, "Agent Hook", cx) {
             data.extend(self.hook_rows(data.is_empty(), cx));
         }
-        page.child(self.cards(vec![("数据与偏好", data)])).child(
-            div().pt(px(T::S12)).px(px(T::S4)).child(label(
+        let updates = self.update_rows(cx);
+        page.child(self.cards(vec![("更新", updates), ("数据与偏好", data)]))
+            .child(div().pt(px(T::S12)).px(px(T::S4)).child(label(
                 "工作区设置随数据库保存；外观、终端文字与快捷键存在偏好文件夹，只属于这台电脑。",
-            )),
-        )
+            )))
     }
 }
