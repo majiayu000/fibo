@@ -94,7 +94,7 @@ a { color: inherit; text-underline-offset: 3px; }
 <p class="note">「真机验过」指在 OPPO 上亲眼看到。「只测过」指自动测试或网页版通过，真手机上没走过。真机结果来自不同版本：信任、审批卡片和允许是在 <code>a4ac4fa</code> 上看的；拒绝、工具清单和终端面板在前一个版本；发消息和新任务更早。</p>
 <div class="tablewrap"><table>
 <tr><th>功能</th><th>状态</th><th>说明</th></tr>
-<tr><td>官方中继</td><td><span class="tag ok">真机验过</span></td><td><code>https://124.221.234.205</code>，腾讯云上海，内容端到端加密。续期还没实际发生过</td></tr>
+<tr><td>官方中继</td><td><span class="tag ok">真机验过</span></td><td>腾讯云上海（地址不写进公开仓库），内容端到端加密。续期还没实际发生过</td></tr>
 <tr><td>配对</td><td><span class="tag ok">真机验过</span></td><td>用数据线发配对链接，不扫码。App 内扫码没验</td></tr>
 <tr><td>收件箱</td><td><span class="tag ok">真机验过</span></td><td>分支、在跑时长、正在做什么，审批和等你回答固定在最上面</td></tr>
 <tr><td>收件箱折叠和筛选</td><td><span class="tag ok">真机验过</span></td><td>真实数据下折叠、展开、横滑筛选、重开记住空间都正常；真机上把折叠行挪到在跑上面。选中的空间靠右时重开不会自动滚到它</td></tr>
@@ -160,7 +160,7 @@ cd android
 ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 ~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/release/app-release.apk</pre>
 <p>OPPO 弹「安装增强防护」时，在手机上点右上角「⋮」→「开始深度扫描」→ 继续安装。这一步要手动。</p>
-<p><b>不扫码配对</b>：<code>mooring remote --pair --relay https://124.221.234.205 --name 名字 --role full</code> 拿到链接，用 <code>adb shell am start -d</code> 发给手机。链接里有密钥，不要打印或发给别人。</p>
+<p><b>不扫码配对</b>：<code>mooring remote --pair --relay https://&lt;中继地址&gt; --name 名字 --role full</code> 拿到链接，用 <code>adb shell am start -d</code> 发给手机。链接里有密钥，不要打印或发给别人。</p>
 <p><b>真机点按前</b>先用 <code>uiautomator dump</code> 取坐标，列表随时会变。真实测试放在临时目录，用完删掉。</p>
 
 <h2>相关文档</h2>
