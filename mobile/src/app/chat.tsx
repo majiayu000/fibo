@@ -414,7 +414,6 @@ export default function Chat() {
           permission={card?.permission}
           running={!!running}
           canStop={supports(m, 'stop')}
-          canContinue={online && card?.phase === 'idle'}
           offline={!online}
           suggestion={suggestion}
           onSend={send}

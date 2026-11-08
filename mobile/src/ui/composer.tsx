@@ -1,12 +1,13 @@
 // The composer: a big rounded card with the text on top and a row of small controls
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
-// The + on the left takes a photo or picks pictures; they wait as thumbnails above the text.
+// The + opens a sheet: take a photo or pick pictures (they wait as thumbnails above the text),
+// and this conversation's permission. The row under the text keeps only +, the model and send.
 import { type ComponentRef, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AttachSheet } from './attachsheet';
 import { Icon } from './icons';
 import { useBottomOverKeyboard } from './keyboard';
 import { noOutline } from './kit';
-import { isFull } from './modes';
 import { modelName } from './parse';
 import { MAX_PICTURES, type Picture, pick } from './pictures';
 import { useTheme } from './theme';
@@ -17,7 +18,6 @@ export function Composer({
   permission,
   running,
   canStop,
-  canContinue,
   offline,
   suggestion,
   onSend,
@@ -37,7 +37,6 @@ export function Composer({
   onPermission?: () => void;
   running: boolean;
   canStop: boolean;
-  canContinue: boolean;
   offline: boolean;
   /** What the Agent offers as the next prompt: a tap puts it in the box, sending is still yours. */
   suggestion?: string | null;
@@ -78,7 +77,8 @@ export function Composer({
       setPicking(false);
     }
   }
-  const attach = canAttach || pictures.length > 0;
+  // The + opens pictures and this conversation's settings: shown when either is there.
+  const sheetable = !!canAttach || pictures.length > 0 || !!permission || !!onPermission;
   return (
     <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }]}>
       {!!suggestion && !draft && (
@@ -127,43 +127,16 @@ export function Composer({
         style={[s.input, { color: t.text }, noOutline]}
         accessibilityLabel="给 Agent 发消息"
       />
-      {choosing && (
-        <View style={s.bar}>
-          <Pressable accessibilityRole="button" onPress={() => add('camera')} style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
-            <Text style={{ color: t.text, fontSize: 12 }}>拍照</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => add('library')} style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
-            <Text style={{ color: t.text, fontSize: 12 }}>从相册选</Text>
-          </Pressable>
-        </View>
-      )}
       <View style={s.bar}>
-        {attach && (
+        {sheetable && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={choosing ? '收起' : '拍照或选图片'}
-            disabled={!canAttach || picking || pictures.length >= MAX_PICTURES}
-            onPress={() => setChoosing((c) => !c)}
-            style={({ pressed }) => [
-              s.round,
-              { borderColor: t.line, opacity: !canAttach || picking || pictures.length >= MAX_PICTURES ? 0.35 : pressed ? 0.6 : 1 },
-            ]}
+            accessibilityLabel="添加图片和这个对话的设置"
+            disabled={picking}
+            onPress={() => setChoosing(true)}
+            style={({ pressed }) => [s.round, { backgroundColor: t.well, opacity: picking ? 0.35 : pressed ? 0.6 : 1 }]}
           >
-            <Icon name={choosing ? 'close' : 'plus'} size={15} width={2.2} color={t.text} />
-          </Pressable>
-        )}
-        {(!!permission || !!onPermission) && (
-          <Pressable
-            disabled={!onPermission}
-            onPress={onPermission}
-            accessibilityRole={onPermission ? 'button' : undefined}
-            accessibilityLabel={`权限：${permission ?? '还没读到'}`}
-            style={({ pressed }) => [s.tag, s.fact, { borderColor: isFull(permission) ? t.err : t.line }, pressed && { opacity: 0.6 }]}
-          >
-            <Icon name="shield" size={13} width={2} color={isFull(permission) ? t.err : t.text} />
-            <Text numberOfLines={1} style={{ color: isFull(permission) ? t.err : t.text, fontSize: 12, flexShrink: 1 }}>
-              {permission ?? '权限'}
-            </Text>
+            <Icon name="plus" size={17} width={2.2} color={t.text} />
           </Pressable>
         )}
         {(!!model || !!agent) && (
@@ -172,20 +145,21 @@ export function Composer({
             onPress={onModel}
             accessibilityRole={onModel ? 'button' : undefined}
             accessibilityLabel={`模型：${model ? modelName(model) : agent}`}
-            style={({ pressed }) => [s.tag, s.fact, { borderColor: t.line }, pressed && { opacity: 0.6 }]}
+            style={({ pressed }) => [s.model, { backgroundColor: t.well }, pressed && { opacity: 0.6 }]}
           >
-            <Text numberOfLines={1} style={{ color: t.text, fontSize: 12, flexShrink: 1 }}>
+            <Text numberOfLines={1} style={{ color: t.text, fontSize: 13, flexShrink: 1 }}>
               {model ? modelName(model) : agent}
             </Text>
           </Pressable>
         )}
-        {canContinue && (
-          <Pressable onPress={() => go('继续')} style={({ pressed }) => [s.tag, { borderColor: t.line }, pressed && { opacity: 0.6 }]}>
-            <Text style={{ color: t.text, fontSize: 12 }}>继续</Text>
+        <View style={{ flex: 1 }} />
+        {running && canStop && !empty && (
+          <Pressable accessibilityRole="button" accessibilityLabel="停下" onPress={onStop} style={({ pressed }) => [s.send, { borderWidth: 1, borderColor: t.line, backgroundColor: t.card }, pressed && { opacity: 0.6 }]}>
+            <Icon name="stop" size={14} width={2.4} color={t.text} />
           </Pressable>
         )}
-        <View style={{ flex: 1 }} />
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel={stop ? '停下' : '发送'}
           disabled={!stop && (empty || picking)}
           onPress={() => (stop ? onStop() : go(draft, pictures))}
@@ -197,6 +171,22 @@ export function Composer({
           <Icon name={stop ? 'stop' : 'up'} size={stop ? 14 : 16} width={2.4} color={t.onAct} />
         </Pressable>
       </View>
+      {choosing && (
+        <AttachSheet
+          onClose={() => setChoosing(false)}
+          pictures={canAttach ? (pictures.length >= MAX_PICTURES ? `已经选了 ${MAX_PICTURES} 张，发出去再加` : null) : pictures.length ? '电脑没连上，图片要连上后才能发' : undefined}
+          onCamera={() => add('camera')}
+          onLibrary={() => add('library')}
+          permission={permission}
+          onPermission={
+            onPermission &&
+            (() => {
+              setChoosing(false);
+              onPermission();
+            })
+          }
+        />
+      )}
     </View>
   );
 }
@@ -216,12 +206,11 @@ const s = StyleSheet.create({
   },
   suggestion: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', maxWidth: '100%', gap: 8, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
   input: { fontSize: 15, minHeight: 24, maxHeight: 140, paddingHorizontal: 4, paddingVertical: 2 },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tag: { height: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
-  fact: { flexDirection: 'row', gap: 5, flexShrink: 1 },
-  round: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  model: { height: 36, borderRadius: 18, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
   pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingRight: 4 },
   thumb: { width: 56, height: 56, borderRadius: 12 },
   unpick: { position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  send: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 });
