@@ -11,6 +11,7 @@ pub const MAX_LINE: usize = 1 << 20;
 pub use crate::asks::*;
 pub use crate::cards::*;
 pub use crate::chat::*;
+pub use crate::ops::OPS;
 pub use crate::tools::*;
 pub use crate::usage::*;
 
@@ -331,46 +332,6 @@ impl Op {
         }
     }
 }
-
-/// Every op, in the order `hello` lists them.
-pub const OPS: &[&str] = &[
-    "hello",
-    "list",
-    "cards",
-    "read",
-    "send",
-    "keys",
-    "input",
-    "answer",
-    "ask",
-    "trust",
-    "chat",
-    "events",
-    "watch",
-    "resize",
-    "open",
-    "end",
-    "outcome",
-    "close",
-    "ping",
-    "diff",
-    "dirs",
-    "mkdir",
-    "stop",
-    "quota",
-    "lastsession",
-    "addspace",
-    "usage",
-    "toolcalls",
-    "toolcall",
-    "backfill",
-    "todoadd",
-    "todooutcome",
-    "suggestion",
-    "modes",
-    "setmode",
-    "image",
-];
 
 /// A line from the machine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

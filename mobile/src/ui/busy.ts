@@ -25,6 +25,16 @@ const UNKNOWN: BusyWords = {
   note: '已发给它 · 它还在做事',
 };
 
+export type How = 'queue' | 'steer';
+
+/** Said under a message sent with a `how` the computer pressed the key for. */
+export const HOW_NOTE: Record<How, string> = { queue: QUEUES.note, steer: STEERS.note };
+
+/** Whether this CLI was measured to queue and steer on keys the computer knows (host `turn_input`). */
+export function steerable(agent: string | null | undefined) {
+  return agent === 'claude' || agent === 'codex';
+}
+
 /** `agent` as cards name it: `claude`, `codex`… */
 export function whileBusy(agent: string | null | undefined): BusyWords {
   if (agent === 'claude') return QUEUES;

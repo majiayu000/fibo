@@ -32,6 +32,7 @@ mod quota;
 mod resume;
 mod todos;
 mod tools;
+mod turn_input;
 mod usage;
 mod writes;
 
@@ -433,7 +434,11 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
                 Some(_) => return Err(io::Error::other("session 需要字符串")),
             };
             let pictures = images::wanted(socket, request)?;
+            let how = turn_input::how(request)?;
             images::paste(socket, request, client, &terminal()?, &session, &pictures)?;
+            if let Some(steer) = how {
+                return turn_input::send(socket, request, client, session, steer);
+            }
             let send = Request::SendText {
                 session,
                 id: terminal()?,
