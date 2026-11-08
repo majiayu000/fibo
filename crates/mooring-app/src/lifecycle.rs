@@ -176,7 +176,10 @@ pub fn spawn_host(root: &Path, takeover: bool) -> io::Result<()> {
     mooring_platform::process::detach(&mut command);
     let mut child = command.spawn()?;
     let socket = root.join("workbench.sock");
-    let until = std::time::Instant::now() + Duration::from_secs(if takeover { 20 } else { 5 });
+    // 20 s either way: the first start of a freshly downloaded app waits on macOS checking
+    // the host binary before it runs, and a busy machine adds to it; 5 s showed a stranger
+    // 「后台启动超时」 on their first launch while the host came up a moment later.
+    let until = std::time::Instant::now() + Duration::from_secs(20);
     loop {
         // During a takeover the old host still answers; wait for this build's.
         let serving = if takeover {

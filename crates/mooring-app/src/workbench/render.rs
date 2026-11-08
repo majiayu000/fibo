@@ -684,6 +684,8 @@ impl Render for Workbench {
                 grid = grid.child(self.pane_view(zoomed, false, window, cx));
             } else if let Some(tree) = current.and_then(|t| t.layout.as_ref()) {
                 grid = grid.child(self.layout_view(tree, vec![], count > 1, window, cx));
+            } else if self.first_run.on {
+                grid = grid.child(self.first_run_view(cx));
             } else {
                 grid = grid.child(self.empty_tab(cx));
             }

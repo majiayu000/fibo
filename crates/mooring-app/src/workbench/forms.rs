@@ -208,7 +208,7 @@ impl Workbench {
         cx.notify();
     }
     /// Asks the login shell once which Agent commands it has, in the background.
-    fn probe_agents(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn probe_agents(&mut self, cx: &mut Context<Self>) {
         if self.tasks.found.is_some() || self.tasks.probing {
             return;
         }

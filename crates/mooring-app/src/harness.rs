@@ -11,6 +11,8 @@ mod complete_evidence;
 mod cpu_probe_evidence;
 mod decoration_evidence;
 mod diagnostic_evidence;
+#[path = "first_run_evidence.rs"]
+mod first_run_evidence;
 mod folderless_space_evidence;
 mod follow_input_evidence;
 mod keymap_evidence;
@@ -69,7 +71,8 @@ pub fn start(
     evidence: Option<PathBuf>,
     cx: &mut App,
 ) {
-    if settings_evidence::start(handle, evidence.clone(), cx)
+    if first_run_evidence::start(handle, evidence.clone(), cx)
+        || settings_evidence::start(handle, evidence.clone(), cx)
         || phones_evidence::start(handle, evidence.clone(), cx)
         || remote_typing_evidence::start(handle, evidence.clone(), cx)
         || cpu_probe_evidence::start(handle, evidence.clone(), cx)
