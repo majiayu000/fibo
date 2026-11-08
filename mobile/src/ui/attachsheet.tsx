@@ -15,6 +15,7 @@ export function AttachSheet({
   onLibrary,
   permission,
   onPermission,
+  onEffort,
 }: {
   onClose: () => void;
   /** Why pictures cannot be added now, or null when they can; undefined: this computer takes none. */
@@ -24,6 +25,8 @@ export function AttachSheet({
   /** What the computer says is on; onPermission absent: it cannot be changed from here. */
   permission?: string | null;
   onPermission?: () => void;
+  /** How hard it thinks; absent: this computer or CLI cannot change it from here. */
+  onEffort?: () => void;
 }) {
   const t = useTheme();
   const can = pictures === null;
@@ -44,7 +47,7 @@ export function AttachSheet({
           {!can && <Text style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>{pictures}</Text>}
         </>
       )}
-      {(!!permission || !!onPermission) && (
+      {(!!permission || !!onPermission || !!onEffort) && (
         <View style={[s.group, { backgroundColor: t.well }]}>
           <Pressable
             accessibilityRole={onPermission ? 'button' : undefined}
@@ -60,6 +63,21 @@ export function AttachSheet({
             <Text style={{ color: isFull(permission) ? t.err : t.dim, fontSize: 14 }}>{permission ?? '还没读到'}</Text>
             {!!onPermission && <Icon name="right" size={14} width={2} color={t.dim} />}
           </Pressable>
+          {!!onEffort && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="强度"
+              onPress={onEffort}
+              style={({ pressed }) => [s.row, { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.sep }, pressed && { opacity: 0.6 }]}
+            >
+              <View style={[s.rowIcon, { backgroundColor: t.card }]}>
+                <Icon name="gauge" size={16} width={1.8} color={t.text} />
+              </View>
+              {/* What is on is read off the CLI when it opens: a card does not carry it. */}
+              <Text style={{ flex: 1, color: t.text, fontSize: 15 }}>强度</Text>
+              <Icon name="right" size={14} width={2} color={t.dim} />
+            </Pressable>
+          )}
         </View>
       )}
     </Frame>

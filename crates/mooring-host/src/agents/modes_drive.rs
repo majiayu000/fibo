@@ -32,6 +32,8 @@ pub trait Terminal {
 pub struct Changed {
     pub model: Option<String>,
     pub permission: Option<String>,
+    /// In the CLI's own word for it.
+    pub effort: Option<String>,
 }
 
 /// Whether this Agent's modes can be changed from here.
@@ -46,6 +48,8 @@ pub fn options(term: &dyn Terminal, agent: Agent, kind: ModeKind) -> io::Result<
         (ModeKind::Model, _) => s.model_options(),
         (ModeKind::Permission, Agent::Claude) => s.claude_options(),
         (ModeKind::Permission, _) => s.codex_options(),
+        (ModeKind::Effort, Agent::Claude) => s.claude_effort_options(),
+        (ModeKind::Effort, _) => s.codex_effort_options(),
     }
 }
 
@@ -63,6 +67,8 @@ pub fn set(
         (ModeKind::Model, _) => s.set_codex_model(choice),
         (ModeKind::Permission, Agent::Claude) => s.set_claude_mode(choice, allow_full),
         (ModeKind::Permission, _) => s.set_codex_mode(choice, allow_full),
+        (ModeKind::Effort, Agent::Claude) => s.set_claude_effort(choice),
+        (ModeKind::Effort, _) => s.set_codex_effort(choice),
     }
 }
 
@@ -121,6 +127,13 @@ impl<'a> Steps<'a> {
     /// Types `command` and takes it only once the box holds exactly that: text left in it would
     /// otherwise go out with Enter, as a message to the Agent.
     fn open(&self, command: &str, title: &str) -> io::Result<Menu> {
+        self.run(command)?;
+        let menu = self.wait(Duration::from_secs(3), |t| read::menu(t, title))?;
+        menu.ok_or_else(|| io::Error::other("菜单没有打开，请打开终端看一眼"))
+    }
+
+    /// Types `command` and presses Enter, as `open` does, without waiting for a menu.
+    fn run(&self, command: &str) -> io::Result<()> {
         self.term.paste(command)?;
         let agent = self.agent;
         let typed = self.wait(Duration::from_millis(1500), |t| {
@@ -131,9 +144,7 @@ impl<'a> Steps<'a> {
             self.keys(&erase)?;
             return Err(io::Error::other("输入框里有还没发的字，先在终端里处理"));
         }
-        self.keys(&["enter"])?;
-        let menu = self.wait(Duration::from_secs(3), |t| read::menu(t, title))?;
-        menu.ok_or_else(|| io::Error::other("菜单没有打开，请打开终端看一眼"))
+        self.keys(&["enter"])
     }
 
     /// Esc out of whatever `levels` menus stand open.
@@ -309,6 +320,7 @@ impl<'a> Steps<'a> {
         Ok(Changed {
             model: Some(now),
             permission: None,
+            effort: None,
         })
     }
 
@@ -339,6 +351,7 @@ impl<'a> Steps<'a> {
         Ok(Changed {
             model: Some(now),
             permission: None,
+            effort: None,
         })
     }
 
@@ -382,6 +395,7 @@ impl<'a> Steps<'a> {
                 return Ok(Changed {
                     model: None,
                     permission: Some(read::card_words(Agent::Claude, choice)),
+                    effort: None,
                 });
             }
             self.keys(&["shift-tab"])?;
@@ -471,6 +485,10 @@ impl<'a> Steps<'a> {
         Ok(Changed {
             model: None,
             permission: Some(read::card_words(agent, choice)),
+            effort: None,
         })
     }
 }
+
+#[path = "modes_effort.rs"]
+mod effort;

@@ -19,6 +19,12 @@
 - **强度两家都在菜单里，都有「只改这次对话」的 s**，和现在换模型、换权限是同一种做法（读菜单、按键、核对画面），能接进现有的 `modes` / `setmode`。
 - 手机现在的按键列表里没有 Ctrl+Enter，要用 `input` 发原始键码，或者给 `keys` 加一个名字。
 
+## 已做（11-09）
+
+- **排队 / 引导**：每家在适配器里声明键（`Adapter::turn_keys`），`send` 带 `how` 时电脑先粘贴再按这家的键；没声明的 Agent 手机上不出选择。真 Claude、真 Codex 各走通两种。
+- **强度**：`modes` / `setmode` 多一种 `effort`（`agents/modes_effort.rs`）。Claude 读 `/effort` 滑杆上 ▲ 指着哪档（底栏的「● high · /effort」时有时无，不能靠它），换完核对「Set effort level to high (this session only)」；Codex 走 `/model` → 当前模型 → 档位菜单，Max、Ultra 在「More reasoning…」下一层，换完核对底栏。手机在 + 面板里多一行「强度」。
+- **Codex 在 Ultra 档时输入框符号是 `»` 不是 `›`**：换模型、换权限、换强度的「在输入框」判断都已认这两种；状态识别（`AgentSpec` 的 prompt markers、`agent_input_ready`）还只认 `›`，没改。
+
 ## 没验
 
 - OpenCode：旁屏标签只剩 25×15，OpenCode 一启动就段错误（退出码 139），要动用户窗口布局才能腾地方，没测。

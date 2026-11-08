@@ -26,7 +26,7 @@ import { WaitPanel } from '@/ui/waitpanel';
 import { STARTING, sendBlocked, waitView } from '@/ui/waits';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
-import type { ModeKind } from '@/ui/modes';
+import { hasEffort, type ModeKind } from '@/ui/modes';
 import { ModeSheet } from '@/ui/modesheet';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
@@ -426,6 +426,7 @@ export default function Chat() {
           onUseSuggestion={() => suggestionStats.set(countUse)}
           onModel={supports(m, 'setmode') ? () => setPicking('model') : undefined}
           onPermission={supports(m, 'setmode') ? () => setPicking('permission') : undefined}
+          onEffort={supports(m, 'setmode') && supports(m, 'effort') && hasEffort(card?.agent) ? () => setPicking('effort') : undefined}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />

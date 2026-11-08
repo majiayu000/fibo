@@ -1,7 +1,10 @@
 // The words around changing a running Agent's model or permission mode. What is offered and what
 // is on come from the computer, which reads them off the CLI; a phone counts no keys.
 
-export type ModeKind = 'model' | 'permission';
+export type ModeKind = 'model' | 'permission' | 'effort';
+
+/** CLIs whose effort the computer reads and sets (host `agents/modes_effort.rs`). */
+export const hasEffort = (agent: string | null | undefined) => agent === 'claude' || agent === 'codex';
 
 export type ModeOption = { key: string; label: string; detail?: string; current?: boolean; full?: boolean };
 export type ModeOptions = { options: ModeOption[]; note?: string };
@@ -26,4 +29,4 @@ export const FULL_CONFIRM = {
   ok: `切到${FULL_WORDS}`,
 };
 
-export const kindName = (kind: ModeKind) => (kind === 'model' ? '模型' : '权限');
+export const kindName = (kind: ModeKind) => ({ model: '模型', permission: '权限', effort: '强度' })[kind];

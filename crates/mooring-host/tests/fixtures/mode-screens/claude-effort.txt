@@ -1,0 +1,18 @@
+ ▐▛███▛█   Claude Code v2.1.319
+▝▜██████▀  Opus 5.5 · Claude Ultra
+ ▝▝   ▝▝   /private/tmp/claude-502/cli-test
+
+
+❯ /effort
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Effort
+
+                        Faster                             Smarter
+                        ──────────▲───────────────────────────────      Ultracode  off
+                        low     medium     high     xhigh      max      Tab to toggle
+
+                                       The default effort for this model
+
+
+  ←/→ to adjust · Enter to confirm · s for this session only · Esc to cancel

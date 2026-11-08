@@ -33,7 +33,7 @@ mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined })
 mock.module('../src/store/settings', () => ({ settings: { get: () => ({ lock, confirmDanger: true }) } }));
 const hub = await import('../src/remote/hub');
 const { switchMode } = await import('../src/actions');
-const { FULL_CONFIRM, FULL_WORDS, isFull, rowSaysFull } = await import('../src/ui/modes');
+const { FULL_CONFIRM, FULL_WORDS, hasEffort, isFull, kindName, rowSaysFull } = await import('../src/ui/modes');
 
 const FULL = { key: 'bypassPermissions', label: FULL_WORDS, full: true };
 const PLAIN = { key: 'plan', label: '只做计划' };
@@ -113,4 +113,12 @@ test('a row says it only when it is the exception', () => {
   expect(rowSaysFull(full, [full, asks])).toBe(true);
   expect(rowSaysFull(full, [full, { permission: null }])).toBe(false);
   expect(rowSaysFull(asks, [full, asks])).toBe(false);
+});
+
+test('an effort goes as its own kind, and only claude and codex offer it', async () => {
+  expect(await switchMode('modes-m', 't', 'effort', { key: 'xhigh', label: 'xhigh' })).toBe(true);
+  expect(asked).toEqual([]);
+  expect(plain()).toEqual([{ op: 'setmode', terminal: 't', kind: 'effort', choice: 'xhigh' }]);
+  expect(kindName('effort')).toBe('强度');
+  expect([hasEffort('claude'), hasEffort('codex'), hasEffort('grok'), hasEffort(undefined)]).toEqual([true, true, false, false]);
 });

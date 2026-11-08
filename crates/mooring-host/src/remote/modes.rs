@@ -12,6 +12,7 @@ fn kind(request: &Value) -> io::Result<ModeKind> {
     match text(request, "kind")? {
         "model" => Ok(ModeKind::Model),
         "permission" => Ok(ModeKind::Permission),
+        "effort" => Ok(ModeKind::Effort),
         other => Err(io::Error::other(format!("不认识的 kind {other}"))),
     }
 }
@@ -47,9 +48,11 @@ pub(super) fn set(socket: &Path, request: &Value, client: Option<&str>) -> io::R
         allow_full: request["allow_full"] == Value::Bool(true),
     };
     match rpc(socket, &named(client, request, Request::Modes(ask)))? {
-        Reply::Modes(ModeReply::Now { model, permission }) => {
-            Ok(json!({ "model": model, "permission": permission }))
-        }
+        Reply::Modes(ModeReply::Now {
+            model,
+            permission,
+            effort,
+        }) => Ok(json!({ "model": model, "permission": permission, "effort": effort })),
         // A resend after a lost reply: the first one took.
         Reply::Ok => Ok(json!({})),
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),

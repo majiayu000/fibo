@@ -233,7 +233,7 @@ pub enum Op {
     Suggestion {
         terminal: String,
     },
-    /// What the terminal's Agent offers as `kind` (`model` or `permission`) and which is on:
+    /// What the terminal's Agent offers as `kind` (`model`, `permission` or `effort`) and which is on:
     /// [`crate::protocol::ModeOptions`]. The machine opens the CLI's own menu to read it, so an
     /// error says when it cannot: the Agent is busy, asking something, or no CLI it knows.
     Modes {
