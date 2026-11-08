@@ -189,6 +189,7 @@ export function Wide({
   icon,
   height = 52,
   wrap,
+  cut = 'tail',
   textStyle,
 }: {
   label: string;
@@ -199,6 +200,8 @@ export function Wide({
   height?: number;
   /** All of the label, however many lines: words the person agrees to must not be cut off. */
   wrap?: boolean;
+  /** Where a long label loses letters: `head` keeps a path's last folder in sight. */
+  cut?: 'head' | 'middle' | 'tail';
   textStyle?: StyleProp<TextStyle>;
 }) {
   const t = useTheme();
@@ -222,7 +225,7 @@ export function Wide({
       ]}
     >
       {icon && <Icon name={icon} size={18} width={2} color={look.fg} />}
-      <Text style={[s.wideText, { color: look.fg }, textStyle, wrap && { flexShrink: 1, textAlign: 'center' }]} numberOfLines={wrap ? undefined : 1}>
+      <Text style={[s.wideText, { color: look.fg }, textStyle, wrap && { flexShrink: 1, textAlign: 'center' }]} numberOfLines={wrap ? undefined : 1} ellipsizeMode={cut}>
         {label}
       </Text>
     </Pressable>

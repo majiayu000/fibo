@@ -73,15 +73,56 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
             (w.spaces.iter().find(|s| s.id == space)).map(|s| s.cwd.as_str())
         })
         .filter(|c| !c.is_empty());
-    let space = asked
-        .and_then(|cwd| {
-            (w.spaces.iter())
-                .filter(|s| !s.cwd.is_empty() && Path::new(cwd).starts_with(&s.cwd))
-                .max_by_key(|s| s.cwd.len())
+    // Picked on the phone: that space and no other. Without one (an older phone), the
+    // space whose folder holds the directory, else the first not put aside.
+    let picked = request["space"].as_str().filter(|s| !s.is_empty());
+    let picked = picked
+        .map(|id| {
+            (w.spaces.iter().find(|s| s.id == id))
+                .ok_or_else(|| io::Error::other("这个空间已经不在了"))
+        })
+        .transpose()?;
+    let space = picked
+        .or_else(|| {
+            asked.and_then(|cwd| {
+                (w.spaces.iter())
+                    .filter(|s| !s.cwd.is_empty() && Path::new(cwd).starts_with(&s.cwd))
+                    .max_by_key(|s| s.cwd.len())
+            })
         })
         .or_else(|| (w.spaces.iter()).find(|s| !w.space_quiet(&s.id)))
         .or_else(|| w.spaces.first())
-        .ok_or_else(|| io::Error::other("那台电脑还没有空间"))?;
+        .cloned();
+    // A computer with no space yet (a fresh install, never opened in the window): the folder
+    // becomes its first, rather than nothing opening at all. A resend finds it by its folder.
+    let space = match space {
+        Some(space) => space,
+        None => {
+            let folder = asked
+                .filter(|c| Path::new(c).is_dir())
+                .map(str::to_owned)
+                .or_else(mooring_platform::dirs::home_str)
+                .ok_or_else(|| io::Error::other("那台电脑还没有空间"))?;
+            let folder = folder.trim_end_matches('/').to_owned();
+            let space = Space {
+                id: uuid::Uuid::new_v4().simple().to_string(),
+                name: (Path::new(&folder).file_name())
+                    .map_or_else(|| folder.clone(), |n| n.to_string_lossy().into_owned()),
+                cwd: folder,
+            };
+            match rpc(
+                socket,
+                &Request::Edit {
+                    request: None,
+                    edit: Edit::AddSpace(space.clone()),
+                },
+            )? {
+                Reply::Workspace(_) => space,
+                other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+            }
+        }
+    };
+    let space = &space;
     // Asked for by hand, so it is back; and the list leaves a space put aside out, so what
     // opened there would vanish from the phone.
     if w.space_quiet(&space.id) {
@@ -151,7 +192,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
             }
         }
     }
-    Ok(json!({ "terminal": terminal, "tab": tab }))
+    Ok(json!({ "terminal": terminal, "tab": tab, "space": space.id }))
 }
 
 /// `addspace`: a folder as a space of its own, named after it. One that already is a space

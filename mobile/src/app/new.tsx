@@ -1,16 +1,20 @@
 // A new task: pick the computer, the directory and the Agent, write what it should do;
 // the computer opens a new tab running that Agent with it as the first message. Or pick
 // up the last conversation there: then what you write is optional, its next message.
+// The space its tab goes in is shown and sent, so it never lands somewhere unsaid; the
+// keyboard's return key starts it (or puts the keyboard away and says what is missing).
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { resetDraft, setDraft, useDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
 import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
 import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
+import { SpaceField } from '@/ui/spacefield';
+import { ignoredPick, landing, pickSpace } from '@/ui/spaces';
 import { agentName, tilde } from '@/ui/status';
 import { ago, useTheme } from '@/ui/theme';
 
@@ -22,6 +26,14 @@ export default function NewTask() {
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const typing = useRef(false);
+  // The box is the last field: once the keyboard is up and the page has shrunk, bring it
+  // into view. On focus alone is too early on Android, where the keyboard is still coming.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => typing.current && scroll.current?.scrollToEnd({ animated: true }));
+    return () => sub.remove();
+  }, []);
   const online = machines.filter((m) => m.status === 'online');
   const m = machines.find((x) => x.id === draft.machine) ?? online[0] ?? machines[0];
 
@@ -30,8 +42,26 @@ export default function NewTask() {
   }, [m?.id]);
 
   const able = supports(m, 'open') && speaksV2(m);
-  const canResume = able && !!draft.cwd && supports(m, 'lastsession');
-  const ready = able && !!draft.cwd && (!!draft.prompt.trim() || !!draft.resume) && !busy;
+  const spaces = m?.spaceList ?? [];
+  const land = landing(spaces, draft.space, draft.cwd);
+  // No directory picked: the space's own folder, as a new tab in that space opens there.
+  const cwd = draft.cwd || land.space?.cwd || undefined;
+  const canResume = able && !!cwd && supports(m, 'lastsession');
+  const ready = able && !!cwd && (!!draft.prompt.trim() || !!draft.resume) && !busy;
+  /** What stops 开始, said where the button is: a grey button alone says nothing. */
+  const missing = busy
+    ? ''
+    : !m
+      ? '先在「我的」里配对一台电脑'
+      : m.status !== 'online'
+        ? '电脑没连上'
+        : !able
+          ? '这台电脑的 Mooring 还不能开新任务'
+          : !cwd
+            ? '先选一个目录'
+            : !draft.prompt.trim() && !draft.resume
+              ? '写上要它做什么'
+              : '';
 
   // Another directory, Agent or computer: another 「上次」.
   useEffect(() => {
@@ -42,10 +72,10 @@ export default function NewTask() {
   /** Finds the last conversation here. One still running is not opened again: you go to it. */
   async function findLast() {
     const r = m ? remote(m.id) : null;
-    if (!m || !r || !draft.cwd) return;
+    if (!m || !r || !cwd) return;
     setNote('');
     try {
-      const { session: found } = await r.request('lastsession', { cwd: draft.cwd, agent: draft.agent });
+      const { session: found } = await r.request('lastsession', { cwd: cwd, agent: draft.agent });
       if (!found) setNote(`这个目录里没有 ${agentName(draft.agent)} 的旧对话`);
       else if (found.terminal) router.replace({ pathname: '/chat', params: { machine: m.id, terminal: found.terminal } });
       else setDraft({ resume: { id: found.id, title: found.title, updated: found.updated } });
@@ -55,13 +85,17 @@ export default function NewTask() {
   }
 
   async function start() {
-    if (!m || !draft.cwd) return;
+    if (!m || !cwd) return;
     setBusy(true);
     try {
       const prompt = draft.prompt.trim();
-      const ok = await write(m.id, 'open', draft.resume ? { resume: draft.resume.id, ...(prompt ? { prompt } : {}) } : { cwd: draft.cwd, agent: draft.agent, prompt });
+      const space = land.space?.id;
+      const where = space ? { space } : {};
+      const ok = await write(m.id, 'open', draft.resume ? { resume: draft.resume.id, ...where, ...(prompt ? { prompt } : {}) } : { cwd: cwd, agent: draft.agent, prompt, ...where });
+      const ignored = ignoredPick(spaces, space, cwd, ok ?? {});
       resetDraft();
       await refresh(m.id);
+      if (ignored) oops(ignored);
       if (ok?.terminal) router.replace({ pathname: '/chat', params: { machine: m.id, terminal: ok.terminal } });
       else router.back();
     } catch (e) {
@@ -71,10 +105,26 @@ export default function NewTask() {
     }
   }
 
+  /** The keyboard's return key: start when it can; the keyboard goes away either way, and the line under 开始 says what is missing. */
+  function submit() {
+    if (ready) start();
+  }
+
+  async function addSpace(path: string) {
+    if (!m) return;
+    try {
+      const made = await write(m.id, 'addspace', { path });
+      await refresh(m.id);
+      if (made?.id) setDraft({ space: made.id });
+    } catch (e) {
+      oops((e as Error).message);
+    }
+  }
+
   return (
     <KeyboardSafe style={{ backgroundColor: t.bg }}>
       <Nav close big title="新任务" sub="在电脑上开一个新终端，运行 Agent" />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scroll} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <View style={s.field}>
           <Label>电脑</Label>
           <Pressable onPress={() => setPicking(!picking)} style={[s.sel, { backgroundColor: t.card, borderColor: t.line }]}>
@@ -89,7 +139,7 @@ export default function NewTask() {
               <Pressable
                 key={x.id}
                 onPress={() => {
-                  setDraft({ machine: x.id, cwd: undefined, about: undefined });
+                  setDraft({ machine: x.id, cwd: undefined, about: undefined, space: undefined });
                   setPicking(false);
                 }}
                 style={[s.sel, { backgroundColor: t.bg, borderColor: x.id === m?.id ? t.focus : t.line }]}
@@ -100,19 +150,33 @@ export default function NewTask() {
               </Pressable>
             ))}
         </View>
+        {m && (
+          <SpaceField
+            spaces={spaces}
+            land={land}
+            cwd={draft.cwd}
+            canAdd={supports(m, 'addspace')}
+            onAdd={addSpace}
+            onPick={(x) => {
+              const p = pickSpace(x, draft.cwd);
+              setDraft({ space: p.space, cwd: p.cwd, ...(p.reset && { about: undefined }) });
+            }}
+          />
+        )}
         <View style={s.field}>
           <Label>目录</Label>
           <Pressable
             disabled={!m}
-            onPress={() => m && router.push({ pathname: '/dirs', params: { machine: m.id } })}
+            onPress={() => m && router.push({ pathname: '/dirs', params: { machine: m.id, ...(cwd && { at: cwd }) } })}
             style={[s.sel, { height: 56, backgroundColor: t.card, borderColor: t.line }]}
           >
             <Icon name="folder" size={20} color={t.dim} />
             <View style={{ flex: 1, gap: 2 }}>
-              <Text numberOfLines={1} style={{ fontFamily: mono, fontSize: 15, color: draft.cwd ? t.text : t.dim }}>
-                {draft.cwd ? tilde(draft.cwd) : '选一个文件夹'}
+              <Text numberOfLines={1} ellipsizeMode="head" style={{ fontFamily: mono, fontSize: 15, color: cwd ? t.text : t.dim }}>
+                {cwd ? tilde(cwd) : '选一个文件夹'}
               </Text>
               {!!draft.about && <Text style={{ fontSize: 12, color: t.dim }}>{draft.about}</Text>}
+              {!draft.cwd && !!cwd && <Text style={{ fontSize: 12, color: t.dim }}>空间「{land.space?.name}」的文件夹，点这里换</Text>}
             </View>
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Pressable>
@@ -141,6 +205,17 @@ export default function NewTask() {
             multiline
             value={draft.prompt}
             onChangeText={(prompt) => setDraft({ prompt })}
+            // Return starts it: on a phone a new line is rarely what is meant, and the
+            // keyboard otherwise hides 开始 with no way to put it away.
+            returnKeyType={ready ? 'send' : 'done'}
+            submitBehavior="blurAndSubmit"
+            onSubmitEditing={submit}
+            onFocus={() => {
+              typing.current = true;
+              if (Keyboard.isVisible()) scroll.current?.scrollToEnd({ animated: true });
+            }}
+            onBlur={() => (typing.current = false)}
+            accessibilityLabel={draft.resume ? '接着说什么' : '要它做什么'}
             placeholder="比如：把审批框里的终端内容换成等宽字体"
             placeholderTextColor={t.dim}
             style={[s.area, { color: t.text, backgroundColor: t.card, borderColor: t.line }, noOutline]}
@@ -176,7 +251,9 @@ export default function NewTask() {
       </ScrollView>
       <View style={{ paddingHorizontal: 18, paddingBottom: bottom + 4, gap: 10 }}>
         <Wide label={busy ? '正在打开…' : draft.resume ? '接着做' : '开始'} disabled={!ready} onPress={start} />
-        <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>电脑上会出现一个新标签页，你回到电脑前可以直接接着用</Text>
+        <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>
+          {missing || (land.space ? `电脑上「${land.space.name}」里会出现一个新标签页，回到电脑前可以直接接着用` : '电脑上会出现一个新标签页，你回到电脑前可以直接接着用')}
+        </Text>
       </View>
     </KeyboardSafe>
   );

@@ -329,6 +329,44 @@ fn addspace_makes_one_space_for_a_folder_for_the_full_role_only() {
     assert!(e.contains("不能 addspace"), "{e}");
 }
 
+/// The phone names the space: the tab goes there even when the folder is outside it (it used
+/// to fall into the first space). Without one, as from an older phone, the folder decides.
+#[test]
+fn open_puts_the_tab_in_the_space_named_and_without_one_where_the_folder_is() {
+    let h = Host::start();
+    let a = scratch(&h, "alpha").to_string_lossy().into_owned();
+    let elsewhere = scratch(&h, "elsewhere").to_string_lossy().into_owned();
+    let mut r = Remote::open(&h, None, &[]);
+    let alpha = r.ok(json!({ "op": "addspace", "path": a, "request": "s1" }));
+    let tab_space = |h: &Host, tab: &Value| {
+        let w = h.workspace();
+        (w.tabs.iter().find(|t| t.id == tab.as_str().unwrap())).map(|t| t.space.clone())
+    };
+
+    let picked =
+        r.ok(json!({ "op": "open", "cwd": elsewhere, "space": alpha["id"], "request": "o1" }));
+    assert_eq!(picked["space"], alpha["id"]);
+    assert_eq!(
+        tab_space(&h, &picked["tab"]).as_deref(),
+        alpha["id"].as_str()
+    );
+
+    let inside = r.ok(json!({ "op": "open", "cwd": a, "request": "o2" }));
+    assert_eq!(
+        inside["space"], alpha["id"],
+        "no space named: the folder's space"
+    );
+
+    let outside = r.ok(json!({ "op": "open", "cwd": elsewhere, "request": "o3" }));
+    assert_ne!(
+        outside["space"], alpha["id"],
+        "no space named, folder in none: the first space"
+    );
+
+    let e = r.error(json!({ "op": "open", "cwd": elsewhere, "space": "gone", "request": "o4" }));
+    assert!(e.contains("空间已经不在"), "{e}");
+}
+
 /// Today's tokens from logs shaped as the CLIs write them, read once and then by their growth.
 #[test]
 fn usage_counts_each_reply_once_and_only_since_the_moment_asked() {

@@ -7,6 +7,8 @@ export type Draft = {
   cwd?: string;
   /** What the picker knew of the directory: 「git · main · 2 个改动」. */
   about?: string;
+  /** The space it goes in, when chosen or read off the directory; none means the computer's first. */
+  space?: string;
   agent: 'claude' | 'codex';
   prompt: string;
   /** The conversation to pick back up instead of starting one. */
@@ -21,7 +23,7 @@ export function setDraft(patch: Partial<Draft>) {
   listeners.forEach((l) => l());
 }
 
-export const resetDraft = () => setDraft({ cwd: undefined, about: undefined, prompt: '', resume: undefined });
+export const resetDraft = () => setDraft({ cwd: undefined, about: undefined, space: undefined, prompt: '', resume: undefined });
 
 export const useDraft = () =>
   useSyncExternalStore(

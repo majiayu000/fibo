@@ -137,12 +137,16 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         take: bool,
     },
-    /// A shell in a new tab, in `cwd` (else its space's directory): `{terminal, tab}`.
+    /// A shell in a new tab, in `cwd` (else its space's directory): `{terminal, tab, space}`.
     /// With `agent` (as cards name it: `claude`, `codex`…) the shell runs that Agent,
-    /// `prompt` its first message; the shell stays once it exits.
+    /// `prompt` its first message; the shell stays once it exits. The tab goes in `space`
+    /// when named (an id from `list`'s `spaces`), else in the space whose folder holds `cwd`,
+    /// else the first one not put aside. An older host leaves `space` out of the reply.
     Open {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cwd: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        space: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
