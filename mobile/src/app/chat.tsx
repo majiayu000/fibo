@@ -426,11 +426,16 @@ export default function Chat() {
           onUseSuggestion={() => suggestionStats.set(countUse)}
           onModel={supports(m, 'setmode') ? () => setPicking('model') : undefined}
           onPermission={supports(m, 'setmode') ? () => setPicking('permission') : undefined}
-          onEffort={supports(m, 'setmode') && supports(m, 'effort') && hasEffort(card?.agent) ? () => setPicking('effort') : undefined}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />
-      {!!picking && <ModeSheet machine={machine} terminal={terminal} kind={picking} onClose={() => setPicking(null)} />}
+      {!!picking && <ModeSheet
+          machine={machine}
+          terminal={terminal}
+          kind={picking}
+          effort={picking === 'model' && supports(m, 'effort') && hasEffort(card?.agent)}
+          onClose={() => setPicking(null)}
+        />}
     </KeyboardSafe>
   );
 }

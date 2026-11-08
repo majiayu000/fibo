@@ -63,10 +63,25 @@ fn row(line: &str) -> Option<Row> {
 pub fn menu(tail: &str, title: &str) -> Option<Menu> {
     let lines: Vec<&str> = tail.lines().collect();
     let top = lines.iter().rposition(|l| l.contains(title))?;
-    let mut rows = vec![];
+    let mut rows: Vec<Row> = vec![];
     let mut more = false;
+    // A narrow terminal wraps a row's detail onto the lines under it, indented to the
+    // detail's column: they belong to that row until a blank line.
+    let mut wrapping = false;
     for l in &lines[top + 1..] {
         let t = l.trim();
+        if t.is_empty() {
+            wrapping = false;
+        } else if wrapping && row(l).is_none() && l.len() - l.trim_start().len() >= 6 {
+            if let Some(r) = rows.last_mut() {
+                r.detail = if r.detail.is_empty() {
+                    t.to_owned()
+                } else {
+                    format!("{} {t}", r.detail)
+                };
+                continue;
+            }
+        }
         let lower = t.to_ascii_lowercase();
         if lower.starts_with("enter ")
             || lower.contains(" · esc ")
@@ -81,6 +96,7 @@ pub fn menu(tail: &str, title: &str) -> Option<Menu> {
         more |= t.starts_with('↓');
         if let Some(r) = row(l) {
             rows.push(r);
+            wrapping = true;
         }
     }
     None
