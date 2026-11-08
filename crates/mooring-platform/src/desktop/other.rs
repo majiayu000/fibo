@@ -62,6 +62,49 @@ pub fn editor_cli(editor: super::Editor) -> Option<std::path::PathBuf> {
     fixed.chain(searched).find(|p| p.is_file())
 }
 
+/// Windows PowerShell's toast API, attributed to PowerShell since Mooring registers no app id
+/// yet; `notify-send` elsewhere. Title and body travel in the environment, so nothing a
+/// conversation says is ever parsed as script.
+pub fn notify(title: &str, body: &str, sound: bool) -> std::io::Result<()> {
+    let mut command = if cfg!(windows) {
+        let mut c = std::process::Command::new("powershell.exe");
+        c.args(["-NoProfile", "-NonInteractive", "-Command", TOAST])
+            .env("MOORING_TOAST_TITLE", title)
+            .env("MOORING_TOAST_BODY", body)
+            .env("MOORING_TOAST_SILENT", if sound { "0" } else { "1" });
+        hide_console(&mut c);
+        c
+    } else {
+        let mut c = std::process::Command::new("notify-send");
+        c.args(["--app-name=Mooring", "--", title, body]);
+        c
+    };
+    let mut child = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
+const TOAST: &str = r#"$m=[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime]
+$x=$m::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$t=$x.GetElementsByTagName('text')
+[void]$t.Item(0).AppendChild($x.CreateTextNode($env:MOORING_TOAST_TITLE))
+[void]$t.Item(1).AppendChild($x.CreateTextNode($env:MOORING_TOAST_BODY))
+if ($env:MOORING_TOAST_SILENT -eq '1') { $a=$x.CreateElement('audio'); $a.SetAttribute('silent','true'); [void]$x.DocumentElement.AppendChild($a) }
+$m::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($x))"#;
+
+#[cfg(windows)]
+fn hide_console(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+#[cfg(not(windows))]
+fn hide_console(_command: &mut std::process::Command) {}
+
 /// Not read on these systems yet.
 pub fn reduce_motion() -> bool {
     false

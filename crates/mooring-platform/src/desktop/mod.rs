@@ -32,6 +32,12 @@ pub fn editor_cli(editor: Editor) -> Option<std::path::PathBuf> {
     imp::editor_cli(editor)
 }
 
+/// Shows a notification through the system's own center, for a window with no native one of
+/// its own (the Mac's is in the app). The text is handed over as data, never as code.
+pub fn notify(title: &str, body: &str, sound: bool) -> std::io::Result<()> {
+    imp::notify(title, body, sound)
+}
+
 /// Whether the system is set to reduce motion. May take a while: off the main thread.
 pub fn reduce_motion() -> bool {
     imp::reduce_motion()
