@@ -217,6 +217,11 @@ export default function Inbox() {
         {ahead.map((i) => (
           <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
         ))}
+        {/* 等你验收 above 在跑: it wants you to look, 在跑 wants nothing (2026-11-08, docs/decisions/2026-11-08-review-above-running.md). */}
+        {review.length > 0 && (
+          <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />
+        )}
+        {view.review && review.map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
         {(running.length > 0 || tight.length > 0) && (
           <View style={s.runHead}>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -242,10 +247,6 @@ export default function Inbox() {
             <Text style={{ fontSize: 14, color: t.dim }}>{`看全部 ${running.length} 个`}</Text>
           </Pressable>
         )}
-        {review.length > 0 && (
-          <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />
-        )}
-        {view.review && review.map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
         {behind.map((i) => (
           <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
         ))}
