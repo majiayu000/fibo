@@ -1,3 +1,6 @@
+// A window, not a console program: Windows opens no command prompt beside it. Other systems
+// ignore the attribute.
+#![windows_subsystem = "windows"]
 mod agent_hooks;
 mod connection;
 mod desktop;
