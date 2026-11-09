@@ -8,9 +8,7 @@
 
 **给 Coding Agent 用的原生 macOS 工作台。每个会话都是一个真终端；Fibo 告诉你哪个在等你，关掉窗口它们照样跑，崩了也能接着聊。**
 
-[![GitHub stars](https://img.shields.io/github/stars/majiayu000/mooring?style=flat-square&color=ffcc00)](https://github.com/majiayu000/mooring)
 [![Release](https://img.shields.io/github/v/release/majiayu000/mooring?style=flat-square&label=release)](https://github.com/majiayu000/mooring/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/majiayu000/mooring/total?style=flat-square&color=success)](https://github.com/majiayu000/mooring/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/mooring/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/mooring/actions/workflows/ci.yml)
 [![Last commit](https://img.shields.io/github/last-commit/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/commits/main)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/pulse)
