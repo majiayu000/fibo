@@ -21,7 +21,7 @@
 "断开#button" = "Disconnect"
 "改权限或取消配对" = "Change access or unpair"
 "取消配对" = "Unpair"
-"用 Mooring 手机 App 扫这个码：「{name}」 · {role}" = "Scan this code with the Mooring phone app: “{name}” · {role}"
+"用 Fibo 手机 App 扫这个码：「{name}」 · {role}" = "Scan this code with the Fibo phone app: “{name}” · {role}"
 "这个码只给这一台手机，别截图发给别人；关掉后不再显示。" = "This code is for this one phone only; don't share a screenshot. It won't show again once closed."
 "复制链接" = "Copy link"
 "完成" = "Done"

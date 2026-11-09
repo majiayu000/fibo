@@ -1,4 +1,4 @@
-# Mooring zsh integration. Mooring starts zsh with ZDOTDIR pointing here; this file
+# Fibo zsh integration. Fibo starts zsh with ZDOTDIR pointing here; this file
 # puts the user's ZDOTDIR back first, so .zprofile, .zshrc and .zlogin load as usual.
 if [[ -n "${MOORING_ZSH_ZDOTDIR+X}" ]]; then
     'builtin' 'export' ZDOTDIR="$MOORING_ZSH_ZDOTDIR"

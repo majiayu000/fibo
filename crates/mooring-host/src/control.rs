@@ -39,28 +39,28 @@ pub(crate) const COMMANDS: &[Command] = &[
         valued: &[],
         switches: &["json"],
         usage: "\
-mooring list [--json]                      终端列表：编号、Agent 状态、标签、目录",
+fibo list [--json]                         终端列表：编号、Agent 状态、标签、目录",
     },
     Command {
         name: "read",
         valued: &["lines"],
         switches: &[],
         usage: "\
-mooring read <终端> [--lines N]            画面最后 N 行（默认 50）",
+fibo read <终端> [--lines N]               画面最后 N 行（默认 50）",
     },
     Command {
         name: "send",
         valued: &[],
         switches: &["enter"],
         usage: "\
-mooring send <终端> <文字|-> [--enter]     把文字作为粘贴放进终端；- 从标准输入读（最多 64 KiB）",
+fibo send <终端> <文字|-> [--enter]        把文字作为粘贴放进终端；- 从标准输入读（最多 64 KiB）",
     },
     Command {
         name: "prompt",
         valued: &["timeout"],
         switches: &["wait", "force"],
         usage: "\
-mooring prompt <终端> <文字|-> [--wait] [--timeout 秒] [--force]
+fibo prompt <终端> <文字|-> [--wait] [--timeout 秒] [--force]
                                              给 Agent 发一条并回车；它正等你回答时拒绝，除非 --force",
     },
     Command {
@@ -68,7 +68,7 @@ mooring prompt <终端> <文字|-> [--wait] [--timeout 秒] [--force]
         valued: &["until", "timeout"],
         switches: &[],
         usage: "\
-mooring wait <终端> [--until idle|waiting|working] [--timeout 秒]
+fibo wait <终端> [--until idle|waiting|working] [--timeout 秒]
                                              等 Agent 进入某个状态（默认 idle：这一轮做完）",
     },
     Command {
@@ -76,8 +76,8 @@ mooring wait <终端> [--until idle|waiting|working] [--timeout 秒]
         valued: &["file", "agent"],
         switches: &["json"],
         usage: "\
-mooring explain --file <画面.txt> --agent <claude|codex> [--json]
-mooring explain <终端> [--json]            画面规则怎么读这块屏：状态、命中的规则、规则版本和来源、看到的行；
+fibo explain --file <画面.txt> --agent <claude|codex> [--json]
+fibo explain <终端> [--json]               画面规则怎么读这块屏：状态、命中的规则、规则版本和来源、看到的行；
                                              还有每个后台 shell 算任务还是服务、依据哪条",
     },
     Command {
@@ -85,7 +85,7 @@ mooring explain <终端> [--json]            画面规则怎么读这块屏：�
         valued: &[],
         switches: &["json"],
         usage: "\
-mooring events [--json]                    先列出现在的状态，再每有变化输出一行，直到 Ctrl-C：
+fibo events [--json]                       先列出现在的状态，再每有变化输出一行，直到 Ctrl-C：
                                              started / waiting / error / done、approval / approval_gone、
                                              terminal_started / terminal_exited、command_done / command_failed；
                                              lagged 表示跟不上丢了事件，应重新开一次取现状",
@@ -95,7 +95,7 @@ mooring events [--json]                    先列出现在的状态，再每有�
         valued: &["size", "cwd"],
         switches: &["down", "tab", "here", "json"],
         usage: "\
-mooring split <终端> [--down] [--size 0.5] [--tab|--here] [--cwd 目录] [--json] [-- 命令…]
+fibo split <终端> [--down] [--size 0.5] [--tab|--here] [--cwd 目录] [--json] [-- 命令…]
                                              在这个终端右边（--down 下面）开一块新分屏，打印新终端编号；
                                              标签已有 4 块或切开太窄时开到「旁屏」标签（--here 改为拒绝，
                                              --tab 直接开到旁屏）；给了命令就在新 shell 里跑，跑完留在 shell",
@@ -105,28 +105,28 @@ mooring split <终端> [--down] [--size 0.5] [--tab|--here] [--cwd 目录] [--js
         valued: &["cwd", "from", "timeout"],
         switches: &["split", "no-report", "json"],
         usage: "\
-mooring run <agent> <任务|-> [--split] [--cwd 目录] [--no-report] [--from <终端>] [--timeout 秒] [--json]
+fibo run <agent> <任务|-> [--split] [--cwd 目录] [--no-report] [--from <终端>] [--timeout 秒] [--json]
                                              派一个 Agent 去做事：开在旁屏标签（--split 开在旁边），等它出现输入框
                                              再交任务；它每结束一轮，结果自动发回你的输入框（<mooring from=…>）；
-                                             不在 Mooring 终端里时用 --from 说开在谁旁边、汇报给谁",
+                                             不在 Fibo 终端里时用 --from 说开在谁旁边、汇报给谁",
     },
     Command {
         name: "close",
         valued: &[],
         switches: &[],
         usage: "\
-mooring close <终端>                       关掉这块分屏并结束里面的程序",
+fibo close <终端>                          关掉这块分屏并结束里面的程序",
     },
     Command {
         name: "todo",
         valued: &["task", "said", "space"],
         switches: &["all", "work", "json"],
         usage: "\
-mooring todo list [--all] [--json]         没做完的待办；--all 连已收尾的
-mooring todo show [--task <待办>] [--json]   看一条：用户写的、验收标准、进展
-mooring todo add <标题|-> [--said <原话>] [--space <空间>] [--work] [--json]
+fibo todo list [--all] [--json]            没做完的待办；--all 连已收尾的
+fibo todo show [--task <待办>] [--json]      看一条：用户写的、验收标准、进展
+fibo todo add <标题|-> [--said <原话>] [--space <空间>] [--work] [--json]
                                            记一件事，默认只记下来自哪个会话；--work 表示这个会话就在做它
-mooring todo note <文字|-> [--task <待办>]   写进展：做了什么、剩什么、要用户定什么；完成由用户标记",
+fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩什么、要用户定什么；完成由用户标记",
     },
     Command {
         name: "remote",
@@ -143,23 +143,23 @@ mooring todo note <文字|-> [--task <待办>]   写进展：做了什么、剩�
             "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report",
         ],
         usage: "\
-mooring remote --stdio [--role view|answer|full]  给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
-                                             答审批、事件），经 ssh 连过来：ssh 主机 mooring remote --stdio
-mooring remote --relay <中继地址> [--relay-key <密钥>] [--report]
+fibo remote --stdio [--role view|answer|full]     给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
+                                             答审批、事件），经 ssh 连过来：ssh 主机 fibo remote --stdio
+fibo remote --relay <中继地址> [--relay-key <密钥>] [--report]
                                              连上中继并一直挂着，配对过的手机在哪都能连过来；内容端到端加密，
                                              中继看不到。中继要密钥时也可以设 MOORING_RELAY_KEY；
                                              --report 把连接状态报给后台（后台自己启动它时用）
-mooring remote --pair --relay <中继地址> [--name 名字] [--role view|answer|full] [--new-code]
+fibo remote --pair --relay <中继地址> [--name 名字] [--role view|answer|full] [--new-code]
                                              配对一台新手机，打印它的二维码和链接；权限分只看 / 能答审批 / 完全控制（默认）。
                                              加 --new-code 换掉机器码，已配对的手机全部失效
-mooring remote --enable --relay <中继地址> [--relay-key <密钥>] | --disable
+fibo remote --enable --relay <中继地址> [--relay-key <密钥>] | --disable
                                              让后台一直挂在中继上（重启后也会自动连回去），或者断开；配对保留
-mooring remote --status                    中继连接状态、配对的手机、现在谁在线、在看哪个终端
-mooring remote --kick <设备>               立刻断开这台手机正连着的会话，配对保留
-mooring remote --devices                   列出配对过的手机、权限和最近连接时间；操作记在运行目录的 remote-log.jsonl
-mooring remote --device <设备> --role <view|answer|full>
+fibo remote --status                       中继连接状态、配对的手机、现在谁在线、在看哪个终端
+fibo remote --kick <设备>                  立刻断开这台手机正连着的会话，配对保留
+fibo remote --devices                      列出配对过的手机、权限和最近连接时间；操作记在运行目录的 remote-log.jsonl
+fibo remote --device <设备> --role <view|answer|full>
                                              改一台手机的权限；它正连着的会话一秒内断开，重连后按新权限
-mooring remote --revoke <设备编号或名字>   取消一台手机的配对，它正连着的会话一秒内断开",
+fibo remote --revoke <设备编号或名字>      取消一台手机的配对，它正连着的会话一秒内断开",
     },
     Command {
         name: "themes",
@@ -178,9 +178,9 @@ mooring remote --revoke <设备编号或名字>   取消一台手机的配对，
         valued: &["agent"],
         switches: &["json", "outdated-only"],
         usage: "\
-mooring hooks install|uninstall [--agent <cli>]
-                                             把 Mooring 的 hook 写进（或移出）Agent CLI 自己的设置；不写 --agent 就是全部
-mooring hooks status [--agent <cli>] [--json] [--outdated-only]
+fibo hooks install|uninstall [--agent <cli>]
+                                             把 Fibo 的 hook 写进（或移出）Agent CLI 自己的设置；不写 --agent 就是全部
+fibo hooks status [--agent <cli>] [--json] [--outdated-only]
                                              各 CLI 的 hook 装了没有、和现在 install 会写的差在哪",
     },
     Command {
@@ -188,15 +188,15 @@ mooring hooks status [--agent <cli>] [--json] [--outdated-only]
         valued: &["agent"],
         switches: &[],
         usage: "\
-mooring hook --agent <claude|codex|grok>   Agent CLI 的 hook 调用的入口：从标准输入读一条 hook JSON（最多 1 MiB）
-                                             报给后台；不在 Mooring 终端里什么都不做。不用手动跑",
+fibo hook --agent <claude|codex|grok>      Agent CLI 的 hook 调用的入口：从标准输入读一条 hook JSON（最多 1 MiB）
+                                             报给后台；不在 Fibo 终端里什么都不做。不用手动跑",
     },
     Command {
         name: "serve",
         valued: &["recent-days"],
         switches: &["takeover"],
         usage: "\
-mooring serve --runtime <目录> [--takeover] [--recent-days N]
+fibo serve --runtime <目录> [--takeover] [--recent-days N]
                                              启动后台（App 自己会启动，不用手动跑）；--takeover 从正在跑的后台
                                              接过全部终端，--recent-days 只读最近 N 天的会话（默认 7）",
     },
@@ -205,23 +205,23 @@ mooring serve --runtime <目录> [--takeover] [--recent-days N]
         valued: &[],
         switches: &[],
         usage: "\
-mooring scan --runtime <目录>              让后台重新扫一遍 Agent 会话，打印会话数和终端数",
+fibo scan --runtime <目录>                 让后台重新扫一遍 Agent 会话，打印会话数和终端数",
     },
     Command {
         name: "--skill",
         valued: &[],
         switches: &[],
         usage: "\
-mooring --skill                            给 Coding Agent 看的用法说明（Markdown）
-mooring --skill plugins                    给 Coding Agent 看的写插件、改外观说明（Markdown）
-mooring --skill session                    Mooring 在会话开始时告诉 Agent 的话",
+fibo --skill                               给 Coding Agent 看的用法说明（Markdown）
+fibo --skill plugins                       给 Coding Agent 看的写插件、改外观说明（Markdown）
+fibo --skill session                       Fibo 在会话开始时告诉 Agent 的话",
     },
     Command {
         name: "--version",
         valued: &[],
         switches: &[],
         usage: "\
-mooring --version                          打印协议版本",
+fibo --version                             打印协议版本",
     },
 ];
 const FOOTER: &str = "\
@@ -264,7 +264,7 @@ pub(crate) fn check(cmd: &Command, args: &[String]) -> io::Result<bool> {
                 }
             }
         } else if !cmd.switches.contains(&name) {
-            wrong.get_or_insert_with(|| format!("mooring {} 没有 --{name} 这个选项", cmd.name));
+            wrong.get_or_insert_with(|| format!("fibo {} 没有 --{name} 这个选项", cmd.name));
         }
     }
     match wrong {
@@ -281,7 +281,7 @@ pub const SKILL: &str = include_str!("skill.md");
 pub const PLUGINS_SKILL: &str = include_str!("plugins.md");
 /// What every conversation in a Mooring terminal is told when it starts. It costs every
 /// conversation these words, so it only says when to write something down.
-pub const SESSION_SKILL: &str = "你在 Mooring 终端里。用户说「记一下」，或有这次不处理但之后要跟进的事时：先 mooring todo list 查重，有就 mooring todo note --task <待办> 写进展，没有就 mooring todo add \"标题\" --said \"用户原话\"。当场问完答完的事不记。完成由用户标记，你不能标。\n";
+pub const SESSION_SKILL: &str = "你在 Fibo 终端里。用户说「记一下」，或有这次不处理但之后要跟进的事时：先 fibo todo list 查重，有就 fibo todo note --task <待办> 写进展，没有就 fibo todo add \"标题\" --said \"用户原话\"。当场问完答完的事不记。完成由用户标记，你不能标。\n";
 
 /// What the Agent in a terminal is doing, read like the workbench's pane states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

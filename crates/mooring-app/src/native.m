@@ -212,7 +212,7 @@ static NSImage *tray_mark(BOOL offline) {
     [vc.view addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[[stack.leadingAnchor constraintEqualToAnchor:vc.view.leadingAnchor],[stack.trailingAnchor constraintEqualToAnchor:vc.view.trailingAnchor],[stack.topAnchor constraintEqualToAnchor:vc.view.topAnchor]]];
     // One number for the title; the minute it is from when the host is gone.
-    NSStackView *head=spread(label(self.data[@"heading"]?:@"Mooring",[t[@"title"] doubleValue],NSFontWeightSemibold,ink),label(text(self.data[@"when"]),meta,NSFontWeightRegular,muted));
+    NSStackView *head=spread(label(self.data[@"heading"]?:@"Fibo",[t[@"title"] doubleValue],NSFontWeightSemibold,ink),label(text(self.data[@"when"]),meta,NSFontWeightRegular,muted));
     head.edgeInsets=NSEdgeInsetsMake(0,4,0,4);add(stack,head);
     if(offline) {
         NSView *alert=fill(color(p[@"error_wash"]),radius);
@@ -350,7 +350,7 @@ static NSImage *tray_mark(BOOL offline) {
 void kl_desktop_install(KLCallback callback) {
     desktop=[KLDesktop new];desktop.callback=callback;
     desktop.item=[[NSStatusBar systemStatusBar]statusItemWithLength:NSVariableStatusItemLength];
-    desktop.item.button.title=@"";desktop.item.button.image=tray_mark(NO);desktop.item.button.imagePosition=NSImageOnly;desktop.item.button.toolTip=@"Mooring";
+    desktop.item.button.title=@"";desktop.item.button.image=tray_mark(NO);desktop.item.button.imagePosition=NSImageOnly;desktop.item.button.toolTip=@"Fibo";
     desktop.item.button.target=desktop;desktop.item.button.action=@selector(show:);
     desktop.popover=[NSPopover new];desktop.popover.behavior=NSPopoverBehaviorTransient;
     // An open panel repaints when the system switches between light and dark.
@@ -365,13 +365,13 @@ void kl_desktop_update(const char *json) {
     desktop.data=data;NSString *badge=data[@"badge"]?:@"";desktop.item.button.title=badge;
     BOOL offline=[data[@"connection"][@"error"] isKindOfClass:NSString.class];
     desktop.item.button.image=tray_mark(offline);desktop.item.button.imagePosition=badge.length?NSImageLeft:NSImageOnly;
-    desktop.item.button.toolTip=offline?word(data,@"offline_tip",@"Mooring · 连不上后台"):@"Mooring";
+    desktop.item.button.toolTip=offline?word(data,@"offline_tip",@"Fibo · 连不上后台"):@"Fibo";
     if(desktop.popover.shown) [desktop rebuild];
 }
 void kl_notifications_enable(void) {
-    if(!NSBundle.mainBundle.bundleIdentifier) {[desktop route:@"error:系统通知需要从 Mooring.app 启动"];return;}
+    if(!NSBundle.mainBundle.bundleIdentifier) {[desktop route:@"error:系统通知需要从 Fibo.app 启动"];return;}
     [[UNUserNotificationCenter currentNotificationCenter]requestAuthorizationWithOptions:UNAuthorizationOptionAlert|UNAuthorizationOptionSound completionHandler:^(BOOL granted,NSError *error){
-        NSString *message=error?[@"error:" stringByAppendingString:error.localizedDescription]:(granted?@"notice:系统通知已允许":@"error:系统未允许通知，请在系统设置中手动打开 Mooring 通知；工作台列表仍可使用");
+        NSString *message=error?[@"error:" stringByAppendingString:error.localizedDescription]:(granted?@"notice:系统通知已允许":@"error:系统未允许通知，请在系统设置中手动打开 Fibo 通知；工作台列表仍可使用");
         dispatch_async(dispatch_get_main_queue(),^{[desktop route:message];});
     }];
 }
@@ -380,7 +380,7 @@ void kl_play_sound(void) {
     [[NSSound soundNamed:@"Glass"] play];
 }
 void kl_desktop_notify(const char *session,const char *title,const char *body,int sound) {
-    if(!NSBundle.mainBundle.bundleIdentifier) {[desktop route:@"error:系统通知需要从 Mooring.app 启动"];return;}
+    if(!NSBundle.mainBundle.bundleIdentifier) {[desktop route:@"error:系统通知需要从 Fibo.app 启动"];return;}
     NSString *sid=[NSString stringWithUTF8String:session];
     UNMutableNotificationContent *content=[UNMutableNotificationContent new];content.title=[NSString stringWithUTF8String:title];content.body=[NSString stringWithUTF8String:body];content.userInfo=@{@"session":sid};
     if(sound) content.sound=[UNNotificationSound defaultSound];

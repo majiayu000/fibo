@@ -1,6 +1,7 @@
-//! The `mooring` command at one fixed place on PATH. A terminal Mooring opens finds it by
-//! itself, but an Agent may run its commands from a daemon started somewhere else, whose
-//! PATH knows nothing of the app. A link there lets it be called by name, wherever the app is.
+//! The `fibo` command (and its old name `mooring`) at one fixed place on PATH. A terminal
+//! Fibo opens finds it by itself, but an Agent may run its commands from a daemon started
+//! somewhere else, whose PATH knows nothing of the app. A link there lets it be called by
+//! name, wherever the app is.
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -8,7 +9,11 @@ use std::{
 
 /// Where a link is put: directories a Mac's PATH has for every process, first one that takes it.
 pub const DIRS: [&str; 2] = ["/opt/homebrew/bin", "/usr/local/bin"];
-const NAME: &str = "mooring";
+/// The command's name. The program in the bundle is still the file `mooring`, which
+/// terminals started before the rename point `MOORING_HOOK` at.
+pub const NAME: &str = "fibo";
+/// The names linked on PATH: the command's, and the old one Agents and scripts learned.
+pub const NAMES: [&str; 2] = [NAME, "mooring"];
 
 /// A `mooring` inside an app bundle: only those get the name, never a build under test.
 pub fn in_bundle(exe: &Path) -> bool {
@@ -19,12 +24,12 @@ fn ours(target: &Path) -> bool {
     in_bundle(target)
 }
 
-/// Points `mooring` at `exe` in the first directory that takes it, and says where. Anything
-/// there that Mooring did not put there is left alone, and then no link is made at all: a
+/// Points `name` at `exe` in the first directory that takes it, and says where. Anything
+/// there that Fibo did not put there is left alone, and then no link is made at all: a
 /// later directory would not be reached first.
-pub fn link(dirs: &[impl AsRef<Path>], exe: &Path) -> io::Result<Option<PathBuf>> {
+pub fn link(dirs: &[impl AsRef<Path>], exe: &Path, name: &str) -> io::Result<Option<PathBuf>> {
     for dir in dirs.iter().map(AsRef::as_ref).filter(|d| d.is_dir()) {
-        let entry = dir.join(NAME);
+        let entry = dir.join(name);
         match fs::read_link(&entry) {
             Ok(target) if target == exe => return Ok(Some(entry)),
             Ok(target) if !ours(&target) => return Ok(None),
@@ -33,7 +38,7 @@ pub fn link(dirs: &[impl AsRef<Path>], exe: &Path) -> io::Result<Option<PathBuf>
             Err(_) => {}
         }
         // Replaced in one step: an Agent running it right now finds the old or the new one.
-        let fresh = dir.join(format!(".{NAME}.{}", std::process::id()));
+        let fresh = dir.join(format!(".{name}.{}", std::process::id()));
         let _ = fs::remove_file(&fresh);
         match mooring_platform::fs::link_program(exe, &fresh) {
             Ok(()) => {
@@ -47,7 +52,7 @@ pub fn link(dirs: &[impl AsRef<Path>], exe: &Path) -> io::Result<Option<PathBuf>
     Ok(None)
 }
 
-/// Whether the name `mooring` reaches `exe`: the first directory that has one decides.
+/// Whether the name `fibo` reaches `exe`: the first directory that has one decides.
 pub fn reaches(dirs: &[impl AsRef<Path>], exe: &Path) -> bool {
     let first = dirs
         .iter()
@@ -74,7 +79,7 @@ pub fn is_default_runtime(runtime: &Path) -> bool {
     }
 }
 
-/// Whether plain `mooring`, typed anywhere, is this app's command talking to this host.
+/// Whether plain `fibo`, typed anywhere, is this app's command talking to this host.
 pub fn by_name_reaches(exe: &Path, runtime: &Path) -> bool {
     reaches(&DIRS, exe) && is_default_runtime(runtime)
 }
@@ -114,30 +119,30 @@ mod tests {
             bundle(root.as_path(), "B.app"),
         );
 
-        assert_eq!(link(&dirs, &a).unwrap(), Some(bin.join("mooring")));
+        assert_eq!(link(&dirs, &a, NAME).unwrap(), Some(bin.join(NAME)));
         assert!(reaches(&dirs, &a));
         assert!(!reaches(&dirs, &b), "not the running app");
-        assert_eq!(link(&dirs, &b).unwrap(), Some(bin.join("mooring")));
+        assert_eq!(link(&dirs, &b, NAME).unwrap(), Some(bin.join(NAME)));
         assert!(reaches(&dirs, &b), "the app moved, the name follows");
         assert!(
             fs::read_dir(&bin).unwrap().count() == 1,
             "no temporary link left"
         );
 
-        // Someone else's `mooring`, a file or a link, stays.
-        fs::remove_file(bin.join("mooring")).unwrap();
-        fs::write(bin.join("mooring"), "mine").unwrap();
-        assert_eq!(link(&dirs, &a).unwrap(), None);
-        assert_eq!(fs::read(bin.join("mooring")).unwrap(), b"mine");
+        // Someone else's `fibo`, a file or a link, stays.
+        fs::remove_file(bin.join(NAME)).unwrap();
+        fs::write(bin.join(NAME), "mine").unwrap();
+        assert_eq!(link(&dirs, &a, NAME).unwrap(), None);
+        assert_eq!(fs::read(bin.join(NAME)).unwrap(), b"mine");
         assert!(
             !reaches(&dirs, &a),
             "the name is not ours: spell the path out"
         );
-        fs::remove_file(bin.join("mooring")).unwrap();
-        std::os::unix::fs::symlink("/somewhere/else", bin.join("mooring")).unwrap();
-        assert_eq!(link(&dirs, &a).unwrap(), None);
+        fs::remove_file(bin.join(NAME)).unwrap();
+        std::os::unix::fs::symlink("/somewhere/else", bin.join(NAME)).unwrap();
+        assert_eq!(link(&dirs, &a, NAME).unwrap(), None);
         assert_eq!(
-            fs::read_link(bin.join("mooring")).unwrap(),
+            fs::read_link(bin.join(NAME)).unwrap(),
             Path::new("/somewhere/else")
         );
     }
@@ -149,7 +154,7 @@ mod tests {
         fs::create_dir(&bin).unwrap();
         let exe = bundle(root.as_path(), "A.app");
         let dirs = [root.as_path().join("absent"), bin.clone()];
-        assert_eq!(link(&dirs, &exe).unwrap(), Some(bin.join("mooring")));
+        assert_eq!(link(&dirs, &exe, NAME).unwrap(), Some(bin.join(NAME)));
         assert!(in_bundle(&exe));
         assert!(!in_bundle(Path::new("/repo/target/debug/mooring")));
     }

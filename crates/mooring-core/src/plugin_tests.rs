@@ -158,13 +158,7 @@ fn a_plugin_for_a_newer_mooring_loads_what_this_one_knows() {
     assert!(mixed.warnings[0].contains("canvas"));
     assert!(mixed.warnings[1].contains("homepage"));
     assert_eq!(mixed.level, 1);
-    assert!(
-        found[1]
-            .result
-            .as_ref()
-            .unwrap_err()
-            .contains("更新 Mooring")
-    );
+    assert!(found[1].result.as_ref().unwrap_err().contains("更新 Fibo"));
     assert!(
         found[2]
             .result

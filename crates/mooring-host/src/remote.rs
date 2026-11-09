@@ -134,7 +134,7 @@ pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
     if !a.has("stdio") {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("mooring remote 要选一种用法：\n{}", cmd.usage),
+            format!("fibo remote 要选一种用法：\n{}", cmd.usage),
         ));
     }
     // `--role` narrows what this link may do, as a paired device's role would.

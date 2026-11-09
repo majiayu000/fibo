@@ -101,12 +101,12 @@ pub(crate) fn set_menus(cx: &mut App) {
             }
         }
     }
-    cx.set_menus([gpui::Menu::new("Mooring").items([
+    cx.set_menus([gpui::Menu::new("Fibo").items([
         gpui::MenuItem::action(t!("设置…"), ShowSettings),
         gpui::MenuItem::action(t!("菜单栏面板"), ShowMenuPanel),
         gpui::MenuItem::submenu(gpui::Menu::new(t!("外观")).items(looks)),
         gpui::MenuItem::separator(),
-        gpui::MenuItem::action(t!("退出 Mooring"), Quit),
+        gpui::MenuItem::action(t!("退出 Fibo"), Quit),
     ])]);
 }
 
@@ -115,7 +115,7 @@ fn window_options(bounds: Bounds<gpui::Pixels>) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
-            title: Some("Mooring".into()),
+            title: Some("Fibo".into()),
             appears_transparent: true,
             traffic_light_position: Some(point(
                 px(theme::Theme::TRAFFIC_LIGHT_X),
@@ -211,7 +211,7 @@ impl gpui::Render for StartupError {
     }
 }
 fn show_startup_error(message: String, cx: &mut App) {
-    eprintln!("Mooring: {message}");
+    eprintln!("Fibo: {message}");
     if let Err(e) = cx.open_window(WindowOptions::default(), |window, cx| {
         cx.new(|cx| {
             let focus = cx.focus_handle();
@@ -235,7 +235,7 @@ fn main() {
     record_panics();
     ui::language::apply();
     if let Err(error) = run() {
-        eprintln!("Mooring: {error}");
+        eprintln!("Fibo: {error}");
         std::process::exit(1);
     }
 }
@@ -267,7 +267,7 @@ fn stop_evidence_host() {
         .args([
             "-TERM",
             "-f",
-            &format!("mooring serve --runtime {escaped}( |$)"),
+            &format!("(mooring|fibo) serve --runtime {escaped}( |$)"),
         ])
         .status();
 }
@@ -275,8 +275,7 @@ fn stop_evidence_host() {
 /// appended to ~/Library/Logs/Mooring/crash.log. A failed visual-evidence check exits
 /// with 101 instead of aborting, so a scripted run raises no "quit unexpectedly" dialog.
 fn record_panics() {
-    let log =
-        mooring_platform::dirs::home().map(|home| home.join("Library/Logs/Mooring/crash.log"));
+    let log = mooring_platform::dirs::home().map(|home| home.join("Library/Logs/Fibo/crash.log"));
     let scripted = std::env::args().any(|arg| arg == "--visual-evidence");
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {

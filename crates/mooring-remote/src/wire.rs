@@ -13,9 +13,8 @@ pub const MIN_RELAY: u32 = 3;
 /// Why a machine leaves a relay that agreed on `proto` (`None`: a relay too old to say).
 pub fn relay_too_old(proto: Option<u32>) -> Option<String> {
     let proto = proto.unwrap_or(1);
-    (proto < MIN_RELAY).then(|| {
-        format!("中继版本太旧（协议 {proto}，这台 Mooring 要 {MIN_RELAY} 以上）：请升级中继")
-    })
+    (proto < MIN_RELAY)
+        .then(|| format!("中继版本太旧（协议 {proto}，这台 Fibo 要 {MIN_RELAY} 以上）：请升级中继"))
 }
 /// Phones a machine may list in `routes`, and revoked ones in `revoked`.
 pub const MAX_ROUTES: usize = 256;

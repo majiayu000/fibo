@@ -565,7 +565,7 @@ fn a_build_too_old_for_the_newest_gets_the_newest_it_can_run() {
             .for_this_build()
             .check()
             .unwrap_err()
-            .contains("更新 Mooring")
+            .contains("更新 Fibo")
     );
     let _ = std::fs::remove_dir_all(&catalog);
     let _ = std::fs::remove_dir_all(&plugins);

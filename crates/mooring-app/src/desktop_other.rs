@@ -12,7 +12,7 @@ pub fn notifications_enable() {}
 pub fn withdraw(_session: &str) {}
 pub fn notify(_session: &str, title: &str, body: &str, sound: bool) {
     if let Err(e) = mooring_platform::desktop::notify(title, body, sound) {
-        eprintln!("mooring: notification not shown: {e}");
+        eprintln!("fibo: notification not shown: {e}");
     }
 }
 pub fn play_sound() {}

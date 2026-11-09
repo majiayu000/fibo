@@ -185,7 +185,7 @@ fn pair(socket: &Path, relay: &str, name: &str, role: Role) -> io::Result<()> {
     writeln!(out, "{link}")?;
     writeln!(
         out,
-        "这一行只给这一台手机用，别发给别人。取消它：mooring remote --revoke {}",
+        "这一行只给这一台手机用，别发给别人。取消它：fibo remote --revoke {}",
         device.id
     )
 }
@@ -193,7 +193,7 @@ fn pair(socket: &Path, relay: &str, name: &str, role: Role) -> io::Result<()> {
 fn list_devices(socket: &Path) -> io::Result<()> {
     let list = devices::load(socket);
     if list.is_empty() {
-        println!("还没有配对的设备：mooring remote --pair --relay <中继地址> --name <名字>");
+        println!("还没有配对的设备：fibo remote --pair --relay <中继地址> --name <名字>");
         return Ok(());
     }
     let seen = devices::last_seen(socket);

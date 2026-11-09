@@ -553,7 +553,7 @@ pub fn files(kind: Kind) -> Vec<PathBuf> {
 pub fn bad_format(e: &serde_json::Error) -> String {
     let text = e.to_string();
     if text.contains("unknown field") || text.contains("unknown variant") {
-        format!("格式不对：{text}（写错了，或者要更新 Mooring 才认识）")
+        format!("格式不对：{text}（写错了，或者要更新 Fibo 才认识）")
     } else {
         format!("格式不对：{text}")
     }
@@ -651,7 +651,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
             Some(k) if !provides.contains(&k) => provides.push(k),
             Some(_) => {}
             None => warnings.push(format!(
-                "这个版本不认识「{name}」类，跳过了；更新 Mooring 后可用"
+                "这个版本不认识「{name}」类，跳过了；更新 Fibo 后可用"
             )),
         }
     }
@@ -673,12 +673,12 @@ fn read(dir: &Path) -> Result<Plugin, String> {
     let level = m.mooring.unwrap_or(needed).max(needed);
     if level > LEVEL {
         return Err(format!(
-            "要更新 Mooring：它需要插件级别 {level}，这个版本是 {LEVEL}"
+            "要更新 Fibo：它需要插件级别 {level}，这个版本是 {LEVEL}"
         ));
     }
     if provides.is_empty() {
         return Err(format!(
-            "这个版本不认识它提供的任何一类（{}），要更新 Mooring",
+            "这个版本不认识它提供的任何一类（{}），要更新 Fibo",
             m.provides.join("、")
         ));
     }

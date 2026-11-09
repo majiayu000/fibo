@@ -7,11 +7,12 @@ import pathlib
 import plistlib
 import shutil
 import subprocess
+import tomllib
 
 root = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--release-dir', type=pathlib.Path, default=root / 'target/release')
-parser.add_argument('--output', type=pathlib.Path, default=root / 'target/bundle/Mooring.app',
+parser.add_argument('--output', type=pathlib.Path, default=root / 'target/bundle/Fibo.app',
                     help='Bundle path; use a separate path when an installed build is running')
 parser.add_argument('--icon', type=pathlib.Path,
                     default=root / 'assets/Mooring.icns',
@@ -46,10 +47,11 @@ resources.mkdir(parents=True, exist_ok=True)
 for binary in ('mooring-app', 'mooring'):
     shutil.copy2(args.release_dir / binary, mac / binary)
     subprocess.run([*sign, str(mac / binary)], check=True)
-# The command's old names, Keepline's `keepline` and before it `keeplined`: Agents learned
-# them, and terminals started before the rename keep KEEPLINE_HOOK=.../MacOS/<old name>.
-for old in ('keepline', 'keeplined'):
-    (mac / old).symlink_to('mooring')
+# The command is `fibo`. The program stays the file `mooring`: terminals started before the
+# rename keep MOORING_HOOK=.../MacOS/mooring. Keepline's `keepline` and before it `keeplined`
+# are older names Agents learned, kept in KEEPLINE_HOOK=.../MacOS/<old name>.
+for name in ('fibo', 'keepline', 'keeplined'):
+    (mac / name).symlink_to('mooring')
 shutil.copy2(root / 'crates/mooring-app/assets/NERD-FONTS-LICENSE', resources / 'NERD-FONTS-LICENSE')
 shutil.copy2(args.icon, resources / 'Mooring.icns')
 # macOS 26 shrinks a plain .icns and puts a light plate behind it; an Icon Composer asset fills the tile.
@@ -73,16 +75,21 @@ for plugin in json.loads((catalog / 'index.json').read_text())['plugins']:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 shutil.copy2(catalog / 'index.json', resources / 'plugins/index.json')
+# The version users and the updater compare: the app crate's, so a release bumps it in one place.
+# CFBundleVersion must only grow; the commit count does.
+version = tomllib.loads((root / 'crates/mooring-app/Cargo.toml').read_text())['package']['version']
+build = subprocess.check_output(['git', 'rev-list', '--count', 'HEAD'], cwd=root, text=True).strip()
 (stage / 'Contents/Info.plist').write_bytes(plistlib.dumps({
-    'CFBundleName': 'Mooring', 'CFBundleDisplayName': 'Mooring',
-    'CFBundleIdentifier': 'local.mooring.workbench', 'CFBundleExecutable': 'mooring-app',
-    'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'Mooring', **icon_name, 'CFBundleVersion': '1', 'CFBundleShortVersionString': '0.1.0',
+    'CFBundleName': 'Fibo', 'CFBundleDisplayName': 'Fibo',
+    # Matches update::BUNDLE_ID; before the rename it was local.mooring.workbench.
+    'CFBundleIdentifier': 'page.fibo.app', 'CFBundleExecutable': 'mooring-app',
+    'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'Mooring', **icon_name, 'CFBundleVersion': build, 'CFBundleShortVersionString': version,
     'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '14.0',
     # macOS names the app, not the Agent in its terminal, when a program there first opens
     # 桌面, 文稿 or 下载; without these it asks with no reason given.
-    'NSDesktopFolderUsageDescription': 'Mooring 终端里运行的程序（例如 Claude Code、Codex）要读写桌面上的项目。',
-    'NSDocumentsFolderUsageDescription': 'Mooring 终端里运行的程序（例如 Claude Code、Codex）要读写文稿里的项目。',
-    'NSDownloadsFolderUsageDescription': 'Mooring 终端里运行的程序（例如 Claude Code、Codex）要读写下载里的文件。',
+    'NSDesktopFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写桌面上的项目。',
+    'NSDocumentsFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写文稿里的项目。',
+    'NSDownloadsFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写下载里的文件。',
 }))
 subprocess.run([*sign, str(stage)], check=True)
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(stage)], check=True)
@@ -94,9 +101,9 @@ if bundle.exists():
 stage.rename(bundle)
 shutil.rmtree(retired, ignore_errors=True)
 mac = bundle / 'Contents/MacOS'
-receipt = {'bundle': str(bundle), 'signature': args.sign_identity,
+receipt = {'bundle': str(bundle), 'version': version, 'build': build, 'signature': args.sign_identity,
            'hardened_runtime': args.sign_identity != '-', 'notarized': False, 'published': False,
            'git_head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
-           'binaries': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in mac.iterdir() if p.is_file()}}
+           'binaries': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in mac.iterdir() if p.is_file() and not p.is_symlink()}}
 (bundle.parent / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
 print(json.dumps(receipt, indent=2))

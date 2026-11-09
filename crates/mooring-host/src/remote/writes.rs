@@ -39,7 +39,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         ),
     };
     let agent = agent.or(task.map(|t| t.agent));
-    let handoff = task.map(|t| w.task_handoff(t, "mooring todo note"));
+    let handoff = task.map(|t| w.task_handoff(t, "fibo todo note"));
     let prompt =
         (request["prompt"].as_str().filter(|p| !p.trim().is_empty())).or(handoff.as_deref());
     let resume = request["resume"].as_str().filter(|r| !r.is_empty());

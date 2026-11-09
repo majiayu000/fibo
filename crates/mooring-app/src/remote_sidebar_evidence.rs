@@ -381,7 +381,7 @@ pub(super) fn start(
             .unwrap();
         wait(300).await;
         let file = std::path::PathBuf::from(std::env::var("HOME").unwrap())
-            .join(".config/mooring/machines.json");
+            .join(".config/fibo/machines.json");
         let saved = || std::fs::read_to_string(&file).unwrap().contains("\"quiet\": true");
         assert!(!saved(), "a machine started out quiet");
         assert_eq!(wants(cx), 2, "both machines before 先不管");

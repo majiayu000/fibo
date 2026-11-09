@@ -148,7 +148,7 @@ impl Workbench {
                     this.layout.space_menu = None;
                     space_themes::toggle_menu(cx);
                     if let Err(error) = space_themes::set(&space, theme.as_deref(), cx) {
-                        eprintln!("mooring: {error}");
+                        eprintln!("fibo: {error}");
                     }
                     cx.notify();
                 }))

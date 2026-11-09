@@ -32,7 +32,7 @@ impl Instance {
                     }
                     std::thread::sleep(Duration::from_millis(25));
                 }
-                return Err(io::Error::other("已有 Mooring 客户端，但无法唤醒其窗口"));
+                return Err(io::Error::other("已有 Fibo 客户端，但无法唤醒其窗口"));
             }
         }
         match std::fs::remove_file(&socket) {

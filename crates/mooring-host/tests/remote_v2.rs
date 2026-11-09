@@ -389,7 +389,7 @@ fn remote_quota_reports_each_agents_reading_from_the_last_week() {
     assert_eq!(r.ok(json!({ "op": "quota" })), json!({ "agents": [] }));
     drop(r);
     // A quota plugin reading a file, as `claude-quota` reads Claude Code's status line.
-    let plugin = config.join("mooring/plugins/q");
+    let plugin = config.join("fibo/plugins/q");
     fs::create_dir_all(&plugin).unwrap();
     let reading = h.root.join("reading.json");
     fs::write(

@@ -26,11 +26,11 @@ fn versions_compare_as_semver() {
 const LATEST: &str = r#"{
   "url": "https://api.github.com/repos/majiayu000/mooring/releases/1",
   "html_url": "https://github.com/majiayu000/mooring/releases/tag/v0.2.0",
-  "tag_name": "v0.2.0", "name": "Mooring 0.2.0", "draft": false, "prerelease": false,
+  "tag_name": "v0.2.0", "name": "Fibo 0.2.0", "draft": false, "prerelease": false,
   "body": "notes", "published_at": "2026-11-20T00:00:00Z",
   "assets": [
-    {"name": "Mooring-0.2.0-arm64.dmg", "size": 30000000, "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/Mooring-0.2.0-arm64.dmg"},
-    {"name": "Mooring-0.2.0-arm64.zip", "size": 29000000, "content_type": "application/zip", "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/Mooring-0.2.0-arm64.zip"},
+    {"name": "Fibo-0.2.0-arm64.dmg", "size": 30000000, "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/Fibo-0.2.0-arm64.dmg"},
+    {"name": "Fibo-0.2.0-arm64.zip", "size": 29000000, "content_type": "application/zip", "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/Fibo-0.2.0-arm64.zip"},
     {"name": "SHA256SUMS", "size": 200, "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/SHA256SUMS"}
   ]
 }"#;
@@ -45,8 +45,8 @@ fn the_release_json_gives_the_zip_for_this_arch_and_the_sums() {
         "https://github.com/majiayu000/mooring/releases/tag/v0.2.0"
     );
     let zip = r.zip.unwrap();
-    assert_eq!(zip.name, "Mooring-0.2.0-arm64.zip");
-    assert!(zip.url.ends_with("/v0.2.0/Mooring-0.2.0-arm64.zip"));
+    assert_eq!(zip.name, "Fibo-0.2.0-arm64.zip");
+    assert!(zip.url.ends_with("/v0.2.0/Fibo-0.2.0-arm64.zip"));
     assert_eq!(r.sums.unwrap().name, "SHA256SUMS");
     // An Intel Mac finds no zip; the release still names its page.
     let intel = select(&api, "x86_64").unwrap();
@@ -83,13 +83,10 @@ fn drafts_prereleases_and_odd_tags_are_not_releases() {
 fn sums_are_read_from_sha256sum_lines() {
     let a = "a".repeat(64);
     let b = "B".repeat(64);
-    let sums = format!("{a}  Mooring-0.2.0-arm64.dmg\n{b} *Mooring-0.2.0-arm64.zip\n");
-    assert_eq!(
-        sum_for(&sums, "Mooring-0.2.0-arm64.zip"),
-        Some("b".repeat(64))
-    );
-    assert_eq!(sum_for(&sums, "Mooring-0.2.0-arm64.dmg"), Some(a.clone()));
-    assert_eq!(sum_for(&sums, "Mooring-0.2.0-x86_64.zip"), None);
+    let sums = format!("{a}  Fibo-0.2.0-arm64.dmg\n{b} *Fibo-0.2.0-arm64.zip\n");
+    assert_eq!(sum_for(&sums, "Fibo-0.2.0-arm64.zip"), Some("b".repeat(64)));
+    assert_eq!(sum_for(&sums, "Fibo-0.2.0-arm64.dmg"), Some(a.clone()));
+    assert_eq!(sum_for(&sums, "Fibo-0.2.0-x86_64.zip"), None);
     // Two different sums for one file, or a malformed one, are not trusted.
     let twice = format!("{a}  x.zip\n{}  x.zip\n", "c".repeat(64));
     assert_eq!(sum_for(&twice, "x.zip"), None);
@@ -131,17 +128,17 @@ fn dev_builds_never_update_themselves() {
         "/Users/me/mooring/target/debug/mooring-app",
         "/Users/me/mooring/target/release/mooring-app",
         "/Users/me/mooring/target/debug/deps/mooring_app-1234",
-        "/Applications/Mooring.app/mooring-app",
+        "/Applications/Fibo.app/mooring-app",
         "/x/Contents/MacOS/mooring-app",
-        "/x/Mooring.app/Contents/Resources/mooring-app",
+        "/x/Fibo.app/Contents/Resources/mooring-app",
     ] {
         assert_eq!(packaged_bundle(Path::new(dev)), None, "{dev}");
     }
     assert_eq!(
         packaged_bundle(Path::new(
-            "/Applications/Mooring.app/Contents/MacOS/mooring-app"
+            "/Applications/Fibo.app/Contents/MacOS/mooring-app"
         )),
-        Some(PathBuf::from("/Applications/Mooring.app"))
+        Some(PathBuf::from("/Applications/Fibo.app"))
     );
     // This test binary itself runs from target/.
     assert_eq!(packaged_bundle(&std::env::current_exe().unwrap()), None);
@@ -176,11 +173,17 @@ fn homebrew_installs_are_left_to_brew() {
     let dir = scratch("brew");
     let prefix = dir.join("homebrew");
     let apps = dir.join("Applications");
-    std::fs::create_dir_all(apps.join("Mooring.app")).unwrap();
+    std::fs::create_dir_all(apps.join("Fibo.app")).unwrap();
     let prefixes = vec![prefix.clone()];
-    assert!(!homebrew_managed(&apps.join("Mooring.app"), &prefixes));
+    assert!(!homebrew_managed(&apps.join("Fibo.app"), &prefixes));
+    std::fs::create_dir_all(prefix.join("Caskroom/fibo/0.2.0")).unwrap();
+    assert!(homebrew_managed(&apps.join("Fibo.app"), &prefixes));
+    std::fs::remove_dir_all(prefix.join("Caskroom/fibo")).unwrap();
     std::fs::create_dir_all(prefix.join("Caskroom/mooring/0.1.0")).unwrap();
-    assert!(homebrew_managed(&apps.join("Mooring.app"), &prefixes));
+    assert!(
+        homebrew_managed(&apps.join("Fibo.app"), &prefixes),
+        "the cask before the rename"
+    );
     let installed = Installed::new("brew-install");
     let tools = Fake::good(&installed);
     let job = installed.job(&prefixes);
@@ -209,8 +212,22 @@ fn a_good_release_replaces_the_bundle_by_rename() {
         .map(|e| e.unwrap().file_name())
         .collect();
     left.sort();
-    assert_eq!(left, ["Mooring.app"]);
+    assert_eq!(left, ["Fibo.app"]);
     assert!(!installed.cache.join("0.2.0").exists());
+}
+
+/// A release still carrying the identifier from before the rename to Fibo installs: the
+/// team id is what says it is ours.
+#[test]
+fn a_release_with_the_old_bundle_id_still_installs() {
+    let installed = Installed::new("old-id");
+    let mut tools = Fake::good(&installed);
+    tools.info.id = OLD_BUNDLE_ID.into();
+    install(&installed.job(&[]), &tools, &|_| ()).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(installed.bundle.join("Contents/MacOS/mooring-app")).unwrap(),
+        "new"
+    );
 }
 
 #[test]
@@ -327,7 +344,7 @@ impl Installed {
     fn new(name: &str) -> Self {
         let dir = scratch(name);
         let apps = dir.join("Applications");
-        let bundle = apps.join("Mooring.app");
+        let bundle = apps.join("Fibo.app");
         std::fs::create_dir_all(bundle.join("Contents/MacOS")).unwrap();
         std::fs::write(bundle.join("Contents/MacOS/mooring-app"), "old").unwrap();
         let release = select(&parse(LATEST.as_bytes()).unwrap(), "arm64").unwrap();
@@ -419,13 +436,13 @@ impl Tools for Fake {
         std::fs::write(to, &self.zip_bytes).map_err(|e| e.to_string())
     }
     fn unzip(&self, _zip: &Path, into: &Path) -> Result<(), String> {
-        let app = into.join("Mooring.app/Contents/MacOS");
+        let app = into.join("Fibo.app/Contents/MacOS");
         std::fs::create_dir_all(&app).unwrap();
         std::fs::write(app.join("mooring-app"), "new").unwrap();
         Ok(())
     }
     fn bundle_info(&self, app: &Path) -> Result<BundleInfo, String> {
-        assert!(app.ends_with("Mooring.app"));
+        assert!(app.ends_with("Fibo.app"));
         Ok(self.info.clone())
     }
     fn verify_signature(&self, _: &Path) -> Result<(), String> {

@@ -98,10 +98,10 @@ impl SettingsView {
                 .flex_col()
                 .gap(px(T::S4))
                 .child(label(t!(
-                    "只提醒由 Mooring 打开的会话；你正看着的那个终端不会打扰你。"
+                    "只提醒由 Fibo 打开的会话；你正看着的那个终端不会打扰你。"
                 )))
                 .child(label(t!(
-                    "首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Mooring 重新允许。"
+                    "首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Fibo 重新允许。"
                 ))),
         )
     }

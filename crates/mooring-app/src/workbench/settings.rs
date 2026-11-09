@@ -119,7 +119,7 @@ impl Page {
             Self::Plugins => {
                 t!("装上、更新、卸载和开关插件，马上生效；也能看到每个声明文件生效了没有、为什么。")
             }
-            Self::About => t!("版本信息，以及 Mooring 把数据和偏好存在哪里。"),
+            Self::About => t!("版本信息，以及 Fibo 把数据和偏好存在哪里。"),
         }
     }
 }
@@ -299,7 +299,7 @@ const ENTRIES: [(Page, &str, &str); 40] = [
         tk!("插件"),
         tk!("plugin 扩展 市场 安装 卸载 更新 声明 agent json 动作 验证规则 左栏 sidebar 动画"),
     ),
-    (Page::About, tk!("版本"), tk!("关于 mooring version")),
+    (Page::About, tk!("版本"), tk!("关于 fibo version")),
     (
         Page::About,
         tk!("检查更新"),

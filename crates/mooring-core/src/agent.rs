@@ -399,9 +399,10 @@ pub fn report() -> &'static [Loaded] {
 mod builtins;
 use builtins::builtin;
 
-/// `$XDG_CONFIG_HOME/mooring`, else `~/.config/mooring`.
+/// `$XDG_CONFIG_HOME/fibo`, else `~/.config/fibo` (`legacy::move_old_config` brings an
+/// older `mooring` or `keepline` one here).
 pub fn config_dir() -> Option<PathBuf> {
-    mooring_platform::dirs::config_home().map(|base| base.join("mooring"))
+    mooring_platform::dirs::config_home().map(|base| base.join("fibo"))
 }
 
 /// Registers the declarations in `<config_dir>/agents` and in every plugin that provides
@@ -550,7 +551,7 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
         match transcripts.as_ref() {
             None => return Err("写了 source 也要写 transcripts，说明每行记录里的字段".into()),
             Some(t) if !t.root.as_os_str().is_empty() => {
-                return Err("用 source 时不写 transcripts.root，记录由 Mooring 自己存放".into());
+                return Err("用 source 时不写 transcripts.root，记录由 Fibo 自己存放".into());
             }
             _ => {}
         }

@@ -29,7 +29,7 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
     let from = match a.value("from") {
         Some(from) => from.to_owned(),
         None => std::env::var("MOORING_TERMINAL").map_err(|_| {
-            io::Error::other("不在 Mooring 终端里：用 --from <终端> 说要开在谁旁边、汇报给谁")
+            io::Error::other("不在 Fibo 终端里：用 --from <终端> 说要开在谁旁边、汇报给谁")
         })?,
     };
     let parent = resolve(&workspace(&a.socket)?, &from)?;
@@ -47,7 +47,7 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
     let timeout = Duration::from_secs(a.number("timeout", 90)?);
     if let Err(e) = hand_over(&a.socket, agent, &opened.id, &task, timeout) {
         return Err(io::Error::other(format!(
-            "{e}（终端 {} 留着，mooring read {} 看画面）",
+            "{e}（终端 {} 留着，fibo read {} 看画面）",
             opened.id, opened.id
         )));
     }

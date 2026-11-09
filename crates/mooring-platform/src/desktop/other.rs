@@ -81,7 +81,7 @@ pub fn notify(title: &str, body: &str, sound: bool) -> std::io::Result<()> {
         c
     } else {
         let mut c = std::process::Command::new("notify-send");
-        c.args(["--app-name=Mooring", "--", title, body]);
+        c.args(["--app-name=Fibo", "--", title, body]);
         c
     };
     let mut child = command

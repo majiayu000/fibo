@@ -175,7 +175,7 @@ impl SettingsView {
                                         .text_size(px(T::TITLE))
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(T::color(T::primary()))
-                                        .child("Mooring"),
+                                        .child("Fibo"),
                                 )
                                 .child(label(t!(
                                     "版本 {version} · Agent 工作台",

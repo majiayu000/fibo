@@ -1,6 +1,6 @@
 //! Checking for and installing a release. Every outside effect goes through `Tools`, so each
 //! way a check or an install can fail is tested without a network or a signed build.
-use super::{BUNDLE_ID, Release, TEAM_ID, Version, select, sum_for};
+use super::{BUNDLE_ID, OLD_BUNDLE_ID, Release, TEAM_ID, Version, select, sum_for};
 use crate::t;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -69,7 +69,7 @@ impl Failure {
     pub fn message(&self) -> String {
         match self {
             Self::Homebrew => t!(
-                "这份 Mooring 由 Homebrew 安装，请运行 {v1}",
+                "这份 Fibo 由 Homebrew 安装，请运行 {v1}",
                 v1 = super::BREW_COMMAND
             ),
             Self::NoPermission(why) => t!("没有权限替换这份 App（{why}），请从发布页下载", why),
@@ -195,9 +195,7 @@ fn single_app(stage: &Path) -> Result<PathBuf, Failure> {
         .collect();
     match entries.as_slice() {
         [app] if app.extension().is_some_and(|e| e == "app") && app.is_dir() => Ok(app.clone()),
-        _ => Err(Failure::Verify(
-            t!("压缩包里应当只有一个 Mooring.app").into(),
-        )),
+        _ => Err(Failure::Verify(t!("压缩包里应当只有一个 Fibo.app").into())),
     }
 }
 
@@ -211,7 +209,7 @@ pub fn verify_app(
     tools: &dyn Tools,
 ) -> Result<(), Failure> {
     let info = tools.bundle_info(app).map_err(Failure::Verify)?;
-    if info.id != BUNDLE_ID {
+    if info.id != BUNDLE_ID && info.id != OLD_BUNDLE_ID {
         return Err(Failure::Verify(t!(
             "包标识是 {id}，不是 {BUNDLE_ID}",
             id = info.id,

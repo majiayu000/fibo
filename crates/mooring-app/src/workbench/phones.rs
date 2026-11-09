@@ -439,7 +439,7 @@ impl Workbench {
                         .gap(px(T::S4))
                         .text_size(px(T::SMALL))
                         .child(t!(
-                            "用 Mooring 手机 App 扫这个码：「{name}」 · {role}",
+                            "用 Fibo 手机 App 扫这个码：「{name}」 · {role}",
                             name = p.name.read(cx).text.trim(),
                             role = role_label(p.role)
                         ))

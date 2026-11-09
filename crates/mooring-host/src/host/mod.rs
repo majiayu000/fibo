@@ -290,7 +290,7 @@ impl Host {
         let shared = shared.clone();
         std::thread::spawn(move || {
             if let Err(e) = apply_official(&shared, &index, &due) {
-                eprintln!("mooring: official status unavailable: {e}");
+                eprintln!("fibo: official status unavailable: {e}");
             }
         });
         later

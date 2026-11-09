@@ -48,7 +48,7 @@ fn todo_commands_write_back_and_cannot_complete() {
     assert_eq!(log.notes.len(), 1);
     assert_eq!(log.notes[0].text, "查清了是容量不够");
     assert!(w
-        .task_handoff(task, "mooring todo note")
+        .task_handoff(task, "fibo todo note")
         .contains("- 查清了是容量不够"));
 
     let (ok, shown, err) = cli(&h, &["todo", "show", "--task", &id, "--json"]);
@@ -244,7 +244,7 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
 
     let first_session = start("real-1", "tab-1");
     let w = h.workspace();
-    ask("real-1", &w.task_handoff(&w.tasks[0], "mooring todo note"));
+    ask("real-1", &w.task_handoff(&w.tasks[0], "fibo todo note"));
     let notes = wait_notes(1);
     eprintln!("first note: {}", notes[0].text);
     assert_eq!(notes[0].session.as_deref(), Some(first_session.as_str()));
@@ -272,7 +272,7 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
     let second_session = start("real-2", "tab-2");
     assert_ne!(first_session, second_session);
     let w = h.workspace();
-    let handoff = w.task_handoff(&w.tasks[0], "mooring todo note");
+    let handoff = w.task_handoff(&w.tasks[0], "fibo todo note");
     assert!(handoff.contains(&notes[0].text), "{handoff}");
     ask(
         "real-2",

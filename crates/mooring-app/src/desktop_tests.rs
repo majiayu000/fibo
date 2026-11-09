@@ -99,7 +99,7 @@ fn notifications_only_follow_new_attention_facts_and_opt_in() {
     scanned.agent_sessions[0].terminal = None;
     assert!(
         entered(&before, &scanned, None).is_empty(),
-        "a session Mooring did not start never asks for attention"
+        "a session Fibo did not start never asks for attention"
     );
     let value: serde_json::Value =
         serde_json::from_str(&panel(&scanned, &Link::fresh(RecognitionPhase::Healthy))).unwrap();

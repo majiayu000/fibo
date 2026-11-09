@@ -195,7 +195,7 @@ impl Supervisor {
                 .map_or_else(std::env::current_exe, Ok)
             {
                 Ok(exe) => exe,
-                Err(e) => return eprintln!("mooring: remote unavailable: {e}"),
+                Err(e) => return eprintln!("fibo: remote unavailable: {e}"),
             };
             let mut command = Command::new(exe);
             command
@@ -258,7 +258,7 @@ impl Supervisor {
                     pause = (pause * 2).min(Duration::from_secs(30));
                 }
                 _ => {
-                    let why = said.strip_prefix("mooring: ").unwrap_or(&said).to_owned();
+                    let why = said.strip_prefix("fibo: ").unwrap_or(&said).to_owned();
                     self.failed(generation, why);
                 }
             }

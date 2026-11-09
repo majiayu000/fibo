@@ -27,7 +27,7 @@
 "设置…" = "Settings…"
 "菜单栏面板" = "Menu bar panel"
 "外观" = "Appearance"
-"退出 Mooring" = "Quit Mooring"
+"退出 Fibo" = "Quit Fibo"
 
 [pane_render]
 "进程已退出" = "Process exited"
@@ -104,7 +104,7 @@
 "「{title}」这一轮已经结束，关闭后它会退出。" = "“{title}” has finished this turn; it quits when closed."
 "另有 {shells} 个普通终端会停止。" = "{shells} other {shells|terminal|terminals} will stop too."
 "这个标签有 {splits} 个分屏，会一起关闭。" = "This tab has {splits} {splits|split|splits}; they close too."
-"后台还在跑旧版本，新改动要重启后台才生效。重启会停止所有终端，Mooring 会自动重新打开。" = "The host still runs the old version; new changes take effect after a restart. Restarting stops every terminal, and Mooring reopens them."
+"后台还在跑旧版本，新改动要重启后台才生效。重启会停止所有终端，Fibo 会自动重新打开。" = "The host still runs the old version; new changes take effect after a restart. Restarting stops every terminal, and Fibo reopens them."
 "没认出这个窗格是哪条对话，所以不会记成完成。" = "Couldn't tell which conversation this pane holds, so it won't be marked done."
 "里面的 Agent 会退出，正在做的事也会停下。对话记录会保留，可以从左栏底部「已关闭」里接着聊。" = "The Agent inside quits and stops what it's doing. The conversation is kept; continue it from “Closed” at the bottom of the sidebar."
 "对话记录会保留，重启后可以原地重开终端，或从左栏「已关闭」里接着聊。" = "Conversations are kept; after the restart, reopen terminals in place or continue from “Closed” in the sidebar."
@@ -234,10 +234,10 @@
 "{m}分" = "{m}m"
 
 [menu bar panel words]
-"打开工作台" = "Open Mooring"
+"打开工作台" = "Open Fibo"
 "复制错误" = "Copy error"
 "查看诊断" = "Diagnostics"
 "正在重连" = "Reconnecting"
 "连不上后台，正在重连：" = "Can't reach the host, reconnecting: "
 "还有 %ld 项" = "%ld more"
-"Mooring · 连不上后台" = "Mooring · host unreachable"
+"Fibo · 连不上后台" = "Fibo · host unreachable"

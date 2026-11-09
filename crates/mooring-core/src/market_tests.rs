@@ -229,12 +229,7 @@ fn an_index_from_a_newer_mooring_still_lists_what_this_one_can_install() {
     .unwrap();
     assert_eq!(index.plugins[0].provides, [Kind::Actions]);
     assert!(index.plugins[0].check().is_ok());
-    assert!(
-        index.plugins[1]
-            .check()
-            .unwrap_err()
-            .contains("更新 Mooring")
-    );
+    assert!(index.plugins[1].check().unwrap_err().contains("更新 Fibo"));
 }
 
 #[test]

@@ -21,7 +21,7 @@ impl Global for SpaceThemes {}
 impl SpaceThemes {
     fn parse(text: &str) -> BTreeMap<String, String> {
         serde_json::from_str(text).unwrap_or_else(|e| {
-            eprintln!("mooring: reading {FILE}: {e}");
+            eprintln!("fibo: reading {FILE}: {e}");
             BTreeMap::new()
         })
     }

@@ -65,7 +65,7 @@ pub(super) fn start(
         let pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
         pane.update(cx, |p, cx| {
             p.visual_type(
-                "clear; command -v mooring claude codex; mooring hooks status; mooring list\r",
+                "clear; command -v mooring claude codex; fibo hooks status; fibo list\r",
                 cx,
             )
         });

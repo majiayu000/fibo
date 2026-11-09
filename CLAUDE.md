@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Mooring: a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt). It was called Keepline; see "Compatibility" below.
+Fibo (https://fibo.page): a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt). It was called Mooring, and before that Keepline; see "Compatibility" below. The crates, modules, the program file `mooring` and the `MOORING_*` variables keep the old name on purpose; what users see says Fibo.
 
 ## Layout
 
@@ -34,6 +34,10 @@ Local `main` only follows `origin/main`: never commit or merge on it. It drifted
 - GitHub refuses a direct push to `main` and a merge before `Workbench Rust checks` passes, for everyone including admins (ruleset `main requires CI`, docs/decisions/2026-11-06-main-requires-ci.md). When a check is red, fix the cause rather than loosening the rule.
 - Follow it in the main checkout with `git pull --ff-only`. Package the App from `origin/main`.
 - Push only your own commits. Nothing waits on "someone else's unpushed commits", because there are none.
+
+## Compatibility with Mooring installs
+
+The rename to Fibo (docs/decisions/2026-11-09-rename-fibo.md) works like the Keepline one below: `~/.config/mooring` moves to `~/.config/fibo` once, an existing `~/.local/share/mooring-workbench` stays the runtime, the command is `fibo` and `mooring` still answers (PATH links for both; in the bundle `fibo` links to the program `mooring`), `MOORING_*` stays what code reads and hooks test, with `FIBO_*` set beside it and adopted at start. The updater accepts the old bundle id `local.mooring.workbench` and the `mooring` cask.
 
 ## Compatibility with Keepline installs
 

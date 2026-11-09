@@ -264,7 +264,7 @@ fn load(config: Option<&Path>) -> Rules {
         }
         Err(e) => {
             eprintln!(
-                "mooring: 原因规则 {} 不可用，改用内置规则：{e}",
+                "fibo: 原因规则 {} 不可用，改用内置规则：{e}",
                 path.display()
             );
             bundled

@@ -378,7 +378,7 @@ impl Adapter for Codex {
     fn title_status(&self, title: &str) -> Option<Hint> {
         let state = codex_state(title);
         let why =
-            "这个窗格还没关联到对话，Mooring 暂时只看得到它忙不忙。在这里发下一句话后会自动关联。";
+            "这个窗格还没关联到对话，Fibo 暂时只看得到它忙不忙。在这里发下一句话后会自动关联。";
         Some(Hint {
             text: match state {
                 Some(state) => format!("仅显示状态：{state}；发下一句后自动关联对话"),

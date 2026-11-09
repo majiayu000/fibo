@@ -44,7 +44,7 @@
 [board.remote]
 "{machine} 上的会话：{title}" = "Session on {machine}: {title}"
 "断开" = "Offline"
-"{machine}没连上，或那边的 Mooring 太旧，不能在这里标" = "{machine} isn't connected, or its Mooring is too old to mark from here"
+"{machine}没连上，或那边的 Fibo 太旧，不能在这里标" = "{machine} isn't connected, or its Fibo is too old to mark from here"
 "「{title}」移到{label}" = "Moved “{title}” to {label}"
 "「{title}」退回{needs}" = "Moved “{title}” back to {needs}"
 "{text}（{machine}）" = "{text} ({machine})"
@@ -81,7 +81,7 @@
 "回合" = "Turns"
 "最后动静" = "Last activity"
 "外部 · 只读" = "External · read-only"
-"Mooring 里在开" = "Open in Mooring"
+"Fibo 里在开" = "Open in Fibo"
 "已关掉" = "Closed"
 "目录" = "Folder"
 

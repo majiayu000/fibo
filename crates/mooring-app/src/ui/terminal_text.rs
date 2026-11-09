@@ -142,12 +142,12 @@ impl TerminalText {
         };
         match std::fs::read_to_string(&path) {
             Ok(text) => Self::parse(&text).unwrap_or_else(|e| {
-                eprintln!("mooring: reading {}: {e}", path.display());
+                eprintln!("fibo: reading {}: {e}", path.display());
                 Self::default()
             }),
             Err(e) => {
                 if e.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("mooring: reading {}: {e}", path.display());
+                    eprintln!("fibo: reading {}: {e}", path.display());
                 }
                 Self::default()
             }

@@ -42,7 +42,7 @@ pub(super) async fn stay_connected(
                     wait = Duration::from_secs(1);
                 }
                 let again = format!("{why}，{} 秒后重连", wait.as_secs());
-                eprintln!("mooring remote: 和中继断开：{again:?}");
+                eprintln!("fibo remote: 和中继断开：{again:?}");
                 live.state(RemoteState::Connecting, again);
                 tokio::time::sleep(wait).await;
                 wait = (wait * 2).min(Duration::from_secs(30));
@@ -121,7 +121,7 @@ async fn connect(
             Err(_) => return (Ended::Lost("中继没有回应注册".into()), false),
         }
     };
-    eprintln!("mooring remote: 已连上中继 {base:?}");
+    eprintln!("fibo remote: 已连上中继 {base:?}");
     live.state(RemoteState::Connected, String::new());
 
     let (out, mut outbox) = mpsc::channel::<Message>(64);
@@ -177,7 +177,7 @@ async fn connect(
                     close(&out, &id, code, reason).await;
                     if let Some(Session::Open { device, .. }) = sessions.remove(&id) {
                         live.left(&id);
-                        eprintln!("mooring remote: 设备 {device:?} {}", why.label());
+                        eprintln!("fibo remote: 设备 {device:?} {}", why.label());
                         devices::log(
                             &log,
                             json!({ "event": "dropped", "device": device, "why": reason }),
@@ -244,7 +244,7 @@ async fn connect(
                             ) {
                                 Ok(bridge) => bridge,
                                 Err(e) => {
-                                    eprintln!("mooring remote: 手机 {id:?} 无法启动会话：{e:?}");
+                                    eprintln!("fibo remote: 手机 {id:?} 无法启动会话：{e:?}");
                                     close(&out, &id, close::NORMAL, "session unavailable").await;
                                     continue;
                                 }
@@ -252,11 +252,7 @@ async fn connect(
                             if out.send(to_phone(proto, &id, &answer)).await.is_err() {
                                 break Ended::Lost("写不进中继".into());
                             }
-                            eprintln!(
-                                "mooring remote: 「{:?}」已连上（{}）",
-                                d.name,
-                                d.role.label()
-                            );
+                            eprintln!("fibo remote: 「{:?}」已连上（{}）", d.name, d.role.label());
                             devices::log(
                                 &log,
                                 json!({ "event": "connected", "device": d.id, "name": d.name, "role": d.role }),
@@ -271,7 +267,7 @@ async fn connect(
                             })
                         }
                         None => {
-                            eprintln!("mooring remote: 设备 {device:?} 没有配对或密钥不对，已拒绝");
+                            eprintln!("fibo remote: 设备 {device:?} 没有配对或密钥不对，已拒绝");
                             devices::log(&log, json!({ "event": "refused", "device": device }));
                             close(&out, &id, close::UNPAIRED, "not paired").await;
                             None
@@ -293,7 +289,7 @@ async fn connect(
                         first_message: None,
                     }),
                     Err(e) => {
-                        eprintln!("mooring remote: 手机 {id:?} 断开：{e:?}");
+                        eprintln!("fibo remote: 手机 {id:?} 断开：{e:?}");
                         live.left(&id);
                         close(&out, &id, close::BAD_MESSAGE, "bad message").await;
                         None
@@ -339,7 +335,7 @@ async fn connect(
                 Ok(Frame::Wclose { id, .. }) => {
                     if let Some(Session::Open { device, .. }) = sessions.remove(&id) {
                         live.left(&id);
-                        eprintln!("mooring remote: 设备 {device:?} 已离开");
+                        eprintln!("fibo remote: 设备 {device:?} 已离开");
                         devices::log(&log, json!({ "event": "left", "device": device }));
                     }
                 }

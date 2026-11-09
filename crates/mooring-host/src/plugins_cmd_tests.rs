@@ -48,7 +48,7 @@ fn the_note_is_written_kept_current_and_never_over_the_users_own() {
     write_note(&dir).unwrap();
     let path = dir.join("AGENTS.md");
     let ours = std::fs::read_to_string(&path).unwrap();
-    assert!(ours.starts_with(MARK) && ours.contains("mooring --skill plugins"));
+    assert!(ours.starts_with(MARK) && ours.contains("fibo --skill plugins"));
     std::fs::write(&path, format!("{MARK}\n旧版本")).unwrap();
     write_note(&dir).unwrap();
     assert_eq!(
@@ -202,7 +202,7 @@ fn the_check_sees_what_only_shows_between_two_plugins() {
 fn trying_a_declaration_it_does_not_have_says_what_there_is() {
     let root = std::env::temp_dir().join(format!("kl-try-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    let d = root.join("mooring/plugins/x");
+    let d = root.join("fibo/plugins/x");
     write(
         &d.join("plugin.json"),
         r#"{"api":1,"id":"x","name":"X","provides":["hooks"]}"#,
@@ -222,7 +222,7 @@ fn trying_a_declaration_it_does_not_have_says_what_there_is() {
     assert!(try_run("x", "say", None, None, false).is_ok());
     // One Agent read from a file and from a command: trying it runs the command, whichever
     // is declared first, or the only thing there is to run can't be tried.
-    let both = root.join("mooring/plugins/both");
+    let both = root.join("fibo/plugins/both");
     write(
         &both.join("plugin.json"),
         r#"{"api":1,"id":"both","name":"B","provides":["quota"]}"#,

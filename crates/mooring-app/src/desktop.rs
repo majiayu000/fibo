@@ -319,7 +319,7 @@ fn panel(w: &Workspace, link: &Link) -> String {
             "open": t!("打开工作台"), "copy_error": t!("复制错误"),
             "diagnostics": t!("查看诊断"), "reconnecting": t!("正在重连"),
             "offline": t!("连不上后台，正在重连："), "more": t!("还有 %ld 项"),
-            "offline_tip": t!("Mooring · 连不上后台"),
+            "offline_tip": t!("Fibo · 连不上后台"),
         },
         "section": section,
         "section_note": section_note,

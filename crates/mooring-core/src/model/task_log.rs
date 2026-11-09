@@ -60,7 +60,7 @@ impl Workspace {
             parts.push(format!("目前进展：\n{}", notes.join("\n")));
         }
         parts.push(format!(
-            "（这是 Mooring 待办。每做完一段就运行 {note} --task {} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）",
+            "（这是 Fibo 待办。每做完一段就运行 {note} --task {} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）",
             task.id
         ));
         parts.join("\n\n")
@@ -180,7 +180,7 @@ mod tests {
             text: "  查清了是容量不够  ".into(),
         })
         .unwrap();
-        let next = w.task_handoff(&w.tasks[0], "mooring todo note");
+        let next = w.task_handoff(&w.tasks[0], "fibo todo note");
         assert!(next.contains("目前进展：\n- 查清了是容量不够"), "{next}");
         assert_eq!(w.tasks[0].description, "同时开 3 个就失败", "原话不变");
     }

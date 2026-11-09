@@ -30,7 +30,7 @@ impl Host {
         // Each startup file counts its loads; bash's also sets a prompt command to keep.
         let count = |name: &str| format!("echo x >> \"$HOME/loaded-{name}\"\n");
         // A hooks plugin that records every finished command, and one that only hears long ones.
-        let plugin = home.join(".config/mooring/plugins/record");
+        let plugin = home.join(".config/fibo/plugins/record");
         fs::create_dir_all(&plugin).unwrap();
         fs::write(
             plugin.join("plugin.json"),
@@ -353,7 +353,7 @@ fn hooks_change_with_a_reload_and_a_removed_one_stops() {
     let h = Host::start();
     let mut s = Session::launch(&h, "/bin/zsh");
     let home = h.home();
-    let plugin = home.join(".config/mooring/plugins/late");
+    let plugin = home.join(".config/fibo/plugins/late");
     fs::create_dir_all(&plugin).unwrap();
     fs::write(
         plugin.join("plugin.json"),

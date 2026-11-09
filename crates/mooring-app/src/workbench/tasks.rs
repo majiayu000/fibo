@@ -36,11 +36,11 @@ impl Workbench {
             (Ok(binary), Some(runtime))
                 if mooring_core::cli_entry::by_name_reaches(binary, runtime) =>
             {
-                "mooring todo note".to_owned()
+                format!("{} todo note", mooring_core::cli_entry::NAME)
             }
             // The name isn't ours here, or this is a private host: say exactly which.
             (binary, runtime) => {
-                let mut note = binary.as_ref().map_or("mooring todo note".into(), |b| {
+                let mut note = binary.as_ref().map_or("fibo todo note".into(), |b| {
                     format!("{} todo note", shell_quote(&b.display().to_string()))
                 });
                 if let Some(runtime) = runtime {

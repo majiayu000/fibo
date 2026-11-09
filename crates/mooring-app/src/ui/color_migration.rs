@@ -130,7 +130,7 @@ pub fn run(cx: &mut App) {
             cx.set_global(Themes::read(dir().as_deref()));
         }
         Ok(false) => {}
-        Err(error) => eprintln!("mooring: colors.json 没能并入主题：{error}"),
+        Err(error) => eprintln!("fibo: colors.json 没能并入主题：{error}"),
     }
 }
 

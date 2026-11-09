@@ -21,7 +21,7 @@ impl SettingsView {
                 self.row(
                     rows.is_empty(),
                     t!("自动检查更新"),
-                    t!("每天最多一次，只向 GitHub 问最新的版本号；这是 Mooring 唯一会自己发出的网络请求"),
+                    t!("每天最多一次，只向 GitHub 问最新的版本号；这是 Fibo 唯一会自己发出的网络请求"),
                     toggle,
                 )
                 .into_any_element(),

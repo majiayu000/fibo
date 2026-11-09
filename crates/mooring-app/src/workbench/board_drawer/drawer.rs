@@ -254,7 +254,7 @@ impl Workbench {
             if s.terminal.is_none() {
                 t!("外部 · 只读").to_owned()
             } else if live {
-                t!("Mooring 里在开").to_owned()
+                t!("Fibo 里在开").to_owned()
             } else {
                 t!("已关掉").to_owned()
             },

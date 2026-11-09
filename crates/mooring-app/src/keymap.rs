@@ -601,10 +601,7 @@ impl Keymap {
         };
         match std::fs::read_to_string(&path) {
             Ok(text) => Self::parse(&text).unwrap_or_else(|e| {
-                eprintln!(
-                    "mooring: {}: {e}; using the default shortcuts",
-                    path.display()
-                );
+                eprintln!("fibo: {}: {e}; using the default shortcuts", path.display());
                 Self::default()
             }),
             Err(_) => Self::default(),
@@ -634,7 +631,7 @@ impl Keymap {
                 })
         };
         if let Err(e) = written {
-            eprintln!("mooring: saving {}: {e}", path.display());
+            eprintln!("fibo: saving {}: {e}", path.display());
         }
     }
 }

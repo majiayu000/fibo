@@ -65,7 +65,7 @@ pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()>
     })
 }
 pub fn config_dir() -> Option<std::path::PathBuf> {
-    Some(mooring_platform::dirs::config_home()?.join("mooring"))
+    mooring_core::agent::config_dir()
 }
 
 #[cfg(test)]

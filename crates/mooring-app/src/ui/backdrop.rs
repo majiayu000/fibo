@@ -162,7 +162,7 @@ fn load(cx: &mut App) {
         *picture.state() = match done {
             Ok(image) => Load::Ready(image),
             Err(error) => {
-                eprintln!("mooring: {error}");
+                eprintln!("fibo: {error}");
                 Load::Failed(error)
             }
         };

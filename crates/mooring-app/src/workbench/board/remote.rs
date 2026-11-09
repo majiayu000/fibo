@@ -257,7 +257,7 @@ impl Workbench {
         let linked = self.machines[r.index].slot().lock().unwrap().clone();
         let Some(linked) = linked.filter(|l| l.managing) else {
             let text = t!(
-                "{machine}没连上，或那边的 Mooring 太旧，不能在这里标",
+                "{machine}没连上，或那边的 Fibo 太旧，不能在这里标",
                 machine = r.machine
             );
             self.show_toast(text, None, true, cx);

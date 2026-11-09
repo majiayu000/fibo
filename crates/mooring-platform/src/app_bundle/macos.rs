@@ -6,7 +6,7 @@ use std::process::{Command, Output, Stdio};
 pub const SUPPORTED: bool = true;
 
 pub fn cache_dir() -> Option<PathBuf> {
-    crate::dirs::home().map(|h| h.join("Library/Caches/Mooring/updates"))
+    crate::dirs::home().map(|h| h.join("Library/Caches/Fibo/updates"))
 }
 
 /// Runs `command`; its stderr (else stdout) is the error.
@@ -31,7 +31,7 @@ fn curl(allow_http: bool, max: u64, seconds: u32) -> Command {
     c.args(["-fsSL", "--proto", protocols, "--proto-redir", protocols])
         .args(["--max-time", &seconds.to_string()])
         .args(["--max-filesize", &max.to_string()])
-        .args(["-A", concat!("Mooring/", env!("CARGO_PKG_VERSION"))]);
+        .args(["-A", concat!("Fibo/", env!("CARGO_PKG_VERSION"))]);
     c
 }
 

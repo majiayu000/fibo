@@ -429,7 +429,7 @@ impl SettingsView {
                 .filter(|r| now.saturating_sub(r.at) < 7 * 86_400)
             {
                 note.push(t!(
-                    "上次运行失败（{what}）：{detail}；终端里 mooring plugins log {id} 看全部",
+                    "上次运行失败（{what}）：{detail}；终端里 fibo plugins log {id} 看全部",
                     what = r.what,
                     detail = r.detail,
                     id = p.id
@@ -664,7 +664,7 @@ impl SettingsView {
         page = page.child(div().pt(px(T::S20)).child(card().child(self.row(
             true,
             t!("重新读取"),
-            t!("手动改了插件目录，或在终端里用 mooring plugins install 装了插件后，点这里马上生效"),
+            t!("手动改了插件目录，或在终端里用 fibo plugins install 装了插件后，点这里马上生效"),
             secondary("plugins-reload", t!("重新读取")).on_click(cx.listener(|this, _, _, cx| {
                 this.market.read_catalog();
                 this.market.confirm = None;
@@ -731,7 +731,7 @@ impl SettingsView {
             }));
             detail.extend(report(mooring_core::hook::report(), |t| {
                 t!(
-                    "会话状态变化时由后台调用：{t}；终端里 mooring plugins log 看运行记录",
+                    "会话状态变化时由后台调用：{t}；终端里 fibo plugins log 看运行记录",
                     t
                 )
             }));
@@ -751,12 +751,10 @@ impl SettingsView {
                 page = page.child(div().pt(px(T::S8)).child(card().children(rows)));
             }
         }
-        let where_ = agent::config_dir().map_or_else(
-            || "~/.config/mooring".to_owned(),
-            |d| d.display().to_string(),
-        );
+        let where_ = agent::config_dir()
+            .map_or_else(|| "~/.config/fibo".to_owned(), |d| d.display().to_string());
         page.child(div().pt(px(T::S12)).px(px(T::S4)).child(label(t!(
-            "插件放在 {dir}/plugins/<id>/；写插件的说明：在终端运行 mooring --skill plugins。",
+            "插件放在 {dir}/plugins/<id>/；写插件的说明：在终端运行 fibo --skill plugins。",
             dir = tilde(&where_)
         ))))
     }
