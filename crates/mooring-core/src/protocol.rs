@@ -177,6 +177,8 @@ pub enum Request {
         #[serde(default)]
         after: Option<i64>,
         limit: usize,
+        #[serde(default)]
+        last: Option<usize>,
     },
     /// One tool call by its id, and where its raw lines are.
     ToolCall {

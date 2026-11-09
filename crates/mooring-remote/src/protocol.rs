@@ -276,6 +276,9 @@ pub enum Op {
         after: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<u64>,
+        /// Only the stretch's last this many calls, oldest first (with `toolslast`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        last: Option<u64>,
     },
     /// One call in full, from its raw log lines, secrets hidden: [`ToolCallDetail`], the
     /// head and tail of its input and output. With `part` (`input` or `output`) and

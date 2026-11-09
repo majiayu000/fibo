@@ -512,6 +512,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         "todoadd" => todos::add(socket, request, client),
         "todooutcome" => todos::outcome(socket, request, client),
         "image" => images::upload(socket, request),
+        "sendnow" => turn_input::send_now(socket, request, client),
         op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
     }
 }

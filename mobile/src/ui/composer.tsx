@@ -46,7 +46,7 @@ export function Composer({
   /** What the Agent offers as the next prompt: a tap puts it in the box, sending is still yours. */
   suggestion?: string | null;
   onSend: (text: string, pictures: Picture[], how?: How) => Promise<boolean>;
-  /** It works and this computer and CLI can queue or steer: offer the choice once something is typed. */
+  /** It works and this computer and CLI can queue: a message sent then waits in the Agent's queue. */
   canSteer?: boolean;
   /** The computer keeps pictures (`image`) and is online; without it there is no +. */
   canAttach?: boolean;
@@ -60,7 +60,6 @@ export function Composer({
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [choosing, setChoosing] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [how, setHow] = useState<How>('queue');
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const empty = !draft.trim() && !pictures.length;
   const stop = running && canStop && empty;
@@ -68,8 +67,8 @@ export function Composer({
     if (!text.trim() && !with_.length) return;
     setDraft('');
     setPictures([]);
-    const choose = running && canSteer ? how : undefined;
-    setHow('queue');
+    // Sent while it works, a message queues; tapping it then sends it now (ui/queuedsheet).
+    const choose: How | undefined = running && canSteer ? 'queue' : undefined;
     if (!(await onSend(text.trim(), with_, choose))) {
       setDraft(text);
       setPictures(with_);
@@ -123,22 +122,6 @@ export function Composer({
                 <Icon name="close" size={10} width={2.6} color={t.card} />
               </Pressable>
             </View>
-          ))}
-        </View>
-      )}
-      {running && canSteer && !empty && (
-        <View accessibilityRole="radiogroup" style={[s.how, { borderColor: t.line }]}>
-          {(['queue', 'steer'] as const).map((h) => (
-            <Pressable
-              key={h}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: how === h }}
-              onPress={() => setHow(h)}
-              style={[s.howOne, how === h && { backgroundColor: t.act }]}
-            >
-              <Text style={{ color: how === h ? t.onAct : t.text, fontSize: 13, fontWeight: '600' }}>{h === 'queue' ? '排队' : '引导'}</Text>
-              <Text style={{ color: how === h ? t.onAct : t.dim, fontSize: 11 }}>{h === 'queue' ? '做完这一步再看' : '先停下，马上看这句'}</Text>
-            </Pressable>
           ))}
         </View>
       )}
@@ -235,8 +218,6 @@ const s = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   model: { height: 36, borderRadius: 18, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
-  how: { flexDirection: 'row', borderWidth: 1, borderRadius: 14, padding: 3, gap: 3 },
-  howOne: { flex: 1, minHeight: 44, borderRadius: 11, alignItems: 'center', justifyContent: 'center', gap: 1 },
   pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingRight: 4 },
   thumb: { width: 56, height: 56, borderRadius: 12 },
   unpick: { position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },

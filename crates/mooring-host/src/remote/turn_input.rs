@@ -66,6 +66,21 @@ pub(super) fn send(
     ok_reply(rpc(socket, &named(client, request, press))?)
 }
 
+/// Sends what the Agent has queued now, without waiting for the step at hand: its steer key
+/// with nothing typed. On Claude Code 2.1 the queue says `ctrl+enter to send now`, and that
+/// key on an empty box sends every queued message at once (measured 2026-11-09).
+pub(super) fn send_now(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
+    let terminal = text(request, "terminal")?.to_owned();
+    let keys = agent_in(socket, &terminal)?
+        .and_then(|a| mooring_host::agent_adapter(a).turn_keys())
+        .ok_or_else(|| io::Error::other("这个 Agent 没有「马上发」的键，排着的话要等这一步做完"))?;
+    let press = Request::SendInput {
+        id: terminal,
+        bytes: keys.steer.to_vec(),
+    };
+    ok_reply(rpc(socket, &named(client, request, press))?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

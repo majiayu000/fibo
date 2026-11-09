@@ -14,9 +14,11 @@ import { useSuggestion } from '@/remote/useSuggestion';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { countUse } from '@/store/suggestionCounts';
 import { suggestionStats } from '@/store/suggestions';
-import { HOW_NOTE, type How, steerable, whileBusy } from '@/ui/busy';
+import { HOW_NOTE, type How, QUEUED_TAP, SENT_NOW, sendsNow, steerable, whileBusy } from '@/ui/busy';
 import { Composer } from '@/ui/composer';
 import { KeyboardSafe } from '@/ui/keyboard';
+import { LiveWork } from '@/ui/livework';
+import { QueuedSheet } from '@/ui/queuedsheet';
 import type { Picture } from '@/ui/pictures';
 import { cardTitle } from '@/ui/format';
 import { Icon } from '@/ui/icons';
@@ -36,10 +38,13 @@ import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 
 /** `queued`: sent while the Agent worked; what that means depends on the CLI (ui/busy.ts). */
-type Pending = { text: string; at: number; queued?: boolean; pictures?: number; how?: How };
+type Pending = { text: string; at: number; queued?: boolean; pictures?: number; how?: How; now?: boolean };
 
 const POLL_MS = 2000;
 const NO_CONVERSATION = /没有 Agent 对话/;
+
+/** A message on its way, as its bubble shows it. */
+const pendingText = (p: Pending) => (p.pictures ? `[${p.pictures} 张图片] ${p.text}`.trim() : p.text);
 
 type Line = { kind: 'msg'; m: Message } | { kind: 'pending'; p: Pending } | { kind: 'unsent'; id: string; text: string; error?: string };
 
@@ -66,6 +71,8 @@ export default function Chat() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
   const [term, setTerm] = useState(false);
+  const [queuedOpen, setQueuedOpen] = useState(false);
+  const openQueued = useCallback(() => setQueuedOpen(true), []);
   const [picking, setPicking] = useState<ModeKind | null>(null);
   const generation = useRef<string | null>(null);
   const last = useRef(0);
@@ -241,6 +248,18 @@ export default function Chat() {
     }
   }
 
+  // Queued messages go to the Agent now, not after the step at hand: its queue goes as one.
+  async function sendNow() {
+    setQueuedOpen(false);
+    try {
+      await write(machine, 'sendnow', { terminal });
+      setPending((p) => p.map((x) => (x.how === 'queue' ? { ...x, now: true } : x)));
+      setError('');
+    } catch (e) {
+      setError(`没立刻发出去：${(e as Error).message}`);
+    }
+  }
+
   async function act(op: string, fields: Record<string, unknown>) {
     try {
       await write(machine, op, { terminal, ...fields });
@@ -278,6 +297,7 @@ export default function Chat() {
   const view = waitView(waiting) ?? (starting ? STARTING : null);
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
+  const canSendNow = !!running && supports(m, 'sendnow') && sendsNow(card?.agent);
   // Only Claude offers one, only between turns with nothing else being asked. The card names
   // the turn, so this does not wait on the messages of a conversation still being read.
   const turnEnded = online && card?.agent === 'claude' && card.phase === 'idle' && !card.trust && supports(m, 'suggestion');
@@ -297,13 +317,17 @@ export default function Chat() {
           <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
       ) : l.kind === 'pending' ? (
-        <Mine text={l.p.pictures ? `[${l.p.pictures} 张图片] ${l.p.text}`.trim() : l.p.text} note={l.p.how ? HOW_NOTE[l.p.how] : l.p.queued ? whileBusy(card?.agent).note : '发送中…'} tone="pending" />
+        l.p.how === 'queue' && !l.p.now && canSendNow ? (
+          <Mine text={pendingText(l.p)} note={QUEUED_TAP} tone="queued" onPress={openQueued} />
+        ) : (
+          <Mine text={pendingText(l.p)} note={l.p.now ? SENT_NOW : l.p.how ? HOW_NOTE[l.p.how] : l.p.queued ? whileBusy(card?.agent).note : '发送中…'} tone="pending" />
+        )
       ) : (
         <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
           <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, card?.agent, toTools],
+    [agent, card?.agent, toTools, canSendNow, openQueued],
   );
 
   return (
@@ -349,21 +373,17 @@ export default function Chat() {
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
           ListHeaderComponent={
-            running && session && (card?.doing || supports(m, 'toolcalls')) ? (
-              // What it is doing now, as the desktop's card says it: between its messages a turn
-              // can work for minutes, and a bare link read as nothing happening.
-              <Pressable
-                accessibilityRole="button"
-                disabled={!supports(m, 'toolcalls')}
-                onPress={() => toTools()}
-                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 6 }}
-              >
-                <ActivityIndicator size="small" color={t.dim} />
-                <Text numberOfLines={2} style={{ flex: 1, fontSize: 13, lineHeight: 18, color: t.dim }}>
-                  {card?.doing ? `正在${card.doing}` : '看它到现在做了什么'}
-                </Text>
-                {supports(m, 'toolcalls') && <Icon name="right" size={14} width={2} color={t.dim} />}
-              </Pressable>
+            running && session && (card?.doing || supports(m, 'toolcalls') || supports(m, 'read')) ? (
+              <LiveWork
+                machine={machine}
+                terminal={terminal}
+                session={session}
+                doing={card?.doing}
+                steps={supports(m, 'toolslast')}
+                screen={supports(m, 'read')}
+                focused={focused}
+                onOpen={supports(m, 'toolcalls') ? () => toTools() : undefined}
+              />
             ) : undefined
           }
           ListFooterComponent={
@@ -435,6 +455,13 @@ export default function Chat() {
           onUseSuggestion={() => suggestionStats.set(countUse)}
           onModel={supports(m, 'setmode') ? () => setPicking('model') : undefined}
           onPermission={supports(m, 'setmode') ? () => setPicking('permission') : undefined}
+        />
+      )}
+      {queuedOpen && (
+        <QueuedSheet
+          texts={pending.filter((p) => p.how === 'queue' && !p.now).map(pendingText)}
+          onSendNow={sendNow}
+          onClose={() => setQueuedOpen(false)}
         />
       )}
       <TerminalSheet visible={term} machine={machine} terminal={terminal} onClose={() => setTerm(false)} />
