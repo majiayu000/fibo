@@ -67,7 +67,17 @@ export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress
         }}
         style={[s.mine, { backgroundColor: t.bubble }, tone === 'pending' && { opacity: 0.6 }, tone === 'queued' && { backgroundColor: t.waitBg, borderWidth: 1.5, borderStyle: 'dashed', borderColor: t.run }]}
       >
-        <Text style={{ color: t.text, fontSize: 15, lineHeight: 22 }}>{text}</Text>
+        {tone === 'queued' ? (
+          // The return key says what a tap does: send it now, as Enter would.
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
+            <Text style={{ flexShrink: 1, color: t.text, fontSize: 15, lineHeight: 22 }}>{text}</Text>
+            <View style={[s.enter, { backgroundColor: t.run }]}>
+              <Icon name="enter" size={16} width={2.2} color={t.waitBg} />
+            </View>
+          </View>
+        ) : (
+          <Text style={{ color: t.text, fontSize: 15, lineHeight: 22 }}>{text}</Text>
+        )}
       </Pressable>
       <Meta text={note ?? (at ? clock(at) : '')} note={said} right color={tone === 'error' ? t.err : tone === 'queued' ? t.run : t.dim} onSelect={() => setSelecting(true)} />
       {selecting && <SelectSheet text={text} onClose={() => setSelecting(false)} />}
@@ -129,6 +139,7 @@ export const Theirs = memo(function Theirs({ m, agent, onTools }: { m: Message; 
 });
 
 const s = StyleSheet.create({
+  enter: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   mine: { alignSelf: 'flex-end', maxWidth: '80%', borderRadius: 20, paddingVertical: 11, paddingHorizontal: 15 },
   meta: { fontSize: 12 },
   worked: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, borderBottomWidth: 1 },

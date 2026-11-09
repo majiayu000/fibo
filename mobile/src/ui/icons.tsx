@@ -31,6 +31,8 @@ const paths = {
   ),
   down: <Path d="M6 9l6 6 6-6" />,
   right: <Path d="M9 6l6 6-6 6" />,
+  /** The return key: a queued message goes now. */
+  enter: <Path d="M20 5v6a4 4 0 0 1-4 4H5M9 11l-4 4 4 4" />,
   folder: <Path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   search: (
     <>
