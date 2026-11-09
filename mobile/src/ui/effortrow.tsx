@@ -72,7 +72,7 @@ export function EffortRow({ machine, terminal, start }: { machine: string; termi
               {busy === o.key ? (
                 <ActivityIndicator color={t.dim} />
               ) : (
-                <Text style={{ color: o.current ? t.bg : t.text, fontSize: 14 }}>{o.label}</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ color: o.current ? t.bg : t.text, fontSize: 14 }}>{o.label}</Text>
               )}
             </Pressable>
           ))}
@@ -86,5 +86,5 @@ const s = StyleSheet.create({
   wrap: { borderTopWidth: 1, paddingTop: 12, marginTop: 4, gap: 10 },
   head: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { flexGrow: 1, minWidth: 56, height: 36, paddingHorizontal: 10, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  chip: { flexGrow: 1, flexBasis: 0, minWidth: 52, height: 36, paddingHorizontal: 4, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });
