@@ -111,4 +111,12 @@ describe('the live block', () => {
     expect(lastLines('a\nb  \nc\n\n   \n', 2)).toEqual(['b', 'c']);
     expect(lastLines('only', 8)).toEqual(['only']);
   });
+  test('leaves out the input box and the footer under it', () => {
+    const rule = '─'.repeat(40);
+    const claude = ['⏺ Bash(ping -c 90 127.0.0.1)', '  ⎿  64 bytes from 127.0.0.1', '', '✶ Thundering… (36s)', '', rule, '❯ Press up to edit queued messages', rule, '  🔥7天', '  ⏵⏵ bypass permissions on'].join('\n');
+    expect(lastLines(claude, 8)).toEqual(['⏺ Bash(ping -c 90 127.0.0.1)', '  ⎿  64 bytes from 127.0.0.1', '', '✶ Thundering… (36s)']);
+    // A rule far above the bottom is the Agent's own output, not its box.
+    const table = [rule, 'a', rule, '1', '2', '3', '4', '5', '6', '7', '8'].join('\n');
+    expect(lastLines(table, 3)).toEqual(['6', '7', '8']);
+  });
 });

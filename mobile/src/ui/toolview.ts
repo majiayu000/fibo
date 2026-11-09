@@ -176,7 +176,18 @@ export function columns(rows: ViewRow[]): number {
  * to go to, and a list told to start on its last row draws only that one. */
 export const opensAtEnd = (rows: number, height: number, line: number) => rows * line > height;
 
-/** A screen's last `n` lines, the blank ones at its bottom gone: what the live block shows. */
+/** A rule across the screen: the edges of a CLI's input box. */
+const RULE = /^\s*[─━]{8,}/;
+
+/**
+ * What a screen shows the Agent doing, as its last `n` lines: the input box and everything
+ * under it cut off (the box between its last two rules, then the footer), blank lines at the
+ * bottom gone. Its last lines alone were Claude's box, tips and footer (2026-11-09).
+ */
 export function lastLines(text: string, n: number): string[] {
-  return text.replace(/\s+$/, '').split('\n').map((l) => l.replace(/\s+$/, '')).slice(-n);
+  let lines = text.replace(/\s+$/, '').split('\n').map((l) => l.replace(/\s+$/, ''));
+  const rules = lines.map((l, i) => (RULE.test(l) ? i : -1)).filter((i) => i >= 0);
+  if (rules.length >= 2 && lines.length - rules[rules.length - 1] <= 6) lines = lines.slice(0, rules[rules.length - 2]);
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return lines.slice(-n);
 }
