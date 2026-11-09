@@ -129,14 +129,22 @@ const HEAD_ICON: f32 = T::BOARD_HEAD_ICON;
 /// `color`; its initial when it has no mark.
 pub(super) fn agent_mark(agent: Agent, color: Hsla) -> gpui::AnyElement {
     let color = agent.brand_color().map(T::color).unwrap_or(color);
+    agent_mark_in(agent, color, MARK)
+}
+
+/// The CLI's mark at `size`, all in `color`, its own color or not.
+pub(super) fn agent_mark_in(agent: Agent, color: Hsla, size: f32) -> gpui::AnyElement {
     match agent_icon(agent) {
         Some(path) => svg()
             .path(path)
-            .size(px(MARK))
+            .size(px(size))
             .flex_shrink_0()
             .text_color(color)
             .into_any_element(),
         None => div()
+            .min_w(px(size))
+            .flex()
+            .justify_center()
             .text_size(px(T::CHIP_SIZE))
             .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_color(color)

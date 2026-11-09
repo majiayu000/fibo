@@ -54,11 +54,22 @@ impl Agent {
         self.spec().map_or(self.0, |s| s.executable.as_str())
     }
     /// The CLI's mark as a one-fill SVG the app tints with its text color
-    /// (`assets/agent-icons/LICENSE`). A declared CLI has none and shows its initial.
+    /// (`assets/agent-icons/LICENSE`). One without (Droid, oh-my-pi, most declared CLIs)
+    /// shows its initial.
     pub fn icon_svg(self) -> Option<&'static [u8]> {
         match self.0 {
             "Claude" => Some(include_bytes!("../assets/agent-icons/claude.svg")),
             "Codex" => Some(include_bytes!("../assets/agent-icons/codex.svg")),
+            "Grok" => Some(include_bytes!("../assets/agent-icons/grok.svg")),
+            "Cursor" => Some(include_bytes!("../assets/agent-icons/cursor.svg")),
+            "Qoder" => Some(include_bytes!("../assets/agent-icons/qoder.svg")),
+            "Hermes" => Some(include_bytes!("../assets/agent-icons/hermes.svg")),
+            "Pi" => Some(include_bytes!("../assets/agent-icons/pi.svg")),
+            "Dsh" => Some(include_bytes!("../assets/agent-icons/deepseek.svg")),
+            "Kimi" => Some(include_bytes!("../assets/agent-icons/kimi.svg")),
+            "Gemini" => Some(include_bytes!("../assets/agent-icons/gemini.svg")),
+            // Declared by the OpenCode plugin (`plugins/opencode/agent.json`).
+            "opencode" => Some(include_bytes!("../assets/agent-icons/opencode.svg")),
             _ => None,
         }
     }

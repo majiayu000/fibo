@@ -242,25 +242,28 @@ impl Workbench {
             .iter()
             .find(|s| s.id == self.nav.space);
         let first = self.first_agent();
-        let link = |id: String, text: String| {
-            button(gpui::SharedString::from(id), text)
-                .border_0()
+        // Each link is its mark and its name in one piece, so a wrapped row never starts
+        // or ends on a separator as the old `·` between names did.
+        let link = |id: String, text: String, mark: Option<gpui::AnyElement>| {
+            marked_button(id, text, mark)
                 .px(px(T::S4))
                 .text_color(T::color(T::link()))
         };
+        let mark = |agent: Agent, ink| super::super::board::agent_mark_in(agent, ink, T::SMALL);
         let mut others = vec![];
         for agent in Agent::all().into_iter().filter(|a| *a != first) {
             others.push(
                 link(
                     format!("empty-tab-{}", agent.executable()),
                     agent.name().to_owned(),
+                    Some(mark(agent, T::color(T::link()))),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(agent, cx)))
                 .into_any_element(),
             );
         }
         others.push(
-            link("empty-tab-new".into(), t!("空终端").into())
+            link("empty-tab-new".into(), t!("空终端").into(), None)
                 .on_click(cx.listener(|this, _, _, cx| this.launch(false, None, cx)))
                 .into_any_element(),
         );
@@ -295,9 +298,10 @@ impl Workbench {
                     }),
             )
             .child(
-                super::super::overview::solid(button(
-                    gpui::SharedString::from(format!("empty-tab-{}", first.executable())),
+                super::super::overview::solid(marked_button(
+                    format!("empty-tab-{}", first.executable()),
                     t!("运行 {name}", name = first.name()),
+                    Some(mark(first, T::color(T::on_accent()))),
                 ))
                 .px(px(T::S16))
                 .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(first, cx))),
@@ -309,17 +313,37 @@ impl Workbench {
                     .flex_wrap()
                     .justify_center()
                     .items_center()
-                    .gap(px(T::S4))
+                    .gap_x(px(T::S12))
+                    .gap_y(px(T::S4))
                     .text_size(px(T::SMALL))
-                    .children(others.into_iter().enumerate().flat_map(|(i, b)| {
-                        (i > 0)
-                            .then(|| label("·").into_any_element())
-                            .into_iter()
-                            .chain(std::iter::once(b))
-                    })),
+                    .children(others),
             )
             .when_some(split, |d, keys| {
                 d.child(label(t!("打开后可以右键分屏，或按 {keys} 向右分屏", keys)))
             })
     }
+}
+
+/// `widgets::button` with a CLI's mark before its words.
+fn marked_button(
+    id: String,
+    text: String,
+    mark: Option<gpui::AnyElement>,
+) -> gpui::Stateful<gpui::Div> {
+    let text = gpui::SharedString::from(text);
+    div()
+        .id(gpui::SharedString::from(id))
+        .role(gpui::accesskit::Role::Button)
+        .aria_label(text.clone())
+        .h(px(T::ROW))
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(px(T::S6))
+        .rounded(px(T::CONTROL_RADIUS))
+        .text_size(px(T::SMALL))
+        .cursor_pointer()
+        .hover(|s| s.bg(T::color(T::button_hover())))
+        .when_some(mark, |d, m| d.child(m))
+        .child(text)
 }

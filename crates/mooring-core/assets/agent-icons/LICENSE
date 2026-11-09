@@ -1,7 +1,10 @@
-claude.svg and codex.svg are the Claude Code and Codex marks from LobeHub's lobe-icons
-(https://github.com/lobehub/lobe-icons), MIT License. Reduced here to one fill so the app can tint them.
-The marks themselves belong to Anthropic and OpenAI; Fibo shows them only to say which
-CLI a conversation runs in.
+Every SVG here is a CLI's mark from LobeHub's lobe-icons
+(https://github.com/lobehub/lobe-icons, @lobehub/icons-static-svg 1.102.0), MIT License:
+claude (claudecode), codex, grok, cursor, qoder, hermes (hermesagent), pi, deepseek, kimi,
+gemini (geminicli) and opencode. Reduced here to one fill so the app can tint them.
+The marks themselves belong to their makers (Anthropic, OpenAI, xAI, Anysphere, Alibaba,
+Nous Research, DeepSeek, Moonshot AI, Google, SST and Pi's authors); Fibo shows them only
+to say which CLI a conversation runs in.
 
 MIT License
 
