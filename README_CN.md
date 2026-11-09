@@ -9,11 +9,30 @@
 **给 Coding Agent 用的原生 macOS 工作台。每个会话都是一个真终端；Fibo 告诉你哪个在等你，关掉窗口它们照样跑，崩了也能接着聊。**
 
 [![GitHub stars](https://img.shields.io/github/stars/majiayu000/mooring?style=flat-square&color=ffcc00)](https://github.com/majiayu000/mooring)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/majiayu000/mooring?style=flat-square&label=release)](https://github.com/majiayu000/mooring/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/majiayu000/mooring/total?style=flat-square&color=success)](https://github.com/majiayu000/mooring/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/mooring/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/mooring/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/commits/main)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/pulse)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/mooring/releases/latest)
 [![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
+[![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
+[![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
+[![libghostty](https://img.shields.io/badge/terminal-libghostty-3551F3?style=flat-square&logo=ghostty&logoColor=white)](https://github.com/ghostty-org/ghostty)
+[![Website](https://img.shields.io/badge/website-fibo.page-111111?style=flat-square)](https://fibo.page)
+
+[![12 agents built in](https://img.shields.io/badge/agents-12%20built%20in-555?style=flat-square)](#03--什么-agent-都能接)
+[![Claude Code](https://img.shields.io/badge/-Claude%20Code-D97757?style=flat-square&logo=claude&logoColor=white)](#03--什么-agent-都能接)
+[![Codex](https://img.shields.io/badge/-Codex-412991?style=flat-square)](#03--什么-agent-都能接)
+[![Gemini CLI](https://img.shields.io/badge/-Gemini%20CLI-8E75B2?style=flat-square&logo=googlegemini&logoColor=white)](#03--什么-agent-都能接)
+[![Cursor Agent](https://img.shields.io/badge/-Cursor%20Agent-000000?style=flat-square&logo=cursor&logoColor=white)](#03--什么-agent-都能接)
+[![Grok Build](https://img.shields.io/badge/-Grok%20Build-000000?style=flat-square&logo=x&logoColor=white)](#03--什么-agent-都能接)
+[![DeepSeek](https://img.shields.io/badge/-DeepSeek-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](#03--什么-agent-都能接)
+[![Kimi Code](https://img.shields.io/badge/-Kimi%20Code-1A1A1A?style=flat-square)](#03--什么-agent-都能接)
+[![Qoder CLI](https://img.shields.io/badge/-Qoder%20CLI-2E7D32?style=flat-square)](#03--什么-agent-都能接)
+[![and more](https://img.shields.io/badge/-%2B%20Hermes%2C%20Droid%2C%20Pi%2C%20OpenCode-777?style=flat-square)](#03--什么-agent-都能接)
 
 [官网](https://fibo.page) | [安装](#安装) | [能做什么](#能做什么) | [常见问题](#常见问题) | [English](README.md)
 
