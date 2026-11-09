@@ -59,11 +59,13 @@ export const LiveWork = memo(function LiveWork({
       if (!r || asking) return;
       asking = true;
       try {
-        if (shown === 'steps') {
+        // The steps name what it does on the line above, so they are read under the screen too.
+        if (canSteps) {
           const page = await r.request('toolcalls', { session, last: STEPS });
           if (live) setCalls(page.calls ?? []);
-        } else {
-          const read = await r.request('read', { terminal, lines: LINES + 4 });
+        }
+        if (shown === 'screen') {
+          const read = await r.request('read', { terminal, lines: LINES + 16 });
           if (live) setLines(lastLines(String(read.text ?? ''), LINES));
         }
       } catch {
@@ -78,7 +80,7 @@ export const LiveWork = memo(function LiveWork({
       live = false;
       clearInterval(timer);
     };
-  }, [machine, terminal, session, shown, focused]);
+  }, [machine, terminal, session, shown, focused, canSteps]);
 
   const latest = calls[calls.length - 1];
   const head = doing ? `正在${doing}` : latest ? words(latest) : '看它到现在做了什么';
