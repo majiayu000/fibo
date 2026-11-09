@@ -359,13 +359,35 @@ impl Connection {
     }
 }
 
+/// What the status subscription reports: the host's status, or that the link to the host
+/// dropped. A host can itself say recognition is Interrupted (a log folder it could not
+/// read); only `Lost` means the window cannot reach the host.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StatusLink {
+    Status(Box<RecognitionStatus>),
+    Lost(String),
+}
+impl StatusLink {
+    /// For a reader that only wants a phase: a lost link reads as Interrupted.
+    pub fn into_status(self) -> RecognitionStatus {
+        match self {
+            Self::Status(status) => *status,
+            Self::Lost(detail) => RecognitionStatus {
+                phase: RecognitionPhase::Interrupted,
+                detail,
+                ..RecognitionStatus::default()
+            },
+        }
+    }
+}
+
 /// One blocking status subscription, independent of terminal output. No refresh timer.
 pub struct RecognitionConnection {
     socket: Arc<Mutex<Option<local::Stream>>>,
     closed: Arc<AtomicBool>,
 }
 impl RecognitionConnection {
-    pub fn new(path: &Path, wake: UnboundedSender<RecognitionStatus>) -> Self {
+    pub fn new(path: &Path, wake: UnboundedSender<StatusLink>) -> Self {
         let socket = Arc::new(Mutex::new(None));
         let closed = Arc::new(AtomicBool::new(false));
         let result = Self {
@@ -402,7 +424,10 @@ impl RecognitionConnection {
                         match receive::<Reply>(&mut stream)? {
                             Reply::Recognition(status) => {
                                 subscribed = true;
-                                if wake.unbounded_send(status).is_err() {
+                                if wake
+                                    .unbounded_send(StatusLink::Status(Box::new(status)))
+                                    .is_err()
+                                {
                                     return Ok(());
                                 }
                             }
@@ -423,13 +448,8 @@ impl RecognitionConnection {
                 }
                 if !reported {
                     reported = true;
-                    let interrupted = RecognitionStatus {
-                        phase: RecognitionPhase::Interrupted,
-                        detail: format!("识别状态连接中断：{error}"),
-                        scopes: vec![],
-                        ..RecognitionStatus::default()
-                    };
-                    if wake.unbounded_send(interrupted).is_err() {
+                    let lost = StatusLink::Lost(format!("识别状态连接中断：{error}"));
+                    if wake.unbounded_send(lost).is_err() {
                         return;
                     }
                 }
@@ -537,12 +557,16 @@ mod tests {
         let (tx, mut rx) = futures::channel::mpsc::unbounded();
         let first = host_once(&path, RecognitionPhase::Starting);
         let _connection = RecognitionConnection::new(&path, tx);
-        let mut next = || futures::executor::block_on(rx.next()).unwrap().phase;
-        assert_eq!(next(), RecognitionPhase::Starting);
+        let mut next = || futures::executor::block_on(rx.next()).unwrap();
+        let phase = |link: StatusLink| match link {
+            StatusLink::Status(status) => status.phase,
+            StatusLink::Lost(detail) => panic!("lost: {detail}"),
+        };
+        assert_eq!(phase(next()), RecognitionPhase::Starting);
         first.join().unwrap();
-        assert_eq!(next(), RecognitionPhase::Interrupted);
+        assert!(matches!(next(), StatusLink::Lost(_)));
         host_once(&path, RecognitionPhase::Healthy).join().unwrap();
-        assert_eq!(next(), RecognitionPhase::Healthy);
+        assert_eq!(phase(next()), RecognitionPhase::Healthy);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

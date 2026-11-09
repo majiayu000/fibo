@@ -87,43 +87,11 @@ fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
     fs::create_dir_all(root.join("logs/b")).unwrap();
     let root = root.canonicalize().unwrap();
     let roots = vec![root.join("logs")];
-    let (store, workspace) = Store::open(&root).unwrap();
     let mut index =
         crate::log_index::Index::open(&root, vec![(Agent::Codex, roots[0].clone())]).unwrap();
     index.initialize().unwrap();
     index.bootstrap().unwrap();
-    let shared = Arc::new(Mutex::new(Host {
-        remote: None,
-        store,
-        workspace,
-        terminals: HashMap::new(),
-        closed: Default::default(),
-        instance: "test".into(),
-        index: index.fork(&root).unwrap(),
-        recognition: RecognitionStatus::default(),
-        log_events: None,
-        new_roots: None,
-        recognition_subscribers: HashMap::new(),
-        event_subscribers: HashMap::new(),
-        events: Default::default(),
-        exits: None,
-        agent_pids: HashMap::new(),
-        unbound_pids: HashMap::new(),
-        released_logs: Default::default(),
-        unrecorded_pids: HashMap::new(),
-        submits: HashMap::new(),
-        input_probes: Default::default(),
-        deadlines: None,
-        myself: std::sync::Weak::new(),
-        http_asks: HashMap::new(),
-        screen_waits: HashMap::new(),
-        title_busy: HashMap::new(),
-        screen_busy: HashMap::new(),
-        hooks: Default::default(),
-        report_back: Default::default(),
-        shell_watch: Default::default(),
-        reconciled: HashMap::new(),
-    }));
+    let shared = shared_host(&root, &index);
     let (tx, rx) = sync_channel(16);
     let (socket, _peer) = local::Stream::pair().unwrap();
     lock(&shared).unwrap().recognition_subscribers.insert(
@@ -164,15 +132,7 @@ fn must_scan_repairs_only_event_subtree_and_publishes_status_then_continues() {
             .collect::<Vec<_>>(),
         ["a"]
     );
-    let mut phases: Vec<_> = rx
-        .try_iter()
-        .map(
-            |(_, bytes)| match serde_json::from_slice::<Reply>(&bytes).unwrap() {
-                Reply::Recognition(s) => s.phase,
-                _ => panic!(),
-            },
-        )
-        .collect();
+    let mut phases: Vec<_> = published(&rx).into_iter().map(|s| s.phase).collect();
     // Content imports publish a revision while recovery remains in progress.
     phases.dedup();
     assert_eq!(
@@ -299,4 +259,103 @@ fn a_window_that_stops_reading_is_caught_up_not_cut_off() {
         seen < 65,
         "stale statuses are skipped once the window catches up"
     );
+}
+
+/// A folder that held logs is deleted (a removed worktree's conversations, say) while the
+/// Mac sleeps; waking, FSEvents asks for a rescan of it. Once its logs are forgotten the
+/// repair is over: recognition is Healthy again, saying what went. It used to stay
+/// Interrupted, which nothing cleared, and the window read that as the host being cut off.
+#[test]
+fn a_deleted_log_folder_ends_its_repair_healthy() {
+    let root = std::env::temp_dir().join(format!("kl-lost-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join("logs/gone")).unwrap();
+    let root = root.canonicalize().unwrap();
+    let logs = root.join("logs");
+    fs::write(
+        logs.join("gone/old.jsonl"),
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"old\",\"cwd\":\"/tmp\"}}\n",
+    )
+    .unwrap();
+    let mut index =
+        crate::log_index::Index::open(&root, vec![(Agent::Codex, logs.clone())]).unwrap();
+    index.initialize().unwrap();
+    index.bootstrap().unwrap();
+    assert_eq!(index.cached().unwrap().len(), 1);
+    let shared = shared_host(&root, &index);
+    let (tx, rx) = sync_channel(16);
+    let (socket, _peer) = local::Stream::pair().unwrap();
+    lock(&shared).unwrap().recognition_subscribers.insert(
+        1,
+        Subscriber {
+            tx,
+            socket,
+            lagged: Default::default(),
+        },
+    );
+
+    fs::remove_dir_all(logs.join("gone")).unwrap();
+    let scopes = vec![logs.join("gone")];
+    recover_logs(&shared, &mut index, &mut Association::default(), &scopes).unwrap();
+
+    let last = published(&rx).pop().unwrap();
+    assert_eq!(last.phase, RecognitionPhase::Healthy, "{}", last.detail);
+    assert!(last.detail.contains("被删除"), "{}", last.detail);
+    assert_eq!(
+        lock(&shared).unwrap().recognition.phase,
+        RecognitionPhase::Healthy
+    );
+    assert!(index.cached().unwrap().is_empty());
+    assert!(index.recovery_scopes().unwrap().is_empty());
+    drop(shared);
+    drop(index);
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A host over `root`'s store with nothing running, for driving recognition by hand.
+fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Shared {
+    let (store, workspace) = Store::open(root).unwrap();
+    Arc::new(Mutex::new(Host {
+        remote: None,
+        store,
+        workspace,
+        terminals: HashMap::new(),
+        closed: Default::default(),
+        instance: "test".into(),
+        index: index.fork(root).unwrap(),
+        recognition: RecognitionStatus::default(),
+        log_events: None,
+        new_roots: None,
+        recognition_subscribers: HashMap::new(),
+        event_subscribers: HashMap::new(),
+        events: Default::default(),
+        exits: None,
+        agent_pids: HashMap::new(),
+        unbound_pids: HashMap::new(),
+        released_logs: Default::default(),
+        unrecorded_pids: HashMap::new(),
+        submits: HashMap::new(),
+        input_probes: Default::default(),
+        deadlines: None,
+        myself: std::sync::Weak::new(),
+        http_asks: HashMap::new(),
+        screen_waits: HashMap::new(),
+        title_busy: HashMap::new(),
+        screen_busy: HashMap::new(),
+        hooks: Default::default(),
+        report_back: Default::default(),
+        shell_watch: Default::default(),
+        reconciled: HashMap::new(),
+    }))
+}
+
+/// Recognition status frames sent to subscriber `rx`, in order.
+fn published(rx: &std::sync::mpsc::Receiver<Frame>) -> Vec<RecognitionStatus> {
+    rx.try_iter()
+        .map(
+            |(_, bytes)| match serde_json::from_slice::<Reply>(&bytes).unwrap() {
+                Reply::Recognition(s) => s,
+                _ => panic!(),
+            },
+        )
+        .collect()
 }

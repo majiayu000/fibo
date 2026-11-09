@@ -167,6 +167,7 @@
 "工作空间" = "Workspace"
 "正在更新…" = "Updating…"
 "正在识别会话…" = "Recognizing sessions…"
+"会话识别中断" = "Session recognition interrupted"
 "正在更新后台…" = "Updating host…"
 "后台有更新 · 更新" = "Host update · Update"
 "后台有更新 · 重启" = "Host update · Restart"

@@ -360,6 +360,7 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
         let mut previous_panel = panel(&before, &link);
         let mut fresh = now();
         while let Some(status) = status_rx.next().await {
+            let status: RecognitionStatus = crate::connection::StatusLink::into_status(status);
             let socket_read = socket.clone();
             let result = cx
                 .background_spawn(async move { rpc(&socket_read, &Request::Workspace) })

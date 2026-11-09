@@ -29,7 +29,9 @@ impl Workbench {
         let fit = Fit::of(width);
         let open = self.statusbar;
         let cut = self.store.cut_off();
-        let detail = self.store.recognition().detail.clone();
+        let detail = (self.store.cut_off_reason())
+            .unwrap_or(&self.store.recognition().detail)
+            .to_owned();
         // 「本机 · 11 个会话」: this machine and how many sessions it lists. What needs you
         // is the title row's 要你处理 alone; a click here still lists what works or waits.
         let listed = self.facts().listed;

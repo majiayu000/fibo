@@ -1,6 +1,6 @@
 //! The client's link to mooring: the socket, the in-flight user action, background
 //! syncs and the recognition status the host pushes. Views never call `rpc` themselves.
-use crate::connection::RecognitionConnection;
+use crate::connection::{RecognitionConnection, StatusLink};
 use futures::channel::mpsc::UnboundedSender;
 use mooring_core::delivery::{PATIENCE, Settled, deliver};
 use mooring_core::{model::*, protocol::*};
@@ -35,13 +35,13 @@ pub struct Store {
     /// The launch asked for while another action was in flight; it runs after `queued`.
     held_launch: Option<Launch>,
     recognition: RecognitionStatus,
-    /// When the status link to the host dropped; `None` while it is up.
-    cut_off_at: Option<Instant>,
+    /// When the status link to the host dropped, and why; `None` while it is up.
+    cut_off_at: Option<(Instant, String)>,
     _recognition_connection: RecognitionConnection,
 }
 
 impl Store {
-    pub fn new(socket: PathBuf, status: UnboundedSender<RecognitionStatus>) -> Self {
+    pub fn new(socket: PathBuf, status: UnboundedSender<StatusLink>) -> Self {
         let recognition_connection = RecognitionConnection::new(&socket, status);
         Self {
             socket,
@@ -70,18 +70,37 @@ impl Store {
     pub fn recognition(&self) -> &RecognitionStatus {
         &self.recognition
     }
+    /// A status from the host: the link is up, whatever phase it reports. A host can
+    /// say recognition is Interrupted while every connection works; that is not a cut.
     pub fn set_recognition(&mut self, status: RecognitionStatus) {
-        if status.phase == RecognitionPhase::Interrupted {
-            self.cut_off_at.get_or_insert_with(Instant::now);
-        } else {
-            self.cut_off_at = None;
-        }
+        self.cut_off_at = None;
         self.recognition = status;
+    }
+    /// What the status subscription reported. The last status stays while the link is
+    /// down; reconnecting brings a whole new one.
+    pub fn take_link(&mut self, link: StatusLink) {
+        match link {
+            StatusLink::Status(status) => self.set_recognition(*status),
+            StatusLink::Lost(error) => {
+                if self.cut_off_at.is_none() {
+                    self.cut_off_at = Some((Instant::now(), error));
+                }
+            }
+        }
     }
     /// The status link has been down at least `CUT_OFF_NOTICE`.
     pub fn cut_off(&self) -> bool {
         self.cut_off_at
-            .is_some_and(|at| at.elapsed() >= CUT_OFF_NOTICE)
+            .as_ref()
+            .is_some_and(|(at, _)| at.elapsed() >= CUT_OFF_NOTICE)
+    }
+    /// The status link is down, however briefly.
+    pub fn link_down(&self) -> bool {
+        self.cut_off_at.is_some()
+    }
+    /// Why the status link dropped, while it is down.
+    pub fn cut_off_reason(&self) -> Option<&str> {
+        self.cut_off_at.as_ref().map(|(_, why)| why.as_str())
     }
     /// The host has published a newer workspace than the one at `revision`.
     pub fn behind(&self, revision: u64) -> bool {
