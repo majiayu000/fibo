@@ -46,7 +46,8 @@ pub(super) fn start(
         // The nav's rows, by the page's place: adding a page must not move what a click means.
         let nav = |page: &str, cx: &mut gpui::AsyncApp| {
             let pages = workbench::Workbench::visual_settings_pages();
-            let row = pages.iter().position(|p| *p == page).expect("a settings page") as f32;
+            let shown = mooring_core::i18n::say(page);
+            let row = pages.iter().position(|p| *p == page || *p == shown).expect("a settings page") as f32;
             click(60., 119. + 34. * row, cx);
         };
         let values = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_settings_values()).unwrap();

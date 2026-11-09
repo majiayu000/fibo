@@ -261,7 +261,12 @@ impl Workbench {
     pub(crate) fn visual_settings_show(&mut self, label: &str, cx: &mut Context<Self>) {
         let view = self.settings.clone().expect("settings open");
         view.update(cx, |v, cx| {
-            v.page = Page::ALL.into_iter().find(|p| p.label() == label).unwrap();
+            // Scenes name a page by its Chinese key; a run on an English system (CI) shows
+            // the English label, so either is a match.
+            let shown = mooring_core::i18n::say(label);
+            v.page = (Page::ALL.into_iter())
+                .find(|p| p.label() == label || p.label() == shown)
+                .unwrap_or_else(|| panic!("no settings page {label:?} ({shown:?})"));
             cx.notify();
         });
     }
