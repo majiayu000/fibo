@@ -17,6 +17,8 @@
 
 [官网](https://fibo.page) | [安装](#安装) | [能做什么](#能做什么) | [常见问题](#常见问题) | [English](README.md)
 
+<img src="docs/site/assets/shot-main.webp" alt="Fibo 三个窗格：Codex 等你回答、Claude Code 在跑、Codex 等你验收；侧栏列出要你处理 3 个、在跑 2 个" width="900" />
+
 </div>
 
 ---
@@ -51,6 +53,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./run.sh
 ### 01 · 一眼看出哪个 Agent 在等你
 
 每个会话只有一个状态，左栏、标签、窗格和看板上的说法一致：**等你回答**（提问或审批）、**在跑**、**等你验收**（一轮跑完）、**做完了**。一轮跑完不等于活干完了，只有你点了标记完成才算做完。鸟瞰把所有会话按列摊开，底栏显示 Codex、Claude、Grok 的额度。
+
+![鸟瞰：会话按待办、在跑、要你处理、停下了、做完了分列](docs/site/assets/shot-board.webp)
 
 ### 02 · 关掉窗口，它们照样跑
 
