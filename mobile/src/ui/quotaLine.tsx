@@ -1,8 +1,9 @@
-// Quota at a glance: one line on the home screen, the fullest window of each Agent under 我的.
+// Quota at a glance: the fullest window of each Agent, on each computer's card under 我的. The
+// home screen shows none: a line there read as part of the list it sat over (2026-11-09).
 // As on 额度, every reading comes from the paired computer itself; the phone asks nobody else.
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { type Machine, remote, supports } from '@/remote/hub';
 import { quotaStore } from '@/store/quota';
 import { type Tight, level, tightWindows, windowName } from './parse';
@@ -67,9 +68,3 @@ const s = StyleSheet.create({
   track: { height: 5, borderRadius: 3, overflow: 'hidden' },
   fill: { height: 5, borderRadius: 3 },
 });
-
-export const QuotaWords = ({ q, named, t }: { q: Tight; named: boolean; t: Theme }) => (
-  <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim, flexShrink: 1 }}>
-    {tightWords(q, named)}
-  </Text>
-);
