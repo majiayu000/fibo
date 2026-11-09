@@ -1,6 +1,7 @@
 // The uncommitted changes where the conversation runs: one card per file, ticked 看过 on
 // this phone, and a summary card with 要求修改 (a sentence to the Agent) and 让它提交
-// (「提交吧」).
+// (「提交吧」). A phone paired as 只看 or 能答审批 gets `summary`: what this turn changed,
+// names and counts only, from the conversation's log (the computer runs no git for it).
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -9,24 +10,26 @@ import { NOT_YET, remote, supports, useHub, write } from '@/remote/hub';
 import { useReviewed } from '@/store/reviewed';
 import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, TITLE_WEIGHT, mono, useBottom } from '@/ui/kit';
-import { type Check, checkLine, diffLines } from '@/ui/parse';
+import { type Check, checkLine, diffLines, diffWords } from '@/ui/parse';
 import { SayDialog } from '@/ui/sheets';
 import { tilde } from '@/ui/status';
 import { type Theme, useTheme } from '@/ui/theme';
 
 type File = { path: string; added: number; removed: number; status: string; patch: string; truncated?: boolean };
-type Diff = { cwd: string; branch?: string; files: File[]; added: number; removed: number; truncated?: boolean; checks?: Check[] };
+type Diff = { cwd: string; branch?: string; files: File[]; added: number; removed: number; truncated?: boolean; checks?: Check[]; summary?: boolean };
 
-function FileCard({ f, t, seen, onTick, open, onOpen }: { f: File; t: Theme; seen: boolean; onTick: () => void; open: boolean; onOpen: () => void }) {
+function FileCard({ f, t, seen, onTick, open, onOpen, names }: { f: File; t: Theme; seen: boolean; onTick: () => void; open: boolean; onOpen: () => void; names: boolean }) {
+  // Names only: nothing to open.
+  open = open && !names;
   const lines = open ? diffLines(f.patch) : [];
   return (
     <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
-      <Pressable onPress={onOpen} style={[s.fh, open && { borderBottomWidth: 1, borderColor: t.sep }]}>
-        <Icon name={open ? 'down' : 'right'} size={14} width={2} color={t.text} />
+      <Pressable disabled={names} onPress={onOpen} style={[s.fh, open && { borderBottomWidth: 1, borderColor: t.sep }]}>
+        {!names && <Icon name={open ? 'down' : 'right'} size={14} width={2} color={t.text} />}
         <Text numberOfLines={1} style={[s.path, { color: t.text }]}>
           {f.path}
         </Text>
-        {f.status !== 'M' && <Text style={[s.monoSmall, { color: t.dim }]}>{f.status === '?' ? '新' : f.status}</Text>}
+        {f.status !== 'M' && <Text style={[s.monoSmall, { color: t.dim }]}>{f.status === '?' || f.status === 'A' ? '新' : f.status}</Text>}
         <Text style={[s.monoSmall, { color: t.ok }]}>+{f.added}</Text>
         <Text style={[s.monoSmall, { color: t.err }]}>−{f.removed}</Text>
         <Pressable
@@ -103,6 +106,7 @@ export default function DiffScreen() {
   const files = diff?.files ?? [];
   const check = checkLine(diff?.checks);
   const seen = files.filter((f) => reviewed.has(f.path, f.patch)).length;
+  const words = diffWords(diff);
   const say = (text: string) =>
     write(machine, 'send', { terminal, text, enter: true })
       .then(() => setSent(text))
@@ -112,7 +116,7 @@ export default function DiffScreen() {
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <Nav
         big
-        title="未提交的改动"
+        title={words.title}
         sub={
           diff ? (
             <Text style={{ fontSize: 12, color: t.dim }} numberOfLines={1}>
@@ -133,7 +137,8 @@ export default function DiffScreen() {
       ) : (
         <>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 4, paddingBottom: 16, gap: 10 }}>
-            {files.length === 0 && <Notice text="没有未提交的改动" />}
+            {words.note !== '' && <Text style={{ fontSize: 12, color: t.dim, paddingHorizontal: 4 }}>{words.note}</Text>}
+            {files.length === 0 && <Notice text={words.empty} />}
             {files.map((f) => (
               <FileCard
                 key={f.path}
@@ -143,6 +148,7 @@ export default function DiffScreen() {
                 onTick={() => reviewed.toggle(f.path, f.patch)}
                 open={!!openSet[f.path]}
                 onOpen={() => setOpen((o) => ({ ...o, [f.path]: !o[f.path] }))}
+                names={!!diff.summary}
               />
             ))}
             {diff.truncated && <Notice text="改动太多，只列出了一部分" />}
