@@ -16,10 +16,7 @@ import { Btn, Group, Round, TITLE_WEIGHT, Wide, mono, useTop } from '@/ui/kit';
 import { QuietSpaces } from '@/ui/quietspaces';
 import { Row, rowStyles, spaceName } from '@/ui/row';
 import { SpaceChips } from '@/ui/spacechips';
-import { type Arranged, type Item, agentsIn, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
-import { useTightWindows } from '@/ui/quotaLine';
-import { quotaChips } from '@/ui/parse';
-import { QuotaStrip } from '@/ui/quotastrip';
+import { type Arranged, type Item, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
 import { TabBar } from '@/ui/tabs';
 import { statusColor } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
@@ -155,7 +152,6 @@ export default function Inbox() {
   const named = namesComputer(machines);
   const line = connectionLine(machines);
   const offline = offlineRows(machines);
-  const tight = useTightWindows(machines);
   const runningOpen = view.running !== false;
   const [allRunning, setAllRunning] = useState(false);
   const [undo, setUndo] = useState<{ text: string; back: () => void } | null>(null);
@@ -194,7 +190,6 @@ export default function Inbox() {
         <Round icon="search" label="搜索" onPress={() => router.push('/search')} />
         <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
       </View>
-      <QuotaStrip chips={quotaChips(tight, shelf.filter === null ? null : agentsIn(shelf))} named={named} />
       <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
       <View style={{ flex: 1 }} {...hold.touch}>
       <ScrollView

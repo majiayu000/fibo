@@ -271,16 +271,3 @@ export function pathChips(crumbs: { label: string; path: string }[]): PathChip[]
   if (crumbs.length <= 4) return crumbs.map(level);
   return [level(crumbs[0], 0), { kind: 'more', hidden: crumbs.slice(1, -2) }, ...crumbs.slice(-2).map((c, j) => level(c, crumbs.length - 2 + j))];
 }
-
-/**
- * The home screen's quota row: every Agent's fullest window, in a fixed order so the chips
- * do not swap places as the numbers move. With a space picked, only the Agents that have a
- * conversation in it: one Agent alone, the fullest of all, read as unrelated to the list it
- * sat over (2026-11-09, 「既有 codex 也有 claudecode 为啥要只显示一个」).
- */
-export function quotaChips(tight: Tight[], agents: string[] | null): Tight[] {
-  return tight
-    .filter((q) => agents === null || agents.includes(q.agent))
-    .slice()
-    .sort((x, y) => x.machine.localeCompare(y.machine) || x.agent.localeCompare(y.agent));
-}
