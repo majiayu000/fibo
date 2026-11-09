@@ -33,7 +33,7 @@ function MachineCard({ m, t }: { m: Machine; t: Theme }) {
   const place = relayPlace(m.link.relay);
   const online = m.status === 'online';
   const conversations = m.cards.filter((c) => c.agent && c.phase !== 'shell').length;
-  const facts = [m.os ? (OS[m.os] ?? m.os) : '', m.role ? `权限：${ROLE[m.role]}` : '', m.appVersion ? `Mooring ${m.appVersion}` : ''].filter(Boolean);
+  const facts = [m.os ? (OS[m.os] ?? m.os) : '', m.role ? `权限：${ROLE[m.role]}` : '', m.appVersion ? `Fibo ${m.appVersion}` : ''].filter(Boolean);
   return (
     <View
       style={[

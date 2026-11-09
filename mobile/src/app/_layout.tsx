@@ -17,19 +17,19 @@ function useLocked() {
     let live = true;
     settings.ready.then(async () => {
       if (!settings.get().lock) return live && setLocked(false);
-      const ok = await verify('打开 Mooring');
+      const ok = await verify('打开 Fibo');
       if (live) setLocked(!ok);
     });
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'background' && settings.get().lock) setLocked(true);
-      if (s === 'active' && settings.get().lock) verify('打开 Mooring').then((ok) => ok && setLocked(false));
+      if (s === 'active' && settings.get().lock) verify('打开 Fibo').then((ok) => ok && setLocked(false));
     });
     return () => {
       live = false;
       sub.remove();
     };
   }, []);
-  return [locked && lock, () => verify('打开 Mooring').then((ok) => ok && setLocked(false))] as const;
+  return [locked && lock, () => verify('打开 Fibo').then((ok) => ok && setLocked(false))] as const;
 }
 
 export default function Layout() {

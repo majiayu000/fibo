@@ -273,7 +273,7 @@ async function connect(id: string) {
   } catch (e) {
     // The connection still up means the machine itself said no: say what it said, not
     // that the network is down.
-    if (!r.ended) refusal = `电脑上的 Mooring 没接受这台手机：${(e as Error).message}`;
+    if (!r.ended) refusal = `电脑上的 Fibo 没接受这台手机：${(e as Error).message}`;
     r.close();
   }
 }
@@ -407,7 +407,7 @@ export const supports = (m: Machine | undefined, op: string) => !!m && m.status 
 export const speaksV2 = (m: Machine | undefined) => !!m?.os;
 
 /** What a screen says instead of its data when the machine lacks the op. */
-export const NOT_YET = '这台电脑的 Mooring 还不支持，更新后可用';
+export const NOT_YET = '这台电脑的 Fibo 还不支持，更新后可用';
 
 export const getMachine = get;
 

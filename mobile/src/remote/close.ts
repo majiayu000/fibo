@@ -52,7 +52,7 @@ export function closeOutcome(code?: number, reason?: string): Outcome {
     case Close.ROLE_CHANGED:
       return { status: 'offline', retry: 'now', text: '这台手机的权限改了，正在按新权限重连' };
     case Close.MACHINE_GONE:
-      return { status: 'offline', retry: 'later', text: '电脑上的 Mooring 不在线' };
+      return { status: 'offline', retry: 'later', text: '电脑上的 Fibo 不在线' };
     case Close.TOO_SLOW:
       return { status: 'offline', retry: 'later', text: '网络太慢，中继断开了连接' };
     case undefined:

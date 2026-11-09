@@ -174,7 +174,7 @@ export function holdLeft(h: Hold, now: number): number {
 
 /** The home screen's title: what is yours to decide. Finished work to check is not counted. */
 export function headline(s: Shelf, paired: number): string {
-  if (paired === 0) return 'Mooring';
+  if (paired === 0) return 'Fibo';
   return s.acts > 0 ? `${s.acts} 件要你决定` : '没有要你决定的事';
 }
 
