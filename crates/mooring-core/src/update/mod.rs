@@ -13,7 +13,7 @@
 //!   why `package-macos.py` swaps the same way. The app then quits and starts the new
 //!   bundle, whose host takes the terminals over from the old one, as after a manual swap.
 //!   Any failed check removes what was extracted and leaves the installed app untouched.
-//! - **Where not.** A bundle Homebrew manages is left to `brew upgrade --cask mooring`, and one
+//! - **Where not.** A bundle Homebrew manages is left to `brew upgrade --cask fibo`, and one
 //!   this user cannot replace (owned by root, a read-only volume) gets the release page.
 mod install;
 mod release;

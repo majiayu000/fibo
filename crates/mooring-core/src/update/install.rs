@@ -48,7 +48,7 @@ pub fn check(url: &str, current: &Version, arch: &str, tools: &dyn Tools) -> Res
 /// Why an update did not install. The installed app is untouched in every case.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Failure {
-    /// Homebrew installed this app; `brew upgrade --cask mooring` updates it.
+    /// Homebrew installed this app; `brew upgrade --cask fibo` updates it.
     Homebrew,
     /// This user cannot replace the bundle where it is; the release page has the download.
     NoPermission(String),

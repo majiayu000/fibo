@@ -11,15 +11,25 @@
 [![GitHub stars](https://img.shields.io/github/stars/majiayu000/mooring?style=flat-square&color=ffcc00)](https://github.com/majiayu000/mooring)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[Website](https://fibo.page) | [Build from source](#build-from-source) | [What it does](#what-it-does) | [FAQ](#faq) | [中文](README_CN.md)
+[Website](https://fibo.page) | [Install](#install) | [What it does](#what-it-does) | [FAQ](#faq) | [中文](README_CN.md)
 
 </div>
 
 ---
 
-> **Status:** in daily use but not released yet: there is no download, build it from source. Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
+> **Status:** first release, [v0.1.0](https://github.com/majiayu000/mooring/releases/latest): Apple silicon, macOS 14 or later, signed and notarized. Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
 
-## Build from source
+## Install
+
+Download `Fibo-<version>-arm64.dmg` from the [latest release](https://github.com/majiayu000/mooring/releases/latest) and drag Fibo to Applications, or use Homebrew:
+
+```sh
+brew install --cask majiayu000/tap/fibo
+```
+
+Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in the sidebar. Releases update themselves (see [How do I update?](#faq)).
+
+### Build from source
 
 You need macOS, Xcode, [Zig](https://ziglang.org/download/) 0.16.x and [rustup](https://rustup.rs) (the Rust version is pinned in `rust-toolchain.toml`).
 
@@ -44,7 +54,7 @@ Terminals live in a background host (`fibo serve`), not in the window. Quit, upd
 
 ### 03 · Any agent CLI
 
-Claude Code, Codex, Grok Build, Cursor Agent, Qoder CLI, Hermes, Factory Droid, Pi, oh-my-pi and DeepSeek Harness are built in. Fibo reads the session records and events each tool provides; see the [integration boundaries](docs/decisions/2026-11-07-more-agent-inputs.md) for supported formats, child relationships and state signals. Others are added with a JSON plugin (OpenCode ships as an example). Any program can report its own state with one `printf`, using the OSC 7501 status protocol:
+Claude Code, Codex, Grok Build, Cursor Agent, Qoder CLI, Hermes, Factory Droid, Pi, oh-my-pi, DeepSeek Harness, Kimi Code and Gemini CLI are built in. Fibo reads the session records and events each tool provides; see the [integration boundaries](docs/decisions/2026-11-07-more-agent-inputs.md) for supported formats, child relationships and state signals. Others are added with a JSON plugin (OpenCode ships as an example). Any program can report its own state with one `printf`, using the OSC 7501 status protocol:
 
 ```sh
 printf '\033]7501;state=working:app=deploy:progress=30\033\\'
@@ -87,7 +97,7 @@ Terminals and the session index live in `~/.local/share/fibo-workbench`, setting
 The update check is the only network request the app makes on its own: at most once a day, one `GET` to the GitHub API for the latest release, turned off under Settings › About › Check for updates automatically. The phone relay connects only after you turn it on; everything else that goes online waits for you: fetching the remote plugin catalog, a webhook or an SSH machine you added, a plugin you installed.
 
 **How do I update?**
-A release build checks GitHub once a day and shows the new version in the status bar; click it, or use Settings › About › Check for updates. Fibo downloads the release zip, checks it against the release's `SHA256SUMS`, checks that it is signed by Fibo's Developer ID (team `C5UWZ934C2`) and passes Gatekeeper, swaps it in place of the running app and restarts; every terminal keeps running. Nothing is installed if a check fails. Installed with Homebrew: run `brew upgrade --cask mooring`. In a folder you cannot write to (an app owned by root): download it from the release page. A build from source never updates itself; `git pull` and rebuild.
+A release build checks GitHub once a day and shows the new version in the status bar; click it, or use Settings › About › Check for updates. Fibo downloads the release zip, checks it against the release's `SHA256SUMS`, checks that it is signed by Fibo's Developer ID (team `C5UWZ934C2`) and passes Gatekeeper, swaps it in place of the running app and restarts; every terminal keeps running. Nothing is installed if a check fails. Installed with Homebrew: run `brew upgrade --cask fibo`. In a folder you cannot write to (an app owned by root): download it from the release page. A build from source never updates itself; `git pull` and rebuild.
 
 **Does Fibo change my agent settings?**
 Only when you install hooks (`fibo hooks install`), which adds Fibo's entries to the agent's settings file; `fibo hooks uninstall` removes them. Without hooks, state comes from transcripts and the screen.

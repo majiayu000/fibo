@@ -11,15 +11,25 @@
 [![GitHub stars](https://img.shields.io/github/stars/majiayu000/mooring?style=flat-square&color=ffcc00)](https://github.com/majiayu000/mooring)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[官网](https://fibo.page) | [从源码构建](#从源码构建) | [能做什么](#能做什么) | [常见问题](#常见问题) | [English](README.md)
+[官网](https://fibo.page) | [安装](#安装) | [能做什么](#能做什么) | [常见问题](#常见问题) | [English](README.md)
 
 </div>
 
 ---
 
-> **现状：** 已经在日常使用，但还没有发布，没有安装包，需要从源码构建。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
+> **现状：** 第一个发布版 [v0.1.0](https://github.com/majiayu000/mooring/releases/latest)：Apple 芯片，macOS 14 及以上，已签名并经 Apple 公证。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
 
-## 从源码构建
+## 安装
+
+从[最新发布](https://github.com/majiayu000/mooring/releases/latest)下载 `Fibo-<版本>-arm64.dmg`，把 Fibo 拖进「应用程序」；或者用 Homebrew：
+
+```sh
+brew install --cask majiayu000/tap/fibo
+```
+
+打开 Fibo，在它的终端里运行 `claude` 或 `codex`，会话就会出现在左栏。发布版会自己更新（见[常见问题](#常见问题)里的「怎么更新」）。
+
+### 从源码构建
 
 需要 macOS、Xcode、[Zig](https://ziglang.org/download/) 0.16.x 和 [rustup](https://rustup.rs)（Rust 版本固定在 `rust-toolchain.toml`）。
 
@@ -44,7 +54,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./run.sh
 
 ### 03 · 什么 Agent 都能接
 
-内置 Claude Code、Codex、Grok Build、Cursor Agent、Qoder CLI，以及 Hermes、Factory Droid、Pi、oh-my-pi、DeepSeek Harness。Fibo 读取各工具提供的会话记录和事件；各新增工具的父子关系、格式和状态边界见[接入说明](docs/decisions/2026-11-07-more-agent-inputs.md)。别的 CLI 用一个 JSON 插件接入（自带 OpenCode 示例）。任何程序都能用 OSC 7501 状态协议，一行 `printf` 报告自己的状态：
+内置 Claude Code、Codex、Grok Build、Cursor Agent、Qoder CLI，以及 Hermes、Factory Droid、Pi、oh-my-pi、DeepSeek Harness、Kimi Code、Gemini CLI。Fibo 读取各工具提供的会话记录和事件；各新增工具的父子关系、格式和状态边界见[接入说明](docs/decisions/2026-11-07-more-agent-inputs.md)。别的 CLI 用一个 JSON 插件接入（自带 OpenCode 示例）。任何程序都能用 OSC 7501 状态协议，一行 `printf` 报告自己的状态：
 
 ```sh
 printf '\033]7501;state=working:app=deploy:progress=30\033\\'
@@ -87,7 +97,7 @@ fibo plugins          # 哪些插件生效了，没生效的为什么
 检查更新是 App 唯一会自己发出的网络请求：每天最多一次，向 GitHub API 要一次最新发布的信息；在「设置 › 关于 › 自动检查更新」里关掉。手机中继要你开启后才连；其余联网都等你动手：获取远程插件目录、你加的 webhook 和 SSH 电脑、你装的插件。
 
 **怎么更新？**
-发布版每天向 GitHub 查一次，有新版本时状态栏会显示，点它或在「设置 › 关于 › 检查更新」里更新。Fibo 下载发布的 zip，按发布里的 `SHA256SUMS` 校验，确认是 Fibo 的 Developer ID（团队 `C5UWZ934C2`）签名并通过 Gatekeeper，再把它换到正在运行的 App 的位置并重启；终端都继续运行。任何一项校验不通过都不会安装。用 Homebrew 装的请运行 `brew upgrade --cask mooring`；App 所在的文件夹没有写权限（比如 App 属于 root）时请从发布页下载。从源码运行的版本不自动更新，`git pull` 后重新构建。
+发布版每天向 GitHub 查一次，有新版本时状态栏会显示，点它或在「设置 › 关于 › 检查更新」里更新。Fibo 下载发布的 zip，按发布里的 `SHA256SUMS` 校验，确认是 Fibo 的 Developer ID（团队 `C5UWZ934C2`）签名并通过 Gatekeeper，再把它换到正在运行的 App 的位置并重启；终端都继续运行。任何一项校验不通过都不会安装。用 Homebrew 装的请运行 `brew upgrade --cask fibo`；App 所在的文件夹没有写权限（比如 App 属于 root）时请从发布页下载。从源码运行的版本不自动更新，`git pull` 后重新构建。
 
 **Fibo 会改我的 Agent 配置吗？**
 只有安装 hook（`fibo hooks install`）时会在 Agent 的配置文件里加上 Fibo 的条目，`fibo hooks uninstall` 会移除。不装 hook 时，状态从对话记录和画面读。
