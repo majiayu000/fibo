@@ -402,7 +402,7 @@ impl Workbench {
                         .rounded_full()
                         .border(px(T::BORDER_WIDTH))
                         .border_color(T::color(F::chip_line()))
-                        .bg(T::color(F::bg()))
+                        .bg(T::surface(F::bg()))
                         .text_size(px(F::TAG))
                         .text_color(T::color(F::second()))
                         .cursor_pointer()
