@@ -72,9 +72,18 @@ fn remote_diff_reads_changes_and_untracked_files_and_caps_patches() {
     fs::write(repo.join("new.txt"), "fresh\nfile\n").unwrap();
     h.launch("in-repo", &repo, "sleep 60");
 
-    // A read: the view role may ask.
-    let mut r = Remote::open(&h, Some("view"), &[]);
+    // A lesser role gets no git run here: no conversation in this terminal, nothing listed.
+    let mut view = Remote::open(&h, Some("view"), &[]);
+    let d = view.ok(json!({ "op": "diff", "terminal": "in-repo" }));
+    assert_eq!(
+        (&d["summary"], &d["files"]),
+        (&json!(true), &json!([])),
+        "{d}"
+    );
+    // The full role reads the work tree.
+    let mut r = Remote::open(&h, Some("full"), &[]);
     let d = r.ok(json!({ "op": "diff", "terminal": "in-repo" }));
+    assert!(d.get("summary").is_none(), "{d}");
     let top = fs::canonicalize(&repo).unwrap();
     assert_eq!(fs::canonicalize(d["cwd"].as_str().unwrap()).unwrap(), top);
     assert_eq!(d["branch"], "main");
