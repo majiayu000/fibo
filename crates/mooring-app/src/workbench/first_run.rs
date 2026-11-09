@@ -157,7 +157,7 @@ impl Workbench {
                             .text_size(px(T::FORM_TITLE))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(T::color(T::primary()))
-                            .child(t!("欢迎使用 Mooring")),
+                            .child(t!("欢迎使用 Fibo")),
                     )
                     .child(label({
                         use mooring_core::status::Status;
@@ -247,7 +247,7 @@ impl Workbench {
         let names: Vec<&str> = hooks.iter().map(|h| h.name.as_str()).collect();
         let all_current = hooks.iter().all(|h| h.state == State::Current);
         let unreadable = hooks.iter().find(|h| h.state == State::Unreadable);
-        let mut body = div().flex().flex_col().gap(px(T::S6)).child(label(t!("推荐装上：{agents} 的状态和审批就不靠猜画面。会在 {files} 里加几条 Mooring 的条目，只在 Mooring 的终端里起作用，在别处什么都不做。撤销：设置 › 关于，或在 Mooring 终端里运行 mooring hooks uninstall。", agents = names.join(t!("、")), files = files.join(t!("、")))));
+        let mut body = div().flex().flex_col().gap(px(T::S6)).child(label(t!("推荐装上：{agents} 的状态和审批就不靠猜画面。会在 {files} 里加几条 Fibo 的条目，只在 Fibo 的终端里起作用，在别处什么都不做。撤销：设置 › 关于，或在 Fibo 终端里运行 fibo hooks uninstall。", agents = names.join(t!("、")), files = files.join(t!("、")))));
         let control = if all_current {
             label(t!("已安装")).into_any_element()
         } else if let Some(h) = unreadable {

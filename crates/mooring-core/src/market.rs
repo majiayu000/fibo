@@ -280,7 +280,7 @@ impl Entry {
         }
         if let Some(level) = self.mooring.filter(|l| *l > plugin::LEVEL) {
             return Err(format!(
-                "要更新 Mooring 才能装 {}：它需要插件级别 {level}，这个版本是 {}",
+                "要更新 Fibo 才能装 {}：它需要插件级别 {level}，这个版本是 {}",
                 self.id,
                 plugin::LEVEL
             ));

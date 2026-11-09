@@ -31,7 +31,7 @@ pub(super) fn start(home: &Path) {
                             Err(e) => {
                                 let next = e.to_string();
                                 if next != error {
-                                    eprintln!("mooring: Hermes 读不了：{next}");
+                                    eprintln!("fibo: Hermes 读不了：{next}");
                                 }
                                 error = next;
                             }

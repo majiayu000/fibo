@@ -1,4 +1,4 @@
-# Mooring bash integration. Mooring starts interactive bash with --init-file pointing
+# Fibo bash integration. Fibo starts interactive bash with --init-file pointing
 # here, which bash reads instead of ~/.bashrc; so this file first loads the user's own
 # startup files the way bash itself would, then reports the working directory with
 # OSC 7 (file://host/path, percent-encoded) so new tabs and splits open where you are, and
@@ -38,7 +38,7 @@ _mooring_report_pwd() {
 }
 # Reads the command's status, ends its mark and hands the status on unchanged, so a
 # prompt command that shows it still sees the command's own. A prompt with no command
-# before it also says D; Mooring only counts a D that follows a C.
+# before it also says D; Fibo only counts a D that follows a C.
 _mooring_prompt() {
     builtin local status=$?
     builtin printf '\e]133;D;%s\e\\' "$status"

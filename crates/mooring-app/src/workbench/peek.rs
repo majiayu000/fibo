@@ -291,7 +291,7 @@ impl Workbench {
             Some(r) if read_only => {
                 let linked = r.slot.lock().unwrap().is_some();
                 let why = if linked {
-                    "只读：那边的 Mooring 太旧，更新后才能打字"
+                    "只读：那边的 Fibo 太旧，更新后才能打字"
                 } else {
                     "只读：没连上"
                 };

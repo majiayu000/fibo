@@ -48,7 +48,7 @@ fn a_grok_tui_is_bound_through_its_own_registry_and_its_stream_drives_the_card()
         record(
             now,
             serde_json::json!({"sessionUpdate": "user_message_chunk",
-                "content": {"type": "text", "text": "给 Mooring 接上 Grok"}}),
+                "content": {"type": "text", "text": "给 Fibo 接上 Grok"}}),
         ),
     )
     .unwrap();
@@ -73,7 +73,7 @@ fn a_grok_tui_is_bound_through_its_own_registry_and_its_stream_drives_the_card()
     assert_eq!(s.runtime, Agent::Grok);
     assert_eq!(s.cli_session_id, "01a1-live");
     assert_eq!(s.cwd, "/Users/me/repo");
-    assert_eq!(c.title, "给 Mooring 接上 Grok");
+    assert_eq!(c.title, "给 Fibo 接上 Grok");
     assert_eq!(c.hidden_reason(), None);
     let mut file = fs::OpenOptions::new()
         .append(true)

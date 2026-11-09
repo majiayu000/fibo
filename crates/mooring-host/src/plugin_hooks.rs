@@ -236,7 +236,7 @@ fn spawn(h: &Hook, p: Payload) {
         .submit(&plugin, (h.clone(), p));
     if let Some((old, event)) = dropped {
         eprintln!(
-            "mooring: hook {} ({}) dropped: {MAX_QUEUED} events already waiting",
+            "fibo: hook {} ({}) dropped: {MAX_QUEUED} events already waiting",
             old.id,
             event.event.name()
         );
@@ -275,7 +275,7 @@ fn pump() {
                 );
             }
             if let Err(e) = result {
-                eprintln!("mooring: hook {} ({}) failed: {e}", h.id, p.event.name());
+                eprintln!("fibo: hook {} ({}) failed: {e}", h.id, p.event.name());
             }
             SCHEDULER
                 .lock()

@@ -95,6 +95,10 @@ pub fn start_after_exit(
     Ok(())
 }
 
+pub fn become_command(command: &mut Command) -> io::Error {
+    command.exec()
+}
+
 pub fn exit_now(code: i32) -> ! {
     // SAFETY: ends the process; nothing runs after it.
     unsafe { libc::_exit(code) }

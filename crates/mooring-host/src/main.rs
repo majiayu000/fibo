@@ -15,7 +15,7 @@ fn main() {
     let code = match ran {
         Ok(()) => 0,
         Err(err) => {
-            eprintln!("mooring: {err}");
+            eprintln!("fibo: {err}");
             1
         }
     };
@@ -27,9 +27,9 @@ fn main() {
 /// exited with EMFILE, leaving every pane black. Raise the soft limit as far as allowed.
 fn raise_open_file_limit() {
     match mooring_platform::process::raise_open_file_limit() {
-        Ok(Some(wanted)) => eprintln!("mooring: open file limit raised to {wanted}"),
+        Ok(Some(wanted)) => eprintln!("fibo: open file limit raised to {wanted}"),
         Ok(None) => (),
-        Err(e) => eprintln!("mooring: open file limit: {e}"),
+        Err(e) => eprintln!("fibo: open file limit: {e}"),
     }
 }
 
@@ -110,7 +110,7 @@ fn run() -> std::io::Result<()> {
                 Some("session") => print!("{}", control::SESSION_SKILL),
                 Some(other) => {
                     return Err(std::io::Error::other(format!(
-                        "没有叫 {other} 的说明；有：mooring --skill、mooring --skill plugins、mooring --skill session"
+                        "没有叫 {other} 的说明；有：fibo --skill、fibo --skill plugins、fibo --skill session"
                     )))
                 }
             }

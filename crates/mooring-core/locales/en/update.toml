@@ -6,7 +6,7 @@
 "自动检查更新" = "Check for updates automatically"
 "更新 升级 新版本 update release 发布页" = "update upgrade new version release download page"
 "更新 联网 网络 隐私 自动 update" = "update online network privacy automatic"
-"每天最多一次，只向 GitHub 问最新的版本号；这是 Mooring 唯一会自己发出的网络请求" = "At most once a day, Mooring asks GitHub for the latest version number; this is the only network request Mooring makes on its own"
+"每天最多一次，只向 GitHub 问最新的版本号；这是 Fibo 唯一会自己发出的网络请求" = "At most once a day, Fibo asks GitHub for the latest version number; this is the only network request Fibo makes on its own"
 "{current} · 从源码运行的版本不自动更新，用 git pull 后重新构建" = "{current} · A build from source doesn't update itself; git pull and rebuild"
 "当前 {current}" = "Current {current}"
 "{current} 已是最新版本" = "{current} is the latest version"
@@ -34,7 +34,7 @@
 "已装好新版本，但没能自动重启（{e}），请退出后重新打开" = "The new version is installed but couldn't restart ({e}); quit and open it again"
 
 [install]
-"这份 Mooring 由 Homebrew 安装，请运行 {v1}" = "This Mooring was installed with Homebrew; run {v1}"
+"这份 Fibo 由 Homebrew 安装，请运行 {v1}" = "This Fibo was installed with Homebrew; run {v1}"
 "没有权限替换这份 App（{why}），请从发布页下载" = "No permission to replace this App ({why}); download it from the release page"
 "下载失败：{why}" = "Download failed: {why}"
 "校验没通过，没有安装：{why}" = "Verification failed, nothing installed: {why}"
@@ -45,7 +45,7 @@
 "SHA256SUMS 里没有 {name} 的校验和" = "SHA256SUMS has no checksum for {name}"
 "{name} 的 SHA-256 是 {actual}，SHA256SUMS 写的是 {expected}" = "{name} has SHA-256 {actual}, SHA256SUMS says {expected}"
 "解不开 {name}：{e}" = "Couldn't unpack {name}: {e}"
-"压缩包里应当只有一个 Mooring.app" = "The archive should hold exactly one Mooring.app"
+"压缩包里应当只有一个 Fibo.app" = "The archive should hold exactly one Fibo.app"
 "包标识是 {id}，不是 {BUNDLE_ID}" = "Bundle identifier is {id}, not {BUNDLE_ID}"
 "App 自称 {got}，发布写的是 {version}" = "The App says it is {got}, the release says {version}"
 "签名无效：{e}" = "Invalid signature: {e}"

@@ -72,8 +72,8 @@
 "Agent 提问或请求批准；同一次等待只提醒一次" = "An Agent asks a question or requests approval; once per wait"
 "出错停下" = "Stopped on error"
 "Agent 报错中断；同一条错误只提醒一次" = "An Agent stops with an error; once per error"
-"只提醒由 Mooring 打开的会话；你正看着的那个终端不会打扰你。" = "Only sessions opened by Mooring notify you, and never the terminal you're looking at."
-"首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Mooring 重新允许。" = "macOS asks for permission the first time. If you declined, allow it again in System Settings → Notifications → Mooring."
+"只提醒由 Fibo 打开的会话；你正看着的那个终端不会打扰你。" = "Only sessions opened by Fibo notify you, and never the terminal you're looking at."
+"首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Fibo 重新允许。" = "macOS asks for permission the first time. If you declined, allow it again in System Settings → Notifications → Fibo."
 
 [panel]
 "搜索结果" = "Search results"
@@ -99,7 +99,7 @@
 "自动找那台电脑上的 mooring" = "Finds mooring on that computer automatically"
 "移除" = "Remove"
 "加一台电脑" = "Add a computer"
-"填 ssh 能免密登录的主机名；那台电脑上要装着 Mooring。侧栏里只看，不能打字" = "A host name ssh can log in to without a password, with Mooring installed. View-only in the sidebar; you can't type"
+"填 ssh 能免密登录的主机名；那台电脑上要装着 Fibo。侧栏里只看，不能打字" = "A host name ssh can log in to without a password, with Fibo installed. View-only in the sidebar; you can't type"
 "添加" = "Add"
 "{host} 已经加过了" = "{host} is already added"
 "没存上：{e}" = "Couldn't save: {e}"

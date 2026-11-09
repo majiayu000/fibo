@@ -57,7 +57,7 @@ fn the_skill_names_the_marker_and_every_command() {
     // Every command and every flag it takes, so the skill cannot fall behind the table.
     let named = flags_in(SKILL, "");
     for c in COMMANDS {
-        assert!(SKILL.contains(&format!("mooring {}", c.name)), "{}", c.name);
+        assert!(SKILL.contains(&format!("fibo {}", c.name)), "{}", c.name);
         for f in declared(c) {
             assert!(named.contains(&f), "{} --{f}", c.name);
         }
@@ -88,7 +88,7 @@ fn every_command_documents_exactly_the_flags_it_takes() {
     for c in COMMANDS {
         assert_eq!(flags_in(c.usage, c.name), declared(c), "{}", c.name);
         for line in c.usage.lines().filter(|l| !l.starts_with(' ')) {
-            assert!(line.starts_with(&format!("mooring {}", c.name)), "{line}");
+            assert!(line.starts_with(&format!("fibo {}", c.name)), "{line}");
         }
         assert!(usage().contains(c.usage), "{}", c.name);
     }

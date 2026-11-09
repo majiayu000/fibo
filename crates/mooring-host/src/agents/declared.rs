@@ -157,7 +157,7 @@ impl Adapter for Declared {
             note: TerminalNote {
                 note: format!("{} · 没有对话记录", self.spec.executable),
                 why: format!(
-                    "{name} 的声明（{}）没有写 transcripts，Mooring 认得出它在运行，但读不到对话，所以不能挂到待办或从菜单停止。",
+                    "{name} 的声明（{}）没有写 transcripts，Fibo 认得出它在运行，但读不到对话，所以不能挂到待办或从菜单停止。",
                     self.spec.file.as_deref().unwrap_or(Path::new("")).display()
                 ),
             },

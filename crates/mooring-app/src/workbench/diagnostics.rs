@@ -326,7 +326,7 @@ impl DiagnosticView {
                 spinner(),
                 div()
                     .text_color(T::color(T::primary()))
-                    .child("连接 Mooring 后台…")
+                    .child("连接 Fibo 后台…")
                     .into_any_element(),
             ));
         }

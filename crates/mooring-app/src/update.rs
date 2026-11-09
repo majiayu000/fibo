@@ -59,7 +59,9 @@ impl Updates {
             .and_then(|exe| core::packaged_bundle(&exe))
             .and_then(|bundle| {
                 let info = system().bundle_info(&bundle).ok()?;
-                (info.id == core::BUNDLE_ID).then_some((bundle, info.version))
+                [core::BUNDLE_ID, core::OLD_BUNDLE_ID]
+                    .contains(&info.id.as_str())
+                    .then_some((bundle, info.version))
             });
         let (bundle, current) = match packaged {
             Some((bundle, version)) => (Some(bundle), Version::parse(&version).unwrap_or(built)),

@@ -77,7 +77,7 @@ pub fn select(api: &ApiRelease, arch: &str) -> Result<Release, String> {
         })
     };
     Ok(Release {
-        zip: find(&format!("Mooring-{version}-{arch}.zip")),
+        zip: find(&format!("Fibo-{version}-{arch}.zip")),
         sums: find("SHA256SUMS"),
         version,
         page: api.html_url.clone(),

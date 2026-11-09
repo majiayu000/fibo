@@ -44,11 +44,11 @@ impl Spec {
     pub fn command(&self) -> Vec<String> {
         let run = match &self.path {
             Some(path) => format!("exec {} remote --stdio", quote(path)),
-            // On its PATH, else the app bundle in ~/Applications, else /Applications.
+            // On its PATH (by the new name, then the old), else the app bundle in
+            // ~/Applications, else /Applications; Fibo.app, else one installed as Mooring.app.
             None => [
-                "p=$(command -v mooring)",
-                "[ -n \"$p\" ] || p=\"$HOME/Applications/Mooring.app/Contents/MacOS/mooring\"",
-                "[ -x \"$p\" ] || p=/Applications/Mooring.app/Contents/MacOS/mooring",
+                "p=$(command -v fibo || command -v mooring)",
+                "for d in \"$HOME/Applications\" /Applications; do for a in Fibo Mooring; do [ -x \"$p\" ] || p=\"$d/$a.app/Contents/MacOS/mooring\"; done; done",
                 "exec \"$p\" remote --stdio",
             ]
             .join("; "),
@@ -368,7 +368,7 @@ fn run_once(
 /// The machine answered but its host is not there to ask: Mooring is not open on it.
 fn not_running(e: io::Error) -> io::Error {
     if e.to_string().starts_with("RPC connect") {
-        io::Error::other("那台电脑上的 Mooring 没打开")
+        io::Error::other("那台电脑上的 Fibo 没打开")
     } else {
         e
     }
@@ -604,9 +604,8 @@ mod tests {
             quiet: false,
         };
         let probe = unnamed.command().last().unwrap().clone();
-        assert!(probe.contains("command -v mooring"));
-        assert!(probe.contains("$HOME/Applications/Mooring.app"));
-        assert!(probe.contains("p=/Applications/Mooring.app"));
+        assert!(probe.contains("command -v fibo || command -v mooring"));
+        assert!(probe.contains("for a in Fibo Mooring"));
     }
 
     fn spec(host: &str, quiet: bool) -> Spec {

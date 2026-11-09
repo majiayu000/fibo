@@ -24,14 +24,14 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
 }
 
 fn usage_error() -> io::Error {
-    io::Error::other("用法：mooring claude-quota status <数据目录> | usage | setup | teardown")
+    io::Error::other("用法：fibo claude-quota status <数据目录> | usage | setup | teardown")
 }
 
 /// Mooring hands a plugin command its data directory.
 fn data_dir() -> io::Result<PathBuf> {
     let dir = std::env::var_os("MOORING_PLUGIN_DATA")
         .map(PathBuf::from)
-        .ok_or_else(|| io::Error::other("要由 Mooring 运行：缺少 MOORING_PLUGIN_DATA"))?;
+        .ok_or_else(|| io::Error::other("要由 Fibo 运行：缺少 MOORING_PLUGIN_DATA"))?;
     mooring_platform::fs::create_private_dir(&dir)?;
     Ok(dir)
 }

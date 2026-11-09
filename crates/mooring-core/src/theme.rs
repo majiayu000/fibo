@@ -216,7 +216,7 @@ impl ThemeFile {
                 "format" => match value.as_u64() {
                     Some(format) if format <= FORMAT => {}
                     Some(format) => out.problems.push(format!(
-                        "这个主题是为更新的 Mooring 写的（格式 {format}），不认识的部分已跳过"
+                        "这个主题是为更新的 Fibo 写的（格式 {format}），不认识的部分已跳过"
                     )),
                     None => out
                         .problems

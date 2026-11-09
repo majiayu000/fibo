@@ -12,10 +12,10 @@ pub(super) fn todo(a: Args) -> io::Result<()> {
         "add" => add(a),
         "note" => note(a),
         "done" | "complete" | "close" => Err(io::Error::other(
-            "待办只由用户在窗口里标记完成，Agent 不能标；把结果写成 mooring todo note，等用户看",
+            "待办只由用户在窗口里标记完成，Agent 不能标；把结果写成 fibo todo note，等用户看",
         )),
         other => Err(io::Error::other(format!(
-            "没有 mooring todo {other}\n用法：\n{}",
+            "没有 fibo todo {other}\n用法：\n{}",
             a.usage
         ))),
     }
@@ -53,7 +53,7 @@ fn pick<'a>(w: &'a Workspace, a: &Args) -> io::Result<&'a Task> {
             .and_then(|t| w.terminal_task(&t))
             .ok_or_else(|| {
                 io::Error::other(
-                    "这个终端没有关联待办：用 --task <待办> 指定，mooring todo list 能看编号",
+                    "这个终端没有关联待办：用 --task <待办> 指定，fibo todo list 能看编号",
                 )
             });
     };
@@ -107,7 +107,7 @@ fn pick_space(w: &Workspace, a: &Args) -> io::Result<String> {
         spaces => {
             let names: Vec<&str> = spaces.iter().map(|s| s.name.as_str()).collect();
             Err(io::Error::other(format!(
-                "不在 Mooring 终端里，用 --space <空间> 说记到哪：{}",
+                "不在 Fibo 终端里，用 --space <空间> 说记到哪：{}",
                 names.join("、")
             )))
         }

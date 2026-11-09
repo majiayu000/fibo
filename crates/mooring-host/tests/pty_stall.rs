@@ -157,7 +157,7 @@ fn pty_floor_without_host() {
     latency.sort_unstable();
     gaps.sort_unstable();
     let line = format!(
-        "不经过 Mooring 的对照（{terminals} 个裸 PTY，{producer}，标题每 {title_ms}ms，{seconds}s）：延迟 p50 {:.2} / p99 {:.2} / p99.9 {:.2} / 最大 {:.2}（{} 行）；间隔 p99 {:.2} / 最大 {:.2}",
+        "不经过 Fibo 的对照（{terminals} 个裸 PTY，{producer}，标题每 {title_ms}ms，{seconds}s）：延迟 p50 {:.2} / p99 {:.2} / p99.9 {:.2} / 最大 {:.2}（{} 行）；间隔 p99 {:.2} / 最大 {:.2}",
         ms(percentile(&latency, 0.5)),
         ms(percentile(&latency, 0.99)),
         ms(percentile(&latency, 0.999)),

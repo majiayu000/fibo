@@ -8,8 +8,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub const USAGE: &str = "\
-mooring themes [文件或目录]                 按 App 的规则检查主题：跳过了什么、图在不在、对比度够不够
-mooring themes names                       列出主题能写的全部键";
+fibo themes [文件或目录]                 按 App 的规则检查主题：跳过了什么、图在不在、对比度够不够
+fibo themes names                       列出主题能写的全部键";
 fn folder() -> io::Result<PathBuf> {
     mooring_core::agent::config_dir()
         .map(|config| config.join("themes"))

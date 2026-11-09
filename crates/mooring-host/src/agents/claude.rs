@@ -353,7 +353,7 @@ impl Adapter for Claude {
             text: CLAUDE_TRANSCRIPT_OFF.into(),
             note: TerminalNote {
                 note: "claude · 没有保存记录".into(),
-                why: "这个 Claude 继承了 CLAUDE_CODE_CHILD_SESSION，自认为是别的会话的子会话，不写对话记录，Mooring 读不到也统计不了。关掉这个终端重新打开，再运行 claude。".into(),
+                why: "这个 Claude 继承了 CLAUDE_CODE_CHILD_SESSION，自认为是别的会话的子会话，不写对话记录，Fibo 读不到也统计不了。关掉这个终端重新打开，再运行 claude。".into(),
             },
         })
     }

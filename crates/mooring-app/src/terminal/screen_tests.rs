@@ -375,7 +375,7 @@ fn cell_aspect_ratio_stays_within_five_percent_of_ghostty_for_the_resolved_font(
     let delta = mooring(face_height) / ghostty - 1.;
     assert!(
         delta.abs() <= 0.05,
-        "{path}: Mooring cell h/w {:.3} vs Ghostty {ghostty:.3} ({:+.1}%)",
+        "{path}: Fibo cell h/w {:.3} vs Ghostty {ghostty:.3} ({:+.1}%)",
         mooring(face_height),
         delta * 100.
     );

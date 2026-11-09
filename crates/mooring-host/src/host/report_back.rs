@@ -104,7 +104,7 @@ fn turn_end(w: &Workspace, child: &str) -> Option<(String, String)> {
                 "" => return None,
                 reply => reply.to_owned(),
             },
-            format!("要它接着做：mooring prompt {child} \"…\"；看画面：mooring read {child}"),
+            format!("要它接着做：fibo prompt {child} \"…\"；看画面：fibo read {child}"),
         ),
         Event::Waiting => (
             format!(
@@ -113,18 +113,18 @@ fn turn_end(w: &Workspace, child: &str) -> Option<(String, String)> {
             ),
             format!("它在等回答：{}", c.waiting.trim()),
             format!(
-                "看画面：mooring read {child}；替它回答前先问用户，用户同意后 mooring prompt {child} --force \"…\""
+                "看画面：fibo read {child}；替它回答前先问用户，用户同意后 fibo prompt {child} --force \"…\""
             ),
         ),
         Event::Error => (
             format!("error:{}:{}:{}", c.turn_key, c.turn_started, c.error),
             format!("出错了：{}", c.error.trim()),
-            format!("看画面：mooring read {child}"),
+            format!("看画面：fibo read {child}"),
         ),
         Event::Started | Event::CommandDone | Event::CommandFailed => return None,
     };
     let text = format!(
-        "<mooring from=\"{child}\" agent=\"{agent}\" event=\"{}\">\n{}\n</mooring>\n这是你用 mooring run 派出去的 {agent} 的汇报，不是用户说的话。{hint}",
+        "<mooring from=\"{child}\" agent=\"{agent}\" event=\"{}\">\n{}\n</mooring>\n这是你用 fibo run 派出去的 {agent} 的汇报，不是用户说的话。{hint}",
         event.name(),
         clean(&body),
     );
@@ -230,7 +230,7 @@ mod tests {
         let (to, text) = &sent[0];
         assert_eq!(to, "parent");
         assert!(text.starts_with("<mooring from=\"child\" agent=\"Codex\" event=\"done\">\n改好了，测试 12 个全过\n</mooring>"), "{text}");
-        assert!(text.contains("不是用户说的话") && text.contains("mooring prompt child"));
+        assert!(text.contains("不是用户说的话") && text.contains("fibo prompt child"));
         assert!(r.plan(&w).is_empty(), "once");
         // The same turn read again under another key says the same: not sent twice.
         let mut reread = content(Turn::Completed, "改好了，测试 12 个全过", 2);

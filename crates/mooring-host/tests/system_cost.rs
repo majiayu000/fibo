@@ -339,7 +339,7 @@ fn how_much_a_host_costs() {
         let out = cli(&host.root).args(["list", "--json"]).output().unwrap();
         assert!(out.status.success());
     });
-    eprintln!("a whole `mooring list`: median {median:?}, worst {worst:?}");
+    eprintln!("a whole `fibo list`: median {median:?}, worst {worst:?}");
     let (median, worst) = timed(20, || {
         let _ = rpc(&socket, &Request::Workspace);
     });

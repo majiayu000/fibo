@@ -1,4 +1,4 @@
-# Mooring fish integration, sourced through --init-command after the user's own config:
+# Fibo fish integration, sourced through --init-command after the user's own config:
 # reports the working directory with OSC 7 (file://host/path, percent-encoded) so new
 # tabs and splits open where you are.
 set -e MOORING_SHELL_INTEGRATION_DIR

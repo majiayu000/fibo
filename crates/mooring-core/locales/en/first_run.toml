@@ -1,5 +1,5 @@
 # crates/mooring-app/src/workbench/first_run.rs: the welcome page on a first start.
-"欢迎使用 Mooring" = "Welcome to Mooring"
+"欢迎使用 Fibo" = "Welcome to Fibo"
 "每个 Agent 都跑在这里的真终端里。在这里启动 Claude Code 或 Codex，左边就会列出这个会话和它现在的状态：{running}、{waiting}、{review}。" = "Every agent runs in a real terminal here. Start Claude Code or Codex and the sidebar lists the session and its state: {running}, {waiting}, {review}."
 "启动一个 Agent" = "Start an agent"
 "在 {place} 打开；换文件夹用左边空间旁的 ＋" = "Opens in {place}; to use another folder, click + beside the spaces on the left"
@@ -10,7 +10,7 @@
 "正在查找…" = "Looking…"
 "正在检查…" = "Checking…"
 "没能检查：{e}" = "Couldn't check: {e}"
-"推荐装上：{agents} 的状态和审批就不靠猜画面。会在 {files} 里加几条 Mooring 的条目，只在 Mooring 的终端里起作用，在别处什么都不做。撤销：设置 › 关于，或在 Mooring 终端里运行 mooring hooks uninstall。" = "Recommended: then {agents} report state and approvals directly instead of Mooring reading the screen. Adds a few Mooring entries to {files} that only act in Mooring terminals and do nothing elsewhere. Undo: Settings › About, or run mooring hooks uninstall in a Mooring terminal."
+"推荐装上：{agents} 的状态和审批就不靠猜画面。会在 {files} 里加几条 Fibo 的条目，只在 Fibo 的终端里起作用，在别处什么都不做。撤销：设置 › 关于，或在 Fibo 终端里运行 fibo hooks uninstall。" = "Recommended: then {agents} report state and approvals directly instead of Fibo reading the screen. Adds a few Fibo entries to {files} that only act in Fibo terminals and do nothing elsewhere. Undo: Settings › About, or run fibo hooks uninstall in a Fibo terminal."
 "已安装" = "Installed"
 "读不了 {file}：{why}" = "Can't read {file}: {why}"
 "正在安装…" = "Installing…"

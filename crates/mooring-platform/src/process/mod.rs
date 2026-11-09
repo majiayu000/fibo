@@ -53,6 +53,12 @@ pub fn start_after_exit(
     imp::start_after_exit(pid, program, args.collect())
 }
 
+/// Runs `command` in place of this process and ends with its exit code: on Unix this
+/// process becomes it (exec); on Windows it waits for it. Returns only when it cannot start.
+pub fn become_command(command: &mut std::process::Command) -> io::Error {
+    imp::become_command(command)
+}
+
 /// Ends this process at once, running nothing on the way out, as the abort after a panic would.
 pub fn exit_now(code: i32) -> ! {
     imp::exit_now(code)

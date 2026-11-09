@@ -189,10 +189,7 @@ pub fn bundled(agent: Agent) -> &'static Rules {
 fn of_adapter(agent: Agent) -> Rules {
     let text = crate::agents::adapter(agent).screen_rules();
     Rules::parse(text, Source::Bundled).unwrap_or_else(|e| {
-        eprintln!(
-            "mooring: {} 的画面规则不可用，改用默认规则：{e}",
-            agent.key()
-        );
+        eprintln!("fibo: {} 的画面规则不可用，改用默认规则：{e}", agent.key());
         compile(crate::agents::DEFAULT_SCREEN_RULES)
     })
 }
@@ -216,7 +213,7 @@ fn active(agent: Agent, config: Option<&Path>) -> Rules {
     match config.and_then(|dir| load_override(agent, dir)) {
         Some(Ok(rules)) => rules,
         Some(Err(e)) => {
-            eprintln!("mooring: 画面规则覆盖文件不可用，改用内置规则：{e}");
+            eprintln!("fibo: 画面规则覆盖文件不可用，改用内置规则：{e}");
             of_adapter(agent)
         }
         None => of_adapter(agent),

@@ -8,57 +8,59 @@ use std::path::{Path, PathBuf};
 
 /// Its lines in `mooring --help`.
 pub const COMMAND_USAGE: &str = "\
-mooring plugins [--dir 目录] [--json]      检查插件能不能装上：哪个生效、哪个为什么没生效
-mooring plugins available [--remote]       列出可安装的插件（App 附带的，加 --remote 再查远程目录）
-mooring plugins install <id>[@版本] [--remote] [--yes]
+fibo plugins [--dir 目录] [--json]         检查插件能不能装上：哪个生效、哪个为什么没生效
+fibo plugins available [--remote]          列出可安装的插件（App 附带的，加 --remote 再查远程目录）
+fibo plugins install <id>[@版本] [--remote] [--yes]
                                              安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
-mooring plugins uninstall <id> [--force]   卸载一个插件；--force 在 teardown 失败时也卸
-mooring plugins disable|enable <id> [--force]
+fibo plugins uninstall <id> [--force]      卸载一个插件；--force 在 teardown 失败时也卸
+fibo plugins disable|enable <id> [--force]
                                              停用或打开一个插件；--force 在 teardown 失败时也停用
-mooring plugins log <id>                   这个插件最近的运行和出过的错
-mooring plugins set <id> [<key> <值>]      看或改插件的设置项
-mooring plugins run <id> <声明 id> [--event 事件] [--cwd 目录] [--send]
+fibo plugins log <id>                      这个插件最近的运行和出过的错
+fibo plugins set <id> [<key> <值>]         看或改插件的设置项
+fibo plugins run <id> <声明 id> [--event 事件] [--cwd 目录] [--send]
                                              用和 App 一样的环境试跑一条 hook、装饰或额度命令；webhook 加 --send 才真发
-mooring plugins index <目录> [--check] [--key 私钥文件]
+fibo plugins index <目录> [--check] [--key 私钥文件]
                                              为插件目录生成 index.json 并签名（--check 只检查是否最新、签名对不对）
-mooring plugins keygen [--name 发布者] [--key 私钥文件]
+fibo plugins keygen [--name 发布者] [--key 私钥文件]
                                              生成发布者的签名私钥，默认 <配置>/publisher.key";
-pub const USAGE: &str = "用法：mooring plugins [--dir 插件目录] [--json]
-      mooring plugins available [--remote]   列出可安装的插件（App 附带的，加 --remote 再查远程目录）
-      mooring plugins install <id>[@版本] [--remote] [--yes]
+pub const USAGE: &str = "用法：fibo plugins [--dir 插件目录] [--json]
+      fibo plugins available [--remote]      列出可安装的插件（App 附带的，加 --remote 再查远程目录）
+      fibo plugins install <id>[@版本] [--remote] [--yes]
                                               安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
-      mooring plugins uninstall <id> [--force]
+      fibo plugins uninstall <id> [--force]
                                               卸载一个插件；--force 在 teardown 失败时也卸（加载不了的按目录名卸）
-      mooring plugins disable|enable <id> [--force]
+      fibo plugins disable|enable <id> [--force]
                                               停用或打开一个插件；--force 在 teardown 失败时也停用
-      mooring plugins index <目录> [--check] [--key 私钥文件]
+      fibo plugins index <目录> [--check] [--key 私钥文件]
                                               为插件目录生成 index.json 并用私钥签名（--check 只检查是否最新、签名对不对）
-      mooring plugins keygen [--name 发布者] [--key 私钥文件]
+      fibo plugins keygen [--name 发布者] [--key 私钥文件]
                                               生成发布者的签名私钥，默认 <配置>/publisher.key
-      mooring plugins log <id>                这个插件最近的运行：setup、hook、出过错的装饰和额度命令
-      mooring plugins set <id> [<key> <值>]   看或改插件的设置项；值写 true/false、数字或文字
-      mooring plugins run <id> <声明 id> [--event 事件] [--cwd 目录]
+      fibo plugins log <id>                   这个插件最近的运行：setup、hook、出过错的装饰和额度命令
+      fibo plugins set <id> [<key> <值>]      看或改插件的设置项；值写 true/false、数字或文字
+      fibo plugins run <id> <声明 id> [--event 事件] [--cwd 目录]
                                               用和 App 一样的环境试跑一条 hook、装饰或额度命令，打印输出；
                                               webhook 只显示会发什么，加 --send 才真发
 
 检查插件能不能装上：逐个读 plugin.json 和它提供的文件，说哪个生效、哪个为什么没生效。
-默认目录是 ${XDG_CONFIG_HOME:-$HOME/.config}/mooring/plugins。有问题时以 1 退出。
-手写改了插件目录后，在 Mooring 的 设置 › 插件 点「重新读取」就生效。
-写插件的说明：mooring --skill plugins";
+默认目录是 ${XDG_CONFIG_HOME:-$HOME/.config}/fibo/plugins。有问题时以 1 退出。
+手写改了插件目录后，在 Fibo 的 设置 › 插件 点「重新读取」就生效。
+写插件的说明：fibo --skill plugins";
 
 /// The first line of the `AGENTS.md` Mooring writes; a file without it is the user's.
 const MARK: &str =
-    "<!-- 由 Mooring 生成，每次启动会更新；要写自己的说明就删掉这一行，Mooring 就不再覆盖 -->";
-const AGENTS_MD: &str = "# Mooring 配置目录
+    "<!-- 由 Fibo 生成，每次启动会更新；要写自己的说明就删掉这一行，Fibo 就不再覆盖 -->";
+/// How `MARK` began before the rename: a note that starts with it is still ours.
+const MARK_BEFORE: &str = "<!-- 由 Mooring 生成";
+const AGENTS_MD: &str = "# Fibo 配置目录
 
-这里是 Mooring 的配置。用户让你改 Mooring 时（加右键菜单或 ⌘P 里的命令、换左栏排法、在窗格上显示点什么、会话等你或做完时发通知、换完成动画、改状态颜色）：
+这里是 Fibo 的配置。用户让你改 Fibo 时（加右键菜单或 ⌘P 里的命令、换左栏排法、在窗格上显示点什么、会话等你或做完时发通知、换完成动画、改状态颜色）：
 
-1. 先运行 `mooring --skill plugins`，读完整说明：插件格式、规矩和例子。
-2. 插件写在 `plugins/<id>/`，一个想法一个插件。写完运行 `mooring plugins` 检查，全是 ✓ 才算写好。
-3. 告诉用户在 Mooring 的 设置 › 插件 点「重新读取」就生效，以及去哪里看。
+1. 先运行 `fibo --skill plugins`，读完整说明：插件格式、规矩和例子。
+2. 插件写在 `plugins/<id>/`，一个想法一个插件。写完运行 `fibo plugins` 检查，全是 ✓ 才算写好。
+3. 告诉用户在 Fibo 的 设置 › 插件 点「重新读取」就生效，以及去哪里看。
 
 别改用户已有的插件和 `plugins/disabled.json`；快捷键、终端字体、完成动画在 App 的「设置」里改。
-在 Mooring 打开的终端里 `mooring` 直接能用；驱动别的终端的说明是 `mooring --skill`。
+在 Fibo 打开的终端里 `fibo` 直接能用；驱动别的终端的说明是 `fibo --skill`。
 ";
 
 /// Writes `<config>/AGENTS.md`, the note an Agent finds when it opens the config
@@ -75,7 +77,9 @@ fn write_note(dir: &Path) -> io::Result<()> {
     let path = dir.join("AGENTS.md");
     let want = format!("{MARK}\n{AGENTS_MD}");
     match std::fs::read_to_string(&path) {
-        Ok(text) if text == want || !text.starts_with(MARK) => return Ok(()),
+        Ok(text) if text == want || !(text.starts_with(MARK) || text.starts_with(MARK_BEFORE)) => {
+            return Ok(())
+        }
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
@@ -409,7 +413,7 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
                     let (v, shown) = if opt.secret {
                         if value != "-" {
                             return Err(io::Error::other(format!(
-                                "{key} 是密钥，别写在命令行里：printf %s 值 | mooring plugins set {id} {key} -"
+                                "{key} 是密钥，别写在命令行里：printf %s 值 | fibo plugins set {id} {key} -"
                             )));
                         }
                         let mut text = String::new();
@@ -449,8 +453,8 @@ fn tell_running() -> String {
         )
     });
     match told {
-        Some(Ok(_)) => "运行中的 Mooring 已经用上了".to_owned(),
-        _ => "Mooring 没在运行，下次打开时生效".to_owned(),
+        Some(Ok(_)) => "运行中的 Fibo 已经用上了".to_owned(),
+        _ => "Fibo 没在运行，下次打开时生效".to_owned(),
     }
 }
 
@@ -496,7 +500,7 @@ fn try_run(
             title: "试跑".into(),
             cwd: cwd.clone(),
             space: Some("试跑".into()),
-            detail: "这是 mooring plugins run 发的样例事件".into(),
+            detail: "这是 fibo plugins run 发的样例事件".into(),
             at: mooring_core::content::now(),
             terminal: None,
             exit_code: on
@@ -768,7 +772,7 @@ fn render(dir: &Path, checked: &[Checked]) -> String {
             (None, None) => {}
         }
     }
-    out.push_str("改完在 Mooring 的 设置 › 插件 点「重新读取」就生效。\n");
+    out.push_str("改完在 Fibo 的 设置 › 插件 点「重新读取」就生效。\n");
     out
 }
 

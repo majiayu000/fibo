@@ -41,11 +41,16 @@ fn host_env(
             env.push(("PATH".into(), shell::on_path(login_path, dir)));
         }
     }
-    // Agents and hooks set up under the old name (Keepline) read these too.
+    // Agents and hooks set up under the old name (Keepline) read these too, and what is
+    // written for Fibo reads `FIBO_*`.
     let old: Vec<_> = env
         .iter()
-        .filter_map(|(k, v)| {
-            mooring_core::legacy::old_name(k.to_str()?).map(|o| (OsString::from(o), v.clone()))
+        .flat_map(|(k, v)| {
+            let names = k.to_str().map(mooring_core::legacy::other_names);
+            names
+                .unwrap_or_default()
+                .into_iter()
+                .map(|o| (OsString::from(o), v.clone()))
         })
         .collect();
     env.extend(old);
@@ -413,9 +418,12 @@ mod host_env_tests {
             [
                 "MOORING_ENV=1",
                 "MOORING_TERMINAL=t1",
-                // Under the old name too, for Agents and hooks set up under Keepline.
+                // Under the old name too, for Agents and hooks set up under Keepline,
+                // and under the product's name for what is written for Fibo.
                 "KEEPLINE_ENV=1",
-                "KEEPLINE_TERMINAL=t1"
+                "FIBO_ENV=1",
+                "KEEPLINE_TERMINAL=t1",
+                "FIBO_TERMINAL=t1"
             ]
         );
         let host = ("/run/k".into(), "/app/mooring".into());
@@ -432,9 +440,13 @@ mod host_env_tests {
                 "MOORING_HOOK=/app/mooring",
                 &path,
                 "KEEPLINE_ENV=1",
+                "FIBO_ENV=1",
                 "KEEPLINE_TERMINAL=t2",
+                "FIBO_TERMINAL=t2",
                 "KEEPLINE_RUNTIME=/run/k",
-                "KEEPLINE_HOOK=/app/mooring"
+                "FIBO_RUNTIME=/run/k",
+                "KEEPLINE_HOOK=/app/mooring",
+                "FIBO_HOOK=/app/mooring"
             ]
         );
     }

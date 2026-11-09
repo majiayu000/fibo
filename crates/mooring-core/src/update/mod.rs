@@ -27,7 +27,10 @@ pub use version::Version;
 
 use std::path::{Path, PathBuf};
 
-pub const BUNDLE_ID: &str = "local.mooring.workbench";
+pub const BUNDLE_ID: &str = "page.fibo.app";
+/// What the app was called before the rename to Fibo. A release carrying it is still ours
+/// (the team id decides who signed it), so an older build can be updated across the rename.
+pub const OLD_BUNDLE_ID: &str = "local.mooring.workbench";
 /// The Developer ID team every release is signed by. Nothing signed by anyone else installs.
 pub const TEAM_ID: &str = "C5UWZ934C2";
 pub const API_BASE: &str = "https://api.github.com";
@@ -72,17 +75,17 @@ pub fn packaged_bundle(exe: &Path) -> Option<PathBuf> {
 }
 
 pub use mooring_platform::app_bundle::homebrew_prefixes as brew_prefixes;
-/// Whether Homebrew installed this app: the bundle lives in a Caskroom, or a `mooring` cask
-/// is recorded. Homebrew then owns the version; replacing the bundle behind its back would
+/// Whether Homebrew installed this app: the bundle lives in a Caskroom, or a `fibo` (or
+/// before the rename `mooring`) cask is recorded. Homebrew then owns the version; replacing the bundle behind its back would
 /// leave `brew` believing the old one is installed.
 pub fn homebrew_managed(bundle: &Path, prefixes: &[PathBuf]) -> bool {
     let real = std::fs::canonicalize(bundle).unwrap_or_else(|_| bundle.to_path_buf());
     prefixes.iter().any(|prefix| {
         let room = prefix.join("Caskroom");
-        real.starts_with(&room) || room.join("mooring").exists()
+        real.starts_with(&room) || ["fibo", "mooring"].iter().any(|c| room.join(c).exists())
     })
 }
-pub const BREW_COMMAND: &str = "brew upgrade --cask mooring";
+pub const BREW_COMMAND: &str = "brew upgrade --cask fibo";
 
 /// Whether a check is due: never checked, a day since, or a clock that went back.
 pub fn due(last: Option<u64>, now: u64) -> bool {

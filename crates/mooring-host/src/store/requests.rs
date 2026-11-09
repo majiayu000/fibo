@@ -14,7 +14,7 @@ pub(super) const TABLE: &str = "CREATE TABLE IF NOT EXISTS requests (client TEXT
 /// the middle and cannot tell whether the act happened.
 const STARTED: &str = "\u{0}started";
 pub const UNSURE: &str =
-    "电脑上的 Mooring 在执行这一步时停了，不确定执行了没有；看一眼屏幕再决定要不要重发";
+    "电脑上的 Fibo 在执行这一步时停了，不确定执行了没有；看一眼屏幕再决定要不要重发";
 
 impl Store {
     /// The outcome recorded for `request`: applied (`Ok`) or refused with its error; one

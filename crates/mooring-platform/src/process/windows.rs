@@ -48,6 +48,13 @@ pub fn start_after_exit(
     Ok(())
 }
 
+pub fn become_command(command: &mut Command) -> io::Error {
+    match command.status() {
+        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+        Err(e) => e,
+    }
+}
+
 pub fn exit_now(code: i32) -> ! {
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
     // SAFETY: ends this process; the handle is the pseudo-handle for it.

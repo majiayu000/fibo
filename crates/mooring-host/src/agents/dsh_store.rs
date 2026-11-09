@@ -27,7 +27,7 @@ pub(super) fn start(home: &Path) {
                             Err(e) => {
                                 let next = e.to_string();
                                 if next != error {
-                                    eprintln!("mooring: DSH 读不了：{next}");
+                                    eprintln!("fibo: DSH 读不了：{next}");
                                 }
                                 error = next;
                             }

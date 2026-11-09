@@ -105,7 +105,7 @@ impl Workbench {
                     )
                     .when(host, |d| {
                         d.child(label(
-                            t!("后台还在跑旧版本，新改动要重启后台才生效。重启会停止所有终端，Mooring 会自动重新打开。"),
+                            t!("后台还在跑旧版本，新改动要重启后台才生效。重启会停止所有终端，Fibo 会自动重新打开。"),
                         ))
                     })
                     .when(unmatched, |d| {

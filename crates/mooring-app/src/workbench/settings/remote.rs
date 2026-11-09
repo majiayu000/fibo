@@ -160,7 +160,7 @@ impl SettingsView {
                 rows.is_empty(),
                 t!("加一台电脑"),
                 self.machines_error.as_deref().unwrap_or(t!(
-                    "填 ssh 能免密登录的主机名；那台电脑上要装着 Mooring。侧栏里只看，不能打字"
+                    "填 ssh 能免密登录的主机名；那台电脑上要装着 Fibo。侧栏里只看，不能打字"
                 )),
                 div()
                     .flex()

@@ -443,7 +443,7 @@ mod tests {
                 .result
                 .as_ref()
                 .unwrap_err()
-                .contains("更新 Mooring")
+                .contains("更新 Fibo")
         );
         let _ = std::fs::remove_dir_all(&d);
     }

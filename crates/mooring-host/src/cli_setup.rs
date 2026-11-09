@@ -8,7 +8,9 @@ use std::{fs, io, path::Path};
 
 /// What a CLI reads to know when to write something down.
 const SKILL: &str = include_str!("todo_skill.md");
-const OURS: &str = "<!-- 由 Mooring 写入";
+const OURS: &str = "<!-- 由 Fibo 写入";
+/// What a skill written before the rename starts with: still ours, so it gets updated.
+const OURS_BEFORE: &str = "<!-- 由 Mooring 写入";
 /// Turns all of this off, like `MOORING_NO_SHELL_INTEGRATION` does for its own part.
 const OFF_ENV: &str = "MOORING_NO_CLI_SETUP";
 
@@ -24,10 +26,12 @@ pub fn install(runtime: &Path) {
     if !cli_entry::in_bundle(&exe) || !cli_entry::is_default_runtime(runtime) {
         return;
     }
-    match cli_entry::link(&cli_entry::DIRS, &exe) {
-        Ok(Some(_)) => {}
-        Ok(None) => eprintln!("mooring: 没有放入口：目录不可写，或那里已有别的 mooring"),
-        Err(e) => eprintln!("mooring: 放入口失败：{e}"),
+    for name in cli_entry::NAMES {
+        match cli_entry::link(&cli_entry::DIRS, &exe, name) {
+            Ok(Some(_)) => {}
+            Ok(None) => eprintln!("fibo: 没有放入口：目录不可写，或那里已有别的 {name}"),
+            Err(e) => eprintln!("fibo: 放 {name} 入口失败：{e}"),
+        }
     }
     let Some(home) = mooring_platform::dirs::home() else {
         return;
@@ -37,7 +41,7 @@ pub fn install(runtime: &Path) {
             continue;
         };
         if let Err(e) = write_skill(&skills) {
-            eprintln!("mooring: 写 {} 失败：{e}", skills.display());
+            eprintln!("fibo: 写 {} 失败：{e}", skills.display());
         }
     }
 }
@@ -51,7 +55,7 @@ fn write_skill(skills: &Path) -> io::Result<bool> {
     let file = dir.join("SKILL.md");
     match fs::read_to_string(&file) {
         Ok(now) if now == SKILL => return Ok(false),
-        Ok(now) if !now.contains(OURS) => return Ok(false),
+        Ok(now) if !now.contains(OURS) && !now.contains(OURS_BEFORE) => return Ok(false),
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
@@ -92,6 +96,14 @@ mod tests {
         assert!(write_skill(&skills).unwrap(), "an older one of ours");
         assert_eq!(fs::read_to_string(&file).unwrap(), SKILL);
 
+        fs::write(
+            &file,
+            format!("{OURS_BEFORE}，App 启动时会更新这个文件。 -->"),
+        )
+        .unwrap();
+        assert!(write_skill(&skills).unwrap(), "one Mooring wrote");
+        assert_eq!(fs::read_to_string(&file).unwrap(), SKILL);
+
         fs::write(&file, "用户自己写的").unwrap();
         assert!(!write_skill(&skills).unwrap());
         assert_eq!(fs::read_to_string(&file).unwrap(), "用户自己写的");
@@ -99,7 +111,7 @@ mod tests {
 
     #[test]
     fn the_skill_names_only_commands_that_exist_and_forbids_going_around_them() {
-        for said in ["mooring todo list", "mooring todo note", "mooring todo add"] {
+        for said in ["fibo todo list", "fibo todo note", "fibo todo add"] {
             assert!(SKILL.contains(said), "{said}");
         }
         assert!(SKILL.contains(OURS));
