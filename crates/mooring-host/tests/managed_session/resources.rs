@@ -264,7 +264,7 @@ read -r finish
     assert!(idle <= 50_000_000, "idle control busy: {idle}");
     let within = match after.instructions {
         0 => stats.metrics.log_bytes - before.metrics.log_bytes <= appended + appended / 10,
-        _ => per_line <= 1_000_000,
+        _ => per_line <= 1_250_000, // SQLite 3.54 (RUSTSEC-2026-0459 fix) costs ~1.03M a line, 3.51 cost ~0.82M
     };
     assert!(within, "daemon over its budget, see the line above");
     assert!(

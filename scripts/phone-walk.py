@@ -12,7 +12,7 @@ content: they stay out of the repo.
   phone-walk.py shot <编号> [说明]       screenshot + UI dump for a checklist item
   phone-walk.py tap <文字> [--contains]  tap the one element with this text
   phone-walk.py type <文字>              type ASCII into the focused field
-  phone-walk.py key back|enter|home     press a key
+  phone-walk.py key hide|back|enter|home  hide the keyboard (only if up), or press a key
   phone-walk.py texts                   print the texts on screen with their centers
   phone-walk.py push-image              put a test picture in the phone's gallery
   phone-walk.py pick-image              in the system picker, select that picture and nothing else
@@ -217,7 +217,18 @@ def nodes():
     return xml, out
 
 
+def in_front():
+    """Mooring is the app on screen. Another one there (a picker, the gallery) is tapped only
+    where the walk says so; a tap meant for Mooring must not land in the person's own apps."""
+    focus = adb("shell", "dumpsys", "window", out=True).decode()
+    line = next((l for l in focus.splitlines() if "mCurrentFocus" in l), "")
+    return PACKAGE in line, line.strip()
+
+
 def tap(text, contains=False):
+    ours, line = in_front()
+    if not ours and "--any-app" not in sys.argv:
+        die(f"前台不是 Mooring（{line}），不点「{text}」。系统选图之类要点别的 App 时加 --any-app")
     if any(w in text for w in NEVER):
         die(f"「{text}」在永远不按的名单里")
     xml, found = nodes()
@@ -454,7 +465,14 @@ def main(argv):
         text = rest[0].replace(" ", "%s").replace("'", "'\\''")
         adb("shell", "input", "text", f"'{text}'")
     elif cmd == "key":
-        adb("shell", "input", "keyevent", {"back": "4", "enter": "66", "home": "3"}[rest[0]])
+        if rest[0] == "hide":
+            # Back only while the keyboard is up: with it down, Back leaves the page, and twice
+            # it left the chat for other screens mid-walk (2026-11-09).
+            shown = adb("shell", "dumpsys", "input_method", out=True).decode()
+            if "mInputShown=true" in shown:
+                adb("shell", "input", "keyevent", "4")
+        else:
+            adb("shell", "input", "keyevent", {"back": "4", "enter": "66", "home": "3"}[rest[0]])
     elif cmd == "texts":
         for t, x, y in nodes()[1]:
             print(f"{x:5} {y:5}  {t[:60]}")
