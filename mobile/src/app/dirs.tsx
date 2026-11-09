@@ -11,6 +11,7 @@ import { Icon } from '@/ui/icons';
 import { Label, Nav, Notice, Wide, mono, noOutline, useBottom } from '@/ui/kit';
 import { trail } from '@/ui/parse';
 import { SayDialog } from '@/ui/sheets';
+import { PathBar } from '@/ui/pathbar';
 import { pickDir } from '@/ui/spaces';
 import { tilde } from '@/ui/status';
 import { type Theme, useTheme } from '@/ui/theme';
@@ -173,17 +174,7 @@ export default function Dirs() {
         <>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 18, gap: 12, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
             {!query && list && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
-                {crumbs.map((c, i) => {
-                  const last = i === crumbs.length - 1;
-                  return (
-                    <Text key={c.path} style={{ fontFamily: mono, fontSize: 14, color: last ? t.text : t.dim, fontWeight: last ? '600' : '400' }}>
-                      {i > 0 && <Text style={{ color: t.dim }}>{' / '}</Text>}
-                      <Text onPress={last ? undefined : () => setPath(c.path)}>{c.label}</Text>
-                    </Text>
-                  );
-                })}
-              </ScrollView>
+              <PathBar crumbs={crumbs} onGo={setPath} />
             )}
             <View style={[s.search, { backgroundColor: t.card, borderColor: query ? t.focus : t.line }]}>
               <Icon name="search" size={16} width={2} color={t.dim} />

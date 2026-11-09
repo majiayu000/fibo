@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -204,4 +204,15 @@ test('a question from the computer comes apart into its text and one button per 
   ]);
   expect(questionText(sent)).toBe('【下一步】接下来怎么继续？');
   expect(choices('CLI 请求工具审批（Hook）')).toEqual([]);
+});
+
+// The folder chips over the list (ui/pathbar.tsx): the root as 电脑, never a bare 「/」 beside the
+// separators; a long path keeps its root and last two levels in sight.
+test('a path reads as folder chips, the middle folded when long', () => {
+  const short = pathChips(trail('/Users/d/code/AI', '/Users/d'));
+  expect(short.map((c) => (c.kind === 'level' ? c.label : '…'))).toEqual(['~', 'code', 'AI']);
+  const deep = pathChips(trail('/private/var/folders/3_/x/T', '/Users/d'));
+  expect(deep.map((c) => (c.kind === 'level' ? c.label : `…${c.hidden.length}`))).toEqual(['电脑', '…4', 'x', 'T']);
+  expect(deep[0]).toMatchObject({ root: true, path: '/' });
+  expect(deep.at(-1)).toMatchObject({ current: true, path: '/private/var/folders/3_/x/T' });
 });
