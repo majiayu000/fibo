@@ -4,8 +4,8 @@
     {
       "id": "claude-quota",
       "name": "Claude 额度",
-      "version": "0.2.0",
-      "description": "接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Mooring 状态栏；原来的状态栏照常显示，卸载时还原。默认只读本机；打开「联网读 /usage」后，让 Claude Code 自己查额度，不用等状态栏刷新，还能看到按模型的周额度，不花钱也不留会话",
+      "version": "0.2.1",
+      "description": "接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Fibo 状态栏；原来的状态栏照常显示，卸载时还原。默认只读本机；打开「联网读 /usage」后，让 Claude Code 自己查额度，不用等状态栏刷新，还能看到按模型的周额度，不花钱也不留会话",
       "provides": [
         "setup",
         "quota"
@@ -18,8 +18,8 @@
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "3277ac0cb171e958fac21a0100c7d1521fee66f5a33a603d7bc0b0342f74e680",
-          "size": 891
+          "sha256": "7218f17669763a0d8263aade28f8cddf62a171cc6208d316b2f769e161f650bc",
+          "size": 888
         },
         {
           "path": "quota.json",
