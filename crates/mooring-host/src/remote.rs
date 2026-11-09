@@ -124,6 +124,7 @@ pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
         || a.value("revoke").is_some()
         || a.value("device").is_some()
         || a.value("kick").is_some()
+        || a.value("machine-name").is_some()
         || a.has("enable")
         || a.has("disable")
         || a.has("status")

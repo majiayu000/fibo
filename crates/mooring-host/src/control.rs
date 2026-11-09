@@ -138,6 +138,7 @@ fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩�
             "revoke",
             "device",
             "kick",
+            "machine-name",
         ],
         switches: &[
             "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report",
@@ -159,7 +160,8 @@ fibo remote --kick <设备>                  立刻断开这台手机正连着�
 fibo remote --devices                      列出配对过的手机、权限和最近连接时间；操作记在运行目录的 remote-log.jsonl
 fibo remote --device <设备> --role <view|answer|full>
                                              改一台手机的权限；它正连着的会话一秒内断开，重连后按新权限
-fibo remote --revoke <设备编号或名字>      取消一台手机的配对，它正连着的会话一秒内断开",
+fibo remote --revoke <设备编号或名字>      取消一台手机的配对，它正连着的会话一秒内断开
+fibo remote --machine-name <名字>          手机上这台电脑叫什么；给空字符串换回系统主机名，手机重连后显示新名字",
     },
     Command {
         name: "themes",
