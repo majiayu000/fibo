@@ -307,11 +307,21 @@ impl Workbench {
         let store = Store::new(socket, status_tx);
         cx.spawn(async move |this, cx| {
             use futures::StreamExt;
-            while let Some(status) = status_rx.next().await {
+            while let Some(link) = status_rx.next().await {
                 if this
                     .update(cx, |this, cx| {
+                        let crate::connection::StatusLink::Status(status) = link else {
+                            this.store.take_link(link);
+                            // Repaint once the outage is long enough to show its strip.
+                            cx.spawn(async move |this, cx| {
+                                cx.background_executor().timer(CUT_OFF_NOTICE).await;
+                                let _ = this.update(cx, |_, cx| cx.notify());
+                            })
+                            .detach();
+                            cx.notify();
+                            return;
+                        };
                         let revision = status.workspace_revision;
-                        let interrupted = status.phase == RecognitionPhase::Interrupted;
                         this.follow_plugins(status.plugins_revision, cx);
                         if let Some(view) = &this.settings {
                             let remote = status.remote.clone();
@@ -322,15 +332,7 @@ impl Workbench {
                                 }
                             });
                         }
-                        this.store.set_recognition(status);
-                        if interrupted {
-                            // Repaint once the outage is long enough to show its strip.
-                            cx.spawn(async move |this, cx| {
-                                cx.background_executor().timer(CUT_OFF_NOTICE).await;
-                                let _ = this.update(cx, |_, cx| cx.notify());
-                            })
-                            .detach();
-                        }
+                        this.store.set_recognition(*status);
                         if revision > this.workspace.revision {
                             this.sync(cx);
                         }

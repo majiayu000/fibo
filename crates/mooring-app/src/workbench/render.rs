@@ -148,6 +148,12 @@ impl Render for Workbench {
             RecognitionPhase::Starting | RecognitionPhase::Recovering
         ) {
             tail.push(label(t!("正在识别会话…")).into_any_element());
+        } else if self.store.recognition().phase == RecognitionPhase::Interrupted
+            && !self.store.link_down()
+        {
+            // The host is reachable but cannot read some Agent logs; the status bar's
+            // tooltip carries its reason. Not 「后台连接断开」: every connection works.
+            tail.push(label(t!("会话识别中断")).into_any_element());
         }
         // The host runs older code than this app. One that can hand over is updated
         // in place; an older one must be restarted, which ends every terminal.
@@ -575,13 +581,18 @@ impl Render for Workbench {
             .map(|s| s.0.clone())
             .filter(|s| !s.is_empty());
         if self.store.cut_off() {
-            let mut details = vec![self.store.recognition().detail.clone()];
+            let mut details: Vec<String> = self
+                .store
+                .cut_off_reason()
+                .map(str::to_owned)
+                .into_iter()
+                .collect();
             details.extend(status);
             main =
                 main.child(self.notice_strip(t!("后台连接断开，正在重新连接…"), details, true, cx));
         } else if let Some(status) = status.filter(|_| {
             // A failed refresh while the link is down for a moment is the same blip.
-            self.store.recognition().phase != RecognitionPhase::Interrupted
+            !self.store.link_down()
         }) {
             let (text, detail) = status.split_once('：').unwrap_or((&status, ""));
             let details = vec![detail.to_string()];

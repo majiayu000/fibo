@@ -213,17 +213,16 @@ pub(super) fn recover_logs(
     // Asked first: finishing forgets what was in a folder that is gone.
     let lost = index.lost_logs(scopes)?;
     index.finish_recovery(scopes)?;
-    if lost {
-        publish_recognition(
-            shared,
-            index,
-            RecognitionPhase::Interrupted,
-            "日志目录暂不可用，等待重建事件",
-            scopes,
-        )
+    // A folder that held logs and went away is repaired once its logs are forgotten:
+    // recognition works, so the phase is Healthy and the detail says what went. Left
+    // Interrupted, nothing ever cleared it (no later recovery runs for a gone folder),
+    // and each batch republished it for good.
+    let detail = if lost {
+        "识别正常；有记录过会话的日志目录被删除，记录已清理"
     } else {
-        publish_recognition(shared, index, RecognitionPhase::Healthy, "识别正常", &[])
-    }
+        "识别正常"
+    };
+    publish_recognition(shared, index, RecognitionPhase::Healthy, detail, &[])
 }
 pub(super) fn event_scopes(
     batch: &mooring_platform::file_watch::Batch,
