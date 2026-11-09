@@ -16,8 +16,10 @@ import { Btn, Group, Round, TITLE_WEIGHT, Wide, mono, useTop } from '@/ui/kit';
 import { QuietSpaces } from '@/ui/quietspaces';
 import { Row, rowStyles, spaceName } from '@/ui/row';
 import { SpaceChips } from '@/ui/spacechips';
-import { type Arranged, type Item, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
-import { Bar, QuotaWords, useTightWindows } from '@/ui/quotaLine';
+import { type Arranged, type Item, agentsIn, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
+import { useTightWindows } from '@/ui/quotaLine';
+import { quotaChips } from '@/ui/parse';
+import { QuotaStrip } from '@/ui/quotastrip';
 import { TabBar } from '@/ui/tabs';
 import { statusColor } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
@@ -192,6 +194,7 @@ export default function Inbox() {
         <Round icon="search" label="搜索" onPress={() => router.push('/search')} />
         <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
       </View>
+      <QuotaStrip chips={quotaChips(tight, shelf.filter === null ? null : agentsIn(shelf))} named={named} />
       <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
       <View style={{ flex: 1 }} {...hold.touch}>
       <ScrollView
@@ -232,24 +235,8 @@ export default function Inbox() {
           <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />
         )}
         {view.review && review.map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
-        {(running.length > 0 || tight.length > 0) && (
-          <View style={s.runHead}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              {running.length > 0 && <Group label={foldLabel(running)} color={statusColor(running[0].c, t)} open={runningOpen} onPress={() => setInboxView({ running: !runningOpen })} />}
-            </View>
-            {tight[0] && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="看全部额度"
-                hitSlop={{ top: 10, bottom: 10 }}
-                onPress={() => router.push('/quota')}
-                style={s.quota}
-              >
-                <QuotaWords q={tight[0]} named={named} t={t} />
-                <Bar used={tight[0].used} t={t} width={36} />
-              </Pressable>
-            )}
-          </View>
+        {running.length > 0 && (
+          <Group label={foldLabel(running)} color={statusColor(running[0].c, t)} open={runningOpen} onPress={() => setInboxView({ running: !runningOpen })} />
         )}
         {runningOpen && runningShown(running, allRunning).map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
         {runningOpen && !allRunning && running.length > runningShown(running, false).length && (
@@ -334,8 +321,6 @@ const s = StyleSheet.create({
   elsewhere: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 18, borderBottomWidth: 1 },
   title: { fontSize: 26, lineHeight: 32, fontWeight: '600', letterSpacing: -0.3 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  runHead: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
-  quota: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 18, paddingBottom: 6, flexShrink: 1, maxWidth: '62%' },
   more: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1 },
   undo: { position: 'absolute', left: 12, right: 12, bottom: 8, minHeight: 48, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingLeft: 14, paddingRight: 4 },
   undoGo: { minHeight: 44, minWidth: 64, alignItems: 'center', justifyContent: 'center' },

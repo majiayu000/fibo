@@ -139,6 +139,12 @@ export function shelve(a: Arranged, selected: string | null): Shelf {
   };
 }
 
+/** The Agents of the conversations a shelf shows, for the quota row over it. */
+export function agentsIn(shelf: Shelf): string[] {
+  const all = [...shelf.pinned, ...shelf.ahead, ...shelf.review, ...shelf.running, ...shelf.behind, ...shelf.later, ...shelf.done];
+  return [...new Set(all.map((i) => i.c.agent).filter((a): a is string => !!a))];
+}
+
 /** The fold's line, in the word the host gives these cards. */
 export const foldLabel = (items: Item[]) => {
   const word = items[0] ? statusWord(items[0].c) : '';

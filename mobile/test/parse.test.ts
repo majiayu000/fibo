@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, pathChips, quotaChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -215,4 +215,17 @@ test('a path reads as folder chips, the middle folded when long', () => {
   expect(deep.map((c) => (c.kind === 'level' ? c.label : `…${c.hidden.length}`))).toEqual(['电脑', '…4', 'x', 'T']);
   expect(deep[0]).toMatchObject({ root: true, path: '/' });
   expect(deep.at(-1)).toMatchObject({ current: true, path: '/private/var/folders/3_/x/T' });
+});
+
+// The home screen's quota row: every Agent, not only the fullest; with a space picked, only the
+// Agents that have a conversation there (「既有 codex 也有 claudecode 为啥要只显示一个」).
+test('the quota row shows each Agent, or the ones in the picked space', () => {
+  const tight = [
+    { machine: 'm', agent: 'codex', minutes: 10080, used: 53 },
+    { machine: 'm', agent: 'claude', minutes: 10080, used: 49 },
+    { machine: 'm', agent: 'grok', minutes: 10080, used: 37 },
+  ];
+  expect(quotaChips(tight, null).map((q) => q.agent)).toEqual(['claude', 'codex', 'grok']);
+  expect(quotaChips(tight, ['claude']).map((q) => q.agent)).toEqual(['claude']);
+  expect(quotaChips(tight, [])).toEqual([]);
 });
