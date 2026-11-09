@@ -15,6 +15,7 @@ content: they stay out of the repo.
   phone-walk.py key back|enter|home     press a key
   phone-walk.py texts                   print the texts on screen with their centers
   phone-walk.py push-image              put a test picture in the phone's gallery
+  phone-walk.py pick-image              in the system picker, select that picture and nothing else
   phone-walk.py mark <编号> 过|不过|跳过 <说明>
   phone-walk.py report                  write index.html and print what is not walked yet
   phone-walk.py teardown                close the test terminals, delete the test dirs
@@ -34,7 +35,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 CHECKLIST = REPO / "docs/phone-app/walkthrough.md"
 PAGES = Path.home() / "Documents/claude-pages/mooring"
-CURRENT = PAGES / ".phone-walk-current"
+# Each terminal keeps its own run: two sessions walking at once must not write into each
+# other's (2026-11-09 one did). The phone itself is one: the lock says who walks it now.
+WHO = os.environ.get("MOORING_TERMINAL") or os.environ.get("KEEPLINE_TERMINAL") or "shell"
+CURRENT = PAGES / f".phone-walk-current-{re.sub(r'[^A-Za-z0-9_-]', '_', WHO)}"
+LOCK = PAGES / ".phone-walk-lock"
+# A run untouched this long has stopped; its lock no longer holds the phone.
+STALE_S = 600
 ADB = os.environ.get("ADB", str(Path.home() / "Library/Android/sdk/platform-tools/adb"))
 SERIAL = os.environ.get("ANDROID_SERIAL", "")
 RUNTIME = Path.home() / ".local/share/keepline-workbench"
@@ -102,13 +109,31 @@ def save(s):
     (run_dir() / "results.json").write_text(json.dumps(s, ensure_ascii=False, indent=1))
 
 
+def holder():
+    """Who else walks the phone now: (terminal, run dir), or None."""
+    try:
+        who, run = LOCK.read_text().split("\n")[:2]
+    except (OSError, ValueError):
+        return None
+    if who == WHO:
+        return None
+    results = Path(run) / "results.json"
+    touched = results.stat().st_mtime if results.exists() else LOCK.stat().st_mtime
+    return (who, run) if time.time() - touched < STALE_S else None
+
+
 def start():
+    other = holder()
+    if other and "--force" not in sys.argv:
+        die(f"终端 {other[0]} 正在走查这台手机（{other[1]}，{STALE_S // 60} 分钟内有动静）。"
+            "两个会话同时点同一台手机会互相打乱：等它走完，或确认它已停下再加 --force")
     day = datetime.date.today().isoformat()
     d, n = PAGES / f"{day}-phone-walk", 2
     while d.exists():
         d, n = PAGES / f"{day}-phone-walk-{n}", n + 1
     d.mkdir(parents=True)
     CURRENT.write_text(str(d))
+    LOCK.write_text(f"{WHO}\n{d}\n")
     head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "origin/main"],
                           capture_output=True, text=True).stdout.strip()
     pkg = adb("shell", "dumpsys", "package", PACKAGE, out=True).decode()
@@ -255,8 +280,26 @@ def push_image():
         "-d", f"file://{target}")
     s = state()
     s.setdefault("pushed", []).append(target)
+    s["pushed_at"] = time.strftime("%H:%M")
     save(s)
     print(f"{target}（图上写着 WALK 4217）")
+
+
+def pick_image():
+    """In the system picker, select the test picture by the minute it was pushed: the first cell
+    is not always it, and a wrong one is someone's own photo (2026-11-09)."""
+    at = state().get("pushed_at")
+    if not at:
+        die("先 push-image")
+    h, m = at.split(":")
+    stamp = f"{int(h)}:{m}"
+    _, found = nodes()
+    hits = [n for n in found if n[0].startswith("照片拍摄于") and n[0].endswith(stamp) and "动态" not in n[0]]
+    if len(hits) != 1:
+        die(f"相册里拍摄于 {stamp} 的照片有 {len(hits)} 张，不点：可能测试图还没进相册，退出选图再开一次")
+    adb("shell", "input", "tap", str(hits[0][1]), str(hits[0][2]))
+    time.sleep(1.5)
+    print(f"选了拍摄于 {stamp} 的那张")
 
 
 def report():
@@ -387,6 +430,8 @@ def teardown():
         # A scan of the missing file drops it from the gallery too.
         adb("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
             "-d", f"file://{p}")
+    if LOCK.exists() and LOCK.read_text().startswith(f"{WHO}\n"):
+        LOCK.unlink()
     print(f"关了 {len(closing)} 个测试终端，删了 {len(dirs)} 个测试目录和 {len(s.get('pushed', []))} 张测试图")
 
 
@@ -415,6 +460,8 @@ def main(argv):
             print(f"{x:5} {y:5}  {t[:60]}")
     elif cmd == "push-image":
         push_image()
+    elif cmd == "pick-image":
+        pick_image()
     elif cmd == "mark":
         mark(rest[0], rest[1], " ".join(rest[2:]))
     elif cmd == "report":
