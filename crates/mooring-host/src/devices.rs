@@ -339,8 +339,34 @@ pub fn machine(socket: &Path) -> io::Result<Machine> {
             id
         }
     };
-    let name = mooring_platform::system::host_name();
+    let name = std::fs::read_to_string(name_file(socket))
+        .ok()
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(mooring_platform::system::host_name);
     Ok(Machine { id, name })
+}
+
+/// The name phones show for this machine when its owner gave one: a host name like
+/// `appledeMacBook-Pro.local` is long for a phone, and changing it needs root (2026-11-09).
+fn name_file(socket: &Path) -> PathBuf {
+    socket.with_file_name("machine-name")
+}
+
+/// Gives this machine the name phones show, or with an empty one goes back to the host name.
+pub fn set_machine_name(socket: &Path, name: &str) -> io::Result<Machine> {
+    let name = name.trim();
+    let file = name_file(socket);
+    if name.is_empty() {
+        match std::fs::remove_file(&file) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    } else {
+        let _ = std::fs::remove_file(&file);
+        write_private(&file, name.as_bytes())?;
+    }
+    machine(socket)
 }
 
 /// The machine's pairing code, made on first use, readable only by this user.
@@ -537,6 +563,10 @@ mod tests {
         let socket = dir.join("workbench.sock");
         let a = machine(&socket).unwrap();
         assert_eq!(machine(&socket).unwrap().id, a.id);
+        // A name its owner gives replaces the host name, keeps the id, and clears back.
+        assert_eq!(set_machine_name(&socket, "  apple ").unwrap().name, "apple");
+        assert_eq!(machine(&socket).unwrap().id, a.id);
+        assert_eq!(set_machine_name(&socket, "").unwrap().name, a.name);
         use std::os::unix::fs::PermissionsExt;
         let mode = std::fs::metadata(dir.join("machine-id"))
             .unwrap()
