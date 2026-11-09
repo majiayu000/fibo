@@ -256,36 +256,106 @@ def push_image():
 
 def report():
     s, d = state(), run_dir()
-    rows, missing = [], []
+    rows, missing, shots = [], [], []
     for c in checklist():
         e = s["items"].get(c["id"], {})
         verdict = e.get("verdict", "没验")
         if verdict == "没验":
             missing.append(c["id"])
-        pics = "".join(f'<a href="{x["file"]}"><img src="{x["file"]}" loading="lazy"></a>'
-                       f'<small>{html.escape(x["note"])}</small>' for x in e.get("shots", []))
+        pics = ""
+        for x in e.get("shots", []):
+            pics += (f'<button class="shot" data-i="{len(shots)}"><img src="{x["file"]}" loading="lazy" alt="">'
+                     f'<small>{html.escape(x["note"])}</small></button>')
+            shots.append({"file": x["file"], "shot": x["note"], "id": c["id"], "page": c["page"],
+                          "verdict": verdict, "note": e.get("note", "")})
         rows.append(f'<tr class="v-{verdict}"><td><code>{c["id"]}</code><br>{html.escape(c["page"])}</td>'
                     f'<td>{html.escape(c["look"])}</td><td><b>{verdict}</b><br>{html.escape(e.get("note", ""))}</td>'
                     f'<td class="pics">{pics}</td></tr>')
     count = {v: sum(1 for c in checklist() if s["items"].get(c["id"], {}).get("verdict", "没验") == v)
              for v in ("过", "不过", "跳过", "没验")}
     summary = " · ".join(f"{k} {v}" for k, v in count.items())
-    (d / "index.html").write_text(f"""<!doctype html><html lang="zh"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>手机走查</title>
-<style>
-:root{{--bg:#fff;--fg:#1a1a1a;--line:#ddd;--ok:#e6f4ea;--bad:#fde8e8;--skip:#f3f3f3;--miss:#fff4d6}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#181a1f;--fg:#e6e6e6;--line:#333;--ok:#1d3326;--bad:#3a1f1f;--skip:#26282d;--miss:#3a321b}}}}
-body{{background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,sans-serif;margin:0;padding:16px}}
-table{{border-collapse:collapse;width:100%}}td{{border-bottom:1px solid var(--line);padding:8px;vertical-align:top}}
-.v-过{{background:var(--ok)}}.v-不过{{background:var(--bad)}}.v-跳过{{background:var(--skip)}}.v-没验{{background:var(--miss)}}
-.pics img{{height:220px;margin:0 6px 4px 0;border:1px solid var(--line)}}.pics small{{display:block}}
-</style><h1>手机走查 {html.escape(s["started"])}</h1>
-<p>电脑 App {s["app"]} · origin/main {s["origin_main"]} · 手机包安装于 {html.escape(s["apk_installed"])}</p>
-<p><b>{summary}</b></p><table>{"".join(rows)}</table></html>""")
+    head = (f'<h1>手机走查 {html.escape(s["started"])}</h1>'
+            f'<p>电脑 App {s["app"]} · origin/main {s["origin_main"]} · 手机包安装于 {html.escape(s["apk_installed"])}</p>'
+            f'<p><b>{summary}</b> <button id="all">从第一张开始看 {len(shots)} 张图</button></p>')
+    data = json.dumps(shots, ensure_ascii=False).replace("</", "<\\/")
+    (d / "index.html").write_text(REPORT_HEAD + head + f'<table>{"".join(rows)}</table>'
+                                  + REPORT_TAIL.replace("__SHOTS__", data))
     print(d / "index.html")
     print(summary)
     if missing:
         print("没验：" + "、".join(missing))
+
+
+# The report page: a table per item, and a viewer that steps through every screenshot in
+# checklist order (← → keys, buttons or swipe; Esc closes) instead of opening each one.
+REPORT_HEAD = """<!doctype html><html lang="zh"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>手机走查</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--muted:#666;--line:#ddd;--ok:#e6f4ea;--bad:#fde8e8;--skip:#f3f3f3;--miss:#fff4d6}
+@media (prefers-color-scheme:dark){:root{--bg:#181a1f;--fg:#e6e6e6;--muted:#999;--line:#333;--ok:#1d3326;--bad:#3a1f1f;--skip:#26282d;--miss:#3a321b}}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,sans-serif;margin:0;padding:16px}
+table{border-collapse:collapse;width:100%}td{border-bottom:1px solid var(--line);padding:8px;vertical-align:top}
+.v-过{background:var(--ok)}.v-不过{background:var(--bad)}.v-跳过{background:var(--skip)}.v-没验{background:var(--miss)}
+button{font:inherit;color:inherit;cursor:pointer}
+#all{margin-left:12px;padding:4px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.shot{display:inline-block;vertical-align:top;width:124px;margin:0 6px 6px 0;padding:0;border:0;background:none;text-align:left}
+.shot img{height:220px;max-width:124px;object-fit:cover;border:1px solid var(--line);display:block}
+.shot small{display:block;color:var(--muted)}
+#lb{position:fixed;inset:0;background:#0e0f12;display:none;flex-direction:column;align-items:center;z-index:9;color:#eee}
+#lb.on{display:flex}
+#lb figure{flex:1;min-height:0;margin:0;display:flex;align-items:center;justify-content:center;width:100%}
+#lb img{max-height:100%;max-width:calc(100% - 140px);object-fit:contain}
+#lb .cap{padding:10px 16px 16px;text-align:center;max-width:900px}
+#lb .cap b{font-size:16px}#lb .cap span{color:#aaa}
+#lb .nav{position:absolute;top:50%;transform:translateY(-50%);width:56px;height:96px;border:0;border-radius:10px;background:rgba(255,255,255,.12);font-size:32px;color:#fff}
+#lb .nav:disabled{opacity:.2;cursor:default}#prev{left:12px}#next{right:12px}
+#close{position:absolute;top:10px;right:14px;border:0;background:none;color:#fff;font-size:28px}
+#count{padding-top:10px;color:#aaa}
+@media (max-width:600px){#lb img{max-width:100%}#lb .nav{width:40px;height:72px;font-size:24px}}
+</style>
+"""
+REPORT_TAIL = """<div id="lb" role="dialog" aria-label="截图">
+<div id="count"></div><button id="close" aria-label="关闭">×</button>
+<figure><img id="lbimg" alt=""></figure>
+<button class="nav" id="prev" aria-label="上一张">‹</button><button class="nav" id="next" aria-label="下一张">›</button>
+<div class="cap"><b id="t1"></b><br><span id="t2"></span></div></div>
+<script>
+const shots = __SHOTS__;
+const lb = document.getElementById('lb'), img = document.getElementById('lbimg');
+let at = 0;
+function show(i) {
+  at = Math.max(0, Math.min(shots.length - 1, i));
+  const s = shots[at];
+  img.src = s.file;
+  document.getElementById('count').textContent = (at + 1) + ' / ' + shots.length;
+  document.getElementById('t1').textContent = s.id + ' · ' + s.page + ' · ' + s.verdict + ' — ' + s.shot;
+  document.getElementById('t2').textContent = s.note;
+  document.getElementById('prev').disabled = at === 0;
+  document.getElementById('next').disabled = at === shots.length - 1;
+  lb.classList.add('on');
+}
+const close = () => lb.classList.remove('on');
+document.querySelectorAll('.shot').forEach(b => b.onclick = () => show(+b.dataset.i));
+document.getElementById('all').onclick = () => show(0);
+document.getElementById('prev').onclick = e => { e.stopPropagation(); show(at - 1); };
+document.getElementById('next').onclick = e => { e.stopPropagation(); show(at + 1); };
+document.getElementById('close').onclick = close;
+lb.onclick = e => { if (e.target === lb || e.target.tagName === 'FIGURE') close(); };
+document.addEventListener('keydown', e => {
+  if (!lb.classList.contains('on')) return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); show(at + 1); }
+  else if (e.key === 'ArrowLeft') show(at - 1);
+  else if (e.key === 'Escape') close();
+});
+let x0 = null;
+lb.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+lb.addEventListener('touchend', e => {
+  if (x0 === null) return;
+  const dx = e.changedTouches[0].clientX - x0; x0 = null;
+  if (Math.abs(dx) > 50) show(at + (dx < 0 ? 1 : -1));
+});
+</script></html>
+"""
 
 
 def teardown():
