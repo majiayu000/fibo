@@ -16,7 +16,7 @@ fn populated() -> (Fixture, Index) {
     (fixture, index)
 }
 
-fn steps(index: &Index, read: impl FnOnce()) -> usize {
+fn steps(index: &mut Index, read: impl FnOnce(&Index)) -> usize {
     let ticks = Arc::new(AtomicUsize::new(0));
     let count = Arc::clone(&ticks);
     index
@@ -29,15 +29,15 @@ fn steps(index: &Index, read: impl FnOnce()) -> usize {
             }),
         )
         .unwrap();
-    read();
+    read(index);
     index.db.progress_handler(0, None::<fn() -> bool>).unwrap();
     ticks.load(Ordering::Relaxed)
 }
 
 #[test]
 fn an_empty_poll_does_not_walk_old_records() {
-    let (_fixture, index) = populated();
-    let work = steps(&index, || {
+    let (_fixture, mut index) = populated();
+    let work = steps(&mut index, |index| {
         let (messages, more) = index
             .chat("bench", 0, Some(5_000_000 * 4096 + 1), None, 50, false)
             .unwrap();
@@ -48,8 +48,8 @@ fn an_empty_poll_does_not_walk_old_records() {
 
 #[test]
 fn latest_messages_skip_a_long_non_message_tail() {
-    let (_fixture, index) = populated();
-    let work = steps(&index, || {
+    let (_fixture, mut index) = populated();
+    let work = steps(&mut index, |index| {
         let (messages, more) = index.chat("bench", 0, None, None, 50, false).unwrap();
         assert_eq!(messages.len(), 10);
         assert_eq!(messages[0].text, "message-0");
@@ -63,8 +63,8 @@ fn latest_messages_skip_a_long_non_message_tail() {
 
 #[test]
 fn a_single_call_does_not_walk_unrelated_records() {
-    let (_fixture, index) = populated();
-    let work = steps(&index, || {
+    let (_fixture, mut index) = populated();
+    let work = steps(&mut index, |index| {
         let call = index.tool_call("bench", "tool-1").unwrap().unwrap();
         assert_eq!(call.results.len(), 1);
         assert_eq!(call.results[0].offset, 200);
@@ -124,8 +124,8 @@ fn old_tools(failed: bool) -> (Fixture, Index) {
 #[test]
 fn old_tool_pages_skip_unrelated_later_results() {
     for failed in [false, true] {
-        let (_fixture, index) = old_tools(failed);
-        let work = steps(&index, || {
+        let (_fixture, mut index) = old_tools(failed);
+        let work = steps(&mut index, |index| {
             let (summary, rows, next) = index
                 .tool_calls("bench", Some(1000 * 4096 + 1), None, 1)
                 .unwrap();
@@ -143,8 +143,8 @@ fn old_tool_pages_skip_unrelated_later_results() {
 #[test]
 fn old_chat_summaries_skip_unrelated_later_results() {
     for failed in [false, true] {
-        let (_fixture, index) = old_tools(failed);
-        let work = steps(&index, || {
+        let (_fixture, mut index) = old_tools(failed);
+        let work = steps(&mut index, |index| {
             let (messages, _) = index
                 .chat("bench", 0, None, Some(1000 * 4096 + 2), 1, true)
                 .unwrap();
@@ -162,9 +162,9 @@ fn old_chat_summaries_skip_unrelated_later_results() {
 
 #[test]
 fn an_empty_tool_page_skips_a_result_only_tail() {
-    let (_fixture, index) = populated();
+    let (_fixture, mut index) = populated();
     index.db.execute_batch("UPDATE session_records SET kind='tool_result',call_id='later-'||offset WHERE offset>=10000;").unwrap();
-    let work = steps(&index, || {
+    let work = steps(&mut index, |index| {
         let (_, rows, next) = index
             .tool_calls("bench", None, Some(9000 * 4096 + 1), 50)
             .unwrap();
