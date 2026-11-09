@@ -3,7 +3,7 @@
 // computer reads which is on off the CLI after the models, never at the same time (both open
 // menus in the same terminal).
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { oops, switchMode } from '../actions';
 import { remote } from '../remote/hub';
 import type { ModeOption, ModeOptions } from './modes';
@@ -53,7 +53,8 @@ export function EffortRow({ machine, terminal, start }: { machine: string; termi
       {!!error && <Text style={{ color: t.err, fontSize: 13, lineHeight: 18 }}>{error}</Text>}
       {!got && !error && <ActivityIndicator accessibilityLabel="正在读强度" color={t.dim} style={{ alignSelf: 'flex-start' }} />}
       {!!got && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} keyboardShouldPersistTaps="handled">
+        // Every level in sight: in a scrolling row the last one stood half off the sheet.
+        <View style={s.chips}>
           {got.options.map((o) => (
             <Pressable
               key={o.key}
@@ -75,7 +76,7 @@ export function EffortRow({ machine, terminal, start }: { machine: string; termi
               )}
             </Pressable>
           ))}
-        </ScrollView>
+        </View>
       )}
     </View>
   );
@@ -84,6 +85,6 @@ export function EffortRow({ machine, terminal, start }: { machine: string; termi
 const s = StyleSheet.create({
   wrap: { borderTopWidth: 1, paddingTop: 12, marginTop: 4, gap: 10 },
   head: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
-  chips: { gap: 8, paddingRight: 8 },
-  chip: { minWidth: 56, height: 36, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { flexGrow: 1, minWidth: 56, height: 36, paddingHorizontal: 10, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });

@@ -15,7 +15,9 @@ export function Frame({ visible, onClose, onShow, children }: { visible: boolean
   const bottom = useBottomOverKeyboard();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} onShow={onShow}>
-      <KeyboardSafe>
+      {/* The dim is under the sheet too: only above it, the page showed undimmed past its
+          rounded corners, a rectangle around a round one (2026-11-09). */}
+      <KeyboardSafe style={s.dim}>
         <Pressable style={s.scrim} onPress={onClose} />
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line, paddingBottom: bottom + 12 }]}>{children}</View>
       </KeyboardSafe>
@@ -135,7 +137,8 @@ const SCREEN_HEIGHT = 440;
 const noGap = () => <View />;
 
 const s = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  dim: { backgroundColor: 'rgba(0,0,0,0.35)' },
+  scrim: { flex: 1 },
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: SHEET_PAD, gap: 12 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 17, fontWeight: '600' },
