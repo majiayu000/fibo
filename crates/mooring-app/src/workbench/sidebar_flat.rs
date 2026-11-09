@@ -130,7 +130,7 @@ impl Workbench {
     }
     /// MOORING and the machine the column shows.
     pub(super) fn flat_brand(&self) -> gpui::Div {
-        let letters = "MOORING".chars().map(|ch| div().child(ch.to_string()));
+        let letters = "FIBO".chars().map(|ch| div().child(ch.to_string()));
         let (machine, up) = self.column_machine();
         div()
             .flex_shrink_0()

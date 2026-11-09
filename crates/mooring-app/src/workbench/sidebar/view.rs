@@ -411,7 +411,7 @@ impl Workbench {
                                 .text_size(px(T::CHIP_SIZE))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(T::color(T::secondary()))
-                                .child("MOORING"),
+                                .child("FIBO"),
                         )
                         .child(self.title_drag_area(cx))
                         .child(self.sidebar_toggle(cx)),
