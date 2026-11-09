@@ -397,11 +397,22 @@ impl Workbench {
                         .role(gpui::accesskit::Role::Button)
                         .aria_label(t!("接着管 {name}", name))
                         .flex_shrink_0()
-                        .px(px(T::S6))
-                        .rounded(px(T::S4))
+                        .px(px(T::S8))
+                        .py(px(T::S2))
+                        .rounded_full()
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(T::color(F::chip_line()))
+                        .bg(T::color(F::bg()))
                         .text_size(px(F::TAG))
                         .text_color(T::color(F::second()))
-                        .hover(|s| s.bg(T::color(F::selected())))
+                        .cursor_pointer()
+                        // Drawn like a space chip, so it reads as something to press on the
+                        // gray line, and lights up like a chosen chip under the pointer.
+                        .hover(|s| {
+                            s.bg(T::color(F::chip_on()))
+                                .border_color(T::color(F::chip_on_line()))
+                                .text_color(T::color(F::bright()))
+                        })
                         .child(t!("接着管"))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
