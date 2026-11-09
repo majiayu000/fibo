@@ -67,9 +67,13 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             seq,
             after,
             limit,
+            last,
         } => {
             let (log, index) = tool_log(shared, &session)?;
-            let (tools, rows, next) = index.tool_calls(&log.path, seq, after, limit)?;
+            let (tools, rows, next) = match last {
+                Some(n) => index.last_tool_calls(&log.path, seq, n)?,
+                None => index.tool_calls(&log.path, seq, after, limit)?,
+            };
             Ok(Reply::ToolCalls {
                 log,
                 tools,

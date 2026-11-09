@@ -46,14 +46,7 @@ impl Index {
         let limit = limit.clamp(1, 200);
         let until = seq.unwrap_or(i64::MAX);
         let end = place(until);
-        let from: i64 = self
-            .db
-            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
-            .map_err(err)?
-            .query_row(params![path, end.0, end.1], |r| r.get(0))
-            .optional()
-            .map_err(err)?
-            .unwrap_or(0);
+        let from = self.stretch_start(path, end)?;
         let start = after.map_or(from, |a| a.max(from));
         let begin = place(start);
         let mut rows = self
@@ -73,6 +66,38 @@ impl Index {
             None => Some(self.stretch(path, from, until)?),
         };
         Ok((tools, rows, next))
+    }
+
+    /// The stretch's last `n` calls, oldest first, with what the whole stretch adds up to:
+    /// what a running turn did just now, without paging through the hundreds before it.
+    pub fn last_tool_calls(&self, path: &str, seq: Option<i64>, n: usize) -> io::Result<Page> {
+        let until = seq.unwrap_or(i64::MAX);
+        let end = place(until);
+        let from = self.stretch_start(path, end)?;
+        let begin = place(from);
+        let mut rows = self
+            .db
+            .prepare_cached(&format!("SELECT {SEQ},call_id,text,at,inode,offset FROM session_records WHERE path=?1 AND kind='tool_call' AND (offset,ordinal)>(?2,?3) AND (offset,ordinal)<(?4,?5) ORDER BY offset DESC,ordinal DESC LIMIT ?6"))
+            .map_err(err)?
+            .query_map(params![path, begin.0, begin.1, end.0, end.1, n.clamp(1, 20) as i64], row)
+            .map_err(err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(err)?;
+        rows.reverse();
+        self.attach_results(path, &mut rows)?;
+        Ok((Some(self.stretch(path, from, until)?), rows, None))
+    }
+
+    /// Where the stretch ending at `end` begins: the message before it.
+    fn stretch_start(&self, path: &str, end: (i64, i64)) -> io::Result<i64> {
+        Ok(self
+            .db
+            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .map_err(err)?
+            .query_row(params![path, end.0, end.1], |r| r.get(0))
+            .optional()
+            .map_err(err)?
+            .unwrap_or(0))
     }
 
     /// Which log the turn begun at `since` is in and where its opening message is, so reading

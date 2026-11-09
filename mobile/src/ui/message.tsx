@@ -51,23 +51,25 @@ function Meta({ text, note, right, color, onSelect }: { text: string; note: stri
 
 const COPIED = '已复制全文';
 
-export const Mine = memo(function Mine({ text, at, note, tone, copyable }: { text: string; at?: number; note?: string; tone?: 'pending' | 'error'; copyable?: boolean }) {
+export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress }: { text: string; at?: number; note?: string; tone?: 'pending' | 'queued' | 'error'; copyable?: boolean; onPress?: () => void }) {
   const t = useTheme();
   const [said, say] = useCopied();
   const [selecting, setSelecting] = useState(false);
   return (
     <View style={{ gap: 6 }}>
       <Pressable
-        disabled={!copyable}
+        disabled={!copyable && !onPress}
+        onPress={onPress}
+        accessibilityRole={onPress ? 'button' : undefined}
         onLongPress={() => {
           Clipboard.setStringAsync(text).catch(() => undefined);
           say(COPIED);
         }}
-        style={[s.mine, { backgroundColor: t.bubble }, tone === 'pending' && { opacity: 0.6 }]}
+        style={[s.mine, { backgroundColor: t.bubble }, tone === 'pending' && { opacity: 0.6 }, tone === 'queued' && { backgroundColor: t.waitBg, borderWidth: 1.5, borderStyle: 'dashed', borderColor: t.run }]}
       >
         <Text style={{ color: t.text, fontSize: 15, lineHeight: 22 }}>{text}</Text>
       </Pressable>
-      <Meta text={note ?? (at ? clock(at) : '')} note={said} right color={tone === 'error' ? t.err : t.dim} onSelect={() => setSelecting(true)} />
+      <Meta text={note ?? (at ? clock(at) : '')} note={said} right color={tone === 'error' ? t.err : tone === 'queued' ? t.run : t.dim} onSelect={() => setSelecting(true)} />
       {selecting && <SelectSheet text={text} onClose={() => setSelecting(false)} />}
     </View>
   );

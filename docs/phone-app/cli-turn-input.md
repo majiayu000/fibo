@@ -22,6 +22,7 @@
 ## 已做（11-09）
 
 - **排队 / 引导**：每家在适配器里声明键（`Adapter::turn_keys`），`send` 带 `how` 时电脑先粘贴再按这家的键；没声明的 Agent 手机上不出选择。真 Claude、真 Codex 各走通两种。
+- **默认排队，点气泡立刻发送**（11-09 晚，用户：「排队引导应该是默认发出去 不分排队还是引导的 如果在排队 可以点击一下 消息气泡 有一个 立刻发送」）：它在跑时手机不再让人先选排队还是引导，一律排队；排着的气泡点一下给「立刻发送」，电脑按这家的引导键、不粘贴任何字（`sendnow`）。Claude 上输入框空着按 Ctrl+Enter 会把排着的几句**一起**发出，所以手机也说「排着的 N 句会一起发出去」。只对 Claude 打开（Codex 没测）。撤回、改一下没做：Claude 按 ↑ 会把整个队列拉回输入框，只撤一句要先清空再把别的重新排上，依赖它输入框怎么删行，容易残字或误发。
 - **强度**：`modes` / `setmode` 多一种 `effort`（`agents/modes_effort.rs`）。Claude 读 `/effort` 滑杆上 ▲ 指着哪档（底栏的「● high · /effort」时有时无，不能靠它），换完核对「Set effort level to high (this session only)」；Codex 走 `/model` → 当前模型 → 档位菜单，Max、Ultra 在「More reasoning…」下一层，换完核对底栏。手机在 + 面板里多一行「强度」。
 - **Codex 在 Ultra 档时输入框符号是 `»` 不是 `›`**：换模型、换权限、换强度的「在输入框」判断都已认这两种；状态识别（`AgentSpec` 的 prompt markers、`agent_input_ready`）还只认 `›`，没改。
 

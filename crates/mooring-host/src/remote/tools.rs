@@ -112,6 +112,7 @@ pub(super) fn tool_calls(socket: &Path, request: &Value) -> io::Result<Value> {
             seq: request["seq"].as_i64(),
             after: request["after"].as_i64(),
             limit: request["limit"].as_u64().unwrap_or(100).clamp(1, 200) as usize,
+            last: request["last"].as_u64().map(|n| n.clamp(1, 20) as usize),
         },
     )?;
     let Reply::ToolCalls {

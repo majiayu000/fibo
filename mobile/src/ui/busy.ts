@@ -35,6 +35,18 @@ export function steerable(agent: string | null | undefined) {
   return agent === 'claude' || agent === 'codex';
 }
 
+/**
+ * Whether the Agent sends its whole queue now on its steer key with nothing typed: Claude Code
+ * says `ctrl+enter to send now` under a queued message, measured 2026-11-09. Codex not yet.
+ */
+export function sendsNow(agent: string | null | undefined) {
+  return agent === 'claude';
+}
+
+/** Under a queued message the phone can send now; after that is done. */
+export const QUEUED_TAP = '排队中 · 点一下可以立刻发送';
+export const SENT_NOW = '已立刻发送 · 它马上会看到';
+
 /** `agent` as cards name it: `claude`, `codex`… */
 export function whileBusy(agent: string | null | undefined): BusyWords {
   if (agent === 'claude') return QUEUES;
