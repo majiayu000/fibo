@@ -55,8 +55,12 @@ def mooring():
     found = shutil.which("mooring")
     if found:
         return found
-    app = Path("/Applications/Mooring.app/Contents/MacOS/mooring")
-    return str(app) if app.exists() else die("找不到 mooring 命令")
+    # An app updated in place keeps its folder name, so an old install is still Mooring.app.
+    for name in ("Fibo", "Mooring"):
+        app = Path(f"/Applications/{name}.app/Contents/MacOS/mooring")
+        if app.exists():
+            return str(app)
+    return die("找不到 mooring 命令")
 
 
 def adb(*args, out=False):
@@ -115,7 +119,8 @@ def start():
 
 
 def app_head():
-    for p in (REPO.parent / "mooring/target/bundle-here/Mooring.app/Contents/Resources/receipt.json",
+    for p in (REPO.parent / "mooring/target/bundle-here/Fibo.app/Contents/Resources/receipt.json",
+              REPO.parent / "mooring/target/bundle-here/Mooring.app/Contents/Resources/receipt.json",
               REPO.parent / "mooring/target/bundle-here/receipt.json"):
         if p.exists():
             return json.loads(p.read_text()).get("git_head", "?")[:7]

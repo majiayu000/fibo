@@ -242,7 +242,7 @@ function remote(machine: string) {
 export function install() {
   (globalThis as { fixture?: typeof driver }).fixture = driver;
   stage(LINKS, async (l) => {
-    if (l.machine === 'air') throw new RemoteError('电脑上的 Mooring 不在线', 1012);
+    if (l.machine === 'air') throw new RemoteError('电脑上的 Fibo 不在线', 1012);
     return remote(l.machine) as never;
   });
   outboxReady.then(() => {

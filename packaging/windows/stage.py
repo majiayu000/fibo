@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Lay out a Windows release build the way the installer copies it; no signing or publishing.
 
-bin/        mooring-app.exe (the window) and mooring.exe (host and CLI)
+bin/        mooring-app.exe (the window), mooring.exe (host and CLI) and fibo.exe, which runs
+            mooring.exe with the same arguments so either name works in a terminal
 Resources/  the plugin catalog and notices, where market::bundled_dir looks beside bin/
 """
 import argparse
@@ -40,6 +41,7 @@ def subsystem(exe: pathlib.Path) -> int:
 for binary, want, words in (
     ('mooring-app.exe', GUI, '窗口程序，否则打开时旁边会多一个命令行窗口'),
     ('mooring.exe', CONSOLE, '命令行程序，否则在终端里敲 mooring 没有输出'),
+    ('fibo.exe', CONSOLE, '命令行程序，否则在终端里敲 fibo 没有输出'),
 ):
     got = subsystem(args.release_dir / binary)
     if got != want:

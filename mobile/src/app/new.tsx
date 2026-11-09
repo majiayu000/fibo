@@ -56,7 +56,7 @@ export default function NewTask() {
       : m.status !== 'online'
         ? '电脑没连上'
         : !able
-          ? '这台电脑的 Mooring 还不能开新任务'
+          ? '这台电脑的 Fibo 还不能开新任务'
           : !cwd
             ? '先选一个目录'
             : !draft.prompt.trim() && !draft.resume

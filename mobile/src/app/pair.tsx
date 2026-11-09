@@ -29,7 +29,7 @@ export default function Pair() {
       setCandidate(parseLink(linkText));
       setError('');
     } catch (e) {
-      setError(`这不是 Mooring 的配对链接（${(e as Error).message}）`);
+      setError(`这不是 Fibo 的配对链接（${(e as Error).message}）`);
     }
   }
 
@@ -68,7 +68,7 @@ export default function Pair() {
         <View style={s.body}>
           <Text style={{ color: t.text, fontSize: 19, fontWeight: TITLE_WEIGHT }}>和「{candidate.name || '这台电脑'}」配对？</Text>
           <Text style={[s.hint, { color: t.dim }]}>
-            经过中继 {relay}。只在你刚在自己电脑的 Mooring 里点了「配对新手机」时才确认；别人发来的链接不要配。
+            经过中继 {relay}。只在你刚在自己电脑的 Fibo 里点了「配对新手机」时才确认；别人发来的链接不要配。
           </Text>
         </View>
         <View style={[s.foot, { paddingBottom: bottom + 4 }]}>
@@ -114,7 +114,7 @@ export default function Pair() {
           </View>
         </View>
         <View style={{ gap: 10 }}>
-          <Text style={[s.step, { color: t.dim }]}>1. 在电脑的 Mooring 里点标题栏的手机图标</Text>
+          <Text style={[s.step, { color: t.dim }]}>1. 在电脑的 Fibo 里点标题栏的手机图标</Text>
           <Text style={[s.step, { color: t.dim }]}>2. 选「配对新手机」，屏幕上会出现二维码</Text>
           <Text style={[s.step, { color: t.dim }]}>
             3. 用<Text style={{ color: t.text, fontWeight: '700' }}>这里</Text>对准它。微信和系统相机打不开这种码

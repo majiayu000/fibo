@@ -99,7 +99,7 @@ export default function SettingsScreen() {
         <Label style={{ marginTop: 8 }}>输入建议</Label>
         <Text style={{ fontSize: 12, color: t.dim, lineHeight: 18 }}>{statsWords(stats)}</Text>
         <Text style={{ textAlign: 'center', fontSize: 13, color: t.dim, marginTop: 24 }}>
-          Mooring {Constants.expoConfig?.version ?? ''} · 这些设置只存在这台手机上
+          Fibo {Constants.expoConfig?.version ?? ''} · 这些设置只存在这台手机上
         </Text>
       </ScrollView>
     </View>

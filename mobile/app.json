@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Mooring",
+    "name": "Fibo",
     "slug": "mooring-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "dev.mooring.mobile",
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "连接同一个 Wi‑Fi 里电脑上的 Mooring 中继",
+        "NSLocalNetworkUsageDescription": "连接同一个 Wi‑Fi 里电脑上的 Fibo 中继",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
@@ -48,13 +48,13 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "允许审批和打开 Mooring 前用 Face ID 确认是你"
+          "faceIDPermission": "允许审批和打开 Fibo 前用 Face ID 确认是你"
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "扫描电脑上 Mooring 显示的配对二维码",
+          "cameraPermission": "扫描电脑上 Fibo 显示的配对二维码",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }

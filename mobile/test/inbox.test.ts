@@ -286,7 +286,7 @@ describe('the home screen', () => {
     expect(headline(shelve(a, null), 1)).toBe('1 件要你决定');
     const quiet = arrange([one([card('r', 'review')])], []);
     expect(headline(shelve(quiet, null), 1)).toBe('没有要你决定的事');
-    expect(headline(shelve(arrange([], []), null), 0)).toBe('Mooring');
+    expect(headline(shelve(arrange([], []), null), 0)).toBe('Fibo');
   });
 
   test('what runs shows a few at first, all when asked', () => {

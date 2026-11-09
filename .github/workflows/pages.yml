@@ -1,4 +1,4 @@
-name: Publish Mooring website
+name: Publish Fibo website
 on:
   push:
     branches: [main]
