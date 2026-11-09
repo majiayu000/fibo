@@ -178,6 +178,8 @@ pub(super) fn start(
                     "TodoStart" => 4,
                     // A login shell with a rich prompt takes longer before the command goes in.
                     "ActionRun" => 6,
+                    // The host reads the turn's edits before the panel has lines to show.
+                    "ChangesOpen" => 3,
                     _ => 1,
                 };
                 cx.background_executor()

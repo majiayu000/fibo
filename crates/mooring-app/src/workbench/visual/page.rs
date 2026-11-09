@@ -360,6 +360,12 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
+            // 看改动 open on the second pane of the right column, as its button opens it.
+            "ChangesOpen" => {
+                if let Some(session) = self.workspace.current_agent("p2").cloned() {
+                    self.toggle_changes("p2", &session, window, cx);
+                }
+            }
             // `Settings-{General|Look|Terminal|Keys|Notifications|Phones|Plugins|About}`: the
             // settings window open on that page (MOORING_LANG=en for its English).
             settings if settings.starts_with("Settings-") => {
