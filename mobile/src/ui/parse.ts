@@ -250,3 +250,24 @@ export function tightWindows(readings: { machine: string; agents: Reading[] | nu
   }
   return out.sort((x, y) => y.used - x.used);
 }
+
+export type PathChip =
+  | { kind: 'level'; label: string; path: string; root: boolean; current: boolean }
+  | { kind: 'more'; hidden: { label: string; path: string }[] };
+
+/**
+ * A `trail` as the folder chips above the list: the root, the last two levels, and the ones
+ * between folded into one 「… N 级」 when there are more than four. The root `/` reads 电脑:
+ * as a chip next to the separators, a bare `/` read as 「/ / private」 (2026-11-09).
+ */
+export function pathChips(crumbs: { label: string; path: string }[]): PathChip[] {
+  const level = (c: { label: string; path: string }, i: number): PathChip => ({
+    kind: 'level',
+    label: i === 0 && c.label === '/' ? '电脑' : c.label,
+    path: c.path,
+    root: i === 0,
+    current: i === crumbs.length - 1,
+  });
+  if (crumbs.length <= 4) return crumbs.map(level);
+  return [level(crumbs[0], 0), { kind: 'more', hidden: crumbs.slice(1, -2) }, ...crumbs.slice(-2).map((c, j) => level(c, crumbs.length - 2 + j))];
+}
