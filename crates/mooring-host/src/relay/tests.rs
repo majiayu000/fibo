@@ -231,3 +231,6 @@ async fn a_frame_id_that_does_not_fit_is_refused_and_one_that_just_fits_works() 
 
 #[path = "regressions.rs"]
 mod regressions;
+
+#[path = "replaced_tests.rs"]
+mod replaced_tests;

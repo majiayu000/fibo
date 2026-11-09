@@ -3,9 +3,10 @@
 //! reports of who is on are passed to the app with the rest of the host's status.
 //!
 //! The setting lives in `remote-relay.json` next to the socket (0600: it may hold the
-//! relay's key). A child that exits on its own was refused (a bad key, another machine
-//! with this code) and is not restarted until the setting changes; one killed by a
-//! signal it did not get from here is restarted after a pause.
+//! relay's key). A child that exits on its own was refused (a bad key, a newer child on
+//! this machine) and is not restarted until the setting changes; one killed by a signal it
+//! did not get from here is restarted after a pause. Pushed off its code from elsewhere,
+//! the child itself waits and takes it back (#69).
 use mooring_core::protocol::{RemoteLive, RemoteState, RemoteStatus};
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};

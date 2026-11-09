@@ -44,8 +44,11 @@ location / {
     proxy_set_header Connection "upgrade";
     proxy_set_header X-Real-IP $remote_addr;
     proxy_read_timeout 1h;
+    access_log off;
 }
 ```
+
+**别让代理记下手机的地址。** 手机连的路径 `/c/<路由码>/…` 里带着它的路由码，访问日志记下它，看得到日志的人就能反复占用这台电脑的连接名额（通信内容仍然读不到）。nginx 在这个 `location` 里加 `access_log off;`；Caddy 默认不写访问日志，打开过 `log` 的话把它去掉。电脑连的 `/agent` 从 11-09 起不再带任何凭据。
 
 检查：`curl https://relay.example.com/healthz` 应该返回 `"ok":true`，以及 `"protocol":3` 或更高。
 
