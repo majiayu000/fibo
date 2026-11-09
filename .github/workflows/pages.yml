@@ -1,8 +1,8 @@
-name: Publish Mooring website
+name: Publish Fibo website
 on:
   push:
     branches: [main]
-    paths: ['docs/site/**', 'assets/mooring-1024.png', '.github/workflows/pages.yml']
+    paths: ['docs/site/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,8 +26,8 @@ jobs:
       - name: Stage only public website files
         run: |
           mkdir -p _site/assets
-          cp docs/site/index.html docs/site/sitemap.xml _site/
-          cp assets/mooring-1024.png _site/assets/
+          cp docs/site/index.html docs/site/sitemap.xml docs/site/CNAME _site/
+          cp docs/site/assets/* _site/assets/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
