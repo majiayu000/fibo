@@ -30,13 +30,13 @@ impl Workbench {
         self.nav.zoomed = None;
         self.nav.space = "s0".into();
         self.nav.tab = Some(
-            if matches!(
-                name,
-                "TodoStart" | "UnboundAgent" | "UnboundAgentMenu" | "UnboundAgentConfirm"
-            ) {
-                "start"
-            } else {
-                "feedback"
+            match name {
+                "TodoStart" | "UnboundAgent" | "UnboundAgentMenu" | "UnboundAgentConfirm" => {
+                    "start"
+                }
+                // No tab of the fixture's: the empty tab's 在这里开始 and its Agent links.
+                "EmptyTab" => "visual-empty-tab",
+                _ => "feedback",
             }
             .into(),
         );
@@ -51,7 +51,7 @@ impl Workbench {
             // 额度's popover, with MOORING_FIXTURE_QUOTA_SPARE a week about to go unused.
             "StatusQuota" => self.statusbar = Some(super::statusbar::StatusPop::Quota),
             // Main is the window as it opens (docs/ui-v3/v3-4.png); 看进度's card has its own.
-            "Main" | "MainSpace" | "UnboundAgent" => {}
+            "Main" | "MainSpace" | "UnboundAgent" | "EmptyTab" => {}
             // 标记完成 on it, in its menu; asked for real, the fixture's screen names no
             // conversation, so the host's answer opens the close-only confirmation.
             "UnboundAgentMenu" => {
