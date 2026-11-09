@@ -6,7 +6,7 @@ impl Render for SettingsView {
         let searching = !self.query(cx).is_empty();
         let body = self.body(cx);
         let (title, description) = if searching {
-            ("搜索结果", "在所有分类中查找。")
+            (t!("搜索结果"), t!("在所有分类中查找。"))
         } else {
             (self.page.label(), self.page.description())
         };
@@ -70,7 +70,7 @@ impl Render for SettingsView {
                             .text_size(px(T::TITLE))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(T::color(T::primary()))
-                            .child("设置"),
+                            .child(t!("设置")),
                     )
                     .child(
                         div()
@@ -117,6 +117,8 @@ impl Render for SettingsView {
                             .child(
                                 div()
                                     .flex_1()
+                                    // Lets a long description (English) wrap, not run past the close button.
+                                    .min_w_0()
                                     .flex()
                                     .flex_col()
                                     .gap(px(T::S4))
@@ -131,7 +133,7 @@ impl Render for SettingsView {
                             )
                             .child(
                                 button("settings-close", "✕")
-                                    .aria_label("关闭设置")
+                                    .aria_label(t!("关闭设置"))
                                     .w(px(T::ROW))
                                     .text_color(T::color(T::secondary()))
                                     .on_click(
@@ -188,7 +190,7 @@ impl Workbench {
                     this.nav.pending_focus = true;
                 } else {
                     view.update(cx, |v, _| {
-                        v.text_error = Some("先打开一个终端窗格，再回来试播".into());
+                        v.text_error = Some(t!("先打开一个终端窗格，再回来试播").into());
                     });
                 }
                 cx.notify();

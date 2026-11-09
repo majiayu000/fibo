@@ -68,16 +68,25 @@ impl Status {
     /// One word per state everywhere; nothing else spells these (tests/guard.rs).
     pub fn label(self) -> &'static str {
         match self {
-            Self::Waiting => "等你回答",
-            Self::Error => "出错了",
-            Self::Running => "在跑",
-            Self::Background => "等后台",
-            Self::Review => "等你验收",
-            Self::Fresh => "新开的",
-            Self::Paused => "停下了",
-            Self::Stale => "很久没动",
-            Self::Deferred => "稍后再看",
-            Self::Closed => "做完了",
+            Self::Waiting => crate::t!("等你回答"),
+            Self::Error => crate::t!("出错了"),
+            Self::Running => crate::t!("在跑"),
+            Self::Background => crate::t!("等后台"),
+            Self::Review => crate::t!("等你验收"),
+            Self::Fresh => crate::t!("新开的"),
+            Self::Paused => crate::t!("停下了"),
+            Self::Stale => crate::t!("很久没动"),
+            Self::Deferred => crate::t!("稍后再看"),
+            Self::Closed => crate::t!("做完了"),
+        }
+    }
+    /// The word where only a few letters fit (the menu bar's count cards). The same as
+    /// [`Status::label`] in Chinese; English drops "for you".
+    pub fn short_label(self) -> &'static str {
+        match self {
+            Self::Waiting => crate::t!("等你回答#short"),
+            Self::Review => crate::t!("等你验收#short"),
+            _ => self.label(),
         }
     }
     /// The terminal style's symbol. ✓ is yours to give; a turn waiting for it is the open
@@ -235,13 +244,13 @@ impl TaskState {
     }
     pub fn label(self) -> &'static str {
         match self {
-            Self::NotStarted => "未开始",
-            Self::Working => "进行中",
-            Self::Settled => "会话都做完了",
-            Self::Proven => "验收齐了",
-            Self::Completed => "已完成",
-            Self::Deferred => "稍后再看",
-            Self::Abandoned => "已放弃",
+            Self::NotStarted => crate::t!("未开始"),
+            Self::Working => crate::t!("进行中"),
+            Self::Settled => crate::t!("会话都做完了"),
+            Self::Proven => crate::t!("验收齐了"),
+            Self::Completed => crate::t!("已完成"),
+            Self::Deferred => crate::t!("稍后再看"),
+            Self::Abandoned => crate::t!("已放弃"),
         }
     }
     /// Closed by you: its sessions no longer ask for you and take no new conversation.
@@ -286,7 +295,9 @@ fn task_closed(w: &Workspace, s: &AgentSession) -> bool {
 /// The name of the group `needs_you` counts (waiting on you, failed, or finished for you
 /// to check), wherever it is shown: the window's chip and board column, the menu bar,
 /// the sidebar's groups.
-pub const NEEDS_YOU: &str = "要你处理";
+pub fn needs_you_word() -> &'static str {
+    crate::t!("要你处理")
+}
 
 /// Whether a session asks for you now: stopped and yours (`Status::needs_you`), in a Mooring terminal
 /// that is open in a tab (its process may have failed), not one you put off or closed

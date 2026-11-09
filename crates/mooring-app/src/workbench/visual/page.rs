@@ -360,6 +360,22 @@ impl Workbench {
             // The overview's foot: the folded groups below the cards.
             "OverviewEnd" => self.overview.scroll.scroll_to_bottom(),
             "Overview" | "Menubar" | "BoardDrag" | "BoardRefuseDrag" => (),
+            // `Settings-{General|Look|Terminal|Keys|Notifications|Phones|Plugins|About}`: the
+            // settings window open on that page (MOORING_LANG=en for its English).
+            settings if settings.starts_with("Settings-") => {
+                use super::settings::Page;
+                let page = match &settings["Settings-".len()..] {
+                    "Look" => Page::Look,
+                    "Terminal" => Page::Terminal,
+                    "Keys" => Page::Keys,
+                    "Notifications" => Page::Notifications,
+                    "Phones" => Page::Phones,
+                    "Plugins" => Page::Plugins,
+                    "About" => Page::About,
+                    _ => Page::General,
+                };
+                self.show_settings_page(page, window, cx);
+            }
             // `SidebarUnlinked-{all|s0|s1}-{today}{older}-{none|codex|claude}-{recent|directory}`:
             // the terminals `MOORING_FIXTURE_UNLINKED` starts, under each fold (`o` open, `f`
             // folded) and selection; `s1` holds none of them.

@@ -99,7 +99,7 @@ impl Workbench {
                     .iter()
                     .map(|t| Hit::Task(t.id.clone()))
                     .collect();
-                sections.push(self.section("待办", tasks.len().to_string(), tasks));
+                sections.push(self.section(t!("待办"), tasks.len().to_string(), tasks));
             }
             return sections;
         }
@@ -172,26 +172,42 @@ impl Workbench {
         // 「视图」 or 「左栏」 lists every view; a view's own name finds it too.
         let views: Vec<Hit> = self
             .sidebar_presets()
-            .filter(|p| contains(&format!("左栏 侧栏 视图 {}", p.name), query))
+            .filter(|p| {
+                // Chinese words always match; the current language's word too.
+                let words = format!("{} {}", not_ui!("左栏 侧栏 视图"), t!("左栏视图"));
+                contains(
+                    &format!("{words} {} {}", p.name, mooring_core::i18n::say(&p.name)),
+                    query,
+                )
+            })
             .map(|p| Hit::View(p.id.clone()))
             .collect();
-        let tools: Vec<Hit> = contains("本机诊断 诊断 卡顿 占用 CPU GPU 内存 diagnostics", query)
-            .then_some(Hit::Diagnostics)
-            .into_iter()
-            .chain(self.machine_hits(query))
-            .chain(self.space_hits(query))
-            .collect();
+        let tools: Vec<Hit> = contains(
+            &format!(
+                "{} {}",
+                not_ui!("本机诊断 诊断 卡顿 占用 CPU GPU 内存 diagnostics"),
+                t!("本机诊断")
+            ),
+            query,
+        )
+        .then_some(Hit::Diagnostics)
+        .into_iter()
+        .chain(self.machine_hits(query))
+        .chain(self.space_hits(query))
+        .collect();
         for (title, hits) in [
-            ("会话", sessions),
-            ("原话", quotes),
-            ("待办", tasks),
-            ("动作", actions),
-            ("左栏视图", views),
-            ("工具", tools),
+            (t!("会话"), sessions),
+            (t!("原话"), quotes),
+            (t!("待办"), tasks),
+            (t!("动作"), actions),
+            (t!("左栏视图"), views),
+            (t!("工具"), tools),
         ] {
             if !hits.is_empty() {
                 let note = match title {
-                    "原话" if !titled.is_empty() => format!("{} · 来自其他会话", hits.len()),
+                    _ if title == t!("原话") && !titled.is_empty() => {
+                        t!("{len} · 来自其他会话", len = hits.len())
+                    }
                     _ => hits.len().to_string(),
                 };
                 sections.push(self.section(title, note, hits));

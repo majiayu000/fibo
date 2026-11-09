@@ -27,9 +27,9 @@ impl Column {
     ];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Todo => "待办",
+            Self::Todo => crate::t!("待办"),
             Self::Running => Status::Running.label(),
-            Self::Needs => status::NEEDS_YOU,
+            Self::Needs => status::needs_you_word(),
             // Stopped and put off ones; finished turns are in 要你处理 since 11-03.
             Self::Review => Status::Paused.label(),
             Self::Done => Status::Closed.label(),

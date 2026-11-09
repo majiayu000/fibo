@@ -127,7 +127,7 @@ pub(super) struct Loaded {
     paused_until: Option<std::time::Instant>,
 }
 /// What is shown while a module compiles: the classic list, with no message.
-const COMPILING: &str = "正在加载";
+const COMPILING: &str = not_ui!("正在加载");
 /// Calls that fail in a row before the module is left alone for `PAUSE`: each costs the UI
 /// thread up to its deadline, on every state change.
 const FAILURES: u32 = 3;
@@ -159,9 +159,12 @@ impl Default for Views {
 fn accept(reply: Reply) -> Result<Reply, String> {
     let rows: usize = reply.sections.iter().map(|s| s.rows.len()).sum();
     if reply.sections.len() > MAX_SECTIONS || rows > MAX_ROWS {
-        return Err(format!(
-            "回复太多（{} 段 {rows} 行，最多 {MAX_SECTIONS} 段 {MAX_ROWS} 行）",
-            reply.sections.len()
+        return Err(t!(
+            "回复太多（{len} 段 {rows} 行，最多 {MAX_SECTIONS} 段 {MAX_ROWS} 行）",
+            len = reply.sections.len(),
+            rows,
+            MAX_SECTIONS,
+            MAX_ROWS
         ));
     }
     Ok(reply)
@@ -181,12 +184,13 @@ fn engine() -> Result<&'static host::Engine, String> {
 
 /// Reads and compiles it. Slow: never on the UI thread.
 fn compile(preset: &Preset) -> Result<host::Module, String> {
-    let path = preset.wasm_path().ok_or("没有 wasm 文件")?;
-    let bytes = std::fs::read(&path).map_err(|e| format!("读不了 {}：{e}", path.display()))?;
-    host::module(engine()?, &bytes).map_err(|e| format!("不是可用的 wasm：{e}"))
+    let path = preset.wasm_path().ok_or(t!("没有 wasm 文件"))?;
+    let bytes = std::fs::read(&path)
+        .map_err(|e| t!("读不了 {display}：{e}", display = path.display(), e))?;
+    host::module(engine()?, &bytes).map_err(|e| t!("不是可用的 wasm：{e}", e))
 }
 fn instantiate(module: &host::Module) -> Result<host::Plugin, String> {
-    host::Plugin::new(engine()?, module).map_err(|e| format!("加载失败：{e}"))
+    host::Plugin::new(engine()?, module).map_err(|e| t!("加载失败：{e}", e))
 }
 
 /// The state string a session's group goes by, the same coarse words as the spec.
@@ -299,9 +303,7 @@ impl Workbench {
                 return view
                     .last
                     .as_ref()
-                    .map_or(Err("连续失败，稍后再试".to_owned()), |(_, r)| {
-                        r.clone()
-                    });
+                    .map_or(Err(t!("连续失败，稍后再试").to_owned()), |(_, r)| r.clone());
             }
             view.paused_until = None;
         }
@@ -312,9 +314,9 @@ impl Workbench {
         let mut plugin = plugin;
         let reply = plugin
             .render(&state)
-            .map_err(|e| format!("调用出错：{e}"))
+            .map_err(|e| t!("调用出错：{e}", e))
             .and_then(|bytes| {
-                serde_json::from_slice::<Reply>(&bytes).map_err(|e| format!("回复格式不对：{e}"))
+                serde_json::from_slice::<Reply>(&bytes).map_err(|e| t!("回复格式不对：{e}", e))
             })
             .and_then(accept);
         if reply.is_ok() {
@@ -385,9 +387,10 @@ impl Workbench {
             }
             Err(why) => {
                 out.push(
-                    label(format!(
-                        "左栏「{}」没能排出来，先排成一列显示：{why}",
-                        preset.name
+                    label(t!(
+                        "左栏「{name}」没能排出来，先排成一列显示：{why}",
+                        name = mooring_core::i18n::say(&preset.name),
+                        why
                     ))
                     .px(px(T::S8))
                     .mt(px(T::S12))

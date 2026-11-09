@@ -11,10 +11,10 @@ impl SettingsView {
     ) -> gpui::AnyElement {
         let shown = path
             .as_ref()
-            .map_or_else(|| "未知".into(), |p| tilde(&p.display().to_string()));
+            .map_or_else(|| t!("未知").into(), |p| tilde(&p.display().to_string()));
         let control = secondary(
             format!("reveal-{title}"),
-            crate::ui::words::local("在访达中显示"),
+            crate::ui::words::local(t!("在访达中显示")),
         )
         .when(path.is_none(), |b| b.opacity(0.5))
         .on_click(cx.listener(move |_, _, _, cx| {
@@ -86,12 +86,12 @@ impl SettingsView {
         let hooks = match &self.hooks {
             None => {
                 return vec![
-                    self.row(first, "Agent Hook", "正在检查…", div())
+                    self.row(first, "Agent Hook", t!("正在检查…"), div())
                         .into_any_element(),
                 ];
             }
             Some(Err(e)) => {
-                let note = format!("没能检查：{e}");
+                let note = t!("没能检查：{e}", e);
                 return vec![
                     self.row(first, "Agent Hook", &note, div())
                         .into_any_element(),
@@ -104,20 +104,24 @@ impl SettingsView {
             .enumerate()
             .map(|(i, hook)| {
                 let (state, action) = match hook.state {
-                    State::Current => ("已安装且是最新", None),
-                    State::Outdated => ("已安装但过期", Some("重新安装")),
-                    State::Missing => ("未安装", Some("安装")),
-                    State::Unreadable => ("读不了这个文件", None),
+                    State::Current => (t!("已安装且是最新"), None),
+                    State::Outdated => (t!("已安装但过期"), Some(t!("重新安装"))),
+                    State::Missing => (t!("未安装"), Some(t!("安装"))),
+                    State::Unreadable => (t!("读不了这个文件"), None),
                 };
                 let mut note = state.to_owned();
                 if !hook.differences.is_empty() {
-                    note = format!("{note}：{}", hook.differences.join("；"));
+                    note = t!(
+                        "{note}：{diffs}",
+                        note,
+                        diffs = hook.differences.join(t!("；"))
+                    );
                 }
                 let busy = self.installing.is_some();
                 let control = action.map(|text| {
                     let agent = hook.agent.clone();
                     let text = if self.installing.as_ref() == Some(&agent) {
-                        "正在安装…"
+                        t!("正在安装…")
                     } else {
                         text
                     };
@@ -149,7 +153,7 @@ impl SettingsView {
     }
     pub(super) fn about_page(&self, cx: &Context<Self>) -> gpui::Div {
         let mut page = div().flex().flex_col();
-        if self.shows(Page::About, "版本", cx) {
+        if self.shows(Page::About, t!("版本"), cx) {
             page = page.child(
                 card().mt(px(T::S20)).child(
                     div()
@@ -173,30 +177,30 @@ impl SettingsView {
                                         .text_color(T::color(T::primary()))
                                         .child("Mooring"),
                                 )
-                                .child(label(format!(
-                                    "版本 {} · Agent 工作台",
-                                    env!("CARGO_PKG_VERSION")
+                                .child(label(t!(
+                                    "版本 {version} · Agent 工作台",
+                                    version = env!("CARGO_PKG_VERSION")
                                 )))
-                                .child(label("别再丢掉 Codex 与 Claude Code 里的工作。")),
+                                .child(label(t!("别再丢掉 Codex 与 Claude Code 里的工作。"))),
                         ),
                 ),
             );
         }
         let config = crate::ui::status_colors::config_dir();
         let mut data = Vec::new();
-        if self.shows(Page::About, "运行数据", cx) {
-            data.push(self.path_row(data.is_empty(), "运行数据", self.runtime.clone(), cx));
+        if self.shows(Page::About, t!("运行数据"), cx) {
+            data.push(self.path_row(data.is_empty(), t!("运行数据"), self.runtime.clone(), cx));
         }
-        if self.shows(Page::About, "偏好文件", cx) {
-            data.push(self.path_row(data.is_empty(), "偏好文件", config.clone(), cx));
+        if self.shows(Page::About, t!("偏好文件"), cx) {
+            data.push(self.path_row(data.is_empty(), t!("偏好文件"), config.clone(), cx));
         }
         if self.shows(Page::About, "Agent Hook", cx) {
             data.extend(self.hook_rows(data.is_empty(), cx));
         }
         let updates = self.update_rows(cx);
-        page.child(self.cards(vec![("更新", updates), ("数据与偏好", data)]))
-            .child(div().pt(px(T::S12)).px(px(T::S4)).child(label(
-                "工作区设置随数据库保存；外观、终端文字与快捷键存在偏好文件夹，只属于这台电脑。",
-            )))
+        page.child(self.cards(vec![(t!("更新"), updates), (t!("数据与偏好"), data)]))
+            .child(div().pt(px(T::S12)).px(px(T::S4)).child(label(t!(
+                "工作区设置随数据库保存；外观、终端文字与快捷键存在偏好文件夹，只属于这台电脑。"
+            ))))
     }
 }

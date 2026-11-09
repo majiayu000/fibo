@@ -46,7 +46,7 @@ impl Workbench {
                     .flex()
                     .px(px(T::S8))
                     .mb(px(T::S4))
-                    .child(label("空间").flex_1())
+                    .child(label(t!("空间")).flex_1())
                     .child(label(self.workspace.spaces.len().to_string())),
             );
         }
@@ -124,9 +124,9 @@ impl Workbench {
                         d.child(
                             button(
                                 gpui::SharedString::from(format!("space-missing-{id}")),
-                                "目录不在了",
+                                t!("目录不在了"),
                             )
-                            .aria_label(format!("重新选择 {} 的目录", space.name))
+                            .aria_label(t!("重新选择 {name} 的目录", name = space.name))
                             .flex_shrink_0()
                             .h(px(T::ICON_HEIGHT))
                             .px(px(T::S4))
@@ -182,7 +182,7 @@ impl Workbench {
         }
         if !dense {
             sidebar = sidebar.child(
-                button("add-space", "＋ 空间")
+                button("add-space", t!("＋ 空间"))
                     .border_0()
                     .justify_start()
                     .text_color(T::color(T::muted()))
@@ -322,7 +322,7 @@ impl Workbench {
         if !local_hidden && sessions.is_empty() && unread.is_empty() && !(recent && ended.total > 0)
         {
             sidebar = sidebar.child(
-                label("没有打开的会话。从右边启动一个 Agent，或在终端里运行 claude、codex，它们会出现在这里")
+                label(t!("没有打开的会话。从右边启动一个 Agent，或在终端里运行 claude、codex，它们会出现在这里"))
                     .mt(px(T::S14))
                     .px(px(T::S8)),
             );
@@ -337,7 +337,7 @@ impl Workbench {
             sidebar = sidebar.child(
                 button(
                     "sidebar-more-sessions",
-                    format!("另有 {more} 个 · 鸟瞰全部"),
+                    t!("另有 {more} 个 · 鸟瞰全部", more),
                 )
                 .border_0()
                 .justify_start()
@@ -352,12 +352,13 @@ impl Workbench {
                 button(
                     "sidebar-closed-sessions",
                     if dense {
-                        format!(
-                            "已关闭 {closed} · {} 找回",
-                            crate::keymap::keycap(cx, crate::keymap::Action::Search)
+                        t!(
+                            "已关闭 {closed} · {key} 找回",
+                            closed,
+                            key = crate::keymap::keycap(cx, crate::keymap::Action::Search)
                         )
                     } else {
-                        format!("已关闭 {closed} 个 · 点开接着聊")
+                        t!("已关闭 {closed} 个 · 点开接着聊", closed)
                     },
                 )
                 .border_0()
@@ -426,7 +427,7 @@ impl Workbench {
             div()
                 .id("global-search")
                 .role(gpui::accesskit::Role::Button)
-                .aria_label("搜索会话、空间或原话")
+                .aria_label(t!("搜索会话、空间或原话"))
                 .h(px(T::ROW))
                 .px(px(T::S10))
                 .flex()
@@ -450,7 +451,7 @@ impl Workbench {
                         .min_w_0()
                         .truncate()
                         .text_size(px(T::SMALL))
-                        .child("找会话、空间或原话"),
+                        .child(t!("找会话、空间或原话")),
                 )
                 .child(
                     div()
@@ -513,14 +514,14 @@ impl Workbench {
                                 crate::keymap::Action::NextWaiting,
                             )),
                     )
-                    .child(div().min_w_0().truncate().child("下一个要你的")),
+                    .child(div().min_w_0().truncate().child(t!("下一个要你的"))),
             )
             .child(
-                button("todos-toggle", format!("待办 {todos}"))
+                button("todos-toggle", t!("待办 {todos}", todos))
                     .aria_label(if todos_open {
-                        "收起待办"
+                        t!("收起待办")
                     } else {
-                        "展开待办"
+                        t!("展开待办")
                     })
                     .flex_shrink_0()
                     .h(px(T::ICON_HEIGHT + T::S4))
@@ -539,7 +540,7 @@ impl Workbench {
                     })),
             )
             .child(
-                icon("sidebar-foot-view", "icons/sliders.svg", "选择视图")
+                icon("sidebar-foot-view", "icons/sliders.svg", t!("选择视图"))
                     .when(view_open, |d| d.bg(T::color(T::button_hover())))
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -554,11 +555,15 @@ impl Workbench {
                     ),
             )
             .child(
-                icon("sidebar-phones", "icons/phone.svg", "连接手机或其他电脑")
-                    .on_click(cx.listener(|this, _, _, cx| this.toggle_phones(cx))),
+                icon(
+                    "sidebar-phones",
+                    "icons/phone.svg",
+                    t!("连接手机或其他电脑"),
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_phones(cx))),
             )
             .child(
-                icon("sidebar-settings", "icons/gear.svg", "设置")
+                icon("sidebar-settings", "icons/gear.svg", t!("设置"))
                     .on_click(cx.listener(|this, _, window, cx| this.show_settings(window, cx))),
             )
     }

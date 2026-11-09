@@ -186,11 +186,11 @@ pub fn check(manual: bool, cx: &mut App) {
 
 /// Turns the daily check on or off.
 pub fn set_auto(on: bool, cx: &mut App) -> Result<(), String> {
-    let file = core::auto_check_file().ok_or("找不到配置目录")?;
+    let file = core::auto_check_file().ok_or(t!("找不到配置目录"))?;
     file.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
         .and_then(|()| std::fs::write(&file, if on { "on" } else { "off" }))
-        .map_err(|e| format!("无法保存 {}：{e}", file.display()))?;
+        .map_err(|e| t!("无法保存 {display}：{e}", display = file.display(), e))?;
     if let Some(u) = updates(cx) {
         let mut u = u.clone();
         u.auto = on;
@@ -219,8 +219,8 @@ pub fn install(cx: &mut App) {
         let job_bundle = bundle.clone();
         let result = cx
             .background_spawn(async move {
-                let cache =
-                    core::cache_dir().ok_or(core::Failure::Download("找不到缓存目录".into()))?;
+                let cache = core::cache_dir()
+                    .ok_or(core::Failure::Download(t!("找不到缓存目录").into()))?;
                 let real = core::api_base().1;
                 let job = core::Install {
                     release: &job_release,
@@ -270,7 +270,7 @@ fn relaunch(bundle: &std::path::Path, cx: &mut App) {
                 set_phase(
                     Phase::Failed {
                         release,
-                        message: format!("已装好新版本，但没能自动重启（{e}），请退出后重新打开"),
+                        message: t!("已装好新版本，但没能自动重启（{e}），请退出后重新打开", e),
                         page: false,
                     },
                     cx,

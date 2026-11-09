@@ -1,0 +1,78 @@
+# English for the words core owns: session and todo states, the board's columns, sidebar
+# presets. Keys are the Chinese text exactly as written in the code (src/i18n.rs).
+# Terms used everywhere (keep them the same in every table):
+#   要你处理 Needs you · 等你回答 Waiting for you · 在跑 Running · 等你验收 Ready for review
+#   做完了 Done · 鸟瞰 Board · 空间 Space · 待办 To-do · 会话 session · 标签 tab · 窗格 pane
+
+[status]
+"等你回答" = "Waiting for you"
+"出错了" = "Error"
+"在跑" = "Running"
+"等后台" = "In background"
+"等你验收" = "Ready for review"
+"新开的" = "New"
+"停下了" = "Stopped"
+"很久没动" = "Idle"
+"稍后再看" = "Snoozed"
+"做完了" = "Done"
+"要你处理" = "Needs you"
+
+[todo]
+"未开始" = "Not started"
+"进行中" = "In progress"
+"会话都做完了" = "Sessions done"
+"验收齐了" = "All checks met"
+"已完成" = "Completed"
+"已放弃" = "Abandoned"
+"待办" = "To-do"
+
+[time]
+"今天 {hm}" = "Today {hm}"
+"明天 {hm}" = "Tomorrow {hm}"
+"周日" = "Sun"
+"周一" = "Mon"
+"周二" = "Tue"
+"周三" = "Wed"
+"周四" = "Thu"
+"周五" = "Fri"
+"周六" = "Sat"
+"{month}月{day}日" = "{month}/{day}"
+"刚刚" = "just now"
+"{minutes} 分钟" = "{minutes} min"
+"{h} 小时" = "{h} {h|hour|hours}"
+"{d} 天" = "{d} {d|day|days}"
+"{m}分" = "{m}m"
+"{h}时" = "{h}h"
+"{d}天" = "{d}d"
+"{secs} 秒" = "{secs} s"
+"{h} 小时 {m} 分" = "{h} h {m} min"
+"最近 24 小时" = "Last 24 hours"
+"最近 7 天" = "Last 7 days"
+"更早" = "Earlier"
+"{m} 分钟前" = "{m} min ago"
+"{h} 小时前" = "{h} {h|hour|hours} ago"
+"{d} 天前" = "{d} {d|day|days} ago"
+"超过 30 天" = "Over 30 days"
+
+[memory pressure]
+"正常" = "normal"
+"偏紧" = "tight"
+"紧张" = "critical"
+
+[look]
+"跟随系统" = "System"
+"亮色" = "Light"
+"暗色" = "Dark"
+"标准" = "Standard"
+"终端原生" = "Terminal"
+"曜黑" = "Obsidian"
+"纸白" = "Paper"
+"蓝灰" = "Slate"
+"石墨" = "Graphite"
+"暖灰" = "Warm gray"
+"松绿" = "Pine"
+"紫灰" = "Plum"
+
+[short state words]
+"等你回答#short" = "Waiting"
+"等你验收#short" = "To review"

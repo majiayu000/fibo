@@ -5,6 +5,7 @@ pub mod backdrop;
 pub mod color_migration;
 pub mod field;
 pub mod icons;
+pub mod language;
 pub mod palette;
 pub mod peek;
 pub mod pinned_ask;

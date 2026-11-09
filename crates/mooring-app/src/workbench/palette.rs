@@ -66,7 +66,7 @@ pub(super) struct Search {
 impl Search {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Workbench>) -> Self {
         let search = cx.new(|cx| {
-            Field::new("搜索会话、待办或你说过的话", "", cx)
+            Field::new(t!("搜索会话、待办或你说过的话"), "", cx)
                 .compact()
                 .bare()
         });
@@ -176,13 +176,13 @@ impl Workbench {
         let found = if query.is_empty() {
             None
         } else if total == 0 {
-            Some("0 项".to_owned())
+            Some(t!("0 项").to_owned())
         } else {
-            Some(format!(
-                "会话 {} · 原话 {} · 待办 {}",
-                count("会话"),
-                count("原话"),
-                count("待办")
+            Some(t!(
+                "会话 {sessions} · 原话 {quotes} · 待办 {todos}",
+                sessions = count(t!("会话")),
+                quotes = count(t!("原话")),
+                todos = count(t!("待办"))
             ))
         };
         let field_row = div()
@@ -239,7 +239,8 @@ impl Workbench {
             .font_features(T::tabular())
             .map(|d| {
                 if nothing {
-                    d.child(keys("⌫", "改关键词")).child(keys("↵", "新建会话"))
+                    d.child(keys("⌫", t!("改关键词")))
+                        .child(keys("↵", t!("新建会话")))
                 } else {
                     d.child(
                         div()
@@ -248,17 +249,17 @@ impl Workbench {
                             .gap(px(T::S4))
                             .child(kbd("↑"))
                             .child(kbd("↓"))
-                            .child("选择"),
+                            .child(t!("选择")),
                     )
-                    .child(keys("↵", "打开"))
-                    .child(keys("⇥", "切换分组"))
+                    .child(keys("↵", t!("打开")))
+                    .child(keys("⇥", t!("切换分组")))
                 }
             })
             .child(div().flex_1())
             .child(if query.is_empty() {
-                format!("只搜索本地已索引的内容 · {sessions} 个会话")
+                t!("只搜索本地已索引的内容 · {sessions} 个会话", sessions)
             } else {
-                "只搜索本地已索引的内容".into()
+                t!("只搜索本地已索引的内容").into()
             });
         let panel = div()
             .id("search-palette")
@@ -318,7 +319,7 @@ impl Workbench {
                 div()
                     .id(gpui::SharedString::from(format!("search-status-{name}")))
                     .role(gpui::accesskit::Role::Button)
-                    .aria_label(format!("{name} {count} 个，只看这一组"))
+                    .aria_label(t!("{name} {count} 个，只看这一组", name, count))
                     .h(px(T::FILTER_PILL))
                     .px(px(T::S8))
                     .flex()
@@ -354,8 +355,8 @@ impl Workbench {
         }
         row.child(div().flex_1()).child(
             label(match self.search.group {
-                Some(_) => "再点一下看全部",
-                None => "还没收尾的会话按状态计数，点一下只看这一组",
+                Some(_) => t!("再点一下看全部"),
+                None => t!("还没收尾的会话按状态计数，点一下只看这一组"),
             })
             .text_color(T::color(T::muted())),
         )
@@ -391,7 +392,7 @@ impl Workbench {
                     .text_color(T::color(T::body()))
                     .cursor_pointer()
                     .hover(|d| d.bg(T::color(T::button_hover())))
-                    .child(format!("只搜「{term}」"))
+                    .child(t!("只搜「{term}」", term))
                     .on_click(cx.listener(move |this, _, _, cx| this.set_query(&text, cx))),
             );
         }
@@ -409,14 +410,14 @@ impl Workbench {
                     .text_size(px(T::CARD_TITLE))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(T::primary()))
-                    .child(format!("没有找到「{query}」")),
+                    .child(t!("没有找到「{query}」", query)),
             )
             .child(
                 div()
                     .max_w(px(T::FORM_WIDTH))
                     .text_size(px(T::SMALL))
                     .text_color(T::color(T::secondary()))
-                    .child("标题、会话 ID、目录、你说过的话和待办里都没有这几个字。没被索引的旧历史不会出现在这里。"),
+                    .child(t!("标题、会话 ID、目录、你说过的话和待办里都没有这几个字。没被索引的旧历史不会出现在这里。")),
             )
             .child(
                 div()
@@ -427,16 +428,16 @@ impl Workbench {
                     .text_size(px(T::META))
                     .text_color(T::color(T::muted()))
                     .font_features(T::tabular())
-                    .child(format!("会话标题 {}", visible.len()))
-                    .child(format!("原话 {asks} 句"))
-                    .child(format!("待办 {}", self.workspace.tasks.len())),
+                    .child(t!("会话标题 {len}", len = visible.len()))
+                    .child(t!("原话 {asks} 句", asks))
+                    .child(t!("待办 {len}", len = self.workspace.tasks.len())),
             )
             .child(suggestions)
             .child(
                 solid(button("search-empty-new", ""))
-                    .aria_label("在当前空间新建会话")
+                    .aria_label(t!("在当前空间新建会话"))
                     .gap(px(T::S6))
-                    .child("在当前空间新建会话")
+                    .child(t!("在当前空间新建会话"))
                     .child(kbd("↵").text_color(T::color(T::on_accent())))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.open_hit(Hit::NewSession, window, cx)

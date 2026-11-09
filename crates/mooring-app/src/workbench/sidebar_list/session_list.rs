@@ -117,9 +117,9 @@ impl Workbench {
             });
             let recent = preset.group == Grouping::Recent;
             out.push(if recent {
-                self.flat_fold("recent:pinned", "置顶", top.len(), cx)
+                self.flat_fold("recent:pinned", t!("置顶"), top.len(), cx)
             } else {
-                self.heading("置顶".into(), top.len(), cx)
+                self.heading(t!("置顶").into(), top.len(), cx)
                     .mt(px(T::S14))
                     .into_any_element()
             });
@@ -220,8 +220,12 @@ impl Workbench {
                     .collect();
                 if !pinned.is_empty() {
                     out.push(
-                        self.heading(mooring_core::status::NEEDS_YOU.into(), pinned.len(), cx)
-                            .into_any_element(),
+                        self.heading(
+                            mooring_core::status::needs_you_word().into(),
+                            pinned.len(),
+                            cx,
+                        )
+                        .into_any_element(),
                     );
                     for l in &pinned {
                         let d = detail(l).map(|d| format!("{} · {d}", folder_name(&l.0.cwd)));
@@ -243,7 +247,7 @@ impl Workbench {
                     (!has(Bucket::Running), !has(Bucket::Attention))
                 });
                 if !folders.is_empty() {
-                    out.push(Self::group_title("目录".into(), None, cx).into_any_element());
+                    out.push(Self::group_title(t!("目录").into(), None, cx).into_any_element());
                 }
                 // A folder's rows sit in from its name.
                 let indent = |out: &mut Vec<gpui::AnyElement>, from: usize| {
@@ -285,7 +289,7 @@ impl Workbench {
                     if !folded.is_empty() {
                         let more_key = format!("dir-more:{cwd}");
                         let more_open = self.sidebar.open(&more_key, false);
-                        out.push(self.fold_row(more_key, &folded, more_open, "另有", cx));
+                        out.push(self.fold_row(more_key, &folded, more_open, t!("另有"), cx));
                         if more_open {
                             for l in rows.iter().filter(|l| {
                                 self.row_bucket(l) != Bucket::Attention

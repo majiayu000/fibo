@@ -11,6 +11,7 @@ pub mod effect;
 pub mod face;
 pub mod git_head;
 pub mod hook;
+pub mod i18n;
 pub mod layout;
 pub mod legacy;
 pub mod market;

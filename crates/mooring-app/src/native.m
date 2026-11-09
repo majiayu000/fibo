@@ -37,6 +37,11 @@ static BOOL dark_mode(void) {
     return [name isEqualToString:NSAppearanceNameDarkAqua];
 }
 static NSString *text(id value) { return [value isKindOfClass:NSString.class]?value:@""; }
+// The panel's fixed words come from the window (desktop.rs "words"), in its language.
+static NSString *word(NSDictionary *data,NSString *key,NSString *fallback) {
+    id value=data[@"words"][key];
+    return [value isKindOfClass:NSString.class]?value:fallback;
+}
 static NSTextField *label(NSString *string,CGFloat size,NSFontWeight weight,NSColor *ink) {
     NSTextField *field=[NSTextField labelWithString:string?:@""];
     field.font=[NSFont systemFontOfSize:size weight:weight];field.textColor=ink;
@@ -215,8 +220,8 @@ static NSImage *tray_mark(BOOL offline) {
         icon.symbolConfiguration=[NSImageSymbolConfiguration configurationWithPointSize:12 weight:NSFontWeightSemibold];icon.contentTintColor=color(p[@"error"]);
         NSTextField *detail=[NSTextField wrappingLabelWithString:text(self.data[@"connection"][@"error"])];
         detail.font=[NSFont monospacedSystemFontOfSize:meta weight:NSFontWeightRegular];detail.textColor=secondary;detail.selectable=YES;
-        NSStackView *links=line_of(@[text_button(@"复制错误",ink,small,YES,self,@selector(copyError:),@""),text_button(@"查看诊断",ink,small,YES,self,@selector(choose:),@"diagnostics:")],12);
-        NSStackView *body=column_of(@[label(@"正在重连",12.5,NSFontWeightSemibold,ink),detail,links],4,NSEdgeInsetsMake(0,0,0,0));
+        NSStackView *links=line_of(@[text_button(word(self.data,@"copy_error",@"复制错误"),ink,small,YES,self,@selector(copyError:),@""),text_button(word(self.data,@"diagnostics",@"查看诊断"),ink,small,YES,self,@selector(choose:),@"diagnostics:")],12);
+        NSStackView *body=column_of(@[label(word(self.data,@"reconnecting",@"正在重连"),12.5,NSFontWeightSemibold,ink),detail,links],4,NSEdgeInsetsMake(0,0,0,0));
         for(NSView *v in @[icon,body]) {v.translatesAutoresizingMaskIntoConstraints=NO;[alert addSubview:v];}
         [NSLayoutConstraint activateConstraints:@[
             [icon.leadingAnchor constraintEqualToAnchor:alert.leadingAnchor constant:10],[icon.topAnchor constraintEqualToAnchor:alert.topAnchor constant:10],
@@ -225,7 +230,7 @@ static NSImage *tray_mark(BOOL offline) {
             [body.topAnchor constraintEqualToAnchor:alert.topAnchor constant:9],[body.bottomAnchor constraintEqualToAnchor:alert.bottomAnchor constant:-9],
             [detail.widthAnchor constraintEqualToAnchor:body.widthAnchor],
         ]];
-        [alert setAccessibilityElement:YES];[alert setAccessibilityRole:NSAccessibilityGroupRole];[alert setAccessibilityLabel:[@"连不上后台，正在重连：" stringByAppendingString:text(self.data[@"connection"][@"error"])]];
+        [alert setAccessibilityElement:YES];[alert setAccessibilityRole:NSAccessibilityGroupRole];[alert setAccessibilityLabel:[word(self.data,@"offline",@"连不上后台，正在重连：") stringByAppendingString:text(self.data[@"connection"][@"error"])]];
         add(stack,alert);
     }
     // Four counts; status colour lives only on the dot and a zero stays quiet.
@@ -259,7 +264,7 @@ static NSImage *tray_mark(BOOL offline) {
         add(stack,list);
         NSInteger more=[self.data[@"more"] integerValue];
         if(more>0) {
-            NSButton *rest=text_button([NSString stringWithFormat:@"还有 %ld 项",(long)more],secondary,small,NO,self,@selector(choose:),@"");
+            NSButton *rest=text_button([word(self.data,@"more",@"还有 %ld 项") stringByReplacingOccurrencesOfString:@"%ld" withString:[NSString stringWithFormat:@"%ld",(long)more]],secondary,small,NO,self,@selector(choose:),@"");
             [stack setCustomSpacing:8 afterView:list];
             NSStackView *holder=line_of(@[rest],0);holder.edgeInsets=NSEdgeInsetsMake(0,4,0,4);add(stack,holder);
         }
@@ -285,7 +290,7 @@ static NSImage *tray_mark(BOOL offline) {
     NSStackView *foot=spread(line_of(left,6),label(text(self.data[@"foot_note"]),meta,NSFontWeightRegular,muted));
     foot.alignment=NSLayoutAttributeCenterY;foot.edgeInsets=NSEdgeInsetsMake(0,4,0,4);add(stack,foot);
     // The view's one solid control.
-    NSButton *open=[NSButton buttonWithTitle:@"打开工作台" target:self action:@selector(choose:)];open.identifier=@"";open.bordered=NO;
+    NSButton *open=[NSButton buttonWithTitle:word(self.data,@"open",@"打开工作台") target:self action:@selector(choose:)];open.identifier=@"";open.bordered=NO;
     open.wantsLayer=YES;open.layer.backgroundColor=color(p[@"accent"]).CGColor;open.layer.cornerRadius=radius;
     open.attributedTitle=[[NSAttributedString alloc]initWithString:open.title attributes:@{NSForegroundColorAttributeName:color(p[@"on_accent"]),NSFontAttributeName:[NSFont systemFontOfSize:[t[@"font"] doubleValue] weight:NSFontWeightSemibold]}];
     add(stack,open);[open.heightAnchor constraintEqualToConstant:[t[@"button"] doubleValue]].active=YES;
@@ -360,7 +365,7 @@ void kl_desktop_update(const char *json) {
     desktop.data=data;NSString *badge=data[@"badge"]?:@"";desktop.item.button.title=badge;
     BOOL offline=[data[@"connection"][@"error"] isKindOfClass:NSString.class];
     desktop.item.button.image=tray_mark(offline);desktop.item.button.imagePosition=badge.length?NSImageLeft:NSImageOnly;
-    desktop.item.button.toolTip=offline?@"Mooring · 连不上后台":@"Mooring";
+    desktop.item.button.toolTip=offline?word(data,@"offline_tip",@"Mooring · 连不上后台"):@"Mooring";
     if(desktop.popover.shown) [desktop rebuild];
 }
 void kl_notifications_enable(void) {

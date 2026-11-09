@@ -35,7 +35,7 @@ impl Workbench {
             .child(
                 segment(
                     "all-spaces",
-                    "全部空间".into(),
+                    t!("全部空间").into(),
                     self.overview.filter_space.is_none(),
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -52,7 +52,7 @@ impl Workbench {
         {
             row = row.child(
                 segment("filter-space", format!("{} ×", space.name), true)
-                    .aria_label(format!("取消只看 {}", space.name))
+                    .aria_label(t!("取消只看 {name}", name = space.name))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.overview.filter_space = None;
                         cx.notify();
@@ -61,7 +61,7 @@ impl Workbench {
         }
         if self.overview.closed_only {
             row = row.child(
-                segment("only-closed", "只看已关闭的 ×".into(), true).on_click(cx.listener(
+                segment("only-closed", t!("只看已关闭的 ×").into(), true).on_click(cx.listener(
                     |this, _, _, cx| {
                         this.overview.closed_only = false;
                         cx.notify();
@@ -72,7 +72,7 @@ impl Workbench {
         row.child(
             segment(
                 "only-changed",
-                "只看有变化".into(),
+                t!("只看有变化").into(),
                 self.overview.changed_only,
             )
             .on_click(cx.listener(|this, _, _, cx| {

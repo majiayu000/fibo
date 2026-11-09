@@ -4,6 +4,7 @@
 //! --keepParent` zip of the signed, notarized, stapled Mooring.app), `Mooring-X.Y.Z-<arch>.dmg`
 //! and `SHA256SUMS` (`sha256sum` lines: `<hex>  <file name>`).
 use super::version::Version;
+use crate::t;
 use serde::Deserialize;
 
 /// One release as `GET /repos/<owner>/<repo>/releases/latest` returns it. Fields GitHub adds
@@ -53,7 +54,7 @@ pub fn arch() -> &'static str {
 }
 
 pub fn parse(bytes: &[u8]) -> Result<ApiRelease, String> {
-    serde_json::from_slice(bytes).map_err(|e| format!("看不懂发布信息：{e}"))
+    serde_json::from_slice(bytes).map_err(|e| t!("看不懂发布信息：{e}", e))
 }
 
 /// The release `api` describes, for a Mac of `arch`. A draft, a pre-release or a tag that
@@ -61,10 +62,13 @@ pub fn parse(bytes: &[u8]) -> Result<ApiRelease, String> {
 /// the answer is not what it claims.
 pub fn select(api: &ApiRelease, arch: &str) -> Result<Release, String> {
     if api.draft || api.prerelease {
-        return Err(format!("{} 是预发布版本，不自动更新", api.tag_name));
+        return Err(t!(
+            "{tag_name} 是预发布版本，不自动更新",
+            tag_name = api.tag_name
+        ));
     }
-    let version =
-        Version::parse(&api.tag_name).ok_or_else(|| format!("{} 不是版本号", api.tag_name))?;
+    let version = Version::parse(&api.tag_name)
+        .ok_or_else(|| t!("{tag_name} 不是版本号", tag_name = api.tag_name))?;
     let find = |name: &str| {
         api.assets.iter().find(|a| a.name == name).map(|a| Asset {
             name: a.name.clone(),

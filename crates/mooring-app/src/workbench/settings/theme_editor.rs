@@ -4,7 +4,7 @@
 use super::*;
 use crate::ui::appearance;
 use crate::ui::palette::UI_TOKENS;
-use crate::ui::theme::{Status, StatusStyle, contrast};
+use crate::ui::theme::{Status, StatusStyle};
 use crate::ui::themes;
 use crate::ui::tone::Tone;
 use gpui::{MouseDownEvent, MouseMoveEvent, MouseUpEvent, Subscription, canvas};
@@ -15,7 +15,6 @@ const SLIDER: f32 = 14.;
 const SLIDER_STEPS: usize = 36;
 const ROW_COLUMN: f32 = 310.;
 const LIST_HEIGHT: f32 = 400.;
-const READABLE: f32 = 4.5;
 const THUMB: f32 = T::S4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -38,12 +37,12 @@ impl Tab {
     ];
     fn label(self) -> &'static str {
         match self {
-            Self::Base => "基础",
-            Self::Terminal => "终端",
+            Self::Base => t!("基础"),
+            Self::Terminal => t!("终端"),
             Self::Ansi => "ANSI",
-            Self::Window => "界面",
-            Self::Sidebar => "侧栏",
-            Self::Meaning => "状态",
+            Self::Window => t!("界面"),
+            Self::Sidebar => t!("侧栏"),
+            Self::Meaning => t!("状态"),
         }
     }
     fn items(self) -> Vec<Item> {
@@ -53,16 +52,16 @@ impl Tab {
             label,
         };
         match self {
-            Self::Base => vec![item("", "bg", "背景"), item("", "fg", "前景")],
+            Self::Base => vec![item("", "bg", t!("背景")), item("", "fg", t!("前景"))],
             Self::Terminal => vec![
-                item("terminal", "cursor", "光标"),
-                item("terminal", "cursor_text", "光标上的文字"),
-                item("terminal", "selection", "选区"),
-                item("terminal", "selected_text", "选中的文字"),
-                item("terminal", "cursor_guide", "光标行"),
-                item("terminal", "bold", "粗体"),
-                item("terminal", "link", "链接"),
-                item("terminal", "underline", "下划线"),
+                item("terminal", "cursor", t!("光标")),
+                item("terminal", "cursor_text", t!("光标上的文字")),
+                item("terminal", "selection", t!("选区")),
+                item("terminal", "selected_text", t!("选中的文字")),
+                item("terminal", "cursor_guide", t!("光标行")),
+                item("terminal", "bold", t!("粗体")),
+                item("terminal", "link", t!("链接")),
+                item("terminal", "underline", t!("下划线")),
             ],
             Self::Ansi => ANSI_NAMES.iter().map(|n| item("ansi", n, n)).collect(),
             Self::Window => UI_TOKENS
@@ -79,11 +78,11 @@ impl Tab {
                 .iter()
                 .map(|s| item("status", s.key(), s.label()))
                 .chain([
-                    item("tone", "ok", "语气：正常"),
-                    item("tone", "warn", "语气：警告"),
-                    item("tone", "danger", "语气：危险"),
-                    item("seen", "title", "看过的会话标题"),
-                    item("seen", "status", "看过的会话状态"),
+                    item("tone", "ok", t!("语气：正常")),
+                    item("tone", "warn", t!("语气：警告")),
+                    item("tone", "danger", t!("语气：危险")),
+                    item("seen", "title", t!("看过的会话标题")),
+                    item("seen", "status", t!("看过的会话状态")),
                 ])
                 .collect(),
         }
@@ -162,8 +161,8 @@ impl SettingsView {
         );
         let picked = Tab::Base.items()[0];
         let start = picked.value(&draft);
-        let name = cx.new(|cx| Field::new("主题名称", &draft.name, cx).compact());
-        let hex_field = cx.new(|cx| Field::new("颜色", &hex(start), cx).compact());
+        let name = cx.new(|cx| Field::new(t!("主题名称"), &draft.name, cx).compact());
+        let hex_field = cx.new(|cx| Field::new(t!("颜色"), &hex(start), cx).compact());
         let watch = cx.observe(&hex_field, |this, field, cx| {
             let typed = parse_hex(&field.read(cx).text);
             let Some(color) = typed else { return };
@@ -251,7 +250,7 @@ impl SettingsView {
         };
         let name = editor.name.read(cx).text.trim().to_owned();
         if name.is_empty() {
-            editor.error = Some("给主题起个名字".to_owned());
+            editor.error = Some(t!("给主题起个名字").to_owned());
             cx.notify();
             return;
         }
@@ -289,7 +288,8 @@ impl SettingsView {
             }
             Err(error) => {
                 if let Some(editor) = self.editor.as_mut() {
-                    editor.error = Some(format!("无法删除 {}：{error}", path.display()));
+                    let path = path.display();
+                    editor.error = Some(t!("无法删除 {path}：{error}", path, error));
                 }
                 cx.notify();
             }
@@ -335,7 +335,7 @@ impl SettingsView {
                             .gap(px(T::S12))
                             .child(self.picker(editor, cx))
                             .child(preview_window())
-                            .child(contrast_note(editor)),
+                            .child(super::theme_material::contrast_note(editor)),
                     ),
             )
     }
@@ -352,16 +352,16 @@ impl SettingsView {
                     .child(div().flex_1().min_w_0().child(editor.name.clone()))
                     .when(editor.over.is_some(), |d| {
                         d.child(
-                            secondary("editor-delete", "删除")
+                            secondary("editor-delete", t!("删除"))
                                 .on_click(cx.listener(|this, _, _, cx| this.delete_theme(cx))),
                         )
                     })
                     .child(
-                        secondary("editor-cancel", "取消")
+                        secondary("editor-cancel", t!("取消"))
                             .on_click(cx.listener(|this, _, _, cx| this.close_editor(cx))),
                     )
                     .child(
-                        secondary("editor-save", "保存")
+                        secondary("editor-save", t!("保存"))
                             .bg(T::color(T::accent()))
                             .text_color(T::color(T::on_accent()))
                             .on_click(cx.listener(|this, _, _, cx| this.save_draft(cx))),
@@ -376,9 +376,9 @@ impl SettingsView {
                 )
             })
             .child(label(if editor.over.is_some() {
-                "改动马上显示，保存后写回这个主题"
+                t!("改动马上显示，保存后写回这个主题")
             } else {
-                "内置主题不会被改：保存时存成一个新主题"
+                t!("内置主题不会被改：保存时存成一个新主题")
             }))
     }
     fn editor_rows(&self, editor: &Editor, cx: &Context<Self>) -> impl IntoElement {
@@ -413,8 +413,10 @@ impl SettingsView {
                         .text_color(T::color(T::primary()))
                         .child(item.label),
                 )
-                .when(item.section.is_empty(), |d| d.child(label("基础")))
-                .when(!item.section.is_empty() && !set, |d| d.child(label("推导")))
+                .when(item.section.is_empty(), |d| d.child(label(t!("基础"))))
+                .when(!item.section.is_empty() && !set, |d| {
+                    d.child(label(t!("推导")))
+                })
                 .when(set, |d| {
                     d.child(
                         secondary(
@@ -422,7 +424,7 @@ impl SettingsView {
                                 "editor-reset-{}-{}",
                                 item.section, item.key
                             )),
-                            "重置",
+                            t!("重置"),
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
@@ -463,9 +465,9 @@ impl SettingsView {
                     )
                     .child(div().w(px(T::S20 * 4.5)).child(editor.hex.clone())),
             )
-            .child(self.slider(0, "色相", editor.hsv, cx))
-            .child(self.slider(1, "饱和", editor.hsv, cx))
-            .child(self.slider(2, "明度", editor.hsv, cx))
+            .child(self.slider(0, t!("色相"), editor.hsv, cx))
+            .child(self.slider(1, t!("饱和"), editor.hsv, cx))
+            .child(self.slider(2, t!("明度"), editor.hsv, cx))
     }
     /// One channel, drawn as the colors dragging it would give. Only exists while the
     /// editor is open.
@@ -598,7 +600,7 @@ fn preview_window() -> gpui::Div {
                     div()
                         .text_size(px(T::SMALL))
                         .text_color(T::color(p.sidebar_third))
-                        .child("弱文字"),
+                        .child(t!("弱文字")),
                 ),
         )
         .child(
@@ -635,28 +637,6 @@ fn preview_window() -> gpui::Div {
                         .child(div().w(px(T::S8)).h(px(T::S14)).bg(T::color(p.term.cursor))),
                 ),
         )
-}
-fn contrast_note(editor: &Editor) -> gpui::Div {
-    let ratio = contrast(editor.draft.fg, editor.draft.bg);
-    let low = ratio < READABLE;
-    let kind = if editor.draft.term_colors().light {
-        "亮色"
-    } else {
-        "暗色"
-    };
-    let text = if low {
-        format!("{kind}主题，文字对比度 {ratio:.1}:1，低于 {READABLE}:1，文字可能看不清")
-    } else {
-        format!("{kind}主题，文字对比度 {ratio:.1}:1")
-    };
-    div()
-        .text_size(px(T::SMALL))
-        .text_color(if low {
-            Tone::Warn.ink()
-        } else {
-            T::color(T::secondary())
-        })
-        .child(text)
 }
 #[cfg(feature = "visual-test")]
 impl Workbench {

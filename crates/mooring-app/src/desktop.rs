@@ -238,41 +238,67 @@ fn panel(w: &Workspace, link: &Link) -> String {
     let offline = link.error.is_some();
     let stopped = minute(link.since);
     let (heading, when) = if offline {
-        ("连不上后台".to_owned(), format!("数据停在 {stopped}"))
+        (
+            t!("连不上后台").to_owned(),
+            t!("数据停在 {stopped}", stopped),
+        )
     } else if total == 0 {
         (
-            format!("没有{}的", status::NEEDS_YOU),
-            "刚刚更新".to_owned(),
+            t!("没有{needs}的", needs = status::needs_you_word()),
+            t!("刚刚更新").to_owned(),
         )
     } else {
         (
-            format!("{total} 项{}", status::NEEDS_YOU),
-            "刚刚更新".to_owned(),
+            t!("{total} 项{needs}", total, needs = status::needs_you_word()),
+            t!("刚刚更新").to_owned(),
         )
     };
     let (section, section_note) = if offline {
-        (format!("{stopped} 时{}", status::NEEDS_YOU), "可能已经变了")
+        (
+            t!(
+                "{stopped} 时{needs}",
+                stopped,
+                needs = status::needs_you_word()
+            ),
+            t!("可能已经变了"),
+        )
     } else {
-        (status::NEEDS_YOU.to_owned(), "等你在前，按时间")
+        (status::needs_you_word().to_owned(), t!("等你在前，按时间"))
     };
     // The empty view says what happens next instead of leaving a blank.
     let empty = (!offline && total == 0).then(|| {
-        let who = if running > 0 {
-            format!("在跑的 {running} 个停下来要你时")
-        } else {
-            "有 Agent 停下来要你时".to_owned()
+        // Whole sentences: who stops and what happens then, in each language's order.
+        let title = match (running > 0, w.settings.notifications, w.settings.sound) {
+            (true, true, _) => t!(
+                "{state}的 {running} 个停下来要你时，会发系统通知",
+                running,
+                state = State::Running.label()
+            ),
+            (true, false, true) => t!(
+                "{state}的 {running} 个停下来要你时，会响提示音",
+                running,
+                state = State::Running.label()
+            ),
+            (true, false, false) => t!(
+                "{state}的 {running} 个停下来要你时，会出现在这里",
+                running,
+                state = State::Running.label()
+            ),
+            (false, true, _) => t!("有 Agent 停下来要你时，会发系统通知").to_owned(),
+            (false, false, true) => t!("有 Agent 停下来要你时，会响提示音").to_owned(),
+            (false, false, false) => t!("有 Agent 停下来要你时，会出现在这里").to_owned(),
         };
-        let (what, note) = match (w.settings.notifications, w.settings.sound) {
-            (true, _) => ("会发系统通知", "通知已开 · 你正看着的画面不会再弹"),
-            (false, true) => ("会响提示音", "系统通知没开 · 在设置的通知页打开"),
-            (false, false) => ("会出现在这里", "通知没开 · 在设置的通知页打开"),
+        let note = match (w.settings.notifications, w.settings.sound) {
+            (true, _) => t!("通知已开 · 你正看着的画面不会再弹"),
+            (false, true) => t!("系统通知没开 · 在设置的通知页打开"),
+            (false, false) => t!("通知没开 · 在设置的通知页打开"),
         };
-        json!({"title": format!("{who}，{what}"), "note": note})
+        json!({"title": title, "note": note})
     });
     let (foot, foot_count, foot_note) = if offline {
-        ("重连后自动刷新", None, "通知暂停")
+        (t!("重连后自动刷新"), None, t!("通知暂停"))
     } else {
-        ("很久没动", Some(stale), "外部会话在鸟瞰里看")
+        (State::Stale.label(), Some(stale), t!("外部会话在鸟瞰里看"))
     };
     json!({
         "badge": if offline || total == 0 { String::new() } else { total.to_string() },
@@ -285,8 +311,15 @@ fn panel(w: &Workspace, link: &Link) -> String {
         },
         // The words come from the one table every surface uses (`Status::label`).
         "labels": {
-            "waiting": State::Waiting.label(), "errors": State::Error.label(),
-            "review": State::Review.label(), "running": State::Running.label(),
+            "waiting": State::Waiting.short_label(), "errors": State::Error.short_label(),
+            "review": State::Review.short_label(), "running": State::Running.short_label(),
+        },
+        // The panel's own words, in the window's language.
+        "words": {
+            "open": t!("打开工作台"), "copy_error": t!("复制错误"),
+            "diagnostics": t!("查看诊断"), "reconnecting": t!("正在重连"),
+            "offline": t!("连不上后台，正在重连："), "more": t!("还有 %ld 项"),
+            "offline_tip": t!("Mooring · 连不上后台"),
         },
         "section": section,
         "section_note": section_note,

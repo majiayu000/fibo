@@ -75,7 +75,7 @@ impl Bucket {
     ];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Attention => crate::status::NEEDS_YOU,
+            Self::Attention => crate::status::needs_you_word(),
             Self::Running => Status::Running.label(),
             Self::Done => Status::Review.label(),
             Self::Stopped => Status::Paused.label(),
@@ -162,7 +162,8 @@ struct File {
     presets: Vec<Preset>,
 }
 
-/// The built-in presets, in the order the switch shows them.
+/// The built-in presets, in the order the switch shows them. Their names are the Chinese
+/// keys; say them with `i18n::say` where shown (a plugin's own name passes through).
 pub fn builtin() -> Vec<Preset> {
     let p = |id: &str, name: &str, group, fold: &[Bucket], detail| Preset {
         id: id.into(),
@@ -180,15 +181,15 @@ pub fn builtin() -> Vec<Preset> {
         ..p(id, name, Grouping::Recent, &[Bucket::Stale], Detail::Always)
     };
     vec![
-        recent("recent", "会话优先", Machines::Mixed),
-        recent("machine-rail", "机器栏", Machines::Rail),
-        recent("machine-fold", "按机器", Machines::Sections),
+        recent("recent", crate::tk!("会话优先"), Machines::Mixed),
+        recent("machine-rail", crate::tk!("机器栏"), Machines::Rail),
+        recent("machine-fold", crate::tk!("按机器"), Machines::Sections),
         // Every folder's sessions stay reachable here: no rows hand off to 鸟瞰.
         Preset {
             limit: 100,
             ..p(
                 "directory",
-                "目录",
+                crate::tk!("目录"),
                 Grouping::Directory,
                 &[Bucket::Done, Bucket::Stopped, Bucket::Fresh, Bucket::Stale],
                 Detail::Attention,
@@ -226,7 +227,7 @@ fn read(file: &Path, taken: &[Preset]) -> Result<Vec<Preset>, String> {
             return Err(format!(
                 "左栏 {} 不能折叠「{}」的会话",
                 p.id,
-                crate::status::NEEDS_YOU
+                crate::status::needs_you_word()
             ));
         }
         if !(1..=100).contains(&p.limit) {
@@ -380,7 +381,7 @@ mod tests {
                 .result
                 .as_ref()
                 .unwrap_err()
-                .contains(crate::status::NEEDS_YOU)
+                .contains(crate::status::needs_you_word())
         );
         assert!(report[3].result.as_ref().unwrap_err().contains("格式不对"));
         let _ = std::fs::remove_dir_all(&d);

@@ -49,8 +49,8 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         let text = match (right, terminal_style) {
-            (true, true) => format!("还有 {} 个 ›", edge.count),
-            (false, true) => format!("‹ {} 个", edge.count),
+            (true, true) => t!("还有 {count} 个 ›", count = edge.count),
+            (false, true) => t!("‹ {count} 个", count = edge.count),
             (true, false) => format!("+{} ▾", edge.count),
             (false, false) => format!("‹ {}", edge.count),
         };
@@ -64,9 +64,9 @@ impl Workbench {
             "",
         )
         .aria_label(if right {
-            format!("右侧还有 {} 个标签", edge.count)
+            t!("右侧还有 {count} 个标签", count = edge.count)
         } else {
-            format!("左侧还有 {} 个标签", edge.count)
+            t!("左侧还有 {count} 个标签", count = edge.count)
         })
         .flex_shrink_0()
         .h_full()
@@ -254,7 +254,7 @@ impl Workbench {
                         .find(|t| s.terminal.as_ref() == Some(&t.id))?;
                     t.error
                         .clone()
-                        .or_else(|| t.exit_code.map(|c| format!("终端退出码 {c}")))
+                        .or_else(|| t.exit_code.map(|c| t!("终端退出码 {c}", c)))
                 })
                 .unwrap_or_default(),
             _ => return None,

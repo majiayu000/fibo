@@ -3,8 +3,8 @@ use super::*;
 
 impl SettingsView {
     pub(super) fn notifications_page(&self, cx: &Context<Self>) -> gpui::Div {
-        let notify = self.shows(Page::Notifications, "桌面通知", cx);
-        let sound = self.shows(Page::Notifications, "提示音", cx);
+        let notify = self.shows(Page::Notifications, t!("桌面通知"), cx);
+        let sound = self.shows(Page::Notifications, t!("提示音"), cx);
         if !notify && !sound {
             return div();
         }
@@ -18,8 +18,8 @@ impl SettingsView {
             switches.push(
                 self.row(
                     true,
-                    "桌面通知",
-                    "Agent 停下来等你时，发一条系统通知",
+                    t!("桌面通知"),
+                    t!("Agent 停下来等你时，发一条系统通知"),
                     toggle,
                 )
                 .into_any_element(),
@@ -32,8 +32,8 @@ impl SettingsView {
             switches.push(
                 self.row(
                     switches.is_empty(),
-                    "提示音",
-                    "Agent 等你或出错时响一声；不开桌面通知也会响",
+                    t!("提示音"),
+                    t!("Agent 等你或出错时响一声；不开桌面通知也会响"),
                     toggle,
                 )
                 .into_any_element(),
@@ -71,20 +71,20 @@ impl SettingsView {
                 .into_any_element()
         };
         self.cards(vec![
-            ("开关", switches),
+            (t!("开关"), switches),
             (
-                "什么时候提醒",
+                t!("什么时候提醒"),
                 vec![
                     when(
                         Status::Waiting,
-                        "等你回复",
-                        "Agent 提问或请求批准；同一次等待只提醒一次",
+                        t!("等你回复"),
+                        t!("Agent 提问或请求批准；同一次等待只提醒一次"),
                         true,
                     ),
                     when(
                         Status::Error,
-                        "出错停下",
-                        "Agent 报错中断；同一条错误只提醒一次",
+                        t!("出错停下"),
+                        t!("Agent 报错中断；同一条错误只提醒一次"),
                         false,
                     ),
                 ],
@@ -97,10 +97,12 @@ impl SettingsView {
                 .flex()
                 .flex_col()
                 .gap(px(T::S4))
-                .child(label("只提醒由 Mooring 打开的会话；你正看着的那个终端不会打扰你。"))
-                .child(label(
-                    "首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Mooring 重新允许。",
-                )),
+                .child(label(t!(
+                    "只提醒由 Mooring 打开的会话；你正看着的那个终端不会打扰你。"
+                )))
+                .child(label(t!(
+                    "首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Mooring 重新允许。"
+                ))),
         )
     }
 }

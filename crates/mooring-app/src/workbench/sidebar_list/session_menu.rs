@@ -25,24 +25,28 @@ impl Workbench {
             return vec![];
         };
         let terminal = live_terminal(&self.workspace, session).map(|t| t.id.clone());
-        let mut out = vec![("打开", SessionAction::Open)];
+        let mut out = vec![(t!("打开"), SessionAction::Open)];
         if let Some(t) = &terminal {
             let pinned = self.sidebar.pinned.contains(t);
             out.push((
-                if pinned { "取消置顶" } else { "置顶" },
+                if pinned {
+                    t!("取消置顶")
+                } else {
+                    t!("置顶")
+                },
                 SessionAction::Pin(t.clone()),
             ));
         }
-        out.push(("重命名", SessionAction::Rename));
+        out.push((t!("重命名"), SessionAction::Rename));
         out.push(match session.outcome {
-            Outcome::Open => ("标记完成", SessionAction::Settle(Outcome::Completed)),
-            _ => ("撤销结局", SessionAction::Settle(Outcome::Open)),
+            Outcome::Open => (t!("标记完成"), SessionAction::Settle(Outcome::Completed)),
+            _ => (t!("撤销结局"), SessionAction::Settle(Outcome::Open)),
         });
         if let Some(t) = terminal {
-            out.push(("关闭终端", SessionAction::Close(t)));
+            out.push((t!("关闭终端"), SessionAction::Close(t)));
         }
         if session.outcome != Outcome::Abandoned {
-            out.push(("放弃", SessionAction::Settle(Outcome::Abandoned)));
+            out.push((t!("放弃"), SessionAction::Settle(Outcome::Abandoned)));
         }
         out
     }
@@ -65,7 +69,7 @@ impl Workbench {
                 .w_full()
                 .justify_start()
                 .border_0()
-                .when(name == "放弃", |d| d.text_color(Tone::Danger.ink()))
+                .when(name == t!("放弃"), |d| d.text_color(Tone::Danger.ink()))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.layout.session_menu = None;
                     this.session_action(&id, &action, window, cx);

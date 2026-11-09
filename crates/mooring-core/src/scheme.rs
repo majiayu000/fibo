@@ -71,13 +71,13 @@ impl Scheme {
     }
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Dark => "曜黑",
-            Self::Light => "纸白",
-            Self::Slate => "蓝灰",
-            Self::Graphite => "石墨",
-            Self::Warm => "暖灰",
-            Self::Pine => "松绿",
-            Self::Plum => "紫灰",
+            Self::Dark => crate::tk!("曜黑"),
+            Self::Light => crate::tk!("纸白"),
+            Self::Slate => crate::tk!("蓝灰"),
+            Self::Graphite => crate::tk!("石墨"),
+            Self::Warm => crate::tk!("暖灰"),
+            Self::Pine => crate::tk!("松绿"),
+            Self::Plum => crate::tk!("紫灰"),
         }
     }
     /// (foreground, background).

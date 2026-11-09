@@ -13,6 +13,8 @@ pub const DRAWS_WINDOW_BUTTONS: bool = imp::DRAWS_WINDOW_BUTTONS;
 
 /// What this system calls the app that shows files in their folders, as a label names it.
 pub const FILE_MANAGER: &str = imp::FILE_MANAGER;
+/// The same in English: Finder, File Explorer.
+pub const FILE_MANAGER_EN: &str = imp::FILE_MANAGER_EN;
 
 /// Opens a file as plain text in the system's own editor, whatever its extension says.
 pub fn open_as_text(path: &std::path::Path) -> std::io::Result<()> {
@@ -36,6 +38,12 @@ pub fn editor_cli(editor: Editor) -> Option<std::path::PathBuf> {
 /// its own (the Mac's is in the app). The text is handed over as data, never as code.
 pub fn notify(title: &str, body: &str, sound: bool) -> std::io::Result<()> {
     imp::notify(title, body, sound)
+}
+
+/// The account's preferred languages, most wanted first, as tags like `zh-Hans-CN`; empty
+/// when the system does not say.
+pub fn preferred_languages() -> Vec<String> {
+    imp::preferred_languages()
 }
 
 /// Whether the system is set to reduce motion. May take a while: off the main thread.

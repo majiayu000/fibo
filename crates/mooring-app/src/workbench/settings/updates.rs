@@ -8,10 +8,10 @@ impl SettingsView {
             return Vec::new();
         };
         let mut rows = Vec::new();
-        if self.shows(Page::About, "检查更新", cx) {
+        if self.shows(Page::About, t!("检查更新"), cx) {
             rows.push(self.update_now_row(u, cx));
         }
-        if u.bundle.is_some() && self.shows(Page::About, "自动检查更新", cx) {
+        if u.bundle.is_some() && self.shows(Page::About, t!("自动检查更新"), cx) {
             let on = u.auto;
             let toggle = switch("update-auto", on).on_click(cx.listener(move |this, _, _, cx| {
                 this.text_error = update::set_auto(!on, cx).err();
@@ -20,8 +20,8 @@ impl SettingsView {
             rows.push(
                 self.row(
                     rows.is_empty(),
-                    "自动检查更新",
-                    "每天最多一次，只向 GitHub 问最新的版本号；这是 Mooring 唯一会自己发出的网络请求",
+                    t!("自动检查更新"),
+                    t!("每天最多一次，只向 GitHub 问最新的版本号；这是 Mooring 唯一会自己发出的网络请求"),
                     toggle,
                 )
                 .into_any_element(),
@@ -37,37 +37,47 @@ impl SettingsView {
             return self
                 .row(
                     true,
-                    "检查更新",
-                    &format!("{current} · 从源码运行的版本不自动更新，用 git pull 后重新构建"),
+                    t!("检查更新"),
+                    &t!(
+                        "{current} · 从源码运行的版本不自动更新，用 git pull 后重新构建",
+                        current
+                    ),
                     div(),
                 )
                 .into_any_element();
         }
         let (note, action): (String, Option<(&str, bool)>) = match &u.phase {
-            Phase::Idle => (format!("当前 {current}"), Some(("检查更新", false))),
-            Phase::Checking => ("正在检查…".into(), None),
-            Phase::Latest(_) => (format!("{current} 已是最新版本"), Some(("检查更新", false))),
-            Phase::CheckFailed(e) => (format!("检查失败：{e}"), Some(("检查更新", false))),
-            Phase::Available(r) => (
-                format!("有新版本 {}（当前 {current}），终端会继续运行", r.version),
-                Some(("立即更新", true)),
+            Phase::Idle => (t!("当前 {current}", current), Some((t!("检查更新"), false))),
+            Phase::Checking => (t!("正在检查…").into(), None),
+            Phase::Latest(_) => (
+                t!("{current} 已是最新版本", current),
+                Some((t!("检查更新"), false)),
             ),
-            Phase::Installing(r) => (format!("正在下载并校验 {}…", r.version), None),
+            Phase::CheckFailed(e) => (t!("检查失败：{e}", e), Some((t!("检查更新"), false))),
+            Phase::Available(r) => (
+                t!(
+                    "有新版本 {version}（当前 {current}），终端会继续运行",
+                    version = r.version,
+                    current
+                ),
+                Some((t!("立即更新"), true)),
+            ),
+            Phase::Installing(r) => (t!("正在下载并校验 {version}…", version = r.version), None),
             Phase::Failed { message, page, .. } => (
                 message.clone(),
                 Some(if *page {
-                    ("打开发布页", true)
+                    (t!("打开发布页"), true)
                 } else {
-                    ("重试", true)
+                    (t!("重试"), true)
                 }),
             ),
             Phase::Homebrew(r) => (
-                format!(
-                    "有新版本 {}；这份由 Homebrew 安装，请运行 {}",
-                    r.version,
-                    mooring_core::update::BREW_COMMAND
+                t!(
+                    "有新版本 {version}；这份由 Homebrew 安装，请运行 {v2}",
+                    version = r.version,
+                    v2 = mooring_core::update::BREW_COMMAND
                 ),
-                Some(("拷贝命令", false)),
+                Some((t!("拷贝命令"), false)),
             ),
         };
         let control = action.map(|(text, install)| {
@@ -84,7 +94,7 @@ impl SettingsView {
                 }
             }))
         });
-        self.row(true, "检查更新", &note, div().children(control))
+        self.row(true, t!("检查更新"), &note, div().children(control))
             .into_any_element()
     }
 }

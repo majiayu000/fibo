@@ -157,21 +157,15 @@ impl Workbench {
                             .text_size(px(T::FORM_TITLE))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(T::color(T::primary()))
-                            .child("欢迎使用 Mooring"),
+                            .child(t!("欢迎使用 Mooring")),
                     )
                     .child(label({
                         use mooring_core::status::Status;
-                        format!(
-                            "每个 Agent 都跑在这里的真终端里。在这里启动 Claude Code 或 Codex，\
-                             左边就会列出这个会话和它现在的状态：{}、{}、{}。",
-                            Status::Running.label(),
-                            Status::Waiting.label(),
-                            Status::Review.label()
-                        )
+                        t!("每个 Agent 都跑在这里的真终端里。在这里启动 Claude Code 或 Codex，左边就会列出这个会话和它现在的状态：{running}、{waiting}、{review}。", running = Status::Running.label(), waiting = Status::Waiting.label(), review = Status::Review.label())
                     }))
                     .child(section(
-                        "启动一个 Agent",
-                        format!("在 {place} 打开；换文件夹用左边空间旁的 ＋"),
+                        t!("启动一个 Agent"),
+                        t!("在 {place} 打开；换文件夹用左边空间旁的 ＋", place),
                     ))
                     .child(agents)
                     .children(self.first_run_hooks_view(cx))
@@ -182,12 +176,12 @@ impl Workbench {
                             .items_center()
                             .gap(px(T::S4))
                             .text_size(px(T::SMALL))
-                            .child(link("first-run-shell", "打开空终端").on_click(
+                            .child(link("first-run-shell", t!("打开空终端")).on_click(
                                 cx.listener(|this, _, _, cx| this.launch(false, None, cx)),
                             ))
                             .child(label("·"))
                             .child(
-                                link("first-run-close", "不再显示").on_click(
+                                link("first-run-close", t!("不再显示")).on_click(
                                     cx.listener(|this, _, _, cx| this.finish_first_run(cx)),
                                 ),
                             ),
@@ -212,18 +206,18 @@ impl Workbench {
             }
             let start = button(
                 gpui::SharedString::from(format!("first-run-{}", agent.executable())),
-                format!("启动 {}", agent.name()),
+                t!("启动 {name}", name = agent.name()),
             )
             .px(px(T::S16))
             .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(agent, cx)));
             let note: Option<String> = match here {
                 Some(true) => None,
-                Some(false) => Some(format!(
-                    "没在登录 shell 的 PATH 里找到 {}。安装：{}",
-                    agent.executable(),
-                    hint.unwrap_or_default()
+                Some(false) => Some(t!(
+                    "没在登录 shell 的 PATH 里找到 {executable}。安装：{hint}",
+                    executable = agent.executable(),
+                    hint = hint.unwrap_or_default()
                 )),
-                None if probing => Some("正在查找…".to_owned()),
+                None if probing => Some(t!("正在查找…").to_owned()),
                 None => None,
             };
             rows = rows.child(
@@ -244,8 +238,8 @@ impl Workbench {
     /// The hooks: which file, what they do, how to take them out, and one button.
     fn first_run_hooks_view(&self, cx: &Context<Self>) -> Option<gpui::Div> {
         let hooks = match &self.first_run.hooks {
-            None => return Some(section("Hook", "正在检查…".to_owned())),
-            Some(Err(e)) => return Some(section("Hook", format!("没能检查：{e}"))),
+            None => return Some(section("Hook", t!("正在检查…").to_owned())),
+            Some(Err(e)) => return Some(section("Hook", t!("没能检查：{e}", e))),
             Some(Ok(hooks)) if hooks.is_empty() => return None,
             Some(Ok(hooks)) => hooks,
         };
@@ -253,24 +247,22 @@ impl Workbench {
         let names: Vec<&str> = hooks.iter().map(|h| h.name.as_str()).collect();
         let all_current = hooks.iter().all(|h| h.state == State::Current);
         let unreadable = hooks.iter().find(|h| h.state == State::Unreadable);
-        let mut body = div().flex().flex_col().gap(px(T::S6)).child(label(format!(
-            "推荐装上：{} 的状态和审批就不靠猜画面。会在 {} 里加几条 Mooring 的条目，\
-             只在 Mooring 的终端里起作用，在别处什么都不做。撤销：设置 › 关于，\
-             或在 Mooring 终端里运行 mooring hooks uninstall。",
-            names.join("、"),
-            files.join("、")
-        )));
+        let mut body = div().flex().flex_col().gap(px(T::S6)).child(label(t!("推荐装上：{agents} 的状态和审批就不靠猜画面。会在 {files} 里加几条 Mooring 的条目，只在 Mooring 的终端里起作用，在别处什么都不做。撤销：设置 › 关于，或在 Mooring 终端里运行 mooring hooks uninstall。", agents = names.join(t!("、")), files = files.join(t!("、")))));
         let control = if all_current {
-            label("已安装").into_any_element()
+            label(t!("已安装")).into_any_element()
         } else if let Some(h) = unreadable {
-            label(format!("读不了 {}：{}", files[0], h.differences.join("；")))
-                .text_color(Tone::Danger.ink())
-                .into_any_element()
+            label(t!(
+                "读不了 {file}：{why}",
+                file = files[0],
+                why = h.differences.join(t!("；"))
+            ))
+            .text_color(Tone::Danger.ink())
+            .into_any_element()
         } else {
             let text = if self.first_run.installing {
-                "正在安装…"
+                t!("正在安装…")
             } else {
-                "安装 Hook"
+                t!("安装 Hook")
             };
             button("first-run-hooks", text)
                 .px(px(T::S16))

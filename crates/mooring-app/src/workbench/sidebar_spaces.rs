@@ -6,8 +6,8 @@ use super::*;
 pub(super) fn new_space_name(spaces: &[Space]) -> String {
     (1..)
         .map(|i| match i {
-            1 => "新空间".to_owned(),
-            i => format!("新空间 {i}"),
+            1 => t!("新空间").to_owned(),
+            i => t!("新空间 {i}", i),
         })
         .find(|name| !spaces.iter().any(|s| &s.name == name))
         .unwrap_or_default()
@@ -71,7 +71,7 @@ impl Workbench {
                 id,
                 mooring_core::protocol::TerminalNote {
                     note: "claude-code".into(),
-                    why: "样例：没有关联对话的终端".into(),
+                    why: t!("样例：没有关联对话的终端").into(),
                 },
             );
             self.store.set_recognition(recognition);
@@ -109,10 +109,10 @@ impl Workbench {
         let mut rows = vec![
             button(
                 "space-menu-theme",
-                format!(
-                    "主题：{} {}",
-                    named.unwrap_or("跟随外观"),
-                    if spaces.menu_open { "▾" } else { "▸" }
+                t!(
+                    "主题：{theme} {arrow}",
+                    theme = named.unwrap_or(t!("跟随外观")),
+                    arrow = if spaces.menu_open { "▾" } else { "▸" }
                 ),
             )
             .w_full()
@@ -127,7 +127,7 @@ impl Workbench {
         if !spaces.menu_open {
             return rows;
         }
-        let choices = std::iter::once((None, "跟随外观".to_owned())).chain(
+        let choices = std::iter::once((None, t!("跟随外观").to_owned())).chain(
             themes
                 .entries
                 .iter()
@@ -139,7 +139,7 @@ impl Workbench {
             rows.push(
                 button(
                     gpui::SharedString::from(format!("space-theme-{i}")),
-                    format!("{} {name}", if picked { "✓" } else { "　" }),
+                    format!("{} {name}", if picked { "✓" } else { not_ui!("　") }),
                 )
                 .w_full()
                 .justify_start()
@@ -198,7 +198,7 @@ impl Workbench {
             .map(|s| self.space_counts(&s.id))
             .map(|c| c.waiting + c.errors)
             .sum::<usize>();
-        let name = space.map_or_else(|| "全部空间".to_owned(), |s| s.name.clone());
+        let name = space.map_or_else(|| t!("全部空间").to_owned(), |s| s.name.clone());
         let todos = self
             .workspace
             .tasks
@@ -209,7 +209,7 @@ impl Workbench {
         line.when(!all_spaces, |line| {
             line.child(
                 button("space-switch", "")
-                    .aria_label(format!("空间 {name}，点开切换或新建"))
+                    .aria_label(t!("空间 {name}，点开切换或新建", name))
                     .min_w_0()
                     .px(px(T::S8))
                     .gap(px(T::S6))
@@ -252,8 +252,12 @@ impl Workbench {
         })
         .child(div().flex_1())
         .child(
-            button("todos-toggle", format!("待办 {todos}"))
-                .aria_label(if open { "收起待办" } else { "展开待办" })
+            button("todos-toggle", t!("待办 {todos}", todos))
+                .aria_label(if open {
+                    t!("收起待办")
+                } else {
+                    t!("展开待办")
+                })
                 .flex_shrink_0()
                 .h(px(T::ICON_HEIGHT))
                 .px(px(T::S6))
@@ -267,8 +271,8 @@ impl Workbench {
                 })),
         )
         .child(
-            button("sidebar-new-task", "＋")
-                .aria_label("新待办")
+            button("sidebar-new-task", not_ui!("＋"))
+                .aria_label(t!("新待办"))
                 .flex_shrink_0()
                 .h(px(T::ICON_HEIGHT))
                 .px(px(T::S6))
@@ -333,11 +337,11 @@ impl Workbench {
                     .id(gpui::SharedString::from(format!("space-{id}")))
                     .role(gpui::accesskit::Role::Button)
                     .aria_label(if missing {
-                        format!("{}，目录不在了，点一下重新选择", space.name)
+                        t!("{name}，目录不在了，点一下重新选择", name = space.name)
                     } else if on {
-                        format!("{}，正在只看这个空间，点一下看全部", space.name)
+                        t!("{name}，正在只看这个空间，点一下看全部", name = space.name)
                     } else {
-                        format!("只看 {}", space.name)
+                        t!("只看 {name}", name = space.name)
                     })
                     .h(px(F::CHIP))
                     .max_w_full()
@@ -400,7 +404,7 @@ impl Workbench {
                         )
                     })
                     .tooltip(super::diagnostics::tip(vec![if missing {
-                        "目录不在了，点一下重新选择".to_owned()
+                        t!("目录不在了，点一下重新选择").to_owned()
                     } else {
                         format!("{} · {}", space.name, space.cwd)
                     }]))
@@ -435,7 +439,7 @@ impl Workbench {
             div()
                 .id("add-space")
                 .role(gpui::accesskit::Role::Button)
-                .aria_label("新建空间")
+                .aria_label(t!("新建空间"))
                 .size(px(F::CHIP))
                 .flex()
                 .items_center()
@@ -483,7 +487,7 @@ impl Workbench {
                         div()
                             .flex_shrink_0()
                             .text_color(T::color(F::third()))
-                            .child("只看"),
+                            .child(t!("只看")),
                     )
                     .child(
                         div()
@@ -516,7 +520,7 @@ impl Workbench {
                         div()
                             .id("space-filter-clear")
                             .role(gpui::accesskit::Role::Button)
-                            .aria_label("看全部空间")
+                            .aria_label(t!("看全部空间"))
                             .flex_shrink_0()
                             .h(px(T::ICON_HEIGHT))
                             .flex()
@@ -525,7 +529,7 @@ impl Workbench {
                             .text_color(T::color(F::third()))
                             .cursor_pointer()
                             .hover(|s| s.text_color(T::color(F::bright())))
-                            .child("看全部")
+                            .child(t!("看全部"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.sidebar.space_filter = None;
                                 cx.notify();

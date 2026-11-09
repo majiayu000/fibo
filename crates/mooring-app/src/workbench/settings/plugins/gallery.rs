@@ -139,13 +139,13 @@ impl SettingsView {
                 segments()
                     .child(choose(
                         "plugin-tab-installed",
-                        format!("已安装 {installed}"),
+                        t!("已安装 {installed}", installed),
                         Tab::Installed,
                         cx,
                     ))
                     .child(choose(
                         "plugin-tab-discover",
-                        format!("发现 {total}"),
+                        t!("发现 {total}", total),
                         Tab::Discover,
                         cx,
                     )),
@@ -201,16 +201,16 @@ impl SettingsView {
                 .into_any_element()
         };
         if self.market.working.as_deref() == Some(id) {
-            return quiet("正在处理…".into(), false);
+            return quiet(t!("正在处理…").into(), false);
         }
         let busy = self.market.working.is_some();
         if let Some(offer) = item.offer.clone() {
             let text = if item.update {
-                format!("更新到 {}", offer.entry.version)
+                t!("更新到 {version}", version = offer.entry.version)
             } else if item.complete.is_some() {
-                "安装并使用".to_owned()
+                t!("安装并使用").to_owned()
             } else {
-                "安装".to_owned()
+                t!("安装").to_owned()
             };
             let key = format!("plugin-get-{id}");
             let get = if strong && !item.update {
@@ -230,11 +230,11 @@ impl SettingsView {
         }
         if let Some(pick) = item.pick.clone() {
             if pick == playing() {
-                return quiet("● 正在用".into(), true);
+                return quiet(t!("● 正在用").into(), true);
             }
             return secondary(
                 format!("complete-use-{}", pick.name().replace(':', "-")),
-                "用这个",
+                t!("用这个"),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
@@ -245,7 +245,7 @@ impl SettingsView {
         }
         if item.complete.is_some() && !item.enabled() {
             let on = id.clone();
-            return secondary(format!("complete-enable-{id}"), "打开并用这个")
+            return secondary(format!("complete-enable-{id}"), t!("打开并用这个"))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     cx.stop_propagation();
                     if this.market.working.is_none() {
@@ -256,9 +256,9 @@ impl SettingsView {
         }
         quiet(
             if item.enabled() {
-                "● 已安装"
+                t!("● 已安装")
             } else {
-                "已停用"
+                t!("已停用")
             }
             .to_owned(),
             item.enabled(),
@@ -370,7 +370,7 @@ impl SettingsView {
             .flex()
             .flex_wrap()
             .gap(px(T::S6))
-            .child(self.plugin_chip("plugin-cat-all".into(), format!("全部 {total}"), None, cx));
+            .child(self.plugin_chip("plugin-cat-all".into(), t!("全部 {total}", total), None, cx));
         for c in Category::ALL {
             chips = chips.child(self.plugin_chip(
                 format!("plugin-cat-{}", c.label()),
@@ -420,7 +420,7 @@ impl SettingsView {
             let more = (capped && rows.len() > shown.len()).then(|| {
                 secondary(
                     "plugin-see-animations",
-                    format!("查看全部 {} 个", rows.len()),
+                    t!("查看全部 {len} 个", len = rows.len()),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.market.category = Some(c);
@@ -470,9 +470,9 @@ impl SettingsView {
                     .py(px(T::S20 * 2.))
                     .flex()
                     .justify_center()
-                    .child(label(format!(
-                        "没有找到「{}」",
-                        self.market.search_text(cx)
+                    .child(label(t!(
+                        "没有找到「{query}」",
+                        query = self.market.search_text(cx)
                     ))),
             );
         }

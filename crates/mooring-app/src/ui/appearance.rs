@@ -23,9 +23,9 @@ impl Mode {
     pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
     pub fn label(self) -> &'static str {
         match self {
-            Self::System => "跟随系统",
-            Self::Light => "亮色",
-            Self::Dark => "暗色",
+            Self::System => t!("跟随系统"),
+            Self::Light => t!("亮色"),
+            Self::Dark => t!("暗色"),
         }
     }
     fn name(self) -> &'static str {

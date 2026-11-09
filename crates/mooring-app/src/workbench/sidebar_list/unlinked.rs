@@ -6,7 +6,7 @@ use super::*;
 use crate::ui::theme::Flat as F;
 use crate::workbench::sidebar_flat::{flat_row_box, flat_selected_edge, flat_state};
 
-const TITLE: &str = "未关联的终端";
+const TITLE: &str = tk!("未关联的终端");
 
 /// One such terminal: its short note, the reason a hover shows, and its dot's state.
 pub(in crate::workbench) struct Unlinked {
@@ -18,7 +18,7 @@ pub(in crate::workbench) struct Unlinked {
 
 /// The heading, or none: no such terminal, no empty group.
 fn heading_text(count: usize) -> Option<(&'static str, usize)> {
-    (count > 0).then_some((TITLE, count))
+    (count > 0).then_some((mooring_core::i18n::say(TITLE), count))
 }
 
 /// Whether this row is the selected one. A peek is what is in front: its session's row is

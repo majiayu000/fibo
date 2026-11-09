@@ -8,6 +8,8 @@ use super::*;
 use crate::ui::widgets::gauge;
 use mooring_core::quota::{NEAR, OVER, Quota, Window as QuotaWindow};
 
+mod sessions;
+
 /// A reading older than this is marked `*`: the CLI has not been used since.
 const STALE_AFTER: u64 = 3600;
 
@@ -32,7 +34,7 @@ impl Workbench {
         // is the title row's 要你处理 alone; a click here still lists what works or waits.
         let listed = self.facts().listed;
         let host = item("status-host", open == Some(StatusPop::Sessions))
-            .aria_label(format!("本机，{listed} 个会话"))
+            .aria_label(t!("本机，{listed} 个会话", listed))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Sessions, cx)))
             .child(div().size(px(T::DOT)).rounded_full().bg(if cut {
                 Tone::Danger.dot()
@@ -49,19 +51,19 @@ impl Workbench {
                             T::color(T::secondary())
                         })
                         .child(if cut {
-                            "后台断开，正在重连".to_owned()
+                            t!("后台断开，正在重连").to_owned()
                         } else if fit.working {
-                            format!("本机 · {listed} 个会话")
+                            t!("本机 · {listed} 个会话", listed)
                         } else {
-                            "本机".to_owned()
+                            t!("本机").to_owned()
                         }),
                 )
             })
             .tooltip(super::diagnostics::tip(vec![
                 if cut {
-                    "和后台 mooring 的连接断了，侧栏和看板停在断开那一刻".into()
+                    t!("和后台 mooring 的连接断了，侧栏和看板停在断开那一刻").into()
                 } else {
-                    "后台 mooring 在运行，按事件更新，不定时轮询".into()
+                    t!("后台 mooring 在运行，按事件更新，不定时轮询").into()
                 },
                 detail,
             ]));
@@ -92,25 +94,25 @@ impl Workbench {
                 };
                 d.child(divider()).child(
                     item("status-memory", false)
-                        .aria_label(format!("内存{}", pressure.label()))
+                        .aria_label(t!("内存{label}", label = pressure.label()))
                         .gap(px(T::S4))
                         .child(div().size(px(T::DOT)).rounded_full().bg(tone.dot()))
                         .child(
                             div()
                                 .text_color(tone.ink())
-                                .child(format!("内存{}", pressure.label())),
+                                .child(t!("内存{label}", label = pressure.label())),
                         )
                         .when(swap > 0 && fit.working, |d| {
                             d.child(
-                                div().text_color(T::color(T::secondary())).child(format!(
-                                    "交换 {}",
-                                    mooring_core::diagnostics::gib(swap)
+                                div().text_color(T::color(T::secondary())).child(t!(
+                                    "交换 {v1}",
+                                    v1 = mooring_core::diagnostics::gib(swap)
                                 )),
                             )
                         })
                         .tooltip(super::diagnostics::tip(vec![
-                            format!("系统内存压力{}", pressure.label()),
-                            "点开本机诊断，看谁占得多".into(),
+                            t!("系统内存压力{label}", label = pressure.label()),
+                            t!("点开本机诊断，看谁占得多").into(),
                         ]))
                         .on_click(
                             cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx)),
@@ -121,8 +123,8 @@ impl Workbench {
             .when(fit.diagnose, |d| {
                 d.child(
                     item("diagnose-host", false)
-                        .aria_label("本机诊断")
-                        .child("本机诊断")
+                        .aria_label(t!("本机诊断"))
+                        .child(t!("本机诊断"))
                         .on_click(
                             cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx)),
                         ),
@@ -132,14 +134,14 @@ impl Workbench {
             .when(fit.settings, |d| {
                 d.child(
                     item("open-palette", false)
-                        .aria_label("命令面板")
+                        .aria_label(t!("命令面板"))
                         .gap(px(T::S4))
                         .child(
                             div()
                                 .text_color(T::color(T::muted()))
                                 .child(crate::keymap::keycap(cx, crate::keymap::Action::Search)),
                         )
-                        .child("命令")
+                        .child(t!("命令"))
                         .on_click(cx.listener(|this, _, window, cx| this.open_search(window, cx))),
                 )
             })
@@ -185,8 +187,8 @@ impl Workbench {
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Quota, cx)));
         if readings.is_empty() {
             return b
-                .aria_label("额度：还没有读数")
-                .child(div().text_color(T::color(T::muted())).child("额度"))
+                .aria_label(t!("额度：还没有读数"))
+                .child(div().text_color(T::color(T::muted())).child(t!("额度")))
                 .child(caret());
         }
         // The marks tell the cells apart once there are two; alone, the usual rule.
@@ -208,7 +210,7 @@ impl Workbench {
                 .filter(|w| !w.reset(now) && w.on_bar())
                 .collect();
             if windows.is_empty() {
-                cell = cell.child(div().text_color(T::color(T::muted())).child("已重置"));
+                cell = cell.child(div().text_color(T::color(T::muted())).child(t!("已重置")));
             }
             for (i, w) in windows.iter().enumerate() {
                 let (fill, ink) = colors(w, stale);
@@ -230,7 +232,7 @@ impl Workbench {
             }
             b = b.child(cell);
         }
-        b = b.aria_label(format!("额度：{}", said.join("，")));
+        b = b.aria_label(t!("额度：{v1}", v1 = said.join(t!("，"))));
         if readings.len() > BAR_CELLS {
             b = b.child(
                 div()
@@ -295,10 +297,10 @@ impl Workbench {
         let all = super::redraw::quotas(&self.workspace, now);
         let readings = tightest_first(&all, now);
         panel = panel.child(heading(
-            "额度",
+            t!("额度"),
             match self.quota_pin {
-                Some(_) => "按用得最多排序 · 状态栏每家一格，固定的在最前",
-                None => "按用得最多排序 · 状态栏每家一格",
+                Some(_) => t!("按用得最多排序 · 状态栏每家一格，固定的在最前"),
+                None => t!("按用得最多排序 · 状态栏每家一格"),
             },
         ));
         let on_bar: Vec<_> = bar_order(&readings, self.quota_pin)
@@ -307,7 +309,7 @@ impl Workbench {
             .map(|(a, ..)| a)
             .collect();
         if readings.is_empty() {
-            panel = panel.child(label("这一周用过的 Agent 都还没留下额度记录"));
+            panel = panel.child(label(t!("这一周用过的 Agent 都还没留下额度记录")));
         }
         for (agent, quota, _) in &readings {
             let stale = now.saturating_sub(quota.at) > STALE_AFTER;
@@ -323,7 +325,7 @@ impl Workbench {
             }
             head = head
                 .child(div().flex_1())
-                .child(label(format!("读数 {}", ago(quota.at, now))))
+                .child(label(t!("读数 {v1}", v1 = ago(quota.at, now))))
                 .child(self.pin_chip(*agent, on_bar.contains(agent), cx));
             let mut block = div()
                 .flex()
@@ -361,23 +363,27 @@ impl Workbench {
                                 .justify_end()
                                 .text_color(ink)
                                 .child(if reset {
-                                    "已重置".into()
+                                    t!("已重置").into()
                                 } else {
                                     format!("{}%", w.used)
                                 }),
                         )
                         .child(div().flex_1())
                         .child(label(if reset {
-                            "等下次使用时更新".into()
+                            t!("等下次使用时更新").into()
                         } else if w.resets_at == 0 {
                             String::new()
                         } else if let Some(spare) = w.spare(now) {
-                            format!("{} 后重置 · 还有 {spare}% 没用", left(w.resets_at, now))
+                            t!(
+                                "{v1} 后重置 · 还有 {spare}% 没用",
+                                v1 = left(w.resets_at, now),
+                                spare
+                            )
                         } else {
-                            format!(
-                                "{} 后 · {} 重置",
-                                left(w.resets_at, now),
-                                upcoming(w.resets_at, now)
+                            t!(
+                                "{v1} 后 · {v2} 重置",
+                                v1 = left(w.resets_at, now),
+                                v2 = upcoming(w.resets_at, now)
                             )
                         })),
                 );
@@ -389,10 +395,12 @@ impl Workbench {
             );
         }
         panel.child(
-            label("读各家留在本机的记录和插件的读数。* 表示读数超过 1 小时")
-                .pt(px(T::S4))
-                .border_t(px(T::BORDER_WIDTH))
-                .border_color(T::color(T::border())),
+            label(t!(
+                "读各家留在本机的记录和插件的读数。* 表示读数超过 1 小时"
+            ))
+            .pt(px(T::S4))
+            .border_t(px(T::BORDER_WIDTH))
+            .border_color(T::color(T::border())),
         )
     }
 
@@ -406,9 +414,9 @@ impl Workbench {
     ) -> gpui::Stateful<gpui::Div> {
         let pinned = self.quota_pin == Some(agent);
         let text = match (on_bar, pinned) {
-            (true, true) => "✓ 固定显示",
-            (true, false) => "状态栏显示中",
-            _ => "固定到状态栏",
+            (true, true) => t!("✓ 固定显示"),
+            (true, false) => t!("状态栏显示中"),
+            _ => t!("固定到状态栏"),
         };
         div()
             .id(gpui::SharedString::from(format!(
@@ -417,9 +425,9 @@ impl Workbench {
             )))
             .role(gpui::accesskit::Role::Button)
             .aria_label(if pinned {
-                format!("取消固定 {}，改回显示用得最多的", agent.name())
+                t!("取消固定 {name}，改回显示用得最多的", name = agent.name())
             } else {
-                format!("状态栏固定显示 {}", agent.name())
+                t!("状态栏固定显示 {name}", name = agent.name())
             })
             .px(px(T::S6))
             .rounded(px(T::CHIP_RADIUS))
@@ -446,82 +454,6 @@ impl Workbench {
             }))
     }
 
-    fn sessions_popover(
-        &self,
-        mut panel: gpui::Stateful<gpui::Div>,
-        cx: &Context<Self>,
-    ) -> gpui::Stateful<gpui::Div> {
-        let (working, needs) = self.status_sessions();
-        if working.is_empty() && needs.is_empty() {
-            return panel.child(label(format!(
-                "没有{}或{}的会话",
-                Status::Running.label(),
-                mooring_core::status::NEEDS_YOU
-            )));
-        }
-        let now = now();
-        for (title, group, list) in [
-            (format!("等你 {}", needs.len()), Status::Waiting, &needs),
-            (
-                format!("{} {}", Status::Running.label(), working.len()),
-                Status::Running,
-                &working,
-            ),
-        ] {
-            if list.is_empty() {
-                continue;
-            }
-            panel = panel.child(
-                div()
-                    .text_size(px(T::CHIP_SIZE))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(group.colors().1)
-                    .child(title),
-            );
-            for s in list.iter() {
-                let g = status_of(&self.workspace, s);
-                let session = (*s).clone();
-                panel = panel.child(
-                    div()
-                        .id(gpui::SharedString::from(format!("status-session-{}", s.id)))
-                        .h(px(T::ROW))
-                        .px(px(T::S6))
-                        .mx(px(-T::S6))
-                        .flex()
-                        .items_center()
-                        .gap(px(T::S8))
-                        .rounded(px(T::CHIP_RADIUS))
-                        .cursor_pointer()
-                        .hover(|d| d.bg(T::color(T::button_hover())))
-                        .child(
-                            div()
-                                .size(px(T::DOT))
-                                .flex_shrink_0()
-                                .rounded_full()
-                                .bg(g.colors().0),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .truncate()
-                                .child(self.session_title(s)),
-                        )
-                        .child(label(format!(
-                            "{} · {}",
-                            s.runtime.name(),
-                            ago(self.workspace.session_updated(s), now)
-                        )))
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.statusbar = None;
-                            this.enter_card(&session, window, cx);
-                        })),
-                );
-            }
-        }
-        panel
-    }
-
     /// The pane header's warning when the CLI running there has used up a window.
     pub(super) fn quota_alert(&self, session: &AgentSession) -> Option<String> {
         let now = now();
@@ -533,19 +465,19 @@ impl Workbench {
             .filter(|w| !w.reset(now) && w.used >= OVER)
             .max_by_key(|w| w.used)?;
         Some(if w.resets_at > now {
-            format!(
-                "{} {}额度已用 {}%，{}后重置",
-                session.runtime.name(),
-                w.label(),
-                w.used,
-                left(w.resets_at, now)
+            t!(
+                "{name} {label}额度已用 {used}%，{v4}后重置",
+                name = session.runtime.name(),
+                label = w.label(),
+                used = w.used,
+                v4 = left(w.resets_at, now)
             )
         } else {
-            format!(
-                "{} {}额度已用 {}%",
-                session.runtime.name(),
-                w.label(),
-                w.used
+            t!(
+                "{name} {label}额度已用 {used}%",
+                name = session.runtime.name(),
+                label = w.label(),
+                used = w.used
             )
         })
     }

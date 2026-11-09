@@ -117,9 +117,9 @@ impl Workbench {
                                 button(
                                     "overview-new-task",
                                     if self.tasks.board_draft.is_empty() {
-                                        "＋ 新待办"
+                                        t!("＋ 新待办")
                                     } else {
-                                        "＋ 新待办 · 有草稿"
+                                        t!("＋ 新待办 · 有草稿")
                                     },
                                 )
                                 .h(px(T::SEGMENT_HEIGHT))
@@ -135,7 +135,7 @@ impl Workbench {
                     )
                     .when(reviewable, |d| {
                         d.child(
-                            button("review-queue", "逐个验收 →")
+                            button("review-queue", t!("逐个验收 →"))
                                 .h(px(T::SEGMENT_HEIGHT))
                                 .px(px(T::S8))
                                 .text_color(T::color(T::link()))
@@ -146,7 +146,7 @@ impl Workbench {
                     })
                     .when(column == Column::Stale && count > 0, |d| {
                         d.child(
-                            button("cleanup", "逐个清理 →")
+                            button("cleanup", t!("逐个清理 →"))
                                 .h(px(T::SEGMENT_HEIGHT))
                                 .px(px(T::S8))
                                 .text_color(T::color(T::link()))

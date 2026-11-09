@@ -77,15 +77,19 @@ pub(in crate::workbench) fn quiet_tag(name: &str) -> gpui::Div {
 /// link coming and going does not change it.
 pub(super) fn quiet_words(name: &str, waiting: usize) -> String {
     if waiting == 0 {
-        format!("{name} · 先不管")
+        t!("{name} · 先不管", name)
     } else {
-        format!("{name} · 先不管 · {waiting} 个在等")
+        t!("{name} · 先不管 · {waiting} 个在等", name, waiting)
     }
 }
 
 /// What the palette says for a machine.
 fn switch_words(name: &str, quiet: bool) -> String {
-    format!("{} {name}", if quiet { "接着管" } else { "先不管" })
+    if quiet {
+        t!("接着管 {name}", name)
+    } else {
+        t!("先不管 {name}", name)
+    }
 }
 
 impl Workbench {
@@ -120,7 +124,7 @@ impl Workbench {
             self.set_machine_scope(None);
         }
         if let Err(e) = crate::machines::set_quiet(&host, quiet) {
-            self.error = Some(format!("没存上，下次打开不会记得：{e}"));
+            self.error = Some(t!("没存上，下次打开不会记得：{e}", e));
         }
         cx.notify();
     }
@@ -189,9 +193,9 @@ impl Workbench {
             let entry = button(
                 "machine-menu-quiet",
                 if quiet {
-                    "接着管这台"
+                    t!("接着管这台")
                 } else {
-                    "先不管这台"
+                    t!("先不管这台")
                 },
             )
             .w_full()
@@ -342,10 +346,11 @@ impl Workbench {
                 d.bg(T::color(F::selected_line()).opacity(state.glow * 0.6))
             })
             .role(gpui::accesskit::Role::Button)
-            .aria_label(format!(
-                "{words}，点一下{}",
-                if open { "收起" } else { "展开" }
-            ))
+            .aria_label(if open {
+                t!("{words}，点一下收起", words)
+            } else {
+                t!("{words}，点一下展开", words)
+            })
             .h(px(LINE))
             .flex_shrink_0()
             .pl(px(if machine { T::S14 } else { F::EDGE }))
@@ -390,14 +395,14 @@ impl Workbench {
                     div()
                         .id(gpui::SharedString::from(resume_id))
                         .role(gpui::accesskit::Role::Button)
-                        .aria_label(format!("接着管 {name}"))
+                        .aria_label(t!("接着管 {name}", name))
                         .flex_shrink_0()
                         .px(px(T::S6))
                         .rounded(px(T::S4))
                         .text_size(px(F::TAG))
                         .text_color(T::color(F::second()))
                         .hover(|s| s.bg(T::color(F::selected())))
-                        .child("接着管")
+                        .child(t!("接着管"))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
                             resume(this, cx);
@@ -427,7 +432,7 @@ impl Workbench {
             .text_color(T::color(T::muted()))
             .child(words)
             .child(
-                button(resume_id, "接着管")
+                button(resume_id, t!("接着管"))
                     .h(px(T::SEGMENT_HEIGHT))
                     .px(px(T::S6))
                     .on_click(resume),
@@ -462,9 +467,12 @@ impl Workbench {
         (0..self.machines.len())
             .filter(|i| {
                 self.machine_host(*i).is_some_and(|host| {
-                    format!("先不管 接着管 恢复 电脑 机器 {}", machine_label(&host))
-                        .to_lowercase()
-                        .contains(&query.to_lowercase())
+                    t!(
+                        "先不管 接着管 恢复 电脑 机器 {name}",
+                        name = machine_label(&host)
+                    )
+                    .to_lowercase()
+                    .contains(&query.to_lowercase())
                 })
             })
             .map(Hit::Machine)

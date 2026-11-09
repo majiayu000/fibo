@@ -48,7 +48,7 @@ impl Workbench {
                     .child(div().min_w_0().truncate().child(space.name.clone()))
                     .when(space_dir_missing(space), |d| {
                         d.child(
-                            label("目录不在了")
+                            label(t!("目录不在了"))
                                 .flex_shrink_0()
                                 .text_size(px(T::CHIP_SIZE))
                                 .text_color(T::color(T::muted())),
@@ -71,7 +71,7 @@ impl Workbench {
                 );
             }
             picks.push(
-                button("space-menu-add", "＋ 新空间")
+                button("space-menu-add", t!("＋ 新空间"))
                     .w_full()
                     .justify_start()
                     .border_0()
@@ -97,9 +97,9 @@ impl Workbench {
             button(
                 "space-menu-rename",
                 if self.layout.space_switch {
-                    format!("重命名「{name}」")
+                    t!("重命名「{name}」", name)
                 } else {
-                    "重命名".to_owned()
+                    t!("重命名").to_owned()
                 },
             )
             .w_full()
@@ -113,9 +113,9 @@ impl Workbench {
             button(
                 "space-menu-folder",
                 if has_dir {
-                    "更换目录…"
+                    t!("更换目录…")
                 } else {
-                    "设置目录…"
+                    t!("设置目录…")
                 },
             )
             .w_full()
@@ -130,11 +130,11 @@ impl Workbench {
             button(
                 "space-menu-remove",
                 if !self.layout.space_removing {
-                    "删除空间".to_owned()
+                    t!("删除空间").to_owned()
                 } else if tabs > 0 {
-                    format!("确认删除，并关掉 {tabs} 个标签")
+                    t!("确认删除，并关掉 {tabs} 个标签", tabs)
                 } else {
-                    "确认删除".to_owned()
+                    t!("确认删除").to_owned()
                 },
             )
             .w_full()

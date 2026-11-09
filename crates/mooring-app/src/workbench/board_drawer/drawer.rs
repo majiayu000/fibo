@@ -26,13 +26,13 @@ impl Workbench {
             })
             .filter(|t| !t.trim().is_empty())
             .unwrap_or_else(|| self.session_line(s));
-        let space_id = self.workspace.session_space(s).unwrap_or("外部");
+        let space_id = self.workspace.session_space(s).unwrap_or(not_ui!("外部"));
         let space = self
             .workspace
             .spaces
             .iter()
             .find(|p| p.id == space_id)
-            .map_or("外部", |p| p.name.as_str());
+            .map_or(t!("外部"), |p| p.name.as_str());
         let live = live_terminal(&self.workspace, s).is_some();
         // 要你处理 tells 等你回答 from 出错 by the status's own dot.
         let marked = column == Column::Needs;
@@ -66,27 +66,27 @@ impl Workbench {
             .child(format!("{} / {}", index + 1, list.len()))
             .child(
                 small("drawer-up", "↑")
-                    .aria_label("上一个")
+                    .aria_label(t!("上一个"))
                     .on_click(cx.listener(|this, _, _, cx| this.step_drawer(-1, cx))),
             )
             .child(
                 small("drawer-down", "↓")
-                    .aria_label("下一个")
+                    .aria_label(t!("下一个"))
                     .on_click(cx.listener(|this, _, _, cx| this.step_drawer(1, cx))),
             )
             .child(div().flex_1())
             .child(
                 small("drawer-close", "✕")
-                    .aria_label("关闭")
+                    .aria_label(t!("关闭"))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.overview.drawer = None;
                         cx.notify();
                     })),
             );
         let primary = gpui::SharedString::from(match (marked, live) {
-            (true, true) => "打开终端回答 →",
-            (_, true) => "打开终端 →",
-            _ => "接着聊 →",
+            (true, true) => t!("打开终端回答 →"),
+            (_, true) => t!("打开终端 →"),
+            _ => t!("接着聊 →"),
         });
         let mut actions = div().flex().gap(px(T::S8)).child(
             super::overview::solid(button("drawer-open", primary)).on_click(cx.listener(
@@ -97,8 +97,14 @@ impl Workbench {
             )),
         );
         let move_to = match column {
-            Column::Needs | Column::Review => Some((Column::Done, "标记完成")),
-            Column::Done => Some((Column::Needs, "退回要你处理")),
+            Column::Needs | Column::Review => Some((Column::Done, t!("标记完成").to_owned())),
+            Column::Done => Some((
+                Column::Needs,
+                t!(
+                    "退回{needs}",
+                    needs = mooring_core::status::needs_you_word()
+                ),
+            )),
             _ => None,
         };
         if let Some((to, text)) = move_to {
@@ -118,7 +124,7 @@ impl Workbench {
             .into_iter()
             .map(|q| {
                 fact_row(
-                    "你",
+                    t!("你"),
                     q.text.lines().next().unwrap_or("").to_owned(),
                     short_ago(q.at, at),
                 )
@@ -133,7 +139,7 @@ impl Workbench {
             .take(4)
             .map(|h| {
                 fact_row(
-                    "结局",
+                    t!("结局"),
                     format!(
                         "{} → {}{}",
                         outcome_label(&h.before),
@@ -180,7 +186,7 @@ impl Workbench {
                             .cursor_pointer()
                             .text_size(px(T::META))
                             .text_color(T::color(T::link()))
-                            .child(format!("待办 · {} ›", task.title))
+                            .child(t!("待办 · {title} ›", title = task.title))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.overview.drawer = None;
                                 this.nav.task_detail = Some(id.clone());
@@ -198,7 +204,7 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .gap(px(T::S6))
-                    .child(label("Agent 最后说").text_color(T::color(T::muted())))
+                    .child(label(t!("Agent 最后说")).text_color(T::color(T::muted())))
                     .child(
                         div()
                             .text_size(px(T::BODY_SIZE))
@@ -211,49 +217,49 @@ impl Workbench {
             )
             .child(actions);
         if !asks.is_empty() {
-            main = main.child(section("你问过")).children(asks);
+            main = main.child(section(t!("你问过"))).children(asks);
         }
         if !history.is_empty() {
-            main = main.child(section("经过")).children(history);
+            main = main.child(section(t!("经过"))).children(history);
         }
         let mut props = vec![
-            prop("状态", status_icon(), status.to_owned()),
+            prop(t!("状态"), status_icon(), status.to_owned()),
             prop(
                 "Agent",
                 agent_mark(s.runtime, T::color(T::secondary())),
                 s.runtime.name().to_owned(),
             ),
             prop(
-                "空间",
+                t!("空间"),
                 mesh(self.space_mesh(space_id), T::BOARD_MARK).into_any_element(),
                 space.to_owned(),
             ),
         ];
         if let Some(branch) = self.git_branch(&s.cwd, cx) {
-            props.push(prop("分支", div().into_any_element(), branch));
+            props.push(prop(t!("分支"), div().into_any_element(), branch));
         }
         props.push(prop(
-            "回合",
+            t!("回合"),
             div().into_any_element(),
             content.map_or(0, |c| c.asks.len()).to_string(),
         ));
         props.push(prop(
-            "最后动静",
+            t!("最后动静"),
             div().into_any_element(),
             short_ago(self.session_updated(s), at),
         ));
         props.push(prop(
-            "终端",
+            t!("终端"),
             div().into_any_element(),
             if s.terminal.is_none() {
-                "外部 · 只读".to_owned()
+                t!("外部 · 只读").to_owned()
             } else if live {
-                "Mooring 里在开".to_owned()
+                t!("Mooring 里在开").to_owned()
             } else {
-                "已关闭".to_owned()
+                t!("已关掉").to_owned()
             },
         ));
-        props.push(prop("目录", div().into_any_element(), s.cwd.clone()));
+        props.push(prop(t!("目录"), div().into_any_element(), s.cwd.clone()));
         let drawer = div()
             .id("board-drawer")
             .occlude()

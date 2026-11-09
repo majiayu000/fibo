@@ -23,6 +23,7 @@ Mooring: a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt).
 - Before changing code, read `docs/lessons.md`: the mistakes made more than once, with the commits that show them. A rule seen on three days moves here.
 - Changing a state rule, an interface or a file format: try it with the old one still there (the host just restarted, a plugin updated after the host started, a file or script an older build wrote), and say what a fix that only holds for new data does to the old. Seen on four days (`docs/lessons.md`).
 - One owner per fact (docs/plan.md principle 7): a session's state, name, 要你处理, time, folder and state words come from core (`status::of`, `session_title`, `status::needs_you`, `session_updated`, `terminal_cwd`, `Status::label`). `crates/mooring-core/tests/guard.rs` counts raw-field reads and hand-written state words per file; rewrite `tests/guard-baseline.txt` (`MOORING_GUARD_UPDATE=1`) only for a use you mean to keep.
+- Words the window shows go through `t!("中文")` with English in `crates/mooring-core/locales/en/*.toml`; `tests/i18n.rs` checks every key has English and that unconverted Chinese only goes down. How to convert a file: docs/decisions/2026-11-08-english-ui.md.
 - File size: no source file grows past 800 lines, however it was written (`crates/mooring-core/tests/file_size.rs`). Put new code in a new file. Files in `tests/file-size-baseline.txt` can only get shorter; `MOORING_GUARD_UPDATE=1` lowers their numbers and never raises one.
 
 ## Reaching main

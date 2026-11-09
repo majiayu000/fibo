@@ -70,9 +70,9 @@ pub(in crate::workbench) struct Market {
 impl Market {
     pub(in crate::workbench) fn read(cx: &mut Context<SettingsView>) -> Self {
         let search = cx.new(|cx| {
-            crate::ui::field::Field::new("搜索插件", "", cx)
+            crate::ui::field::Field::new(t!("搜索插件"), "", cx)
                 .compact()
-                .placeholder("搜索插件")
+                .placeholder(t!("搜索插件"))
         });
         cx.observe(&search, |_, _, cx| cx.notify()).detach();
         let spot = crate::workbench::complete::StageSpot::default();
@@ -147,12 +147,14 @@ fn kinds(provides: &[Kind]) -> String {
         .iter()
         .map(|k| k.label())
         .collect::<Vec<_>>()
-        .join("、")
+        .join(t!("、"))
 }
 
 /// An animation plugin's name inside 完成动画, without the 「完成动画：」 its name starts with.
 fn short_name(name: &str) -> String {
-    name.strip_prefix("完成动画：").unwrap_or(name).to_owned()
+    name.strip_prefix(not_ui!("完成动画："))
+        .unwrap_or(name)
+        .to_owned()
 }
 
 impl SettingsView {
@@ -191,16 +193,16 @@ impl SettingsView {
         use mooring_core::plugin_context::{Opt, OptKind};
         let note = if o.secret {
             let said = o.description.as_deref().unwrap_or_default();
-            format!("{said}（存在钥匙串里，不写进文件）")
+            t!("{said}（存在钥匙串里，不写进文件）", said)
         } else {
             o.description.clone().unwrap_or_default()
         };
-        let title = format!("　└ {}", o.title);
+        let title = t!("　└ {title}", title = o.title);
         let (pid, key) = (id.to_owned(), o.key.clone());
         let save = move |this: &mut Self, value: serde_json::Value, cx: &mut Context<Self>| {
             this.text_error = plugin::config()
                 .map(plugin::dir)
-                .ok_or_else(|| "找不到配置目录".to_owned())
+                .ok_or_else(|| t!("找不到配置目录").to_owned())
                 .and_then(|d| mooring_core::plugin_context::set(&d, &pid, &key, value))
                 .err();
             cx.notify();
@@ -246,12 +248,12 @@ impl SettingsView {
                                 .text_size(px(T::SMALL))
                                 .text_color(T::color(T::secondary()))
                                 .child(if shown.is_empty() {
-                                    "（空）".to_owned()
+                                    t!("（空）").to_owned()
                                 } else {
                                     shown.clone()
                                 }),
                         )
-                        .child(secondary(key_id, "改").on_click(cx.listener(
+                        .child(secondary(key_id, t!("改")).on_click(cx.listener(
                             move |this, _, window, cx| {
                                 this.edit_option(&pid, &opt, &shown, window, cx)
                             },
@@ -292,7 +294,7 @@ impl SettingsView {
                     .and_then(|v| {
                         plugin::config()
                             .map(plugin::dir)
-                            .ok_or_else(|| "找不到配置目录".to_owned())
+                            .ok_or_else(|| t!("找不到配置目录").to_owned())
                             .and_then(|d| mooring_core::plugin_context::set(&d, &pid, &opt.key, v))
                     })
                     .err();
@@ -317,7 +319,7 @@ impl SettingsView {
                 let aid = a.id.clone();
                 self.row(
                     false,
-                    &format!("　└ {}", a.title),
+                    &t!("　└ {title}", title = a.title),
                     &a.command,
                     switch(format!("action-switch-{}", a.id), on).on_click(cx.listener(
                         move |this, _, _, cx| {
@@ -334,10 +336,14 @@ impl SettingsView {
     fn remote_row(&self, cx: &Context<Self>) -> gpui::Div {
         let url = market::remote_url();
         let note = match &self.market.remote {
-            _ if self.market.fetching => "正在获取…".to_owned(),
-            None => format!("{url}；只在点了之后才联网"),
-            Some(Ok(r)) => format!("{url}；有 {} 个插件，更新的和新的已列在上面", r.len()),
-            Some(Err(e)) => format!("获取失败：{e}"),
+            _ if self.market.fetching => t!("正在获取…").to_owned(),
+            None => t!("{url}；只在点了之后才联网", url),
+            Some(Ok(r)) => t!(
+                "{url}；有 {len} 个插件，更新的和新的已列在上面",
+                url,
+                len = r.len()
+            ),
+            Some(Err(e)) => t!("获取失败：{e}", e),
         };
         let note = match &self.market.bundled_error {
             Some(e) => format!("{e} · {note}"),
@@ -347,9 +353,9 @@ impl SettingsView {
             card().child(
                 self.row(
                     true,
-                    "远程目录",
+                    t!("远程目录"),
                     &note,
-                    secondary("plugins-fetch", "检查远程目录")
+                    secondary("plugins-fetch", t!("检查远程目录"))
                         .when(self.market.fetching, |b| b.opacity(0.5))
                         .on_click(cx.listener(|this, _, _, cx| {
                             if !this.market.fetching {
@@ -366,9 +372,9 @@ impl SettingsView {
             .id("complete-draw")
             .role(gpui::accesskit::Role::Button)
             .aria_label(if face_editor::has_draft() {
-                "接着画"
+                t!("接着画")
             } else {
-                "自己画一个"
+                t!("自己画一个")
             })
             .min_h(px(FACE_TILE))
             .p(px(T::S10))
@@ -389,15 +395,15 @@ impl SettingsView {
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(T::primary()))
                     .child(if face_editor::has_draft() {
-                        "接着画"
+                        t!("接着画")
                     } else {
-                        "- _ -　自己画一个"
+                        t!("- _ -　自己画一个")
                     }),
             )
             .child(label(if face_editor::has_draft() {
-                "上次试播的那张还留着".to_owned()
+                t!("上次试播的那张还留着").to_owned()
             } else {
-                "一帧一帧改眼睛和嘴，存成插件".to_owned()
+                t!("一帧一帧改眼睛和嘴，存成插件").to_owned()
             }))
     }
     /// One installed plugin in 已安装: its picture or mark, what it is, its next step.
@@ -422,9 +428,11 @@ impl SettingsView {
                 .into_iter()
                 .filter(|r| now.saturating_sub(r.at) < 7 * 86_400)
             {
-                note.push(format!(
-                    "上次运行失败（{}）：{}；终端里 mooring plugins log {} 看全部",
-                    r.what, r.detail, p.id
+                note.push(t!(
+                    "上次运行失败（{what}）：{detail}；终端里 mooring plugins log {id} 看全部",
+                    what = r.what,
+                    detail = r.detail,
+                    id = p.id
                 ));
             }
         }
@@ -555,15 +563,15 @@ impl SettingsView {
         // The teardown failed and it is still running: leave the decision to whoever reads why.
         if let Some((id, name, removing)) = self.market.stuck.clone() {
             let verb = if removing {
-                "仍然卸载"
+                t!("仍然卸载")
             } else {
-                "仍然停用"
+                t!("仍然停用")
             };
             notices.push(
                 self.row(
                     notices.is_empty(),
                     verb,
-                    "它撤回失败了，继续的话，它改过的东西可能会留下来",
+                    t!("它撤回失败了，继续的话，它改过的东西可能会留下来"),
                     secondary(format!("plugin-force-{id}"), verb).on_click(cx.listener(
                         move |this, _, _, cx| {
                             if this.market.working.is_some() {
@@ -589,8 +597,8 @@ impl SettingsView {
             notices.push(
                 self.row(
                     notices.is_empty(),
-                    &format!("{} 个插件有新版本", updates.len()),
-                    &updates.join("、"),
+                    &t!("{len} 个插件有新版本", len = updates.len()),
+                    &updates.join(t!("、")),
                     div(),
                 )
                 .into_any_element(),
@@ -627,7 +635,7 @@ impl SettingsView {
                     .file_name()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
                 let (dir_name, shown) = (name.clone(), name.clone());
-                let remove = secondary(format!("plugin-remove-broken-{name}"), "移除")
+                let remove = secondary(format!("plugin-remove-broken-{name}"), t!("移除"))
                     .when(busy, |b| b.opacity(0.5))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if this.market.working.is_none() {
@@ -642,7 +650,7 @@ impl SettingsView {
                         .flex()
                         .items_center()
                         .gap(px(T::S8))
-                        .child(status(false, "没有加载".into()))
+                        .child(status(false, t!("没有加载").into()))
                         .child(remove),
                 )
                 .into_any_element()
@@ -650,14 +658,14 @@ impl SettingsView {
             .collect();
         if !broken.is_empty() {
             page = page
-                .child(heading("没有加载"))
+                .child(heading(t!("没有加载")))
                 .child(card().children(broken));
         }
         page = page.child(div().pt(px(T::S20)).child(card().child(self.row(
             true,
-            "重新读取",
-            "手动改了插件目录，或在终端里用 mooring plugins install 装了插件后，点这里马上生效",
-            secondary("plugins-reload", "重新读取").on_click(cx.listener(|this, _, _, cx| {
+            t!("重新读取"),
+            t!("手动改了插件目录，或在终端里用 mooring plugins install 装了插件后，点这里马上生效"),
+            secondary("plugins-reload", t!("重新读取")).on_click(cx.listener(|this, _, _, cx| {
                 this.market.read_catalog();
                 this.market.confirm = None;
                 this.market.working = None;
@@ -675,9 +683,9 @@ impl SettingsView {
                 secondary(
                     "plugin-files",
                     if opened {
-                        "▾ 声明文件明细"
+                        t!("▾ 声明文件明细")
                     } else {
-                        "▸ 声明文件明细"
+                        t!("▸ 声明文件明细")
                     },
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -692,14 +700,17 @@ impl SettingsView {
                     .enumerate()
                     .map(|(i, (file, result))| {
                         match result {
-                            Ok(did) => {
-                                self.row(i == 0, &tilde(&file), &did, status(true, "生效".into()))
-                            }
+                            Ok(did) => self.row(
+                                i == 0,
+                                &tilde(&file),
+                                &did,
+                                status(true, t!("生效").into()),
+                            ),
                             Err(e) => self.row(
                                 i == 0,
                                 &tilde(&file),
                                 &e,
-                                status(false, "没有生效".into()),
+                                status(false, t!("没有生效").into()),
                             ),
                         }
                         .into_any_element()
@@ -713,25 +724,28 @@ impl SettingsView {
             };
             let mut detail = Vec::new();
             detail.extend(report(mooring_core::action::report(), |t| {
-                crate::ui::words::local(&format!("加进右键菜单和 ⌘P：{t}"))
+                crate::ui::words::local(&t!("加进右键菜单和 ⌘P：{t}", t))
             }));
             detail.extend(report(mooring_core::rule::report(), |t| {
-                format!("这些命令算跑过验证：{t}")
+                t!("这些命令算跑过验证：{t}", t)
             }));
             detail.extend(report(mooring_core::hook::report(), |t| {
-                format!("会话状态变化时由后台调用：{t}；终端里 mooring plugins log 看运行记录")
+                t!(
+                    "会话状态变化时由后台调用：{t}；终端里 mooring plugins log 看运行记录",
+                    t
+                )
             }));
             detail.extend(report(mooring_core::sidebar::report(), |t| {
-                format!("左栏顶部多了：{t}")
+                t!("左栏顶部多了：{t}", t)
             }));
             detail.extend(report(mooring_core::decoration::report(), |t| {
-                format!("窗格标题栏或悬停卡片里显示：{t}")
+                t!("窗格标题栏或悬停卡片里显示：{t}", t)
             }));
             detail.extend(report(mooring_core::effect::report(), |t| t));
             detail.extend(report(mooring_core::quota::report(), |t| {
-                format!("状态栏额度多了：{t}")
+                t!("状态栏额度多了：{t}", t)
             }));
-            detail.extend(report(agent::report(), |t| format!("注册为 {t}")));
+            detail.extend(report(agent::report(), |t| t!("注册为 {t}", t)));
             let rows = files(detail);
             if !rows.is_empty() {
                 page = page.child(div().pt(px(T::S8)).child(card().children(rows)));
@@ -741,14 +755,14 @@ impl SettingsView {
             || "~/.config/mooring".to_owned(),
             |d| d.display().to_string(),
         );
-        page.child(div().pt(px(T::S12)).px(px(T::S4)).child(label(format!(
-            "插件放在 {}/plugins/<id>/；写插件的说明：在终端运行 mooring --skill plugins。",
-            tilde(&where_)
+        page.child(div().pt(px(T::S12)).px(px(T::S4)).child(label(t!(
+            "插件放在 {dir}/plugins/<id>/；写插件的说明：在终端运行 mooring --skill plugins。",
+            dir = tilde(&where_)
         ))))
     }
     /// 已安装 and 发现, or one plugin opened from either, or the frame editor.
     pub(super) fn plugins_page(&self, cx: &Context<Self>) -> gpui::Div {
-        if !self.shows(Page::Plugins, "插件", cx) {
+        if !self.shows(Page::Plugins, t!("插件"), cx) {
             return div();
         }
         if self.market.face.is_some() {

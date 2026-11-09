@@ -91,13 +91,13 @@ impl SettingsView {
         };
         let first = sheet.frames.first().cloned();
         let part = |pick: fn(&Frame) -> String| first.as_ref().map_or_else(String::new, pick);
-        let name = field(cx, "名字", &name);
-        let open = field(cx, "左边", &sheet.open);
-        let close = field(cx, "右边", &sheet.close);
-        let left = field(cx, "左眼", &part(|f| f.left.clone()));
-        let mouth = field(cx, "嘴", &part(|f| f.mouth.clone()));
-        let right = field(cx, "右眼", &part(|f| f.right.clone()));
-        let hold = field(cx, "毫秒", &part(|f| f.ms.to_string()));
+        let name = field(cx, t!("名字"), &name);
+        let open = field(cx, t!("左边"), &sheet.open);
+        let close = field(cx, t!("右边"), &sheet.close);
+        let left = field(cx, t!("左眼"), &part(|f| f.left.clone()));
+        let mouth = field(cx, t!("嘴"), &part(|f| f.mouth.clone()));
+        let right = field(cx, t!("右眼"), &part(|f| f.right.clone()));
+        let hold = field(cx, t!("毫秒"), &part(|f| f.ms.to_string()));
         let watching = [&name, &open, &close, &left, &mouth, &right, &hold]
             .into_iter()
             .map(|f| cx.observe(f, |this, _, cx| this.face_read_fields(cx)))
@@ -238,7 +238,7 @@ impl SettingsView {
             return;
         };
         let Some(plugins) = plugin::config().map(plugin::dir) else {
-            e.failed = Some("找不到配置目录".into());
+            e.failed = Some(t!("找不到配置目录").into());
             cx.notify();
             return;
         };
@@ -257,7 +257,7 @@ impl SettingsView {
         self.plugins_changed(cx);
         let picked = mooring_core::effect::Pick::Plugin(id);
         self.text_error = mooring_core::effect::pick(Some(picked)).err();
-        self.market.done = Some(Ok(format!("「{}」画好了，已经换成它", name.trim())));
+        self.market.done = Some(Ok(t!("「{name}」画好了，已经换成它", name = name.trim())));
         cx.notify();
     }
 
@@ -294,9 +294,9 @@ impl SettingsView {
             return self.face_editor(e, cx);
         }
         let (text, note) = if has_draft() {
-            ("接着画", "上次试播的那张还留着")
+            (t!("接着画"), t!("上次试播的那张还留着"))
         } else {
-            ("自己画一个", "一帧一帧改眼睛和嘴，存成插件")
+            (t!("自己画一个"), t!("一帧一帧改眼睛和嘴，存成插件"))
         };
         let draw = secondary("complete-draw", text)
             .on_click(cx.listener(|this, _, _, cx| this.face_open(None, cx)));
@@ -324,7 +324,7 @@ impl SettingsView {
             complete.drawn_sheet(),
         );
         Some(
-            secondary(format!("complete-edit-{id}"), "改一改").on_click(cx.listener(
+            secondary(format!("complete-edit-{id}"), t!("改一改")).on_click(cx.listener(
                 move |this, _, _, cx| {
                     this.face_open(Some(start.clone()), cx);
                 },
@@ -365,7 +365,7 @@ impl SettingsView {
             .child(shown);
 
         let mut scenes = div().flex().flex_wrap().items_center().gap(px(T::S6));
-        scenes = scenes.child(face_label("场景"));
+        scenes = scenes.child(face_label(t!("场景")));
         for style in Style::FACES {
             let on = style == e.style;
             scenes = scenes.child(
@@ -408,7 +408,7 @@ impl SettingsView {
                     .bg(T::color(if on { T::primary() } else { T::secondary() })),
             );
             let hold = if i == last {
-                "停住".to_owned()
+                t!("停住").to_owned()
             } else {
                 format!("{}", f.ms)
             };
@@ -416,7 +416,7 @@ impl SettingsView {
                 div()
                     .id(("face-frame", i))
                     .role(gpui::accesskit::Role::Button)
-                    .aria_label(format!("第 {} 帧", i + 1))
+                    .aria_label(t!("第 {n} 帧", n = i + 1))
                     .px(px(T::S8))
                     .py(px(T::S4))
                     .flex()
@@ -434,7 +434,7 @@ impl SettingsView {
                             .child(e.sheet.text(f)),
                     )
                     .child(label(if f.scramble {
-                        format!("{hold} · 乱码")
+                        t!("{hold} · 乱码", hold)
                     } else {
                         hold
                     }))
@@ -451,16 +451,16 @@ impl SettingsView {
             .flex_wrap()
             .items_center()
             .gap(px(T::S8))
-            .child(face_label("这帧"))
-            .child(label("左眼".to_owned()))
+            .child(face_label(t!("这帧")))
+            .child(label(t!("左眼").to_owned()))
             .child(box_of(PART_FIELD, &e.left))
-            .child(label("嘴".to_owned()))
+            .child(label(t!("嘴").to_owned()))
             .child(box_of(PART_FIELD, &e.mouth))
-            .child(label("右眼".to_owned()))
+            .child(label(t!("右眼").to_owned()))
             .child(box_of(PART_FIELD, &e.right))
-            .child(label("毫秒".to_owned()))
+            .child(label(t!("毫秒").to_owned()))
             .child(box_of(HOLD_FIELD, &e.hold))
-            .child(label("乱码进场".to_owned()))
+            .child(label(t!("乱码进场").to_owned()))
             .child(
                 switch("face-scramble", on_scramble).on_click(cx.listener(|this, _, _, cx| {
                     this.face_change(cx, |e| {
@@ -475,11 +475,11 @@ impl SettingsView {
             .flex_wrap()
             .items_center()
             .gap(px(T::S8))
-            .child(face_label("外框"))
+            .child(face_label(t!("外框")))
             .child(box_of(SHELL_FIELD, &e.open))
-            .child(label("脸".to_owned()))
+            .child(label(t!("脸").to_owned()))
             .child(box_of(SHELL_FIELD, &e.close))
-            .child(label("名字".to_owned()))
+            .child(label(t!("名字").to_owned()))
             .child(box_of(NAME_FIELD, &e.name));
 
         let edit = |key: &str, text: &str| secondary(format!("face-{key}"), text.to_owned());
@@ -488,9 +488,9 @@ impl SettingsView {
             .flex_wrap()
             .items_center()
             .gap(px(T::S6))
-            .child(face_label("帧"))
+            .child(face_label(t!("帧")))
             .child(
-                edit("add", "复制这帧").on_click(cx.listener(|this, _, _, cx| {
+                edit("add", t!("复制这帧")).on_click(cx.listener(|this, _, _, cx| {
                     this.face_change(cx, |e| {
                         if e.sheet.frames.len() < face::MAX_FRAMES
                             && let Some(f) = e.sheet.frames.get(e.selected).cloned()
@@ -502,7 +502,7 @@ impl SettingsView {
                 })),
             )
             .child(
-                edit("remove", "删掉").on_click(cx.listener(|this, _, _, cx| {
+                edit("remove", t!("删掉")).on_click(cx.listener(|this, _, _, cx| {
                     this.face_change(cx, |e| {
                         if e.sheet.frames.len() > 1 {
                             e.sheet.frames.remove(e.selected);
@@ -511,7 +511,7 @@ impl SettingsView {
                 })),
             )
             .child(
-                edit("earlier", "往前").on_click(cx.listener(|this, _, _, cx| {
+                edit("earlier", t!("往前")).on_click(cx.listener(|this, _, _, cx| {
                     this.face_change(cx, |e| {
                         if e.selected > 0 {
                             e.sheet.frames.swap(e.selected, e.selected - 1);
@@ -521,7 +521,7 @@ impl SettingsView {
                 })),
             )
             .child(
-                edit("later", "往后").on_click(cx.listener(|this, _, _, cx| {
+                edit("later", t!("往后")).on_click(cx.listener(|this, _, _, cx| {
                     this.face_change(cx, |e| {
                         if e.selected + 1 < e.sheet.frames.len() {
                             e.sheet.frames.swap(e.selected, e.selected + 1);
@@ -541,9 +541,10 @@ impl SettingsView {
                 T::color(T::secondary())
             })
             .child(problem.unwrap_or_else(|| {
-                format!(
-                    "最后一帧之前共 {} 毫秒，最多 {most}；最后一帧停到脸离开，它第一次出现时开始开心",
-                    e.sheet.held_ms()
+                t!(
+                    "最后一帧之前共 {held_ms} 毫秒，最多 {most}；最后一帧停到脸离开，它第一次出现时开始开心",
+                    held_ms = e.sheet.held_ms(),
+                    most
                 )
             }));
         let actions = div()
@@ -551,18 +552,19 @@ impl SettingsView {
             .flex_wrap()
             .gap(px(T::S8))
             .child(
-                edit("play", "▶ 播放").on_click(cx.listener(|this, _, _, cx| this.face_play(cx))),
+                edit("play", t!("▶ 播放"))
+                    .on_click(cx.listener(|this, _, _, cx| this.face_play(cx))),
             )
             .child(
-                edit("try", "在窗格上试播")
+                edit("try", t!("在窗格上试播"))
                     .on_click(cx.listener(|this, _, _, cx| this.face_try(cx))),
             )
             .child(
-                edit("save", "保存并用它")
+                edit("save", t!("保存并用它"))
                     .on_click(cx.listener(|this, _, _, cx| this.face_save(cx))),
             )
             .child(
-                edit("cancel", "取消").on_click(cx.listener(|this, _, _, cx| {
+                edit("cancel", t!("取消")).on_click(cx.listener(|this, _, _, cx| {
                     this.market.face = None;
                     *draft() = None;
                     cx.notify();
@@ -579,13 +581,17 @@ impl SettingsView {
             .child(strip)
             .child(chips)
             .child(parts)
-            .child(self.face_chips("eyes", "眼睛", &face::EYES, cx, |f, c| {
-                f.left = c.to_owned();
-                f.right = c.to_owned();
-            }))
-            .child(self.face_chips("mouth", "嘴", &face::MOUTHS, cx, |f, c| {
-                f.mouth = c.to_owned();
-            }))
+            .child(
+                self.face_chips("eyes", t!("眼睛"), &face::EYES, cx, |f, c| {
+                    f.left = c.to_owned();
+                    f.right = c.to_owned();
+                }),
+            )
+            .child(
+                self.face_chips("mouth", t!("嘴"), &face::MOUTHS, cx, |f, c| {
+                    f.mouth = c.to_owned();
+                }),
+            )
             .child(frames_buttons)
             .child(shell)
             .child(scenes)

@@ -11,11 +11,11 @@ impl Workbench {
     ) {
         let menu = self.layout.menu.take();
         match action {
-            "向右分屏" | "向下分屏" => {
+            tk!("向右分屏") | tk!("向下分屏") => {
                 self.nav.zoomed = None;
                 self.layout.split_target = Some((
                     id.into(),
-                    if action == "向右分屏" {
+                    if action == tk!("向右分屏") {
                         Axis::Right
                     } else {
                         Axis::Down
@@ -23,7 +23,7 @@ impl Workbench {
                 ));
                 self.launch(true, None, cx);
             }
-            "放大" | "还原" => {
+            tk!("放大") | tk!("还原") => {
                 self.nav.zoomed = if self.nav.zoomed.as_deref() == Some(id) {
                     None
                 } else {
@@ -34,20 +34,20 @@ impl Workbench {
                     window.focus(&pane.focus_handle(cx), cx);
                 }
             }
-            "关闭画面" => self.close_pane(id, cx),
-            "复制" => {
+            tk!("关闭画面") => self.close_pane(id, cx),
+            tk!("复制") => {
                 if let Some(pane) = self.layout.panes.get(id) {
                     pane.update(cx, |p, cx| p.copy(cx));
                 }
             }
-            "粘贴" => {
+            tk!("粘贴") => {
                 if let Some(pane) = self.layout.panes.get(id) {
                     pane.update(cx, |p, cx| p.paste(cx));
                     window.focus(&pane.focus_handle(cx), cx);
                 }
             }
-            "在编辑器里看滚动内容" => self.scrollback_in_editor(id, cx),
-            "搜索滚动内容" => {
+            tk!("在编辑器里看滚动内容") => self.scrollback_in_editor(id, cx),
+            tk!("搜索滚动内容") => {
                 if let Some(pane) = self.layout.panes.get(id) {
                     pane.update(cx, |p, cx| p.open_search(window, cx));
                 }
@@ -58,8 +58,8 @@ impl Workbench {
                 }
             }
             super::super::pane_menu::INTERRUPT_TURN => self.interrupt_turn(id, cx),
-            "停止 Agent" => self.request_close(Closing::Agent(id.into()), cx),
-            "取消关联" => {
+            tk!("停止 Agent") => self.request_close(Closing::Agent(id.into()), cx),
+            tk!("取消关联") => {
                 if let Some(session) = self.current_agent(id) {
                     self.edit(
                         Edit::AssignTask {
@@ -70,12 +70,15 @@ impl Workbench {
                     );
                 }
             }
-            "挂到待办…" | "为这个待办开一个会话" | "移到标签…" | "为什么是这个状态" => {
+            tk!("挂到待办…")
+            | tk!("为这个待办开一个会话")
+            | tk!("移到标签…")
+            | tk!("为什么是这个状态") => {
                 if let Some(mut menu) = menu {
                     menu.page = match action {
-                        "挂到待办…" => MenuPage::Assign,
-                        "移到标签…" => MenuPage::Move,
-                        "为什么是这个状态" => MenuPage::Why,
+                        tk!("挂到待办…") => MenuPage::Assign,
+                        tk!("移到标签…") => MenuPage::Move,
+                        tk!("为什么是这个状态") => MenuPage::Why,
                         _ => MenuPage::Sessions,
                     };
                     self.layout.menu = Some(menu);
@@ -110,9 +113,13 @@ impl Workbench {
         ];
         let items: [(&str, String, bool); 4] = [
             ("open", Pane::open_title(target), true),
-            ("reveal", crate::ui::words::local("在访达中显示"), true),
-            ("copy", "复制路径".into(), true),
-            ("copy-relative", "复制相对路径".into(), relative.is_some()),
+            ("reveal", crate::ui::words::local(t!("在访达中显示")), true),
+            ("copy", t!("复制路径").into(), true),
+            (
+                "copy-relative",
+                t!("复制相对路径").into(),
+                relative.is_some(),
+            ),
         ];
         for (key, title, enabled) in items {
             let terminal = terminal.to_owned();
@@ -135,12 +142,12 @@ impl Workbench {
                                 "reveal" => p.open_target(&target, true, cx),
                                 "copy" => p.copy_note(
                                     target.path.to_string_lossy().into_owned(),
-                                    "已复制路径",
+                                    t!("已复制路径"),
                                     cx,
                                 ),
                                 _ => p.copy_note(
                                     relative.clone().unwrap_or_default(),
-                                    "已复制相对路径",
+                                    t!("已复制相对路径"),
                                     cx,
                                 ),
                             });
@@ -183,7 +190,7 @@ impl Workbench {
         }) {
             let (t, sid) = (terminal.to_owned(), s.id.clone());
             out.push(
-                entry("accept", "标记完成")
+                entry("accept", t!("标记完成"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.layout.menu = None;
                         this.complete_pane(t.clone(), sid.clone(), cx)
@@ -194,7 +201,7 @@ impl Workbench {
         if self.unbound_agent(terminal) && self.completing(terminal).is_none() {
             let t = terminal.to_owned();
             out.push(
-                entry("accept-unbound", "标记完成")
+                entry("accept-unbound", t!("标记完成"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.layout.menu = None;
                         this.complete_unbound(t.clone(), cx)
@@ -205,7 +212,7 @@ impl Workbench {
         if let Some(s) = session {
             let sid = s.id.clone();
             out.push(
-                entry("here", "看进度")
+                entry("here", t!("看进度"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.layout.menu = None;
                         this.overview.here = Some(sid.clone());
@@ -227,7 +234,7 @@ impl Workbench {
         {
             let target = terminal.to_owned();
             out.push(
-                entry("place-task", "放入待办")
+                entry("place-task", t!("放入待办"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.layout.menu = None;
                         if let Some(p) = this.layout.panes.get(&target) {
@@ -241,7 +248,7 @@ impl Workbench {
         if let Some(task) = self.pane_task(terminal, session) {
             let tid = task.id.clone();
             out.push(
-                entry("task-detail", "待办详情")
+                entry("task-detail", t!("待办详情"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.layout.menu = None;
                         this.nav.task_detail = Some(tid.clone());
@@ -287,16 +294,16 @@ impl Workbench {
                     };
                     // A greyed item says why on hover, so it doesn't read as broken.
                     let blocked = match title {
-                        "为这个待办开一个会话" => {
-                            task.is_none().then_some("这个标签没有设默认待办")
+                        tk!("为这个待办开一个会话") => {
+                            task.is_none().then_some(t!("这个标签没有设默认待办"))
                         }
-                        "挂到待办…" | "停止 Agent" => {
-                            session.is_none().then_some("这个终端里没有识别到 Agent")
-                        }
+                        tk!("挂到待办…") | tk!("停止 Agent") => session
+                            .is_none()
+                            .then_some(t!("这个终端里没有识别到 Agent")),
                         super::super::pane_menu::INTERRUPT_TURN => self.interrupt_blocked(session),
-                        "取消关联" => match session {
-                            None => Some("这个终端里没有识别到 Agent"),
-                            Some(s) if s.task.is_none() => Some("这个会话没有挂到待办"),
+                        tk!("取消关联") => match session {
+                            None => Some(t!("这个终端里没有识别到 Agent")),
+                            Some(s) if s.task.is_none() => Some(t!("这个会话没有挂到待办")),
                             Some(_) => None,
                         },
                         _ => None,
@@ -306,7 +313,7 @@ impl Workbench {
                     let action = title.to_owned();
                     entries.push(
                         button(gpui::SharedString::from(format!("menu-{title}")), "")
-                            .aria_label(title)
+                            .aria_label(mooring_core::i18n::say(title))
                             .w_full()
                             .justify_between()
                             .border_0()
@@ -316,7 +323,7 @@ impl Workbench {
                                 div()
                                     .flex_1()
                                     .when(blocked.is_some(), |d| d.opacity(0.4))
-                                    .child(title),
+                                    .child(mooring_core::i18n::say(title)),
                             )
                             .when_some(shortcut, |d, keys| {
                                 d.child(
@@ -344,7 +351,7 @@ impl Workbench {
                 let offered = self.actions_for(&menu.terminal);
                 if !offered.is_empty() {
                     entries.push(
-                        label("插件")
+                        label(t!("插件"))
                             .h(px(T::ROW))
                             .px(px(T::S10))
                             .flex()
@@ -378,7 +385,7 @@ impl Workbench {
                     .is_some_and(|p| p.read(cx).takes_mouse())
                 {
                     entries.push(
-                        label("选中文字：按住 Shift 再拖动")
+                        label(t!("选中文字：按住 Shift 再拖动"))
                             .h(px(T::ROW))
                             .px(px(T::S10))
                             .flex()
@@ -446,7 +453,7 @@ impl Workbench {
                     .iter()
                     .filter(|t| t.space == self.nav.space && Some(&t.id) != own.as_ref())
                     .map(|t| (Some(t.id.clone()), self.tab_name(t, cx)))
-                    .chain([(None, "新标签".to_owned())])
+                    .chain([(None, t!("新标签").to_owned())])
                     .collect();
                 for (tab, name) in targets {
                     let terminal = menu.terminal.clone();
@@ -513,27 +520,32 @@ impl Workbench {
         let close = id.to_owned();
         let tabs = self.sibling_tabs(id);
         let at = tabs.iter().position(|t| t == id).unwrap_or(0);
-        let mut entries: Vec<gpui::AnyElement> =
-            [("向左移", -1, at > 0), ("向右移", 1, at + 1 < tabs.len())]
-                .into_iter()
-                .map(|(name, step, enabled)| {
-                    let id = id.to_owned();
-                    button(gpui::SharedString::from(format!("tab-menu-{name}")), name)
-                        .w_full()
-                        .justify_start()
-                        .border_0()
-                        .when(!enabled, |d| d.opacity(0.4))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if enabled {
-                                this.layout.tab_menu = None;
-                                this.step_tab(&id, step, cx);
-                            }
-                        }))
-                        .into_any_element()
-                })
-                .collect();
+        let mut entries: Vec<gpui::AnyElement> = [
+            (tk!("向左移"), -1, at > 0),
+            (tk!("向右移"), 1, at + 1 < tabs.len()),
+        ]
+        .into_iter()
+        .map(|(name, step, enabled)| {
+            let id = id.to_owned();
+            button(
+                gpui::SharedString::from(format!("tab-menu-{name}")),
+                mooring_core::i18n::say(name),
+            )
+            .w_full()
+            .justify_start()
+            .border_0()
+            .when(!enabled, |d| d.opacity(0.4))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                if enabled {
+                    this.layout.tab_menu = None;
+                    this.step_tab(&id, step, cx);
+                }
+            }))
+            .into_any_element()
+        })
+        .collect();
         entries.extend([
-            button("tab-menu-rename", "重命名")
+            button("tab-menu-rename", t!("重命名"))
                 .w_full()
                 .justify_start()
                 .border_0()
@@ -542,7 +554,7 @@ impl Workbench {
                     this.rename_tab(&rename, window, cx);
                 }))
                 .into_any_element(),
-            button("tab-menu-close", "关闭标签")
+            button("tab-menu-close", t!("关闭标签"))
                 .w_full()
                 .justify_start()
                 .border_0()

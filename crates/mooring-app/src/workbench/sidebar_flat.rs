@@ -199,7 +199,7 @@ impl Workbench {
             div()
                 .id("global-search")
                 .role(gpui::accesskit::Role::Button)
-                .aria_label("搜索会话、空间或原话")
+                .aria_label(t!("搜索会话、空间或原话"))
                 .h(px(F::SEARCH))
                 .px(px(T::S10))
                 .flex()
@@ -225,7 +225,7 @@ impl Workbench {
                         .text_size(px(T::SMALL))
                         .line_height(px(F::LINE_TEXT))
                         .text_color(ink(F::third()))
-                        .child("找会话、空间或原话"),
+                        .child(t!("找会话、空间或原话")),
                 )
                 .child(
                     div()
@@ -293,7 +293,7 @@ impl Workbench {
             .text_size(px(F::SUB))
             .line_height(px(F::SUB_LINE))
             .text_color(ink(F::third()))
-            .child(format!("还有 {count} 个已关闭 · 在鸟瞰里找"))
+            .child(t!("还有 {count} 个已关闭 · 在鸟瞰里找", count))
             .on_click(cx.listener(|this, _, _, cx| this.show_closed(cx)))
             .into_any_element()
     }
@@ -407,7 +407,7 @@ impl Workbench {
                                 .text_size(px(F::SUB))
                                 .line_height(px(F::SUB_LINE))
                                 .text_color(asks_ink)
-                                .child(text.replacen(ASKS, "问：", 1)),
+                                .child(text.replacen(mooring_core::i18n::say(ASKS), t!("问："), 1)),
                         )
                     })
                     .when_some(subs, |d, subs| {
@@ -483,7 +483,7 @@ impl Workbench {
                     .map(mooring_core::content::plain_line)
                     .find(|l| !l.is_empty())
             })
-            .unwrap_or_else(|| "没有留下回复".into());
+            .unwrap_or_else(|| t!("没有留下回复").into());
         let (resume, undo) = (session.clone(), session.clone());
         let action = |id: String, text: &'static str| {
             div()
@@ -520,7 +520,7 @@ impl Workbench {
                     .flex()
                     .gap(px(T::S6))
                     .child(
-                        action(format!("done-resume-{}", session.id), "继续对话").on_click(
+                        action(format!("done-resume-{}", session.id), t!("继续对话")).on_click(
                             cx.listener(move |this, _, window, cx| {
                                 cx.stop_propagation();
                                 this.layout.done_open = None;
@@ -529,7 +529,7 @@ impl Workbench {
                         ),
                     )
                     .child(
-                        action(format!("done-undo-{}", session.id), "撤销完成").on_click(
+                        action(format!("done-undo-{}", session.id), t!("撤销完成")).on_click(
                             cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
                                 this.layout.done_open = None;
@@ -568,7 +568,7 @@ impl Workbench {
                         crate::keymap::Action::NextWaiting,
                     )),
             )
-            .child("下一个要你的")
+            .child(t!("下一个要你的"))
     }
     /// The foot: this machine and what it lists; the space's todos, the view, pairing a
     /// phone and settings.
@@ -609,9 +609,9 @@ impl Workbench {
                     .id("todos-toggle")
                     .role(gpui::accesskit::Role::Button)
                     .aria_label(if todos_open {
-                        "收起待办"
+                        t!("收起待办")
                     } else {
-                        "展开待办"
+                        t!("展开待办")
                     })
                     .h(px(F::ICON_BUTTON))
                     .px(px(T::S6))
@@ -623,14 +623,14 @@ impl Workbench {
                         d.bg(ink(F::selected())).text_color(ink(F::bright()))
                     })
                     .hover(|s| s.bg(ink(F::selected())))
-                    .child(format!("待办 {todos}"))
+                    .child(t!("待办 {todos}", todos))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.tasks.todos_open = !this.tasks.todos_open;
                         cx.notify();
                     })),
             )
             .child(
-                icon("sidebar-foot-view", "icons/sliders.svg", "选择视图")
+                icon("sidebar-foot-view", "icons/sliders.svg", t!("选择视图"))
                     .when(view_open, |d| d.bg(ink(F::selected())))
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -645,11 +645,15 @@ impl Workbench {
                     ),
             )
             .child(
-                icon("sidebar-phones", "icons/phone.svg", "连接手机或其他电脑")
-                    .on_click(cx.listener(|this, _, _, cx| this.toggle_phones(cx))),
+                icon(
+                    "sidebar-phones",
+                    "icons/phone.svg",
+                    t!("连接手机或其他电脑"),
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_phones(cx))),
             )
             .child(
-                icon("sidebar-settings", "icons/gear.svg", "设置")
+                icon("sidebar-settings", "icons/gear.svg", t!("设置"))
                     .on_click(cx.listener(|this, _, window, cx| this.show_settings(window, cx))),
             )
     }

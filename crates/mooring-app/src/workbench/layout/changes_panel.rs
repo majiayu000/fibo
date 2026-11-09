@@ -169,7 +169,7 @@ impl ChangesPanel {
     }
 
     fn make_filter(&mut self, cx: &mut Context<Self>) {
-        let field = cx.new(|cx| Field::new("过滤文件", "", cx).inline());
+        let field = cx.new(|cx| Field::new(t!("过滤文件"), "", cx).inline());
         self.watching = vec![cx.observe(&field, |this, _, cx| this.filter_changed(cx))];
         self.filter = Some(field);
     }
@@ -437,9 +437,12 @@ impl ChangesPanel {
             Some(file) => {
                 let (dir, name) = file.path.rsplit_once('/').unwrap_or(("", &file.path));
                 let note = if file.created {
-                    Some("新文件".to_owned())
+                    Some(t!("新文件").to_owned())
                 } else if file.edits > 1 {
-                    Some(format!("编辑 {} 次，这里是合并后的结果", file.edits))
+                    Some(t!(
+                        "编辑 {edits} 次，这里是合并后的结果",
+                        edits = file.edits
+                    ))
                 } else {
                     None
                 };
@@ -470,13 +473,13 @@ impl ChangesPanel {
                 div()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(T::primary()))
-                    .child("看改动"),
+                    .child(t!("看改动")),
             ),
         };
         row.child(div().flex_1())
             .when(summary.is_some(), |d| {
                 d.child(
-                    button("changes-open-file", "打开文件")
+                    button("changes-open-file", t!("打开文件"))
                         .flex_shrink_0()
                         .h(px(T::ICON_HEIGHT))
                         .px(px(T::S6))
@@ -509,7 +512,7 @@ impl ChangesPanel {
     }
 
     fn retry_button(id: &'static str) -> gpui::Stateful<gpui::Div> {
-        button(id, "再试一次")
+        button(id, t!("再试一次"))
             .h(px(T::PANE_ACTION))
             .border(px(T::BORDER_WIDTH))
             .border_color(T::color(T::control()))
@@ -519,10 +522,11 @@ impl ChangesPanel {
     fn main(&self, summary: Option<&FileSummary>, cx: &mut Context<Self>) -> gpui::AnyElement {
         match &self.load {
             Load::Reading { say } => {
-                return Self::middle_words(if *say { "正在读取…" } else { "" }).into_any_element();
+                return Self::middle_words(if *say { t!("正在读取…") } else { "" })
+                    .into_any_element();
             }
             Load::Failed => {
-                return Self::middle_words("读不到这一轮的会话记录")
+                return Self::middle_words(t!("读不到这一轮的会话记录"))
                     .child(
                         Self::retry_button("changes-retry")
                             .on_click(cx.listener(|this, _, _, cx| this.read_again(cx))),
@@ -532,7 +536,7 @@ impl ChangesPanel {
             Load::Ready(_) => {}
         }
         let Some(summary) = summary else {
-            return Self::middle_words("这一轮没有文件改动").into_any_element();
+            return Self::middle_words(t!("这一轮没有文件改动")).into_any_element();
         };
         let detail = self.details.get(&self.selected);
         let read = match detail {
@@ -554,7 +558,7 @@ impl ChangesPanel {
             }
             Some(Detail::Failed) => {
                 let file = self.selected;
-                Self::middle_words("读不到这个文件的改动")
+                Self::middle_words(t!("读不到这个文件的改动"))
                     .child(
                         Self::retry_button("changes-file-retry").on_click(cx.listener(
                             move |this, _, _, cx| {
@@ -566,7 +570,7 @@ impl ChangesPanel {
                     .into_any_element()
             }
             Some(Detail::Reading { say: true }) => {
-                Self::middle_words("正在读取…").into_any_element()
+                Self::middle_words(t!("正在读取…")).into_any_element()
             }
             _ => Self::middle_words("").into_any_element(),
         }
@@ -616,9 +620,10 @@ impl Render for ChangesPanel {
             .map(|words| notice(words.into()));
         let cut = shown.as_deref().filter(|f| f.cut).map(|f| {
             notice(
-                format!(
-                    "太长了，只显示前面一部分（共 +{} −{}）。完整内容请打开文件。",
-                    f.added, f.removed
+                t!(
+                    "太长了，只显示前面一部分（共 +{added} −{removed}）。完整内容请打开文件。",
+                    added = f.added,
+                    removed = f.removed
                 )
                 .into(),
             )
@@ -635,15 +640,19 @@ impl Render for ChangesPanel {
             .border_color(T::color(T::border()))
             .text_size(px(T::PANE_FOOTER_SIZE))
             .text_color(T::color(T::muted()))
-            .child(div().flex_shrink_0().child("用命令或脚本改的文件不在这里"))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .child(t!("用命令或脚本改的文件不在这里")),
+            )
             .child(div().flex_1())
-            .when(many, |d| d.child(hint("Tab", "下一个文件")))
+            .when(many, |d| d.child(hint("Tab", t!("下一个文件"))))
             .when(self.filter.is_some(), |d| {
                 let keys = crate::keymap::keycap(cx, crate::keymap::Action::Find);
-                d.child(div().flex_shrink_0().child(format!("{keys} 过滤")))
+                d.child(div().flex_shrink_0().child(t!("{keys} 过滤", keys)))
             })
-            .child(hint("↑↓", "滚动"))
-            .child(hint("Esc", "关闭"));
+            .child(hint("↑↓", t!("滚动")))
+            .child(hint("Esc", t!("关闭")));
         let focus = self.focus.clone();
         let pane = self.pane.clone();
         div()

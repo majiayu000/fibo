@@ -22,8 +22,8 @@ impl Workbench {
                         .map(|c| c.display())
                         .unwrap_or_default();
                     (
-                        glyph("＋"),
-                        "在当前空间新建会话".into(),
+                        glyph(not_ui!("＋")),
+                        t!("在当前空间新建会话").into(),
                         String::new(),
                         String::new(),
                         key,
@@ -31,15 +31,15 @@ impl Workbench {
                 }
                 Hit::NextWaiting => (
                     glyph("→"),
-                    "跳到下一个等你的会话".into(),
+                    t!("跳到下一个等你的会话").into(),
                     String::new(),
-                    format!("{} 个", self.needs_you().len()),
+                    t!("{len} 个", len = self.needs_you().len()),
                     String::new(),
                 ),
                 Hit::More { section, hidden } => {
-                    let unit = if *section == "原话" { "条" } else { "个" };
+                    let quotes = *section == t!("原话");
                     return self
-                        .more_row(row, selected, (*hidden).min(MORE_STEP), unit, hit, cx)
+                        .more_row(row, selected, (*hidden).min(MORE_STEP), quotes, hit, cx)
                         .into_any_element();
                 }
                 Hit::Machine(index) => (
@@ -57,14 +57,14 @@ impl Workbench {
                     String::new(),
                 ),
                 Hit::View(id) => {
-                    let name = presets::find(id).name.clone();
+                    let name = mooring_core::i18n::say(&presets::find(id).name).to_owned();
                     let on = self.sidebar.preset().id == *id;
                     (
                         glyph("▤"),
-                        format!("左栏视图：{name}"),
+                        t!("左栏视图：{name}", name),
                         String::new(),
                         if on {
-                            "正在用".into()
+                            t!("正在用").into()
                         } else {
                             String::new()
                         },
@@ -73,8 +73,8 @@ impl Workbench {
                 }
                 Hit::Diagnostics => (
                     glyph("◔"),
-                    "本机诊断".into(),
-                    "看谁在占 CPU / GPU / 内存".into(),
+                    t!("本机诊断").into(),
+                    t!("看谁在占 CPU / GPU / 内存").into(),
                     String::new(),
                     String::new(),
                 ),
@@ -86,9 +86,9 @@ impl Workbench {
                         String::new(),
                         action
                             .map(|a| match a.run {
-                                mooring_core::action::Run::Split => "在旁边分屏执行",
-                                mooring_core::action::Run::Tab => "在新标签执行",
-                                mooring_core::action::Run::Paste => "放进输入行，你按回车",
+                                mooring_core::action::Run::Split => t!("在旁边分屏执行"),
+                                mooring_core::action::Run::Tab => t!("在新标签执行"),
+                                mooring_core::action::Run::Paste => t!("放进输入行，你按回车"),
                             })
                             .unwrap_or_default()
                             .into(),
@@ -102,7 +102,11 @@ impl Workbench {
                         task.map(|t| t.title.clone()).unwrap_or_default(),
                         String::new(),
                         task.map(|t| {
-                            format!("{} · {} 条验收", t.agent.executable(), t.acceptance.len())
+                            t!(
+                                "{executable} · {len} 条验收",
+                                executable = t.agent.executable(),
+                                len = t.acceptance.len()
+                            )
                         })
                         .unwrap_or_default(),
                         task.and_then(|t| self.space_name(&t.space))
@@ -136,8 +140,11 @@ impl Workbench {
                                 let matched =
                                     c.asks.iter().filter(|q| contains(&q.text, query)).count();
                                 if matched > 0 {
-                                    sub.push_str(&format!(
-                                        " · 你说过 {said} 句，{matched} 句含「{query}」"
+                                    sub.push_str(&t!(
+                                        " · 你说过 {said} 句，{matched} 句含「{query}」",
+                                        said,
+                                        matched,
+                                        query
                                     ));
                                 }
                             }
@@ -256,7 +263,7 @@ impl Workbench {
         row: usize,
         selected: bool,
         next: usize,
-        unit: &str,
+        quotes: bool,
         hit: &Hit,
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
@@ -284,6 +291,10 @@ impl Workbench {
             .on_click(
                 cx.listener(move |this, _, window, cx| this.open_hit(open.clone(), window, cx)),
             )
-            .child(format!("再显示 {next} {unit} ↓"))
+            .child(if quotes {
+                t!("再显示 {next} 条 ↓", next)
+            } else {
+                t!("再显示 {next} 个 ↓", next)
+            })
     }
 }

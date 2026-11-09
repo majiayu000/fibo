@@ -91,7 +91,12 @@ impl Workbench {
         // act on. A finished turn or a running one reads from its state mark alone,
         // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
         for (key, title, rows, lines) in [
-            ("recent:need", mooring_core::status::NEEDS_YOU, need, true),
+            (
+                "recent:need",
+                mooring_core::status::needs_you_word(),
+                need,
+                true,
+            ),
             ("recent:running", Status::Running.label(), running, false),
         ] {
             if rows.is_empty() {
@@ -143,7 +148,7 @@ impl Workbench {
             .collect();
         let (today, older) = split_today(history, crate::model::time::now());
         if !today.is_empty() {
-            out.push(self.flat_fold("recent:today", "今天", today.len(), cx));
+            out.push(self.flat_fold("recent:today", t!("今天"), today.len(), cx));
             self.history_rows("recent:today", true, today, current, out, cx);
         }
         // Older ones a module was not handed are still counted, and open in 鸟瞰.
@@ -155,7 +160,10 @@ impl Workbench {
                 .open("recent:older", self.space_filter().is_some());
             out.push(self.flat_more(
                 "recent:older",
-                format!("更早 {} 个 · 停着或做完了", older.len() + unlisted),
+                t!(
+                    "更早 {unlisted} 个 · 停着或做完了",
+                    unlisted = older.len() + unlisted
+                ),
                 open,
                 cx,
             ));

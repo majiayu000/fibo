@@ -158,9 +158,10 @@ impl Workbench {
         let open = (r.index, r.card.clone(), r.machine.clone());
         let link = T::color(T::link());
         let mut frame = card_frame(gpui::SharedString::from(format!("card-{id}")))
-            .aria_label(gpui::SharedString::from(format!(
-                "{} 上的会话：{title}",
-                r.machine
+            .aria_label(gpui::SharedString::from(t!(
+                "{machine} 上的会话：{title}",
+                machine = r.machine,
+                title
             )))
             .when(!r.online, |d| d.opacity(T::BOARD_REFUSED_OPACITY))
             .on_click(cx.listener(move |this, _, window, cx| {
@@ -181,7 +182,7 @@ impl Workbench {
                 div()
                     .text_size(px(T::META))
                     .text_color(T::color(T::muted()))
-                    .child("断开")
+                    .child(t!("断开"))
                     .into_any_element(),
             ),
             (_, Column::Done, _) => Some(
@@ -255,18 +256,28 @@ impl Workbench {
         };
         let linked = self.machines[r.index].slot().lock().unwrap().clone();
         let Some(linked) = linked.filter(|l| l.managing) else {
-            let text = format!("{}没连上，或那边的 Mooring 太旧，不能在这里标", r.machine);
+            let text = t!(
+                "{machine}没连上，或那边的 Mooring 太旧，不能在这里标",
+                machine = r.machine
+            );
             self.show_toast(text, None, true, cx);
             return;
         };
         let (outcome, text) = if to == Column::Done {
             (
                 "done",
-                format!("「{}」移到{}", card.title, Status::Closed.label()),
+                t!(
+                    "「{title}」移到{label}",
+                    title = card.title,
+                    label = Status::Closed.label()
+                ),
             )
         } else {
-            let needs = mooring_core::status::NEEDS_YOU;
-            ("open", format!("「{}」退回{needs}", card.title))
+            let needs = mooring_core::status::needs_you_word();
+            (
+                "open",
+                t!("「{title}」退回{needs}", title = card.title, needs),
+            )
         };
         {
             let mut view = self.machines[r.index].view.lock().unwrap();
@@ -275,7 +286,12 @@ impl Workbench {
                 c.needs_you = outcome == "open";
             }
         }
-        self.show_toast(format!("{text}（{}）", r.machine), None, false, cx);
+        self.show_toast(
+            t!("{text}（{machine}）", text, machine = r.machine),
+            None,
+            false,
+            cx,
+        );
         let op = Op::Outcome {
             session,
             outcome: outcome.to_owned(),
@@ -291,7 +307,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             if let Err(e) = sent.await {
                 let _ = this.update(cx, |this, cx| {
-                    this.show_toast(format!("{machine}没标上：{e}"), None, true, cx);
+                    this.show_toast(t!("{machine}没标上：{e}", machine, e), None, true, cx);
                 });
             }
         })

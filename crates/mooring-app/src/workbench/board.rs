@@ -449,7 +449,10 @@ impl Workbench {
                     agent.key()
                 )))
                 .role(gpui::accesskit::Role::Button)
-                .aria_label(gpui::SharedString::from(format!("只看 {}", agent.name())))
+                .aria_label(gpui::SharedString::from(t!(
+                    "只看 {name}",
+                    name = agent.name()
+                )))
                 .h(px(T::SEGMENT_HEIGHT))
                 .pl(px(T::S6))
                 .pr(px(T::S8))
@@ -497,17 +500,17 @@ impl Workbench {
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(T::primary()))
                     .child(if self.overview.welcome {
-                        "欢迎回来"
+                        t!("欢迎回来")
                     } else {
-                        "鸟瞰全部"
+                        t!("鸟瞰全部")
                     }),
             )
             .child(
                 // An empty board says what lands in these columns, not just 「0 个」.
                 label(if empty {
-                    "还没有会话：在终端里运行 claude 或 codex，它们会按进度出现在下面几列 · Esc 回到工作区".to_owned()
+                    t!("还没有会话：在终端里运行 claude 或 codex，它们会按进度出现在下面几列 · Esc 回到工作区").to_owned()
                 } else {
-                    format!("{open} 个没收尾 · Esc 回到工作区")
+                    t!("{open} 个没收尾 · Esc 回到工作区", open)
                 })
                 .text_color(T::color(T::muted())),
             )
@@ -519,9 +522,9 @@ impl Workbench {
                     link(
                         "board-stale",
                         if self.overview.show_stale {
-                            format!("收起很久没动 {stale}")
+                            t!("收起很久没动 {stale}", stale)
                         } else {
-                            format!("很久没动 {stale}")
+                            t!("很久没动 {stale}", stale)
                         },
                     )
                     .on_click(cx.listener(|this, _, _, cx| {
@@ -531,7 +534,7 @@ impl Workbench {
                 )
             })
             .child(
-                link("board-closed", "稍后再看与已结束".into()).on_click(cx.listener(
+                link("board-closed", t!("稍后再看与已结束").into()).on_click(cx.listener(
                     |this, _, _, cx| {
                         this.overview.show_closed = true;
                         cx.notify();

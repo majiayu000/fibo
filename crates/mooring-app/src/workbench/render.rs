@@ -88,7 +88,7 @@ impl Render for Workbench {
             .iter()
             .find(|s| s.id == self.nav.space)
             .map(|s| s.name.as_str())
-            .unwrap_or("工作空间");
+            .unwrap_or(t!("工作空间"));
         // The main column's own title row, as T3 Code has it: where you are on the left,
         // what needs you and the overview on the right. The window's top edge belongs to
         // the sidebar; collapsed, its toggle stays beside the traffic lights right here.
@@ -96,7 +96,7 @@ impl Render for Workbench {
         // Standard style puts the tabs in this row, so the current tab is not named a
         // second time; only the overview and a task's page, which no tab stands for.
         let here = if self.nav.overview || !self.overview.cleanup.is_empty() {
-            Some("鸟瞰全部".to_owned())
+            Some(t!("鸟瞰全部").to_owned())
         } else if let Some(task) = self
             .nav
             .task_detail
@@ -141,13 +141,13 @@ impl Render for Workbench {
         // The right end of the title row: notes, what needs you, the overview, phones.
         let mut tail: Vec<gpui::AnyElement> = Vec::new();
         if self.store.slow() {
-            tail.push(label("正在更新…").into_any_element());
+            tail.push(label(t!("正在更新…")).into_any_element());
         }
         if matches!(
             self.store.recognition().phase,
             RecognitionPhase::Starting | RecognitionPhase::Recovering
         ) {
-            tail.push(label("正在识别会话…").into_any_element());
+            tail.push(label(t!("正在识别会话…")).into_any_element());
         }
         // The host runs older code than this app. One that can hand over is updated
         // in place; an older one must be restarted, which ends every terminal.
@@ -159,10 +159,10 @@ impl Render for Workbench {
                         self.restarting,
                         crate::lifecycle::stale_build().is_some_and(|b| b.handoff),
                     ) {
-                        (true, _) => "正在更新后台…",
+                        (true, _) => t!("正在更新后台…"),
                         // Updated in place: every terminal keeps running.
-                        (false, true) => "后台有更新 · 更新",
-                        (false, false) => "后台有更新 · 重启",
+                        (false, true) => t!("后台有更新 · 更新"),
+                        (false, false) => t!("后台有更新 · 重启"),
                     },
                 )
                 .text_color(T::color(T::secondary()))
@@ -185,9 +185,9 @@ impl Render for Workbench {
                 "overview",
                 "icons/grid.svg",
                 if on {
-                    "回到工作区"
+                    t!("回到工作区")
                 } else {
-                    "鸟瞰全部"
+                    t!("鸟瞰全部")
                 },
             )
             .when(!terminal_style, |d| {
@@ -196,16 +196,16 @@ impl Render for Workbench {
                     .gap(px(T::S6))
                     .text_size(px(T::SMALL))
                     .text_color(T::color(T::secondary()))
-                    .child("鸟瞰")
+                    .child(t!("鸟瞰"))
             })
             .when(on, |d| d.bg(T::color(T::selection())))
             .tooltip(move |_, cx| {
                 cx.new(|_| {
                     TextTip(
                         if on {
-                            "回到工作区"
+                            t!("回到工作区")
                         } else {
-                            "鸟瞰全部"
+                            t!("鸟瞰全部")
                         }
                         .into(),
                     )
@@ -322,7 +322,7 @@ impl Render for Workbench {
             let group_name = gpui::SharedString::from(format!("tab-group-{id}"));
             // Shown on the current tab, and on the others while hovered, like a browser.
             let close = button(gpui::SharedString::from(format!("tab-close-{id}")), "×")
-                .aria_label(format!("关闭标签 {title}"))
+                .aria_label(t!("关闭标签 {title}", title))
                 .flex_shrink_0()
                 .h(px(T::ICON_HEIGHT))
                 .px(px(T::S4))
@@ -478,8 +478,8 @@ impl Render for Workbench {
                 )
             });
         let right = right.map(|hint| self.tab_edge(hint, true, terminal_style, cx));
-        let new_tab = button("new", "＋")
-            .aria_label("新建终端标签")
+        let new_tab = button("new", not_ui!("＋"))
+            .aria_label(t!("新建终端标签"))
             .flex_shrink_0()
             .border_0()
             .text_color(T::color(T::link()))
@@ -577,7 +577,8 @@ impl Render for Workbench {
         if self.store.cut_off() {
             let mut details = vec![self.store.recognition().detail.clone()];
             details.extend(status);
-            main = main.child(self.notice_strip("后台连接断开，正在重新连接…", details, true, cx));
+            main =
+                main.child(self.notice_strip(t!("后台连接断开，正在重新连接…"), details, true, cx));
         } else if let Some(status) = status.filter(|_| {
             // A failed refresh while the link is down for a moment is the same blip.
             self.store.recognition().phase != RecognitionPhase::Interrupted

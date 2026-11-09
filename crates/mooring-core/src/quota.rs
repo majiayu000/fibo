@@ -64,11 +64,11 @@ impl Window {
     fn length_label(&self) -> String {
         match self.minutes {
             300 => "5h".into(),
-            10_080 => "周".into(),
-            43_200 => "月".into(),
-            m if m % 1440 == 0 => format!("{}天", m / 1440),
+            10_080 => crate::t!("周").into(),
+            43_200 => crate::t!("月").into(),
+            m if m % 1440 == 0 => crate::t!("{n}天", n = m / 1440),
             m if m % 60 == 0 => format!("{}h", m / 60),
-            m => format!("{m}分"),
+            m => crate::t!("{m}分", m),
         }
     }
     /// The window rolled over after the reading, so its percentage no longer applies.

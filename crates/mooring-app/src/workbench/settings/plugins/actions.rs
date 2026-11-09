@@ -16,7 +16,7 @@ impl SettingsView {
             let version = offer.entry.version.clone();
             let prepared = cx
                 .background_spawn(async move {
-                    let config = plugin::config().ok_or("找不到配置目录".to_owned())?;
+                    let config = plugin::config().ok_or(t!("找不到配置目录").to_owned())?;
                     offer.prepare(&plugin::dir(config))
                 })
                 .await;
@@ -31,7 +31,7 @@ impl SettingsView {
                 Ok(p) => this.commit_install(p, name, version, cx),
                 Err(e) => {
                     this.market.working = None;
-                    this.market.done = Some(Err(format!("没装上「{name}」：{e}")));
+                    this.market.done = Some(Err(t!("没装上「{name}」：{e}", name, e)));
                     cx.notify();
                 }
             });
@@ -55,8 +55,8 @@ impl SettingsView {
                 this.market.working = None;
                 this.market.done = Some(
                     result
-                        .map(|_| format!("装好了「{name}」v{version}，已经生效"))
-                        .map_err(|e| format!("没装上「{name}」：{e}")),
+                        .map(|_| t!("装好了「{name}」v{version}，已经生效", name, version))
+                        .map_err(|e| t!("没装上「{name}」：{e}", name, e)),
                 );
                 this.plugins_changed(cx);
             });
@@ -75,19 +75,19 @@ impl SettingsView {
             return None;
         }
         let e = &offer.entry;
-        let lead = if waiting.added.is_empty() {
-            "装上后它会："
+        let lines = waiting.lines().join(t!("；"));
+        let note = if waiting.added.is_empty() {
+            t!("装上后它会：{lines}。确认吗？", lines)
         } else {
-            ""
+            t!("{lines}。确认吗？", lines)
         };
-        let note = format!("{lead}{}。确认吗？", waiting.lines().join("；"));
         let (name, version) = (e.name.clone(), e.version.clone());
         let controls = div()
             .flex()
             .items_center()
             .gap(px(T::S8))
             .child(
-                secondary(format!("plugin-cancel-{}", e.id), "取消").on_click(cx.listener(
+                secondary(format!("plugin-cancel-{}", e.id), t!("取消")).on_click(cx.listener(
                     |this, _, _, cx| {
                         // Dropping it discards the staged copy.
                         this.market.confirm = None;
@@ -96,15 +96,15 @@ impl SettingsView {
                 )),
             )
             .child(
-                secondary(format!("plugin-confirm-{}", e.id), "确认安装").on_click(cx.listener(
-                    move |this, _, _, cx| {
+                secondary(format!("plugin-confirm-{}", e.id), t!("确认安装")).on_click(
+                    cx.listener(move |this, _, _, cx| {
                         if this.market.working.is_none()
                             && let Some(p) = this.market.confirm.take()
                         {
                             this.commit_install(p, name.clone(), version.clone(), cx);
                         }
-                    },
-                )),
+                    }),
+                ),
             );
         Some((note, controls))
     }
@@ -131,9 +131,9 @@ impl SettingsView {
                     this.market.stuck = Some((id, name.clone(), true));
                 }
                 this.market.done = Some(match result {
-                    Ok(None) => Ok(format!("卸载了「{name}」")),
-                    Ok(Some(w)) => Ok(format!("卸载了「{name}」。注意：{w}")),
-                    Err(e) => Err(format!("没卸掉「{name}」：{e}")),
+                    Ok(None) => Ok(t!("卸载了「{name}」", name)),
+                    Ok(Some(w)) => Ok(t!("卸载了「{name}」。注意：{w}", name, w)),
+                    Err(e) => Err(t!("没卸掉「{name}」：{e}", name, e)),
                 });
                 this.plugins_changed(cx);
             });
@@ -160,11 +160,11 @@ impl SettingsView {
                 this.market.working = None;
                 match result {
                     Ok(None) => {}
-                    Ok(Some(w)) => this.market.done = Some(Ok(format!("停用了。注意：{w}"))),
-                    Err(e) if on => this.text_error = Some(format!("没能打开插件：{e}")),
+                    Ok(Some(w)) => this.market.done = Some(Ok(t!("停用了。注意：{w}", w))),
+                    Err(e) if on => this.text_error = Some(t!("没能打开插件：{e}", e)),
                     Err(e) => {
                         let name = plugin::installed(&id).map_or(id.clone(), |p| p.name.clone());
-                        this.market.done = Some(Err(format!("没能停用「{name}」：{e}")));
+                        this.market.done = Some(Err(t!("没能停用「{name}」：{e}", name, e)));
                         this.market.stuck = Some((id, name, false));
                     }
                 }

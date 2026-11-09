@@ -121,7 +121,7 @@ impl Workbench {
             .when_some(detail, |d, text| {
                 // A second line that opens with the state word shows that word in its ink;
                 // a question is in 等你回答's ink throughout, with how many it asks.
-                let asks = text.starts_with(ASKS);
+                let asks = text.starts_with(mooring_core::i18n::say(ASKS));
                 let (state, rest) = match text.strip_prefix(g.label()) {
                     Some(rest) => (Some(g.label()), rest.to_owned()),
                     None => (None, text),

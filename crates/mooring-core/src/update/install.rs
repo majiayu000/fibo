@@ -1,6 +1,7 @@
 //! Checking for and installing a release. Every outside effect goes through `Tools`, so each
 //! way a check or an install can fail is tested without a network or a signed build.
 use super::{BUNDLE_ID, Release, TEAM_ID, Version, select, sum_for};
+use crate::t;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -67,15 +68,15 @@ impl Failure {
     }
     pub fn message(&self) -> String {
         match self {
-            Self::Homebrew => format!(
-                "这份 Mooring 由 Homebrew 安装，请运行 {}",
-                super::BREW_COMMAND
+            Self::Homebrew => t!(
+                "这份 Mooring 由 Homebrew 安装，请运行 {v1}",
+                v1 = super::BREW_COMMAND
             ),
-            Self::NoPermission(why) => format!("没有权限替换这份 App（{why}），请从发布页下载"),
+            Self::NoPermission(why) => t!("没有权限替换这份 App（{why}），请从发布页下载", why),
             Self::NoBuild(why) => why.clone(),
-            Self::Download(why) => format!("下载失败：{why}"),
-            Self::Verify(why) => format!("校验没通过，没有安装：{why}"),
-            Self::Swap(why) => format!("替换 App 失败，已恢复原来的版本：{why}"),
+            Self::Download(why) => t!("下载失败：{why}", why),
+            Self::Verify(why) => t!("校验没通过，没有安装：{why}", why),
+            Self::Swap(why) => t!("替换 App 失败，已恢复原来的版本：{why}", why),
         }
     }
 }
@@ -108,23 +109,29 @@ pub fn install(job: &Install, tools: &dyn Tools, step: &dyn Fn(Step)) -> Result<
     }
     let version = &job.release.version;
     let (Some(zip), Some(sums)) = (&job.release.zip, &job.release.sums) else {
-        return Err(Failure::NoBuild(format!(
-            "{version} 没有给这台 Mac（{}）的安装包",
-            super::arch()
+        return Err(Failure::NoBuild(t!(
+            "{version} 没有给这台 Mac（{arch}）的安装包",
+            version,
+            arch = super::arch()
         )));
     };
     let (parent, name) = match (bundle.parent(), bundle.file_name()) {
         (Some(p), Some(n)) => (p, n.to_string_lossy().into_owned()),
-        _ => return Err(Failure::Swap(format!("{} 不是一个 App", bundle.display()))),
+        _ => {
+            return Err(Failure::Swap(t!(
+                "{display} 不是一个 App",
+                display = bundle.display()
+            )));
+        }
     };
     // Extracted beside the bundle, so the swap is a rename on one volume.
     let stage = parent.join(format!(".{name}.update"));
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir(&stage).map_err(|e| match e.kind() {
         std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem => {
-            Failure::NoPermission(format!("{}：{e}", parent.display()))
+            Failure::NoPermission(t!("{display}：{e}", display = parent.display(), e))
         }
-        _ => Failure::Swap(format!("{}：{e}", stage.display())),
+        _ => Failure::Swap(t!("{display}：{e}", display = stage.display(), e)),
     })?;
     let result = replaceable(bundle, &stage)
         .map_err(Failure::NoPermission)
@@ -145,10 +152,10 @@ fn fetch_and_swap(
     step(Step::Downloading);
     let listed = tools.fetch(&sums.url).map_err(Failure::Download)?;
     let expected = sum_for(&String::from_utf8_lossy(&listed), &zip.name)
-        .ok_or_else(|| Failure::Verify(format!("SHA256SUMS 里没有 {} 的校验和", zip.name)))?;
+        .ok_or_else(|| Failure::Verify(t!("SHA256SUMS 里没有 {name} 的校验和", name = zip.name)))?;
     let folder = job.cache.join(job.release.version.to_string());
     std::fs::create_dir_all(&folder)
-        .map_err(|e| Failure::Download(format!("{}：{e}", folder.display())))?;
+        .map_err(|e| Failure::Download(t!("{display}：{e}", display = folder.display(), e)))?;
     let file = folder.join(&zip.name);
     let _ = std::fs::remove_file(&file);
     let downloaded = tools.download(&zip.url, &file).map_err(Failure::Download);
@@ -156,14 +163,16 @@ fn fetch_and_swap(
         step(Step::Verifying);
         let actual = sha256_file(&file).map_err(Failure::Download)?;
         if actual != expected {
-            return Err(Failure::Verify(format!(
-                "{} 的 SHA-256 是 {actual}，SHA256SUMS 写的是 {expected}",
-                zip.name
+            return Err(Failure::Verify(t!(
+                "{name} 的 SHA-256 是 {actual}，SHA256SUMS 写的是 {expected}",
+                name = zip.name,
+                actual,
+                expected
             )));
         }
         tools
             .unzip(&file, stage)
-            .map_err(|e| Failure::Verify(format!("解不开 {}：{e}", zip.name)))
+            .map_err(|e| Failure::Verify(t!("解不开 {name}：{e}", name = zip.name, e)))
     });
     // The zip is not needed past this point, whatever happened.
     let _ = std::fs::remove_dir_all(&folder);
@@ -186,7 +195,9 @@ fn single_app(stage: &Path) -> Result<PathBuf, Failure> {
         .collect();
     match entries.as_slice() {
         [app] if app.extension().is_some_and(|e| e == "app") && app.is_dir() => Ok(app.clone()),
-        _ => Err(Failure::Verify("压缩包里应当只有一个 Mooring.app".into())),
+        _ => Err(Failure::Verify(
+            t!("压缩包里应当只有一个 Mooring.app").into(),
+        )),
     }
 }
 
@@ -201,30 +212,34 @@ pub fn verify_app(
 ) -> Result<(), Failure> {
     let info = tools.bundle_info(app).map_err(Failure::Verify)?;
     if info.id != BUNDLE_ID {
-        return Err(Failure::Verify(format!(
-            "包标识是 {}，不是 {BUNDLE_ID}",
-            info.id
+        return Err(Failure::Verify(t!(
+            "包标识是 {id}，不是 {BUNDLE_ID}",
+            id = info.id,
+            BUNDLE_ID
         )));
     }
     if Version::parse(&info.version).as_ref() != Some(version) {
-        return Err(Failure::Verify(format!(
-            "App 自称 {}，发布写的是 {version}",
-            info.version
+        return Err(Failure::Verify(t!(
+            "App 自称 {got}，发布写的是 {version}",
+            got = info.version,
+            version = version
         )));
     }
     tools
         .verify_signature(app)
-        .map_err(|e| Failure::Verify(format!("签名无效：{e}")))?;
+        .map_err(|e| Failure::Verify(t!("签名无效：{e}", e)))?;
     let team = tools.team_id(app).map_err(Failure::Verify)?;
     if team != TEAM_ID {
-        return Err(Failure::Verify(format!(
-            "签名的团队是 {team}，不是 {TEAM_ID}"
+        return Err(Failure::Verify(t!(
+            "签名的团队是 {team}，不是 {TEAM_ID}",
+            team,
+            TEAM_ID
         )));
     }
     match tools.assess(app) {
         Ok(()) => Ok(()),
         Err(e) if allow_unnotarized && e.contains("Unnotarized Developer ID") => Ok(()),
-        Err(e) => Err(Failure::Verify(format!("Gatekeeper 不放行：{e}"))),
+        Err(e) => Err(Failure::Verify(t!("Gatekeeper 不放行：{e}", e))),
     }
 }
 
@@ -234,8 +249,8 @@ pub fn verify_app(
 fn replaceable(bundle: &Path, mine: &Path) -> Result<(), String> {
     match mooring_platform::app_bundle::same_owner(bundle, mine) {
         Ok(true) => Ok(()),
-        Ok(false) => Err(format!("{} 不属于当前用户", bundle.display())),
-        Err(e) => Err(format!("{}：{e}", bundle.display())),
+        Ok(false) => Err(t!("{display} 不属于当前用户", display = bundle.display())),
+        Err(e) => Err(t!("{display}：{e}", display = bundle.display(), e)),
     }
 }
 
@@ -244,12 +259,17 @@ fn swap(bundle: &Path, new: &Path, name: &str) -> Result<(), Failure> {
     let retired = bundle.with_file_name(format!(".{name}.retired"));
     let _ = std::fs::remove_dir_all(&retired);
     std::fs::rename(bundle, &retired)
-        .map_err(|e| Failure::Swap(format!("移开 {}：{e}", bundle.display())))?;
+        .map_err(|e| Failure::Swap(t!("移开 {display}：{e}", display = bundle.display(), e)))?;
     if let Err(e) = std::fs::rename(new, bundle) {
         let back = std::fs::rename(&retired, bundle);
         return Err(Failure::Swap(match back {
-            Ok(()) => format!("放入新版本：{e}"),
-            Err(b) => format!("放入新版本：{e}；旧版本留在 {}：{b}", retired.display()),
+            Ok(()) => t!("放入新版本：{e}", e),
+            Err(b) => t!(
+                "放入新版本：{e}；旧版本留在 {display}：{b}",
+                e,
+                display = retired.display(),
+                b
+            ),
         }));
     }
     // Running processes keep the old files open past the unlink.
@@ -259,7 +279,8 @@ fn swap(bundle: &Path, new: &Path, name: &str) -> Result<(), Failure> {
 
 pub fn sha256_file(path: &Path) -> Result<String, String> {
     use std::io::Read;
-    let mut file = std::fs::File::open(path).map_err(|e| format!("{}：{e}", path.display()))?;
+    let mut file =
+        std::fs::File::open(path).map_err(|e| t!("{display}：{e}", display = path.display(), e))?;
     let mut hash = Sha256::new();
     let mut buf = vec![0; 1 << 16];
     loop {
