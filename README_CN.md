@@ -10,8 +10,14 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/majiayu000/mooring?style=flat-square&color=ffcc00)](https://github.com/majiayu000/mooring)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/majiayu000/mooring?style=flat-square&label=release)](https://github.com/majiayu000/mooring/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/mooring/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/mooring/actions/workflows/ci.yml)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/mooring/releases/latest)
+[![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
 
 [官网](https://fibo.page) | [安装](#安装) | [能做什么](#能做什么) | [常见问题](#常见问题) | [English](README.md)
+
+<img src="docs/site/assets/shot-main.webp" alt="Fibo 三个窗格：Codex 等你回答、Claude Code 在跑、Codex 等你验收；侧栏列出要你处理 3 个、在跑 2 个" width="900" />
 
 </div>
 
@@ -47,6 +53,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./run.sh
 ### 01 · 一眼看出哪个 Agent 在等你
 
 每个会话只有一个状态，左栏、标签、窗格和看板上的说法一致：**等你回答**（提问或审批）、**在跑**、**等你验收**（一轮跑完）、**做完了**。一轮跑完不等于活干完了，只有你点了标记完成才算做完。鸟瞰把所有会话按列摊开，底栏显示 Codex、Claude、Grok 的额度。
+
+![鸟瞰：会话按待办、在跑、要你处理、停下了、做完了分列](docs/site/assets/shot-board.webp)
 
 ### 02 · 关掉窗口，它们照样跑
 
