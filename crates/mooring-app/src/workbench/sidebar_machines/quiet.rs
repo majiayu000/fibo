@@ -391,29 +391,33 @@ impl Workbench {
                     .child(div().min_w_0().truncate().opacity(state.rest).child(rest)),
             )
             .when_some(resume, |d, resume| {
+                let press = mix(T::color(F::hover()), T::color(F::bright()), 0.1);
                 d.child(
                     div()
                         .id(gpui::SharedString::from(resume_id))
                         .role(gpui::accesskit::Role::Button)
                         .aria_label(t!("接着管 {name}", name))
+                        .group(gpui::SharedString::from("quiet-resume"))
                         .flex_shrink_0()
-                        .px(px(T::S8))
+                        .flex()
+                        .items_center()
+                        .px(px(T::S6))
                         .py(px(T::S2))
-                        .rounded_full()
-                        .border(px(T::BORDER_WIDTH))
-                        .border_color(T::color(F::chip_line()))
-                        .bg(T::surface(F::bg()))
+                        .rounded(px(T::S4))
                         .text_size(px(F::TAG))
                         .text_color(T::color(F::second()))
                         .cursor_pointer()
-                        // Drawn like a space chip, so it reads as something to press on the
-                        // gray line, and lights up like a chosen chip under the pointer.
-                        .hover(|s| {
-                            s.bg(T::color(F::chip_on()))
-                                .border_color(T::color(F::chip_on_line()))
-                                .text_color(T::color(F::bright()))
-                        })
+                        // Words and an arrow, no box; under the pointer a step darker than
+                        // the gray line, black words, and the arrow leans on.
+                        .hover(move |s| s.bg(press).text_color(T::color(F::bright())))
                         .child(t!("接着管"))
+                        .child(
+                            div()
+                                .pl(px(T::S2))
+                                .pr(px(T::S2))
+                                .group_hover("quiet-resume", |s| s.pl(px(T::S4)).pr(px(0.)))
+                                .child("→"),
+                        )
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
                             resume(this, cx);
