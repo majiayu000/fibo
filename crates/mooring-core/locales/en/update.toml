@@ -1,0 +1,62 @@
+# Self-update: settings › about, the status bar notice and install errors.
+
+[settings]
+"更新" = "Updates"
+"检查更新" = "Check for Updates"
+"自动检查更新" = "Check for updates automatically"
+"更新 升级 新版本 update release 发布页" = "update upgrade new version release download page"
+"更新 联网 网络 隐私 自动 update" = "update online network privacy automatic"
+"每天最多一次，只向 GitHub 问最新的版本号；这是 Mooring 唯一会自己发出的网络请求" = "At most once a day, Mooring asks GitHub for the latest version number; this is the only network request Mooring makes on its own"
+"{current} · 从源码运行的版本不自动更新，用 git pull 后重新构建" = "{current} · A build from source doesn't update itself; git pull and rebuild"
+"当前 {current}" = "Current {current}"
+"{current} 已是最新版本" = "{current} is the latest version"
+"检查失败：{e}" = "Check failed: {e}"
+"有新版本 {version}（当前 {current}），终端会继续运行" = "{version} is available (current {current}); terminals keep running"
+"立即更新" = "Update Now"
+"正在下载并校验 {version}…" = "Downloading and verifying {version}…"
+"打开发布页" = "Open Release Page"
+"重试" = "Retry"
+"拷贝命令" = "Copy Command"
+"有新版本 {version}；这份由 Homebrew 安装，请运行 {v2}" = "{version} is available; this copy was installed with Homebrew, run {v2}"
+
+[statusbar]
+"新版本 {version} · 更新" = "New version {version} · Update"
+"当前 {current}；更新后 App 自动重启，终端继续运行" = "Current {current}; the App restarts after updating, terminals keep running"
+"正在更新到 {version}…" = "Updating to {version}…"
+"下载、校验签名后替换 App，然后自动重启" = "Downloads, checks the signature, replaces the App, then restarts"
+"新版本 {version}" = "New version {version}"
+"这份由 Homebrew 安装：运行 {v1}" = "Installed with Homebrew: run {v1}"
+"{version} 没装上" = "{version} didn't install"
+
+[app]
+"无法保存 {display}：{e}" = "Couldn't save {display}: {e}"
+"找不到缓存目录" = "No cache folder found"
+"已装好新版本，但没能自动重启（{e}），请退出后重新打开" = "The new version is installed but couldn't restart ({e}); quit and open it again"
+
+[install]
+"这份 Mooring 由 Homebrew 安装，请运行 {v1}" = "This Mooring was installed with Homebrew; run {v1}"
+"没有权限替换这份 App（{why}），请从发布页下载" = "No permission to replace this App ({why}); download it from the release page"
+"下载失败：{why}" = "Download failed: {why}"
+"校验没通过，没有安装：{why}" = "Verification failed, nothing installed: {why}"
+"替换 App 失败，已恢复原来的版本：{why}" = "Replacing the App failed; the previous version is back: {why}"
+"{version} 没有给这台 Mac（{arch}）的安装包" = "{version} has no build for this Mac ({arch})"
+"{display} 不是一个 App" = "{display} is not an App"
+"{display}：{e}" = "{display}: {e}"
+"SHA256SUMS 里没有 {name} 的校验和" = "SHA256SUMS has no checksum for {name}"
+"{name} 的 SHA-256 是 {actual}，SHA256SUMS 写的是 {expected}" = "{name} has SHA-256 {actual}, SHA256SUMS says {expected}"
+"解不开 {name}：{e}" = "Couldn't unpack {name}: {e}"
+"压缩包里应当只有一个 Mooring.app" = "The archive should hold exactly one Mooring.app"
+"包标识是 {id}，不是 {BUNDLE_ID}" = "Bundle identifier is {id}, not {BUNDLE_ID}"
+"App 自称 {got}，发布写的是 {version}" = "The App says it is {got}, the release says {version}"
+"签名无效：{e}" = "Invalid signature: {e}"
+"Gatekeeper 不放行：{e}" = "Gatekeeper refused it: {e}"
+"签名的团队是 {team}，不是 {TEAM_ID}" = "Signed by team {team}, not {TEAM_ID}"
+"{display} 不属于当前用户" = "{display} doesn't belong to the current user"
+"移开 {display}：{e}" = "Moving {display} aside: {e}"
+"放入新版本：{e}" = "Putting the new version in place: {e}"
+"放入新版本：{e}；旧版本留在 {display}：{b}" = "Putting the new version in place: {e}; the old version stays at {display}: {b}"
+
+[release]
+"看不懂发布信息：{e}" = "Couldn't read the release info: {e}"
+"{tag_name} 是预发布版本，不自动更新" = "{tag_name} is a pre-release; not updating automatically"
+"{tag_name} 不是版本号" = "{tag_name} is not a version number"

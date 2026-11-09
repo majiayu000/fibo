@@ -12,25 +12,28 @@ impl Workbench {
         let version = &release.version;
         let (text, tone, tip) = match &u.phase {
             Phase::Available(_) => (
-                format!("新版本 {version} · 更新"),
+                t!("新版本 {version} · 更新", version),
                 Tone::Ok,
-                format!("当前 {}；更新后 App 自动重启，终端继续运行", u.current),
+                t!(
+                    "当前 {current}；更新后 App 自动重启，终端继续运行",
+                    current = u.current
+                ),
             ),
             Phase::Installing(_) => (
-                format!("正在更新到 {version}…"),
+                t!("正在更新到 {version}…", version),
                 Tone::Ok,
-                "下载、校验签名后替换 App，然后自动重启".into(),
+                t!("下载、校验签名后替换 App，然后自动重启").into(),
             ),
             Phase::Homebrew(_) => (
-                format!("新版本 {version}"),
+                t!("新版本 {version}", version),
                 Tone::Ok,
-                format!(
-                    "这份由 Homebrew 安装：运行 {}",
-                    mooring_core::update::BREW_COMMAND
+                t!(
+                    "这份由 Homebrew 安装：运行 {v1}",
+                    v1 = mooring_core::update::BREW_COMMAND
                 ),
             ),
             Phase::Failed { message, .. } => {
-                (format!("{version} 没装上"), Tone::Warn, message.clone())
+                (t!("{version} 没装上", version), Tone::Warn, message.clone())
             }
             _ => return None,
         };
