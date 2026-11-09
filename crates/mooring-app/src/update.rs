@@ -25,7 +25,7 @@ pub enum Phase {
         message: String,
         page: bool,
     },
-    /// Homebrew installed this copy; `brew upgrade --cask mooring` updates it.
+    /// Homebrew installed this copy; `brew upgrade --cask fibo` updates it.
     Homebrew(Release),
 }
 
