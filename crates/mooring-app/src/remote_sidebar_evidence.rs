@@ -427,6 +427,17 @@ pub(super) fn start(
             assert_eq!(wants(cx), 1, "{preset} counts a quiet machine");
             shoot(shot, cx);
         }
+        // The pointer over the gray line's 接着管, then away again.
+        for (at, shot) in [((279., 793.), "quiet-c-hover.png"), ((150., 100.), "quiet-c-left.png")] {
+            cx.update_window(handle.into(), |_, w, a| {
+                let position = gpui::point(px(at.0), px(at.1));
+                let pointer = gpui::MouseMoveEvent { position, pressed_button: None, modifiers: Default::default() };
+                w.dispatch_event(gpui::InputEvent::to_platform_input(pointer), a);
+            })
+            .unwrap();
+            wait(100).await;
+            shoot(shot, cx);
+        }
         handle
             .update(cx, |v, _, cx| v.visual_choose_preset("recent", cx))
             .unwrap();
