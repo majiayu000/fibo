@@ -202,7 +202,8 @@ pub enum Op {
     /// Answered `{}` at once: a client's heartbeat, to find a link that died quietly.
     Ping,
     /// What changed in a git work tree against HEAD, untracked files included: [`Diff`].
-    /// Names the `terminal` whose directory it is, or the `cwd`. Read only.
+    /// Names the `terminal` whose directory it is, or the `cwd`. Read only. A role without
+    /// `dirs` names a `terminal` only and gets [`Diff::summary`].
     Diff {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         terminal: Option<String>,
@@ -593,6 +594,11 @@ pub struct Diff {
     /// With `terminal`: the test and check commands its conversation last ran.
     #[serde(default)]
     pub checks: Vec<Check>,
+    /// Only names and counts, from what the current turn's log says it changed: the reply a
+    /// role without `dirs` gets, since git runs what a work tree's own config says (#125).
+    /// No `patch`, no `branch`; `cwd` is the terminal's folder.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub summary: bool,
 }
 
 /// A test or check command as the log recorded it: its exit code, never the Agent's words.

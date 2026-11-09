@@ -81,6 +81,11 @@ pub fn run(a: &Args) -> io::Result<()> {
         );
         return Ok(());
     }
+    if let Some(name) = a.value("machine-name") {
+        let m = devices::set_machine_name(&a.socket, name)?;
+        println!("手机上这台电脑叫「{}」，手机重连后显示", m.name);
+        return Ok(());
+    }
     if let Some(needle) = a.value("kick") {
         host(
             a,

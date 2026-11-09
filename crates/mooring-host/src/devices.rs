@@ -125,8 +125,21 @@ fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     written
 }
 
-/// Whether `name` is a temporary [`write_private`] makes for `remote-devices.json`.
+/// Fixed-name temporaries builds before 11-09 wrote: the device list's held every key, the
+/// code's the machine's code. Nothing writes these names now, so whoever holds [`lock`] may
+/// remove them.
+const OLD_TEMPORARIES: [&str; 3] = [
+    "remote-devices.tmp",
+    "remote-code.tmp",
+    "remote-code-retired.tmp",
+];
+
+/// Whether `name` is a temporary [`write_private`] makes for `remote-devices.json`, or one an
+/// older build left.
 fn is_devices_temporary(name: &str) -> bool {
+    if OLD_TEMPORARIES.contains(&name) {
+        return true;
+    }
     let Some(made) = name
         .strip_prefix("remote-devices.")
         .and_then(|n| n.strip_suffix(".tmp"))
@@ -326,21 +339,57 @@ pub fn last_seen(socket: &Path) -> std::collections::HashMap<String, u64> {
 /// one on every call would make one computer look like several.
 pub fn machine(socket: &Path) -> io::Result<Machine> {
     let file = socket.with_file_name("machine-id");
-    let kept = match std::fs::read_to_string(&file) {
-        Ok(text) => Some(text.trim().to_owned()).filter(|s| !s.is_empty()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-        Err(e) => return Err(e),
-    };
-    let id = match kept {
-        Some(id) => id,
-        None => {
-            let id = uuid::Uuid::new_v4().to_string();
-            write_private(&file, id.as_bytes())?;
-            id
+    let read = || -> io::Result<Option<String>> {
+        match std::fs::read_to_string(&file) {
+            Ok(text) => Ok(Some(text.trim().to_owned()).filter(|s| !s.is_empty())),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
         }
     };
-    let name = mooring_platform::system::host_name();
+    let id = match read()? {
+        Some(id) => id,
+        // Made under the lock and looked for again there: two processes starting at once
+        // would otherwise each hand out an id and only the later one be kept.
+        None => {
+            let _held = lock(socket)?;
+            match read()? {
+                Some(id) => id,
+                None => {
+                    let id = uuid::Uuid::new_v4().to_string();
+                    write_private(&file, id.as_bytes())?;
+                    id
+                }
+            }
+        }
+    };
+    let name = std::fs::read_to_string(name_file(socket))
+        .ok()
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(mooring_platform::system::host_name);
     Ok(Machine { id, name })
+}
+
+/// The name phones show for this machine when its owner gave one: a host name like
+/// `appledeMacBook-Pro.local` is long for a phone, and changing it needs root (2026-11-09).
+fn name_file(socket: &Path) -> PathBuf {
+    socket.with_file_name("machine-name")
+}
+
+/// Gives this machine the name phones show, or with an empty one goes back to the host name.
+pub fn set_machine_name(socket: &Path, name: &str) -> io::Result<Machine> {
+    let name = name.trim();
+    let file = name_file(socket);
+    if name.is_empty() {
+        match std::fs::remove_file(&file) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    } else {
+        let _ = std::fs::remove_file(&file);
+        write_private(&file, name.as_bytes())?;
+    }
+    machine(socket)
 }
 
 /// The machine's pairing code, made on first use, readable only by this user.
@@ -348,23 +397,26 @@ pub fn machine(socket: &Path) -> io::Result<Machine> {
 /// phone still on it to pair again.
 pub fn machine_code(socket: &Path, new: bool) -> io::Result<Code> {
     let file = socket.with_file_name("remote-code");
-    let kept = std::fs::read_to_string(&file)
-        .ok()
-        .and_then(|t| Code::parse(&t));
-    match kept {
+    let read = || {
+        std::fs::read_to_string(&file)
+            .ok()
+            .and_then(|t| Code::parse(&t))
+    };
+    if let (Some(code), false) = (read(), new) {
+        return Ok(code);
+    }
+    // Made, replaced and retired under the lock: several first pairings at once used to
+    // collide on one temporary name (`File exists`), and two `--new-code` could each retire
+    // from a list the other was rewriting. Looked for again once held: whoever came first
+    // made the code everyone else is to use.
+    let _held = lock(socket)?;
+    match read() {
         Some(code) if !new => return Ok(code),
         Some(old) => retire(socket, &old)?,
         None => (),
     }
     let code = Code::generate()?;
-    let tmp = file.with_extension("tmp");
-    let _ = std::fs::remove_file(&tmp);
-    mooring_platform::fs::private_file()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)?
-        .write_all(code.text().as_bytes())?;
-    std::fs::rename(&tmp, &file)?;
+    write_private(&file, code.text().as_bytes())?;
     Ok(code)
 }
 
@@ -387,15 +439,10 @@ fn retire(socket: &Path, old: &Code) -> io::Result<()> {
     let mut list = retired(socket);
     list.push(wire::token_hash(&old.token()));
     let start = list.len().saturating_sub(wire::MAX_RETIRED);
-    let path = retired_file(socket);
-    let tmp = path.with_extension("tmp");
-    let _ = std::fs::remove_file(&tmp);
-    mooring_platform::fs::private_file()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)?
-        .write_all((list[start..].join("\n") + "\n").as_bytes())?;
-    std::fs::rename(&tmp, &path)
+    write_private(
+        &retired_file(socket),
+        (list[start..].join("\n") + "\n").as_bytes(),
+    )
 }
 
 /// Pairs one more phone: its device entry, and the link its QR code carries.
@@ -537,6 +584,10 @@ mod tests {
         let socket = dir.join("workbench.sock");
         let a = machine(&socket).unwrap();
         assert_eq!(machine(&socket).unwrap().id, a.id);
+        // A name its owner gives replaces the host name, keeps the id, and clears back.
+        assert_eq!(set_machine_name(&socket, "  apple ").unwrap().name, "apple");
+        assert_eq!(machine(&socket).unwrap().id, a.id);
+        assert_eq!(set_machine_name(&socket, "").unwrap().name, a.name);
         use std::os::unix::fs::PermissionsExt;
         let mode = std::fs::metadata(dir.join("machine-id"))
             .unwrap()

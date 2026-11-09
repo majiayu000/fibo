@@ -9,9 +9,34 @@
 **A native macOS workbench for coding agents. Every session is a real terminal; Fibo shows which one needs you, keeps them running when the window closes, and brings back the conversation after a crash.**
 
 [![GitHub stars](https://img.shields.io/github/stars/majiayu000/mooring?style=flat-square&color=ffcc00)](https://github.com/majiayu000/mooring)
+[![Release](https://img.shields.io/github/v/release/majiayu000/mooring?style=flat-square&label=release)](https://github.com/majiayu000/mooring/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/majiayu000/mooring/total?style=flat-square&color=success)](https://github.com/majiayu000/mooring/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/mooring/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/mooring/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/commits/main)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/pulse)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/mooring/releases/latest)
+[![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
+[![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
+[![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
+[![libghostty](https://img.shields.io/badge/terminal-libghostty-3551F3?style=flat-square&logo=ghostty&logoColor=white)](https://github.com/ghostty-org/ghostty)
+[![Website](https://img.shields.io/badge/website-fibo.page-111111?style=flat-square)](https://fibo.page)
+
+[![12 agents built in](https://img.shields.io/badge/agents-12%20built%20in-555?style=flat-square)](#03--any-agent-cli)
+[![Claude Code](https://img.shields.io/badge/-Claude%20Code-D97757?style=flat-square&logo=claude&logoColor=white)](#03--any-agent-cli)
+[![Codex](https://img.shields.io/badge/-Codex-412991?style=flat-square)](#03--any-agent-cli)
+[![Gemini CLI](https://img.shields.io/badge/-Gemini%20CLI-8E75B2?style=flat-square&logo=googlegemini&logoColor=white)](#03--any-agent-cli)
+[![Cursor Agent](https://img.shields.io/badge/-Cursor%20Agent-000000?style=flat-square&logo=cursor&logoColor=white)](#03--any-agent-cli)
+[![Grok Build](https://img.shields.io/badge/-Grok%20Build-000000?style=flat-square&logo=x&logoColor=white)](#03--any-agent-cli)
+[![DeepSeek](https://img.shields.io/badge/-DeepSeek-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](#03--any-agent-cli)
+[![Kimi Code](https://img.shields.io/badge/-Kimi%20Code-1A1A1A?style=flat-square)](#03--any-agent-cli)
+[![Qoder CLI](https://img.shields.io/badge/-Qoder%20CLI-2E7D32?style=flat-square)](#03--any-agent-cli)
+[![and more](https://img.shields.io/badge/-%2B%20Hermes%2C%20Droid%2C%20Pi%2C%20OpenCode-777?style=flat-square)](#03--any-agent-cli)
+
 [Website](https://fibo.page) | [Install](#install) | [What it does](#what-it-does) | [FAQ](#faq) | [中文](README_CN.md)
+
+<img src="docs/site/assets/shot-main.webp" alt="Fibo with three panes: Codex waiting for an answer, Claude Code running, Codex ready for review; the sidebar lists Needs you 3 and Running 2" width="900" />
 
 </div>
 
@@ -47,6 +72,8 @@ The first build also downloads the Ghostty source and takes a while. Run `claude
 ### 01 · See which agent needs you
 
 Each session has one state, shown the same way in the sidebar, tabs, panes and the board: **waiting for you** (a question or an approval), **running**, **ready for review** (a turn ended), **done**. A turn ending is not the work being done: only you mark a session complete. The board (鸟瞰) lays every session out in columns, and the status bar shows your Codex, Claude and Grok quota.
+
+![The board: sessions in columns To-do, Running, Needs you, Stopped and Done](docs/site/assets/shot-board.webp)
 
 ### 02 · Close it, they keep working
 

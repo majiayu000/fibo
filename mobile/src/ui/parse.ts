@@ -271,3 +271,11 @@ export function pathChips(crumbs: { label: string; path: string }[]): PathChip[]
   if (crumbs.length <= 4) return crumbs.map(level);
   return [level(crumbs[0], 0), { kind: 'more', hidden: crumbs.slice(1, -2) }, ...crumbs.slice(-2).map((c, j) => level(c, crumbs.length - 2 + j))];
 }
+
+/** What the 改动 page calls itself and its empty state, by what the computer sent: a phone
+ * paired as 只看 or 能答审批 gets `summary`, this turn's file names and counts only. */
+export function diffWords(d: { summary?: boolean } | null) {
+  return d?.summary
+    ? { title: '这一轮改了哪些文件', empty: '这一轮还没改文件', note: '这台手机的权限只显示文件名和行数' }
+    : { title: '未提交的改动', empty: '没有未提交的改动', note: '' };
+}

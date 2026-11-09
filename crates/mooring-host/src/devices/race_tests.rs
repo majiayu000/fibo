@@ -296,3 +296,80 @@ fn the_next_change_removes_what_a_killed_write_left_and_nothing_else() {
     remove(&socket, &device.id).unwrap();
     assert!(!dir.0.join(&abandoned).exists(), "残留的临时文件还在");
 }
+
+/// #128: phones paired at once on a machine without a code yet, `--new-code` run beside
+/// them, and every first start asking for the machine's id: each one gets what the others
+/// get, none fails on another's temporary, and no retired code is lost.
+#[test]
+fn first_pairings_at_once_share_one_code_and_one_machine_id() {
+    let dir = Dir::new();
+    let barrier = Arc::new(Barrier::new(WORKERS));
+    let workers: Vec<_> = (0..WORKERS)
+        .map(|_| {
+            let (socket, barrier) = (dir.socket(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                let code = machine_code(&socket, false).map(|c| c.text());
+                let id = machine(&socket).map(|m| m.id);
+                (code, id)
+            })
+        })
+        .collect();
+    let got: Vec<_> = workers.into_iter().map(|w| w.join().unwrap()).collect();
+    let codes: HashSet<String> = got
+        .iter()
+        .map(|(c, _)| c.as_ref().expect("配对码出错").clone())
+        .collect();
+    let ids: HashSet<String> = got
+        .iter()
+        .map(|(_, i)| i.as_ref().expect("machine-id 出错").clone())
+        .collect();
+    assert_eq!(codes.len(), 1, "同时首次配对拿到了不同的码：{codes:?}");
+    assert_eq!(ids.len(), 1, "同时首次启动拿到了不同的 id：{ids:?}");
+    assert_eq!(
+        machine_code(&dir.socket(), false).unwrap().text(),
+        *codes.iter().next().unwrap()
+    );
+    assert_eq!(
+        machine(&dir.socket()).unwrap().id,
+        *ids.iter().next().unwrap()
+    );
+
+    let barrier = Arc::new(Barrier::new(WORKERS));
+    let workers: Vec<_> = (0..WORKERS)
+        .map(|_| {
+            let (socket, barrier) = (dir.socket(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                machine_code(&socket, true).map(|c| c.text())
+            })
+        })
+        .collect();
+    let replaced: Vec<String> = workers
+        .into_iter()
+        .map(|w| w.join().unwrap().expect("--new-code 出错"))
+        .collect();
+    // The first code and every replacement but the one kept are retired, none dropped.
+    let retired: HashSet<String> = retired(&dir.socket()).into_iter().collect();
+    let current = machine_code(&dir.socket(), false).unwrap().text();
+    let first = codes.into_iter().next().unwrap();
+    for code in replaced.iter().chain([&first]).filter(|c| **c != current) {
+        let hash = wire::token_hash(&Code::parse(code).unwrap().token());
+        assert!(retired.contains(&hash), "换下的码没进 retired：{code}");
+    }
+    assert_no_temporaries(&dir.socket());
+}
+
+/// #128 item 5: what builds before the fix left under a fixed name (the device list's held
+/// every key) goes with the next change.
+#[test]
+fn fixed_name_temporaries_of_older_builds_are_removed() {
+    let dir = Dir::new();
+    for name in OLD_TEMPORARIES {
+        std::fs::write(dir.0.join(name), "old").unwrap();
+    }
+    add(&dir.socket(), "iPhone", Role::Full).unwrap();
+    for name in OLD_TEMPORARIES {
+        assert!(!dir.0.join(name).exists(), "{name} 还在");
+    }
+}

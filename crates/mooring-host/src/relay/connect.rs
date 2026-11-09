@@ -21,7 +21,65 @@ use tokio_tungstenite::tungstenite::Message;
 enum Ended {
     /// The relay refused this machine; redialing would not help.
     Refused(String),
+    /// Another connection registered with this machine's code (4000). It may be another
+    /// computer given the same code, or someone who read the code's hash off a proxy log
+    /// (#69): either way leaving for good hands the code over, so it tries again later.
+    Replaced,
     Lost(String),
+}
+
+/// How long a machine pushed off by another connection on its code waits before it takes
+/// the code back. Long, so two computers sharing a code take turns for minutes at a time
+/// instead of throwing each other off every second.
+pub(super) const REPLACED_WAIT: Duration = Duration::from_secs(5 * 60);
+
+/// Which process on this machine last dialed the relay for this runtime. Written before each
+/// dial, so when the relay pushes one off (4000) it can tell a newer process here (a host
+/// restarted beside an old child, say) from a connection elsewhere: the first it leaves to,
+/// as it always did, the second it takes the code back from later.
+fn owner_file(socket: &Path) -> std::path::PathBuf {
+    socket.with_file_name("remote-relay.owner")
+}
+
+fn claim(socket: &Path) {
+    let _ = std::fs::write(owner_file(socket), std::process::id().to_string());
+}
+
+/// Whether another live process on this machine dialed after this one. A build before 11-09
+/// writes no owner: replaced by one, this process takes the code back in [`REPLACED_WAIT`]
+/// and that build, on its 4000, leaves for good.
+pub(super) fn taken_here(socket: &Path) -> bool {
+    std::fs::read_to_string(owner_file(socket))
+        .ok()
+        .and_then(|t| t.trim().parse::<u32>().ok())
+        .is_some_and(|pid| {
+            pid != std::process::id() && mooring_platform::process::exists(pid as i32)
+        })
+}
+
+/// What follows a connection that ended: give up, or what to say and how long to wait
+/// before the next one. `wait` is the backoff after a lost connection; it starts over once
+/// one got registered.
+fn after(ended: Ended, was_up: bool, wait: &mut Duration) -> io::Result<(Duration, String)> {
+    match ended {
+        Ended::Refused(why) => Err(io::Error::other(why)),
+        Ended::Replaced => {
+            *wait = Duration::from_secs(1);
+            let why = format!(
+                "另一个连接用这台电脑的配对码连上了中继，把它顶了下来（同一个码在另一台电脑上，或码被别人拿到了），{} 分钟后再连",
+                REPLACED_WAIT.as_secs() / 60
+            );
+            Ok((REPLACED_WAIT, why))
+        }
+        Ended::Lost(why) => {
+            if was_up {
+                *wait = Duration::from_secs(1);
+            }
+            let now = *wait;
+            *wait = (now * 2).min(Duration::from_secs(30));
+            Ok((now, format!("{why}，{} 秒后重连", now.as_secs())))
+        }
+    }
 }
 
 pub(super) async fn stay_connected(
@@ -35,19 +93,10 @@ pub(super) async fn stay_connected(
     let mut wait = Duration::from_secs(1);
     loop {
         let (ended, was_up) = connect(base, code, key.as_deref(), &name, socket, live).await;
-        match ended {
-            Ended::Refused(why) => return Err(io::Error::other(why)),
-            Ended::Lost(why) => {
-                if was_up {
-                    wait = Duration::from_secs(1);
-                }
-                let again = format!("{why}，{} 秒后重连", wait.as_secs());
-                eprintln!("fibo remote: 和中继断开：{again:?}");
-                live.state(RemoteState::Connecting, again);
-                tokio::time::sleep(wait).await;
-                wait = (wait * 2).min(Duration::from_secs(30));
-            }
-        }
+        let (pause, again) = after(ended, was_up, &mut wait)?;
+        eprintln!("fibo remote: 和中继断开：{again:?}");
+        live.state(RemoteState::Connecting, again);
+        tokio::time::sleep(pause).await;
     }
 }
 
@@ -61,7 +110,10 @@ async fn connect(
     live: &Live,
 ) -> (Ended, bool) {
     let hash = wire::token_hash(&code.token());
-    let url = format!("{base}{}?th={hash}", wire::AGENT_PATH);
+    // Nothing secret in the URL: proxies log it, and the hash is all it takes to register as
+    // this machine (#69). The relay never read a query here; the hash goes in `Register`.
+    let url = format!("{base}{}", wire::AGENT_PATH);
+    claim(socket);
     let ws = match tokio::time::timeout(
         Duration::from_secs(20),
         tokio_tungstenite::connect_async(&url),
@@ -358,9 +410,10 @@ async fn connect(
             Message::Close(f) => {
                 let code = f.as_ref().map_or(1005, |f| u16::from(f.code));
                 break match code {
-                    4000 => {
-                        Ended::Refused("另一个 mooring 用同一个配对码连上了中继，这一个退出".into())
+                    4000 if taken_here(socket) => {
+                        Ended::Refused("这台电脑上另一个连接中继的进程接管了，这一个退出".into())
                     }
+                    4000 => Ended::Replaced,
                     _ => Ended::Lost(format!("中继关闭了连接（{code}）")),
                 };
             }

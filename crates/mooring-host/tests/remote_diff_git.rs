@@ -1,5 +1,6 @@
-//! `diff` runs git in folders a phone names, whose contents someone else may have written.
-//! No repository's own config may make it run a command, and home is never read as a tree.
+//! `diff` runs git, for the full role only, in folders a phone names, whose contents someone
+//! else may have written: no repository's own config may make it run a command. A lesser
+//! role gets names and counts from the conversation's log and git never starts (#125).
 #[path = "remote_v2/common.rs"]
 mod common;
 use common::*;
@@ -8,6 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const NOT_GIT: &str = "这里不是 git 仓库";
+const BY_TERMINAL_ONLY: &str = "这台设备只能看终端里这一轮改了哪些文件";
 const SECRET: &str = "BEGIN-PRIVATE-KEY";
 
 fn diff(cwd: &Path) -> Value {
@@ -23,6 +25,37 @@ fn isolated() -> Vec<(&'static str, &'static Path)> {
         ("GIT_CONFIG_GLOBAL", Path::new("/dev/null")),
         ("GIT_CONFIG_NOSYSTEM", Path::new("1")),
     ]
+}
+
+/// A `git` first on PATH that leaves `marker` behind, to see whether git ran at all.
+fn marking_git(h: &Host, marker: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = scratch(h, "marking-bin");
+    let git = bin.join("git");
+    let script = format!(
+        "#!/bin/sh\n/usr/bin/touch '{}'\nexec /usr/bin/git \"$@\"\n",
+        marker.display()
+    );
+    fs::write(&git, script).unwrap();
+    fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
+    bin
+}
+
+/// What a lesser role hears of `asked`: by path, the one refusal; by terminal, names and
+/// counts (none here: no conversation runs in these terminals). Never `SECRET`.
+fn lesser_hears_no_git(r: &mut Remote, asked: Value) {
+    let reply = r.ask(asked.clone());
+    assert!(!reply.to_string().contains(SECRET), "{reply}");
+    if asked.get("cwd").is_some() {
+        assert_eq!(reply["error"], BY_TERMINAL_ONLY, "{asked}: {reply}");
+    } else {
+        let d = &reply["ok"];
+        assert_eq!(
+            (&d["summary"], &d["files"]),
+            (&json!(true), &json!([])),
+            "{asked}: {reply}"
+        );
+    }
 }
 
 /// A repository whose tracked tree holds `inner/`, itself a whole git directory with its
@@ -69,7 +102,9 @@ fn a_git_directory_checked_into_a_project_runs_nothing() {
     let inner = clone.join("inner");
     h.launch("project", &clone, "sleep 60");
     h.launch("inside", &inner, "sleep 60");
-    for role in ["view", "answer", "full"] {
+    // The full role's git meets it: safe.bareRepository=explicit keeps it no repository.
+    {
+        let role = "full";
         let mut r = Remote::open(&h, Some(role), &isolated());
         for (asked, how) in [
             (diff(&inner), "by path"),
@@ -86,6 +121,28 @@ fn a_git_directory_checked_into_a_project_runs_nothing() {
             fs::canonicalize(&clone).unwrap()
         );
     }
+    // A lesser role's request starts no git at all, whichever way in.
+    let git_ran = h.root.join("git-ran");
+    let mut env = isolated();
+    let bin = marking_git(&h, &git_ran);
+    env.push(("PATH", bin.as_path()));
+    for role in ["view", "answer"] {
+        let mut r = Remote::open(&h, Some(role), &env);
+        for asked in [
+            diff(&inner),
+            diff(&clone),
+            by_terminal("inside"),
+            by_terminal("project"),
+        ] {
+            lesser_hears_no_git(&mut r, asked);
+        }
+        assert!(!git_ran.exists(), "{role}: git ran");
+        assert!(!marker.exists(), "{role}: its config ran");
+    }
+    // The marking git is the one the full role starts: the check above can fail.
+    let mut full = Remote::open(&h, Some("full"), &env);
+    full.ok(diff(&clone));
+    assert!(git_ran.exists(), "the full role runs this git");
 }
 
 /// A driver in an ordinary repository's config, however it got there, is not asked to turn
@@ -104,7 +161,8 @@ fn a_textconv_driver_runs_for_no_role() {
     git(&repo, &["config", "diff.x.textconv", &command]);
     fs::write(repo.join("a.txt"), "two\n").unwrap();
     h.launch("work", &repo, "sleep 60");
-    for role in ["view", "full"] {
+    {
+        let role = "full";
         let mut r = Remote::open(&h, Some(role), &isolated());
         for asked in [diff(&repo), by_terminal("work")] {
             let d = r.ok(asked);
@@ -116,8 +174,8 @@ fn a_textconv_driver_runs_for_no_role() {
 }
 
 /// `~/.git` makes the whole home one work tree, so `~/.ssh/id_rsa` is an untracked file:
-/// a lesser role hears what it would if home were no repository, by path or terminal, from
-/// home or from a folder inside it. The full role still reads it.
+/// a lesser role never reads a tree, by path or terminal, from home or a folder inside it.
+/// The full role still reads it.
 #[test]
 fn a_repository_at_home_is_no_repository_to_a_lesser_role() {
     let h = Host::start();
@@ -139,9 +197,7 @@ fn a_repository_at_home_is_no_repository_to_a_lesser_role() {
             by_terminal("at-home"),
             by_terminal("at-notes"),
         ] {
-            let reply = r.ask(asked.clone());
-            assert_eq!(reply["error"], NOT_GIT, "{role} {asked}: {reply}");
-            assert!(!reply.to_string().contains(SECRET), "{reply}");
+            lesser_hears_no_git(&mut r, asked);
         }
     }
     let mut full = Remote::open(&h, Some("full"), &env);
@@ -151,7 +207,7 @@ fn a_repository_at_home_is_no_repository_to_a_lesser_role() {
 }
 
 /// The same for a repository above home; a repository inside home, read from a folder deep
-/// in it, still shows all of itself.
+/// in it, still shows all of itself to the full role.
 #[test]
 fn a_repository_above_home_is_refused_and_one_inside_it_reads_whole() {
     let h = Host::start();
@@ -172,10 +228,14 @@ fn a_repository_above_home_is_refused_and_one_inside_it_reads_whole() {
     env.push(("HOME", home.as_path()));
     let mut r = Remote::open(&h, Some("view"), &env);
     for asked in [diff(&plain), by_terminal("at-plain")] {
-        let reply = r.ask(asked);
-        assert_eq!(reply["error"], NOT_GIT, "{reply}");
-        assert!(!reply.to_string().contains(SECRET), "{reply}");
+        lesser_hears_no_git(&mut r, asked);
     }
+    let mut r = Remote::open(&h, Some("full"), &env);
+    let d = r.ok(by_terminal("at-plain"));
+    assert!(
+        d.to_string().contains(SECRET),
+        "the full role reads above home"
+    );
     for asked in [diff(&project.join("deep")), by_terminal("deep")] {
         let d = r.ok(asked);
         assert_eq!(d["files"][0]["path"], "note.txt", "{d}");

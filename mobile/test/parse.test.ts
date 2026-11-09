@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, compact, dangerous, diffLines, level, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, diffWords, compact, dangerous, diffLines, level, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -217,3 +217,14 @@ test('a path reads as folder chips, the middle folded when long', () => {
   expect(deep.at(-1)).toMatchObject({ current: true, path: '/private/var/folders/3_/x/T' });
 });
 
+describe('diffWords', () => {
+  test('a lesser role is told it sees names and counts of this turn', () => {
+    expect(diffWords({ summary: true }).title).toBe('这一轮改了哪些文件');
+    expect(diffWords({ summary: true }).note).not.toBe('');
+  });
+  test('the full role, an older computer, or nothing yet: uncommitted changes as ever', () => {
+    for (const d of [{}, { summary: false }, null]) {
+      expect(diffWords(d)).toEqual({ title: '未提交的改动', empty: '没有未提交的改动', note: '' });
+    }
+  });
+});

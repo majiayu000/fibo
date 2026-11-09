@@ -1,9 +1,9 @@
 //! `diff`: what changed in a work tree against HEAD, untracked files included, for the
-//! phone's 改动 view. Read only: git runs with `core.fsmonitor` off and no optional locks,
-//! so it neither starts a monitor nor rewrites the index. A folder may hold what a stranger
-//! wrote: a git directory checked into a project is no repository here, since its config
-//! would run commands, and no textconv driver runs. Patches are capped per file and in all;
-//! a file past the cap still lists, with its counts and `truncated`.
+//! phone's 改动 view, to the full role only: it may run anything on this machine anyway, and
+//! git runs what a repository's own config says. A lesser role gets `diff_summary`. Read
+//! only: git runs with `core.fsmonitor` off and no optional locks, so it neither starts a
+//! monitor nor rewrites the index, and no textconv driver runs. Patches are capped per file
+//! and in all; a file past the cap still lists, with its counts and `truncated`.
 use mooring_core::model::Workspace;
 use mooring_core::protocol::*;
 use mooring_remote::protocol as rp;
@@ -24,9 +24,11 @@ const LINE_MARGIN: usize = 64;
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 pub(super) fn diff(socket: &Path, request: &Value, role: super::Role) -> io::Result<Value> {
+    if !role.allows("dirs") {
+        return super::diff_summary::diff(socket, request);
+    }
     let (cwd, checks) = match (request["cwd"].as_str(), request["terminal"].as_str()) {
-        (Some(cwd), _) if role.allows("dirs") => (super::dirs::expand(cwd)?, Vec::new()),
-        (Some(cwd), _) => (super::diff_scope::checked(socket, cwd)?, Vec::new()),
+        (Some(cwd), _) => (super::dirs::expand(cwd)?, Vec::new()),
         (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
             Reply::Workspace(w) => {
                 let term = (w.terminals.iter().find(|x| x.id == t))
@@ -37,7 +39,7 @@ pub(super) fn diff(socket: &Path, request: &Value, role: super::Role) -> io::Res
         },
         (None, None) => return Err(io::Error::other("diff 需要 terminal 或 cwd")),
     };
-    let mut diff = read(&cwd, role)?;
+    let mut diff = read(&cwd)?;
     diff.checks = checks;
     fit(&mut diff);
     Ok(json!(diff))
@@ -84,42 +86,15 @@ fn fields(bytes: &[u8]) -> Vec<String> {
 }
 
 /// The diff of the work tree holding `cwd`.
-pub(crate) fn read(cwd: &Path, role: super::Role) -> io::Result<rp::Diff> {
+pub(crate) fn read(cwd: &Path) -> io::Result<rp::Diff> {
     let not_git = || io::Error::other("这里不是 git 仓库");
     if !cwd.is_dir() {
         return Err(io::Error::other("目录不存在"));
-    }
-    let lesser = !role.allows("dirs");
-    // A lesser role's read fetches no object a partial clone lacks, by whatever its config
-    // says to fetch with: a missing object reads as a failed git.
-    let git = |dir: &Path| {
-        let mut c = git(dir);
-        if lesser {
-            c.env("GIT_NO_LAZY_FETCH", "1");
-        }
-        c
-    };
-    // Before anything that could run a filter. All of it sounds the same as a plain folder.
-    let foreign = |dir: &Path| -> io::Result<bool> {
-        let list = output(git(dir).args(super::diff_config::LIST))?.ok_or_else(not_git)?;
-        Ok(super::diff_config::foreign(&list))
-    };
-    if lesser && foreign(cwd)? {
-        return Err(not_git());
     }
     let top = output(git(cwd).args(["rev-parse", "--show-toplevel"]))?.ok_or_else(not_git)?;
     // Only the line's end: a folder's name may itself end in a space.
     let top = String::from_utf8_lossy(&top);
     let top = PathBuf::from(top.strip_suffix('\n').unwrap_or(&top));
-    // Git runs in `top` from here on, so `top` is what must be clean.
-    if lesser && foreign(&top)? {
-        return Err(not_git());
-    }
-    // A repository holding home would show `~/.ssh` as untracked files. To a role that may
-    // not see the machine's folders, it reads as if home were no repository at all.
-    if lesser && super::diff_scope::holds_home(&top) {
-        return Err(not_git());
-    }
     let branch = output(git(&top).args(["symbolic-ref", "--short", "-q", "HEAD"]))?
         .map(|b| String::from_utf8_lossy(&b).trim().to_owned())
         .unwrap_or_default();
@@ -128,12 +103,8 @@ pub(crate) fn read(cwd: &Path, role: super::Role) -> io::Result<rp::Diff> {
     let diff = |extra: &[&str]| {
         let mut c = git(&top);
         c.args(["diff", "-M", "--no-color", "--no-ext-diff", "--no-textconv"])
-            .args(extra);
-        // A submodule is a repository with its own config: don't look inside it.
-        if lesser {
-            c.args(["--ignore-submodules=dirty", "--submodule=short"]);
-        }
-        c.args([base, "--"]);
+            .args(extra)
+            .args([base, "--"]);
         c
     };
     let mut files = tracked(
@@ -159,6 +130,7 @@ pub(crate) fn read(cwd: &Path, role: super::Role) -> io::Result<rp::Diff> {
         files,
         truncated,
         checks: Vec::new(),
+        summary: false,
     })
 }
 
@@ -167,7 +139,7 @@ const CHECKS: usize = 3;
 
 /// What the conversation in this terminal last tested, newest first, one per command: the
 /// records the log made of its exit codes (`Evidence`), never what the Agent said of them.
-fn checks(w: &Workspace, terminal: &str) -> Vec<rp::Check> {
+pub(super) fn checks(w: &Workspace, terminal: &str) -> Vec<rp::Check> {
     let Some(content) = w.current_agent(terminal).and_then(|s| w.content.get(&s.id)) else {
         return Vec::new();
     };

@@ -485,7 +485,21 @@ fn a_diff_names_the_tests_its_conversation_ran_and_whether_edits_came_after() {
     assert_eq!(c[1]["command"], "cargo test -p app", "{d}");
     assert_eq!((&c[1]["ok"], &c[1]["stale"]), (&json!(true), &json!(true)));
     assert!(c[1]["counts"].as_str().unwrap().contains("8 passed"), "{d}");
-    let by_cwd = r.ok(json!({ "op": "diff", "cwd": repo.to_string_lossy() }));
+    // A lesser role is told what the turn changed, from its log: names and counts only.
+    assert_eq!(d["summary"], true, "{d}");
+    let files = d["files"].as_array().unwrap();
+    assert_eq!(files.len(), 1, "{d}");
+    assert_eq!(files[0]["path"], "/r/a.rs", "{d}");
+    assert_eq!(
+        (&files[0]["added"], &files[0]["removed"]),
+        (&json!(1), &json!(1))
+    );
+    assert_eq!(files[0]["patch"], "", "{d}");
+    // A directory names no conversation, and a lesser role reads no folder by git (#125).
+    let by_cwd = r.error(json!({ "op": "diff", "cwd": repo.to_string_lossy() }));
+    assert_eq!(by_cwd, "这台设备只能看终端里这一轮改了哪些文件");
+    let mut full = Remote::open(&h, Some("full"), &[]);
+    let by_cwd = full.ok(json!({ "op": "diff", "cwd": repo.to_string_lossy() }));
     assert_eq!(
         by_cwd["checks"],
         json!([]),

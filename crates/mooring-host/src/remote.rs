@@ -22,8 +22,7 @@ mod asks;
 mod cards;
 mod chat;
 mod diff;
-mod diff_config;
-mod diff_scope;
+mod diff_summary;
 mod dirs;
 mod images;
 mod list;
@@ -125,6 +124,7 @@ pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
         || a.value("revoke").is_some()
         || a.value("device").is_some()
         || a.value("kick").is_some()
+        || a.value("machine-name").is_some()
         || a.has("enable")
         || a.has("disable")
         || a.has("status")
