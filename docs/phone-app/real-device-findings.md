@@ -19,6 +19,7 @@
 
 | 日期 | 现象 | 类型 | 为什么之前看不到 | 修复 | 现在由什么守着 |
 |---|---|---|---|---|---|
+| 11-09 | 「终端最后几行」里 Claude 的 `⏵⏵` 显示成方框，`⏺` 变成橙色图标 | 平台 | 安卓系统字体没有 `⏵`，`⏺` 被当成 emoji 画；电脑和网页的等宽字体都有这两个字。第一次全量走查时看到的 | 未修 | 无自动测试；11-09 OPPO PMA110 全量走查 `chat.terminal` 的截图 |
 | 11-09 | 记录被改短后，手机按 #186 整份换掉对话，但改写前那一轮的「干了 7 秒 · 跑了 1 个命令」没了；后台给的命令数从 1 变成 0 | 量 | 测试日志都小于 128 KiB。后台发现文件变短后只重读最后 128 KiB（和首次建索引一样），更早的工具调用要等「读回」；这次 491 KB 的记录里 echo 在第 286,783 字节。先清空再写的截法是从空文件一路追加读全的，看不出来 | 未修。真 Claude 不截短自己的记录；会改写历史的 CLI 上，改写前的回合摘要可能少算，翻到顶读回后才对 | 无自动测试；11-09 OPPO PMA110 上用 `os.truncate` 截短测试会话复现，`toolcalls` 返回 `calls: []` |
 | 11-08 | 键盘挡住「新任务」的开始键、「记一件待办」的记下键和底部弹出的输入框（要求修改、新建文件夹）；聊天页输入框和键盘之间多空一截 | 平台 | RN 0.88 安卓全屏绘制，窗口不再为键盘缩小；只有聊天页包了 `KeyboardAvoidingView`，弹框只在 iOS 生效。网页版和 iOS 看不到。用户在真手机（搜狗输入法）上报的 | 所有带输入框的页面统一包 `KeyboardSafe`（`mobile/src/ui/keyboard.tsx`），键盘弹起时不再留系统栏的空 | 无自动测试，靠真机看：11-08 OPPO PMA110（安卓 16）＋搜狗九宫格，旧包在「新任务」复现（开始键整个不见），新包修好；同一台上旧包的聊天页没被挡，搜狗拼音候选出来也没挡 |
 | 11-08 | Claude 用提问框问三选一，手机只写「等你回答」，点进去只有「CLI 请求工具审批（Hook）」和 Esc，会话卡住 | 真 CLI | 这一版 Claude Code 答完才把 AskUserQuestion 写进日志，答之前只有 PermissionRequest hook；测试里的提问都从日志读 | `b7b9b93`：读 hook 的 tool_input，给手机编号选项 | `turn_tests::a_question_asked_through_the_permission_hook_keeps_its_question_and_choices` |
@@ -53,6 +54,8 @@ tail -20 ~/.local/share/keepline-workbench/screen-waits.jsonl
 11-07 的一张卡片是这样：bypass 模式、记录里没有审批、也没有子 Agent，却写着「Do you want to proceed?」。怀疑是运行中命令的输出被当成了审批框，未证实。到 11-21 没再出现就关掉这件事。
 
 ## 怎么走真机（安卓）
+
+每次都走 [walkthrough.md](walkthrough.md) 的整张清单：用 `scripts/phone-walk.py` 截图、记结果、出报告。下面是底层的 adb 命令。
 
 手机用 USB 连着电脑，在 App 里已经配对。`adb` 在 `~/Library/Android/sdk/platform-tools/adb`，不在 PATH 里。
 
