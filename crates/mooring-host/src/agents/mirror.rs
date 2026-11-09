@@ -198,7 +198,7 @@ impl Mirror {
 
     fn changed(&self, conn: &Connection, source: &RecordSource) -> rusqlite::Result<Vec<Changed>> {
         let mut stmt = conn.prepare_cached(&source.sessions)?;
-        let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+        let names: Vec<String> = stmt.column_names().map(|s| s.to_string()).collect();
         // Sessions are asked for by `updated > cursor`, in the CLI's own clock: another write in
         // the very moment the cursor stands on would never come up again. So that moment is
         // always read once more; the row cursors keep what was written from being repeated.
@@ -239,7 +239,7 @@ impl Mirror {
             let mut stmt = conn
                 .prepare_cached(&source.records)
                 .map_err(io::Error::other)?;
-            let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+            let names: Vec<String> = stmt.column_names().map(|s| s.to_string()).collect();
             let mut rows = stmt
                 .query(rusqlite::params![session, t, id])
                 .map_err(io::Error::other)?;
