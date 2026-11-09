@@ -125,8 +125,21 @@ fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     written
 }
 
-/// Whether `name` is a temporary [`write_private`] makes for `remote-devices.json`.
+/// Fixed-name temporaries builds before 11-09 wrote: the device list's held every key, the
+/// code's the machine's code. Nothing writes these names now, so whoever holds [`lock`] may
+/// remove them.
+const OLD_TEMPORARIES: [&str; 3] = [
+    "remote-devices.tmp",
+    "remote-code.tmp",
+    "remote-code-retired.tmp",
+];
+
+/// Whether `name` is a temporary [`write_private`] makes for `remote-devices.json`, or one an
+/// older build left.
 fn is_devices_temporary(name: &str) -> bool {
+    if OLD_TEMPORARIES.contains(&name) {
+        return true;
+    }
     let Some(made) = name
         .strip_prefix("remote-devices.")
         .and_then(|n| n.strip_suffix(".tmp"))
@@ -326,17 +339,27 @@ pub fn last_seen(socket: &Path) -> std::collections::HashMap<String, u64> {
 /// one on every call would make one computer look like several.
 pub fn machine(socket: &Path) -> io::Result<Machine> {
     let file = socket.with_file_name("machine-id");
-    let kept = match std::fs::read_to_string(&file) {
-        Ok(text) => Some(text.trim().to_owned()).filter(|s| !s.is_empty()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-        Err(e) => return Err(e),
+    let read = || -> io::Result<Option<String>> {
+        match std::fs::read_to_string(&file) {
+            Ok(text) => Ok(Some(text.trim().to_owned()).filter(|s| !s.is_empty())),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
+        }
     };
-    let id = match kept {
+    let id = match read()? {
         Some(id) => id,
+        // Made under the lock and looked for again there: two processes starting at once
+        // would otherwise each hand out an id and only the later one be kept.
         None => {
-            let id = uuid::Uuid::new_v4().to_string();
-            write_private(&file, id.as_bytes())?;
-            id
+            let _held = lock(socket)?;
+            match read()? {
+                Some(id) => id,
+                None => {
+                    let id = uuid::Uuid::new_v4().to_string();
+                    write_private(&file, id.as_bytes())?;
+                    id
+                }
+            }
         }
     };
     let name = mooring_platform::system::host_name();
@@ -348,23 +371,26 @@ pub fn machine(socket: &Path) -> io::Result<Machine> {
 /// phone still on it to pair again.
 pub fn machine_code(socket: &Path, new: bool) -> io::Result<Code> {
     let file = socket.with_file_name("remote-code");
-    let kept = std::fs::read_to_string(&file)
-        .ok()
-        .and_then(|t| Code::parse(&t));
-    match kept {
+    let read = || {
+        std::fs::read_to_string(&file)
+            .ok()
+            .and_then(|t| Code::parse(&t))
+    };
+    if let (Some(code), false) = (read(), new) {
+        return Ok(code);
+    }
+    // Made, replaced and retired under the lock: several first pairings at once used to
+    // collide on one temporary name (`File exists`), and two `--new-code` could each retire
+    // from a list the other was rewriting. Looked for again once held: whoever came first
+    // made the code everyone else is to use.
+    let _held = lock(socket)?;
+    match read() {
         Some(code) if !new => return Ok(code),
         Some(old) => retire(socket, &old)?,
         None => (),
     }
     let code = Code::generate()?;
-    let tmp = file.with_extension("tmp");
-    let _ = std::fs::remove_file(&tmp);
-    mooring_platform::fs::private_file()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)?
-        .write_all(code.text().as_bytes())?;
-    std::fs::rename(&tmp, &file)?;
+    write_private(&file, code.text().as_bytes())?;
     Ok(code)
 }
 
@@ -387,15 +413,10 @@ fn retire(socket: &Path, old: &Code) -> io::Result<()> {
     let mut list = retired(socket);
     list.push(wire::token_hash(&old.token()));
     let start = list.len().saturating_sub(wire::MAX_RETIRED);
-    let path = retired_file(socket);
-    let tmp = path.with_extension("tmp");
-    let _ = std::fs::remove_file(&tmp);
-    mooring_platform::fs::private_file()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)?
-        .write_all((list[start..].join("\n") + "\n").as_bytes())?;
-    std::fs::rename(&tmp, &path)
+    write_private(
+        &retired_file(socket),
+        (list[start..].join("\n") + "\n").as_bytes(),
+    )
 }
 
 /// Pairs one more phone: its device entry, and the link its QR code carries.
