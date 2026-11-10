@@ -23,7 +23,6 @@ section h2{font-size:15px;margin:0 0 4px}
 section>p{font-size:12px;color:var(--second);margin:0 0 12px;min-height:72px}
 .rec{display:inline-block;font-size:11px;color:#111;background:var(--review);border-radius:4px;padding:0 6px;margin-left:6px;vertical-align:2px}
 .frame{width:300px;height:720px;overflow:hidden;border-radius:10px;border:1px solid var(--border);background:var(--panel)}
-.shot{width:300px;height:720px;overflow:hidden;border-radius:10px;border:1px solid var(--border);background:url(now.png) 0 -290px/1846px auto no-repeat}
 /* sidebar */
 .sb{padding:10px 0;user-select:none}
 .grp{display:flex;align-items:center;padding:12px 18px 6px;font-size:12px;color:var(--second)}
@@ -84,11 +83,6 @@ code{font:11.5px ui-monospace,Menlo,monospace;color:var(--text)}
 
 <main>
   <section>
-    <h2>现在</h2>
-    <p>截自你的截图。有子代理的会话看不出来，只有回合结束后，第二行才会写「后台仍有…」。</p>
-    <div class="shot" role="img" aria-label="当前侧栏截图"></div>
-  </section>
-  <section>
     <h2>A · 树枝常开</h2>
     <p>只要有子代理在跑，就在父会话下面直接展开 ├ └；全部跑完后自动收起。一眼就能看全，但会话多、子代理多的时候侧栏会很长。</p>
     <div class="frame"><div class="sb" id="A"></div></div>
@@ -147,24 +141,24 @@ const SVG = {
   errS:'<svg width="10" height="10" viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="#e5534b" stroke-width="1.6" stroke-linecap="round"/></svg>',
   chev:'<svg class="chev" viewBox="0 0 12 12"><path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="#7e7d7b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
-// Sessions, taken from the screenshot. subs: [name, state, time, fg?]
+// Synthetic demo sessions. subs: [name, state, time, fg?]
 const DATA = [
   {grp:'要你处理', n:4},
   {t:'截图内容显示异常', st:'review', sp:'mooring', time:'2分'},
-  {t:'Pulse Alpha stealth model on…', st:'review', sp:'code', time:'24分', l2:'后台仍有 shell 2 个',
-   subs:[['Survey model card claims','run','1:12']]},
-  {t:'Gödel, Escher, Bach 电子书', st:'review', sp:'工作空间', time:'6时'},
+  {t:'比较两种缓存策略', st:'review', sp:'code', time:'24分', l2:'后台仍有 shell 2 个',
+   subs:[['Measure cache hit rate','run','1:12']]},
+  {t:'整理开发指南', st:'review', sp:'工作空间', time:'6时'},
   {grp:'在跑', n:5},
   {t:'侧栏账号名未同步', st:'run', sp:'mooring', time:'0:00', sel:true,
    subs:[['Audit phone link protocol drift','done','3:18'],['Audit tasks, spaces, shortcuts drift','done','3:48'],['Audit plugins and CLI docs drift','run','4:31']]},
-  {t:'issuelens 库检测 mooring…', st:'run', sp:'mooring', time:'0:36',
+  {t:'检查示例项目的输入事件', st:'run', sp:'mooring', time:'0:36',
    subs:[['Check IME/keyboard charters','done','2:37'],['Check PTY/process lifecycle charters','run','3:03'],['Check agent status/hook charters','run','2:52'],['Check remote/phone & render charters','run','2:43']]},
-  {t:'Write Me Down 方向的 AI 角…', st:'run', sp:'工作空间', time:'2:46'},
+  {t:'设计示例应用的欢迎页', st:'run', sp:'工作空间', time:'2:46'},
   {t:'Image #1 元素静止异常', st:'run', sp:'mooring', time:'4:56',
    subs:[['Explore','run','0:41',true]]},
   {t:'标记完成动画', st:'run', sp:'mooring', time:'1:04:45'},
   {grp:'今天', n:49},
-  {t:'codex的聊天记录 你觉得他…', st:'wait', sp:'工作空间', time:'刚刚'},
+  {t:'核对示例会话的状态', st:'wait', sp:'工作空间', time:'刚刚'},
   {t:'左侧侧边栏运行状态异常', st:'doneM', sp:'mooring', time:'2分'},
 ];
 const dotOf = s => s==='run'?SVG.run: s==='review'?SVG.review: s==='wait'?SVG.wait:
@@ -218,8 +212,8 @@ render('A','A'); render('B','B'); render('C','C');
 
 // State gallery
 const S = [
-  {h:'在跑 + 跑完混着', r:{t:'issuelens 库检测 mooring…',st:'run',sp:'mooring',time:'0:36',subs:DATA[6].subs}, p:'跑完的变灰、留在原位，直到这一轮结束。'},
-  {h:'回合结束了，子代理还在跑', r:{t:'Pulse Alpha stealth model on…',st:'run',sp:'code',time:'24分',l2:'后台仍有 shell 2 个',subs:[['Survey model card claims','run','1:12'],['Compare pricing pages','done','0:58']]}, p:'按现有状态规则，子代理还在跑，回合就不算结束，会话留在「在跑」。计数和「后台仍有 shell」合成一行。'},
+  {h:'在跑 + 跑完混着', r:{t:'检查示例项目的输入事件',st:'run',sp:'mooring',time:'0:36',subs:DATA[6].subs}, p:'跑完的变灰、留在原位，直到这一轮结束。'},
+  {h:'回合结束了，子代理还在跑', r:{t:'比较两种缓存策略',st:'run',sp:'code',time:'24分',l2:'后台仍有 shell 2 个',subs:[['Measure cache hit rate','run','1:12'],['Compare cache latency','done','0:58']]}, p:'按现有状态规则，子代理还在跑，回合就不算结束，会话留在「在跑」。计数和「后台仍有 shell」合成一行。'},
   {h:'失败 + 超过 4 个', r:{t:'重复来源审计 第二轮',st:'run',sp:'mooring',time:'6:10',subs:[['Audit persisted state','run','5:40'],['Audit session facts','err','2:11'],['Audit UI constants','done','4:02']],more:4}, p:'红 ✕ 保留到这一轮结束，折叠时优先留着；更早跑完的折成一行。'},
   {h:'前台子代理', r:{t:'Image #1 元素静止异常',st:'run',sp:'mooring',time:'4:56',subs:[['Explore','run','0:41',true]]}, p:'父会话在等它，标「前台」。只有一个时也显示，因为它说明了会话卡在哪。'},
 ];

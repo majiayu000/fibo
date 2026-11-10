@@ -112,7 +112,8 @@ def claude_records(cid, cwd, title, state, stamp):
 
 if sys.argv[1] == 'prepare':
     STATE.parent.mkdir(parents=True, exist_ok=True)
-    root = pathlib.Path(tempfile.mkdtemp(prefix='promo-', dir=STATE.parent)); home = pathlib.Path(tempfile.mkdtemp(prefix='promo-home-', dir='/tmp'))
+    # Project folders appear in screenshots: keep the runtime outside the real user's home.
+    root = pathlib.Path(tempfile.mkdtemp(prefix='fibo-promo-', dir='/tmp')); home = pathlib.Path(tempfile.mkdtemp(prefix='promo-home-', dir='/tmp'))
     codex_logs = home / '.codex/sessions'; codex_logs.mkdir(parents=True)
     now = int(time.time()); logs = {}
     for n, (space, agent, title, state, _) in enumerate(SESSIONS):

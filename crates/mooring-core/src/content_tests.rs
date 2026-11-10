@@ -24,10 +24,7 @@ fn a_running_turn_reads_as_words_not_a_raw_command() {
         Some("cargo build -p mooring-app")
     );
     // Only assignments, and the cut a long command got when it was recorded.
-    assert_eq!(
-        command_gist("S=/private/tmp/claude-502/-Users-lifcc…"),
-        None
-    );
+    assert_eq!(command_gist("S=/private/tmp/claude-502/-Users-demo…"), None);
     assert_eq!(
         command_gist("/usr/bin/env python3 /Users/me/Library/Caches/scripts/render_all.py --out x"),
         Some("python3 render_all.py --out x".into())
