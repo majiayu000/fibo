@@ -157,7 +157,7 @@ async fn a_phone_reaches_its_machine_both_ways_and_closes_reach_the_other_side()
     .unwrap();
     assert_eq!(closed(&mut p).await, 4100);
 
-    // A plain-HTTP request the machine may get from alma-relay is just another frame.
+    // A plain-HTTP request the machine may get from an upstream relay is just another frame.
     let health: serde_json::Value = {
         let addr = base.trim_start_matches("ws://");
         let mut s = TcpStream::connect(addr).await.unwrap();

@@ -127,6 +127,9 @@ A release build checks GitHub once a day and shows the new version in the status
 **Does Fibo change my agent settings?**
 Only when you install hooks (`fibo hooks install`), which adds Fibo's entries to the agent's settings file; `fibo hooks uninstall` removes them. Without hooks, state comes from transcripts and the screen.
 
+**How do I connect from my phone?**
+Fibo on macOS works standalone locally without any server or account. To answer sessions away from your desk, deploy `mooring-relay` ([self-hosting guide](docs/relay/self-host.md)), enter your relay URL under Settings › Phones & Remote, and pair the Expo app in [`mobile/`](mobile/) — traffic is end-to-end encrypted with Noise so the relay never sees plaintext. Official hosted relay is in private beta.
+
 ## Repository
 
 - `crates/mooring-app`: the GPUI window. `crates/mooring-host`: the background host and the `fibo` command. `crates/mooring-core`: the shared model and protocol. `crates/mooring-remote`, `mooring-relay`: the phone link and its relay.

@@ -24,14 +24,14 @@ fn versions_compare_as_semver() {
 }
 
 const LATEST: &str = r#"{
-  "url": "https://api.github.com/repos/majiayu000/mooring/releases/1",
-  "html_url": "https://github.com/majiayu000/mooring/releases/tag/v0.2.0",
+  "url": "https://api.github.com/repos/majiayu000/fibo/releases/1",
+  "html_url": "https://github.com/majiayu000/fibo/releases/tag/v0.2.0",
   "tag_name": "v0.2.0", "name": "Fibo 0.2.0", "draft": false, "prerelease": false,
   "body": "notes", "published_at": "2026-11-20T00:00:00Z",
   "assets": [
-    {"name": "Fibo-0.2.0-arm64.dmg", "size": 30000000, "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/Fibo-0.2.0-arm64.dmg"},
-    {"name": "Fibo-0.2.0-arm64.zip", "size": 29000000, "content_type": "application/zip", "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/Fibo-0.2.0-arm64.zip"},
-    {"name": "SHA256SUMS", "size": 200, "browser_download_url": "https://github.com/majiayu000/mooring/releases/download/v0.2.0/SHA256SUMS"}
+    {"name": "Fibo-0.2.0-arm64.dmg", "size": 30000000, "browser_download_url": "https://github.com/majiayu000/fibo/releases/download/v0.2.0/Fibo-0.2.0-arm64.dmg"},
+    {"name": "Fibo-0.2.0-arm64.zip", "size": 29000000, "content_type": "application/zip", "browser_download_url": "https://github.com/majiayu000/fibo/releases/download/v0.2.0/Fibo-0.2.0-arm64.zip"},
+    {"name": "SHA256SUMS", "size": 200, "browser_download_url": "https://github.com/majiayu000/fibo/releases/download/v0.2.0/SHA256SUMS"}
   ]
 }"#;
 
@@ -42,7 +42,7 @@ fn the_release_json_gives_the_zip_for_this_arch_and_the_sums() {
     assert_eq!(r.version, v("0.2.0"));
     assert_eq!(
         r.page,
-        "https://github.com/majiayu000/mooring/releases/tag/v0.2.0"
+        "https://github.com/majiayu000/fibo/releases/tag/v0.2.0"
     );
     let zip = r.zip.unwrap();
     assert_eq!(zip.name, "Fibo-0.2.0-arm64.zip");
@@ -99,7 +99,7 @@ fn checking_finds_newer_and_same_and_older() {
     let url = latest_url(API_BASE);
     assert_eq!(
         url,
-        "https://api.github.com/repos/majiayu000/mooring/releases/latest"
+        "https://api.github.com/repos/majiayu000/fibo/releases/latest"
     );
     assert!(
         matches!(check(&url, &v("0.1.0"), "arm64", &tools), Ok(Found::Newer(r)) if r.version == v("0.2.0"))

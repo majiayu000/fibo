@@ -1,6 +1,6 @@
 # Codex 启动图标验证
 
-关联 [issue #94](https://github.com/majiayu000/mooring/issues/94)。决定采用已有的进程身份显示图标，聊天关联和工作状态仍按各自证据判断。
+关联 [issue #94](https://github.com/majiayu000/fibo/issues/94)。决定采用已有的进程身份显示图标，聊天关联和工作状态仍按各自证据判断。
 
 ## 同场景原生截图
 

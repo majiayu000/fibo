@@ -1,5 +1,5 @@
 //! Frames on the machine's socket to the relay: JSON text frames, and binary frames
-//! `[kind][id length][id][payload]` for message bytes (alma-relay protocol 2).
+//! `[kind][id length][id][payload]` for message bytes (tunnel protocol v2+).
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -107,7 +107,7 @@ pub enum Frame {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
-    /// A phone made a plain HTTP request; this relay never sends one, alma-relay may.
+    /// A phone made a plain HTTP request; `mooring-relay` never sends one, another relay may.
     Hreq {
         id: String,
     },

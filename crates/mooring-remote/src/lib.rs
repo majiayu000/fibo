@@ -9,7 +9,7 @@
 //! - [`role`]: what a paired device may do.
 //! - [`link`]: the pairing link a QR code carries.
 //! - [`secure`]: the Noise channel a phone and a machine run, so a relay sees ciphertext.
-//! - [`wire`]: the frames between a machine and a relay (the alma-relay protocol).
+//! - [`wire`]: the frames between a machine and a relay (the tunnel protocol).
 //!
 //! `tests/vectors.rs` checks `vectors/v1.json`: fixed inputs and the exact bytes they
 //! must produce, for an implementation in another language to check itself against.

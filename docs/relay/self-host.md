@@ -7,7 +7,7 @@
 ## 1. 启动中继
 
 ```sh
-git clone https://github.com/majiayu000/mooring && cd mooring
+git clone https://github.com/majiayu000/fibo && cd fibo
 docker build -f crates/mooring-relay/Dockerfile -t mooring-relay .
 docker run -d --name mooring-relay --restart unless-stopped \
   --log-opt max-size=20m --log-opt max-file=10 \
@@ -52,28 +52,28 @@ location / {
 
 检查：`curl https://relay.example.com/healthz` 应该返回 `"ok":true`，以及 `"protocol":3` 或更高。
 
-## 3. 在 Mooring 里填两个值
+## 3. 在 Fibo 里填两个值
 
-打开 设置与记录 › 手机与远程：
+打开 设置 › 手机与远程：
 
 | 设置 | 填什么 |
 |---|---|
 | 中继地址 | `https://relay.example.com` |
 | 中继密钥 | 第 1 步记下的注册密钥 |
 
-状态变成「中继已连上」后，点配对，用手机扫二维码。命令行也可以：`mooring remote --enable --relay https://relay.example.com --relay-key <密钥>`。
+状态变成「中继已连上」后，点配对，用手机扫二维码。命令行也可以：`fibo remote --enable --relay https://relay.example.com --relay-key <密钥>`。
 
 ## 升级
 
 ```sh
-cd mooring && git pull
+cd fibo && git pull
 docker build -f crates/mooring-relay/Dockerfile -t mooring-relay .
 docker rm -f mooring-relay   # 然后用第 1 步同样的 docker run 启动，填同一个密钥
 ```
 
 中继不存东西，重启后电脑会自己连回来，已配对的手机不受影响。
 
-这台 Mooring 需要协议 3 以上的中继。中继太旧时，App 会显示「没连上：中继版本太旧（协议 N，这台 Mooring 要 3 以上）：请升级中继」，并且不再重试。升级中继后，在设置里把「让手机连过来」关掉再打开。中继的版本可以用 `docker exec mooring-relay mooring-relay --version` 查看。
+这台 Fibo 需要协议 3 以上的中继。中继太旧时，App 会显示「没连上：中继版本太旧（协议 N，这台 Fibo 要 3 以上）：请升级中继」，并且不再重试。升级中继后，在设置里把「让手机连过来」关掉再打开。中继的版本可以用 `docker exec mooring-relay mooring-relay --version` 查看。
 
 ## 中继能看到什么
 

@@ -44,7 +44,7 @@ pub use sign::*;
 pub const API: u32 = 1;
 /// This repository's plugins, as published on GitHub.
 pub const DEFAULT_REMOTE: &str =
-    "https://raw.githubusercontent.com/majiayu000/mooring/main/plugins/index.json";
+    "https://raw.githubusercontent.com/majiayu000/fibo/main/plugins/index.json";
 /// No plugin file is this large; a bigger one is refused, not written.
 const MAX_FILE: u64 = 16 << 20;
 /// The public halves of the keys this repository's catalog may be signed with. The private

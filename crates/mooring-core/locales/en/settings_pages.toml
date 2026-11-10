@@ -88,7 +88,7 @@
 [remote]
 "先填中继地址" = "Enter a relay address first"
 "这台 Mac 一直挂在中继上，配对过的手机在哪都能连过来；关掉后手机暂时连不上，配对还在。" = "This Mac stays connected to the relay, so paired phones can reach it from anywhere. Turned off, phones can't connect for now, but stay paired."
-"自己部署的 mooring-relay，或部署好的 alma-relay" = "Your own mooring-relay, or a deployed alma-relay"
+"自己部署的 mooring-relay 地址（见 docs/relay/self-host.md）" = "Your self-hosted mooring-relay URL (see docs/relay/self-host.md)"
 "已保存，不显示；要换就填新的" = "Saved and hidden; enter a new one to replace it"
 "中继要求注册密钥时才填" = "Only needed when the relay requires a registration key"
 "改过的地址或密钥" = "Changed address or key"
