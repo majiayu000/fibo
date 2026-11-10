@@ -4,19 +4,22 @@
 // wrote while a computer was away waits under 「未发送」. Chips under the title show one space
 // alone; spaces put aside on the computer are named at the foot, each can be taken back.
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { type ComponentRef, type ReactElement, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BlurTargetView } from 'expo-blur';
 import { approve, deny, oops, settle } from '@/actions';
 import { tk, tr } from '@/i18n';
 import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
 import { setInboxView, useInboxView } from '@/store/inboxView';
 import { drop, useOutbox } from '@/store/outbox';
+import { BlurTop } from '@/ui/blurtop';
 import { SpaceMark } from '@/ui/icons';
 import { Btn, Group, Round, TITLE_WEIGHT, Wide, mono, useTop } from '@/ui/kit';
 import { QuietSpaces } from '@/ui/quietspaces';
 import { Row, rowStyles, spaceName } from '@/ui/row';
 import { SpaceChips } from '@/ui/spacechips';
+import { StickyBelow, StickyOffset } from '@/ui/sticky';
 import { chipSpace } from '@/ui/spaces';
 import { FiboTitle } from '@/ui/fibomark';
 import { getDraft, setDraft } from '@/store/draft';
@@ -159,6 +162,9 @@ export default function Inbox() {
   const offline = offlineRows(machines);
   const runningOpen = view.running !== false;
   const [allRunning, setAllRunning] = useState(false);
+  // The header floats over the list; until it is measured, roughly its height on a phone.
+  const [headerH, setHeaderH] = useState(top + 112);
+  const blurTarget = useRef<ComponentRef<typeof View> | null>(null);
   const [undo, setUndo] = useState<{ text: string; back: () => void } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(undoTimer.current), []);
@@ -176,146 +182,176 @@ export default function Inbox() {
     return { m, c };
   };
 
+  // The list as one flat array, so the labels that stick are counted where ScrollView counts
+  // them (it flattens its children and drops what is false).
+  const nodes: ReactElement[] = [];
+  const sticky: number[] = [];
+  const stick = (key: string, el: ReactElement) => {
+    // The web build sticks with CSS and ignores StickyHeaderComponent, so the label says where.
+    if (Platform.OS !== 'web') sticky.push(nodes.length);
+    nodes.push(
+      <View key={key} style={[{ backgroundColor: t.bg }, Platform.OS === 'web' && ({ position: 'sticky', top: headerH, zIndex: 10 } as never)]}>
+        {el}
+      </View>,
+    );
+  };
+  if (loaded && machines.length === 0)
+    nodes.push(
+      <View key="empty" style={s.empty}>
+        <Text style={[s.emptyTitle, { color: t.text }]}>{tr('还没有配对电脑')}</Text>
+        <Text style={[s.emptyText, { color: t.dim }]}>{tr('在电脑的 Fibo 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。')}</Text>
+        <View style={{ alignSelf: 'stretch' }}>
+          <Wide label={tr('扫码配对')} onPress={() => router.push('/pair')} />
+        </View>
+      </View>,
+    );
+  // What asks you first: a computer coming and going, or a group opening, pushes nothing you could tap.
+  pinned.forEach((i, n) => nodes.push(<Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={String(n)} named={named} boxed onSettle={onSettle} />));
+  offline.forEach((m) => nodes.push(<Offline key={m.id} m={m} t={t} />));
+  if (shelf.filter !== null && shelf.elsewhere > 0)
+    nodes.push(
+      <Pressable key="elsewhere" accessibilityRole="button" onPress={() => setInboxView({ space: null })} style={({ pressed }) => [s.elsewhere, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
+        <Text style={{ fontSize: 14, color: t.wait, flex: 1 }}>{tr('其他空间还有 {n} 件等你', { n: shelf.elsewhere })}</Text>
+        <Text style={{ fontSize: 13, color: t.dim }}>{tr('看全部')}</Text>
+      </Pressable>,
+    );
+  ahead.forEach((i) => nodes.push(<Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />));
+  // 等你验收 above 在跑: it wants you to look, 在跑 wants nothing (2026-11-08, docs/decisions/2026-11-08-review-above-running.md).
+  if (review.length > 0) {
+    stick('g-review', <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />);
+    if (view.review) review.forEach((i) => nodes.push(<Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />));
+  }
+  if (running.length > 0) {
+    stick('g-running', <Group label={foldLabel(running)} color={statusColor(running[0].c, t)} open={runningOpen} onPress={() => setInboxView({ running: !runningOpen })} />);
+    if (runningOpen) runningShown(running, allRunning).forEach((i) => nodes.push(<Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />));
+    if (runningOpen && !allRunning && running.length > runningShown(running, false).length)
+      nodes.push(
+        <Pressable key="more-running" accessibilityRole="button" onPress={() => setAllRunning(true)} style={({ pressed }) => [s.more, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
+          <Text style={{ fontSize: 14, color: t.dim }}>{tr('看全部 {n} 个', { n: running.length })}</Text>
+        </Pressable>,
+      );
+  }
+  behind.forEach((i) => nodes.push(<Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />));
+  if (loaded && machines.some((m) => m.status === 'online') && shelf.empty)
+    nodes.push(
+      <Text key="nothing" style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>
+        {shelf.filter === null ? tr('没有要处理的事') : tr('这个空间没有要处理的事')}
+      </Text>,
+    );
+  if (unsent.length > 0) stick('g-unsent', <Group label={tr('未发送')} />);
+  unsent.forEach((u, i) => {
+    const { m, c } = where(u.machine, u.terminal);
+    const space = m && c ? spaceName(m, c) : '';
+    nodes.push(
+      <Swipe key={u.id} left={{ label: tr('删除'), color: t.errBg, fg: t.err, run: () => drop(u.id) }}>
+        <Pressable
+          onPress={() => router.push({ pathname: '/chat', params: { machine: u.machine, terminal: u.terminal } })}
+          style={[s.unsent, { borderColor: t.sep, backgroundColor: t.bg }, i === unsent.length - 1 && { borderBottomWidth: 0 }]}
+        >
+          <View style={rowStyles.l1}>
+            <SpaceMark name={space || '?'} id={c?.space || space || u.machine} />
+            <Text numberOfLines={1} style={[rowStyles.where, { color: t.dim }]}>
+              {[space, m?.name].filter(Boolean).join(' · ') || tr('电脑')}
+            </Text>
+            <Text style={[rowStyles.state, { color: u.error ? t.err : t.dim }]}>{u.error ? tr('没发出去') : tr('重连后发送')}</Text>
+          </View>
+          <Text numberOfLines={2} style={[rowStyles.title, { color: t.dim }]}>
+            {u.text}
+          </Text>
+          {!!u.error && <Text style={{ color: t.err, fontSize: 12 }}>{u.error}</Text>}
+        </Pressable>
+      </Swipe>,
+    );
+  });
+  if (later.length > 0) {
+    stick('g-later', <Group label={tr('稍后提醒 · {n}', { n: later.length })} open={showLater} onPress={() => setShowLater(!showLater)} />);
+    if (showLater)
+      later.forEach(({ m, c }) =>
+        nodes.push(
+          <Swipe key={`${m.id}/${c.id}`} left={{ label: tr('已处理'), color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}>
+            <Row m={m} c={c} named={named} dim right={{ text: tr('稍后提醒') }} onPress={() => open(m, c)} />
+          </Swipe>,
+        ),
+      );
+  }
+  if (done.length > 0) {
+    stick('g-done', <Group label={tr('已处理 · {n}', { n: done.length })} open={showDone} onPress={() => setShowDone(!showDone)} />);
+    if (showDone)
+      done.forEach(({ m, c }) =>
+        nodes.push(
+          <Swipe key={`${m.id}/${c.id}`} right={{ label: tr('放回收件箱'), color: t.well, fg: t.text, run: () => run(settle(m.id, c, 'open')) }}>
+            <Row m={m} c={c} named={named} dim right={{ text: tr('已处理') }} onPress={() => open(m, c)} />
+          </Swipe>,
+        ),
+      );
+  }
+  nodes.push(<QuietSpaces key="quiet" machines={machines} open={view.quiet} onToggle={() => setInboxView({ quiet: !view.quiet })} named={named} />);
+
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <View style={[s.hd, { paddingTop: top + 9 }]}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <FiboTitle color={t.text} />
-          {/* A computer away or refused says so here; otherwise the line says what is going on. */}
-          {machines.length > 0 && (line.alert || machines.some((m) => m.status !== 'online')) ? (
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/me')} style={s.line}>
-              <View style={[s.dotSmall, { backgroundColor: machines.some((m) => m.status === 'online') ? t.ok : t.dim }]} />
-              <Text numberOfLines={1} style={{ fontSize: 13, color: line.alert ? t.err : t.dim, flexShrink: 1 }}>
-                {line.text}
-              </Text>
-            </Pressable>
-          ) : machines.length > 0 ? (
-            <View style={s.line}>
-              <View style={[s.dotSmall, { backgroundColor: now.urgent ? t.wait : t.ok }]} />
-              <Text numberOfLines={1} style={{ fontSize: 13, color: now.urgent ? t.wait : t.dim, flexShrink: 1 }}>
-                {now.text}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-        <Round icon="search" label={tr('搜索')} onPress={() => router.push('/search')} />
-        <Round icon="plus" label={tr('新任务')} onPress={() => newTask(machines, shelf.filter)} />
-      </View>
-      <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
       <View style={{ flex: 1 }} {...hold.touch}>
-      <ScrollView
-        contentContainerStyle={{ paddingTop: 4, paddingBottom: undo ? 72 : 16 }}
-        onScroll={hold.onScroll}
-        scrollEventThrottle={32}
-        keyboardShouldPersistTaps="handled"
-      >
-        {loaded && machines.length === 0 && (
-          <View style={s.empty}>
-            <Text style={[s.emptyTitle, { color: t.text }]}>{tr('还没有配对电脑')}</Text>
-            <Text style={[s.emptyText, { color: t.dim }]}>
-              {tr('在电脑的 Fibo 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。')}
-            </Text>
-            <View style={{ alignSelf: 'stretch' }}>
-              <Wide label={tr('扫码配对')} onPress={() => router.push('/pair')} />
+        <BlurTargetView ref={blurTarget} style={{ flex: 1, backgroundColor: t.bg }}>
+          <StickyOffset value={headerH}>
+            <ScrollView
+              contentContainerStyle={{ paddingTop: headerH + 4, paddingBottom: undo ? 72 : 16 }}
+              scrollIndicatorInsets={{ top: headerH }}
+              onScroll={hold.onScroll}
+              scrollEventThrottle={32}
+              keyboardShouldPersistTaps="handled"
+              stickyHeaderIndices={sticky}
+              StickyHeaderComponent={StickyBelow as never}
+            >
+              {nodes}
+            </ScrollView>
+          </StickyOffset>
+        </BlurTargetView>
+        {/* Over the list, after it: a blur drawn before the list it blurs does not update. */}
+        <View style={s.float} onLayout={(e) => setHeaderH(Math.round(e.nativeEvent.layout.height))}>
+          <BlurTop target={blurTarget} height={headerH} />
+          <View style={[s.hd, { paddingTop: top + 9 }]}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <FiboTitle color={t.text} />
+              {/* A computer away or refused says so here; otherwise the line says what is going on. */}
+              {machines.length > 0 && (line.alert || machines.some((m) => m.status !== 'online')) ? (
+                <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/me')} style={s.line}>
+                  <View style={[s.dotSmall, { backgroundColor: machines.some((m) => m.status === 'online') ? t.ok : t.dim }]} />
+                  <Text numberOfLines={1} style={{ fontSize: 13, color: line.alert ? t.err : t.dim, flexShrink: 1 }}>
+                    {line.text}
+                  </Text>
+                </Pressable>
+              ) : machines.length > 0 ? (
+                <View style={s.line}>
+                  <View style={[s.dotSmall, { backgroundColor: now.urgent ? t.wait : t.ok }]} />
+                  <Text numberOfLines={1} style={{ fontSize: 13, color: now.urgent ? t.wait : t.dim, flexShrink: 1 }}>
+                    {now.text}
+                  </Text>
+                </View>
+              ) : null}
             </View>
+            <Round icon="search" label={tr('搜索')} onPress={() => router.push('/search')} />
+            <Round icon="plus" label={tr('新任务')} onPress={() => newTask(machines, shelf.filter)} />
+          </View>
+          <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
+        </View>
+        {undo && (
+          <View style={[s.undo, { backgroundColor: t.act }]}>
+            <Text numberOfLines={1} style={{ fontSize: 14, color: t.onAct, flexShrink: 1 }}>
+              {undo.text}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => {
+                undo.back();
+                clearTimeout(undoTimer.current);
+                setUndo(null);
+              }}
+              style={s.undoGo}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '600', color: t.onAct }}>{tr('撤销')}</Text>
+            </Pressable>
           </View>
         )}
-        {/* What asks you first: a computer coming and going, or a group opening, pushes nothing you could tap. */}
-        {pinned.map((i, n) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={String(n)} named={named} boxed onSettle={onSettle} />
-        ))}
-        {offline.map((m) => (
-          <Offline key={m.id} m={m} t={t} />
-        ))}
-        {shelf.filter !== null && shelf.elsewhere > 0 && (
-          <Pressable accessibilityRole="button" onPress={() => setInboxView({ space: null })} style={({ pressed }) => [s.elsewhere, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
-            <Text style={{ fontSize: 14, color: t.wait, flex: 1 }}>{tr('其他空间还有 {n} 件等你', { n: shelf.elsewhere })}</Text>
-            <Text style={{ fontSize: 13, color: t.dim }}>{tr('看全部')}</Text>
-          </Pressable>
-        )}
-        {ahead.map((i) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
-        ))}
-        {/* 等你验收 above 在跑: it wants you to look, 在跑 wants nothing (2026-11-08, docs/decisions/2026-11-08-review-above-running.md). */}
-        {review.length > 0 && (
-          <Group label={foldLabel(review)} color={statusColor(review[0].c, t)} open={view.review} onPress={() => setInboxView({ review: !view.review })} />
-        )}
-        {view.review && review.map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
-        {running.length > 0 && (
-          <Group label={foldLabel(running)} color={statusColor(running[0].c, t)} open={runningOpen} onPress={() => setInboxView({ running: !runningOpen })} />
-        )}
-        {runningOpen && runningShown(running, allRunning).map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
-        {runningOpen && !allRunning && running.length > runningShown(running, false).length && (
-          <Pressable accessibilityRole="button" onPress={() => setAllRunning(true)} style={({ pressed }) => [s.more, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
-            <Text style={{ fontSize: 14, color: t.dim }}>{tr('看全部 {n} 个', { n: running.length })}</Text>
-          </Pressable>
-        )}
-        {behind.map((i) => (
-          <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
-        ))}
-        {loaded && machines.some((m) => m.status === 'online') && shelf.empty && (
-          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>{shelf.filter === null ? tr('没有要处理的事') : tr('这个空间没有要处理的事')}</Text>
-        )}
-        {unsent.length > 0 && <Group label={tr('未发送')} />}
-        {unsent.map((u, i) => {
-          const { m, c } = where(u.machine, u.terminal);
-          const space = m && c ? spaceName(m, c) : '';
-          return (
-            <Swipe key={u.id} left={{ label: tr('删除'), color: t.errBg, fg: t.err, run: () => drop(u.id) }}>
-              <Pressable
-                onPress={() => router.push({ pathname: '/chat', params: { machine: u.machine, terminal: u.terminal } })}
-                style={[s.unsent, { borderColor: t.sep, backgroundColor: t.bg }, i === unsent.length - 1 && { borderBottomWidth: 0 }]}
-              >
-                <View style={rowStyles.l1}>
-                  <SpaceMark name={space || '?'} id={c?.space || space || u.machine} />
-                  <Text numberOfLines={1} style={[rowStyles.where, { color: t.dim }]}>
-                    {[space, m?.name].filter(Boolean).join(' · ') || tr('电脑')}
-                  </Text>
-                  <Text style={[rowStyles.state, { color: u.error ? t.err : t.dim }]}>{u.error ? tr('没发出去') : tr('重连后发送')}</Text>
-                </View>
-                <Text numberOfLines={2} style={[rowStyles.title, { color: t.dim }]}>
-                  {u.text}
-                </Text>
-                {!!u.error && <Text style={{ color: t.err, fontSize: 12 }}>{u.error}</Text>}
-              </Pressable>
-            </Swipe>
-          );
-        })}
-        {later.length > 0 && <Group label={tr('稍后提醒 · {n}', { n: later.length })} open={showLater} onPress={() => setShowLater(!showLater)} />}
-        {showLater &&
-          later.map(({ m, c }) => (
-            <Swipe key={`${m.id}/${c.id}`} left={{ label: tr('已处理'), color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}>
-              <Row m={m} c={c} named={named} dim right={{ text: tr('稍后提醒') }} onPress={() => open(m, c)} />
-            </Swipe>
-          ))}
-        {done.length > 0 && <Group label={tr('已处理 · {n}', { n: done.length })} open={showDone} onPress={() => setShowDone(!showDone)} />}
-        {showDone &&
-          done.map(({ m, c }) => (
-            <Swipe key={`${m.id}/${c.id}`} right={{ label: tr('放回收件箱'), color: t.well, fg: t.text, run: () => run(settle(m.id, c, 'open')) }}>
-              <Row m={m} c={c} named={named} dim right={{ text: tr('已处理') }} onPress={() => open(m, c)} />
-            </Swipe>
-          ))}
-        <QuietSpaces machines={machines} open={view.quiet} onToggle={() => setInboxView({ quiet: !view.quiet })} named={named} />
-      </ScrollView>
-      {undo && (
-        <View style={[s.undo, { backgroundColor: t.act }]}>
-          <Text numberOfLines={1} style={{ fontSize: 14, color: t.onAct, flexShrink: 1 }}>
-            {undo.text}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => {
-              undo.back();
-              clearTimeout(undoTimer.current);
-              setUndo(null);
-            }}
-            style={s.undoGo}
-          >
-            <Text style={{ fontSize: 14, fontWeight: '600', color: t.onAct }}>{tr('撤销')}</Text>
-          </Pressable>
-        </View>
-      )}
       </View>
       <TabBar on="home" />
     </View>
@@ -331,6 +367,7 @@ function newTask(machines: Machine[], filter: string | null) {
 }
 
 const s = StyleSheet.create({
+  float: { position: 'absolute', top: 0, left: 0, right: 0 },
   hd: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
   elsewhere: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 18, borderBottomWidth: 1 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
