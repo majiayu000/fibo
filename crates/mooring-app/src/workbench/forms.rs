@@ -218,12 +218,19 @@ impl Workbench {
             .map(|a| a.executable().to_owned())
             .collect();
         cx.spawn(async move |this, cx| {
+            let asked = names.clone();
             let found = cx
                 .background_executor()
                 .spawn(async move { login_commands(&names) })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                this.tasks.found = found;
+                let now: Vec<String> = Agent::all()
+                    .into_iter()
+                    .map(|a| a.executable().to_owned())
+                    .collect();
+                if this.tasks.probe_answered(&asked, &now, found) {
+                    this.probe_agents(cx);
+                }
                 cx.notify();
             });
         })

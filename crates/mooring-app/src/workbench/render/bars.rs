@@ -325,7 +325,7 @@ impl Workbench {
 }
 
 /// `widgets::button` with a CLI's mark before its words.
-fn marked_button(
+pub(in crate::workbench) fn marked_button(
     id: String,
     text: String,
     mark: Option<gpui::AnyElement>,

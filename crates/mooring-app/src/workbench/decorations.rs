@@ -50,6 +50,10 @@ impl Workbench {
         forget();
         self.sidebar.wasm = Default::default();
         self.tasks.found = None;
+        // The welcome page lists what the shell finds and nothing else asks for it there.
+        if self.first_run.on {
+            self.probe_agents(cx);
+        }
         cx.refresh_windows();
     }
     /// Plugins changed from a terminal or another window: the host said so, read them here.

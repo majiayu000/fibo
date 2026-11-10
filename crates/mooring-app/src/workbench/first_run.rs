@@ -52,6 +52,51 @@ fn install_hint(agent: Agent) -> Option<&'static str> {
     }
 }
 
+/// What the welcome page offers to start.
+#[derive(Debug, Default, PartialEq)]
+pub(super) struct Offer {
+    /// The login shell is being asked: nothing is listed until it answers, so the page
+    /// never shows every CLI there is and then takes most of them away.
+    pub(super) looking: bool,
+    /// Started with one click, `first` at the front when it is among them.
+    pub(super) start: Vec<Agent>,
+    /// Not found, with an install command to show.
+    pub(super) missing: Vec<Agent>,
+}
+/// Found by the login shell: those. It could not tell (no zsh or bash, or it hung): the two
+/// a stranger most likely wants, offered anyway. CLIs without an install command are only
+/// ever listed when found.
+pub(super) fn offered(
+    all: Vec<Agent>,
+    found: Option<&HashSet<String>>,
+    probing: bool,
+    first: Agent,
+) -> Offer {
+    let mut offer = Offer::default();
+    match found {
+        Some(found) => {
+            for agent in all {
+                if found.contains(agent.executable()) {
+                    offer.start.push(agent);
+                } else if install_hint(agent).is_some() {
+                    offer.missing.push(agent);
+                }
+            }
+        }
+        None if probing => offer.looking = true,
+        None => {
+            offer.start = all
+                .into_iter()
+                .filter(|a| install_hint(*a).is_some())
+                .collect()
+        }
+    }
+    if let Some(at) = offer.start.iter().position(|a| *a == first) {
+        offer.start[..=at].rotate_right(1);
+    }
+    offer
+}
+
 impl Workbench {
     /// Asks the login shell for the Agent CLIs and `mooring hooks status` for the hooks.
     pub(super) fn start_first_run(&mut self, cx: &mut Context<Self>) {
@@ -188,52 +233,65 @@ impl Workbench {
                     ),
             )
     }
-    /// One row per CLI: started here when the login shell finds it, the install command when
-    /// it does not. CLIs beyond Claude Code and Codex are listed only when found.
+    /// The Agents to start, laid out as an empty tab lays them out: one solid button for
+    /// the first, the others as quiet links that wrap, never a column of buttons.
     fn first_run_agents(&self, cx: &Context<Self>) -> gpui::Div {
-        let found = self.tasks.found.as_ref();
-        let probing = self.tasks.probing;
-        let mut rows = div().flex().flex_col().gap(px(T::S6));
-        for agent in Agent::all() {
-            let hint = install_hint(agent);
-            let here = found.map(|f| f.contains(agent.executable()));
-            if here == Some(false) && hint.is_none() {
-                continue;
-            }
-            // Asked and not answered (no zsh or bash, or it hung): offer it anyway.
-            if found.is_none() && !probing && hint.is_none() {
-                continue;
-            }
-            let start = button(
-                gpui::SharedString::from(format!("first-run-{}", agent.executable())),
-                t!("启动 {name}", name = agent.name()),
-            )
-            .px(px(T::S16))
-            .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(agent, cx)));
-            let note: Option<String> = match here {
-                Some(true) => None,
-                Some(false) => Some(t!(
-                    "没在登录 shell 的 PATH 里找到 {executable}。安装：{hint}",
-                    executable = agent.executable(),
-                    hint = hint.unwrap_or_default()
-                )),
-                None if probing => Some(t!("正在查找…").to_owned()),
-                None => None,
-            };
-            rows = rows.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(T::S12))
-                    .child(if here == Some(false) {
-                        start.opacity(0.5).into_any_element()
-                    } else {
-                        super::overview::solid(start).into_any_element()
-                    })
-                    .when_some(note, |d, n| d.child(label(n).flex_1().min_w_0())),
+        let offer = offered(
+            Agent::all(),
+            self.tasks.found.as_ref(),
+            self.tasks.probing,
+            self.first_agent(),
+        );
+        let mark = |agent: Agent, ink| super::board::agent_mark_in(agent, ink, T::SMALL);
+        let id = |agent: Agent| format!("first-run-{}", agent.executable());
+        let mut column = div().flex().flex_col().items_start().gap(px(T::S6));
+        if offer.looking {
+            column = column.child(label(t!("正在查找…")));
+        }
+        let mut start = offer.start.into_iter();
+        if let Some(first) = start.next() {
+            column = column.child(
+                super::overview::solid(super::render::marked_button(
+                    id(first),
+                    t!("启动 {name}", name = first.name()),
+                    Some(mark(first, T::color(T::on_accent()))),
+                ))
+                .px(px(T::S16))
+                .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(first, cx))),
             );
         }
-        rows
+        let others: Vec<_> = start
+            .map(|agent| {
+                super::render::marked_button(
+                    id(agent),
+                    agent.name().to_owned(),
+                    Some(mark(agent, T::color(T::link()))),
+                )
+                .px(px(T::S4))
+                .text_color(T::color(T::link()))
+                .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(agent, cx)))
+            })
+            .collect();
+        if !others.is_empty() {
+            column = column.child(
+                div()
+                    .w_full()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_x(px(T::S12))
+                    .gap_y(px(T::S4))
+                    .children(others),
+            );
+        }
+        for agent in offer.missing {
+            column = column.child(label(t!(
+                "没在登录 shell 的 PATH 里找到 {executable}。安装：{hint}",
+                executable = agent.executable(),
+                hint = install_hint(agent).unwrap_or_default()
+            )));
+        }
+        column
     }
     /// The hooks: which file, what they do, how to take them out, and one button.
     fn first_run_hooks_view(&self, cx: &Context<Self>) -> Option<gpui::Div> {
@@ -353,6 +411,60 @@ mod tests {
             s.terminal = None;
         }
         assert!(wanted(&used, Some(Ok(false))));
+    }
+
+    fn names(agents: &[Agent]) -> Vec<&'static str> {
+        agents.iter().map(|a| a.executable()).collect()
+    }
+    fn set(names: &[&str]) -> HashSet<String> {
+        names.iter().map(|n| (*n).to_owned()).collect()
+    }
+
+    #[test]
+    fn only_what_the_shell_finds_is_offered_and_nothing_while_it_is_asked() {
+        let all = Agent::all();
+        let first = Agent::from_executable("codex").unwrap();
+        // Being asked: one 「正在查找…」, not every CLI there is.
+        let asking = offered(all.clone(), None, true, first);
+        assert!(asking.looking);
+        assert!(asking.start.is_empty() && asking.missing.is_empty());
+        // Answered: the found ones, the one used last in front; Claude Code is missing and
+        // has an install command, the other missing ones are not mentioned.
+        let found = set(&["codex", "gemini"]);
+        let answered = offered(all.clone(), Some(&found), false, first);
+        assert!(!answered.looking);
+        assert_eq!(names(&answered.start)[0], "codex");
+        assert_eq!(answered.start.len(), 2);
+        assert_eq!(names(&answered.missing), ["claude"]);
+        // It could not tell: the two with install commands, offered anyway.
+        let unknown = offered(all, None, false, first);
+        assert!(!unknown.looking && unknown.missing.is_empty());
+        assert_eq!(names(&unknown.start), ["codex", "claude"]);
+    }
+
+    #[test]
+    fn an_answer_ends_the_asking_so_the_page_is_never_left_looking() {
+        let asked = vec!["claude".to_owned(), "codex".to_owned()];
+        // No answer (no zsh or bash, or it hung): the asking is still over.
+        let mut tasks = super::super::tasks::TaskUi {
+            probing: true,
+            ..Default::default()
+        };
+        assert!(!tasks.probe_answered(&asked, &asked, None));
+        assert!(!tasks.probing && tasks.found.is_none());
+        // Plugins were read again meanwhile and declare another CLI: this answer is for
+        // the old list, so it is dropped and the shell is asked again.
+        tasks.probing = true;
+        let now = vec![
+            "claude".to_owned(),
+            "codex".to_owned(),
+            "opencode".to_owned(),
+        ];
+        assert!(tasks.probe_answered(&asked, &now, Some(set(&["claude"]))));
+        assert!(!tasks.probing && tasks.found.is_none());
+        tasks.probing = true;
+        assert!(!tasks.probe_answered(&now, &now, Some(set(&["claude"]))));
+        assert_eq!(tasks.found, Some(set(&["claude"])));
     }
 
     #[test]
