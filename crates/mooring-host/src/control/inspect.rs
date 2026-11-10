@@ -82,25 +82,22 @@ pub(super) fn list(a: Args) -> io::Result<()> {
         );
         return Ok(());
     }
-    // Full ids: terminals opened by one app share a long prefix, so a cut-off id names none.
-    let id_width = rows.iter().map(|r| r.0.id.len()).max().unwrap_or(0);
-    let tab_width = rows
-        .iter()
-        .map(|r| r.3.chars().count().max(1))
-        .max()
-        .unwrap_or(1);
-    for (t, s, phase, tab) in rows {
-        let agent = s.map_or_else(|| "-".into(), |s| agent_label(s.runtime));
-        let tab = if tab.is_empty() { "-".to_owned() } else { tab };
-        let pad = " ".repeat(tab_width - tab.chars().count());
-        println!(
-            "{:<id_width$}  {:<6}  {:<7}  {tab}{pad}  {}",
-            t.id,
-            agent,
-            phase.name(),
-            w.terminal_cwd(t)
-        );
-    }
+    let lines = rows
+        .into_iter()
+        .map(|(t, s, _, tab)| super::list_text::Line {
+            id: t.id.clone(),
+            agent: s.map(|s| agent_label(s.runtime)),
+            status: status(&w, &t.id),
+            title: tab,
+            cwd: w.terminal_cwd(t).to_string(),
+        })
+        .collect();
+    let home = std::env::var("HOME").unwrap_or_default();
+    let color = {
+        use std::io::IsTerminal;
+        std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+    };
+    print!("{}", super::list_text::render(lines, &home, color));
     Ok(())
 }
 pub(super) fn read(a: Args) -> io::Result<()> {
