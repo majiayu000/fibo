@@ -4,7 +4,9 @@ use super::*;
 /// The most a terminal's text opened in an editor holds: the host's own read limit.
 const SCROLLBACK_ROWS: usize = 10_000;
 mod drag;
+mod resize;
 use drag::DropState;
+use resize::SplitDrag;
 mod changes_files;
 mod changes_panel;
 mod changes_rows;
@@ -23,7 +25,7 @@ pub(super) struct LayoutState {
     pub(super) split_target: Option<(String, Axis)>,
     /// A plugin action waiting for its new pane: the command and the directory to run it in.
     pub(super) pending_command: Option<(String, String)>,
-    pub(super) drag: Option<Vec<bool>>,
+    pub(super) drag: Option<SplitDrag>,
     pub(super) split_bounds: HashMap<Vec<bool>, gpui::Bounds<gpui::Pixels>>,
     /// Where a pane or tab being dragged would land.
     pub(super) drop: DropState,
@@ -160,16 +162,16 @@ impl Workbench {
                                     .rounded_full()
                                     .when(down, |d| d.h(px(T::S2)).w(px(T::S20 * 2.)))
                                     .when(!down, |d| d.w(px(T::S2)).h(px(T::S20 * 2.)))
-                                    .when(self.layout.drag.as_ref() == Some(&path), |d| {
-                                        d.bg(T::color(T::focus()))
-                                    })
+                                    .when(
+                                        self.layout.drag.as_ref().is_some_and(|d| d.path == path),
+                                        |d| d.bg(T::color(T::focus())),
+                                    )
                                     .group_hover("divider", |d| d.bg(T::color(T::focus()))),
                             )
                             .on_mouse_down(
                                 gpui::MouseButton::Left,
-                                cx.listener(move |this, _, _, cx| {
-                                    // Its resize is a request, which waits behind a busy one.
-                                    this.layout.drag = Some(drag_path.clone());
+                                cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                    this.begin_resize(drag_path.clone(), event.position);
                                     this.layout.menu = None;
                                     cx.stop_propagation();
                                     cx.notify();
@@ -196,35 +198,25 @@ impl Workbench {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(path) = &self.layout.drag else {
+        let Some(drag) = &self.layout.drag else {
             return;
         };
-        let Some(bounds) = self.layout.split_bounds.get(path) else {
+        if self.nav.tab.as_ref() != Some(&drag.tab) {
+            self.layout.drag = None;
+            return;
+        }
+        let Some(Layout::Split { ratio, .. }) = drag.split(&mut self.workspace) else {
             return;
         };
-        let Some(Layout::Split { axis, ratio, .. }) = self
-            .workspace
-            .tabs
-            .iter_mut()
-            .find(|t| Some(&t.id) == self.nav.tab.as_ref())
-            .and_then(|t| t.layout.as_mut())
-            .and_then(|l| l.at_mut(path))
-        else {
-            return;
-        };
-        let fraction = if *axis == Axis::Right {
-            (event.position.x - bounds.left()) / bounds.size.width
-        } else {
-            (event.position.y - bounds.top()) / bounds.size.height
-        };
-        *ratio = (fraction.clamp(0.05, 0.95) * 10000.).round() as u16;
+        *ratio = drag.ratio_at(event.position);
         cx.notify();
     }
     pub(super) fn finish_drag(&mut self, cx: &mut Context<Self>) {
         self.layout.drop = DropState::default();
-        let (Some(path), Some(tab)) = (self.layout.drag.take(), self.nav.tab.clone()) else {
+        let Some(drag) = self.layout.drag.take() else {
             return;
         };
+        let (path, tab) = (drag.path, drag.tab);
         let at = (self.workspace.tabs.iter_mut().find(|t| t.id == tab))
             .and_then(|t| t.layout.as_mut()?.at_mut(&path).cloned());
         if let Some(Layout::Split { axis, ratio, .. }) = at {

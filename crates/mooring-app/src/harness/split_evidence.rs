@@ -6,11 +6,17 @@ pub(super) fn start(
     cx: &mut App,
 ) {
     if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
-        && std::env::var_os("MOORING_SPLIT_EVIDENCE").is_some()
+        && (std::env::var_os("MOORING_SPLIT_EVIDENCE").is_some()
+            || std::env::var_os("MOORING_RESIZE_EVIDENCE").is_some())
     {
         let handle = *handle;
         cx.spawn(async move |cx| {
             cx.background_executor().timer(Duration::from_secs(2)).await;
+            if std::env::var_os("MOORING_RESIZE_EVIDENCE").is_some() {
+                resize_regression(handle, &directory, cx);
+                cx.update(|cx| cx.quit());
+                return;
+            }
             for name in ["single","nested","menu","eight"] {
                 handle.update(cx,|view,window,cx|{
                     if window.viewport_size().height < px(theme::Theme::WINDOW_HEIGHT) {window.toggle_simple_fullscreen();}
@@ -67,4 +73,105 @@ pub(super) fn start(
             cx.update(|cx|cx.quit());
         }).detach();
     }
+}
+
+fn resize_regression(
+    handle: WindowHandle<workbench::Workbench>,
+    out: &std::path::Path,
+    cx: &mut gpui::AsyncApp,
+) {
+    use super::pane_drag_evidence::{down, send};
+    use gpui::InputEvent;
+    use mooring_core::layout::Axis;
+    std::fs::create_dir_all(out).unwrap();
+    let original = handle
+        .update(cx, |v, _, _| v.visual_resize_workspace())
+        .unwrap();
+    let mut failures = vec![];
+    let draw = |cx: &mut gpui::AsyncApp| {
+        cx.update_window(handle.into(), |_, w, a| {
+            w.refresh();
+            w.draw(a).clear(a);
+        })
+        .unwrap();
+    };
+    let shot = |name: String, cx: &mut gpui::AsyncApp| {
+        cx.update_window(handle.into(), |_, w, _| {
+            w.render_to_image().unwrap().save(out.join(name)).unwrap();
+        })
+        .unwrap();
+    };
+    for (axis, nested) in [
+        (Axis::Down, false),
+        (Axis::Right, false),
+        (Axis::Down, true),
+    ] {
+        for grab in [1., 4., 7.] {
+            let path = handle
+                .update(cx, |v, _, a| {
+                    v.visual_resize_setup(original.clone(), axis, nested, a)
+                })
+                .unwrap();
+            draw(cx);
+            let stale = handle
+                .update(cx, |v, _, _| v.visual_resize_workspace())
+                .unwrap();
+            let (from, usable) = handle
+                .update(cx, |v, _, _| v.visual_resize_geometry(&path, axis, grab))
+                .unwrap();
+            let label = format!("{axis:?}-nested-{nested}-grab-{grab}");
+            shot(format!("{label}-before.png"), cx);
+            send(handle, cx, down(from));
+            for (step, delta) in [1., 20., 19., -1.].into_iter().enumerate() {
+                let position = from
+                    + match axis {
+                        Axis::Down => gpui::point(px(0.), px(delta)),
+                        Axis::Right => gpui::point(px(delta), px(0.)),
+                    };
+                send(
+                    handle,
+                    cx,
+                    gpui::MouseMoveEvent {
+                        position,
+                        pressed_button: Some(gpui::MouseButton::Left),
+                        modifiers: Default::default(),
+                    }
+                    .to_platform_input(),
+                );
+                let actual = handle
+                    .update(cx, |v, _, _| v.visual_resize_ratio(&path))
+                    .unwrap();
+                let expected = (8000. + px(delta) / usable * 10000.).round() as u16;
+                eprintln!("{label} step={step} delta={delta} actual={actual} expected={expected}");
+                if actual != expected {
+                    failures.push(format!("{label} step {step}: {actual} != {expected}"));
+                }
+                if step == 0 {
+                    shot(format!("{label}-moved.png"), cx);
+                }
+                handle
+                    .update(cx, |v, _, a| v.visual_resize_snapshot(stale.clone(), a))
+                    .unwrap();
+                draw(cx);
+                if handle
+                    .update(cx, |v, _, _| v.visual_resize_ratio(&path))
+                    .unwrap()
+                    != actual
+                {
+                    failures.push(format!("{label}: snapshot reset the divider"));
+                }
+            }
+        }
+    }
+    std::fs::write(
+        out.join("result.txt"),
+        if failures.is_empty() {
+            "PASS: both axes, nested split, three grab positions, reverse moves, incoming snapshots"
+                .into()
+        } else {
+            failures.join("\n")
+        },
+    )
+    .unwrap();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
