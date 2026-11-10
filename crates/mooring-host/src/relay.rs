@@ -21,6 +21,7 @@ use std::time::Duration;
 mod bridge;
 mod connect;
 mod live;
+mod status_text;
 
 use connect::stay_connected;
 use live::Live;
@@ -75,10 +76,14 @@ pub fn run(a: &Args) -> io::Result<()> {
         let Reply::Recognition(status) = host(a, Request::RecognitionStatus)? else {
             return Err(io::Error::other("unexpected reply"));
         };
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&status.remote).map_err(io::Error::other)?
-        );
+        if a.has("json") {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&status.remote).map_err(io::Error::other)?
+            );
+        } else {
+            print!("{}", status_text::render(&status.remote, devices::now()));
+        }
         return Ok(());
     }
     if let Some(name) = a.value("machine-name") {

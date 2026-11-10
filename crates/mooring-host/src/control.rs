@@ -141,7 +141,7 @@ fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩�
             "machine-name",
         ],
         switches: &[
-            "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report",
+            "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report", "json",
         ],
         usage: "\
 fibo remote --stdio [--role view|answer|full]     给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
@@ -155,7 +155,7 @@ fibo remote --pair --relay <中继地址> [--name 名字] [--role view|answer|fu
                                              加 --new-code 换掉机器码，已配对的手机全部失效
 fibo remote --enable --relay <中继地址> [--relay-key <密钥>] | --disable
                                              让后台一直挂在中继上（重启后也会自动连回去），或者断开；配对保留
-fibo remote --status                       中继连接状态、配对的手机、现在谁在线、在看哪个终端
+fibo remote --status [--json]              中继连接状态、配对的手机、现在谁在线、在看哪个终端
 fibo remote --kick <设备>                  立刻断开这台手机正连着的会话，配对保留
 fibo remote --devices                      列出配对过的手机、权限和最近连接时间；操作记在运行目录的 remote-log.jsonl
 fibo remote --device <设备> --role <view|answer|full>
