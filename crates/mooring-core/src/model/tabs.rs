@@ -131,22 +131,23 @@ impl Workspace {
                     *layout = moved;
                 }
             }
-            Edit::ResizeSplit {
+            Edit::ResizeDivider {
                 tab,
                 path,
                 axis,
+                anchors,
                 ratio,
             } => {
                 if !(1..10000).contains(&ratio) {
                     return Err("分屏比例必须在 0 与 1 之间".into());
                 }
-                let node = (self.tab_mut(&tab)?.layout.as_mut()).and_then(|l| l.at_mut(&path));
-                match node {
-                    Some(Layout::Split {
-                        axis: a, ratio: r, ..
-                    }) if *a == axis => *r = ratio,
-                    _ => return Err("这条分隔线刚被别处改掉了，再拖一次".into()),
-                }
+                let node = (self.tab_mut(&tab)?.layout.as_mut())
+                    .and_then(|l| l.at_mut(&path))
+                    .filter(|l| l.is_divider(axis, &anchors));
+                let Some(Layout::Split { ratio: current, .. }) = node else {
+                    return Err("这条分隔线刚被别处改掉了，再拖一次".into());
+                };
+                *current = ratio;
             }
             Edit::ReplacePane { old, new } => {
                 if !self.terminals.iter().any(|t| t.id == new) {
@@ -240,6 +241,34 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_queued_resize_must_not_retarget_a_collapsed_sibling_split() {
+        let mut w = workspace(&["a", "b", "c"]);
+        w.edit(tab("t", split(leaf("a"), split(leaf("b"), leaf("c")))))
+            .unwrap();
+        // The pointer was released on the outer divider while another request was busy.
+        let queued = Edit::ResizeDivider {
+            tab: "t".into(),
+            path: vec![],
+            axis: Axis::Right,
+            anchors: ["a".into(), "b".into()],
+            ratio: 7000,
+        };
+        // Another client closes a: the b|c divider now occupies the old root path.
+        w.edit(Edit::ClosePane {
+            terminal: "a".into(),
+        })
+        .unwrap();
+        let before = w.tabs.clone();
+        let reply = w.edit(queued);
+        assert!(
+            reply.is_err(),
+            "stale request accepted on different divider; layout={:?}",
+            w.tabs[0].layout
+        );
+        assert_eq!(w.tabs, before);
+    }
+
     /// The acceptance of step D: what each hand did stays, in any order.
     #[test]
     fn an_agents_split_a_rename_and_a_dragged_divider_all_stay() {
@@ -257,10 +286,11 @@ mod tests {
             id: "t".into(),
             title: "部署".into(),
         };
-        let drag = Edit::ResizeSplit {
+        let drag = Edit::ResizeDivider {
             tab: "t".into(),
             path: vec![],
             axis: Axis::Right,
+            anchors: ["a".into(), "b".into()],
             ratio: 3000,
         };
         for order in [[0, 1, 2], [2, 0, 1], [1, 2, 0]] {
@@ -278,10 +308,11 @@ mod tests {
         }
         // A divider that is gone, or turned, is not dragged blindly.
         w.edit(agent).unwrap();
-        let stale = Edit::ResizeSplit {
+        let stale = Edit::ResizeDivider {
             tab: "t".into(),
             path: vec![true],
             axis: Axis::Right,
+            anchors: ["a".into(), "b".into()],
             ratio: 3000,
         };
         assert!(w.edit(stale).unwrap_err().contains("再拖一次"));

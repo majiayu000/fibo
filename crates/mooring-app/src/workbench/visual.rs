@@ -3,6 +3,7 @@ use super::*;
 mod crowded;
 mod fixture;
 mod page;
+mod resize;
 mod spaces;
 #[path = "subagent_sample_tests.rs"]
 mod subagent_samples;

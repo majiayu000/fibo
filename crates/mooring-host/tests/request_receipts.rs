@@ -256,7 +256,7 @@ fn layout_changes_from_two_hands_all_stay() {
         Edit::SplitPane {
             target: "b".into(),
             terminal: "agent".into(),
-            axis: Axis::Down,
+            axis: Axis::Right,
             before: false,
             share: 5000,
             forced: false,
@@ -268,10 +268,11 @@ fn layout_changes_from_two_hands_all_stay() {
         title: "部署".into(),
     };
     h.call(Some(RequestId::fresh()), rename).unwrap();
-    let drag = Edit::ResizeSplit {
+    let drag = Edit::ResizeDivider {
         tab: "t".into(),
         path: vec![],
         axis: Axis::Right,
+        anchors: ["a".into(), "b".into()],
         ratio: 3000,
     };
     h.call(Some(RequestId::fresh()), drag).unwrap();
@@ -289,6 +290,54 @@ fn layout_changes_from_two_hands_all_stay() {
     let w = h.workspace();
     assert_eq!(w.tab_terminals("t"), ["a", "b", "agent"]);
     assert!(w.terminals.iter().all(|t| t.state == ProcessState::Running));
+    // A queued save is tied to a|b, not to whichever split later occupies [].
+    let queued = Edit::ResizeDivider {
+        tab: "t".into(),
+        path: vec![],
+        axis: Axis::Right,
+        anchors: ["a".into(), "b".into()],
+        ratio: 7000,
+    };
+    h.call(
+        None,
+        Edit::ClosePane {
+            terminal: "a".into(),
+        },
+    )
+    .unwrap();
+    let before = h.workspace().tabs;
+    let refusal = h.call(Some(RequestId::fresh()), queued).unwrap_err();
+    assert!(refusal.to_string().contains("再拖一次"));
+    assert_eq!(
+        h.workspace().tabs,
+        before,
+        "replacement divider must not move"
+    );
+    // An older script without divider identity is not silently accepted.
+    let mut legacy = UnixStream::connect(&socket).unwrap();
+    legacy
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    send(&mut legacy, CONTROL, &Request::Hello { major: MAJOR }).unwrap();
+    receive::<Reply>(&mut legacy).unwrap();
+    send(
+        &mut legacy,
+        CONTROL,
+        &serde_json::json!({"Edit": {"edit": {"ResizeSplit": {
+            "tab": "t", "path": [], "axis": "Right", "ratio": 7000
+        }}}}),
+    )
+    .unwrap();
+    assert!(
+        receive::<Reply>(&mut legacy).is_err(),
+        "old request must be rejected at decode"
+    );
+    assert_eq!(
+        h.workspace().tabs,
+        before,
+        "old request must not change the layout"
+    );
+    let w = h.workspace();
     h.call(Some(RequestId::fresh()), close(Some(w.tab_terminals("t"))))
         .unwrap();
     assert!(h.workspace().tabs.is_empty());

@@ -52,6 +52,11 @@ impl Workbench {
                     _ => None,
                 };
                 let confirmed = matches!(settled, Settled::Confirmed(_));
+                let confirmed_revision = match &settled {
+                    Settled::Confirmed(Reply::Workspace(w)) => Some(w.revision),
+                    _ => None,
+                };
+                let resized = this.settle_resize(id.as_ref(), confirmed_revision);
                 let received_workspace =
                     matches!(&settled, Settled::Confirmed(Reply::Workspace(_)));
                 if let Some(words) = settled.words() {
@@ -65,6 +70,9 @@ impl Workbench {
                     if let Some(task) = this.tasks.start_after_save.take() {
                         this.launch(false, Some(task), cx);
                     }
+                }
+                if resized && !confirmed {
+                    this.sync(cx);
                 }
                 this.form_settled(id, confirmed);
                 if let Some(view) = &this.settings {

@@ -16,6 +16,26 @@ pub enum Layout {
     },
 }
 impl Layout {
+    /// One existing pane on each side identifies the divider without tying it to
+    /// child ratios or forbidding another pane from being split on either side.
+    pub fn divider_anchors(&self) -> Option<[String; 2]> {
+        let Self::Split { first, second, .. } = self else {
+            return None;
+        };
+        fn first_pane(layout: &Layout) -> &str {
+            match layout {
+                Layout::Leaf(id) => id,
+                Layout::Split { first, .. } => first_pane(first),
+            }
+        }
+        Some([first_pane(first).to_owned(), first_pane(second).to_owned()])
+    }
+
+    pub fn is_divider(&self, axis: Axis, anchors: &[String; 2]) -> bool {
+        matches!(self, Self::Split { axis: current, first, second, .. }
+            if *current == axis && first.contains(&anchors[0]) && second.contains(&anchors[1]))
+    }
+
     pub fn ids(&self) -> Vec<String> {
         match self {
             Self::Leaf(id) => vec![id.clone()],

@@ -530,7 +530,7 @@ impl Workbench {
         this
     }
     /// Takes a snapshot unless a newer one already arrived by another reply.
-    fn apply_workspace(&mut self, w: Workspace, cx: &mut Context<Self>) {
+    fn apply_workspace(&mut self, mut w: Workspace, cx: &mut Context<Self>) {
         if w.revision < self.workspace.revision {
             return;
         }
@@ -549,6 +549,13 @@ impl Workbench {
                 }
                 self.overview.cleanup_index += 1;
             }
+        }
+        // The host still holds the pre-drag ratio until mouse-up. Keep the local
+        // preview while accepting everything else in its snapshot.
+        if let Some(drag) = &mut self.layout.drag
+            && !drag.preserve_preview(&mut self.workspace, &mut w)
+        {
+            self.layout.drag = None;
         }
         self.workspace = w;
         self.facts.forget();

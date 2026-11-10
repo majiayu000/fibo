@@ -299,7 +299,7 @@ impl Workspace {
             | Edit::ClosePane { .. }
             | Edit::SplitPane { .. }
             | Edit::MovePane { .. }
-            | Edit::ResizeSplit { .. }
+            | Edit::ResizeDivider { .. }
             | Edit::ReplacePane { .. }) => self.edit_tabs(edit)?,
             Edit::RemoveSpace { id } => {
                 if !self.spaces.iter().any(|s| s.id == id) {
