@@ -145,12 +145,12 @@ function dirs(fields: Record<string, unknown>) {
     parent: path.split('/').slice(0, -1).join('/') || '/',
     home: HOME,
     dirs: [
-      { name: 'mooring', path: `${path}/mooring`, git: { branch: 'main', changes: 2, worktree: false }, sessions: 3 },
-      { name: 'mooring-mobile', path: `${path}/mooring-mobile`, git: { branch: 'feat/mobile', changes: 0, worktree: true }, sessions: 0 },
-      { name: 'alma-relay', path: `${path}/alma-relay`, git: { branch: 'main', changes: 0, worktree: false }, sessions: 0 },
+      { name: 'fibo', path: `${path}/fibo`, git: { branch: 'main', changes: 2, worktree: false }, sessions: 3 },
+      { name: 'fibo-mobile', path: `${path}/fibo-mobile`, git: { branch: 'feat/mobile', changes: 0, worktree: true }, sessions: 0 },
+      { name: 'fibo-relay', path: `${path}/fibo-relay`, git: { branch: 'main', changes: 0, worktree: false }, sessions: 0 },
       { name: 'scratch', path: `${path}/scratch`, sessions: 0 },
     ],
-    recent: [`${HOME}/code/mooring`, `${HOME}/code/blog`, `${HOME}/code/alma-relay`],
+    recent: [`${HOME}/code/fibo`, `${HOME}/code/blog`, `${HOME}/code/fibo-relay`],
   };
 }
 

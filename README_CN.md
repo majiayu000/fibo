@@ -127,6 +127,9 @@ fibo plugins          # 哪些插件生效了，没生效的为什么
 **Fibo 会改我的 Agent 配置吗？**
 只有安装 hook（`fibo hooks install`）时会在 Agent 的配置文件里加上 Fibo 的条目，`fibo hooks uninstall` 会移除。不装 hook 时，状态从对话记录和画面读。
 
+**怎么用手机连过来？**
+桌面端在本机完全独立运行，不需要账号或服务器。想在离开电脑时用手机看状态、审批或发话，现阶段请按[自建中继说明](docs/relay/self-host.md)部署 `mooring-relay`，在「设置 › 手机与远程」填入中继地址，再用仓库 [`mobile/`](mobile/) 下的 Expo 应用扫码配对；两端之间用 Noise 端到端加密，中继读不到内容。官方托管中继正在内测。
+
 ## 仓库结构
 
 - `crates/mooring-app` 是 GPUI 窗口，`crates/mooring-host` 是后台和 `fibo` 命令，`crates/mooring-core` 是共用的模型和协议，`crates/mooring-remote`、`mooring-relay` 是手机连接和中继。

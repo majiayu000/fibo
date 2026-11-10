@@ -48,7 +48,7 @@ impl SettingsView {
                 self.row(
                     link.is_empty(),
                     t!("中继地址"),
-                    t!("自己部署的 mooring-relay，或部署好的 alma-relay"),
+                    t!("自己部署的 mooring-relay 地址（见 docs/relay/self-host.md）"),
                     field(&self.relay),
                 )
                 .into_any_element(),

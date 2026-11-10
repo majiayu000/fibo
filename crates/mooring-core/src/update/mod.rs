@@ -34,7 +34,7 @@ pub const OLD_BUNDLE_ID: &str = "local.mooring.workbench";
 /// The Developer ID team every release is signed by. Nothing signed by anyone else installs.
 pub const TEAM_ID: &str = "C5UWZ934C2";
 pub const API_BASE: &str = "https://api.github.com";
-pub const REPO: &str = "majiayu000/mooring";
+pub const REPO: &str = "majiayu000/fibo";
 /// Test only: another API base, e.g. `http://127.0.0.1:8000` for a fake release. It also
 /// lets the asset links be plain `http`.
 pub const API_ENV: &str = "MOORING_UPDATE_API";
