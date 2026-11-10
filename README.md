@@ -8,13 +8,13 @@
 
 **A native macOS workbench for coding agents. Every session is a real terminal; Fibo shows which one needs you, keeps them running when the window closes, and brings back the conversation after a crash.**
 
-[![Release](https://img.shields.io/github/v/release/majiayu000/mooring?style=flat-square&label=release)](https://github.com/majiayu000/mooring/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/mooring/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/mooring/actions/workflows/ci.yml)
-[![Last commit](https://img.shields.io/github/last-commit/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/commits/main)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/pulse)
+[![Release](https://img.shields.io/github/v/release/majiayu000/fibo?style=flat-square&label=release)](https://github.com/majiayu000/fibo/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/fibo/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/fibo/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/commits/main)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/pulse)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/mooring/releases/latest)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest)
 [![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
 [![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
 [![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
@@ -40,11 +40,11 @@
 
 ---
 
-> **Status:** first release, [v0.1.0](https://github.com/majiayu000/mooring/releases/latest): Apple silicon, macOS 14 or later, signed and notarized. Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
+> **Status:** first release, [v0.1.0](https://github.com/majiayu000/fibo/releases/latest): Apple silicon, macOS 14 or later, signed and notarized. Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
 
 ## Install
 
-Download `Fibo-<version>-arm64.dmg` from the [latest release](https://github.com/majiayu000/mooring/releases/latest) and drag Fibo to Applications, or use Homebrew:
+Download `Fibo-<version>-arm64.dmg` from the [latest release](https://github.com/majiayu000/fibo/releases/latest) and drag Fibo to Applications, or use Homebrew:
 
 ```sh
 brew install --cask majiayu000/tap/fibo
@@ -57,8 +57,8 @@ Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in 
 You need macOS, Xcode, [Zig](https://ziglang.org/download/) 0.16.x and [rustup](https://rustup.rs) (the Rust version is pinned in `rust-toolchain.toml`).
 
 ```sh
-git clone https://github.com/majiayu000/mooring.git
-cd mooring
+git clone https://github.com/majiayu000/fibo.git
+cd fibo
 ./bootstrap.sh            # fetches the pinned GPUI and libghostty sources
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./run.sh
 ```
@@ -132,7 +132,7 @@ Only when you install hooks (`fibo hooks install`), which adds Fibo's entries to
 - `crates/mooring-app`: the GPUI window. `crates/mooring-host`: the background host and the `fibo` command. `crates/mooring-core`: the shared model and protocol. `crates/mooring-remote`, `mooring-relay`: the phone link and its relay.
 - `plugins/`: example plugins. `mobile/`: the phone chat app (Expo). `eval/`: terminal and protocol checks.
 
-Issues: [GitHub Issues](https://github.com/majiayu000/mooring/issues).
+Issues: [GitHub Issues](https://github.com/majiayu000/fibo/issues).
 
 <div align="center">
 
@@ -157,4 +157,4 @@ This project is one layer of an open-source stack for running coding agents (Cla
 | Remember | [remem](https://github.com/majiayu000/remem) | Local-first persistent memory for Claude Code and Codex sessions |
 | Orchestrate | [harness](https://github.com/majiayu000/harness) | Rust agent orchestration platform — rules, skills, GC, observability |
 | Route | [litellm-rs](https://github.com/majiayu000/litellm-rs) | High-performance Rust AI gateway — 100+ LLM APIs via OpenAI format |
-| Keep | [mooring](https://github.com/majiayu000/mooring) **◀ you are here** | Session command center — monitor, recover, never lose agent work |
+| Keep | [fibo](https://github.com/majiayu000/fibo) **◀ you are here** | Session command center — monitor, recover, never lose agent work |
