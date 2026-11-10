@@ -224,6 +224,22 @@ impl Remote {
         Self { view, client, stop }
     }
 
+    /// A machine that lists `terminals` and never connects: for screenshots only.
+    #[cfg(feature = "visual-test")]
+    pub fn fixed(spec: Spec, spaces: Vec<Space>, terminals: Vec<Card>) -> Self {
+        let view = View {
+            spec,
+            link: Link::Online,
+            machine: None,
+            spaces,
+            terminals,
+        };
+        Self {
+            view: Arc::new(Mutex::new(view)),
+            client: Arc::new(Mutex::new(None)),
+            stop: Arc::new(AtomicBool::new(true)),
+        }
+    }
     /// Where its live connection is, for a terminal's screen.
     pub fn slot(&self) -> Slot {
         Arc::clone(&self.client)
