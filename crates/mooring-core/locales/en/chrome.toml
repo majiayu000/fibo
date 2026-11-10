@@ -2,6 +2,9 @@
 # changes panel, close confirmations, the macOS menu bar and the menu-bar tray panel.
 
 [desktop]
+"{agent} 有话问你" = "{agent} is waiting for you"
+"{agent} 中途报错" = "{agent} stopped on an error"
+"{agent} 这轮好了，请你过目" = "{agent} is ready for review"
 "连不上后台" = "Can't reach the host"
 "数据停在 {stopped}" = "Data as of {stopped}"
 "没有{needs}的" = "Nothing {needs}"

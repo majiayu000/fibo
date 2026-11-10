@@ -91,10 +91,10 @@ fn notifications_only_follow_new_attention_facts_and_opt_in() {
     let c = asked.content.get_mut("s").unwrap();
     c.waiting = "要继续吗？".into();
     c.waiting_episode += 1;
-    assert_eq!(
-        entered(&renamed, &asked, None)[0].2,
-        "工作空间 · 发布前检查"
-    );
+    let banner = &entered(&renamed, &asked, None)[0];
+    assert_eq!(banner.title, "Codex 有话问你");
+    assert_eq!(banner.body, "工作空间 · 要继续吗？");
+    assert!(banner.urgent);
     let mut scanned = previous.clone();
     scanned.agent_sessions[0].terminal = None;
     assert!(
@@ -366,4 +366,36 @@ fn a_space_put_aside_stays_silent_and_taking_it_back_sends_no_burst() {
     let mut next = w.clone();
     next.content.get_mut("asks").unwrap().waiting_episode += 1;
     assert_eq!(entered(&w, &next, None).len(), 1);
+}
+
+/// A finished turn sends one silent banner, as the landing page shows: who is ready, then
+/// the project and the last reply. The sound alone stays quiet for it.
+#[test]
+fn a_finished_turn_sends_one_silent_review_banner() {
+    use mooring_core::content::Turn;
+    let mut before = Workspace::default();
+    session(&mut before, "r", Turn::Running, 60);
+    before.settings.notifications = true;
+    let mut after = before.clone();
+    let c = after.content.get_mut("r").unwrap();
+    c.turn = Turn::Completed;
+    c.last_reply = "Done. Ready for your review.".into();
+    assert_eq!(
+        status::of(&after, &after.agent_sessions[0], now()),
+        State::Review
+    );
+    let banners = entered(&before, &after, None);
+    assert_eq!(banners.len(), 1);
+    assert_eq!(banners[0].title, "Claude Code 这轮好了，请你过目");
+    assert_eq!(banners[0].body, "工作空间 · Done. Ready for your review.");
+    assert!(!banners[0].urgent, "a finished turn never sounds");
+    assert!(entered(&after, &after, None).is_empty(), "once per turn");
+    let mut sound_only = after.clone();
+    sound_only.settings.notifications = false;
+    sound_only.settings.sound = true;
+    assert!(entered(&before, &sound_only, None).is_empty());
+    // Typing the next ask takes the banner back.
+    let mut next = after.clone();
+    next.content.get_mut("r").unwrap().turn = Turn::Running;
+    assert_eq!(left(&after, &next), ["r"]);
 }

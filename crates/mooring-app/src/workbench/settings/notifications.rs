@@ -19,7 +19,7 @@ impl SettingsView {
                 self.row(
                     true,
                     t!("桌面通知"),
-                    t!("Agent 停下来等你时，发一条系统通知"),
+                    t!("Agent 停下来等你或做完一轮时，发一条系统通知"),
                     toggle,
                 )
                 .into_any_element(),
@@ -85,6 +85,12 @@ impl SettingsView {
                         Status::Error,
                         t!("出错停下"),
                         t!("Agent 报错中断；同一条错误只提醒一次"),
+                        false,
+                    ),
+                    when(
+                        Status::Review,
+                        t!("做完一轮"),
+                        t!("Agent 做完一轮请你过目；每轮只提醒一次，不响提示音"),
                         false,
                     ),
                 ],
