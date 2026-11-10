@@ -322,9 +322,20 @@ impl Workbench {
         if !local_hidden && sessions.is_empty() && unread.is_empty() && !(recent && ended.total > 0)
         {
             sidebar = sidebar.child(
-                label(t!("没有打开的会话。从右边启动一个 Agent，或在终端里运行 claude、codex，它们会出现在这里"))
-                    .mt(px(T::S14))
-                    .px(px(T::S8)),
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(T::S8))
+                    .mt(px(T::S20))
+                    .px(px(T::S16))
+                    .child(
+                        div()
+                            .text_size(px(T::S16))
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(T::color(T::primary()))
+                            .child(t!("还没有会话")),
+                    )
+                    .child(label(t!("从右侧启动 Agent，开始任务")).text_size(px(T::BODY_SIZE))),
             );
         }
         let listed = sessions.into_iter().map(|(s, g, a, _)| (s, g, a)).collect();
