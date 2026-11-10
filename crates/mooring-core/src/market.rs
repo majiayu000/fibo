@@ -450,7 +450,14 @@ pub fn bundled_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("MOORING_PLUGIN_CATALOG") {
         return Some(PathBuf::from(dir));
     }
-    let exe = std::env::current_exe().ok()?;
+    catalog_beside(&std::env::current_exe().ok()?)
+}
+
+/// The catalog that ships with the program at `exe`. Through a link on PATH (Homebrew's
+/// `/opt/homebrew/bin/fibo`) `current_exe` names the link, whose folder has no catalog, so
+/// the link is followed to the program inside the app first.
+fn catalog_beside(exe: &Path) -> Option<PathBuf> {
+    let exe = std::fs::canonicalize(exe).unwrap_or_else(|_| exe.to_owned());
     let mac = exe.parent()?;
     let candidates = [
         mac.parent().map(|c| c.join("Resources/plugins")),
