@@ -8,13 +8,13 @@
 
 **给 Coding Agent 用的原生 macOS 工作台。每个会话都是一个真终端；Fibo 告诉你哪个在等你，关掉窗口它们照样跑，崩了也能接着聊。**
 
-[![Release](https://img.shields.io/github/v/release/majiayu000/mooring?style=flat-square&label=release)](https://github.com/majiayu000/mooring/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/mooring/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/mooring/actions/workflows/ci.yml)
-[![Last commit](https://img.shields.io/github/last-commit/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/commits/main)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/mooring?style=flat-square)](https://github.com/majiayu000/mooring/pulse)
+[![Release](https://img.shields.io/github/v/release/majiayu000/fibo?style=flat-square&label=release)](https://github.com/majiayu000/fibo/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/majiayu000/fibo/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/majiayu000/fibo/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/commits/main)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/pulse)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/mooring/releases/latest)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest)
 [![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
 [![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
 [![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
@@ -40,11 +40,11 @@
 
 ---
 
-> **现状：** 第一个发布版 [v0.1.0](https://github.com/majiayu000/mooring/releases/latest)：Apple 芯片，macOS 14 及以上，已签名并经 Apple 公证。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
+> **现状：** 第一个发布版 [v0.1.0](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片，macOS 14 及以上，已签名并经 Apple 公证。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
 
 ## 安装
 
-从[最新发布](https://github.com/majiayu000/mooring/releases/latest)下载 `Fibo-<版本>-arm64.dmg`，把 Fibo 拖进「应用程序」；或者用 Homebrew：
+从[最新发布](https://github.com/majiayu000/fibo/releases/latest)下载 `Fibo-<版本>-arm64.dmg`，把 Fibo 拖进「应用程序」；或者用 Homebrew：
 
 ```sh
 brew install --cask majiayu000/tap/fibo
@@ -57,8 +57,8 @@ brew install --cask majiayu000/tap/fibo
 需要 macOS、Xcode、[Zig](https://ziglang.org/download/) 0.16.x 和 [rustup](https://rustup.rs)（Rust 版本固定在 `rust-toolchain.toml`）。
 
 ```sh
-git clone https://github.com/majiayu000/mooring.git
-cd mooring
+git clone https://github.com/majiayu000/fibo.git
+cd fibo
 ./bootstrap.sh            # 拉取固定版本的 GPUI 和 libghostty 源码
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./run.sh
 ```
@@ -132,7 +132,7 @@ fibo plugins          # 哪些插件生效了，没生效的为什么
 - `crates/mooring-app` 是 GPUI 窗口，`crates/mooring-host` 是后台和 `fibo` 命令，`crates/mooring-core` 是共用的模型和协议，`crates/mooring-remote`、`mooring-relay` 是手机连接和中继。
 - `plugins/` 是示例插件，`mobile/` 是手机聊天 App（Expo），`eval/` 是终端和协议的检查工具。
 
-问题反馈：[GitHub Issues](https://github.com/majiayu000/mooring/issues)。
+问题反馈：[GitHub Issues](https://github.com/majiayu000/fibo/issues)。
 
 <div align="center">
 
