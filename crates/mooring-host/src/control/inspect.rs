@@ -12,6 +12,8 @@ pub(super) fn events(a: Args) -> io::Result<()> {
     }
     mooring_core::protocol::send(&mut stream, CONTROL, &Request::Subscribe)?;
     let json = a.has("json");
+    // Tab titles by terminal id, read again only for a terminal not seen yet: a starting terminal's notice has none.
+    let mut tabs: std::collections::HashMap<String, String> = Default::default();
     loop {
         let notices = match receive::<Reply>(&mut stream)? {
             Reply::Events(n) => n,
@@ -23,23 +25,18 @@ pub(super) fn events(a: Args) -> io::Result<()> {
                 println!("{}", serde_json::to_string(&n).map_err(io::Error::other)?);
                 continue;
             }
-            let terminal: String = n
-                .terminal
-                .as_deref()
-                .unwrap_or("")
-                .chars()
-                .take(8)
-                .collect();
-            let what = [n.title.as_str(), n.detail.as_str()]
-                .into_iter()
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<_>>()
-                .join(" · ");
-            let code = n
-                .exit_code
-                .map(|c| format!(" 退出码 {c}"))
-                .unwrap_or_default();
-            println!("{:<16} {terminal:<8} {what}{code}", n.event);
+            let id = n.terminal.as_deref().unwrap_or("");
+            if !id.is_empty() && !tabs.contains_key(id) {
+                // One read fills every terminal, so the opening snapshot costs one.
+                if let Ok(w) = workspace(&a.socket) {
+                    for t in &w.terminals {
+                        tabs.insert(t.id.clone(), tab_title(&w, &t.id));
+                    }
+                }
+                tabs.entry(id.to_owned()).or_default();
+            }
+            let tab = tabs.get(id).map_or("", String::as_str);
+            println!("{}", super::events_text::line(&n, tab));
         }
     }
 }
@@ -82,25 +79,24 @@ pub(super) fn list(a: Args) -> io::Result<()> {
         );
         return Ok(());
     }
-    // Full ids: terminals opened by one app share a long prefix, so a cut-off id names none.
-    let id_width = rows.iter().map(|r| r.0.id.len()).max().unwrap_or(0);
-    let tab_width = rows
-        .iter()
-        .map(|r| r.3.chars().count().max(1))
-        .max()
-        .unwrap_or(1);
-    for (t, s, phase, tab) in rows {
-        let agent = s.map_or_else(|| "-".into(), |s| agent_label(s.runtime));
-        let tab = if tab.is_empty() { "-".to_owned() } else { tab };
-        let pad = " ".repeat(tab_width - tab.chars().count());
-        println!(
-            "{:<id_width$}  {:<6}  {:<7}  {tab}{pad}  {}",
-            t.id,
-            agent,
-            phase.name(),
-            w.terminal_cwd(t)
-        );
-    }
+    let lines = rows
+        .into_iter()
+        .map(|(t, s, _, tab)| super::list_text::Line {
+            id: t.id.clone(),
+            agent: s.map(|s| agent_label(s.runtime)),
+            status: status(&w, &t.id),
+            title: tab,
+            cwd: w.terminal_cwd(t).to_string(),
+        })
+        .collect();
+    let home = mooring_platform::dirs::home()
+        .map(|h| h.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let color = {
+        use std::io::IsTerminal;
+        std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+    };
+    print!("{}", super::list_text::render(lines, &home, color));
     Ok(())
 }
 pub(super) fn read(a: Args) -> io::Result<()> {

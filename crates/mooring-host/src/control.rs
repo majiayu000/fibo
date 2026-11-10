@@ -6,12 +6,15 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+mod events_text;
 mod explain;
 mod inspect;
+mod list_text;
 mod open;
 mod prompt;
 mod run_agent;
 mod todo;
+mod todo_text;
 use explain::explain;
 use inspect::{events, list, read};
 use open::{close, split};
@@ -39,7 +42,7 @@ pub(crate) const COMMANDS: &[Command] = &[
         valued: &[],
         switches: &["json"],
         usage: "\
-fibo list [--json]                         终端列表：编号、Agent 状态、标签、目录",
+fibo list [--json]                         终端列表：要你处理的排前面，状态、Agent、标签、目录、编号",
     },
     Command {
         name: "read",

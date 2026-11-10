@@ -62,9 +62,10 @@ fn command_line_lists_reads_sends_and_refuses_to_type_into_an_approval() {
     assert!(ok);
     let line = out
         .lines()
-        .find(|l| l.starts_with("agent-cl"))
+        .find(|l| l.trim_end().ends_with("agent-cli"))
         .unwrap_or_default();
-    assert!(line.contains("claude") && line.contains("waiting"), "{out}");
+    let waiting = mooring_core::status::Status::Waiting.label();
+    assert!(line.contains("claude") && line.contains(waiting), "{out}");
     let (ok, _, err) = cli(&["prompt", "agent-cli", "yes", "please"]);
     assert!(!ok && err.contains("等你回答"), "{err}");
     // Nothing reached the approval.

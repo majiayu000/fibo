@@ -161,21 +161,27 @@ fn list(a: Args) -> io::Result<()> {
     }
     if shown.is_empty() {
         println!("没有待办");
+        return Ok(());
     }
-    for task in shown {
-        let last = w
-            .task_logs
-            .get(&task.id)
-            .and_then(|log| log.notes.last())
-            .map_or(String::new(), |n| format!("  {}", n.text));
-        println!(
-            "{}  {}  {}  {}{last}",
-            short_id(&w, &task.id),
-            task_state(&w, task, now).label(),
-            space_name(&w, &task.space),
-            task.title,
-        );
-    }
+    let lines = shown
+        .into_iter()
+        .map(|task| super::todo_text::Line {
+            id: short_id(&w, &task.id).to_owned(),
+            state: task_state(&w, task, now),
+            space: space_name(&w, &task.space).to_owned(),
+            title: task.title.clone(),
+            note: w
+                .task_logs
+                .get(&task.id)
+                .and_then(|log| log.notes.last())
+                .map_or(String::new(), |n| n.text.clone()),
+        })
+        .collect();
+    let color = {
+        use std::io::IsTerminal;
+        io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+    };
+    print!("{}", super::todo_text::render(lines, color));
     Ok(())
 }
 
