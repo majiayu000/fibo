@@ -2,6 +2,7 @@
 use super::*;
 
 /// Todo editing: the open form, the sidebar quick capture and the Agent choice.
+#[derive(Default)]
 pub(super) struct TaskUi {
     pub(super) chosen_agent: Option<Agent>,
     /// The task whose 开始 is waiting for an Agent choice; true when it is "再开一个会话".
@@ -26,6 +27,24 @@ pub(super) struct TaskUi {
     pub(super) expanded: HashSet<String>,
     /// The criterion whose 「挂一条证据」 list is open.
     pub(super) attaching: Option<String>,
+}
+impl TaskUi {
+    /// The login shell answered (or could not) for the commands `asked`. The asking is over
+    /// either way, so the next one can start; true when the Agents changed meanwhile (plugins
+    /// read again) and this answer is for a list that no longer holds: ask again.
+    pub(super) fn probe_answered(
+        &mut self,
+        asked: &[String],
+        now: &[String],
+        found: Option<HashSet<String>>,
+    ) -> bool {
+        self.probing = false;
+        if asked != now {
+            return true;
+        }
+        self.found = found;
+        false
+    }
 }
 impl Workbench {
     /// What an Agent is handed for `task`, with this app's own `mooring` to write back with.
