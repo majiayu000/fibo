@@ -13,6 +13,7 @@ mod open;
 mod prompt;
 mod run_agent;
 mod todo;
+mod todo_text;
 use explain::explain;
 use inspect::{events, list, read};
 use open::{close, split};

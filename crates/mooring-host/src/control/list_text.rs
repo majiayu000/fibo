@@ -21,7 +21,7 @@ fn rank(s: Option<Status>) -> usize {
         .unwrap_or(Status::ALL.len())
 }
 
-fn pad(s: &str, cols: usize) -> String {
+pub(super) fn pad(s: &str, cols: usize) -> String {
     let w = width(s);
     format!("{s}{}", " ".repeat(cols.saturating_sub(w)))
 }
@@ -44,7 +44,7 @@ fn fit_tail(s: &str, max: usize) -> String {
     std::iter::once('…').chain(kept.into_iter().rev()).collect()
 }
 
-fn paint(color: bool, code: &str, s: &str) -> String {
+pub(super) fn paint(color: bool, code: &str, s: &str) -> String {
     if color && !code.is_empty() {
         format!("\x1b[{code}m{s}\x1b[0m")
     } else {
@@ -123,7 +123,7 @@ pub(super) fn render(mut lines: Vec<Line>, home: &str, color: bool) -> String {
     out
 }
 
-fn one_line(s: &str) -> String {
+pub(super) fn one_line(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
