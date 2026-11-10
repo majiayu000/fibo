@@ -32,6 +32,10 @@ fn command_line_lists_reads_sends_and_refuses_to_type_into_an_approval() {
         std::thread::sleep(Duration::from_millis(100));
     }
 
+    // A shell has no Agent to wait for: say so, not "timed out, now -".
+    let (ok, _, err) = cli(&["wait", "shell-cli", "--timeout", "2"]);
+    assert!(!ok && err.contains("没有可识别的 Agent"), "{err}");
+
     let logs = h.root.join("logs/claude");
     fs::create_dir_all(&logs).unwrap();
     let claude = h.root.join("claude");

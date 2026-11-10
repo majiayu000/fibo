@@ -106,6 +106,13 @@ fn wait(
         if targets.contains(&now) && (now != Phase::Idle || started || since.elapsed() >= GRACE) {
             return Ok(now);
         }
+        // A shell with no Agent never gets there: say so instead of sitting out the
+        // timeout (30 minutes by default). An Agent just started gets the grace to show up.
+        if now == Phase::None && since.elapsed() >= GRACE.min(timeout) {
+            return Err(io::Error::other(
+                "这个终端里没有可识别的 Agent 对话；等 shell 里的命令请用 fibo read 看画面",
+            ));
+        }
         if since.elapsed() >= timeout {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
