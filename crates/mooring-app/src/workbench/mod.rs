@@ -62,6 +62,7 @@ pub struct Workbench {
     copied_seq: u64,
     /// A fresh install's welcome where an empty tab would be.
     first_run: first_run::FirstRun,
+    hooks: hooks::Hooks,
 }
 #[derive(Clone)]
 struct PaneMenu {
@@ -234,6 +235,7 @@ mod filters;
 mod first_run;
 mod forms;
 mod frame_facts;
+mod hooks;
 mod layout;
 mod machines;
 mod review_queue;
@@ -399,6 +401,7 @@ impl Workbench {
             copied: None,
             copied_seq: 0,
             first_run: first_run::FirstRun::load(&workspace),
+            hooks: Default::default(),
             search,
             store,
             workspace,
@@ -517,6 +520,7 @@ impl Workbench {
             },
         };
         this.sync_panes(cx);
+        this.read_hooks(cx);
         // A fresh install is greeted where the empty tab is, instead of with a bare shell.
         if this.first_run.on {
             this.start_first_run(cx);

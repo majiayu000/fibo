@@ -40,6 +40,9 @@ pub fn check() -> io::Result<Vec<Hook>> {
 pub fn install(agent: &str) -> io::Result<()> {
     mooring(&["hooks", "install", "--agent", agent]).map(drop)
 }
+pub fn uninstall(agent: &str) -> io::Result<()> {
+    mooring(&["hooks", "uninstall", "--agent", agent]).map(drop)
+}
 fn parse(bytes: &[u8]) -> io::Result<Vec<Hook>> {
     let rows: Vec<serde_json::Value> = serde_json::from_slice(bytes).map_err(io::Error::other)?;
     Ok(rows

@@ -78,6 +78,13 @@ impl Workbench {
                     String::new(),
                     String::new(),
                 ),
+                Hit::Hooks => (
+                    glyph("↯"),
+                    "Agent Hook".into(),
+                    t!("安装或卸载 Agent 的 Hook").into(),
+                    String::new(),
+                    String::new(),
+                ),
                 Hit::Action(i) => {
                     let action = mooring_core::action::all().get(*i);
                     (

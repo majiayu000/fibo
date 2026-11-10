@@ -1,7 +1,8 @@
 //! The first run: what someone who just installed Mooring sees where an empty tab would be,
 //! until a session has run in one of its terminals or they close it. It says which Agent
-//! CLIs the login shell finds, starts one in the shown space, and offers the hooks with the
-//! file they change and how to take them out. Never shown again once closed or once a
+//! CLIs the login shell finds, starts one in the shown space, and says which file the hooks
+//! change and how to take them out: a box, ticked until cleared, has the started CLI's
+//! hook written with its start (`hooks.rs`). Never shown again once closed or once a
 //! session ran here; an install that already has hooks never sees it.
 use super::*;
 use crate::agent_hooks::{Hook, State};
@@ -27,19 +28,17 @@ pub(super) fn hooks_installed(hooks: &[Hook]) -> bool {
         .any(|h| matches!(h.state, State::Current | State::Outdated))
 }
 
-#[derive(Default)]
 pub(super) struct FirstRun {
     pub(super) on: bool,
-    /// The hooks as `mooring hooks status` read them; None while reading.
-    hooks: Option<Result<Vec<Hook>, String>>,
-    installing: bool,
+    /// 「启动时一起装上」: ticked until the reader clears it.
+    pub(super) with_hook: bool,
 }
 impl FirstRun {
     pub(super) fn load(w: &Workspace) -> Self {
         let done = marker().map(|p| p.try_exists());
         Self {
             on: wanted(w, done),
-            ..Default::default()
+            with_hook: true,
         }
     }
 }
@@ -98,51 +97,12 @@ pub(super) fn offered(
 }
 
 impl Workbench {
-    /// Asks the login shell for the Agent CLIs and `mooring hooks status` for the hooks.
+    /// Asks the login shell for the Agent CLIs; the hooks are read for every window
+    /// (`read_hooks`), and found installed there, the run is over.
     pub(super) fn start_first_run(&mut self, cx: &mut Context<Self>) {
-        if !self.first_run.on {
-            return;
+        if self.first_run.on {
+            self.probe_agents(cx);
         }
-        self.probe_agents(cx);
-        self.first_run_hooks(false, cx);
-    }
-    /// Reads the hooks again, installing the missing or outdated ones first when `install`
-    /// (only ever from the button). Found installed on the first read, the run is over:
-    /// this install was set up before, and gets the shell it always opened with.
-    fn first_run_hooks(&mut self, install: bool, cx: &mut Context<Self>) {
-        let pending: Vec<String> = match &self.first_run.hooks {
-            Some(Ok(hooks)) if install => hooks
-                .iter()
-                .filter(|h| matches!(h.state, State::Missing | State::Outdated))
-                .map(|h| h.agent.clone())
-                .collect(),
-            _ => vec![],
-        };
-        self.first_run.installing = install;
-        cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_spawn(async move {
-                    for agent in &pending {
-                        crate::agent_hooks::install(agent)?;
-                    }
-                    crate::agent_hooks::check()
-                })
-                .await
-                .map_err(|e| e.to_string());
-            let _ = this.update(cx, |this, cx| {
-                let old = !install && result.as_deref().is_ok_and(hooks_installed);
-                this.first_run.hooks = Some(result);
-                this.first_run.installing = false;
-                if old && this.first_run.on {
-                    this.finish_first_run(cx);
-                    if this.workspace.terminals.is_empty() && !this.nav.overview {
-                        this.launch(false, None, cx);
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
     }
     /// Over for good. A marker that cannot be written only ends it for this run.
     pub(super) fn finish_first_run(&mut self, cx: &mut Context<Self>) {
@@ -257,7 +217,7 @@ impl Workbench {
                     Some(mark(first, T::color(T::on_accent()))),
                 ))
                 .px(px(T::S16))
-                .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(first, cx))),
+                .on_click(cx.listener(move |this, _, _, cx| this.first_run_start(first, cx))),
             );
         }
         let others: Vec<_> = start
@@ -269,7 +229,7 @@ impl Workbench {
                 )
                 .px(px(T::S4))
                 .text_color(T::color(T::link()))
-                .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(agent, cx)))
+                .on_click(cx.listener(move |this, _, _, cx| this.first_run_start(agent, cx)))
             })
             .collect();
         if !others.is_empty() {
@@ -293,9 +253,10 @@ impl Workbench {
         }
         column
     }
-    /// The hooks: which file, what they do, how to take them out, and one button.
+    /// The hooks: which file, what they do, how to take them out, and a box that has the
+    /// started CLI's hook written with its start.
     fn first_run_hooks_view(&self, cx: &Context<Self>) -> Option<gpui::Div> {
-        let hooks = match &self.first_run.hooks {
+        let hooks = match &self.hooks.read {
             None => return Some(section("Hook", t!("正在检查…").to_owned())),
             Some(Err(e)) => return Some(section("Hook", t!("没能检查：{e}", e))),
             Some(Ok(hooks)) if hooks.is_empty() => return None,
@@ -305,7 +266,7 @@ impl Workbench {
         let names: Vec<&str> = hooks.iter().map(|h| h.name.as_str()).collect();
         let all_current = hooks.iter().all(|h| h.state == State::Current);
         let unreadable = hooks.iter().find(|h| h.state == State::Unreadable);
-        let mut body = div().flex().flex_col().gap(px(T::S6)).child(label(t!("推荐装上：{agents} 的状态和审批就不靠猜画面。会在 {files} 里加几条 Fibo 的条目，只在 Fibo 的终端里起作用，在别处什么都不做。撤销：设置 › 关于，或在 Fibo 终端里运行 fibo hooks uninstall。", agents = names.join(t!("、")), files = files.join(t!("、")))));
+        let mut body = div().flex().flex_col().gap(px(T::S6)).child(label(t!("推荐装上：{agents} 的状态和审批就不靠猜画面。会在 {files} 里加几条 Fibo 的条目，只在 Fibo 的终端里起作用，在别处什么都不做。以后安装或卸载：设置 › 通用，或在 Fibo 终端里运行 fibo hooks install / uninstall。", agents = names.join(t!("、")), files = files.join(t!("、")))));
         let control = if all_current {
             label(t!("已安装")).into_any_element()
         } else if let Some(h) = unreadable {
@@ -316,24 +277,22 @@ impl Workbench {
             ))
             .text_color(Tone::Danger.ink())
             .into_any_element()
+        } else if self.hooks.installing {
+            label(t!("正在安装…")).into_any_element()
         } else {
-            let text = if self.first_run.installing {
-                t!("正在安装…")
-            } else {
-                t!("安装 Hook")
-            };
-            button("first-run-hooks", text)
-                .px(px(T::S16))
-                .bg(T::color(T::button()))
-                .text_color(T::color(T::primary()))
-                .when(self.first_run.installing, |b| b.opacity(0.5))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    if !this.first_run.installing {
-                        this.first_run_hooks(true, cx);
-                        cx.notify();
-                    }
-                }))
-                .into_any_element()
+            super::hooks::tick_box(
+                "first-run-with-hook",
+                self.first_run.with_hook,
+                t!(
+                    "启动 {agents} 时一起装上（推荐）",
+                    agents = names.join(t!("、"))
+                ),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.first_run.with_hook = !this.first_run.with_hook;
+                cx.notify();
+            }))
+            .into_any_element()
         };
         body = body.child(div().flex().child(control));
         Some(
@@ -351,14 +310,26 @@ impl Workbench {
     pub fn visual_first_run(&self) -> bool {
         self.first_run.on
     }
-    /// The 「安装 Hook」 button's click.
-    pub fn visual_first_run_install(&mut self, cx: &mut Context<Self>) {
-        self.first_run_hooks(true, cx);
+    /// A click on the 「启动时一起装上」 box.
+    pub fn visual_first_run_tick(&mut self, cx: &mut Context<Self>) {
+        self.first_run.with_hook = !self.first_run.with_hook;
+        cx.notify();
+    }
+    /// ⌘P with `query` typed, over the window as it is.
+    pub fn visual_first_run_palette(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.settings = None;
+        self.open_search(window, cx);
+        self.set_query(query, cx);
     }
     /// The 「启动 X」 button's click for the CLI named `executable`.
     pub fn visual_first_run_start(&mut self, executable: &str, cx: &mut Context<Self>) {
         if let Some(agent) = Agent::from_executable(executable) {
-            self.run_agent_here(agent, cx);
+            self.first_run_start(agent, cx);
         }
     }
 }

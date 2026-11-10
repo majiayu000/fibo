@@ -86,6 +86,7 @@ impl Workbench {
             .child(host)
             .child(div().flex_1())
             .children(self.update_item(cx))
+            .children(fit.working.then(|| self.hook_item(cx)).flatten())
             .child(self.quota_cells(cx))
             // Only while memory is tight: a click opens 本机诊断, memory row first.
             .when_some(super::pressure::tight(), |d, (pressure, swap)| {

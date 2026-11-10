@@ -1,4 +1,5 @@
-//! 设置 › 通用: the default Agent, tidying old sessions and the sidebar.
+//! 设置 › 通用: the default Agent, the Agents' hooks (`hooks.rs`), tidying old sessions and
+//! the sidebar.
 use super::*;
 
 impl SettingsView {
@@ -18,14 +19,30 @@ impl SettingsView {
                     })),
                 );
             }
+            // Its own line below the words: a dozen CLIs beside them left the title a
+            // column one character wide.
             start.push(
-                self.row(
-                    start.is_empty(),
-                    t!("默认 Agent"),
-                    t!("新建待办和未指定 Agent 时用它"),
-                    choices,
-                )
-                .into_any_element(),
+                div()
+                    .px(px(T::S16))
+                    .py(px(T::S12))
+                    .flex()
+                    .flex_col()
+                    .gap(px(T::S8))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(T::S2))
+                            .child(
+                                div()
+                                    .text_size(px(T::BODY_SIZE))
+                                    .text_color(T::color(T::primary()))
+                                    .child(t!("默认 Agent")),
+                            )
+                            .child(label(t!("新建待办和未指定 Agent 时用它"))),
+                    )
+                    .child(div().flex().child(choices.flex_wrap()))
+                    .into_any_element(),
             );
         }
         if self.shows(Page::General, t!("语言"), cx) {
@@ -102,6 +119,7 @@ impl SettingsView {
         }
         self.cards(vec![
             (t!("启动"), start),
+            ("Agent Hook", self.hook_card(cx)),
             (t!("会话整理"), tidy),
             (t!("侧栏"), sidebar),
         ])
