@@ -192,6 +192,17 @@ impl Workbench {
         )
         .then_some(Hit::Diagnostics)
         .into_iter()
+        .chain(
+            contains(
+                &format!(
+                    "{} {}",
+                    not_ui!("Agent Hook hooks 钩子 安装 卸载 状态不准 审批 claude"),
+                    t!("安装或卸载 Agent 的 Hook")
+                ),
+                query,
+            )
+            .then_some(Hit::Hooks),
+        )
         .chain(self.machine_hits(query))
         .chain(self.space_hits(query))
         .collect();
@@ -273,6 +284,7 @@ impl Workbench {
             Hit::Machine(index) => self.switch_machine_quiet(index, cx),
             Hit::Space(id) => self.switch_space_quiet(&id, cx),
             Hit::Diagnostics => self.show_diagnostics(window, cx),
+            Hit::Hooks => self.show_settings_page(settings::Page::General, window, cx),
             Hit::Action(i) => {
                 if let (Some(action), Some(pane)) =
                     (mooring_core::action::all().get(i), self.nav.focused.clone())
@@ -308,7 +320,7 @@ impl Workbench {
             None => {}
         }
     }
-    pub(super) fn set_query(&mut self, text: &str, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn set_query(&mut self, text: &str, cx: &mut Context<Self>) {
         self.search.field.update(cx, |f, cx| {
             f.set_text(text);
             cx.notify();

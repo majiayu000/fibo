@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 mod about;
 mod general;
+mod hooks;
 mod keys;
 mod look;
 mod notifications;
@@ -124,7 +125,17 @@ impl Page {
     }
 }
 /// Every searchable setting: its page, its title and the words that find it.
-const ENTRIES: [(Page, &str, &str); 40] = [
+const ENTRIES: [(Page, &str, &str); 41] = [
+    (
+        Page::General,
+        "Agent Hook",
+        tk!("hook hooks claude settings.json 过期 安装 重新安装 卸载 对上对话 状态不准"),
+    ),
+    (
+        Page::General,
+        tk!("没装 Hook 时提醒"),
+        tk!("hook 提醒 状态栏 没装 过期"),
+    ),
     (
         Page::General,
         tk!("语言"),
@@ -315,11 +326,6 @@ const ENTRIES: [(Page, &str, &str); 40] = [
         tk!("运行数据"),
         tk!("数据目录 数据库 runtime 后台 访达"),
     ),
-    (
-        Page::About,
-        "Agent Hook",
-        tk!("hook hooks claude settings.json 过期 重新安装 对上对话"),
-    ),
     (Page::About, tk!("偏好文件"), tk!("配置 config 访达")),
 ];
 pub(super) enum SettingsAction {
@@ -333,6 +339,8 @@ pub(super) enum SettingsAction {
     PluginsChanged,
     /// The other machines list was saved: connect to them afresh.
     MachinesChanged,
+    /// A CLI's hooks were installed or removed here: the window reads them again.
+    HooksChanged,
     /// Phones on a relay: on or off, the relay, and its key (None keeps the saved one).
     Remote {
         enabled: bool,
@@ -358,7 +366,7 @@ pub(super) struct SettingsView {
     pub(super) refused: Option<(Action, &'static str)>,
     /// The Agent CLIs' hook entries, read once when the panel opens; None while reading.
     hooks: Option<Result<Vec<crate::agent_hooks::Hook>, String>>,
-    /// The CLI whose hooks are being installed after a click.
+    /// The CLI whose hooks are being installed or removed after a click.
     installing: Option<String>,
     /// Phones on a relay as the host last said; kept current while the panel is open.
     pub(super) remote: mooring_core::protocol::RemoteStatus,
@@ -423,7 +431,7 @@ impl SettingsView {
             }
         })
         .detach();
-        Self::check_hooks(None, cx);
+        Self::change_hooks(None, cx);
         let (machines, machines_error) = match crate::machines::load() {
             Ok(machines) => (machines, None),
             Err(e) => (Vec::new(), Some(t!("没读到电脑配置：{e}", e))),
@@ -452,26 +460,6 @@ impl SettingsView {
             market: plugins::Market::read(cx),
             editor: None,
         }
-    }
-    /// Installs `agent`'s hooks first when given (only ever from a click), then reads every
-    /// CLI's again. Both run in the background: they spawn `mooring` and read small files.
-    fn check_hooks(agent: Option<String>, cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_spawn(async move {
-                    if let Some(agent) = agent {
-                        crate::agent_hooks::install(&agent)?;
-                    }
-                    crate::agent_hooks::check()
-                })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.hooks = Some(result.map_err(|e| e.to_string()));
-                this.installing = None;
-                cx.notify();
-            });
-        })
-        .detach();
     }
     /// Sends a workspace setting to the host; nothing while the last one is saving.
     fn change(&self, cx: &mut Context<Self>, edit: impl FnOnce(&mut Settings)) {

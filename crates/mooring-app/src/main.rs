@@ -425,6 +425,7 @@ fn run() -> io::Result<()> {
         cx.set_global(ui::space_themes::SpaceThemes::load());
         cx.set_global(ui::style::Style::load());
         cx.set_global(ui::peek::PeekChoice::load());
+        cx.set_global(ui::hook_hint::HookHint::load());
         cx.set_global(ui::pinned_ask::PinnedAsk::load());
         cx.set_global(ui::running_spin::RunningSpin::load());
         cx.set_global(keymap::Keymap::load());

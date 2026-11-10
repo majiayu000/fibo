@@ -37,6 +37,8 @@ pub(super) enum Hit {
     Space(String),
     /// 本机诊断: opens the CPU / GPU panel, otherwise only reachable from the sidebar foot.
     Diagnostics,
+    /// Agent Hook: opens 设置 › 通用, where a CLI's hook is installed and taken out.
+    Hooks,
     /// 「再显示 N 个」: the rest of a folded group, `hidden` rows past what shows.
     More {
         section: &'static str,

@@ -231,6 +231,8 @@ impl Workbench {
         self.tasks.last_agent = Some(agent);
         self.tasks.chosen_agent = Some(agent);
         self.launch(false, None, cx);
+        // Its hook may have been installed or removed from a terminal since the last read.
+        self.read_hooks(cx);
     }
     /// The Agent an empty tab offers first: the last one picked, else the default.
     /// A tab with no terminal yet, a new space's first view: where work starts, one solid

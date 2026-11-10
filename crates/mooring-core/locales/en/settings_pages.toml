@@ -14,6 +14,8 @@
 "{note}：{diffs}" = "{note}: {diffs}"
 "；" = "; "
 "正在安装…" = "Installing…"
+"正在卸载…" = "Removing…"
+"Hook 让 Agent 自己报状态和审批，不靠读终端画面，只在 Fibo 的终端里起作用。开着的 Agent 没装或过期时，在状态栏说一声" = "Hooks let an agent report its own state and approvals instead of Fibo reading the terminal screen; they only act in Fibo terminals. When an open agent has none or old ones, the status bar says so"
 "版本 {version} · Agent 工作台" = "Version {version} · Agent workbench"
 "别再丢掉 Codex 与 Claude Code 里的工作。" = "Never lose work in Codex and Claude Code again."
 "数据与偏好" = "Data and preferences"

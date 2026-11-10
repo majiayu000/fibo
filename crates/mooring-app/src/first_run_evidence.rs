@@ -1,8 +1,9 @@
 use super::*;
 
 // A stranger's first five minutes, run against a fresh HOME and runtime: what the window
-// shows on first launch, once the login shell and hooks are checked, after 「安装 Hook」,
-// after 「启动 Claude Code」, and then what the terminal says about `mooring` and the hooks.
+// shows on first launch, once the login shell and hooks are checked, after 「启动 Claude Code」
+// (which writes its hook unless `MOORING_FIRST_RUN_NO_HOOK` clears the box first), what the
+// terminal then says about `mooring` and the hooks, and 设置 › 通用.
 // `MOORING_FIRST_RUN_AGENT` names the CLI to start (default claude).
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
@@ -48,11 +49,14 @@ pub(super) fn start(
         wait(6000).await;
         take("2-checked", cx);
         if greeted {
-            handle
-                .update(cx, |v, _, cx| v.visual_first_run_install(cx))
-                .unwrap();
-            wait(4000).await;
-            take("3-hooks", cx);
+            // 「启动时一起装上」 is ticked unless the run asks for it cleared.
+            if std::env::var_os("MOORING_FIRST_RUN_NO_HOOK").is_some() {
+                handle
+                    .update(cx, |v, _, cx| v.visual_first_run_tick(cx))
+                    .unwrap();
+                wait(400).await;
+                take("3-unticked", cx);
+            }
             handle
                 .update(cx, |v, _, cx| v.visual_first_run_start(&agent, cx))
                 .unwrap();
@@ -71,6 +75,20 @@ pub(super) fn start(
         });
         wait(4000).await;
         take("5-terminal", cx);
+        // Where the hook is installed and taken out afterwards.
+        handle
+            .update(cx, |v, window, cx| v.show_settings(window, cx))
+            .unwrap();
+        wait(2000).await;
+        take("6-settings", cx);
+        // And how it is found again without knowing where it is.
+        handle
+            .update(cx, |v, window, cx| {
+                v.visual_first_run_palette("hook", window, cx)
+            })
+            .unwrap();
+        wait(1000).await;
+        take("7-palette", cx);
         let still = handle.update(cx, |v, _, _| v.visual_first_run()).unwrap();
         eprintln!("first run still shown at the end: {still}");
         cx.update(|cx| cx.quit());

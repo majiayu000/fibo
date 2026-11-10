@@ -35,6 +35,8 @@ pub(super) struct FrameFacts {
     /// Sessions in Mooring's terminals that work and that wait for your check.
     pub(super) working: usize,
     pub(super) review: usize,
+    /// The CLIs with a conversation going on in one of our terminals, each once.
+    pub(super) running: Vec<Agent>,
 }
 
 /// `Workbench::facts` keeps its answer here until an input changes.
@@ -58,10 +60,14 @@ impl FrameFacts {
         let mut latest: FxHashMap<String, usize> = FxHashMap::default();
         let mut newest: FxHashMap<&str, u64> = FxHashMap::default();
         let mut needs_you = Vec::new();
+        let mut running = Vec::new();
         for (index, s) in w.agent_sessions.iter().enumerate() {
             if let Some(terminal) = s.terminal.as_deref() {
                 if s.current {
                     current.entry(terminal.to_owned()).or_default().push(index);
+                    if !running.contains(&s.runtime) {
+                        running.push(s.runtime);
+                    }
                 }
                 let updated = w.session_updated(s);
                 // The last of equals, as `max_by_key` picks.
@@ -93,6 +99,7 @@ impl FrameFacts {
             listed,
             working,
             review,
+            running,
         }
     }
 

@@ -90,7 +90,9 @@
 "关于 fibo version" = "about fibo version"
 "运行数据" = "Runtime data"
 "数据目录 数据库 runtime 后台 访达" = "data folder database runtime host finder"
-"hook hooks claude settings.json 过期 重新安装 对上对话" = "hook hooks claude settings.json outdated reinstall match conversation"
+"hook hooks claude settings.json 过期 安装 重新安装 卸载 对上对话 状态不准" = "hook hooks claude settings.json outdated install reinstall uninstall remove match conversation wrong state"
+"没装 Hook 时提醒" = "Remind me about missing hooks"
+"hook 提醒 状态栏 没装 过期" = "hook hooks reminder status bar missing outdated"
 "偏好文件" = "Preferences"
 "配置 config 访达" = "config finder"
 
