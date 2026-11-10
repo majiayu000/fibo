@@ -125,7 +125,9 @@ pub fn start(
     if diagnostic_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
-    split_evidence::start(handle, evidence.clone(), cx);
+    if split_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
     if osc7_evidence::start(handle, evidence.clone(), cx) {
         return;
     }

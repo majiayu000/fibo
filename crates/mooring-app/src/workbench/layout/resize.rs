@@ -6,6 +6,8 @@ use gpui::{Pixels, Point};
 pub(in crate::workbench) struct SplitDrag {
     pub(super) tab: String,
     pub(super) path: Vec<bool>,
+    /// After release, keep the preview until this save's receipt arrives.
+    pub(super) saving: Option<RequestId>,
     axis: Axis,
     start: Point<Pixels>,
     start_ratio: u16,
@@ -61,6 +63,20 @@ impl SplitDrag {
 }
 
 impl Workbench {
+    pub(in crate::workbench) fn settle_resize(&mut self, id: Option<&RequestId>) -> bool {
+        if self
+            .layout
+            .drag
+            .as_ref()
+            .is_some_and(|drag| drag.saving.as_ref().is_some_and(|save| Some(save) == id))
+        {
+            self.layout.drag = None;
+            true
+        } else {
+            false
+        }
+    }
+
     pub(super) fn begin_resize(&mut self, path: Vec<bool>, start: Point<Pixels>) {
         let Some(tab) = self.nav.tab.clone() else {
             return;
@@ -87,6 +103,7 @@ impl Workbench {
                 path,
                 axis: *axis,
                 start,
+                saving: None,
                 start_ratio: *ratio,
                 usable,
             });
@@ -97,6 +114,9 @@ impl Workbench {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const FIXTURE_SPAN: f32 = 1000.;
+    const FIXTURE_LEFT: f32 = 100.;
+    const FIXTURE_TOP: f32 = 200.;
 
     #[test]
     fn split_drag_keeps_preview_but_accepts_other_snapshot_changes() {
@@ -105,8 +125,9 @@ mod tests {
             path: vec![],
             axis: Axis::Down,
             start: Point::default(),
+            saving: None,
             start_ratio: 8000,
-            usable: px(1000.),
+            usable: px(FIXTURE_SPAN),
         };
         let mut local = Workspace::default();
         local.tabs.push(Tab {
@@ -147,14 +168,15 @@ mod tests {
         for axis in [Axis::Down, Axis::Right] {
             for start_ratio in [500, 2000, 5000, 8000, 9500] {
                 for grab in [0., 4., 8.] {
-                    let start = gpui::point(px(100. + grab), px(200. + grab));
+                    let start = gpui::point(px(FIXTURE_LEFT + grab), px(FIXTURE_TOP + grab));
                     let drag = SplitDrag {
                         tab: "tab".into(),
                         path: vec![],
                         axis,
                         start,
+                        saving: None,
                         start_ratio,
-                        usable: px(1000.),
+                        usable: px(FIXTURE_SPAN),
                     };
                     assert_eq!(drag.ratio_at(start), start_ratio, "pressing must not jump");
                     for delta in [-20., -1., 0., 1., 20.] {

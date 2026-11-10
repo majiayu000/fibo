@@ -4,7 +4,7 @@ pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
     evidence: Option<PathBuf>,
     cx: &mut App,
-) {
+) -> bool {
     if let (Some(handle), Some(directory)) = (&handle, evidence.clone())
         && (std::env::var_os("MOORING_SPLIT_EVIDENCE").is_some()
             || std::env::var_os("MOORING_RESIZE_EVIDENCE").is_some())
@@ -13,7 +13,7 @@ pub(super) fn start(
         cx.spawn(async move |cx| {
             cx.background_executor().timer(Duration::from_secs(2)).await;
             if std::env::var_os("MOORING_RESIZE_EVIDENCE").is_some() {
-                resize_regression(handle, &directory, cx);
+                resize_regression(handle, &directory, cx).await;
                 cx.update(|cx| cx.quit());
                 return;
             }
@@ -72,15 +72,17 @@ pub(super) fn start(
             }
             cx.update(|cx|cx.quit());
         }).detach();
+        return true;
     }
+    false
 }
 
-fn resize_regression(
+async fn resize_regression(
     handle: WindowHandle<workbench::Workbench>,
     out: &std::path::Path,
     cx: &mut gpui::AsyncApp,
 ) {
-    use super::pane_drag_evidence::{down, send};
+    use super::pane_drag_evidence::{down, send, up};
     use gpui::InputEvent;
     use mooring_core::layout::Axis;
     std::fs::create_dir_all(out).unwrap();
@@ -113,7 +115,7 @@ fn resize_regression(
                 })
                 .unwrap();
             draw(cx);
-            let stale = handle
+            let mut stale = handle
                 .update(cx, |v, _, _| v.visual_resize_workspace())
                 .unwrap();
             let (from, usable) = handle
@@ -149,8 +151,8 @@ fn resize_regression(
                 if step == 0 {
                     shot(format!("{label}-moved.png"), cx);
                 }
-                handle
-                    .update(cx, |v, _, a| v.visual_resize_snapshot(stale.clone(), a))
+                stale = handle
+                    .update(cx, |v, _, a| v.visual_resize_snapshot(a))
                     .unwrap();
                 draw(cx);
                 if handle
@@ -161,12 +163,66 @@ fn resize_regression(
                     failures.push(format!("{label}: snapshot reset the divider"));
                 }
             }
+            let expected = (8000. - px(1.) / usable * 10000.).round() as u16;
+            let release = from
+                - match axis {
+                    Axis::Down => gpui::point(px(0.), px(1.)),
+                    Axis::Right => gpui::point(px(1.), px(0.)),
+                };
+            send(handle, cx, up(release));
+            send(
+                handle,
+                cx,
+                gpui::MouseMoveEvent {
+                    position: from,
+                    pressed_button: None,
+                    modifiers: Default::default(),
+                }
+                .to_platform_input(),
+            );
+            assert_eq!(
+                handle
+                    .update(cx, |v, _, _| v.visual_resize_ratio(&path))
+                    .unwrap(),
+                expected,
+                "hover after mouse-up must not resize"
+            );
+            // A snapshot already in flight can arrive after mouse-up, before the
+            // resize receipt. Its revision is real, not artificially advanced.
+            handle
+                .update(cx, |v, _, a| v.visual_resize_apply(stale, a))
+                .unwrap();
+            draw(cx);
+            if handle
+                .update(cx, |v, _, _| v.visual_resize_ratio(&path))
+                .unwrap()
+                != expected
+            {
+                failures.push(format!("{label}: mouse-up snapshot reset the divider"));
+            }
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(50))
+                    .await;
+                if handle
+                    .update(cx, |v, _, _| v.visual_resize_saved(&path, expected))
+                    .unwrap()
+                {
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "resize receipt timed out: {label}"
+                );
+            }
+            eprintln!("{label}: mouse-up persisted {expected} and reply kept the position");
         }
     }
     std::fs::write(
         out.join("result.txt"),
         if failures.is_empty() {
-            "PASS: both axes, nested split, three grab positions, reverse moves, incoming snapshots"
+            "PASS: both axes, nested split, three grab positions, reverse moves, incoming snapshots, mouse-up and saved ratios"
                 .into()
         } else {
             failures.join("\n")

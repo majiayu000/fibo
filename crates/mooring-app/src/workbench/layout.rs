@@ -163,7 +163,10 @@ impl Workbench {
                                     .when(down, |d| d.h(px(T::S2)).w(px(T::S20 * 2.)))
                                     .when(!down, |d| d.w(px(T::S2)).h(px(T::S20 * 2.)))
                                     .when(
-                                        self.layout.drag.as_ref().is_some_and(|d| d.path == path),
+                                        self.layout
+                                            .drag
+                                            .as_ref()
+                                            .is_some_and(|d| d.path == path && d.saving.is_none()),
                                         |d| d.bg(T::color(T::focus())),
                                     )
                                     .group_hover("divider", |d| d.bg(T::color(T::focus()))),
@@ -201,6 +204,9 @@ impl Workbench {
         let Some(drag) = &self.layout.drag else {
             return;
         };
+        if drag.saving.is_some() {
+            return;
+        }
         if self.nav.tab.as_ref() != Some(&drag.tab) {
             self.layout.drag = None;
             return;
@@ -213,14 +219,17 @@ impl Workbench {
     }
     pub(super) fn finish_drag(&mut self, cx: &mut Context<Self>) {
         self.layout.drop = DropState::default();
-        let Some(drag) = self.layout.drag.take() else {
+        let Some(drag) = &self.layout.drag else {
             return;
         };
-        let (path, tab) = (drag.path, drag.tab);
+        if drag.saving.is_some() {
+            return;
+        }
+        let (path, tab) = (drag.path.clone(), drag.tab.clone());
         let at = (self.workspace.tabs.iter_mut().find(|t| t.id == tab))
             .and_then(|t| t.layout.as_mut()?.at_mut(&path).cloned());
         if let Some(Layout::Split { axis, ratio, .. }) = at {
-            self.edit(
+            let request = self.edit_named(
                 Edit::ResizeSplit {
                     tab,
                     path,
@@ -229,6 +238,7 @@ impl Workbench {
                 },
                 cx,
             );
+            self.layout.drag.as_mut().unwrap().saving = Some(request);
         }
     }
     /// Moves a pane, process and all, beside the panes of another tab or into a tab of

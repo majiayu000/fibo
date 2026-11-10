@@ -41,10 +41,22 @@ impl Workbench {
         } else {
             split
         };
-        let tab = &mut self.workspace.tabs[0];
+        let mut tab = self.workspace.tabs[0].clone();
+        tab.id = super::super::id();
         tab.layout = Some(tree);
         self.nav.tab = Some(tab.id.clone());
         self.nav.space = tab.space.clone();
+        let Reply::Workspace(w) = rpc(
+            self.store.socket(),
+            &Request::Edit {
+                request: None,
+                edit: Edit::CreateTab { tab },
+            },
+        )
+        .expect("create fixture split") else {
+            panic!("fixture split refused")
+        };
+        self.workspace = w;
         self.nav.overview = false;
         self.nav.zoomed = None;
         self.sync_panes(cx);
@@ -83,9 +95,57 @@ impl Workbench {
         }
     }
 
-    pub fn visual_resize_snapshot(&mut self, mut incoming: Workspace, cx: &mut Context<Self>) {
+    pub fn visual_resize_snapshot(&mut self, cx: &mut Context<Self>) -> Workspace {
         assert!(self.layout.drag.is_some(), "divider must be grabbed");
-        incoming.revision = self.workspace.revision + 1;
-        self.apply_workspace(incoming, cx);
+        let Reply::Workspace(w) = rpc(
+            self.store.socket(),
+            &Request::Edit {
+                request: None,
+                edit: Edit::RenameTab {
+                    id: self.nav.tab.clone().unwrap(),
+                    title: format!("snapshot-{}", self.workspace.revision),
+                },
+            },
+        )
+        .unwrap() else {
+            panic!("snapshot edit refused")
+        };
+        self.apply_workspace(w.clone(), cx);
+        w
+    }
+
+    pub fn visual_resize_apply(&mut self, w: Workspace, cx: &mut Context<Self>) {
+        self.apply_workspace(w, cx);
+    }
+
+    pub fn visual_resize_saved(&mut self, path: &[bool], expected: u16) -> bool {
+        assert!(self.error.is_none(), "resize failed: {:?}", self.error);
+        if self.store.busy() {
+            return false;
+        }
+        assert!(
+            self.layout.drag.is_none(),
+            "save receipt did not end the resize"
+        );
+        let Reply::Workspace(mut saved) = rpc(self.store.socket(), &Request::Workspace).unwrap()
+        else {
+            panic!("read saved split")
+        };
+        let tab = saved
+            .tabs
+            .iter_mut()
+            .find(|t| Some(&t.id) == self.nav.tab.as_ref())
+            .unwrap();
+        assert!(
+            matches!(tab.layout.as_mut().unwrap().at_mut(path),
+            Some(Layout::Split { ratio, .. }) if *ratio == expected),
+            "host did not save {expected}"
+        );
+        assert_eq!(
+            self.visual_resize_ratio(path),
+            expected,
+            "reply changed the preview"
+        );
+        true
     }
 }

@@ -109,6 +109,21 @@ jobs:
       - name: Cargo test
         run: sh ci-test.sh
 
+      # Keep the pointer/refresh/save regression inside the required check, not only
+      # the optional performance job. Compilation alone does not exercise its events.
+      - name: Native split resize regression
+        run: |
+          cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
+          python3 scripts/resize-scenes.py target/debug target/resize-scenes
+
+      - name: Keep resize regression evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resize-scenes
+          path: target/resize-scenes
+          if-no-files-found: ignore
+
       - name: Upload managed_session retries
         if: always()
         uses: actions/upload-artifact@v4
