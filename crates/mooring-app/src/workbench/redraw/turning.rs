@@ -3,8 +3,9 @@
 //! The sidebar is a cached view and costs about 105 M instructions a draw on a large
 //! workspace, so the turning part lives outside it: a row leaves an empty box where its
 //! mark goes and notes where that box landed, and a small view over the sidebar paints the
-//! marks there, turned to the shared clock. A step draws the workbench (about 8 M) and
-//! reuses the sidebar. With the setting off none of this exists in a frame.
+//! marks there, turned to the shared clock. Tabs and pane headers register their marks
+//! afresh each frame, while cached sidebar marks stay until that view draws again.
+//! A step draws the workbench (about 8 M) and reuses the sidebar. With the setting off none of this exists in a frame.
 use super::*;
 use gpui::{Bounds, ContentMask, Pixels, TransformationMatrix};
 use std::cell::RefCell;
@@ -32,6 +33,8 @@ impl Mark {
 #[derive(Default)]
 pub(super) struct Marks {
     rows: RefCell<Vec<Mark>>,
+    /// Tabs and pane headers are laid out anew on every workbench frame.
+    frame: RefCell<Vec<Mark>>,
     /// The last paint showed marks: the view keeps stepping only while this holds, so a
     /// running row scrolled away costs nothing. Noted at paint, because a frame that draws
     /// the sidebar has no marks yet when views render.
@@ -61,9 +64,11 @@ impl Render for Turning {
             |_, _, _| (),
             move |_, (), window, cx| {
                 let rows = marks.rows.borrow();
-                marks.live.set(rows.iter().any(Mark::shown));
+                let frame = marks.frame.borrow();
+                let all = || rows.iter().chain(frame.iter());
+                marks.live.set(all().any(Mark::shown));
                 let scale = window.scale_factor();
-                for mark in rows.iter().filter(|m| m.shown()) {
+                for mark in all().filter(|m| m.shown()) {
                     let center = mark.bounds.center();
                     let turned = TransformationMatrix::unit()
                         .translate(center.scale(scale))
@@ -98,6 +103,7 @@ impl Workbench {
         g: Status,
         icon: &'static str,
         size: f32,
+        in_sidebar: bool,
         cx: &Context<Self>,
     ) -> Option<gpui::AnyElement> {
         if g != Status::Running || !turns(cx) {
@@ -108,7 +114,12 @@ impl Workbench {
         let hue = g.colors().0;
         let note = move |bounds, window: &mut Window, _: &mut gpui::App| {
             let mask = window.content_mask();
-            marks.rows.borrow_mut().push(Mark {
+            let rows = if in_sidebar {
+                &marks.rows
+            } else {
+                &marks.frame
+            };
+            rows.borrow_mut().push(Mark {
                 bounds,
                 mask,
                 icon,
@@ -127,10 +138,11 @@ impl Workbench {
         &self,
         g: Status,
         unseen: bool,
+        in_sidebar: bool,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         const SIZE: f32 = 10.;
-        let Some(arc) = self.turning_mark(g, "icons/arc.svg", SIZE, cx) else {
+        let Some(arc) = self.turning_mark(g, "icons/arc.svg", SIZE, in_sidebar, cx) else {
             return crate::ui::widgets::status_mark_seen(g, unseen);
         };
         let ring = gpui::svg()
@@ -145,12 +157,21 @@ impl Workbench {
             .child(div().absolute().top_0().left_0().child(arc))
             .into_any_element()
     }
-    /// The view that paints them, over the sidebar and under menus and the 标记完成 run.
+    /// Forget only the marks whose owners will lay out again this frame.
+    pub(in crate::workbench) fn begin_turning_frame(&self) {
+        if let Some(r) = &self.redraw {
+            r.marks.frame.borrow_mut().clear();
+            if self.sidebar.collapsed {
+                r.marks.clear();
+            }
+        }
+    }
+    /// The view that paints marks under menus and the 标记完成 run.
     pub(in crate::workbench) fn turning_view(
         &self,
         cx: &Context<Self>,
     ) -> Option<gpui::AnyElement> {
-        let on = turns(cx) && !self.sidebar.collapsed;
+        let on = turns(cx);
         self.redraw
             .as_ref()
             .filter(|_| on)
@@ -179,6 +200,35 @@ impl Workbench {
         self.redraw.as_ref().map_or(0, |r| {
             r.marks.rows.borrow().iter().filter(|m| m.shown()).count()
         })
+    }
+    pub fn visual_turning_frame_bounds(&self) -> Vec<Bounds<Pixels>> {
+        self.redraw.as_ref().map_or_else(Vec::new, |r| {
+            r.marks
+                .frame
+                .borrow()
+                .iter()
+                .filter(|m| m.shown())
+                .map(|m| m.bounds)
+                .collect()
+        })
+    }
+    pub fn visual_turning_focus(&mut self, cx: &mut Context<Self>) {
+        self.nav.tab = self
+            .workspace
+            .tabs
+            .iter()
+            .find(|tab| {
+                tab.space == self.nav.space
+                    && self.workspace.tab_terminals(&tab.id).iter().any(|id| {
+                        self.pane_status(id)
+                            .is_some_and(|(g, _)| g == Status::Running)
+                    })
+            })
+            .map(|tab| tab.id.clone());
+        assert!(self.nav.tab.is_some(), "fixture needs a running tab");
+        self.nav.overview = false;
+        self.sync_panes(cx);
+        cx.notify();
     }
     /// How many times the view has asked for its next step, to see it stop.
     pub fn visual_turning_asks() -> usize {

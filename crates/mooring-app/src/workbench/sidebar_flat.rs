@@ -337,7 +337,7 @@ impl Workbench {
         flat_row_box(row, selected, two)
             .child(
                 div().flex_shrink_0().when(two, |d| d.mt(px(T::S4))).child(
-                    self.turning_mark(g, "icons/state-run.svg", F::STATE, cx)
+                    self.turning_mark(g, "icons/state-run.svg", F::STATE, true, cx)
                         .unwrap_or_else(|| flat_state(g, attention)),
                 ),
             )

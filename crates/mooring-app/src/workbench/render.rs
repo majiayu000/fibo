@@ -358,7 +358,8 @@ impl Render for Workbench {
             let tail = if terminal_style {
                 close.into_any_element()
             } else {
-                tabs::tab_tail(close, after, group_name.clone()).into_any_element()
+                let mark = after.map(|g| self.session_mark(g, false, false, cx));
+                tabs::tab_tail(close, mark, group_name.clone()).into_any_element()
             };
             strip = strip.child(
                 div()

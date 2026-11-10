@@ -402,7 +402,7 @@ impl PaneAction for gpui::Stateful<gpui::Div> {
 /// The pane header's status: the group's wash, its ink and its dot.
 /// The state word, and after it why the session needs you when a reasons rule knows:
 /// 「等你回答 · 批准 WebSearch」. The phrase is already cut to the rules' width.
-fn state_chip(group: Status, reason: Option<String>) -> gpui::Div {
+fn state_chip(group: Status, reason: Option<String>, mark: gpui::AnyElement) -> gpui::Div {
     let (_, ink, wash) = group.colors();
     div()
         .flex_shrink_0()
@@ -416,7 +416,7 @@ fn state_chip(group: Status, reason: Option<String>) -> gpui::Div {
         .text_color(ink)
         .text_size(px(T::META))
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .child(crate::ui::widgets::status_mark(group))
+        .child(mark)
         .child(group.label())
         .when_some(reason, |d, r| {
             d.child(div().opacity(0.6).child("·"))

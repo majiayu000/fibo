@@ -4,14 +4,14 @@ use super::*;
 /// A stable slot: the state and close control trade visibility, never layout space.
 pub(super) fn tab_tail(
     close: gpui::Stateful<gpui::Div>,
-    status: Option<Status>,
+    mark: Option<gpui::AnyElement>,
     group: gpui::SharedString,
 ) -> gpui::Div {
     div()
         .relative()
         .flex_shrink_0()
         .size(px(T::ICON_HEIGHT))
-        .when_some(status, |d, g| {
+        .when_some(mark, |d, mark| {
             d.child(
                 div()
                     .absolute()
@@ -21,7 +21,7 @@ pub(super) fn tab_tail(
                     .justify_center()
                     .text_size(px(T::CHIP_SIZE))
                     .group_hover(group, |s| s.opacity(0.))
-                    .child(crate::ui::widgets::status_mark(g)),
+                    .child(mark),
             )
         })
         .child(close.absolute().size_full().px_0())

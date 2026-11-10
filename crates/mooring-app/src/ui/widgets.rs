@@ -89,9 +89,6 @@ pub fn glyph(group: Status) -> gpui::Div {
 /// The v3 mark beside a session in the sidebar and on its tab: a filled dot when it
 /// waits on you, a ring for a turn to check, a quarter arc on a pale ring while it runs,
 /// a gray ring once it stopped, and ✓ when you marked it done.
-pub fn status_mark(group: Status) -> gpui::AnyElement {
-    status_mark_seen(group, false)
-}
 /// The sidebar's mark: a finished turn you have not looked at yet is a filled green dot;
 /// once seen it turns back into 等你验收's ring.
 pub fn status_mark_seen(group: Status, unseen: bool) -> gpui::AnyElement {

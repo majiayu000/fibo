@@ -305,7 +305,7 @@ pub(super) fn start(
             } else if name == "frames-changes" {
                 changes_frames(handle, &pane, cx).await
             } else if name == "frames-turning" {
-                turning::run(handle, cx).await
+                turning::run(handle, &directory, cx).await
             } else if name == "frames-motion" {
                 motion_frames(handle, cx).await
             } else if name == "frames-arrive" {

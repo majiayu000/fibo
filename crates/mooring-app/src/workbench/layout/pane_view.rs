@@ -248,7 +248,7 @@ impl Workbench {
                 d.child(
                     div()
                         .id(gpui::SharedString::from(format!("pane-state-{id}")))
-                        .child(state_chip(g, when))
+                        .child(state_chip(g, when, self.session_mark(g, false, false, cx)))
                         .when_some(reason.clone(), |d, r| {
                             d.tooltip(move |_, cx| {
                                 cx.new(|_| super::render::TextTip(r.clone().into())).into()
