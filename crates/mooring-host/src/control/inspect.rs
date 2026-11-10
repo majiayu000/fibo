@@ -92,7 +92,9 @@ pub(super) fn list(a: Args) -> io::Result<()> {
             cwd: w.terminal_cwd(t).to_string(),
         })
         .collect();
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = mooring_platform::dirs::home()
+        .map(|h| h.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let color = {
         use std::io::IsTerminal;
         std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none()
