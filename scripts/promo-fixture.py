@@ -9,11 +9,16 @@ visual tests: `cargo build -p mooring-host -p mooring-app --features mooring-app
   python3 scripts/promo-fixture.py prepare
   MOORING_LANG=en MOORING_PAGE_LIST=Main,Overview python3 scripts/promo-fixture.py capture DIR
   python3 scripts/promo-fixture.py stop
+
+MOORING_PROMO_FAR=1 on prepare adds a second Mac, mac2, reached through a fake ssh (a host here
+with its own HOME and runtime), with two spaces of its own, and quiets the docs space here: what
+the website's spaces-and-machines section shows. capture and stop pick it up from the state file.
 """
 import json, os, random, uuid, pathlib, shlex, socket, struct, subprocess, sys, tempfile, time
 
 BASE = pathlib.Path(__file__).resolve().parents[1]
-STATE = pathlib.Path.home() / 'Library/Caches/MooringVisual/promo-state.json'
+# MOORING_PROMO_STATE keeps one run's state apart, so two sessions capturing at once never stop each other's host.
+STATE = pathlib.Path(os.environ.get('MOORING_PROMO_STATE') or pathlib.Path.home() / 'Library/Caches/MooringVisual/promo-state.json')
 BIN = pathlib.Path(os.environ.get('MOORING_VISUAL_BIN', BASE / 'target/debug'))
 
 
@@ -81,15 +86,24 @@ SESSIONS = [
     (1, 'Codex', 'Add request IDs to every log line', 'review', []),
 ]
 LIVE = [0, 1, 2, 3, 4]
+# The second machine's spaces and sessions (MOORING_PROMO_FAR=1), shaped like SESSIONS.
+FAR_SPACES = ['ci-runner', 'blog']
+FAR_SESSIONS = [
+    (0, 'Codex', 'Bump the macOS runner image', 'needs',
+     ['› Bump the macOS runner image', '', '• macos-14 is deprecated on 2026-12-01', '', '? Move to macos-15 now, or wait for the Xcode 27 image?']),
+    (0, 'Codex', 'Cache the cargo registry between jobs', 'done', []),
+    (1, 'Claude', 'Draft the v0.1 launch post', 'review',
+     ['> Draft the v0.1 launch post', '', '⏺ Write(posts/fibo-0-1.md)', '  ⎿ 640 words, three screenshots', '', 'Done. Ready for your review.']),
+]
 
 
-def codex_records(cid, cwd, title, state, stamp):
+def codex_records(cid, cwd, title, state, stamp, ask=('Two ways to fix this. Which one should I take?', 'Which fix?', ['Wait for the old host', 'Hand the socket over'])):
     r = [(stamp - 420, 'session_meta', {'id': cid, 'cwd': cwd, 'source': 'cli', 'originator': 'codex-tui', 'thread_source': 'user'}),
          (stamp - 420, 'event_msg', {'type': 'user_message', 'message': title}),
          (stamp - 420, 'event_msg', {'type': 'task_started', 'turn_id': cid + '-turn'})]
     if state == 'needs':
-        r.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': 'Two ways to fix this. Which one should I take?',
-                                       'questions': [{'question': 'Which fix?', 'options': [{'label': 'Wait for the old host'}, {'label': 'Hand the socket over'}]}]}))
+        r.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': ask[0],
+                                       'questions': [{'question': ask[1], 'options': [{'label': o} for o in ask[2]]}]}))
     elif state in ('review', 'done'):
         r.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': 'Done. Ready for your review.'}))
     elif state == 'aborted':
@@ -165,7 +179,56 @@ if sys.argv[1] == 'prepare':
         n = next((n for n, (cid, _) in logs.items() if cid == s['cli_session_id']), None)
         if n is None: continue
         if SESSIONS[n][3] == 'done': edit(root, {'SetOutcome': {'id': s['id'], 'outcome': 'Completed', 'seen': None}})
-    state = {'root': str(root), 'home': str(home), 'host': host.pid}; STATE.write_text(json.dumps(state)); print(state)
+    state = {'root': str(root), 'home': str(home), 'host': host.pid}
+    if os.environ.get('MOORING_PROMO_FAR') == '1':
+        # mac2: its own HOME and runtime, reached by an ssh that drops the host and runs the command here.
+        far = root / 'far'; far_home = far / 'home'; (far / 'runtime').mkdir(parents=True, mode=0o700); far.chmod(0o700)
+        (far_home / '.codex/sessions').mkdir(parents=True)
+        far_logs = {}
+        for n, (space, agent, title, st, _) in enumerate(FAR_SESSIONS):
+            project = far / 'projects' / FAR_SPACES[space]; project.mkdir(parents=True, exist_ok=True)
+            stamp = now - 150 * (n + 1); cid = str(uuid.UUID(int=random.Random(n * 104729).getrandbits(128), version=4))
+            if st == 'done': far_done = cid
+            if agent == 'Codex':
+                path = far_home / '.codex/sessions' / f'rollout-{cid}.jsonl'; path.write_text(codex_records(cid, str(project), title, st, stamp, ('macos-14 goes away on 2026-12-01.', 'macOS 15 now?', ['Move to macos-15', 'Wait for Xcode 27'])))
+            else:
+                folder = far_home / '.claude/projects' / ('-' + FAR_SPACES[space]); folder.mkdir(parents=True, exist_ok=True)
+                path = folder / f'{cid}.jsonl'; path.write_text(claude_records(cid, str(project), title, st, stamp))
+            os.utime(path, (stamp, stamp)); far_logs[n] = (cid, path)
+        far_env = dict(env, HOME=str(far_home), CODEX_HOME=str(far_home / '.codex'), CLAUDE_CONFIG_DIR=str(far_home / '.claude'))
+        far_host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(far / 'runtime')], env=far_env, stdout=subprocess.DEVNULL, stderr=open(far / 'host.log', 'w'), start_new_session=True)
+        while not (far / 'runtime/workbench.sock').exists():
+            assert far_host.poll() is None and time.monotonic() < deadline + 60; time.sleep(.05)
+        for n, name in enumerate(FAR_SPACES): edit(far, {'AddSpace': {'id': f'f{n}', 'name': name, 'cwd': str(far / 'projects' / name)}})
+        for name in ('codex', 'claude'): (far / name).symlink_to('/bin/sh')
+        far_live = [n for n, x in enumerate(FAR_SESSIONS) if x[4]]
+        for n in far_live:
+            space, agent, title, st, lines = FAR_SESSIONS[n]; cid, path = far_logs[n]
+            script = 'exec 3<' + shlex.quote(str(path)) + '; printf "\\033[?25l"; printf "%s\\n" ' + ' '.join(shlex.quote(x) for x in lines) + '; while IFS= read -r line; do :; done'
+            r = rpc(far, {'Launch': {'id': f'q{n}', 'space': f'f{space}', 'argv': [str(far / agent.lower()), '-c', script], 'cwd': str(far / 'projects' / FAR_SPACES[space]), 'cols': 90, 'rows': 30}}); assert 'Error' not in r, r
+            edit(far, {'CreateTab': {'tab': {'id': f'ft{n}', 'space': f'f{space}', 'title': '', 'default_task': None, 'closed': False, 'layout': {'Leaf': f'q{n}'}}}})
+        while not all(t.get('pid') for t in rpc(far, 'Workspace')['Workspace']['terminals']):
+            assert time.monotonic() < deadline + 90, 'far terminals'; time.sleep(.2)
+        while len(rpc(far, 'Workspace')['Workspace']['agent_sessions']) < len(FAR_SESSIONS):
+            assert time.monotonic() < deadline + 90, 'far index timeout'; time.sleep(.2)
+        time.sleep(1)
+        fw = rpc(far, 'Workspace')['Workspace']
+        for n in far_live:
+            t = next(t for t in fw['terminals'] if t['id'] == f'q{n}')
+            r = rpc(far, {'Hook': {'runtime': FAR_SESSIONS[n][1], 'pid': t['pid'], 'cli_session_id': far_logs[n][0], 'transcript': str(far_logs[n][1]), 'ended': False, 'event': None}}); assert 'Error' not in r, r
+        for a in rpc(far, 'Workspace')['Workspace']['agent_sessions']:
+            if a['cli_session_id'] == far_done: edit(far, {'SetOutcome': {'id': a['id'], 'outcome': 'Completed', 'seen': None}})
+        (root / 'bin').mkdir()
+        ssh = root / 'bin/ssh'
+        ssh.write_text('#!/bin/sh\n# Fake ssh: drops options and the host, runs the command here.\nwhile [ $# -gt 0 ]; do case "$1" in -o) shift 2 ;; -*) shift ;; *) shift; break ;; esac; done\n'
+                       f'export HOME={shlex.quote(str(far_home))} CODEX_HOME={shlex.quote(str(far_home / ".codex"))} CLAUDE_CONFIG_DIR={shlex.quote(str(far_home / ".claude"))}\nexec /bin/sh -c "$*"\n')
+        ssh.chmod(0o755)
+        wrapper = far / 'mooring'; wrapper.write_text(f'#!/bin/sh\nexec {shlex.quote(str(BIN / "mooring"))} "$@" --runtime {shlex.quote(str(far / "runtime"))}\n'); wrapper.chmod(0o755)
+        (home / '.config/fibo').mkdir(parents=True, exist_ok=True)
+        (home / '.config/fibo/machines.json').write_text(json.dumps([{'host': 'mac2', 'path': str(wrapper)}]))
+        edit(root, {'SetSpaceQuiet': {'id': 's3', 'quiet': True}})
+        state['far'] = far_host.pid
+    STATE.write_text(json.dumps(state)); print(state)
 else:
     s = json.loads(STATE.read_text()); root = pathlib.Path(s['root']); home = pathlib.Path(s['home'])
     if sys.argv[1] == 'capture':
@@ -173,6 +236,7 @@ else:
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8',
                'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', 'MOORING_PAGE_EVIDENCE': '1', 'MOORING_PAGE_LIST': os.environ.get('MOORING_PAGE_LIST', 'Main,Overview')}
         if os.environ.get('MOORING_LANG'): env['MOORING_LANG'] = os.environ['MOORING_LANG']
+        if (root / 'bin/ssh').exists(): env['PATH'] = str(root / 'bin') + ':' + env['PATH']
         result = subprocess.run([str(BIN / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
         (directory / 'native-render.log').write_bytes(result.stdout); assert result.returncode == 0, result.stdout.decode()[-4000:]
         print('native captures', sorted(p.name for p in directory.glob('*-native.png')))
@@ -185,3 +249,6 @@ else:
             os.kill(s['host'], 15)
         except (ConnectionRefusedError, FileNotFoundError, ProcessLookupError):
             pass
+        if s.get('far'):
+            try: os.kill(s['far'], 15)
+            except ProcessLookupError: pass

@@ -17,11 +17,47 @@ const link = (machine: string, name: string, relay: string): Link => ({
   name,
 });
 
-const LINKS = [
-  link('agent-os', 'Agent-OS', 'ws://192.168.1.20:8790'),
-  link('dev-linux', 'dev-linux', 'wss://relay.example.com'),
-  link('air', 'MacBook Air', 'wss://relay.example.com'),
-];
+// EXPO_PUBLIC_FIXTURE=promo: the website's sample day instead (scripts/promo-fixture.py with
+// MOORING_PROMO_FAR=1), so the phone shot shows the same sessions as the desktop one.
+const PROMO = process.env.EXPO_PUBLIC_FIXTURE === 'promo';
+const LINKS = PROMO
+  ? [link('agent-os', 'This Mac', 'wss://relay.example.com'), link('dev-linux', 'mac2', 'wss://relay.example.com')]
+  : [
+      link('agent-os', 'Agent-OS', 'ws://192.168.1.20:8790'),
+      link('dev-linux', 'dev-linux', 'wss://relay.example.com'),
+      link('air', 'MacBook Air', 'wss://relay.example.com'),
+    ];
+
+function promoCards(machine: string) {
+  const t = now();
+  const ask = (o: Record<string, unknown>) => card({ column: 'needs', phase: 'waiting', status: 'waiting', status_label: '等你回答', needs_you: true, agent: 'codex', ...o });
+  const review = (o: Record<string, unknown>) => card({ column: 'review', status: 'review', status_label: '等你验收', needs_you: true, ...o });
+  const run = (o: Record<string, unknown>) => card({ column: 'running', phase: 'working', status: 'running', status_label: '在跑', agent: 'claude', ...o });
+  if (machine === 'dev-linux') {
+    return [
+      ask({ id: 'm1', space: 's-ci', cwd: '/Users/demo/ci-runner', title: 'Bump the macOS runner image', waiting: 'macos-14 goes away on 2026-12-01. macOS 15 now?\n❯ 1. Move to macos-15\n  2. Wait for Xcode 27', updated: t - 120 }),
+      review({ id: 'm2', space: 's-blog', cwd: '/Users/demo/blog', agent: 'claude', title: 'Draft the v0.1 launch post', updated: t - 420 }),
+    ];
+  }
+  return [
+    ask({ id: 'p0', space: 's-fibo', cwd: '/Users/demo/projects/fibo', title: 'Fix flaky reconnect test in host handover', waiting: 'Two ways to fix this. Which one should I take?\n❯ 1. Wait for the old host\n  2. Hand the socket over', updated: t - 60 }),
+    review({ id: 'p2', space: 's-fibo', cwd: '/Users/demo/projects/fibo', agent: 'codex', title: 'Speed up sidebar redraw on large workspaces', updated: t - 240 }),
+    review({ id: 'p4', space: 's-web', cwd: '/Users/demo/projects/web', agent: 'codex', title: 'Dark mode for the pricing page', updated: t - 420 }),
+    run({ id: 'p1', space: 's-fibo', cwd: '/Users/demo/projects/fibo', title: 'Add English UI for the settings window', updated: t - 600 }),
+    run({ id: 'p3', space: 's-api', cwd: '/Users/demo/projects/api-server', title: 'Rate-limit the public upload endpoint', updated: t - 780 }),
+  ];
+}
+const PROMO_SPACES: Record<string, { id: string; name: string; cwd: string }[]> = {
+  'agent-os': [
+    { id: 's-fibo', name: 'fibo', cwd: '/Users/demo/projects/fibo' },
+    { id: 's-api', name: 'api-server', cwd: '/Users/demo/projects/api-server' },
+    { id: 's-web', name: 'web', cwd: '/Users/demo/projects/web' },
+  ],
+  'dev-linux': [
+    { id: 's-ci', name: 'ci-runner', cwd: '/Users/demo/ci-runner' },
+    { id: 's-blog', name: 'blog', cwd: '/Users/demo/blog' },
+  ],
+};
 
 const ALL_OPS = ['hello', 'list', 'read', 'send', 'keys', 'answer', 'ask', 'trust', 'chat', 'events', 'open', 'end', 'outcome', 'close', 'ping', 'diff', 'dirs', 'mkdir', 'quota', 'stop', 'backfill', 'suggestion', 'todoadd', 'todooutcome'];
 
@@ -198,16 +234,18 @@ function remote(machine: string) {
     }
     switch (op) {
       case 'hello':
-        return { version: 1, machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name }, ops: ALL_OPS, role: machine === 'dev-linux' ? 'answer' : 'full', requests: true, os: machine === 'dev-linux' ? 'linux' : 'macos', app_version: '0.1.0' };
+        return { version: 1, machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name }, ops: ALL_OPS, role: machine === 'dev-linux' && !PROMO ? 'answer' : 'full', requests: true, os: machine === 'dev-linux' ? 'linux' : 'macos', app_version: '0.1.0' };
       case 'list':
         return {
           machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name },
-          spaces: [
-            { id: 's-mooring', name: 'mooring', cwd: '/Users/demo/code/mooring' },
-            { id: 's-blog', name: 'blog', cwd: '/home/demo/blog' },
-          ],
-          terminals: cards(machine),
-          todos: machine === 'agent-os' ? TODOS() : [],
+          spaces: PROMO
+            ? PROMO_SPACES[machine]
+            : [
+                { id: 's-mooring', name: 'mooring', cwd: '/Users/demo/code/mooring' },
+                { id: 's-blog', name: 'blog', cwd: '/home/demo/blog' },
+              ],
+          terminals: PROMO ? promoCards(machine) : cards(machine),
+          todos: machine === 'agent-os' && !PROMO ? TODOS() : [],
         };
       case 'read':
         return { text: SCREEN };
@@ -246,6 +284,6 @@ export function install() {
     return remote(l.machine) as never;
   });
   outboxReady.then(() => {
-    if (!unsent().length) enqueue({ machine: 'air', terminal: 'x', session: 'fixture-air', text: '测完把 APK 装到手机上' });
+    if (!PROMO && !unsent().length) enqueue({ machine: 'air', terminal: 'x', session: 'fixture-air', text: '测完把 APK 装到手机上' });
   });
 }

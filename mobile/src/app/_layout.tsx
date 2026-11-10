@@ -37,7 +37,7 @@ export default function Layout() {
   const [locked, unlock] = useLocked();
   useEffect(() => {
     // Screenshot builds only; inlined to false otherwise, so the fixture is dropped.
-    if (process.env.EXPO_PUBLIC_FIXTURE === '1') require('@/fixture').install();
+    if (process.env.EXPO_PUBLIC_FIXTURE === '1' || process.env.EXPO_PUBLIC_FIXTURE === 'promo') require('@/fixture').install();
     start();
   }, []);
   return (
