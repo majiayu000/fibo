@@ -273,7 +273,9 @@ impl Workbench {
             .text_size(px(T::SMALL))
             .line_height(px(F::LINE_TEXT))
             .text_color(ink(F::third()))
-            .child(flat_state(Status::Stale, false))
+            // An empty slot, not a state dot: the line is not a session (「为啥有个圆圈」),
+            // yet its text keeps the titles' column.
+            .child(div().w(px(F::STATE)).flex_shrink_0())
             .child(div().flex_1().min_w_0().truncate().child(text))
             .child(self.sidebar.fold_mark(&key, open))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))

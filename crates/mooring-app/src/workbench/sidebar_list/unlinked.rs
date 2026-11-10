@@ -220,4 +220,13 @@ mod tests {
             row_text(Look::Flat, String::new()).style().text.clone();
         assert_eq!(font_size, Some(px(F::TITLE).into()));
     }
+
+    /// 「这里为啥有个圆圈」: the 更早 line holds a blank slot, not a session's state dot.
+    #[test]
+    fn the_older_line_draws_no_state_dot() {
+        let flat = include_str!("../sidebar_flat.rs");
+        let start = flat.find("pub(super) fn flat_more(").unwrap();
+        let end = start + flat[start..].find("into_any_element()").unwrap();
+        assert!(!flat[start..end].contains("flat_state("));
+    }
 }
