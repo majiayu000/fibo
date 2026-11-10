@@ -26,7 +26,7 @@
 | A 按对象带前提 | 去掉全局版本号检查。SetOutcome 带「我看到的结局」和 turn_key，SetTaskOutcome 带「我看到的结局」；AddTask、AddSpace、AssignTask、SetPendingTask、SaveSessionTask 不带前提；UpdateSpace、UpdateTask 按 id 改 | Agent 持续输出时连续标记完成 100 次，0 次被拒；Agent 在你看过之后又开了新一轮，「标记完成」被拒并说明原因 |
 | B 信封、回执、去重 | 写请求外面包一层 `{client, request, edit}`；回执分三种：已落库、被拒（附对象现状）、重复（返回上次结果）；`requests` 表和改动在同一个事务里写，保留 24 小时 | 回执前断开、用同一个 id 重发，只生效一次；宿主重启后重发也一样 |
 | C 一个请求状态机 | App、CLI、手机共用：挂起 / 已确认 / 被拒 / 结果未知。忙时不再丢，排队；表单等回执才关；超时显示「不确定是否成功」，给出用同一个 id 重试的按钮 | 拔掉宿主再接上，挂起的请求要么确认、要么显示结果未知，没有一条无声消失 |
-| D 布局改成操作 | CreateTab、RenameTab、MoveTab、SplitPane、ResizeSplit、MovePane、ClosePane{expect_terminal}、CloseTab{expect_terminals}；去掉 PutTab | Agent 分屏的同时改标签名、拖分隔线，三个改动都在；关标签确认后有新分屏，关标签被拒 |
+| D 布局改成操作 | CreateTab、RenameTab、MoveTab、SplitPane、ResizeDivider、MovePane、ClosePane{expect_terminal}、CloseTab{expect_terminals}；去掉 PutTab | Agent 分屏的同时改标签名、拖分隔线，三个改动都在；关标签确认后有新分屏，关标签被拒 |
 | E 远程协议用信封 | `mooring remote` 的写操作带上 client 和 request，回执原样传回去 | 手机和另一台电脑断线重发，只生效一次 |
 
 - A 先做：改动最小，单独就能解决「被挡」。
@@ -123,7 +123,7 @@
   - `CreateTab`：新建标签；id 已经有了就拒绝，不再覆盖。它摆进来的终端，会从原来所在的标签里移走，原标签空了就关掉。
   - `RenameTab`：改标签名。
   - `MovePane { terminal, target, side }`：拖到目标窗格旁边，或在同一个标签里互换位置。同样的移动重复做一次，结果不变。
-  - `ResizeSplit { tab, path, axis, ratio }`：拖分隔线。这条路径上已经不是同方向的分隔线时拒绝，提示「再拖一次」。
+  - `ResizeDivider { tab, path, axis, anchors, ratio }`：拖分隔线。`anchors` 是按下时两侧各一个窗格 ID；该路径、方向或任一锚点所在侧变化时拒绝，提示「再拖一次」。子比例变化或两侧内部新增分屏仍可合并。旧 `ResizeSplit` 已移除，版本混用会拒绝解析而非忽略身份检查，见 [分隔条身份](../decisions/2026-11-10-divider-identity.md)。
   - `ReplacePane { old, new }`：中断的终端重开后，回到它原来的格子。
   - `SplitPane` 加了 `forced`：窗口里手动分屏时为 true，不做「两半够不够大」的检查；脚本和 Agent 的分屏照旧检查。
   - `CloseTab` 加了 `expect`：用户同意关掉的那几个终端。标签里的终端变了就拒绝，什么都不停。

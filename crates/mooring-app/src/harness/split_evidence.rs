@@ -103,126 +103,158 @@ async fn resize_regression(
         })
         .unwrap();
     };
-    for (axis, nested) in [
+    let ordinary = [
         (Axis::Down, false),
         (Axis::Right, false),
         (Axis::Down, true),
-    ] {
-        for grab in [1., 4., 7.] {
-            let path = handle
-                .update(cx, |v, _, a| {
-                    v.visual_resize_setup(original.clone(), axis, nested, a)
-                })
-                .unwrap();
-            draw(cx);
-            let mut stale = handle
-                .update(cx, |v, _, _| v.visual_resize_workspace())
-                .unwrap();
-            let (from, usable) = handle
-                .update(cx, |v, _, _| v.visual_resize_geometry(&path, axis, grab))
-                .unwrap();
-            let label = format!("{axis:?}-nested-{nested}-grab-{grab}");
-            shot(format!("{label}-before.png"), cx);
-            send(handle, cx, down(from));
-            for (step, delta) in [1., 20., 19., -1.].into_iter().enumerate() {
-                let position = from
-                    + match axis {
-                        Axis::Down => gpui::point(px(0.), px(delta)),
-                        Axis::Right => gpui::point(px(delta), px(0.)),
-                    };
-                send(
-                    handle,
-                    cx,
-                    gpui::MouseMoveEvent {
-                        position,
-                        pressed_button: Some(gpui::MouseButton::Left),
-                        modifiers: Default::default(),
-                    }
-                    .to_platform_input(),
-                );
-                let actual = handle
-                    .update(cx, |v, _, _| v.visual_resize_ratio(&path))
-                    .unwrap();
-                let expected = (8000. + px(delta) / usable * 10000.).round() as u16;
-                eprintln!("{label} step={step} delta={delta} actual={actual} expected={expected}");
-                if actual != expected {
-                    failures.push(format!("{label} step {step}: {actual} != {expected}"));
-                }
-                if step == 0 {
-                    shot(format!("{label}-moved.png"), cx);
-                }
-                stale = handle
-                    .update(cx, |v, _, a| v.visual_resize_snapshot(a))
-                    .unwrap();
-                draw(cx);
-                if handle
-                    .update(cx, |v, _, _| v.visual_resize_ratio(&path))
-                    .unwrap()
-                    != actual
-                {
-                    failures.push(format!("{label}: snapshot reset the divider"));
-                }
-            }
-            let expected = (8000. - px(1.) / usable * 10000.).round() as u16;
-            let release = from
-                - match axis {
-                    Axis::Down => gpui::point(px(0.), px(1.)),
-                    Axis::Right => gpui::point(px(1.), px(0.)),
+    ]
+    .into_iter()
+    .flat_map(|(axis, nested)| [1., 4., 7.].map(|grab| (axis, nested, grab, 8000, false)));
+    let extra = [
+        (Axis::Down, false, 4., 9800, false),
+        (Axis::Down, false, 4., 200, false),
+        (Axis::Right, true, 4., 4000, true),
+    ];
+    for (axis, nested, grab, initial, child_update) in ordinary.chain(extra) {
+        let mut path = handle
+            .update(cx, |v, _, a| {
+                v.visual_resize_setup(original.clone(), axis, nested, initial, a)
+            })
+            .unwrap();
+        if child_update {
+            path.clear();
+        }
+        draw(cx);
+        let mut stale = handle
+            .update(cx, |v, _, _| v.visual_resize_workspace())
+            .unwrap();
+        let (from, usable) = handle
+            .update(cx, |v, _, _| v.visual_resize_geometry(&path, axis, grab))
+            .unwrap();
+        let expected_at = |delta| {
+            (initial as f32 + px(delta) / usable * 10000.)
+                .clamp(initial.min(500) as f32, initial.max(9500) as f32)
+                .round() as u16
+        };
+        let label =
+            format!("{axis:?}-nested-{nested}-grab-{grab}-initial-{initial}-child-{child_update}");
+        shot(format!("{label}-before.png"), cx);
+        send(handle, cx, down(from));
+        for (step, delta) in [1., 20., 19., -1.].into_iter().enumerate() {
+            let position = from
+                + match axis {
+                    Axis::Down => gpui::point(px(0.), px(delta)),
+                    Axis::Right => gpui::point(px(delta), px(0.)),
                 };
-            send(handle, cx, up(release));
             send(
                 handle,
                 cx,
                 gpui::MouseMoveEvent {
-                    position: from,
-                    pressed_button: None,
+                    position,
+                    pressed_button: Some(gpui::MouseButton::Left),
                     modifiers: Default::default(),
                 }
                 .to_platform_input(),
             );
-            assert_eq!(
-                handle
-                    .update(cx, |v, _, _| v.visual_resize_ratio(&path))
-                    .unwrap(),
-                expected,
-                "hover after mouse-up must not resize"
-            );
-            // A snapshot already in flight can arrive after mouse-up, before the
-            // resize receipt. Its revision is real, not artificially advanced.
-            handle
-                .update(cx, |v, _, a| v.visual_resize_apply(stale, a))
+            let actual = handle
+                .update(cx, |v, _, _| v.visual_resize_ratio(&path))
+                .unwrap();
+            let expected = expected_at(delta);
+            eprintln!("{label} step={step} delta={delta} actual={actual} expected={expected}");
+            if actual != expected {
+                failures.push(format!("{label} step {step}: {actual} != {expected}"));
+            }
+            if step == 0 {
+                shot(format!("{label}-moved.png"), cx);
+            }
+            stale = handle
+                .update(cx, |v, _, a| {
+                    if child_update {
+                        v.visual_resize_child_snapshot(a)
+                    } else {
+                        v.visual_resize_snapshot(a)
+                    }
+                })
                 .unwrap();
             draw(cx);
+            if step == 0 {
+                shot(format!("{label}-refreshed.png"), cx);
+            }
             if handle
                 .update(cx, |v, _, _| v.visual_resize_ratio(&path))
                 .unwrap()
-                != expected
+                != actual
             {
-                failures.push(format!("{label}: mouse-up snapshot reset the divider"));
+                failures.push(format!("{label}: snapshot reset the divider"));
             }
-            let deadline = std::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(50))
-                    .await;
-                if handle
-                    .update(cx, |v, _, _| v.visual_resize_saved(&path, expected))
-                    .unwrap()
-                {
-                    break;
-                }
-                assert!(
-                    std::time::Instant::now() < deadline,
-                    "resize receipt timed out: {label}"
-                );
-            }
-            eprintln!("{label}: mouse-up persisted {expected} and reply kept the position");
         }
+        let expected = expected_at(-1.);
+        let release = from
+            - match axis {
+                Axis::Down => gpui::point(px(0.), px(1.)),
+                Axis::Right => gpui::point(px(1.), px(0.)),
+            };
+        send(handle, cx, up(release));
+        send(
+            handle,
+            cx,
+            gpui::MouseMoveEvent {
+                position: from,
+                pressed_button: None,
+                modifiers: Default::default(),
+            }
+            .to_platform_input(),
+        );
+        assert_eq!(
+            handle
+                .update(cx, |v, _, _| v.visual_resize_ratio(&path))
+                .unwrap(),
+            expected,
+            "hover after mouse-up must not resize"
+        );
+        // A snapshot already in flight can arrive after mouse-up, before the
+        // resize receipt. Its revision is real, not artificially advanced.
+        handle
+            .update(cx, |v, _, a| v.visual_resize_apply(stale, a))
+            .unwrap();
+        draw(cx);
+        if handle
+            .update(cx, |v, _, _| v.visual_resize_ratio(&path))
+            .unwrap()
+            != expected
+        {
+            failures.push(format!("{label}: mouse-up snapshot reset the divider"));
+        }
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(50))
+                .await;
+            if handle
+                .update(cx, |v, _, _| v.visual_resize_saved(&path, expected))
+                .unwrap()
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "resize receipt timed out: {label}"
+            );
+        }
+        if child_update {
+            assert_eq!(
+                handle
+                    .update(cx, |v, _, _| v.visual_resize_ratio(&[true]))
+                    .unwrap(),
+                7000
+            );
+        }
+        eprintln!("{label}: mouse-up persisted {expected} and reply kept the position");
     }
     std::fs::write(
         out.join("result.txt"),
         if failures.is_empty() {
-            "PASS: both axes, nested split, three grab positions, reverse moves, incoming snapshots, mouse-up and saved ratios"
+            "PASS: both axes, nested split, three grab positions, reverse moves, incoming snapshots, mouse-up and saved ratios, existing 2%/98% ratios, child updates during parent drag"
                 .into()
         } else {
             failures.join("\n")

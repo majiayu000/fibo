@@ -225,15 +225,16 @@ impl Workbench {
         if drag.saving.is_some() {
             return;
         }
-        let (path, tab) = (drag.path.clone(), drag.tab.clone());
+        let (path, tab, anchors) = (drag.path.clone(), drag.tab.clone(), drag.anchors.clone());
         let at = (self.workspace.tabs.iter_mut().find(|t| t.id == tab))
             .and_then(|t| t.layout.as_mut()?.at_mut(&path).cloned());
         if let Some(Layout::Split { axis, ratio, .. }) = at {
             let request = self.edit_named(
-                Edit::ResizeSplit {
+                Edit::ResizeDivider {
                     tab,
                     path,
                     axis,
+                    anchors,
                     ratio,
                 },
                 cx,

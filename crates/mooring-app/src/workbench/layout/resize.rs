@@ -6,6 +6,7 @@ use gpui::{Pixels, Point};
 pub(in crate::workbench) struct SplitDrag {
     pub(super) tab: String,
     pub(super) path: Vec<bool>,
+    pub(super) anchors: [String; 2],
     /// After release, keep the preview until this save's receipt arrives.
     pub(super) saving: Option<RequestId>,
     axis: Axis,
@@ -20,8 +21,11 @@ impl SplitDrag {
             Axis::Right => at.x - self.start.x,
             Axis::Down => at.y - self.start.y,
         };
-        let fraction = self.start_ratio as f32 / 10000. + delta / self.usable;
-        (fraction.clamp(0.05, 0.95) * 10000.).round() as u16
+        let start = self.start_ratio as f32 / 10000.;
+        let fraction = start + delta / self.usable;
+        // Keep an existing narrow pane where it was grabbed. It can move inward
+        // smoothly, but cannot be made narrower than its starting size.
+        (fraction.clamp(0.05_f32.min(start), 0.95_f32.max(start)) * 10000.).round() as u16
     }
 
     pub(super) fn split<'a>(&self, w: &'a mut Workspace) -> Option<&'a mut Layout> {
@@ -38,26 +42,20 @@ impl SplitDrag {
         local: &mut Workspace,
         incoming: &mut Workspace,
     ) -> bool {
-        match (self.split(local), self.split(incoming)) {
-            (
-                Some(Layout::Split {
-                    axis,
-                    ratio,
-                    first,
-                    second,
-                }),
-                Some(Layout::Split {
-                    axis: next_axis,
-                    ratio: next_ratio,
-                    first: next_first,
-                    second: next_second,
-                }),
-            ) if axis == next_axis && first == next_first && second == next_second => {
-                *next_ratio = *ratio;
-                true
-            }
-            // A closed/rearranged pane is no longer the split that was pressed.
-            _ => false,
+        let Some(Layout::Split { ratio, .. }) = self.split(local) else {
+            return false;
+        };
+        let next = self
+            .split(incoming)
+            .filter(|l| l.is_divider(self.axis, &self.anchors));
+        if let Some(Layout::Split {
+            ratio: next_ratio, ..
+        }) = next
+        {
+            *next_ratio = *ratio;
+            true
+        } else {
+            false
         }
     }
 }
@@ -84,7 +82,7 @@ impl Workbench {
         let Some(bounds) = self.layout.split_bounds.get(&path) else {
             return;
         };
-        let Some(Layout::Split { axis, ratio, .. }) = self
+        let Some(split @ Layout::Split { .. }) = self
             .workspace
             .tabs
             .iter_mut()
@@ -92,6 +90,10 @@ impl Workbench {
             .and_then(|t| t.layout.as_mut()?.at_mut(&path))
         else {
             return;
+        };
+        let anchors = split.divider_anchors().unwrap();
+        let Layout::Split { axis, ratio, .. } = split else {
+            unreachable!()
         };
         let usable = match axis {
             Axis::Right => bounds.size.width,
@@ -101,6 +103,7 @@ impl Workbench {
             self.layout.drag = Some(SplitDrag {
                 tab,
                 path,
+                anchors,
                 axis: *axis,
                 start,
                 saving: None,
@@ -119,10 +122,106 @@ mod tests {
     const FIXTURE_TOP: f32 = 200.;
 
     #[test]
+    fn split_drag_keeps_parent_preview_when_a_child_ratio_changes() {
+        let drag = SplitDrag {
+            tab: "tab".into(),
+            path: vec![],
+            anchors: ["a".into(), "b".into()],
+            saving: None,
+            axis: Axis::Right,
+            start: Point::default(),
+            start_ratio: 4000,
+            usable: px(FIXTURE_SPAN),
+        };
+        let child = Layout::Split {
+            axis: Axis::Down,
+            ratio: 8000,
+            first: Box::new(Layout::Leaf("b".into())),
+            second: Box::new(Layout::Leaf("c".into())),
+        };
+        let mut local = Workspace::default();
+        local.tabs.push(Tab {
+            id: "tab".into(),
+            space: "space".into(),
+            default_task: None,
+            title: "test".into(),
+            layout: Some(Layout::Split {
+                axis: Axis::Right,
+                ratio: 4000,
+                first: Box::new(Layout::Leaf("a".into())),
+                second: Box::new(child),
+            }),
+        });
+        let mut incoming = local.clone();
+        if let Some(Layout::Split { ratio, .. }) = drag.split(&mut local) {
+            *ratio = 6000;
+        }
+        if let Some(Layout::Split { ratio, .. }) =
+            incoming.tabs[0].layout.as_mut().unwrap().at_mut(&[true])
+        {
+            *ratio = 7000;
+        }
+        let kept = drag.preserve_preview(&mut local, &mut incoming);
+        assert!(
+            kept,
+            "same panes and axes, only child ratio 8000 -> 7000: parent drag was cancelled"
+        );
+        assert!(matches!(
+            drag.split(&mut incoming),
+            Some(Layout::Split { ratio: 6000, .. })
+        ));
+        assert!(
+            matches!(
+                incoming.tabs[0].layout.as_mut().unwrap().at_mut(&[true]),
+                Some(Layout::Split { ratio: 7000, .. })
+            ),
+            "child update must also survive"
+        );
+    }
+
+    #[test]
+    fn split_drag_keeps_existing_extreme_ratios_and_moves_inward_smoothly() {
+        for axis in [Axis::Down, Axis::Right] {
+            for (start_ratio, outward, inward_ratio) in [(200, -1., 210), (9800, 1., 9790)] {
+                let drag = SplitDrag {
+                    tab: "tab".into(),
+                    path: vec![],
+                    anchors: ["a".into(), "b".into()],
+                    saving: None,
+                    axis,
+                    start: Point::default(),
+                    start_ratio,
+                    usable: px(FIXTURE_SPAN),
+                };
+                let offset = match axis {
+                    Axis::Down => gpui::point(px(0.), px(outward)),
+                    Axis::Right => gpui::point(px(outward), px(0.)),
+                };
+                assert_eq!(
+                    drag.ratio_at(Point::default()),
+                    start_ratio,
+                    "no jump on press"
+                );
+                assert_eq!(
+                    drag.ratio_at(offset),
+                    start_ratio,
+                    "outward movement must not reverse"
+                );
+                assert_eq!(
+                    drag.ratio_at(Point::default() - offset),
+                    inward_ratio,
+                    "inward movement must stay smooth"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn split_drag_keeps_preview_but_accepts_other_snapshot_changes() {
         let drag = SplitDrag {
             tab: "tab".into(),
             path: vec![],
+            anchors: ["one".into(), "two".into()],
             axis: Axis::Down,
             start: Point::default(),
             saving: None,
@@ -172,6 +271,7 @@ mod tests {
                     let drag = SplitDrag {
                         tab: "tab".into(),
                         path: vec![],
+                        anchors: ["a".into(), "b".into()],
                         axis,
                         start,
                         saving: None,

@@ -75,12 +75,13 @@ pub enum Edit {
         target: String,
         side: Option<(Axis, bool)>,
     },
-    /// Drags the divider of the split at `path` in `tab`; refused if no split with
-    /// that axis stands there any more.
-    ResizeSplit {
+    /// Drags the divider at `path`; each side must still contain its original anchor.
+    /// A distinct wire name makes older hosts reject this identity-checked request.
+    ResizeDivider {
         tab: String,
         path: Vec<bool>,
         axis: Axis,
+        anchors: [String; 2],
         /// The first side's share, in basis points.
         ratio: u16,
     },

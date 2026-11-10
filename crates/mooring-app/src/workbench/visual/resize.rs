@@ -12,6 +12,7 @@ impl Workbench {
         original: Workspace,
         axis: Axis,
         nested: bool,
+        initial: u16,
         cx: &mut Context<Self>,
     ) -> Vec<bool> {
         self.workspace = original;
@@ -26,7 +27,7 @@ impl Workbench {
         assert_eq!(ids.len(), 3);
         let split = Layout::Split {
             axis,
-            ratio: 8000,
+            ratio: initial,
             first: Box::new(Layout::Leaf(ids[0].clone())),
             second: Box::new(Layout::Leaf(ids[1].clone())),
         };
@@ -65,19 +66,22 @@ impl Workbench {
     }
 
     pub fn visual_resize_geometry(
-        &self,
+        &mut self,
         path: &[bool],
         axis: Axis,
         grab: f32,
     ) -> (Point<Pixels>, Pixels) {
+        let share = self.visual_resize_ratio(path) as f32 / 10000.;
         let bounds = self.layout.split_bounds[path];
         let usable = match axis {
             Axis::Down => bounds.size.height,
             Axis::Right => bounds.size.width,
         } - px(T::S8);
         let from = match axis {
-            Axis::Down => gpui::point(bounds.center().x, bounds.top() + usable * 0.8 + px(grab)),
-            Axis::Right => gpui::point(bounds.left() + usable * 0.8 + px(grab), bounds.center().y),
+            Axis::Down => gpui::point(bounds.center().x, bounds.top() + usable * share + px(grab)),
+            Axis::Right => {
+                gpui::point(bounds.left() + usable * share + px(grab), bounds.center().y)
+            }
         };
         (from, usable)
     }
@@ -109,6 +113,43 @@ impl Workbench {
         )
         .unwrap() else {
             panic!("snapshot edit refused")
+        };
+        self.apply_workspace(w.clone(), cx);
+        w
+    }
+
+    pub fn visual_resize_child_snapshot(&mut self, cx: &mut Context<Self>) -> Workspace {
+        let tab = self.nav.tab.clone().unwrap();
+        let child = self
+            .workspace
+            .tabs
+            .iter_mut()
+            .find(|t| t.id == tab)
+            .unwrap()
+            .layout
+            .as_mut()
+            .unwrap()
+            .at_mut(&[true])
+            .unwrap();
+        let anchors = child.divider_anchors().unwrap();
+        let Layout::Split { axis, .. } = child else {
+            panic!("child split")
+        };
+        let Reply::Workspace(w) = rpc(
+            self.store.socket(),
+            &Request::Edit {
+                request: None,
+                edit: Edit::ResizeDivider {
+                    tab,
+                    path: vec![true],
+                    axis: *axis,
+                    anchors,
+                    ratio: 7000,
+                },
+            },
+        )
+        .unwrap() else {
+            panic!("child resize refused")
         };
         self.apply_workspace(w.clone(), cx);
         w
