@@ -267,7 +267,18 @@ fn market_cmd(command: &str, mut args: impl Iterator<Item = String>) -> io::Resu
         }
         ("available", []) => {
             let installed = plugin::discover(&plugins_dir()?);
-            for o in offers(remote)? {
+            let offered = offers(remote)?;
+            if offered.is_empty() {
+                println!(
+                    "{}",
+                    if remote {
+                        "附带的和远程目录里都没有插件"
+                    } else {
+                        "这个 App 没有附带插件；加 --remote 查远程目录"
+                    }
+                );
+            }
+            for o in offered {
                 let e = &o.entry;
                 let have = installed
                     .iter()

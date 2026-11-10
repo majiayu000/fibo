@@ -301,3 +301,24 @@ fn install_refuses_a_package_that_provides_more_than_listed() {
     assert!(result.is_err_and(|e| e.contains("没有登记")));
     assert!(!installed);
 }
+
+/// Homebrew puts a link to the program on PATH: the catalog is still found inside the app.
+#[cfg(unix)]
+#[test]
+fn the_catalog_is_found_through_a_link_on_path() {
+    let root = tmp("link");
+    let app = root.join("Fibo.app/Contents");
+    std::fs::create_dir_all(app.join("MacOS")).unwrap();
+    std::fs::create_dir_all(app.join("Resources/plugins")).unwrap();
+    std::fs::write(app.join("Resources/plugins/index.json"), "{}").unwrap();
+    std::fs::write(app.join("MacOS/mooring"), "").unwrap();
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::os::unix::fs::symlink(app.join("MacOS/mooring"), bin.join("fibo")).unwrap();
+    let found = catalog_beside(&bin.join("fibo")).expect("found through the link");
+    assert!(
+        found.ends_with("Fibo.app/Contents/Resources/plugins"),
+        "{found:?}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
