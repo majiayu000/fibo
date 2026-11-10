@@ -64,7 +64,7 @@
 "导入" = "Import"
 
 [notifications]
-"Agent 停下来等你时，发一条系统通知" = "Post a system notification when an Agent stops and waits for you"
+"Agent 停下来等你或做完一轮时，发一条系统通知" = "Post a system notification when an Agent stops for you or finishes a turn"
 "Agent 等你或出错时响一声；不开桌面通知也会响" = "Play a sound when an Agent waits for you or fails, even with desktop notifications off"
 "开关" = "Switches"
 "什么时候提醒" = "When to notify"
@@ -72,6 +72,8 @@
 "Agent 提问或请求批准；同一次等待只提醒一次" = "An Agent asks a question or requests approval; once per wait"
 "出错停下" = "Stopped on error"
 "Agent 报错中断；同一条错误只提醒一次" = "An Agent stops with an error; once per error"
+"做完一轮" = "Turn finished"
+"Agent 做完一轮请你过目；每轮只提醒一次，不响提示音" = "An Agent finishes a turn and is ready for review; once per turn, no sound"
 "只提醒由 Fibo 打开的会话；你正看着的那个终端不会打扰你。" = "Only sessions opened by Fibo notify you, and never the terminal you're looking at."
 "首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Fibo 重新允许。" = "macOS asks for permission the first time. If you declined, allow it again in System Settings → Notifications → Fibo."
 

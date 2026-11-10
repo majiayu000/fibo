@@ -114,7 +114,7 @@ impl Status {
         )
     }
     /// The Agent cannot go on without you: the urgent part of 要你处理, the only one that
-    /// sends a notification or a sound and colors the 要你处理 chip orange or red.
+    /// sounds and colors the 要你处理 chip orange or red (等你验收 gets a silent banner).
     pub fn blocked(self) -> bool {
         matches!(self, Self::Waiting | Self::Error)
     }

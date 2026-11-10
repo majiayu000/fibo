@@ -49,7 +49,10 @@ extern "C" fn event(value: *const c_char) {
         let _ = tx.unbounded_send(value);
     }
 }
-fn fact(w: &Workspace, s: &AgentSession) -> Option<(String, String)> {
+/// A session's news for a banner: its dedupe key, the state, and the line under the title.
+/// Waiting and failed sessions call you; a finished turn (Review) gets a banner too, but
+/// no sound: it does not block anything.
+fn fact(w: &Workspace, s: &AgentSession) -> Option<(String, State, String)> {
     let c = w.content.get(&s.id)?;
     // Banners follow the one count of 要你处理: nothing the window would not list.
     if !status::needs_you(w, s, now()) {
@@ -59,25 +62,42 @@ fn fact(w: &Workspace, s: &AgentSession) -> Option<(String, String)> {
     let body = match group {
         State::Waiting => c.waiting.clone(),
         State::Error => c.error.clone(),
+        State::Review => c.headline(),
         _ => return None,
     };
     // One dialog is one event however many signals report it or refine its text; an error
-    // is keyed by its text.
+    // is keyed by its text; a finished turn by the turn.
     let event = match group {
         State::Waiting => format!("episode {}", c.waiting_episode),
+        State::Review => String::new(),
         _ => body.clone(),
     };
     Some((
         format!("{:?}:{}:{}:{}", group, c.turn_key, c.turn_started, event),
-        format!("{} · {}", group.label(), short(&body, 180)),
+        group,
+        body,
     ))
 }
-fn entered(
-    before: &Workspace,
-    after: &Workspace,
-    watching: Option<&str>,
-) -> Vec<(String, String, String, String)> {
-    if !after.settings.notifications && !after.settings.sound {
+/// The banner's title, as the landing page shows it: who and what, e.g.
+/// "Claude Code is ready for review".
+fn banner_title(agent: &str, group: State) -> String {
+    match group {
+        State::Waiting => t!("{agent} 有话问你", agent),
+        State::Error => t!("{agent} 中途报错", agent),
+        _ => t!("{agent} 这轮好了，请你过目", agent),
+    }
+}
+/// A banner to post: session, dedupe key, title, body, and whether it may sound.
+pub(crate) struct Banner {
+    pub session: String,
+    pub key: String,
+    pub title: String,
+    pub body: String,
+    pub urgent: bool,
+}
+fn entered(before: &Workspace, after: &Workspace, watching: Option<&str>) -> Vec<Banner> {
+    let (notify, sound) = (after.settings.notifications, after.settings.sound);
+    if !notify && !sound {
         return vec![];
     }
     after
@@ -88,22 +108,35 @@ fn entered(
         // a burst of banners; its next new fact is a banner again.
         .filter(|s| !before.session_quiet(s))
         .filter_map(|s| {
-            let (key, body) = fact(after, s)?;
+            let (key, group, body) = fact(after, s)?;
+            // The sound alone only speaks for what blocks the Agent.
+            if !notify && !group.blocked() {
+                return None;
+            }
             let old = before
                 .agent_sessions
                 .iter()
                 .find(|p| p.id == s.id)
                 .and_then(|s| fact(before, s));
-            if old.as_ref().is_some_and(|(old, _)| old == &key) {
+            if old.as_ref().is_some_and(|(old, ..)| old == &key) {
                 return None;
             }
-            let title = short(&after.session_title(s), 72);
             // Name the project first: several panes often run the same kind of task.
-            let title = match space_name(after, s) {
-                Some(space) => format!("{space} · {title}"),
-                None => title,
+            let detail = match short(&body, 180) {
+                d if d.is_empty() => short(&after.session_title(s), 72),
+                d => d,
             };
-            Some((s.id.clone(), key, title, body))
+            let body = match space_name(after, s) {
+                Some(space) => format!("{space} · {detail}"),
+                None => detail,
+            };
+            Some(Banner {
+                session: s.id.clone(),
+                key,
+                title: banner_title(s.runtime.name(), group),
+                body,
+                urgent: group.blocked(),
+            })
         })
         .collect()
 }
@@ -412,7 +445,14 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                 }
                 let watching =
                     cx.update(|cx| cx.try_global::<Watching>().and_then(|w| w.0.clone()));
-                for (session, key, title, body) in entered(&before, &after, watching.as_deref()) {
+                for banner in entered(&before, &after, watching.as_deref()) {
+                    let Banner {
+                        session,
+                        key,
+                        title,
+                        body,
+                        urgent,
+                    } = banner;
                     let socket_claim = socket.clone();
                     let claim_session = session.clone();
                     match cx
@@ -431,7 +471,12 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                             let settings = &after.settings;
                             cx.update(|_| {
                                 if settings.notifications {
-                                    native::notify(&session, &title, &body, settings.sound);
+                                    native::notify(
+                                        &session,
+                                        &title,
+                                        &body,
+                                        settings.sound && urgent,
+                                    );
                                 } else {
                                     native::play_sound();
                                 }
