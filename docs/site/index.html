@@ -23,161 +23,536 @@
 <link rel="icon" type="image/png" href="assets/icon.png">
 <meta name="theme-color" content="#0a0b0d">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Fibo","applicationCategory":"DeveloperApplication","operatingSystem":"macOS","description":"A native macOS workbench for running many coding agents at once.","url":"https://fibo.page/","downloadUrl":"https://github.com/majiayu000/mooring/releases/latest","codeRepository":"https://github.com/majiayu000/mooring","license":"https://github.com/majiayu000/mooring/blob/main/LICENSE","image":"https://fibo.page/assets/og.png","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<script>
+// 先定主题和语言，免得闪一下
+(function () {
+  var r = document.documentElement, t = null, l = null;
+  try { t = localStorage.getItem('fibo-theme'); l = localStorage.getItem('fibo-lang'); } catch (e) {}
+  r.dataset.theme = t || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  r.lang = (l || (/^zh/i.test(navigator.language || '') ? 'zh' : 'en')) === 'en' ? 'en' : 'zh-CN';
+})();
+</script>
 <style>
-:root{color-scheme:dark;--bg:#0a0b0d;--panel:#121317;--panel2:#17181d;--ink:#f2efe8;--muted:#9c978d;--faint:#5f5b55;--line:#24252b;--gold:#f2b84b;--orange:#f0803c;--green:#3fbf7f;--yellow:#e6c14a}
-*{box-sizing:border-box}html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-a{color:inherit;text-underline-offset:4px}a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:4px}
-code,pre,.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace}
-.skip{position:absolute;top:-80px;left:16px;background:var(--gold);color:#111;padding:10px 14px;border-radius:6px}.skip:focus{top:12px}
-.wrap{max-width:1180px;margin:0 auto;padding:0 28px}
-header{position:sticky;top:0;z-index:10;background:rgba(10,11,13,.82);backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid var(--line)}
-.bar{display:flex;align-items:center;justify-content:space-between;height:62px;gap:20px}
-.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:700;font-size:19px;letter-spacing:-.01em}.brand img{border-radius:8px}
-nav{display:flex;gap:22px;font-size:14px;color:var(--muted)}nav a{text-decoration:none}nav a:hover{color:var(--ink)}
-.hero{position:relative;padding:92px 0 40px;text-align:center;overflow:hidden}
-.seq{display:inline-flex;gap:14px;font:500 15px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--faint);letter-spacing:.04em;margin-bottom:26px}
-.seq span{opacity:0;animation:seq .5s ease forwards}.seq span:nth-child(1){animation-delay:.1s}.seq span:nth-child(2){animation-delay:.35s}.seq span:nth-child(3){animation-delay:.6s}.seq span:nth-child(4){animation-delay:.85s}.seq span:nth-child(5){animation-delay:1.1s}.seq span:nth-child(6){animation-delay:1.35s;color:var(--gold)}
-@keyframes seq{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-h1{font-size:clamp(44px,7.4vw,92px);line-height:1.02;letter-spacing:-.045em;margin:0 auto 22px;max-width:14ch;font-weight:750}
-h1 em{font-style:normal;color:var(--gold)}
-.lede{font-size:clamp(17px,2vw,21px);color:#bdb8ae;max-width:640px;margin:0 auto}
-.actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:34px 0 14px}
-.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:10px;font-weight:650;font-size:15px;text-decoration:none;border:1px solid var(--line);background:var(--panel2);transition:transform .15s ease,background .15s ease}
-.btn:hover{transform:translateY(-1px);background:#1e2026}
-.btn.primary{background:var(--ink);color:#0b0b0c;border-color:var(--ink)}.btn.primary:hover{background:#fff}
-.brew{display:inline-flex;align-items:center;gap:10px;margin-top:6px;padding:9px 10px 9px 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:14px;color:#d9d4cb;max-width:100%}
-.brew code{overflow-x:auto;white-space:nowrap}
-.brew button{font:600 12px -apple-system,sans-serif;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;flex:none}.brew button:hover{color:var(--ink)}
-.note{font-size:13px;color:var(--muted);margin-top:14px}
-.film{margin:54px auto 0;max-width:1120px;position:relative}
-.film video{width:100%;display:block;border-radius:16px;border:1px solid var(--line);box-shadow:0 40px 120px -30px rgba(242,184,75,.22),0 30px 80px rgba(0,0,0,.6);background:#000;aspect-ratio:16/9}
-.spiral{position:absolute;pointer-events:none;opacity:.35}
-.hero .spiral{width:760px;left:50%;top:-120px;transform:translateX(-50%);opacity:.12}
-section{scroll-margin-top:80px}
-.section{padding:110px 0 30px}
-.eyebrow{font:600 12px/1.4 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
-h2{font-size:clamp(32px,4.4vw,52px);line-height:1.08;letter-spacing:-.035em;margin:14px 0 18px;font-weight:720}
-.sub{color:#b3aea4;font-size:18px;max-width:640px}
-.story{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
-.squares{position:relative;aspect-ratio:13/8;width:100%}
-.squares div{position:absolute;border:1px solid rgba(242,184,75,.35);border-radius:6px;display:flex;align-items:flex-end;justify-content:flex-start;padding:8px;font:500 13px ui-monospace,"SF Mono",Menlo,monospace;color:var(--gold);background:rgba(242,184,75,.03)}
-.squares svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.shot{margin-top:40px}
-.shot img{width:100%;height:auto;display:block;border-radius:14px;border:1px solid var(--line);box-shadow:0 30px 90px rgba(0,0,0,.55)}
-.shot figcaption{font-size:14px;color:var(--muted);margin-top:14px}
-.legend{display:flex;gap:22px;flex-wrap:wrap;margin:22px 0 0;padding:0;list-style:none;font-size:15px;color:#cfcac1}
-.legend li{display:flex;align-items:center;gap:9px}.dot{width:10px;height:10px;border-radius:50%;flex:none}
-.split{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:40px}
-.split figure{margin:0}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:44px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px}
-.card h3{font-size:19px;margin:10px 0 8px;letter-spacing:-.01em}.card p{margin:0;color:#aaa59b;font-size:15px}
-.num{font:500 13px ui-monospace,"SF Mono",Menlo,monospace;color:var(--gold)}
-.install{display:grid;grid-template-columns:1fr 1fr 1fr;gap:22px;margin-top:40px}.install>*{min-width:0}
-.install pre{margin:12px 0 0;background:#08090b;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.75;overflow-x:auto;color:#e2ded5}
-details{border-bottom:1px solid var(--line);padding:20px 0}summary{cursor:pointer;font-weight:620;font-size:17px;list-style:none;display:flex;justify-content:space-between;gap:16px}summary::after{content:"+";color:var(--muted);font-weight:400}details[open] summary::after{content:"–"}summary::-webkit-details-marker{display:none}
-details p{color:#aaa59b;font-size:15px;max-width:820px;margin:12px 0 0}
-.zh{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:36px;margin-top:20px}
-.zh h2{font-size:clamp(26px,3.4vw,36px)}.zh p{color:#bdb8ae;max-width:760px}
-footer{margin-top:110px;border-top:1px solid var(--line);padding:30px 0 50px;display:flex;justify-content:space-between;gap:20px;font-size:13px;color:var(--muted)}footer div{display:flex;gap:18px;flex-wrap:wrap}
-@media(max-width:860px){.story,.split,.grid3,.install{grid-template-columns:1fr}.story{gap:36px}nav a:not(.gh){display:none}}
-@media(max-width:560px){.wrap{padding:0 16px}.hero{padding-top:64px}.section{padding-top:80px}.zh{padding:24px}footer{flex-direction:column}.brew{font-size:12px}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.seq span{animation:none;opacity:1}.btn{transition:none}}
+:root {
+  --bg: #09090a; --panel: #0f0f10; --fg: #ededeb; --dim: #9a9995; --faint: #62615d;
+  --line: rgba(255, 255, 255, .085); --line-2: rgba(255, 255, 255, .16);
+  --accent: #f0883e; --review: #3fb97f; --run: #e3b341;
+  --sans: "Geist", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  --mono: "Geist Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  --max: 1216px; --pad: clamp(20px, 3.4vw, 44px); --rail: 188px;
+}
+:root[data-theme="light"] {
+  --bg: #fbfbfa; --panel: #ffffff; --fg: #0d0d0e; --dim: #5d5c58; --faint: #a2a19c;
+  --line: rgba(0, 0, 0, .09); --line-2: rgba(0, 0, 0, .2);
+  --accent: #d5621b; --review: #1f8f58; --run: #a67a00;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+html[lang="en"] .zh, html[lang^="zh"] .en { display: none !important; }
+[data-theme="light"] .only-dark, [data-theme="dark"] .only-light { display: none !important; }
+a { color: inherit; text-decoration: none; }
+code, pre, .mono { font-family: var(--mono); }
+code { font-size: .86em; color: var(--fg); background: var(--line); padding: .1em .38em; border-radius: 4px; }
+kbd { font: 500 11px var(--mono); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--fg); white-space: nowrap; }
+
+/* 整页是一张带左右边线的图纸，每段之间一条横线，交点打十字 */
+.frame { max-width: var(--max); margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+.sec { position: relative; border-top: 1px solid var(--line); }
+.sec::before, .sec::after { content: "+"; position: absolute; top: -9px; font: 400 13px/17px var(--mono); color: var(--faint); width: 17px; text-align: center; background: var(--bg); }
+.sec::before { left: -9px; } .sec::after { right: -9px; }
+.label { font: 500 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.label b { color: var(--accent); font-weight: 500; margin-right: 10px; }
+
+/* 顶栏 */
+.nav { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.nav .frame { display: flex; align-items: center; gap: 26px; height: 56px; padding: 0 var(--pad); }
+.brand { font: 600 13px var(--sans); letter-spacing: .32em; display: flex; align-items: center; gap: 10px; }
+.brand i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.nav-links { display: flex; gap: 24px; margin-left: auto; font-size: 13.5px; color: var(--dim); }
+.nav-links a:hover { color: var(--fg); }
+.ghost { font: 500 11px var(--mono); background: none; color: var(--dim); border: 1px solid var(--line-2); border-radius: 6px; height: 28px; min-width: 34px; padding: 0 8px; cursor: pointer; }
+.ghost:hover { color: var(--fg); border-color: var(--fg); }
+.nav .dl { font-size: 13px; font-weight: 500; background: var(--fg); color: var(--bg); border-radius: 6px; padding: 5px 12px; }
+
+/* 首屏 */
+.hero { padding: clamp(56px, 9vw, 120px) var(--pad) 0; }
+.hero h1 { font-weight: 600; font-size: clamp(2.2rem, 5.3vw, 4.4rem); line-height: 1.08; letter-spacing: -.035em; margin: 22px 0 0; max-width: 15em; }
+html[lang^="zh"] .hero h1 { font-weight: 500; letter-spacing: -.01em; line-height: 1.18; }
+.hero h1 span.d { color: var(--faint); }
+.hero-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; margin-top: 28px; }
+.hero .lede { margin: 0; color: var(--dim); font-size: clamp(1rem, 1.25vw, 1.12rem); max-width: 34em; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 8px; font-weight: 500; font-size: 14.5px; background: var(--fg); color: var(--bg); transition: opacity .15s; }
+.btn:hover { opacity: .86; }
+.brew { display: inline-flex; align-items: center; gap: 12px; height: 42px; max-width: 100%; padding: 0 6px 0 14px; border-radius: 8px; border: 1px solid var(--line-2); background: none; color: var(--fg); font: 400 12.5px var(--mono); cursor: pointer; }
+.brew .cmd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brew .cmd::before { content: "$ "; color: var(--faint); }
+.brew .copy { font-size: 11px; color: var(--dim); border-left: 1px solid var(--line); padding: 4px 8px 4px 12px; flex: none; }
+.brew:hover .copy { color: var(--fg); }
+.meta { margin-top: 18px; }
+.shot { display: block; width: 100%; height: auto; }
+.hero-shot { margin-top: clamp(40px, 6vw, 72px); border-top: 1px solid var(--line); position: relative; }
+.hero-shot .legend { display: flex; flex-wrap: wrap; gap: 6px 26px; padding: 12px var(--pad); border-top: 1px solid var(--line); font: 400 11.5px var(--mono); color: var(--dim); }
+.legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; background: var(--c); }
+.legend .r { margin-left: auto; color: var(--faint); }
+
+/* Agent 名单 */
+.agents { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); }
+.agents .label { padding: 22px var(--pad); border-right: 1px solid var(--line); }
+.agents ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.agents li { padding: 14px 16px; font-size: 13.5px; color: var(--dim); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .15s, background .15s; }
+.agents li:nth-child(6n) { border-right: 0; } .agents li:nth-child(n+7) { border-bottom: 0; }
+.agents li:hover { color: var(--fg); background: var(--panel); }
+
+/* 标题段 */
+.intro { padding: clamp(72px, 10vw, 140px) var(--pad) clamp(40px, 5vw, 64px); }
+h2 { font-weight: 600; font-size: clamp(1.8rem, 3.6vw, 3rem); line-height: 1.12; letter-spacing: -.03em; margin: 18px 0 0; max-width: 18em; }
+html[lang^="zh"] h2 { font-weight: 500; letter-spacing: -.01em; line-height: 1.25; }
+h2 .d { color: var(--faint); }
+
+/* 功能行 */
+.feat { display: grid; grid-template-columns: var(--rail) minmax(0, 5fr) minmax(0, 6fr); }
+.feat > .label { padding: 30px var(--pad); border-right: 1px solid var(--line); }
+.feat .txt { padding: 28px clamp(20px, 3vw, 40px) 40px; }
+.feat h3 { font-weight: 600; font-size: clamp(1.3rem, 2vw, 1.7rem); line-height: 1.2; letter-spacing: -.02em; margin: 0 0 12px; }
+html[lang^="zh"] .feat h3 { font-weight: 500; letter-spacing: 0; }
+.feat p { margin: 0 0 12px; color: var(--dim); font-size: 15px; max-width: 32em; }
+.feat p strong { color: var(--fg); font-weight: 500; }
+.spec { margin: 20px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); font-size: 13.5px; }
+.spec li { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--dim); }
+.spec li > :first-child { font: 400 11.5px/1.9 var(--mono); color: var(--faint); }
+.spec .st { color: var(--fg); } .spec .st::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c); margin-right: 8px; }
+.feat .viz { border-left: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; justify-content: center; padding: clamp(16px, 2.6vw, 36px); min-width: 0; }
+.feat.full { grid-template-columns: var(--rail) minmax(0, 1fr); }
+.feat.full .viz { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); padding: 0; }
+.feat.full .txt { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 clamp(24px, 4vw, 56px); }
+.feat.full .txt h3 { grid-column: 1 / -1; }
+/* 从真实截图里裁一块：--z 放大倍数，--x --y 位置 */
+.crop { width: 100%; border: 1px solid var(--line-2); border-radius: 8px; background-repeat: no-repeat; background-size: var(--z) auto; background-position: var(--x) var(--y); box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .55); background-image: url(assets/shot-main.webp); }
+[data-theme="light"] .crop.themed { background-image: url(assets/shot-light.webp); }
+.stack { display: grid; gap: 14px; width: 100%; }
+
+.term { width: 100%; margin: 0; font-size: 12.5px; line-height: 1.9; color: var(--fg); white-space: pre; overflow-x: auto; }
+.term .c { color: var(--faint); } .term .p { color: var(--accent); user-select: none; } .term .g { color: var(--review); } .term .y { color: var(--run); }
+
+/* 时间线：窗口断了，后台没断 */
+.tl { width: 100%; font: 400 11px var(--mono); color: var(--faint); }
+.tl .ev, .tl .row { display: grid; grid-template-columns: 7.5em repeat(4, minmax(0, 1fr)); align-items: center; }
+.tl .ev span { text-align: center; padding-bottom: 12px; color: var(--dim); }
+.tl .row { height: 34px; }
+.tl .row > span:first-child { color: var(--dim); }
+.tl .seg { height: 2px; background: var(--fg); position: relative; }
+.tl .seg.cut { background: repeating-linear-gradient(90deg, var(--faint) 0 3px, transparent 3px 7px); }
+.tl .seg.live { background: var(--review); }
+.tl .seg.mark::after { content: ""; position: absolute; left: 50%; top: -11px; height: 24px; border-left: 1px dashed var(--line-2); }
+.tl .seg.back::before { content: ""; position: absolute; left: 50%; top: -3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--accent); }
+.tl .note { margin-top: 14px; padding-left: 7.5em; color: var(--dim); line-height: 1.7; }
+.tl .note b { color: var(--accent); font-weight: 400; }
+
+/* 两栏卡 */
+.duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.duo > div { padding: 32px var(--pad) 40px; }
+.duo > div + div { border-left: 1px solid var(--line); }
+.duo h3 { font-weight: 600; font-size: 1.3rem; letter-spacing: -.02em; margin: 14px 0 10px; }
+html[lang^="zh"] .duo h3 { font-weight: 500; letter-spacing: 0; }
+.duo p { margin: 0; color: var(--dim); font-size: 15px; max-width: 32em; }
+
+/* 其余功能：一张表 */
+.all { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.all > div { padding: 22px var(--pad) 26px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transition: background .15s; }
+.all > div:nth-child(3n) { border-right: 0; }
+.all > div:nth-last-child(-n+3) { border-bottom: 0; }
+.all > div:hover { background: var(--panel); }
+.all h4 { margin: 10px 0 6px; font-size: 15px; font-weight: 500; }
+.all p { margin: 0; font-size: 13.5px; color: var(--dim); }
+
+/* 数据 */
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.facts div { padding: 28px var(--pad) 36px; }
+.facts div + div { border-left: 1px solid var(--line); }
+.facts h4 { margin: 12px 0 8px; font-size: 16px; font-weight: 500; }
+.facts p { margin: 0; color: var(--dim); font-size: 14px; }
+.facts code { overflow-wrap: anywhere; }
+
+/* 常见问题 */
+.faq { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); }
+.faq > .label { padding: 26px var(--pad); border-right: 1px solid var(--line); }
+details + details { border-top: 1px solid var(--line); }
+summary { cursor: pointer; list-style: none; padding: 20px var(--pad); font-weight: 500; display: flex; justify-content: space-between; gap: 16px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; font-family: var(--mono); color: var(--faint); }
+details[open] summary::after { content: "–"; }
+summary:hover { background: var(--panel); }
+details p { margin: 0; padding: 0 var(--pad) 24px; color: var(--dim); font-size: 15px; max-width: 46em; }
+
+/* 收尾 */
+.final { padding: clamp(80px, 12vw, 160px) var(--pad); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; }
+.final h2 { font-size: clamp(2.2rem, 5.3vw, 4.4rem); margin: 0; }
+.final .lede { color: var(--dim); margin: 18px 0 0; max-width: 32em; font-size: 15px; }
+.final .side { display: grid; gap: 10px; justify-items: start; }
+.final .side a.src { font-size: 13px; color: var(--dim); margin-top: 6px; }
+.final .side a.src:hover { color: var(--fg); }
+footer .frame { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 20px var(--pad) 40px; font-size: 12.5px; color: var(--faint); border-top: 1px solid var(--line); }
+footer a:hover { color: var(--fg); }
+footer .sp { margin-left: auto; }
+
+.js .rise { opacity: 0; transform: translateY(14px); transition: opacity .7s, transform .7s cubic-bezier(.2, .7, .2, 1); }
+.js .rise.in { opacity: 1; transform: none; }
+
+@media (max-width: 980px) {
+  :root { --rail: 0px; }
+  .agents, .faq, .feat, .feat.full { grid-template-columns: minmax(0, 1fr); }
+  .agents .label, .faq > .label, .feat > .label { border-right: 0; padding-bottom: 0; }
+  .agents .label { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+  .feat .viz { border-left: 0; border-top: 1px solid var(--line); }
+  .feat.full .txt { grid-template-columns: minmax(0, 1fr); }
+  .hero-row, .final { grid-template-columns: minmax(0, 1fr); }
+  .agents ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .agents li:nth-child(6n) { border-right: 1px solid var(--line); } .agents li:nth-child(3n) { border-right: 0; }
+  .agents li:nth-child(n+7) { border-bottom: 1px solid var(--line); } .agents li:nth-child(n+10) { border-bottom: 0; }
+  .all { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .all > div:nth-child(3n) { border-right: 1px solid var(--line); } .all > div:nth-child(2n) { border-right: 0; }
+  .all > div:nth-last-child(-n+3) { border-bottom: 1px solid var(--line); } .all > div:nth-last-child(-n+2) { border-bottom: 0; }
+  .facts, .duo { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div, .duo > div + div { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 640px) {
+  .frame { border-left: 0; border-right: 0; }
+  .sec::before, .sec::after { display: none; }
+  .nav-links { display: none; }
+  .nav .frame { gap: 10px; }
+  .nav .brand { margin-right: auto; }
+  .agents ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .agents li:nth-child(3n) { border-right: 1px solid var(--line); } .agents li:nth-child(2n) { border-right: 0; }
+  .agents li:nth-child(n+10) { border-bottom: 1px solid var(--line); } .agents li:nth-child(n+11) { border-bottom: 0; }
+  .all { grid-template-columns: minmax(0, 1fr); }
+  .all > div, .all > div:nth-child(3n) { border-right: 0; }
+  .all > div:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); } .all > div:last-child { border-bottom: 0; }
+  .btn, .brew { width: 100%; justify-content: center; }
+  .brew { justify-content: space-between; }
+  .legend .r { margin-left: 0; flex-basis: 100%; }
+  footer .sp { margin-left: 0; flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+  .js .rise { opacity: 1; transform: none; }
+}
 </style>
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
-<header><div class="wrap bar"><a class="brand" href="./" aria-label="Fibo home"><img src="assets/icon.png" alt="" width="30" height="30">Fibo</a><nav aria-label="Main"><a href="#see">Tour</a><a href="#why">Why Fibo</a><a href="#install">Install</a><a href="#faq">FAQ</a><a href="#zh" lang="zh-CN">中文</a><a class="gh" href="https://github.com/majiayu000/mooring">GitHub ↗</a></nav></div></header>
-<main id="main">
-<section class="hero"><div class="wrap">
-<div class="seq" aria-hidden="true"><span>1</span><span>1</span><span>2</span><span>3</span><span>5</span><span>8</span></div>
-<h1>Run more agents. <em>Miss none of them.</em></h1>
-<p class="lede">Fibo is a native macOS workbench for running Claude Code, Codex and other coding agents side by side, each in a real terminal, with one place that shows which one needs you.</p>
-<div class="actions"><a class="btn primary" href="https://github.com/majiayu000/mooring/releases/latest"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.1-1.2 2.9-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.4-1-2.4-3.8zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.2 1.8-1 2.9 1.1.1 2.1-.5 2.8-1.3z"/></svg>Download for Mac</a><a class="btn" href="https://github.com/majiayu000/mooring">View source ↗</a></div>
-<div class="brew"><code id="brew">brew install --cask majiayu000/tap/fibo</code><button type="button" id="copy" aria-label="Copy the Homebrew command">Copy</button></div>
-<p class="note">Free and open source (MIT). Apple silicon. Signed and notarized by Apple.</p>
-<div class="film"><video src="assets/fibo-promo.mp4" poster="assets/fibo-promo-poster.jpg" autoplay muted loop playsinline preload="metadata" aria-label="A 30-second film: agents multiply like Fibonacci's rabbits, then Fibo shows which one needs you"></video></div>
-</div></section>
 
-<section class="section" id="story"><div class="wrap story">
-<div><p class="eyebrow">Why the name</p><h2>One agent becomes two. Two become three.</h2>
-<p class="sub">Fibonacci counted rabbits: one pair, then another, then two, three, five, eight. Coding agents multiply the same way. You start one on a bug, another on tests, a third on docs, and soon you are switching windows to find out which one stopped to ask you something.</p>
-<p class="sub">Fibo keeps count. Every agent lives in a real terminal in one window, and its state is always on screen.</p></div>
-<div class="squares" aria-hidden="true">
-<div style="left:23.08%;top:62.5%;width:7.69%;height:12.5%">1</div><div style="left:30.77%;top:62.5%;width:7.69%;height:12.5%">1</div><div style="left:23.08%;top:75%;width:15.38%;height:25%">2</div><div style="left:0;top:62.5%;width:23.08%;height:37.5%">3</div><div style="left:0;top:0;width:38.46%;height:62.5%">5</div><div style="left:38.46%;top:0;width:61.54%;height:100%">8</div>
-<svg viewBox="0 0 13 8" preserveAspectRatio="none"><path d="M3 6 A1 1 0 0 1 4 5 A1 1 0 0 1 5 6 A2 2 0 0 1 3 8 A3 3 0 0 1 0 5 A5 5 0 0 1 5 0 A8 8 0 0 1 13 8" fill="none" stroke="#f2b84b" stroke-width=".06" vector-effect="non-scaling-stroke" style="stroke-width:2.5px"/></svg>
-</div>
-</div></section>
+<nav class="nav">
+  <div class="frame">
+    <a class="brand" href="#top"><i></i>FIBO</a>
+    <div class="nav-links">
+      <a href="#features"><span class="zh">功能</span><span class="en">Features</span></a>
+      <a href="#all"><span class="zh">全部细节</span><span class="en">Everything</span></a>
+      <a href="#privacy"><span class="zh">数据</span><span class="en">Your data</span></a>
+      <a href="#faq"><span class="zh">常见问题</span><span class="en">FAQ</span></a>
+      <a href="https://github.com/majiayu000/mooring">GitHub</a>
+    </div>
+    <button class="ghost" type="button" id="theme" aria-label="Toggle light and dark">◐</button>
+    <button class="ghost" type="button" id="lang" aria-label="Switch language">EN</button>
+    <a class="dl" href="https://github.com/majiayu000/mooring/releases/latest"><span class="zh">下载</span><span class="en">Download</span></a>
+  </div>
+</nav>
 
-<section class="section" id="see"><div class="wrap">
-<p class="eyebrow">See who needs you</p><h2>Every agent's state, always on screen.</h2>
-<p class="sub">Agents run side by side. The sidebar sorts them by what they need from you, and each pane says it in the header.</p>
-<ul class="legend"><li><span class="dot" style="background:var(--orange)"></span>Waiting for you: a question or an approval</li><li><span class="dot" style="background:var(--yellow)"></span>Running</li><li><span class="dot" style="background:var(--green)"></span>Ready for review: the turn ended, you decide if it's done</li></ul>
-<figure class="shot"><img src="assets/shot-main.webp" width="1600" height="1000" alt="Fibo with three panes: Codex waiting for an answer, Claude Code running, Codex ready for review; the sidebar lists Needs you 3 and Running 2" loading="lazy"><figcaption>Codex asks which fix to take, Claude Code is mid-turn, another Codex finished and waits for review. ⌘J jumps to the next one that needs you.</figcaption></figure>
-</div></section>
+<main class="frame" id="top">
 
-<section class="section" id="board"><div class="wrap">
-<p class="eyebrow">One board</p><h2>All your agents, across every project.</h2>
-<p class="sub">The board lines up every session from every space: to-do, running, needs you, stopped, done. Open a card for the agent's last words and jump straight into its terminal.</p>
-<figure class="shot"><img src="assets/shot-board.webp" width="1600" height="1000" alt="The Fibo board with columns To-do, Running, Needs you, Stopped and Done" loading="lazy"></figure>
-<div class="split"><figure class="shot"><img src="assets/shot-drawer.webp" width="1600" height="1000" alt="A card opened on the board showing the agent's status, last words and folder" loading="lazy"><figcaption>A card's details: status, the agent's last words, branch and folder.</figcaption></figure>
-<figure class="shot"><img src="assets/shot-themes.webp" width="1600" height="1000" alt="Fibo's appearance settings with six dark themes" loading="lazy"><figcaption>Light, dark and six themes, or import your .itermcolors.</figcaption></figure></div>
-<div class="split"><figure class="shot"><img src="assets/shot-light.webp" width="1600" height="1000" alt="Fibo in the light theme" loading="lazy"></figure><figure class="shot"><img src="assets/shot-plum.webp" width="1600" height="1000" alt="Fibo in the plum theme" loading="lazy"></figure></div>
-</div></section>
+  <header class="hero">
+    <div class="label"><b>●</b><span class="zh">给 Coding Agent 的原生 macOS 工作台</span><span class="en">The native macOS workbench for coding agents</span></div>
+    <h1>
+      <span class="zh">同时跑很多个 Agent，<br><span class="d">只看需要你的那一个。</span></span>
+      <span class="en">Run many coding agents.<br><span class="d">Look at the one that needs you.</span></span>
+    </h1>
+    <div class="hero-row">
+      <p class="lede">
+        <span class="zh">每个会话都是一个真终端。Fibo 告诉你哪个在等你，关掉窗口它们照样跑，崩了也能接着聊。</span>
+        <span class="en">Every session is a real terminal. Fibo shows which one needs you, keeps them running when the window closes, and brings back the conversation after a crash.</span>
+      </p>
+      <div>
+        <div class="cta">
+          <a class="btn" href="https://github.com/majiayu000/mooring/releases/latest"><span class="zh">下载 Fibo</span><span class="en">Download Fibo</span></a>
+          <button class="brew" type="button" data-copy="brew install --cask majiayu000/tap/fibo">
+            <span class="cmd">brew install --cask majiayu000/tap/fibo</span>
+            <span class="copy"><span class="zh">复制</span><span class="en">Copy</span></span>
+          </button>
+        </div>
+        <div class="label meta"><span class="zh">macOS 14+ · Apple 芯片 · 已签名并公证 · MIT</span><span class="en">macOS 14+ · Apple silicon · signed &amp; notarized · MIT</span></div>
+      </div>
+    </div>
+  </header>
 
-<section class="section" id="why"><div class="wrap">
-<p class="eyebrow">Why Fibo</p><h2>Built for a desk full of agents.</h2>
-<div class="grid3">
-<article class="card"><span class="num">01</span><h3>Real terminals, your CLIs</h3><p>Claude Code, Codex, Grok, Cursor Agent and more run as themselves in real terminals (libghostty). Fibo doesn't wrap their models or change how they work.</p></article>
-<article class="card"><span class="num">02</span><h3>Terminals outlive the window</h3><p>A background host keeps every terminal running when the window closes or the app updates itself. After a reboot, interrupted sessions offer to resume.</p></article>
-<article class="card"><span class="num">03</span><h3>You decide what's done</h3><p>A finished turn is “ready for review”, not “done”. Mark it done yourself, or send it back from the same pane.</p></article>
-<article class="card"><span class="num">04</span><h3>Native and fast</h3><p>Rust and GPUI, drawn on the GPU, with frame-time checks in CI so a long day of sessions doesn't slow the window down.</p></article>
-<article class="card"><span class="num">05</span><h3>From your phone (preview)</h3><p>A companion phone app, still in development, answers an agent's question or approves a step while you're away. The relay is end-to-end encrypted and you can host your own.</p></article>
-<article class="card"><span class="num">06</span><h3>Local and open</h3><p>Fibo reads your agents' transcripts on your Mac and uploads nothing itself. MIT licensed; plugins are plain files.</p></article>
-</div></div></section>
+  <div class="hero-shot">
+    <img class="shot only-dark" src="assets/shot-main.webp" width="1600" height="1000" alt="Fibo: the sidebar lists Needs you 3 and Running 2; three panes show Codex waiting for an answer, Claude Code running, and Codex ready for review">
+    <img class="shot only-light" src="assets/shot-light.webp" width="1600" height="1000" alt="Fibo in its light theme, with the same three panes">
+    <div class="legend">
+      <span><i style="--c:var(--accent)"></i><span class="zh">等你回答</span><span class="en">Waiting for you</span></span>
+      <span><i style="--c:var(--run)"></i><span class="zh">在跑</span><span class="en">Running</span></span>
+      <span><i style="--c:var(--review)"></i><span class="zh">等你验收</span><span class="en">Ready for review</span></span>
+      <span class="r"><span class="zh">真实截图 · Rust · GPUI · libghostty</span><span class="en">Real screenshot · Rust · GPUI · libghostty</span></span>
+    </div>
+  </div>
 
-<section class="section" id="install"><div class="wrap">
-<p class="eyebrow">Install</p><h2>Get Fibo.</h2>
-<div class="install">
-<div class="card"><h3>Download</h3><p>A notarized DMG. Drag Fibo into Applications. It updates itself.</p><p style="margin-top:16px"><a class="btn primary" href="https://github.com/majiayu000/mooring/releases/latest">Latest release</a></p></div>
-<div class="card"><h3>Homebrew</h3><p>Install and upgrade with brew.</p><pre><code>brew install --cask majiayu000/tap/fibo</code></pre></div>
-<div class="card"><h3>From source</h3><p>Needs Xcode, Zig 0.16 and rustup.</p><pre><code>git clone https://github.com/majiayu000/mooring
-cd mooring && ./bootstrap.sh && ./run.sh</code></pre></div>
-</div>
-<p class="note">Then run <code>claude</code> or <code>codex</code> in a Fibo terminal. Your agent CLIs, accounts and subscriptions stay your own.</p>
-</div></section>
+  <section class="sec agents">
+    <div class="label"><span class="zh">内置 12 个 Agent</span><span class="en">12 agents built in</span></div>
+    <ul>
+      <li>Claude Code</li><li>Codex</li><li>Gemini CLI</li><li>Cursor Agent</li><li>Grok Build</li><li>Qoder CLI</li>
+      <li>Kimi Code</li><li>DeepSeek Harness</li><li>Hermes</li><li>Factory Droid</li><li>Pi</li><li>oh-my-pi</li>
+    </ul>
+  </section>
 
-<section class="section" id="faq"><div class="wrap">
-<p class="eyebrow">FAQ</p><h2>Before you start.</h2>
-<details><summary>Is Fibo a terminal or an agent?</summary><p>Neither on its own: it is a workbench around real terminals and the agent CLIs you already use. It shows their state and keeps them running; it does not replace an agent's model or loop.</p></details>
-<details><summary>Which agents does it know?</summary><p>Claude Code, Codex, Grok Build, Cursor Agent and Qoder CLI are built in; OpenCode comes as a plugin, and others can be added the same way. Any other program still runs in a plain terminal.</p></details>
-<details><summary>Does Fibo upload my conversations?</summary><p>No. Fibo reads local transcripts and does not upload them. Your agent CLIs still talk to their own providers. The optional phone link is end-to-end encrypted.</p></details>
-<details><summary>Does it change my agent settings?</summary><p>Only if you install the optional hooks from the welcome screen or with <code>fibo hooks install</code>; they make state changes instant. <code>fibo hooks uninstall</code> removes them.</p></details>
-<details><summary>Wasn't this called Mooring?</summary><p>Yes. It was renamed Fibo in November 2026. Existing installs keep working: the <code>mooring</code> command, settings and terminals carry over.</p></details>
-<details><summary>Windows or Linux?</summary><p>The app is macOS only today. The shared crates build on Linux and Windows, but there is no release for them.</p></details>
-<details><summary>How do I report a problem?</summary><p><a href="https://github.com/majiayu000/mooring/issues">Open a GitHub issue</a> with your macOS version, the agent CLI and its version, and steps to reproduce. Remove credentials and private content from logs first.</p></details>
-</div></section>
+  <section class="sec intro rise" id="features">
+    <div class="label"><span class="zh">功能</span><span class="en">Features</span></div>
+    <h2>
+      <span class="zh">Agent 多了，难的不是让它们跑。<span class="d">是知道现在该看哪一个，以及哪一个都不能丢。</span></span>
+      <span class="en">Running more agents is easy. <span class="d">Knowing which one to look at, and never losing one, is the work.</span></span>
+    </h2>
+  </section>
 
-<section class="section" id="zh" lang="zh-CN"><div class="wrap"><div class="zh">
-<p class="eyebrow">中文介绍</p><h2>多开 agent，一个都不漏。</h2>
-<p>Fibo 是原生 macOS 上的 coding agent 工作台。Claude Code、Codex 等 agent 各自跑在真终端里，并排放在一个窗口；谁在等你回答、谁在跑、谁这一轮做完了等你验收，侧栏和看板上一眼看清，⌘J 直接跳到下一个要你处理的。</p>
-<p>名字来自斐波那契的兔子：一对生两对，两对生三对。agent 也是这样一个接一个冒出来，Fibo 帮你数着、管着。原名 Mooring，老安装照常能用。</p>
-<p><a href="https://github.com/majiayu000/mooring/blob/main/README_CN.md">中文说明 ↗</a></p>
-</div></div></section>
+  <section class="sec feat rise">
+    <div class="label"><b>01</b><span class="zh">状态</span><span class="en">State</span></div>
+    <div class="txt">
+      <h3><span class="zh">一眼看出哪个 Agent 在等你</span><span class="en">See which agent needs you</span></h3>
+      <p><span class="zh">每个会话只有一个状态，左栏、标签、窗格、看板和手机上的说法一致。<strong>一轮跑完不等于活干完了</strong>，只有你点了标记完成才算做完。</span><span class="en">Each session has one state, and the sidebar, tabs, panes, board and phone all say the same thing. <strong>A turn ending is not the work being done</strong>: only you mark a session complete.</span></p>
+      <ul class="spec">
+        <li><span class="st" style="--c:var(--accent)"><span class="zh">等你回答</span><span class="en">Waiting for you</span></span><span><span class="zh">它在提问，或等你审批</span><span class="en">It asked a question or wants an approval</span></span></li>
+        <li><span class="st" style="--c:var(--run)"><span class="zh">在跑</span><span class="en">Running</span></span><span><span class="zh">不用管它</span><span class="en">Leave it alone</span></span></li>
+        <li><span class="st" style="--c:var(--review)"><span class="zh">等你验收</span><span class="en">Ready for review</span></span><span><span class="zh">一轮跑完，结果等你看</span><span class="en">A turn ended; the result is yours to check</span></span></li>
+        <li><span><kbd>⌘J</kbd></span><span><span class="zh">跳到下一个等你的会话</span><span class="en">Jump to the next one waiting for you</span></span></li>
+        <li><span><span class="zh">通知</span><span class="en">Notify</span></span><span><span class="zh">每次等待只提醒一次，你正看着的终端不提醒</span><span class="en">Once per wait, and never for the terminal you are looking at</span></span></li>
+      </ul>
+    </div>
+    <div class="viz"><div class="stack">
+      <div class="crop themed" role="img" aria-label="Sidebar: Needs you 3, Running 2" style="aspect-ratio:350/262; --z:457.14%; --x:0%; --y:28.4%"></div>
+      <div class="crop themed" role="img" aria-label="Pane title bar: Codex, Waiting for you" style="aspect-ratio:636/200; --z:251.6%; --x:37.3%; --y:7.6%"></div>
+    </div></div>
+  </section>
+
+  <section class="sec feat full rise">
+    <div class="label"><b>02</b><span class="zh">看板</span><span class="en">Board</span></div>
+    <div class="txt">
+      <h3><span class="zh">所有会话，按它们要你做什么排开</span><span class="en">Every session, laid out by what it needs from you</span></h3>
+      <p><span class="zh">待办、在跑、要你处理、停下了、做完了。待办可以先写下来，想开工时选一个 Agent 启动；拖到「做完了」就是你验收过。</span><span class="en">To-do, Running, Needs you, Stopped, Done. Write a to-do now and pick an agent when you want it started; dragging a card to Done means you reviewed it.</span></p>
+      <p><span class="zh">点开一张卡：你问了什么、Agent 最后说了什么、分支、轮数，不用翻终端。关掉的会话对话还留着，随时在新窗格里接着聊。</span><span class="en">Open a card for what you asked, the agent’s last words, the branch and the turn count, without scrolling a terminal. Closed sessions keep their conversation; continue any of them in a new pane.</span></p>
+    </div>
+    <div class="viz"><img class="shot" src="assets/shot-board.webp" width="1600" height="1000" loading="lazy" alt="The board: columns To-do, Running, Needs you, Stopped and Done, with a card per session"></div>
+  </section>
+
+  <section class="sec feat rise">
+    <div class="label"><b>03</b><span class="zh">验收</span><span class="en">Review</span></div>
+    <div class="txt">
+      <h3><span class="zh">这一轮它到底改了什么</span><span class="en">What this turn actually changed</span></h3>
+      <p><span class="zh">一轮结束，窗格顶上写着这一轮改了几个文件，点开看合并后的改动。你的提问钉在顶上，回答再长也不用往回翻。</span><span class="en">When a turn ends, the pane says how many files it changed; open them for the combined diff. Your question stays pinned at the top however long the answer runs.</span></p>
+      <ul class="spec">
+        <li><span><span class="zh">本轮改动</span><span class="en">Changes</span></span><span><span class="zh">按文件列出，同一文件改多次只看最终结果</span><span class="en">Listed per file; many edits to one file show as one result</span></span></li>
+        <li><span><span class="zh">验证规则</span><span class="en">Criteria</span></span><span><span class="zh">插件定义的检查，窗格上显示过了几条</span><span class="en">Checks defined by plugins, with the proven count on the pane</span></span></li>
+        <li><span><span class="zh">标记完成</span><span class="en">Mark done</span></span><span><span class="zh">只有你能按，可以撤销</span><span class="en">Only you press it, and it can be undone</span></span></li>
+      </ul>
+    </div>
+    <div class="viz"><div class="crop themed" role="img" aria-label="A pane ready for review: This turn is done, with a Mark done button" style="aspect-ratio:590/290; --z:271.2%; --x:99.6%; --y:72%"></div></div>
+  </section>
+
+  <section class="sec feat rise">
+    <div class="label"><b>04</b><span class="zh">不丢</span><span class="en">Persistence</span></div>
+    <div class="txt">
+      <h3><span class="zh">关掉窗口，它们照样跑</span><span class="en">Close it, they keep working</span></h3>
+      <p><span class="zh">终端跑在后台进程 <code>fibo serve</code> 里，不在窗口里。退出、更新或 App 崩溃，再打开时终端都还在。</span><span class="en">Terminals live in a background host, <code>fibo serve</code>, not in the window. Quit, update or crash the app and every terminal is still there when it opens again.</span></p>
+      <p><span class="zh">连后台也没了（比如重启电脑），被打断的会话会显示<strong>接着聊</strong>：点一下就用 <code>claude --resume</code> 或 <code>codex resume</code> 回到同一段对话，启动时带的参数也一起带上。</span><span class="en">If the host itself goes (a reboot), sessions that were cut off show <strong>resume</strong>: one click reopens the same conversation with <code>claude --resume</code> or <code>codex resume</code>, with the flags it was started with.</span></p>
+    </div>
+    <div class="viz"><div class="tl" aria-hidden="true">
+      <div class="ev"><span></span><span><span class="zh">退出</span><span class="en">quit</span></span><span><span class="zh">更新</span><span class="en">update</span></span><span><span class="zh">崩溃</span><span class="en">crash</span></span><span><span class="zh">重启电脑</span><span class="en">reboot</span></span></div>
+      <div class="row"><span><span class="zh">窗口</span><span class="en">window</span></span><i class="seg cut mark"></i><i class="seg cut mark"></i><i class="seg cut mark"></i><i class="seg cut mark"></i></div>
+      <div class="row"><span>fibo serve</span><i class="seg live"></i><i class="seg live"></i><i class="seg live"></i><i class="seg cut back"></i></div>
+      <div class="note"><span class="zh">前三次终端一直在。<b>●</b> 重启后点「接着聊」，回到同一段对话。</span><span class="en">Terminals stay up through the first three. <b>●</b> After a reboot, one click resumes the same conversation.</span></div>
+    </div></div>
+  </section>
+
+  <section class="sec feat rise">
+    <div class="label"><b>05</b><span class="zh">接入</span><span class="en">Agents</span></div>
+    <div class="txt">
+      <h3><span class="zh">什么 Agent 都能接</span><span class="en">Any agent CLI</span></h3>
+      <p><span class="zh">内置 12 个 Agent CLI，Fibo 读取各工具自己提供的会话记录和事件；子代理在左栏里展开成一棵树。别的 CLI 用一个 JSON 插件接入，自带 OpenCode 示例。</span><span class="en">Twelve agent CLIs are built in; Fibo reads the session records and events each tool provides, and sub-agents open as a tree in the sidebar. Other CLIs are added with a JSON plugin; OpenCode ships as an example.</span></p>
+      <p><span class="zh">任何程序都能用 OSC 7501 状态协议，<strong>一行 <code>printf</code></strong> 报告自己的状态。</span><span class="en">Any program can report its own state with <strong>one <code>printf</code></strong>, using the OSC 7501 status protocol.</span></p>
+    </div>
+    <div class="viz"><pre class="term"><span class="c"># deploy.sh</span>
+<span class="p">$ </span>printf '\033]7501;state=working:app=deploy:progress=30\033\\'
+
+<span class="y">●</span> deploy   <span class="y">working</span>   <span class="c">30%</span></pre></div>
+  </section>
+
+  <section class="sec feat rise">
+    <div class="label"><b>06</b><span class="zh">协作</span><span class="en">Orchestration</span></div>
+    <div class="txt">
+      <h3><span class="zh">Agent 能驱动 Fibo，也能互相派活</span><span class="en">Agents drive Fibo, and each other</span></h3>
+      <p><span class="zh">在 Fibo 终端里，Agent 可以用 <code>fibo</code> 命令读别的终端、给别的 Agent 发话。</span><span class="en">Inside a Fibo terminal, an agent can read and drive the others with the <code>fibo</code> command.</span></p>
+      <p><span class="zh"><code>fibo run</code> 派另一个 Agent 去做一件事；它每结束一轮，结果自动回到派活那一方的输入框，<strong>谁都不用轮询</strong>。</span><span class="en"><code>fibo run</code> starts another agent with a task; each turn it ends comes back into the caller’s input, so <strong>nobody polls</strong>.</span></p>
+    </div>
+    <div class="viz"><pre class="term"><span class="p">$ </span>fibo list
+<span class="p">$ </span>fibo run codex "<span class="zh">审一下这个分支，只列真正的 bug</span><span class="en">review this branch, real bugs only</span>"
+
+<span class="g">&lt;mooring from=codex&gt;</span> … <span class="g">&lt;/mooring&gt;</span>
+<span class="c"># <span class="zh">它每结束一轮，结果自己回来</span><span class="en">each turn it ends reports back by itself</span></span>
+
+<span class="p">$ </span>fibo --skill   <span class="c"># <span class="zh">写给 Agent 看的完整说明</span><span class="en">the full guide, written for agents</span></span></pre></div>
+  </section>
+
+  <section class="sec duo rise">
+    <div>
+      <div class="label"><b>07</b><span class="zh">多台电脑</span><span class="en">Machines</span></div>
+      <h3><span class="zh">别的电脑，也在同一个左栏里</span><span class="en">Other computers, in the same sidebar</span></h3>
+      <p><span class="zh">加一台 ssh 能免密登录、装了 Fibo 的电脑，它的空间和会话就按机器名列在左栏。暂时不想管的空间或整台机器可以「先不管」：照样跑，不计数，不提醒。</span><span class="en">Add a computer that ssh can log in to and that has Fibo installed; its spaces and sessions are listed in the sidebar under its name. Quiet a space or a whole machine you don’t want to think about: it keeps running, uncounted and silent.</span></p>
+    </div>
+    <div>
+      <div class="label"><b>08</b><span class="zh">手机</span><span class="en">Phone</span></div>
+      <h3><span class="zh">人不在电脑前，也能回它一句</span><span class="en">Answer it when you are away from the desk</span></h3>
+      <p><span class="zh">配对手机后，在手机上看哪个在等你、读对话、看改动、允许或拒绝、发一句话、让它停下。中继要你自己开启，内容端到端加密，也可以用自己部署的中继。</span><span class="en">Pair a phone to see which session is waiting, read the conversation and the changes, allow or deny, send a message or stop a turn. The relay is opt-in and end-to-end encrypted, and you can run your own.</span></p>
+    </div>
+  </section>
+
+  <section class="sec feat full rise">
+    <div class="label"><b>09</b><span class="zh">定制</span><span class="en">Yours</span></div>
+    <div class="txt">
+      <h3><span class="zh">用插件改它，或者让 Agent 替你改</span><span class="en">Change it with plugins, or ask your agent to</span></h3>
+      <p><span class="zh">插件就是 <code>~/.config/fibo/plugins/</code> 下的普通文件：右键菜单和 <kbd>⌘P</kbd> 里的命令、左栏排法、窗格上显示的信息、状态变化时的 hook、验证规则、完成动画、新的 Agent CLI。</span><span class="en">Plugins are plain files in <code>~/.config/fibo/plugins/</code>: commands for the pane menu and <kbd>⌘P</kbd>, sidebar layouts, facts on each pane, hooks on state changes, verification rules, done animations, new agent CLIs.</span></p>
+      <p><span class="zh">跟终端里的 Agent 说一句「加一个右键命令，在旁边跑 npm test」，它会读 <code>fibo --skill plugins</code>，写好插件并检查。主题有六套深色和浅色，可以导入 <code>.itermcolors</code>，每个空间还能单独用一套。</span><span class="en">Tell the agent in your terminal “add a menu item that runs npm test beside this pane”; it reads <code>fibo --skill plugins</code>, writes the plugin and checks it. Themes come as six dark ones plus light, import <code>.itermcolors</code>, and each space can keep its own.</span></p>
+    </div>
+    <div class="viz"><img class="shot" src="assets/shot-themes.webp" width="1600" height="1000" loading="lazy" alt="Settings › Appearance: dark themes Obsidian, Slate, Graphite, Warm gray, Pine and Plum, and the interface style switch"></div>
+  </section>
+
+  <section class="sec intro rise" id="all">
+    <div class="label"><span class="zh">全部细节</span><span class="en">Everything else</span></div>
+    <h2><span class="zh">它首先是一个好用的终端。<span class="d">其余的都长在这上面。</span></span><span class="en">It is a good terminal first. <span class="d">Everything else is built on that.</span></span></h2>
+  </section>
+  <section class="sec all rise">
+    <div><div class="label">Splits</div><h4><span class="zh">标签和分屏</span><span class="en">Tabs and splits</span></h4><p><span class="zh">向右、向下分屏，按方向切窗格。带 ⌘ 的快捷键都能改。</span><span class="en">Split right or down and move between panes by direction. Every ⌘ shortcut can be rebound.</span></p></div>
+    <div><div class="label">⌘P</div><h4><span class="zh">一个搜索框</span><span class="en">One search box</span></h4><p><span class="zh">找会话、空间、说过的话，也执行命令。</span><span class="en">Finds sessions, spaces and messages, and runs commands.</span></p></div>
+    <div><div class="label">Paths</div><h4><span class="zh">点路径，跳到那一行</span><span class="en">Click a path, land on the line</span></h4><p><span class="zh">⌘ 点 <code>pane.rs:651</code>，在 Zed、VS Code 或 Cursor 里打开到那一行。</span><span class="en">⌘-click <code>pane.rs:651</code> to open it at that line in Zed, VS Code or Cursor.</span></p></div>
+    <div><div class="label">Spaces</div><h4><span class="zh">一个项目一个空间</span><span class="en">A space per project</span></h4><p><span class="zh">空间对应一个文件夹，左栏可以只看其中一个。</span><span class="en">A space maps to a folder, and the sidebar can show just one.</span></p></div>
+    <div><div class="label">To-do</div><h4><span class="zh">待办</span><span class="en">To-dos</span></h4><p><span class="zh">想到就记下，稍后再交给某个 Agent 开工。</span><span class="en">Write it down when you think of it; hand it to an agent later.</span></p></div>
+    <div><div class="label">Limits</div><h4><span class="zh">额度</span><span class="en">Quota</span></h4><p><span class="zh">底栏显示 Codex、Claude、Grok 的额度。</span><span class="en">The status bar shows your Codex, Claude and Grok quota.</span></p></div>
+    <div><div class="label">Sub-agents</div><h4><span class="zh">子代理</span><span class="en">Sub-agents</span></h4><p><span class="zh">一个会话派出去的子代理，在它下面展开。</span><span class="en">Sub-agents a session started open underneath it.</span></p></div>
+    <div><div class="label">Find</div><h4><span class="zh">终端内查找</span><span class="en">Find in terminal</span></h4><p><span class="zh">在滚动缓冲里搜，翻到顶、翻到底都有快捷键。</span><span class="en">Search the scrollback, with shortcuts to jump to the top and bottom.</span></p></div>
+    <div><div class="label">Type</div><h4><span class="zh">字体</span><span class="en">Type</span></h4><p><span class="zh">等宽字体、连字、行高、中文字体各自可选。</span><span class="en">Pick the monospaced font, ligatures, line height and the CJK font separately.</span></p></div>
+    <div><div class="label">Style</div><h4><span class="zh">两种界面风格</span><span class="en">Two interface styles</span></h4><p><span class="zh">标准，或者终端原生：边框缩成细线，标签在底部。</span><span class="en">Standard, or terminal native: chrome shrinks to hairlines, tabs at the bottom.</span></p></div>
+    <div><div class="label">Done</div><h4><span class="zh">完成动画</span><span class="en">Done animations</span></h4><p><span class="zh">标记完成时放一段，自带 18 种，也可以自己写。</span><span class="en">One plays when you mark done. Eighteen ship as plugins; write your own.</span></p></div>
+    <div><div class="label">Update</div><h4><span class="zh">更新时终端不断</span><span class="en">Updates keep terminals up</span></h4><p><span class="zh">新版本校验签名后原地替换，终端继续跑。</span><span class="en">A new version is verified, swapped in place, and every terminal keeps running.</span></p></div>
+  </section>
+
+  <section class="sec intro rise" id="privacy">
+    <div class="label"><span class="zh">数据</span><span class="en">Your data</span></div>
+    <h2><span class="zh">App 自己只发一个网络请求：<span class="d">检查更新。</span></span><span class="en">One network request on its own: <span class="d">the update check.</span></span></h2>
+  </section>
+  <section class="sec facts rise">
+    <div>
+      <div class="label"><b>A</b><span class="zh">留在本机</span><span class="en">Stays local</span></div>
+      <h4><span class="zh">对话记录不上传</span><span class="en">Transcripts are never uploaded</span></h4>
+      <p><span class="zh">终端和会话索引在 <code>~/.local/share/fibo-workbench</code>，设置和插件在 <code>~/.config/fibo</code>。Fibo 只读 Agent 自己的对话记录。</span><span class="en">Terminals and the session index live in <code>~/.local/share/fibo-workbench</code>, settings and plugins in <code>~/.config/fibo</code>. Fibo only reads the agents’ own transcripts.</span></p>
+    </div>
+    <div>
+      <div class="label"><b>B</b><span class="zh">每天最多一次</span><span class="en">Once a day at most</span></div>
+      <h4><span class="zh">可以关掉</span><span class="en">And you can turn it off</span></h4>
+      <p><span class="zh">向 GitHub API 要一次最新发布的信息。更新包按 SHA256 和 Developer ID 签名校验，任何一项不过都不安装。</span><span class="en">One GET to the GitHub API for the latest release. Updates are checked against SHA256 sums and the Developer ID signature; nothing installs if a check fails.</span></p>
+    </div>
+    <div>
+      <div class="label"><b>C</b><span class="zh">其余等你动手</span><span class="en">The rest waits for you</span></div>
+      <h4><span class="zh">你加了才连</span><span class="en">Nothing connects until you add it</span></h4>
+      <p><span class="zh">手机中继、远程插件目录、webhook、SSH 电脑，都是你开启或添加之后才联网。</span><span class="en">The phone relay, the remote plugin catalog, webhooks and SSH machines go online only after you turn them on or add them.</span></p>
+    </div>
+  </section>
+
+  <section class="sec faq rise" id="faq">
+    <div class="label"><span class="zh">常见问题</span><span class="en">FAQ</span></div>
+    <div>
+      <details open>
+        <summary><span class="zh">退出、更新或重启会怎样？</span><span class="en">What happens when I quit, update or restart?</span></summary>
+        <p><span class="zh">退出或更新 App，终端都继续跑。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。</span><span class="en">Quitting or updating the app leaves every terminal running. Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.</span></p>
+      </details>
+      <details>
+        <summary><span class="zh">Agent 没出现在左栏。</span><span class="en">An agent does not show up in the sidebar.</span></summary>
+        <p><span class="zh">要在 Fibo 的终端里运行；在别处启动的会话只在看板上以「外部·只读」出现。套在沙盒或虚拟机里运行时，启动前设 <code>MOORING_AGENT=claude</code>。<code>fibo explain &lt;终端&gt;</code> 能看到 Fibo 怎么读这块屏。</span><span class="en">It has to run inside a Fibo terminal; sessions started elsewhere appear on the board only. Behind a sandbox or a VM, start it with <code>MOORING_AGENT=claude</code>. <code>fibo explain &lt;terminal&gt;</code> shows how Fibo read that screen.</span></p>
+      </details>
+      <details>
+        <summary><span class="zh">Fibo 会改我的 Agent 配置吗？</span><span class="en">Does Fibo change my agent settings?</span></summary>
+        <p><span class="zh">只有运行 <code>fibo hooks install</code> 时会在 Agent 的配置文件里加上 Fibo 的条目，<code>fibo hooks uninstall</code> 会移除。不装 hook 时，状态从对话记录和画面读。</span><span class="en">Only when you run <code>fibo hooks install</code>, which adds Fibo’s entries to the agent’s settings file; <code>fibo hooks uninstall</code> removes them. Without hooks, state comes from transcripts and the screen.</span></p>
+      </details>
+      <details>
+        <summary><span class="zh">以前用的是 Mooring 或 Keepline，要做什么？</span><span class="en">I used Mooring or Keepline. What changes?</span></summary>
+        <p><span class="zh">不用重来。Fibo 第一次启动时会把旧配置搬到 <code>~/.config/fibo</code>，老后台把终端交接过来；<code>mooring</code>、<code>keepline</code> 命令和 <code>MOORING_*</code>、<code>KEEPLINE_*</code> 变量照样认。</span><span class="en">Nothing to redo. On first start Fibo moves the old config to <code>~/.config/fibo</code> and the old host hands its terminals over; it still answers to <code>mooring</code>, <code>keepline</code>, <code>MOORING_*</code> and <code>KEEPLINE_*</code>.</span></p>
+      </details>
+    </div>
+  </section>
+
+  <section class="sec final rise" id="install">
+    <div>
+      <h2><span class="zh">让它们跑。<br><span class="d">你去忙别的。</span></span><span class="en">Let them run.<br><span class="d">Go do something else.</span></span></h2>
+      <p class="lede"><span class="zh">打开 Fibo，在它的终端里运行 <code>claude</code> 或 <code>codex</code>，会话就会出现在左栏。</span><span class="en">Open Fibo, run <code>claude</code> or <code>codex</code> in its terminal, and the session shows up in the sidebar.</span></p>
+    </div>
+    <div class="side">
+      <a class="btn" href="https://github.com/majiayu000/mooring/releases/latest"><span class="zh">下载 .dmg</span><span class="en">Download .dmg</span></a>
+      <button class="brew" type="button" data-copy="brew install --cask majiayu000/tap/fibo">
+        <span class="cmd">brew install --cask majiayu000/tap/fibo</span>
+        <span class="copy"><span class="zh">复制</span><span class="en">Copy</span></span>
+      </button>
+      <a class="src" href="https://github.com/majiayu000/mooring#build-from-source"><span class="zh">或者从源码构建 →</span><span class="en">Or build from source →</span></a>
+    </div>
+  </section>
 </main>
-<footer class="wrap"><span>Fibo · open source by majiayu000 · fibo.page</span><div><a href="https://github.com/majiayu000/mooring">Source</a><a href="https://github.com/majiayu000/mooring/releases">Releases</a><a href="https://github.com/majiayu000/mooring/issues">Issues</a><a href="https://github.com/majiayu000/mooring/blob/main/LICENSE">MIT license</a></div></footer>
+
+<footer>
+  <div class="frame">
+    <span>Fibo · MIT License</span>
+    <a href="https://github.com/majiayu000/mooring">GitHub</a>
+    <a href="https://github.com/majiayu000/mooring/issues">Issues</a>
+    <a href="https://github.com/majiayu000/mooring/releases/latest"><span class="zh">发布</span><span class="en">Releases</span></a>
+    <span class="sp"><span class="zh">原名 Mooring，更早叫 Keepline。</span><span class="en">Formerly Mooring, and before that Keepline.</span></span>
+  </div>
+</footer>
+
 <script>
-// Phones get the 9:16 cut.
-if (matchMedia('(max-width: 560px)').matches) {
-  const v = document.querySelector('.film video');
-  v.poster = 'assets/fibo-promo-v-poster.jpg'; v.src = 'assets/fibo-promo-v.mp4'; v.style.aspectRatio = '9/16';
-}
-document.getElementById('copy').addEventListener('click', async e => {
-  try { await navigator.clipboard.writeText(document.getElementById('brew').textContent); e.target.textContent = 'Copied'; }
-  catch { e.target.textContent = 'Select & copy'; }
-  setTimeout(() => e.target.textContent = 'Copy', 1600);
-});
+(function () {
+  var root = document.documentElement;
+  root.classList.add('js');
+  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function lang() { return root.lang === 'en' ? 'en' : 'zh'; }
+  function label() {
+    document.getElementById('lang').textContent = lang() === 'zh' ? 'EN' : '中文';
+    document.title = lang() === 'zh' ? 'Fibo — 同时跑很多个 Coding Agent 的 macOS 工作台' : 'Fibo — run many coding agents at once on your Mac';
+  }
+  label();
+  document.getElementById('lang').addEventListener('click', function () {
+    var l = lang() === 'zh' ? 'en' : 'zh';
+    root.lang = l === 'en' ? 'en' : 'zh-CN';
+    save('fibo-lang', l);
+    label();
+  });
+  document.getElementById('theme').addEventListener('click', function () {
+    root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+    save('fibo-theme', root.dataset.theme);
+  });
+
+  [].forEach.call(document.querySelectorAll('[data-copy]'), function (b) {
+    b.addEventListener('click', function () {
+      var tag = b.querySelector('.copy'), old = tag.innerHTML;
+      var done = function () { tag.textContent = '✓'; setTimeout(function () { tag.innerHTML = old; }, 1400); };
+      if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy).then(done, function () {});
+    });
+  });
+
+  var rises = document.querySelectorAll('.rise');
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { rootMargin: '0px 0px -6% 0px' });
+    [].forEach.call(rises, function (el) { io.observe(el); });
+  } else {
+    [].forEach.call(rises, function (el) { el.classList.add('in'); });
+  }
+})();
 </script>
 </body>
 </html>
