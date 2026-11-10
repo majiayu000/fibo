@@ -6,6 +6,7 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+mod events_text;
 mod explain;
 mod inspect;
 mod list_text;
