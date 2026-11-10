@@ -51,10 +51,14 @@ pub(in crate::workbench) fn machine_letter(name: &str) -> String {
         .map_or_else(String::new, |c| c.to_uppercase().collect())
 }
 /// As `row_bucket` does at home: 要你处理 holds only what that machine's host counts.
-fn remote_bucket(status: Status, needs_you: bool) -> Bucket {
-    match bucket(status) {
-        Bucket::Attention if !needs_you => Bucket::Stopped,
-        b => b,
+/// A state this build does not know goes by that count alone: listed where the chip and
+/// ⌘J count it, else with what is no longer moving.
+fn remote_bucket(said: Option<Status>, needs_you: bool) -> Bucket {
+    match said.map(bucket) {
+        None if needs_you => Bucket::Attention,
+        None => Bucket::Stale,
+        Some(Bucket::Attention) if !needs_you => Bucket::Stopped,
+        Some(b) => b,
     }
 }
 /// The entry after `at`, or the first when none is current.
@@ -190,7 +194,7 @@ impl Workbench {
                     key,
                     status,
                     known: said.is_some(),
-                    bucket: remote_bucket(status, card.needs_you),
+                    bucket: remote_bucket(said, card.needs_you),
                     quiet: view.spec.quiet,
                     when: card.updated.unwrap_or(now),
                     card: card.clone(),
@@ -585,10 +589,14 @@ mod tests {
     /// 要你处理 holds what that machine's host counts, as it does at home.
     #[test]
     fn a_remote_row_needs_you_only_when_its_host_says_so() {
-        assert_eq!(remote_bucket(Status::Review, true), Bucket::Attention);
-        assert_eq!(remote_bucket(Status::Waiting, false), Bucket::Stopped);
-        assert_eq!(remote_bucket(Status::Running, false), Bucket::Running);
-        assert_eq!(remote_bucket(Status::Stale, false), Bucket::Stale);
+        assert_eq!(remote_bucket(Some(Status::Review), true), Bucket::Attention);
+        assert_eq!(remote_bucket(Some(Status::Waiting), false), Bucket::Stopped);
+        assert_eq!(remote_bucket(Some(Status::Running), false), Bucket::Running);
+        assert_eq!(remote_bucket(Some(Status::Stale), false), Bucket::Stale);
+        // A newer machine's state word: its 要你处理 count still decides (apple, 11-10:
+        // the chip said 2 while the list held 1).
+        assert_eq!(remote_bucket(None, true), Bucket::Attention);
+        assert_eq!(remote_bucket(None, false), Bucket::Stale);
     }
 
     #[test]
