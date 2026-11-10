@@ -88,11 +88,14 @@ impl Index {
         Ok((Some(self.stretch(path, from, until)?), rows, None))
     }
 
-    /// Where the stretch ending at `end` begins: the message before it.
-    fn stretch_start(&self, path: &str, end: (i64, i64)) -> io::Result<i64> {
+    /// Where the stretch ending at `end` begins: the Agent's message before it. A message you
+    /// send while it works lands mid-stretch, between its calls; starting there lost the calls
+    /// before it from every count (2026-11-10 walk). The `IN` lets SQLite walk the
+    /// messages' partial index instead of every record.
+    pub(super) fn stretch_start(&self, path: &str, end: (i64, i64)) -> io::Result<i64> {
         Ok(self
             .db
-            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND kind='assistant' AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
             .map_err(err)?
             .query_row(params![path, end.0, end.1], |r| r.get(0))
             .optional()

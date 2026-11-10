@@ -33,7 +33,7 @@ import { hasEffort, type ModeKind } from '@/ui/modes';
 import { ModeSheet } from '@/ui/modesheet';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
-import { sameWords } from '@/ui/sent';
+import { sameWords, sendTarget, shownWords } from '@/ui/sent';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 
@@ -219,7 +219,8 @@ export default function Chat() {
       setError(blocked);
       return false;
     }
-    if (!session) {
+    const to = sendTarget(session, online, card?.session);
+    if (!to) {
       setError('尚未识别对话，暂时不能发送');
       return false;
     }
@@ -228,7 +229,7 @@ export default function Chat() {
       return false;
     }
     if (!online) {
-      enqueue({ machine, terminal, session, text });
+      enqueue({ machine, terminal, session: to, text });
       return true;
     }
     setPending((p) => [...p, { text, at: Date.now() / 1000, queued: working, pictures: pictures.length, how }]);
@@ -312,7 +313,7 @@ export default function Chat() {
     ({ item: l }: { item: Line }) =>
       l.kind === 'msg' ? (
         l.m.role === 'user' ? (
-          <Mine text={l.m.text} at={l.m.at} copyable />
+          <Mine text={shownWords(l.m.text)} at={l.m.at} copyable />
         ) : (
           <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
@@ -397,7 +398,7 @@ export default function Chat() {
           }
           ListEmptyComponent={
             <Text onPress={canReadBack && !readingBack ? older : undefined} style={{ color: t.dim, textAlign: 'center' }}>
-              {canReadBack ? readBackWords(readingBack, readFailed) : partial ? partialWords(0) : card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
+              {canReadBack ? readBackWords(readingBack, readFailed) : partial ? partialWords(0) : !online ? '电脑没连上，连上后这里显示这段对话' : card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
             </Text>
           }
         />

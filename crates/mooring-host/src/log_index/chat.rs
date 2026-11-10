@@ -9,6 +9,8 @@ use serde_json::Value;
 use std::io;
 
 mod backfill;
+#[cfg(test)]
+mod queued_tests;
 
 /// A record's `seq`: where it is in its log, so reading older lines later (`backfill`) keeps
 /// the order and every seq already handed out. Past zero, and under 2^53 for a log under
@@ -108,26 +110,27 @@ impl Index {
         Ok((messages, more && after.is_none()))
     }
 
-    /// Each Agent message's tool calls: those logged after the message before it, user's or
-    /// Agent's, so a turn's calls are counted once, on the message they led to. One read of
-    /// the page's whole range: this runs under the host's lock.
+    /// Each Agent message's tool calls: those logged after the Agent's message before it, so a
+    /// turn's calls are counted once, on the message they led to, and a message you send while
+    /// it works does not cut the calls before it away. The time runs from the first thing in
+    /// the stretch, your message or its first call. One read of the page's whole range: this
+    /// runs under the host's lock.
     fn attach_tools(&self, path: &str, messages: &mut [ChatMessage]) -> io::Result<()> {
         let (Some(first), Some(last)) = (messages.first(), messages.last()) else {
             return Ok(());
         };
         let (first, last) = (first.seq, last.seq);
-        // The message before this page: where its first message's work began.
-        let (from, mut before_at, mut before_user): (i64, i64, bool) = self
+        let from = self.stretch_start(path, place(first))?;
+        let (from, until) = (place(from), place(last));
+        // Where the first message's stretch began, when that is before this page.
+        let mut began: i64 = self
             .db
-            .prepare_cached(&format!("SELECT {SEQ},at,kind='user' FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .prepare_cached(&format!("SELECT at FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','tool_call') AND (offset,ordinal)>(?2,?3) AND (offset,ordinal)<(?4,?5) ORDER BY offset,ordinal LIMIT 1"))
             .map_err(err)?
-            .query_row(rusqlite::params![path, place(first).0, place(first).1], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })
+            .query_row(rusqlite::params![path, from.0, from.1, place(first).0, place(first).1], |r| r.get(0))
             .optional()
             .map_err(err)?
             .unwrap_or_default();
-        let (from, until) = (place(from), place(last));
         let calls = self
             .db
             .prepare_cached(&format!("SELECT {SEQ},text,{FAILED},at FROM session_records AS call WHERE path=?1 AND kind='tool_call' AND (offset,ordinal)>(?2,?3) AND (offset,ordinal)<(?4,?5) ORDER BY offset,ordinal"))
@@ -144,22 +147,25 @@ impl Index {
             .collect::<Result<Vec<_>, _>>()
             .map_err(err)?;
         let mut calls = calls.into_iter().peekable();
+        let mut before = Vec::new();
         for m in messages.iter_mut() {
-            let mut before = Vec::new();
-            let mut first_call = 0;
             while let Some((_, text, failed, at)) = calls.next_if(|c| c.0 < m.seq) {
-                if before.is_empty() {
-                    first_call = at;
+                if began == 0 {
+                    began = at;
                 }
                 before.push((text, failed));
             }
-            if !m.user {
-                let began = if before_user { before_at } else { first_call };
-                let mut tools = summary(&before);
-                tools.took = took(began, m.at);
-                m.tools = Some(tools);
+            if m.user {
+                if began == 0 {
+                    began = m.at as i64;
+                }
+                continue;
             }
-            (before_at, before_user) = (m.at as i64, m.user);
+            let mut tools = summary(&before);
+            tools.took = took(began, m.at);
+            m.tools = Some(tools);
+            before.clear();
+            began = 0;
         }
         Ok(())
     }
