@@ -240,6 +240,8 @@ impl Workbench {
                 cx,
             );
             self.layout.drag.as_mut().unwrap().saving = Some(request);
+        } else {
+            self.layout.drag = None;
         }
     }
     /// Moves a pane, process and all, beside the panes of another tab or into a tab of

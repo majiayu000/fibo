@@ -552,7 +552,7 @@ impl Workbench {
         }
         // The host still holds the pre-drag ratio until mouse-up. Keep the local
         // preview while accepting everything else in its snapshot.
-        if let Some(drag) = &self.layout.drag
+        if let Some(drag) = &mut self.layout.drag
             && !drag.preserve_preview(&mut self.workspace, &mut w)
         {
             self.layout.drag = None;

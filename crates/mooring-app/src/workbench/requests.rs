@@ -52,7 +52,11 @@ impl Workbench {
                     _ => None,
                 };
                 let confirmed = matches!(settled, Settled::Confirmed(_));
-                let resized = this.settle_resize(id.as_ref());
+                let confirmed_revision = match &settled {
+                    Settled::Confirmed(Reply::Workspace(w)) => Some(w.revision),
+                    _ => None,
+                };
+                let resized = this.settle_resize(id.as_ref(), confirmed_revision);
                 let received_workspace =
                     matches!(&settled, Settled::Confirmed(Reply::Workspace(_)));
                 if let Some(words) = settled.words() {

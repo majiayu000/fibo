@@ -9,6 +9,8 @@ pub(in crate::workbench) struct SplitDrag {
     pub(super) anchors: [String; 2],
     /// After release, keep the preview until this save's receipt arrives.
     pub(super) saving: Option<RequestId>,
+    /// Latest incoming `(revision, ratio)` overwritten while keeping the local preview.
+    shadowed: Option<(u64, u16)>,
     axis: Axis,
     start: Point<Pixels>,
     start_ratio: u16,
@@ -38,13 +40,14 @@ impl SplitDrag {
     }
 
     pub(in crate::workbench) fn preserve_preview(
-        &self,
+        &mut self,
         local: &mut Workspace,
         incoming: &mut Workspace,
     ) -> bool {
         let Some(Layout::Split { ratio, .. }) = self.split(local) else {
             return false;
         };
+        let incoming_revision = incoming.revision;
         let next = self
             .split(incoming)
             .filter(|l| l.is_divider(self.axis, &self.anchors));
@@ -52,7 +55,33 @@ impl SplitDrag {
             ratio: next_ratio, ..
         }) = next
         {
+            self.shadowed = Some((incoming_revision, *next_ratio));
             *next_ratio = *ratio;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Restores the overwritten snapshot ratio when a save receipt turns out to be older
+    /// than the snapshot already held locally (or did not commit).
+    pub(super) fn restore_if_superseded(
+        &self,
+        local: &mut Workspace,
+        confirmed_revision: Option<u64>,
+    ) -> bool {
+        let superseded = confirmed_revision.is_none_or(|rev| rev < local.revision);
+        let Some((rev, authoritative)) = self.shadowed else {
+            return false;
+        };
+        if !superseded || rev != local.revision {
+            return false;
+        }
+        let target = self
+            .split(local)
+            .filter(|l| l.is_divider(self.axis, &self.anchors));
+        if let Some(Layout::Split { ratio, .. }) = target {
+            *ratio = authoritative;
             true
         } else {
             false
@@ -61,14 +90,21 @@ impl SplitDrag {
 }
 
 impl Workbench {
-    pub(in crate::workbench) fn settle_resize(&mut self, id: Option<&RequestId>) -> bool {
+    pub(in crate::workbench) fn settle_resize(
+        &mut self,
+        id: Option<&RequestId>,
+        confirmed_revision: Option<u64>,
+    ) -> bool {
         if self
             .layout
             .drag
             .as_ref()
             .is_some_and(|drag| drag.saving.as_ref().is_some_and(|save| Some(save) == id))
         {
-            self.layout.drag = None;
+            let drag = self.layout.drag.take().unwrap();
+            if drag.restore_if_superseded(&mut self.workspace, confirmed_revision) {
+                self.facts.forget();
+            }
             true
         } else {
             false
@@ -107,6 +143,7 @@ impl Workbench {
                 axis: *axis,
                 start,
                 saving: None,
+                shadowed: None,
                 start_ratio: *ratio,
                 usable,
             });
@@ -123,11 +160,12 @@ mod tests {
 
     #[test]
     fn split_drag_keeps_parent_preview_when_a_child_ratio_changes() {
-        let drag = SplitDrag {
+        let mut drag = SplitDrag {
             tab: "tab".into(),
             path: vec![],
             anchors: ["a".into(), "b".into()],
             saving: None,
+            shadowed: None,
             axis: Axis::Right,
             start: Point::default(),
             start_ratio: 4000,
@@ -188,6 +226,7 @@ mod tests {
                     path: vec![],
                     anchors: ["a".into(), "b".into()],
                     saving: None,
+                    shadowed: None,
                     axis,
                     start: Point::default(),
                     start_ratio,
@@ -218,13 +257,14 @@ mod tests {
 
     #[test]
     fn split_drag_keeps_preview_but_accepts_other_snapshot_changes() {
-        let drag = SplitDrag {
+        let mut drag = SplitDrag {
             tab: "tab".into(),
             path: vec![],
             anchors: ["one".into(), "two".into()],
             axis: Axis::Down,
             start: Point::default(),
             saving: None,
+            shadowed: None,
             start_ratio: 8000,
             usable: px(FIXTURE_SPAN),
         };
@@ -263,6 +303,63 @@ mod tests {
     }
 
     #[test]
+    fn split_drag_restores_newer_snapshot_when_save_receipt_is_older() {
+        let mut drag = SplitDrag {
+            tab: "tab".into(),
+            path: vec![],
+            anchors: ["a".into(), "b".into()],
+            axis: Axis::Right,
+            start: Point::default(),
+            saving: Some(RequestId::fresh()),
+            shadowed: None,
+            start_ratio: 4000,
+            usable: px(FIXTURE_SPAN),
+        };
+        let mut local = Workspace {
+            revision: 8,
+            tabs: vec![Tab {
+                id: "tab".into(),
+                space: "space".into(),
+                default_task: None,
+                title: "test".into(),
+                layout: Some(Layout::Split {
+                    axis: Axis::Right,
+                    ratio: 6000,
+                    first: Box::new(Layout::Leaf("a".into())),
+                    second: Box::new(Layout::Leaf("b".into())),
+                }),
+            }],
+            ..Workspace::default()
+        };
+        // Pre-save refresh (rev 9 < receipt rev 10): receipt wins, do not restore 4000.
+        let mut pre_save = local.clone();
+        pre_save.revision = 9;
+        if let Some(Layout::Split { ratio, .. }) = drag.split(&mut pre_save) {
+            *ratio = 4000;
+        }
+        assert!(drag.preserve_preview(&mut local, &mut pre_save));
+        local = pre_save;
+        assert!(!drag.restore_if_superseded(&mut local, Some(10)));
+        assert!(matches!(
+            drag.split(&mut local),
+            Some(Layout::Split { ratio: 6000, .. })
+        ));
+        // Post-save refresh from another client (rev 11 > receipt rev 10): restore 3000.
+        let mut post_save = local.clone();
+        post_save.revision = 11;
+        if let Some(Layout::Split { ratio, .. }) = drag.split(&mut post_save) {
+            *ratio = 3000;
+        }
+        assert!(drag.preserve_preview(&mut local, &mut post_save));
+        local = post_save;
+        assert!(drag.restore_if_superseded(&mut local, Some(10)));
+        assert!(matches!(
+            drag.split(&mut local),
+            Some(Layout::Split { ratio: 3000, .. })
+        ));
+    }
+
+    #[test]
     fn split_drag_follows_small_moves_from_either_edge_on_both_axes() {
         for axis in [Axis::Down, Axis::Right] {
             for start_ratio in [500, 2000, 5000, 8000, 9500] {
@@ -275,6 +372,7 @@ mod tests {
                         axis,
                         start,
                         saving: None,
+                        shadowed: None,
                         start_ratio,
                         usable: px(FIXTURE_SPAN),
                     };
