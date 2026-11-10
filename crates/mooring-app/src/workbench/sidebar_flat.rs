@@ -66,6 +66,11 @@ pub(super) fn flat_state(g: Status, unseen: bool) -> gpui::AnyElement {
     }
 }
 
+/// `unknown_mark` in the column's state slot.
+pub(super) fn flat_unknown() -> gpui::AnyElement {
+    crate::ui::widgets::unknown_mark(F::STATE, F::STATE + 3., ink(F::idle())).into_any_element()
+}
+
 /// A row of the list, without its contents: where its state and text go, its corners, and
 /// its background selected and under the pointer. `two` is for a second line below the first.
 pub(super) fn flat_row_box(

@@ -29,6 +29,9 @@ pub(super) struct RemoteRow {
     key: String,
     pub(super) card: Card,
     status: Status,
+    /// Whether `status` is what the machine said; when not, it is 停着 for sorting only
+    /// and the row draws `flat_unknown`.
+    known: bool,
     pub(super) bucket: Bucket,
     /// When it last moved; a terminal that does not say counts as now, since it is live.
     pub(super) when: u64,
@@ -174,11 +177,8 @@ impl Workbench {
             .iter()
             .filter(|c| listed_card(c))
             .map(|card| {
-                let status = card
-                    .status
-                    .as_deref()
-                    .and_then(Status::from_key)
-                    .unwrap_or(Status::Stale);
+                let said = card.status.as_deref().and_then(Status::from_key);
+                let status = said.unwrap_or(Status::Stale);
                 let key = remote_key(&view, &card.id);
                 RemoteRow {
                     index,
@@ -189,6 +189,7 @@ impl Workbench {
                     shown: self.peek.as_ref().is_some_and(|p| p.terminal == key),
                     key,
                     status,
+                    known: said.is_some(),
                     bucket: remote_bucket(status, card.needs_you),
                     quiet: view.spec.quiet,
                     when: card.updated.unwrap_or(now),
@@ -300,7 +301,11 @@ impl Workbench {
                     .child(if r.quiet {
                         quiet::quiet_ring().into_any_element()
                     } else {
-                        flat_state(r.status, false)
+                        if r.known {
+                            flat_state(r.status, false)
+                        } else {
+                            super::sidebar_flat::flat_unknown()
+                        }
                     }),
             )
             .child(
@@ -591,5 +596,21 @@ mod tests {
         assert_eq!(next_index(3, None), 0);
         assert_eq!(next_index(3, Some(0)), 1);
         assert_eq!(next_index(3, Some(2)), 0);
+    }
+
+    /// 「为啥有个圆圈」(11-10): a state this build cannot tell draws `?`, not 停着's ring,
+    /// on another machine's rows (both layouts) and on a terminal here with no conversation.
+    /// Split needles: this file holds the test too, so a whole one would always be found.
+    #[test]
+    fn a_state_nobody_said_is_not_drawn_as_stopped() {
+        let rows = include_str!("sidebar_machines.rs");
+        assert!(rows.contains(concat!("known: said", ".is_some()")));
+        assert!(rows.contains(concat!("sidebar_flat::", "flat_unknown()")));
+        let below = include_str!("machines.rs");
+        assert!(!below.contains("then_some(Status::Stale)"));
+        assert!(below.contains("widgets::unknown_mark("));
+        let here = include_str!("sidebar/view.rs");
+        assert!(!here.contains("map_or(Status::Stale"));
+        assert_eq!(Status::from_key("someday"), None);
     }
 }

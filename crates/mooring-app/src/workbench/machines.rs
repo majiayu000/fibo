@@ -136,11 +136,7 @@ impl Workbench {
                 continue;
             }
             for card in sessions {
-                let status = card
-                    .status
-                    .as_deref()
-                    .and_then(Status::from_key)
-                    .or(card.note.is_some().then_some(Status::Stale));
+                let status = card.status.as_deref().and_then(Status::from_key);
                 let title = shown_title(card);
                 let word = card.status_label.clone();
                 let shown = self
@@ -164,7 +160,16 @@ impl Workbench {
                         .cursor_pointer()
                         .when(shown, |d| d.bg(T::color(T::raised())))
                         .hover(|s| s.bg(T::color(T::raised())))
-                        .when_some(status, |d, g| d.child(dot(g)))
+                        .child(status.map_or_else(
+                            || {
+                                crate::ui::widgets::unknown_mark(
+                                    T::DOT,
+                                    T::CHIP_SIZE,
+                                    T::color(T::muted()),
+                                )
+                            },
+                            dot,
+                        ))
                         .child(div().flex_1().min_w_0().truncate().child(title))
                         .when_some(word, |d, w| {
                             d.child(

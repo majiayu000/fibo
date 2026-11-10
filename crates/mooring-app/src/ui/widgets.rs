@@ -138,6 +138,22 @@ pub fn dot(group: Status) -> gpui::Div {
         .rounded_full()
         .bg(group.colors().0)
 }
+/// A state this build cannot tell (an Agent no conversation is tied to, or a state word
+/// from a newer machine): a gray `?` in the dot's place, never a state's ring, so the row
+/// does not claim 停着 (「为啥有个圆圈」, 11-10).
+pub fn unknown_mark(size: f32, text: f32, color: gpui::Hsla) -> gpui::Div {
+    div()
+        .size(px(size))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(text))
+        .line_height(px(size))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(color)
+        .child("?")
+}
 /// Running work keeps its filled status color even after it has been viewed.
 /// Other seen rows follow the theme's `seen.dot` style.
 pub fn seen_dot(group: Status) -> gpui::Div {

@@ -292,7 +292,7 @@ impl Workbench {
                     .terminal_reports
                     .get(terminal)
                     .map(crate::model::session_state::report_view);
-                let group = report.as_ref().map_or(Status::Stale, |(g, _)| *g);
+                let group = report.as_ref().map(|(g, _)| *g);
                 let n = recognition
                     .terminal_notes
                     .get(terminal)
