@@ -67,6 +67,15 @@ def stop_tree(pid, recorded=None):
                 os.killpg(group, sig)
             except ProcessLookupError:
                 pass
+            except PermissionError:
+                # XNU killpg returns EPERM when a group's remaining members became zombies
+                # between the ps snapshot and killpg (e.g. PTY SIGHUP as the host exits).
+                for member, row in alive.items():
+                    if row[1] == group:
+                        try:
+                            os.kill(member, sig)
+                        except ProcessLookupError:
+                            pass
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             current = processes()

@@ -211,6 +211,30 @@ class CleanupTests(unittest.TestCase):
     def test_gate_cleans_up_when_probe_times_out(self):
         self.gate_failure('probe')
 
+    def test_stop_tree_tolerates_group_becoming_zombie_after_snapshot(self):
+        dying = self.popen(['/bin/sh', '-c', 'sleep 0.15'], start_new_session=True)
+        staying = self.popen(['/bin/sh', '-c', 'sleep 3600'], start_new_session=True)
+        initial = fixture.processes()
+        recorded = {p: initial[p] for p in (dying.pid, staying.pid)}
+        calls = 0
+        real_processes = fixture.processes
+
+        def snapshot_then_zombie():
+            nonlocal calls
+            calls += 1
+            table = real_processes()
+            if calls == 2:
+                # Let `dying` finish into an unreaped zombie before killpg runs on its group.
+                for _ in range(30):
+                    if 'Z' in real_processes().get(dying.pid, ('', '', 'Z'))[2]:
+                        break
+                    fixture.time.sleep(0.02)
+            return table
+
+        with patch.object(fixture, 'processes', snapshot_then_zombie):
+            fixture.stop_tree(staying.pid, recorded)
+        self.assert_gone(recorded)
+
 
 if __name__ == '__main__':
     unittest.main()
