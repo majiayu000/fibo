@@ -201,10 +201,13 @@ describe('finished work folds, and does not read as nothing to do', () => {
     expect(ids(s.ahead)).toEqual(['a', 'e']);
     expect(ids(s.review)).toEqual(['r']);
   });
-  test('the fold says its word from the host, and its count', () => {
+  test('the fold says its word in the phone\'s language, and its count', () => {
     expect(foldLabel(lay([review('r1'), review('r2')]).review)).toBe('等你验收 · 2');
-    expect(foldLabel(lay([review('r', { status_label: 'in review' })]).review)).toBe('in review · 1');
-    expect(foldLabel(lay([review('r', { status_label: null })]).review)).toBe('1');
+    // A key the phone knows is said by the phone, whatever language the computer used.
+    expect(foldLabel(lay([review('r', { status_label: 'Ready for review' })]).review)).toBe('等你验收 · 1');
+    // One it does not know yet keeps the computer's word, or just the count.
+    expect(foldLabel([{ c: card('x', 'mystery', 0, { status_label: 'in review' }) } as never])).toBe('in review · 1');
+    expect(foldLabel([{ c: card('x', 'mystery', 0, { status_label: null }) } as never])).toBe('1');
   });
 });
 

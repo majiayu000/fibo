@@ -2,6 +2,7 @@
 // JSON lines both ways, ACKs, requests by id and streams. What
 // `next/crates/mooring-relay/examples/phone.rs` does, for the app. Protocol shapes:
 // the Keepline repo's `specs/extensions/remote-protocol.md` (not moved here).
+import { tr } from '../i18n';
 import { concat, text, utf8 } from './bytes';
 import { type Link, linkUrl } from './link';
 import { closeOutcome } from './close';
@@ -59,7 +60,7 @@ export class Remote {
       const hs = new Handshake(link.key);
       const timer = setTimeout(() => {
         ws.close();
-        reject(new RemoteError('连接超时'));
+        reject(new RemoteError(tr('连接超时')));
       }, timeoutMs);
       ws.onopen = () => ws.send(own(hs.first));
       ws.onmessage = (ev) => {
@@ -68,7 +69,7 @@ export class Remote {
           resolve(new Remote(ws, hs.finish(new Uint8Array(ev.data as ArrayBuffer))));
         } catch (e) {
           ws.close();
-          reject(new RemoteError(`握手失败：${(e as Error).message}`));
+          reject(new RemoteError(tr('握手失败：{why}', { why: (e as Error).message })));
         }
       };
       ws.onclose = (ev) => {
@@ -86,7 +87,7 @@ export class Remote {
    * a machine online whose answers never come.
    */
   request<T = any>(op: string, fields: Record<string, unknown> = {}): Promise<T> {
-    if (this.ended) return Promise.reject(new RemoteError('连接已断开'));
+    if (this.ended) return Promise.reject(new RemoteError(tr('连接已断开')));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {

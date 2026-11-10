@@ -9,6 +9,7 @@ import { KeyboardSafe, useBottomOverKeyboard } from './keyboard';
 import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
 import { opensAtEnd, textRows } from './toolview';
 import { useTheme } from './theme';
+import { tr } from '../i18n';
 
 export function Frame({ visible, onClose, onShow, children }: { visible: boolean; onClose: () => void; onShow?: () => void; children: React.ReactNode }) {
   const t = useTheme();
@@ -30,7 +31,7 @@ export function SelectSheet({ text, onClose }: { text: string; onClose: () => vo
   const t = useTheme();
   return (
     <Frame visible onClose={onClose}>
-      <Text style={[s.title, { color: t.text }]}>选择文字</Text>
+      <Text style={[s.title, { color: t.text }]}>{tr('选择文字')}</Text>
       <ScrollView style={{ maxHeight: 420 }}>
         <Text selectable style={{ color: t.text, fontSize: 15, lineHeight: 23 }}>
           {text}
@@ -104,7 +105,7 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
     setLoaded(false);
     setNote('');
     const r = remote(machine);
-    if (!r) return setError('电脑没连上');
+    if (!r) return setError(tr('电脑没连上'));
     setError('');
     r.request('read', { terminal, lines: 40 })
       .then((x) => {
@@ -116,8 +117,8 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
   return (
     <Frame visible={visible} onClose={onClose}>
       <View style={s.head}>
-        <Text style={[s.title, { color: t.text }]}>终端最后几行</Text>
-        <Btn label="复制" onPress={() => copyWithNote(text, '已复制', setNote, () => closed.current)} disabled={!text || !!error} />
+        <Text style={[s.title, { color: t.text }]}>{tr('终端最后几行')}</Text>
+        <Btn label={tr('复制')} onPress={() => copyWithNote(text, tr('已复制'), setNote, () => closed.current)} disabled={!text || !!error} />
       </View>
       {!!note && <Notice text={note} style={{ paddingVertical: 2 }} />}
       {text && !error ? (
@@ -125,9 +126,9 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
           <CodeView rows={rows} gap={noGap} footer={8} room={width - SHEET_PAD * 2} atEnd={opensAtEnd(rows.length, SCREEN_HEIGHT, LINE)} />
         </View>
       ) : (
-        <Text style={{ color: t.dim, fontSize: 14, paddingVertical: 24, textAlign: 'center' }}>{error || (loaded ? '画面是空的' : '…')}</Text>
+        <Text style={{ color: t.dim, fontSize: 14, paddingVertical: 24, textAlign: 'center' }}>{error || (loaded ? tr('画面是空的') : '…')}</Text>
       )}
-      <Wide label="关上" kind="grey" onPress={onClose} height={46} />
+      <Wide label={tr('关上')} kind="grey" onPress={onClose} height={46} />
     </Frame>
   );
 }

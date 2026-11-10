@@ -6,6 +6,7 @@ import { Text, View } from 'react-native';
 import { Frame } from './sheets';
 import { Wide } from './kit';
 import { useTheme } from './theme';
+import { tr } from '../i18n';
 
 export function QueuedSheet({ texts, onSendNow, onClose }: { texts: string[]; onSendNow: () => void; onClose: () => void }) {
   const t = useTheme();
@@ -21,10 +22,10 @@ export function QueuedSheet({ texts, onSendNow, onClose }: { texts: string[]; on
           ))}
         </View>
         <Text style={{ color: t.text, fontSize: 14, lineHeight: 20 }}>
-          {many ? `排着的 ${texts.length} 句会一起发出去，` : ''}不等手头这一步做完，它马上就会看到。
+          {many ? tr('排着的 {n} 句会一起发出去，不等手头这一步做完，它马上就会看到。', { n: texts.length }) : tr('不等手头这一步做完，它马上就会看到。')}
         </Text>
-        <Wide label="立刻发送" onPress={onSendNow} height={48} />
-        <Wide label="取消" kind="grey" onPress={onClose} height={46} />
+        <Wide label={tr('立刻发送')} onPress={onSendNow} height={48} />
+        <Wide label={tr('取消')} kind="grey" onPress={onClose} height={46} />
       </View>
     </Frame>
   );

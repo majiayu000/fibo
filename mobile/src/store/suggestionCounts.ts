@@ -19,8 +19,10 @@ export const countOffer = (s: SuggestionStats, key: string): SuggestionStats =>
 
 export const countUse = (s: SuggestionStats): SuggestionStats => ({ ...s, used: s.used + 1 });
 
+import { tr } from '../i18n';
+
 export function statsWords(s: SuggestionStats): string {
-  if (!s.turns) return '还没有记录。Claude 一轮结束、手机正开着这段对话时才计数。';
+  if (!s.turns) return tr('还没有记录。Claude 一轮结束、手机正开着这段对话时才计数。');
   const day = new Date(s.since * 1000);
-  return `${day.getMonth() + 1} 月 ${day.getDate()} 日起：${s.turns} 轮里 ${s.offered} 轮有建议，点用 ${s.used} 次。`;
+  return tr('{month} 月 {day} 日起：{turns} 轮里 {offered} 轮有建议，点用 {used} 次。', { month: day.getMonth() + 1, day: day.getDate(), turns: s.turns, offered: s.offered, used: s.used });
 }

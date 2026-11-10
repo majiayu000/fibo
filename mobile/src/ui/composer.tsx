@@ -12,6 +12,7 @@ import { noOutline } from './kit';
 import { modelName } from './parse';
 import { MAX_PICTURES, type Picture, pick } from './pictures';
 import { useTheme } from './theme';
+import { tr } from '../i18n';
 
 export function Composer({
   agent,
@@ -93,7 +94,7 @@ export function Composer({
       {!!suggestion && !draft && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`填入建议：${suggestion}`}
+          accessibilityLabel={tr('填入建议：{s}', { s: suggestion })}
           onPress={() => {
             setDraft(suggestion);
             onUseSuggestion?.();
@@ -101,7 +102,7 @@ export function Composer({
           }}
           style={({ pressed }) => [s.suggestion, { backgroundColor: t.well }, pressed && { opacity: 0.6 }]}
         >
-          <Text style={{ color: t.dim, fontSize: 12 }}>建议</Text>
+          <Text style={{ color: t.dim, fontSize: 12 }}>{tr('建议')}</Text>
           <Text numberOfLines={2} style={{ color: t.text, fontSize: 14, lineHeight: 19, flexShrink: 1 }}>
             {suggestion}
           </Text>
@@ -111,10 +112,10 @@ export function Composer({
         <View style={s.pictures}>
           {pictures.map((p, i) => (
             <View key={p.uri}>
-              <Image source={{ uri: p.uri }} style={[s.thumb, { backgroundColor: t.well }]} accessibilityLabel={`第 ${i + 1} 张图片`} />
+              <Image source={{ uri: p.uri }} style={[s.thumb, { backgroundColor: t.well }]} accessibilityLabel={tr('第 {n} 张图片', { n: i + 1 })} />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`去掉第 ${i + 1} 张图片`}
+                accessibilityLabel={tr('去掉第 {n} 张图片', { n: i + 1 })}
                 hitSlop={8}
                 onPress={() => setPictures((all) => all.filter((x) => x !== p))}
                 style={[s.unpick, { backgroundColor: t.text }]}
@@ -129,18 +130,18 @@ export function Composer({
         ref={input}
         value={draft}
         onChangeText={setDraft}
-        placeholder={offline ? '电脑没连上，写的话会在重连后发送' : running ? busyPlaceholder : '回复，或者让它接着做…'}
+        placeholder={offline ? tr('电脑没连上，写的话会在重连后发送') : running ? busyPlaceholder : tr('回复，或者让它接着做…')}
         placeholderTextColor={t.dim}
         multiline
         numberOfLines={Platform.OS === 'web' ? 1 : undefined}
         style={[s.input, { color: t.text }, noOutline]}
-        accessibilityLabel="给 Agent 发消息"
+        accessibilityLabel={tr('给 Agent 发消息')}
       />
       <View style={s.bar}>
         {sheetable && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="添加图片和这个对话的设置"
+            accessibilityLabel={tr('添加图片和这个对话的设置')}
             disabled={picking}
             onPress={() => setChoosing(true)}
             style={({ pressed }) => [s.round, { backgroundColor: t.well, opacity: picking ? 0.35 : pressed ? 0.6 : 1 }]}
@@ -153,7 +154,7 @@ export function Composer({
             disabled={!onModel}
             onPress={onModel}
             accessibilityRole={onModel ? 'button' : undefined}
-            accessibilityLabel={`模型：${model ? modelName(model) : agent}`}
+            accessibilityLabel={tr('模型：{m}', { m: model ? modelName(model) : agent })}
             style={({ pressed }) => [s.model, { backgroundColor: t.well }, pressed && { opacity: 0.6 }]}
           >
             <Text numberOfLines={1} style={{ color: t.text, fontSize: 13, flexShrink: 1 }}>
@@ -163,13 +164,13 @@ export function Composer({
         )}
         <View style={{ flex: 1 }} />
         {running && canStop && !empty && (
-          <Pressable accessibilityRole="button" accessibilityLabel="停下" onPress={onStop} style={({ pressed }) => [s.send, { borderWidth: 1, borderColor: t.line, backgroundColor: t.card }, pressed && { opacity: 0.6 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('停下')} onPress={onStop} style={({ pressed }) => [s.send, { borderWidth: 1, borderColor: t.line, backgroundColor: t.card }, pressed && { opacity: 0.6 }]}>
             <Icon name="stop" size={14} width={2.4} color={t.text} />
           </Pressable>
         )}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={stop ? '停下' : '发送'}
+          accessibilityLabel={stop ? tr('停下') : tr('发送')}
           disabled={!stop && (empty || picking)}
           onPress={() => (stop ? onStop() : go(draft, pictures))}
           style={({ pressed }) => [
@@ -183,7 +184,7 @@ export function Composer({
       {choosing && (
         <AttachSheet
           onClose={() => setChoosing(false)}
-          pictures={canAttach ? (pictures.length >= MAX_PICTURES ? `已经选了 ${MAX_PICTURES} 张，发出去再加` : null) : pictures.length ? '电脑没连上，图片要连上后才能发' : undefined}
+          pictures={canAttach ? (pictures.length >= MAX_PICTURES ? tr('已经选了 {n} 张，发出去再加', { n: MAX_PICTURES }) : null) : pictures.length ? tr('电脑没连上，图片要连上后才能发') : undefined}
           onCamera={() => add('camera')}
           onLibrary={() => add('library')}
           permission={permission}

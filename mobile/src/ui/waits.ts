@@ -4,6 +4,7 @@
 // computer can do it (a browser page, a form), it says so. A wait the phone could not read
 // used to leave 「等你回答」 and Esc alone, and the conversation stuck (2026-11-08).
 import { type Choice, choices, questionText } from './parse';
+import { tk, tr } from '../i18n';
 
 export type WaitView = {
   /** What it asks, without its numbered options. */
@@ -18,15 +19,16 @@ export type WaitView = {
 
 /** Waits only the computer can finish, by the words the host gives them (reasons.json). */
 const COMPUTER: [RegExp, string][] = [
-  [/^MCP 请求在浏览器中完成/, '要在电脑的浏览器里完成，手机上做不了'],
-  [/^MCP 表单等待填写/, '这个表单要在电脑上填，手机上还填不了'],
+  [/^MCP 请求在浏览器中完成/, tk('要在电脑的浏览器里完成，手机上做不了')],
+  [/^MCP 表单等待填写/, tk('这个表单要在电脑上填，手机上还填不了')],
 ];
 
 export function waitView(waiting: string | null | undefined): WaitView | null {
   if (!waiting) return null;
   const options = choices(waiting);
-  const text = (options.length ? questionText(waiting) : waiting.trim()) || '它在问你，点「看终端」看问的是什么';
-  const computer = COMPUTER.find(([r]) => r.test(waiting))?.[1] ?? '';
+  const text = (options.length ? questionText(waiting) : waiting.trim()) || tr('它在问你，点「看终端」看问的是什么');
+  const found = COMPUTER.find(([r]) => r.test(waiting))?.[1];
+  const computer = found ? tr(found) : '';
   return { text, options, keys: !options.length && !computer, computer };
 }
 
@@ -42,12 +44,12 @@ export function sendBlocked(view: WaitView | null, waiting: string | null | unde
   if (!view || view.computer || (waiting && FREE.test(waiting))) return '';
   if (again && !view.options.length) return '';
   return view.options.length
-    ? '它在等你从上面的选项里选一个；想说别的，先按 Esc 关掉选择框'
-    : '它开着一个选择框，这段话会落进框里、回车会选中当前那一项。确定要发，再点一次发送';
+    ? tr('它在等你从上面的选项里选一个；想说别的，先按 Esc 关掉选择框')
+    : tr('它开着一个选择框，这段话会落进框里、回车会选中当前那一项。确定要发，再点一次发送');
 }
 
 /**
  * An Agent started but no conversation yet: it may be showing a menu of its own first (an
  * update offer, a login choice), which no log or hook reports. The terminal and its keys.
  */
-export const STARTING: WaitView = { text: 'Agent 还没开始对话；它要是在终端里问你什么，在这里答', options: [], keys: true, computer: '' };
+export const starting = (): WaitView => ({ text: tr('Agent 还没开始对话；它要是在终端里问你什么，在这里答'), options: [], keys: true, computer: '' });

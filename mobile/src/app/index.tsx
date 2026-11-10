@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { approve, deny, oops, settle } from '@/actions';
+import { tk, tr } from '@/i18n';
 import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
 import { setInboxView, useInboxView } from '@/store/inboxView';
@@ -69,12 +70,12 @@ function ApprovalRow({ m, c, t, place, named }: Item & { t: Theme; place: string
       <View style={s.act} onStartShouldSetResponder={() => off}>
         {can && (
           <>
-            <Btn primary icon="face" label="允许" disabled={off} onPress={() => answer(() => approve(m.id, c, ask))} />
-            <Btn label="拒绝" disabled={off} onPress={() => answer(() => deny(m.id, c, ask))} />
+            <Btn primary icon="face" label={tr('允许')} disabled={off} onPress={() => answer(() => approve(m.id, c, ask))} />
+            <Btn label={tr('拒绝')} disabled={off} onPress={() => answer(() => deny(m.id, c, ask))} />
           </>
         )}
         <Btn
-          label="详情"
+          label={tr('详情')}
           onPress={() => router.push({ pathname: '/approve', params: { machine: m.id, terminal: c.id } })}
         />
       </View>
@@ -106,8 +107,8 @@ function Swiped({ m, c, t, last, nth, named, boxed, onSettle }: Item & { t: Them
     >
       {can ? (
         <Swipe
-          left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}
-          right={{ label: '稍后提醒', color: t.waitBg, fg: t.wait, run: () => onSettle(m, c, 'deferred') }}
+          left={{ label: tr('已处理'), color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}
+          right={{ label: tr('稍后提醒'), color: t.waitBg, fg: t.wait, run: () => onSettle(m, c, 'deferred') }}
         >
           {body}
         </Swipe>
@@ -122,9 +123,9 @@ function Offline({ m, t }: { m: Machine; t: Theme }) {
   return (
     <Pressable onPress={() => reconnect(m.id)} style={[s.offline, { borderColor: t.sep }]}>
       <View style={[s.dotSmall, { backgroundColor: m.status === 'refused' ? t.err : t.dim }]} />
-      <Text style={{ color: t.text, fontSize: 13 }}>{m.name || '电脑'}</Text>
+      <Text style={{ color: t.text, fontSize: 13 }}>{m.name || tr('电脑')}</Text>
       <Text numberOfLines={2} style={{ color: m.status === 'refused' ? t.err : t.dim, fontSize: 13, flex: 1 }}>
-        {m.status === 'connecting' ? '正在连接…' : `${m.error ?? '没连上'} · 点这里重试`}
+        {m.status === 'connecting' ? tr('正在连接…') : tr('{why} · 点这里重试', { why: m.error ?? tr('没连上') })}
       </Text>
     </Pressable>
   );
@@ -133,7 +134,7 @@ function Offline({ m, t }: { m: Machine; t: Theme }) {
 /** How long 撤销 stays. */
 const UNDO_MS = 7000;
 
-const UNDO_WORDS = { done: '已标记「已处理」', deferred: '一小时后再提醒你' } as const;
+const UNDO_WORDS = { done: tk('已标记「已处理」'), deferred: tk('一小时后再提醒你') } as const;
 
 export default function Inbox() {
   const t = useTheme();
@@ -161,7 +162,7 @@ export default function Inbox() {
     const before = undoTo(c);
     settle(m.id, c, outcome).then(() => {
       clearTimeout(undoTimer.current);
-      setUndo({ text: UNDO_WORDS[outcome], back: () => run(settle(m.id, c, before)) });
+      setUndo({ text: tr(UNDO_WORDS[outcome]), back: () => run(settle(m.id, c, before)) });
       undoTimer.current = setTimeout(() => setUndo(null), UNDO_MS);
     }, (e) => oops((e as Error).message));
   };
@@ -187,8 +188,8 @@ export default function Inbox() {
             </Pressable>
           )}
         </View>
-        <Round icon="search" label="搜索" onPress={() => router.push('/search')} />
-        <Round icon="plus" label="新任务" onPress={() => router.push('/new')} />
+        <Round icon="search" label={tr('搜索')} onPress={() => router.push('/search')} />
+        <Round icon="plus" label={tr('新任务')} onPress={() => router.push('/new')} />
       </View>
       <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
       <View style={{ flex: 1 }} {...hold.touch}>
@@ -200,12 +201,12 @@ export default function Inbox() {
       >
         {loaded && machines.length === 0 && (
           <View style={s.empty}>
-            <Text style={[s.emptyTitle, { color: t.text }]}>还没有配对电脑</Text>
+            <Text style={[s.emptyTitle, { color: t.text }]}>{tr('还没有配对电脑')}</Text>
             <Text style={[s.emptyText, { color: t.dim }]}>
-              在电脑的 Fibo 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。
+              {tr('在电脑的 Fibo 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。')}
             </Text>
             <View style={{ alignSelf: 'stretch' }}>
-              <Wide label="扫码配对" onPress={() => router.push('/pair')} />
+              <Wide label={tr('扫码配对')} onPress={() => router.push('/pair')} />
             </View>
           </View>
         )}
@@ -218,8 +219,8 @@ export default function Inbox() {
         ))}
         {shelf.filter !== null && shelf.elsewhere > 0 && (
           <Pressable accessibilityRole="button" onPress={() => setInboxView({ space: null })} style={({ pressed }) => [s.elsewhere, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
-            <Text style={{ fontSize: 14, color: t.wait, flex: 1 }}>{`其他空间还有 ${shelf.elsewhere} 件等你`}</Text>
-            <Text style={{ fontSize: 13, color: t.dim }}>看全部</Text>
+            <Text style={{ fontSize: 14, color: t.wait, flex: 1 }}>{tr('其他空间还有 {n} 件等你', { n: shelf.elsewhere })}</Text>
+            <Text style={{ fontSize: 13, color: t.dim }}>{tr('看全部')}</Text>
           </Pressable>
         )}
         {ahead.map((i) => (
@@ -236,21 +237,21 @@ export default function Inbox() {
         {runningOpen && runningShown(running, allRunning).map((i) => <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />)}
         {runningOpen && !allRunning && running.length > runningShown(running, false).length && (
           <Pressable accessibilityRole="button" onPress={() => setAllRunning(true)} style={({ pressed }) => [s.more, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
-            <Text style={{ fontSize: 14, color: t.dim }}>{`看全部 ${running.length} 个`}</Text>
+            <Text style={{ fontSize: 14, color: t.dim }}>{tr('看全部 {n} 个', { n: running.length })}</Text>
           </Pressable>
         )}
         {behind.map((i) => (
           <Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />
         ))}
         {loaded && machines.some((m) => m.status === 'online') && shelf.empty && (
-          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>{shelf.filter === null ? '没有要处理的事' : '这个空间没有要处理的事'}</Text>
+          <Text style={[s.emptyText, { color: t.dim, paddingVertical: 24 }]}>{shelf.filter === null ? tr('没有要处理的事') : tr('这个空间没有要处理的事')}</Text>
         )}
-        {unsent.length > 0 && <Group label="未发送" />}
+        {unsent.length > 0 && <Group label={tr('未发送')} />}
         {unsent.map((u, i) => {
           const { m, c } = where(u.machine, u.terminal);
           const space = m && c ? spaceName(m, c) : '';
           return (
-            <Swipe key={u.id} left={{ label: '删除', color: t.errBg, fg: t.err, run: () => drop(u.id) }}>
+            <Swipe key={u.id} left={{ label: tr('删除'), color: t.errBg, fg: t.err, run: () => drop(u.id) }}>
               <Pressable
                 onPress={() => router.push({ pathname: '/chat', params: { machine: u.machine, terminal: u.terminal } })}
                 style={[s.unsent, { borderColor: t.sep, backgroundColor: t.bg }, i === unsent.length - 1 && { borderBottomWidth: 0 }]}
@@ -258,9 +259,9 @@ export default function Inbox() {
                 <View style={rowStyles.l1}>
                   <SpaceMark name={space || '?'} id={c?.space || space || u.machine} />
                   <Text numberOfLines={1} style={[rowStyles.where, { color: t.dim }]}>
-                    {[space, m?.name].filter(Boolean).join(' · ') || '电脑'}
+                    {[space, m?.name].filter(Boolean).join(' · ') || tr('电脑')}
                   </Text>
-                  <Text style={[rowStyles.state, { color: u.error ? t.err : t.dim }]}>{u.error ? '没发出去' : '重连后发送'}</Text>
+                  <Text style={[rowStyles.state, { color: u.error ? t.err : t.dim }]}>{u.error ? tr('没发出去') : tr('重连后发送')}</Text>
                 </View>
                 <Text numberOfLines={2} style={[rowStyles.title, { color: t.dim }]}>
                   {u.text}
@@ -270,18 +271,18 @@ export default function Inbox() {
             </Swipe>
           );
         })}
-        {later.length > 0 && <Group label={`稍后提醒 · ${later.length}`} open={showLater} onPress={() => setShowLater(!showLater)} />}
+        {later.length > 0 && <Group label={tr('稍后提醒 · {n}', { n: later.length })} open={showLater} onPress={() => setShowLater(!showLater)} />}
         {showLater &&
           later.map(({ m, c }) => (
-            <Swipe key={`${m.id}/${c.id}`} left={{ label: '已处理', color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}>
-              <Row m={m} c={c} named={named} dim right={{ text: '稍后提醒' }} onPress={() => open(m, c)} />
+            <Swipe key={`${m.id}/${c.id}`} left={{ label: tr('已处理'), color: t.okBg, fg: t.ok, run: () => onSettle(m, c, 'done') }}>
+              <Row m={m} c={c} named={named} dim right={{ text: tr('稍后提醒') }} onPress={() => open(m, c)} />
             </Swipe>
           ))}
-        {done.length > 0 && <Group label={`已处理 · ${done.length}`} open={showDone} onPress={() => setShowDone(!showDone)} />}
+        {done.length > 0 && <Group label={tr('已处理 · {n}', { n: done.length })} open={showDone} onPress={() => setShowDone(!showDone)} />}
         {showDone &&
           done.map(({ m, c }) => (
-            <Swipe key={`${m.id}/${c.id}`} right={{ label: '放回收件箱', color: t.well, fg: t.text, run: () => run(settle(m.id, c, 'open')) }}>
-              <Row m={m} c={c} named={named} dim right={{ text: '已处理' }} onPress={() => open(m, c)} />
+            <Swipe key={`${m.id}/${c.id}`} right={{ label: tr('放回收件箱'), color: t.well, fg: t.text, run: () => run(settle(m.id, c, 'open')) }}>
+              <Row m={m} c={c} named={named} dim right={{ text: tr('已处理') }} onPress={() => open(m, c)} />
             </Swipe>
           ))}
         <QuietSpaces machines={machines} open={view.quiet} onToggle={() => setInboxView({ quiet: !view.quiet })} named={named} />
@@ -301,7 +302,7 @@ export default function Inbox() {
             }}
             style={s.undoGo}
           >
-            <Text style={{ fontSize: 14, fontWeight: '600', color: t.onAct }}>撤销</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: t.onAct }}>{tr('撤销')}</Text>
           </Pressable>
         </View>
       )}

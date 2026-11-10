@@ -3,6 +3,7 @@
 // a few asks; numbers grow until it says it is done.
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { tr } from '../i18n';
 import { type Machine, remote, supports } from '../remote/hub';
 import { compact } from './parse';
 import { agentName } from './status';
@@ -49,12 +50,12 @@ export function TodayTokens({ m }: { m: Machine }) {
   return (
     <View style={[s.card, { backgroundColor: t.card, borderColor: t.line }]}>
       <View style={s.row}>
-        <Text style={{ fontSize: 12, color: t.dim }}>今天 tokens</Text>
-        {got.partial && <Text style={{ fontSize: 12, color: t.dim }}>还在读日志…</Text>}
+        <Text style={{ fontSize: 12, color: t.dim }}>{tr('今天 tokens')}</Text>
+        {got.partial && <Text style={{ fontSize: 12, color: t.dim }}>{tr('还在读日志…')}</Text>}
       </View>
       <Text style={{ fontSize: 22, fontWeight: '700', color: t.text }}>{compact(tokens)}</Text>
       <Text numberOfLines={2} style={{ fontSize: 12, lineHeight: 17, color: t.dim }}>
-        {[...got.agents.map((a) => `${agentName(a.agent)} ${compact(a.tokens)}`), cached ? `另有缓存读取 ${compact(cached)}` : ''].filter(Boolean).join(' · ') || '今天还没有用量'}
+        {[...got.agents.map((a) => `${agentName(a.agent)} ${compact(a.tokens)}`), cached ? tr('另有缓存读取 {n}', { n: compact(cached) }) : ''].filter(Boolean).join(' · ') || tr('今天还没有用量')}
       </Text>
     </View>
   );

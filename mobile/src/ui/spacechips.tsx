@@ -1,15 +1,16 @@
 // One chip per space, 全部 first, to show one space alone: on the home screen and in search.
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { tr } from '../i18n';
 import type { Chip } from './inbox';
 import { type Theme, useTheme } from './theme';
 
 function SpaceChip({ chip, on, t, onPress }: { chip: Chip; on: boolean; t: Theme; onPress: () => void }) {
-  const label = chip.name ?? '全部';
+  const label = chip.name ?? tr('全部');
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: on }}
-      accessibilityLabel={`${label}，${chip.count} 个`}
+      accessibilityLabel={tr('{name}，{n} 个', { name: label, n: chip.count })}
       hitSlop={{ top: 7, bottom: 7 }}
       onPress={onPress}
       style={({ pressed }) => [s.chip, { borderColor: on ? t.act : t.line, backgroundColor: on ? t.act : t.card }, pressed && { opacity: 0.7 }]}

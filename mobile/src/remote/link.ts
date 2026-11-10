@@ -1,6 +1,7 @@
 // The pairing link the machine shows as a QR code, as `mooring-remote/src/link.rs` reads
 // and writes it, and the relay URL it leads to.
 import { sha256 } from '@noble/hashes/sha2.js';
+import { tr } from '../i18n';
 import { b64url, hex, unb64url, utf8 } from './bytes';
 import { derive } from './noise';
 
@@ -83,7 +84,7 @@ export function websocketBase(relay: string): string {
   if (relay.startsWith('http://')) return 'ws://' + relay.slice(7);
   if (relay.startsWith('wss://') || relay.startsWith('ws://')) return relay;
   if (relay && !relay.includes('://')) return 'wss://' + relay;
-  throw new Error(`看不懂的中继地址 ${relay}`);
+  throw new Error(tr('看不懂的中继地址 {relay}', { relay }));
 }
 
 /** Where this phone opens its WebSocket. */

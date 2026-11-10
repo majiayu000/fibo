@@ -4,16 +4,22 @@
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { confirm } from '@/actions';
+import { tk, tr } from '@/i18n';
 import { type Machine, forget, reconnect, useHub } from '@/remote/hub';
 import { Btn, Label, Nav, Round, Wide, useBottom } from '@/ui/kit';
 import { relayPlace } from '@/ui/parse';
 import { type Theme, ago, useTheme } from '@/ui/theme';
 
-const ROLE = { view: '只看', answer: '能答审批', full: '完全控制' } as const;
+const ROLE = { view: tk('只看'), answer: tk('能答审批'), full: tk('完全控制') } as const;
 const OS: Record<string, string> = { macos: 'macOS', linux: 'Linux', windows: 'Windows' };
 
 async function remove(m: Machine) {
-  const ok = await confirm(`从手机上移除「${m.name || '电脑'}」？`, '要再连这台电脑得重新扫码配对。电脑那边的配对记录不受影响。', '移除', true);
+  const ok = await confirm(
+    tr('从手机上移除「{name}」？', { name: m.name || tr('电脑') }),
+    tr('要再连这台电脑得重新扫码配对。电脑那边的配对记录不受影响。'),
+    tr('移除'),
+    true,
+  );
   if (ok) forget(m.id);
 }
 
@@ -33,7 +39,7 @@ function MachineCard({ m, t }: { m: Machine; t: Theme }) {
   const place = relayPlace(m.link.relay);
   const online = m.status === 'online';
   const conversations = m.cards.filter((c) => c.agent && c.phase !== 'shell').length;
-  const facts = [m.os ? (OS[m.os] ?? m.os) : '', m.role ? `权限：${ROLE[m.role]}` : '', m.appVersion ? `Fibo ${m.appVersion}` : ''].filter(Boolean);
+  const facts = [m.os ? (OS[m.os] ?? m.os) : '', m.role ? tr('权限：{role}', { role: tr(ROLE[m.role]) }) : '', m.appVersion ? `Fibo ${m.appVersion}` : ''].filter(Boolean);
   return (
     <View
       style={[
@@ -45,21 +51,21 @@ function MachineCard({ m, t }: { m: Machine; t: Theme }) {
       <View style={s.top}>
         <View style={[s.dot, { backgroundColor: online ? t.ok : m.status === 'refused' ? t.err : t.dim }]} />
         <Text style={[s.name, { color: online ? t.text : t.dim }]} numberOfLines={1}>
-          {m.name || '电脑'}
+          {m.name || tr('电脑')}
         </Text>
         <Text style={{ marginLeft: 'auto', fontSize: 13, color: online ? t.ok : t.dim, fontWeight: online ? '600' : '400' }}>
-          {online ? '在线' : m.status === 'connecting' ? '正在连接' : m.seen ? `${ago(m.seen)}在线` : '不在线'}
+          {online ? tr('在线') : m.status === 'connecting' ? tr('正在连接') : m.seen ? tr('{when}在线', { when: ago(m.seen) }) : tr('不在线')}
         </Text>
       </View>
       {online ? (
         <>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Stat t={t} k="对话" v={String(conversations)} />
-            <Stat t={t} k="连接" v={place.lan ? '局域网' : '中继'} />
-            <Stat t={t} k="延迟" v={m.latency === undefined ? '—' : m.latency < 1 ? '<1' : String(m.latency)} unit={m.latency !== undefined ? 'ms' : undefined} />
+            <Stat t={t} k={tr('对话')} v={String(conversations)} />
+            <Stat t={t} k={tr('连接')} v={place.lan ? tr('局域网') : tr('中继')} />
+            <Stat t={t} k={tr('延迟')} v={m.latency === undefined ? '—' : m.latency < 1 ? '<1' : String(m.latency)} unit={m.latency !== undefined ? 'ms' : undefined} />
           </View>
           <Text style={{ fontSize: 13, color: t.dim }} numberOfLines={2}>
-            {[...facts, `经 ${place.host}`].join(' · ')}
+            {[...facts, tr('经 {host}', { host: place.host })].join(' · ')}
           </Text>
         </>
       ) : (
@@ -70,9 +76,9 @@ function MachineCard({ m, t }: { m: Machine; t: Theme }) {
           {m.status !== 'connecting' && (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <View style={{ flex: 1 }}>
-                <Wide kind="grey" height={40} label="重试" onPress={() => reconnect(m.id)} textStyle={{ fontSize: 15 }} />
+                <Wide kind="grey" height={40} label={tr('重试')} onPress={() => reconnect(m.id)} textStyle={{ fontSize: 15 }} />
               </View>
-              <Wide kind="danger" height={40} label="移除" onPress={() => remove(m)} textStyle={{ fontSize: 15 }} />
+              <Wide kind="danger" height={40} label={tr('移除')} onPress={() => remove(m)} textStyle={{ fontSize: 15 }} />
             </View>
           )}
         </>
@@ -90,20 +96,20 @@ export default function Machines() {
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <Nav
         big
-        title="电脑"
+        title={tr('电脑#list')}
         right={
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Btn icon="plus" label="配对" onPress={() => router.push('/pair')} style={{ height: 44, borderRadius: 22 }} />
-            <Round icon="gear" label="设置" onPress={() => router.push('/settings')} />
+            <Btn icon="plus" label={tr('配对')} onPress={() => router.push('/pair')} style={{ height: 44, borderRadius: 22 }} />
+            <Round icon="gear" label={tr('设置')} onPress={() => router.push('/settings')} />
           </View>
         }
       />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 14, paddingBottom: bottom + 16 }}>
-        {machines.length === 0 && <Text style={{ color: t.dim, textAlign: 'center', paddingTop: 40 }}>还没有配对电脑</Text>}
+        {machines.length === 0 && <Text style={{ color: t.dim, textAlign: 'center', paddingTop: 40 }}>{tr('还没有配对电脑')}</Text>}
         {machines.map((m) => (
           <MachineCard key={m.id} m={m} t={t} />
         ))}
-        {relays.length > 0 && <Label style={{ marginTop: 8 }}>中继</Label>}
+        {relays.length > 0 && <Label style={{ marginTop: 8 }}>{tr('中继')}</Label>}
         {relays.map((host) => {
           const using = machines.filter((m) => relayPlace(m.link.relay).host === host);
           const up = using.some((m) => m.status === 'online');
@@ -113,9 +119,9 @@ export default function Machines() {
                 <Text style={{ fontSize: 16, color: t.text }} numberOfLines={1}>
                   {host}
                 </Text>
-                <Text style={{ fontSize: 13, color: t.dim }}>端到端加密，中继看不到内容 · {using.length} 台电脑</Text>
+                <Text style={{ fontSize: 13, color: t.dim }}>{tr('端到端加密，中继看不到内容 · {n} 台电脑', { n: using.length })}</Text>
               </View>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: up ? t.ok : t.dim }}>{up ? '正常' : '没连上'}</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: up ? t.ok : t.dim }}>{up ? tr('正常') : tr('没连上')}</Text>
             </View>
           );
         })}

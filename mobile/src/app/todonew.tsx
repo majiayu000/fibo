@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
+import { tr } from '@/i18n';
 import { refresh, supports, useHub, write } from '@/remote/hub';
 import { Label, Nav, Wide, noOutline } from '@/ui/kit';
 import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
@@ -52,15 +53,15 @@ export default function TodoNew() {
 
   return (
     <KeyboardSafe style={{ backgroundColor: t.bg }}>
-      <Nav close big title="记一件待办" sub="记在电脑的待办里，要做时点「接着做」" />
+      <Nav close big title={tr('记一件待办')} sub={tr('记在电脑的待办里，要做时点「接着做」')} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
-        {!m && <Text style={{ fontSize: 14, color: t.dim }}>没有能记待办的电脑：电脑要在线、更新到新版本，这台手机要有完全控制权限。</Text>}
+        {!m && <Text style={{ fontSize: 14, color: t.dim }}>{tr('没有能记待办的电脑：电脑要在线、更新到新版本，这台手机要有完全控制权限。')}</Text>}
         <View style={s.field}>
-          <Label>要做的事</Label>
+          <Label>{tr('要做的事')}</Label>
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="一句话写清要做什么"
+            placeholder={tr('一句话写清要做什么')}
             placeholderTextColor={t.dim}
             autoFocus
             returnKeyType="done"
@@ -69,11 +70,11 @@ export default function TodoNew() {
           />
         </View>
         <View style={s.field}>
-          <Label>你说的（可不填）</Label>
+          <Label>{tr('你说的（可不填）')}</Label>
           <TextInput
             value={said}
             onChangeText={setSaid}
-            placeholder="背景、要求，交给 Agent 时原样带上"
+            placeholder={tr('背景、要求，交给 Agent 时原样带上')}
             placeholderTextColor={t.dim}
             multiline
             style={[s.input, { minHeight: 96, textAlignVertical: 'top', color: t.text, borderColor: t.line, backgroundColor: t.card }, noOutline]}
@@ -81,19 +82,19 @@ export default function TodoNew() {
         </View>
         {able.length > 1 && (
           <View style={s.field}>
-            <Label>电脑</Label>
-            <View style={s.chips}>{able.map((x) => chip(x.id, x.name || '电脑', x.id === m?.id, () => setMachine(x.id)))}</View>
+            <Label>{tr('电脑')}</Label>
+            <View style={s.chips}>{able.map((x) => chip(x.id, x.name || tr('电脑'), x.id === m?.id, () => setMachine(x.id)))}</View>
           </View>
         )}
         {spaces.length > 0 && (
           <View style={s.field}>
-            <Label>空间</Label>
+            <Label>{tr('空间')}</Label>
             <View style={s.chips}>{spaces.map(([id, name]) => chip(id, name, id === chosen, () => setSpace(id)))}</View>
           </View>
         )}
       </ScrollView>
       <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: bottom + 12 }}>
-        <Wide label={busy ? '正在记…' : '记下'} disabled={!ready} onPress={save} />
+        <Wide label={busy ? tr('正在记…') : tr('记下')} disabled={!ready} onPress={save} />
       </View>
     </KeyboardSafe>
   );

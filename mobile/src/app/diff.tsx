@@ -14,6 +14,7 @@ import { type Check, checkLine, diffLines, diffWords } from '@/ui/parse';
 import { SayDialog } from '@/ui/sheets';
 import { tilde } from '@/ui/status';
 import { type Theme, useTheme } from '@/ui/theme';
+import { notUi, tr } from '@/i18n';
 
 type File = { path: string; added: number; removed: number; status: string; patch: string; truncated?: boolean };
 type Diff = { cwd: string; branch?: string; files: File[]; added: number; removed: number; truncated?: boolean; checks?: Check[]; summary?: boolean };
@@ -29,12 +30,12 @@ function FileCard({ f, t, seen, onTick, open, onOpen, names }: { f: File; t: The
         <Text numberOfLines={1} style={[s.path, { color: t.text }]}>
           {f.path}
         </Text>
-        {f.status !== 'M' && <Text style={[s.monoSmall, { color: t.dim }]}>{f.status === '?' || f.status === 'A' ? '新' : f.status}</Text>}
+        {f.status !== 'M' && <Text style={[s.monoSmall, { color: t.dim }]}>{f.status === '?' || f.status === 'A' ? tr('新') : f.status}</Text>}
         <Text style={[s.monoSmall, { color: t.ok }]}>+{f.added}</Text>
         <Text style={[s.monoSmall, { color: t.err }]}>−{f.removed}</Text>
         <Pressable
           accessibilityRole="checkbox"
-          accessibilityLabel="标为看过"
+          accessibilityLabel={tr('标为看过')}
           accessibilityState={{ checked: seen }}
           hitSlop={10}
           onPress={onTick}
@@ -61,8 +62,8 @@ function FileCard({ f, t, seen, onTick, open, onOpen, names }: { f: File; t: The
                 </View>
               ),
             )}
-            {f.truncated && <Text style={[s.dl, { color: t.dim, paddingLeft: 12 }]}>…太长，只显示了前面一部分</Text>}
-            {!f.patch && <Text style={[s.dl, { color: t.dim, paddingLeft: 12 }]}>没有可显示的文本改动</Text>}
+            {f.truncated && <Text style={[s.dl, { color: t.dim, paddingLeft: 12 }]}>{tr('…太长，只显示了前面一部分')}</Text>}
+            {!f.patch && <Text style={[s.dl, { color: t.dim, paddingLeft: 12 }]}>{tr('没有可显示的文本改动')}</Text>}
           </View>
         </ScrollView>
       )}
@@ -121,15 +122,15 @@ export default function DiffScreen() {
           diff ? (
             <Text style={{ fontSize: 12, color: t.dim }} numberOfLines={1}>
               <Text style={{ color: t.ok }}>+{diff.added}</Text> <Text style={{ color: t.err }}>−{diff.removed}</Text>
-              {` · ${files.length} 个文件${diff.branch ? ` · ${diff.branch}` : ''}`}
+              {` · ${tr('{n} 个文件', { n: files.length })}${diff.branch ? ` · ${diff.branch}` : ''}`}
             </Text>
           ) : undefined
         }
       />
       {!online ? (
-        <Notice text={m?.error ?? '电脑没连上'} />
+        <Notice text={m?.error ?? tr('电脑没连上')} />
       ) : !can ? (
-        <Notice text={NOT_YET} />
+        <Notice text={tr(NOT_YET)} />
       ) : error ? (
         <Notice text={error} />
       ) : !diff ? (
@@ -151,7 +152,7 @@ export default function DiffScreen() {
                 names={!!diff.summary}
               />
             ))}
-            {diff.truncated && <Notice text="改动太多，只列出了一部分" />}
+            {diff.truncated && <Notice text={tr('改动太多，只列出了一部分')} />}
           </ScrollView>
           {files.length > 0 && (
             <View style={[s.sheet, s.sum, { backgroundColor: t.card, borderColor: t.line, marginBottom: bottom + 8 }]}>
@@ -161,17 +162,17 @@ export default function DiffScreen() {
                 </View>
                 <View style={{ gap: 1, flex: 1 }}>
                   <Text style={{ fontSize: 16, fontWeight: TITLE_WEIGHT, color: t.text }}>
-                    看过 {seen} / {files.length} 个文件
+                    {tr('看过 {seen} / {n} 个文件', { seen, n: files.length })}
                   </Text>
                   <Text numberOfLines={2} style={{ fontSize: 12, color: !sent && check?.failed && !check.stale ? t.err : t.dim }}>
-                    {sent ? `已发给它：${sent}` : (check?.text ?? tilde(diff.cwd))}
+                    {sent ? tr('已发给它：{text}', { text: sent }) : (check?.text ?? tilde(diff.cwd))}
                   </Text>
                 </View>
               </View>
               {terminal && supports(m, 'send') && (
                 <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Btn tall label="要求修改" onPress={() => setAsking(true)} />
-                  <Btn tall primary label="让它提交" onPress={() => say('提交吧')} />
+                  <Btn tall label={tr('要求修改')} onPress={() => setAsking(true)} />
+                  <Btn tall primary label={tr('让它提交')} onPress={() => say(notUi('提交吧'))} />
                 </View>
               )}
             </View>
@@ -180,9 +181,9 @@ export default function DiffScreen() {
       )}
       <SayDialog
         visible={asking}
-        title="要求修改"
-        placeholder="比如：偏移量别写死，取标题栏的高度"
-        action="发给它"
+        title={tr('要求修改')}
+        placeholder={tr('比如：偏移量别写死，取标题栏的高度')}
+        action={tr('发给它')}
         onClose={() => setAsking(false)}
         onSend={(text) => {
           setAsking(false);

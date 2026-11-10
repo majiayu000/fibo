@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
+import { tr } from '@/i18n';
 import { NOT_YET, refresh, remote, supports, useHub, write } from '@/remote/hub';
 import { setDraft, useDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
@@ -21,19 +22,19 @@ type Listing = { path: string; parent?: string | null; home: string; dirs: Dir[]
 
 /** A worktree is said to be one; otherwise its count, when counting did not time out. */
 function changes(g: NonNullable<Dir['git']>): string {
-  if (g.worktree) return '工作树';
+  if (g.worktree) return tr('工作树');
   if (g.changes === undefined || g.changes === null) return '';
-  return g.changes ? `${g.changes} 个改动` : '没有改动';
+  return g.changes ? tr('{n} 个改动', { n: g.changes }) : tr('没有改动');
 }
 
 function about(d: Dir): string {
-  return d.git ? [d.git.branch || 'git', changes(d.git)].filter(Boolean).join(' · ') : '普通文件夹';
+  return d.git ? [d.git.branch || 'git', changes(d.git)].filter(Boolean).join(' · ') : tr('普通文件夹');
 }
 
 /** Why a search may have missed some: it ran out of time, or hit the machine's 50. */
 function searchLimit(l: Listing): string {
-  if (l.truncated) return '没搜完，多打几个字再试';
-  return l.dirs.length >= 50 ? '结果太多，只显示前 50 个' : '';
+  if (l.truncated) return tr('没搜完，多打几个字再试');
+  return l.dirs.length >= 50 ? tr('结果太多，只显示前 50 个') : '';
 }
 
 function Mark({ text, query, t }: { text: string; query: string; t: Theme }) {
@@ -119,7 +120,7 @@ export default function Dirs() {
 
   function choose(cwd: string, d?: Dir | null) {
     const space = m?.spaceDirs?.[cwd];
-    const known = [d && about(d), space && `空间 ${space}`].filter(Boolean).join(' · ');
+    const known = [d && about(d), space && tr('空间 {name}', { name: space })].filter(Boolean).join(' · ');
     setDraft({ machine, cwd, about: known || undefined, space: pickDir(m?.spaceList ?? [], draft.space, cwd) });
     router.back();
   }
@@ -158,18 +159,18 @@ export default function Dirs() {
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <Nav
         big
-        title="选择目录"
+        title={tr('选择目录')}
         sub={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <View style={[s.dot, { backgroundColor: online ? t.ok : t.dim }]} />
-            <Text style={{ fontSize: 13, color: t.dim }}>{m?.name ?? '电脑'}</Text>
+            <Text style={{ fontSize: 13, color: t.dim }}>{m?.name ?? tr('电脑')}</Text>
           </View>
         }
       />
       {!online ? (
-        <Notice text={m?.error ?? '电脑没连上'} />
+        <Notice text={m?.error ?? tr('电脑没连上')} />
       ) : !can ? (
-        <Notice text={m.role === 'full' ? NOT_YET : '只有「完全控制」权限的手机能浏览电脑上的目录'} />
+        <Notice text={m.role === 'full' ? tr(NOT_YET) : tr('只有「完全控制」权限的手机能浏览电脑上的目录')} />
       ) : (
         <>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 18, gap: 12, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
@@ -181,14 +182,14 @@ export default function Dirs() {
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="输入路径，或搜文件夹名"
+                placeholder={tr('输入路径，或搜文件夹名')}
                 placeholderTextColor={t.dim}
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={[{ flex: 1, fontSize: 16, color: t.text, fontFamily: query ? mono : undefined }, noOutline]}
               />
               {!!query && (
-                <Pressable onPress={() => setQuery('')} style={[s.clear, { backgroundColor: t.well }]} accessibilityLabel="清空">
+                <Pressable onPress={() => setQuery('')} style={[s.clear, { backgroundColor: t.well }]} accessibilityLabel={tr('清空')}>
                   <Icon name="close" size={12} width={2.4} color={t.text} />
                 </Pressable>
               )}
@@ -196,7 +197,7 @@ export default function Dirs() {
             {!!error && <Notice tone="danger" text={error} />}
             {!query && recent.length > 0 && (
               <>
-                <Label>最近用过</Label>
+                <Label>{tr('最近用过')}</Label>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {recent.map((p) => (
                     <Pressable key={p} onPress={() => setPath(p)} style={[s.chip, { borderColor: t.line }]}>
@@ -210,12 +211,12 @@ export default function Dirs() {
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Label>
-                    {crumbs.at(-1)?.label ?? '~'} 里的文件夹 · {list.dirs.length}
+                    {tr('{name} 里的文件夹 · {n}', { name: crumbs.at(-1)?.label ?? '~', n: list.dirs.length })}
                   </Label>
                   {busy && <ActivityIndicator size="small" />}
                 </View>
                 <View style={[s.list, { borderColor: t.line, backgroundColor: t.card }]}>
-                  {list.dirs.length === 0 && <Notice text="这里没有子文件夹" />}
+                  {list.dirs.length === 0 && <Notice text={tr('这里没有子文件夹')} />}
                   {list.dirs.map((d, i) => {
                     const on = picked?.path === d.path;
                     return (
@@ -233,9 +234,9 @@ export default function Dirs() {
                                   {changes(d.git) ? ` · ${changes(d.git)}` : ''}
                                 </>
                               ) : (
-                                '普通文件夹'
+                                tr('普通文件夹')
                               )}
-                              {!!d.sessions && <Text style={{ color: t.run }}>{` · ${d.sessions} 个会话`}</Text>}
+                              {!!d.sessions && <Text style={{ color: t.run }}>{` · ${tr('{n} 个会话', { n: d.sessions })}`}</Text>}
                             </Text>
                           </View>
                           {on && (
@@ -244,7 +245,7 @@ export default function Dirs() {
                             </View>
                           )}
                         </Pressable>
-                        <Pressable onPress={() => setPath(d.path)} style={[s.enter, { borderColor: t.sep }]} accessibilityLabel={`打开 ${d.name}`}>
+                        <Pressable onPress={() => setPath(d.path)} style={[s.enter, { borderColor: t.sep }]} accessibilityLabel={tr('打开 {name}', { name: d.name })}>
                           <Icon name="right" size={14} width={2} color={t.dim} />
                         </Pressable>
                       </View>
@@ -257,20 +258,21 @@ export default function Dirs() {
             {!!query && !typedPath && (
               <>
                 <Label>
-                  家目录下名字里有「{query.trim()}」的文件夹{found ? ` · ${found.length}` : ''}
+                  {tr('家目录下名字里有「{q}」的文件夹', { q: query.trim() })}
+                  {found ? ` · ${found.length}` : ''}
                 </Label>
                 {!found ? (
                   <ActivityIndicator />
                 ) : (
                   <View style={[s.list, { borderColor: t.line, backgroundColor: t.card }]}>
-                    {found.length === 0 && <Notice text="没找到" />}
+                    {found.length === 0 && <Notice text={tr('没找到')} />}
                     {found.map((d, i) => (
                       <Pressable key={d.path} onPress={() => choose(d.path, d)} style={[s.found, { borderColor: t.sep }, i === 0 && { borderTopWidth: 0 }]}>
                         <Text numberOfLines={1} style={{ fontFamily: mono, fontSize: 15, color: t.text }}>
                           <Mark text={tilde(d.path)} query={query.trim()} t={t} />
                         </Text>
                         <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim }}>
-                          {[d.git ? 'git' : '', about(d), d.sessions ? `${d.sessions} 个会话` : '', d.recent ? '最近用过' : ''].filter(Boolean).join(' · ')}
+                          {[d.git ? 'git' : '', about(d), d.sessions ? tr('{n} 个会话', { n: d.sessions }) : '', d.recent ? tr('最近用过') : ''].filter(Boolean).join(' · ')}
                         </Text>
                       </Pressable>
                     ))}
@@ -281,10 +283,12 @@ export default function Dirs() {
             )}
             {!!query && typedPath && (
               <>
-                <Label>直接用这个路径</Label>
+                <Label>{tr('直接用这个路径')}</Label>
                 <Pressable onPress={() => choose(query.trim())} style={[s.found, s.list, { borderColor: t.line, backgroundColor: t.card }]}>
                   <Text style={{ fontFamily: mono, fontSize: 15, color: t.text }}>{query.trim()}</Text>
-                  <Text style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>以 ~ 开头的路径按电脑上的家目录展开。路径不存在时用下面的「新建文件夹」。</Text>
+                  <Text style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>
+                    {tr('以 ~ 开头的路径按电脑上的家目录展开。路径不存在时用下面的「新建文件夹」。')}
+                  </Text>
                 </Pressable>
               </>
             )}
@@ -292,7 +296,7 @@ export default function Dirs() {
               <View style={[s.lockNote, { borderColor: t.line }]}>
                 <Icon name="lock" size={16} width={2} color={t.dim} />
                 <Text style={{ flex: 1, fontSize: 13, color: t.dim, lineHeight: 19 }}>
-                  只列文件夹，不读文件内容；跳过 node_modules、.git 和隐藏文件夹。只有「完全控制」权限的手机能浏览和开新任务。
+                  {tr('只列文件夹，不读文件内容；跳过 node_modules、.git 和隐藏文件夹。只有「完全控制」权限的手机能浏览和开新任务。')}
                 </Text>
               </View>
             )}
@@ -300,20 +304,20 @@ export default function Dirs() {
           {!query && <View style={[s.foot, { borderColor: t.sep, paddingBottom: bottom + 4 }]}>
             <Wide
               disabled={!here}
-              label={here ? `在 ${home(here)} 开始` : '选一个文件夹'}
+              label={here ? tr('在 {path} 开始', { path: home(here) }) : tr('选一个文件夹')}
               cut="head"
               onPress={() => here && choose(here, picked)}
               textStyle={{ fontFamily: mono, fontSize: 15 }}
             />
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <View style={{ flex: 1 }}>
-                <Wide kind="grey" height={40} label="新建文件夹" disabled={!supports(m, 'mkdir')} onPress={() => setMaking(true)} textStyle={{ fontSize: 15 }} />
+                <Wide kind="grey" height={40} label={tr('新建文件夹')} disabled={!supports(m, 'mkdir')} onPress={() => setMaking(true)} textStyle={{ fontSize: 15 }} />
               </View>
               <View style={{ flex: 1 }}>
                 <Wide
                   kind="grey"
                   height={40}
-                  label={spaceHere ? `空间 ${spaceHere}` : adding ? '正在设置…' : '设为空间'}
+                  label={spaceHere ? tr('空间 {name}', { name: spaceHere }) : adding ? tr('正在设置…') : tr('设为空间')}
                   disabled={!here || !!spaceHere || adding || !supports(m, 'addspace')}
                   onPress={() => here && makeSpace(here)}
                   textStyle={{ fontSize: 15 }}
@@ -326,9 +330,9 @@ export default function Dirs() {
       <SayDialog
         visible={making}
         name
-        title={`在 ${list ? home(list.path) : '~'} 里新建文件夹`}
-        placeholder={typedPath ? query.trim() : '文件夹名，或者完整路径'}
-        action="新建并在这里开始"
+        title={tr('在 {path} 里新建文件夹', { path: list ? home(list.path) : '~' })}
+        placeholder={typedPath ? query.trim() : tr('文件夹名，或者完整路径')}
+        action={tr('新建并在这里开始')}
         onClose={() => setMaking(false)}
         onSend={(name) => {
           setMaking(false);

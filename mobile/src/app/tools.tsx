@@ -11,6 +11,7 @@ import type { Tools as Summary } from '@/ui/message';
 import { span } from '@/ui/parse';
 import { useTheme } from '@/ui/theme';
 import { metaWords, type ToolCall } from '@/ui/toolview';
+import { tr } from '@/i18n';
 
 /** Rows of one height: 2,007 of them scroll as lightly as twenty. */
 const ROW = 62;
@@ -22,14 +23,14 @@ const Row = memo(function Row({ call, onOpen }: { call: ToolCall; onOpen: (id: s
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${call.about || call.label || call.name}，${metaWords(call)}`}
+      accessibilityLabel={tr('{what}，{meta}', { what: call.about || call.label || call.name, meta: metaWords(call) })}
       onPress={() => onOpen(call.id)}
       style={({ pressed }) => [s.row, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}
     >
       <Icon name={call.failed ? 'alert' : (ICONS[call.kind] ?? 'gear')} size={18} width={1.8} color={call.failed ? t.err : t.dim} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Text numberOfLines={call.about ? 2 : 1} ellipsizeMode={call.about ? 'tail' : 'middle'} style={[call.about ? s.about : s.label, { color: call.failed ? t.err : t.text }]}>
-          {call.about || call.label || '（没有说明）'}
+          {call.about || call.label || tr('（没有说明）')}
         </Text>
         <Text numberOfLines={1} style={{ fontSize: 12, color: call.failed ? t.err : t.dim }}>
           {metaWords(call)}
@@ -43,7 +44,7 @@ const Row = memo(function Row({ call, onOpen }: { call: ToolCall; onOpen: (id: s
 function summaryWords(tools: Summary | undefined, shown: number, more: boolean): string {
   if (!tools) return '';
   const calls = tools.calls ?? shown;
-  return [tools.took ? `干了 ${span(tools.took)}` : '', `${more ? calls || shown : shown} 次调用`, tools.commands ? `${tools.commands} 个命令` : ''].filter(Boolean).join(' · ');
+  return [tools.took ? tr('干了 {time}', { time: span(tools.took) }) : '', tr('{n} 次调用', { n: more ? calls || shown : shown }), tools.commands ? tr('{n} 个命令', { n: tools.commands }) : ''].filter(Boolean).join(' · ');
 }
 
 type Page = { tools?: Summary; calls: ToolCall[]; next?: number; gone?: boolean };
@@ -108,30 +109,30 @@ export default function ToolsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Nav rule title={seq ? '这段做了什么' : '它到现在做了什么'} sub={summaryWords(tools, calls.length, next.current !== undefined)} />
+      <Nav rule title={seq ? tr('这段做了什么') : tr('它到现在做了什么')} sub={summaryWords(tools, calls.length, next.current !== undefined)} />
       {files.length > 0 && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="看改动"
+          accessibilityLabel={tr('看改动')}
           onPress={() => router.push({ pathname: '/diff', params: { machine, terminal } })}
           style={({ pressed }) => [s.files, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}
         >
           <Icon name="diff" size={18} width={1.8} color={t.ok} />
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, color: t.text }}>
-            改了{' '}
+            {tr('改了')}{' '}
             <Text style={{ fontFamily: mono, fontSize: 13, color: t.ok }}>
-              {files.length === 1 ? files[0].path.split('/').pop() : `${files.length} 个文件`} +{files.reduce((n, f) => n + f.added, 0)} −{files.reduce((n, f) => n + f.removed, 0)}
+              {files.length === 1 ? files[0].path.split('/').pop() : tr('{n} 个文件', { n: files.length })} +{files.reduce((n, f) => n + f.added, 0)} −{files.reduce((n, f) => n + f.removed, 0)}
             </Text>
           </Text>
-          <Text style={{ fontSize: 13, color: t.dim }}>看改动</Text>
+          <Text style={{ fontSize: 13, color: t.dim }}>{tr('看改动')}</Text>
           <Icon name="right" size={14} width={2} color={t.dim} />
         </Pressable>
       )}
-      {gone && <Notice text="原始记录已不在：只剩下这份清单，看不到每条的内容" />}
+      {gone && <Notice text={tr('原始记录已不在：只剩下这份清单，看不到每条的内容')} />}
       {!online ? (
-        <Notice text={m?.error ?? '电脑没连上'} />
+        <Notice text={m?.error ?? tr('电脑没连上')} />
       ) : !can ? (
-        <Notice text={NOT_YET} />
+        <Notice text={tr(NOT_YET)} />
       ) : error ? (
         <Notice text={error} />
       ) : loading ? (
@@ -148,7 +149,7 @@ export default function ToolsScreen() {
           onEndReached={() => next.current !== undefined && page(next.current)}
           onEndReachedThreshold={1.5}
           contentContainerStyle={{ paddingBottom: bottom + 16 }}
-          ListEmptyComponent={<Notice text="这一段没有工具调用" />}
+          ListEmptyComponent={<Notice text={tr('这一段没有工具调用')} />}
         />
       )}
     </View>

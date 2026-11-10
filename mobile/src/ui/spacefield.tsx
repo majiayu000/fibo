@@ -2,6 +2,7 @@
 // Tap to list the spaces; a folder in none can become one from here.
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { tr } from '../i18n';
 import { SpaceMark, Icon } from './icons';
 import { Label, mono } from './kit';
 import { type Landing, type Space, holds, landingNote } from './spaces';
@@ -33,18 +34,18 @@ export function SpaceField({
   const s0 = land.space;
   return (
     <View style={s.field}>
-      <Label>空间</Label>
+      <Label>{tr('空间')}</Label>
       <Pressable
         disabled={spaces.length === 0}
         onPress={() => setOpen(!open)}
         accessibilityRole="button"
-        accessibilityLabel={`空间：${s0?.name ?? '没有'}`}
+        accessibilityLabel={tr('空间：{name}', { name: s0?.name ?? tr('没有') })}
         style={[s.sel, { backgroundColor: t.card, borderColor: t.line }]}
       >
         {s0 ? <SpaceMark name={s0.name} id={s0.id} size={20} radius={5} /> : <Icon name="folder" size={18} color={t.dim} />}
         <View style={{ flex: 1, gap: 2 }}>
           <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '500', color: s0 ? t.text : t.dim }}>
-            {s0?.name || (spaces.length ? '选一个空间' : cwd ? '新空间（用这个文件夹）' : '电脑上还没有空间，选了目录就建一个')}
+            {s0?.name || (spaces.length ? tr('选一个空间') : cwd ? tr('新空间（用这个文件夹）') : tr('电脑上还没有空间，选了目录就建一个'))}
           </Text>
           {!!s0?.cwd && (
             <Text numberOfLines={1} ellipsizeMode="head" style={{ fontSize: 12, color: t.dim, fontFamily: mono }}>
@@ -79,8 +80,8 @@ export function SpaceField({
                   {x.name}
                 </Text>
                 <Text numberOfLines={1} ellipsizeMode="head" style={{ fontSize: 12, color: t.dim, fontFamily: mono }}>
-                  {x.cwd ? tilde(x.cwd) : '没有固定文件夹'}
-                  {cwd && x.cwd && holds(x.cwd, cwd) ? '  · 目录在这里' : ''}
+                  {x.cwd ? tilde(x.cwd) : tr('没有固定文件夹')}
+                  {cwd && x.cwd && holds(x.cwd, cwd) ? `  · ${tr('目录在这里')}` : ''}
                 </Text>
               </View>
               {on && <Icon name="check" size={16} width={2.6} color={t.link} />}
@@ -101,7 +102,7 @@ export function SpaceField({
         >
           {adding ? <ActivityIndicator size="small" /> : <Icon name="plus" size={16} width={2.2} color={t.link} />}
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, color: t.link }}>
-            把「{cwd.replace(/\/+$/, '').split('/').pop() || cwd}」设为新空间
+            {tr('把「{name}」设为新空间', { name: cwd.replace(/\/+$/, '').split('/').pop() || cwd })}
           </Text>
         </Pressable>
       )}

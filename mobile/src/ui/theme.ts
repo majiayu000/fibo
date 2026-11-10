@@ -2,6 +2,7 @@
 // 「新外观 · 参照 T3 Code」): near-white and #0a0a0a, flat rows, neutral grey own bubbles.
 // The system picks light or dark unless settings say otherwise.
 import { useColorScheme } from 'react-native';
+import { tr } from '../i18n';
 import { useSettings } from '../store/settings';
 
 const light = {
@@ -90,11 +91,11 @@ export function useTheme(): Theme {
 /** "刚刚", "5 分钟前", "3 小时前", or the date. */
 export function ago(at: number): string {
   const s = Date.now() / 1000 - at;
-  if (s < 60) return '刚刚';
-  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
-  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+  if (s < 60) return tr('刚刚');
+  if (s < 3600) return tr('{n} 分钟前', { n: Math.floor(s / 60) });
+  if (s < 86400) return tr('{n} 小时前', { n: Math.floor(s / 3600) });
   const d = new Date(at * 1000);
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  return tr('{month}月{day}日', { month: d.getMonth() + 1, day: d.getDate() });
 }
 
 /** "16:31" today, else "11月3日 16:31". */
@@ -102,5 +103,5 @@ export function clock(at: number): string {
   const d = new Date(at * 1000);
   const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
   const today = new Date();
-  return d.toDateString() === today.toDateString() ? hm : `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+  return d.toDateString() === today.toDateString() ? hm : tr('{month}月{day}日 {time}', { month: d.getMonth() + 1, day: d.getDate(), time: hm });
 }

@@ -4,6 +4,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { tr } from '@/i18n';
 import { type Machine, remote, supports } from '@/remote/hub';
 import { quotaStore } from '@/store/quota';
 import { type Tight, level, tightWindows, windowName } from './parse';
@@ -18,7 +19,7 @@ export function useTightWindows(machines: Machine[]): Tight[] {
   const able = machines.filter((m) => m.status === 'online' && supports(m, 'quota'));
   const ids = able.map((m) => m.id).join('\n');
   const read = useCallback(
-    () => tightWindows(ids ? ids.split('\n').map((id) => ({ machine: machines.find((m) => m.id === id)?.name || '电脑', agents: quotaStore(id).get().agents })) : []),
+    () => tightWindows(ids ? ids.split('\n').map((id) => ({ machine: machines.find((m) => m.id === id)?.name || tr('电脑'), agents: quotaStore(id).get().agents })) : []),
     // `ids` says which computers; their names do not change what is read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ids],
@@ -49,8 +50,8 @@ export function useTightWindows(machines: Machine[]): Tight[] {
   return tight;
 }
 
-/** 「5 小时窗口」 is long for a line. */
-const shortWindow = (minutes: number) => windowName(minutes).replace('窗口', '');
+/** 「5 小时窗口」 is long for a line; the other windows' names are short already. */
+const shortWindow = (minutes: number) => (minutes === 300 ? tr('5 小时') : windowName(minutes));
 
 export function tightWords(q: Tight, named: boolean) {
   return `${named ? `${q.machine} · ` : ''}${agentName(q.agent)} ${shortWindow(q.minutes)} ${q.used}%`;

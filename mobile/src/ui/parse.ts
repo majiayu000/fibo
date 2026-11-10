@@ -1,6 +1,7 @@
 // Reading what the machine sends into what the screens show: whether an approval is
 // dangerous, the options a question offers, a patch's lines, quota windows. Pure, so
 // tests run it without React Native.
+import { tk, tr } from '../i18n';
 
 /** A screen line without the box Claude Code draws around a prompt. */
 const unbox = (line: string) => line.replace(/^\s*[│┃|]\s?/, '').replace(/\s*[│┃|]\s*$/, '');
@@ -43,19 +44,23 @@ export const asksTwice = (ask: Pick<Ask, 'subject' | 'known' | 'truncated'>) => 
 
 /** What a folder-trust question says, in the person's words: what trusting it allows. */
 export const trustWords = (agent: string) => ({
-  ask: `${agent || 'Agent'} 问：信任这个文件夹吗？`,
-  means: '信任后，它能读、改、运行这个文件夹里的文件。这个决定会记在电脑上。不信任的话，它不会在这里工作。',
+  ask: tr('{agent} 问：信任这个文件夹吗？', { agent: agent || 'Agent' }),
+  means: tr('信任后，它能读、改、运行这个文件夹里的文件。这个决定会记在电脑上。不信任的话，它不会在这里工作。'),
 });
 
 /** What a conversation read only from its log's end says about what is missing. */
 export const partialWords = (messages: number) =>
   messages
-    ? '更早的消息没有读进来：电脑第一次看到这段对话时，只读了日志的最后一段。'
-    : '这段日志电脑只读了最后一段，里面没有消息。之后的新消息会显示，更早的要回电脑上看。';
+    ? tr('更早的消息没有读进来：电脑第一次看到这段对话时，只读了日志的最后一段。')
+    : tr('这段日志电脑只读了最后一段，里面没有消息。之后的新消息会显示，更早的要回电脑上看。');
 
 /** What a conversation with older lines still unread says, on a computer that can read them. */
 export const readBackWords = (reading: boolean, failed: string) =>
-  reading ? '正在读更早的消息…' : failed ? `${failed}。点这里再试一次` : '更早的消息还在电脑的日志里。继续往上翻，或者点这里读';
+  reading
+    ? tr('正在读更早的消息…')
+    : failed
+      ? tr('{why}。点这里再试一次', { why: failed })
+      : tr('更早的消息还在电脑的日志里。继续往上翻，或者点这里读');
 
 /** Commands worth a second confirmation: pushing, deleting, deploying, publishing. */
 const DANGER = [
@@ -135,28 +140,28 @@ export function diffLines(patch: string): DiffLine[] {
 
 /** "5 小时窗口", "本周", or the window's length. */
 export function windowName(minutes: number): string {
-  if (minutes === 300) return '5 小时窗口';
-  if (minutes === 10080) return '本周';
-  if (minutes === 1440) return '今天';
-  if (minutes % 1440 === 0) return `${minutes / 1440} 天`;
-  if (minutes % 60 === 0) return `${minutes / 60} 小时`;
-  return `${minutes} 分钟`;
+  if (minutes === 300) return tr('5 小时窗口');
+  if (minutes === 10080) return tr('本周');
+  if (minutes === 1440) return tr('今天');
+  if (minutes % 1440 === 0) return tr('{d} 天', { d: minutes / 1440 });
+  if (minutes % 60 === 0) return tr('{h} 小时', { h: minutes / 60 });
+  return tr('{minutes} 分钟', { minutes });
 }
 
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const WEEKDAYS = [tk('周日'), tk('周一'), tk('周二'), tk('周三'), tk('周四'), tk('周五'), tk('周六')];
 
 /** "1 时 40 分后重置" within a day, else the weekday; empty when the time is unknown or past. */
 export function resetText(resetsAt: number, now = Date.now() / 1000): string {
   if (!resetsAt || resetsAt <= now) return '';
   const s = resetsAt - now;
-  if (s < 3600) return `${Math.max(1, Math.round(s / 60))} 分后重置`;
+  if (s < 3600) return tr('{m} 分后重置', { m: Math.max(1, Math.round(s / 60)) });
   if (s < 86400) {
     const minutes = Math.round(s / 60);
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
-    return m ? `${h} 时 ${m} 分后重置` : `${h} 时后重置`;
+    return m ? tr('{h} 时 {m} 分后重置', { h, m }) : tr('{h} 时后重置', { h });
   }
-  return `${WEEKDAYS[new Date(resetsAt * 1000).getDay()]}重置`;
+  return tr('{day}重置', { day: tr(WEEKDAYS[new Date(resetsAt * 1000).getDay()]) });
 }
 
 /** How full a window is, as the gauge colours it: under half, past half, past 80%. */
@@ -165,10 +170,11 @@ export const level = (used: number): 'low' | 'mid' | 'high' => (used > 80 ? 'hig
 /** A stretch of time as people say it: 「45 秒」「12 分钟」「1 小时 20 分钟」. */
 export function span(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
-  if (s < 60) return `${s} 秒`;
+  if (s < 60) return tr('{secs} 秒', { secs: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} 分钟`;
-  return m % 60 ? `${Math.floor(m / 60)} 小时 ${m % 60} 分钟` : `${Math.floor(m / 60)} 小时`;
+  if (m < 60) return tr('{minutes} 分钟', { minutes: m });
+  const h = Math.floor(m / 60);
+  return m % 60 ? tr('{h} 小时 {m} 分钟', { h, m: m % 60 }) : tr('{h} 小时', { h });
 }
 
 /** A running turn's time beside its state word; nothing in its first minute. */
@@ -196,10 +202,10 @@ export type Check = { command: string; counts?: string; ok: boolean; at: number;
 /** What the conversation's last test commands said, from their exit codes. */
 export function checkLine(checks: Check[] | undefined): { text: string; failed: boolean; stale: boolean } | null {
   if (!checks?.length) return null;
-  const word = (c: Check) => `${c.command} ${c.ok ? '通过' : '没通过'}`;
+  const word = (c: Check) => (c.ok ? tr('{command} 通过', { command: c.command }) : tr('{command} 没通过', { command: c.command }));
   const fresh = checks.filter((c) => !c.stale);
   // Changed since: the old results say nothing about the files now.
-  if (!fresh.length) return { text: `${word(checks[0])}，之后又改过`, failed: !checks[0].ok, stale: true };
+  if (!fresh.length) return { text: tr('{check}，之后又改过', { check: word(checks[0]) }), failed: !checks[0].ok, stale: true };
   return { text: fresh.map(word).join(' · '), failed: fresh.some((c) => !c.ok), stale: false };
 }
 
@@ -263,7 +269,7 @@ export type PathChip =
 export function pathChips(crumbs: { label: string; path: string }[]): PathChip[] {
   const level = (c: { label: string; path: string }, i: number): PathChip => ({
     kind: 'level',
-    label: i === 0 && c.label === '/' ? '电脑' : c.label,
+    label: i === 0 && c.label === '/' ? tr('电脑') : c.label,
     path: c.path,
     root: i === 0,
     current: i === crumbs.length - 1,
@@ -276,6 +282,6 @@ export function pathChips(crumbs: { label: string; path: string }[]): PathChip[]
  * paired as 只看 or 能答审批 gets `summary`, this turn's file names and counts only. */
 export function diffWords(d: { summary?: boolean } | null) {
   return d?.summary
-    ? { title: '这一轮改了哪些文件', empty: '这一轮还没改文件', note: '这台手机的权限只显示文件名和行数' }
-    : { title: '未提交的改动', empty: '没有未提交的改动', note: '' };
+    ? { title: tr('这一轮改了哪些文件'), empty: tr('这一轮还没改文件'), note: tr('这台手机的权限只显示文件名和行数') }
+    : { title: tr('未提交的改动'), empty: tr('没有未提交的改动'), note: '' };
 }
