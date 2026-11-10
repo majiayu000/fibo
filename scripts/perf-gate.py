@@ -40,7 +40,7 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
 - with nothing happening, one catch-up must not schedule the next (a loop drew the whole
   window several times a second).
 """
-import fcntl, os, pathlib, re, subprocess, sys
+import fcntl, os, pathlib, re, signal, subprocess, sys, tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'crates/mooring-app/perf-baseline.txt'
@@ -51,8 +51,7 @@ LOCK = pathlib.Path.home() / 'Library/Caches/MooringPerf/gate.lock'
 
 
 def wait_for_other_gates():
-    """One gate at a time on a machine. perf-fixture.py keeps its host in one state file, so
-    two gates stop each other's probes, and their load moves the times a VM run goes by.
+    """One gate at a time: competing load moves the CPU times a VM run goes by.
     The system lets go of the lock when this process ends, however it ends."""
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     held = LOCK.open('w')
@@ -74,12 +73,14 @@ def probe(bindir, out, plan, catch_up, machine=False, running=False):
     env.pop('MOORING_NO_CATCH_UP', None)
     if not catch_up:
         env['MOORING_NO_CATCH_UP'] = '1'
-    subprocess.run(FIXTURE + ['prepare', str(bindir)], env=env, check=True, stdout=subprocess.DEVNULL)
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    root = tempfile.mkdtemp(prefix='p-', dir=LOCK.parent)
     try:
-        r = subprocess.run(FIXTURE + ['probe', str(bindir), str(out), plan], env=env, check=True,
+        subprocess.run(FIXTURE + ['prepare', root, str(bindir)], env=env, check=True, stdout=subprocess.DEVNULL)
+        r = subprocess.run(FIXTURE + ['probe', root, str(bindir), str(out), plan], env=env, check=True,
                            capture_output=True, text=True)
     finally:
-        subprocess.run(FIXTURE + ['stop'], capture_output=True)
+        subprocess.run(FIXTURE + ['stop', root], check=True)
     print(r.stdout.strip())
     return r.stdout
 
@@ -219,4 +220,8 @@ def main():
     sys.exit(1 if fails else 0)
 
 
-main()
+if __name__ == '__main__':
+    def interrupted(signum, _frame):
+        raise KeyboardInterrupt(f'interrupted by signal {signum}')
+    signal.signal(signal.SIGTERM, interrupted)
+    main()

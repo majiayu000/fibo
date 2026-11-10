@@ -13,7 +13,7 @@ machine's utilization read 43% for the plain theme and 26% for a picture in one 
 is why neither is used. Needs an unlocked screen, so this is
 a thing to run by hand, not in CI.
 """
-import os, pathlib, re, shutil, statistics, subprocess, sys, threading, time
+import os, pathlib, re, shutil, signal, statistics, subprocess, sys, tempfile, threading, time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FIXTURE = [sys.executable, str(ROOT / 'scripts/perf-fixture.py')]
@@ -63,39 +63,44 @@ def main():
     for n in range(rounds):
         for name, plugin, theme, side in THEMES:
             env = {**os.environ, 'NORUN': '1'}
-            prepared = subprocess.run(FIXTURE + ['prepare', str(bindir), '2000', '60', '4'], env=env,
-                                      check=True, capture_output=True, text=True).stdout
-            home = pathlib.Path(re.search(r"'home': '([^']+)'", prepared).group(1))
-            config = home / '.config/mooring'
-            config.mkdir(parents=True, exist_ok=True)
-            if plugin:
-                shutil.copytree(ROOT / 'plugins' / plugin, config / 'plugins' / plugin)
-                (config / 'appearance').write_text(side)
-                (config / f'theme-{side}').write_text(theme)
-            fronts, used, done = [], {}, threading.Event()
-
-            def watch():
-                time.sleep(10)  # as the fixture's own measurement: past the start
-                if pictures and n == 0:
-                    pictures.mkdir(parents=True, exist_ok=True)
-                    subprocess.run(['screencapture', '-x', str(pictures / f'{name}.png')], capture_output=True)
-                server = pid_of('/WindowServer')
-                start, began = gpu_seconds(), time.monotonic()
-                while not done.is_set():
-                    fronts.append(front_app())
-                    done.wait(1)
-                end, spent = gpu_seconds(), time.monotonic() - began
-                used['server'] = (end.get(server, 0) - start.get(server, 0)) / spent * 100
-
-            thread = threading.Thread(target=watch)
-            thread.start()
+            cache = pathlib.Path.home() / 'Library/Caches/MooringPerf'
+            cache.mkdir(parents=True, exist_ok=True)
+            root = pathlib.Path(tempfile.mkdtemp(prefix='p-', dir=cache))
             try:
-                live = subprocess.run(FIXTURE + ['live', str(bindir), secs], env=env, check=True,
-                                      capture_output=True, text=True).stdout.strip()
+                subprocess.run(FIXTURE + ['prepare', str(root), str(bindir), '2000', '60', '4'], env=env,
+                                          check=True, capture_output=True, text=True)
+                home = root / 'home'
+                config = home / '.config/mooring'
+                config.mkdir(parents=True, exist_ok=True)
+                if plugin:
+                    shutil.copytree(ROOT / 'plugins' / plugin, config / 'plugins' / plugin)
+                    (config / 'appearance').write_text(side)
+                    (config / f'theme-{side}').write_text(theme)
+                fronts, used, done = [], {}, threading.Event()
+
+                def watch():
+                    time.sleep(10)  # as the fixture's own measurement: past the start
+                    if pictures and n == 0:
+                        pictures.mkdir(parents=True, exist_ok=True)
+                        subprocess.run(['screencapture', '-x', str(pictures / f'{name}.png')], capture_output=True)
+                    server = pid_of('/WindowServer')
+                    start, began = gpu_seconds(), time.monotonic()
+                    while not done.is_set():
+                        fronts.append(front_app())
+                        done.wait(1)
+                    end, spent = gpu_seconds(), time.monotonic() - began
+                    used['server'] = (end.get(server, 0) - start.get(server, 0)) / spent * 100
+
+                thread = threading.Thread(target=watch)
+                thread.start()
+                try:
+                    live = subprocess.run(FIXTURE + ['live', str(root), str(bindir), secs], env=env, check=True,
+                                          capture_output=True, text=True).stdout.strip()
+                finally:
+                    done.set()
+                    thread.join()
             finally:
-                done.set()
-                thread.join()
-                subprocess.run(FIXTURE + ['stop'], capture_output=True)
+                subprocess.run(FIXTURE + ['stop', str(root)], check=True)
             cpu = float(re.search(r'([\d.]+)% of a core', live).group(1))
             shown = fronts.count('mooring-app') / max(len(fronts), 1)
             server_gpu = used.get('server', float('nan'))
@@ -109,4 +114,8 @@ def main():
         print(f'{name}: CPU {statistics.median(cpu):.1f}% of a core; WindowServer GPU {tail}', flush=True)
 
 
-main()
+if __name__ == '__main__':
+    def interrupted(signum, _frame):
+        raise KeyboardInterrupt(f'interrupted by signal {signum}')
+    signal.signal(signal.SIGTERM, interrupted)
+    main()
