@@ -280,6 +280,8 @@ use tasks::TaskUi;
 mod tests;
 #[cfg(feature = "visual-test")]
 mod visual;
+#[cfg(feature = "visual-test")]
+mod visual_unknown;
 
 mod closing;
 mod launch_slot;

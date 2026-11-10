@@ -13,7 +13,8 @@ pub(in crate::workbench) struct Unlinked {
     pub terminal: String,
     pub note: String,
     pub why: String,
-    pub group: Status,
+    /// What its program reported; none when nothing did.
+    pub group: Option<Status>,
 }
 
 /// The heading, or none: no such terminal, no empty group.
@@ -55,7 +56,23 @@ fn row_box(id: gpui::SharedString, look: Look, focused: bool) -> gpui::Stateful<
     }
 }
 
-fn row_mark(look: Look, group: Status) -> gpui::AnyElement {
+fn row_mark(look: Look, group: Option<Status>) -> gpui::AnyElement {
+    let Some(group) = group else {
+        return match look {
+            Look::Flat => crate::workbench::sidebar_flat::flat_unknown(),
+            Look::Dense | Look::Standard => div()
+                .w(px(T::BOARD_MARK))
+                .flex_shrink_0()
+                .flex()
+                .justify_center()
+                .child(crate::ui::widgets::unknown_mark(
+                    T::BOARD_MARK,
+                    T::SMALL,
+                    T::color(T::muted()),
+                ))
+                .into_any_element(),
+        };
+    };
     match look {
         Look::Flat => flat_state(group, false),
         // Centered where the neighbours draw their Agent's mark.
