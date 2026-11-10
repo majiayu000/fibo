@@ -7,7 +7,7 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$here"
-export ZIG=${ZIG:-/Users/lifcc/Desktop/code/AI/tools/mooring/.claude/worktrees/terminal-eval-04a203/eval/terminal/vendor/zig/zig}
+export ZIG=${ZIG:-zig}
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 export LIBGHOSTTY_VT_SYS_OPTIMIZE=${LIBGHOSTTY_VT_SYS_OPTIMIZE:-ReleaseFast}
 cols=${REF_COLS:-100} rows=${REF_ROWS:-30}

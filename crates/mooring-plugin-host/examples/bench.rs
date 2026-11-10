@@ -13,7 +13,7 @@ fn state(n: usize) -> Vec<u8> {
                 "title": format!("这个诊断的 ui 感觉很丑啊 第 {i} 个会话，看看标题够长时会怎样"),
                 "agent": if i % 2 == 0 { "claude" } else { "codex" },
                 "group": g,
-                "cwd": "/Users/lifcc/Desktop/code/AI/tools/mooring",
+                "cwd": "/Users/demo/code/fibo",
                 "space": "工作空间",
                 "updated": 1_793_336_000u64 - i as u64 * 97,
                 "running_since": if g == "running" { Some(1_793_336_000u64) } else { None },

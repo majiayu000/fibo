@@ -69,7 +69,7 @@ impl Workbench {
                 Turn::Running,
                 true,
                 2467,
-                "S=/private/tmp/claude-502/-Users-lifcc-Desktop; cd \"$S\" && cargo build -p mooring-app 2>&1 | tail -20",
+                "S=/private/tmp/claude-502/-Users-demo-Desktop; cd \"$S\" && cargo build -p mooring-app 2>&1 | tail -20",
             ),
             (
                 "标签命名依旧有问题",
