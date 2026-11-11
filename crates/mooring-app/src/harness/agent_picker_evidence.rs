@@ -21,7 +21,12 @@ pub(super) fn start(
         let wait = move |ms| executor.timer(Duration::from_millis(ms));
         wait(2000).await;
         std::fs::create_dir_all(&directory).unwrap();
-        handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+        // Match the smaller macOS CI display, including the panel's height clamp.
+        handle.update(cx, |v, w, a| {
+            w.resize(gpui::size(px(1024.), px(675.)));
+            w.bounds_changed(a);
+            v.show_settings(w, a);
+        }).unwrap();
         wait(300).await;
         let shot = |name: &str, cx: &mut gpui::AsyncApp| {
             cx.update_window(handle.into(), |_, w, a| {
@@ -41,7 +46,8 @@ pub(super) fn start(
                 w.draw(a).clear(a);
                 let origin = gpui::point(
                     (w.viewport_size().width - px(theme::Theme::SETTINGS_WIDTH)) / 2.,
-                    (w.viewport_size().height - px(664.)) / 2.,
+                    ((w.viewport_size().height - px(664.)) / 2.)
+                        .max(px(theme::Theme::S20)),
                 );
                 native_click(
                     w,
