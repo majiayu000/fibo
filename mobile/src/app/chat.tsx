@@ -3,7 +3,7 @@
 // send key turns into stop while the Agent runs.
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Keyboard, Pressable, Text, View } from 'react-native';
 import { approve, deny, oops } from '@/actions';
 import { catchUp } from '@/remote/gap';
 import { mergeChat as merge, readChatPage } from '@/remote/chatHistory';
@@ -72,7 +72,12 @@ export default function Chat() {
   const [pending, setPending] = useState<Pending[]>([]);
   const [term, setTerm] = useState(false);
   const [queuedOpen, setQueuedOpen] = useState(false);
-  const openQueued = useCallback(() => setQueuedOpen(true), []);
+  // The box keeps its focus under the sheet, and Android hands it back when the sheet closes:
+  // after 「立刻发送」 the keyboard came up on its own (real phone, 2026-11-11). Let go of it first.
+  const openQueued = useCallback(() => {
+    Keyboard.dismiss();
+    setQueuedOpen(true);
+  }, []);
   const [picking, setPicking] = useState<ModeKind | null>(null);
   const generation = useRef<string | null>(null);
   const last = useRef(0);

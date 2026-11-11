@@ -11,6 +11,15 @@ impl Parser {
         at: u64,
         source: &Source,
     ) {
+        let ends_running = self.calls.get(id).is_some_and(|call| {
+            self.card
+                .running_command
+                .as_ref()
+                .is_some_and(|r| r.source == call.source)
+        });
+        if ends_running {
+            self.card.running_command = None;
+        }
         let object = input(value);
         let output = object
             .get("output")
