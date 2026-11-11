@@ -147,6 +147,11 @@ pub struct Content {
     /// evidence the host adds to its snapshot; stored, every one is `job: false`.
     #[serde(default)]
     pub shells: Vec<ShellTask>,
+    /// The command the turn is running now, from its call until its result: a record names
+    /// a command only once it ends, so a minutes-long one showed the one before it. Absent
+    /// in cards written before 2026-11-12, which read as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running_command: Option<Evidence>,
     /// The session this conversation went on in, when its CLI handed it to another one
     /// (Claude Code's `continued-in` record: a forked session run by its background daemon).
     /// Empty while this session is the one in use.
@@ -657,6 +662,14 @@ impl Content {
                     (n, true) => t!("等后台任务 {n} 个", n),
                 });
             }
+        }
+        // A command still running says what it is doing, unless something ended after it began.
+        if self.turn == Turn::Running
+            && let Some(now) = &self.running_command
+            && self.evidence.last().is_none_or(|e| e.at <= now.at)
+            && let Some(c) = command_gist(&now.summary)
+        {
+            return Some(t!("运行 {c}", c));
         }
         let this_turn = |e: &&Evidence| self.turn_started == 0 || e.at >= self.turn_started;
         let from_record =

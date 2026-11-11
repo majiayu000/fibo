@@ -1,4 +1,5 @@
 use super::*;
+mod doing_tests;
 mod turn_tests;
 #[test]
 fn edits_and_patches_count_their_lines() {

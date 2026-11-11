@@ -401,6 +401,7 @@ impl Parser {
             self.card.error.clear();
             self.card.background = None;
             self.card.shells.clear();
+            self.card.running_command = None;
             self.completed_while_waiting = false;
             self.child_wait_from = None;
         }
@@ -424,6 +425,20 @@ impl Parser {
             at,
             source,
         );
+        if let Some(command) = (name == "Bash" || name.ends_with("exec_command"))
+            .then(|| args["cmd"].as_str().or_else(|| args["command"].as_str()))
+            .flatten()
+        {
+            let summary = short(command, 300);
+            let source = source.clone();
+            self.card.running_command = Some(Evidence {
+                kind: "command".into(),
+                summary,
+                exit_code: None,
+                at,
+                source,
+            });
+        }
         if is_question_tool(name) {
             self.card.turn = Turn::Waiting;
             self.child_wait_from = None;
