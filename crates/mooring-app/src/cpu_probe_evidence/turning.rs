@@ -160,6 +160,65 @@ pub(super) async fn run(
             "a running mark stayed still with the sidebar collapsed: {bound:?}"
         );
     }
+    // The column and both drawer headers use exactly the same overlay and setting.
+    for drawer in [false, true] {
+        handle
+            .update(cx, |v, _, a| v.visual_turning_board(drawer, a))
+            .unwrap();
+        // An animation starts at its first draw, not at the state change. A covered
+        // probe window may draw no automatic frame during the wait below.
+        refreshed(cx);
+        wait(600).await;
+        refreshed(cx);
+        let bounds = handle
+            .update(cx, |v, _, _| v.visual_turning_frame_bounds())
+            .unwrap();
+        let board: Vec<_> = bounds
+            .iter()
+            .filter(|b| f32::from(b.origin.y) >= top)
+            .collect();
+        let state = handle
+            .update(cx, |v, _, a| v.visual_turning_state(a))
+            .unwrap();
+        shot(cx)
+            .save(directory.join(format!("board-{drawer}-registered.png")))
+            .unwrap();
+        assert!(
+            board.len() >= if drawer { 2 } else { 1 },
+            "board/drawer did not share the running clock: {board:?}; {state}"
+        );
+        step(cx);
+        let before = shot(cx);
+        wait(350).await;
+        step(cx);
+        let after = shot(cx);
+        for b in board {
+            let x = (f32::from(b.origin.x) * scale) as u32;
+            let y = (f32::from(b.origin.y) * scale) as u32;
+            let n = (f32::from(b.size.width) * scale) as u32;
+            assert!(
+                (y..(y + n).min(before.height())).any(|y| (x..(x + n).min(before.width()))
+                    .any(|x| before.get_pixel(x, y) != after.get_pixel(x, y))),
+                "board mark stayed still: {b:?}"
+            );
+        }
+        before
+            .save(directory.join(format!("running-board-{drawer}-before.png")))
+            .unwrap();
+        after
+            .save(directory.join(format!("running-board-{drawer}-after.png")))
+            .unwrap();
+        cx.update(|a| running_spin::choose(false, a).unwrap());
+        refreshed(cx);
+        assert!(
+            handle
+                .update(cx, |v, _, _| v.visual_turning_frame_bounds().is_empty())
+                .unwrap(),
+            "board ignored the running-spin switch"
+        );
+        cx.update(|a| running_spin::choose(true, a).unwrap());
+        refreshed(cx);
+    }
     mooring_core::effect::set_reduce_motion(true);
     refreshed(cx);
     assert!(
@@ -177,7 +236,10 @@ pub(super) async fn run(
     );
     mooring_core::effect::set_reduce_motion(false);
     handle
-        .update(cx, |v, _, a| v.visual_toggle_sidebar(a))
+        .update(cx, |v, _, a| {
+            v.visual_turning_focus(a);
+            v.visual_toggle_sidebar(a);
+        })
         .unwrap();
     cx.update(|a| running_spin::choose(false, a).unwrap());
     refreshed(cx);

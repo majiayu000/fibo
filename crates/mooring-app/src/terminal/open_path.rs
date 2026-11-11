@@ -172,9 +172,7 @@ pub fn relative(path: &Path, cwd: Option<&Path>) -> Option<String> {
     (!rest.as_os_str().is_empty()).then(|| rest.to_string_lossy().into_owned())
 }
 
-fn shell_quote(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "'\\''"))
-}
+use mooring_platform::shell::quote_posix as shell_quote;
 
 #[cfg(test)]
 mod tests {

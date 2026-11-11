@@ -18,7 +18,11 @@ import type { Space } from '../ui/spaces';
 export type Phase = 'working' | 'waiting' | 'idle' | 'shell';
 
 /** A terminal as `list` gives it. */
+export type AgentControls = { steer: boolean; send_now: boolean; effort: boolean; suggestion?: boolean; busy_input?: 'queue' | 'steer' | null };
+
 export type Card = {
+  agent_name?: string;
+  controls?: AgentControls | null;
   id: string;
   space: string;
   tab: string;
@@ -61,6 +65,7 @@ export type Card = {
 /** A todo you have not closed. Hosts before 11-08 send the first four fields only, and only
  *  todos nobody started. */
 export type Todo = {
+  agent_name?: string;
   id: string;
   space: string;
   title: string;
@@ -80,6 +85,7 @@ export type Todo = {
 };
 
 export type Machine = {
+  agentNames?: Record<string, string>;
   id: string;
   link: Link;
   name: string;
@@ -156,7 +162,7 @@ function set(id: string, patch: Partial<Machine>) {
 const get = (id: string) => state.machines.find((m) => m.id === id);
 
 /** What `spaces` says, as a machine keeps it; only when the reply says it. */
-function listed(list: { spaces?: any[]; quiet?: any[] | null; todos?: Todo[]; machine?: { name?: string } }, id: string): Partial<Machine> {
+function listed(list: { spaces?: any[]; quiet?: any[] | null; todos?: Todo[]; machine?: { name?: string; agent_names?: Record<string, string> } }, id: string): Partial<Machine> {
   return {
     ...(list.spaces && {
       spaces: Object.fromEntries(list.spaces.map((s: any) => [s.id, s.name])),
@@ -166,6 +172,7 @@ function listed(list: { spaces?: any[]; quiet?: any[] | null; todos?: Todo[]; ma
     ...(Array.isArray(list.quiet) && { quietSpaces: list.quiet.map((s: any) => ({ id: String(s.id), name: String(s.name ?? ''), cwd: String(s.cwd ?? '') })) }),
     ...(list.todos && { todos: list.todos }),
     name: list.machine?.name || get(id)?.name || '',
+    ...(list.machine && { agentNames: list.machine.agent_names ?? {} }),
     updated: Date.now() / 1000,
   };
 }
@@ -264,6 +271,7 @@ async function connect(id: string) {
       role: hello.role,
       ops: hello.ops ?? [],
       name: hello.machine?.name || m.name,
+      agentNames: hello.machine?.agent_names ?? {},
       os: typeof hello.os === 'string' ? hello.os : undefined,
       appVersion: typeof hello.app_version === 'string' ? hello.app_version : undefined,
       seen: Date.now() / 1000,

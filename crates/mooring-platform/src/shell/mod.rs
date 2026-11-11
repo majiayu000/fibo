@@ -38,6 +38,11 @@ pub fn quote(word: &str) -> String {
     imp::quote(word)
 }
 
+/// One literal word for a POSIX shell, including remote Unix commands on Windows.
+pub fn quote_posix(word: &str) -> String {
+    format!("'{}'", word.replace('\'', "'\\''"))
+}
+
 /// `program` for [`interactive`] to run as the program itself, past any function of that name:
 /// such a wrapper usually adds flags the caller is about to give, and a CLI may reject one twice.
 pub fn past_functions(program: &str) -> String {
@@ -87,6 +92,25 @@ fn sh_among(path: &[PathBuf], installed: Option<&std::path::Path>) -> Option<Pat
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(unix)]
+    fn posix_word_survives_shell_parsing_without_expansion() {
+        for word in [
+            "",
+            "a'b",
+            "two words",
+            "$(printf expanded)\n$HOME;*",
+            "中文",
+        ] {
+            let out = std::process::Command::new("/bin/sh")
+                .args(["-c", &format!("printf %s {}", quote_posix(word))])
+                .output()
+                .unwrap();
+            assert!(out.status.success());
+            assert_eq!(out.stdout, word.as_bytes());
+        }
+    }
 
     #[test]
     fn sh_is_found_on_path_then_beside_git_then_where_git_installs() {

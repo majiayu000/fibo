@@ -80,7 +80,7 @@ export default function Approve() {
             </Text>
             <Text style={{ fontSize: 15, color: gone ? t.dim : t.wait, fontWeight: '500' }}>{gone ? tr('已经不在等了') : tr('等你同意')}</Text>
             <Text style={{ fontSize: 13, color: t.dim }} numberOfLines={1}>
-              {[m?.name, space, agentName(card?.agent), card?.updated ? ago(card.updated) : ''].filter(Boolean).join(' · ')}
+              {[m?.name, space, agentName(card), card?.updated ? ago(card.updated) : ''].filter(Boolean).join(' · ')}
             </Text>
           </View>
         </View>

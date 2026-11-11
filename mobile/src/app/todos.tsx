@@ -37,7 +37,7 @@ function Row({ item, t }: { item: TodoItem; t: Theme }) {
         </Text>
       )}
       <Text numberOfLines={1} style={{ fontSize: 13, color: t.dim }}>
-        {[agentName(todo.agent), at ? ago(at) : ''].filter(Boolean).join(' · ')}
+        {[agentName(todo), at ? ago(at) : ''].filter(Boolean).join(' · ')}
       </Text>
     </Pressable>
   );
@@ -104,7 +104,7 @@ export default function Todos() {
                 {cardTitle(c)}
               </Text>
               <Text numberOfLines={1} style={{ fontSize: 13, color: t.dim }}>
-                {[agentName(c.agent), c.updated ? ago(c.updated) : ''].filter(Boolean).join(' · ')}
+                {[agentName(c), c.updated ? ago(c.updated) : ''].filter(Boolean).join(' · ')}
               </Text>
             </Pressable>
           ))}

@@ -1,8 +1,8 @@
 //! A session row's subagents in 会话优先 (docs/subagent-tree/index.html, option B): a
 //! count line (a dot each, a bar past [`PIPS`]) and, once opened, a branch per subagent
 //! with its clock, [`SHOWN`] at most before the rest fold into one line that opens them
-//! all. Open by default on the session you are in. The marks stay still: the clocks
-//! already tick each second, and spinning rings would redraw the column every frame.
+//! all. Open by default on the session you are in. Running marks share the lightweight
+//! overlay clock, so a step does not redraw the column.
 //! 在跑 yellow, 跑完 a grey ✓, 中断 (failed or stopped) a red ✕; 前台 marks one the turn
 //! waits on. A branch's click does what its session row's click does.
 use super::layout::turn_clock;
@@ -262,11 +262,18 @@ impl Workbench {
                     .id(gpui::SharedString::from(format!("subagent-{session}-{i}")))
                     .cursor_pointer()
                     .child(
-                        gpui::svg()
-                            .path(path)
-                            .size(px(F::STATE + 1.))
-                            .flex_shrink_0()
-                            .text_color(color),
+                        on.then(|| {
+                            self.turning_mark(Status::Running, path, F::STATE + 1., true, cx)
+                        })
+                        .flatten()
+                        .unwrap_or_else(|| {
+                            gpui::svg()
+                                .path(path)
+                                .size(px(F::STATE + 1.))
+                                .flex_shrink_0()
+                                .text_color(color)
+                                .into_any_element()
+                        }),
                     )
                     .child(
                         div()

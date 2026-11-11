@@ -72,9 +72,7 @@ impl Spec {
     }
 }
 
-fn quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', r"'\''"))
-}
+use mooring_platform::shell::quote_posix as quote;
 
 pub fn file() -> Option<PathBuf> {
     mooring_core::agent::config_dir().map(|d| d.join("machines.json"))
@@ -114,12 +112,10 @@ fn save_to(f: &std::path::Path, specs: &[Spec]) -> io::Result<()> {
     if let Some(dir) = f.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let tmp = f.with_extension("json.tmp");
-    std::fs::write(
-        &tmp,
-        serde_json::to_vec_pretty(specs).map_err(io::Error::other)?,
-    )?;
-    std::fs::rename(tmp, f)
+    crate::ui::status_colors::write_atomic(
+        f,
+        &serde_json::to_vec_pretty(specs).map_err(io::Error::other)?,
+    )
 }
 
 /// `specs` with `host` quiet or not; `None` when it is not among them, so a file that could

@@ -70,9 +70,7 @@ impl SidebarPrefs {
             for terminal in &self.pinned {
                 body.push_str(&format!("pin {terminal}\n"));
             }
-            // Written beside and renamed over: a crash mid-write keeps the old choices.
-            let tmp = path.with_extension("tmp");
-            let _ = std::fs::write(&tmp, body).and_then(|()| std::fs::rename(&tmp, &path));
+            let _ = crate::ui::status_colors::write_atomic(&path, body.as_bytes());
         }
     }
     pub fn preset(&self) -> &'static Preset {

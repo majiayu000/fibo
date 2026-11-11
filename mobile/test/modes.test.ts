@@ -115,10 +115,10 @@ test('a row says it only when it is the exception', () => {
   expect(rowSaysFull(asks, [full, asks])).toBe(false);
 });
 
-test('an effort goes as its own kind, and only claude and codex offer it', async () => {
+test('an effort goes as its own kind, and the host says whether it is offered', async () => {
   expect(await switchMode('modes-m', 't', 'effort', { key: 'xhigh', label: 'xhigh' })).toBe(true);
   expect(asked).toEqual([]);
   expect(plain()).toEqual([{ op: 'setmode', terminal: 't', kind: 'effort', choice: 'xhigh' }]);
   expect(kindName('effort')).toBe('强度');
-  expect([hasEffort('claude'), hasEffort('codex'), hasEffort('grok'), hasEffort(undefined)]).toEqual([true, true, false, false]);
+  expect([hasEffort({ steer: false, send_now: false, effort: true }), hasEffort({ steer: true, send_now: true, effort: true }), hasEffort({ steer: false, send_now: false, effort: false }), hasEffort(undefined)]).toEqual([true, true, false, false]);
 });

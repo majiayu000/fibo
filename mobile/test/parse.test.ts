@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, diffWords, compact, dangerous, diffLines, level, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, diffWords, compact, dangerous, diffLines, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -101,9 +101,6 @@ describe('quota words', () => {
     expect(resetText(1000 + 100 * 60, 1000)).toBe('1 时 40 分后重置');
     expect(resetText(0, 1000)).toBe('');
   });
-  test('orange starts past 80%', () => {
-    expect([49, 50, 80, 81].map(level)).toEqual(['low', 'mid', 'mid', 'high']);
-  });
 });
 
 test('a private relay address reads as the local network', () => {
@@ -177,13 +174,17 @@ describe('the gaps against the design', () => {
 });
 
 describe('tightWindows', () => {
+  test('old unordered readings are not guessed and host severity is preserved', () => {
+    expect(tightWindows([{ machine: 'old', agents: [{ agent: 'codex', windows: [{ minutes: 300, used: 90, resets_at: 0 }] }] }])).toEqual([]);
+    expect(tightWindows([{ machine: 'new', agents: [{ agent: 'future', agent_name: 'Future CLI', windows: [{ minutes: 300, used: 81, resets_at: 0, level: 'mid' }] }] }])[0]).toMatchObject({ agent_name: 'Future CLI', level: 'mid' });
+  });
   const now = 1000;
-  const w = (minutes: number, used: number, resets_at = 2000) => ({ minutes, used, resets_at });
+  const w = (minutes: number, used: number, resets_at = 2000) => ({ minutes, used, resets_at, level: 'low' as const });
   test('the fullest window of each Agent, fullest Agent first', () => {
-    const got = tightWindows([{ machine: 'mac', agents: [{ agent: 'codex', windows: [w(300, 10), w(10080, 40)] }, { agent: 'claude', windows: [w(300, 62), w(10080, 30)] }] }], now);
+    const got = tightWindows([{ machine: 'mac', agents: [{ agent: 'codex', windows: [w(10080, 40), w(300, 10)] }, { agent: 'claude', windows: [w(300, 62), w(10080, 30)] }] }], now);
     expect(got).toEqual([
-      { machine: 'mac', agent: 'claude', minutes: 300, used: 62 },
-      { machine: 'mac', agent: 'codex', minutes: 10080, used: 40 },
+      { machine: 'mac', agent: 'claude', minutes: 300, used: 62, agent_name: undefined, level: 'low' },
+      { machine: 'mac', agent: 'codex', minutes: 10080, used: 40, agent_name: undefined, level: 'low' },
     ]);
   });
   test('a window past its reset says nothing, and computers are never added up', () => {

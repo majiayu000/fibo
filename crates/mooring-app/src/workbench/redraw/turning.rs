@@ -133,6 +133,22 @@ impl Workbench {
                 .into_any_element(),
         )
     }
+    pub(in crate::workbench) fn flat_session_mark(
+        &self,
+        g: Status,
+        unseen: bool,
+        cx: &Context<Self>,
+    ) -> gpui::AnyElement {
+        self.turning_mark(
+            g,
+            "icons/state-run.svg",
+            crate::ui::theme::Flat::STATE,
+            true,
+            cx,
+        )
+        .unwrap_or_else(|| super::super::sidebar_flat::flat_state(g, unseen))
+    }
+
     /// The list layouts' mark: its pale ring stands still and the arc on it turns.
     pub(in crate::workbench) fn session_mark(
         &self,
@@ -229,6 +245,31 @@ impl Workbench {
         self.nav.overview = false;
         self.sync_panes(cx);
         cx.notify();
+    }
+    pub fn visual_turning_board(&mut self, drawer: bool, cx: &mut Context<Self>) {
+        self.show_overview(cx);
+        self.overview.drawer = drawer.then(|| {
+            self.board_sessions(now())
+                .into_iter()
+                .find(|(column, _)| *column == super::super::board::Column::Running)
+                .expect("fixture needs a running board card")
+                .1
+                .id
+                .clone()
+        });
+        cx.notify();
+    }
+    pub fn visual_turning_state(&self, cx: &Context<Self>) -> String {
+        format!(
+            "enabled={} reduced={} drawer={:?} column={:?}",
+            crate::ui::running_spin::current(cx),
+            mooring_core::effect::reduce_motion(),
+            self.overview.drawer,
+            self.board_sessions(now())
+                .into_iter()
+                .find(|(_, s)| Some(&s.id) == self.overview.drawer.as_ref())
+                .map(|(c, _)| c)
+        )
     }
     /// How many times the view has asked for its next step, to see it stop.
     pub fn visual_turning_asks() -> usize {

@@ -3,7 +3,6 @@
 //! each machine's own host; a machine that dropped off keeps its last rows, faded.
 //! `sidebar_machine_views` holds the three layouts around them.
 use super::machines::{remote_key, shown_title};
-use super::sidebar_flat::flat_state;
 use super::sidebar_list::{ASKS, bucket};
 use super::*;
 use crate::machines::Link;
@@ -306,7 +305,7 @@ impl Workbench {
                         quiet::quiet_ring().into_any_element()
                     } else {
                         if r.known {
-                            flat_state(r.status, false)
+                            self.flat_session_mark(r.status, false, cx)
                         } else {
                             super::sidebar_flat::flat_unknown()
                         }

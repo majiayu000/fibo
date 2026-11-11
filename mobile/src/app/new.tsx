@@ -18,7 +18,7 @@ import { MAX_PICTURES, type Picture, pick } from '@/ui/pictures';
 import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
 import { SpaceField } from '@/ui/spacefield';
 import { ignoredPick, landing, pickSpace } from '@/ui/spaces';
-import { agentName, tilde } from '@/ui/status';
+import { tilde } from '@/ui/status';
 import { ago, useTheme } from '@/ui/theme';
 
 export default function NewTask() {
@@ -82,7 +82,7 @@ export default function NewTask() {
     setNote('');
     try {
       const { session: found } = await r.request('lastsession', { cwd: cwd, agent: draft.agent });
-      if (!found) setNote(tr('这个目录里没有 {agent} 的旧对话', { agent: agentName(draft.agent) }));
+      if (!found) setNote(tr('这个目录里没有 {agent} 的旧对话', { agent: m?.agentNames?.[draft.agent] || draft.agent }));
       else if (found.terminal) router.replace({ pathname: '/chat', params: { machine: m.id, terminal: found.terminal } });
       else setDraft({ resume: { id: found.id, title: found.title, updated: found.updated } });
     } catch (e) {
@@ -211,7 +211,7 @@ export default function NewTask() {
                 accessibilityState={{ selected: draft.agent === a }}
               >
                 <Text style={{ fontSize: 15, color: draft.agent === a ? t.text : t.dim, fontWeight: draft.agent === a ? '600' : '400' }}>
-                  {a === 'claude' ? 'Claude Code' : 'Codex'}
+                  {m?.agentNames?.[a] || a}
                 </Text>
               </Pressable>
             ))}

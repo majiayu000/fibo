@@ -74,7 +74,7 @@ impl AppIcon {
             .unwrap_or(Self::Fibo)
     }
     pub fn save(self, file: &Path) -> std::io::Result<()> {
-        std::fs::write(file, self.key())
+        super::status_colors::write_atomic(file, self.key().as_bytes())
     }
 }
 

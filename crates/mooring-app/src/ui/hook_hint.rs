@@ -23,7 +23,9 @@ pub fn choose(on: bool, cx: &mut App) -> Result<(), String> {
     let path = path().ok_or_else(|| t!("找不到配置目录").to_string())?;
     path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| std::fs::write(&path, if on { "on" } else { "off" }))
+        .and_then(|()| {
+            super::status_colors::write_atomic(&path, (if on { "on" } else { "off" }).as_bytes())
+        })
         .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
     cx.set_global(HookHint(on));
     Ok(())

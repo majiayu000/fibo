@@ -89,7 +89,10 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
             let note = unbound
                 .filter(|_| trust.is_none())
                 .and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
+            let agent = session.map(|s| s.runtime).or(unbound);
             rp::Card {
+                agent_name: agent.map_or_else(String::new, |a| a.name().to_owned()),
+                controls: agent.map(controls),
                 id: t.id.clone(),
                 // The space the window lists the conversation under; a shell's own.
                 space: session
@@ -99,12 +102,14 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                 tab: control::tab_title(w, &t.id),
                 cwd: cwd.clone(),
                 phase,
-                agent: session
-                    .map(|s| s.runtime)
-                    .or(unbound)
-                    .map(|a| control::agent_label(a).to_owned()),
+                agent: agent.map(control::agent_label),
                 session: session.map(|s| s.id.clone()),
-                title: session.map(|s| w.session_title(s)),
+                title: Some(
+                    session
+                        .map(|s| w.session_title(s))
+                        .or_else(|| note.clone())
+                        .unwrap_or_else(|| cwd.clone()),
+                ),
                 approval: content.and_then(|c| said(&c.approval)),
                 waiting: content.and_then(|c| asked(c).or_else(|| said(&c.waiting))),
                 status: status.map(|s| s.key().to_owned()),
@@ -163,6 +168,26 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
     }))
 }
 
+fn controls(agent: Agent) -> mooring_remote::cards::AgentControls {
+    let adapter = mooring_host::agent_adapter(agent);
+    let keys = adapter.turn_keys();
+    mooring_remote::cards::AgentControls {
+        steer: keys.is_some(),
+        send_now: keys.is_some(),
+        effort: mooring_host::agent_modes_switch(agent),
+        suggestion: adapter.input_suggestion().is_some(),
+        busy_input: keys.and_then(|k| {
+            if k.queue == b"\r" {
+                Some("queue".into())
+            } else if k.steer == b"\r" {
+                Some("steer".into())
+            } else {
+                None
+            }
+        }),
+    }
+}
+
 /// A todo with what the phone shows of it: its state, your words, the progress so far, and
 /// the terminal of a conversation working on it.
 fn todo(w: &Workspace, t: &Task, now: u64) -> rp::Todo {
@@ -178,6 +203,7 @@ fn todo(w: &Workspace, t: &Task, now: u64) -> rp::Todo {
         space: t.space.clone(),
         title: t.title.clone(),
         agent: control::agent_label(t.agent),
+        agent_name: t.agent.name().to_owned(),
         state: Some(state.key().to_owned()),
         state_label: Some(state.label().to_owned()),
         said: t.description.trim().to_owned(),
@@ -332,6 +358,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn controls_follow_the_adapters_and_old_cards_do_not_guess() {
+        assert_eq!(controls(Agent::Claude).busy_input.as_deref(), Some("queue"));
+        assert!(controls(Agent::Claude).suggestion);
+        assert!(!controls(Agent::Codex).suggestion);
+        let unknown = controls(Agent::from_key("Future"));
+        assert!(!unknown.steer && !unknown.send_now && !unknown.effort && !unknown.suggestion);
+        let old: rp::Card = serde_json::from_value(json!({
+            "id": "t", "space": "s", "tab": "tab", "cwd": "/work", "phase": "shell"
+        }))
+        .unwrap();
+        assert_eq!(old.controls, None);
+        assert!(old.agent_name.is_empty());
+    }
+
     /// A Codex on the shared daemon has no conversation, yet it is no plain shell.
     /// The phone's row says what a finished turn left running, in the sidebar's words.
     #[test]
@@ -395,6 +436,16 @@ mod tests {
         assert_eq!(card.phase, rp::Phase::Shell);
         assert_eq!(card.agent.as_deref(), Some("codex"));
         assert_eq!(card.note.as_deref(), Some("codex · 空闲 · 未关联对话"));
+        assert_eq!(card.title, card.note);
+        assert_eq!(card.agent_name, Agent::Codex.name());
+        assert_eq!(card.controls, Some(controls(Agent::Codex)));
+        assert_eq!(
+            list.machine.agent_names.get("dsh").map(String::as_str),
+            Some(Agent::Dsh.name())
+        );
+        let controls = card.controls.as_ref().unwrap();
+        assert!(controls.steer && controls.send_now && controls.effort);
+        assert_eq!(controls.busy_input.as_deref(), Some("steer"));
         assert!(list
             .terminals
             .iter()

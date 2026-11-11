@@ -412,6 +412,8 @@ pub struct Event {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Machine {
+    #[serde(default)]
+    pub agent_names: std::collections::BTreeMap<String, String>,
     /// Stays the same across restarts.
     pub id: String,
     pub name: String,
@@ -455,6 +457,8 @@ pub struct List {
 /// on yet, with only the first four fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Todo {
+    #[serde(default)]
+    pub agent_name: String,
     pub id: String,
     pub space: String,
     pub title: String,
@@ -495,6 +499,10 @@ pub struct Space {
 /// A running terminal and what its Agent is doing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Card {
+    #[serde(default)]
+    pub agent_name: String,
+    #[serde(default)]
+    pub controls: Option<crate::cards::AgentControls>,
     pub id: String,
     pub space: String,
     pub tab: String,

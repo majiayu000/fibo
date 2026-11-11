@@ -93,10 +93,18 @@ impl Workbench {
                     .gap(px(T::S8))
                     .child({
                         let spin = active && count > 0;
-                        if spin && matches!(column, Column::Running | Column::Needs) {
+                        if spin && column == Column::Needs {
                             super::pace::wake(&MOTION, MOTION_STEP, cx);
                         }
-                        animated_column_icon(column, spin)
+                        self.column_icon(
+                            column,
+                            if column == Column::Running {
+                                count > 0 && self.overview.drawer.is_none()
+                            } else {
+                                spin
+                            },
+                            cx,
+                        )
                     })
                     .child(
                         div()

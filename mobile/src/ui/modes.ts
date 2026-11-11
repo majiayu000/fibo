@@ -1,3 +1,4 @@
+import type { AgentControls } from '../remote/hub';
 // The words around changing a running Agent's model or permission mode. What is offered and what
 // is on come from the computer, which reads them off the CLI; a phone counts no keys.
 import { notUi, tr } from '../i18n';
@@ -5,7 +6,7 @@ import { notUi, tr } from '../i18n';
 export type ModeKind = 'model' | 'permission' | 'effort';
 
 /** CLIs whose effort the computer reads and sets (host `agents/modes_effort.rs`). */
-export const hasEffort = (agent: string | null | undefined) => agent === 'claude' || agent === 'codex';
+export const hasEffort = (controls: AgentControls | null | undefined) => !!controls?.effort;
 
 export type ModeOption = { key: string; label: string; detail?: string; current?: boolean; full?: boolean };
 export type ModeOptions = { options: ModeOption[]; note?: string };

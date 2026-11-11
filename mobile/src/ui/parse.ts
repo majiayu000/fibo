@@ -1,3 +1,4 @@
+import type { QuotaWindow, QuotaLevel } from '../store/quota';
 // Reading what the machine sends into what the screens show: whether an approval is
 // dangerous, the options a question offers, a patch's lines, quota windows. Pure, so
 // tests run it without React Native.
@@ -172,7 +173,7 @@ export function resetText(resetsAt: number, now = Date.now() / 1000): string {
 }
 
 /** How full a window is, as the gauge colours it: under half, past half, past 80%. */
-export const level = (used: number): 'low' | 'mid' | 'high' => (used > 80 ? 'high' : used >= 50 ? 'mid' : 'low');
+
 
 /** A stretch of time as people say it: 「45 秒」「12 分钟」「1 小时 20 分钟」. */
 export function span(seconds: number): string {
@@ -247,18 +248,19 @@ export function quotaView(online: boolean, asks: boolean, saved: unknown[] | nul
   return saved ? 'live' : 'loading';
 }
 
-type Reading = { agent: string; windows: { minutes: number; used: number; resets_at: number }[] };
-export type Tight = { machine: string; agent: string; minutes: number; used: number };
+type Reading = { agent: string; agent_name?: string; windows: QuotaWindow[] };
+export type Tight = { machine: string; agent: string; agent_name?: string; minutes: number; used: number; level?: QuotaLevel };
 
 /** Each Agent's most used window on each computer, fullest first. Never added up: see `app/quota.tsx`. A window past its reset says nothing. */
 export function tightWindows(readings: { machine: string; agents: Reading[] | null }[], now = Date.now() / 1000): Tight[] {
   const out: Tight[] = [];
   for (const { machine, agents } of readings) {
     for (const a of agents ?? []) {
-      const live = a.windows.filter((w) => !w.resets_at || w.resets_at > now);
-      if (!live.length) continue;
-      const top = live.reduce((x, y) => (y.used > x.used ? y : x));
-      out.push({ machine, agent: a.agent, minutes: top.minutes, used: top.used });
+      // Old hosts/cached readings do not supply severity or a shared ordering.
+      if (a.windows.some((w) => !w.level)) continue;
+      const top = a.windows.find((w) => !w.resets_at || w.resets_at > now);
+      if (!top) continue;
+      out.push({ machine, agent: a.agent, agent_name: a.agent_name, minutes: top.minutes, used: top.used, level: top.level });
     }
   }
   return out.sort((x, y) => y.used - x.used);

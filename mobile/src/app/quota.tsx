@@ -1,22 +1,22 @@
 // How much of each Agent's limits is used, computer by computer and never added up: two
 // computers may share an account or not, and only each one's own readings say anything.
-// One card per Agent, a striped gauge per window, orange past 80%.
+// One card per Agent, a striped gauge per window, orange from 80%, red from 95%, as the host reports.
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { type Machine, NOT_YET, remote, supports, useHub } from '@/remote/hub';
 import { tr } from '@/i18n';
-import { type QuotaReading as Reading, quotaStore } from '@/store/quota';
+import { type QuotaReading as Reading, type QuotaLevel, quotaStore } from '@/store/quota';
 import { Nav, Notice, useBottom } from '@/ui/kit';
-import { level, quotaView, resetText, windowName } from '@/ui/parse';
+import { quotaView, resetText, windowName } from '@/ui/parse';
 import { agentName } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
 import { TodayTokens } from '@/ui/usage';
 
 const STRIPES = 20;
 
-function Gauge({ used, t }: { used: number; t: Theme }) {
+function Gauge({ used, level, t }: { used: number; level?: QuotaLevel; t: Theme }) {
   const lit = Math.round((Math.min(used, 100) / 100) * STRIPES);
-  const color = t[level(used)];
+  const color = level ? t[level] : t.dim;
   return (
     <View style={s.gauge} accessibilityLabel={tr('用了 {n}%', { n: used })}>
       {Array.from({ length: STRIPES }, (_, i) => (
@@ -30,7 +30,7 @@ function AgentCard({ r, t }: { r: Reading; t: Theme }) {
   return (
     <View style={[s.card, { backgroundColor: t.card, borderColor: t.line }]}>
       <View style={s.row}>
-        <Text style={{ fontSize: 17, fontWeight: '600', color: t.text }}>{agentName(r.agent)}</Text>
+        <Text style={{ fontSize: 17, fontWeight: '600', color: t.text }}>{agentName(r)}</Text>
         {!!r.plan && <Text style={{ fontSize: 13, color: t.dim }}>{tr('{plan} 计划', { plan: r.plan[0].toUpperCase() + r.plan.slice(1) })}</Text>}
       </View>
       {r.windows.length === 0 && <Text style={{ color: t.dim, fontSize: 13 }}>{tr('没有读数')}</Text>}
@@ -41,11 +41,11 @@ function AgentCard({ r, t }: { r: Reading; t: Theme }) {
             <View style={s.row}>
               <Text style={{ fontSize: 15, color: t.text }}>{windowName(w.minutes)}</Text>
               <Text style={{ fontSize: 14, color: t.dim }}>
-                <Text style={{ fontWeight: '700', color: level(w.used) === 'high' ? t.high : t.text }}>{w.used}%</Text>
+                <Text style={{ fontWeight: '700', color: w.level === 'high' ? t.high : t.text }}>{w.used}%</Text>
                 {reset ? ` · ${reset}` : ''}
               </Text>
             </View>
-            <Gauge used={w.used} t={t} />
+            <Gauge used={w.used} level={w.level} t={t} />
           </View>
         );
       })}

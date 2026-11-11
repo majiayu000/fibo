@@ -46,7 +46,30 @@ pub struct Window {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
 }
+impl Quota {
+    /// Most used first; ties keep the source's shortest-window-first order.
+    pub fn by_usage(&self) -> Vec<&Window> {
+        let mut windows: Vec<_> = self.windows.iter().collect();
+        windows.sort_by_key(|w| std::cmp::Reverse(w.used));
+        windows
+    }
+    pub fn tightest(&self, now: u64) -> Option<&Window> {
+        self.by_usage().into_iter().find(|w| !w.reset(now))
+    }
+}
+
 impl Window {
+    /// Shared presentation severity, also sent to remote clients.
+    pub fn level(&self) -> &'static str {
+        if self.used >= OVER {
+            "high"
+        } else if self.used >= NEAR {
+            "mid"
+        } else {
+            "low"
+        }
+    }
+
     /// The windows CLIs report today get their usual names; any other its length. One with a
     /// name of its own says it, or two weeks read the same.
     pub fn label(&self) -> String {

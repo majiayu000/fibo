@@ -114,7 +114,7 @@ impl Workbench {
             let written = path
                 .parent()
                 .map_or(Ok(()), std::fs::create_dir_all)
-                .and_then(|()| std::fs::write(&path, "done\n"));
+                .and_then(|()| crate::ui::status_colors::write_atomic(&path, b"done\n"));
             if let Err(e) = written {
                 eprintln!("first run marker {}: {e}", path.display());
             }

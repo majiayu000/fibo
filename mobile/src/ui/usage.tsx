@@ -9,7 +9,7 @@ import { compact } from './parse';
 import { agentName } from './status';
 import { useTheme } from './theme';
 
-type Reading = { agents: { agent: string; tokens: number; cached: number }[]; partial: boolean };
+type Reading = { agents: { agent: string; agent_name?: string; tokens: number; cached: number }[]; partial: boolean };
 
 const AGAIN_MS = 1500;
 const EVERY_MS = 60_000;
@@ -55,7 +55,7 @@ export function TodayTokens({ m }: { m: Machine }) {
       </View>
       <Text style={{ fontSize: 22, fontWeight: '700', color: t.text }}>{compact(tokens)}</Text>
       <Text numberOfLines={2} style={{ fontSize: 12, lineHeight: 17, color: t.dim }}>
-        {[...got.agents.map((a) => `${agentName(a.agent)} ${compact(a.tokens)}`), cached ? tr('另有缓存读取 {n}', { n: compact(cached) }) : ''].filter(Boolean).join(' · ') || tr('今天还没有用量')}
+        {[...got.agents.map((a) => `${agentName(a)} ${compact(a.tokens)}`), cached ? tr('另有缓存读取 {n}', { n: compact(cached) }) : ''].filter(Boolean).join(' · ') || tr('今天还没有用量')}
       </Text>
     </View>
   );
