@@ -173,10 +173,20 @@ fn first_rows(gpu_rows: usize) -> usize {
 /// Apps that get their own chart color; the rest share one.
 const COLORED: usize = 5;
 
-/// A hover card: a bold first line, then quieter detail lines.
-struct Tip(Vec<gpui::SharedString>);
+/// One line of a hover card.
+pub(super) enum TipLine {
+    Title(String),
+    Text(String),
+    /// Secondary facts: dimmer.
+    Quiet(String),
+    /// A dim label in front of its text, as in 「最初  …」.
+    Labeled(String, String),
+}
+/// A hover card: a bold title, then detail lines, the secondary ones dimmer.
+struct Tip(std::rc::Rc<Vec<TipLine>>);
 impl Render for Tip {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        const QUIET: f32 = 0.62;
         let mut card = div()
             .max_w(px(T::TIP_WIDTH))
             .px(px(T::S10))
@@ -187,22 +197,45 @@ impl Render for Tip {
             .text_size(px(T::SMALL))
             .font_features(tabular())
             .shadow_lg();
-        for (i, line) in self.0.iter().enumerate() {
-            card = card.child(if i == 0 {
-                div()
+        for line in self.0.iter() {
+            card = card.child(match line {
+                TipLine::Title(text) => div()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(line.clone())
-            } else {
-                div().child(line.clone())
+                    .child(text.clone()),
+                TipLine::Text(text) => div().child(text.clone()),
+                TipLine::Quiet(text) => div().opacity(QUIET).child(text.clone()),
+                TipLine::Labeled(label, text) => div()
+                    .flex()
+                    .gap(px(T::S6))
+                    .child(div().flex_none().opacity(QUIET).child(label.clone()))
+                    .child(div().min_w_0().child(text.clone())),
             });
         }
         card
     }
 }
+/// A hover card whose first line is its title.
 pub(super) fn tip(
     lines: Vec<String>,
 ) -> impl Fn(&mut Window, &mut gpui::App) -> gpui::AnyView + 'static {
-    let lines: Vec<gpui::SharedString> = lines.into_iter().map(Into::into).collect();
+    tip_lines(
+        lines
+            .into_iter()
+            .enumerate()
+            .map(|(i, l)| {
+                if i == 0 {
+                    TipLine::Title(l)
+                } else {
+                    TipLine::Text(l)
+                }
+            })
+            .collect(),
+    )
+}
+pub(super) fn tip_lines(
+    lines: Vec<TipLine>,
+) -> impl Fn(&mut Window, &mut gpui::App) -> gpui::AnyView + 'static {
+    let lines = std::rc::Rc::new(lines);
     move |_, cx| cx.new(|_| Tip(lines.clone())).into()
 }
 /// Digits of equal width, so columns of numbers line up.
