@@ -8,6 +8,7 @@
 
 | 日期 | 决定 | 状态 |
 |---|---|---|
+| 2026-11-11 | [App 图标换成 Fibo 标志：f 加金点，晚霞渐变底](2026-11-11-fibo-app-icon.md) | 采用 |
 | 2026-11-10 | [分隔条按两侧窗格确认身份](2026-11-10-divider-identity.md) | 采用 |
 | 2026-11-10 | [Hook 不静默安装：欢迎页默认勾选随启动装，设置 › 通用是它的家](2026-11-10-hook-with-first-start.md) | 采用 |
 | 2026-11-10 | [性能测试各自记录并清理进程](2026-11-10-perf-fixture-cleanup.md) | 采用 |
@@ -31,7 +32,7 @@
 | 2026-11-03 | [后台 shell 一律算等后台](2026-11-03-count-background-shells-as-waiting.md) | 被取代 |
 | 2026-11-03 | [后台 shell 按监听端口分任务和服务](2026-11-03-split-background-shells-by-listening-port.md) | 采用 |
 | 2026-11-04 | [后台 shell：脚本自己连的端口不算服务，规则和真实案例记在这一处](2026-11-04-background-shell-own-client.md) | 采用 |
-| 2026-11-05 | [第一版图标用系泊环，信号黄加墨色](2026-11-05-mooring-ring-icon.md) | 采用 |
+| 2026-11-05 | [第一版图标用系泊环，信号黄加墨色](2026-11-05-mooring-ring-icon.md) | 被取代 |
 | 2026-11-05 | [工作台主库改 synchronous=NORMAL](2026-11-05-workbench-db-synchronous-normal.md) | 采用 |
 | 2026-11-05 | [本地 main 只跟随远端](2026-11-05-local-main-follows-origin.md) | 采用，推送方式已改 |
 | 2026-11-06 | [main 必须走 PR 且 CI 通过](2026-11-06-main-requires-ci.md) | 采用 |

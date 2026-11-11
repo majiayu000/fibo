@@ -90,28 +90,46 @@ static NSButton *text_button(NSString *title,NSColor *ink,CGFloat size,BOOL unde
     button.attributedTitle=[[NSAttributedString alloc]initWithString:title attributes:attributes];
     return button;
 }
-/// The menu bar mark: the C-shaped ring with its post in the gap, in the bar's own ink.
-/// Offline drops the post; the count stays plain text beside it. `assets/Mooring.icon` is the same mark.
+// The f of docs/site/brand/fibo-icon.svg in an 18-point box, y down: 0 move, 1 line, 2 curve, 3 close.
+static const CGFloat F_MARK[]={
+    0,3.878,7.074,2,3.878,6.869,3.953,6.701,4.103,6.572,2,4.252,6.443,4.453,6.378,4.706,6.378,1,6.011,
+    4.209,2,6.317,3.087,6.734,2.272,7.263,1.763,2,7.792,1.255,8.467,1.001,9.29,1.001,2,9.819,1.001,
+    10.244,1.146,10.564,1.437,2,10.885,1.728,11.045,2.088,11.045,2.517,2,11.045,2.887,10.921,3.184,
+    10.674,3.407,2,10.427,3.63,10.104,3.742,9.705,3.742,2,9.505,3.742,9.336,3.708,9.198,3.641,2,9.06,
+    3.574,8.938,3.494,8.832,3.403,2,8.726,3.312,8.62,3.232,8.515,3.165,2,8.409,3.097,8.291,3.063,8.162,
+    3.063,2,8.045,3.063,7.945,3.095,7.862,3.16,2,7.78,3.225,7.715,3.325,7.668,3.46,2,7.627,3.583,7.647,
+    3.711,7.726,3.844,2,7.805,3.976,7.896,4.129,7.999,4.302,2,8.102,4.475,8.177,4.691,8.224,4.95,2,8.271,
+    5.209,8.247,5.532,8.153,5.92,1,8.03,6.387,2,8.659,6.387,9.054,6.434,9.215,6.528,2,9.377,6.622,9.458,
+    6.795,9.458,7.048,2,9.458,7.236,9.398,7.411,9.277,7.572,2,9.156,7.734,8.993,7.863,8.788,7.96,2,8.582,
+    8.057,8.359,8.106,8.118,8.106,1,6.196,13.351,2,6.161,13.504,6.133,13.642,6.112,13.765,2,6.092,13.888,
+    6.082,14.003,6.082,14.109,2,6.082,14.291,6.138,14.441,6.249,14.558,2,6.361,14.676,6.471,14.797,6.58,
+    14.92,2,6.689,15.043,6.743,15.205,6.743,15.405,2,6.743,15.704,6.615,15.975,6.359,16.216,2,6.104,
+    16.457,5.778,16.648,5.381,16.789,2,4.984,16.93,4.574,17.0,4.151,17.0,2,3.652,17.0,3.337,16.813,3.208,
+    16.44,2,3.079,16.067,3.102,15.543,3.278,14.867,1,4.83,8.952,2,4.901,8.682,4.907,8.463,4.848,8.295,2,
+    4.789,8.128,4.633,7.979,4.38,7.85,2,4.204,7.733,4.076,7.614,3.997,7.493,2,3.918,7.372,3.878,7.233,
+    3.878,7.074,3,
+};
+// Its dot: centre and radius.
+static const CGFloat F_DOT[]={13.381,3.35,1.606};
+/// The menu bar mark: the f of the app icon with its dot, in the bar's own ink.
+/// Offline drops the dot; the count stays plain text beside it. `assets/Mooring.icon` is the same mark.
 static NSImage *tray_mark(BOOL offline) {
     NSImage *image=[NSImage imageWithSize:NSMakeSize(18,18) flipped:YES drawingHandler:^BOOL(NSRect rect){
-        NSBezierPath *ring=[NSBezierPath bezierPath];
-        const int steps=48;
-        for(int i=0;i<=steps;i++) {
-            CGFloat a=(15.31+(254.69-15.31)*i/steps)*M_PI/180;
-            NSPoint p=NSMakePoint(8.448+7*cos(a),9.552+7*sin(a));
-            if(i==0) [ring moveToPoint:p]; else [ring lineToPoint:p];
+        NSBezierPath *f=[NSBezierPath bezierPath];
+        const size_t n=sizeof(F_MARK)/sizeof(F_MARK[0]);
+        for(size_t i=0;i<n;) {
+            const CGFloat *v=F_MARK+i+1;
+            switch((int)F_MARK[i]) {
+                case 0: [f moveToPoint:NSMakePoint(v[0],v[1])]; i+=3; break;
+                case 1: [f lineToPoint:NSMakePoint(v[0],v[1])]; i+=3; break;
+                case 2: [f curveToPoint:NSMakePoint(v[4],v[5]) controlPoint1:NSMakePoint(v[0],v[1]) controlPoint2:NSMakePoint(v[2],v[3])]; i+=7; break;
+                default: [f closePath]; i+=1; break;
+            }
         }
-        for(int i=0;i<=steps;i++) {
-            CGFloat a=(-103.77+(-346.23+103.77)*i/steps)*M_PI/180;
-            [ring lineToPoint:NSMakePoint(8.524+4.3*cos(a),9.476+4.3*sin(a))];
-        }
-        [ring closePath];
-        [NSColor.blackColor setFill];[ring fill];
+        [NSColor.blackColor setFill];[f fill];
         if(!offline) {
-            NSBezierPath *post=[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(-2.3,-2.3,4.6,4.6) xRadius:1.2 yRadius:1.2];
-            NSAffineTransform *place=[NSAffineTransform transform];
-            [place translateXBy:13.4 yBy:4.6];[place rotateByDegrees:-42];
-            [post transformUsingAffineTransform:place];[post fill];
+            const CGFloat r=F_DOT[2];
+            [[NSBezierPath bezierPathWithOvalInRect:NSMakeRect(F_DOT[0]-r,F_DOT[1]-r,2*r,2*r)] fill];
         }
         return YES;
     }];

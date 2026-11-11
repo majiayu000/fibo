@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: "superseded by [Fibo 标志](2026-11-11-fibo-app-icon.md)"
 date: 2026-11-05
 decision-makers: majiayu000
 ---

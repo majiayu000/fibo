@@ -94,6 +94,7 @@
 "已复制 {chars} 字" = "Copied {chars} {chars|character|characters}"
 
 [ui]
+"Fibo 标志" = "Fibo mark"
 "系泊环" = "Mooring ring"
 "吉祥物" = "Mascot"
 "二次元" = "Anime"
