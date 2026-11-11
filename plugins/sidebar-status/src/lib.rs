@@ -17,6 +17,9 @@ struct State {
     closed_total: usize,
     #[allow(dead_code)]
     now: u64,
+    /// The window's language; a host from before it was sent means Chinese.
+    #[serde(default)]
+    lang: String,
 }
 
 #[derive(Deserialize)]
@@ -82,20 +85,31 @@ enum Trailing {
     },
 }
 
-fn row(s: &Session, trailing: Trailing, detail_mode: &'static str) -> Row {
+fn row(s: &Session, trailing: Trailing, detail_mode: &'static str, en: bool) -> Row {
     Row::Session {
         id: s.id.clone(),
         trailing,
         detail: s
             .stopped
             .clone()
-            .map(|t| format!("停在 {t}"))
-            .or_else(|| s.done.clone().map(|t| format!("做成了 {t}"))),
+            .map(|t| {
+                if en {
+                    format!("Stopped: {t}")
+                } else {
+                    format!("停在 {t}")
+                }
+            })
+            .or_else(|| {
+                s.done
+                    .clone()
+                    .map(|t| if en { t } else { format!("做成了 {t}") })
+            }),
         detail_mode,
     }
 }
 
 fn build(state: &State) -> Sidebar {
+    let en = state.lang == "en";
     let open: Vec<&Session> = state.sessions.iter().filter(|s| !s.closed).collect();
     let mut need: Vec<&Session> = open.iter().copied().filter(|s| s.needs_you).collect();
     need.sort_by(|a, b| b.updated.cmp(&a.updated));
@@ -114,17 +128,17 @@ fn build(state: &State) -> Sidebar {
     let mut sections = vec![
         Section {
             id: "need",
-            title: Some("需要你"),
+            title: Some(if en { "Needs you" } else { "需要你" }),
             count: Some(need.len()),
             folded_default: false,
             rows: need
                 .iter()
-                .map(|s| row(s, Trailing::State, "always"))
+                .map(|s| row(s, Trailing::State, "always", en))
                 .collect(),
         },
         Section {
             id: "running",
-            title: Some("在跑"),
+            title: Some(if en { "Running" } else { "在跑" }),
             count: Some(running.len()),
             folded_default: false,
             rows: running
@@ -134,6 +148,7 @@ fn build(state: &State) -> Sidebar {
                         s,
                         Trailing::Elapsed,
                         if s.selected { "always" } else { "hover" },
+                        en,
                     )
                 })
                 .collect(),
@@ -141,10 +156,15 @@ fn build(state: &State) -> Sidebar {
     ];
     // The rest, folded into one summary row and grouped by folder when opened.
     let mut rows = vec![Row::Note {
-        text: if fresh > 0 {
-            format!("等你验收 {done} · 停下了 {paused} · 新开的 {fresh} · 很久没动 {stale}")
-        } else {
-            format!("等你验收 {done} · 停下了 {paused} · 很久没动 {stale}")
+        text: match (en, fresh > 0) {
+            (true, true) => {
+                format!("To review {done} · Stopped {paused} · New {fresh} · Idle {stale}")
+            }
+            (true, false) => format!("To review {done} · Stopped {paused} · Idle {stale}"),
+            (false, true) => {
+                format!("等你验收 {done} · 停下了 {paused} · 新开的 {fresh} · 很久没动 {stale}")
+            }
+            (false, false) => format!("等你验收 {done} · 停下了 {paused} · 很久没动 {stale}"),
         },
         action: Some("toggle"),
     }];
@@ -164,7 +184,7 @@ fn build(state: &State) -> Sidebar {
             cwd: cwd.to_owned(),
             folded_default: false,
         });
-        rows.extend(list.iter().map(|s| row(s, Trailing::Age, "hover")));
+        rows.extend(list.iter().map(|s| row(s, Trailing::Age, "hover", en)));
     }
     sections.push(Section {
         id: "rest",
@@ -177,18 +197,26 @@ fn build(state: &State) -> Sidebar {
     if state.closed_total > 0 {
         let closed: Vec<&Session> = state.sessions.iter().filter(|s| s.closed).collect();
         let mut rows = vec![Row::Note {
-            text: format!("已关闭 {}", state.closed_total),
+            text: if en {
+                format!("Closed {}", state.closed_total)
+            } else {
+                format!("已关闭 {}", state.closed_total)
+            },
             action: Some("toggle"),
         }];
         rows.extend(
             closed
                 .iter()
                 .take(CLOSED_LISTED)
-                .map(|s| row(s, Trailing::Age, "never")),
+                .map(|s| row(s, Trailing::Age, "never", en)),
         );
         if state.closed_total > CLOSED_LISTED {
             rows.push(Row::Note {
-                text: format!("全部 {} 个 · 鸟瞰里接着聊", state.closed_total),
+                text: if en {
+                    format!("All {} · continue in Overview", state.closed_total)
+                } else {
+                    format!("全部 {} 个 · 鸟瞰里接着聊", state.closed_total)
+                },
                 action: Some("closed"),
             });
         }

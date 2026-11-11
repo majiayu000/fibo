@@ -28,6 +28,8 @@ struct State<'a> {
     /// Every closed session in the space; `sessions` carries only the newest of them.
     closed_total: usize,
     now: u64,
+    /// The window's language, `zh` or `en`, so a module can word its titles and notes to match.
+    lang: &'static str,
 }
 #[derive(Serialize)]
 struct StateSession<'a> {
@@ -273,6 +275,10 @@ impl Workbench {
             closed_total: closed.total,
             // Whole minutes, so a clock tick alone never asks the module again.
             now: now() / 60 * 60,
+            lang: match mooring_core::i18n::lang() {
+                mooring_core::i18n::Lang::En => "en",
+                mooring_core::i18n::Lang::Zh => "zh",
+            },
         };
         serde_json::to_vec(&state).unwrap_or_default()
     }

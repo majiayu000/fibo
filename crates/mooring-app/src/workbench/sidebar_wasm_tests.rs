@@ -43,6 +43,7 @@ fn the_shipped_wasm_preset_sorts_sessions_into_sections() {
         ],
         closed_total: 9,
         now: 100,
+        lang: "zh",
     };
     let bytes = plugin.render(&serde_json::to_vec(&state).unwrap()).unwrap();
     let reply: Reply = serde_json::from_slice(&bytes).unwrap();
@@ -85,6 +86,54 @@ fn the_shipped_wasm_preset_sorts_sessions_into_sections() {
         section("closed").rows.last(),
         Some(Row::Note { action: Some(a), text }) if a == "closed" && text.contains('9')
     ));
+}
+
+/// The shipped module words its own titles in the window's language, and a host from before
+/// `lang` was sent (no field) still gets the Chinese it always did.
+#[test]
+fn the_shipped_wasm_preset_follows_the_window_language() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/sidebar-status");
+    let (presets, _) = mooring_core::sidebar::load(vec![dir.join("sidebar.json")]);
+    let mut plugin = load(presets.last().unwrap()).unwrap();
+    let mut ask = |lang: Option<&'static str>| -> (Vec<String>, String) {
+        let state = State {
+            sessions: vec![
+                session("a", "waiting"),
+                session("b", "running"),
+                session("c", "review"),
+            ],
+            closed_total: 0,
+            now: 0,
+            lang: lang.unwrap_or("zh"),
+        };
+        let mut json = serde_json::to_value(&state).unwrap();
+        if lang.is_none() {
+            json.as_object_mut().unwrap().remove("lang");
+        }
+        let bytes = plugin.render(&serde_json::to_vec(&json).unwrap()).unwrap();
+        let reply: Reply = serde_json::from_slice(&bytes).unwrap();
+        let titles = reply
+            .sections
+            .iter()
+            .filter_map(|s| s.title.clone())
+            .collect();
+        let note = reply
+            .sections
+            .iter()
+            .flat_map(|s| &s.rows)
+            .find_map(|r| match r {
+                Row::Note { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap();
+        (titles, note)
+    };
+    let (titles, note) = ask(Some("en"));
+    assert_eq!(titles, ["Needs you", "Running"]);
+    assert!(note.starts_with("To review 1"), "{note}");
+    let (titles, note) = ask(None);
+    assert_eq!(titles, ["需要你", "在跑"]);
+    assert!(note.starts_with("等你验收 1"), "{note}");
 }
 
 #[test]
@@ -244,6 +293,7 @@ fn sidebar_cost_on_a_real_workspace() {
                 .collect(),
             closed_total: total,
             now: 0,
+            lang: "zh",
         };
         let bytes = serde_json::to_vec(&state).unwrap();
         let d = lap(&mut t);
