@@ -68,11 +68,13 @@ pub(super) fn start(
                 .unwrap()
         };
         use mooring_core::model::Agent;
+        let agents = Agent::all();
+        let mouse_choice = agents[1];
         shot("closed", cx);
         if phase == "readback" {
             assert_eq!(
                 selected(cx),
-                Agent::Claude,
+                mouse_choice,
                 "previous process saved its choice"
             );
         } else {
@@ -108,7 +110,6 @@ pub(super) fn start(
             shot("outside", cx);
             assert_eq!(selected(cx), original, "outside click does not save");
             // Every registered agent, including the last item, can be chosen by keyboard.
-            let agents = Agent::all();
             for _ in 0..agents.len() {
                 let before = selected(cx);
                 let i = agents.iter().position(|a| *a == before).unwrap();
@@ -123,12 +124,12 @@ pub(super) fn start(
                     "keyboard choice reached the host"
                 );
             }
-            // Mouse selection of Claude, the second menu row.
+            // Select the second registered Agent with the mouse.
             click(810., 148., cx);
             wait(200).await;
             click(810., 215., cx);
             wait(600).await;
-            assert_eq!(selected(cx), Agent::Claude, "mouse choice reached the host");
+            assert_eq!(selected(cx), mouse_choice, "mouse choice reached the host");
             handle
                 .update(cx, |v, _, a| v.visual_settings_close(a))
                 .unwrap();
@@ -136,7 +137,7 @@ pub(super) fn start(
             wait(200).await;
             assert_eq!(
                 selected(cx),
-                Agent::Claude,
+                mouse_choice,
                 "reopened panel keeps the choice"
             );
             shot("saved", cx);

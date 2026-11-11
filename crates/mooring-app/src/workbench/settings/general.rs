@@ -100,7 +100,7 @@ impl SettingsView {
             .relative()
             .child(
                 secondary("default-agent", self.values.default_agent.name())
-                    .w(px(180.))
+                    .w(px(T::SETTINGS_AGENT_WIDTH))
                     .justify_between()
                     .child("▾")
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -123,8 +123,8 @@ impl SettingsView {
                             .child(
                                 div()
                                     .id("default-agent-menu")
-                                    .w(px(180.))
-                                    .max_h(px(400.))
+                                    .w(px(T::SETTINGS_AGENT_WIDTH))
+                                    .max_h(px(T::SETTINGS_AGENT_MENU_HEIGHT))
                                     .overflow_y_scroll()
                                     .p(px(T::S4))
                                     .bg(T::color(T::popover()))
