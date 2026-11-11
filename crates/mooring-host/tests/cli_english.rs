@@ -64,11 +64,11 @@ fn cli_renders_english_via_env_and_saved_preference_without_cjk() {
     for env_pair in [("MOORING_LANG", "en"), ("FIBO_LANG", "en")] {
         for (args, expected) in [
             (&["--help"][..], "List terminals"),
-            (&["--skill"][..], "# Controlling Terminals in Fibo"),
+            (&["--skill"][..], "# Driving Fibo Terminals"),
             (&["--skill", "plugins"][..], "# Customizing Fibo"),
             (&["--skill", "session"][..], "fibo todo list"),
-            (&["plugins", "--help"][..], "Usage: fibo plugins"),
-            (&["themes", "names"][..], "bg background (required)"),
+            (&["plugins", "--help"][..], "Validate installed plugins"),
+            (&["hooks", "status", "--agent", "claude"][..], "claude"),
         ] {
             let (ok, stdout, stderr) = run_cli(tmp.path(), &[env_pair], args);
             assert!(ok, "{env_pair:?} {args:?} failed: {stderr}");

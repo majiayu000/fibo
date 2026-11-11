@@ -12,6 +12,6 @@ description: "When the user says 'note this down', 'add a todo', or 'follow up l
 
 Tell the user in one sentence what was recorded.
 
-Completion is marked by the user in the Fibo window — you cannot mark a todo done.
+Completion is marked by the user in the Fibo window — you cannot mark a todo as completed.
 
 If `fibo` is missing or unreachable, report the error to the user. Never bypass the CLI by writing directly to Fibo's socket or database.
