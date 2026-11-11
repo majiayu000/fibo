@@ -152,7 +152,7 @@ impl Pane {
                                     .flex_shrink_0()
                                     .text_size(px(T::META))
                                     .text_color(T::color(T::muted()))
-                                    .child(super::super::glyph::ASK_BACK),
+                                    .child(mooring_core::i18n::text(super::super::glyph::ASK_BACK)),
                             )
                             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
                                 cx.stop_propagation()
@@ -210,7 +210,7 @@ impl Pane {
                             .text_color(T::color(T::secondary()))
                             .truncate()
                             .cursor_pointer()
-                            .child(format!("在看 › {text}"))
+                            .child(t!("在看 › {text}", text))
                             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
                                 cx.stop_propagation()
                             })

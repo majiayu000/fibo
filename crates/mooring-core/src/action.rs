@@ -150,7 +150,7 @@ impl Action {
                     let value = own
                         .as_deref()
                         .or_else(|| ctx.var(name))
-                        .ok_or_else(|| format!("这个画面没有 {{{name}}}"))?;
+                        .ok_or_else(|| t!("这个画面没有 {{{name}}}", name))?;
                     out.push_str(&match quote {
                         Quote::None => shell_quote(value),
                         // Out of the double quotes, the value in single ones, and back:
@@ -201,24 +201,28 @@ impl Quote {
 
 /// Reads one `actions.json`: every action, or why none of it loads.
 fn read(file: &Path) -> Result<Vec<Action>, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}", e))?;
     let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
-        return Err(format!("动作格式是 api {}，这个版本只认 api {API}", f.api));
+        return Err(t!(
+            "动作格式是 api {got}，这个版本只认 api {API}",
+            got = f.api,
+            API
+        ));
     }
     if f.actions.is_empty() {
-        return Err("actions 至少写一条".into());
+        return Err(t!("actions 至少写一条").into());
     }
     let mut actions = f.actions;
     for a in &mut actions {
         if !crate::plugin::valid_id(&a.id) {
-            return Err(format!(
-                "动作 id \"{}\" 只能用小写字母、数字和 -，不超过 40 个字",
-                a.id
+            return Err(t!(
+                "动作 id \"{id}\" 只能用小写字母、数字和 -，不超过 40 个字",
+                id = a.id
             ));
         }
         if a.title.trim().is_empty() || a.command.trim().is_empty() {
-            return Err(format!("动作 {} 的 title 和 command 都要写", a.id));
+            return Err(t!("动作 {id} 的 title 和 command 都要写", id = a.id));
         }
         // A brace that reads like a placeholder but names none is a typo, not text.
         for (i, _) in a.command.match_indices('{') {
@@ -228,10 +232,11 @@ fn read(file: &Path) -> Result<Vec<Action>, String> {
                 let looks_like_var =
                     !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_');
                 if looks_like_var && !VARS.contains(&name) {
-                    return Err(format!(
-                        "动作 {} 用了不认识的 {{{name}}}，能用的有 {}",
-                        a.id,
-                        VARS.map(|v| format!("{{{v}}}")).join("、")
+                    return Err(t!(
+                        "动作 {id} 用了不认识的 {{{name}}}，能用的有 {vars}",
+                        id = a.id,
+                        name,
+                        vars = VARS.map(|v| format!("{{{v}}}")).join(t!("、"))
                     ));
                 }
             }
@@ -248,7 +253,7 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Action>, Vec<Loaded>) {
     for file in files {
         let result = read(&file).and_then(|found| {
             if let Some(dup) = found.iter().find(|a| actions.iter().any(|b| b.id == a.id)) {
-                return Err(format!("动作 id \"{}\" 和前面的插件重名", dup.id));
+                return Err(t!("动作 id \"{id}\" 和前面的插件重名", id = dup.id));
             }
             Ok(found)
         });
@@ -261,7 +266,7 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Action>, Vec<Loaded>) {
                         .iter()
                         .map(|a| a.title.as_str())
                         .collect::<Vec<_>>()
-                        .join("、")
+                        .join(t!("、"))
                 })
                 .map_err(Clone::clone),
         });
@@ -307,7 +312,7 @@ impl Action {
 }
 /// Turns one action on or off from now on, and keeps it for the next start.
 pub fn set_enabled(id: &str, on: bool) -> Result<(), String> {
-    let path = off_path().ok_or("找不到配置目录")?;
+    let path = off_path().ok_or(t!("找不到配置目录"))?;
     // What is in memory came from this file; if it no longer parses, saving would replace it.
     crate::state_file::read_for_update::<Vec<String>>(&path).map_err(|e| e.to_string())?;
     let list = with_off(|off| {
@@ -320,7 +325,7 @@ pub fn set_enabled(id: &str, on: bool) -> Result<(), String> {
     path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
         .and_then(|()| std::fs::write(&path, serde_json::to_vec_pretty(&list).unwrap_or_default()))
-        .map_err(|e| format!("无法保存 {}：{e}", path.display()))
+        .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))
 }
 /// Every loaded action, plugin by plugin.
 pub fn all() -> &'static [Action] {

@@ -38,11 +38,11 @@ impl Style {
             .unwrap_or_default()
     }
     fn save(self) -> Result<(), String> {
-        let path = path().ok_or("找不到配置目录")?;
+        let path = path().ok_or(t!("找不到配置目录"))?;
         path.parent()
             .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|()| std::fs::write(&path, self.name()))
-            .map_err(|e| format!("无法保存 {}：{e}", path.display()))
+            .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))
     }
 }
 pub fn current(cx: &App) -> Style {

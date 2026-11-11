@@ -199,44 +199,48 @@ pub fn builtin() -> Vec<Preset> {
 }
 
 fn read(file: &Path, taken: &[Preset]) -> Result<Vec<Preset>, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}", e))?;
     let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
-        return Err(format!("左栏格式是 api {}，这个版本只认 api {API}", f.api));
+        return Err(t!(
+            "左栏格式是 api {got}，这个版本只认 api {api}",
+            got = f.api,
+            api = API
+        ));
     }
     if f.presets.is_empty() {
-        return Err("presets 至少写一个".into());
+        return Err(t!("presets 至少写一个").into());
     }
     let mut presets = f.presets;
     for i in 0..presets.len() {
         let (before, rest) = presets.split_at_mut(i);
         let p = &mut rest[0];
         if !crate::plugin::valid_id(&p.id) {
-            return Err(format!(
-                "左栏 id \"{}\" 只能用小写字母、数字和 -，不超过 40 个字",
-                p.id
+            return Err(t!(
+                "左栏 id \"{id}\" 只能用小写字母、数字和 -，不超过 40 个字",
+                id = p.id
             ));
         }
         if taken.iter().chain(before.iter()).any(|t| t.id == p.id) {
-            return Err(format!("左栏 id \"{}\" 和内置或前面的插件重名", p.id));
+            return Err(t!("左栏 id \"{id}\" 和内置或前面的插件重名", id = p.id));
         }
         if p.name.trim().is_empty() || p.name.chars().count() > 6 {
-            return Err(format!("左栏 {} 的 name 要写，最多 6 个字", p.id));
+            return Err(t!("左栏 {id} 的 name 要写，最多 6 个字", id = p.id));
         }
         if p.fold.contains(&Bucket::Attention) {
-            return Err(format!(
-                "左栏 {} 不能折叠「{}」的会话",
-                p.id,
-                crate::status::needs_you_word()
+            return Err(t!(
+                "左栏 {id} 不能折叠「{word}」的会话",
+                id = p.id,
+                word = crate::status::needs_you_word()
             ));
         }
         if !(1..=100).contains(&p.limit) {
-            return Err(format!("左栏 {} 的 limit 要在 1 到 100 之间", p.id));
+            return Err(t!("左栏 {id} 的 limit 要在 1 到 100 之间", id = p.id));
         }
         if p.machines != Machines::Below && p.group != Grouping::Recent {
-            return Err(format!(
-                "左栏 {} 写了 machines，group 要写 \"recent\"",
-                p.id
+            return Err(t!(
+                "左栏 {id} 写了 machines，group 要写 \"recent\"",
+                id = p.id
             ));
         }
         match (p.group, p.wasm.as_deref()) {
@@ -246,21 +250,21 @@ fn read(file: &Path, taken: &[Preset]) -> Result<Vec<Preset>, String> {
                     .components()
                     .all(|c| matches!(c, std::path::Component::Normal(_)));
                 if !plain || !name.ends_with(".wasm") {
-                    return Err(format!(
-                        "左栏 {} 的 wasm 要写插件目录里的 .wasm 文件名",
-                        p.id
+                    return Err(t!(
+                        "左栏 {id} 的 wasm 要写插件目录里的 .wasm 文件名",
+                        id = p.id
                     ));
                 }
                 let module = file.parent().map(|d| d.join(name));
                 if !module.is_some_and(|m| m.is_file()) {
-                    return Err(format!("左栏 {} 的 {name} 不在插件目录里", p.id));
+                    return Err(t!("左栏 {id} 的 {name} 不在插件目录里", id = p.id, name));
                 }
             }
             (Grouping::Wasm, None) => {
-                return Err(format!("左栏 {} 用 wasm 排法，要写 wasm 文件名", p.id));
+                return Err(t!("左栏 {id} 用 wasm 排法，要写 wasm 文件名", id = p.id));
             }
             (_, Some(_)) => {
-                return Err(format!("左栏 {} 写了 wasm，group 要写 \"wasm\"", p.id));
+                return Err(t!("左栏 {id} 写了 wasm，group 要写 \"wasm\"", id = p.id));
             }
             _ => {}
         }
@@ -284,7 +288,7 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Preset>, Vec<Loaded>) {
                         .iter()
                         .map(|p| p.name.as_str())
                         .collect::<Vec<_>>()
-                        .join("、")
+                        .join(t!("、"))
                 })
                 .map_err(Clone::clone),
         });

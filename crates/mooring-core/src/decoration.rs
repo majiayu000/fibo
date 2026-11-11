@@ -176,13 +176,13 @@ impl Decoration {
     fn run_once(&self, pane: &Pane) -> Result<Option<String>, String> {
         use crate::plugin_command::Failed;
         let done = crate::plugin_command::run(self.spec(pane)).map_err(|e| match e {
-            Failed::Start(why) => format!("启动不了：{why}"),
-            Failed::TimedOut => format!("超过 {} ms，已停止", self.timeout_ms),
+            Failed::Start(why) => t!("启动不了：{why}", why),
+            Failed::TimedOut => t!("超过 {ms} ms，已停止", ms = self.timeout_ms),
         })?;
         // A script opting out exits non-zero; one the shell cannot even run has not opted
         // out of anything, and its author needs to hear why.
         if done.not_runnable() {
-            return Err(format!("{}：{}", done.how(), done.said()));
+            return Err(t!("{display}：{e}", display = done.how(), e = done.said()));
         }
         if !done.status.success() {
             return Ok(None);
@@ -234,39 +234,44 @@ struct File {
 }
 
 fn read(file: &Path) -> Result<Vec<Decoration>, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}", e))?;
     let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
-        return Err(format!("装饰格式是 api {}，这个版本只认 api {API}", f.api));
+        return Err(t!(
+            "装饰格式是 api {got}，这个版本只认 api {API}",
+            got = f.api,
+            API
+        ));
     }
     if f.decorations.is_empty() {
-        return Err("decorations 至少写一条".into());
+        return Err(t!("decorations 至少写一条").into());
     }
     let mut found = f.decorations;
     for i in 0..found.len() {
         let (before, rest) = found.split_at_mut(i);
         let d = &mut rest[0];
         if !crate::plugin::valid_id(&d.id) {
-            return Err(format!(
-                "装饰 id \"{}\" 只能用小写字母、数字和 -，不超过 40 个字",
-                d.id
+            return Err(t!(
+                "装饰 id \"{id}\" 只能用小写字母、数字和 -，不超过 40 个字",
+                id = d.id
             ));
         }
         // Inside its own plugin only: nothing stores a decoration's id (the cache goes by
         // position), so two plugins may share one and installing one cannot break another.
         if before.iter().any(|t| t.id == d.id) {
-            return Err(format!("装饰 id \"{}\" 重名", d.id));
+            return Err(t!("装饰 id \"{id}\" 重名", id = d.id));
         }
         if d.command.trim().is_empty() {
-            return Err(format!("装饰 {} 要写 command", d.id));
+            return Err(t!("装饰 {id} 要写 command", id = d.id));
         }
         if !(2..=3600).contains(&d.refresh_s) {
-            return Err(format!("装饰 {} 的 refresh_s 要在 2 到 3600 之间", d.id));
+            return Err(t!("装饰 {id} 的 refresh_s 要在 2 到 3600 之间", id = d.id));
         }
         if !(100..=MAX_TIMEOUT_MS).contains(&d.timeout_ms) {
-            return Err(format!(
-                "装饰 {} 的 timeout_ms 要在 100 到 {MAX_TIMEOUT_MS} 之间",
-                d.id
+            return Err(t!(
+                "装饰 {id} 的 timeout_ms 要在 100 到 {MAX_TIMEOUT_MS} 之间",
+                id = d.id,
+                MAX_TIMEOUT_MS
             ));
         }
         d.file = file.to_owned();
@@ -288,7 +293,7 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Decoration>, Vec<Loaded>) {
                         .iter()
                         .map(|d| d.id.as_str())
                         .collect::<Vec<_>>()
-                        .join("、")
+                        .join(t!("、"))
                 })
                 .map_err(Clone::clone),
         });

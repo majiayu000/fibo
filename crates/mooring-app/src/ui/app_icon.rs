@@ -28,9 +28,9 @@ impl AppIcon {
     pub const ALL: [Self; 3] = [Self::Ring, Self::Anime, Self::Mascot];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Ring => "系泊环",
-            Self::Mascot => "吉祥物",
-            Self::Anime => "二次元",
+            Self::Ring => t!("系泊环"),
+            Self::Mascot => t!("吉祥物"),
+            Self::Anime => t!("二次元"),
         }
     }
     fn key(self) -> &'static str {

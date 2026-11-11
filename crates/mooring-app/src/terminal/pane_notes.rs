@@ -4,7 +4,14 @@ use super::Pane;
 use gpui::{Context, SharedString};
 use std::time::Duration;
 
-pub(super) const MOUSE_HINT: &str = "程序接管了鼠标，选字和复制由它处理";
+pub(super) struct MouseHint(&'static str);
+impl gpui::IntoElement for MouseHint {
+    type Element = <&'static str as gpui::IntoElement>::Element;
+    fn into_element(self) -> Self::Element {
+        mooring_core::i18n::text(self.0).into_element()
+    }
+}
+pub(super) const MOUSE_HINT: MouseHint = MouseHint(tk!("程序接管了鼠标，选字和复制由它处理"));
 const NOTE_LIFETIME: Duration = Duration::from_secs(3);
 
 #[derive(Default)]

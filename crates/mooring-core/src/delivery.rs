@@ -34,10 +34,10 @@ impl Settled {
             Self::Confirmed(_) => None,
             Self::Refused(e) => Some(e.clone()),
             Self::Unknown { sent: false, error } => {
-                Some(format!("没发出去：后台没有响应（{error}）"))
+                Some(t!("没发出去：后台没有响应（{error}）", error))
             }
             Self::Unknown { sent: true, error } => {
-                Some(format!("不确定是否成功：等回复时断开了（{error}）"))
+                Some(t!("不确定是否成功：等回复时断开了（{error}）", error))
             }
         }
     }

@@ -117,22 +117,22 @@ impl TerminalText {
     fn parse(text: &str) -> Result<Self, String> {
         let value: Self = serde_json::from_str(text).map_err(|e| e.to_string())?;
         if !(8. ..=36.).contains(&value.size) || !(1. ..=2.).contains(&value.line_height) {
-            return Err("字号须为 8–36，行距须为 1–2 倍".into());
+            return Err(t!("字号须为 8–36，行距须为 1–2 倍").into());
         }
         if !(0. ..=0.5).contains(&value.unfocused_dim) {
-            return Err("非当前分屏变暗须为 0–0.5".into());
+            return Err(t!("非当前分屏变暗须为 0–0.5").into());
         }
         if !(0. ..=0.5).contains(&value.window_dim) {
-            return Err("后台窗口变暗须为 0–0.5".into());
+            return Err(t!("后台窗口变暗须为 0–0.5").into());
         }
         if !(1. ..=21.).contains(&value.min_contrast) {
-            return Err("最低对比度须为 1–21".into());
+            return Err(t!("最低对比度须为 1–21").into());
         }
         if !(0.1..=1.).contains(&value.faint) {
-            return Err("弱化文字须为 0.1–1".into());
+            return Err(t!("弱化文字须为 0.1–1").into());
         }
         if !(0. ..=40.).contains(&value.padding) {
-            return Err("终端边距须为 0–40".into());
+            return Err(t!("终端边距须为 0–40").into());
         }
         Ok(value)
     }
@@ -213,12 +213,12 @@ pub fn path() -> Option<PathBuf> {
 }
 /// Save before applying, so a failed write never looks like a saved preference.
 pub fn update(value: TerminalText) -> Result<(), String> {
-    let path = path().ok_or("找不到配置目录")?;
+    let path = path().ok_or(t!("找不到配置目录"))?;
     let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     let value = TerminalText::parse(&text)?;
     std::fs::create_dir_all(path.parent().unwrap())
         .and_then(|()| super::status_colors::write_atomic(&path, text.as_bytes()))
-        .map_err(|e| format!("无法保存 {}：{e}", path.display()))?;
+        .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
     *state().write().unwrap() = value;
     GENERATION.fetch_add(1, Ordering::Relaxed);
     Ok(())

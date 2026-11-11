@@ -89,7 +89,7 @@ pub(super) fn space_dir_missing(space: &Space) -> bool {
 /// The space's folder as shown: home as `~`, or where an unset one starts.
 pub(super) fn space_dir_label(space: &Space) -> String {
     if space.cwd.is_empty() {
-        "未设目录 · 从 ~ 开始".to_owned()
+        t!("未设目录 · 从 ~ 开始").to_owned()
     } else {
         home_relative(&space.cwd)
     }
@@ -210,13 +210,13 @@ pub(super) fn splits_closed(workspace: &Workspace, closing: &Closing) -> usize {
 }
 fn outcome_label(outcome: &Outcome) -> String {
     match outcome {
-        Outcome::Open => "未结束".into(),
-        Outcome::Completed => "已完成".into(),
-        Outcome::Abandoned => "已放弃".into(),
-        Outcome::Deferred { reason, until } => format!(
-            "稍后再看：{} · {} 小时后",
+        Outcome::Open => t!("未结束").into(),
+        Outcome::Completed => t!("已完成").into(),
+        Outcome::Abandoned => t!("已放弃").into(),
+        Outcome::Deferred { reason, until } => t!(
+            "稍后再看：{reason} · {hours} 小时后",
             reason,
-            until.saturating_sub(now()).div_ceil(3600)
+            hours = until.saturating_sub(now()).div_ceil(3600)
         ),
     }
 }
@@ -644,7 +644,7 @@ impl Workbench {
     /// A copy button's text: its own label, or 「✓ 已复制」 right after it copied.
     pub(super) fn copy_label(&self, key: &'static str, label: &'static str) -> &'static str {
         if self.copied.is_some_and(|(k, _)| k == key) {
-            "✓ 已复制"
+            t!("✓ 已复制")
         } else {
             label
         }

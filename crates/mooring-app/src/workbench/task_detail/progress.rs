@@ -17,7 +17,7 @@ impl Workbench {
             .get(&task.id)
             .filter(|log| has_progress(Some(log)))?;
         let at = now();
-        let mut panel = panel().child(panel_head("进展", log.notes.len().to_string()));
+        let mut panel = panel().child(panel_head(t!("进展"), log.notes.len().to_string()));
         for (i, note) in log.notes.iter().enumerate().rev() {
             panel = panel.child(
                 div()
@@ -85,7 +85,7 @@ impl Workbench {
                         .id((key.0, key.1 + 1))
                         .cursor_pointer()
                         .hover(|d| d.text_color(T::color(T::link())))
-                        .child(format!("来自「{name}」"))
+                        .child(t!("来自「{from}」", from = &name))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.nav.task_detail = None;
                             this.enter_card(&s, window, cx);

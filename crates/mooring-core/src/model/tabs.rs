@@ -9,29 +9,29 @@ impl Workspace {
         match edit {
             Edit::CreateTab { tab } => {
                 if self.tabs.iter().any(|t| t.id == tab.id) {
-                    return Err("标签已存在".into());
+                    return Err(t!("标签已存在").into());
                 }
                 let Some(layout) = &tab.layout else {
-                    return Err("标签里至少要有一个画面".into());
+                    return Err(t!("标签里至少要有一个画面").into());
                 };
                 if !layout.valid_ratios() {
-                    return Err("分屏比例必须在 0 与 1 之间".into());
+                    return Err(t!("分屏比例必须在 0 与 1 之间").into());
                 }
                 if !self.spaces.iter().any(|s| s.id == tab.space) {
-                    return Err("空间不存在".into());
+                    return Err(t!("空间不存在").into());
                 }
                 if (tab.default_task.as_ref())
                     .is_some_and(|id| !self.tasks.iter().any(|t| &t.id == id))
                 {
-                    return Err("默认待办不存在".into());
+                    return Err(t!("默认待办不存在").into());
                 }
                 let terminals = layout.ids();
                 for (i, id) in terminals.iter().enumerate() {
                     if terminals[..i].contains(id) {
-                        return Err("终端不能重复摆放".into());
+                        return Err(t!("终端不能重复摆放").into());
                     }
                     if !self.terminals.iter().any(|t| &t.id == id) {
-                        return Err("终端不存在".into());
+                        return Err(t!("终端不存在").into());
                     }
                 }
                 for id in &terminals {
@@ -47,7 +47,7 @@ impl Workspace {
                     .tabs
                     .iter()
                     .position(|t| t.id == id)
-                    .ok_or("标签不存在")?;
+                    .ok_or(t!("标签不存在"))?;
                 if before.as_ref() == Some(&id) {
                     return Ok(());
                 }
@@ -57,7 +57,7 @@ impl Workspace {
                         .tabs
                         .iter()
                         .position(|t| &t.id == other)
-                        .ok_or("目标标签不存在")?,
+                        .ok_or(t!("目标标签不存在"))?,
                     None => self.tabs.len(),
                 };
                 self.tabs.insert(to, tab);
@@ -65,20 +65,20 @@ impl Workspace {
             Edit::CloseTab { id, expect } => {
                 let mut held = self.tab_terminals(&id);
                 if !self.tabs.iter().any(|t| t.id == id) {
-                    return Err("标签不存在".into());
+                    return Err(t!("标签不存在").into());
                 }
                 if let Some(mut expect) = expect {
                     held.sort();
                     expect.sort();
                     if held != expect {
-                        return Err("这个标签里的画面刚变了，再确认一次要关掉哪些".into());
+                        return Err(t!("这个标签里的画面刚变了，再确认一次要关掉哪些").into());
                     }
                 }
                 self.tabs.retain(|t| t.id != id);
             }
             Edit::ClosePane { terminal } => {
                 if !self.take_pane(&terminal) {
-                    return Err("画面不存在".into());
+                    return Err(t!("画面不存在").into());
                 }
             }
             Edit::SplitPane {
@@ -90,19 +90,19 @@ impl Workspace {
                 ..
             } => {
                 if !(1..10000).contains(&share) {
-                    return Err("分屏比例必须在 0 与 1 之间".into());
+                    return Err(t!("分屏比例必须在 0 与 1 之间").into());
                 }
                 if !self.terminals.iter().any(|t| t.id == terminal) {
-                    return Err("终端不存在".into());
+                    return Err(t!("终端不存在").into());
                 }
                 if self.terminal_tab(&terminal).is_some() {
-                    return Err("终端已经摆在别的画面里".into());
+                    return Err(t!("终端已经摆在别的画面里").into());
                 }
                 let placed = self
                     .pane_layout(&target)?
                     .split_beside(&target, terminal, axis, before, share);
                 if !placed {
-                    return Err("画面不存在".into());
+                    return Err(t!("画面不存在").into());
                 }
             }
             Edit::MovePane {
@@ -111,13 +111,13 @@ impl Workspace {
                 side,
             } => {
                 if !self.terminals.iter().any(|t| t.id == terminal) {
-                    return Err("终端不存在".into());
+                    return Err(t!("终端不存在").into());
                 }
                 let together = self.terminal_tab(&target).map(|t| &t.id)
                     == self.terminal_tab(&terminal).map(|t| &t.id);
                 if !together {
                     let Some((axis, before)) = side else {
-                        return Err("两个画面不在同一个标签里，不能互换".into());
+                        return Err(t!("两个画面不在同一个标签里，不能互换").into());
                     };
                     self.pane_layout(&target)?;
                     self.take_pane(&terminal);
@@ -139,25 +139,25 @@ impl Workspace {
                 ratio,
             } => {
                 if !(1..10000).contains(&ratio) {
-                    return Err("分屏比例必须在 0 与 1 之间".into());
+                    return Err(t!("分屏比例必须在 0 与 1 之间").into());
                 }
                 let node = (self.tab_mut(&tab)?.layout.as_mut())
                     .and_then(|l| l.at_mut(&path))
                     .filter(|l| l.is_divider(axis, &anchors));
                 let Some(Layout::Split { ratio: current, .. }) = node else {
-                    return Err("这条分隔线刚被别处改掉了，再拖一次".into());
+                    return Err(t!("这条分隔线刚被别处改掉了，再拖一次").into());
                 };
                 *current = ratio;
             }
             Edit::ReplacePane { old, new } => {
                 if !self.terminals.iter().any(|t| t.id == new) {
-                    return Err("终端不存在".into());
+                    return Err(t!("终端不存在").into());
                 }
                 if self.terminal_tab(&new).is_some() {
-                    return Err("终端已经摆在别的画面里".into());
+                    return Err(t!("终端已经摆在别的画面里").into());
                 }
                 if !self.pane_layout(&old)?.replace(&old, &new) {
-                    return Err("画面不存在".into());
+                    return Err(t!("画面不存在").into());
                 }
             }
             _ => unreachable!("not a tab edit"),
@@ -168,7 +168,7 @@ impl Workspace {
         self.tabs
             .iter_mut()
             .find(|t| t.id == id)
-            .ok_or_else(|| "标签不存在".into())
+            .ok_or_else(|| t!("标签不存在").into())
     }
     /// The layout of the tab that shows `terminal`.
     fn pane_layout(&mut self, terminal: &str) -> Result<&mut Layout, String> {
@@ -176,7 +176,7 @@ impl Workspace {
             .iter_mut()
             .filter_map(|t| t.layout.as_mut())
             .find(|l| l.contains(terminal))
-            .ok_or_else(|| "画面不存在".into())
+            .ok_or_else(|| t!("画面不存在").into())
     }
     /// Takes `terminal` out of the tab showing it, which closes with its last pane.
     /// False if no tab showed it.

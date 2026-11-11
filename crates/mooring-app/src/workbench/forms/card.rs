@@ -32,12 +32,12 @@ impl Workbench {
                             .text_size(px(T::FORM_TITLE))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child(if self.tasks.editing_task.is_some() {
-                                "编辑待办"
+                                t!("编辑待办")
                             } else {
-                                "新建待办"
+                                t!("新建待办")
                             }),
                     )
-                    .child(hint("保存后出现在左栏「待办」和鸟瞰顶部"))
+                    .child(hint(t!("保存后出现在左栏「待办」和鸟瞰顶部")))
                     .child(div().flex_1())
                     .child(
                         button("form-close", "×")
@@ -56,7 +56,7 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .gap(px(T::S6))
-                    .child(form_label("要做什么", None, None))
+                    .child(form_label(t!("要做什么"), None, None))
                     .child(
                         div()
                             .rounded(px(T::CONTROL_RADIUS))
@@ -65,7 +65,9 @@ impl Workbench {
                             })
                             .child(form.fields[0].clone()),
                     )
-                    .when(title_bad, |d| d.child(hint("先写要做什么").text_color(error))),
+                    .when(title_bad, |d| {
+                        d.child(hint(t!("先写要做什么")).text_color(error))
+                    }),
             )
             .child(self.form_spaces(form, checks, cx))
             .child(form.fields[1].clone())
@@ -75,7 +77,11 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .gap(px(T::S6))
-                    .child(form_label("默认用哪个 Agent", Some("开始时还能改"), None))
+                    .child(form_label(
+                        t!("默认用哪个 Agent"),
+                        Some(t!("开始时还能改")),
+                        None,
+                    ))
                     .child(Agent::all().into_iter().fold(segments(), |row, agent| {
                         row.child(
                             segment(
@@ -101,9 +107,9 @@ impl Workbench {
                     }))
                     .when(checks.agent_missing, |d| {
                         d.child(
-                            hint(format!(
-                                "找不到 {} 命令：开始后会停在「找不到命令」。先安装或加进 PATH，或换一个 Agent",
-                                form.agent.executable()
+                            hint(t!(
+                                "找不到 {cmd} 命令：开始后会停在「找不到命令」。先安装或加进 PATH，或换一个 Agent",
+                                cmd = form.agent.executable()
                             ))
                             .text_color(error),
                         )
@@ -111,10 +117,10 @@ impl Workbench {
             );
         let blocked = checks.title_missing;
         let no_start = blocked || checks.dir_missing;
-        let save = button("save", "保存为待办");
+        let save = button("save", t!("保存为待办"));
         let start = button("save-start", "")
             .gap(px(T::S6))
-            .child("保存并开始")
+            .child(t!("保存并开始"))
             .child(
                 div()
                     .px(px(T::S4))
@@ -125,7 +131,7 @@ impl Workbench {
                     .text_size(px(T::KBD_SIZE))
                     .child(crate::ui::words::local_field("⌘⏎")),
             )
-            .aria_label("保存并开始");
+            .aria_label(t!("保存并开始"));
         card.child(
             div()
                 .flex()
@@ -136,12 +142,12 @@ impl Workbench {
                 .border_t(px(T::BORDER_WIDTH))
                 .border_color(T::color(T::border()))
                 .child(
-                    hint("都能再编辑；验收标准改字不会丢掉已挂的证据")
+                    hint(t!("都能再编辑；验收标准改字不会丢掉已挂的证据"))
                         .text_size(px(T::SMALL))
                         .mr_auto(),
                 )
                 .child(
-                    button("cancel", "取消").on_click(cx.listener(|this, _, _, cx| {
+                    button("cancel", t!("取消")).on_click(cx.listener(|this, _, _, cx| {
                         this.close_form();
                         cx.notify();
                     })),
@@ -191,7 +197,7 @@ impl Workbench {
                             .text_size(px(T::CHIP_SIZE))
                             .text_color(T::color(T::muted()))
                             .font_weight(gpui::FontWeight::NORMAL)
-                            .child("目录不在了"),
+                            .child(t!("目录不在了")),
                     )
                 })
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -208,9 +214,9 @@ impl Workbench {
             .flex_col()
             .gap(px(T::S6))
             .child(form_label(
-                "在哪个空间做",
+                t!("在哪个空间做"),
                 None,
-                Some("开始时在这个目录开终端".into()),
+                Some(t!("开始时在这个目录开终端").into()),
             ))
             .child(
                 div()
@@ -234,11 +240,11 @@ impl Workbench {
                         .items_center()
                         .gap(px(T::S8))
                         .child(
-                            hint("这个空间的目录不在了：可以先保存为待办，改好目录再开始")
+                            hint(t!("这个空间的目录不在了：可以先保存为待办，改好目录再开始"))
                                 .text_color(error),
                         )
                         .child(
-                            button("form-space-dir", "改空间目录")
+                            button("form-space-dir", t!("改空间目录"))
                                 .h(px(T::ICON_HEIGHT))
                                 .px(px(T::S6))
                                 .text_color(T::color(T::link()))

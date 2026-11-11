@@ -121,16 +121,16 @@ pub fn permissions(provides: &[Kind]) -> Vec<&'static str> {
     let mut out = Vec::new();
     for k in provides {
         out.push(match k {
-            Kind::Actions => "右键菜单或 ⌘P 里点了它，就在终端里运行它写的命令",
-            Kind::Hooks => "会话等你、出错、做完或命令结束时，在后台运行它写的命令或发 webhook",
-            Kind::Decorations => "定时在窗格所在目录里运行它写的命令，显示第一行输出",
-            Kind::Agent => "读这个 Agent 的对话记录，并能用它写的命令启动和恢复会话",
-            Kind::Rules => "只决定哪些命令算跑过验证，不运行任何东西",
-            Kind::Sidebar => "只决定左栏怎么排；WASM 排法在沙盒里跑，读不到文件和网络",
-            Kind::Effects => "只挑选标记完成时播哪种动画，不运行任何东西",
-            Kind::Setup => "装上、更新或打开时运行它的 setup 命令，停用或卸载时运行 teardown 撤回，可以改别的程序的设置",
-            Kind::Quota => "读它指定的文件或定时运行它写的命令，取某个 Agent 的额度",
-            Kind::Themes => "只给设置 › 外观多几套主题，不运行任何东西",
+            Kind::Actions => t!("右键菜单或 ⌘P 里点了它，就在终端里运行它写的命令"),
+            Kind::Hooks => t!("会话等你、出错、做完或命令结束时，在后台运行它写的命令或发 webhook"),
+            Kind::Decorations => t!("定时在窗格所在目录里运行它写的命令，显示第一行输出"),
+            Kind::Agent => t!("读这个 Agent 的对话记录，并能用它写的命令启动和恢复会话"),
+            Kind::Rules => t!("只决定哪些命令算跑过验证，不运行任何东西"),
+            Kind::Sidebar => t!("只决定左栏怎么排；WASM 排法在沙盒里跑，读不到文件和网络"),
+            Kind::Effects => t!("只挑选标记完成时播哪种动画，不运行任何东西"),
+            Kind::Setup => t!("装上、更新或打开时运行它的 setup 命令，停用或卸载时运行 teardown 撤回，可以改别的程序的设置"),
+            Kind::Quota => t!("读它指定的文件或定时运行它写的命令，取某个 Agent 的额度"),
+            Kind::Themes => t!("只给设置 › 外观多几套主题，不运行任何东西"),
         });
     }
     out
@@ -227,11 +227,14 @@ pub fn disclosure(provides: &[Kind], touches: &[String], network: Option<bool>) 
         .map(str::to_owned)
         .collect();
     if !touches.is_empty() {
-        out.push(format!("会改别的程序的文件：{}", touches.join("、")));
+        out.push(t!(
+            "会改别的程序的文件：{files}",
+            files = touches.join(t!("、"))
+        ));
     }
     match network {
-        Some(true) => out.push("会联网".into()),
-        Some(false) if runs_commands(provides) => out.push("声明不联网".into()),
+        Some(true) => out.push(t!("会联网").into()),
+        Some(false) if runs_commands(provides) => out.push(t!("声明不联网").into()),
         _ => {}
     }
     out
@@ -276,30 +279,44 @@ impl Entry {
     /// Refuses an entry that could not be installed safely, before fetching anything.
     pub fn check(&self) -> Result<(), String> {
         if !plugin::valid_id(&self.id) {
-            return Err(format!("id \"{}\" 不合法", self.id));
+            return Err(t!("id \"{id}\" 不合法", id = self.id));
         }
         if let Some(level) = self.mooring.filter(|l| *l > plugin::LEVEL) {
-            return Err(format!(
-                "要更新 Fibo 才能装 {}：它需要插件级别 {level}，这个版本是 {}",
-                self.id,
-                plugin::LEVEL
+            return Err(t!(
+                "要更新 Fibo 才能装 {id}：它需要插件级别 {level}，这个版本是 {cur}",
+                id = self.id,
+                level,
+                cur = plugin::LEVEL
             ));
         }
         if let Some(dir) = self.dir.as_deref().filter(|d| !safe_path(d)) {
-            return Err(format!("{} 的目录 \"{dir}\" 不安全", self.id));
+            return Err(t!("{id} 的目录 \"{dir}\" 不安全", id = self.id, dir));
         }
         if !self.files.iter().any(|f| f.path == "plugin.json") {
-            return Err(format!("{} 的文件里没有 plugin.json", self.id));
+            return Err(t!("{id} 的文件里没有 plugin.json", id = self.id));
         }
         for f in &self.files {
             if !safe_path(&f.path) {
-                return Err(format!("{} 的文件路径 \"{}\" 不安全", self.id, f.path));
+                return Err(t!(
+                    "{id} 的文件路径 \"{path}\" 不安全",
+                    id = self.id,
+                    path = f.path
+                ));
             }
             if f.size > MAX_FILE {
-                return Err(format!("{} 的 {} 太大（{} 字节）", self.id, f.path, f.size));
+                return Err(t!(
+                    "{id} 的 {path} 太大（{size} 字节）",
+                    id = self.id,
+                    path = f.path,
+                    size = f.size
+                ));
             }
             if f.sha256.len() != 64 || !f.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
-                return Err(format!("{} 的 {} 没有正确的 sha256", self.id, f.path));
+                return Err(t!(
+                    "{id} 的 {path} 没有正确的 sha256",
+                    id = self.id,
+                    path = f.path
+                ));
             }
         }
         Ok(())
@@ -336,21 +353,21 @@ pub fn index_of(dir: &Path) -> Result<Index, String> {
     for found in plugin::discover(dir) {
         let p = found
             .result
-            .map_err(|e| format!("{}：{e}", found.dir.display()))?;
+            .map_err(|e| t!("{display}：{e}", display = found.dir.display(), e))?;
         if found.dir.file_name() != Some(std::ffi::OsStr::new(&p.id)) {
-            return Err(format!(
-                "{}：目录名要和 id「{}」一样，安装时按 id 找文件",
-                found.dir.display(),
-                p.id
+            return Err(t!(
+                "{dir}：目录名要和 id「{id}」一样，安装时按 id 找文件",
+                dir = found.dir.display(),
+                id = p.id
             ));
         }
         let mut files = Vec::new();
         for file in shipped_files(&p) {
-            let bytes =
-                std::fs::read(&file).map_err(|e| format!("读不了 {}：{e}", file.display()))?;
+            let bytes = std::fs::read(&file)
+                .map_err(|e| t!("读不了 {display}：{e}", display = file.display(), e))?;
             let path = file
                 .strip_prefix(&p.dir)
-                .map_err(|_| format!("{} 不在插件目录里", file.display()))?
+                .map_err(|_| t!("{file} 不在插件目录里", file = file.display()))?
                 .to_string_lossy()
                 .into_owned();
             files.push(FileEntry {
@@ -395,18 +412,23 @@ fn older_versions(dir: &Path, id: &str) -> Result<Vec<Entry>, String> {
         if !e.path().is_dir() || name.starts_with('.') {
             continue;
         }
-        let p = plugin::check(&e.path()).map_err(|why| format!("{}：{why}", e.path().display()))?;
+        let p = plugin::check(&e.path())
+            .map_err(|why| t!("{display}：{e}", display = e.path().display(), e = why))?;
         if p.id != id {
-            return Err(format!("{}：id 要和插件一样（{id}）", e.path().display()));
+            return Err(t!(
+                "{dir}：id 要和插件一样（{id}）",
+                dir = e.path().display(),
+                id
+            ));
         }
         let mut files = Vec::new();
         for file in shipped_files(&p) {
-            let bytes =
-                std::fs::read(&file).map_err(|err| format!("读不了 {}：{err}", file.display()))?;
+            let bytes = std::fs::read(&file)
+                .map_err(|e| t!("读不了 {display}：{e}", display = file.display(), e))?;
             files.push(FileEntry {
                 path: file
                     .strip_prefix(&p.dir)
-                    .map_err(|_| format!("{} 不在插件目录里", file.display()))?
+                    .map_err(|_| t!("{file} 不在插件目录里", file = file.display()))?
                     .to_string_lossy()
                     .into_owned(),
                 sha256: sha256(&bytes),
@@ -434,11 +456,12 @@ pub fn render(index: &Index) -> String {
 
 fn parse(bytes: &[u8]) -> Result<Index, String> {
     let index: Index =
-        serde_json::from_slice(bytes).map_err(|e| format!("index.json 格式不对：{e}"))?;
+        serde_json::from_slice(bytes).map_err(|e| t!("index.json 格式不对：{e}", e))?;
     if index.api != API {
-        return Err(format!(
-            "插件目录格式是 api {}，这个版本只认 api {API}",
-            index.api
+        return Err(t!(
+            "插件目录格式是 api {got}，这个版本只认 api {API}",
+            got = index.api,
+            API
         ));
     }
     Ok(index)
@@ -477,8 +500,13 @@ pub fn bundled() -> Result<Vec<Offer>, String> {
     let Some(dir) = bundled_dir() else {
         return Ok(vec![]);
     };
-    let bytes = std::fs::read(dir.join("index.json"))
-        .map_err(|e| format!("读不了 {}：{e}", dir.join("index.json").display()))?;
+    let bytes = std::fs::read(dir.join("index.json")).map_err(|e| {
+        t!(
+            "读不了 {display}：{e}",
+            display = dir.join("index.json").display(),
+            e
+        )
+    })?;
     Ok(parse(&bytes)?
         .plugins
         .into_iter()
@@ -516,13 +544,14 @@ fn curl(url: &str) -> Result<Vec<u8>, String> {
         .arg(url)
         .stdin(std::process::Stdio::null())
         .output()
-        .map_err(|e| format!("运行 curl 失败：{e}"))?;
+        .map_err(|e| t!("运行 curl 失败：{e}", e))?;
     if !out.status.success() {
         let why = String::from_utf8_lossy(&out.stderr).trim().to_owned();
+        let code = format!("{:?}", out.status.code());
         return Err(if why.is_empty() {
-            format!("下载 {url} 失败（curl 退出码 {:?}）", out.status.code())
+            t!("下载 {url} 失败（curl 退出码 {code}）", url, code)
         } else {
-            format!("下载 {url} 失败：{why}")
+            t!("下载 {url} 失败：{why}", url, why)
         });
     }
     Ok(out.stdout)
@@ -533,7 +562,7 @@ pub fn fetch_remote(url: &str) -> Result<Vec<Offer>, String> {
     let base = url
         .rsplit_once('/')
         .map(|(b, _)| b.to_owned())
-        .ok_or_else(|| format!("{url} 不是一个地址"))?;
+        .ok_or_else(|| t!("{url} 不是一个地址", url))?;
     let bytes = curl(url)?;
     // Any failure to get a signature is no signature; this repository's address and the
     // pin on what is installed are what make that matter.
@@ -580,7 +609,8 @@ impl Offer {
                     file.push(version);
                 }
                 file.push(path);
-                std::fs::read(&file).map_err(|e| format!("读不了 {}：{e}", file.display()))
+                std::fs::read(&file)
+                    .map_err(|e| t!("读不了 {display}：{e}", display = file.display(), e))
             }
             Source::Remote(base) => {
                 let id = &self.entry.id;
@@ -608,15 +638,17 @@ impl Offer {
     fn origin_key(&self) -> String {
         match (&self.publisher, &self.source) {
             (Publisher::Unsigned, Source::Remote(base)) => base.clone(),
-            (Publisher::Unsigned, Source::Bundled(_)) => OFFICIAL.to_owned(),
+            (Publisher::Unsigned, Source::Bundled(_)) | (Publisher::Official, _) => {
+                OFFICIAL.to_owned()
+            }
             (publisher, _) => publisher.said(),
         }
     }
     /// Where it comes from, in words.
     pub fn origin(&self) -> &'static str {
         match self.source {
-            Source::Bundled(_) => "随 App 附带",
-            Source::Remote(_) => "远程目录",
+            Source::Bundled(_) => t!("随 App 附带"),
+            Source::Remote(_) => t!("远程目录"),
         }
     }
     /// Fetches and checks it into a staging directory without touching what is installed.
@@ -625,7 +657,7 @@ impl Offer {
     pub fn prepare(&self, plugins: &Path) -> Result<Prepared, String> {
         let e = &self.entry;
         e.check()?;
-        std::fs::create_dir_all(plugins).map_err(|err| format!("建不了插件目录：{err}"))?;
+        std::fs::create_dir_all(plugins).map_err(|e| t!("建不了插件目录：{e}", e))?;
         static STAGES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = STAGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let stage = plugins.join(format!(".installing-{}-{}-{n}", e.id, std::process::id()));
@@ -647,9 +679,10 @@ impl Offer {
         for f in &e.files {
             let bytes = self.fetch(&f.path)?;
             if bytes.len() as u64 != f.size || sha256(&bytes) != f.sha256 {
-                return Err(format!(
-                    "{} 的 {} 和目录里登记的不一致（大小或 sha256 不对），没有安装",
-                    e.id, f.path
+                return Err(t!(
+                    "{id} 的 {path} 和目录里登记的不一致（大小或 sha256 不对），没有安装",
+                    id = e.id,
+                    path = f.path
                 ));
             }
             let to = stage.join(&f.path);
@@ -660,29 +693,31 @@ impl Offer {
         }
         let p = plugin::check(&stage)?;
         if p.id != e.id {
-            return Err(format!(
-                "plugin.json 里的 id 是 {}，目录里登记的是 {}",
-                p.id, e.id
+            return Err(t!(
+                "plugin.json 里的 id 是 {got}，目录里登记的是 {expected}",
+                got = p.id,
+                expected = e.id
             ));
         }
         // What you are shown may never be less than what the package says of itself.
         if let Some(k) = p.provides.iter().find(|k| !e.provides.contains(k)) {
-            return Err(format!(
-                "{} 的 plugin.json 声明了 {}，目录里没有登记，没有安装",
-                e.id,
-                k.label()
+            return Err(t!(
+                "{id} 的 plugin.json 声明了 {kind}，目录里没有登记，没有安装",
+                id = e.id,
+                kind = k.label()
             ));
         }
         if let Some(t) = p.touches.iter().find(|t| !e.touches.contains(t)) {
-            return Err(format!(
-                "{} 的 plugin.json 说会改 {t}，目录里没有登记，没有安装",
-                e.id
+            return Err(t!(
+                "{id} 的 plugin.json 说会改 {t}，目录里没有登记，没有安装",
+                id = e.id,
+                t
             ));
         }
         if p.network == Some(true) && e.network != Some(true) {
-            return Err(format!(
-                "{} 的 plugin.json 说会联网，目录里没有登记，没有安装",
-                e.id
+            return Err(t!(
+                "{id} 的 plugin.json 说会联网，目录里没有登记，没有安装",
+                id = e.id
             ));
         }
         loadable(&p)?;
@@ -700,11 +735,13 @@ impl Offer {
         if old.is_none() {
             prepared.replacing.extend(match &self.publisher {
                 Publisher::Official => None,
-                Publisher::Signed { .. } => Some(format!(
-                    "发布者：{}，第一次见到这个密钥，以后换了会问你",
-                    self.publisher.said()
+                Publisher::Signed { .. } => Some(t!(
+                    "发布者：{who}，第一次见到这个密钥，以后换了会问你",
+                    who = self.publisher.said()
                 )),
-                Publisher::Unsigned => Some("这个目录没有签名，不能确认文件是谁发的".to_owned()),
+                Publisher::Unsigned => {
+                    Some(t!("这个目录没有签名，不能确认文件是谁发的").to_owned())
+                }
             });
         }
         prepared.must_ask = !prepared.replacing.is_empty()
@@ -722,7 +759,7 @@ impl Offer {
     }
     /// Installs it into this process's plugins directory (after `plugin::install`).
     pub fn install(&self) -> Result<PathBuf, String> {
-        let config = plugin::config().ok_or("找不到配置目录")?;
+        let config = plugin::config().ok_or(t!("找不到配置目录"))?;
         self.install_into(&plugin::dir(config))
     }
 }

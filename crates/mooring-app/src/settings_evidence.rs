@@ -237,7 +237,7 @@ pub(super) fn start(
             assert!(T::palette().backdrop.unwrap().picture.error().is_some());
             shot("material-broken", cx);
             theme("gone", r##""background":{"image":"images/nowhere.png"}"##, cx); wait(300).await;
-            assert!(cx.update(|a| a.global::<themes::Themes>().problems.iter().any(|(_, why)| why.contains("找不到背景图"))));
+            assert!(cx.update(|a| a.global::<themes::Themes>().problems.iter().any(|(_, why)| why.contains(&t!("找不到背景图 {path}", path = "images/nowhere.png")))));
             cx.update(|a| appearance::set_theme("dark", false, true, a).unwrap()); wait(300).await;
             assert_eq!(backing(cx), W::Opaque);
             // The editor's rows, on a theme with a picture.
@@ -267,7 +267,7 @@ pub(super) fn start(
             let id = "plugin:tide-themes/tide";
             let entry = cx.update(|a| a.global::<Themes>().get(id).cloned()).expect("the plugin's theme is offered");
             assert!(entry.read_only && entry.own_file().is_none());
-            assert_eq!(entry.as_file().name, "潮汐 副本");
+            assert_eq!(entry.as_file().name, t!("{name} 副本", name = "潮汐"));
             cx.update(|a| appearance::set_theme(id, false, true, a).unwrap());
             wait(300).await;
             assert_eq!(T::term().bg, 0x0b2530);

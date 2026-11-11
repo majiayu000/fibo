@@ -122,7 +122,7 @@ impl Connection {
                         };
                         if let Err(error) = sent {
                             let mut state = write_state.lock().unwrap();
-                            state.error = Some(format!("{error}；输入结果未知，请勿自动重发"));
+                            state.error = Some(t!("{error}；输入结果未知，请勿自动重发", error));
                             state.writable = false;
                             let _ = write_wake.unbounded_send(());
                             let _ = writer.shutdown(std::net::Shutdown::Both);
@@ -209,7 +209,7 @@ impl Connection {
             })();
             if let Err(error) = work {
                 let mut state = state.lock().unwrap();
-                state.error = Some(format!("连接已断开：{error}"));
+                state.error = Some(t!("连接已断开：{error}", error));
                 state.dropped = state.vt.is_some() && !state.ended;
                 state.writable = false;
                 if let Some(socket) = &state.socket {
@@ -256,7 +256,7 @@ impl Connection {
             remote: None,
         };
         let Some(linked) = linked else {
-            state.lock().unwrap().error = Some("那台电脑没连上".into());
+            state.lock().unwrap().error = Some(t!("那台电脑没连上").into());
             return result;
         };
         let client = linked.client;
@@ -300,7 +300,7 @@ impl Connection {
                     }
                     StreamBody::End { reason } => {
                         if !s.ended {
-                            s.error = Some(format!("连接已断开：{reason}"));
+                            s.error = Some(t!("连接已断开：{error}", error = reason));
                             s.dropped = s.vt.is_some();
                         }
                         Ok(())
@@ -308,7 +308,7 @@ impl Connection {
                     StreamBody::Event { .. } => Ok(()),
                 };
                 if let Err(e) = fed {
-                    s.error = Some(format!("画面读不懂：{e}"));
+                    s.error = Some(t!("画面读不懂：{e}", e));
                 }
                 drop(s);
                 if !dirty.swap(true, Ordering::AcqRel) {
@@ -332,7 +332,7 @@ impl Connection {
                     std::thread::spawn(move || {
                         let sizes = take.then_some(stream);
                         if let Err(e) = remote_typing(&client, &id, sizes, &typed) {
-                            state.lock().unwrap().error = Some(format!("没发过去：{e}"));
+                            state.lock().unwrap().error = Some(t!("没发过去：{e}", e));
                             let _ = wake.unbounded_send(());
                         }
                     });
@@ -340,7 +340,7 @@ impl Connection {
                 result.remote = Some((client, stream));
             }
             Err(e) => {
-                state.lock().unwrap().error = Some(format!("打不开那台电脑的终端：{e}"));
+                state.lock().unwrap().error = Some(t!("打不开那台电脑的终端：{e}", e));
                 let _ = wake.unbounded_send(());
             }
         }
@@ -350,12 +350,12 @@ impl Connection {
         let state = self.state.lock().map_err(|_| "terminal lock poisoned")?;
         // Another machine's terminal queues what is typed while its screen is on the way.
         if (state.vt.is_none() && self.remote.is_none()) || !state.writable {
-            return Err("终端尚未恢复或当前为只读".into());
+            return Err(t!("终端尚未恢复或当前为只读").into());
         }
         drop(state);
         self.sender
             .try_send(request)
-            .map_err(|_| "输入队列已满或连接已断开；未自动重试".into())
+            .map_err(|_| t!("输入队列已满或连接已断开；未自动重试").into())
     }
 }
 
@@ -417,7 +417,7 @@ impl RecognitionConnection {
                         receive::<Reply>(&mut stream)?,
                         Reply::Hello { major: MAJOR, .. }
                     ) {
-                        return Err(io::Error::other("识别状态协议不匹配"));
+                        return Err(io::Error::other(t!("识别状态协议不匹配")));
                     }
                     send(&mut stream, CONTROL, &Request::WatchRecognition)?;
                     loop {
@@ -431,7 +431,7 @@ impl RecognitionConnection {
                                     return Ok(());
                                 }
                             }
-                            _ => return Err(io::Error::other("识别状态响应无效")),
+                            _ => return Err(io::Error::other(t!("识别状态响应无效"))),
                         }
                     }
                 })();
@@ -448,7 +448,7 @@ impl RecognitionConnection {
                 }
                 if !reported {
                     reported = true;
-                    let lost = StatusLink::Lost(format!("识别状态连接中断：{error}"));
+                    let lost = StatusLink::Lost(t!("识别状态连接中断：{error}", error));
                     if wake.unbounded_send(lost).is_err() {
                         return;
                     }

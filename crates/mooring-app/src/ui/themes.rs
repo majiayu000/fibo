@@ -30,12 +30,12 @@ impl Entry {
     pub fn as_file(&self) -> ThemeFile {
         match &self.file {
             Some((_, file)) if self.read_only => ThemeFile {
-                name: format!("{} 副本", self.name),
+                name: t!("{name} 副本", name = self.name),
                 ..file.clone()
             },
             Some((_, file)) => file.clone(),
             None => ThemeFile {
-                name: format!("{} 副本", self.name),
+                name: t!("{name} 副本", name = self.name),
                 bg: self.palette.term.bg,
                 fg: self.palette.term.fg,
                 ..ThemeFile::default()
@@ -95,7 +95,7 @@ impl Themes {
         {
             out.problems.push((
                 "colors.json".to_owned(),
-                "内容有误，没能并入主题，里面的颜色没有生效".to_owned(),
+                t!("内容有误，没能并入主题，里面的颜色没有生效").to_owned(),
             ));
         }
         for path in paths {
@@ -140,7 +140,7 @@ impl Themes {
         }
         if !file.problems.is_empty() {
             self.problems
-                .push((shown.to_string(), file.problems.join("；")));
+                .push((shown.to_string(), file.problems.join(t!("；"))));
         }
         self.entries.push(Entry {
             id,
@@ -198,14 +198,15 @@ pub fn start(cx: &mut App) {
 }
 /// Write a theme: over its own file, or to a new one named after it. Returns its id.
 pub fn save(file: &ThemeFile, over: Option<&Path>) -> Result<String, String> {
-    let folder = dir().ok_or("找不到配置目录")?;
-    std::fs::create_dir_all(&folder).map_err(|e| format!("无法创建 {}：{e}", folder.display()))?;
+    let folder = dir().ok_or(t!("找不到配置目录"))?;
+    std::fs::create_dir_all(&folder)
+        .map_err(|e| t!("无法创建 {path}：{e}", path = folder.display(), e))?;
     let path = over.map_or_else(
         || free_path(&folder, &file_stem(&file.name)),
         Path::to_owned,
     );
     write_atomic(&path, file.to_json().as_bytes())
-        .map_err(|e| format!("无法保存 {}：{e}", path.display()))?;
+        .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
     Ok(format!(
         "file:{}",
         path.file_stem().unwrap_or_default().to_string_lossy()
@@ -223,15 +224,17 @@ fn free_path(folder: &Path, stem: &str) -> PathBuf {
 }
 /// A picture copied into the themes folder; returns the path a theme names it by.
 pub fn keep_picture(from: &Path) -> Result<String, String> {
-    keep_picture_in(&dir().ok_or("找不到配置目录")?, from)
+    keep_picture_in(&dir().ok_or(t!("找不到配置目录"))?, from)
 }
 /// The same picture again reuses its copy; another one with the same name gets its own, so
 /// a theme's picture never changes because another theme chose a file with that name.
 fn keep_picture_in(themes: &Path, from: &Path) -> Result<String, String> {
     let folder = themes.join("images");
-    std::fs::create_dir_all(&folder).map_err(|e| format!("无法创建 {}：{e}", folder.display()))?;
-    let name = Path::new(from.file_name().ok_or("这不是一个文件")?);
-    let bytes = std::fs::read(from).map_err(|e| format!("读不了 {}：{e}", from.display()))?;
+    std::fs::create_dir_all(&folder)
+        .map_err(|e| t!("无法创建 {path}：{e}", path = folder.display(), e))?;
+    let name = Path::new(from.file_name().ok_or(t!("这不是一个文件"))?);
+    let bytes = std::fs::read(from)
+        .map_err(|e| t!("读不了 {display}：{e}", display = from.display(), e))?;
     let (stem, extension) = (
         name.file_stem().unwrap_or_default().to_string_lossy(),
         name.extension()
@@ -247,16 +250,17 @@ fn keep_picture_in(themes: &Path, from: &Path) -> Result<String, String> {
             Err(_) => false,
         };
         if !same {
-            write_atomic(&to, &bytes).map_err(|e| format!("无法复制到 {}：{e}", to.display()))?;
+            write_atomic(&to, &bytes)
+                .map_err(|e| t!("无法复制到 {path}：{e}", path = to.display(), e))?;
         }
         return Ok(format!("images/{candidate}"));
     }
-    Err("找不到可用的文件名".to_owned())
+    Err(t!("找不到可用的文件名").to_owned())
 }
 /// A theme or an iTerm2 preset from anywhere, as a theme file ready to save.
 pub fn import(path: &Path) -> Result<ThemeFile, String> {
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let text = std::fs::read_to_string(path).map_err(|e| format!("读不了这个文件：{e}"))?;
+    let text = std::fs::read_to_string(path).map_err(|e| t!("读不了这个文件：{e}", e))?;
     if path.extension().is_some_and(|e| e == "itermcolors") {
         ThemeFile::from_itermcolors(&text, &stem)
     } else {

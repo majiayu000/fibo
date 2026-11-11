@@ -484,7 +484,7 @@ pub fn load_files(files: Vec<PathBuf>, home: &Path) -> (Vec<AgentSpec>, Vec<Load
                 if r.file.as_path() == old.file.as_deref().unwrap_or(Path::new(""))
                     && r.result.is_ok()
                 {
-                    r.result = Err(format!("被后面的 {} 取代", file.display()));
+                    r.result = Err(t!("被后面的 {path} 取代", path = file.display()));
                 }
             }
             *old = spec;
@@ -496,12 +496,14 @@ pub fn load_files(files: Vec<PathBuf>, home: &Path) -> (Vec<AgentSpec>, Vec<Load
 }
 
 fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
-    let d: Declaration = serde_json::from_slice(&bytes).map_err(|e| format!("格式不对：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}#runtime", e))?;
+    let d: Declaration =
+        serde_json::from_slice(&bytes).map_err(|e| t!("格式不对：{e}#runtime", e))?;
     if d.api == 0 || d.api > API {
-        return Err(format!(
-            "声明格式是 api {}，这个版本只认 api 1 到 {API}",
-            d.api
+        return Err(t!(
+            "声明格式是 api {api}，这个版本只认 api 1 到 {max}",
+            api = d.api,
+            max = API,
         ));
     }
     let id_ok = !d.id.is_empty()
@@ -512,9 +514,9 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
     if !id_ok {
-        return Err(format!(
-            "id \"{}\" 只能用小写字母、数字和 -，不超过 40 个字",
-            d.id
+        return Err(t!(
+            "id \"{id}\" 只能用小写字母、数字和 -，不超过 40 个字#runtime",
+            id = &d.id,
         ));
     }
     let builtin = known.iter().filter(|s| s.file.is_none());
@@ -522,47 +524,52 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
         .clone()
         .find(|s| s.key.eq_ignore_ascii_case(&d.id) || s.executable == d.id)
     {
-        return Err(format!("id \"{}\" 和内置的 {} 重名", d.id, s.name));
+        return Err(t!(
+            "id \"{id}\" 和内置的 {name} 重名",
+            id = &d.id,
+            name = &s.name
+        ));
     }
     if d.executable.trim().is_empty() || d.executable.contains('/') {
-        return Err("executable 要写可执行文件名，不带路径".into());
+        return Err(t!("executable 要写可执行文件名，不带路径").into());
     }
     if let Some(s) = known
         .iter()
         .find(|s| s.executable == d.executable && s.key != d.id)
     {
-        return Err(format!(
-            "executable \"{}\" 已经是 {} 的，同一个程序认不出是谁",
-            d.executable, s.name
+        return Err(t!(
+            "executable \"{exec}\" 已经是 {name} 的，同一个程序认不出是谁",
+            exec = &d.executable,
+            name = &s.name,
         ));
     }
     if d.start.trim().is_empty() || d.resume.trim().is_empty() {
-        return Err("start 和 resume 都要写命令".into());
+        return Err(t!("start 和 resume 都要写命令").into());
     }
     let mut transcripts = d.transcripts;
     let mut source = d.source;
     if let Some(s) = source.as_mut() {
         if d.api < 2 {
-            return Err("source 需要 api 2".into());
+            return Err(t!("source 需要 api 2").into());
         }
         if let Ok(rest) = s.sqlite.strip_prefix("~") {
             s.sqlite = home.join(rest);
         }
         if !s.sqlite.is_absolute() {
-            return Err("source.sqlite 要写绝对路径或 ~/ 开头".into());
+            return Err(t!("source.sqlite 要写绝对路径或 ~/ 开头").into());
         }
         for (name, q) in [("sessions", &s.sessions), ("records", &s.records)] {
             if !q.trim_start().to_ascii_lowercase().starts_with("select") {
-                return Err(format!("source.{name} 要写一条 SELECT 查询"));
+                return Err(t!("source.{name} 要写一条 SELECT 查询", name));
             }
         }
         if !(200..=60_000).contains(&s.poll_ms) {
-            return Err("source.poll_ms 要在 200 到 60000 之间".into());
+            return Err(t!("source.poll_ms 要在 200 到 60000 之间").into());
         }
         match transcripts.as_ref() {
-            None => return Err("写了 source 也要写 transcripts，说明每行记录里的字段".into()),
+            None => return Err(t!("写了 source 也要写 transcripts，说明每行记录里的字段").into()),
             Some(t) if !t.root.as_os_str().is_empty() => {
-                return Err("用 source 时不写 transcripts.root，记录由 Fibo 自己存放".into());
+                return Err(t!("用 source 时不写 transcripts.root，记录由 Fibo 自己存放").into());
             }
             _ => {}
         }
@@ -573,7 +580,7 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
                 t.root = home.join(rest);
             }
             if !t.root.is_absolute() {
-                return Err("transcripts.root 要写绝对路径或 ~/ 开头".into());
+                return Err(t!("transcripts.root 要写绝对路径或 ~/ 开头").into());
             }
         }
         let pointers = [
@@ -584,40 +591,37 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             t.parent.as_ref(),
         ];
         if let Some(p) = pointers.into_iter().flatten().find(|p| !p.starts_with('/')) {
-            return Err(format!(
-                "transcripts 里的 \"{p}\" 要写成 / 开头的 JSON 指针"
-            ));
+            return Err(t!("transcripts 里的 \"{p}\" 要写成 / 开头的 JSON 指针", p));
         }
         if (!t.events.is_empty() || t.parent.is_some()) && d.api < 2 {
-            return Err("transcripts.events / parent 需要 api 2".into());
+            return Err(t!("transcripts.events / parent 需要 api 2").into());
         }
         if let Some(p) = &t.title {
             if d.api < 2 {
-                return Err("transcripts.title 需要 api 2".into());
+                return Err(t!("transcripts.title 需要 api 2").into());
             }
             if !p.starts_with('/') {
-                return Err(format!(
-                    "transcripts.title \"{p}\" 要写成 / 开头的 JSON 指针"
-                ));
+                return Err(t!("transcripts.title \"{p}\" 要写成 / 开头的 JSON 指针", p));
             }
         }
         for (i, e) in t.events.iter().enumerate() {
             let n = i + 1;
             if e.when.is_empty() {
-                return Err(format!("events 第 {n} 条的 when 不能为空"));
+                return Err(t!("events 第 {n} 条的 when 不能为空", n));
             }
             if e.turn.is_none() && e.tool.is_none() && e.result.is_none() {
-                return Err(format!("events 第 {n} 条要写 turn、tool 或 result 之一"));
+                return Err(t!("events 第 {n} 条要写 turn、tool 或 result 之一", n));
             }
             if let Some(t) = &e.tool {
                 match t.kind {
                     Some(ToolKind::Command) if t.command.is_none() => {
-                        return Err(format!(
-                            "events 第 {n} 条的 tool 是 command，要写 command 指针"
+                        return Err(t!(
+                            "events 第 {n} 条的 tool 是 command，要写 command 指针",
+                            n
                         ));
                     }
                     Some(ToolKind::Edit) if t.path.is_none() => {
-                        return Err(format!("events 第 {n} 条的 tool 是 edit，要写 path 指针"));
+                        return Err(t!("events 第 {n} 条的 tool 是 edit，要写 path 指针", n));
                     }
                     _ => {}
                 }
@@ -648,8 +652,10 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
                         .flatten(),
                 );
             if let Some(p) = pointers.into_iter().find(|p| !p.starts_with('/')) {
-                return Err(format!(
-                    "events 第 {n} 条的 \"{p}\" 要写成 / 开头的 JSON 指针"
+                return Err(t!(
+                    "events 第 {n} 条的 \"{p}\" 要写成 / 开头的 JSON 指针",
+                    n,
+                    p
                 ));
             }
         }
@@ -660,10 +666,10 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             || d.answers.is_some()
             || !d.input_hint.is_empty())
     {
-        return Err("screen_rules、interrupt、answers 和 input_hint 需要 api 2".into());
+        return Err(t!("screen_rules、interrupt、answers 和 input_hint 需要 api 2").into());
     }
     if d.input_hint.iter().any(|h| h.trim().is_empty()) {
-        return Err("input_hint 不能有空字符串，否则任何画面都算输入框就绪".into());
+        return Err(t!("input_hint 不能有空字符串，否则任何画面都算输入框就绪").into());
     }
     if let Some(a) = &d.answers {
         a.check()?;
@@ -675,10 +681,15 @@ fn declare(file: &Path, home: &Path, known: &[AgentSpec]) -> Result<AgentSpec, S
             let key: &'static [u8] = match i.key.as_str() {
                 "esc" => b"\x1b",
                 "ctrl-c" => b"\x03",
-                other => return Err(format!("interrupt.key 只能是 esc 或 ctrl-c，不是 {other}")),
+                other => {
+                    return Err(t!(
+                        "interrupt.key 只能是 esc 或 ctrl-c，不是 {other}",
+                        other
+                    ));
+                }
             };
             if !(1..=3).contains(&i.presses) {
-                return Err("interrupt.presses 要在 1 到 3 之间".into());
+                return Err(t!("interrupt.presses 要在 1 到 3 之间").into());
             }
             Some(Interrupt {
                 key,

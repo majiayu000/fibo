@@ -58,23 +58,23 @@ fn store(chain: Option<&PathBuf>, plugin: &str, key: &str, value: &str) -> Resul
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("运行 security 失败：{e}"))?;
+        .map_err(|e| t!("运行 security 失败：{e}", e))?;
     if let Some(mut stdin) = child.stdin.take() {
         stdin
             .write_all(line.as_bytes())
-            .map_err(|e| format!("写不进钥匙串：{e}"))?;
+            .map_err(|e| t!("写不进钥匙串：{e}", e))?;
     }
     let out = child
         .wait_with_output()
-        .map_err(|e| format!("写不进钥匙串：{e}"))?;
+        .map_err(|e| t!("写不进钥匙串：{e}", e))?;
     // `security -i` exits 0 whatever its commands did: what it said is the only sign.
     let said = String::from_utf8_lossy(&out.stderr);
     if out.status.success() && !said.contains("security:") && !said.contains("error") {
         Ok(())
     } else {
-        Err(format!(
-            "写不进钥匙串：{}",
-            crate::content::short(said.trim(), 200)
+        Err(t!(
+            "写不进钥匙串：{e}",
+            e = crate::content::short(said.trim(), 200)
         ))
     }
 }

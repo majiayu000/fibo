@@ -30,26 +30,33 @@ pub fn matches(rule: &[String], words: &[&str]) -> bool {
 }
 
 fn read(file: &Path) -> Result<Vec<Vec<String>>, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}", e))?;
     let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
-        return Err(format!("规则格式是 api {}，这个版本只认 api {API}", f.api));
+        return Err(t!(
+            "规则格式是 api {got}，这个版本只认 api {api}",
+            got = f.api,
+            api = API
+        ));
     }
     if f.verify.is_empty() {
-        return Err("verify 至少写一条".into());
+        return Err(t!("verify 至少写一条").into());
     }
     for rule in &f.verify {
         match rule.first().map(String::as_str) {
-            None => return Err("verify 里有一条是空的".into()),
+            None => return Err(t!("verify 里有一条是空的").into()),
             // A leading wildcard would make every command a test.
-            Some("*") => return Err(format!("{rule:?} 不能用 * 开头")),
+            Some("*") => return Err(t!("{rule} 不能用 * 开头", rule = format!("{rule:?}"))),
             _ => {}
         }
         if rule
             .iter()
             .any(|w| w.trim().is_empty() || w.contains(char::is_whitespace))
         {
-            return Err(format!("{rule:?} 每个词要单独写，不能带空格"));
+            return Err(t!(
+                "{rule} 每个词要单独写，不能带空格",
+                rule = format!("{rule:?}")
+            ));
         }
     }
     Ok(f.verify)
@@ -64,7 +71,12 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Vec<String>>, Vec<Loaded>) {
             file: file.clone(),
             result: result
                 .as_ref()
-                .map(|r| r.iter().map(|w| w.join(" ")).collect::<Vec<_>>().join("、"))
+                .map(|r| {
+                    r.iter()
+                        .map(|w| w.join(" "))
+                        .collect::<Vec<_>>()
+                        .join(t!("、"))
+                })
                 .map_err(Clone::clone),
         });
         if let Ok(found) = result {

@@ -132,36 +132,36 @@ impl Style {
     }
     pub fn label(self) -> &'static str {
         match self {
-            Self::Seal => "印章",
-            Self::Stamp => "落印",
-            Self::Sweep => "扫光合上",
-            Self::Dissolve => "化进侧栏",
-            Self::Fade => "只淡出",
-            Self::Relief => "松口气",
-            Self::Wake => "睡醒了",
-            Self::Sunrise => "小太阳",
-            Self::Heart => "比心",
-            Self::Cat => "小猫",
-            Self::Tea => "一杯热茶",
-            Self::Hop => "蹦回家",
-            Self::Moor => "靠岸",
-            Self::Gravity => "字往下掉",
-            Self::Swirl => "漩涡",
-            Self::Backspace => "退格收工",
-            Self::Crt => "老显示器关机",
-            Self::Confetti => "彩纸",
+            Self::Seal => t!("印章"),
+            Self::Stamp => t!("落印"),
+            Self::Sweep => t!("扫光合上"),
+            Self::Dissolve => t!("化进侧栏"),
+            Self::Fade => t!("只淡出"),
+            Self::Relief => t!("松口气"),
+            Self::Wake => t!("睡醒了"),
+            Self::Sunrise => t!("小太阳"),
+            Self::Heart => t!("比心"),
+            Self::Cat => t!("小猫"),
+            Self::Tea => t!("一杯热茶"),
+            Self::Hop => t!("蹦回家"),
+            Self::Moor => t!("靠岸"),
+            Self::Gravity => t!("字往下掉"),
+            Self::Swirl => t!("漩涡"),
+            Self::Backspace => t!("退格收工"),
+            Self::Crt => t!("老显示器关机"),
+            Self::Confetti => t!("彩纸"),
         }
     }
     /// What the face styles say after 做完了.
     pub fn greeting(self) -> Option<&'static str> {
         match self {
-            Self::Relief => Some("辛苦啦"),
-            Self::Wake => Some("起来活动一下吧"),
-            Self::Sunrise => Some("今天也很棒"),
-            Self::Heart => Some("比个心"),
-            Self::Cat => Some("喵～"),
-            Self::Tea => Some("歇一会儿吧"),
-            Self::Hop => Some("回家啦"),
+            Self::Relief => Some(t!("辛苦啦")),
+            Self::Wake => Some(t!("起来活动一下吧")),
+            Self::Sunrise => Some(t!("今天也很棒")),
+            Self::Heart => Some(t!("比个心")),
+            Self::Cat => Some(t!("喵～")),
+            Self::Tea => Some(t!("歇一会儿吧")),
+            Self::Hop => Some(t!("回家啦")),
             _ => None,
         }
     }
@@ -260,25 +260,32 @@ struct CompleteFile {
 }
 
 fn read(file: &Path) -> Result<Option<Complete>, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}", e))?;
     let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
-        return Err(format!("动效格式是 api {}，这个版本只认 api {API}", f.api));
+        return Err(t!(
+            "动效格式是 api {got}，这个版本只认 api {API}",
+            got = f.api,
+            API
+        ));
     }
     let Some(c) = f.complete else {
         return Ok(None);
     };
     let ms = c.duration_ms.unwrap_or(c.style.default_ms());
     if !(MIN_MS..=MAX_MS).contains(&ms) {
-        return Err(format!(
-            "duration_ms 要在 {MIN_MS}–{MAX_MS} 之间，写的是 {ms}"
+        return Err(t!(
+            "duration_ms 要在 {MIN_MS}–{MAX_MS} 之间，写的是 {ms}",
+            MIN_MS,
+            MAX_MS,
+            ms
         ));
     }
     let face = match c.face {
         Some(_) if !Style::FACES.contains(&c.style) => {
-            return Err(format!(
-                "face 只能配脸的动画，「{}」没有脸",
-                c.style.label()
+            return Err(t!(
+                "face 只能配脸的动画，「{style}」没有脸",
+                style = c.style.label()
             ));
         }
         Some(sheet) => Some(crate::face::intern(Script::build(sheet, ms as u32)?)),
@@ -296,16 +303,17 @@ fn read(file: &Path) -> Result<Option<Complete>, String> {
 }
 
 fn describe(c: &Complete) -> String {
-    format!(
-        "标记完成时播放「{}」，{:.1} 秒{}",
-        c.style.label(),
-        c.duration.as_secs_f32(),
-        if c.land {
-            "，最后落到侧栏那一行"
-        } else {
-            ""
-        }
-    )
+    let style = c.style.label();
+    let secs = format!("{:.1}", c.duration.as_secs_f32());
+    if c.land {
+        t!(
+            "标记完成时播放「{style}」，{secs} 秒，最后落到侧栏那一行",
+            style,
+            secs
+        )
+    } else {
+        t!("标记完成时播放「{style}」，{secs} 秒", style, secs)
+    }
 }
 
 /// One plugin's animation, offered in settings beside the built-in styles.
@@ -345,22 +353,22 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Preset>, Vec<Loaded>) {
             Ok(Some(c)) => {
                 let (id, name) = owner(&file);
                 if presets.iter().any(|p| p.id == id) {
-                    Err(format!("{id} 已经有一个完成动画，这个没有加进选项"))
+                    Err(t!("{id} 已经有一个完成动画，这个没有加进选项", id))
                 } else {
                     let preset = Preset {
                         id,
                         name,
                         complete: c,
                     };
-                    let did = format!(
-                        "{}；装上或打开时就换成它，外观 › 标记完成动画里能换回别的",
-                        describe(&c)
+                    let did = t!(
+                        "{desc}；装上或打开时就换成它，外观 › 标记完成动画里能换回别的",
+                        desc = describe(&c)
                     );
                     presets.push(preset);
                     Ok(did)
                 }
             }
-            Ok(None) => Ok("没有设置任何动效".into()),
+            Ok(None) => Ok(t!("没有设置任何动效").into()),
             Err(e) => Err(e),
         };
         report.push(Loaded { file, result });
@@ -473,7 +481,7 @@ pub fn picked() -> Option<Pick> {
 }
 /// Picks the animation from now on and keeps it for the next start; None is the seal.
 pub fn pick(choice: Option<Pick>) -> Result<(), String> {
-    let path = picked_path().ok_or("找不到配置目录")?;
+    let path = picked_path().ok_or(t!("找不到配置目录"))?;
     match &choice {
         Some(c) => path
             .parent()
@@ -484,7 +492,7 @@ pub fn pick(choice: Option<Pick>) -> Result<(), String> {
             _ => Ok(()),
         },
     }
-    .map_err(|e| format!("无法保存 {}：{e}", path.display()))?;
+    .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
     *PICKED.lock().unwrap_or_else(|e| e.into_inner()) = choice;
     Ok(())
 }

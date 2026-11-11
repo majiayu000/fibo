@@ -81,7 +81,7 @@ pub fn file() -> Option<PathBuf> {
 }
 
 pub fn load() -> io::Result<Vec<Spec>> {
-    load_from(&file().ok_or_else(|| io::Error::other("找不到配置目录"))?)
+    load_from(&file().ok_or_else(|| io::Error::other(t!("找不到配置目录")))?)
 }
 
 fn load_from(file: &std::path::Path) -> io::Result<Vec<Spec>> {
@@ -91,21 +91,21 @@ fn load_from(file: &std::path::Path) -> io::Result<Vec<Spec>> {
         Err(e) => {
             return Err(io::Error::new(
                 e.kind(),
-                format!("读不了 {}：{e}", file.display()),
+                t!("读不了 {display}：{e}", display = file.display(), e),
             ));
         }
     };
     serde_json::from_slice(&bytes).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("{} 格式不对：{e}", file.display()),
+            t!("{display} 格式不对：{e}", display = file.display(), e),
         )
     })
 }
 
 pub fn save(specs: &[Spec]) -> io::Result<()> {
     save_to(
-        &file().ok_or_else(|| io::Error::other("找不到配置目录"))?,
+        &file().ok_or_else(|| io::Error::other(t!("找不到配置目录")))?,
         specs,
     )
 }
@@ -131,7 +131,7 @@ fn with_quiet(mut specs: Vec<Spec>, host: &str, quiet: bool) -> Option<Vec<Spec>
 /// Sets 先不管 on what the file holds now, leaving everything else in it alone.
 pub fn set_quiet(host: &str, quiet: bool) -> io::Result<()> {
     let specs = with_quiet(load()?, host, quiet)
-        .ok_or_else(|| io::Error::other(format!("machines.json 里没有 {host}")))?;
+        .ok_or_else(|| io::Error::other(t!("machines.json 里没有 {host}", host)))?;
     save(&specs)
 }
 /// `next` with what `saved` says about 先不管: a list held since before the switch does not
@@ -147,7 +147,7 @@ fn keep_quiet(mut next: Vec<Spec>, saved: &[Spec]) -> Vec<Spec> {
 /// Saves the list settings edits, which adds and removes machines and nothing else.
 pub fn save_keeping_quiet(next: &[Spec]) -> io::Result<()> {
     save_keeping_quiet_to(
-        &file().ok_or_else(|| io::Error::other("找不到配置目录"))?,
+        &file().ok_or_else(|| io::Error::other(t!("找不到配置目录")))?,
         next,
     )
 }
@@ -375,7 +375,7 @@ fn run_once(
                 }
             }
             Err(RecvTimeoutError::Disconnected) => {
-                return Err(io::Error::other("事件流断了"));
+                return Err(io::Error::other(t!("事件流断了")));
             }
         }
     }
@@ -384,7 +384,7 @@ fn run_once(
 /// The machine answered but its host is not there to ask: Mooring is not open on it.
 fn not_running(e: io::Error) -> io::Error {
     if e.to_string().starts_with("RPC connect") {
-        io::Error::other("那台电脑上的 Fibo 没打开")
+        io::Error::other(t!("那台电脑上的 Fibo 没打开"))
     } else {
         e
     }
@@ -406,7 +406,7 @@ fn apply(view: &Mutex<View>, machine: Option<Machine>, list: List) -> bool {
 }
 
 fn parse<T: serde::de::DeserializeOwned>(v: serde_json::Value) -> io::Result<T> {
-    serde_json::from_value(v).map_err(|e| io::Error::other(format!("对方的回复读不懂：{e}")))
+    serde_json::from_value(v).map_err(|e| io::Error::other(t!("对方的回复读不懂：{e}", e)))
 }
 
 #[cfg(test)]

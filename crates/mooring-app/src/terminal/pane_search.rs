@@ -5,7 +5,7 @@ use mooring_core::terminal::libghostty_vt::terminal::ScrollViewport;
 
 impl Pane {
     pub fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let field = cx.new(|cx| crate::ui::field::Field::new("搜索滚动内容", "", cx));
+        let field = cx.new(|cx| crate::ui::field::Field::new(t!("搜索滚动内容"), "", cx));
         window.focus(&field.focus_handle(cx), cx);
         // Enter finds, then steps to the next match; the panel's buttons do the same.
         let events = cx.subscribe(&field, |this, _, event, cx| {
@@ -81,7 +81,7 @@ impl Pane {
                 .map_err(|_| "terminal lock poisoned".to_owned())?
                 .vt
                 .as_ref()
-                .ok_or("终端尚未恢复".to_owned())?
+                .ok_or_else(|| t!("终端尚未恢复").to_owned())?
                 .search(&query)
                 .map_err(|e| e.to_string())
         });

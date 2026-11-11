@@ -292,18 +292,24 @@ impl Background {
     }
     /// "后台仍有子 Agent 1 个、shell 2 个", or `None` when nothing is in flight.
     pub fn describe(&self) -> Option<String> {
-        let parts: Vec<String> = [
-            (self.agents, "子 Agent"),
-            (self.jobs, "任务"),
-            (self.shells - self.jobs.min(self.shells), "shell"),
-            (self.monitors, "监视任务"),
-            (self.crons, "已排定唤醒"),
-        ]
-        .into_iter()
-        .filter(|(n, _)| *n > 0)
-        .map(|(n, kind)| format!("{kind} {n} 个"))
-        .collect();
-        (!parts.is_empty()).then(|| format!("后台仍有{}", parts.join("、")))
+        let shells = self.shells - self.jobs.min(self.shells);
+        let mut parts = Vec::new();
+        if self.agents > 0 {
+            parts.push(t!("子 Agent {n} 个", n = self.agents));
+        }
+        if self.jobs > 0 {
+            parts.push(t!("任务 {n} 个", n = self.jobs));
+        }
+        if shells > 0 {
+            parts.push(t!("shell {n} 个", n = shells));
+        }
+        if self.monitors > 0 {
+            parts.push(t!("监视任务 {n} 个", n = self.monitors));
+        }
+        if self.crons > 0 {
+            parts.push(t!("已排定唤醒 {n} 个", n = self.crons));
+        }
+        (!parts.is_empty()).then(|| t!("后台仍有{list}", list = parts.join(t!("、"))))
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -335,24 +341,24 @@ pub fn topic(title: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     const LEAD: [&str; 20] = [
-        "你",
-        "请",
-        "帮我",
-        "帮忙",
-        "麻烦",
-        "能不能",
-        "可以",
-        "看看",
-        "看下",
-        "看一下",
-        "查查",
-        "查一下",
-        "一下",
-        "我想要",
-        "我想",
-        "我准备",
-        "我要",
-        "，",
+        not_ui!("你"),
+        not_ui!("请"),
+        not_ui!("帮我"),
+        not_ui!("帮忙"),
+        not_ui!("麻烦"),
+        not_ui!("能不能"),
+        not_ui!("可以"),
+        not_ui!("看看"),
+        not_ui!("看下"),
+        not_ui!("看一下"),
+        not_ui!("查查"),
+        not_ui!("查一下"),
+        not_ui!("一下"),
+        not_ui!("我想要"),
+        not_ui!("我想"),
+        not_ui!("我准备"),
+        not_ui!("我要"),
+        not_ui!("，"),
         ",",
         " ",
     ];
@@ -402,14 +408,17 @@ pub fn topic(title: &str) -> String {
 fn noise(line: &str) -> bool {
     let l = line.trim();
     let first = l.split_whitespace().next().unwrap_or("");
-    matches!(
-        l,
-        "跳至主要内容" | "跳到主要内容" | "Skip to main content" | "Skip to content"
-    ) || l
-        .chars()
-        .filter(|c| ('\u{2500}'..='\u{257f}').contains(c))
-        .count()
-        >= 2
+    [
+        not_ui!("跳至主要内容"),
+        not_ui!("跳到主要内容"),
+        "Skip to main content",
+        "Skip to content",
+    ]
+    .contains(&l)
+        || l.chars()
+            .filter(|c| ('\u{2500}'..='\u{257f}').contains(c))
+            .count()
+            >= 2
         || (l.starts_with('<') && l.ends_with('>'))
         || (first.len() >= 16 && first.chars().all(|c| c.is_ascii_hexdigit()))
 }
@@ -458,9 +467,9 @@ fn link(word: &str) -> String {
     format!("{lead} {short}").trim_start().to_owned()
 }
 /// `Here::done` when nothing confirmed has happened yet.
-pub const NO_DONE: &str = "尚无已确认的修改、提交或测试成功证据";
+pub const NO_DONE: &str = not_ui!("尚无已确认的修改、提交或测试成功证据");
 /// Hidden reason for a session whose working directory is temporary.
-pub const TEMPORARY_DIRECTORY: &str = "临时目录会话";
+pub const TEMPORARY_DIRECTORY: &str = not_ui!("临时目录会话");
 impl Content {
     /// One readable line on where the session stands, without the labels its state chip
     /// already says ("回合结束；Agent 自述：", "等待输入："): the question it waits on,
@@ -507,17 +516,16 @@ impl Content {
             .collect();
         ports.sort_unstable();
         ports.dedup();
-        let kind = if ports.len() as u32 == left {
-            "服务"
+        let line = if ports.len() as u32 == left {
+            t!("后台留着 {left} 个服务", left)
         } else {
-            "进程"
+            t!("后台留着 {left} 个进程", left)
         };
-        let line = format!("后台留着 {left} 个{kind}");
         Some(match ports.as_slice() {
             [] => line,
             _ => {
-                let ports: Vec<String> = ports.iter().map(u16::to_string).collect();
-                format!("{line} · 端口 {}", ports.join("、"))
+                let list: Vec<String> = ports.iter().map(u16::to_string).collect();
+                t!("{line} · 端口 {ports}", line, ports = list.join(t!("、")))
             }
         })
     }
@@ -538,14 +546,14 @@ impl Content {
         if !self.hidden_reason.is_empty() {
             Some(&self.hidden_reason)
         } else if !self.interactive {
-            Some("缺少交互入口证据")
+            Some(not_ui!("缺少交互入口证据"))
         } else {
             None
         }
     }
     pub fn here(&self) -> Here {
         let ask = if self.asks.is_empty() {
-            "历史尾段未覆盖用户原话，要求未知".into()
+            t!("历史尾段未覆盖用户原话，要求未知").into()
         } else {
             let quotes = if self.asks.len() <= 3 {
                 self.asks.iter().collect::<Vec<_>>()
@@ -558,10 +566,10 @@ impl Content {
                 .into_iter()
                 .map(|q| short(&q.text, 240))
                 .collect::<Vec<_>>()
-                .join("\n追加：")
+                .join(t!("\n追加：#here"))
         };
         let ask = if !self.first_ask_known && !self.asks.is_empty() {
-            format!("最初要求未覆盖；已读取追加：\n{ask}")
+            t!("最初要求未覆盖；已读取追加：\n{ask}", ask)
         } else {
             ask
         };
@@ -579,46 +587,52 @@ impl Content {
             facts.join("\n")
         };
         let stopped = match self.turn {
-            Turn::Waiting => format!("等待输入：{}", short(&self.waiting, 240)),
-            Turn::Error => format!("最后回合出错：{}", short(&self.error, 240)),
-            Turn::Running => "日志最后记录：回合进行中；不代表此刻进程仍在线".into(),
-            Turn::Interrupted => "回合已中断，尚未验收".into(),
+            Turn::Waiting => t!("等待输入：{text}", text = short(&self.waiting, 240)),
+            Turn::Error => t!("最后回合出错：{text}", text = short(&self.error, 240)),
+            Turn::Running => t!("日志最后记录：回合进行中；不代表此刻进程仍在线").into(),
+            Turn::Interrupted => t!("回合已中断，尚未验收").into(),
             Turn::Completed => match self.background.and_then(|b| b.describe()) {
-                Some(work) if self.waking() => format!(
-                    "等待唤醒，{work}；Agent 自述：{}",
-                    short(&self.last_reply, 220)
+                Some(work) if self.waking() => t!(
+                    "等待唤醒，{work}；Agent 自述：{reply}",
+                    work,
+                    reply = short(&self.last_reply, 220),
                 ),
-                Some(work) => format!(
-                    "回合结束，{}；Agent 自述：{}",
-                    self.left_behind().unwrap_or(work),
-                    short(&self.last_reply, 220)
+                Some(work) => t!(
+                    "回合结束，{work}；Agent 自述：{reply}",
+                    work = self.left_behind().unwrap_or(work),
+                    reply = short(&self.last_reply, 220),
                 ),
-                None => format!("回合结束；Agent 自述：{}", short(&self.last_reply, 260)),
+                None => t!(
+                    "回合结束；Agent 自述：{reply}",
+                    reply = short(&self.last_reply, 260)
+                ),
             },
             Turn::Unknown => {
                 if self.last_reply.is_empty() {
-                    "尾段没有明确回合结束事件，当前状态未知".into()
+                    t!("尾段没有明确回合结束事件，当前状态未知").into()
                 } else {
-                    format!(
-                        "最近 Agent 自述（状态未知）：{}",
-                        short(&self.last_reply, 240)
+                    t!(
+                        "最近 Agent 自述（状态未知）：{reply}",
+                        reply = short(&self.last_reply, 240),
                     )
                 }
             }
         };
         let next = match self.turn {
             Turn::Completed if self.background.is_some_and(|b| b.agents > 0) => {
-                "等后台子 Agent 结束后再核对结果"
+                t!("等后台子 Agent 结束后再核对结果")
             }
             Turn::Completed if self.background.is_some_and(|b| b.jobs > 0) => {
-                "等后台任务跑完，Agent 会接着做"
+                t!("等后台任务跑完，Agent 会接着做")
             }
-            Turn::Completed if self.waking() => "等它被监视任务或定时唤醒，回合结束后再核对",
-            Turn::Waiting => "回应上面的审批或问题",
-            Turn::Error => "检查失败证据后决定是否继续",
-            Turn::Running => "等回合结束后核对结果",
-            Turn::Completed if self.completed_claim => "按用户原话逐项核对机械证据，再决定是否验收",
-            _ => "先核对原话与日志，再决定是否继续",
+            Turn::Completed if self.waking() => t!("等它被监视任务或定时唤醒，回合结束后再核对"),
+            Turn::Waiting => t!("回应上面的审批或问题"),
+            Turn::Error => t!("检查失败证据后决定是否继续"),
+            Turn::Running => t!("等回合结束后核对结果"),
+            Turn::Completed if self.completed_claim => {
+                t!("按用户原话逐项核对机械证据，再决定是否验收")
+            }
+            _ => t!("先核对原话与日志，再决定是否继续"),
         }
         .into();
         Here {
@@ -638,9 +652,9 @@ impl Content {
             if let Some(first) = jobs.first() {
                 let name = short(&plain_line(&first.description), DOING_CHARS);
                 return Some(match (jobs.len(), name.is_empty()) {
-                    (1, false) => format!("等后台任务 {name}"),
-                    (n, false) => format!("等后台任务 {name} 等 {n} 个"),
-                    (n, true) => format!("等后台任务 {n} 个"),
+                    (1, false) => t!("等后台任务 {name}", name),
+                    (n, false) => t!("等后台任务 {name} 等 {n} 个", name, n),
+                    (n, true) => t!("等后台任务 {n} 个", n),
                 });
             }
         }
@@ -654,19 +668,19 @@ impl Content {
                     "file" => {
                         let path = e.summary.split_once('：').map_or(&*e.summary, |(_, p)| p);
                         let name = path.trim().rsplit('/').next().unwrap_or(path).trim();
-                        (!name.is_empty()).then(|| format!("改 {name}"))
+                        (!name.is_empty()).then(|| t!("改 {name}", name))
                     }
                     "test" => {
                         let command = e.summary.split(['：', '（']).next().unwrap_or_default();
-                        command_gist(command).map(|c| format!("跑测试 {c}"))
+                        command_gist(command).map(|c| t!("跑测试 {c}", c))
                     }
-                    "commit" => Some(format!("提交 {}", short(e.summary.trim(), 12))),
-                    "command" => command_gist(&e.summary).map(|c| format!("运行 {c}")),
+                    "commit" => Some(t!("提交 {s}", s = short(e.summary.trim(), 12))),
+                    "command" => command_gist(&e.summary).map(|c| t!("运行 {c}", c)),
                     _ => None,
                 });
         from_record.or_else(|| {
             let ask = plain_line(&self.asks.last()?.text);
-            (!ask.is_empty()).then(|| format!("做 {}", short(&ask, DOING_CHARS)))
+            (!ask.is_empty()).then(|| t!("做 {ask}", ask = short(&ask, DOING_CHARS)))
         })
     }
 }

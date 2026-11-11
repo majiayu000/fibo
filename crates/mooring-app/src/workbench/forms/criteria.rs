@@ -80,17 +80,17 @@ impl Workbench {
                     .child(div().flex_1().min_w_0().h_full().child(row.field.clone()))
                     .when_some(same, |d, j| {
                         d.child(
-                            hint(format!("和第 {} 条相同，保存时合并", j + 1))
+                            hint(t!("和第 {n} 条相同，保存时合并", n = j + 1))
                                 .flex_shrink_0()
                                 .text_color(warn),
                         )
                     })
                     .when(same.is_none() && focused, |d| {
-                        d.child(hint("回车加下一条").flex_shrink_0())
+                        d.child(hint(t!("回车加下一条")).flex_shrink_0())
                     })
                     .child(
                         button(("criterion-delete", i), "×")
-                            .aria_label(format!("删除第 {} 条", i + 1))
+                            .aria_label(t!("删除第 {n} 条", n = i + 1))
                             .w(px(T::ICON_HEIGHT))
                             .h(px(T::ICON_HEIGHT))
                             .px_0()
@@ -133,12 +133,12 @@ impl Workbench {
                         .flex()
                         .justify_end()
                         .text_color(T::color(T::muted()))
-                        .child("＋"),
+                        .child(t!("＋")),
                 )
                 .child(div().text_color(T::color(T::muted())).child(if count == 0 {
-                    "写一条完成时怎么核对…"
+                    t!("写一条完成时怎么核对…")
                 } else {
-                    "再加一条…"
+                    t!("再加一条…")
                 }))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.add_criterion(count, None, true, window, cx)
@@ -149,16 +149,16 @@ impl Workbench {
             .flex_col()
             .gap(px(T::S6))
             .child(form_label(
-                "验收标准",
-                Some("可选 · 也会交给 Agent，完成时逐条核对"),
-                (written > 0).then(|| format!("{written} 条")),
+                t!("验收标准"),
+                Some(t!("可选 · 也会交给 Agent，完成时逐条核对")),
+                (written > 0).then(|| t!("{written} 条", written)),
             ))
             .child(list)
             .child(if written == 0 && !form.fields[0].read(cx).text.trim().is_empty() {
-                hint("没有验收标准，完成时没有东西可核对；开始后待办信息条会一直提示「补写」")
+                hint(t!("没有验收标准，完成时没有东西可核对；开始后待办信息条会一直提示「补写」"))
                     .text_color(warn)
             } else {
-                hint("每条最好能被一条命令、一次测试或一处文件改动证明；Fibo 会从关联会话里找这类记录当证据。")
+                hint(t!("每条最好能被一条命令、一次测试或一处文件改动证明；Fibo 会从关联会话里找这类记录当证据。"))
             })
     }
 }

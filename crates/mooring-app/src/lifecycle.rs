@@ -32,7 +32,7 @@ impl Instance {
                     }
                     std::thread::sleep(Duration::from_millis(25));
                 }
-                return Err(io::Error::other("已有 Fibo 客户端，但无法唤醒其窗口"));
+                return Err(io::Error::other(t!("已有 Fibo 客户端，但无法唤醒其窗口")));
             }
         }
         match std::fs::remove_file(&socket) {
@@ -72,8 +72,10 @@ impl Drop for Instance {
     }
 }
 
-pub const OLD_BACKEND: &str = "后台版本过旧，需要重启后台（会中断正在运行的终端）";
-pub const RESET_NOTICE: &str = "此版本不迁移旧库。切换到新库后，旧空间、待办、标签布局、终端记录、Agent 会话归属和结局不会保留。原始 CLI 日志文件不会删除。请先处理运行中的终端，再手动备份旧库并切换；本窗口不会重启后台或删除数据。";
+pub const OLD_BACKEND: &str = tk!("后台版本过旧，需要重启后台（会中断正在运行的终端）");
+pub const RESET_NOTICE: &str = tk!(
+    "此版本不迁移旧库。切换到新库后，旧空间、待办、标签布局、终端记录、Agent 会话归属和结局不会保留。原始 CLI 日志文件不会删除。请先处理运行中的终端，再手动备份旧库并切换；本窗口不会重启后台或删除数据。"
+);
 
 /// The running host when it runs other code than this app's own; set on connect.
 static STALE_HOST: std::sync::Mutex<Option<mooring_core::protocol::Build>> =
@@ -131,7 +133,7 @@ pub fn stop_host(root: &Path, host: &mooring_core::protocol::Build) -> io::Resul
             .lines()
             .next()
             .and_then(|l| l.trim().parse().ok())
-            .ok_or_else(|| io::Error::other("找不到正在运行的后台进程"))?
+            .ok_or_else(|| io::Error::other(t!("找不到正在运行的后台进程")))?
     };
     let socket = root.join("workbench.sock");
     // Gone already: its pid may belong to something else by now.
@@ -151,7 +153,7 @@ pub fn stop_host(root: &Path, host: &mooring_core::protocol::Build) -> io::Resul
             std::thread::sleep(Duration::from_millis(100));
         }
     }
-    Err(io::Error::other("后台没有在 7 秒内退出"))
+    Err(io::Error::other(t!("后台没有在 7 秒内退出")))
 }
 /// Starts this app's own host for `root` and waits until it serves. With `takeover` it
 /// first takes the running terminals over from the host serving there now, which exits.
@@ -198,13 +200,16 @@ pub fn spawn_host(root: &Path, takeover: bool) -> io::Result<()> {
         }
         if let Some(status) = child.try_wait()? {
             return Err(io::Error::other(if takeover {
-                format!("新后台没能接手终端（{status}），旧后台照常运行；详情见 host.log")
+                t!(
+                    "新后台没能接手终端（{status}），旧后台照常运行；详情见 host.log",
+                    status
+                )
             } else {
                 format!("host exited {status}; see host.log")
             }));
         }
         if std::time::Instant::now() >= until {
-            return Err(io::Error::other("后台启动超时，请检查 host.log"));
+            return Err(io::Error::other(t!("后台启动超时，请检查 host.log")));
         }
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -224,7 +229,7 @@ fn hello_build(socket: &Path) -> io::Result<mooring_core::protocol::Build> {
 /// new process connects to the current host. A host that can hand over keeps every
 /// terminal running; an older one is stopped and the new process starts a fresh host.
 pub fn restart_host(root: &Path) -> io::Result<()> {
-    let host = stale_build().ok_or_else(|| io::Error::other("后台已是最新"))?;
+    let host = stale_build().ok_or_else(|| io::Error::other(t!("后台已是最新")))?;
     if host.handoff {
         spawn_host(root, true)?;
     } else {
@@ -273,19 +278,24 @@ pub fn connected_host(socket: &Path) -> io::Result<bool> {
                 .and_then(|s| s.parse::<u32>().ok());
             if major.is_some_and(|v| v < MAJOR) {
                 let notice = if major == Some(1) {
-                    RESET_NOTICE
+                    mooring_core::i18n::text(RESET_NOTICE)
                 } else {
-                    "空间、待办和会话结局沿用现有对象表，不作迁移；重启会中断正在运行的终端。本窗口不会重启后台或删除数据。"
+                    t!(
+                        "空间、待办和会话结局沿用现有对象表，不作迁移；重启会中断正在运行的终端。本窗口不会重启后台或删除数据。"
+                    )
                 };
-                Err(io::Error::other(format!("{OLD_BACKEND}\n\n{notice}")))
+                let old = mooring_core::i18n::text(OLD_BACKEND);
+                Err(io::Error::other(format!("{old}\n\n{notice}")))
             } else {
-                Err(io::Error::other(format!(
-                    "后台协议不匹配：{message}。后台未被重启。"
+                Err(io::Error::other(t!(
+                    "后台协议不匹配：{message}。后台未被重启。",
+                    message
                 )))
             }
         }
-        other => Err(io::Error::other(format!(
-            "无法连接后台：{other:?}。后台未被重启。"
+        other => Err(io::Error::other(t!(
+            "无法连接后台：{other}。后台未被重启。",
+            other = format!("{other:?}")
         ))),
     }
 }

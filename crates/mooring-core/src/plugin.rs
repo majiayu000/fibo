@@ -62,27 +62,27 @@ impl Kind {
     pub fn label(self) -> &'static str {
         match self {
             Self::Agent => "Agent",
-            Self::Actions => "动作",
-            Self::Rules => "验证规则",
-            Self::Sidebar => "左栏",
+            Self::Actions => t!("动作"),
+            Self::Rules => t!("验证规则"),
+            Self::Sidebar => t!("左栏"),
             Self::Hooks => "Hooks",
-            Self::Decorations => "窗格装饰",
-            Self::Effects => "动效",
-            Self::Setup => "安装步骤",
-            Self::Quota => "额度",
-            Self::Themes => "主题",
+            Self::Decorations => t!("窗格装饰"),
+            Self::Effects => t!("动效"),
+            Self::Setup => t!("安装步骤"),
+            Self::Quota => t!("额度"),
+            Self::Themes => t!("主题"),
         }
     }
     /// Where a plugin of this kind shows once it is on, for 设置 › 插件.
     pub fn where_it_shows(self) -> Option<&'static str> {
         match self {
-            Self::Effects => Some("装上或打开就换成它，在上面「完成动画」里能换回"),
-            Self::Sidebar => Some("在左栏顶部切换排法"),
-            Self::Actions => Some("在窗格右键菜单和 ⌘P 里"),
-            Self::Decorations => Some("显示在窗格标题栏和标题悬停卡片里"),
-            Self::Agent => Some("新开窗格的 Agent 列表里就有；已经开着的会话不受影响"),
-            Self::Quota => Some("显示在状态栏的额度里"),
-            Self::Themes => Some("在设置 › 外观里选"),
+            Self::Effects => Some(t!("装上或打开就换成它，在上面「完成动画」里能换回")),
+            Self::Sidebar => Some(t!("在左栏顶部切换排法")),
+            Self::Actions => Some(t!("在窗格右键菜单和 ⌘P 里")),
+            Self::Decorations => Some(t!("显示在窗格标题栏和标题悬停卡片里")),
+            Self::Agent => Some(t!("新开窗格的 Agent 列表里就有；已经开着的会话不受影响")),
+            Self::Quota => Some(t!("显示在状态栏的额度里")),
+            Self::Themes => Some(t!("在设置 › 外观里选")),
             Self::Hooks | Self::Rules | Self::Setup => None,
         }
     }
@@ -324,14 +324,14 @@ pub fn installed(id: &str) -> Option<&'static Plugin> {
 /// Held while plugins are installed, removed or switched: the app and a `mooring plugins` in
 /// a terminal must not swap the same directory at once. Released when dropped.
 pub(crate) fn lock(plugins: &Path) -> Result<std::fs::File, String> {
-    std::fs::create_dir_all(plugins).map_err(|e| format!("建不了插件目录：{e}"))?;
+    std::fs::create_dir_all(plugins).map_err(|e| t!("建不了插件目录：{e}", e))?;
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(plugins.join(".lock"))
-        .map_err(|e| format!("打不开插件锁：{e}"))?;
-    file.lock().map_err(|e| format!("拿不到插件锁：{e}"))?;
+        .map_err(|e| t!("打不开插件锁：{e}", e))?;
+    file.lock().map_err(|e| t!("拿不到插件锁：{e}", e))?;
     Ok(file)
 }
 
@@ -340,7 +340,7 @@ pub(crate) fn lock(plugins: &Path) -> Result<std::fs::File, String> {
 /// name, since nothing else could ever remove it; its teardown cannot run, and that is said.
 /// With `force`, a failing teardown no longer keeps it, and that is said too.
 pub fn uninstall(id: &str, force: bool) -> Result<Option<String>, String> {
-    let plugins = dir(CONFIG.get().ok_or("找不到配置目录")?);
+    let plugins = dir(CONFIG.get().ok_or(t!("找不到配置目录"))?);
     uninstall_in(&plugins, id, force)
 }
 
@@ -354,7 +354,7 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
     let (target, data_id) = match loaded {
         Some(f) => {
             if f.dir.parent() != Some(plugins) {
-                return Err(format!("{} 不在插件目录里，没有删", f.dir.display()));
+                return Err(t!("{dir} 不在插件目录里，没有删", dir = f.dir.display()));
             }
             // What it set up is undone first; when that fails it stays, since what it
             // changed may still need its files (a status line pointing at its script).
@@ -363,7 +363,7 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
                 && let Err(why) = crate::setup::run(plugins, &f.dir, crate::setup::Phase::Teardown)
             {
                 if !force {
-                    return Err(format!("没有卸载：{why}"));
+                    return Err(t!("没有卸载：{why}", why));
                 }
                 warnings.push(left_behind(&why, &p.touches));
             }
@@ -379,11 +379,12 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
                 })
                 .flatten();
             let Some(f) = named else {
-                return Err(format!("没有装叫 {id} 的插件"));
+                return Err(t!("没有装叫 {id} 的插件", id));
             };
             if f.dir.join("setup.json").is_file() {
-                warnings
-                    .push("它加载不了，teardown 没有跑；它改过的别的程序的设置可能还在".to_owned());
+                warnings.push(
+                    t!("它加载不了，teardown 没有跑；它改过的别的程序的设置可能还在").to_owned(),
+                );
             }
             (
                 f.dir.clone(),
@@ -392,7 +393,8 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
         }
     };
     let secrets = secret_keys(&target);
-    std::fs::remove_dir_all(&target).map_err(|e| format!("删不掉 {}：{e}", target.display()))?;
+    std::fs::remove_dir_all(&target)
+        .map_err(|e| t!("删不掉 {dir}：{e}", dir = target.display(), e))?;
     for key in secrets {
         crate::secret::delete(&data_id, &key);
     }
@@ -401,22 +403,30 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
     if data.is_dir()
         && let Err(e) = std::fs::remove_dir_all(&data)
     {
-        warnings.push(format!("它的数据目录 {} 没删掉：{e}", data.display()));
+        warnings.push(t!(
+            "它的数据目录 {dir} 没删掉：{e}",
+            dir = data.display(),
+            e
+        ));
     }
     let mut off = disabled(plugins);
     if off.contains(&data_id) {
         off.retain(|d| *d != data_id);
-        write_switches(plugins, &off).map_err(|e| format!("没能更新插件开关：{e}"))?;
+        write_switches(plugins, &off).map_err(|e| t!("没能更新插件开关：{e}", e))?;
     }
-    Ok((!warnings.is_empty()).then(|| warnings.join("；")))
+    Ok((!warnings.is_empty()).then(|| warnings.join(t!("；"))))
 }
 
 /// What a forced removal leaves: why teardown failed and what it says it had changed.
 fn left_behind(why: &str, touches: &[String]) -> String {
     if touches.is_empty() {
-        format!("{why}，它改过的东西可能还在")
+        t!("{why}，它改过的东西可能还在", why)
     } else {
-        format!("{why}，这些文件可能还留着它的改动：{}", touches.join("、"))
+        t!(
+            "{why}，这些文件可能还留着它的改动：{files}",
+            why,
+            files = touches.join(t!("、"))
+        )
     }
 }
 
@@ -476,7 +486,7 @@ pub fn enabled_next_start(id: &str) -> bool {
 /// setup fails stays off, with what it managed undone as far as its teardown can. A failing
 /// teardown keeps it on unless `force`: on, it still runs, so you must be able to stop it.
 pub fn set_enabled(id: &str, on: bool, force: bool) -> Result<Option<String>, String> {
-    let plugins = dir(CONFIG.get().ok_or("找不到配置目录")?);
+    let plugins = dir(CONFIG.get().ok_or(t!("找不到配置目录"))?);
     set_enabled_in(&plugins, id, on, force)
 }
 
@@ -513,7 +523,7 @@ pub fn set_enabled_in(
     if !on {
         off.push(id.to_owned());
     }
-    write_switches(plugins, &off).map_err(|e| format!("没能更新插件开关：{e}"))?;
+    write_switches(plugins, &off).map_err(|e| t!("没能更新插件开关：{e}", e))?;
     Ok(warning)
 }
 
@@ -553,9 +563,9 @@ pub fn files(kind: Kind) -> Vec<PathBuf> {
 pub fn bad_format(e: &serde_json::Error) -> String {
     let text = e.to_string();
     if text.contains("unknown field") || text.contains("unknown variant") {
-        format!("格式不对：{text}（写错了，或者要更新 Fibo 才认识）")
+        t!("格式不对：{e}（写错了，或者要更新 Fibo 才认识）", e = text)
     } else {
-        format!("格式不对：{text}")
+        t!("格式不对：{e}", e = text)
     }
 }
 
@@ -607,7 +617,7 @@ pub fn discover(plugins: &Path) -> Vec<Found> {
                 .iter()
                 .any(|f| f.result.as_ref().is_ok_and(|p| p.id == plugin.id))
         {
-            result = Err(format!("id \"{}\" 和前面的插件重名", plugin.id));
+            result = Err(t!("id \"{id}\" 和前面的插件重名", id = plugin.id));
         }
         found.push(Found { dir, result });
     }
@@ -621,26 +631,30 @@ pub fn check(dir: &Path) -> Result<Plugin, String> {
 
 fn read(dir: &Path) -> Result<Plugin, String> {
     let file = dir.join("plugin.json");
-    let bytes = std::fs::read(&file).map_err(|_| "缺少 plugin.json".to_owned())?;
+    let bytes = std::fs::read(&file).map_err(|_| t!("缺少 plugin.json").to_owned())?;
     let value: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|e| format!("plugin.json 格式不对：{e}"))?;
+        serde_json::from_slice(&bytes).map_err(|e| t!("plugin.json 格式不对：{e}", e))?;
     let m: Manifest =
-        serde_json::from_value(value.clone()).map_err(|e| format!("plugin.json 格式不对：{e}"))?;
+        serde_json::from_value(value.clone()).map_err(|e| t!("plugin.json 格式不对：{e}", e))?;
     if m.api != API {
-        return Err(format!("插件格式是 api {}，这个版本只认 api {API}", m.api));
+        return Err(t!(
+            "插件格式是 api {got}，这个版本只认 api {api}",
+            got = m.api,
+            api = API
+        ));
     }
     if !valid_id(&m.id) {
-        return Err(format!(
-            "id \"{}\" 只能用小写字母、数字和 -，不超过 40 个字",
-            m.id
+        return Err(t!(
+            "id \"{id}\" 只能用小写字母、数字和 -，不超过 40 个字",
+            id = m.id
         ));
     }
     if m.name.trim().is_empty() {
-        return Err("name 不能为空".into());
+        return Err(t!("name 不能为空").into());
     }
     if m.provides.is_empty() {
         return Err(
-            "provides 至少写一种：agent、actions、rules、sidebar、hooks、decorations、effects、setup、quota"
+            t!("provides 至少写一种：agent、actions、rules、sidebar、hooks、decorations、effects、setup、quota")
                 .into(),
         );
     }
@@ -650,8 +664,9 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         match Kind::from_name(name) {
             Some(k) if !provides.contains(&k) => provides.push(k),
             Some(_) => {}
-            None => warnings.push(format!(
-                "这个版本不认识「{name}」类，跳过了；更新 Fibo 后可用"
+            None => warnings.push(t!(
+                "这个版本不认识「{name}」类，跳过了；更新 Fibo 后可用",
+                name
             )),
         }
     }
@@ -660,7 +675,7 @@ fn read(dir: &Path) -> Result<Plugin, String> {
             .keys()
             .filter(|k| !MANIFEST_FIELDS.contains(&k.as_str()))
         {
-            warnings.push(format!("这个版本不认识 plugin.json 的「{key}」，忽略了"));
+            warnings.push(t!("这个版本不认识 plugin.json 的「{key}」，忽略了", key));
         }
     }
     let needed = provides
@@ -672,25 +687,27 @@ fn read(dir: &Path) -> Result<Plugin, String> {
         .unwrap_or(1);
     let level = m.mooring.unwrap_or(needed).max(needed);
     if level > LEVEL {
-        return Err(format!(
-            "要更新 Fibo：它需要插件级别 {level}，这个版本是 {LEVEL}"
+        return Err(t!(
+            "要更新 Fibo：它需要插件级别 {level}，这个版本是 {current}",
+            level,
+            current = LEVEL
         ));
     }
     if provides.is_empty() {
-        return Err(format!(
-            "这个版本不认识它提供的任何一类（{}），要更新 Fibo",
-            m.provides.join("、")
+        return Err(t!(
+            "这个版本不认识它提供的任何一类（{kinds}），要更新 Fibo",
+            kinds = m.provides.join(t!("、"))
         ));
     }
     crate::plugin_context::check_options(&m.options)?;
     let mut files = Vec::new();
     for f in &m.files {
         if !crate::market::safe_path(f) {
-            return Err(format!("files 里的 \"{f}\" 要是插件目录里的相对路径"));
+            return Err(t!("files 里的 \"{f}\" 要是插件目录里的相对路径", f));
         }
         let path = dir.join(f);
         if !path.is_file() {
-            return Err(format!("files 里写了 {f}，但目录里没有它"));
+            return Err(t!("files 里写了 {f}，但目录里没有它", f));
         }
         files.push(path);
     }
@@ -711,7 +728,10 @@ fn read(dir: &Path) -> Result<Plugin, String> {
     };
     for kind in &plugin.provides {
         if kind.files(dir).is_empty() {
-            return Err(format!("写了提供 {}，但目录里没有它的文件", kind.label()));
+            return Err(t!(
+                "写了提供 {kind}，但目录里没有它的文件",
+                kind = kind.label()
+            ));
         }
     }
     Ok(plugin)

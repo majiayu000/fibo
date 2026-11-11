@@ -162,7 +162,7 @@ impl Pane {
         )
     }
     pub fn visual_select_hint(&mut self, cx: &mut Context<Self>) {
-        self.show_toast("已复制 3 行", cx);
+        self.show_toast(t!("已复制 {lines} 行", lines = 3), cx);
         self.show_mouse_hint(cx);
     }
     /// Where the link whose target starts with `prefix` is drawn, and its cell count.

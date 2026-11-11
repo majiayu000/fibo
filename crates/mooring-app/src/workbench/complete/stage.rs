@@ -187,7 +187,7 @@ fn cells_of(grid: Bounds<Pixels>, metrics: CellMetrics, color: Hsla) -> Vec<Text
 
 fn paint(
     complete: Complete,
-    t: f32,
+    progress: f32,
     bounds: Bounds<Pixels>,
     window: &mut Window,
     cx: &mut gpui::App,
@@ -241,7 +241,7 @@ fn paint(
         (grid, metrics.height),
         metrics,
         fg,
-        Some("修登录"),
+        Some(t!("修登录")),
         faces,
         cx,
     );
@@ -252,16 +252,24 @@ fn paint(
         for i in 0..LINES.len() {
             let top = grid.top() + metrics.height * i as f32;
             let down = f32::from(top - body.top()) / f32::from(body.size.height).max(1.);
-            let w = body.size.width * wipe_edge(t, down);
+            let w = body.size.width * wipe_edge(progress, down);
             window.paint_quad(gpui::fill(
                 Bounds::new(point(body.left(), top), size(w, metrics.height)),
                 pane_color,
             ));
         }
     }
-    paint_wipe(style, t, &text, grid, metrics.height, pane_color, window);
+    paint_wipe(
+        style,
+        progress,
+        &text,
+        grid,
+        metrics.height,
+        pane_color,
+        window,
+    );
     let veil_w = if style == Style::Sweep {
-        sweep_at(t).clamp(0., 1.)
+        sweep_at(progress).clamp(0., 1.)
     } else {
         1.
     };
@@ -270,9 +278,9 @@ fn paint(
             body.origin,
             size(body.size.width * veil_w, body.size.height),
         ),
-        pane_color.opacity(veil_amount(style, t)),
+        pane_color.opacity(veil_amount(style, progress)),
     ));
-    let lids = lids_amount(style, t);
+    let lids = lids_amount(style, progress);
     if lids > 0. {
         let h = body.size.height * (0.5 * lids);
         window.paint_quad(gpui::fill(
@@ -290,7 +298,7 @@ fn paint(
     // The pane fades by a cover in what is behind it, as on a real pane.
     window.paint_quad(gpui::fill(
         pane,
-        side_color.opacity(1. - Workbench::completing_opacity(style, t)),
+        side_color.opacity(1. - Workbench::completing_opacity(style, progress)),
     ));
     window.paint_quad(gpui::fill(
         Bounds::new(
@@ -322,17 +330,17 @@ fn paint(
         point(pane.left(), pane.top() - px(HEADER_SAVED)),
         size(pane.size.width, pane.size.height + px(HEADER_SAVED)),
     );
-    p.frame(style, t, drawn_from, target, &glyphs, Some(&text));
+    p.frame(style, progress, drawn_from, target, &glyphs, Some(&text));
     if let Some(at) = target {
-        p.landed(t, timing(style).land, row, at);
+        p.landed(progress, timing(style).land, row, at);
     }
     let tm = timing(style);
     let (a, b, c, d) = tm.words;
-    let shown = eo(sl(t, a, b)) * if c > 0. { 1. - sl(t, c, d) } else { 1. };
+    let shown = eo(sl(progress, a, b)) * if c > 0. { 1. - sl(progress, c, d) } else { 1. };
     if shown > 0.01 && style != Style::Backspace {
         let words = style.greeting().map_or_else(
             || Status::Closed.label().to_owned(),
-            |g| format!("{}，{g}", Status::Closed.label()),
+            |g| t!("{done}，{g}", done = Status::Closed.label(), g),
         );
         let tall = f32::from(body.size.height) >= WORDS_LARGE_FROM;
         p.text(

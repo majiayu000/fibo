@@ -23,7 +23,7 @@ impl Workbench {
             .cloned();
         let from = session
             .as_ref()
-            .map_or_else(|| "已关闭的会话".to_owned(), |s| self.session_title(s));
+            .map_or_else(|| t!("已关闭的会话").to_owned(), |s| self.session_title(s));
         let path = e.record.source.path.clone();
         let key = format!("{criterion}-{index}");
         div()
@@ -82,7 +82,7 @@ impl Workbench {
                             .id(gpui::SharedString::from(format!("evidence-from-{key}")))
                             .cursor_pointer()
                             .hover(|s| s.text_color(T::color(T::link())))
-                            .child(format!("来自「{from}」"))
+                            .child(t!("来自「{from}」", from))
                             .when_some(session, |d, s| {
                                 d.on_click(cx.listener(move |this, _, window, cx| {
                                     this.nav.task_detail = None;
@@ -90,20 +90,20 @@ impl Workbench {
                                 }))
                             }),
                     )
-                    .when(last_try, |d| d.child("· 最近一次尝试，不算证据"))
+                    .when(last_try, |d| d.child(t!("· 最近一次尝试，不算证据")))
                     .child("·")
                     .child(
                         div()
                             .id(gpui::SharedString::from(format!("evidence-source-{key}")))
                             .cursor_pointer()
                             .text_color(T::color(T::link()))
-                            .child("看原文 ↗")
+                            .child(t!("看原文 ↗"))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 // The session log itself, opened as text where the record sits.
                                 if let Err(e) = mooring_platform::desktop::open_as_text(
                                     std::path::Path::new(&path),
                                 ) {
-                                    this.error = Some(format!("无法打开会话原文：{e}"));
+                                    this.error = Some(t!("无法打开会话原文：{e}", e));
                                     cx.notify();
                                 }
                             })),
@@ -119,7 +119,7 @@ impl Workbench {
                                 .id(gpui::SharedString::from(format!("evidence-remove-{key}")))
                                 .cursor_pointer()
                                 .hover(|s| s.text_color(T::color(T::link())))
-                                .child("移除")
+                                .child(t!("移除"))
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.change_criterion(
                                         &tid,
@@ -191,7 +191,10 @@ impl Workbench {
                     )
                     .child(
                         muted(if failed {
-                            format!("{} · 失败，只记作尝试", result_name(&e.record))
+                            t!(
+                                "{result} · 失败，只记作尝试",
+                                result = result_name(&e.record)
+                            )
                         } else {
                             result_name(&e.record)
                         })

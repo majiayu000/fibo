@@ -40,18 +40,18 @@ pub(super) fn attachable(
 }
 fn kind_name(e: &Evidence) -> &'static str {
     match e.kind.as_str() {
-        "test" => "测试",
-        "commit" => "提交",
-        _ => "文件",
+        "test" => t!("测试"),
+        "commit" => t!("提交"),
+        _ => t!("文件"),
     }
 }
 /// How the record ended: an exit code, or what a file change and a commit did.
 fn result_name(e: &Evidence) -> String {
     match (e.kind.as_str(), e.exit_code) {
-        ("file", Some(0)) => "已写入".into(),
-        ("commit", Some(0)) => "已提交".into(),
+        ("file", Some(0)) => t!("已写入").into(),
+        ("commit", Some(0)) => t!("已提交").into(),
         (_, Some(code)) => format!("exit {code}"),
-        _ => "未知".into(),
+        _ => t!("未知").into(),
     }
 }
 fn hm(at: u64) -> String {
@@ -144,9 +144,9 @@ impl Workbench {
             left = left.child(
                 panel()
                     .child(
-                        panel_head("说明", String::new())
+                        panel_head(t!("说明#workbench"), String::new())
                             .child(div().flex_1())
-                            .child(link("task-edit-description", "编辑").on_click({
+                            .child(link("task-edit-description", t!("编辑")).on_click({
                                 let task = task.clone();
                                 cx.listener(move |this, _, window, cx| {
                                     this.edit_task_form(&task, window, cx)
@@ -188,14 +188,14 @@ impl Workbench {
                             .gap(px(T::S8))
                             .text_size(px(T::SMALL))
                             .text_color(T::color(T::secondary()))
-                            .child(button("task-close", "← 返回画面").on_click(cx.listener(
+                            .child(button("task-close", t!("← 返回画面")).on_click(cx.listener(
                                 |this, _, _, cx| {
                                     this.nav.task_detail = None;
                                     cx.notify();
                                 },
                             )))
                             .child("·")
-                            .child("待办"),
+                            .child(t!("待办")),
                     )
                     .child(self.detail_head(task, status, !sessions.is_empty(), cx))
                     .children(self.agent_picker(&task.id, cx))
@@ -217,9 +217,9 @@ impl Workbench {
                                     .gap(px(T::S16))
                                     .child(self.sessions_panel(task, &sessions, cx))
                                     .when(!sessions.is_empty(), |d| {
-                                        d.child(muted(
-                                        "标记完成会关掉已经停下的会话的终端，之后可以从卡片恢复；没停的留着。",
-                                    ))
+                                        d.child(muted(t!(
+                                            "标记完成会关掉已经停下的会话的终端，之后可以从卡片恢复；没停的留着。"
+                                        )))
                                     }),
                             ),
                     ),
@@ -243,21 +243,21 @@ impl Workbench {
                 .filter(|s| status_of(&self.workspace, s) == Status::Review)
                 .count();
             [
-                format!(
-                    "最后一条证据 {}{}",
-                    hm(last),
-                    if !sessions.is_empty() && done == sessions.len() {
-                        format!(" · {done} 个会话都在等你验收")
+                t!(
+                    "最后一条证据 {when}{rest}",
+                    when = hm(last),
+                    rest = if !sessions.is_empty() && done == sessions.len() {
+                        t!(" · {done} 个会话都在等你验收", done)
                     } else {
                         String::new()
                     }
                 ),
-                "核对后点「标记完成」".to_owned(),
+                t!("核对后点「标记完成」").to_owned(),
             ]
         } else {
             [
-                "证据只认成功的测试、提交和文件改动".to_owned(),
-                "Agent 自己说「做完了」不算".to_owned(),
+                t!("证据只认成功的测试、提交和文件改动").to_owned(),
+                t!("Agent 自己说「做完了」不算").to_owned(),
             ]
         };
         div()
@@ -293,7 +293,7 @@ impl Workbench {
                             .ml(px(T::S6))
                             .text_size(px(T::SMALL))
                             .text_color(T::color(T::secondary()))
-                            .child("有证据"),
+                            .child(t!("有证据")),
                     ),
             )
             .child(div().flex_1().min_w_0().flex().gap(px(T::S4)).children(
@@ -340,11 +340,15 @@ impl Workbench {
     fn criteria_panel(&self, task: &Task, cx: &Context<Self>) -> gpui::Div {
         let total = task.acceptance.len();
         let mut p = panel().child(panel_head(
-            "验收标准",
+            t!("验收标准"),
             if total == 0 {
                 "0".into()
             } else {
-                format!("{} / {total} 有证据", task.proven())
+                t!(
+                    "{proven} / {total} 有证据",
+                    proven = task.proven(),
+                    total = total
+                )
             },
         ));
         if total == 0 {
@@ -357,9 +361,9 @@ impl Workbench {
                     .items_center()
                     .gap(px(T::S8))
                     .text_color(T::color(T::muted()))
-                    .child("没有写验收标准，这条待办靠你自己判断完成")
+                    .child(t!("没有写验收标准，这条待办靠你自己判断完成"))
                     .child(div().flex_1())
-                    .child(link("task-criteria-add", "补写").on_click(cx.listener(
+                    .child(link("task-criteria-add", t!("补写")).on_click(cx.listener(
                         move |this, _, window, cx| this.edit_task_form(&edit, window, cx),
                     ))),
             );
@@ -375,7 +379,7 @@ impl Workbench {
         sessions: &[AgentSession],
         cx: &Context<Self>,
     ) -> gpui::Div {
-        let mut p = panel().child(panel_head("关联会话", sessions.len().to_string()));
+        let mut p = panel().child(panel_head(t!("关联会话"), sessions.len().to_string()));
         if sessions.is_empty() {
             let tid = task.id.clone();
             return p.child(
@@ -386,9 +390,9 @@ impl Workbench {
                     .items_center()
                     .gap(px(T::S8))
                     .text_color(T::color(T::muted()))
-                    .child("没有会话做过这条待办")
+                    .child(t!("没有会话做过这条待办"))
                     .child(div().flex_1())
-                    .child(link("task-session-start", "再开一个会话 ▾").on_click(
+                    .child(link("task-session-start", t!("再开一个会话 ▾")).on_click(
                         cx.listener(move |this, _, _, cx| this.ask_agent(tid.clone(), false, cx)),
                     )),
             );
@@ -451,11 +455,11 @@ impl Workbench {
                                             .content
                                             .get(&session.id)
                                             .is_some_and(|c| c.waking()),
-                                        |d| d.child("等待唤醒"),
+                                        |d| d.child(t!("等待唤醒")),
                                     ),
                             ),
                     )
-                    .child(muted("打开 →").text_color(T::color(T::link())))
+                    .child(muted(t!("打开 →")).text_color(T::color(T::link())))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.nav.task_detail = None;
                         this.enter_card(&open, window, cx);

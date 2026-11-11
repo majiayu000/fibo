@@ -104,7 +104,7 @@ impl Workbench {
                 Err(e) => {
                     let _ = this.update(cx, |this, cx| {
                         this.restarting = false;
-                        this.error = Some(format!("重启后台失败：{e}"));
+                        this.error = Some(t!("重启后台失败：{e}", e));
                         cx.notify();
                     });
                 }

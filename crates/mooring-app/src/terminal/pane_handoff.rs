@@ -224,12 +224,12 @@ impl Pane {
     pub fn prefill(&mut self, command: &str, cx: &mut Context<Self>) -> bool {
         let bracketed = self.bracketed();
         if !bracketed && (command.contains('\n') || command.contains('\r')) {
-            self.local_error = Some("终端尚未启用安全粘贴；请等待 shell 就绪后重试".into());
+            self.local_error = Some(t!("终端尚未启用安全粘贴；请等待 shell 就绪后重试").into());
             cx.notify();
             return false;
         }
         if command.contains('\x1b') {
-            self.local_error = Some("待填入文本包含终端控制字符".into());
+            self.local_error = Some(t!("待填入文本包含终端控制字符").into());
             cx.notify();
             return false;
         }

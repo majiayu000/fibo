@@ -257,10 +257,14 @@ impl Source {
         use crate::plugin_command::Failed;
         let done = crate::plugin_command::run(self.spec()).map_err(|e| match e {
             Failed::Start(why) => why,
-            Failed::TimedOut => "超时".to_owned(),
+            Failed::TimedOut => t!("超时#quota").to_owned(),
         })?;
         if !done.status.success() {
-            return Err(format!("{}：{}", done.how(), done.said()));
+            return Err(t!(
+                "{how}：{said}#quota",
+                how = done.how(),
+                said = done.said()
+            ));
         }
         serde_json::from_slice(&done.stdout).map_err(|e| e.to_string())
     }
@@ -274,13 +278,17 @@ struct File {
 }
 
 fn read(file: &Path) -> Result<Vec<Source>, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}#runtime", e))?;
     let f: File = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
-        return Err(format!("额度格式是 api {}，这个版本只认 api {API}", f.api));
+        return Err(t!(
+            "额度格式是 api {api}，这个版本只认 api {max}",
+            api = f.api,
+            max = API
+        ));
     }
     if f.sources.is_empty() {
-        return Err("sources 至少写一条".into());
+        return Err(t!("sources 至少写一条").into());
     }
     let dir = file.parent().unwrap_or(Path::new("/")).to_owned();
     let id = crate::plugin::check(&dir).map(|p| p.id)?;
@@ -289,19 +297,19 @@ fn read(file: &Path) -> Result<Vec<Source>, String> {
     for s in &mut sources {
         let who = &s.agent;
         if who.trim().is_empty() {
-            return Err("agent 不能为空".into());
+            return Err(t!("agent 不能为空").into());
         }
         if s.file.is_some() == s.command.is_some() {
-            return Err(format!("{who}：file 和 command 写一个"));
+            return Err(t!("{who}：file 和 command 写一个", who));
         }
         if !(60..=86_400).contains(&s.refresh_s) {
-            return Err(format!("{who}：refresh_s 要在 60 到 86400 之间"));
+            return Err(t!("{who}：refresh_s 要在 60 到 86400 之间", who));
         }
         if s.timeout_ms.is_some_and(|t| !(100..=300_000).contains(&t)) {
-            return Err(format!("{who}：timeout_ms 要在 100 到 300000 之间"));
+            return Err(t!("{who}：timeout_ms 要在 100 到 300000 之间", who));
         }
         if s.windows.is_empty() {
-            return Err(format!("{who}：windows 至少写一个"));
+            return Err(t!("{who}：windows 至少写一个", who));
         }
         let pointers = s
             .windows
@@ -312,10 +320,10 @@ fn read(file: &Path) -> Result<Vec<Source>, String> {
             .flatten()
             .find(|p| !p.starts_with('/'))
         {
-            return Err(format!("{who}：\"{bad}\" 要写成 JSON 指针，以 / 开头"));
+            return Err(t!("{who}：\"{bad}\" 要写成 JSON 指针，以 / 开头", who, bad));
         }
         if s.windows.iter().any(|w| w.minutes == 0) {
-            return Err(format!("{who}：窗口的 minutes 要大于 0"));
+            return Err(t!("{who}：窗口的 minutes 要大于 0", who));
         }
         s.dir = dir.clone();
         s.data = data.clone();
@@ -337,7 +345,7 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Source>, Vec<Loaded>) {
                         .iter()
                         .map(|s| s.agent.as_str())
                         .collect::<Vec<_>>()
-                        .join("、")
+                        .join(t!("、"))
                 })
                 .map_err(Clone::clone),
         });

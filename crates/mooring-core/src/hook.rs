@@ -206,7 +206,7 @@ struct File {
 }
 
 fn read(file: &Path) -> Result<Vec<Hook>, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}", e))?;
     // An event this build does not know is skipped, not the whole file: a plugin written for
     // a newer Mooring keeps working for the events both know.
     let mut value: serde_json::Value =
@@ -226,51 +226,53 @@ fn read(file: &Path) -> Result<Vec<Hook>, String> {
     }
     let f: File = serde_json::from_value(value).map_err(|e| crate::plugin::bad_format(&e))?;
     if f.api != API {
-        return Err(format!(
-            "hooks 格式是 api {}，这个版本只认 api {API}",
-            f.api
+        return Err(t!(
+            "hooks 格式是 api {got}，这个版本只认 api {API}",
+            got = f.api,
+            API
         ));
     }
     if f.hooks.is_empty() {
-        return Err("hooks 至少写一条".into());
+        return Err(t!("hooks 至少写一条").into());
     }
     let mut hooks = f.hooks;
     for i in 0..hooks.len() {
         let (before, rest) = hooks.split_at_mut(i);
         let h = &mut rest[0];
         if !crate::plugin::valid_id(&h.id) {
-            return Err(format!(
-                "hook id \"{}\" 只能用小写字母、数字和 -，不超过 40 个字",
-                h.id
+            return Err(t!(
+                "hook id \"{id}\" 只能用小写字母、数字和 -，不超过 40 个字",
+                id = h.id
             ));
         }
         // Inside its own plugin only: nothing stores a hook's id, so two plugins' hooks may
         // share a name, and installing one can never break another.
         if before.iter().any(|t| t.id == h.id) {
-            return Err(format!("hook id \"{}\" 重名", h.id));
+            return Err(t!("hook id \"{id}\" 重名", id = h.id));
         }
         if h.on.is_empty() && !empty_after_skip[i] {
-            return Err(format!("hook {} 的 on 至少写一个事件", h.id));
+            return Err(t!("hook {id} 的 on 至少写一个事件", id = h.id));
         }
         h.skipped = skipped[i].clone();
         match (&h.command, &h.webhook) {
             (Some(c), None) if !c.trim().is_empty() => {}
             (None, Some(u)) if u.starts_with("https://") || u.starts_with("http://") => {}
             (None, Some(_)) => {
-                return Err(format!("hook {} 的 webhook 要以 http(s):// 开头", h.id));
+                return Err(t!("hook {id} 的 webhook 要以 http(s):// 开头", id = h.id));
             }
-            _ => return Err(format!("hook {} 要写 command 或 webhook 其中一个", h.id)),
+            _ => return Err(t!("hook {id} 要写 command 或 webhook 其中一个", id = h.id)),
         }
         if !(100..=MAX_TIMEOUT_MS).contains(&h.timeout_ms) {
-            return Err(format!(
-                "hook {} 的 timeout_ms 要在 100 到 {MAX_TIMEOUT_MS} 之间",
-                h.id
+            return Err(t!(
+                "hook {id} 的 timeout_ms 要在 100 到 {MAX_TIMEOUT_MS} 之间",
+                id = h.id,
+                MAX_TIMEOUT_MS
             ));
         }
         if h.min_ms > 0 && !h.on.iter().any(|e| e.is_command()) {
-            return Err(format!(
-                "hook {} 的 min_ms 只对 command_done、command_failed 有用",
-                h.id
+            return Err(t!(
+                "hook {id} 的 min_ms 只对 command_done、command_failed 有用",
+                id = h.id
             ));
         }
         h.file = file.to_owned();
@@ -293,18 +295,18 @@ pub fn load(files: Vec<PathBuf>) -> (Vec<Hook>, Vec<Loaded>) {
                         .map(|h| {
                             let on: Vec<_> = h.on.iter().map(|e| e.name()).collect();
                             if h.skipped.is_empty() {
-                                format!("{}（{}）", h.id, on.join("/"))
+                                t!("{id}（{on}）", id = h.id, on = on.join("/"))
                             } else {
-                                format!(
-                                    "{}（{}；这个版本不认识 {}，跳过了）",
-                                    h.id,
-                                    on.join("/"),
-                                    h.skipped.join("、")
+                                t!(
+                                    "{id}（{on}；这个版本不认识 {skipped}，跳过了）",
+                                    id = h.id,
+                                    on = on.join("/"),
+                                    skipped = h.skipped.join(t!("、"))
                                 )
                             }
                         })
                         .collect::<Vec<_>>()
-                        .join("、")
+                        .join(t!("、"))
                 })
                 .map_err(Clone::clone),
         });

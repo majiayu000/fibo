@@ -21,7 +21,7 @@ use std::{
 #[derive(Default)]
 pub struct Status(pub String);
 impl Global for Status {}
-const MENUBAR_FAILED: &str = "菜单栏连接失败：";
+const MENUBAR_FAILED: &str = tk!("菜单栏连接失败：");
 /// The route the panel's 查看诊断 sends; session ids never take this form.
 pub const DIAGNOSTICS: &str = "diagnostics:";
 /// The terminal in the focused pane of the active window, if any.
@@ -415,14 +415,23 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                 Ok(Reply::Workspace(w)) => {
                     // A host restart breaks one refresh; clear its note once the next one works.
                     cx.update(|cx| {
-                        if cx.global::<Status>().0.starts_with(MENUBAR_FAILED) {
+                        if cx
+                            .global::<Status>()
+                            .0
+                            .starts_with(mooring_core::i18n::text(MENUBAR_FAILED))
+                        {
                             cx.set_global(Status::default());
                         }
                     });
                     w
                 }
                 Err(e) => {
-                    cx.update(|cx| cx.set_global(Status(format!("{MENUBAR_FAILED}{e}"))));
+                    cx.update(|cx| {
+                        cx.set_global(Status(format!(
+                            "{}{e}",
+                            mooring_core::i18n::text(MENUBAR_FAILED)
+                        )))
+                    });
                     continue;
                 }
                 _ => continue,
@@ -483,7 +492,7 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                             });
                         }
                         Err(e) => {
-                            cx.update(|cx| cx.set_global(Status(format!("通知去重记录失败：{e}"))));
+                            cx.update(|cx| cx.set_global(Status(t!("通知去重记录失败：{e}", e))));
                         }
                         _ => (),
                     }

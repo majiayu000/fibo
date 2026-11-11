@@ -124,11 +124,17 @@ pub fn resolve(path: &str) -> PathBuf {
 }
 fn decode(path: &Path) -> Result<Arc<RenderImage>, String> {
     let picture = image::ImageReader::open(path)
-        .map_err(|e| format!("读不了 {}：{e}", path.display()))?
+        .map_err(|e| t!("读不了 {display}：{e}", display = path.display(), e))?
         .with_guessed_format()
-        .map_err(|e| format!("读不了 {}：{e}", path.display()))?
+        .map_err(|e| t!("读不了 {display}：{e}", display = path.display(), e))?
         .decode()
-        .map_err(|e| format!("{} 不是能显示的图片：{e}", path.display()))?;
+        .map_err(|e| {
+            t!(
+                "{display} 不是能显示的图片：{e}",
+                display = path.display(),
+                e
+            )
+        })?;
     let picture = if picture.width().max(picture.height()) > LONGEST_SIDE {
         picture.resize(LONGEST_SIDE, LONGEST_SIDE, FilterType::Triangle)
     } else {

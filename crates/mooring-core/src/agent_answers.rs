@@ -35,14 +35,14 @@ impl Answers {
     pub fn check(&self) -> Result<(), String> {
         let paths = [&self.pending, &self.reply];
         if paths.iter().any(|p| !p.starts_with('/')) || !self.reply.contains("{id}") {
-            return Err("answers 的 pending、reply 要以 / 开头，reply 要含 {id}".into());
+            return Err(t!("answers 的 pending、reply 要以 / 开头，reply 要含 {id}").into());
         }
         let pointers = std::iter::once(&self.id)
             .chain(&self.subject)
             .chain(&self.kind)
             .chain(&self.always);
         if self.subject.is_empty() || pointers.into_iter().any(|p| !p.starts_with('/')) {
-            return Err("answers 里的指针要以 / 开头，subject 至少一个".into());
+            return Err(t!("answers 里的指针要以 / 开头，subject 至少一个").into());
         }
         Ok(())
     }

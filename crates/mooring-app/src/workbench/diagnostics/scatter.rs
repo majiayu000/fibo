@@ -121,12 +121,12 @@ impl DiagnosticView {
                     .bg(T::color(if named { T::primary() } else { T::series(0) }))
                     .tooltip(tip(vec![
                         app.name.clone(),
-                        format!(
-                            "CPU {:.1}% · 内存 {}",
-                            app.cpu_percent,
-                            mib(app.memory_bytes)
+                        t!(
+                            "CPU {cpu}% · 内存 {mem}",
+                            cpu = format!("{:.1}", app.cpu_percent),
+                            mem = mib(app.memory_bytes)
                         ),
-                        format!("{} 个进程", app.processes),
+                        t!("{count} 个进程", count = app.processes),
                     ])),
             );
             if let Some(top) = label_tops.get(app.name.as_str()) {
@@ -148,7 +148,7 @@ impl DiagnosticView {
         let mut v = 0.;
         while v <= x_max + 0.01 {
             let text = if v == 100. {
-                "1 核".to_owned()
+                t!("1 核").to_owned()
             } else {
                 format!("{v:.0}%")
             };
@@ -156,7 +156,10 @@ impl DiagnosticView {
             v += x_step;
         }
         div()
-            .child(heading("CPU × 内存", "纵轴为对数 · 内存为活动监视器口径"))
+            .child(heading(
+                t!("CPU × 内存"),
+                t!("纵轴为对数 · 内存为活动监视器口径"),
+            ))
             .child(
                 div()
                     .flex()
@@ -181,9 +184,9 @@ impl DiagnosticView {
     }
     pub(super) fn gpu_ranking(&self, report: &Diagnostics) -> gpui::Div {
         let apps = report.gpu_ranked();
-        let mut section = div().child(heading("GPU 活动份额", "已观测计数的占比"));
+        let mut section = div().child(heading(t!("GPU 活动份额"), t!("已观测计数的占比")));
         if apps.is_empty() {
-            return section.child(label("没有可比较的 GPU 活动数据，不代表 GPU 空闲。"));
+            return section.child(label(t!("没有可比较的 GPU 活动数据，不代表 GPU 空闲。")));
         }
         let max = axis_max(apps[0].gpu_share_percent.unwrap_or_default(), 20., 20.);
         // The column is narrow: two intervals keep the labels apart.
@@ -208,8 +211,8 @@ impl DiagnosticView {
                 )
                 .tooltip(tip(vec![
                     app.name.clone(),
-                    format!("已观测 GPU 活动的 {share:.1}%"),
-                    "不是设备利用率".into(),
+                    t!("已观测 GPU 活动的 {share}%", share = format!("{share:.1}")),
+                    t!("不是设备利用率").into(),
                 ])),
             );
         }
@@ -218,7 +221,7 @@ impl DiagnosticView {
                 .mt(px(T::S10))
                 .text_size(px(T::META))
                 .text_color(T::color(T::muted()))
-                .child("只统计驱动公开的计数增量；没有读数不代表占用为零。"),
+                .child(t!("只统计驱动公开的计数增量；没有读数不代表占用为零。")),
         )
     }
 }

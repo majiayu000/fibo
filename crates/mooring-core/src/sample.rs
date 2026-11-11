@@ -30,17 +30,17 @@ pub const CASES: &[&str] = &[
 fn content(turn: Turn, at: u64) -> Content {
     Content {
         interactive: true,
-        title: "第一句话 帮我看看登录".into(),
+        title: not_ui!("第一句话 帮我看看登录").into(),
         turn,
         turn_started: at.saturating_sub(120),
         updated: at,
         waiting: if turn == Turn::Waiting {
-            "继续吗？".into()
+            not_ui!("继续吗？").into()
         } else {
             String::new()
         },
         error: if turn == Turn::Error {
-            "测试失败".into()
+            not_ui!("测试失败").into()
         } else {
             String::new()
         },
@@ -55,13 +55,13 @@ pub fn every_state() -> Workspace {
     let mut w = Workspace::default();
     w.spaces.push(Space {
         id: "space".into(),
-        name: "工作空间".into(),
+        name: not_ui!("工作空间").into(),
         cwd: "/project".into(),
     });
     w.tasks.push(Task {
         id: "task".into(),
         space: "space".into(),
-        title: "修登录".into(),
+        title: not_ui!("修登录").into(),
         description: String::new(),
         acceptance: vec![],
         agent: Agent::Claude,
@@ -107,7 +107,7 @@ pub fn every_state() -> Workspace {
                 space: "space".into(),
                 default_task: None,
                 title: if case == "tab-named" {
-                    "部署".into()
+                    not_ui!("部署").into()
                 } else {
                     String::new()
                 },
@@ -149,7 +149,7 @@ pub fn every_state() -> Workspace {
             transcript: String::new(),
             binding: None,
             name: match case {
-                "renamed" => "我起的名".into(),
+                "renamed" => not_ui!("我起的名").into(),
                 _ => String::new(),
             },
         });

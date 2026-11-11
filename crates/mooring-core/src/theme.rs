@@ -49,31 +49,73 @@ pub const SEEN_NAMES: [&str; 2] = ["title", "status"];
 macro_rules! with_ui_tokens {
     ($then:ident) => {
         $then!(
-            app "窗口外框", sidebar "侧栏", panel "面板", pane "窗格", header "窗格标题",
-            todo "待办底色", raised "凸起面", border "分隔线", card_border "卡片边线",
-            control "控件边线", field_edge "输入框边线", button "按钮", button_hover "按钮悬停",
-            primary "主要文字", body "正文", secondary "次要文字", muted "弱文字",
-            accent "强调色", on_accent "强调色上的文字", focus "焦点", link "界面链接",
-            selection "界面选区", chip "标签底色", popover "浮层", palette_row "命令面板选中行",
-            matched "搜索命中", series_other "图表其他", hatch "图表阴影线", chart_grid "图表网格",
-            chart_ref "图表参考线",
-            sidebar_line "侧栏分隔线", sidebar_field_line "侧栏搜索框边线",
-            sidebar_chip_line "空间标签边线", sidebar_chip_on "选中空间底色",
-            sidebar_chip_on_line "选中空间边线", sidebar_hover "会话行悬停",
-            sidebar_selected "选中会话底色", sidebar_selected_line "选中会话边线",
-            sidebar_bright "品牌和选中文字", sidebar_title "会话标题", sidebar_quiet "停着的标题",
-            sidebar_second "侧栏次要文字", sidebar_third "侧栏弱文字", sidebar_done "做完的 ✓",
-            sidebar_idle "停着的圆圈", sidebar_key_line "按键提示边线",
+            app "", sidebar "", panel "", pane "", header "",
+            todo "", raised "", border "", card_border "",
+            control "", field_edge "", button "", button_hover "",
+            primary "", body "", secondary "", muted "",
+            accent "", on_accent "", focus "", link "",
+            selection "", chip "", popover "", palette_row "",
+            matched "", series_other "", hatch "", chart_grid "",
+            chart_ref "",
+            sidebar_line "", sidebar_field_line "",
+            sidebar_chip_line "", sidebar_chip_on "",
+            sidebar_chip_on_line "", sidebar_hover "",
+            sidebar_selected "", sidebar_selected_line "",
+            sidebar_bright "", sidebar_title "", sidebar_quiet "",
+            sidebar_second "", sidebar_third "", sidebar_done "",
+            sidebar_idle "", sidebar_key_line "",
         );
     };
 }
-macro_rules! ui_names {
-    ($($field:ident $label:literal),* $(,)?) => {
-        /// `ui` keys, with what 主题编辑器 calls each.
-        pub const UI_NAMES: &[(&str, &str)] = &[$((stringify!($field), $label)),*];
-    };
-}
-with_ui_tokens!(ui_names);
+/// `ui` keys, with what 主题编辑器 calls each (say with `i18n::say` where shown).
+pub const UI_NAMES: &[(&str, &str)] = &[
+    ("app", tk!("窗口外框")),
+    ("sidebar", tk!("侧栏")),
+    ("panel", tk!("面板")),
+    ("pane", tk!("窗格")),
+    ("header", tk!("窗格标题")),
+    ("todo", tk!("待办底色")),
+    ("raised", tk!("凸起面")),
+    ("border", tk!("分隔线")),
+    ("card_border", tk!("卡片边线")),
+    ("control", tk!("控件边线")),
+    ("field_edge", tk!("输入框边线")),
+    ("button", tk!("按钮")),
+    ("button_hover", tk!("按钮悬停")),
+    ("primary", tk!("主要文字")),
+    ("body", tk!("正文")),
+    ("secondary", tk!("次要文字")),
+    ("muted", tk!("弱文字")),
+    ("accent", tk!("强调色")),
+    ("on_accent", tk!("强调色上的文字")),
+    ("focus", tk!("焦点")),
+    ("link", tk!("界面链接")),
+    ("selection", tk!("界面选区")),
+    ("chip", tk!("标签底色")),
+    ("popover", tk!("浮层")),
+    ("palette_row", tk!("命令面板选中行")),
+    ("matched", tk!("搜索命中")),
+    ("series_other", tk!("图表其他")),
+    ("hatch", tk!("图表阴影线")),
+    ("chart_grid", tk!("图表网格")),
+    ("chart_ref", tk!("图表参考线")),
+    ("sidebar_line", tk!("侧栏分隔线")),
+    ("sidebar_field_line", tk!("侧栏搜索框边线")),
+    ("sidebar_chip_line", tk!("空间标签边线")),
+    ("sidebar_chip_on", tk!("选中空间底色")),
+    ("sidebar_chip_on_line", tk!("选中空间边线")),
+    ("sidebar_hover", tk!("会话行悬停")),
+    ("sidebar_selected", tk!("选中会话底色")),
+    ("sidebar_selected_line", tk!("选中会话边线")),
+    ("sidebar_bright", tk!("品牌和选中文字")),
+    ("sidebar_title", tk!("会话标题")),
+    ("sidebar_quiet", tk!("停着的标题")),
+    ("sidebar_second", tk!("侧栏次要文字")),
+    ("sidebar_third", tk!("侧栏弱文字")),
+    ("sidebar_done", tk!("做完的 ✓")),
+    ("sidebar_idle", tk!("停着的圆圈")),
+    ("sidebar_key_line", tk!("按键提示边线")),
+];
 /// How the dot of a session you have looked at is drawn.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SeenDot {
@@ -192,12 +234,12 @@ impl ThemeFile {
     /// `fallback_name` is the file's stem, used when it names no theme.
     pub fn parse(text: &str, fallback_name: &str) -> Result<Self, String> {
         let root: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
-        let root = root.as_object().ok_or("主题文件应是一个 JSON 对象")?;
+        let root = root.as_object().ok_or(t!("主题文件应是一个 JSON 对象"))?;
         let required = |key: &str| {
             root.get(key)
-                .ok_or_else(|| format!("缺少 {key}"))
+                .ok_or_else(|| t!("缺少 {key}", key))
                 .and_then(parse_color)
-                .map_err(|e| format!("{key}：{e}"))
+                .map_err(|e| t!("{key}：{e}", key, e))
         };
         let mut out = Self {
             name: root
@@ -215,18 +257,19 @@ impl ThemeFile {
                 "name" | "bg" | "fg" => {}
                 "format" => match value.as_u64() {
                     Some(format) if format <= FORMAT => {}
-                    Some(format) => out.problems.push(format!(
-                        "这个主题是为更新的 Fibo 写的（格式 {format}），不认识的部分已跳过"
+                    Some(format) => out.problems.push(t!(
+                        "这个主题是为更新的 Fibo 写的（格式 {format}），不认识的部分已跳过",
+                        format
                     )),
                     None => out
                         .problems
-                        .push(format!("format 应是一个数字，写的是 {value}，已跳过")),
+                        .push(t!("format 应是一个数字，写的是 {value}，已跳过", value)),
                 },
                 "space_gradients" => out.read_gradients(value),
                 "window" => out.read_window(value),
                 "background" => out.read_background(value),
                 section if SECTIONS.contains(&section) => out.read_section(section, value),
-                other => out.problems.push(format!("不认识 {other}，已跳过")),
+                other => out.problems.push(t!("不认识 {other}，已跳过", other)),
             }
         }
         Ok(out)
@@ -234,7 +277,7 @@ impl ThemeFile {
     fn read_section(&mut self, section: &str, value: &serde_json::Value) {
         let Some(keys) = value.as_object() else {
             self.problems
-                .push(format!("{section} 应是一个对象，已跳过"));
+                .push(t!("{section} 应是一个对象，已跳过", section));
             return;
         };
         for (key, value) in keys {
@@ -244,8 +287,9 @@ impl ThemeFile {
                     .find(|dot| value.as_str() == Some(dot.name()));
                 match named {
                     Some(dot) => self.seen_dot = Some(dot),
-                    None => self.problems.push(format!(
-                        "seen.dot 应是 ring、fill 或 fade，写的是 {value}，已跳过"
+                    None => self.problems.push(t!(
+                        "seen.dot 应是 ring、fill 或 fade，写的是 {value}，已跳过",
+                        value
                     )),
                 }
                 continue;
@@ -253,12 +297,14 @@ impl ThemeFile {
             let known = known_key(section, key);
             if !known {
                 self.problems
-                    .push(format!("不认识 {section}.{key}，已跳过"));
+                    .push(t!("不认识 {section}.{key}，已跳过", section, key));
                 continue;
             }
             match parse_color(value) {
                 Ok(color) => self.set(section, key, Some(color)),
-                Err(e) => self.problems.push(format!("{section}.{key}：{e}，已跳过")),
+                Err(e) => self
+                    .problems
+                    .push(t!("{section}.{key}：{e}，已跳过", section, key, e)),
             }
         }
     }
@@ -273,39 +319,44 @@ impl ThemeFile {
             Some(Some(pairs)) => self.space_gradients = pairs,
             _ => self
                 .problems
-                .push("space_gradients 应是若干对颜色，已跳过".to_owned()),
+                .push(t!("space_gradients 应是若干对颜色，已跳过").to_owned()),
         }
     }
     fn read_window(&mut self, value: &serde_json::Value) {
         let Some(keys) = value.as_object() else {
-            self.problems.push("window 应是一个对象，已跳过".to_owned());
+            self.problems
+                .push(t!("window 应是一个对象，已跳过").to_owned());
             return;
         };
         for (key, value) in keys {
             match (key.as_str(), value) {
                 ("opacity", value) => match value.as_f64().filter(|v| (0.3..=1.).contains(v)) {
                     Some(v) => self.material.opacity = (v * 100.).round() as u8,
-                    None => self
-                        .problems
-                        .push(format!("window.opacity 应在 0.3–1，写的是 {value}，已跳过")),
+                    None => self.problems.push(t!(
+                        "window.opacity 应在 0.3–1，写的是 {value}，已跳过",
+                        value
+                    )),
                 },
                 ("blur", serde_json::Value::Bool(blur)) => self.material.blur = *blur,
-                ("blur", value) => self.problems.push(format!(
-                    "window.blur 应是 true 或 false，写的是 {value}，已跳过"
+                ("blur", value) => self.problems.push(t!(
+                    "window.blur 应是 true 或 false，写的是 {value}，已跳过",
+                    value
                 )),
-                (other, _) => self.problems.push(format!("不认识 window.{other}，已跳过")),
+                (other, _) => self
+                    .problems
+                    .push(t!("不认识 window.{other}，已跳过", other)),
             }
         }
     }
     fn read_background(&mut self, value: &serde_json::Value) {
         let Some(keys) = value.as_object() else {
             self.problems
-                .push("background 应是一个对象，已跳过".to_owned());
+                .push(t!("background 应是一个对象，已跳过").to_owned());
             return;
         };
         let Some(path) = keys.get("image").and_then(|v| v.as_str()) else {
             self.problems
-                .push("background 缺少 image，已跳过".to_owned());
+                .push(t!("background 缺少 image，已跳过").to_owned());
             return;
         };
         let mut image = BackgroundImage {
@@ -322,20 +373,22 @@ impl ThemeFile {
                         .find(|m| value.as_str() == Some(m.name()));
                     match named {
                         Some(mode) => image.mode = mode,
-                        None => self.problems.push(format!(
-                            "background.mode 应是 fill、fit、stretch 或 tile，写的是 {value}，已跳过"
+                        None => self.problems.push(t!(
+                            "background.mode 应是 fill、fit、stretch 或 tile，写的是 {value}，已跳过",
+                            value
                         )),
                     }
                 }
                 "strength" => match value.as_f64().filter(|v| (0.05..=1.).contains(v)) {
                     Some(v) => image.strength = (v * 100.).round() as u8,
-                    None => self.problems.push(format!(
-                        "background.strength 应在 0.05–1，写的是 {value}，已跳过"
+                    None => self.problems.push(t!(
+                        "background.strength 应在 0.05–1，写的是 {value}，已跳过",
+                        value
                     )),
                 },
                 other => self
                     .problems
-                    .push(format!("不认识 background.{other}，已跳过")),
+                    .push(t!("不认识 background.{other}，已跳过", other)),
             }
         }
         self.material.image = Some(image);
@@ -398,7 +451,7 @@ impl ThemeFile {
     pub fn from_itermcolors(text: &str, name: &str) -> Result<Self, String> {
         let read = |key: &str| iterm_color(text, key);
         let (Some(bg), Some(fg)) = (read("Background Color"), read("Foreground Color")) else {
-            return Err("不是 iTerm2 配色文件：找不到前景或背景颜色".to_owned());
+            return Err(t!("不是 iTerm2 配色文件：找不到前景或背景颜色").to_owned());
         };
         let mut out = Self {
             name: name.to_owned(),
@@ -447,7 +500,7 @@ pub fn load(files: Vec<std::path::PathBuf>) -> Vec<crate::agent::Loaded> {
                 .and_then(|text| ThemeFile::parse(&text, &stem))
                 .and_then(|theme| match theme.problems.is_empty() {
                     true => Ok(theme.name),
-                    false => Err(theme.problems.join("；")),
+                    false => Err(theme.problems.join(t!("；"))),
                 });
             crate::agent::Loaded { file, result }
         })
@@ -482,7 +535,11 @@ pub fn check_file(path: &std::path::Path, base: &std::path::Path) -> Result<Chec
     let contrast = crate::scheme::contrast(theme.fg, theme.bg);
     let warnings = (contrast < READABLE)
         .then(|| {
-            format!("前景和背景的对比度只有 {contrast:.1}:1，低于 {READABLE}:1，文字可能看不清")
+            t!(
+                "前景和背景的对比度只有 {contrast}:1，低于 {readable}:1，文字可能看不清",
+                contrast = format!("{contrast:.1}"),
+                readable = READABLE
+            )
         })
         .into_iter()
         .collect();
@@ -492,7 +549,7 @@ impl ThemeFile {
     /// Why its picture cannot be found, if it names one.
     pub fn missing_image(&self, base: &std::path::Path) -> Option<String> {
         let image = self.material.image.as_ref()?;
-        (!base.join(&image.path).is_file()).then(|| format!("找不到背景图 {}", image.path))
+        (!base.join(&image.path).is_file()).then(|| t!("找不到背景图 {path}", path = image.path))
     }
 }
 pub fn hex(color: u32) -> String {
@@ -509,7 +566,7 @@ fn parse_color(value: &serde_json::Value) -> Result<u32, String> {
     value
         .as_str()
         .and_then(parse_hex)
-        .ok_or_else(|| format!("应写成 #rrggbb，写的是 {value}"))
+        .ok_or_else(|| t!("应写成 #rrggbb，写的是 {value}", value))
 }
 /// One `<key>name</key><dict>…</dict>` of a preset. Property lists from iTerm2 are this
 /// regular, which keeps a whole plist parser out of the build for one import.

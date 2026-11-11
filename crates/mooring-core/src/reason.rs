@@ -84,9 +84,13 @@ const DEFAULT_WIDTH: usize = 24;
 
 impl Rules {
     pub fn parse(text: &str) -> Result<Rules, String> {
-        let f: File = serde_json::from_str(text).map_err(|e| format!("格式不对：{e}"))?;
+        let f: File = serde_json::from_str(text).map_err(|e| t!("格式不对：{e}", e))?;
         if f.api != API {
-            return Err(format!("原因规则是 api {}，这个版本只认 api {API}", f.api));
+            return Err(t!(
+                "原因规则是 api {got}，这个版本只认 api {api}",
+                got = f.api,
+                api = API
+            ));
         }
         let mut ids = HashSet::new();
         let rules = f
@@ -94,11 +98,12 @@ impl Rules {
             .into_iter()
             .map(|r| {
                 if !ids.insert(r.id.clone()) {
-                    return Err(format!("规则 id 重复：{}", r.id));
+                    return Err(t!("规则 id 重复：{id}", id = r.id));
                 }
-                let re =
-                    Regex::new(&r.pattern).map_err(|e| format!("规则 {} 的 match：{e}", r.id))?;
-                check_template(&r.say, &re).map_err(|e| format!("规则 {} 的 say：{e}", r.id))?;
+                let re = Regex::new(&r.pattern)
+                    .map_err(|e| t!("规则 {id} 的 match：{e}", id = r.id, e))?;
+                check_template(&r.say, &re)
+                    .map_err(|e| t!("规则 {id} 的 say：{e}", id = r.id, e))?;
                 Ok(Rule {
                     id: r.id,
                     kind: r.kind,
@@ -149,10 +154,10 @@ fn check_template(say: &str, re: &Regex) -> Result<(), String> {
     let names: HashSet<&str> = re.capture_names().flatten().collect();
     for (name, filter) in fields(say) {
         if !names.contains(name) {
-            return Err(format!("{{{name}}} 不是 match 里的命名分组"));
+            return Err(t!("{{{name}}} 不是 match 里的命名分组", name));
         }
         if !matches!(filter, "" | "word" | "base" | "phrase") {
-            return Err(format!("不认识的 :{filter}，只有 word、base、phrase"));
+            return Err(t!("不认识的 :{filter}，只有 word、base、phrase", filter));
         }
     }
     Ok(())

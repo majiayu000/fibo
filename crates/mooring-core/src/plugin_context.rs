@@ -82,20 +82,20 @@ impl Opt {
                 .parse::<f64>()
                 .ok()
                 .and_then(|n| serde_json::Number::from_f64(n).map(Value::Number))
-                .ok_or_else(|| format!("{} 要填数字", self.title))?,
+                .ok_or_else(|| t!("{title} 要填数字", title = self.title))?,
             OptKind::Boolean => match text {
-                "1" | "true" | "on" | "yes" | "开" => Value::Bool(true),
-                "0" | "false" | "off" | "no" | "关" => Value::Bool(false),
-                _ => return Err(format!("{} 要填 true 或 false", self.title)),
+                "1" | "true" | "on" | "yes" | not_ui!("开") => Value::Bool(true),
+                "0" | "false" | "off" | "no" | not_ui!("关") => Value::Bool(false),
+                _ => return Err(t!("{title} 要填 true 或 false", title = self.title)),
             },
         };
         if self.accepts(&v) {
             Ok(v)
         } else {
-            Err(format!(
-                "{} 只能是：{}",
-                self.title,
-                self.choices.join("、")
+            Err(t!(
+                "{title} 只能是：{choices}",
+                title = self.title,
+                choices = self.choices.join(t!("、"))
             ))
         }
     }
@@ -104,7 +104,7 @@ impl Opt {
 /// Checks a manifest's `options`.
 pub fn check_options(options: &[Opt]) -> Result<(), String> {
     if options.len() > MAX_OPTIONS {
-        return Err(format!("options 最多 {MAX_OPTIONS} 个"));
+        return Err(t!("options 最多 {max} 个", max = MAX_OPTIONS));
     }
     for (i, o) in options.iter().enumerate() {
         let key_ok = !o.key.is_empty()
@@ -113,27 +113,27 @@ pub fn check_options(options: &[Opt]) -> Result<(), String> {
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
         if !key_ok {
-            return Err(format!(
-                "设置项 \"{}\" 的 key 只能用小写字母、数字和 _",
-                o.key
+            return Err(t!(
+                "设置项 \"{key}\" 的 key 只能用小写字母、数字和 _",
+                key = o.key
             ));
         }
         if options[..i].iter().any(|p| p.key == o.key) {
-            return Err(format!("设置项 {} 重名", o.key));
+            return Err(t!("设置项 {key} 重名", key = o.key));
         }
         if o.title.trim().is_empty() {
-            return Err(format!("设置项 {} 要写 title", o.key));
+            return Err(t!("设置项 {key} 要写 title", key = o.key));
         }
         if o.kind == OptKind::Choice && o.choices.is_empty() {
-            return Err(format!("设置项 {} 是 choice，要写 choices", o.key));
+            return Err(t!("设置项 {key} 是 choice，要写 choices", key = o.key));
         }
         if !o.accepts(&o.default) {
-            return Err(format!("设置项 {} 的 default 和 type 对不上", o.key));
+            return Err(t!("设置项 {key} 的 default 和 type 对不上", key = o.key));
         }
         if o.secret && (o.kind != OptKind::String || o.default != Value::String(String::new())) {
-            return Err(format!(
-                "设置项 {} 是 secret，type 要是 string，default 要是空的",
-                o.key
+            return Err(t!(
+                "设置项 {key} 是 secret，type 要是 string，default 要是空的",
+                key = o.key
             ));
         }
     }
@@ -152,7 +152,7 @@ fn options_file(plugins: &Path, id: &str) -> PathBuf {
 }
 
 /// What `options.json` holds for a secret that has a value: that it has one, and not what.
-pub const SECRET_SET: &str = "已设置";
+pub const SECRET_SET: &str = tk!("已设置");
 
 /// Each setting's current value: what the user set, else the default. A stored value
 /// that no longer fits (the plugin changed the setting's type) gives way to the default.
@@ -181,14 +181,14 @@ pub fn set(plugins: &Path, id: &str, key: &str, value: Value) -> Result<(), Stri
     let dir = crate::plugin::discover(plugins)
         .into_iter()
         .find_map(|f| f.result.ok().filter(|p| p.id == id))
-        .ok_or_else(|| format!("没有装叫 {id} 的插件"))?;
+        .ok_or_else(|| t!("没有装叫 {id} 的插件", id))?;
     let opt = dir
         .options
         .iter()
         .find(|o| o.key == key)
-        .ok_or_else(|| format!("{id} 没有叫 {key} 的设置项"))?;
+        .ok_or_else(|| t!("{id} 没有叫 {key} 的设置项", id, key))?;
     if !opt.accepts(&value) {
-        return Err(format!("{} 的值不对", opt.title));
+        return Err(t!("{title} 的值不对", title = opt.title));
     }
     let file = options_file(plugins, id);
     let mut stored: serde_json::Map<String, Value> =
@@ -213,7 +213,7 @@ pub fn set(plugins: &Path, id: &str, key: &str, value: Value) -> Result<(), Stri
     let tmp = file.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_vec_pretty(&stored).unwrap_or_default())
         .and_then(|()| std::fs::rename(&tmp, &file))
-        .map_err(|e| format!("存不了设置：{e}"))
+        .map_err(|e| t!("存不了设置：{e}", e))
 }
 
 /// The `mooring` command next to this program: the app bundle ships it beside the app,

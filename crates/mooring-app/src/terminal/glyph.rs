@@ -14,7 +14,7 @@ pub struct TextCell {
 }
 
 /// What the pinned ask's bar offers at its right end.
-pub const ASK_BACK: &str = "回到这句 ↑";
+pub const ASK_BACK: &str = tk!("回到这句 ↑");
 
 /// The pinned ask along the terminal's top, as it is laid out over the grid.
 pub struct AskBar {

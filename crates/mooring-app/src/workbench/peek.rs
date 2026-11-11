@@ -184,7 +184,7 @@ impl Workbench {
             Some(r) => r.title.clone(),
             None => session
                 .map(|s| self.session_title(s))
-                .unwrap_or_else(|| "终端".into()),
+                .unwrap_or_else(|| t!("终端").into()),
         };
         let remote = peek.remote.is_some();
         // Read only unless that machine lets this desktop type there.
@@ -195,7 +195,7 @@ impl Workbench {
             .is_some_and(|r| r.slot.lock().unwrap().as_ref().is_some_and(|l| l.managing));
         let approval = self.peek_approval();
         let state = match (&approval, group) {
-            (Some(_), _) => Some("等你批准".to_owned()),
+            (Some(_), _) => Some(t!("等你批准").to_owned()),
             (None, Some(g)) => Some(g.label().to_owned()),
             _ => None,
         };
@@ -233,20 +233,20 @@ impl Workbench {
             .when(approval.is_some(), |d| {
                 let busy = peek.answering;
                 d.child(
-                    button("peek-allow", "允许一次")
+                    button("peek-allow", t!("允许一次"))
                         .bg(T::color(T::raised()))
                         .text_color(T::color(T::link()))
                         .when(busy, |b| b.opacity(0.5))
                         .on_click(cx.listener(|this, _, _, cx| this.answer_peek(true, cx))),
                 )
                 .child(
-                    button("peek-deny", "拒绝")
+                    button("peek-deny", t!("拒绝"))
                         .when(busy, |b| b.opacity(0.5))
                         .on_click(cx.listener(|this, _, _, cx| this.answer_peek(false, cx))),
                 )
             })
             .when(ends, |d| match peek.confirm_end {
-                false => d.child(button("peek-end", "关闭终端").on_click(cx.listener(
+                false => d.child(button("peek-end", t!("关闭终端")).on_click(cx.listener(
                     |this, _, _, cx| {
                         if let Some(p) = &mut this.peek {
                             p.confirm_end = true;
@@ -255,13 +255,13 @@ impl Workbench {
                     },
                 ))),
                 true => d
-                    .child(label("关掉那边这个终端？").text_size(px(T::CHIP_SIZE)))
+                    .child(label(t!("关掉那边这个终端？")).text_size(px(T::CHIP_SIZE)))
                     .child(
-                        button("peek-end-yes", "关闭")
+                        button("peek-end-yes", t!("关闭"))
                             .text_color(Tone::Danger.ink())
                             .on_click(cx.listener(|this, _, _, cx| this.end_remote(cx))),
                     )
-                    .child(button("peek-end-no", "取消").on_click(cx.listener(
+                    .child(button("peek-end-no", t!("取消")).on_click(cx.listener(
                         |this, _, _, cx| {
                             if let Some(p) = &mut this.peek {
                                 p.confirm_end = false;
@@ -271,7 +271,7 @@ impl Workbench {
                     ))),
             })
             .when(!remote, |d| {
-                d.child(button("peek-open", "↗ 打开").on_click(cx.listener(
+                d.child(button("peek-open", t!("↗ 打开")).on_click(cx.listener(
                     move |this, _, window, cx| {
                         this.close_peek(cx);
                         if let Some(s) = &open {
@@ -282,7 +282,7 @@ impl Workbench {
             })
             .child(
                 button("peek-close", "✕")
-                    .aria_label("关闭偷看")
+                    .aria_label(t!("关闭偷看"))
                     .on_click(cx.listener(|this, _, _, cx| this.close_peek(cx))),
             );
         // A band says what this is: a layer over the tab, whose machine gets the typing
@@ -291,17 +291,17 @@ impl Workbench {
             Some(r) if read_only => {
                 let linked = r.slot.lock().unwrap().is_some();
                 let why = if linked {
-                    "只读：那边的 Fibo 太旧，更新后才能打字"
+                    t!("只读：那边的 Fibo 太旧，更新后才能打字")
                 } else {
-                    "只读：没连上"
+                    t!("只读：没连上")
                 };
-                (format!("正在偷看 {} 上的终端", r.host), why)
+                (t!("正在偷看 {host} 上的终端", host = &r.host), why)
             }
             Some(r) => (
-                format!("正在偷看 {} 上的终端", r.host),
-                "打的字会发到那台电脑",
+                t!("正在偷看 {host} 上的终端", host = &r.host),
+                t!("打的字会发到那台电脑"),
             ),
-            None => ("正在偷看".to_owned(), "这个会话不在当前标签里"),
+            None => (t!("正在偷看").to_owned(), t!("这个会话不在当前标签里")),
         };
         let band = div()
             .h(px(T::ROW))
@@ -314,7 +314,7 @@ impl Workbench {
             .text_size(px(T::META))
             .text_color(T::color(T::on_accent()))
             .child(div().font_weight(gpui::FontWeight::MEDIUM).child(what))
-            .child(div().opacity(0.75).child(format!("· {how} · Esc 关闭")));
+            .child(div().opacity(0.75).child(t!("· {how} · Esc 关闭", how)));
         div()
             .id("peek")
             .absolute()

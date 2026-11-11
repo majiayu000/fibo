@@ -59,7 +59,7 @@ impl Workbench {
         let command = match action.command(&ctx) {
             Ok(c) => c,
             Err(why) => {
-                self.error = Some(format!("{}：{why}", action.title));
+                self.error = Some(t!("{title}：{why}", title = &action.title, why));
                 cx.notify();
                 return;
             }

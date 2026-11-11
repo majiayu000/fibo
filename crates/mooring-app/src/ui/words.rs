@@ -32,7 +32,7 @@ enum Where {
 
 fn say(text: &str, at: Where, own_key: bool, file_manager: &str) -> String {
     let text = text
-        .replace("访达", file_manager)
+        .replace(not_ui!("访达"), file_manager)
         .replace("Finder", file_manager);
     if own_key {
         return text;

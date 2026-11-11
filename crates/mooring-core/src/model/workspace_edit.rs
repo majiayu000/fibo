@@ -5,7 +5,7 @@ fn validate_outcome(outcome: &Outcome) -> Result<(), String> {
     if let Outcome::Deferred { reason, until } = outcome
         && (reason.trim().is_empty() || *until == 0)
     {
-        return Err("稍后再看需要原因和时间".into());
+        return Err(t!("稍后再看需要原因和时间").into());
     }
     Ok(())
 }
@@ -17,16 +17,16 @@ impl Workspace {
             .agent_sessions
             .iter()
             .find(|s| s.id == id)
-            .ok_or("Agent 会话不存在")?;
+            .ok_or(t!("Agent 会话不存在"))?;
         if &session.outcome == outcome {
             return Ok(());
         }
         if session.outcome != seen.outcome {
-            return Err("这个会话的结局刚被改过，看一眼再定".into());
+            return Err(t!("这个会话的结局刚被改过，看一眼再定").into());
         }
         let turn = self.content.get(id).map_or("", |c| c.turn_key.as_str());
         if turn != seen.turn {
-            return Err("Agent 又开始了新的一轮，没有标记；看完这一轮再定".into());
+            return Err(t!("Agent 又开始了新的一轮，没有标记；看完这一轮再定").into());
         }
         Ok(())
     }
@@ -42,7 +42,7 @@ impl Workspace {
             .agent_sessions
             .iter_mut()
             .find(|s| s.id == id)
-            .ok_or("Agent 会话不存在")?;
+            .ok_or(t!("Agent 会话不存在"))?;
         if session.outcome != outcome {
             self.outcome_history.push(OutcomeChange {
                 session: id.into(),
@@ -66,7 +66,7 @@ impl Workspace {
             .collect();
         let mut changed = !due.is_empty();
         for (id, at) in due {
-            self.change_outcome(&id, Outcome::Open, at, "暂存到期")
+            self.change_outcome(&id, Outcome::Open, at, not_ui!("暂存到期"))
                 .expect("collected session");
         }
         for outcome in self.task_outcomes.values_mut() {
@@ -90,7 +90,7 @@ impl Workspace {
                 && observed.terminal.is_some()
                 && observed.terminal != old.terminal
             {
-                return Err("同一 CLI 会话仍关联在另一个终端；先确认原关联结束".into());
+                return Err(t!("同一 CLI 会话仍关联在另一个终端；先确认原关联结束").into());
             }
             observed.id = old.id.clone();
             observed.task = old.task.clone();
@@ -108,7 +108,7 @@ impl Workspace {
                 .terminals
                 .iter()
                 .find(|t| &t.id == terminal_id)
-                .ok_or("终端不存在")?;
+                .ok_or(t!("终端不存在"))?;
             // Default only on the first proven association, not on moves/resumes.
             let first_binding = prior.is_none_or(|i| self.agent_sessions[i].terminal.is_none());
             if first_binding && observed.task.is_none() {
@@ -191,7 +191,7 @@ impl Workspace {
                 if !(1..=365).contains(&settings.stale_days)
                     || !(1..=1440).contains(&settings.away_minutes)
                 {
-                    return Err("天数须为 1–365，离开分钟数须为 1–1440".into());
+                    return Err(t!("天数须为 1–365，离开分钟数须为 1–1440").into());
                 }
                 self.settings = settings;
             }
@@ -201,7 +201,7 @@ impl Workspace {
                     .tasks
                     .iter()
                     .position(|t| t.id == task.id)
-                    .ok_or("待办不存在")?;
+                    .ok_or(t!("待办不存在"))?;
                 // Reuse the creation boundary so validation stays in one place.
                 let mut check = self.clone();
                 check.tasks.remove(index);
@@ -210,31 +210,31 @@ impl Workspace {
             }
             Edit::SetTaskOutcome { id, outcome, seen } => {
                 if !self.tasks.iter().any(|t| t.id == id) {
-                    return Err("待办不存在".into());
+                    return Err(t!("待办不存在").into());
                 }
                 validate_outcome(&outcome)?;
                 let now = self.task_outcomes.get(&id).cloned().unwrap_or_default();
                 if seen.is_some_and(|seen| seen != now) && now != outcome {
-                    return Err("这个待办的结局刚被改过，看一眼再定".into());
+                    return Err(t!("这个待办的结局刚被改过，看一眼再定").into());
                 }
                 self.stamp_task_closed(&id, &outcome);
                 self.task_outcomes.insert(id, outcome);
             }
             Edit::SetPendingTask { terminal, task } => {
                 if !self.terminals.iter().any(|t| t.id == terminal) {
-                    return Err("终端不存在".into());
+                    return Err(t!("终端不存在").into());
                 }
                 if task
                     .as_ref()
                     .is_some_and(|id| !self.tasks.iter().any(|t| &t.id == id))
                 {
-                    return Err("待办不存在".into());
+                    return Err(t!("待办不存在").into());
                 }
                 self.pending_tasks.insert(terminal, task);
             }
             Edit::SaveSessionTask { session, task } => {
                 if !self.agent_sessions.iter().any(|s| s.id == session) {
-                    return Err("会话不存在".into());
+                    return Err(t!("会话不存在").into());
                 }
                 let task_id = task.id.clone();
                 self.edit(Edit::AddTask(task))?;
@@ -246,41 +246,41 @@ impl Workspace {
             }
             Edit::AddSpace(space) => {
                 if self.spaces.iter().any(|s| s.id == space.id) {
-                    return Err("空间 ID 已存在".into());
+                    return Err(t!("空间 ID 已存在").into());
                 }
                 if space.name.trim().is_empty() {
-                    return Err("空间名称不能为空".into());
+                    return Err(t!("空间名称不能为空").into());
                 }
                 self.spaces.push(space);
             }
             Edit::UpdateSpace(space) => {
                 if space.name.trim().is_empty() {
-                    return Err("空间名称不能为空".into());
+                    return Err(t!("空间名称不能为空").into());
                 }
                 let Some(existing) = self.spaces.iter_mut().find(|s| s.id == space.id) else {
-                    return Err("空间不存在".into());
+                    return Err(t!("空间不存在").into());
                 };
                 *existing = space;
             }
             Edit::AddTask(task) => {
                 if !self.spaces.iter().any(|s| s.id == task.space) {
-                    return Err("空间不存在".into());
+                    return Err(t!("空间不存在").into());
                 }
                 if self.tasks.iter().any(|t| t.id == task.id) {
-                    return Err("待办 ID 已存在".into());
+                    return Err(t!("待办 ID 已存在").into());
                 }
                 if task.title.trim().is_empty() {
-                    return Err("待办标题不能为空".into());
+                    return Err(t!("待办标题不能为空").into());
                 }
                 for (i, criterion) in task.acceptance.iter().enumerate() {
                     if criterion.description.trim().is_empty()
                         || criterion.id.is_empty()
                         || task.acceptance[..i].iter().any(|c| c.id == criterion.id)
                     {
-                        return Err("验收条目需要独立 ID 和非空说明".into());
+                        return Err(t!("验收条目需要独立 ID 和非空说明").into());
                     }
                     if !criterion.evidence.iter().all(|e| e.record.attachable()) {
-                        return Err("证据只认测试、提交和文件改动".into());
+                        return Err(t!("证据只认测试、提交和文件改动").into());
                     }
                 }
                 self.stamp_task_created(&task.id);
@@ -303,10 +303,10 @@ impl Workspace {
             | Edit::ReplacePane { .. }) => self.edit_tabs(edit)?,
             Edit::RemoveSpace { id } => {
                 if !self.spaces.iter().any(|s| s.id == id) {
-                    return Err("空间不存在".into());
+                    return Err(t!("空间不存在").into());
                 }
                 if self.spaces.len() == 1 {
-                    return Err("至少要留一个空间".into());
+                    return Err(t!("至少要留一个空间").into());
                 }
                 let open = self
                     .tasks
@@ -320,12 +320,13 @@ impl Workspace {
                     })
                     .count();
                 if open > 0 {
-                    return Err(format!(
-                        "空间里还有 {open} 个没收尾的待办，先完成或放弃它们"
+                    return Err(t!(
+                        "空间里还有 {open} 个没收尾的待办，先完成或放弃它们",
+                        open,
                     ));
                 }
                 if !self.space_quiet(&id) && self.attended_spaces() == 1 {
-                    return Err("其他空间都先不管了，先接着管一个".into());
+                    return Err(t!("其他空间都先不管了，先接着管一个").into());
                 }
                 self.tabs.retain(|t| t.space != id);
                 self.spaces.retain(|s| s.id != id);
@@ -333,10 +334,10 @@ impl Workspace {
             }
             Edit::SetSpaceQuiet { id, quiet } => {
                 if !self.spaces.iter().any(|s| s.id == id) {
-                    return Err("空间不存在".into());
+                    return Err(t!("空间不存在").into());
                 }
                 if quiet && !self.space_quiet(&id) && self.attended_spaces() == 1 {
-                    return Err("至少要留一个在管的空间".into());
+                    return Err(t!("至少要留一个在管的空间").into());
                 }
                 if quiet {
                     self.quiet_spaces.insert(id);
@@ -348,26 +349,26 @@ impl Workspace {
                 if let Some(seen) = seen {
                     self.check_seen(&id, &seen, &outcome)?;
                 }
-                self.change_outcome(&id, outcome, crate::content::now(), "用户操作")?;
+                self.change_outcome(&id, outcome, crate::content::now(), not_ui!("用户操作"))?;
             }
             Edit::AssignTask { id, task } => {
                 if task
                     .as_ref()
                     .is_some_and(|id| !self.tasks.iter().any(|t| &t.id == id))
                 {
-                    return Err("待办不存在".into());
+                    return Err(t!("待办不存在").into());
                 }
                 self.agent_sessions
                     .iter_mut()
                     .find(|s| s.id == id)
-                    .ok_or("Agent 会话不存在")?
+                    .ok_or(t!("Agent 会话不存在"))?
                     .task = task;
             }
             Edit::RenameSession { id, name } => {
                 self.agent_sessions
                     .iter_mut()
                     .find(|s| s.id == id)
-                    .ok_or("Agent 会话不存在")?
+                    .ok_or(t!("Agent 会话不存在"))?
                     .name = name.split_whitespace().collect::<Vec<_>>().join(" ");
             }
         }

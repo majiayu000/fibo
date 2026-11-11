@@ -37,19 +37,23 @@ pub enum Phase {
 }
 
 pub fn read(file: &Path) -> Result<Setup, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("读不了：{e}"))?;
+    let bytes = std::fs::read(file).map_err(|e| t!("读不了：{e}", e))?;
     let s: Setup = serde_json::from_slice(&bytes).map_err(|e| crate::plugin::bad_format(&e))?;
     if s.api != API {
-        return Err(format!(
-            "安装步骤格式是 api {}，这个版本只认 api {API}",
-            s.api
+        return Err(t!(
+            "安装步骤格式是 api {got}，这个版本只认 api {api}",
+            got = s.api,
+            api = API
         ));
     }
     if s.setup.trim().is_empty() || s.teardown.trim().is_empty() {
-        return Err("setup 和 teardown 都要写：装上时做了什么，卸载时就要能撤回".into());
+        return Err(t!("setup 和 teardown 都要写：装上时做了什么，卸载时就要能撤回").into());
     }
     if !(100..=MAX_TIMEOUT_MS).contains(&s.timeout_ms) {
-        return Err(format!("timeout_ms 要在 100 到 {MAX_TIMEOUT_MS} 之间"));
+        return Err(t!(
+            "timeout_ms 要在 100 到 {max} 之间",
+            max = MAX_TIMEOUT_MS
+        ));
     }
     Ok(s)
 }
@@ -59,7 +63,7 @@ pub fn load(files: Vec<PathBuf>) -> Vec<crate::agent::Loaded> {
     files
         .into_iter()
         .map(|file| crate::agent::Loaded {
-            result: read(&file).map(|_| "setup、teardown".to_owned()),
+            result: read(&file).map(|_| t!("setup、teardown").to_owned()),
             file,
         })
         .collect()
@@ -89,7 +93,7 @@ pub fn run(plugins: &Path, dir: &Path, phase: Phase) -> Result<(), String> {
     let s = read(&file)?;
     let data = data_dir(plugins, &p.id);
     mooring_platform::fs::create_private_dir(&data)
-        .map_err(|e| format!("建不了 {}：{e}", data.display()))?;
+        .map_err(|e| t!("建不了 {dir}：{e}", dir = data.display(), e))?;
     let started = Instant::now();
     let result = run_command(dir, &s, phase);
     crate::plugin_context::record(
@@ -123,8 +127,8 @@ fn run_command(dir: &Path, s: &Setup, phase: Phase) -> Result<(), String> {
         )
     })
     .map_err(|e| match e {
-        Failed::Start(why) => format!("{name} 启动不了：{why}"),
-        Failed::TimedOut => format!("{name} 超过 {} ms，已停止", s.timeout_ms),
+        Failed::Start(why) => t!("{name} 启动不了：{why}", name, why),
+        Failed::TimedOut => t!("{name} 超过 {ms} ms，已停止", name, ms = s.timeout_ms),
     })?;
     if done.status.success() {
         return Ok(());
@@ -134,15 +138,16 @@ fn run_command(dir: &Path, s: &Setup, phase: Phase) -> Result<(), String> {
         .map(|b| String::from_utf8_lossy(b).trim().to_owned())
         .find(|s| !s.is_empty())
         .unwrap_or_default();
-    Err(format!(
-        "{name} 失败（{}）{}",
-        done.how(),
-        if out.is_empty() {
-            String::new()
-        } else {
-            format!("：{}", crate::content::short(&out, 300))
-        }
-    ))
+    if out.is_empty() {
+        Err(t!("{name} 失败（{how}）", name, how = done.how()))
+    } else {
+        Err(t!(
+            "{name} 失败（{how}）：{out}",
+            name,
+            how = done.how(),
+            out = crate::content::short(&out, 300)
+        ))
+    }
 }
 
 #[cfg(test)]

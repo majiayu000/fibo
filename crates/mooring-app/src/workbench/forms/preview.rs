@@ -14,7 +14,7 @@ impl Workbench {
         // A missing title still shows where it will go, rather than a blank first line.
         let text = if draft.title.is_empty() {
             Task {
-                title: "（先写要做什么）".into(),
+                title: t!("（先写要做什么）").into(),
                 ..draft.clone()
             }
             .prompt()
@@ -83,7 +83,7 @@ impl Workbench {
                     .child(
                         div()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("保存并开始之后"),
+                            .child(t!("保存并开始之后")),
                     )
                     .child(
                         div()
@@ -94,7 +94,7 @@ impl Workbench {
                             .child(step(
                                 "1",
                                 false,
-                                format!("在「{space}」新开一个画面，标签就叫待办标题")
+                                t!("在「{space}」新开一个画面，标签就叫待办标题", space)
                                     .into_any_element(),
                             ))
                             .child(step(
@@ -105,9 +105,9 @@ impl Workbench {
                                     .flex_wrap()
                                     .items_center()
                                     .gap(px(T::S4))
-                                    .child("运行")
+                                    .child(t!("运行"))
                                     .child(code(agent.command()))
-                                    .child("，等它的输入框出现")
+                                    .child(t!("，等它的输入框出现"))
                                     .into_any_element(),
                             ))
                             .child(step(
@@ -116,16 +116,21 @@ impl Workbench {
                                 div()
                                     .flex()
                                     .flex_wrap()
-                                    .child(format!("把下面这段放进 {} 的输入框，", agent.name()))
+                                    .child(t!(
+                                        "把下面这段放进 {agent} 的输入框，",
+                                        agent = agent.name()
+                                    ))
                                     .child(
-                                        div().font_weight(gpui::FontWeight::BOLD).child("不发送"),
+                                        div()
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .child(t!("不发送")),
                                     )
                                     .into_any_element(),
                             ))
                             .child(step(
                                 "4",
                                 true,
-                                "你检查、可以改，按回车才发给 Agent".into_any_element(),
+                                t!("你检查、可以改，按回车才发给 Agent").into_any_element(),
                             )),
                     ),
             )
@@ -143,10 +148,10 @@ impl Workbench {
                             .items_center()
                             .text_size(px(T::SMALL))
                             .text_color(T::color(T::secondary()))
-                            .child("放进输入框的内容")
+                            .child(t!("放进输入框的内容"))
                             .child(div().flex_1())
                             .child(
-                                button("form-copy", "复制")
+                                button("form-copy", t!("复制"))
                                     .h(px(T::ICON_WIDTH))
                                     .px(px(T::S6))
                                     .text_color(T::color(T::link()))
@@ -182,8 +187,8 @@ impl Workbench {
                     .gap(px(T::S12))
                     .border_t(px(T::BORDER_WIDTH))
                     .border_color(T::color(T::border()))
-                    .child(hint("不是 shell 参数，引号和换行原样保留"))
-                    .child(hint("同一待办再点「开始」会切回这个画面")),
+                    .child(hint(t!("不是 shell 参数，引号和换行原样保留")))
+                    .child(hint(t!("同一待办再点「开始」会切回这个画面"))),
             )
     }
 }

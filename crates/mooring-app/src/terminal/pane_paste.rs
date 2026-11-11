@@ -45,7 +45,15 @@ impl Pane {
 pub(super) fn line_count(text: &str) -> usize {
     text.trim_end_matches(['\r', '\n']).lines().count()
 }
-pub(super) const NOT_COPIED: &str = "Fibo 这边没有选区，剪贴板没动。程序里选的字由它自己复制";
+pub(super) struct CopyHint(&'static str);
+impl From<CopyHint> for gpui::SharedString {
+    fn from(h: CopyHint) -> Self {
+        mooring_core::i18n::text(h.0).into()
+    }
+}
+pub(super) const NOT_COPIED: CopyHint = CopyHint(tk!(
+    "Fibo 这边没有选区，剪贴板没动。程序里选的字由它自己复制"
+));
 /// Whether a copy has anything to take: the selection, or the screen when there is none.
 /// With the mouse taken Mooring can't see the program's own selection, so copying the screen
 /// could replace what the user just copied there.
@@ -56,12 +64,12 @@ pub(super) fn copies_anything(whole_screen: bool, mouse_taken: bool) -> bool {
 pub(super) fn copied_note(text: &str, whole_screen: bool) -> String {
     let lines = text.lines().count();
     if whole_screen {
-        return format!("没选中文字，已复制整屏 {lines} 行");
+        return t!("没选中文字，已复制整屏 {lines} 行", lines);
     }
     if lines > 1 {
-        format!("已复制 {lines} 行")
+        t!("已复制 {lines} 行", lines)
     } else {
-        format!("已复制 {} 字", text.chars().count())
+        t!("已复制 {chars} 字", chars = text.chars().count())
     }
 }
 
