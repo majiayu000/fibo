@@ -40,7 +40,7 @@
 
 ---
 
-> **现状：** 最新发布版 [v0.2.0](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片，macOS 14 及以上，已签名并经 Apple 公证。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
+> **现状：** 最新发布版 [v0.1.1](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片，macOS 14 及以上，已签名并经 Apple 公证。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
 
 ## 安装
 
