@@ -7,7 +7,7 @@ import { StyleSheet, View } from 'react-native';
 import { tr } from '@/i18n';
 import { type Machine, remote, supports } from '@/remote/hub';
 import { quotaStore } from '@/store/quota';
-import { type Tight, level, tightWindows, windowName } from './parse';
+import { type Tight, level, shortWindow, tightWindows } from './parse';
 import { agentName } from './status';
 import { type Theme } from './theme';
 
@@ -49,9 +49,6 @@ export function useTightWindows(machines: Machine[]): Tight[] {
   );
   return tight;
 }
-
-/** 「5 小时窗口」 is long for a line; the other windows' names are short already. */
-const shortWindow = (minutes: number) => (minutes === 300 ? tr('5 小时') : windowName(minutes));
 
 export function tightWords(q: Tight, named: boolean) {
   return `${named ? `${q.machine} · ` : ''}${agentName(q.agent)} ${shortWindow(q.minutes)} ${q.used}%`;

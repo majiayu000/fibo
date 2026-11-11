@@ -74,3 +74,12 @@ test('the setting switches the words, and a missing key falls back to the Chines
   expect(t('在跑')).toBe('在跑');
   expect(t('电脑#list')).toBe('电脑');
 });
+
+test('a quota window named mid-line starts lower-case in English, unchanged in Chinese', async () => {
+  const { setLanguage } = await import('../src/i18n');
+  const { shortWindow } = await import('../src/ui/parse');
+  expect(shortWindow(10080)).toBe('本周');
+  setLanguage('en');
+  expect(shortWindow(10080)).toBe('this week');
+  setLanguage('auto');
+});

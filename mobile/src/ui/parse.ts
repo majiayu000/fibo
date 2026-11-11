@@ -148,6 +148,13 @@ export function windowName(minutes: number): string {
   return tr('{minutes} 分钟', { minutes });
 }
 
+/** 「5 小时窗口」 is long for a line; the other windows' names are short already. Mid-line, so
+ * English starts it lower-case: "Codex this week 97%", not "Codex This week 97%". */
+export function shortWindow(minutes: number): string {
+  const name = minutes === 300 ? tr('5 小时') : windowName(minutes);
+  return name.charAt(0).toLowerCase() + name.slice(1);
+}
+
 const WEEKDAYS = [tk('周日'), tk('周一'), tk('周二'), tk('周三'), tk('周四'), tk('周五'), tk('周六')];
 
 /** "1 时 40 分后重置" within a day, else the weekday; empty when the time is unknown or past. */
