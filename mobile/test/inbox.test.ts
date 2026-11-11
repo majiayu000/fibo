@@ -201,11 +201,16 @@ describe('finished work folds, and does not read as nothing to do', () => {
     expect(ids(s.ahead)).toEqual(['a', 'e']);
     expect(ids(s.review)).toEqual(['r']);
   });
-  test('the fold says its word in the phone\'s language, and its count', () => {
+  test('the fold says the computer\'s word, in the phone\'s language when it can, and its count', async () => {
     expect(foldLabel(lay([review('r1'), review('r2')]).review)).toBe('等你验收 · 2');
-    // A key the phone knows is said by the phone, whatever language the computer used.
-    expect(foldLabel(lay([review('r', { status_label: 'Ready for review' })]).review)).toBe('等你验收 · 1');
-    // One it does not know yet keeps the computer's word, or just the count.
+    // The word is the computer's (core's Status::label): an English computer's stays English.
+    expect(foldLabel(lay([review('r', { status_label: 'Ready for review' })]).review)).toBe('Ready for review · 1');
+    // A Chinese one reads in English on an English phone.
+    const { setLanguage } = await import('../src/i18n');
+    setLanguage('en');
+    expect(foldLabel(lay([review('r1')]).review)).toBe('Ready for review · 1');
+    setLanguage('auto');
+    // Words the phone has no English for stay as they came, or just the count.
     expect(foldLabel([{ c: card('x', 'mystery', 0, { status_label: 'in review' }) } as never])).toBe('in review · 1');
     expect(foldLabel([{ c: card('x', 'mystery', 0, { status_label: null }) } as never])).toBe('1');
   });

@@ -59,6 +59,14 @@ export function tr(zh: string, args?: Args): string {
   return args ? text.replace(/\{(\w+)\}/g, (m, k: string) => (k in args ? String(args[k] ?? '') : m)) : text;
 }
 
+/** Words the computer spelled (a state's label, from core's `Status::label`): which word is the
+ * computer's to say, so the phone keeps none of its own; it only says a Chinese one in English
+ * when it knows it. An English computer's words stay as they came. */
+export function hostWords(said: string): string {
+  const en = lang() === 'en' ? EN[said] : undefined;
+  return typeof en === 'string' ? en : said;
+}
+
 /** A key kept as the Chinese itself where `t` cannot run yet (a table built at load); say it with `tr` where shown. */
 export const tk = (zh: string) => zh;
 
