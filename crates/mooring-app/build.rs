@@ -6,9 +6,17 @@ fn main() {
     }
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     let object = out.join("native.o");
+    // For the target, not the machine building it: an Intel build on Apple silicon linked an
+    // arm64 bridge and failed on every kl_* symbol (2026-11-12).
+    let arch = match env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
+        Ok("x86_64") => "x86_64",
+        _ => "arm64",
+    };
     let status = Command::new("xcrun")
         .args([
             "clang",
+            "-arch",
+            arch,
             "-fobjc-arc",
             "-fblocks",
             "-c",

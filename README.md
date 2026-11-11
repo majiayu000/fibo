@@ -14,7 +14,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/pulse)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest) [![Windows preview](https://img.shields.io/badge/Windows-x64%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest)
 [![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
 [![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
 [![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
@@ -40,17 +40,19 @@
 
 ---
 
-> **Status:** latest release, [v0.1.1](https://github.com/majiayu000/fibo/releases/latest): Apple silicon, macOS 14 or later, signed and notarized. Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
+> **Status:** latest release, [v0.1.2](https://github.com/majiayu000/fibo/releases/latest): Macs with Apple silicon or Intel, macOS 14 or later, signed and notarized; Windows x64 as a preview (unsigned, tested on Windows 11). Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
 
 ## Install
 
-Download `Fibo-<version>-arm64.dmg` from the [latest release](https://github.com/majiayu000/fibo/releases/latest) and drag Fibo to Applications, or use Homebrew:
+Download from the [latest release](https://github.com/majiayu000/fibo/releases/latest): `Fibo-<version>-arm64.dmg` for Apple silicon, `Fibo-<version>-x86_64.dmg` for Intel Macs, then drag Fibo to Applications. Or use Homebrew, which picks the right one:
 
 ```sh
 brew install --cask majiayu000/tap/fibo
 ```
 
 Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in the sidebar. Releases update themselves (see [How do I update?](#faq)).
+
+**Windows (preview):** run `Fibo-Setup-<version>.exe`; it installs for your user only, no admin needed. The installer is not code-signed yet, so SmartScreen warns about an unknown publisher: choose *More info*, then *Run anyway*. The Windows build does not update itself; run the newer installer to update. It has been tried on Windows 11 x64 only.
 
 ### Build from source
 
