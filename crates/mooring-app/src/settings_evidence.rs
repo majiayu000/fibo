@@ -720,7 +720,7 @@ pub(super) fn start(
         }
         shot("general", cx);
         if phase == "1" {
-            click(578., 148., cx); wait(1000).await;
+            click(810., 148., cx); wait(200).await; click(810., 215., cx); wait(1000).await;
             assert_eq!(values(cx).default_agent, mooring_core::model::Agent::Claude);
             click(723., 253., cx); wait(1000).await;
             assert_eq!(values(cx).away_minutes, 15);

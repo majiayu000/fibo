@@ -6,43 +6,14 @@ impl SettingsView {
     pub(super) fn general_page(&self, cx: &Context<Self>) -> gpui::Div {
         let mut start = Vec::new();
         if self.shows(Page::General, t!("默认 Agent"), cx) {
-            let mut choices = segments();
-            for agent in Agent::all() {
-                choices = choices.child(
-                    segment(
-                        format!("agent-{}", agent.name()),
-                        agent.name(),
-                        self.values.default_agent == agent,
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.change(cx, |v| v.default_agent = agent)
-                    })),
-                );
-            }
-            // Its own line below the words: a dozen CLIs beside them left the title a
-            // column one character wide.
             start.push(
-                div()
-                    .px(px(T::S16))
-                    .py(px(T::S12))
-                    .flex()
-                    .flex_col()
-                    .gap(px(T::S8))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(T::S2))
-                            .child(
-                                div()
-                                    .text_size(px(T::BODY_SIZE))
-                                    .text_color(T::color(T::primary()))
-                                    .child(t!("默认 Agent")),
-                            )
-                            .child(label(t!("新建待办和未指定 Agent 时用它"))),
-                    )
-                    .child(div().flex().child(choices.flex_wrap()))
-                    .into_any_element(),
+                self.row(
+                    true,
+                    t!("默认 Agent"),
+                    t!("新建待办和未指定 Agent 时用它"),
+                    self.default_agent_picker(cx),
+                )
+                .into_any_element(),
             );
         }
         if self.shows(Page::General, t!("语言"), cx) {
@@ -124,6 +95,100 @@ impl SettingsView {
             (t!("侧栏"), sidebar),
         ])
     }
+    fn default_agent_picker(&self, cx: &Context<Self>) -> gpui::Div {
+        div()
+            .relative()
+            .child(
+                secondary("default-agent", self.values.default_agent.name())
+                    .w(px(180.))
+                    .justify_between()
+                    .child("▾")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.agent_menu = if this.agent_menu.is_some() {
+                            None
+                        } else {
+                            Some(this.values.default_agent)
+                        };
+                        window.focus(&this.focus, cx);
+                        cx.notify();
+                    })),
+            )
+            .when_some(self.agent_menu, |d, highlighted| {
+                d.child(
+                    gpui::deferred(
+                        gpui::anchored()
+                            .position_mode(gpui::AnchoredPositionMode::Local)
+                            .position(gpui::point(px(0.), px(T::S4)))
+                            .snap_to_window_with_margin(px(T::S8))
+                            .child(
+                                div()
+                                    .id("default-agent-menu")
+                                    .w(px(180.))
+                                    .max_h(px(400.))
+                                    .overflow_y_scroll()
+                                    .p(px(T::S4))
+                                    .bg(T::color(T::popover()))
+                                    .border(px(T::BORDER_WIDTH))
+                                    .border_color(T::color(T::control()))
+                                    .rounded(px(T::CONTROL_RADIUS))
+                                    .shadow_lg()
+                                    .occlude()
+                                    .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                                        this.agent_menu = None;
+                                        cx.stop_propagation();
+                                        cx.notify();
+                                    }))
+                                    .children(Agent::all().into_iter().map(|agent| {
+                                        button(format!("agent-{}", agent.name()), agent.name())
+                                            .w_full()
+                                            .justify_between()
+                                            .when(agent == highlighted, |d| {
+                                                d.bg(T::color(T::button_hover()))
+                                            })
+                                            .child(if agent == self.values.default_agent {
+                                                "✓"
+                                            } else {
+                                                ""
+                                            })
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.agent_menu = None;
+                                                this.change(cx, |v| v.default_agent = agent);
+                                                cx.notify();
+                                            }))
+                                    })),
+                            ),
+                    )
+                    .with_priority(3),
+                )
+            })
+    }
+
+    /// Keep menu keys inside settings; Esc dismisses only the open picker.
+    pub(super) fn agent_menu_key(&mut self, key: &str, cx: &mut Context<Self>) {
+        let Some(highlighted) = self.agent_menu else {
+            return;
+        };
+        match key {
+            "escape" => self.agent_menu = None,
+            "enter" | "space" => {
+                self.agent_menu = None;
+                self.change(cx, |v| v.default_agent = highlighted);
+            }
+            "up" | "down" => {
+                let agents = Agent::all();
+                let i = agents.iter().position(|a| *a == highlighted).unwrap_or(0);
+                let next = if key == "down" {
+                    (i + 1) % agents.len()
+                } else {
+                    (i + agents.len() - 1) % agents.len()
+                };
+                self.agent_menu = Some(agents[next]);
+            }
+            _ => {}
+        }
+        cx.notify();
+    }
+
     /// 语言: follow the system, or Chinese or English whatever it says. Each language is named
     /// in itself, so a reader who cannot read the other one still finds theirs.
     fn language_row(&self, first: bool, cx: &Context<Self>) -> gpui::Div {

@@ -4,6 +4,7 @@ use super::*;
 use crate::terminal::screen;
 use gpui::WindowHandle;
 use std::time::Duration;
+mod agent_picker_evidence;
 mod blank_pane_evidence;
 mod changes_evidence;
 mod complete_evidence;
@@ -72,7 +73,8 @@ pub fn start(
     evidence: Option<PathBuf>,
     cx: &mut App,
 ) {
-    if first_run_evidence::start(handle, evidence.clone(), cx)
+    if agent_picker_evidence::start(handle, evidence.clone(), cx)
+        || first_run_evidence::start(handle, evidence.clone(), cx)
         || settings_evidence::start(handle, evidence.clone(), cx)
         || phones_evidence::start(handle, evidence.clone(), cx)
         || remote_typing_evidence::start(handle, evidence.clone(), cx)
