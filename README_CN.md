@@ -14,7 +14,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/pulse)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest) [![Windows preview](https://img.shields.io/badge/Windows-x64%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest)
 [![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
 [![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
 [![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
@@ -40,17 +40,19 @@
 
 ---
 
-> **现状：** 最新发布版 [v0.1.1](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片，macOS 14 及以上，已签名并经 Apple 公证。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
+> **现状：** 最新发布版 [v0.1.2](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片和 Intel 的 Mac，macOS 14 及以上，已签名并经 Apple 公证；Windows x64 为预览版（未签名，在 Windows 11 上试过）。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
 
 ## 安装
 
-从[最新发布](https://github.com/majiayu000/fibo/releases/latest)下载 `Fibo-<版本>-arm64.dmg`，把 Fibo 拖进「应用程序」；或者用 Homebrew：
+从[最新发布](https://github.com/majiayu000/fibo/releases/latest)下载：Apple 芯片用 `Fibo-<版本>-arm64.dmg`，Intel 的 Mac 用 `Fibo-<版本>-x86_64.dmg`，把 Fibo 拖进「应用程序」；或者用 Homebrew，它会自己选对的那个：
 
 ```sh
 brew install --cask majiayu000/tap/fibo
 ```
 
 打开 Fibo，在它的终端里运行 `claude` 或 `codex`，会话就会出现在左栏。发布版会自己更新（见[常见问题](#常见问题)里的「怎么更新」）。
+
+**Windows（预览版）：** 运行 `Fibo-Setup-<版本>.exe`，只装给当前用户，不用管理员权限。安装程序还没有代码签名，SmartScreen 会提示「未知发布者」：点「更多信息」，再点「仍要运行」。Windows 版不会自己更新，要更新就运行新版安装程序。目前只在 Windows 11 x64 上试过。
 
 ### 从源码构建
 
