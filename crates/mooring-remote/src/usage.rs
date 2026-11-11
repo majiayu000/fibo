@@ -37,6 +37,9 @@ pub struct AgentQuota {
     pub plan: String,
     /// When the CLI recorded it, Unix seconds.
     pub at: u64,
+    /// Core decides when this reading becomes historical; absent means unknown.
+    #[serde(default)]
+    pub fresh_until: Option<u64>,
     pub windows: Vec<QuotaWindow>,
 }
 

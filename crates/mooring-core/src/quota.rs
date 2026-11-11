@@ -47,6 +47,15 @@ pub struct Window {
     pub name: String,
 }
 impl Quota {
+    /// A reading older than an hour is historical, even if its window has not reset.
+    pub fn fresh_until(&self) -> u64 {
+        self.at.saturating_add(3600)
+    }
+
+    pub fn stale(&self, now: u64) -> bool {
+        now > self.fresh_until()
+    }
+
     /// Most used first; ties keep the source's shortest-window-first order.
     pub fn by_usage(&self) -> Vec<&Window> {
         let mut windows: Vec<_> = self.windows.iter().collect();

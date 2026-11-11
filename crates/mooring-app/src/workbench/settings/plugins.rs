@@ -68,6 +68,9 @@ pub(in crate::workbench) struct Market {
     )>,
 }
 impl Market {
+    pub(super) fn loaded(&self) -> bool {
+        self.player.is_some()
+    }
     pub(in crate::workbench) fn read(cx: &mut Context<SettingsView>) -> Self {
         let search = cx.new(|cx| {
             crate::ui::field::Field::new(t!("搜索插件"), "", cx)

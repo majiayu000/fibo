@@ -29,6 +29,7 @@ fn reading(agent: mooring_core::agent::Agent, q: &quota::Quota) -> rp::AgentQuot
         agent_name: agent.name().to_owned(),
         plan: q.plan.clone(),
         at: q.at,
+        fresh_until: Some(q.fresh_until()),
         // The account's own: a phone has one 本周 per Agent and keys its rows by length.
         windows: (q.by_usage().into_iter())
             .filter(|w| w.name.is_empty())
@@ -81,6 +82,7 @@ mod tests {
         let sent = reading(Agent::Dsh, &q);
         let wire: rp::AgentQuota = serde_json::from_value(json!(sent)).unwrap();
         assert_eq!(wire.agent_name, Agent::Dsh.name());
+        assert_eq!(wire.fresh_until, Some(q.fresh_until()));
         assert_eq!(
             wire.windows
                 .iter()

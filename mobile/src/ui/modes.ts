@@ -14,15 +14,15 @@ export type ModeOptions = { options: ModeOption[]; note?: string };
 /** The word the computer uses on a card for the mode that stops asking. */
 export const FULL_WORDS = notUi('全部放行');
 
-export const isFull = (permission: string | null | undefined) => permission === FULL_WORDS;
+export const isFull = (full: boolean | null | undefined) => full === true;
 
 /**
  * Whether a list row says so: only when it is the exception. Most of a person's sessions may run
  * this way from the start (the first real inbox had the word on all 24), and then it says nothing
  * and takes the room of what each is doing. The chat's own tag always says.
  */
-export const rowSaysFull = (card: { permission?: string | null }, cards: { permission?: string | null }[]) =>
-  isFull(card.permission) && cards.some((c) => !!c.permission && !isFull(c.permission));
+export const rowSaysFull = (card: { permission_full?: boolean | null }, cards: { permission_full?: boolean | null }[]) =>
+  isFull(card.permission_full) && cards.some((c) => c.permission_full === false);
 
 /** What the second confirmation says: the consequence, in so many words. Getters, so the words follow the language. */
 export const FULL_CONFIRM = {

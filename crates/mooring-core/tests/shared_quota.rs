@@ -46,3 +46,13 @@ fn severity_boundaries_and_window_order_have_one_owner() {
     assert_eq!(q.tightest(50).unwrap().minutes, 300);
     assert_eq!(q.tightest(100).unwrap().minutes, 43200);
 }
+
+#[test]
+fn reading_freshness_has_one_deadline_and_survives_old_data() {
+    let q: mooring_core::quota::Quota =
+        serde_json::from_str(r#"{"at":1000,"windows":[]}"#).unwrap();
+    assert_eq!(q.fresh_until(), 4600);
+    assert!(!q.stale(4600));
+    assert!(q.stale(4601));
+    assert!(!q.stale(999));
+}

@@ -465,7 +465,7 @@ impl SettingsView {
             machines,
             machine_field,
             machines_error,
-            market: plugins::Market::read(cx),
+            market: plugins::Market::default(),
             editor: None,
         }
     }

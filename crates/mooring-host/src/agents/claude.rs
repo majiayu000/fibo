@@ -233,7 +233,9 @@ impl Adapter for Claude {
         // Written whenever the mode is in force, and again on each prompt.
         if ty == "permission-mode" || ty == "user" {
             if let Some(mode) = v["permissionMode"].as_str() {
-                parser.card.permission = super::permission::claude(mode);
+                let reading = super::permission::claude(mode);
+                parser.card.permission = reading.words;
+                parser.card.permission_full = reading.full;
             }
         }
         // Handed to Claude Code's background daemon: the conversation goes on in a forked

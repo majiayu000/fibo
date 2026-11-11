@@ -100,18 +100,19 @@ test('confirmed, and through Face ID if on, it carries allow_full', async () => 
   expect(sent[0].choice).toBe('bypassPermissions');
 });
 
-test('the word on a card is what marks it', () => {
-  expect(isFull(FULL_WORDS)).toBe(true);
-  expect(isFull('自动判断')).toBe(false);
+test('a host flag marks permission independently of display words', () => {
+  expect(isFull(true)).toBe(true);
+  expect(isFull(false)).toBe(false);
+  expect(isFull(undefined)).toBe(false);
   expect(isFull(null)).toBe(false);
 });
 
 test('a row says it only when it is the exception', () => {
-  const full = { permission: FULL_WORDS };
-  const asks = { permission: '逐个确认' };
+  const full = { permission: 'Fully allowed', permission_full: true };
+  const asks = { permission: FULL_WORDS, permission_full: false };
   expect(rowSaysFull(full, [full, full])).toBe(false);
   expect(rowSaysFull(full, [full, asks])).toBe(true);
-  expect(rowSaysFull(full, [full, { permission: null }])).toBe(false);
+  expect(rowSaysFull(full, [full, { permission_full: null }])).toBe(false);
   expect(rowSaysFull(asks, [full, asks])).toBe(false);
 });
 

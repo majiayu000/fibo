@@ -449,6 +449,7 @@ export default function Chat() {
           agent={agent}
           model={card?.model}
           permission={card?.permission}
+          permissionFull={card?.permission_full}
           running={!!running}
           busyPlaceholder={tr(whileBusy(card?.controls).placeholder)}
           canStop={supports(m, 'stop')}

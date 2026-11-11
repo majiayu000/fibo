@@ -10,9 +10,6 @@ use mooring_core::quota::{NEAR, OVER, Quota, Window as QuotaWindow};
 
 mod sessions;
 
-/// A reading older than this is marked `*`: the CLI has not been used since.
-const STALE_AFTER: u64 = 3600;
-
 /// Which of the bar's popovers is open.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum StatusPop {
@@ -198,7 +195,7 @@ impl Workbench {
         let marks = true;
         let mut said = Vec::new();
         for (agent, quota, _) in readings.iter().take(BAR_CELLS) {
-            let stale = now.saturating_sub(quota.at) > STALE_AFTER;
+            let stale = quota.stale(now);
             let mut cell = div()
                 .flex()
                 .items_center()
@@ -315,7 +312,7 @@ impl Workbench {
             panel = panel.child(label(t!("这一周用过的 Agent 都还没留下额度记录")));
         }
         for (agent, quota, _) in &readings {
-            let stale = now.saturating_sub(quota.at) > STALE_AFTER;
+            let stale = quota.stale(now);
             let mut head = div().flex().items_baseline().gap(px(T::S6)).child(
                 div().font_weight(gpui::FontWeight::SEMIBOLD).child(format!(
                     "{}{}",

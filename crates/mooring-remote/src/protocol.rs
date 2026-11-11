@@ -561,6 +561,9 @@ pub struct Card {
     /// Its permission mode as its log last said it, in words to show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission: Option<String>,
+    /// Semantic flag from the CLI; None means it has not been read.
+    #[serde(default)]
+    pub permission_full: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

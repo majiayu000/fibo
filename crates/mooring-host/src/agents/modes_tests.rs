@@ -239,7 +239,7 @@ fn claude_log_and_menu_share_permission_words() {
     ] {
         assert_eq!(
             card_words(Agent::Claude, mode),
-            super::super::permission::claude(mode),
+            super::super::permission::claude(mode).words,
             "{mode}"
         );
     }

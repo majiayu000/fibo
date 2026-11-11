@@ -73,6 +73,13 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                 .filter(|m| m.session.as_deref() == session.map(|s| s.id.as_str()));
             let log_model = content.map_or("", |c| c.model.as_str());
             let log_permission = content.map_or("", |c| c.permission.as_str());
+            let set_permission =
+                set.and_then(|m| TerminalModes::read(&m.permission, log_permission));
+            let permission_full = if set_permission.is_some() {
+                set.and_then(|m| m.permission_full)
+            } else {
+                content.and_then(|c| c.permission_full)
+            };
             let status = status::of_terminal(w, &t.id, trust.is_some(), now);
             let phase = match status.map(status::Status::phase) {
                 Some(status::Phase::Working) => rp::Phase::Working,
@@ -143,8 +150,8 @@ pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io
                     }),
                 model: (set.and_then(|m| TerminalModes::read(&m.model, log_model)))
                     .or_else(|| content.and_then(|c| said(&c.model))),
-                permission: (set.and_then(|m| TerminalModes::read(&m.permission, log_permission)))
-                    .or_else(|| content.and_then(|c| said(&c.permission))),
+                permission_full,
+                permission: set_permission.or_else(|| content.and_then(|c| said(&c.permission))),
             }
         })
         .collect();
@@ -451,6 +458,50 @@ mod tests {
             .iter()
             .filter(|c| c.id != shell)
             .all(|c| c.note.is_none()));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn permission_semantics_follow_the_active_override_then_the_new_log() {
+        let mut w = mooring_core::sample::every_state();
+        let session = w
+            .agent_sessions
+            .iter()
+            .find(|s| s.id == "review")
+            .unwrap()
+            .clone();
+        let terminal = session.terminal.clone().unwrap();
+        let c = w.content.get_mut(&session.id).unwrap();
+        c.permission = "Fully allowed".into();
+        c.permission_full = Some(true);
+        let dir = std::env::temp_dir().join(format!("mooring-permission-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut seen = RecognitionStatus::default();
+        let card = |w: &mooring_core::model::Workspace, seen: &RecognitionStatus| {
+            let reply: rp::List =
+                serde_json::from_value(list(w, seen, &dir.join("sock")).unwrap()).unwrap();
+            reply
+                .terminals
+                .into_iter()
+                .find(|c| c.id == terminal)
+                .unwrap()
+        };
+        assert_eq!(card(&w, &seen).permission_full, Some(true));
+        seen.terminal_modes.insert(
+            terminal.clone(),
+            TerminalModes {
+                session: Some(session.id.clone()),
+                permission: Some(("逐个确认".into(), "Fully allowed".into())),
+                permission_full: Some(false),
+                ..Default::default()
+            },
+        );
+        let overridden = card(&w, &seen);
+        assert_eq!(overridden.permission.as_deref(), Some("逐个确认"));
+        assert_eq!(overridden.permission_full, Some(false));
+        w.content.get_mut(&session.id).unwrap().permission = "New log mode".into();
+        assert_eq!(card(&w, &seen).permission_full, Some(true));
+        w.content.get_mut(&session.id).unwrap().permission_full = None;
+        assert_eq!(card(&w, &seen).permission_full, None);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

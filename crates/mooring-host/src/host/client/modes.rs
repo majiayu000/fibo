@@ -94,6 +94,7 @@ impl<'a> Steps<'a> {
         let Changed {
             model,
             permission,
+            permission_full,
             effort,
         } = changed;
         let mut host = lock(self.shared)?;
@@ -120,10 +121,12 @@ impl<'a> Steps<'a> {
         }
         if let Some(p) = permission.clone() {
             at.permission = Some((p, log_permission));
+            at.permission_full = permission_full;
         }
         Ok(Reply::Modes(ModeReply::Now {
             model: model.unwrap_or_default(),
             permission: permission.unwrap_or_default(),
+            permission_full,
             // Cards say no effort: nothing to keep it for.
             effort: effort.unwrap_or_default(),
         }))

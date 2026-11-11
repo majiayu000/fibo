@@ -60,6 +60,7 @@ export type Card = {
   /** The model that last answered, and its permission mode in words to show. */
   model?: string | null;
   permission?: string | null;
+  permission_full?: boolean | null;
 };
 
 /** A todo you have not closed. Hosts before 11-08 send the first four fields only, and only

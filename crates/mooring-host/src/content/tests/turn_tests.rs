@@ -587,3 +587,35 @@ fn a_question_asked_through_the_permission_hook_keeps_its_question_and_choices()
     );
     assert!(choices.is_empty());
 }
+
+#[test]
+fn parsed_permission_semantics_follow_new_modes_not_the_display_words() {
+    let mut p = Parser::default();
+    for (mode, full) in [
+        ("bypassPermissions", Some(true)),
+        ("plan", Some(false)),
+        ("future", None),
+    ] {
+        p.add(
+            Agent::Claude,
+            json!({"type":"permission-mode","permissionMode":mode})
+                .to_string()
+                .as_bytes(),
+            Source::default(),
+        );
+        assert_eq!(p.card.permission_full, full);
+    }
+    for (sandbox, full) in [
+        ("danger-full-access", Some(true)),
+        ("read-only", Some(false)),
+        ("future", None),
+    ] {
+        p.add(Agent::Codex, json!({"type":"turn_context","payload":{"approval_policy":"never","sandbox_policy":{"type":sandbox}}}).to_string().as_bytes(), Source::default());
+        assert_eq!(p.card.permission_full, full);
+    }
+    let mut saved = serde_json::to_value(mooring_core::content::Content::default()).unwrap();
+    saved["permission"] = json!("全部放行");
+    saved.as_object_mut().unwrap().remove("permission_full");
+    let old: mooring_core::content::Content = serde_json::from_value(saved).unwrap();
+    assert_eq!(old.permission_full, None);
+}

@@ -158,15 +158,19 @@ export function shortWindow(minutes: number): string {
 
 const WEEKDAYS = [tk('周日'), tk('周一'), tk('周二'), tk('周三'), tk('周四'), tk('周五'), tk('周六')];
 
+/** The host supplies the deadline; old cached readings with none are not called fresh. */
+export const quotaStale = (reading: { fresh_until?: number | null }, now = Date.now() / 1000) =>
+  reading.fresh_until == null || now > reading.fresh_until;
+
 /** Same boundary as core Window::reset; zero means the reset time is unknown. */
 export const quotaReset = (resetsAt: number, now = Date.now() / 1000) => resetsAt !== 0 && resetsAt <= now;
 
 /** A past reading is not a measurement of the new window, even when it used to be full. */
-export function quotaWindowView(w: QuotaWindow, now = Date.now() / 1000) {
+export function quotaWindowView(w: QuotaWindow, now = Date.now() / 1000, stale = false) {
   const reset = quotaReset(w.resets_at, now);
   return {
     used: reset ? 0 : w.used,
-    level: reset ? undefined : w.level,
+    level: reset || stale ? undefined : w.level,
     text: reset ? tr('已重置') : `${w.used}%`,
     hint: reset ? tr('等下次使用时更新') : resetText(w.resets_at, now),
   };
@@ -262,7 +266,7 @@ export function quotaView(online: boolean, asks: boolean, saved: unknown[] | nul
   return saved ? 'live' : 'loading';
 }
 
-type Reading = { agent: string; agent_name?: string; windows: QuotaWindow[] };
+type Reading = { agent: string; agent_name?: string; fresh_until?: number | null; windows: QuotaWindow[] };
 export type Tight = { machine: string; agent: string; agent_name?: string; minutes: number; used: number; level?: QuotaLevel };
 
 /** Each Agent's most used window on each computer, fullest first. Never added up: see `app/quota.tsx`. A window past its reset says nothing. */
@@ -274,7 +278,7 @@ export function tightWindows(readings: { machine: string; agents: Reading[] | nu
       if (a.windows.some((w) => !w.level)) continue;
       const top = a.windows.find((w) => !quotaReset(w.resets_at, now));
       if (!top) continue;
-      out.push({ machine, agent: a.agent, agent_name: a.agent_name, minutes: top.minutes, used: top.used, level: top.level });
+      out.push({ machine, agent: a.agent, agent_name: a.agent_name, minutes: top.minutes, used: top.used, level: quotaStale(a, now) ? undefined : top.level });
     }
   }
   return out.sort((x, y) => y.used - x.used);

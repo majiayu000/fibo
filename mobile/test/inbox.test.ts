@@ -141,8 +141,14 @@ describe('inbox lists', () => {
     expect(where(plain({ outcome: 'deferred', approval: 'Proceed?' }))).toBe('inbox');
   });
 
-  test('shells are not conversations', () => {
+  test('recognized unbound Agents stay visible, ordinary shells stay hidden', () => {
     expect(where(plain({ phase: 'shell', agent: null }))).toBe('none');
+    const unbound = plain({ phase: 'shell', agent: 'codex', session: null, title: 'codex · 未关联对话' });
+    expect(where(unbound)).toBe('inbox');
+    const view = shelve(arrange([machine([unbound])], []), null);
+    expect(view.behind.map((i) => i.c.id)).toEqual(['c']);
+    expect(view.empty).toBe(false);
+    expect(view.acts).toBe(0);
   });
 
   test('a 稍后提醒 the host brought back joins the inbox but is not pinned: it asks nothing', () => {

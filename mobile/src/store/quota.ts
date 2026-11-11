@@ -5,7 +5,7 @@ import { kv, persisted } from './kv';
 
 export type QuotaLevel = 'low' | 'mid' | 'high';
 export type QuotaWindow = { minutes: number; level?: QuotaLevel; used: number; resets_at: number };
-export type QuotaReading = { agent: string; agent_name?: string; plan?: string; at: number; windows: QuotaWindow[] };
+export type QuotaReading = { agent: string; agent_name?: string; plan?: string; at: number; fresh_until?: number | null; windows: QuotaWindow[] };
 export type QuotaSaved = { agents: QuotaReading[] | null };
 
 const entry = (id: string) => `mooring.quota.${id.replace(/[^A-Za-z0-9._-]/g, '_')}`;

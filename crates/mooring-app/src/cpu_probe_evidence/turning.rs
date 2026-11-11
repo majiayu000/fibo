@@ -303,6 +303,13 @@ pub(super) async fn board_motion(
     wait(300).await;
     cx.update(|a| running_spin::choose(false, a).unwrap());
     for reduced in [false, true] {
+        // Reacquire focus for each capture pair; a different probe/window may have
+        // become key while this foreground-only check changed its mode.
+        cx.update_window(handle.into(), |_, w, a| {
+            a.activate(true);
+            w.activate_window();
+        })
+        .unwrap();
         mooring_core::effect::set_reduce_motion(reduced);
         refreshed(cx);
         wait(300).await;
@@ -316,6 +323,11 @@ pub(super) async fn board_motion(
         wait(350).await;
         refreshed(cx);
         let after = shot(cx);
+        assert!(
+            cx.update_window(handle.into(), |_, w, _| w.is_window_active())
+                .unwrap(),
+            "the motion probe lost focus during capture"
+        );
         before
             .save(directory.join(format!("board-reduced-{reduced}-before.png")))
             .unwrap();

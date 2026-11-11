@@ -110,21 +110,14 @@ pub fn pointed(menu: &Menu) -> Option<&Row> {
 /// The words `permission::codex`/`permission::claude` use for cards, for an option's key.
 pub fn card_words(agent: Agent, key: &str) -> String {
     match agent {
-        Agent::Claude => super::permission::claude(key),
-        _ => match key {
-            "Ask for approval" => "逐个确认",
-            "Approve for me" => "只问不安全的",
-            "Full Access" => "全部放行",
-            "Read Only" => "只读",
-            other => other,
-        }
-        .to_owned(),
+        Agent::Claude => super::permission::claude(key).words,
+        _ => super::permission::codex_option(key).words,
     }
 }
 
 /// Codex's `/permissions`: known ones are worded; anything new counts as full until read.
 pub fn codex_is_full(label: &str) -> bool {
-    !matches!(label, "Ask for approval" | "Approve for me" | "Read Only")
+    super::permission::codex_option(label).full.unwrap_or(true)
 }
 
 /// Claude Code's modes, in the order Shift+Tab goes, with what its footer says for each.

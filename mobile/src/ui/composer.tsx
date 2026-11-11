@@ -18,6 +18,7 @@ export function Composer({
   agent,
   model,
   permission,
+  permissionFull,
   running,
   busyPlaceholder,
   canStop,
@@ -36,6 +37,7 @@ export function Composer({
   /** What the computer says is on. */
   model?: string | null;
   permission?: string | null;
+  permissionFull?: boolean | null;
   /** Each tag opens what can be picked; a computer that cannot change them leaves it a fact. */
   onModel?: () => void;
   onPermission?: () => void;
@@ -188,6 +190,7 @@ export function Composer({
           onCamera={() => add('camera')}
           onLibrary={() => add('library')}
           permission={permission}
+          permissionFull={permissionFull}
           onPermission={
             onPermission &&
             (() => {

@@ -22,7 +22,7 @@ export function sort(machines: Machine[]) {
   const done: Item[] = [];
   for (const m of machines) {
     for (const c of m.cards) {
-      if (!c.agent || c.phase === 'shell') continue;
+      if (!c.agent) continue;
       const item = { m, c };
       // The host's 要你处理 (a 稍后提醒 whose hour is up counts), or something new to
       // answer, brings a settled conversation back.

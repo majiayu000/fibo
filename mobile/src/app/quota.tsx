@@ -7,7 +7,7 @@ import { type Machine, NOT_YET, remote, supports, useHub } from '@/remote/hub';
 import { tr } from '@/i18n';
 import { type QuotaReading as Reading, type QuotaLevel, quotaStore } from '@/store/quota';
 import { Nav, Notice, useBottom } from '@/ui/kit';
-import { quotaView, quotaWindowView, windowName } from '@/ui/parse';
+import { quotaView, quotaWindowView, quotaStale, windowName } from '@/ui/parse';
 import { useNow } from '@/ui/now';
 import { agentName } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
@@ -29,6 +29,7 @@ function Gauge({ used, level, label, t }: { used: number; level?: QuotaLevel; la
 
 function AgentCard({ r, t }: { r: Reading; t: Theme }) {
   const now = useNow();
+  const stale = quotaStale(r, now);
   return (
     <View style={[s.card, { backgroundColor: t.card, borderColor: t.line }]}>
       <View style={s.row}>
@@ -38,13 +39,13 @@ function AgentCard({ r, t }: { r: Reading; t: Theme }) {
       {!!r.at && <Text style={{ color: t.dim, fontSize: 13 }}>{tr('{when}的读数', { when: ago(r.at) })}</Text>}
       {r.windows.length === 0 && <Text style={{ color: t.dim, fontSize: 13 }}>{tr('没有读数')}</Text>}
       {r.windows.map((w) => {
-        const view = quotaWindowView(w, now);
+        const view = quotaWindowView(w, now, stale);
         return (
           <View key={w.minutes} style={{ gap: 8 }}>
             <View style={s.row}>
               <Text style={{ fontSize: 15, color: t.text }}>{windowName(w.minutes)}</Text>
               <Text style={{ fontSize: 14, color: t.dim }}>
-                <Text style={{ fontWeight: '700', color: view.level === 'high' ? t.high : t.text }}>{view.text}</Text>
+                <Text style={{ fontWeight: '700', color: stale ? t.dim : view.level === 'high' ? t.high : t.text }}>{view.text}</Text>
                 {view.hint ? ` · ${view.hint}` : ''}
               </Text>
             </View>
