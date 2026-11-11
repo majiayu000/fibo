@@ -36,6 +36,9 @@ pub(super) fn start(
         };
         let click = |x: f32, y: f32, cx: &mut gpui::AsyncApp| {
             cx.update_window(handle.into(), |_, w, a| {
+                // A reopened panel must lay out its new hitboxes before receiving input.
+                w.refresh();
+                w.draw(a).clear(a);
                 let origin = gpui::point(
                     (w.viewport_size().width - px(theme::Theme::SETTINGS_WIDTH)) / 2.,
                     (w.viewport_size().height - px(664.)) / 2.,
@@ -71,7 +74,50 @@ pub(super) fn start(
         let agents = Agent::all();
         let mouse_choice = agents[1];
         shot("closed", cx);
-        if phase == "readback" {
+        if phase.starts_with("scroll") {
+            assert!(agents.len() >= 14, "use a registry taller than the menu");
+            let last = agents.len() - 1;
+            let visible = |ix: usize, cx: &mut gpui::AsyncApp| {
+                let (scroll, highlighted) = handle.update(cx, |v, _, a| v.visual_agent_menu_scroll(a)).unwrap();
+                assert_eq!(highlighted, Some(agents[ix]), "the key selected the expected item");
+                let viewport = scroll.bounds();
+                let row = scroll.bounds_for_item(ix).expect("row was laid out");
+                let y = scroll.offset().y;
+                assert!(row.top() + y >= viewport.top() && row.bottom() + y <= viewport.bottom(),
+                    "highlighted row {ix} must be fully visible: row={row:?}, viewport={viewport:?}, offset={y:?}");
+            };
+            if phase == "scroll-readback" {
+                assert_eq!(selected(cx), agents[last], "the off-screen choice was saved");
+                click(810., 148., cx); wait(200).await;
+                shot("reopened-last", cx);
+                visible(last, cx);
+                handle.update(cx, |_, w, a| {
+                    w.resize(gpui::size(px(900.), px(900.)));
+                    w.bounds_changed(a);
+                }).unwrap();
+                wait(300).await;
+                shot("narrow-last", cx);
+                visible(last, cx);
+            } else {
+                assert_eq!(selected(cx), agents[0], "fresh fixture starts at the first agent");
+                click(810., 148., cx); wait(200).await;
+                for _ in 0..last { key("down", cx); wait(30).await; }
+                shot("keyboard-last", cx);
+                visible(last, cx);
+                key("down", cx); wait(100).await;
+                visible(0, cx);
+                key("up", cx); wait(100).await;
+                visible(last, cx);
+                key("enter", cx); wait(600).await;
+                assert_eq!(selected(cx), agents[last]);
+                handle.update(cx, |v, _, a| v.visual_settings_close(a)).unwrap();
+                handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+                wait(200).await;
+                click(810., 148., cx); wait(200).await;
+                shot("reopened-last", cx);
+                visible(last, cx);
+            }
+        } else if phase == "readback" {
             assert_eq!(
                 selected(cx),
                 mouse_choice,

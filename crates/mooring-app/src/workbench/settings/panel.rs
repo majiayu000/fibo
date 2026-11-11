@@ -265,6 +265,13 @@ impl Workbench {
             .as_ref()
             .is_some_and(|s| s.read(cx).agent_menu.is_some())
     }
+    pub(crate) fn visual_agent_menu_scroll(
+        &self,
+        cx: &gpui::App,
+    ) -> (gpui::ScrollHandle, Option<Agent>) {
+        let settings = self.settings.as_ref().unwrap().read(cx);
+        (settings.agent_scroll.clone(), settings.agent_menu)
+    }
     pub(crate) fn visual_settings_open(&self) -> bool {
         self.settings.is_some()
     }

@@ -361,6 +361,7 @@ pub(super) struct SettingsView {
     /// The action waiting for its new chord.
     pub(super) recording: Option<Action>,
     agent_menu: Option<Agent>,
+    agent_scroll: gpui::ScrollHandle,
     /// A recorded chord another action already has: it moves only when confirmed.
     pub(super) taken: Option<(Action, Chord, Action)>,
     /// Why the last recorded chord was refused, shown under its row.
@@ -452,6 +453,7 @@ impl SettingsView {
             runtime,
             recording: None,
             agent_menu: None,
+            agent_scroll: gpui::ScrollHandle::new(),
             taken: None,
             refused: None,
             hooks: None,

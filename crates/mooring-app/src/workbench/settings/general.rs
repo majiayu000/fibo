@@ -109,6 +109,11 @@ impl SettingsView {
                         } else {
                             Some(this.values.default_agent)
                         };
+                        if let Some(agent) = this.agent_menu
+                            && let Some(ix) = Agent::all().iter().position(|a| *a == agent)
+                        {
+                            this.agent_scroll.scroll_to_item(ix);
+                        }
                         window.focus(&this.focus, cx);
                         cx.notify();
                     })),
@@ -122,7 +127,22 @@ impl SettingsView {
                             .snap_to_window_with_margin(px(T::S8))
                             .child(
                                 div()
+                                    .when(self.agent_scroll.bounds_for_item(0).is_none(), |d| {
+                                        let scroll = self.agent_scroll.clone();
+                                        let view = cx.entity_id();
+                                        let ix = Agent::all()
+                                            .iter()
+                                            .position(|a| *a == highlighted)
+                                            .unwrap_or(0);
+                                        // A new ScrollHandle has no viewport until prepaint.
+                                        // Reveal the saved choice once that first layout exists.
+                                        d.on_children_prepainted(move |_, window, _| {
+                                            scroll.scroll_to_item(ix);
+                                            window.on_next_frame(move |_, cx| cx.notify(view));
+                                        })
+                                    })
                                     .id("default-agent-menu")
+                                    .track_scroll(&self.agent_scroll)
                                     .w(px(T::SETTINGS_AGENT_WIDTH))
                                     .max_h(px(T::SETTINGS_AGENT_MENU_HEIGHT))
                                     .overflow_y_scroll()
@@ -183,6 +203,7 @@ impl SettingsView {
                     (i + agents.len() - 1) % agents.len()
                 };
                 self.agent_menu = Some(agents[next]);
+                self.agent_scroll.scroll_to_item(next);
             }
             _ => {}
         }
