@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fibo — run many coding agents at once on your Mac</title>
 <meta name="description" content="Fibo is a native macOS workbench for running Claude Code, Codex and other coding agents side by side in real terminals, with one place that shows which agent needs you.">
 <link rel="canonical" href="https://fibo.page/">
@@ -20,539 +20,1044 @@
 <meta name="twitter:title" content="Fibo — run more agents, miss none of them">
 <meta name="twitter:description" content="Claude Code, Codex and more side by side in real terminals. One place shows who's waiting, who's running, who's done.">
 <meta name="twitter:image" content="https://fibo.page/assets/og.png">
-<link rel="icon" type="image/png" href="assets/icon.png">
-<meta name="theme-color" content="#0a0b0d">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Fibo","applicationCategory":"DeveloperApplication","operatingSystem":"macOS","description":"A native macOS workbench for running many coding agents at once.","url":"https://fibo.page/","downloadUrl":"https://github.com/majiayu000/fibo/releases/latest","codeRepository":"https://github.com/majiayu000/fibo","license":"https://github.com/majiayu000/fibo/blob/main/LICENSE","image":"https://fibo.page/assets/og.png","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="brand/favicon-32.png">
+<link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
-<script>
-// 先定主题和语言，免得闪一下
-(function () {
-  var r = document.documentElement, t = null, l = null;
-  try { t = localStorage.getItem('fibo-theme'); l = localStorage.getItem('fibo-lang'); } catch (e) {}
-  r.dataset.theme = t || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-  r.lang = (l || (/^zh/i.test(navigator.language || '') ? 'zh' : 'en')) === 'en' ? 'en' : 'zh-CN';
-})();
-</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg: #09090a; --panel: #0f0f10; --fg: #ededeb; --dim: #9a9995; --faint: #62615d;
-  --line: rgba(255, 255, 255, .085); --line-2: rgba(255, 255, 255, .16);
-  --accent: #f0883e; --review: #3fb97f; --run: #e3b341;
-  --sans: "Geist", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
-  --mono: "Geist Mono", "SF Mono", ui-monospace, Menlo, monospace;
-  --max: 1216px; --pad: clamp(20px, 3.4vw, 44px); --rail: 188px;
+:root{
+  --ink:#0b0d12; --body:#4b5160; --soft:#6b7180; --line:#e7e7e4; --paper:#fff; --mist:#f6f6f4;
+  --night:#0b0c0f; --night-line:rgba(255,255,255,.1); --night-body:rgba(255,255,255,.62);
+  --sky:#1f5fc4; --amber:#f5b82e;
+  --serif:"Instrument Serif","Songti SC",ui-serif,serif;
+  --sans:Inter,-apple-system,"PingFang SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
 }
-:root[data-theme="light"] {
-  --bg: #fbfbfa; --panel: #ffffff; --fg: #0d0d0e; --dim: #5d5c58; --faint: #a2a19c;
-  --line: rgba(0, 0, 0, .09); --line-2: rgba(0, 0, 0, .2);
-  --accent: #d5621b; --review: #1f8f58; --run: #a67a00;
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%;height:auto}
+.wrap{max-width:1256px;margin:0 auto;padding:0 32px}
+
+/* nav */
+.nav{position:absolute;inset:0 0 auto 0;z-index:5}
+.nav .wrap{height:76px;display:flex;align-items:center;gap:36px;color:#fff}
+.logo{display:flex;align-items:center;gap:7px;font-weight:650;font-size:21px;letter-spacing:-.02em}
+.logo img{width:30px;height:30px;border-radius:7px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.logo svg{height:26px;width:auto;display:block;overflow:visible;margin-top:3px}
+.logo .dot{fill:#f5b82e;transform-box:fill-box;transform-origin:center}
+.links{display:flex;gap:28px;font-size:15px;color:rgba(255,255,255,.88)}
+.links a:hover{color:#fff}
+.right{margin-left:auto;display:flex;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:10px;font-size:15px;font-weight:550;white-space:nowrap;transition:transform .15s,background .15s}
+.btn:active{transform:scale(.98)}
+.btn svg{width:16px;height:16px;flex:none}
+.btn.white{background:#fff;color:var(--ink)}
+.btn.white:hover{background:#f1f1ee}
+.btn.glass{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.5);backdrop-filter:blur(10px)}
+.btn.glass:hover{background:rgba(255,255,255,.3)}
+.btn.sm{height:38px;padding:0 14px;font-size:14px}
+.btn.dark{background:var(--ink);color:#fff}
+.btn.line{border:1px solid var(--night-line);color:#fff}
+.btn.line:hover{background:rgba(255,255,255,.06)}
+.ghost{font-size:15px;color:rgba(255,255,255,.9);display:inline-flex;gap:6px;align-items:center}
+.ghost:hover{color:#fff}
+.ghost span{transition:transform .15s}.ghost:hover span{transform:translateX(3px)}
+
+/* hero */
+.hero{position:relative;color:#fff;text-align:center;overflow:hidden;background:#c77cc4}
+.hero .bg{position:absolute;inset:0 0 auto 0;height:max(900px,56.25vw);background-position:center top!important;background:#0bb0c4}
+.hero .bg::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 52% 46% at 50% 42%,rgba(38,62,110,.34),transparent 72%),linear-gradient(rgba(30,50,100,.16),transparent 30%)}
+.hero .in{position:relative;padding:136px 32px 96px}
+h1{font-weight:650;font-size:clamp(44px,5.6vw,80px);line-height:1.02;letter-spacing:-.04em;text-shadow:0 2px 30px rgba(30,45,90,.35)}
+.lede{max-width:820px;margin:28px auto 0;font-size:20px;line-height:1.5;color:#fff;text-shadow:0 1px 14px rgba(30,45,90,.55)}
+.cta{margin-top:40px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap}
+.cta .btn{height:50px;padding:0 22px;font-size:16px}
+.brew{margin-top:18px;font:13.5px var(--mono);color:#fff;text-shadow:0 1px 10px rgba(30,45,90,.6)}
+.brew button{all:unset;cursor:pointer;margin-left:8px;padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.3);font:12px var(--sans);color:#fff}
+.brew button:hover{background:rgba(255,255,255,.14)}
+.works{margin-top:48px;font-size:14px;color:rgba(255,255,255,.9);text-shadow:0 1px 10px rgba(30,45,90,.6)}
+.agents{margin:18px auto 0;display:flex;justify-content:center;flex-wrap:wrap;gap:10px 34px;font-size:17px;font-weight:600;letter-spacing:-.01em;color:#fff;text-shadow:0 1px 12px rgba(30,45,90,.55)}
+.agents span{display:inline-flex;align-items:center;gap:8px}
+.agents i{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.5}
+.shot{margin:60px auto 0;max-width:1160px;overflow:hidden;padding:8px;border-radius:18px;background:rgba(255,255,255,.38);border:1px solid rgba(255,255,255,.7);backdrop-filter:blur(14px) saturate(1.2);box-shadow:0 30px 80px -20px rgba(10,30,80,.45)}
+.shot img{border-radius:11px;width:100%}
+
+/* features */
+.features{padding:140px 0 40px}
+.fgrid{display:grid;grid-template-columns:180px 1fr;gap:48px}
+.fgrid>div{min-width:0}
+.rail{position:sticky;top:120px;align-self:start;display:flex;flex-direction:column;gap:16px;padding-top:18px}
+.rail{gap:14px}
+.fibnav{width:160px;height:auto;display:block;overflow:visible}
+.fibnav a rect{fill:#f2f0ea;stroke:var(--paper);stroke-width:.06;transition:fill .3s}
+.fibnav a:hover rect{fill:#ece6d6}
+.fibnav a.on rect{fill:#f7d77e}
+.fibnav text{font-family:var(--mono);fill:#a6a9b1;transition:fill .3s}
+.fibnav a.on text{fill:#5c4300}
+.fibnav .spiral{fill:none;stroke:#c48a00;stroke-width:.07;stroke-linecap:round;stroke-dasharray:1;transition:stroke-dashoffset .15s linear}
+.fibnav .ghost{fill:none;stroke:#d6d2c6;stroke-width:.03;stroke-dasharray:.06 .06}
+.raillist{list-style:none;display:grid;gap:7px;font:12px var(--mono);color:#a6a9b1}
+.raillist a{display:flex;gap:10px;transition:color .2s}.raillist a:hover{color:var(--body)}
+.raillist a.on{color:var(--ink)}
+.raillist span{width:22px;color:#c48a00;opacity:.0;transition:opacity .2s}.raillist a.on span{opacity:1}
+.railpct{font:11px var(--mono);color:#b0b3ba}
+.feat{padding-bottom:110px;margin-bottom:110px;border-bottom:1px solid var(--line)}
+.feat:last-child{border-bottom:0;margin-bottom:0}
+h2{font-weight:650;font-size:clamp(32px,3.6vw,52px);line-height:1.08;letter-spacing:-.035em;max-width:820px}
+h2 em{font-style:normal;color:var(--soft)}
+.feat>p{margin-top:22px;max-width:580px;font-size:17px;line-height:1.65;color:var(--body)}
+.canvas{position:relative;margin-top:56px;overflow:hidden;background:#6f9cc8 center/cover no-repeat;padding:72px 0 72px 7%;border-radius:4px}
+.canvas.mid{display:flex;justify-content:center;padding-left:0}
+.canvas .card{width:var(--w);max-width:none;padding:7px;border-radius:16px;background:rgba(255,255,255,.38);border:1px solid rgba(255,255,255,.7);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 40px 80px -30px rgba(10,30,60,.55),0 12px 30px -12px rgba(10,30,60,.3)}
+.canvas .card img{width:100%;border-radius:10px;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+.three{margin-top:52px;display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
+.three h3{font-size:15.5px;font-weight:650;letter-spacing:-.01em}
+.three p{margin-top:10px;font-size:14.5px;line-height:1.65;color:var(--soft)}
+code{font-family:var(--mono);font-size:.9em;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px}
+
+/* get started */
+.start{background:var(--night);color:#fff;padding:140px 0 120px}
+.eyebrow{font:600 11px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:#8d919b}
+.start h2{margin-top:18px}
+.start h2 span{color:rgba(255,255,255,.42)}
+.steps{margin-top:64px;display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--night-line);border-radius:14px;overflow:hidden}
+.steps>div{padding:30px 26px 36px;border-left:1px solid var(--night-line)}
+.steps>div:first-child{border-left:0}
+.steps small{font:12px var(--mono);color:#6d717b}
+.steps h3{margin-top:14px;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.steps p{margin-top:12px;font-size:14.5px;line-height:1.65;color:var(--night-body)}
+.steps code{background:rgba(255,255,255,.08);color:#e9e9ea}
+.start .row{margin-top:36px;display:flex;gap:12px;flex-wrap:wrap}
+
+/* open */
+.open{padding:140px 0}
+.open .wrap{display:grid;grid-template-columns:1fr 1.15fr;gap:80px;align-items:center}
+.open p.lead{margin-top:22px;font-size:17px;line-height:1.65;color:var(--body);max-width:460px}
+.open .row{margin-top:30px;display:flex;gap:18px;align-items:center}
+.open .row a.more{font-size:15px;color:var(--body)}.open .row a.more:hover{color:var(--ink)}
+.cards{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.cards>div{padding:30px 28px 34px}
+.cards>div:nth-child(2n){border-left:1px solid var(--line)}
+.cards>div:nth-child(n+3){border-top:1px solid var(--line)}
+.cards h3{font-size:16px;font-weight:650;letter-spacing:-.01em}
+.cards p{margin-top:10px;font-size:14.5px;line-height:1.65;color:var(--soft)}
+
+/* faq */
+.faq{background:var(--mist);padding:130px 0}
+.faq h2{text-align:center;margin:16px auto 0}
+.faq .eyebrow{text-align:center}
+.qa{max-width:820px;margin:56px auto 0}
+details{border-bottom:1px solid #e2e2de}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:20px;padding:24px 4px;font-size:16.5px;font-weight:550;letter-spacing:-.01em}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";width:12px;height:12px;flex:none;background:linear-gradient(currentColor,currentColor) center/12px 1.5px no-repeat,linear-gradient(currentColor,currentColor) center/1.5px 12px no-repeat;color:#9a9da5;transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{padding:0 4px 26px;font-size:15.5px;line-height:1.7;color:var(--body);max-width:700px}
+
+/* footer */
+footer{background:var(--night);color:#fff;padding:90px 0 0;overflow:hidden}
+.fcols{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:40px}
+.fcols p{margin-top:14px;font-size:14px;line-height:1.6;color:var(--night-body);max-width:300px}
+.fcols h4{font:600 11px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:#7d818b}
+.fcols ul{list-style:none;margin-top:16px;display:grid;gap:10px;font-size:14px;color:rgba(255,255,255,.75)}
+.fcols ul a:hover{color:#fff}
+.legal{margin:70px 0 48px;padding-top:24px;border-top:1px solid var(--night-line);display:flex;justify-content:space-between;font-size:12.5px;color:#6d717b}
+.mark{display:flex;align-items:flex-end;gap:2.5vw;margin-top:40px;line-height:.74;font-weight:700;font-size:min(30vw,410px);letter-spacing:-.06em;transform:translateY(5%)}
+.mark img{width:.62em;height:.62em;border-radius:.14em;margin-bottom:.06em}
+
+@media (max-width:900px){
+  .brew{font-size:11.5px}
+  .wrap{padding:0 16px}
+  .links{display:none}.right .glass{display:none}
+  .hero .in{padding:120px 16px 48px}
+  .lede{font-size:17px}
+  .agents{gap:8px 20px;font-size:15px}
+  .shot{margin-top:44px;padding:4px;border-radius:12px}.shot img{border-radius:8px}
+  .features{padding:90px 0 20px}
+  .fgrid{grid-template-columns:1fr;gap:0}.rail{display:none}
+  .feat{padding-bottom:70px;margin-bottom:70px}
+  .canvas{margin:36px -16px 0;padding:32px 0 32px 16px;border-radius:0}.canvas.mid{padding-left:16px;justify-content:flex-start}.canvas .card{width:calc(var(--w) * .62);padding:4px;border-radius:11px}.canvas .card img{border-radius:7px}
+  .three{grid-template-columns:1fr;gap:26px;margin-top:36px}
+  .start,.open,.faq{padding:90px 0}
+  .steps{grid-template-columns:1fr}.steps>div{border-left:0;border-top:1px solid var(--night-line)}.steps>div:first-child{border-top:0}
+  .open .wrap{grid-template-columns:1fr;gap:44px}
+  .cards{grid-template-columns:1fr}.cards>div:nth-child(2n){border-left:0}.cards>div:nth-child(n+2){border-top:1px solid var(--line)}
+  .fcols{grid-template-columns:1fr 1fr}
+  .fcols>div:first-child{grid-column:1/-1}
+  .legal{flex-direction:column;gap:8px}
 }
-* { box-sizing: border-box; }
-html { background: var(--bg); scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-html[lang="en"] .zh, html[lang^="zh"] .en { display: none !important; }
-[data-theme="light"] .only-dark, [data-theme="dark"] .only-light { display: none !important; }
-a { color: inherit; text-decoration: none; }
-code, pre, .mono { font-family: var(--mono); }
-code { font-size: .86em; color: var(--fg); background: var(--line); padding: .1em .38em; border-radius: 4px; }
-kbd { font: 500 11px var(--mono); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--fg); white-space: nowrap; }
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
 
-/* 整页是一张带左右边线的图纸，每段之间一条横线，交点打十字 */
-.frame { max-width: var(--max); margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-.sec { position: relative; border-top: 1px solid var(--line); }
-.sec::before, .sec::after { content: "+"; position: absolute; top: -9px; font: 400 13px/17px var(--mono); color: var(--faint); width: 17px; text-align: center; background: var(--bg); }
-.sec::before { left: -9px; } .sec::after { right: -9px; }
-.label { font: 500 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
-.label b { color: var(--accent); font-weight: 500; margin-right: 10px; }
+/* math */
+.fnum{display:flex;align-items:baseline;gap:10px;margin-bottom:18px;font:13px var(--mono);color:#9a6a00}
+.fnum b{font:600 15px var(--mono);color:var(--ink)}
+.phyllo{padding:130px 0 40px}
+.phyllo .wrap{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:64px;align-items:center}
+.phyllo p.lead{margin-top:22px;font-size:17px;line-height:1.65;color:var(--body);max-width:470px}
+.phyllo .eq{margin-top:28px;display:grid;gap:8px;font:14px var(--mono);color:var(--soft)}
+.phyllo .eq b{color:var(--ink);font-weight:500}
+.legend2{margin-top:28px;display:flex;flex-wrap:wrap;gap:10px 22px;font-size:13.5px;color:var(--body)}
+.legend2 span{display:inline-flex;align-items:center;gap:8px}.legend2 i{width:9px;height:9px;border-radius:50%}
+#seeds{width:100%;aspect-ratio:1;max-width:560px;margin-left:auto;display:block}
+#seeds circle.need{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.fsm{margin-top:40px;max-width:820px}
+.fsm svg{width:100%;height:auto;display:block}
+.formula{font:13px var(--mono);color:#8d919b}
+.mark{position:relative}
+.mark svg{position:absolute;right:0;bottom:4%;height:100%;width:auto;opacity:.22;pointer-events:none}
+@media (max-width:900px){.phyllo{padding:80px 0 10px}.phyllo .wrap{grid-template-columns:1fr;gap:36px}#seeds{margin:0 auto}}
+@media (prefers-reduced-motion:reduce){#seeds circle.need{animation:none}}
 
-/* 顶栏 */
-.nav { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
-.nav .frame { display: flex; align-items: center; gap: 26px; height: 56px; padding: 0 var(--pad); }
-.brand { font: 600 13px var(--sans); letter-spacing: .32em; display: flex; align-items: center; gap: 10px; }
-.brand i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.nav-links { display: flex; gap: 24px; margin-left: auto; font-size: 13.5px; color: var(--dim); }
-.nav-links a:hover { color: var(--fg); }
-.ghost { font: 500 11px var(--mono); background: none; color: var(--dim); border: 1px solid var(--line-2); border-radius: 6px; height: 28px; min-width: 34px; padding: 0 8px; cursor: pointer; }
-.ghost:hover { color: var(--fg); border-color: var(--fg); }
-.nav .dl { font-size: 13px; font-weight: 500; background: var(--fg); color: var(--bg); border-radius: 6px; padding: 5px 12px; }
+.phi{display:inline-flex;align-items:center;gap:10px;margin-bottom:26px;font:13px var(--mono);color:#fff;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.4);border-radius:999px;padding:5px 14px;backdrop-filter:blur(8px)}
+.feat{position:relative}
+.feat:not(:last-child)::after{content:"";position:absolute;bottom:-4px;left:61.8%;width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 4px var(--paper)}
+.feat:not(:last-child)::before{content:"0.618";position:absolute;bottom:-26px;left:calc(61.8% - 14px);font:11px var(--mono);color:#b0b3ba}
+.grow{background:var(--mist);padding:130px 0}
+.grow .wrap{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:64px;align-items:center}
+.tilebox{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}
+#tiles{width:100%;display:block}
+#tiles rect{stroke:#fff;stroke-width:var(--sw)}
+#tiles rect.new{animation:pop .5s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{from{opacity:0}}
+#tiles text{font-family:var(--mono);fill:rgba(0,0,0,.55)}
+.controls{margin-top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.controls button{font:600 14px var(--sans);height:38px;padding:0 16px;border-radius:999px;border:1px solid #d9d6cf;background:var(--card);color:var(--ink);cursor:pointer}
+.controls button.go{background:var(--ink);color:#fff;border-color:var(--ink)}
+.controls button:disabled{opacity:.35;cursor:default}
+.readout{margin-top:26px;display:grid;grid-template-columns:auto 1fr;gap:10px 22px;font:14px var(--mono);color:var(--soft)}
+.readout b{color:var(--ink);font-weight:500}
+.readout .bar{height:6px;border-radius:3px;background:#eceae4;overflow:hidden;align-self:center}
+.readout .bar i{display:block;height:100%;background:var(--amber);transition:width .4s}
+.theorem{margin-top:96px;grid-column:1/-1;max-width:860px;border-left:3px solid var(--amber);padding:6px 0 6px 28px}
+.theorem h3{font-size:16px;font-weight:650}
+.theorem h3 span{font-weight:400;color:var(--soft)}
+.theorem p{margin-top:12px;font-size:16px;line-height:1.7;color:var(--body)}
+.theorem p i{font-family:var(--mono);font-style:normal;color:var(--ink);font-size:.92em}
+.theorem .qed{float:right;color:var(--ink)}
+@media (max-width:900px){.grow{padding:80px 0}.grow .wrap{grid-template-columns:1fr;gap:32px}.theorem{margin-top:48px;padding-left:18px}.feat:not(:last-child)::before{display:none}}
 
-/* 首屏 */
-.hero { padding: clamp(56px, 9vw, 120px) var(--pad) 0; }
-.hero h1 { font-weight: 600; font-size: clamp(2.2rem, 5.3vw, 4.4rem); line-height: 1.08; letter-spacing: -.035em; margin: 22px 0 0; max-width: 15em; }
-html[lang^="zh"] .hero h1 { font-weight: 500; letter-spacing: -.01em; line-height: 1.18; }
-.hero h1 span.d { color: var(--faint); }
-.hero-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; margin-top: 28px; }
-.hero .lede { margin: 0; color: var(--dim); font-size: clamp(1rem, 1.25vw, 1.12rem); max-width: 34em; }
-.cta { display: flex; flex-wrap: wrap; gap: 10px; }
-.btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 8px; font-weight: 500; font-size: 14.5px; background: var(--fg); color: var(--bg); transition: opacity .15s; }
-.btn:hover { opacity: .86; }
-.brew { display: inline-flex; align-items: center; gap: 12px; height: 42px; max-width: 100%; padding: 0 6px 0 14px; border-radius: 8px; border: 1px solid var(--line-2); background: none; color: var(--fg); font: 400 12.5px var(--mono); cursor: pointer; }
-.brew .cmd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.brew .cmd::before { content: "$ "; color: var(--faint); }
-.brew .copy { font-size: 11px; color: var(--dim); border-left: 1px solid var(--line); padding: 4px 8px 4px 12px; flex: none; }
-.brew:hover .copy { color: var(--fg); }
-.meta { margin-top: 18px; }
-.shot { display: block; width: 100%; height: auto; }
-.hero-shot { margin-top: clamp(40px, 6vw, 72px); border-top: 1px solid var(--line); position: relative; }
-.hero-shot .legend { display: flex; flex-wrap: wrap; gap: 6px 26px; padding: 12px var(--pad); border-top: 1px solid var(--line); font: 400 11.5px var(--mono); color: var(--dim); }
-.legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; background: var(--c); }
-.legend .r { margin-left: auto; color: var(--faint); }
+.seedbox{position:relative;max-width:560px;margin-left:auto}
+.seedbox #seeds{max-width:none}
+#seeds circle{transition:cx .35s,cy .35s}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;font-size:12.5px;line-height:1.45;border-radius:10px;padding:9px 12px;white-space:nowrap;transform:translate(-50%,calc(-100% - 12px));box-shadow:0 10px 30px -10px rgba(0,0,0,.4)}
+.tip small{display:block;font:11px var(--mono);color:#a7abb4}
+.seedctl{margin-top:18px;display:grid;gap:12px}
+.seedctl .row{display:flex;align-items:center;gap:14px;font:13px var(--mono);color:var(--soft)}
+.seedctl input[type=range]{flex:1;accent-color:#c48a00}
+.seedctl output{min-width:86px;text-align:right;color:var(--ink)}
+.presets{display:flex;flex-wrap:wrap;gap:8px}
+.presets button,.simside button{font:550 13px var(--sans);height:32px;padding:0 13px;border-radius:999px;border:1px solid #d9d6cf;background:var(--card);color:var(--ink);cursor:pointer}
+.presets button.on,.simside button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.angnote{font-size:14px;line-height:1.6;color:var(--body);min-height:46px}
+.sim{padding:130px 0;border-top:1px solid var(--line)}
+.simhead{max-width:760px}
+.simgrid{margin-top:52px;display:grid;grid-template-columns:minmax(0,7fr) minmax(0,4fr);gap:28px;align-items:start}
+.simboard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
+#sim{width:100%;height:auto;display:block;user-select:none}
+#sim .tok{transition:transform .55s cubic-bezier(.2,.8,.2,1);cursor:pointer}
+#sim .tok rect{fill:#fff;stroke:#e4e1da;stroke-width:1}
+#sim .tok.need rect{fill:#fff6ef;stroke:#f07a2a;stroke-width:1.5}
+#sim .tok.rev rect{stroke:#2fa36b}
+#sim .tok.done{filter:grayscale(1)}#sim .tok.done text{fill:#a6a9b1}
+#sim .tok{transition:transform .55s cubic-bezier(.2,.8,.2,1),opacity .3s}
+#sim .tok.need rect{animation:pulse 1.4s ease-in-out infinite}
+#sim text{font-family:var(--sans)}
+.simside{display:grid;gap:18px}
+.simside .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.simside .row{display:flex;align-items:center;gap:12px;font:13px var(--mono);color:var(--soft)}
+.simside input[type=range]{flex:1;accent-color:#c48a00}
+.simside .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi div{font:12px var(--mono);color:var(--soft)}
+.kpi b{display:block;font:650 28px var(--sans);letter-spacing:-.02em;color:var(--ink);margin-top:2px}
+.kpi .q b{color:#d9621a}
+#spark{width:100%;height:auto;display:block;margin-top:14px}
+.matrix{font:12.5px/1.75 var(--mono);color:var(--ink);display:flex;align-items:center;gap:12px}
+.matrix table{border-collapse:collapse;border-left:1.5px solid var(--ink);border-right:1.5px solid var(--ink);padding:0 6px}
+.matrix td{padding:0 8px;text-align:right}
+.matrix th{font-weight:400;color:var(--soft);padding-right:10px;text-align:left}
+.matrix + p{margin-top:10px;font-size:13px;line-height:1.55;color:var(--soft)}
+kbd{font:12px var(--mono);border:1px solid #d9d6cf;border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
+@media (max-width:900px){.sim{padding:80px 0}.simgrid{grid-template-columns:1fr}.seedbox{margin:0 auto}}
+@media (prefers-reduced-motion:reduce){#sim .tok{transition:none}#sim .tok.need circle{animation:none}#seeds circle{transition:none}}
 
-/* Agent 名单 */
-.agents { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); }
-.agents .label { padding: 22px var(--pad); border-right: 1px solid var(--line); }
-.agents ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.agents li { padding: 14px 16px; font-size: 13.5px; color: var(--dim); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .15s, background .15s; }
-.agents li:nth-child(6n) { border-right: 0; } .agents li:nth-child(n+7) { border-bottom: 0; }
-.agents li:hover { color: var(--fg); background: var(--panel); }
+body.still *, body.still *::before, body.still *::after{animation:none!important;transition:none!important}
+.tilecap{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--soft)}
+.tilecap span{display:inline-flex;align-items:center;gap:7px}.tilecap i{width:9px;height:9px;border-radius:3px}
+#tiles .lbl{font-family:var(--sans);fill:#2a2d35}
+#tiles .lbl2{font-family:var(--mono);fill:rgba(0,0,0,.5)}
+.panel{margin-top:56px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px}
+.panel .formula{display:block;margin-top:16px;font:13px var(--mono);color:var(--soft)}
+.setbar{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;font:13px var(--mono);color:var(--soft)}
+.setbar b{font:650 22px var(--sans);color:#d9621a;margin-left:6px}
+.plug{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:26px;align-items:start}
+.tree{font:13px/1.85 var(--mono);color:var(--body);white-space:pre;overflow-x:auto}
+.tree b{color:var(--ink);font-weight:500}.tree i{font-style:normal;color:#a6a9b1}
+.swap{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.swap button,.chips button,.toggle{font:550 13px var(--sans);height:32px;padding:0 13px;border-radius:999px;border:1px solid #d9d6cf;background:var(--card);color:var(--ink);cursor:pointer}
+.swap button.on,.chips button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.sbshot{position:relative;margin:0;max-width:330px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f6f5f3;box-shadow:0 12px 34px -18px rgba(20,24,40,.35)}
+.sbshot img{display:block;width:100%;height:auto;position:absolute;left:0;top:0;opacity:0;transition:opacity .35s}
+.sbshot img[data-l="sessions"][data-lang="en"]{position:relative}
+html:not([lang="zh-CN"]) .sbshot img.on[data-lang="en"],html[lang="zh-CN"] .sbshot img.on[data-lang="zh"]{opacity:1}
+.sbshot figcaption{position:relative;font:500 11px var(--mono);color:#6b6f78;background:#fff;padding:8px 12px;border-top:1px solid var(--line)}
+.sbshot figcaption span:not(.on){display:none}
+.motion{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:26px;align-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.stage{position:relative;height:190px;border-radius:14px;background:#fbfaf8;border:1px solid var(--line);display:grid;place-items:center;overflow:hidden}
+.demo{position:relative;width:250px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 10px 30px -18px rgba(0,0,0,.35)}
+.demo .st{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#1f7a4f;background:#dcf2e6;border-radius:999px;padding:3px 10px}
+.demo.done .st{color:#5d6270;background:#eeece7}
+.demo h4{margin-top:10px;font-size:14px;font-weight:600}
+.demo .fx{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;font:700 22px var(--sans)}
+.switch{display:flex;align-items:center;gap:12px;margin-top:18px;font-size:14px;color:var(--body)}
+.switch button{width:46px;height:26px;border-radius:999px;border:0;background:#2fa36b;position:relative;cursor:pointer;flex:none}
+.switch button::after{content:"";position:absolute;top:3px;left:23px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s}
+.switch button[aria-checked=false]{background:#c9cbd1}.switch button[aria-checked=false]::after{left:3px}
+@keyframes fx-stamp{0%{transform:scale(2.4) rotate(-14deg);opacity:0}60%{transform:scale(.95) rotate(-8deg);opacity:1}100%{transform:scale(1) rotate(-8deg);opacity:1}}
+@keyframes fx-sweep{from{transform:translateX(-120%)}to{transform:translateX(120%)}}
+@keyframes fx-fade{from{opacity:1}to{opacity:.35}}
+@keyframes fx-pop{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.4);opacity:0}}
+@keyframes fx-rise{0%{transform:translateY(40px);opacity:0}100%{transform:translateY(-6px);opacity:1}}
+.motion{grid-template-columns:minmax(0,.8fr) minmax(0,1.5fr)}
+.stage.fxshot{height:auto;aspect-ratio:1100/605;background:#0d0e10;border-color:rgba(0,0,0,.25);box-shadow:0 18px 40px -24px rgba(0,0,0,.45)}
+.stage.fxshot img{display:block;width:100%;height:100%;object-fit:cover}
+@media (max-width:900px){.plug,.motion{grid-template-columns:1fr}}
 
-/* 标题段 */
-.intro { padding: clamp(72px, 10vw, 140px) var(--pad) clamp(40px, 5vw, 64px); }
-h2 { font-weight: 600; font-size: clamp(1.8rem, 3.6vw, 3rem); line-height: 1.12; letter-spacing: -.03em; margin: 18px 0 0; max-width: 18em; }
-html[lang^="zh"] h2 { font-weight: 500; letter-spacing: -.01em; line-height: 1.25; }
-h2 .d { color: var(--faint); }
+.sp-panel{padding:22px;background:linear-gradient(#fbfaf7,#f6f4ef)}
+.sp-grid{display:grid;grid-template-columns:1.25fr 1fr .95fr;gap:16px;align-items:start}
+.sp-real{display:flex;justify-content:center;align-items:flex-start;gap:clamp(20px,4vw,56px);flex-wrap:wrap}
+.spdesk{max-width:340px;flex:1 1 280px}
+.spdesk img[data-lang="en"]{position:relative}
+.spphone{margin:0;flex:0 1 250px;max-width:250px}
+.spscreen{border-radius:34px;border:9px solid #15171c;box-shadow:0 30px 60px -30px rgba(20,22,60,.55);overflow:hidden}
+.spphone img{display:block;width:100%;height:auto}
+html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphone img[data-lang="zh"]{display:none}
+.spphone figcaption{margin-top:12px;text-align:center;font:500 11px var(--mono);color:#6b6f78}
+.mach{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.02),0 18px 40px -30px rgba(20,20,40,.35)}
+.mach header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:13.5px;font-weight:650}
+.mach header i{width:7px;height:7px;border-radius:50%;background:#2fa36b}
+.mach header small{margin-left:auto;font:11px var(--mono);color:#9a9da5;font-weight:400}
+.space{padding:10px 14px 8px;border-bottom:1px solid #f1efea;transition:opacity .25s}
+.space:last-child{border-bottom:0}
+.space.quiet{opacity:.42}
+.sphead{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:#3a3d45}
+.sphead b{width:9px;height:9px;border-radius:3px}
+.sphead em{font:11px var(--mono);font-style:normal;color:#a6a9b1;font-weight:400}
+.qsw{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font:11px var(--mono);color:#9a9da5;background:none;border:0;cursor:pointer;padding:2px 0}
+.qsw span{width:24px;height:14px;border-radius:999px;background:#dcdad4;position:relative;transition:background .2s}
+.qsw span::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:#fff;transition:left .2s}
+.space.quiet .qsw span{background:#8d919b}.space.quiet .qsw span::after{left:12px}
+.sess{list-style:none;margin-top:6px;display:grid;gap:2px}
+.sess li{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:8px;font-size:12.5px;color:#2a2d35;padding:4px 6px;border-radius:7px;transition:background .3s}
+.sess li.need{background:#fff4ec}
+.sess li i{width:8px;height:8px;border-radius:50%}
+.sess li small{font:10.5px var(--mono);color:#a6a9b1}
+.sess li span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phone{justify-self:center;width:100%;max-width:236px;background:#15171c;border-radius:30px;padding:10px;box-shadow:0 24px 50px -24px rgba(10,10,30,.55)}
+.phone .scr{background:#f7f6f2;border-radius:22px;min-height:330px;padding:16px 12px 14px;overflow:hidden}
+.phone .top{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:650;color:#2a2d35;margin-bottom:10px}
+.phone .top b{font:650 11px var(--mono);color:#fff;background:#f07a2a;border-radius:999px;padding:2px 8px}
+.ask{background:#fff;border:1px solid #ece9e2;border-radius:12px;padding:10px;margin-bottom:8px;transition:opacity .3s,transform .3s}
+.ask.gone{opacity:0;transform:translateX(30px)}
+.ask small{display:block;font:10.5px var(--mono);color:#9a9da5}
+.ask p{margin-top:4px;font-size:12px;line-height:1.4;color:#2a2d35}
+.ask .opts{margin-top:8px;display:flex;gap:6px}
+.ask button{flex:1;font:600 11px var(--sans);border-radius:8px;border:1px solid #e3e0d8;background:#faf9f6;padding:6px 4px;cursor:pointer;color:#2a2d35}
+.ask button:hover{background:#15171c;color:#fff;border-color:#15171c}
+.phone .empty{font-size:12px;color:#9a9da5;text-align:center;margin-top:60px}
+.phone .relay{margin-top:8px;text-align:center;font:10px var(--mono);color:#7d818b}
+.sp-foot{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;font:13px var(--mono);color:var(--soft)}
+.sp-eq{margin-left:auto;color:var(--ink)}
+.sp-eq b{font:650 20px var(--sans);color:#d9621a;margin-left:4px}
+@media (max-width:900px){.sp-grid{grid-template-columns:1fr}.sp-eq{margin-left:0}}
 
-/* 功能行 */
-.feat { display: grid; grid-template-columns: var(--rail) minmax(0, 5fr) minmax(0, 6fr); }
-.feat > .label { padding: 30px var(--pad); border-right: 1px solid var(--line); }
-.feat .txt { padding: 28px clamp(20px, 3vw, 40px) 40px; }
-.feat h3 { font-weight: 600; font-size: clamp(1.3rem, 2vw, 1.7rem); line-height: 1.2; letter-spacing: -.02em; margin: 0 0 12px; }
-html[lang^="zh"] .feat h3 { font-weight: 500; letter-spacing: 0; }
-.feat p { margin: 0 0 12px; color: var(--dim); font-size: 15px; max-width: 32em; }
-.feat p strong { color: var(--fg); font-weight: 500; }
-.spec { margin: 20px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); font-size: 13.5px; }
-.spec li { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--dim); }
-.spec li > :first-child { font: 400 11.5px/1.9 var(--mono); color: var(--faint); }
-.spec .st { color: var(--fg); } .spec .st::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c); margin-right: 8px; }
-.feat .viz { border-left: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; justify-content: center; padding: clamp(16px, 2.6vw, 36px); min-width: 0; }
-.feat.full { grid-template-columns: var(--rail) minmax(0, 1fr); }
-.feat.full .viz { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); padding: 0; }
-.feat.full .txt { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 clamp(24px, 4vw, 56px); }
-.feat.full .txt h3 { grid-column: 1 / -1; }
-/* 从真实截图里裁一块：--z 放大倍数，--x --y 位置 */
-.crop { width: 100%; border: 1px solid var(--line-2); border-radius: 8px; background-repeat: no-repeat; background-size: var(--z) auto; background-position: var(--x) var(--y); box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .55); background-image: url(assets/shot-main.webp); }
-[data-theme="light"] .crop.themed { background-image: url(assets/shot-light.webp); }
-.stack { display: grid; gap: 14px; width: 100%; }
-
-.term { width: 100%; margin: 0; font-size: 12.5px; line-height: 1.9; color: var(--fg); white-space: pre; overflow-x: auto; }
-.term .c { color: var(--faint); } .term .p { color: var(--accent); user-select: none; } .term .g { color: var(--review); } .term .y { color: var(--run); }
-
-/* 时间线：窗口断了，后台没断 */
-.tl { width: 100%; font: 400 11px var(--mono); color: var(--faint); }
-.tl .ev, .tl .row { display: grid; grid-template-columns: 7.5em repeat(4, minmax(0, 1fr)); align-items: center; }
-.tl .ev span { text-align: center; padding-bottom: 12px; color: var(--dim); }
-.tl .row { height: 34px; }
-.tl .row > span:first-child { color: var(--dim); }
-.tl .seg { height: 2px; background: var(--fg); position: relative; }
-.tl .seg.cut { background: repeating-linear-gradient(90deg, var(--faint) 0 3px, transparent 3px 7px); }
-.tl .seg.live { background: var(--review); }
-.tl .seg.mark::after { content: ""; position: absolute; left: 50%; top: -11px; height: 24px; border-left: 1px dashed var(--line-2); }
-.tl .seg.back::before { content: ""; position: absolute; left: 50%; top: -3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--accent); }
-.tl .note { margin-top: 14px; padding-left: 7.5em; color: var(--dim); line-height: 1.7; }
-.tl .note b { color: var(--accent); font-weight: 400; }
-
-/* 两栏卡 */
-.duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.duo > div { padding: 32px var(--pad) 40px; }
-.duo > div + div { border-left: 1px solid var(--line); }
-.duo h3 { font-weight: 600; font-size: 1.3rem; letter-spacing: -.02em; margin: 14px 0 10px; }
-html[lang^="zh"] .duo h3 { font-weight: 500; letter-spacing: 0; }
-.duo p { margin: 0; color: var(--dim); font-size: 15px; max-width: 32em; }
-
-/* 其余功能：一张表 */
-.all { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.all > div { padding: 22px var(--pad) 26px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transition: background .15s; }
-.all > div:nth-child(3n) { border-right: 0; }
-.all > div:nth-last-child(-n+3) { border-bottom: 0; }
-.all > div:hover { background: var(--panel); }
-.all h4 { margin: 10px 0 6px; font-size: 15px; font-weight: 500; }
-.all p { margin: 0; font-size: 13.5px; color: var(--dim); }
-
-/* 数据 */
-.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.facts div { padding: 28px var(--pad) 36px; }
-.facts div + div { border-left: 1px solid var(--line); }
-.facts h4 { margin: 12px 0 8px; font-size: 16px; font-weight: 500; }
-.facts p { margin: 0; color: var(--dim); font-size: 14px; }
-.facts code { overflow-wrap: anywhere; }
-
-/* 常见问题 */
-.faq { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); }
-.faq > .label { padding: 26px var(--pad); border-right: 1px solid var(--line); }
-details + details { border-top: 1px solid var(--line); }
-summary { cursor: pointer; list-style: none; padding: 20px var(--pad); font-weight: 500; display: flex; justify-content: space-between; gap: 16px; }
-summary::-webkit-details-marker { display: none; }
-summary::after { content: "+"; font-family: var(--mono); color: var(--faint); }
-details[open] summary::after { content: "–"; }
-summary:hover { background: var(--panel); }
-details p { margin: 0; padding: 0 var(--pad) 24px; color: var(--dim); font-size: 15px; max-width: 46em; }
-
-/* 收尾 */
-.final { padding: clamp(80px, 12vw, 160px) var(--pad); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; }
-.final h2 { font-size: clamp(2.2rem, 5.3vw, 4.4rem); margin: 0; }
-.final .lede { color: var(--dim); margin: 18px 0 0; max-width: 32em; font-size: 15px; }
-.final .side { display: grid; gap: 10px; justify-items: start; }
-.final .side a.src { font-size: 13px; color: var(--dim); margin-top: 6px; }
-.final .side a.src:hover { color: var(--fg); }
-footer .frame { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 20px var(--pad) 40px; font-size: 12.5px; color: var(--faint); border-top: 1px solid var(--line); }
-footer a:hover { color: var(--fg); }
-footer .sp { margin-left: auto; }
-
-.js .rise { opacity: 0; transform: translateY(14px); transition: opacity .7s, transform .7s cubic-bezier(.2, .7, .2, 1); }
-.js .rise.in { opacity: 1; transform: none; }
-
-@media (max-width: 980px) {
-  :root { --rail: 0px; }
-  .agents, .faq, .feat, .feat.full { grid-template-columns: minmax(0, 1fr); }
-  .agents .label, .faq > .label, .feat > .label { border-right: 0; padding-bottom: 0; }
-  .agents .label { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
-  .feat .viz { border-left: 0; border-top: 1px solid var(--line); }
-  .feat.full .txt { grid-template-columns: minmax(0, 1fr); }
-  .hero-row, .final { grid-template-columns: minmax(0, 1fr); }
-  .agents ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .agents li:nth-child(6n) { border-right: 1px solid var(--line); } .agents li:nth-child(3n) { border-right: 0; }
-  .agents li:nth-child(n+7) { border-bottom: 1px solid var(--line); } .agents li:nth-child(n+10) { border-bottom: 0; }
-  .all { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .all > div:nth-child(3n) { border-right: 1px solid var(--line); } .all > div:nth-child(2n) { border-right: 0; }
-  .all > div:nth-last-child(-n+3) { border-bottom: 1px solid var(--line); } .all > div:nth-last-child(-n+2) { border-bottom: 0; }
-  .facts, .duo { grid-template-columns: minmax(0, 1fr); }
-  .facts div + div, .duo > div + div { border-left: 0; border-top: 1px solid var(--line); }
-}
-@media (max-width: 640px) {
-  .frame { border-left: 0; border-right: 0; }
-  .sec::before, .sec::after { display: none; }
-  .nav-links { display: none; }
-  .nav .frame { gap: 10px; }
-  .nav .brand { margin-right: auto; }
-  .agents ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .agents li:nth-child(3n) { border-right: 1px solid var(--line); } .agents li:nth-child(2n) { border-right: 0; }
-  .agents li:nth-child(n+10) { border-bottom: 1px solid var(--line); } .agents li:nth-child(n+11) { border-bottom: 0; }
-  .all { grid-template-columns: minmax(0, 1fr); }
-  .all > div, .all > div:nth-child(3n) { border-right: 0; }
-  .all > div:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); } .all > div:last-child { border-bottom: 0; }
-  .btn, .brew { width: 100%; justify-content: center; }
-  .brew { justify-content: space-between; }
-  .legend .r { margin-left: 0; flex-basis: 100%; }
-  footer .sp { margin-left: 0; flex-basis: 100%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
-  .js .rise { opacity: 1; transform: none; }
-}
+.tilestage{position:relative;width:100%;margin:0 auto;aspect-ratio:1.618;transition:aspect-ratio .4s}
+.tile{position:absolute;padding:2px;transition:left .45s,top .45s,width .45s,height .45s}
+.term2{position:relative;width:100%;height:100%;background:#fff;border:1.5px solid #e4e1da;border-radius:8px;overflow:hidden;container-type:size;display:flex;flex-direction:column}
+.tile.new .term2{animation:pop .5s ease}
+.term2.needs{border-color:#f07a2a;box-shadow:0 0 0 2px #f07a2a22}
+.term2 .th{display:flex;align-items:center;gap:.5em;padding:.45em .6em;border-bottom:1px solid #f0eee9;font:600 clamp(5px,4.6cqw,12px) var(--sans);color:#2a2d35;white-space:nowrap}
+.term2 .th i{width:.7em;height:.7em;border-radius:50%;flex:none}
+.term2 .th em{margin-left:auto;font-style:normal;font-weight:600;border-radius:999px;padding:.1em .6em;font-size:.88em}
+.term2 .th small{font:400 .9em var(--mono);color:#a6a9b1;overflow:hidden;text-overflow:ellipsis}
+.term2 pre{flex:1;margin:0;padding:.55em .7em;font:clamp(4px,3.9cqw,11px)/1.5 var(--mono);color:#2a2d35;white-space:pre;overflow:hidden}
+.term2 pre .d{color:#9a9da5}.term2 pre .o{color:#b8501a}.term2 pre .g{color:#1f7a4f}
+.term2.tiny{display:grid;place-items:center;font:600 clamp(5px,30cqw,14px) var(--mono);color:#7a7d86}
+.term2.tiny .th,.term2.tiny pre{display:none}
+.tilespiral{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 </style>
+<link rel="stylesheet" href="polish.css">
+<link rel="stylesheet" href="extra.css">
 </head>
 <body>
 
-<nav class="nav">
-  <div class="frame">
-    <a class="brand" href="#top"><i></i>FIBO</a>
-    <div class="nav-links">
-      <a href="#features"><span class="zh">功能</span><span class="en">Features</span></a>
-      <a href="#all"><span class="zh">全部细节</span><span class="en">Everything</span></a>
-      <a href="#privacy"><span class="zh">数据</span><span class="en">Your data</span></a>
-      <a href="#faq"><span class="zh">常见问题</span><span class="en">FAQ</span></a>
-      <a href="https://github.com/majiayu000/fibo">GitHub</a>
-    </div>
-    <button class="ghost" type="button" id="theme" aria-label="Toggle light and dark">◐</button>
-    <button class="ghost" type="button" id="lang" aria-label="Switch language">EN</button>
-    <a class="dl" href="https://github.com/majiayu000/fibo/releases/latest"><span class="zh">下载</span><span class="en">Download</span></a>
+<header class="nav"><div class="wrap">
+  <a class="logo" href="#" aria-label="Fibo"><img src="brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="#features">Features</a><a href="#start">Get started</a><a href="#faq">FAQ</a><a href="https://github.com/majiayu000/fibo/releases">Changelog</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm tog" id="themebtn" aria-label="Switch between light and dark">◐</button><button type="button" class="btn glass sm tog" id="langbtn" aria-label="切换到中文">中文</button>
+    <a class="btn glass sm" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">Download</a>
   </div>
-</nav>
+</div></header>
 
-<main class="frame" id="top">
+<section class="hero">
+  <div class="bg"></div>
+  <div class="in">
+    <span class="phi">φ = 1.6180339… · v0.1.1</span>
+    <h1>Run more agents.<br><em>Miss none of them.</em></h1>
+    <p class="lede">A native Mac workbench for Claude Code, Codex and the agents you already use. Real terminals side by side, and one place that shows who needs you.</p>
+    <div class="cta">
+      <a class="btn white" href="https://github.com/majiayu000/fibo/releases/latest"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.1-1.2 2.9-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.4-1-2.4-3.8zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.2 1.8-1 2.9 1.1.1 2.1-.5 2.8-1.3z"/></svg>Download for Mac</a>
+      <a class="btn glass" href="https://github.com/majiayu000/fibo">View source</a>
+      <button type="button" class="filmbtn" id="filmbtn" aria-haspopup="dialog"><i></i>Watch the film <small>0:30</small></button>
+    </div>
+    <p class="brew">brew install --cask majiayu000/tap/fibo<button type="button" id="copy">Copy</button></p>
+    <div class="skyctl" role="group" aria-label="Time of day in the picture">
+    <button type="button" data-sky="day" class="on">Day</button><button type="button" data-sky="dusk">Dusk</button><button type="button" data-sky="night">Night</button><button type="button" data-sky="auto">Auto</button>
+    <span id="skynote"></span>
+  </div>
+    <div class="shot"><img src="shots/hero-shot.webp" alt="Fibo window: three agents side by side, one waiting for an answer" width="2880" height="1800"><i class="waitpulse" aria-hidden="true"></i><div class="toasts" id="toasts" aria-hidden="true"></div></div>
+  </div>
+</section>
 
-  <header class="hero">
-    <div class="label"><b>●</b><span class="zh">给 Coding Agent 的原生 macOS 工作台</span><span class="en">The native macOS workbench for coding agents</span></div>
-    <h1>
-      <span class="zh">同时跑很多个 Agent，<br><span class="d">只看需要你的那一个。</span></span>
-      <span class="en">Run many coding agents.<br><span class="d">Look at the one that needs you.</span></span>
-    </h1>
-    <div class="hero-row">
-      <p class="lede">
-        <span class="zh">每个会话都是一个真终端。Fibo 告诉你哪个在等你，关掉窗口它们照样跑，崩了也能接着聊。</span>
-        <span class="en">Every session is a real terminal. Fibo shows which one needs you, keeps them running when the window closes, and brings back the conversation after a crash.</span>
-      </p>
-      <div>
-        <div class="cta">
-          <a class="btn" href="https://github.com/majiayu000/fibo/releases/latest"><span class="zh">下载 Fibo</span><span class="en">Download Fibo</span></a>
-          <button class="brew" type="button" data-copy="brew install --cask majiayu000/tap/fibo">
-            <span class="cmd">brew install --cask majiayu000/tap/fibo</span>
-            <span class="copy"><span class="zh">复制</span><span class="en">Copy</span></span>
-          </button>
+<section class="runs"><div class="wrap">
+    <p class="works">Twelve agent CLIs built in. Any other is one JSON plugin away.</p>
+    <div class="agents"><span><img src="agents/claude.svg" alt="" width="18" height="18">Claude Code</span><span><img src="agents/codex.svg" alt="" width="18" height="18">Codex</span><span><img src="agents/grok.svg" alt="" width="18" height="18">Grok Build</span><span><img src="agents/cursor.svg" alt="" width="18" height="18">Cursor Agent</span><span><img src="agents/qoder.svg" alt="" width="18" height="18">Qoder CLI</span><span><img src="agents/hermes.svg" alt="" width="18" height="18">Hermes</span><span><i></i>Factory Droid</span><span><img src="agents/pi.svg" alt="" width="18" height="18">Pi</span><span><img src="agents/pi.svg" alt="" width="18" height="18">oh-my-pi</span><span><img src="agents/deepseek.svg" alt="" width="18" height="18">DeepSeek Harness</span><span><img src="agents/kimi.svg" alt="" width="18" height="18">Kimi Code</span><span><img src="agents/gemini.svg" alt="" width="18" height="18">Gemini CLI</span><span class="via"><img src="agents/opencode.svg" alt="" width="18" height="18">OpenCode<small>plugin</small></span></div>
+</div></section>
+
+<section class="phyllo" aria-labelledby="ph-h"><div class="wrap">
+  <div>
+    <p class="eyebrow">137.5°</p>
+    <h2 id="ph-h" style="margin-top:18px">Packed like sunflower seeds.</h2>
+    <p class="lead">Each dot is a session, turned 137.5° from the last, the golden angle. However many you run, none hides behind another, and the ones that need you stand out.</p>
+    <div class="eq"><span><b>θₙ</b> = n × 137.508°</span><span><b>rₙ</b> = c √n</span><span><b>φ</b> = (1 + √5) / 2 = 1.6180339…</span></div>
+    <div class="legend2"><span><i style="background:#ff7a4d"></i>Needs you</span><span><i style="background:#f5b82e"></i>Running</span><span><i style="background:#4fd6a0"></i>Ready for review</span><span><i style="background:rgba(255,255,255,.28)"></i>Done</span></div>
+  </div>
+  <div class="seedbox">
+    <svg id="seeds" viewBox="-100 -100 200 200" role="img" aria-label="144 sessions arranged by the golden angle, a few of them highlighted as needing you"></svg>
+    <div class="tip" id="seedtip" hidden></div>
+    <div class="seedctl">
+      <div class="row"><span>θ</span><input type="range" id="ang" min="90" max="180" step="0.01" value="137.51" aria-label="Turn per session, in degrees"><output id="angv">137.51°</output></div>
+      <div class="presets"><button type="button" data-a="90">90°</button><button type="button" data-a="120">120°</button><button type="button" data-a="144">144°</button><button type="button" data-a="137.5078">137.5° golden</button></div>
+      <p class="angnote" id="angnote"></p>
+    </div>
+  </div>
+</div></section>
+
+<section class="features" id="features"><div class="wrap fgrid">
+  <nav class="rail" aria-label="Features">
+    <svg class="fibnav" id="fibnav" aria-hidden="true"></svg>
+    <ol class="raillist">
+      <li><a href="#f-side" data-sec="f-side" class="on"><span>F₁</span>Side by side</a></li>
+      <li><a href="#f-needs" data-sec="f-needs"><span>F₂</span>Needs you</a></li>
+      <li><a href="#f-review" data-sec="f-review"><span>F₃</span>Review</a></li>
+      <li><a href="#f-yours" data-sec="f-yours"><span>F₄</span>Yours</a></li>
+      <li><a href="#f-spaces" data-sec="f-spaces"><span>F₅</span>Spaces</a></li>
+      <li><a href="#f-plugins" data-sec="f-plugins"><span>F₆</span>Plugins</a></li>
+      <li><a href="#f-motion" data-sec="f-motion"><span>F₇</span>Motion</a></li>
+    </ol>
+    <p class="railpct" id="railpct">0.000 of the way</p>
+  </nav>
+  <div>
+    <article class="feat" id="f-side">
+      <p class="fnum"><b>1</b>F₁ · Side by side</p>
+      <h2>Every agent in a real terminal, side by side</h2>
+      <p>Claude Code, Codex, Grok and the rest run as themselves, not through a wrapper. Fibo lays them out in panes and tabs, keeps them alive in a background host, and reads their state from the terminal and their transcripts.</p>
+      <div class="canvas" style="background-image:var(--p-s1);background-position:center 62%"><div class="card" style="--w:860px"><img src="shots/c-side.webp" alt="Sidebar and a Codex pane waiting for an answer" width="1720" height="1180" loading="lazy"></div></div>
+      <div class="three">
+        <div><h3>Your CLIs, unchanged</h3><p>Fibo doesn't touch an agent's model or loop. Anything else runs in a plain terminal, drawn by libghostty.</p></div>
+        <div><h3>Terminals outlive the window</h3><p>Close the window or let the app update itself; every terminal keeps running. After a reboot, interrupted sessions offer to resume.</p></div>
+        <div><h3>Spaces per project</h3><p>Group sessions by folder or repository and switch between them without losing a single scrollback line.</p></div>
+      </div>
+    </article>
+
+    <article class="feat" id="f-needs">
+      <p class="fnum"><b>1</b>F₂ · Needs you</p>
+      <h2>Know who is waiting <em>without</em> checking every tab</h2>
+      <p>One counter in the corner and one board for the whole desk. Running, waiting for you, ready for review, stopped: every session has exactly one state, and <code>⌘J</code> jumps to the next one that needs you.</p>
+      <div class="fsm"><svg viewBox="0 0 860 240" role="img" aria-label="State machine: Running goes to Needs you or Ready for review; you answer to send it back to Running; you mark Ready for review as Done">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9a9da5"/></marker></defs>
+        <g fill="none" stroke="#9a9da5" stroke-width="1.5" marker-end="url(#ah)">
+          <path d="M120 96 C150 30 230 20 336 28"/>
+          <path d="M350 50 C290 80 240 104 178 112"/>
+          <path d="M178 132 C240 140 290 160 344 186"/>
+          <path d="M336 214 C230 222 150 210 120 146"/>
+          <path d="M534 198 L656 198"/>
+        </g>
+        <g font-family="Inter,sans-serif" font-size="14" font-weight="600" text-anchor="middle">
+          <rect x="20" y="98" width="156" height="48" rx="24" fill="#fbf0cc"/><text x="98" y="127" fill="#8a6a00">Running</text>
+          <rect x="340" y="6" width="160" height="48" rx="24" fill="#fde4d3"/><text x="420" y="35" fill="#b8501a">Needs you</text>
+          <rect x="340" y="174" width="192" height="48" rx="24" fill="#dcf2e6"/><text x="436" y="203" fill="#1f7a4f">Ready for review</text>
+          <rect x="660" y="174" width="130" height="48" rx="24" fill="#eeece7"/><text x="725" y="203" fill="#5d6270">Done</text>
+        </g>
+        <g font-family="JetBrains Mono,monospace" font-size="12" fill="#6b7180" text-anchor="middle" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">
+          <text x="214" y="30">asks</text><text x="268" y="96">you answer</text>
+          <text x="268" y="150">turn ends</text><text x="214" y="232">send back</text>
+          <text x="595" y="186">you mark it</text>
+        </g>
+      </svg></div>
+      <div class="canvas" style="background-image:var(--p-s2);background-position:center 50%"><div class="card" style="--w:1120px"><img src="shots/c-board.webp" alt="The board: sessions in columns by state" width="2240" height="1060" loading="lazy"></div></div>
+      <div class="three">
+        <div><h3>A board for every agent</h3><p>Columns by state, cards by session, colored by space. Snoozed and finished work stays out of the way.</p></div>
+        <div><h3>Questions surface first</h3><p>When an agent asks which way to go, the question itself shows on the card and in the sidebar.</p></div>
+        <div><h3>Instant with hooks</h3><p>Optional hooks make state changes immediate. <code>fibo hooks uninstall</code> removes them again.</p></div>
+      </div>
+    </article>
+
+    <article class="feat" id="f-review">
+      <p class="fnum"><b>2</b>F₃ · Review</p>
+      <h2>A finished turn is ready for review, not done</h2>
+      <p>You decide when work is finished. Open a session's drawer to read the agent's last words, answer in its terminal, or mark it done. From your phone, if you're away from the desk.</p>
+      <div class="canvas mid" style="background-image:var(--p-s3);background-position:center 60%"><div class="card" style="--w:673px"><img src="shots/c-drawer.webp" alt="A session drawer: last words, answer in terminal, mark done" width="1346" height="560" loading="lazy"></div></div>
+      <div class="three">
+        <div><h3>Read before you accept</h3><p>Each turn keeps what you asked, what the agent said last, its branch, folder and how long it ran.</p></div>
+        <div><h3>Send it back in place</h3><p>Answer in the same pane. No context switch, no copy and paste between windows.</p></div>
+        <div><h3>From your phone (preview)</h3><p>Answer a question or approve a step while you're away. End-to-end encrypted; host the relay yourself if you like.</p></div>
+      </div>
+    </article>
+
+    <article class="feat" id="f-yours">
+      <p class="fnum"><b>3</b>F₄ · Yours</p>
+      <h2>Native, fast, and made to look like yours</h2>
+      <p>Rust and GPUI, drawn on the GPU, with frame-time checks in CI so a long day of sessions doesn't slow the window down. Themes, terminal colors and plugins are plain files.</p>
+      <div class="canvas" style="background-image:var(--p-s4);background-position:center 45%"><div class="card" style="--w:938px"><img src="shots/c-look.webp" alt="Appearance settings: light, dark and themes" width="1876" height="1060" loading="lazy"></div></div>
+      <div class="three">
+        <div><h3>Light, dark and in between</h3><p>Six built-in themes, your own <code>.itermcolors</code>, a background image if you want one.</p></div>
+        <div><h3>Plugins as files</h3><p>Add an agent, a quota source or a theme. The official catalog is signed in CI.</p></div>
+        <div><h3>Stays smooth</h3><p>Hundreds of sessions, one window, frames under budget. Measured on every pull request.</p></div>
+      </div>
+    </article>
+    <article class="feat" id="f-spaces">
+      <p class="fnum"><b>5</b>F₅ · Spaces &amp; machines</p>
+      <h2>Spaces for projects. <em>Machines for spaces.</em></h2>
+      <p>A space is a folder you work in; its sessions stay together, and you can quiet one while you're away from it. Add another Mac over SSH and its spaces appear under it, view only. Questions from every machine reach your phone, end-to-end encrypted, through a relay you can host yourself. Below: two Macs and a quieted space, then the same sessions on the phone.</p>
+      <div class="panel sp-panel">
+        <div class="sp-real">
+          <figure class="sbshot spdesk"><img class="on" data-lang="en" src="shots/sp-desktop.webp" width="632" height="1350" alt="Fibo sidebar by machine: This Mac with four spaces and the docs space quieted, mac2 over SSH with two"><img class="on" data-lang="zh" src="shots/sp-desktop-zh.webp" width="632" height="1350" alt="" loading="lazy"><figcaption><span class="on">Mac · This Mac, and mac2 over SSH</span></figcaption></figure>
+          <figure class="spphone"><div class="spscreen"><img data-lang="en" src="shots/sp-phone.webp" width="780" height="1688" alt="Fibo phone app listing what waits on you across both Macs" loading="lazy"><img data-lang="zh" src="shots/sp-phone-zh.webp" width="780" height="1688" alt="" loading="lazy"></div><figcaption><span>Phone · the same sessions</span></figcaption></figure>
         </div>
-        <div class="label meta"><span class="zh">macOS 14+ · Apple 芯片 · 已签名并公证 · MIT</span><span class="en">macOS 14+ · Apple silicon · signed &amp; notarized · MIT</span></div>
+        <div class="sp-foot"><span class="sp-set">sessions ⊂ spaces ⊂ machines</span></div>
+      </div>
+      <div class="three">
+        <div><h3>Spaces per project</h3><p>Group sessions by folder or repository; a new space on any machine is one click.</p></div>
+        <div><h3>Quiet a space</h3><p>Step away from a project without losing it. Starting work there again turns it back on.</p></div>
+        <div><h3>More than one Mac</h3><p>Any host <code>ssh</code> can reach without a password, with Fibo installed. Your phone joins through the relay.</p></div>
+      </div>
+    </article>
+
+    <article class="feat" id="f-plugins">
+      <p class="fnum"><b>8</b>F₆ · Plugins</p>
+      <h2>Plugins are files. <em>The sidebar is one of them.</em></h2>
+      <p>Everything below lives in <code>~/.config/fibo/plugins</code>. Ask the agent in your terminal to write one; <code>fibo plugins</code> tells you which took effect, and why not. The official catalog is signed in CI.</p>
+      <div class="panel plug">
+        <div class="tree"><b>~/.config/fibo/plugins/</b>
+├─ <b>common-actions/</b>   <i>pane menu &amp; ⌘P commands</i>
+├─ <b>sidebar-status/</b>   <i>a sidebar layout (.wasm)</i>
+├─ <b>pane-facts/</b>       <i>facts on each pane</i>
+├─ <b>notify-macos/</b>     <i>hooks on state changes</i>
+├─ <b>project-checks/</b>   <i>verification rules</i>
+├─ <b>complete-stamp/</b>   <i>a completion animation</i>
+├─ <b>theme-harbor/</b>     <i>a theme</i>
+├─ <b>claude-quota/</b>     <i>a quota source</i>
+└─ <b>opencode/</b>         <i>a new agent CLI</i></div>
+        <div>
+          <div class="swap" role="tablist" aria-label="Sidebar layout"><button type="button" class="on" data-l="sessions">Sessions first</button><button type="button" data-l="dir">Directory</button><button type="button" data-l="wasm">Plugin (.wasm)</button></div>
+          <figure class="sbshot"><img data-l="sessions" data-lang="en" class="on" src="shots/sb-sessions.webp" width="632" height="1150" alt="Fibo sidebar, Sessions first layout"><img data-l="sessions" data-lang="zh" class="on" src="shots/sb-sessions-zh.webp" width="632" height="1150" alt="Fibo sidebar, Sessions first layout" loading="lazy"><img data-l="dir" data-lang="en" class="" src="shots/sb-dir.webp" width="632" height="1150" alt="Fibo sidebar, Directory layout" loading="lazy"><img data-l="dir" data-lang="zh" class="" src="shots/sb-dir-zh.webp" width="632" height="1150" alt="Fibo sidebar, Directory layout" loading="lazy"><img data-l="wasm" data-lang="en" class="" src="shots/sb-wasm.webp" width="632" height="1150" alt="Fibo sidebar drawn by the sidebar-status WebAssembly plugin" loading="lazy"><img data-l="wasm" data-lang="zh" class="" src="shots/sb-wasm-zh.webp" width="632" height="1150" alt="Fibo sidebar drawn by the sidebar-status WebAssembly plugin" loading="lazy"><figcaption><span data-l="sessions" class="on">Built in · the default</span><span data-l="dir">Built in · grouped by folder</span><span data-l="wasm">Plugin · sidebar-status.wasm</span></figcaption></figure>
+          <span class="formula">sidebar = f(sessions) · swap f, keep the sessions</span>
+        </div>
+      </div>
+      <div class="three">
+        <div><h3>Ask, don't configure</h3><p>"Add a menu item that runs npm test beside this pane." The agent reads <code>fibo --skill plugins</code>, writes it, checks it.</p></div>
+        <div><h3>Replace the sidebar</h3><p>Pick a built-in layout, or ship your own as WebAssembly. If yours fails, Fibo falls back to a plain list and says why.</p></div>
+        <div><h3>Signed catalog</h3><p>Install, update and switch plugins in Settings; they take effect at once.</p></div>
+      </div>
+    </article>
+
+    <article class="feat" id="f-motion">
+      <p class="fnum"><b>13</b>F₇ · Motion</p>
+      <h2>Motion when you want it. <em>None when you don't.</em></h2>
+      <p>Choose how a session looks when you mark it done, from sixteen completion animations, and preview it in place. The spinning status dot is off by default. Turn on Reduce Motion in macOS and every effect becomes a fade.</p>
+      <div class="panel motion">
+        <div>
+          <div class="chips" id="fxchips"><button type="button" class="on" data-fx="stamp">Stamp</button><button type="button" data-fx="sweep">Sweep</button><button type="button" data-fx="confetti">Confetti</button><button type="button" data-fx="sunrise">Sunrise</button><button type="button" data-fx="cat">Cat</button><button type="button" data-fx="tea">Tea</button><button type="button" data-fx="wake">Wake</button><button type="button" data-fx="relief">Relief</button><button type="button" data-fx="heart">Heart</button><button type="button" data-fx="hop">Hop</button><button type="button" data-fx="fade">Fade</button></div>
+          <div class="switch"><button type="button" id="motionsw" role="switch" aria-checked="true" aria-label="Motion on this page"></button><span>Motion on this page. Try turning it off: the spiral, the seeds and the desk simulation all stop.</span></div>
+        </div>
+        <div class="stage fxshot"><img id="fxshot" src="media/f7/stamp-en.webp" width="1100" height="605" alt="Fibo marking a session done with the Stamp animation, captured from the app"></div>
+      </div>
+      <div class="three">
+        <div><h3>Sixteen to pick from</h3><p>Stamp, sweep, confetti, a cat, tea, sunrise and more, each a plugin. Or write your own.</p></div>
+        <div><h3>Quiet by default</h3><p>The spinning status dot costs a little battery, so it starts off. Turn it on in Settings if you like it.</p></div>
+        <div><h3>Respects your Mac</h3><p>With Reduce Motion on, every animation becomes a short fade.</p></div>
+      </div>
+    </article>
+
+  </div>
+</div></section>
+
+<section class="keep" id="keep"><div class="wrap">
+  <div class="kcard" id="closedemo">
+    <p class="eyebrow">fibo serve</p>
+    <h3>Close the window. <em>They keep working.</em></h3>
+    <p class="ktext">Terminals live in a background host, not in the window. Quit, update or crash the app and every terminal is still there when it opens again. After a reboot, sessions that were cut off offer to resume the same conversation.</p>
+    <div class="desk" data-noi18n>
+      <div class="win" id="win">
+        <div class="bar"><button type="button" class="tl red" id="win-close" aria-label="Close the window"></button><i class="tl"></i><i class="tl"></i><span>Fibo</span></div>
+        <ul class="rows" id="win-rows"></ul>
+      </div>
+      <button type="button" class="reopen" id="win-open">Open Fibo again</button>
+      <div class="host"><i></i><code>fibo serve</code><span id="host-n"></span></div>
+    </div>
+    <p class="hint" id="win-hint">Click the red button.</p>
+  </div>
+  <div class="kcard" id="oscdemo">
+    <p class="eyebrow">OSC 7501</p>
+    <h3>Any program can report in. <em>One printf.</em></h3>
+    <p class="ktext">A deploy script, a test watcher, a long build: print one escape sequence and it shows up in the sidebar with a state, like any agent.</p>
+    <pre class="term" data-noi18n><code id="osc-code"></code></pre>
+    <div class="chips" id="osc-states" data-noi18n><button type="button" data-s="working" class="on">working</button><button type="button" data-s="blocked">blocked</button><button type="button" data-s="done">done</button><button type="button" data-s="error">error</button><button type="button" data-s="idle">idle</button></div>
+    <div class="oscrow" id="osc-prog"><span>progress</span><input type="range" id="osc-p" min="0" max="100" value="30" aria-label="Progress the script reports"><output id="osc-pv">30</output></div>
+    <div class="sidemock" data-noi18n><small>SIDEBAR</small><div class="srow" id="osc-row"><i></i><b>deploy</b><em id="osc-badge"></em><span class="pbar"><u id="osc-bar"></u></span></div></div>
+  </div>
+</div></section>
+
+<section class="drive" id="drive" aria-labelledby="dr-h"><div class="wrap">
+  <div>
+    <p class="eyebrow">fibo run</p>
+    <h2 id="dr-h">Agents can start agents. <em>That is the name.</em></h2>
+    <p class="lead">Inside a Fibo terminal, an agent can read and drive the others. <code>fibo run</code> starts another agent with a task, and each turn it ends comes back into the caller's input as a report, so nobody polls. Sub-agents open underneath the session that started them.</p>
+    <pre class="cmd" data-noi18n><span>$</span> fibo list
+<span>$</span> fibo run codex "review the diff on this branch and list real bugs only"
+<span>$</span> fibo --skill          <i># the full guide, written for agents</i></pre>
+    <p class="foot">In 1202 Fibonacci counted rabbits this way: every pair that has grown up starts one more. 1, 1, 2, 3, 5, 8, 13.</p>
+  </div>
+  <div class="treebox">
+    <svg id="tree" viewBox="0 0 560 420" role="img" aria-label="A tree of agents: each agent that has finished a turn starts one more, giving 1, 1, 2, 3, 5, 8 and 13 agents"></svg>
+    <div class="treectl"><button type="button" id="tree-step">Next turn</button><button type="button" id="tree-reset">Start over</button><output id="tree-n"></output></div>
+  </div>
+</div></section>
+
+<section class="more" id="more-sec" aria-labelledby="mo-h"><div class="wrap">
+  <p class="eyebrow">Everything else</p>
+  <h2 id="mo-h">It is a good terminal first. <em>Everything else is built on that.</em></h2>
+  <div class="mgrid"><div><small>Splits</small><h3>Tabs and splits</h3><p>Split right or down and move between panes by direction. Every ⌘ shortcut can be rebound.</p></div><div><small>⌘P</small><h3>One search box</h3><p>Finds sessions, spaces and messages, and runs commands.</p></div><div><small>Paths</small><h3>Click a path, land on the line</h3><p>⌘-click <code>pane.rs:651</code> to open it at that line in Zed, VS Code or Cursor.</p></div><div><small>To-do</small><h3>To-dos</h3><p>Write it down when you think of it; hand it to an agent later.</p></div><div><small>Limits</small><h3>Quota</h3><p>The status bar shows your Codex, Claude and Grok quota.</p></div><div><small>Sub-agents</small><h3>Sub-agents</h3><p>Sub-agents a session started open underneath it.</p></div><div><small>Find</small><h3>Find in terminal</h3><p>Search the scrollback, with shortcuts to jump to the top and bottom.</p></div><div><small>Type</small><h3>Type</h3><p>Pick the monospaced font, ligatures, line height and the CJK font separately.</p></div><div><small>Style</small><h3>Two interface styles</h3><p>Standard, or terminal native: chrome shrinks to hairlines, tabs at the bottom.</p></div><div><small>Update</small><h3>Updates keep terminals up</h3><p>A new version is verified, swapped in place, and every terminal keeps running.</p></div></div>
+</div></section>
+
+<section class="grow" aria-labelledby="gr-h"><div class="wrap">
+  <div class="tilebox">
+    <div id="tiles" class="tilestage" role="img" aria-label="Agent terminals tiled as Fibonacci squares, one terminal per agent"></div>
+    <div class="tilecap"><span>Each square is a real agent terminal. The orange-framed ones are waiting for you.</span></div>
+    <div class="controls"><button type="button" id="less" aria-label="Remove a square">−</button><button type="button" class="go" id="more">+1 agent</button><button type="button" id="auto">Play</button></div>
+  </div>
+  <div>
+    <p class="eyebrow">Fₙ = Fₙ₋₁ + Fₙ₋₂</p>
+    <h2 id="gr-h" style="margin-top:18px">Add an agent. The desk keeps its shape.</h2>
+    <p class="sub" style="margin-top:20px;font-size:17px;line-height:1.65;color:var(--body)">Each square is one session: an agent, its task, its state. Each new one is the sum of the two before it, and the whole stays a golden rectangle. That's the promise: one more agent shouldn't make the desk harder to read.</p>
+    <div class="readout">
+      <span>n</span><b id="r-n">6</b>
+      <span>Fₙ</span><b id="r-f">8</b>
+      <span>Fₙ / Fₙ₋₁</span><b id="r-q">1.600000</b>
+      <span>(φⁿ − ψⁿ)/√5</span><b id="r-b">8.000000</b>
+      <span>|ratio − φ|</span><span class="bar"><i id="r-bar"></i></span>
+    </div>
+  </div>
+  <div class="theorem">
+    <h3>Theorem 1 <span>(attention)</span></h3>
+    <p>Let <i>n</i> agents run at once, and let <i>q(t)</i> be the number waiting on you at time <i>t</i>. With Fibo, what you carry is <i>q(t)</i>, not <i>n</i>.</p>
+    <p><b>Proof.</b> Fibo derives exactly one state per session from its terminal and transcript: running, needs you, ready for review, or done. Running sessions stay quiet; only the ones that need you, or wait for review, reach the counter, and <i>⌘J</i> visits them one by one. So <i>n</i> can grow while what you hold in your head stays <i>q(t)</i>. <span class="qed">∎</span></p>
+  </div>
+</div></section>
+
+<section class="sim" aria-labelledby="sim-h"><div class="wrap">
+  <div class="simhead">
+    <p class="eyebrow">A Markov chain · check Theorem 1 yourself</p>
+    <h2 id="sim-h" style="margin-top:18px">Run a desk. Watch what reaches you.</h2>
+    <p class="sub" style="margin-top:20px;font-size:17px;line-height:1.65;color:var(--body)">Every tick, each running agent may ask you something or finish its turn, with the odds in the matrix. Click a session waiting for you to answer it (or press <kbd>J</kbd>), click one ready for review to mark it done. Then raise <i style="font-family:var(--mono);font-style:normal">n</i>: the dashed line is how many agents run, the orange one is what waits on you. Turn autopilot off and the orange line is your backlog, whatever <i style="font-family:var(--mono);font-style:normal">n</i> is.</p>
+  </div>
+  <div class="simgrid">
+    <div class="simboard"><svg id="sim" viewBox="0 0 640 380" role="img" aria-label="Simulated agents moving between running, needs you, ready for review and done"></svg></div>
+    <div class="simside">
+      <div class="card">
+        <div class="kpi"><div><span>agents n</span><b id="k-n">8</b></div><div class="q"><span>needs you q</span><b id="k-q">0</b></div><div><span>review r</span><b id="k-r">0</b></div></div>
+        <svg id="spark" viewBox="0 0 300 80" aria-hidden="true"></svg>
+        <div class="row" style="margin-top:6px"><span style="color:#9a9da5">— n</span><span style="color:#d9621a">— q(t)</span><span style="margin-left:auto">mean q <b id="k-m" style="color:var(--ink);font-weight:500">0.0</b></span></div>
+      </div>
+      <div class="card">
+        <div class="row"><span>n</span><input type="range" id="sim-n" min="1" max="34" value="8" aria-label="Number of agents"><output id="sim-nv" style="min-width:24px;text-align:right;color:var(--ink)">8</output></div>
+        <div class="btns"><button type="button" id="sim-j">Answer next <kbd style="margin-left:4px">J</kbd></button><button type="button" id="sim-auto" class="on">Autopilot on</button><button type="button" id="sim-pause">Pause</button></div>
+      </div>
+      <div class="card">
+        <div class="matrix"><span>P =</span><table>
+          <tr><th>run</th><td>.89</td><td>.06</td><td>.05</td><td>0</td></tr>
+          <tr><th>need</th><td><b>a</b></td><td>1−a</td><td>0</td><td>0</td></tr>
+          <tr><th>rev</th><td>0</td><td>0</td><td>1−m</td><td><b>m</b></td></tr>
+          <tr><th>done</th><td>.12</td><td>0</td><td>0</td><td>.88</td></tr>
+        </table></div>
+        <p>Rows and columns: running, needs you, ready for review, done. <b>a</b> and <b>m</b> are you: how fast you answer and mark. Every other entry is the agents'.</p>
       </div>
     </div>
-  </header>
-
-  <div class="hero-shot">
-    <img class="shot only-dark" src="assets/shot-main.webp" width="1600" height="1000" alt="Fibo: the sidebar lists Needs you 3 and Running 2; three panes show Codex waiting for an answer, Claude Code running, and Codex ready for review">
-    <img class="shot only-light" src="assets/shot-light.webp" width="1600" height="1000" alt="Fibo in its light theme, with the same three panes">
-    <div class="legend">
-      <span><i style="--c:var(--accent)"></i><span class="zh">等你回答</span><span class="en">Waiting for you</span></span>
-      <span><i style="--c:var(--run)"></i><span class="zh">在跑</span><span class="en">Running</span></span>
-      <span><i style="--c:var(--review)"></i><span class="zh">等你验收</span><span class="en">Ready for review</span></span>
-      <span class="r"><span class="zh">真实截图 · Rust · GPUI · libghostty</span><span class="en">Real screenshot · Rust · GPUI · libghostty</span></span>
-    </div>
   </div>
+</div></section>
 
-  <section class="sec agents">
-    <div class="label"><span class="zh">内置 12 个 Agent</span><span class="en">12 agents built in</span></div>
-    <ul>
-      <li>Claude Code</li><li>Codex</li><li>Gemini CLI</li><li>Cursor Agent</li><li>Grok Build</li><li>Qoder CLI</li>
-      <li>Kimi Code</li><li>DeepSeek Harness</li><li>Hermes</li><li>Factory Droid</li><li>Pi</li><li>oh-my-pi</li>
-    </ul>
-  </section>
-
-  <section class="sec intro rise" id="features">
-    <div class="label"><span class="zh">功能</span><span class="en">Features</span></div>
-    <h2>
-      <span class="zh">Agent 多了，难的不是让它们跑。<span class="d">是知道现在该看哪一个，以及哪一个都不能丢。</span></span>
-      <span class="en">Running more agents is easy. <span class="d">Knowing which one to look at, and never losing one, is the work.</span></span>
-    </h2>
-  </section>
-
-  <section class="sec feat rise">
-    <div class="label"><b>01</b><span class="zh">状态</span><span class="en">State</span></div>
-    <div class="txt">
-      <h3><span class="zh">一眼看出哪个 Agent 在等你</span><span class="en">See which agent needs you</span></h3>
-      <p><span class="zh">每个会话只有一个状态，左栏、标签、窗格、看板和手机上的说法一致。<strong>一轮跑完不等于活干完了</strong>，只有你点了标记完成才算做完。</span><span class="en">Each session has one state, and the sidebar, tabs, panes, board and phone all say the same thing. <strong>A turn ending is not the work being done</strong>: only you mark a session complete.</span></p>
-      <ul class="spec">
-        <li><span class="st" style="--c:var(--accent)"><span class="zh">等你回答</span><span class="en">Waiting for you</span></span><span><span class="zh">它在提问，或等你审批</span><span class="en">It asked a question or wants an approval</span></span></li>
-        <li><span class="st" style="--c:var(--run)"><span class="zh">在跑</span><span class="en">Running</span></span><span><span class="zh">不用管它</span><span class="en">Leave it alone</span></span></li>
-        <li><span class="st" style="--c:var(--review)"><span class="zh">等你验收</span><span class="en">Ready for review</span></span><span><span class="zh">一轮跑完，结果等你看</span><span class="en">A turn ended; the result is yours to check</span></span></li>
-        <li><span><kbd>⌘J</kbd></span><span><span class="zh">跳到下一个等你的会话</span><span class="en">Jump to the next one waiting for you</span></span></li>
-        <li><span><span class="zh">通知</span><span class="en">Notify</span></span><span><span class="zh">每次等待只提醒一次，你正看着的终端不提醒</span><span class="en">Once per wait, and never for the terminal you are looking at</span></span></li>
-      </ul>
-    </div>
-    <div class="viz"><div class="stack">
-      <div class="crop themed" role="img" aria-label="Sidebar: Needs you 3, Running 2" style="aspect-ratio:350/262; --z:457.14%; --x:0%; --y:28.4%"></div>
-      <div class="crop themed" role="img" aria-label="Pane title bar: Codex, Waiting for you" style="aspect-ratio:636/200; --z:251.6%; --x:37.3%; --y:7.6%"></div>
-    </div></div>
-  </section>
-
-  <section class="sec feat full rise">
-    <div class="label"><b>02</b><span class="zh">看板</span><span class="en">Board</span></div>
-    <div class="txt">
-      <h3><span class="zh">所有会话，按它们要你做什么排开</span><span class="en">Every session, laid out by what it needs from you</span></h3>
-      <p><span class="zh">待办、在跑、要你处理、停下了、做完了。待办可以先写下来，想开工时选一个 Agent 启动；拖到「做完了」就是你验收过。</span><span class="en">To-do, Running, Needs you, Stopped, Done. Write a to-do now and pick an agent when you want it started; dragging a card to Done means you reviewed it.</span></p>
-      <p><span class="zh">点开一张卡：你问了什么、Agent 最后说了什么、分支、轮数，不用翻终端。关掉的会话对话还留着，随时在新窗格里接着聊。</span><span class="en">Open a card for what you asked, the agent’s last words, the branch and the turn count, without scrolling a terminal. Closed sessions keep their conversation; continue any of them in a new pane.</span></p>
-    </div>
-    <div class="viz"><img class="shot" src="assets/shot-board.webp" width="1600" height="1000" loading="lazy" alt="The board: columns To-do, Running, Needs you, Stopped and Done, with a card per session"></div>
-  </section>
-
-  <section class="sec feat rise">
-    <div class="label"><b>03</b><span class="zh">验收</span><span class="en">Review</span></div>
-    <div class="txt">
-      <h3><span class="zh">这一轮它到底改了什么</span><span class="en">What this turn actually changed</span></h3>
-      <p><span class="zh">一轮结束，窗格顶上写着这一轮改了几个文件，点开看合并后的改动。你的提问钉在顶上，回答再长也不用往回翻。</span><span class="en">When a turn ends, the pane says how many files it changed; open them for the combined diff. Your question stays pinned at the top however long the answer runs.</span></p>
-      <ul class="spec">
-        <li><span><span class="zh">本轮改动</span><span class="en">Changes</span></span><span><span class="zh">按文件列出，同一文件改多次只看最终结果</span><span class="en">Listed per file; many edits to one file show as one result</span></span></li>
-        <li><span><span class="zh">验证规则</span><span class="en">Criteria</span></span><span><span class="zh">插件定义的检查，窗格上显示过了几条</span><span class="en">Checks defined by plugins, with the proven count on the pane</span></span></li>
-        <li><span><span class="zh">标记完成</span><span class="en">Mark done</span></span><span><span class="zh">只有你能按，可以撤销</span><span class="en">Only you press it, and it can be undone</span></span></li>
-      </ul>
-    </div>
-    <div class="viz"><div class="crop themed" role="img" aria-label="A pane ready for review: This turn is done, with a Mark done button" style="aspect-ratio:590/290; --z:271.2%; --x:99.6%; --y:72%"></div></div>
-  </section>
-
-  <section class="sec feat rise">
-    <div class="label"><b>04</b><span class="zh">不丢</span><span class="en">Persistence</span></div>
-    <div class="txt">
-      <h3><span class="zh">关掉窗口，它们照样跑</span><span class="en">Close it, they keep working</span></h3>
-      <p><span class="zh">终端跑在后台进程 <code>fibo serve</code> 里，不在窗口里。退出、更新或 App 崩溃，再打开时终端都还在。</span><span class="en">Terminals live in a background host, <code>fibo serve</code>, not in the window. Quit, update or crash the app and every terminal is still there when it opens again.</span></p>
-      <p><span class="zh">连后台也没了（比如重启电脑），被打断的会话会显示<strong>接着聊</strong>：点一下就用 <code>claude --resume</code> 或 <code>codex resume</code> 回到同一段对话，启动时带的参数也一起带上。</span><span class="en">If the host itself goes (a reboot), sessions that were cut off show <strong>resume</strong>: one click reopens the same conversation with <code>claude --resume</code> or <code>codex resume</code>, with the flags it was started with.</span></p>
-    </div>
-    <div class="viz"><div class="tl" aria-hidden="true">
-      <div class="ev"><span></span><span><span class="zh">退出</span><span class="en">quit</span></span><span><span class="zh">更新</span><span class="en">update</span></span><span><span class="zh">崩溃</span><span class="en">crash</span></span><span><span class="zh">重启电脑</span><span class="en">reboot</span></span></div>
-      <div class="row"><span><span class="zh">窗口</span><span class="en">window</span></span><i class="seg cut mark"></i><i class="seg cut mark"></i><i class="seg cut mark"></i><i class="seg cut mark"></i></div>
-      <div class="row"><span>fibo serve</span><i class="seg live"></i><i class="seg live"></i><i class="seg live"></i><i class="seg cut back"></i></div>
-      <div class="note"><span class="zh">前三次终端一直在。<b>●</b> 重启后点「接着聊」，回到同一段对话。</span><span class="en">Terminals stay up through the first three. <b>●</b> After a reboot, one click resumes the same conversation.</span></div>
-    </div></div>
-  </section>
-
-  <section class="sec feat rise">
-    <div class="label"><b>05</b><span class="zh">接入</span><span class="en">Agents</span></div>
-    <div class="txt">
-      <h3><span class="zh">什么 Agent 都能接</span><span class="en">Any agent CLI</span></h3>
-      <p><span class="zh">内置 12 个 Agent CLI，Fibo 读取各工具自己提供的会话记录和事件；子代理在左栏里展开成一棵树。别的 CLI 用一个 JSON 插件接入，自带 OpenCode 示例。</span><span class="en">Twelve agent CLIs are built in; Fibo reads the session records and events each tool provides, and sub-agents open as a tree in the sidebar. Other CLIs are added with a JSON plugin; OpenCode ships as an example.</span></p>
-      <p><span class="zh">任何程序都能用 OSC 7501 状态协议，<strong>一行 <code>printf</code></strong> 报告自己的状态。</span><span class="en">Any program can report its own state with <strong>one <code>printf</code></strong>, using the OSC 7501 status protocol.</span></p>
-    </div>
-    <div class="viz"><pre class="term"><span class="c"># deploy.sh</span>
-<span class="p">$ </span>printf '\033]7501;state=working:app=deploy:progress=30\033\\'
-
-<span class="y">●</span> deploy   <span class="y">working</span>   <span class="c">30%</span></pre></div>
-  </section>
-
-  <section class="sec feat rise">
-    <div class="label"><b>06</b><span class="zh">协作</span><span class="en">Orchestration</span></div>
-    <div class="txt">
-      <h3><span class="zh">Agent 能驱动 Fibo，也能互相派活</span><span class="en">Agents drive Fibo, and each other</span></h3>
-      <p><span class="zh">在 Fibo 终端里，Agent 可以用 <code>fibo</code> 命令读别的终端、给别的 Agent 发话。</span><span class="en">Inside a Fibo terminal, an agent can read and drive the others with the <code>fibo</code> command.</span></p>
-      <p><span class="zh"><code>fibo run</code> 派另一个 Agent 去做一件事；它每结束一轮，结果自动回到派活那一方的输入框，<strong>谁都不用轮询</strong>。</span><span class="en"><code>fibo run</code> starts another agent with a task; each turn it ends comes back into the caller’s input, so <strong>nobody polls</strong>.</span></p>
-    </div>
-    <div class="viz"><pre class="term"><span class="p">$ </span>fibo list
-<span class="p">$ </span>fibo run codex "<span class="zh">审一下这个分支，只列真正的 bug</span><span class="en">review this branch, real bugs only</span>"
-
-<span class="g">&lt;mooring from=codex&gt;</span> … <span class="g">&lt;/mooring&gt;</span>
-<span class="c"># <span class="zh">它每结束一轮，结果自己回来</span><span class="en">each turn it ends reports back by itself</span></span>
-
-<span class="p">$ </span>fibo --skill   <span class="c"># <span class="zh">写给 Agent 看的完整说明</span><span class="en">the full guide, written for agents</span></span></pre></div>
-  </section>
-
-  <section class="sec duo rise">
-    <div>
-      <div class="label"><b>07</b><span class="zh">多台电脑</span><span class="en">Machines</span></div>
-      <h3><span class="zh">别的电脑，也在同一个左栏里</span><span class="en">Other computers, in the same sidebar</span></h3>
-      <p><span class="zh">加一台 ssh 能免密登录、装了 Fibo 的电脑，它的空间和会话就按机器名列在左栏。暂时不想管的空间或整台机器可以「先不管」：照样跑，不计数，不提醒。</span><span class="en">Add a computer that ssh can log in to and that has Fibo installed; its spaces and sessions are listed in the sidebar under its name. Quiet a space or a whole machine you don’t want to think about: it keeps running, uncounted and silent.</span></p>
-    </div>
-    <div>
-      <div class="label"><b>08</b><span class="zh">手机</span><span class="en">Phone</span></div>
-      <h3><span class="zh">人不在电脑前，也能回它一句</span><span class="en">Answer it when you are away from the desk</span></h3>
-      <p><span class="zh">配对手机后，在手机上看哪个在等你、读对话、看改动、允许或拒绝、发一句话、让它停下。桌面端在本机独立可用；手机连接需你主动开启端到端加密中继（现阶段使用自建 <code>mooring-relay</code> 与仓库 <code>mobile/</code> 应用，官方托管中继内测中）。</span><span class="en">Pair a phone to see which session is waiting, read the conversation and the changes, allow or deny, send a message or stop a turn. The Mac app works standalone locally; phone pairing is opt-in and end-to-end encrypted, currently via a self-hosted <code>mooring-relay</code> and the <code>mobile/</code> app in the repo (hosted relay in private beta).</span></p>
-    </div>
-  </section>
-
-  <section class="sec feat full rise">
-    <div class="label"><b>09</b><span class="zh">定制</span><span class="en">Yours</span></div>
-    <div class="txt">
-      <h3><span class="zh">用插件改它，或者让 Agent 替你改</span><span class="en">Change it with plugins, or ask your agent to</span></h3>
-      <p><span class="zh">插件就是 <code>~/.config/fibo/plugins/</code> 下的普通文件：右键菜单和 <kbd>⌘P</kbd> 里的命令、左栏排法、窗格上显示的信息、状态变化时的 hook、验证规则、完成动画、新的 Agent CLI。</span><span class="en">Plugins are plain files in <code>~/.config/fibo/plugins/</code>: commands for the pane menu and <kbd>⌘P</kbd>, sidebar layouts, facts on each pane, hooks on state changes, verification rules, done animations, new agent CLIs.</span></p>
-      <p><span class="zh">跟终端里的 Agent 说一句「加一个右键命令，在旁边跑 npm test」，它会读 <code>fibo --skill plugins</code>，写好插件并检查。主题有六套深色和浅色，可以导入 <code>.itermcolors</code>，每个空间还能单独用一套。</span><span class="en">Tell the agent in your terminal “add a menu item that runs npm test beside this pane”; it reads <code>fibo --skill plugins</code>, writes the plugin and checks it. Themes come as six dark ones plus light, import <code>.itermcolors</code>, and each space can keep its own.</span></p>
-    </div>
-    <div class="viz"><img class="shot" src="assets/shot-themes.webp" width="1600" height="1000" loading="lazy" alt="Settings › Appearance: dark themes Obsidian, Slate, Graphite, Warm gray, Pine and Plum, and the interface style switch"></div>
-  </section>
-
-  <section class="sec intro rise" id="all">
-    <div class="label"><span class="zh">全部细节</span><span class="en">Everything else</span></div>
-    <h2><span class="zh">它首先是一个好用的终端。<span class="d">其余的都长在这上面。</span></span><span class="en">It is a good terminal first. <span class="d">Everything else is built on that.</span></span></h2>
-  </section>
-  <section class="sec all rise">
-    <div><div class="label">Splits</div><h4><span class="zh">标签和分屏</span><span class="en">Tabs and splits</span></h4><p><span class="zh">向右、向下分屏，按方向切窗格。带 ⌘ 的快捷键都能改。</span><span class="en">Split right or down and move between panes by direction. Every ⌘ shortcut can be rebound.</span></p></div>
-    <div><div class="label">⌘P</div><h4><span class="zh">一个搜索框</span><span class="en">One search box</span></h4><p><span class="zh">找会话、空间、说过的话，也执行命令。</span><span class="en">Finds sessions, spaces and messages, and runs commands.</span></p></div>
-    <div><div class="label">Paths</div><h4><span class="zh">点路径，跳到那一行</span><span class="en">Click a path, land on the line</span></h4><p><span class="zh">⌘ 点 <code>pane.rs:651</code>，在 Zed、VS Code 或 Cursor 里打开到那一行。</span><span class="en">⌘-click <code>pane.rs:651</code> to open it at that line in Zed, VS Code or Cursor.</span></p></div>
-    <div><div class="label">Spaces</div><h4><span class="zh">一个项目一个空间</span><span class="en">A space per project</span></h4><p><span class="zh">空间对应一个文件夹，左栏可以只看其中一个。</span><span class="en">A space maps to a folder, and the sidebar can show just one.</span></p></div>
-    <div><div class="label">To-do</div><h4><span class="zh">待办</span><span class="en">To-dos</span></h4><p><span class="zh">想到就记下，稍后再交给某个 Agent 开工。</span><span class="en">Write it down when you think of it; hand it to an agent later.</span></p></div>
-    <div><div class="label">Limits</div><h4><span class="zh">额度</span><span class="en">Quota</span></h4><p><span class="zh">底栏显示 Codex、Claude、Grok 的额度。</span><span class="en">The status bar shows your Codex, Claude and Grok quota.</span></p></div>
-    <div><div class="label">Sub-agents</div><h4><span class="zh">子代理</span><span class="en">Sub-agents</span></h4><p><span class="zh">一个会话派出去的子代理，在它下面展开。</span><span class="en">Sub-agents a session started open underneath it.</span></p></div>
-    <div><div class="label">Find</div><h4><span class="zh">终端内查找</span><span class="en">Find in terminal</span></h4><p><span class="zh">在滚动缓冲里搜，翻到顶、翻到底都有快捷键。</span><span class="en">Search the scrollback, with shortcuts to jump to the top and bottom.</span></p></div>
-    <div><div class="label">Type</div><h4><span class="zh">字体</span><span class="en">Type</span></h4><p><span class="zh">等宽字体、连字、行高、中文字体各自可选。</span><span class="en">Pick the monospaced font, ligatures, line height and the CJK font separately.</span></p></div>
-    <div><div class="label">Style</div><h4><span class="zh">两种界面风格</span><span class="en">Two interface styles</span></h4><p><span class="zh">标准，或者终端原生：边框缩成细线，标签在底部。</span><span class="en">Standard, or terminal native: chrome shrinks to hairlines, tabs at the bottom.</span></p></div>
-    <div><div class="label">Done</div><h4><span class="zh">完成动画</span><span class="en">Done animations</span></h4><p><span class="zh">标记完成时放一段，自带 18 种，也可以自己写。</span><span class="en">One plays when you mark done. Eighteen ship as plugins; write your own.</span></p></div>
-    <div><div class="label">Update</div><h4><span class="zh">更新时终端不断</span><span class="en">Updates keep terminals up</span></h4><p><span class="zh">新版本校验签名后原地替换，终端继续跑。</span><span class="en">A new version is verified, swapped in place, and every terminal keeps running.</span></p></div>
-  </section>
-
-  <section class="sec intro rise" id="privacy">
-    <div class="label"><span class="zh">数据</span><span class="en">Your data</span></div>
-    <h2><span class="zh">App 自己只发一个网络请求：<span class="d">检查更新。</span></span><span class="en">One network request on its own: <span class="d">the update check.</span></span></h2>
-  </section>
-  <section class="sec facts rise">
-    <div>
-      <div class="label"><b>A</b><span class="zh">留在本机</span><span class="en">Stays local</span></div>
-      <h4><span class="zh">对话记录不上传</span><span class="en">Transcripts are never uploaded</span></h4>
-      <p><span class="zh">终端和会话索引在 <code>~/.local/share/fibo-workbench</code>，设置和插件在 <code>~/.config/fibo</code>。Fibo 只读 Agent 自己的对话记录。</span><span class="en">Terminals and the session index live in <code>~/.local/share/fibo-workbench</code>, settings and plugins in <code>~/.config/fibo</code>. Fibo only reads the agents’ own transcripts.</span></p>
-    </div>
-    <div>
-      <div class="label"><b>B</b><span class="zh">每天最多一次</span><span class="en">Once a day at most</span></div>
-      <h4><span class="zh">可以关掉</span><span class="en">And you can turn it off</span></h4>
-      <p><span class="zh">向 GitHub API 要一次最新发布的信息。更新包按 SHA256 和 Developer ID 签名校验，任何一项不过都不安装。</span><span class="en">One GET to the GitHub API for the latest release. Updates are checked against SHA256 sums and the Developer ID signature; nothing installs if a check fails.</span></p>
-    </div>
-    <div>
-      <div class="label"><b>C</b><span class="zh">其余等你动手</span><span class="en">The rest waits for you</span></div>
-      <h4><span class="zh">你加了才连</span><span class="en">Nothing connects until you add it</span></h4>
-      <p><span class="zh">手机中继、远程插件目录、webhook、SSH 电脑，都是你开启或添加之后才联网。</span><span class="en">The phone relay, the remote plugin catalog, webhooks and SSH machines go online only after you turn them on or add them.</span></p>
-    </div>
-  </section>
-
-  <section class="sec faq rise" id="faq">
-    <div class="label"><span class="zh">常见问题</span><span class="en">FAQ</span></div>
-    <div>
-      <details open>
-        <summary><span class="zh">退出、更新或重启会怎样？</span><span class="en">What happens when I quit, update or restart?</span></summary>
-        <p><span class="zh">退出或更新 App，终端都继续跑。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。</span><span class="en">Quitting or updating the app leaves every terminal running. Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.</span></p>
-      </details>
-      <details>
-        <summary><span class="zh">Agent 没出现在左栏。</span><span class="en">An agent does not show up in the sidebar.</span></summary>
-        <p><span class="zh">要在 Fibo 的终端里运行；在别处启动的会话只在看板上以「外部·只读」出现。套在沙盒或虚拟机里运行时，启动前设 <code>MOORING_AGENT=claude</code>。<code>fibo explain &lt;终端&gt;</code> 能看到 Fibo 怎么读这块屏。</span><span class="en">It has to run inside a Fibo terminal; sessions started elsewhere appear on the board only. Behind a sandbox or a VM, start it with <code>MOORING_AGENT=claude</code>. <code>fibo explain &lt;terminal&gt;</code> shows how Fibo read that screen.</span></p>
-      </details>
-      <details>
-        <summary><span class="zh">Fibo 会改我的 Agent 配置吗？</span><span class="en">Does Fibo change my agent settings?</span></summary>
-        <p><span class="zh">只有运行 <code>fibo hooks install</code> 时会在 Agent 的配置文件里加上 Fibo 的条目，<code>fibo hooks uninstall</code> 会移除。不装 hook 时，状态从对话记录和画面读。</span><span class="en">Only when you run <code>fibo hooks install</code>, which adds Fibo’s entries to the agent’s settings file; <code>fibo hooks uninstall</code> removes them. Without hooks, state comes from transcripts and the screen.</span></p>
-      </details>
-      <details>
-        <summary><span class="zh">以前用的是 Mooring 或 Keepline，要做什么？</span><span class="en">I used Mooring or Keepline. What changes?</span></summary>
-        <p><span class="zh">不用重来。Fibo 第一次启动时会把旧配置搬到 <code>~/.config/fibo</code>，老后台把终端交接过来；<code>mooring</code>、<code>keepline</code> 命令和 <code>MOORING_*</code>、<code>KEEPLINE_*</code> 变量照样认。</span><span class="en">Nothing to redo. On first start Fibo moves the old config to <code>~/.config/fibo</code> and the old host hands its terminals over; it still answers to <code>mooring</code>, <code>keepline</code>, <code>MOORING_*</code> and <code>KEEPLINE_*</code>.</span></p>
-      </details>
-    </div>
-  </section>
-
-  <section class="sec final rise" id="install">
-    <div>
-      <h2><span class="zh">让它们跑。<br><span class="d">你去忙别的。</span></span><span class="en">Let them run.<br><span class="d">Go do something else.</span></span></h2>
-      <p class="lede"><span class="zh">打开 Fibo，在它的终端里运行 <code>claude</code> 或 <code>codex</code>，会话就会出现在左栏。</span><span class="en">Open Fibo, run <code>claude</code> or <code>codex</code> in its terminal, and the session shows up in the sidebar.</span></p>
-    </div>
-    <div class="side">
-      <a class="btn" href="https://github.com/majiayu000/fibo/releases/latest"><span class="zh">下载 .dmg</span><span class="en">Download .dmg</span></a>
-      <button class="brew" type="button" data-copy="brew install --cask majiayu000/tap/fibo">
-        <span class="cmd">brew install --cask majiayu000/tap/fibo</span>
-        <span class="copy"><span class="zh">复制</span><span class="en">Copy</span></span>
-      </button>
-      <a class="src" href="https://github.com/majiayu000/fibo#build-from-source"><span class="zh">或者从源码构建 →</span><span class="en">Or build from source →</span></a>
-    </div>
-  </section>
-</main>
-
-<footer>
-  <div class="frame">
-    <span>Fibo · MIT License</span>
-    <a href="https://github.com/majiayu000/fibo">GitHub</a>
-    <a href="https://github.com/majiayu000/fibo/issues">Issues</a>
-    <a href="https://github.com/majiayu000/fibo/releases/latest"><span class="zh">发布</span><span class="en">Releases</span></a>
-    <span class="sp"><span class="zh">原名 Mooring，更早叫 Keepline。</span><span class="en">Formerly Mooring, and before that Keepline.</span></span>
+<section class="start" id="start"><div class="wrap">
+  <p class="eyebrow">Get started</p>
+  <h2>Three agents running<br><span>before your coffee cools.</span></h2>
+  <div class="steps">
+    <div><small>F₁ = 1</small><h3>Install Fibo</h3><p>Download the notarized DMG, or <code>brew install --cask majiayu000/tap/fibo</code>. It updates itself.</p></div>
+    <div><small>F₂ = 1</small><h3>Open a project</h3><p>Pick a folder. Fibo makes it a space and finds the agent CLIs already on your machine.</p></div>
+    <div><small>F₃ = 2</small><h3>Start your agents</h3><p>Open a tab per task and run <code>claude</code>, <code>codex</code> or anything else, exactly as you do today.</p></div>
+    <div><small>F₄ = 3</small><h3>Answer who needs you</h3><p>Keep working. When the counter lights up, press <code>⌘J</code>, answer, and move on to the next.</p></div>
   </div>
-</footer>
+  <div class="row">
+    <a class="btn white" href="https://github.com/majiayu000/fibo/releases/latest">Download for Mac</a>
+    <a class="btn line" href="https://github.com/majiayu000/fibo#readme">Read the docs</a>
+  </div>
+</div></section>
+
+<section class="open"><div class="wrap">
+  <div>
+    <p class="eyebrow">Open source</p>
+    <h2 style="margin-top:18px">Your agents.<br>Your Mac. Your code.</h2>
+    <p class="lead">Fibo reads your agents' transcripts on your machine and uploads nothing itself. The source is MIT licensed, and so are the example plugins.</p>
+    <div class="row"><a class="btn dark" href="https://github.com/majiayu000/fibo">Star on GitHub</a><a class="more" href="https://github.com/majiayu000/fibo/blob/main/LICENSE">MIT license →</a></div>
+  </div>
+  <div class="cards">
+    <div><h3>Local first</h3><p>Transcripts stay on disk. Your agent CLIs still talk only to their own providers.</p></div>
+    <div><h3>No lock-in</h3><p>Fibo runs the tools you already use. Quit it and your agents work exactly as before.</p></div>
+    <div><h3>Readable</h3><p>Every state rule lives in one place in the code, with tests that keep it there.</p></div>
+    <div><h3>Extensible</h3><p>Agents, quota sources and themes are plugins. Write one in an afternoon.</p></div>
+  </div>
+</div></section>
+
+<section class="faq" id="faq"><div class="wrap">
+  <p class="eyebrow">FAQ</p>
+  <h2>Questions &amp; answers.</h2>
+  <div class="qa">
+    <details><summary>Is Fibo a terminal or an agent?</summary><p>Neither on its own: it is a workbench around real terminals and the agent CLIs you already use. It shows their state and keeps them running; it does not replace an agent's model or loop.</p></details>
+    <details><summary>Which agents does it know?</summary><p>Twelve are built in: Claude Code, Codex, Grok Build, Cursor Agent, Qoder CLI, Hermes, Factory Droid, Pi, oh-my-pi, DeepSeek Harness, Kimi Code and Gemini CLI. OpenCode comes as a plugin, and others can be added the same way. Any other program still runs in a plain terminal.</p></details>
+    <details><summary>Does Fibo upload my conversations?</summary><p>No. Fibo reads local transcripts and does not upload them. Your agent CLIs still talk to their own providers. The optional phone link is end-to-end encrypted.</p></details>
+    <details><summary>Does it change my agent settings?</summary><p>Only if you install the optional hooks from the welcome screen or with <code>fibo hooks install</code>; they make state changes instant. <code>fibo hooks uninstall</code> removes them.</p></details>
+    <details><summary>Wasn't this called Mooring?</summary><p>Yes. It was renamed Fibo in November 2026. Existing installs keep working: the <code>mooring</code> command, settings and terminals carry over.</p></details>
+    <details><summary>Windows or Linux?</summary><p>The app is macOS only today. The shared crates build on Linux and Windows, but there is no release for them.</p></details>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="#" aria-label="Fibo"><img src="brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>A native macOS workbench for running many coding agents at once. Open source, MIT licensed.</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">Download</a></div>
+    <div><h4>Product</h4><ul><li><a href="#features">Features</a></li><li><a href="#start">Get started</a></li><li><a href="https://github.com/majiayu000/fibo/releases">Changelog</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">Documentation</a></li><li><a href="#faq">FAQ</a></li><li><a href="https://github.com/majiayu000/fibo/issues">Report a problem</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">License</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew tap</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo. MIT licensed.</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+  
+</div></footer>
 
 <script>
-(function () {
-  var root = document.documentElement;
-  root.classList.add('js');
-  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  function lang() { return root.lang === 'en' ? 'en' : 'zh'; }
-  function label() {
-    document.getElementById('lang').textContent = lang() === 'zh' ? 'EN' : '中文';
-    document.title = lang() === 'zh' ? 'Fibo — 同时跑很多个 Coding Agent 的 macOS 工作台' : 'Fibo — run many coding agents at once on your Mac';
+(() => {
+  const stage = document.getElementById('tiles'); if (!stage) return;
+  const PHI = (1 + Math.sqrt(5)) / 2, MAX = 12, SCREENS = [{"agent": "Codex", "title": "Fix flaky reconnect test in host handover", "state": "needs", "lines": ["› Fix flaky reconnect test in host handover", "", "• Read crates/host/src/handover.rs (412 lines)", "• Ran cargo test -p host handover -- --nocapture", "  └ test result: FAILED. 23 passed; 1 failed", "• The socket is reused before the old host lets go of it.", "", "? Two ways to fix this:", "  1. Wait for the old host to close (adds ~200 ms)", "  2. Hand the socket over explicitly", "", "  Which one should I take?"]}, {"agent": "Claude", "title": "Add English UI for the settings window", "state": "running", "lines": ["> Add English UI for the settings window", "", "⏺ Reading crates/app/src/settings/*.rs", "⏺ Update(settings/general.rs)", "  ⎿ Wrapped 38 strings in t!()", "⏺ Update(locales/en/settings.toml)", "  ⎿ Added 38 entries", "⏺ Bash(cargo test -p core i18n)", "  ⎿ running 12 tests …", "", "✻ Translating the plugins page… (2m 14s · ↓ 8.1k tokens)"]}, {"agent": "Codex", "title": "Speed up sidebar redraw on large workspaces", "state": "review", "lines": ["› Speed up sidebar redraw on large workspaces", "", "• Profiled frame time with 400 sessions: 31 ms → 9 ms", "• Cached per-second derived values in frame_facts", "• Ran scripts/perf-gate.py", "  └ sidebar-scroll  p50 8.7 ms  (gate 12 ms)  ✓", "• Ran cargo test -p app", "  └ test result: ok. 214 passed; 0 failed", "", "─ Done. Ready for your review."]}, {"agent": "Claude", "title": "Rate-limit the public upload endpoint", "state": "running", "lines": ["> Rate-limit the public upload endpoint", "", "⏺ Read src/routes/upload.ts", "⏺ Write(src/middleware/rateLimit.ts)", "  ⎿ Token bucket, 60 req/min per key", "⏺ Bash(bun test upload)", "  ⎿ 31 pass  0 fail", "", "✻ Writing the load test… (48s · ↓ 3.2k tokens)"]}, {"agent": "Codex", "title": "Dark mode for the pricing page", "state": "review", "lines": ["› Dark mode for the pricing page", "", "• Added color tokens under prefers-color-scheme", "• Checked contrast: 7.1:1 body, 4.8:1 muted", "• Ran pnpm test", "  └ 58 passed", "", "─ Done. Screenshots in ./shots/pricing-dark.png"]}, {"agent": "Claude", "title": "Retry webhooks with backoff", "state": "needs", "lines": ["> Retry webhooks with backoff", "", "⏺ Read src/webhooks/deliver.ts", "⏺ Update(src/webhooks/deliver.ts)", "  ⎿ Exponential backoff, 5 tries, jitter", "", "  Should a 410 Gone stop retries for good?", "  ❯ 1. Yes, drop the endpoint", "    2. No, keep retrying"]}, {"agent": "Codex", "title": "Migrate sessions table to UUID keys", "state": "running", "lines": ["› Migrate sessions table to UUID keys", "", "• Wrote migrations/0042_session_uuid.sql", "• Ran sqlx migrate run", "  └ applied 0042 (312 ms)", "• Backfilling 18,402 rows …"]}, {"agent": "Claude", "title": "Notarize the DMG in the release script", "state": "done", "lines": ["> Notarize the DMG in the release script", "", "⏺ Update(scripts/release-macos.py)", "  ⎿ notarytool submit --wait", "⏺ Bash(spctl -a -vv Fibo.dmg)", "  ⎿ accepted, source=Notarized Developer ID", "", "✻ Done."]}, {"agent": "Codex", "title": "Add request IDs to every log line", "state": "review", "lines": ["› Add request IDs to every log line", "", "• Added a tracing span per request", "• Ran cargo test -p host", "  └ test result: ok. 96 passed; 0 failed", "", "─ Done. Ready for your review."]}, {"agent": "Claude", "title": "Write the getting-started guide", "state": "running", "lines": ["> Write the getting-started guide", "", "⏺ Read README.md", "⏺ Write(docs/getting-started.md)", "  ⎿ 142 lines", "", "✻ Adding screenshots… (1m 02s · ↓ 2.4k tokens)"]}, {"agent": "Codex", "title": "Fix broken links in the changelog", "state": "needs", "lines": ["› Fix broken links in the changelog", "", "• Ran lychee CHANGELOG.md", "  └ 7 broken, 2 redirect", "", "? Point old Mooring links at fibo.page?", "  1. Yes", "  2. Keep them"]}, {"agent": "Claude", "title": "Pin the Zig toolchain in CI", "state": "done", "lines": ["> Pin the Zig toolchain in CI", "", "⏺ Update(.github/workflows/ci.yml)", "  ⎿ zig 0.16.0, cached", "", "✻ Done."]}];
+  const F = [0, 1]; for (let i = 2; i <= MAX + 1; i++) F[i] = F[i - 1] + F[i - 2];
+  const CHIP = { needs: ['Waiting for you', '#b8501a', '#fde4d3'], running: ['Running', '#8a6a00', '#fbf0cc'], review: ['Ready for review', '#1f7a4f', '#dcf2e6'], done: ['Done', '#5d6270', '#eeece7'] };
+  const DOT = { Claude: '#d97757', Codex: '#4b5bdc' }, NAME = { Claude: 'Claude Code', Codex: 'Codex' };
+  const SPACE = ['fibo', 'fibo', 'fibo', 'api-server', 'web', 'api-server', 'api-server', 'fibo', 'api-server', 'docs', 'docs', 'infra'];
+  let n = 1, prev = 0, timer = null, userPaused = false, seen = false;
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const color = l => /^\s*(└|⎿)/.test(l) ? (/(FAILED|fail [1-9])/.test(l) ? `<span class="o">${esc(l)}</span>` : `<span class="d">${esc(l)}</span>`) : /^(\?|  ❯|  Which|  Should)/.test(l) ? `<span class="o">${esc(l)}</span>` : /^(─ Done|✻ Done)/.test(l) ? `<span class="g">${esc(l)}</span>` : esc(l);
+  function layout(n) {
+    const sq = [{ x: 0, y: 0, f: 1 }]; let R = { x0: 0, y0: 0, x1: 1, y1: 1 };
+    for (let k = 2; k <= n; k++) { const f = F[k], d = (k - 2) % 4; let x, y;
+      if (d === 0) { x = R.x1; y = R.y0; } else if (d === 1) { x = R.x0; y = R.y1; } else if (d === 2) { x = R.x0 - f; y = R.y0; } else { x = R.x0; y = R.y0 - f; }
+      sq.push({ x, y, f }); R = { x0: Math.min(R.x0, x), y0: Math.min(R.y0, y), x1: Math.max(R.x1, x + f), y1: Math.max(R.y1, y + f) }; }
+    if (R.y1 - R.y0 > R.x1 - R.x0) return { sq: sq.map(s => ({ x: s.y, y: s.x, f: s.f })), R: { x0: R.y0, y0: R.x0, x1: R.y1, y1: R.x1 }, T: true };
+    return { sq, R, T: false };
   }
-  label();
-  document.getElementById('lang').addEventListener('click', function () {
-    var l = lang() === 'zh' ? 'en' : 'zh';
-    root.lang = l === 'en' ? 'en' : 'zh-CN';
-    save('fibo-lang', l);
-    label();
-  });
-  document.getElementById('theme').addEventListener('click', function () {
-    root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
-    save('fibo-theme', root.dataset.theme);
-  });
-
-  [].forEach.call(document.querySelectorAll('[data-copy]'), function (b) {
-    b.addEventListener('click', function () {
-      var tag = b.querySelector('.copy'), old = tag.innerHTML;
-      var done = function () { tag.textContent = '✓'; setTimeout(function () { tag.innerHTML = old; }, 1400); };
-      if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy).then(done, function () {});
+  function arcs(sq, T) {
+    let P = T ? { x: 1, y: 0 } : { x: 0, y: 1 }, d = '', B = { x0: 0, y0: 0, x1: 1, y1: 1 };
+    sq.forEach((s, i) => { const cs = [[s.x, s.y], [s.x + s.f, s.y], [s.x, s.y + s.f], [s.x + s.f, s.y + s.f]].map(([x, y]) => ({ x, y }));
+      const Q = cs.find(c => c.x !== P.x && c.y !== P.y), cand = cs.filter(c => (c.x === P.x) !== (c.y === P.y) && c !== Q), mid = { x: (B.x0 + B.x1) / 2, y: (B.y0 + B.y1) / 2 };
+      const C = i === 0 ? { x: 1, y: 1 } : cand.sort((a, b) => Math.hypot(a.x - mid.x, a.y - mid.y) - Math.hypot(b.x - mid.x, b.y - mid.y))[0];
+      const cr = (P.x - C.x) * (Q.y - C.y) - (P.y - C.y) * (Q.x - C.x); d += (i ? '' : `M${P.x} ${P.y}`) + ` A${s.f} ${s.f} 0 0 ${cr > 0 ? 1 : 0} ${Q.x} ${Q.y}`; P = Q;
+      B = { x0: Math.min(B.x0, s.x), y0: Math.min(B.y0, s.y), x1: Math.max(B.x1, s.x + s.f), y1: Math.max(B.y1, s.y + s.f) }; });
+    return d;
+  }
+  function draw() {
+    const { sq, R, T } = layout(n), w = R.x1 - R.x0, h = R.y1 - R.y0;
+    stage.style.aspectRatio = (w / h).toFixed(4); stage.style.width = `min(100%, ${(390 * w / h).toFixed(0)}px)`;
+    let html = '';
+    sq.forEach((s, i) => {
+      const sc = SCREENS[(sq.length - 1 - i) % SCREENS.length], big = s.f / Math.max(w, h) > .09 && s.f >= 2;
+      const [cw, cc, cb] = CHIP[sc.state];
+      const pos = `left:${((s.x - R.x0) / w * 100).toFixed(3)}%;top:${((s.y - R.y0) / h * 100).toFixed(3)}%;width:${(s.f / w * 100).toFixed(3)}%;height:${(s.f / h * 100).toFixed(3)}%`;
+      html += `<div class="tile${i >= prev ? ' new' : ''}" style="${pos}"><div class="term2 ${sc.state}${big ? '' : ' tiny'}">` +
+        (big ? `<div class="th"><i style="background:${DOT[sc.agent]}"></i>${NAME[sc.agent]}<small>~/${SPACE[i % SPACE.length]}</small><em style="color:${cc};background:${cb}">${cw}</em></div><pre>${sc.lines.map(color).join('\n')}</pre>` : F[i + 1]) + '</div></div>';
     });
-  });
-
-  var rises = document.querySelectorAll('.rise');
-  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    var io = new IntersectionObserver(function (es) {
-      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-    }, { rootMargin: '0px 0px -6% 0px' });
-    [].forEach.call(rises, function (el) { io.observe(el); });
-  } else {
-    [].forEach.call(rises, function (el) { el.classList.add('in'); });
+    html += `<svg class="tilespiral" viewBox="${R.x0} ${R.y0} ${w} ${h}" preserveAspectRatio="none"><path d="${arcs(sq, T)}" fill="none" stroke="#c48a00" stroke-opacity=".5" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round"/></svg>`;
+    stage.innerHTML = html;
+    const q = n > 1 ? F[n] / F[n - 1] : 1;
+    document.getElementById('r-n').textContent = n;
+    document.getElementById('r-f').textContent = F[n];
+    document.getElementById('r-b').textContent = ((Math.pow(PHI, n) - Math.pow(1 - PHI, n)) / Math.sqrt(5)).toFixed(6);
+    document.getElementById('r-q').textContent = n > 1 ? q.toFixed(6) : '—';
+    document.getElementById('r-bar').style.width = Math.min(100, Math.abs(q - PHI) / .62 * 100) + '%';
+    document.getElementById('less').disabled = n <= 1; document.getElementById('more').disabled = n >= MAX;
+    prev = n;
   }
+  const step = dn => { prev = Math.min(prev, n); n = Math.max(1, Math.min(MAX, n + dn)); draw(); };
+  document.getElementById('more').onclick = () => { userPaused = true; stop(); step(1); };
+  document.getElementById('less').onclick = () => { userPaused = true; stop(); prev = n - 1; step(-1); };
+  const autoBtn = document.getElementById('auto');
+  function play() { if (timer || document.body.classList.contains('still')) return; autoBtn.textContent = 'Pause';
+    timer = setInterval(() => { if (n >= MAX) { prev = 0; n = 0; } step(1); }, 1100); }
+  function stop() { clearInterval(timer); timer = null; autoBtn.textContent = 'Play'; }
+  autoBtn.onclick = () => { if (timer) { userPaused = true; stop(); } else { userPaused = false; play(); } };
+  new IntersectionObserver(es => { seen = es[0].isIntersecting; if (seen && !userPaused) play(); else if (!seen) stop(); }, { threshold: .35 }).observe(stage);
+  addEventListener('stillchange', () => { if (document.body.classList.contains('still')) stop(); else if (seen && !userPaused) play(); });
+  prev = 0; draw();
 })();
 </script>
+<script>
+(() => {
+  const svg = document.getElementById('seeds'); if (!svg) return;
+  const N = 144, ns = 'http://www.w3.org/2000/svg', GOLD = 180 * (3 - Math.sqrt(5));
+  const pick = i => { const h = (i * 2654435761) % 997; return h < 50 ? 'need' : h < 260 ? 'run' : h < 400 ? 'ready' : 'done'; };
+  const fill = { need: '#ff7a4d', run: '#f5b82e', ready: '#4fd6a0', done: 'rgba(255,255,255,.2)' };
+  const WORD = { en: { need: 'Needs you', run: 'Running', ready: 'Ready for review', done: 'Done' }, zh: { need: '要你处理', run: '在跑', ready: '等你验收', done: '做完了' } };
+  const word = new Proxy({}, { get: (_, k) => WORD[document.documentElement.lang === 'zh-CN' ? 'zh' : 'en'][k] });
+  const agents = ['Claude Code', 'Codex', 'Grok Build', 'Cursor Agent', 'OpenCode', 'Qoder CLI'];
+  const tasks = ['Fix flaky reconnect test', 'Add English UI to settings', 'Rate-limit the upload API', 'Dark mode for pricing', 'Migrate sessions to UUIDs', 'Speed up sidebar redraw', 'Notarize the DMG', 'Retry webhooks with backoff', 'Lazy-load screenshots', 'Pin the Zig toolchain', 'Write the getting-started guide', 'Fix broken changelog links', 'Rotate the relay certificate'];
+  const spaces = ['fibo', 'api-server', 'web', 'docs', 'infra'];
+  const dots = [];
+  for (let i = 1; i <= N; i++) {
+    const st = pick(i), c = document.createElementNS(ns, 'circle');
+    c.setAttribute('r', (2.2 + i / N * 2.6).toFixed(2)); c.setAttribute('fill', fill[st]);
+    if (st === 'need') { c.classList.add('need'); c.style.animationDelay = (i % 7) * .23 + 's'; }
+    c.dataset.i = i; svg.appendChild(c); dots.push(c);
+  }
+  const ang = document.getElementById('ang'), out = document.getElementById('angv'), note = document.getElementById('angnote');
+  function frac(x) { let best = [0, 1, 1]; for (let q = 1; q <= 21; q++) { const p = Math.round(x * q), e = Math.abs(x - p / q); if (e < best[2] - 1e-9) best = [p, q, e]; } return best; }
+  function place(deg) {
+    const a = deg * Math.PI / 180;
+    dots.forEach((c, k) => { const i = k + 1, r = 7.9 * Math.sqrt(i); c.setAttribute('cx', (r * Math.cos(i * a)).toFixed(2)); c.setAttribute('cy', (r * Math.sin(i * a)).toFixed(2)); });
+    out.textContent = (+deg).toFixed(2) + '°';
+    const t = deg / 360, golden = Math.abs(deg - GOLD) < .05, [p, q, e] = frac(t);
+    document.querySelectorAll('.presets button').forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.a - deg) < .05));
+    const zh = document.documentElement.lang === 'zh-CN';
+    note.innerHTML = golden
+      ? (zh ? `θ/360° = 0.381966… = 1/φ²。黄金角永远不会重复：φ = [1; 1, 1, 1, …] 是最难用分数逼近的数，所以任何两个会话都不会排成一线。` : `θ/360° = 0.381966… = 1/φ². The golden angle never repeats: φ = [1; 1, 1, 1, …] is the hardest number to approximate by a fraction, so no two sessions ever line up.`)
+      : e < 0.0025 ? (zh ? `θ/360° ≈ ${p}/${q}。接近一个分数圈：会话叠成 ${q} 条辐条，中间留出的空隙足够把一个会话弄丢。` : `θ/360° ≈ ${p}/${q}. A near-fraction of a turn: sessions stack into ${q} spokes and leave gaps you could lose one in.`)
+      : (zh ? `θ/360° = ${t.toFixed(5)}。更接近无理数的一圈，但它的分数近似仍然显成一圈圈辐条。试试 137.5°。` : `θ/360° = ${t.toFixed(5)}. Closer to an irrational turn, but its fractions still show as spirals of spokes. Try 137.5°.`);
+  }
+  ang.addEventListener('input', () => place(+ang.value));
+  document.querySelectorAll('.presets button').forEach(b => b.addEventListener('click', () => { ang.value = b.dataset.a; place(+b.dataset.a); }));
+  place(GOLD); ang.value = GOLD.toFixed(2);
+  new MutationObserver(() => place(+ang.value)).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+  const tip = document.getElementById('seedtip'), box = svg.parentElement;
+  svg.addEventListener('pointermove', e => {
+    const c = e.target.closest('circle'); if (!c) { tip.hidden = true; return; }
+    const i = +c.dataset.i, st = pick(i), rb = box.getBoundingClientRect(), cb = c.getBoundingClientRect();
+    tip.innerHTML = `${tasks[i % tasks.length]}<small>${agents[i % agents.length]} · ${spaces[i % spaces.length]} · ${word[st]} · #${i}</small>`;
+    tip.style.left = (cb.left + cb.width / 2 - rb.left) + 'px'; tip.style.top = (cb.top - rb.top) + 'px'; tip.hidden = false;
+  });
+  svg.addEventListener('pointerleave', () => tip.hidden = true);
+})();
+</script>
+<script>
+document.getElementById('copy').addEventListener('click', async e => {
+  try { await navigator.clipboard.writeText('brew install --cask majiayu000/tap/fibo'); e.target.textContent = 'Copied'; }
+  catch { e.target.textContent = 'Select it'; }
+  setTimeout(() => e.target.textContent = 'Copy', 1600);
+});
+(() => {
+  const nav = document.getElementById('fibnav'); if (!nav) return;
+  const SEC = ['f-side', 'f-needs', 'f-review', 'f-yours', 'f-spaces', 'f-plugins', 'f-motion'], F = [1, 1, 2, 3, 5, 8, 13], ns = 'http://www.w3.org/2000/svg';
+  const sq = [{ x: 0, y: 0, f: 1 }]; let R = { x0: 0, y0: 0, x1: 1, y1: 1 };
+  for (let k = 1; k < F.length; k++) { const f = F[k], d = (k - 1) % 4; let x, y;
+    if (d === 0) { x = R.x1; y = R.y0; } else if (d === 1) { x = R.x0; y = R.y1; } else if (d === 2) { x = R.x0 - f; y = R.y0; } else { x = R.x0; y = R.y0 - f; }
+    sq.push({ x, y, f }); R = { x0: Math.min(R.x0, x), y0: Math.min(R.y0, y), x1: Math.max(R.x1, x + f), y1: Math.max(R.y1, y + f) }; }
+  let P = { x: 0, y: 1 }, d = '', B = { x0: 0, y0: 0, x1: 1, y1: 1 };
+  sq.forEach((s, i) => { const cs = [[s.x, s.y], [s.x + s.f, s.y], [s.x, s.y + s.f], [s.x + s.f, s.y + s.f]].map(([x, y]) => ({ x, y }));
+    const Q = cs.find(c => c.x !== P.x && c.y !== P.y), cand = cs.filter(c => (c.x === P.x) !== (c.y === P.y) && c !== Q), mid = { x: (B.x0 + B.x1) / 2, y: (B.y0 + B.y1) / 2 };
+    const C = i === 0 ? { x: 1, y: 1 } : cand.sort((a, b) => Math.hypot(a.x - mid.x, a.y - mid.y) - Math.hypot(b.x - mid.x, b.y - mid.y))[0];
+    const cr = (P.x - C.x) * (Q.y - C.y) - (P.y - C.y) * (Q.x - C.x); d += (i ? '' : `M${P.x} ${P.y}`) + ` A${s.f} ${s.f} 0 0 ${cr > 0 ? 1 : 0} ${Q.x} ${Q.y}`; P = Q;
+    B = { x0: Math.min(B.x0, s.x), y0: Math.min(B.y0, s.y), x1: Math.max(B.x1, s.x + s.f), y1: Math.max(B.y1, s.y + s.f) }; });
+  const w = R.x1 - R.x0, h = R.y1 - R.y0, pad = .3;
+  nav.setAttribute('viewBox', `${R.x0 - pad} ${R.y0 - pad} ${w + 2 * pad} ${h + 2 * pad}`);
+  let html = '';
+  sq.forEach((s, i) => { html += `<a href="#${SEC[i]}" data-sec="${SEC[i]}"${i ? '' : ' class="on"'}><rect x="${s.x}" y="${s.y}" width="${s.f}" height="${s.f}" rx="${Math.max(.06, s.f * .03)}" style="stroke-width:${w / 140}"/>` +
+    (s.f >= 2 ? `<text x="${s.x + s.f * .1}" y="${s.y + s.f * .3}" font-size="${Math.min(s.f * .22, 2.4)}">${F[i]}</text>` : '') + '</a>'; });
+  html += `<path class="ghost" style="stroke-width:${w / 400};stroke-dasharray:${w / 120} ${w / 120}" d="${d}"/><path class="spiral" id="railspiral" pathLength="1" style="stroke-dashoffset:1;stroke-width:${w / 90}" d="${d}"/>`;
+  nav.innerHTML = html;
+})();
+const railLinks = [...document.querySelectorAll('.rail [data-sec]')];
+const io = new IntersectionObserver(es => es.forEach(en => {
+  if (en.isIntersecting) railLinks.forEach(a => a.classList.toggle('on', a.dataset.sec === en.target.id));
+}), { rootMargin: '-45% 0px -50% 0px' });
+document.querySelectorAll('.feat').forEach(f => io.observe(f));
+(() => {
+  const feats = document.querySelector('.features'), sp = document.getElementById('railspiral'), pct = document.getElementById('railpct');
+  if (!feats || !sp) return;
+  let raf = 0;
+  const upd = () => { raf = 0; const r = feats.getBoundingClientRect(), t = Math.min(1, Math.max(0, (innerHeight * .5 - r.top) / r.height));
+    sp.style.strokeDashoffset = (1 - t).toFixed(4); pct.textContent = t.toFixed(3) + ' of the way'; };
+  addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(upd); }, { passive: true }); upd();
+})();
+</script>
+<script>
+(() => {
+  const svg = document.getElementById('sim'); if (!svg) return;
+  const ns = 'http://www.w3.org/2000/svg', COLS = ['run', 'need', 'rev', 'done'];
+  const LABEL = { en: { run: 'Running', need: 'Needs you', rev: 'Ready for review', done: 'Done' }, zh: { run: '在跑', need: '要你处理', rev: '等你验收', done: '做完了' } };
+  const label = new Proxy({}, { get: (_, k) => LABEL[document.documentElement.lang === 'zh-CN' ? 'zh' : 'en'][k] }), headT = {};
+  const fill = { run: '#e6b422', need: '#f07a2a', rev: '#2fa36b', done: '#cfd1d6' };
+  const el = (t, a) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const heads = {};
+  COLS.forEach((c, i) => {
+    svg.appendChild(el('rect', { x: i * 160 + 4, y: 4, width: 152, height: 372, rx: 14, fill: i === 1 ? '#fff6ef' : '#faf9f6' }));
+    const t = el('text', { x: i * 160 + 18, y: 30, 'font-size': 13, 'font-weight': 600, fill: '#3a3d45' }); t.textContent = label[c]; headT[c] = t; svg.appendChild(t);
+    const n = el('text', { x: i * 160 + 142, y: 30, 'font-size': 13, 'text-anchor': 'end', fill: '#8d919b', 'font-family': 'JetBrains Mono,monospace' }); svg.appendChild(n); heads[c] = n;
+  });
+  let toks = [], seq = 0, paused = false, auto = true, tick = 0, hist = [];
+  const TASKS = ['Fix flaky reconnect test', 'Add English UI to settings', 'Speed up sidebar redraw', 'Rate-limit the upload API', 'Dark mode for pricing', 'Migrate sessions to UUIDs', 'Replace the hero animation', 'Write the setup guide', 'Pin the Zig toolchain', 'Retry webhooks with backoff', 'Fix changelog links', 'Rotate the relay cert', 'Lazy-load screenshots', 'Notarize the DMG', 'Explain plugin fields', 'Request IDs in logs', 'Cache the board query', 'Trim the release notes', 'Bump GPUI patch', 'Add a quota plugin', 'Sign the catalog', 'Test the phone relay', 'Profile the host', 'Split settings.rs', 'Fix IME on Korean', 'Update the brew cask', 'Shrink the DMG', 'Tidy the FAQ', 'Theme: harbor', 'Check OSC 7501', 'Resume after reboot', 'Speed up search', 'Add sub-agent rows', 'Write the changelog'];
+  const SP = ['fibo', 'api-server', 'web', 'docs', 'infra'], AGC = { Claude: '#d97757', Codex: '#4b5bdc' };
+  function add(st = 'run') { const id = ++seq, ag = id % 2 ? 'Codex' : 'Claude', g = el('g', { class: 'tok' });
+    g.appendChild(el('rect', { x: 0, y: 0, width: 140, height: 32, rx: 7 }));
+    g.appendChild(el('circle', { cx: 11, cy: 11, r: 3.5, fill: AGC[ag] }));
+    const t1 = el('text', { x: 20, y: 14, 'font-size': 10.5, 'font-weight': 600, fill: '#2a2d35' }); { const tt = TASKS[(id - 1) % TASKS.length]; t1.textContent = tt.length > 20 ? tt.slice(0, 19) + '…' : tt; } g.appendChild(t1);
+    const t2 = el('text', { x: 20, y: 26, 'font-size': 8.8, fill: '#9a9da5', 'font-family': 'JetBrains Mono,monospace' }); t2.textContent = (ag === 'Claude' ? 'Claude Code' : 'Codex') + ' · ' + SP[id % SP.length]; g.appendChild(t2);
+    svg.appendChild(g); const t = { id, st, g, age: 0 }; g.onclick = () => clickTok(t); toks.push(t); }
+  const more = {}; COLS.forEach((c, i) => { const m = el('text', { x: i * 160 + 80, y: 368, 'text-anchor': 'middle', 'font-size': 11, fill: '#9a9da5', 'font-family': 'JetBrains Mono,monospace' }); svg.appendChild(m); more[c] = m; });
+  function layout() {
+    const per = { run: 0, need: 0, rev: 0, done: 0 };
+    toks.forEach(t => { const k = per[t.st]++, col = COLS.indexOf(t.st), x = col * 160 + 10, y = 44 + Math.min(k, 7) * 38;
+      t.g.style.transform = `translate(${x}px,${y}px)`; t.g.style.opacity = k < 8 ? 1 : 0; t.g.style.pointerEvents = k < 8 ? '' : 'none'; t.g.setAttribute('class', 'tok ' + t.st); });
+    COLS.forEach(c => more[c].textContent = per[c] > 8 ? `+${per[c] - 8} more` : '');
+    COLS.forEach(c => heads[c].textContent = per[c]);
+    document.getElementById('k-n').textContent = toks.length;
+    document.getElementById('k-q').textContent = per.need; document.getElementById('k-r').textContent = per.rev;
+  }
+  function clickTok(t) { if (t.st === 'need') t.st = 'run'; else if (t.st === 'rev') t.st = 'done'; layout(); }
+  function answerNext() { const t = toks.filter(t => t.st === 'need').sort((a, b) => b.age - a.age)[0]; if (t) { t.st = 'run'; t.age = 0; layout(); } }
+  function setN(n) { while (toks.length < n) add(); while (toks.length > n) { const i = [...toks.keys()].reverse().find(i => toks[i].st === 'done') ?? toks.length - 1; toks[i].g.remove(); toks.splice(i, 1); } layout(); }
+  function step() {
+    tick++;
+    toks.forEach(t => { const r = Math.random(); t.age++;
+      if (t.st === 'run') { if (r < .06) { t.st = 'need'; t.age = 0; } else if (r < .11) { t.st = 'rev'; t.age = 0; } }
+      else if (t.st === 'done') { if (r < .12) { t.st = 'run'; t.age = 0; } }
+      else if (t.st === 'rev' && auto && r < .22) t.st = 'done';
+    });
+    if (auto) answerNext();
+    layout();
+    const q = toks.filter(t => t.st === 'need').length; hist.push([toks.length, q]); if (hist.length > 60) hist.shift();
+    const mean = hist.reduce((s, h) => s + h[1], 0) / hist.length; document.getElementById('k-m').textContent = mean.toFixed(1);
+    const sp = document.getElementById('spark'), max = Math.max(34, ...hist.map(h => h[0]));
+    const line = k => hist.map((h, i) => `${(i / 59 * 300).toFixed(1)},${(76 - h[k] / max * 70).toFixed(1)}`).join(' ');
+    sp.innerHTML = `<line x1="0" y1="76" x2="300" y2="76" stroke="#eceae4"/><polyline points="${line(0)}" fill="none" stroke="#9a9da5" stroke-width="1.5" stroke-dasharray="4 3"/><polyline points="${line(1)}" fill="none" stroke="#d9621a" stroke-width="2"/>`;
+  }
+  const nIn = document.getElementById('sim-n'), nOut = document.getElementById('sim-nv');
+  nIn.addEventListener('input', () => { nOut.textContent = nIn.value; setN(+nIn.value); });
+  document.getElementById('sim-j').onclick = answerNext;
+  const autoText = () => document.documentElement.lang === 'zh-CN' ? (auto ? '自动应答：开' : '自动应答：关') : (auto ? 'Autopilot on' : 'Autopilot off');
+  document.getElementById('sim-auto').onclick = e => { auto = !auto; e.currentTarget.classList.toggle('on', auto); e.currentTarget.textContent = autoText(); };
+  new MutationObserver(() => { COLS.forEach(c => headT[c].textContent = label[c]); document.getElementById('sim-auto').textContent = autoText(); document.getElementById('sim-pause').textContent = pauseText(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+  const pauseText = () => document.documentElement.lang === 'zh-CN' ? (paused ? '继续' : '暂停') : (paused ? 'Resume' : 'Pause');
+  document.getElementById('sim-pause').onclick = e => { paused = !paused; e.currentTarget.textContent = pauseText(); };
+  addEventListener('keydown', e => { if ((e.key === 'j' || e.key === 'J') && !e.metaKey && !e.ctrlKey && !/INPUT|TEXTAREA/.test(document.activeElement.tagName) && visible) { e.preventDefault(); answerNext(); } });
+  let visible = false; new IntersectionObserver(es => visible = es[0].isIntersecting).observe(svg);
+  setN(8);
+  setInterval(() => { if (!paused && visible && !document.hidden && !document.body.classList.contains('still')) step(); }, 700);
+})();
+</script>
+<script>
+(() => {
+  /* sessions ⊂ spaces ⊂ machines, answered from a phone */
+  const grid = document.getElementById('spgrid'); if (!grid) return;
+  const COL = { need: '#f07a2a', run: '#e6b422', rev: '#2fa36b', done: '#cfd1d6' };
+  const M = [
+    { name: 'This Mac', zh: '本机', tag: 'local', tagZh: '本地', spaces: [
+      { n: 'fibo', c: '#e0574f', s: [['Fix flaky reconnect test', 'Codex', 'need', 'Two fixes: wait for the old host, or hand the socket over?', ['Wait', 'Hand over']], ['Add English UI to settings', 'Claude', 'run'], ['Speed up sidebar redraw', 'Codex', 'rev']] },
+      { n: 'api-server', c: '#4a7bd8', s: [['Rate-limit the upload API', 'Claude', 'run'], ['Migrate sessions to UUIDs', 'Codex', 'need', 'Drop the old table now, or keep it a week?', ['Drop', 'Keep']]] },
+      { n: 'web', c: '#3aa76d', s: [['Dark mode for pricing', 'Codex', 'rev'], ['Lazy-load screenshots', 'Cursor', 'need', 'Native loading="lazy", or an observer?', ['Native', 'Observer']]] }] },
+    { name: 'mac2', zh: 'mac2', tag: 'ssh · view only', tagZh: 'ssh · 只读', spaces: [
+      { n: 'infra', c: '#7a5bd8', s: [['Rotate the relay certificate', 'Claude', 'need', 'Renew now, three days early?', ['Renew', 'Wait']], ['Pin the Zig toolchain', 'Codex', 'done']] },
+      { n: 'docs', c: '#c4882a', s: [['Write the setup guide', 'Claude', 'run']] }] }];
+  const quiet = new Set();
+  function render() {
+    const zh = document.documentElement.lang === 'zh-CN', nm = m => zh ? m.zh : m.name;
+    let h = '';
+    M.forEach((m, mi) => {
+      h += `<div class="mach"><header><i></i>${nm(m)}<small>${zh ? m.tagZh : m.tag}</small></header>`;
+      m.spaces.forEach((sp, si) => {
+        const k = mi + '-' + si, nNeed = sp.s.filter(x => x[2] === 'need').length;
+        h += `<div class="space${quiet.has(k) ? ' quiet' : ''}"><div class="sphead"><b style="background:${sp.c}"></b>${sp.n}<em>${sp.s.length}</em><button type="button" class="qsw" data-k="${k}" aria-pressed="${quiet.has(k)}"><span></span>${zh ? '先不管' : 'quiet'}</button></div><ul class="sess">`;
+        sp.s.forEach(x => h += `<li class="${x[2]}"><i style="background:${COL[x[2]]}"></i><span>${x[0]}</span><small>${x[1]}</small></li>`);
+        h += '</ul></div>';
+      });
+      h += '</div>';
+    });
+    const asks = [];
+    M.forEach((m, mi) => m.spaces.forEach((sp, si) => { if (quiet.has(mi + '-' + si)) return; sp.s.forEach((x, xi) => { if (x[2] === 'need') asks.push({ m, sp, x, id: `${mi}-${si}-${xi}` }); }); }));
+    h += `<div class="phone"><div class="scr"><div class="top">${zh ? '要你处理' : 'Needs you'} <b>${asks.length}</b></div>` +
+      (asks.length ? asks.map(a => `<div class="ask" data-id="${a.id}"><small>${a.x[1]} · ${a.sp.n} · ${nm(a.m)}</small><p>${a.x[3]}</p><div class="opts">${a.x[4].map(o => `<button type="button" data-id="${a.id}">${o}</button>`).join('')}</div></div>`).join('') : (zh ? '<p class="empty">没有在等你的。</p>' : '<p class="empty">Nothing waits on you.</p>')) +
+      `<p class="relay">${zh ? '经中继 · 端到端加密' : 'via relay · end-to-end encrypted'}</p></div></div>`;
+    grid.innerHTML = h;
+    const per = []; M.forEach((m, mi) => m.spaces.forEach((sp, si) => { if (!quiet.has(mi + '-' + si)) per.push(sp.s.filter(x => x[2] === 'need').length); }));
+    document.getElementById('speq').innerHTML = `q = Σ<sub>s ∉ quiet</sub> need(s) = ${per.join(' + ') || '0'} =<b>${asks.length}</b>`;
+  }
+  grid.addEventListener('click', e => {
+    const q = e.target.closest('.qsw'); if (q) { const k = q.dataset.k; quiet.has(k) ? quiet.delete(k) : quiet.add(k); render(); return; }
+    const b = e.target.closest('.ask button'); if (b) { const [mi, si, xi] = b.dataset.id.split('-').map(Number); b.closest('.ask').classList.add('gone');
+      setTimeout(() => { M[mi].spaces[si].s[xi][2] = 'run'; render(); }, 280); }
+  });
+  render();
+  new MutationObserver(() => render()).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+})();
+(() => {
+  /* sidebar = f(sessions): real captures of each layout over the same sessions, English and Chinese UI */
+  const btns = document.querySelectorAll('.swap button'); if (!document.querySelector('.sbshot')) return;
+  const draw = k => { document.querySelectorAll('.sbshot [data-l]').forEach(e => e.classList.toggle('on', e.dataset.l === k)); btns.forEach(b => b.classList.toggle('on', b.dataset.l === k)); };
+  btns.forEach(b => b.addEventListener('click', () => draw(b.dataset.l)));
+})();
+(() => {
+  /* motion: real captures of each completion animation from the app, English and Chinese UI */
+  const img = document.getElementById('fxshot'); if (!img) return;
+  let cur = 'stamp';
+  const lang = () => document.documentElement.lang === 'zh-CN' ? 'zh' : 'en';
+  const still = () => document.body.classList.contains('still');
+  const show = () => { img.src = `media/f7/${cur}-${lang()}${still() ? '-poster' : ''}.webp`; };
+  document.querySelectorAll('#fxchips button').forEach(b => b.addEventListener('click', () => { cur = b.dataset.fx; document.querySelectorAll('#fxchips button').forEach(x => x.classList.toggle('on', x === b)); show(); }));
+  new MutationObserver(show).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+  addEventListener('stillchange', show);
+  const sw = document.getElementById('motionsw');
+  sw.addEventListener('click', () => { const on = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', on); document.body.classList.toggle('still', !on); dispatchEvent(new Event('stillchange')); });
+})();
+</script>
+<script>
+/* hover: the whole wordmark hops, the dot blooms 1,2,3,5,8 then folds back (same as feat/fibo-wordmark) */
+(function(){var NS='http://www.w3.org/2000/svg',G=2.39996323,GR=[[1],[2],[3,4],[5,6,7]];
+document.querySelectorAll('.logo').forEach(function(brand){var dot=brand.querySelector('.dot'),busy=false;if(!dot||!dot.animate)return;
+function bloom(){if(busy||document.body.classList.contains('still')||matchMedia('(prefers-reduced-motion: reduce)').matches)return;busy=true;
+var svg=dot.ownerSVGElement,b=dot.getBBox(),cx=b.x+b.width/2,cy=b.y+b.height/2,r=(b.width+b.height)/4,layer=document.createElementNS(NS,'g'),made=[];svg.appendChild(layer);
+var lift=Math.max(5,svg.getBoundingClientRect().height*.15);svg.style.transformOrigin='50% 100%';
+svg.animate([{transform:'translateY(0) scale(1,1)',offset:0},{transform:'translateY(0) scale(1.04,.93)',offset:.13,easing:'cubic-bezier(.2,.7,.4,1)'},{transform:'translateY('+(-lift)+'px) scale(.98,1.03)',offset:.5,easing:'cubic-bezier(.6,0,.9,.5)'},{transform:'translateY(0) scale(1.05,.92)',offset:.85},{transform:'translateY(0) scale(1,1)',offset:1}],{duration:520});
+GR.forEach(function(g,k){g.forEach(function(n){var a=n*G-Math.PI/2,rho=r*1.55*Math.sqrt(n),dx=rho*Math.cos(a),dy=rho*Math.sin(a),c=document.createElementNS(NS,'circle');
+c.setAttribute('class','dot');c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r',r*.44);layer.appendChild(c);
+c.animate([{transform:'translate(0,0) scale(0)'},{transform:'translate('+dx+'px,'+dy+'px) scale(1)'}],{duration:420,delay:440+k*170,easing:'cubic-bezier(.34,1.56,.64,1)',fill:'both'});made.push([c,dx,dy,k]);});});
+setTimeout(function(){made.forEach(function(m){m[0].animate([{transform:'translate('+m[1]+'px,'+m[2]+'px) scale(1)'},{transform:'translate(0,0) scale(0)'}],{duration:360,delay:(3-m[3])*80,easing:'cubic-bezier(.5,0,.8,.2)',fill:'both'});});setTimeout(function(){layer.remove();busy=false;},700);},1890);}
+brand.addEventListener('mouseenter',bloom);brand.addEventListener('focus',bloom);});})();
+</script>
+<dialog class="film" id="film" aria-label="Fibo in thirty seconds">
+  <button type="button" class="film-x" id="film-x" aria-label="Close the film">×</button>
+  <video id="film-v" controls playsinline preload="none" poster="assets/fibo-promo-poster.jpg" width="1600" height="900"><source src="assets/fibo-promo.mp4" type="video/mp4"></video>
+</dialog>
+<script src="i18n.js"></script>
+<script src="extra.js"></script>
 </body>
 </html>

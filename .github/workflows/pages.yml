@@ -25,9 +25,10 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Stage only public website files
         run: |
-          mkdir -p _site/assets
+          mkdir -p _site
           cp docs/site/index.html docs/site/sitemap.xml docs/site/CNAME _site/
-          cp docs/site/assets/* _site/assets/
+          cp docs/site/polish.css docs/site/extra.css docs/site/extra.js docs/site/i18n.js _site/
+          cp -R docs/site/assets docs/site/agents docs/site/art-b docs/site/brand docs/site/fonts docs/site/media docs/site/shots _site/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site

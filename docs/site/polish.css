@@ -1,0 +1,192 @@
+/* ===== 改版：只覆盖样子，不动原稿的内容和互动 ===== */
+@font-face{font-family:Fraunces;src:url(fonts/Fraunces.ttf) format("truetype");font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:Fraunces;src:url(fonts/Fraunces-Italic.ttf) format("truetype");font-weight:100 900;font-style:italic;font-display:swap}
+:root{
+  --ink:#141a2e; --body:#474e63; --soft:#6f7589; --line:#e8e4da; --paper:#fbfaf6; --mist:#f4f1ea; --card:#fff;
+  --night:#0c1024; --display:Fraunces,"Songti SC",ui-serif,Georgia,serif;
+}
+body{background:var(--paper)}
+.wrap{max-width:1224px}
+
+/* 配图按屏幕给：w- 是铺满整屏的（首屏、结尾），p- 是面板里的。母版在 art-b/4k/，三档由 upscale.py 和 tiers.py 出。
+   手机和普通屏：首屏 3840，其余 2560；宽屏：铺满的都用 3840；高分屏（Retina、4K、5K）：铺满的用 5K 原图，面板用 3840。 */
+:root{--w-hero:url(art-b/hero-3840.webp);--w-s2:url(art-b/s2-2560.webp);--w-s4:url(art-b/s4-2560.webp);
+  --p-s1:url(art-b/s1-2560.webp);--p-s2:url(art-b/s2-2560.webp);--p-s3:url(art-b/s3-2560.webp);--p-s4:url(art-b/s4-2560.webp)}
+@media (min-width:1700px){:root{--w-s2:url(art-b/s2-3840.webp);--w-s4:url(art-b/s4-3840.webp)}}
+@media (min-width:901px) and (min-resolution:1.5dppx){:root{--w-hero:url(art-b/hero.webp);--w-s2:url(art-b/s2.webp);--w-s4:url(art-b/s4.webp);
+  --p-s1:url(art-b/s1-3840.webp);--p-s2:url(art-b/s2-3840.webp);--p-s3:url(art-b/s3-3840.webp);--p-s4:url(art-b/s4-3840.webp)}}
+/* 标题：和字标同一款字体，正体为主，强调处用斜体 */
+h1,h2{font-family:var(--display);font-optical-sizing:auto;font-variation-settings:"SOFT" 100,"WONK" 0}
+h1{font-weight:540;font-size:clamp(46px,6.3vw,94px);line-height:.98;letter-spacing:-.028em;text-shadow:0 2px 30px rgba(6,60,96,.42)}
+h1 em{font-style:italic;font-weight:500;font-variation-settings:"SOFT" 100,"WONK" 1}
+h2{font-weight:520;font-size:clamp(32px,3.5vw,52px);line-height:1.06;letter-spacing:-.022em}
+h2 em{font-style:italic;font-weight:460;color:var(--soft);font-variation-settings:"SOFT" 100,"WONK" 1}
+.start h2 span{font-style:italic;font-weight:460;color:rgba(255,255,255,.6);font-variation-settings:"SOFT" 100,"WONK" 1}
+
+/* 首屏：画装在一个圆角画框里，整张应用截图都在画里面（用户 11-10 要求，原来是一半压在画上） */
+.hero{background:var(--paper)}
+.hero .bg{inset:10px 10px 0 10px;height:auto;border-radius:26px;overflow:hidden;background:#0bb0c4!important}
+/* 图保持原来的构图（看得到太阳、云和右边的树），只占画框上面一段；下面是同一个颜色的海面一直铺到应用截图下方 */
+.hero .bg::before{content:"";position:absolute;inset:0 0 auto 0;height:clamp(640px,84vw,1500px);background:var(--w-hero) center 18%/cover no-repeat;-webkit-mask-image:linear-gradient(#000 80%,transparent);mask-image:linear-gradient(#000 80%,transparent)}
+.hero .bg::after{border-radius:inherit;background:radial-gradient(ellipse 58% 42% at 50% 36%,rgba(8,62,98,.34),transparent 72%),linear-gradient(rgba(8,62,98,.30),rgba(8,62,98,.08) 14%,transparent 28%)}
+.hero .in{padding:150px 32px clamp(56px,6.4vw,96px)}
+.nav .wrap{height:86px;padding-top:10px}
+.lede{max-width:700px;margin-top:26px;font-size:19.5px;line-height:1.55}
+.cta{margin-top:36px}
+.shot{margin-top:64px;max-width:1220px;padding:7px;border-radius:18px;background:rgba(255,255,255,.5);box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 50px 90px -30px rgba(20,24,60,.45),0 14px 34px -14px rgba(20,24,60,.28)}
+
+/* 能跑哪些 agent：挪到画的下面，安静地排一行 */
+.runs{padding:64px 0 0;text-align:center}
+.runs .works{margin:0;font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--soft);text-shadow:none}
+.runs .agents{margin-top:18px;gap:10px 38px;font-size:17px;font-weight:600;color:var(--ink);text-shadow:none}
+.runs .agents i{background:var(--amber);opacity:1}
+
+/* 功能区：去掉侧栏，标题和导语按黄金比例分两栏，左边线全页对齐 */
+.features{padding:130px 0 40px}
+.fgrid{display:block}
+.rail{display:none}
+.feat{display:grid;grid-template-columns:minmax(0,6.18fr) minmax(0,3.82fr);column-gap:72px;padding-bottom:104px;margin-bottom:104px}
+.feat>*{grid-column:1/-1;min-width:0}
+.feat>h2{grid-column:1;max-width:none}
+.feat>h2+p{grid-column:2;align-self:end;margin-top:0;max-width:none;font-size:16.5px}
+.fnum{margin-bottom:16px}
+/* 截图垫一张同系列的画，整张截图都看得见 */
+.canvas,.canvas.mid{display:flex;justify-content:center;margin-top:52px;padding:clamp(28px,5.4vw,76px) clamp(18px,6vw,92px);border-radius:24px;background-size:cover;background-position:center}
+.canvas .card{width:min(var(--w),100%);padding:6px;border-radius:15px;background:rgba(255,255,255,.52);box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 44px 80px -30px rgba(20,22,60,.6),0 12px 30px -12px rgba(20,22,60,.34)}
+.three{margin-top:44px;gap:44px}
+.three h3{font-size:15.5px}
+.panel,.tilebox,.simboard,.simside .card{background:var(--card)}
+.panel{margin-top:52px;border-radius:20px}
+
+/* 数学几节：和功能区同一条左边线、同一套留白 */
+.phyllo{padding:120px 0 30px}
+.grow{background:var(--mist)}
+.sim{border-top:0}
+.theorem{border-left-color:var(--amber)}
+
+/* 开始使用：用这组画里的夜景收尾 */
+.start{position:relative;isolation:isolate;background:var(--night) var(--w-s4) center 34%/cover no-repeat}
+.start::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(10,14,60,.62),rgba(10,14,60,.86))}
+.steps{background:rgba(14,18,44,.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-color:rgba(255,255,255,.14)}
+.steps>div{border-left-color:rgba(255,255,255,.12)}
+.faq{background:var(--mist)}
+footer{background:var(--night)}
+
+@media (max-width:900px){
+  .hero .bg{inset:6px 6px 0 6px;border-radius:18px}
+  .hero .bg::before{height:100%;-webkit-mask-image:none;mask-image:none}
+  .hero .in{padding:118px 16px 34px}
+  .nav .wrap{height:72px;padding-top:6px}
+  .lede{font-size:17px}
+  .shot{margin-top:40px;padding:4px;border-radius:12px}
+  .runs{padding-top:40px}.runs .agents{gap:8px 20px;font-size:15px}
+  .features{padding:80px 0 20px}
+  .feat{display:block;padding-bottom:64px;margin-bottom:64px}
+  .feat>h2+p{margin-top:18px}
+  .canvas,.canvas.mid{margin:32px -16px 0;padding:26px 16px;border-radius:0;justify-content:center}
+  .canvas .card{width:100%;padding:4px;border-radius:11px}
+  .three{gap:26px;margin-top:32px}
+}
+
+/* ===== 下半页：把线框感的部件收进同一套做法 ===== */
+:root{--need:#f0683e;--run:#f5b82e;--ready:#2fa67a;--shadow-card:0 1px 0 rgba(255,255,255,.7) inset,0 40px 70px -36px rgba(20,22,60,.38),0 10px 24px -14px rgba(20,22,60,.2),0 0 0 1px rgba(20,26,46,.05)}
+
+/* 小标签：统一成一颗金点加等宽小字 */
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.eyebrow::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--amber);margin-right:10px;vertical-align:1px}
+.fnum{align-items:center;gap:12px;margin-bottom:18px;font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.fnum b{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 7px;border-radius:13px;background:var(--amber);color:#2a1e00;font:600 12.5px var(--mono);letter-spacing:0}
+
+/* 向日葵：一整块夜色的画框，圆点像灯一样亮，只有“要你处理”的最显眼 */
+.phyllo{padding:96px 0 0}
+.phyllo .wrap{position:relative;isolation:isolate;grid-template-columns:minmax(0,4.6fr) minmax(0,5.4fr);gap:56px;padding:84px 100px 76px;color:#fff}
+.phyllo .wrap::before{content:"";position:absolute;inset:0 32px;z-index:-1;border-radius:28px;
+  background:radial-gradient(54% 60% at 4% 104%,rgba(240,96,150,.30),transparent 70%),radial-gradient(70% 80% at 76% 44%,#1f2aa0 0%,#161c6e 44%,#0d1140 84%)}
+.phyllo .eyebrow{color:rgba(255,255,255,.62)}
+.phyllo h2{font-size:clamp(34px,3.9vw,58px)}
+.phyllo p.lead{color:rgba(255,255,255,.8);max-width:440px}
+.phyllo .eq{display:flex;flex-wrap:wrap;gap:8px;margin-top:30px;font-size:13px;color:rgba(255,255,255,.66)}
+.phyllo .eq span{padding:7px 12px;border-radius:10px;background:rgba(255,255,255,.06);box-shadow:0 0 0 1px rgba(255,255,255,.13) inset}
+.phyllo .eq b{color:#fff}
+.legend2{margin-top:30px;color:rgba(255,255,255,.82)}
+.seedbox{max-width:620px}
+#seeds circle.need{filter:drop-shadow(0 0 3.5px rgba(255,122,77,.95))}
+.tip{background:#fff;color:var(--ink)}.tip small{color:var(--soft)}
+.seedctl{margin-top:8px}
+.seedctl .row{color:rgba(255,255,255,.6)}.seedctl output{color:#fff}
+.phyllo .presets button{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2);color:#fff}
+.phyllo .presets button:hover{background:rgba(255,255,255,.14)}
+.phyllo .presets button.on{background:var(--amber);border-color:var(--amber);color:#2a1e00}
+.angnote{color:rgba(255,255,255,.72)}
+
+/* 滑块：不用系统默认的样子 */
+input[type=range]{-webkit-appearance:none;appearance:none;height:22px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:rgba(20,26,46,.14)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-7px;border-radius:50%;background:var(--amber);border:3px solid #fff;box-shadow:0 2px 8px rgba(20,22,60,.3)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:rgba(20,26,46,.14)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--amber);border:3px solid #fff;box-shadow:0 2px 8px rgba(20,22,60,.3)}
+.phyllo input[type=range]::-webkit-slider-runnable-track{background:rgba(255,255,255,.24)}
+.phyllo input[type=range]::-moz-range-track{background:rgba(255,255,255,.24)}
+
+/* 按钮和小药丸：一套 */
+.presets button,.simside button,.swap button,.chips button,.toggle,.controls button{border-color:#ddd8cc;transition:background .15s,border-color .15s}
+.presets button:hover,.simside button:hover,.swap button:hover,.chips button:hover,.controls button:hover{border-color:#bdb6a6}
+
+/* 三栏说明：加一条细线和衬线小标题，不再是三坨灰字 */
+.three>div{border-top:1px solid var(--line);padding-top:20px}
+.three h3{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 0;font-size:19.5px;font-weight:560;letter-spacing:-.012em}
+.three p{color:var(--body);font-size:14.5px}
+
+/* 互动演示面板：和截图一样垫一张画，白卡片浮在上面 */
+.panel{--mat:clamp(16px,4.2vw,56px);position:relative;isolation:isolate;border:0;border-radius:24px;padding:calc(var(--mat) + 30px);background:#1fc3cf center/cover no-repeat}
+.panel::before{content:"";position:absolute;inset:var(--mat);z-index:-1;border-radius:16px;background:rgba(255,255,255,.96);box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 44px 80px -30px rgba(20,22,60,.6),0 12px 30px -12px rgba(20,22,60,.34)}
+.sp-panel{background:#1fc3cf var(--p-s3) center 70%/cover no-repeat}
+.plug{background-image:var(--p-s2);background-position:center 55%}
+.motion{background-image:var(--p-s1);background-position:center 62%}
+.mach{border:0;box-shadow:0 0 0 1px rgba(20,26,46,.07),0 18px 40px -28px rgba(20,22,60,.45)}
+#sbsvg,.stage{border-color:var(--line);background:var(--paper)}
+
+/* 方块那节：盒子不要灰边，读数排成一张小表 */
+.grow{padding:120px 0}
+.tilebox{border:0;border-radius:24px;padding:26px;box-shadow:var(--shadow-card)}
+.readout{margin-top:30px;padding:20px 22px;border-radius:16px;background:rgba(255,255,255,.7);box-shadow:0 0 0 1px rgba(20,26,46,.06)}
+.readout .bar{background:#e9e4d8}
+/* 定理：排成一页论文里的样子 */
+.theorem{margin-top:88px;max-width:none;border-left:0;border-radius:24px;padding:44px 52px 46px;background:var(--card);box-shadow:var(--shadow-card);display:grid;grid-template-columns:minmax(0,3.82fr) minmax(0,6.18fr);column-gap:56px;align-items:start}
+.theorem h3{grid-column:1/-1;margin-bottom:6px;font:italic 500 15px var(--display);letter-spacing:.01em;color:#9a6a00}
+.theorem h3 span{font-style:normal;color:var(--soft)}
+.theorem p{margin-top:0;font-size:15.5px}
+.theorem p:first-of-type{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 0;font-size:25px;line-height:1.32;letter-spacing:-.012em;color:var(--ink)}
+.theorem p:first-of-type i{font-size:.82em}
+
+/* 模拟那节：卡片去灰边，数字用衬线 */
+.sim{padding:120px 0 130px}
+.simboard,.simside .card{border:0;box-shadow:var(--shadow-card)}
+.simboard{border-radius:22px;padding:18px}
+.simside .card{border-radius:20px;padding:20px}
+.kpi b{font-family:var(--display);font-weight:520;font-size:36px;font-variation-settings:"SOFT" 100,"WONK" 0}
+.kpi .q b{color:var(--need)}
+
+/* 开源那节的四格 */
+.cards{border:0;border-radius:22px;background:var(--card);box-shadow:var(--shadow-card)}
+.cards h3,.steps h3{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 0;font-weight:560;font-size:19.5px}
+summary{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 0;font-size:20px;font-weight:520}
+
+@media (max-width:900px){
+  .phyllo{padding-top:64px}
+  .phyllo .wrap{grid-template-columns:1fr;gap:28px;padding:44px 34px 36px}
+  .phyllo .wrap::before{inset:0 12px;border-radius:22px}
+  .panel{margin-left:-16px;margin-right:-16px;border-radius:0;padding:calc(var(--mat) + 18px)}
+  .theorem{grid-template-columns:1fr;padding:28px 24px 30px;margin-top:48px}
+  .theorem p+p{margin-top:16px}
+}
+
+/* 演示面板里的内容上下居中，白卡不透底 */
+.panel::before{background:#fffdfa}
+.sp-grid,.plug{align-items:center}
+.sp-foot{margin-top:22px}
+
+/* 状态图：放进一条浅色衬底里居中，不再孤零零飘在左边 */
+.fsm{max-width:none;margin-top:46px;padding:34px 40px;border-radius:22px;background:var(--mist);display:flex;justify-content:center}
+.fsm svg{max-width:780px}
+@media (max-width:900px){.fsm{padding:20px 12px;margin-top:30px}}
