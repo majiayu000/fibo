@@ -45,7 +45,7 @@ fn first_line(s: &str) -> String {
 pub(super) fn render(mut lines: Vec<Line>, color: bool) -> String {
     lines.sort_by_key(|l| rank(l.state));
     let count = |s: TaskState| lines.iter().filter(|l| l.state == s).count();
-    let mut out = format!("{} 条待办", lines.len());
+    let mut out = t!("{n} 条待办", n = lines.len());
     for s in [
         TaskState::Proven,
         TaskState::Settled,

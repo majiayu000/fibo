@@ -53,15 +53,25 @@ fn terminals_resolve_by_unique_prefix_or_tab_title_among_running_ones() {
 }
 #[test]
 fn the_skill_names_the_marker_and_every_command() {
-    assert!(SKILL.contains("MOORING_ENV"));
-    // Every command and every flag it takes, so the skill cannot fall behind the table.
-    let named = flags_in(SKILL, "");
-    for c in COMMANDS {
-        assert!(SKILL.contains(&format!("fibo {}", c.name)), "{}", c.name);
-        for f in declared(c) {
-            assert!(named.contains(&f), "{} --{f}", c.name);
+    for (lang, doc) in [("zh", SKILL), ("en", SKILL_EN)] {
+        assert!(doc.contains("MOORING_ENV"), "{lang}");
+        // Every command and every flag it takes, so neither language's skill can fall behind.
+        let named = flags_in(doc, "");
+        for c in COMMANDS {
+            assert!(
+                doc.contains(&format!("fibo {}", c.name)),
+                "{lang}: {}",
+                c.name
+            );
+            for f in declared(c) {
+                assert!(named.contains(&f), "{lang}: {} --{f}", c.name);
+            }
         }
     }
+    assert!(SESSION_SKILL_EN.contains("fibo todo list"));
+    assert!(!SESSION_SKILL_EN
+        .chars()
+        .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c)));
 }
 /// `--name` words in a text, without `--runtime` (every command takes it) and the
 /// command's own name (`--skill`).
@@ -86,17 +96,32 @@ fn declared(c: &Command) -> std::collections::BTreeSet<String> {
 #[test]
 fn every_command_documents_exactly_the_flags_it_takes() {
     for c in COMMANDS {
-        assert_eq!(flags_in(c.usage, c.name), declared(c), "{}", c.name);
-        for line in c.usage.lines().filter(|l| !l.starts_with(' ')) {
-            assert!(line.starts_with(&format!("fibo {}", c.name)), "{line}");
+        let en = mooring_core::i18n::english(c.usage)
+            .unwrap_or_else(|| panic!("missing English usage for {}", c.name));
+        for (lang, text) in [("zh", c.usage), ("en", en)] {
+            assert_eq!(flags_in(text, c.name), declared(c), "{lang}: {}", c.name);
+            for line in text.lines().filter(|l| !l.starts_with(' ')) {
+                assert!(
+                    line.starts_with(&format!("fibo {}", c.name)),
+                    "{lang}: {line}"
+                );
+            }
         }
-        assert!(usage().contains(c.usage), "{}", c.name);
+        assert!(usage().contains(c.usage()), "{}", c.name);
     }
-    // `mooring plugins` prints its own fuller text on errors; it names the same flags.
+    // `fibo plugins` prints its own fuller text on errors; it names the same flags in both languages.
     let plugins = command("plugins").unwrap();
-    let mut own = flags_in(crate::plugins_cmd::USAGE, "--skill");
-    own.remove("help");
-    assert_eq!(own, declared(plugins));
+    for (lang, text) in [
+        ("zh", crate::plugins_cmd::USAGE),
+        (
+            "en",
+            mooring_core::i18n::english(crate::plugins_cmd::USAGE).unwrap(),
+        ),
+    ] {
+        let mut own = flags_in(text, "--skill");
+        own.remove("help");
+        assert_eq!(own, declared(plugins), "{lang}");
+    }
     for name in DRIVES {
         assert!(
             command(name).is_some(),
@@ -112,7 +137,10 @@ fn every_documented_flag_is_accepted_and_nothing_else() {
             let given = args(&["x", &format!("--{f}"), "1"]);
             assert!(!check(c, &given).unwrap(), "{} --{f}", c.name);
             let e = check(c, &args(&["x", &format!("--{f}")])).unwrap_err();
-            assert!(e.to_string().contains("需要一个值"), "{e}");
+            assert!(
+                e.to_string().contains("需要一个值") || e.to_string().contains("requires a value"),
+                "{e}"
+            );
         }
         for f in c.switches {
             let given = args(&["x", &format!("--{f}"), "--runtime", "/r"]);
@@ -120,7 +148,7 @@ fn every_documented_flag_is_accepted_and_nothing_else() {
         }
         let e = check(c, &args(&["x", "--timout", "60"])).unwrap_err();
         assert!(e.to_string().contains("--timout"), "{e}");
-        assert!(e.to_string().contains(c.usage), "{e}");
+        assert!(e.to_string().contains(c.usage()), "{e}");
         // Help anywhere wins over everything, so the command never acts.
         assert!(check(c, &args(&["x", "--help"])).unwrap(), "{}", c.name);
         assert!(check(c, &args(&["-h", "--timout"])).unwrap(), "{}", c.name);
@@ -144,7 +172,10 @@ fn every_documented_flag_is_accepted_and_nothing_else() {
 fn standard_input_past_the_limit_is_an_error_not_a_cut() {
     assert_eq!(read_limited(&b"abcd"[..], 4).unwrap(), "abcd");
     let e = read_limited(&b"abcde"[..], 4).unwrap_err();
-    assert!(e.to_string().contains("超过"), "{e}");
+    assert!(
+        e.to_string().contains("超过") || e.to_string().contains("exceeds"),
+        "{e}"
+    );
     assert!(read_limited(&[0xff, 0xfe][..], 4).is_err());
 }
 #[test]

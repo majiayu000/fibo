@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate mooring_core;
+
 mod control;
 mod hooks_cmd;
 mod plugins_cmd;
@@ -33,10 +36,31 @@ fn raise_open_file_limit() {
     }
 }
 
+fn apply_language() {
+    use mooring_core::i18n::{self, Choice};
+    let env_choice = std::env::var("MOORING_LANG")
+        .ok()
+        .and_then(|v| Choice::from_key(&v));
+    let saved_choice = mooring_core::agent::config_dir()
+        .and_then(|dir| std::fs::read_to_string(dir.join("language")).ok())
+        .and_then(|text| Choice::from_key(&text));
+    let bundled = std::env::current_exe()
+        .and_then(|p| p.canonicalize())
+        .is_ok_and(|exe| mooring_core::cli_entry::in_bundle(&exe));
+    let Some(choice) = env_choice
+        .or(saved_choice)
+        .or_else(|| bundled.then_some(Choice::Auto))
+    else {
+        return;
+    };
+    i18n::set(choice.resolve(&mooring_platform::desktop::preferred_languages()));
+}
+
 fn run() -> std::io::Result<()> {
     // An install from before the rename to Mooring: its variables and config first.
     mooring_core::legacy::adopt_old_env();
     mooring_core::legacy::move_old_config();
+    apply_language();
     // Declared CLIs first: every later lookup of an Agent reads the registry.
     mooring_core::agent::install();
     mooring_core::rule::install();
@@ -48,16 +72,16 @@ fn run() -> std::io::Result<()> {
             println!("{}", control::usage());
             return Ok(());
         }
-        None => return Err(usage_error("缺少命令".into())),
+        None => return Err(usage_error(t!("缺少命令").into())),
         Some(name) => {
-            control::command(name).ok_or_else(|| usage_error(format!("没有 {name} 这个命令")))?
+            control::command(name).ok_or_else(|| usage_error(t!("没有 {name} 这个命令", name)))?
         }
     };
     // Every command is checked against its declared flags before it acts, so a typo or a
     // `--help` never runs it with defaults.
     let rest: Vec<String> = args.collect();
     if control::check(cmd, &rest)? {
-        println!("{}", cmd.usage);
+        println!("{}", cmd.usage());
         return Ok(());
     }
     let mut args = rest.into_iter();
@@ -105,12 +129,13 @@ fn run() -> std::io::Result<()> {
         "themes" => themes_cmd::run(args),
         "--skill" => {
             match args.next().as_deref() {
-                None => print!("{}", control::SKILL),
-                Some("plugins") => print!("{}", control::PLUGINS_SKILL),
-                Some("session") => print!("{}", control::SESSION_SKILL),
+                None => print!("{}", control::skill()),
+                Some("plugins") => print!("{}", control::plugins_skill()),
+                Some("session") => print!("{}", control::session_skill()),
                 Some(other) => {
-                    return Err(std::io::Error::other(format!(
-                        "没有叫 {other} 的说明；有：fibo --skill、fibo --skill plugins、fibo --skill session"
+                    return Err(std::io::Error::other(t!(
+                        "没有叫 {other} 的说明；有：fibo --skill、fibo --skill plugins、fibo --skill session",
+                        other
                     )))
                 }
             }
@@ -124,13 +149,13 @@ fn run() -> std::io::Result<()> {
             );
             Ok(())
         }
-        other => Err(usage_error(format!("{other} 还没有接上"))),
+        other => Err(usage_error(t!("{other} 还没有接上", other))),
     }
 }
 fn usage_error(what: String) -> std::io::Error {
     std::io::Error::new(
         std::io::ErrorKind::InvalidInput,
-        format!("{what}\n用法：\n{}", control::usage()),
+        t!("{what}\n用法：\n{usage}", what, usage = control::usage()),
     )
 }
 

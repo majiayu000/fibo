@@ -56,68 +56,84 @@ fn the_note_is_written_kept_current_and_never_over_the_users_own() {
         ours,
         "an old note is updated"
     );
+    std::fs::write(&path, format!("{MARK_EN}\nolder")).unwrap();
+    write_note(&dir).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        ours,
+        "an English note is updated too"
+    );
     std::fs::write(&path, "# 我自己的说明").unwrap();
     write_note(&dir).unwrap();
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "# 我自己的说明");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Every JSON example in the guide is a file the loaders accept as written.
+/// Every JSON example in both guides is a file the loaders accept as written.
 #[test]
 fn the_guides_examples_all_load() {
-    let guide = include_str!("plugins.md");
-    let root = std::env::temp_dir().join(format!("kl-guide-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    let mut n = 0;
-    for block in guide.split("```json\n").skip(1) {
-        let text = block.split("```").next().unwrap();
-        let value: serde_json::Value =
-            serde_json::from_str(text).unwrap_or_else(|e| panic!("not JSON ({e}):\n{text}"));
-        let file = [
-            "actions",
-            "presets",
-            "decorations",
-            "hooks",
-            "verify",
-            "complete",
-            "teardown",
-            "sources",
-        ]
-        .into_iter()
-        .find(|k| value.get(k).is_some())
-        .map(|k| match k {
-            "presets" => "sidebar",
-            "verify" => "rules",
-            "complete" => "effects",
-            "teardown" => "setup",
-            "sources" => "quota",
-            other => other,
-        });
-        let Some(kind) = file else {
-            continue; // plugin.json or colors.json: checked below / by the app
-        };
-        n += 1;
-        let dir = root.join(format!("example-{n}"));
-        write(
-            &dir.join("plugin.json"),
-            &format!(r#"{{"api":1,"id":"example-{n}","name":"例子","provides":["{kind}"]}}"#),
-        );
-        write(&dir.join(format!("{kind}.json")), text);
-    }
-    assert!(n >= 6, "examples found: {n}");
-    for c in check(&root, &root) {
-        assert!(c.error.is_none(), "{}: {:?}", c.dir.display(), c.error);
-        for f in &c.files {
-            assert!(
-                f.error.is_none(),
-                "{}: {:?}\n{}",
-                f.file.display(),
-                f.error,
-                std::fs::read_to_string(&f.file).unwrap()
+    for (lang, guide) in [
+        ("zh", include_str!("plugins.md")),
+        ("en", include_str!("plugins_en.md")),
+    ] {
+        let root = std::env::temp_dir().join(format!("kl-guide-{lang}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut n = 0;
+        for block in guide.split("```json\n").skip(1) {
+            let text = block.split("```").next().unwrap();
+            let value: serde_json::Value = serde_json::from_str(text)
+                .unwrap_or_else(|e| panic!("{lang}: not JSON ({e}):\n{text}"));
+            let file = [
+                "actions",
+                "presets",
+                "decorations",
+                "hooks",
+                "verify",
+                "complete",
+                "teardown",
+                "sources",
+            ]
+            .into_iter()
+            .find(|k| value.get(k).is_some())
+            .map(|k| match k {
+                "presets" => "sidebar",
+                "verify" => "rules",
+                "complete" => "effects",
+                "teardown" => "setup",
+                "sources" => "quota",
+                other => other,
+            });
+            let Some(kind) = file else {
+                continue; // plugin.json or colors.json: checked below / by the app
+            };
+            n += 1;
+            let dir = root.join(format!("example-{n}"));
+            write(
+                &dir.join("plugin.json"),
+                &format!(r#"{{"api":1,"id":"example-{n}","name":"例子","provides":["{kind}"]}}"#),
             );
+            write(&dir.join(format!("{kind}.json")), text);
         }
+        assert!(n >= 6, "{lang}: examples found: {n}");
+        for c in check(&root, &root) {
+            assert!(
+                c.error.is_none(),
+                "{lang}: {}: {:?}",
+                c.dir.display(),
+                c.error
+            );
+            for f in &c.files {
+                assert!(
+                    f.error.is_none(),
+                    "{lang}: {}: {:?}\n{}",
+                    f.file.display(),
+                    f.error,
+                    std::fs::read_to_string(&f.file).unwrap()
+                );
+            }
+        }
+        std::fs::remove_dir_all(&root).unwrap();
     }
-    std::fs::remove_dir_all(&root).unwrap();
 }
 
 /// An Agent copies the guide's hook example as it stands, and event text comes from the
@@ -125,38 +141,42 @@ fn the_guides_examples_all_load() {
 /// never inside the script it runs.
 #[test]
 fn the_guides_hook_example_keeps_event_text_out_of_the_script() {
-    let guide = include_str!("plugins.md");
-    let hooks = guide
-        .split("```json\n")
-        .skip(1)
-        .filter_map(|b| serde_json::from_str::<serde_json::Value>(b.split("```").next()?).ok())
-        .find(|v| v.get("hooks").is_some())
-        .unwrap();
-    let command = hooks["hooks"][0]["command"].as_str().unwrap();
-    let bin = std::env::temp_dir().join(format!("kl-guide-osa-{}", std::process::id()));
-    write(
-        &bin.join("osascript"),
-        "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -e ] && { shift; printf '%s\\n' \"$1\"; }; shift; done\n",
-    );
-    let exe = bin.join("osascript");
-    std::process::Command::new("chmod")
-        .arg("+x")
-        .arg(&exe)
-        .status()
-        .unwrap();
-    let path = format!("{}:/usr/bin:/bin", bin.display());
-    const PAYLOAD: &str = "x\" & (do shell script \"touch /tmp/no\") & \"y";
-    let out = std::process::Command::new("/bin/sh")
-        .args(["-c", command])
-        .env("PATH", path)
-        .env("MOORING_DETAIL", PAYLOAD)
-        .env("MOORING_TITLE", PAYLOAD)
-        .output()
-        .unwrap();
-    let script = String::from_utf8_lossy(&out.stdout).into_owned();
-    std::fs::remove_dir_all(&bin).unwrap();
-    assert!(!script.is_empty());
-    assert!(!script.contains("do shell script"), "{script}");
+    for (lang, guide) in [
+        ("zh", include_str!("plugins.md")),
+        ("en", include_str!("plugins_en.md")),
+    ] {
+        let hooks = guide
+            .split("```json\n")
+            .skip(1)
+            .filter_map(|b| serde_json::from_str::<serde_json::Value>(b.split("```").next()?).ok())
+            .find(|v| v.get("hooks").is_some())
+            .unwrap();
+        let command = hooks["hooks"][0]["command"].as_str().unwrap();
+        let bin = std::env::temp_dir().join(format!("kl-guide-osa-{lang}-{}", std::process::id()));
+        write(
+            &bin.join("osascript"),
+            "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -e ] && { shift; printf '%s\\n' \"$1\"; }; shift; done\n",
+        );
+        let exe = bin.join("osascript");
+        std::process::Command::new("chmod")
+            .arg("+x")
+            .arg(&exe)
+            .status()
+            .unwrap();
+        let path = format!("{}:/usr/bin:/bin", bin.display());
+        const PAYLOAD: &str = "x\" & (do shell script \"touch /tmp/no\") & \"y";
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", command])
+            .env("PATH", path)
+            .env("MOORING_DETAIL", PAYLOAD)
+            .env("MOORING_TITLE", PAYLOAD)
+            .output()
+            .unwrap();
+        let script = String::from_utf8_lossy(&out.stdout).into_owned();
+        std::fs::remove_dir_all(&bin).unwrap();
+        assert!(!script.is_empty(), "{lang}");
+        assert!(!script.contains("do shell script"), "{lang}: {script}");
+    }
 }
 
 /// What `mooring plugins` says is what a running Mooring would do: an action id another

@@ -56,26 +56,23 @@ fn side_placement(
     // Named for the Agent asking, or the one where the user started.
     let name = [asking, owner]
         .iter()
-        .find_map(|t| w.current_agent(t))
+        .find_map(|term| w.current_agent(term))
         .map(|s| s.runtime.name().to_owned())
-        .unwrap_or_else(|| "终端".into());
+        .unwrap_or_else(|| t!("终端").into());
     // 「Claude 的旁屏」, 「终端的旁屏」.
-    let gap = if name.ends_with(|c: char| c.is_ascii()) {
-        " "
-    } else {
-        ""
-    };
+    let ascii = name.ends_with(|c: char| c.is_ascii());
     for n in 1.. {
         let id = if n == 1 {
             format!("{SIDE}{owner}")
         } else {
             format!("{SIDE}{owner}~{n}")
         };
-        let Some(tab) = w.tabs.iter().find(|t| t.id == id) else {
-            let title = if n == 1 {
-                format!("{name}{gap}的旁屏")
-            } else {
-                format!("{name}{gap}的旁屏 {n}")
+        let Some(tab) = w.tabs.iter().find(|tab| tab.id == id) else {
+            let title = match (ascii, n) {
+                (true, 1) => t!("{name} 的旁屏", name),
+                (true, _) => t!("{name} 的旁屏 {n}", name, n),
+                (false, 1) => t!("{name}的旁屏", name),
+                (false, _) => t!("{name}的旁屏 {n}", name, n),
             };
             return Ok(Placement::NewTab { id, title });
         };
@@ -107,7 +104,7 @@ pub(super) struct Opened {
     pub(super) overflow: Option<String>,
 }
 pub(super) fn split(a: Args) -> io::Result<()> {
-    let opened = open(&a, a.arg(0, "终端")?, &a.rest, a.has("tab"))?;
+    let opened = open(&a, a.arg(0, t!("终端"))?, &a.rest, a.has("tab"))?;
     if a.has("json") {
         println!(
             "{}",
@@ -124,8 +121,12 @@ pub(super) fn split(a: Args) -> io::Result<()> {
         if let Some(why) = &opened.overflow {
             // On stderr, so `id=$(mooring split …)` still captures only the id.
             eprintln!(
-                "{why}，开在了「{}」标签（不切换用户的画面）",
-                opened.tab_title
+                "{}",
+                t!(
+                    "{why}，开在了「{tab}」标签（不切换用户的画面）",
+                    why,
+                    tab = opened.tab_title
+                )
             );
         }
     }
@@ -135,26 +136,26 @@ pub(super) fn split(a: Args) -> io::Result<()> {
 /// tab is full, or when a split would leave a half too small) running `command`.
 pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<Opened> {
     if a.has("here") && to_tab {
-        return Err(io::Error::other("--here 和 --tab 只能选一个"));
+        return Err(io::Error::other(t!("--here 和 --tab 只能选一个")));
     }
     let w = workspace(&a.socket)?;
     let target = resolve(&w, needle)?;
     let source = w
         .terminals
         .iter()
-        .find(|t| t.id == target)
-        .ok_or_else(|| io::Error::other("终端不存在"))?;
+        .find(|term| term.id == target)
+        .ok_or_else(|| io::Error::other(t!("终端不存在")))?;
     let tab = w
         .terminal_tab(&target)
-        .ok_or_else(|| io::Error::other("这个终端没有摆在任何画面里，不能在它旁边分屏"))?;
+        .ok_or_else(|| io::Error::other(t!("这个终端没有摆在任何画面里，不能在它旁边分屏")))?;
     let share = match a.value("size") {
         None => 5000,
         Some(v) => {
             let f: f64 = v
                 .parse()
-                .map_err(|_| io::Error::other("--size 需要 0 到 1 之间的小数"))?;
+                .map_err(|_| io::Error::other(t!("--size 需要 0 到 1 之间的小数")))?;
             if !(f > 0.0 && f < 1.0) {
-                return Err(io::Error::other("--size 需要 0 到 1 之间的小数"));
+                return Err(io::Error::other(t!("--size 需要 0 到 1 之间的小数")));
             }
             ((f * 10000.0).round() as u16).clamp(1, 9999)
         }
@@ -168,12 +169,13 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
     // beside another starts at the size it will show at.
     let panes = w.tab_terminals(&tab.id).len();
     let (placement, why) = if to_tab {
-        (None, "按 --tab".to_owned())
+        (None, t!("按 --tab").to_owned())
     } else if panes >= MAX_PANES {
-        let why = format!("这个标签已经有 {panes} 块");
+        let why = t!("这个标签已经有 {panes} 块", panes);
         if a.has("here") {
-            return Err(io::Error::other(format!(
-                "{why}，不再往里加；去掉 --here 会开在旁屏标签"
+            return Err(io::Error::other(t!(
+                "{why}，不再往里加；去掉 --here 会开在旁屏标签",
+                why
             )));
         }
         (None, why)
@@ -200,7 +202,7 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
     };
     let cwd = match a.value("cwd") {
         Some(dir) => mooring_platform::fs::canonical(Path::new(dir))
-            .map_err(|e| io::Error::other(format!("--cwd {dir}：{e}")))?
+            .map_err(|e| io::Error::other(t!("--cwd {dir}：{e}", dir, e)))?
             .to_string_lossy()
             .into_owned(),
         // Where that shell is now, as the workbench's own split does.
@@ -280,7 +282,7 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
     let after = workspace(&a.socket)?;
     let placed = after.terminal_tab(&id);
     Ok(Opened {
-        tab: placed.map(|t| t.id.clone()),
+        tab: placed.map(|tab| tab.id.clone()),
         tab_title: after.terminal_tab_title(&id),
         id,
         beside,
@@ -307,14 +309,14 @@ pub(super) fn split_argv(shell: &str, command: &[String]) -> Vec<String> {
 /// `events` reports `terminal_exited`.
 pub(super) fn close(a: Args) -> io::Result<()> {
     let w = workspace(&a.socket)?;
-    let needle = a.arg(0, "终端")?;
+    let needle = a.arg(0, t!("终端"))?;
     // An exited pane still shows; close it by its full id.
     let id = match w.terminal_tab(needle) {
         Some(_) => needle.to_owned(),
         None => resolve(&w, needle)?,
     };
     if w.terminal_tab(&id).is_none() {
-        return Err(io::Error::other("这个终端没有摆在任何画面里"));
+        return Err(io::Error::other(t!("这个终端没有摆在任何画面里")));
     }
     let close = Request::Edit {
         request: Some(RequestId::fresh()),

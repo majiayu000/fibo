@@ -1,5 +1,6 @@
 //! Driving Mooring terminals from scripts and other Agents: list them, read a screen, send text, prompt an Agent and wait.
 use mooring_core::delivery::{deliver, PATIENCE};
+use mooring_core::i18n::{self, Lang};
 use mooring_core::status::{self, Status};
 use mooring_core::{model::*, protocol::*};
 use std::io::{self, Read};
@@ -33,103 +34,108 @@ pub(crate) struct Command {
     pub(crate) valued: &'static [&'static str],
     /// Flags that stand alone.
     pub(crate) switches: &'static [&'static str],
-    /// The command's lines: each starts `mooring <name>`, descriptions are indented.
+    /// The command's lines (as an i18n key): each starts `fibo <name>`, descriptions are indented.
     pub(crate) usage: &'static str,
+}
+impl Command {
+    pub(crate) fn usage(&self) -> &'static str {
+        i18n::say(self.usage)
+    }
 }
 pub(crate) const COMMANDS: &[Command] = &[
     Command {
         name: "list",
         valued: &[],
         switches: &["json"],
-        usage: "\
-fibo list [--json]                         终端列表：要你处理的排前面，状态、Agent、标签、目录、编号",
+        usage: tk!("\
+fibo list [--json]                         终端列表：要你处理的排前面，状态、Agent、标签、目录、编号"),
     },
     Command {
         name: "read",
         valued: &["lines"],
         switches: &[],
-        usage: "\
-fibo read <终端> [--lines N]               画面最后 N 行（默认 50）",
+        usage: tk!("\
+fibo read <终端> [--lines N]               画面最后 N 行（默认 50）"),
     },
     Command {
         name: "send",
         valued: &[],
         switches: &["enter"],
-        usage: "\
-fibo send <终端> <文字|-> [--enter]        把文字作为粘贴放进终端；- 从标准输入读（最多 64 KiB）",
+        usage: tk!("\
+fibo send <终端> <文字|-> [--enter]        把文字作为粘贴放进终端；- 从标准输入读（最多 64 KiB）"),
     },
     Command {
         name: "prompt",
         valued: &["timeout"],
         switches: &["wait", "force"],
-        usage: "\
+        usage: tk!("\
 fibo prompt <终端> <文字|-> [--wait] [--timeout 秒] [--force]
-                                             给 Agent 发一条并回车；它正等你回答时拒绝，除非 --force",
+                                             给 Agent 发一条并回车；它正等你回答时拒绝，除非 --force"),
     },
     Command {
         name: "wait",
         valued: &["until", "timeout"],
         switches: &[],
-        usage: "\
+        usage: tk!("\
 fibo wait <终端> [--until idle|waiting|working] [--timeout 秒]
-                                             等 Agent 进入某个状态（默认 idle：这一轮做完）",
+                                             等 Agent 进入某个状态（默认 idle：这一轮做完）"),
     },
     Command {
         name: "explain",
         valued: &["file", "agent"],
         switches: &["json"],
-        usage: "\
+        usage: tk!("\
 fibo explain --file <画面.txt> --agent <claude|codex> [--json]
 fibo explain <终端> [--json]               画面规则怎么读这块屏：状态、命中的规则、规则版本和来源、看到的行；
-                                             还有每个后台 shell 算任务还是服务、依据哪条",
+                                             还有每个后台 shell 算任务还是服务、依据哪条"),
     },
     Command {
         name: "events",
         valued: &[],
         switches: &["json"],
-        usage: "\
+        usage: tk!("\
 fibo events [--json]                       先列出现在的状态，再每有变化输出一行，直到 Ctrl-C：
                                              started / waiting / error / done、approval / approval_gone、
                                              terminal_started / terminal_exited、command_done / command_failed；
-                                             lagged 表示跟不上丢了事件，应重新开一次取现状",
+                                             lagged 表示跟不上丢了事件，应重新开一次取现状"),
     },
     Command {
         name: "split",
         valued: &["size", "cwd"],
         switches: &["down", "tab", "here", "json"],
-        usage: "\
+        usage: tk!("\
 fibo split <终端> [--down] [--size 0.5] [--tab|--here] [--cwd 目录] [--json] [-- 命令…]
                                              在这个终端右边（--down 下面）开一块新分屏，打印新终端编号；
                                              标签已有 4 块或切开太窄时开到「旁屏」标签（--here 改为拒绝，
-                                             --tab 直接开到旁屏）；给了命令就在新 shell 里跑，跑完留在 shell",
+                                             --tab 直接开到旁屏）；给了命令就在新 shell 里跑，跑完留在 shell"),
     },
     Command {
         name: "run",
         valued: &["cwd", "from", "timeout"],
         switches: &["split", "no-report", "json"],
-        usage: "\
+        usage: tk!("\
 fibo run <agent> <任务|-> [--split] [--cwd 目录] [--no-report] [--from <终端>] [--timeout 秒] [--json]
                                              派一个 Agent 去做事：开在旁屏标签（--split 开在旁边），等它出现输入框
                                              再交任务；它每结束一轮，结果自动发回你的输入框（<mooring from=…>）；
-                                             不在 Fibo 终端里时用 --from 说开在谁旁边、汇报给谁",
+                                             不在 Fibo 终端里时用 --from 说开在谁旁边、汇报给谁"),
     },
     Command {
         name: "close",
         valued: &[],
         switches: &[],
-        usage: "\
-fibo close <终端>                          关掉这块分屏并结束里面的程序",
+        usage: tk!("\
+fibo close <终端>                          关掉这块分屏并结束里面的程序"),
     },
     Command {
         name: "todo",
         valued: &["task", "said", "space"],
         switches: &["all", "work", "json"],
-        usage: "\
+        usage: tk!("\
 fibo todo list [--all] [--json]            没做完的待办；--all 连已收尾的
 fibo todo show [--task <待办>] [--json]      看一条：用户写的、验收标准、进展
 fibo todo add <标题|-> [--said <原话>] [--space <空间>] [--work] [--json]
                                            记一件事，默认只记下来自哪个会话；--work 表示这个会话就在做它
-fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩什么、要用户定什么；完成由用户标记",
+fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩什么、要用户定什么；完成由用户标记"),
     },
     Command {
         name: "remote",
@@ -146,7 +152,7 @@ fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩�
         switches: &[
             "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report", "json",
         ],
-        usage: "\
+        usage: tk!("\
 fibo remote --stdio [--role view|answer|full]     给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
                                              答审批、事件），经 ssh 连过来：ssh 主机 fibo remote --stdio
 fibo remote --relay <中继地址> [--relay-key <密钥>] [--report]
@@ -164,7 +170,7 @@ fibo remote --devices                      列出配对过的手机、权限和�
 fibo remote --device <设备> --role <view|answer|full>
                                              改一台手机的权限；它正连着的会话一秒内断开，重连后按新权限
 fibo remote --revoke <设备编号或名字>      取消一台手机的配对，它正连着的会话一秒内断开
-fibo remote --machine-name <名字>          手机上这台电脑叫什么；给空字符串换回系统主机名，手机重连后显示新名字",
+fibo remote --machine-name <名字>          手机上这台电脑叫什么；给空字符串换回系统主机名，手机重连后显示新名字"),
     },
     Command {
         name: "themes",
@@ -182,60 +188,63 @@ fibo remote --machine-name <名字>          手机上这台电脑叫什么；�
         name: "hooks",
         valued: &["agent"],
         switches: &["json", "outdated-only"],
-        usage: "\
+        usage: tk!("\
 fibo hooks install|uninstall [--agent <cli>]
                                              把 Fibo 的 hook 写进（或移出）Agent CLI 自己的设置；不写 --agent 就是全部
 fibo hooks status [--agent <cli>] [--json] [--outdated-only]
-                                             各 CLI 的 hook 装了没有、和现在 install 会写的差在哪",
+                                             各 CLI 的 hook 装了没有、和现在 install 会写的差在哪"),
     },
     Command {
         name: "hook",
         valued: &["agent"],
         switches: &[],
-        usage: "\
+        usage: tk!("\
 fibo hook --agent <claude|codex|grok>      Agent CLI 的 hook 调用的入口：从标准输入读一条 hook JSON（最多 1 MiB）
-                                             报给后台；不在 Fibo 终端里什么都不做。不用手动跑",
+                                             报给后台；不在 Fibo 终端里什么都不做。不用手动跑"),
     },
     Command {
         name: "serve",
         valued: &["recent-days"],
         switches: &["takeover"],
-        usage: "\
+        usage: tk!("\
 fibo serve --runtime <目录> [--takeover] [--recent-days N]
                                              启动后台（App 自己会启动，不用手动跑）；--takeover 从正在跑的后台
-                                             接过全部终端，--recent-days 只读最近 N 天的会话（默认 7）",
+                                             接过全部终端，--recent-days 只读最近 N 天的会话（默认 7）"),
     },
     Command {
         name: "scan",
         valued: &[],
         switches: &[],
-        usage: "\
-fibo scan --runtime <目录>                 让后台重新扫一遍 Agent 会话，打印会话数和终端数",
+        usage: tk!("\
+fibo scan --runtime <目录>                 让后台重新扫一遍 Agent 会话，打印会话数和终端数"),
     },
     Command {
         name: "--skill",
         valued: &[],
         switches: &[],
-        usage: "\
+        usage: tk!("\
 fibo --skill                               给 Coding Agent 看的用法说明（Markdown）
 fibo --skill plugins                       给 Coding Agent 看的写插件、改外观说明（Markdown）
-fibo --skill session                       Fibo 在会话开始时告诉 Agent 的话",
+fibo --skill session                       Fibo 在会话开始时告诉 Agent 的话"),
     },
     Command {
         name: "--version",
         valued: &[],
         switches: &[],
-        usage: "\
-fibo --version                             打印协议版本",
+        usage: tk!("\
+fibo --version                             打印协议版本"),
     },
 ];
-const FOOTER: &str = "\
+const FOOTER: &str = tk!("\
 <终端> 可以是编号的前几位或标签名；全部命令都接受 --runtime <目录>；-h / --help 只打印用法、什么都不做。
-Agent 藏在包装器（沙盒、虚拟机、nono 等）后面认不出时，启动前设 MOORING_AGENT=<claude|codex|…>。";
+Agent 藏在包装器（沙盒、虚拟机、nono 等）后面认不出时，启动前设 MOORING_AGENT=<claude|codex|…>。");
 /// Every command's lines, then what holds for all of them.
 pub(crate) fn usage() -> String {
-    let mut text: String = COMMANDS.iter().map(|c| format!("{}\n", c.usage)).collect();
-    text.push_str(FOOTER);
+    let mut text: String = COMMANDS
+        .iter()
+        .map(|c| format!("{}\n", c.usage()))
+        .collect();
+    text.push_str(i18n::say(FOOTER));
     text
 }
 pub(crate) fn command(name: &str) -> Option<&'static Command> {
@@ -265,28 +274,52 @@ pub(crate) fn check(cmd: &Command, args: &[String]) -> io::Result<bool> {
                 Some(v) if help_flag(v) => return Ok(true),
                 Some(_) => (),
                 None => {
-                    wrong.get_or_insert_with(|| format!("--{name} 需要一个值"));
+                    wrong.get_or_insert_with(|| t!("--{name} 需要一个值", name));
                 }
             }
         } else if !cmd.switches.contains(&name) {
-            wrong.get_or_insert_with(|| format!("fibo {} 没有 --{name} 这个选项", cmd.name));
+            wrong.get_or_insert_with(|| {
+                t!("fibo {cmd} 没有 --{name} 这个选项", cmd = cmd.name, name)
+            });
         }
     }
     match wrong {
         Some(e) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("{e}\n用法：\n{}", cmd.usage),
+            t!("{e}\n用法：\n{usage}", e, usage = cmd.usage()),
         )),
         None => Ok(false),
     }
 }
-/// `mooring --skill`: how a coding Agent drives these commands, and when it must not.
+/// `fibo --skill`: how a coding Agent drives these commands, and when it must not.
 pub const SKILL: &str = include_str!("skill.md");
-/// `mooring --skill plugins`: how a coding Agent changes Mooring with plugins.
+pub const SKILL_EN: &str = include_str!("skill_en.md");
+/// `fibo --skill plugins`: how a coding Agent changes Fibo with plugins.
 pub const PLUGINS_SKILL: &str = include_str!("plugins.md");
-/// What every conversation in a Mooring terminal is told when it starts. It costs every
+pub const PLUGINS_SKILL_EN: &str = include_str!("plugins_en.md");
+/// What every conversation in a Fibo terminal is told when it starts. It costs every
 /// conversation these words, so it only says when to write something down.
 pub const SESSION_SKILL: &str = "你在 Fibo 终端里。用户说「记一下」，或有这次不处理但之后要跟进的事时：先 fibo todo list 查重，有就 fibo todo note --task <待办> 写进展，没有就 fibo todo add \"标题\" --said \"用户原话\"。当场问完答完的事不记。完成由用户标记，你不能标。\n";
+pub const SESSION_SKILL_EN: &str = "You are in a Fibo terminal. When the user says 'note this down' or out-of-scope follow-up work surfaces: run fibo todo list first to check for duplicates; if tracked, run fibo todo note --task <todo> with progress, else run fibo todo add \"title\" --said \"user's words\". Skip questions answered on the spot. Completion is marked by the user — you cannot mark todos done.\n";
+
+pub fn skill() -> &'static str {
+    match i18n::lang() {
+        Lang::Zh => SKILL,
+        Lang::En => SKILL_EN,
+    }
+}
+pub fn plugins_skill() -> &'static str {
+    match i18n::lang() {
+        Lang::Zh => PLUGINS_SKILL,
+        Lang::En => PLUGINS_SKILL_EN,
+    }
+}
+pub fn session_skill() -> &'static str {
+    match i18n::lang() {
+        Lang::Zh => SESSION_SKILL,
+        Lang::En => SESSION_SKILL_EN,
+    }
+}
 
 /// What the Agent in a terminal is doing, read like the workbench's pane states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -353,10 +386,14 @@ pub fn resolve(w: &Workspace, needle: &str) -> io::Result<String> {
     };
     match found.as_slice() {
         [one] => Ok(one.id.clone()),
-        [] => Err(io::Error::other(format!("没有正在运行的终端匹配 {needle}"))),
-        many => Err(io::Error::other(format!(
-            "{needle} 匹配到 {} 个终端，请写更长的编号",
-            many.len()
+        [] => Err(io::Error::other(t!(
+            "没有正在运行的终端匹配 {needle}",
+            needle
+        ))),
+        many => Err(io::Error::other(t!(
+            "{needle} 匹配到 {n} 个终端，请写更长的编号",
+            needle,
+            n = many.len()
         ))),
     }
 }
@@ -367,16 +404,19 @@ pub(crate) struct Args {
     flags: Vec<(String, Option<String>)>,
     /// Everything after a bare `--`, untouched: a command and its own flags.
     rest: Vec<String>,
-    /// The command's own usage lines, for errors about its arguments.
+    /// The command's own usage lines (as an i18n key), for errors about its arguments.
     usage: &'static str,
 }
 impl Args {
+    pub(crate) fn usage(&self) -> &'static str {
+        i18n::say(self.usage)
+    }
     /// Rejects a flag `cmd` does not take before anything acts; help is answered by the
     /// caller (`main`) before this runs.
     pub(crate) fn parse(args: impl Iterator<Item = String>, cmd: &Command) -> io::Result<Self> {
         let args: Vec<String> = args.collect();
         if check(cmd, &args)? {
-            return Err(io::Error::other(format!("用法：\n{}", cmd.usage)));
+            return Err(io::Error::other(t!("用法：\n{usage}", usage = cmd.usage())));
         }
         let valued = cmd.valued;
         let mut runtime = std::env::var_os("MOORING_RUNTIME").map(PathBuf::from);
@@ -390,14 +430,14 @@ impl Args {
             } else if arg == "--runtime" {
                 runtime = Some(
                     args.next()
-                        .ok_or_else(|| io::Error::other("--runtime 需要目录"))?
+                        .ok_or_else(|| io::Error::other(t!("--runtime 需要目录")))?
                         .into(),
                 );
             } else if let Some(name) = arg.strip_prefix("--") {
                 let value = if valued.contains(&name) {
                     Some(
                         args.next()
-                            .ok_or_else(|| io::Error::other(format!("--{name} 需要一个值")))?,
+                            .ok_or_else(|| io::Error::other(t!("--{name} 需要一个值", name)))?,
                     )
                 } else {
                     None
@@ -437,19 +477,22 @@ impl Args {
         self.value(name)
             .map(|v| {
                 v.parse()
-                    .map_err(|_| io::Error::other(format!("--{name} 需要数字")))
+                    .map_err(|_| io::Error::other(t!("--{name} 需要数字", name)))
             })
             .unwrap_or(Ok(default))
     }
     fn arg(&self, i: usize, what: &str) -> io::Result<&str> {
-        self.positional
-            .get(i)
-            .map(String::as_str)
-            .ok_or_else(|| io::Error::other(format!("缺少{what}\n用法：\n{}", self.usage)))
+        self.positional.get(i).map(String::as_str).ok_or_else(|| {
+            io::Error::other(t!(
+                "缺少{what}\n用法：\n{usage}",
+                what,
+                usage = self.usage()
+            ))
+        })
     }
     /// `-` reads the text from standard input, so long prompts need no shell quoting.
     fn text(&self, i: usize) -> io::Result<String> {
-        let text = self.arg(i, "文字")?;
+        let text = self.arg(i, t!("文字"))?;
         if text != "-" {
             return Ok(self.positional[i..].join(" "));
         }
@@ -462,12 +505,12 @@ fn read_limited(input: impl Read, limit: usize) -> io::Result<String> {
     let mut bytes = Vec::new();
     input.take(limit as u64 + 1).read_to_end(&mut bytes)?;
     if bytes.len() > limit {
-        return Err(io::Error::other(format!(
-            "标准输入超过 {} KiB，没有发送；拆成几段再发",
-            limit / 1024
+        return Err(io::Error::other(t!(
+            "标准输入超过 {kb} KiB，没有发送；拆成几段再发",
+            kb = limit / 1024
         )));
     }
-    String::from_utf8(bytes).map_err(|_| io::Error::other("标准输入不是 UTF-8 文字"))
+    String::from_utf8(bytes).map_err(|_| io::Error::other(t!("标准输入不是 UTF-8 文字")))
 }
 fn workspace(socket: &Path) -> io::Result<Workspace> {
     match rpc(socket, &Request::Workspace)? {

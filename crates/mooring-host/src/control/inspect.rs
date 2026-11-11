@@ -101,7 +101,7 @@ pub(super) fn list(a: Args) -> io::Result<()> {
 }
 pub(super) fn read(a: Args) -> io::Result<()> {
     let w = workspace(&a.socket)?;
-    let id = resolve(&w, a.arg(0, "终端")?)?;
+    let id = resolve(&w, a.arg(0, t!("终端"))?)?;
     let rows = a.number("lines", 50)? as usize;
     match rpc(
         &a.socket,

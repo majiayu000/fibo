@@ -3,16 +3,26 @@
 //! hook of ours when to use it. Failing leaves the todo's handoff to spell the path out, so
 //! it only logs.
 use crate::agents::adapter;
+use mooring_core::i18n::{self, Lang};
 use mooring_core::{cli_entry, model::Agent};
 use std::{fs, io, path::Path};
 
 /// What a CLI reads to know when to write something down.
 const SKILL: &str = include_str!("todo_skill.md");
+const SKILL_EN: &str = include_str!("todo_skill_en.md");
 const OURS: &str = "<!-- 由 Fibo 写入";
+const OURS_EN: &str = "<!-- Written by Fibo";
 /// What a skill written before the rename starts with: still ours, so it gets updated.
 const OURS_BEFORE: &str = "<!-- 由 Mooring 写入";
 /// Turns all of this off, like `MOORING_NO_SHELL_INTEGRATION` does for its own part.
 const OFF_ENV: &str = "MOORING_NO_CLI_SETUP";
+
+fn current_skill() -> &'static str {
+    match i18n::lang() {
+        Lang::Zh => SKILL,
+        Lang::En => SKILL_EN,
+    }
+}
 
 /// A build under test or a host on a private runtime touches nothing of the user's.
 pub fn install(runtime: &Path) {
@@ -29,8 +39,11 @@ pub fn install(runtime: &Path) {
     for name in cli_entry::NAMES {
         match cli_entry::link(&cli_entry::DIRS, &exe, name) {
             Ok(Some(_)) => {}
-            Ok(None) => eprintln!("fibo: 没有放入口：目录不可写，或那里已有别的 {name}"),
-            Err(e) => eprintln!("fibo: 放 {name} 入口失败：{e}"),
+            Ok(None) => eprintln!(
+                "fibo: {}",
+                t!("没有放入口：目录不可写，或那里已有别的 {name}", name)
+            ),
+            Err(e) => eprintln!("fibo: {}", t!("放 {name} 入口失败：{e}", name, e)),
         }
     }
     let Some(home) = mooring_platform::dirs::home() else {
@@ -41,7 +54,10 @@ pub fn install(runtime: &Path) {
             continue;
         };
         if let Err(e) = write_skill(&skills) {
-            eprintln!("fibo: 写 {} 失败：{e}", skills.display());
+            eprintln!(
+                "fibo: {}",
+                t!("写 {path} 失败：{e}", path = skills.display(), e)
+            );
         }
     }
 }
@@ -51,15 +67,18 @@ fn write_skill(skills: &Path) -> io::Result<bool> {
     if !skills.parent().is_some_and(Path::is_dir) {
         return Ok(false);
     }
+    let want = current_skill();
     let dir = skills.join("mooring");
     let file = dir.join("SKILL.md");
     match fs::read_to_string(&file) {
-        Ok(now) if now == SKILL => return Ok(false),
-        Ok(now) if !now.contains(OURS) && !now.contains(OURS_BEFORE) => return Ok(false),
+        Ok(now) if now == want => return Ok(false),
+        Ok(now) if !now.contains(OURS) && !now.contains(OURS_EN) && !now.contains(OURS_BEFORE) => {
+            return Ok(false)
+        }
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
-    mooring_platform::fs::replace_file(&file, SKILL.as_bytes())?;
+    mooring_platform::fs::replace_file(&file, want.as_bytes())?;
     Ok(true)
 }
 
@@ -89,12 +108,16 @@ mod tests {
         fs::create_dir(home.as_path().join("cli")).unwrap();
         assert!(write_skill(&skills).unwrap());
         let file = skills.join("mooring/SKILL.md");
-        assert_eq!(fs::read_to_string(&file).unwrap(), SKILL);
+        assert_eq!(fs::read_to_string(&file).unwrap(), current_skill());
         assert!(!write_skill(&skills).unwrap(), "already current");
 
         fs::write(&file, format!("{OURS} 旧版 -->")).unwrap();
         assert!(write_skill(&skills).unwrap(), "an older one of ours");
-        assert_eq!(fs::read_to_string(&file).unwrap(), SKILL);
+        assert_eq!(fs::read_to_string(&file).unwrap(), current_skill());
+
+        fs::write(&file, format!("{OURS_EN}; older -->")).unwrap();
+        assert!(write_skill(&skills).unwrap(), "an English one of ours");
+        assert_eq!(fs::read_to_string(&file).unwrap(), current_skill());
 
         fs::write(
             &file,
@@ -102,7 +125,7 @@ mod tests {
         )
         .unwrap();
         assert!(write_skill(&skills).unwrap(), "one Mooring wrote");
-        assert_eq!(fs::read_to_string(&file).unwrap(), SKILL);
+        assert_eq!(fs::read_to_string(&file).unwrap(), current_skill());
 
         fs::write(&file, "用户自己写的").unwrap();
         assert!(!write_skill(&skills).unwrap());
@@ -111,11 +134,16 @@ mod tests {
 
     #[test]
     fn the_skill_names_only_commands_that_exist_and_forbids_going_around_them() {
-        for said in ["fibo todo list", "fibo todo note", "fibo todo add"] {
-            assert!(SKILL.contains(said), "{said}");
+        for (doc, mark, forbid) in [
+            (SKILL, OURS, "不要绕过命令"),
+            (SKILL_EN, OURS_EN, "Never bypass the CLI"),
+        ] {
+            for said in ["fibo todo list", "fibo todo note", "fibo todo add"] {
+                assert!(doc.contains(said), "{said}");
+            }
+            assert!(doc.contains(mark));
+            assert!(doc.contains(forbid));
+            assert!(!doc.contains("todo done"));
         }
-        assert!(SKILL.contains(OURS));
-        assert!(SKILL.contains("不要绕过命令"));
-        assert!(!SKILL.contains("todo done"));
     }
 }

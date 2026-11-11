@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) fn send(a: Args) -> io::Result<()> {
     let w = workspace(&a.socket)?;
-    let id = resolve(&w, a.arg(0, "终端")?)?;
+    let id = resolve(&w, a.arg(0, t!("终端"))?)?;
     let text = a.text(1)?;
     expect_ok(rpc(
         &a.socket,
@@ -17,19 +17,19 @@ pub(super) fn send(a: Args) -> io::Result<()> {
 }
 pub(super) fn prompt(a: Args) -> io::Result<()> {
     let w = workspace(&a.socket)?;
-    let id = resolve(&w, a.arg(0, "终端")?)?;
+    let id = resolve(&w, a.arg(0, t!("终端"))?)?;
     let text = a.text(1)?;
     match phase(&w, &id) {
         Phase::None => {
-            return Err(io::Error::other(
-                "这个终端里没有可识别的 Agent 对话；发给 shell 请用 send",
-            ))
+            return Err(io::Error::other(t!(
+                "这个终端里没有可识别的 Agent 对话；发给 shell 请用 send"
+            )))
         }
         // Typing into an approval or a choice would answer it, so refuse.
         Phase::Waiting if !a.has("force") => {
-            return Err(io::Error::other(
-                "Agent 正在等你回答（审批或选择题），没有发送；确认要发请加 --force",
-            ));
+            return Err(io::Error::other(t!(
+                "Agent 正在等你回答（审批或选择题），没有发送；确认要发请加 --force"
+            )));
         }
         _ => (),
     }
@@ -58,14 +58,15 @@ pub(super) fn prompt(a: Args) -> io::Result<()> {
 }
 pub(super) fn wait_cmd(a: Args) -> io::Result<()> {
     let w = workspace(&a.socket)?;
-    let id = resolve(&w, a.arg(0, "终端")?)?;
+    let id = resolve(&w, a.arg(0, t!("终端"))?)?;
     let target = match a.value("until").unwrap_or("idle") {
         "idle" => Phase::Idle,
         "waiting" => Phase::Waiting,
         "working" => Phase::Working,
         other => {
-            return Err(io::Error::other(format!(
-                "--until 只接受 idle|waiting|working，不是 {other}"
+            return Err(io::Error::other(t!(
+                "--until 只接受 idle|waiting|working，不是 {other}",
+                other
             )))
         }
     };
@@ -94,7 +95,7 @@ fn wait(
             .iter()
             .any(|t| t.id == id && t.state == ProcessState::Running)
         {
-            return Err(io::Error::other("终端已退出"));
+            return Err(io::Error::other(t!("终端已退出")));
         }
         let now = phase(&w, id);
         started |= now == Phase::Working
@@ -109,14 +110,14 @@ fn wait(
         // A shell with no Agent never gets there: say so instead of sitting out the
         // timeout (30 minutes by default). An Agent just started gets the grace to show up.
         if now == Phase::None && since.elapsed() >= GRACE.min(timeout) {
-            return Err(io::Error::other(
-                "这个终端里没有可识别的 Agent 对话；等 shell 里的命令请用 fibo read 看画面",
-            ));
+            return Err(io::Error::other(t!(
+                "这个终端里没有可识别的 Agent 对话；等 shell 里的命令请用 fibo read 看画面"
+            )));
         }
         if since.elapsed() >= timeout {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
-                format!("等待超时，当前 {}", now.name()),
+                t!("等待超时，当前 {phase}", phase = now.name()),
             ));
         }
         std::thread::sleep(Duration::from_millis(500));
