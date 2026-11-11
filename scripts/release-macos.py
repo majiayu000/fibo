@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Build the macOS release files from a release build: a notarized, stapled Fibo.app packed
-as Fibo-<version>-arm64.zip (what the in-app updater installs) and .dmg (what people drag into
+as Fibo-<version>-<arch>.zip (arm64 or x86_64; what the in-app updater installs) and .dmg (what people drag into
 Applications), plus SHA256SUMS. It does not publish anything; `gh release create` does that.
 
-Needs: `cargo build --release -p mooring-host -p mooring-app` done first, the Developer ID
+Needs: `cargo build --release -p mooring-host -p mooring-app` done first (for Intel, add
+`--target x86_64-apple-darwin` there and here), the Developer ID
 identity in the keychain, and a notarytool keychain profile (`xcrun notarytool store-credentials`).
 """
 import argparse
@@ -23,10 +24,12 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument('--notary-profile', required=True, help='notarytool keychain profile name')
 parser.add_argument('--out', type=pathlib.Path, default=root / 'target/dist')
 parser.add_argument('--skip-notarize', action='store_true', help='local dry run: sign only')
+parser.add_argument('--target', help='a cargo target such as x86_64-apple-darwin; default: this Mac')
 args = parser.parse_args()
 
 version = tomllib.loads((root / 'crates/mooring-app/Cargo.toml').read_text())['package']['version']
-arch = {'arm64': 'arm64', 'x86_64': 'x86_64'}[platform.machine()]
+arch = {'arm64': 'arm64', 'x86_64': 'x86_64', 'aarch64': 'arm64'}[(args.target or platform.machine()).split('-')[0]]
+release_dir = root / 'target' / args.target / 'release' if args.target else root / 'target/release'
 name = f'Fibo-{version}-{arch}'
 out = args.out.resolve()
 shutil.rmtree(out, ignore_errors=True)
@@ -52,7 +55,7 @@ def notarize(path):
         raise SystemExit(f'notarization failed:\n{log.stdout}')
 
 
-run('python3', root / 'package-macos.py', '--output', app)
+run('python3', root / 'package-macos.py', '--release-dir', release_dir, '--output', app)
 
 # The app first: notarize a zip of it, then staple the ticket so it opens offline.
 submit = out / 'submit.zip'
