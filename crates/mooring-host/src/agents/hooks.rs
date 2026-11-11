@@ -44,9 +44,9 @@ fn ours(entry: &Value) -> bool {
 }
 pub fn target(agent: Agent, home: &Path) -> io::Result<Hooks> {
     adapter(agent).hooks(home).ok_or_else(|| {
-        io::Error::other(format!(
-            "{} 不需要 Hook：它的进程或文件已能说明对话",
-            agent.name()
+        io::Error::other(t!(
+            "{agent} 不需要 Hook：它的进程或文件已能说明对话",
+            agent = agent.name()
         ))
     })
 }
@@ -55,7 +55,7 @@ pub(crate) fn read(path: &Path) -> io::Result<Map<String, Value>> {
         Ok(bytes) if bytes.iter().all(u8::is_ascii_whitespace) => Ok(Map::new()),
         Ok(bytes) => match serde_json::from_slice(&bytes).map_err(io::Error::other)? {
             Value::Object(map) => Ok(map),
-            _ => Err(io::Error::other("settings 不是 JSON 对象，未改动")),
+            _ => Err(io::Error::other(t!("settings 不是 JSON 对象，未改动"))),
         },
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Map::new()),
         Err(e) => Err(e),
@@ -95,7 +95,7 @@ pub fn status(agent: Agent, hooks: &Hooks) -> io::Result<Status> {
     let mut differs = vec![];
     note(
         &mut differs,
-        "缺少事件",
+        t!("缺少事件"),
         hooks
             .events
             .iter()
@@ -104,16 +104,16 @@ pub fn status(agent: Agent, hooks: &Hooks) -> io::Result<Status> {
     );
     note(
         &mut differs,
-        "重复",
+        t!("重复"),
         hooks
             .events
             .iter()
             .filter(|e| count(e) > 1)
-            .map(|e| format!("{e} 有 {} 条", count(e))),
+            .map(|e| t!("{e} 有 {n} 条", e, n = count(e))),
     );
     note(
         &mut differs,
-        "多余的事件",
+        t!("多余的事件"),
         found
             .iter()
             .filter(|(e, ..)| !hooks.events.contains(e))
@@ -121,12 +121,12 @@ pub fn status(agent: Agent, hooks: &Hooks) -> io::Result<Status> {
     );
     note(
         &mut differs,
-        "命令和现在要写的不同",
+        t!("命令和现在要写的不同"),
         changed.iter().map(|(e, ..)| e.to_string()),
     );
     note(
         &mut differs,
-        "指向的路径不存在",
+        t!("指向的路径不存在"),
         changed
             .iter()
             .flat_map(|(.., entry)| absent_paths(entry["command"].as_str().unwrap_or(""))),
@@ -134,15 +134,15 @@ pub fn status(agent: Agent, hooks: &Hooks) -> io::Result<Status> {
     // Claude reads an empty matcher or `*` as every case; anything else drops some.
     note(
         &mut differs,
-        "限定了 matcher，会漏掉事件",
+        t!("限定了 matcher，会漏掉事件"),
         found.iter().filter_map(|(e, matcher, _)| {
             let m = matcher.filter(|m| !m.is_empty() && *m != "*")?;
-            Some(format!("{e}（{m}）"))
+            Some(t!("{e}（{m}）", e, m))
         }),
     );
     note(
         &mut differs,
-        &format!("超时不是 {TIMEOUT} 秒"),
+        &t!("超时不是 {secs} 秒", secs = TIMEOUT),
         found
             .iter()
             .filter(|(.., entry)| entry["timeout"] != TIMEOUT)
@@ -163,7 +163,8 @@ fn note(differs: &mut Vec<String>, kind: &str, items: impl Iterator<Item = Strin
         }
     }
     if !seen.is_empty() {
-        differs.push(format!("{kind}：{}", seen.join("、")));
+        let sep = t!("、");
+        differs.push(t!("{kind}：{items}", kind, items = seen.join(sep)));
     }
 }
 /// Absolute paths a command names that are not on disk, such as an old build's binary.
@@ -216,13 +217,13 @@ pub fn install(agent: Agent, hooks: &Hooks) -> io::Result<bool> {
         .entry("hooks")
         .or_insert_with(|| Value::Object(Map::new()))
         .as_object_mut()
-        .ok_or_else(|| io::Error::other("settings 里的 hooks 不是对象，未改动"))?;
+        .ok_or_else(|| io::Error::other(t!("settings 里的 hooks 不是对象，未改动")))?;
     for event in hooks.events {
         let groups = events
             .entry(*event)
             .or_insert_with(|| Value::Array(vec![]))
             .as_array_mut()
-            .ok_or_else(|| io::Error::other(format!("hooks.{event} 不是数组，未改动")))?;
+            .ok_or_else(|| io::Error::other(t!("hooks.{event} 不是数组，未改动", event = event)))?;
         groups.push(json!({
             "hooks": [{ "type": "command", "command": command_at(agent, event), "timeout": TIMEOUT }]
         }));

@@ -20,16 +20,23 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
         .find(|g| agent_label(*g) == key || g.executable() == key)
         .ok_or_else(|| {
             let known: Vec<String> = Agent::all().into_iter().map(agent_label).collect();
-            io::Error::other(format!("不认识的 Agent：{key}；可选：{}", known.join("、")))
+            let sep = t!("、");
+            io::Error::other(t!(
+                "不认识的 Agent：{key}；可选：{known}",
+                key,
+                known = known.join(sep)
+            ))
         })?;
     let task = a.text(1)?;
     if task.trim().is_empty() {
-        return Err(io::Error::other("任务是空的"));
+        return Err(io::Error::other(t!("任务是空的")));
     }
     let from = match a.value("from") {
         Some(from) => from.to_owned(),
         None => std::env::var("MOORING_TERMINAL").map_err(|_| {
-            io::Error::other("不在 Fibo 终端里：用 --from <终端> 说要开在谁旁边、汇报给谁")
+            io::Error::other(t!(
+                "不在 Fibo 终端里：用 --from <终端> 说要开在谁旁边、汇报给谁"
+            ))
         })?,
     };
     let parent = resolve(&workspace(&a.socket)?, &from)?;
@@ -46,9 +53,10 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
     }
     let timeout = Duration::from_secs(a.number("timeout", 90)?);
     if let Err(e) = hand_over(&a.socket, agent, &opened.id, &task, timeout) {
-        return Err(io::Error::other(format!(
-            "{e}（终端 {} 留着，fibo read {} 看画面）",
-            opened.id, opened.id
+        return Err(io::Error::other(t!(
+            "{e}（终端 {id} 留着，fibo read {id} 看画面）",
+            e,
+            id = opened.id
         )));
     }
     if a.has("json") {
@@ -66,16 +74,27 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
     } else {
         println!("{}", opened.id);
         let place = if opened.beside.is_some() {
-            "开在旁边".to_owned()
+            t!("开在旁边").to_owned()
         } else {
-            format!("开在「{}」标签（不切换用户的画面）", opened.tab_title)
+            t!(
+                "开在「{tab}」标签（不切换用户的画面）",
+                tab = opened.tab_title
+            )
         };
         let back = if report {
-            "；它每结束一轮，结果会以 <mooring from=…> 自动发回你的输入框，不用轮询"
+            t!("；它每结束一轮，结果会以 <mooring from=…> 自动发回你的输入框，不用轮询")
         } else {
             ""
         };
-        eprintln!("{} 已经收到任务，{place}{back}", agent.name());
+        eprintln!(
+            "{}",
+            t!(
+                "{agent} 已经收到任务，{place}{back}",
+                agent = agent.name(),
+                place,
+                back
+            )
+        );
     }
     Ok(())
 }
@@ -105,7 +124,7 @@ fn hand_over(
             other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         };
         if command_missing(&tail) {
-            return Err(io::Error::other("找不到这个 Agent 的命令，没有交任务"));
+            return Err(io::Error::other(t!("找不到这个 Agent 的命令，没有交任务")));
         }
         if tail == last {
             still += 1;
@@ -127,7 +146,7 @@ fn hand_over(
         if started.elapsed() >= timeout {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
-                "Agent 一直没有出现输入框（可能停在登录、信任目录或更新提示上），没有交任务",
+                t!("Agent 一直没有出现输入框（可能停在登录、信任目录或更新提示上），没有交任务"),
             ));
         }
     }

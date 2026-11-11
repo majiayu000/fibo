@@ -10,7 +10,6 @@ field background	crates/mooring-host/src/host/mod.rs	1
 field background	crates/mooring-host/src/host/report_back.rs	1
 field background	crates/mooring-host/src/host/shell_watch.rs	4
 field content-name	crates/mooring-host/src/control.rs	1
-field content-name	crates/mooring-host/src/plugins_cmd.rs	1
 field content-name	mobile/src/ui/livework.tsx	1
 field content-title	crates/mooring-app/src/native.m	1
 field content-title	crates/mooring-app/src/workbench/board/remote.rs	2

@@ -72,10 +72,15 @@ pub(super) fn render(mut lines: Vec<Line>, home: &str, color: bool) -> String {
         .filter(|l| l.status.is_some_and(Status::working))
         .count();
     let mut out = format!(
-        "{} 个终端 · {} {needs} · {} {running}\n",
-        lines.len(),
-        mooring_core::status::needs_you_word(),
-        Status::Running.label(),
+        "{}\n",
+        t!(
+            "{n} 个终端 · {needs_word} {needs} · {running_word} {running}",
+            n = lines.len(),
+            needs_word = mooring_core::status::needs_you_word(),
+            needs,
+            running_word = Status::Running.label(),
+            running,
+        )
     );
     let label_w = lines
         .iter()

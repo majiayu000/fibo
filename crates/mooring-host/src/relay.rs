@@ -52,7 +52,7 @@ pub fn run(a: &Args) -> io::Result<()> {
         let key = a.value("relay-key").map(str::to_owned).or(kept.key);
         let enabled = a.has("enable");
         if enabled && relay.is_empty() {
-            return Err(io::Error::other("--enable 需要 --relay <中继地址>"));
+            return Err(io::Error::other(t!("--enable 需要 --relay <中继地址>")));
         }
         host(
             a,
@@ -65,9 +65,12 @@ pub fn run(a: &Args) -> io::Result<()> {
         println!(
             "{}",
             if enabled {
-                format!("已打开：后台会一直连着 {relay}，配对过的手机随时能连过来")
+                t!(
+                    "已打开：后台会一直连着 {relay}，配对过的手机随时能连过来",
+                    relay
+                )
             } else {
-                "已关闭：后台断开中继，配对还在".to_owned()
+                t!("已关闭：后台断开中继，配对还在").to_owned()
             }
         );
         return Ok(());
@@ -88,7 +91,10 @@ pub fn run(a: &Args) -> io::Result<()> {
     }
     if let Some(name) = a.value("machine-name") {
         let m = devices::set_machine_name(&a.socket, name)?;
-        println!("手机上这台电脑叫「{}」，手机重连后显示", m.name);
+        println!(
+            "{}",
+            t!("手机上这台电脑叫「{name}」，手机重连后显示", name = m.name)
+        );
         return Ok(());
     }
     if let Some(needle) = a.value("kick") {
@@ -99,7 +105,10 @@ pub fn run(a: &Args) -> io::Result<()> {
                 change: RemoteChange::Kick,
             },
         )?;
-        println!("已断开 {needle} 正连着的会话；它还配对着，可以再连");
+        println!(
+            "{}",
+            t!("已断开 {needle} 正连着的会话；它还配对着，可以再连", needle)
+        );
         return Ok(());
     }
     if let (Some(needle), Some(role)) = (a.value("device"), a.value("role")) {
@@ -107,10 +116,13 @@ pub fn run(a: &Args) -> io::Result<()> {
         let d = devices::set_role(&a.socket, needle, role)?;
         refresh(a);
         println!(
-            "{}（{}）的权限改成「{}」，它正连着的会话一秒内断开，重连后按新权限",
-            d.name,
-            d.id,
-            d.role.label()
+            "{}",
+            t!(
+                "{name}（{id}）的权限改成「{role}」，它正连着的会话一秒内断开，重连后按新权限",
+                name = d.name,
+                id = d.id,
+                role = devices::role_label(d.role)
+            )
         );
         return Ok(());
     }
@@ -118,14 +130,18 @@ pub fn run(a: &Args) -> io::Result<()> {
         let gone = devices::remove(&a.socket, needle)?;
         refresh(a);
         println!(
-            "已取消配对 {}（{}），它正连着的会话一秒内断开",
-            gone.name, gone.id
+            "{}",
+            t!(
+                "已取消配对 {name}（{id}），它正连着的会话一秒内断开",
+                name = gone.name,
+                id = gone.id
+            )
         );
         return Ok(());
     }
-    let relay = a
-        .value("relay")
-        .ok_or_else(|| io::Error::other("--relay 需要中继地址，例如 https://relay.example.com"))?;
+    let relay = a.value("relay").ok_or_else(|| {
+        io::Error::other(t!("--relay 需要中继地址，例如 https://relay.example.com"))
+    })?;
     let base = Link::websocket_base(relay).map_err(io::Error::other)?;
     let new = a.has("new-code");
     let code = devices::machine_code(&a.socket, new)?;
@@ -136,7 +152,12 @@ pub fn run(a: &Args) -> io::Result<()> {
         let role = a
             .value("role")
             .map_or(Ok(Role::Full), devices::parse_role)?;
-        return pair(&a.socket, relay, a.value("name").unwrap_or("手机"), role);
+        return pair(
+            &a.socket,
+            relay,
+            a.value("name").unwrap_or_else(|| t!("手机")),
+            role,
+        );
     }
     let key = a
         .value("relay-key")
@@ -188,35 +209,50 @@ fn pair(socket: &Path, relay: &str, name: &str, role: Role) -> io::Result<()> {
     writeln!(out, "{qr}")?;
     writeln!(
         out,
-        "「{name}」（{}，权限：{}）：用手机 App 扫码配对，或者粘贴这一行：",
-        device.id,
-        role.label()
+        "{}",
+        t!(
+            "「{name}」（{id}，权限：{role}）：用手机 App 扫码配对，或者粘贴这一行：",
+            name,
+            id = device.id,
+            role = devices::role_label(role)
+        )
     )?;
     writeln!(out, "{link}")?;
     writeln!(
         out,
-        "这一行只给这一台手机用，别发给别人。取消它：fibo remote --revoke {}",
-        device.id
+        "{}",
+        t!(
+            "这一行只给这一台手机用，别发给别人。取消它：fibo remote --revoke {id}",
+            id = device.id
+        )
     )
 }
 
 fn list_devices(socket: &Path) -> io::Result<()> {
     let list = devices::load(socket);
     if list.is_empty() {
-        println!("还没有配对的设备：fibo remote --pair --relay <中继地址> --name <名字>");
+        println!(
+            "{}",
+            t!("还没有配对的设备：fibo remote --pair --relay <中继地址> --name <名字>")
+        );
         return Ok(());
     }
     let seen = devices::last_seen(socket);
     let ago = |at: u64| mooring_core::time::ago(at, devices::now());
     for d in list {
-        let last = seen.get(&d.id).map_or("没连过".to_owned(), |&at| ago(at));
+        let last = seen
+            .get(&d.id)
+            .map_or_else(|| t!("没连过").to_owned(), |&at| ago(at));
         println!(
-            "{}  {}  {}  配对于 {}  最近连接 {}",
-            d.id,
-            d.name,
-            d.role.label(),
-            ago(d.paired),
-            last
+            "{}",
+            t!(
+                "{id}  {name}  {role}  配对于 {paired}  最近连接 {last}",
+                id = d.id,
+                name = d.name,
+                role = devices::role_label(d.role),
+                paired = ago(d.paired),
+                last
+            )
         );
     }
     Ok(())

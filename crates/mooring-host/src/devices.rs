@@ -16,10 +16,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use mooring_remote::role::{acts, Role};
 
+pub fn role_label(role: Role) -> &'static str {
+    match role {
+        Role::View => t!("只看"),
+        Role::Answer => t!("能答审批"),
+        Role::Full => t!("完全控制"),
+    }
+}
+
 pub fn parse_role(s: &str) -> io::Result<Role> {
     Role::parse(s).ok_or_else(|| {
-        io::Error::other(format!(
-            "--role 只能是 view（只看）、answer（能答审批）或 full（完全控制），不是 {s}"
+        io::Error::other(t!(
+            "--role 只能是 view（只看）、answer（能答审批）或 full（完全控制），不是 {s}",
+            s
         ))
     })
 }
@@ -233,10 +242,11 @@ fn find(devices: &[Device], needle: &str) -> io::Result<usize> {
         .collect();
     match hits[..] {
         [i] => Ok(i),
-        [] => Err(io::Error::other(format!("没有配对过的设备叫 {needle}"))),
-        _ => Err(io::Error::other(format!(
-            "{needle} 匹配到 {} 台设备，请写编号",
-            hits.len()
+        [] => Err(io::Error::other(t!("没有配对过的设备叫 {needle}", needle))),
+        _ => Err(io::Error::other(t!(
+            "{needle} 匹配到 {n} 台设备，请写编号",
+            needle,
+            n = hits.len()
         ))),
     }
 }

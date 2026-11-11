@@ -6,17 +6,18 @@ use mooring_core::status::task_state;
 use mooring_core::time;
 
 pub(super) fn todo(a: Args) -> io::Result<()> {
-    match a.arg(0, "子命令（list、show、add、note）")? {
+    match a.arg(0, t!("子命令（list、show、add、note）"))? {
         "list" => list(a),
         "show" => show(a),
         "add" => add(a),
         "note" => note(a),
-        "done" | "complete" | "close" => Err(io::Error::other(
-            "待办只由用户在窗口里标记完成，Agent 不能标；把结果写成 fibo todo note，等用户看",
-        )),
-        other => Err(io::Error::other(format!(
-            "没有 fibo todo {other}\n用法：\n{}",
-            a.usage
+        "done" | "complete" | "close" => Err(io::Error::other(t!(
+            "待办只由用户在窗口里标记完成，Agent 不能标；把结果写成 fibo todo note，等用户看"
+        ))),
+        other => Err(io::Error::other(t!(
+            "没有 fibo todo {other}\n用法：\n{usage}",
+            other,
+            usage = a.usage()
         ))),
     }
 }
@@ -50,24 +51,25 @@ fn own_session(w: &Workspace) -> Option<String> {
 fn pick<'a>(w: &'a Workspace, a: &Args) -> io::Result<&'a Task> {
     let Some(needle) = a.value("task") else {
         return own_terminal(w)
-            .and_then(|t| w.terminal_task(&t))
+            .and_then(|term| w.terminal_task(&term))
             .ok_or_else(|| {
-                io::Error::other(
-                    "这个终端没有关联待办：用 --task <待办> 指定，fibo todo list 能看编号",
-                )
+                io::Error::other(t!(
+                    "这个终端没有关联待办：用 --task <待办> 指定，fibo todo list 能看编号"
+                ))
             });
     };
     let found: Vec<&Task> = w
         .tasks
         .iter()
-        .filter(|t| t.id.starts_with(needle) || t.title == needle)
+        .filter(|task| task.id.starts_with(needle) || task.title == needle)
         .collect();
     match found.as_slice() {
         [task] => Ok(task),
-        [] => Err(io::Error::other(format!("没有这个待办：{needle}"))),
-        many => Err(io::Error::other(format!(
-            "有 {} 个待办对得上「{needle}」，多写几位编号",
-            many.len()
+        [] => Err(io::Error::other(t!("没有这个待办：{needle}", needle))),
+        many => Err(io::Error::other(t!(
+            "有 {n} 个待办对得上「{needle}」，多写几位编号",
+            n = many.len(),
+            needle
         ))),
     }
 }
@@ -93,9 +95,9 @@ fn pick_space(w: &Workspace, a: &Args) -> io::Result<String> {
             .iter()
             .find(|s| s.id == needle || s.name == needle)
             .map(|s| s.id.clone())
-            .ok_or_else(|| io::Error::other(format!("没有这个空间：{needle}")));
+            .ok_or_else(|| io::Error::other(t!("没有这个空间：{needle}", needle)));
     }
-    if let Some(tab) = own_terminal(w).and_then(|t| w.terminal_tab(&t).cloned()) {
+    if let Some(tab) = own_terminal(w).and_then(|term| w.terminal_tab(&term).cloned()) {
         return Ok(tab.space);
     }
     let here = std::env::current_dir().ok();
@@ -106,9 +108,10 @@ fn pick_space(w: &Workspace, a: &Args) -> io::Result<String> {
         [only] => Ok(only.id.clone()),
         spaces => {
             let names: Vec<&str> = spaces.iter().map(|s| s.name.as_str()).collect();
-            Err(io::Error::other(format!(
-                "不在 Fibo 终端里，用 --space <空间> 说记到哪：{}",
-                names.join("、")
+            let sep = t!("、");
+            Err(io::Error::other(t!(
+                "不在 Fibo 终端里，用 --space <空间> 说记到哪：{spaces}",
+                spaces = names.join(sep)
             )))
         }
     }
@@ -153,14 +156,14 @@ fn list(a: Args) -> io::Result<()> {
     let shown: Vec<&Task> = w
         .tasks
         .iter()
-        .filter(|t| a.has("all") || !task_state(&w, t, now).closed())
+        .filter(|task| a.has("all") || !task_state(&w, task, now).closed())
         .collect();
     if a.has("json") {
-        let rows: Vec<_> = shown.iter().map(|t| task_json(&w, t, now)).collect();
+        let rows: Vec<_> = shown.iter().map(|task| task_json(&w, task, now)).collect();
         return print_json(&serde_json::Value::Array(rows));
     }
     if shown.is_empty() {
-        println!("没有待办");
+        println!("{}", t!("没有待办"));
         return Ok(());
     }
     let lines = shown
@@ -200,16 +203,16 @@ fn show(a: Args) -> io::Result<()> {
         task.title
     );
     if !task.description.trim().is_empty() {
-        println!("\n用户写的：\n{}", task.description.trim());
+        println!("\n{}\n{}", t!("用户写的："), task.description.trim());
     }
     if !task.acceptance.is_empty() {
-        println!("\n验收标准：");
+        println!("\n{}", t!("验收标准："));
         for c in &task.acceptance {
             println!("- {}", c.description);
         }
     }
     if let Some(log) = w.task_logs.get(&task.id).filter(|l| !l.notes.is_empty()) {
-        println!("\n进展：");
+        println!("\n{}", t!("进展："));
         for n in &log.notes {
             println!("- {} {}", time::ago(n.at, now), n.text);
         }
@@ -240,8 +243,8 @@ fn add(a: Args) -> io::Result<()> {
     )?;
     // Only when asked: most things noted mid-conversation are not what it is working on.
     if a.has("work") {
-        let session =
-            session.ok_or_else(|| io::Error::other("这个终端里没有会话，--work 没有东西可关联"))?;
+        let session = session
+            .ok_or_else(|| io::Error::other(t!("这个终端里没有会话，--work 没有东西可关联")))?;
         deliver_edit(
             &a,
             Edit::AssignTask {

@@ -16,7 +16,7 @@ pub(super) fn line(n: &Notice, tab: &str) -> String {
         .join(" · ");
     let code = n
         .exit_code
-        .map(|c| format!(" 退出码 {c}"))
+        .map(|c| t!(" 退出码 {c}", c))
         .unwrap_or_default();
     let line = format!(
         "{}  {:<16} {:<28}  {}{code}",

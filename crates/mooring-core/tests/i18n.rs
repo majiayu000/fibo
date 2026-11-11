@@ -15,6 +15,12 @@ use std::path::{Path, PathBuf};
 
 /// Where the window's words are written.
 const DIRS: &[&str] = &["crates/mooring-app/src", "crates/mooring-core/src"];
+/// Where `t!(…)` and `tk!(…)` keys may live (`mooring-host` also translates CLI text).
+const KEY_DIRS: &[&str] = &[
+    "crates/mooring-app/src",
+    "crates/mooring-core/src",
+    "crates/mooring-host/src",
+];
 /// Calls whose text is for developers.
 const LOGS: &[&str] = &[
     "eprintln!",
@@ -67,14 +73,18 @@ fn sources(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
     }
 }
 
-fn all_sources() -> Vec<(String, String)> {
+fn sources_in(dirs: &[&str]) -> Vec<(String, String)> {
     let root = root();
     let mut out = vec![];
-    for d in DIRS {
+    for d in dirs {
         sources(&root, &root.join(d), &mut out);
     }
     out.sort();
     out
+}
+
+fn all_sources() -> Vec<(String, String)> {
+    sources_in(DIRS)
 }
 
 /// A string literal: its value, its line and the call it is the first argument of
@@ -309,7 +319,7 @@ fn every_key_has_english() {
         }
     }
     let mut used = BTreeSet::new();
-    for (rel, text) in all_sources() {
+    for (rel, text) in sources_in(KEY_DIRS) {
         for lit in literals(&text) {
             if lit.call != "t!" && lit.call != "tk!" {
                 continue;

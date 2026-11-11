@@ -4,7 +4,6 @@
 //! --keepParent` zip of the signed, notarized, stapled Mooring.app), `Mooring-X.Y.Z-<arch>.dmg`
 //! and `SHA256SUMS` (`sha256sum` lines: `<hex>  <file name>`).
 use super::version::Version;
-use crate::t;
 use serde::Deserialize;
 
 /// One release as `GET /repos/<owner>/<repo>/releases/latest` returns it. Fields GitHub adds

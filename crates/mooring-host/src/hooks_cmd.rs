@@ -40,10 +40,10 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
         };
         let path = target.settings.display().to_string();
         let line = match action.as_str() {
-            "install" if hooks::install(agent, &target)? => format!("已安装：{path}"),
-            "install" => format!("已是最新：{path}"),
-            "uninstall" if hooks::uninstall(&target)? => format!("已移除：{path}"),
-            "uninstall" => format!("本来就没装：{path}"),
+            "install" if hooks::install(agent, &target)? => t!("已安装：{path}", path),
+            "install" => t!("已是最新：{path}", path),
+            "uninstall" if hooks::uninstall(&target)? => t!("已移除：{path}", path),
+            "uninstall" => t!("本来就没装：{path}", path),
             // A settings file that cannot be read is reported, and the other CLIs still are.
             "status" => {
                 rows.push((agent, path, hooks::status(agent, &target)));
@@ -64,7 +64,15 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
         );
     } else {
         for (agent, path, status) in &rows {
-            println!("{} · {}：{path}", agent.name(), state(status).1);
+            println!(
+                "{}",
+                t!(
+                    "{agent} · {state}：{path}",
+                    agent = agent.name(),
+                    state = state(status).1,
+                    path
+                )
+            );
             for line in differences(status) {
                 println!("  {line}");
             }
@@ -75,10 +83,10 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
 /// The machine word and the line `status` prints for one CLI.
 fn state(status: &io::Result<Status>) -> (&'static str, &'static str) {
     match status {
-        Ok(Status::Current) => ("current", "已安装且是最新"),
-        Ok(Status::Outdated(_)) => ("outdated", "已安装但过期"),
-        Ok(Status::Missing) => ("missing", "未安装"),
-        Err(_) => ("error", "无法读取"),
+        Ok(Status::Current) => ("current", t!("已安装且是最新")),
+        Ok(Status::Outdated(_)) => ("outdated", t!("已安装但过期")),
+        Ok(Status::Missing) => ("missing", t!("未安装")),
+        Err(_) => ("error", t!("无法读取")),
     }
 }
 fn differences(status: &io::Result<Status>) -> Vec<String> {

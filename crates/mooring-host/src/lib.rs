@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate mooring_core;
+
 mod agents;
 pub use agents::claude_quota;
 mod background_shells;
