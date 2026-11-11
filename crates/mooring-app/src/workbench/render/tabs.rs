@@ -1,7 +1,53 @@
 //! The tab strip's overflow markers and the hover notes on tabs.
 use super::*;
 
+/// A stable slot: the state and close control trade visibility, never layout space.
+pub(super) fn tab_tail(
+    close: gpui::Stateful<gpui::Div>,
+    status: Option<Status>,
+    group: gpui::SharedString,
+) -> gpui::Div {
+    div()
+        .relative()
+        .flex_shrink_0()
+        .size(px(T::ICON_HEIGHT))
+        .when_some(status, |d, g| {
+            d.child(
+                div()
+                    .absolute()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(T::CHIP_SIZE))
+                    .group_hover(group, |s| s.opacity(0.))
+                    .child(crate::ui::widgets::status_mark(g)),
+            )
+        })
+        .child(close.absolute().size_full().px_0())
+}
+
 impl Workbench {
+    #[cfg(feature = "visual-test")]
+    pub fn visual_tab_agent_sample(&mut self, cx: &mut Context<Self>) {
+        let tab = self
+            .workspace
+            .tabs
+            .iter_mut()
+            .find(|t| t.id == "dense")
+            .unwrap();
+        tab.space = self.nav.space.clone();
+        tab.layout = Some(mooring_core::layout::Layout::Leaf("dense-t2".into()));
+        cx.notify();
+    }
+
+    #[cfg(feature = "visual-test")]
+    pub fn visual_tab_bounds(&self) -> Vec<gpui::Bounds<gpui::Pixels>> {
+        (0..self.visual_tab_row().0.len())
+            .filter_map(|ix| self.layout.tab_scroll.bounds_for_item(ix))
+            .collect()
+    }
+
     /// Tabs hidden past each edge of the strip. Read from the last layout, so one more
     /// frame is drawn whenever the new layout moved tabs across an edge.
     pub(super) fn tab_overflow(

@@ -59,6 +59,7 @@ mod split_evidence;
 mod subagent_evidence;
 mod tab_cwd_evidence;
 mod tab_evidence;
+mod tab_geometry_evidence;
 mod tab_overflow_evidence;
 #[path = "todo_flow_evidence.rs"]
 mod todo_flow_evidence;
@@ -138,6 +139,9 @@ pub fn start(
         return;
     }
     if tab_cwd_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    if tab_geometry_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
     if keymap_evidence::start(handle, evidence.clone(), cx) {

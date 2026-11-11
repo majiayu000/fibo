@@ -111,17 +111,20 @@ jobs:
 
       # Keep the pointer/refresh/save regression inside the required check, not only
       # the optional performance job. Compilation alone does not exercise its events.
-      - name: Native split resize regression
+      - name: Native split resize and tab geometry regressions
         run: |
           cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
           python3 scripts/resize-scenes.py target/debug target/resize-scenes
+          python3 scripts/tab-scenes.py target/debug target/tab-scenes
 
-      - name: Keep resize regression evidence
+      - name: Keep native regression evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: resize-scenes
-          path: target/resize-scenes
+          path: |
+            target/resize-scenes
+            target/tab-scenes
           if-no-files-found: ignore
 
       - name: Upload managed_session retries

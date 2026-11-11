@@ -355,8 +355,21 @@ impl Render for Workbench {
                 .min_by_key(|(g, _)| super::layout::urgency(*g))
                 .map(|(g, _)| g)
                 .filter(|_| !active && !terminal_style);
+            let tail = if terminal_style {
+                close.into_any_element()
+            } else {
+                tabs::tab_tail(close, after, group_name.clone()).into_any_element()
+            };
             strip = strip.child(
-                button(gpui::SharedString::from(format!("tab-{id}")), "")
+                div()
+                    .id(gpui::SharedString::from(format!("tab-{id}")))
+                    .role(gpui::accesskit::Role::Button)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .px(px(T::S12))
+                    .rounded(px(T::CONTROL_RADIUS))
+                    .cursor_pointer()
                     .group(group_name)
                     .aria_label(title.clone())
                     .relative()
@@ -369,12 +382,23 @@ impl Render for Workbench {
                     .h(px(if terminal_style { T::FOOTER } else { T::ROW }))
                     .gap(px(T::S6))
                     .border_0()
-                    .when(terminal_style, |d| d.rounded_none())
+                    .when(terminal_style, |d| {
+                        d.rounded_none()
+                            .hover(|s| s.bg(T::color(T::button_hover())))
+                    })
                     .when(!terminal_style, |d| {
                         d.pl(px(T::S10 - T::BORDER_WIDTH))
                             .pr(px(T::S4 - T::BORDER_WIDTH))
                             .border(px(T::BORDER_WIDTH))
                             .border_color(gpui::transparent_black())
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .hover(move |s| {
+                                s.bg(if active {
+                                    T::surface(T::pane())
+                                } else {
+                                    T::color(T::todo())
+                                })
+                            })
                     })
                     .text_size(px(T::MONO_SIZE))
                     .text_color(T::color(if active { T::primary() } else { T::secondary() }))
@@ -400,21 +424,11 @@ impl Render for Workbench {
                                 title
                             }),
                     )
-                    .when_some(after, |d, g| {
-                        d.child(
-                            div()
-                                .flex_shrink_0()
-                                .text_size(px(T::CHIP_SIZE))
-                                .pr(px(T::S4))
-                                .child(crate::ui::widgets::status_mark(g)),
-                        )
-                    })
-                    .when(active || terminal_style, |d| d.child(close))
+                    .child(tail)
                     // The current tab: white with a hairline, the others bare.
                     .when(active && !terminal_style, |d| {
                         d.bg(T::surface(T::pane()))
                             .border_color(T::color(T::border()))
-                            .font_weight(gpui::FontWeight::MEDIUM)
                     })
                     // The hover card would cover the right-click menu; dropping the
                     // builder while a menu is open also dismisses a visible card.
