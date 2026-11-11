@@ -26,11 +26,11 @@ pub fn current(cx: &App) -> bool {
         .0
 }
 pub fn choose(on: bool, cx: &mut App) -> Result<(), String> {
-    let path = path().ok_or("找不到配置目录")?;
+    let path = path().ok_or(t!("找不到配置目录"))?;
     path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
         .and_then(|()| std::fs::write(&path, RunningSpin(on).text()))
-        .map_err(|e| format!("无法保存 {}：{e}", path.display()))?;
+        .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
     cx.set_global(RunningSpin(on));
     Ok(())
 }

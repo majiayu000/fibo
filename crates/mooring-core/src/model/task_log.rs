@@ -57,11 +57,12 @@ impl Workspace {
             .map(|log| log.notes.iter().map(|n| format!("- {}", n.text)).collect())
             .unwrap_or_default();
         if !notes.is_empty() {
-            parts.push(format!("目前进展：\n{}", notes.join("\n")));
+            parts.push(t!("目前进展：\n{notes}", notes = notes.join("\n")));
         }
-        parts.push(format!(
-            "（这是 Fibo 待办。每做完一段就运行 {note} --task {} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）",
-            task.id
+        parts.push(t!(
+            "（这是 Fibo 待办。每做完一段就运行 {note} --task {id} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）",
+            note,
+            id = &task.id,
         ));
         parts.join("\n\n")
     }
@@ -84,21 +85,22 @@ impl Workspace {
         text: String,
     ) -> Result<(), String> {
         if !self.tasks.iter().any(|t| t.id == task) {
-            return Err("待办不存在".into());
+            return Err(t!("待办不存在").into());
         }
         if session
             .as_ref()
             .is_some_and(|id| !self.agent_sessions.iter().any(|s| &s.id == id))
         {
-            return Err("会话不存在".into());
+            return Err(t!("会话不存在").into());
         }
         let text = text.trim().to_owned();
         if text.is_empty() {
-            return Err("进展不能为空".into());
+            return Err(t!("进展不能为空").into());
         }
         if text.chars().count() > NOTE_LIMIT {
-            return Err(format!(
-                "进展超过 {NOTE_LIMIT} 字，没有写入；只写结论和下一步"
+            return Err(t!(
+                "进展超过 {limit} 字，没有写入；只写结论和下一步",
+                limit = NOTE_LIMIT,
             ));
         }
         self.task_logs
@@ -122,7 +124,7 @@ impl Workspace {
             .as_ref()
             .is_some_and(|id| !self.agent_sessions.iter().any(|s| &s.id == id))
         {
-            return Err("会话不存在".into());
+            return Err(t!("会话不存在").into());
         }
         let id = task.id.clone();
         self.edit(Edit::AddTask(task))?;

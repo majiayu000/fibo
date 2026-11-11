@@ -353,12 +353,17 @@ impl Workbench {
     }
     /// The header button mid-run: a fill sweeps in, the words turn to a check, a ring
     /// spreads out and fades.
-    pub(super) fn completing_button(&self, id: &str, style: Style, t: f32) -> gpui::AnyElement {
+    pub(super) fn completing_button(
+        &self,
+        id: &str,
+        style: Style,
+        progress: f32,
+    ) -> gpui::AnyElement {
         let (dot, _, _) = Tone::Ok.colors();
         let end = timing(style).button;
-        let fill = eo(sl(t, 0., end));
-        let turned = sl(t, end * 0.45, end);
-        let ripple = eo(sl(t, end * 0.6, end * 3.));
+        let fill = eo(sl(progress, 0., end));
+        let turned = sl(progress, end * 0.45, end);
+        let ripple = eo(sl(progress, end * 0.6, end * 3.));
         let out = px(-10. * ripple);
         div()
             .id(gpui::SharedString::from(format!("accept-pane-{id}")))
@@ -413,7 +418,7 @@ impl Workbench {
                     .child(if turned > 0.5 {
                         format!("✓ {}", Status::Closed.label())
                     } else {
-                        "标记完成".to_owned()
+                        t!("标记完成").to_owned()
                     }),
             )
             .into_any_element()
@@ -424,7 +429,7 @@ impl Workbench {
         &self,
         id: &str,
         style: Style,
-        t: f32,
+        progress: f32,
         title: &str,
         cx: &Context<Self>,
     ) -> impl IntoElement {
@@ -438,15 +443,15 @@ impl Workbench {
         let tm = timing(style);
         let keep = id.to_owned();
         let (a, b, c, d) = tm.words;
-        let shown = eo(sl(t, a, b)) * if c > 0. { 1. - sl(t, c, d) } else { 1. };
-        let veil = veil_amount(style, t);
+        let shown = eo(sl(progress, a, b)) * if c > 0. { 1. - sl(progress, c, d) } else { 1. };
+        let veil = veil_amount(style, progress);
         let veil_width = if style == Style::Sweep {
-            sweep_at(t).clamp(0., 1.)
+            sweep_at(progress).clamp(0., 1.)
         } else {
             1.
         };
-        let lids = lids_amount(style, t);
-        let countdown = (t / tm.fade.0).min(1.);
+        let lids = lids_amount(style, progress);
+        let countdown = (progress / tm.fade.0).min(1.);
         let words = div()
             .absolute()
             .left_0()
@@ -471,7 +476,7 @@ impl Workbench {
                         .text_color(ink)
                         .child(style.greeting().map_or_else(
                             || Status::Closed.label().to_owned(),
-                            |g| format!("{}，{g}", Status::Closed.label()),
+                            |g| t!("{done}，{g}", done = Status::Closed.label(), g),
                         )),
                 )
                 .child(
@@ -486,7 +491,7 @@ impl Workbench {
             .child(
                 button(
                     gpui::SharedString::from(format!("keep-pane-{id}")),
-                    "留着这个画面",
+                    t!("留着这个画面"),
                 )
                 .pane_action()
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -509,7 +514,7 @@ impl Workbench {
                     .get(id)
                     .filter(|_| style == Style::Dissolve)
                     .cloned(),
-                |d, pane| d.child(dissolve_wipe(pane, t)),
+                |d, pane| d.child(dissolve_wipe(pane, progress)),
             )
             .when_some(
                 self.layout
@@ -517,7 +522,7 @@ impl Workbench {
                     .get(id)
                     .cloned()
                     .zip(self.layout.completing.get(id).and_then(|r| r.text.clone())),
-                |d, (pane, text)| d.child(snapshot::text_wipe(pane, style, t, text)),
+                |d, (pane, text)| d.child(snapshot::text_wipe(pane, style, progress, text)),
             )
             .child(
                 div()
@@ -559,7 +564,7 @@ impl Workbench {
                         .left_0()
                         .top_0()
                         .h(px(T::PANE_HEADER))
-                        .w(gpui::relative(sweep_at(t).clamp(0., 1.)))
+                        .w(gpui::relative(sweep_at(progress).clamp(0., 1.)))
                         .bg(dot.opacity(0.14)),
                 )
             })
@@ -582,7 +587,7 @@ impl Workbench {
                 div()
                     .absolute()
                     .inset_0()
-                    .bg(T::color(behind).opacity(1. - Self::completing_opacity(style, t))),
+                    .bg(T::color(behind).opacity(1. - Self::completing_opacity(style, progress))),
             )
     }
     /// The part of every run that is not confined to its pane: seals, rings, specks and

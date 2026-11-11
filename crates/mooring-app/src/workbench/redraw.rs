@@ -132,7 +132,7 @@ impl Render for SidebarView {
                     .spaces
                     .iter()
                     .find(|s| s.id == w.nav.space)
-                    .map_or("工作空间".to_owned(), |s| s.name.clone());
+                    .map_or(t!("工作空间").to_owned(), |s| s.name.clone());
                 w.sidebar_view(&name, cx).map(IntoElement::into_any_element)
             })
             .ok()
@@ -341,7 +341,7 @@ impl Workbench {
             }
             "rename" => {
                 let mut space = self.workspace.spaces[3].clone();
-                space.name = "改过名字的空间".into();
+                space.name = not_ui!("改过名字的空间").into();
                 self.edit(Edit::UpdateSpace(space), cx);
             }
             other => panic!("unknown redraw step {other}"),
@@ -352,7 +352,7 @@ impl Workbench {
         self.workspace
             .spaces
             .iter()
-            .any(|s| s.name == "改过名字的空间")
+            .any(|s| s.name == not_ui!("改过名字的空间"))
     }
 }
 

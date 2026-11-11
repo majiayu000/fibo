@@ -48,11 +48,11 @@ impl Render for DiagnosticView {
             steps = steps.child(step);
         }
         let state = if running {
-            "采样中"
+            t!("采样中")
         } else if self.report.as_ref().is_some_and(|r| r.complete) {
-            "采样已结束"
+            t!("采样已结束")
         } else {
-            "采样已停止"
+            t!("采样已停止")
         };
         let mut status = div()
             .flex()
@@ -77,11 +77,12 @@ impl Render for DiagnosticView {
             .child(steps);
         if let Some(report) = &self.report {
             status = status
-                .child(format!(
-                    "已采 {:.1} 秒 · 区间 {done} / 2",
-                    report.elapsed_secs
+                .child(t!(
+                    "已采 {elapsed} 秒 · 区间 {done} / 2",
+                    elapsed = format!("{:.1}", report.elapsed_secs),
+                    done
                 ))
-                .child(format!("· 开始于 {}", clock(report.started_at)));
+                .child(t!("· 开始于 {time}", time = clock(report.started_at)));
         }
         // While waiting, the countdown lives on the body's last line, not here too.
         if let Some(report) = &self.report {
@@ -91,7 +92,7 @@ impl Render for DiagnosticView {
                 .zip(report.cpu_percent)
                 .map(|(c, p)| p / 100. * c as f64);
             let memory = report.memory;
-            let unread = || "不可读".to_string();
+            let unread = || t!("不可读").to_string();
             body = body.child(
                 div()
                     .px(px(T::S20))
@@ -105,41 +106,49 @@ impl Render for DiagnosticView {
                             .border(px(T::BORDER_WIDTH))
                             .border_color(T::color(T::border()))
                             .child(panel(
-                                "整机 CPU · 采样平均",
+                                t!("整机 CPU · 采样平均"),
                                 report.cpu_percent,
                                 [
                                     (
-                                        "核心",
+                                        t!("核心"),
                                         report.cpu_cores.map_or_else(unread, |c| c.to_string()),
                                     ),
                                     (
-                                        "在忙",
-                                        busy.map_or_else(unread, |b| format!("约 {b:.1} 核")),
+                                        t!("在忙"),
+                                        busy.map_or_else(unread, |b| {
+                                            t!("约 {cores} 核", cores = format!("{b:.1}"))
+                                        }),
                                     ),
-                                    ("排行能解释", format!("{listed:.1} 核")),
+                                    (
+                                        t!("排行能解释"),
+                                        t!("{cores} 核", cores = format!("{listed:.1}")),
+                                    ),
                                 ],
-                                format!(
-                                    "排行前 {} 项 · 共 {} 个进程",
-                                    report.ranked().count(),
-                                    report.process_count
+                                t!(
+                                    "排行前 {ranked} 项 · 共 {processes} 个进程",
+                                    ranked = report.ranked().count(),
+                                    processes = report.process_count
                                 ),
                                 false,
                             ))
                             .child(memory_panel(memory))
                             .child(panel(
-                                "GPU 设备 · 最新读数",
+                                t!("GPU 设备 · 最新读数"),
                                 report.gpu_percent,
                                 [
                                     (
-                                        "活跃度",
+                                        t!("活跃度"),
                                         report
                                             .gpu_percent
                                             .map_or_else(unread, |p| format!("{p:.1}%")),
                                     ),
-                                    ("有计数的应用", format!("{} 个", report.gpu_ranked().len())),
-                                    ("区间", format!("{done} / 2")),
+                                    (
+                                        t!("有计数的应用"),
+                                        t!("{count} 个", count = report.gpu_ranked().len()),
+                                    ),
+                                    (t!("区间"), format!("{done} / 2")),
                                 ],
-                                "设备活跃度，不是各应用份额之和".into(),
+                                t!("设备活跃度，不是各应用份额之和").into(),
                                 true,
                             ))
                             .child(corners()),
@@ -190,7 +199,9 @@ impl Render for DiagnosticView {
         } else {
             body = body.child(match (&self.sampling, waited) {
                 (Some(sampling), Some(waited)) => self.waiting(sampling, waited, cx),
-                _ => div().p(px(T::S20)).child("采样已停止，尚无可比较的数据。"),
+                _ => div()
+                    .p(px(T::S20))
+                    .child(t!("采样已停止，尚无可比较的数据。")),
             });
         }
         if let Some(error) = &self.error {
@@ -256,14 +267,16 @@ impl Render for DiagnosticView {
                                             .text_size(px(T::FORM_TITLE))
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
                                             .text_color(T::color(T::primary()))
-                                            .child("本机诊断"),
+                                            .child(t!("本机诊断")),
                                     )
-                                    .child(label("看谁在占 CPU / 内存 / GPU，再把证据交给 Agent")),
+                                    .child(label(t!(
+                                        "看谁在占 CPU / 内存 / GPU，再把证据交给 Agent"
+                                    ))),
                             )
                             .child(status),
                     )
                     .child(
-                        button("diagnostic-close", "关闭 · Esc")
+                        button("diagnostic-close", t!("关闭 · Esc"))
                             .bg(T::color(T::button()))
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(DiagnosticAction::Close))),
                     ),
@@ -303,9 +316,10 @@ impl Render for DiagnosticView {
                     d.child(
                         button(
                             "diagnostic-notes",
-                            format!(
-                                "ⓘ 读数说明 · {notes} 条 {}",
-                                if self.notes_open { "▴" } else { "▾" }
+                            t!(
+                                "ⓘ 读数说明 · {notes} 条 {arrow}",
+                                notes,
+                                arrow = if self.notes_open { "▴" } else { "▾" }
                             ),
                         )
                         .px(px(T::S8))
@@ -316,15 +330,15 @@ impl Render for DiagnosticView {
                         })),
                     )
                 })
-                .child(label("只在本机读取，结束后停止采样"))
+                .child(label(t!("只在本机读取，结束后停止采样")))
                 .child(div().flex_1())
                 .child(
                     button(
                         "diagnostic-run",
                         if running {
-                            "停止采样"
+                            t!("停止采样")
                         } else {
-                            "重新采样"
+                            t!("重新采样")
                         },
                     )
                     .bg(T::color(T::button()))
@@ -342,9 +356,9 @@ impl Render for DiagnosticView {
                         button(
                             "diagnostic-copy",
                             if self.copied {
-                                "已复制 ✓".to_string()
+                                t!("已复制 ✓").to_string()
                             } else {
-                                crate::ui::words::local_field("复制摘要给 Agent · ⌘C")
+                                crate::ui::words::local_field(t!("复制摘要给 Agent · ⌘C"))
                             },
                         )
                         .bg(T::color(T::accent()))

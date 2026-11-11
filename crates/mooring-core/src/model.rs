@@ -164,7 +164,7 @@ impl Task {
             .map(|c| format!("- {c}"))
             .collect();
         if !criteria.is_empty() {
-            parts.push(format!("验收标准：\n{}", criteria.join("\n")));
+            parts.push(t!("验收标准：\n{list}", list = criteria.join("\n")));
         }
         parts.join("\n\n")
     }
@@ -243,11 +243,11 @@ pub enum Binding {
 impl Binding {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Process => "进程报出的会话 ID",
-            Self::Hook => "Agent 的 Hook 上报",
-            Self::OpenFile => "进程打开的对话文件",
-            Self::Screen => "画面上的提示词",
-            Self::Continued => "日志写明从这个终端的会话接着跑",
+            Self::Process => t!("进程报出的会话 ID"),
+            Self::Hook => t!("Agent 的 Hook 上报"),
+            Self::OpenFile => t!("进程打开的对话文件"),
+            Self::Screen => t!("画面上的提示词"),
+            Self::Continued => t!("日志写明从这个终端的会话接着跑"),
         }
     }
 }
@@ -264,10 +264,10 @@ pub enum NameSource {
 impl NameSource {
     pub fn label(self, agent: Agent) -> String {
         match self {
-            Self::User => "你起的名".into(),
-            Self::Task => "待办标题".into(),
-            Self::Agent => format!("{} 起的名", agent.name()),
-            Self::FirstAsk => "第一句话".into(),
+            Self::User => t!("你起的名").into(),
+            Self::Task => t!("待办标题").into(),
+            Self::Agent => t!("{name} 起的名", name = agent.name()),
+            Self::FirstAsk => t!("第一句话").into(),
         }
     }
 }
@@ -347,7 +347,7 @@ impl Workspace {
         self.outcome_history
             .iter()
             .rev()
-            .find(|h| h.session == id && h.reason == "暂存到期")
+            .find(|h| h.session == id && h.reason == not_ui!("暂存到期"))
             .map(|h| h.at)
             .unwrap_or(0)
     }
@@ -503,7 +503,7 @@ impl Workspace {
     fn tab_program(&self, tab: &Tab) -> String {
         let ids = self.tab_terminals(&tab.id);
         let Some(id) = ids.first() else {
-            return "终端".into();
+            return t!("终端").into();
         };
         if let Some(session) = self.current_agent(id) {
             return session.runtime.name().into();
@@ -515,7 +515,7 @@ impl Workspace {
             .and_then(|program| program.rsplit('/').next())
             .map(|program| program.trim_start_matches('-'))
             .filter(|program| !program.is_empty())
-            .unwrap_or("终端")
+            .unwrap_or(t!("终端"))
             .into()
     }
     pub fn tab_terminals(&self, id: &str) -> Vec<String> {

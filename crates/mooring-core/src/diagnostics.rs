@@ -140,91 +140,118 @@ impl Diagnostics {
     /// The text handed to an Agent. `started` is the local start time; `titles` names the
     /// workbench terminals so the Agent reads a tab title, not an internal id.
     pub fn summary(&self, started: &str, titles: &HashMap<String, String>) -> String {
-        let mut text = format!(
-            "本机资源诊断 · 开始于 {} · 采样 {:.1} 秒 · {}\n",
+        let mut text = t!(
+            "本机资源诊断 · 开始于 {started} · 采样 {secs} 秒 · {status}\n",
             started,
-            self.elapsed_secs,
-            if self.complete {
-                "采样结束"
+            secs = format!("{:.1}", self.elapsed_secs),
+            status = if self.complete {
+                t!("采样结束")
             } else {
-                "采样中（部分结果）"
+                t!("采样中（部分结果）")
             },
         );
-        let percent = |p: Option<f64>| p.map_or_else(|| "不可读".into(), |v| format!("{v:.1}%"));
+        let percent =
+            |p: Option<f64>| p.map_or_else(|| t!("不可读#diag").into(), |v| format!("{v:.1}%"));
         let _ = writeln!(
             text,
-            "进程数：{}；CPU 核心：{}",
-            self.process_count,
-            self.cpu_cores
-                .map_or_else(|| "不可读".into(), |c| c.to_string())
+            "{}",
+            t!(
+                "进程数：{procs}；CPU 核心：{cores}",
+                procs = self.process_count,
+                cores = self
+                    .cpu_cores
+                    .map_or_else(|| t!("不可读#diag").into(), |c| c.to_string()),
+            )
         );
         let _ = writeln!(
             text,
-            "整机 CPU 平均：{}（所有核心合计）；最新 GPU 设备活跃度：{}",
-            percent(self.cpu_percent),
-            percent(self.gpu_percent)
+            "{}",
+            t!(
+                "整机 CPU 平均：{cpu}（所有核心合计）；最新 GPU 设备活跃度：{gpu}",
+                cpu = percent(self.cpu_percent),
+                gpu = percent(self.gpu_percent),
+            )
         );
         if let Some(m) = self.memory {
             let _ = writeln!(
                 text,
-                "内存：已用 {} / {}（{}，其中压缩 {}）；交换 {}；内存压力 {}",
-                gib(m.used_bytes),
-                gib(m.total_bytes),
-                percent(m.percent()),
-                gib(m.compressed_bytes),
-                gib(m.swap_bytes),
-                m.pressure.map_or("不可读", Pressure::label),
+                "{}",
+                t!(
+                    "内存：已用 {used} / {total}（{pct}，其中压缩 {comp}）；交换 {swap}；内存压力 {pressure}",
+                    used = gib(m.used_bytes),
+                    total = gib(m.total_bytes),
+                    pct = percent(m.percent()),
+                    comp = gib(m.compressed_bytes),
+                    swap = gib(m.swap_bytes),
+                    pressure = m.pressure.map_or(t!("不可读#diag"), Pressure::label),
+                )
             );
         }
         let listed: f64 = self.ranked().map(|a| a.cpu_percent).sum::<f64>() / 100.;
         if let (Some(cores), Some(rest)) = (self.cpu_cores, self.unattributed_cores()) {
             let _ = writeln!(
                 text,
-                "排行前 {} 项合计约 {listed:.1} 核；整机忙碌中约 {rest:.1} / {cores} 核没有归到任何应用（排行之外或采样间隙里的短命进程）。",
-                self.ranked().count(),
+                "{}",
+                t!(
+                    "排行前 {count} 项合计约 {listed} 核；整机忙碌中约 {rest} / {cores} 核没有归到任何应用（排行之外或采样间隙里的短命进程）。",
+                    count = self.ranked().count(),
+                    listed = format!("{listed:.1}"),
+                    rest = format!("{rest:.1}"),
+                    cores,
+                )
             );
         }
-        text.push_str("\nCPU 排行（100% = 一个核心）\n");
+        text.push_str(t!("\nCPU 排行（100% = 一个核心）\n"));
         for app in self.ranked() {
-            let _ = write!(text, "{}：平均 {:.1}%", app.name, app.cpu_percent);
+            text.push_str(&t!(
+                "{name}：平均 {cpu}%",
+                name = &app.name,
+                cpu = format!("{:.1}", app.cpu_percent),
+            ));
             // One interval gives a peak equal to the average; repeating it is noise.
             if app.cpu_peak_percent > app.cpu_percent + 0.05 {
-                let _ = write!(text, "，区间峰值 {:.1}%", app.cpu_peak_percent);
+                text.push_str(&t!(
+                    "，区间峰值 {peak}%",
+                    peak = format!("{:.1}", app.cpu_peak_percent),
+                ));
             }
-            let _ = write!(
-                text,
-                "，内存 {}，{} 个进程",
-                mib(app.memory_bytes),
-                app.processes
-            );
+            text.push_str(&t!(
+                "，内存 {mem}，{procs} 个进程",
+                mem = mib(app.memory_bytes),
+                procs = app.processes,
+            ));
             let named: Vec<&str> = app
                 .terminals
                 .iter()
                 .filter_map(|id| titles.get(id).map(String::as_str))
                 .collect();
             if !named.is_empty() {
-                let _ = write!(text, "，关联终端：{}", named.join("、"));
+                text.push_str(&t!("，关联终端：{list}", list = named.join(t!("、"))));
             }
             let hidden = app.terminals.len() - named.len();
             if hidden > 0 {
-                let _ = write!(
-                    text,
-                    "{}另有 {hidden} 个终端未在工作台打开",
-                    if named.is_empty() { "，" } else { "；" }
-                );
+                text.push_str(if named.is_empty() {
+                    t!("，")
+                } else {
+                    t!("；")
+                });
+                text.push_str(&t!("另有 {hidden} 个终端未在工作台打开", hidden));
             }
             text.push('\n');
         }
-        text.push_str(
-            "\n内存排行（活动监视器「内存」列口径，含被压缩部分的原始大小，合计会超过已用）\n",
-        );
+        text.push_str(t!(
+            "\n内存排行（活动监视器「内存」列口径，含被压缩部分的原始大小，合计会超过已用）\n"
+        ));
         for app in self.memory_ranked().into_iter().take(10) {
             let _ = writeln!(
                 text,
-                "{}：{}，{} 个进程",
-                app.name,
-                mib(app.memory_bytes),
-                app.processes
+                "{}",
+                t!(
+                    "{name}：{mem}，{procs} 个进程",
+                    name = &app.name,
+                    mem = mib(app.memory_bytes),
+                    procs = app.processes,
+                )
             );
         }
         let mut terms: Vec<_> = self
@@ -234,31 +261,38 @@ impl Diagnostics {
             .collect();
         terms.sort_by_key(|t| std::cmp::Reverse(t.1.memory_bytes));
         if !terms.is_empty() {
-            text.push_str("按终端（整棵进程树，含 Agent 拉起的子进程）：");
+            text.push_str(t!("按终端（整棵进程树，含 Agent 拉起的子进程）："));
             let list: Vec<String> = terms
                 .iter()
                 .map(|(title, t)| format!("{title} {}", mib(t.memory_bytes)))
                 .collect();
-            text.push_str(&list.join("、"));
+            text.push_str(&list.join(t!("、")));
             text.push('\n');
         }
-        text.push_str("\nGPU 活动排行（只占已观测计数增量的份额，不是整颗 GPU 利用率）\n");
+        text.push_str(t!(
+            "\nGPU 活动排行（只占已观测计数增量的份额，不是整颗 GPU 利用率）\n"
+        ));
         let gpu = self.gpu_ranked();
         if gpu.is_empty() {
-            text.push_str("没有可比较的 GPU 计数增量；不代表 GPU 空闲。\n");
+            text.push_str(t!("没有可比较的 GPU 计数增量；不代表 GPU 空闲。\n"));
         }
         for app in gpu {
             let _ = writeln!(
                 text,
-                "{}：已观测份额 {:.1}%",
-                app.name,
-                app.gpu_share_percent.unwrap_or_default()
+                "{}",
+                t!(
+                    "{name}：已观测份额 {share}%",
+                    name = &app.name,
+                    share = format!("{:.1}", app.gpu_share_percent.unwrap_or_default()),
+                )
             );
         }
         for note in &self.notes {
-            let _ = writeln!(text, "说明：{note}");
+            let _ = writeln!(text, "{}", t!("说明：{note}", note));
         }
-        text.push_str("\n请根据以上测量分析占用来源，区分已证实、推测与未知。需要解释根因时先收集对应日志、流量或调用栈，不要仅凭排行判断卡死或直接结束进程。\n");
+        text.push_str(t!(
+            "\n请根据以上测量分析占用来源，区分已证实、推测与未知。需要解释根因时先收集对应日志、流量或调用栈，不要仅凭排行判断卡死或直接结束进程。\n"
+        ));
         text
     }
     /// Apps with a GPU share, largest first, at most ten.

@@ -40,11 +40,11 @@ impl Fill {
     }
     /// What the ring's hover says: 「上下文 84% · 已用 840K / 1M」.
     pub fn text(&self) -> String {
-        format!(
-            "上下文 {}% · 已用 {} / {}",
-            self.percent(),
-            tokens(self.used),
-            tokens(self.window)
+        t!(
+            "上下文 {pct}% · 已用 {used} / {max}",
+            pct = self.percent(),
+            used = tokens(self.used),
+            max = tokens(self.window),
         )
     }
 }

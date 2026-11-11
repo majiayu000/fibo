@@ -249,6 +249,8 @@ impl SettingsView {
                                 .text_color(T::color(T::secondary()))
                                 .child(if shown.is_empty() {
                                     t!("（空）").to_owned()
+                                } else if o.secret {
+                                    mooring_core::i18n::say(&shown).to_owned()
                                 } else {
                                     shown.clone()
                                 }),

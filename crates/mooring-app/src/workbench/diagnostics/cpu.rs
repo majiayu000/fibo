@@ -24,28 +24,32 @@ impl DiagnosticView {
             .enumerate()
             .map(|(i, a)| {
                 Segment::new(a.name.clone(), a.cpu_percent / 100., T::series(i))
-                    .detail(format!("{} 个进程", a.processes))
+                    .detail(t!("{count} 个进程", count = a.processes))
             })
             .collect();
         if ranked.len() > COLORED {
             segments.push(Segment::new(
-                format!("排行其余 {} 项", ranked.len() - COLORED),
+                t!("排行其余 {count} 项", count = ranked.len() - COLORED),
                 rest,
                 T::series_other(),
             ));
         }
-        let mut hatched = Segment::new("未归属".into(), unattributed, T::hatch())
-            .detail("排行之外或采样间隙里的短命进程".into());
+        let mut hatched = Segment::new(t!("未归属").into(), unattributed, T::hatch())
+            .detail(t!("排行之外或采样间隙里的短命进程").into());
         hatched.hatched = true;
         segments.push(hatched);
         let idle = (total - busy).max(0.);
         if idle >= 0.05 {
-            segments.push(Segment::new("空闲".into(), idle, T::chart_grid()));
+            segments.push(Segment::new(t!("空闲").into(), idle, T::chart_grid()));
         }
         let (stack, legend) = stack_chart("diag-core", segments, |v| {
             (
-                format!("{v:.2} 核 · 整机 {:.1}%", v / total * 100.),
-                format!("{v:.2} 核"),
+                t!(
+                    "{cores} 核 · 整机 {pct}%",
+                    cores = format!("{v:.2}"),
+                    pct = format!("{:.1}", v / total * 100.)
+                ),
+                t!("{cores} 核", cores = format!("{v:.2}")),
             )
         });
         let mut scale = div()
@@ -56,11 +60,11 @@ impl DiagnosticView {
             .text_color(T::color(T::muted()));
         for q in 0..=4 {
             let at = q as f32 / 4.;
-            let text = format!(
-                "{:.0}{}",
-                total * at as f64,
-                if q == 4 { " 核" } else { "" }
-            );
+            let text = if q == 4 {
+                t!("{cores} 核", cores = format!("{:.0}", total * at as f64))
+            } else {
+                format!("{:.0}", total * at as f64)
+            };
             scale = scale.child(tick(text, at));
         }
         let mut section = div()
@@ -70,16 +74,20 @@ impl DiagnosticView {
             .border_b(px(T::BORDER_WIDTH))
             .border_color(T::color(T::border()))
             .child(heading(
-                "全部核心都在忙什么",
-                "宽度 = 平均占用的核心数 · 悬停看明细",
+                t!("全部核心都在忙什么"),
+                t!("宽度 = 平均占用的核心数 · 悬停看明细"),
             ))
             .child(stack)
             .child(scale)
             .child(legend);
         if unattributed >= 0.5 {
-            section = section.child(chart_note("推测", format!(
-                "约 {unattributed:.1} 核没有归到排行里的应用。可能来自排行之外的进程，或在两次采样之间出生又退出的短命进程（排行只统计前后都在的进程）。要确认，需要抓进程创建记录。"
-            )));
+            section = section.child(chart_note(
+                t!("推测"),
+                t!(
+                    "约 {cores} 核没有归到排行里的应用。可能来自排行之外的进程，或在两次采样之间出生又退出的短命进程（排行只统计前后都在的进程）。要确认，需要抓进程创建记录。",
+                    cores = format!("{unattributed:.1}")
+                ),
+            ));
         }
         Some(section)
     }
@@ -91,7 +99,7 @@ impl DiagnosticView {
             .min_w_0()
             .px(px(T::S20))
             .py(px(T::S16))
-            .child(heading("CPU 占用排行", "平均 · 虚线 = 1 个核心"))
+            .child(heading(t!("CPU 占用排行"), t!("平均 · 虚线 = 1 个核心")))
             .child(axis(max, step, Some(100.), T::BAR_LABEL));
         // The right column holds the scatter only; GPU moved beside the memory ranking.
         let first = first_rows(0);
@@ -110,7 +118,11 @@ impl DiagnosticView {
             let named: Vec<(String, String)> = app
                 .terminals
                 .iter()
-                .filter_map(|id| self.terminals.get(id).map(|t| (id.clone(), t.clone())))
+                .filter_map(|id| {
+                    self.terminals
+                        .get(id)
+                        .map(|title| (id.clone(), title.clone()))
+                })
                 .collect();
             let open = self.open.as_deref() == Some(app.name.as_str()) && !named.is_empty();
             let mut extra = div().flex().items_center().gap(px(T::S4)).flex_shrink_0();
@@ -131,10 +143,10 @@ impl DiagnosticView {
                         .text_color(T::color(T::link()))
                         .cursor_pointer()
                         .hover(|s| s.bg(T::color(T::button_hover())))
-                        .child(format!(
-                            "{} 终端 {}",
-                            named.len(),
-                            if open { "▴" } else { "▾" }
+                        .child(t!(
+                            "{count} 终端 {arrow}",
+                            count = named.len(),
+                            arrow = if open { "▴" } else { "▾" }
                         ))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.open =
@@ -145,19 +157,22 @@ impl DiagnosticView {
             }
             let mut lines = vec![
                 app.name.clone(),
-                format!(
-                    "平均 {:.1}% ≈ {} 核",
-                    app.cpu_percent,
-                    cores(app.cpu_percent)
+                t!(
+                    "平均 {avg}% ≈ {cores} 核",
+                    avg = format!("{:.1}", app.cpu_percent),
+                    cores = cores(app.cpu_percent)
                 ),
             ];
             if app.cpu_peak_percent > app.cpu_percent + 0.05 {
-                lines.push(format!("区间峰值 {:.1}%", app.cpu_peak_percent));
+                lines.push(t!(
+                    "区间峰值 {peak}%",
+                    peak = format!("{:.1}", app.cpu_peak_percent)
+                ));
             }
-            lines.push(format!(
-                "内存 {} · {} 个进程",
-                mib(app.memory_bytes),
-                app.processes
+            lines.push(t!(
+                "内存 {mem} · {count} 个进程",
+                mem = mib(app.memory_bytes),
+                count = app.processes
             ));
             let color = if i < COLORED {
                 T::series(i)
@@ -220,9 +235,9 @@ impl DiagnosticView {
                 button(
                     "diagnostic-more",
                     if self.all_rows {
-                        "收起".to_owned()
+                        t!("收起").to_owned()
                     } else {
-                        format!("再显示 {} 项", ranked.len() - first)
+                        t!("再显示 {count} 项", count = ranked.len() - first)
                     },
                 )
                 .mt(px(T::S6))
@@ -243,11 +258,13 @@ impl DiagnosticView {
                     .mt(px(T::S10))
                     .text_size(px(T::META))
                     .text_color(T::color(T::muted()))
-                    .child("只采到 1 个区间，峰值暂同平均；第 2 个区间后会出现峰值刻度。"),
+                    .child(t!(
+                        "只采到 1 个区间，峰值暂同平均；第 2 个区间后会出现峰值刻度。"
+                    )),
             );
         }
         if ranked.is_empty() {
-            column = column.child(label("这次没有测到 CPU 占用。"));
+            column = column.child(label(t!("这次没有测到 CPU 占用。")));
         }
         column
     }

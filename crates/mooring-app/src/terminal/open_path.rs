@@ -72,12 +72,12 @@ pub fn installed(editor: Editor) -> Option<PathBuf> {
 
 pub fn editor_name(editor: Editor) -> &'static str {
     match editor {
-        Editor::Auto => "自动",
+        Editor::Auto => t!("自动"),
         Editor::Zed => "Zed",
         Editor::VsCode => "VS Code",
         Editor::Cursor => "Cursor",
         Editor::Terminal => "$EDITOR",
-        Editor::System => "默认程序",
+        Editor::System => t!("默认程序"),
     }
 }
 
@@ -142,15 +142,26 @@ pub fn plan(
 
 /// The note shown beside a hovered path while ⌘ is held.
 pub fn hint(plan: &Plan) -> String {
-    const REVEAL: &str = "⌘⌥ 在访达中显示";
+    let reveal = t!("⌘⌥ 在访达中显示");
     match plan {
-        Plan::Reveal { executable: true } => "可执行文件 · ⌘ 点击在访达中显示，不运行".into(),
-        Plan::Reveal { executable: false } => "⌘ 点击在访达中显示".into(),
-        Plan::OpenFolder => format!("⌘ 点击在访达中打开 · {REVEAL}"),
-        Plan::OpenFile => format!("⌘ 点击打开 · {REVEAL}"),
-        Plan::Editor { name, line, .. } => format!("⌘ 点击在 {name} 打开第 {line} 行 · {REVEAL}"),
+        Plan::Reveal { executable: true } => t!("可执行文件 · ⌘ 点击在访达中显示，不运行").into(),
+        Plan::Reveal { executable: false } => t!("⌘ 点击在访达中显示").into(),
+        Plan::OpenFolder => t!("⌘ 点击在访达中打开 · {reveal}", reveal),
+        Plan::OpenFile => t!("⌘ 点击打开 · {reveal}", reveal),
+        Plan::Editor { name, line, .. } => {
+            t!(
+                "⌘ 点击在 {name} 打开第 {line} 行 · {reveal}",
+                name,
+                line,
+                reveal
+            )
+        }
         Plan::Terminal { line, .. } => {
-            format!("⌘ 点击在新标签用 $EDITOR 打开第 {line} 行 · {REVEAL}")
+            t!(
+                "⌘ 点击在新标签用 $EDITOR 打开第 {line} 行 · {reveal}",
+                line,
+                reveal
+            )
         }
     }
 }

@@ -175,16 +175,16 @@ impl Workbench {
         self.sync_panes(cx);
         let fields = match kind {
             FormKind::Defer | FormKind::TaskDefer => vec![
-                cx.new(|cx| Field::new("为什么稍后再看（必填）", "", cx)),
-                cx.new(|cx| Field::new("多少小时后再看（必填）", "24", cx)),
+                cx.new(|cx| Field::new(t!("为什么稍后再看（必填）"), "", cx)),
+                cx.new(|cx| Field::new(t!("多少小时后再看（必填）"), "24", cx)),
             ],
             FormKind::Task => vec![
                 cx.new(|cx| {
-                    Field::new("要做什么", "", cx)
+                    Field::new(t!("要做什么"), "", cx)
                         .compact()
-                        .placeholder("要做什么")
+                        .placeholder(t!("要做什么"))
                 }),
-                cx.new(|cx| Field::new("说明（可选 · 原样交给 Agent）", "", cx)),
+                cx.new(|cx| Field::new(t!("说明（可选 · 原样交给 Agent）"), "", cx)),
             ],
         };
         let watch = fields
@@ -247,9 +247,9 @@ impl Workbench {
     ) {
         let text = criterion.map_or("", |c| c.description.as_str());
         let field = cx.new(|cx| {
-            Field::new("验收标准", text, cx)
+            Field::new(t!("验收标准"), text, cx)
                 .inline()
-                .placeholder("写一条完成时怎么核对…")
+                .placeholder(t!("写一条完成时怎么核对…"))
         });
         // Enter on a written line opens the next one below it.
         let events = cx.subscribe_in(&field, window, |this, field, event, window, cx| {
@@ -360,7 +360,7 @@ impl Workbench {
                     .ok()
                     .filter(|h| *h > 0 && *h <= 24 * 365);
                 if values[0].trim().is_empty() || hours.is_none() {
-                    self.error = Some("请写明为什么稍后再看，并填 1–8760 小时后再看".into());
+                    self.error = Some(t!("请写明为什么稍后再看，并填 1–8760 小时后再看").into());
                     self.tasks.form = Some(form);
                     return;
                 }
@@ -466,7 +466,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap(px(T::S16))
-            .child(div().text_size(px(T::FORM_TITLE)).child("稍后再看"));
+            .child(div().text_size(px(T::FORM_TITLE)).child(t!("稍后再看")));
         for field in &form.fields {
             panel = panel.child(field.clone());
         }
@@ -476,11 +476,11 @@ impl Workbench {
                     .flex()
                     .gap(px(T::S8))
                     .child(
-                        button("save", "保存")
+                        button("save", t!("保存"))
                             .on_click(cx.listener(|this, _, _, cx| this.save_form(false, cx))),
                     )
                     .child(
-                        button("cancel", "取消").on_click(cx.listener(|this, _, _, cx| {
+                        button("cancel", t!("取消")).on_click(cx.listener(|this, _, _, cx| {
                             this.tasks.form = None;
                             cx.notify();
                         })),

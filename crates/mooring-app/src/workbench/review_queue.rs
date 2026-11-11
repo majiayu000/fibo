@@ -96,7 +96,7 @@ impl Workbench {
             "skip" => self.overview.cleanup_index += 1,
             "defersave" => {
                 if let Some(form) = &self.tasks.form {
-                    form.fields[0].update(cx, |f, _| f.set_text("等周一再看"));
+                    form.fields[0].update(cx, |f, _| f.set_text(not_ui!("等周一再看")));
                 }
                 self.save_form(false, cx);
             }

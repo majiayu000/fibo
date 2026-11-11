@@ -42,7 +42,7 @@ impl Prepared {
     /// can, and no failure is called installed.
     pub fn commit(mut self) -> Result<PathBuf, String> {
         use crate::setup::Phase;
-        let stage = self.stage.take().ok_or("已经装过了")?;
+        let stage = self.stage.take().ok_or(t!("已经装过了"))?;
         let (plugins, id) = (self.plugins.clone(), self.id.clone());
         let discard = |err: String| {
             let _ = std::fs::remove_dir_all(&stage);
@@ -59,9 +59,10 @@ impl Prepared {
             // `<id>` may hold another plugin (an example copied and renamed) or a broken
             // one someone is writing: never delete it to make room.
             None if plugins.join(&id).exists() => {
-                return Err(discard(format!(
-                    "{} 已被别的东西占用（不是插件 {id}），没有安装；把它移走或改名后再装",
-                    plugins.join(&id).display(),
+                return Err(discard(t!(
+                    "{path} 已被别的东西占用（不是插件 {id}），没有安装；把它移走或改名后再装",
+                    path = plugins.join(&id).display(),
+                    id
                 )));
             }
             None => plugins.join(&id),
@@ -74,37 +75,50 @@ impl Prepared {
         // The update drops its setup: this is the last time the old teardown exists.
         if on && old_setup && !provides_setup(&stage) {
             crate::setup::run(&plugins, &target, Phase::Teardown).map_err(|err| {
-                discard(format!(
-                    "没有更新：新版本不再带安装步骤，要先撤回旧版做的事，但 {err}"
+                discard(t!(
+                    "没有更新：新版本不再带安装步骤，要先撤回旧版做的事，但 {err}",
+                    err
                 ))
             })?;
         }
         let old = plugins.join(format!(".replaced-{id}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&old);
         if had {
-            std::fs::rename(&target, &old)
-                .map_err(|err| discard(format!("换不掉旧的 {}：{err}", target.display())))?;
+            std::fs::rename(&target, &old).map_err(|err| {
+                discard(t!("换不掉旧的 {path}：{err}", path = target.display(), err))
+            })?;
         }
         if let Err(err) = std::fs::rename(&stage, &target) {
             if had {
                 let _ = std::fs::rename(&old, &target);
             }
-            return Err(discard(format!("装不进 {}：{err}", target.display())));
+            return Err(discard(t!(
+                "装不进 {path}：{err}",
+                path = target.display(),
+                err
+            )));
         }
         if on && let Err(err) = crate::setup::run(&plugins, &target, Phase::Setup) {
             let _ = crate::setup::run(&plugins, &target, Phase::Teardown);
             if had {
                 let _ = std::fs::remove_dir_all(&target);
-                std::fs::rename(&old, &target)
-                    .map_err(|e| format!("{err}；旧版也没能放回去（{e}）：{}", old.display()))?;
+                std::fs::rename(&old, &target).map_err(|e| {
+                    t!(
+                        "{err}；旧版也没能放回去（{e}）：{old}",
+                        err,
+                        e,
+                        old = old.display()
+                    )
+                })?;
                 if old_setup {
                     let _ = crate::setup::run(&plugins, &target, Phase::Setup);
                 }
-                return Err(format!("没有更新，旧版还在：{err}"));
+                return Err(t!("没有更新，旧版还在：{err}", err));
             }
-            plugin::mark_off(&plugins, &id).map_err(|e| format!("{err}；也没能停用它：{e}"))?;
-            return Err(format!(
-                "装上了但没有启用：{err}；修好后在 设置 › 插件 里打开可以重试"
+            plugin::mark_off(&plugins, &id).map_err(|e| t!("{err}；也没能停用它：{e}", err, e))?;
+            return Err(t!(
+                "装上了但没有启用：{err}；修好后在 设置 › 插件 里打开可以重试",
+                err
             ));
         }
         let _ = std::fs::remove_dir_all(&old);
@@ -134,7 +148,7 @@ pub struct InstalledFrom {
 }
 pub(super) const SOURCE_FILE: &str = "source.json";
 /// This repository's catalog, whichever way it arrived: shipped with the app or fetched.
-pub(super) const OFFICIAL: &str = "官方目录";
+pub(super) const OFFICIAL: &str = tk!("官方目录");
 
 /// Every file under `dir`, relative to it; hidden ones are nobody's plugin file.
 fn files_under(dir: &Path) -> Vec<String> {
@@ -179,24 +193,31 @@ pub(super) fn replacing(
             && r.key.as_deref().is_some_and(|k| OFFICIAL_KEYS.contains(&k));
         match (&r.key, offer.publisher.key()) {
             // The serious one, whatever the address says.
-            (Some(was), now) if now.as_ref() != Some(was) && !still_official => out.push(format!(
-                "发布者变了：原来的密钥是 {}，这次{}",
-                Publisher::fingerprint(was),
-                now.map_or("没有签名".to_owned(), |k| format!(
-                    "是 {}",
-                    Publisher::fingerprint(&k)
-                ))
+            (Some(was), Some(now)) if now != *was && !still_official => out.push(t!(
+                "发布者变了：原来的密钥是 {was}，这次是 {now}",
+                was = Publisher::fingerprint(was),
+                now = Publisher::fingerprint(&now),
             )),
+            (Some(was), None) if !still_official => out.push(t!(
+                "发布者变了：原来的密钥是 {was}，这次没有签名",
+                was = Publisher::fingerprint(was),
+            )),
+            (Some(_), Some(_)) => {}
             _ if r.from != from => {
-                out.push(format!("来源变了：原来来自 {}，这次来自 {from}", r.from));
+                out.push(t!(
+                    "来源变了：原来来自 {was}，这次来自 {from}",
+                    was = crate::i18n::say(&r.from),
+                    from = crate::i18n::say(&from),
+                ));
             }
             _ => {}
         }
     }
     if old.name != new.name {
-        out.push(format!(
-            "这是另一个名字的插件：「{}」换成「{}」",
-            old.name, new.name
+        out.push(t!(
+            "这是另一个名字的插件：「{old}」换成「{new}」",
+            old = old.name,
+            new = new.name
         ));
     }
     let keeps = |f: &String| {
@@ -208,9 +229,9 @@ pub(super) fn replacing(
         .filter(|f| !keeps(f))
         .collect();
     if !own.is_empty() {
-        out.push(format!(
-            "目录里这些文件不是包里的，换掉后就没了：{}",
-            own.join("、")
+        out.push(t!(
+            "目录里这些文件不是包里的，换掉后就没了：{files}",
+            files = own.join(t!("、"))
         ));
     }
     out
@@ -259,7 +280,12 @@ pub(super) fn loadable(p: &Plugin) -> Result<(), String> {
                     .file_name()
                     .unwrap_or_default()
                     .to_string_lossy();
-                return Err(format!("{} 的 {file} 加载不了，没有安装：{why}", p.id));
+                return Err(t!(
+                    "{id} 的 {file} 加载不了，没有安装：{why}",
+                    id = p.id,
+                    file,
+                    why
+                ));
             }
         }
     }
@@ -267,11 +293,11 @@ pub(super) fn loadable(p: &Plugin) -> Result<(), String> {
     // A hook left with no event never fires: installing that is a mistake, whichever it is.
     for h in crate::hook::load(p.files(Kind::Hooks)).0 {
         if h.on.is_empty() {
-            return Err(format!(
-                "{} 的 hook {} 没有这个版本认识的事件（{}），没有安装",
-                p.id,
-                h.id,
-                h.skipped.join("、")
+            return Err(t!(
+                "{id} 的 hook {hook} 没有这个版本认识的事件（{events}），没有安装",
+                id = p.id,
+                hook = h.id,
+                events = h.skipped.join(t!("、"))
             ));
         }
     }
@@ -299,7 +325,7 @@ pub(super) fn no_conflict(plugins: &Path, p: &Plugin) -> Result<(), String> {
             if own.contains(&loaded.file)
                 && let Err(why) = loaded.result
             {
-                return Err(format!("{} 和已装的插件冲突，没有安装：{why}", p.id));
+                return Err(t!("{id} 和已装的插件冲突，没有安装：{why}", id = p.id, why));
             }
         }
     }
@@ -372,13 +398,13 @@ pub fn disclosure_of(p: &Plugin) -> Vec<String> {
     };
     let mut out = disclosure(&p.provides, &p.touches, network);
     for url in &webhooks {
-        out.push(format!("把会话标题和回复第一行发到：{url}"));
+        out.push(t!("把会话标题和回复第一行发到：{url}", url));
     }
     for c in commands.iter().take(SHOWN_COMMANDS) {
-        out.push(format!("要跑的命令：{}", crate::content::short(c, 160)));
+        out.push(t!("要跑的命令：{cmd}", cmd = crate::content::short(c, 160)));
     }
     if commands.len() > SHOWN_COMMANDS {
-        out.push(format!("还有 {} 条命令", commands.len() - SHOWN_COMMANDS));
+        out.push(t!("还有 {n} 条命令", n = commands.len() - SHOWN_COMMANDS));
     }
     out
 }
@@ -390,27 +416,27 @@ pub(super) fn added(old: &Plugin, new: &Plugin) -> Vec<String> {
     let mut out = Vec::new();
     for k in new.provides.iter().filter(|k| !old.provides.contains(k)) {
         if runs_commands(&[*k]) {
-            out.push(format!(
-                "这次更新新增了「{}」：{}",
-                k.label(),
-                permissions(&[*k])[0]
+            out.push(t!(
+                "这次更新新增了「{kind}」：{what}",
+                kind = k.label(),
+                what = permissions(&[*k])[0]
             ));
         }
     }
     for t in new.touches.iter().filter(|t| !old.touches.contains(t)) {
-        out.push(format!("这次更新新增了要改的文件：{t}"));
+        out.push(t!("这次更新新增了要改的文件：{t}", t));
     }
     let online = |p: &Plugin, hooks: &[String]| p.network == Some(true) || !hooks.is_empty();
     if online(new, &new_hooks) && !online(old, &old_hooks) {
-        out.push("这次更新开始联网".to_owned());
+        out.push(t!("这次更新开始联网").to_owned());
     }
     for url in new_hooks.iter().filter(|u| !old_hooks.contains(u)) {
-        out.push(format!("这次更新新增了发送地址：{url}"));
+        out.push(t!("这次更新新增了发送地址：{url}", url));
     }
     for c in new_commands.iter().filter(|c| !old_commands.contains(c)) {
-        out.push(format!(
-            "这次更新新增或改了命令：{}",
-            crate::content::short(c, 160)
+        out.push(t!(
+            "这次更新新增或改了命令：{cmd}",
+            cmd = crate::content::short(c, 160)
         ));
     }
     out

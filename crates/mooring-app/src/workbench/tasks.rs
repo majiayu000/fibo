@@ -88,17 +88,17 @@ impl Workbench {
             .map(|s| s.runtime)
             .unwrap_or(task.agent);
         let message = match state {
-            HandoffState::Waiting => format!(
-                "为待办「{}」启动 {}，就绪后发送待办内容",
-                task.title,
-                agent.name()
+            HandoffState::Waiting => t!(
+                "为待办「{title}」启动 {agent}，就绪后发送待办内容",
+                title = &task.title,
+                agent = agent.name()
             ),
-            HandoffState::Placed => "已放入待办内容，检查后在 Agent 里按回车发送".to_owned(),
-            HandoffState::Sending => "正在发送待办内容".to_owned(),
-            HandoffState::NotReady => "Agent 还没准备好，内容没有发送".to_owned(),
-            HandoffState::Missing => format!(
-                "找不到 {} 命令，内容没有发送。先安装它或把它加进 PATH，再点「再试一次」",
-                agent.name()
+            HandoffState::Placed => t!("已放入待办内容，检查后在 Agent 里按回车发送").to_owned(),
+            HandoffState::Sending => t!("正在发送待办内容").to_owned(),
+            HandoffState::NotReady => t!("Agent 还没准备好，内容没有发送").to_owned(),
+            HandoffState::Missing => t!(
+                "找不到 {agent} 命令，内容没有发送。先安装它或把它加进 PATH，再点「再试一次」",
+                agent = agent.name()
             ),
         };
         let stuck = matches!(state, HandoffState::NotReady | HandoffState::Missing);
@@ -117,29 +117,33 @@ impl Workbench {
             }))
             .when(task.acceptance.is_empty(), |d| {
                 let task = task.clone();
-                d.child(label("还没写验收标准").text_color(Tone::Warn.ink()))
-                    .child(button("handoff-criteria", "补写").on_click(cx.listener(
+                d.child(label(t!("还没写验收标准")).text_color(Tone::Warn.ink()))
+                    .child(button("handoff-criteria", t!("补写")).on_click(cx.listener(
                         move |this, _, window, cx| this.edit_task_form(&task, window, cx),
                     )))
             })
             .when(stuck, |d| {
                 let retry = terminal.clone();
-                d.child(button("handoff-retry", "再试一次").on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        if let Some(p) = this.layout.panes.get(&retry) {
-                            p.update(cx, |p, cx| p.retry_handoff(cx));
-                        }
-                    },
-                )))
+                d.child(
+                    button("handoff-retry", t!("再试一次")).on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            if let Some(p) = this.layout.panes.get(&retry) {
+                                p.update(cx, |p, cx| p.retry_handoff(cx));
+                            }
+                        },
+                    )),
+                )
             })
             .child(
-                button("handoff-copy", self.copy_label("handoff-copy", "复制内容")).on_click(
-                    cx.listener(move |this, _, _, cx| {
-                        this.copy_text("handoff-copy", text.clone(), cx)
-                    }),
-                ),
+                button(
+                    "handoff-copy",
+                    self.copy_label("handoff-copy", t!("复制内容")),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.copy_text("handoff-copy", text.clone(), cx)
+                })),
             )
-            .child(button("handoff-dismiss", "收起").on_click({
+            .child(button("handoff-dismiss", t!("收起")).on_click({
                 let terminal = terminal.clone();
                 cx.listener(move |this, _, _, cx| {
                     if let Some(p) = this.layout.panes.get(&terminal) {
@@ -148,19 +152,21 @@ impl Workbench {
                 })
             }))
             .when(self.current_agent(&terminal).is_none(), |d| {
-                d.child(button("handoff-unlink", "不关联待办").on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        if this.current_agent(&terminal).is_none() {
-                            this.edit(
-                                Edit::SetPendingTask {
-                                    terminal: terminal.clone(),
-                                    task: None,
-                                },
-                                cx,
-                            );
-                        }
-                    },
-                )))
+                d.child(
+                    button("handoff-unlink", t!("不关联待办")).on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            if this.current_agent(&terminal).is_none() {
+                                this.edit(
+                                    Edit::SetPendingTask {
+                                        terminal: terminal.clone(),
+                                        task: None,
+                                    },
+                                    cx,
+                                );
+                            }
+                        },
+                    )),
+                )
             })
     }
     /// 开始 asks which Agent first, unless the task already has a pane to return to.
@@ -213,11 +219,12 @@ impl Workbench {
             .child(
                 // On the board the card it opens on already says which todo.
                 label(if self.nav.overview {
-                    "用哪个 Agent".to_owned()
+                    t!("用哪个 Agent").to_owned()
                 } else {
-                    format!(
-                        "「{}」用哪个 Agent",
-                        self.workspace
+                    t!(
+                        "「{title}」用哪个 Agent",
+                        title = self
+                            .workspace
                             .tasks
                             .iter()
                             .find(|t| t.id == task)
@@ -252,7 +259,7 @@ impl Workbench {
             row.child(
                 button(
                     gpui::SharedString::from(format!("pick-plain-{task}")),
-                    "普通终端",
+                    t!("普通终端"),
                 )
                 .h(px(T::ICON_HEIGHT))
                 .px(px(T::S6))
@@ -271,7 +278,7 @@ impl Workbench {
             row.child(
                 button(
                     gpui::SharedString::from(format!("pick-cancel-{task}")),
-                    "取消",
+                    t!("取消"),
                 )
                 .h(px(T::ICON_HEIGHT))
                 .px(px(T::S6))
@@ -298,7 +305,7 @@ impl Workbench {
         self.tasks.form = None;
         self.nav.task_detail = None;
         self.sync_panes(cx);
-        let field = cx.new(|cx| Field::new("要做什么（回车保存，Esc 取消）", "", cx).compact());
+        let field = cx.new(|cx| Field::new(t!("要做什么（回车保存，Esc 取消）"), "", cx).compact());
         let subscription = cx.subscribe(&field, |this, _, event, cx| match event {
             crate::ui::field::FieldEvent::Submit => this.save_quick_task(false, cx),
             crate::ui::field::FieldEvent::Cancel => {
@@ -318,7 +325,7 @@ impl Workbench {
         };
         let title = field.read(cx).text.trim().to_owned();
         if title.is_empty() {
-            self.error = Some("先写要做什么".into());
+            self.error = Some(t!("先写要做什么").into());
             cx.notify();
             return;
         }
@@ -366,7 +373,7 @@ impl Workbench {
                         .flex()
                         .gap(px(T::S4))
                         .child(
-                            button("quick-save-start", "保存并开始")
+                            button("quick-save-start", t!("保存并开始"))
                                 .h(px(T::ICON_HEIGHT))
                                 .px(px(T::S6))
                                 .text_size(px(T::META))
@@ -377,7 +384,7 @@ impl Workbench {
                                 ),
                         )
                         .child(
-                            button("quick-save", "保存")
+                            button("quick-save", t!("保存"))
                                 .h(px(T::ICON_HEIGHT))
                                 .px(px(T::S6))
                                 .text_size(px(T::META))
@@ -386,7 +393,7 @@ impl Workbench {
                                 ),
                         )
                         .child(
-                            button("quick-expand", "展开")
+                            button("quick-expand", t!("展开"))
                                 .h(px(T::ICON_HEIGHT))
                                 .px(px(T::S6))
                                 .text_size(px(T::META))
@@ -395,7 +402,7 @@ impl Workbench {
                                 })),
                         )
                         .child(
-                            button("quick-cancel", "取消")
+                            button("quick-cancel", t!("取消"))
                                 .h(px(T::ICON_HEIGHT))
                                 .px(px(T::S6))
                                 .text_size(px(T::META))

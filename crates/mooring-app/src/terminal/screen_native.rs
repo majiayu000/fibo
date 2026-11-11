@@ -83,7 +83,8 @@ pub fn verify_native_geometry(window: &Window, cx: &App) {
             pane.top() + metrics.height * 5.
         )
     );
-    for text in ["nihao", "n你😀hao", "e\u{301}", "👨‍👩‍👧‍👦🇨🇳👍🏽"] {
+    for text in ["nihao", not_ui!("n你😀hao"), "e\u{301}", "👨‍👩‍👧‍👦🇨🇳👍🏽"]
+    {
         let marked = MarkedText::new(text, font.clone(), anchor, window);
         assert_eq!(marked.bounds.origin, anchor.origin);
         let whole = marked.range_bounds(0..text.encode_utf16().count());
@@ -109,7 +110,17 @@ pub fn verify_native_geometry(window: &Window, cx: &App) {
             );
         }
     }
-    for text in ["实", "现", "反", "馈", "日", "語", "한", "글", "😀"] {
+    for text in [
+        not_ui!("实"),
+        not_ui!("现"),
+        not_ui!("反"),
+        not_ui!("馈"),
+        not_ui!("日"),
+        not_ui!("語"),
+        "한",
+        "글",
+        "😀",
+    ] {
         let run = Run {
             col: 0,
             cols: 2,

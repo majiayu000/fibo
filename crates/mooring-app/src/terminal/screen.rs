@@ -223,7 +223,7 @@ fn row_words(cells: &[(u16, u16, char)]) -> Vec<(usize, usize)> {
     let separator = |c: char| {
         c.is_whitespace()
             || "\"'`()[]{}<>|,;*".contains(c)
-            || "。，、；：！？（）「」『』《》【】“”‘’…".contains(c)
+            || not_ui!("。，、；：！？（）「」『』《》【】“”‘’…").contains(c)
             || ('\u{2500}'..='\u{259f}').contains(&c)
     };
     let mut words = Vec::new();

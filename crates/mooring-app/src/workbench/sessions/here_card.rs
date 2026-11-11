@@ -23,9 +23,9 @@ impl Workbench {
         let (group, _) = session_status(&self.workspace, &self.attention.unseen, session);
         let mut meta = vec![session.runtime.executable().to_owned()];
         if card.turn_started > 0 && card.updated > card.turn_started {
-            meta.push(format!(
-                "本轮 {}",
-                span_label(card.updated - card.turn_started)
+            meta.push(t!(
+                "本轮 {v1}",
+                v1 = span_label(card.updated - card.turn_started)
             ));
         }
         meta.push(ago(self.session_updated(session), now()));
@@ -45,7 +45,7 @@ impl Workbench {
                             .text_size(px(T::META))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(T::color(T::muted()))
-                            .child("你在这里"),
+                            .child(t!("你在这里")),
                     )
                     .child(div().flex_1())
                     .child(
@@ -114,7 +114,13 @@ impl Workbench {
                 )
         };
         // Each later ask on its own line, not run together with 「追加：」.
-        let mut asks = h.ask.split("\n追加：");
+        let sep = mooring_core::i18n::say(not_ui!("\n追加："));
+        let parts: Vec<&str> = if h.ask.contains(sep) {
+            h.ask.split(sep).collect()
+        } else {
+            h.ask.split(not_ui!("\n追加：")).collect()
+        };
+        let mut asks = parts.into_iter();
         let mut ask = div()
             .flex()
             .flex_col()
@@ -124,7 +130,7 @@ impl Workbench {
             ask = ask.child(
                 div()
                     .text_color(T::color(T::secondary()))
-                    .child(format!("追加 {more}")),
+                    .child(t!("追加 {more}", more)),
             );
         }
         // Only fields that say something: no evidence yet is not news, and the guessed
@@ -135,7 +141,7 @@ impl Workbench {
             .flex_col()
             .gap(px(T::S8))
             .text_size(px(T::SMALL))
-            .child(fact("你要它", ask));
+            .child(fact(t!("你要它"), ask));
         if !done.is_empty() {
             let mut list = div().flex().flex_col().gap(px(T::S2));
             for (text, times, file) in done {
@@ -152,15 +158,15 @@ impl Workbench {
                                 div()
                                     .text_size(px(T::CHIP_SIZE))
                                     .text_color(T::color(T::muted()))
-                                    .child(format!("改了 {times} 次")),
+                                    .child(t!("改了 {times} 次", times)),
                             )
                         }),
                 );
             }
-            facts = facts.child(fact("做成了", list));
+            facts = facts.child(fact(t!("做成了"), list));
         }
         facts = facts.child(fact(
-            "停在",
+            t!("停在"),
             div().line_clamp(4).text_ellipsis().child(h.stopped),
         ));
         panel = panel.child(facts);
@@ -224,10 +230,10 @@ impl Workbench {
                                 div()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .text_color(T::color(T::secondary()))
-                                    .child("留下的证据"),
+                                    .child(t!("留下的证据")),
                             )
                             .child(div().flex_1())
-                            .child(format!("最近 {} 条", card.evidence.len())),
+                            .child(t!("最近 {len} 条", len = card.evidence.len())),
                     )
                     .child(bar)
                     .child(
@@ -236,9 +242,9 @@ impl Workbench {
                             .flex_wrap()
                             .gap(px(T::S12))
                             .text_color(T::color(T::secondary()))
-                            .child(key("命令成功", ok, T::color(T::secondary())))
-                            .child(key("改文件", files, T::color(T::primary())))
-                            .child(key("失败", failed, failure)),
+                            .child(key(t!("命令成功"), ok, T::color(T::secondary())))
+                            .child(key(t!("改文件"), files, T::color(T::primary())))
+                            .child(key(t!("失败"), failed, failure)),
                     ),
             );
         }
@@ -250,11 +256,14 @@ impl Workbench {
         };
         if card.partial_history {
             panel = panel.child(note(
-                "仅覆盖已索引的历史尾段与之后的增量；没有证据不等于没做。".into(),
+                t!("仅覆盖已索引的历史尾段与之后的增量；没有证据不等于没做。").into(),
             ));
         }
         if let Some(binding) = session.binding.filter(|_| session.current) {
-            panel = panel.child(note(format!("和这个终端对上靠的是：{}", binding.label())));
+            panel = panel.child(note(t!(
+                "和这个终端对上靠的是：{how}",
+                how = binding.label()
+            )));
         }
         if let Some(h) = self
             .workspace
@@ -263,16 +272,16 @@ impl Workbench {
             .rev()
             .find(|h| h.session == session.id)
         {
-            panel = panel.child(note(format!(
-                "{} · {} → {} · 最近一次结局变化",
-                h.reason,
-                outcome_label(&h.before),
-                outcome_label(&h.after)
+            panel = panel.child(note(t!(
+                "{reason} · {before} → {after} · 最近一次结局变化",
+                reason = &h.reason,
+                before = outcome_label(&h.before),
+                after = outcome_label(&h.after)
             )));
         }
         if session.current && session.outcome != Outcome::Open {
             panel = panel.child(note(
-                "结局已记录，Agent 仍在运行；若要停止，请在画面菜单选择停止 Agent。".into(),
+                t!("结局已记录，Agent 仍在运行；若要停止，请在画面菜单选择停止 Agent。").into(),
             ));
         }
         let resume = session.clone();
@@ -281,21 +290,19 @@ impl Workbench {
         // On its own live pane there is nothing to go back to: you type in the terminal,
         // and settling it is the card's one solid button.
         let typing_here = in_pane && live_terminal(&self.workspace, session).is_some();
-        let (settle_name, settle) = if session.outcome == Outcome::Open {
-            ("标记完成", Outcome::Completed)
+        let (settle_id, settle_name, settle) = if session.outcome == Outcome::Open {
+            ("here-complete", t!("标记完成"), Outcome::Completed)
         } else {
-            ("撤销结局", Outcome::Open)
+            ("here-reopen", t!("撤销结局"), Outcome::Open)
         };
         let settle_session = session.clone();
         let more = self.overview.here_more.as_ref() == Some(&session.id);
         let more_id = session.id.clone();
-        let settle_button = button(
-            gpui::SharedString::from(format!("here-{settle_name}")),
-            settle_name,
-        )
-        .on_click(cx.listener(move |this, _, _, cx| {
-            this.settle_session(&settle_session, settle.clone(), in_pane, cx)
-        }));
+        let settle_target = settle.clone();
+        let settle_button =
+            button(settle_id, settle_name).on_click(cx.listener(move |this, _, _, cx| {
+                this.settle_session(&settle_session, settle_target.clone(), in_pane, cx)
+            }));
         let mut foot = div()
             .flex_none()
             .relative()
@@ -308,9 +315,11 @@ impl Workbench {
             .border_t(px(T::BORDER_WIDTH))
             .border_color(T::color(T::border()))
             .when(!typing_here, |d| {
-                d.child(solid(button("here-continue", "继续")).on_click(
-                    cx.listener(move |this, _, window, cx| this.open_session(&resume, window, cx)),
-                ))
+                d.child(
+                    solid(button("here-continue", t!("继续#workbench"))).on_click(cx.listener(
+                        move |this, _, window, cx| this.open_session(&resume, window, cx),
+                    )),
+                )
             })
             .child(if typing_here {
                 solid(settle_button)
@@ -320,7 +329,7 @@ impl Workbench {
             .child(div().flex_1())
             .child(
                 // The menu folds on 「复制恢复命令」, so the button it hangs from says so.
-                button("here-more", self.copy_label("here-copy", "更多 ⋯"))
+                button("here-more", self.copy_label("here-copy", t!("更多 ⋯")))
                     .text_color(T::color(T::link()))
                     .when(more, |d| d.bg(T::color(T::button_hover())))
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -356,7 +365,7 @@ impl Workbench {
                 .border_color(T::color(T::control()))
                 .shadow_lg()
                 .child(
-                    item("here-copy", "复制命令")
+                    item("here-copy", t!("复制命令"))
                         .child(div().flex_1())
                         .child(
                             div()
@@ -376,14 +385,14 @@ impl Workbench {
                             this.copy_text("here-copy", command.clone(), cx);
                         })),
                 )
-                .child(item("save-here-task", "存为待办").on_click(cx.listener(
+                .child(item("save-here-task", t!("存为待办")).on_click(cx.listener(
                     move |this, _, _, cx| {
                         fold(this);
                         this.save_session_task(&save, cx)
                     },
                 )));
             let sid = session.id.clone();
-            menu = menu.child(item("here-defer", "稍后再看…").on_click(cx.listener(
+            menu = menu.child(item("here-defer", t!("稍后再看…")).on_click(cx.listener(
                 move |this, _, window, cx| {
                     fold(this);
                     this.overview.here = Some(sid.clone());
@@ -392,13 +401,13 @@ impl Workbench {
                 },
             )));
             // The other endings; 放弃 sits apart below a rule.
-            for (name, outcome) in [
-                ("标记完成", Outcome::Completed),
-                ("撤销结局", Outcome::Open),
-                ("放弃", Outcome::Abandoned),
+            for (id, name, outcome) in [
+                ("here-menu-complete", t!("标记完成"), Outcome::Completed),
+                ("here-menu-reopen", t!("撤销结局"), Outcome::Open),
+                ("here-menu-abandon", t!("放弃"), Outcome::Abandoned),
             ]
             .into_iter()
-            .filter(|(name, o)| *o != session.outcome && *name != settle_name)
+            .filter(|(_, _, o)| *o != session.outcome && *o != settle)
             {
                 let settled = session.clone();
                 let abandon = outcome == Outcome::Abandoned;
@@ -412,19 +421,12 @@ impl Workbench {
                     );
                 }
                 menu = menu.child(
-                    item(
-                        match name {
-                            "标记完成" => "here-menu-标记完成",
-                            "撤销结局" => "here-menu-撤销结局",
-                            _ => "here-menu-放弃",
-                        },
-                        name,
-                    )
-                    .when(abandon, |d| d.text_color(Tone::Danger.ink()))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        fold(this);
-                        this.settle_session(&settled, outcome.clone(), in_pane, cx)
-                    })),
+                    item(id, name)
+                        .when(abandon, |d| d.text_color(Tone::Danger.ink()))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            fold(this);
+                            this.settle_session(&settled, outcome.clone(), in_pane, cx)
+                        })),
                 );
             }
             foot = foot.child(menu);

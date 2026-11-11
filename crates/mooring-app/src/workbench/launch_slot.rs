@@ -235,7 +235,7 @@ impl Workbench {
                             this.sync(cx);
                         }
                     }
-                    Ok(_) => this.error = Some("缺少工作台响应".into()),
+                    Ok(_) => this.error = Some(t!("缺少工作台响应").into()),
                     Err(e) => this.error = Some(e.to_string()),
                 }
                 this.run_waiting(cx);

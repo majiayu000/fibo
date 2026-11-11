@@ -58,17 +58,28 @@ impl Layout {
     pub fn split_room(cols: u16, rows: u16, axis: Axis, share: u16) -> Result<(u16, u16), String> {
         const MIN_COLS: u32 = 20;
         const MIN_ROWS: u32 = 5;
-        let (total, min, unit) = match axis {
-            Axis::Right => (u32::from(cols), MIN_COLS, "列"),
-            Axis::Down => (u32::from(rows), MIN_ROWS, "行"),
+        let (total, min) = match axis {
+            Axis::Right => (u32::from(cols), MIN_COLS),
+            Axis::Down => (u32::from(rows), MIN_ROWS),
         };
         let new = total * u32::from(share) / 10000;
         let old = total.saturating_sub(new);
         if new < min || old < min {
-            return Err(format!(
-                "这块终端只有 {total} {unit}，切开后一边只剩 {} {unit}（至少要 {min} {unit}）；换个方向、调 --size，或在更大的终端旁边开",
-                new.min(old)
-            ));
+            let left = new.min(old);
+            return Err(match axis {
+                Axis::Right => t!(
+                    "这块终端只有 {total} 列，切开后一边只剩 {left} 列（至少要 {min} 列）；换个方向、调 --size，或在更大的终端旁边开",
+                    total,
+                    left,
+                    min,
+                ),
+                Axis::Down => t!(
+                    "这块终端只有 {total} 行，切开后一边只剩 {left} 行（至少要 {min} 行）；换个方向、调 --size，或在更大的终端旁边开",
+                    total,
+                    left,
+                    min,
+                ),
+            });
         }
         let new = new as u16;
         Ok(match axis {

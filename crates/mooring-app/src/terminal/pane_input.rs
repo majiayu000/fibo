@@ -196,7 +196,7 @@ impl Pane {
                 .state
                 .lock()
                 .map_err(|_| "terminal state unavailable")?;
-            let vt = state.vt.as_ref().ok_or("终端尚未恢复")?;
+            let vt = state.vt.as_ref().ok_or(t!("终端尚未恢复"))?;
             let mut mods = Mods::empty();
             if k.modifiers.control {
                 mods |= Mods::CTRL;

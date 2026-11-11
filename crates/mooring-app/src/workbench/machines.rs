@@ -69,17 +69,18 @@ impl Workbench {
             let (note, bad) = match &view.link {
                 // A host older than this window still lists; say what it cannot do yet.
                 Link::Online => match remote.slot().lock().unwrap().as_ref() {
-                    Some(l) if !l.typing => {
-                        (format!("{} 个会话 · 旧版，只能看", sessions.len()), false)
-                    }
-                    Some(l) if !l.managing => (
-                        format!("{} 个会话 · 旧版，不能开关终端", sessions.len()),
+                    Some(l) if !l.typing => (
+                        t!("{len} 个会话 · 旧版，只能看", len = sessions.len()),
                         false,
                     ),
-                    _ => (format!("{} 个会话", sessions.len()), false),
+                    Some(l) if !l.managing => (
+                        t!("{len} 个会话 · 旧版，不能开关终端", len = sessions.len()),
+                        false,
+                    ),
+                    _ => (t!("{len} 个会话", len = sessions.len()), false),
                 },
-                Link::Connecting => ("连接中…".to_owned(), false),
-                Link::Offline(why) => (format!("没连上：{why}"), true),
+                Link::Connecting => (t!("连接中…").to_owned(), false),
+                Link::Offline(why) => (t!("没连上：{detail}", detail = why), true),
             };
             let heading = self.machine_menu_on(
                 div()
@@ -114,9 +115,9 @@ impl Workbench {
                             d.child(
                                 button(
                                     gpui::SharedString::from(format!("machine-open-{index}")),
-                                    "＋",
+                                    t!("＋"),
                                 )
-                                .aria_label(format!("在 {name} 上开一个新终端"))
+                                .aria_label(t!("在 {name} 上开一个新终端", name = &name))
                                 .h(px(T::SEGMENT_HEIGHT))
                                 .px(px(T::S6))
                                 .text_color(T::color(T::secondary()))
@@ -190,7 +191,7 @@ impl Workbench {
             }
             if shells > 0 {
                 out.push(
-                    label(format!("另有 {shells} 个普通终端"))
+                    label(t!("另有 {shells} 个普通终端", shells))
                         .when(recent, |d| d.mx(px(T::S8)))
                         .px(px(T::S8))
                         .text_size(px(T::CHIP_SIZE))
@@ -295,13 +296,13 @@ impl Workbench {
                         let terminal = reply["terminal"].as_str().unwrap_or_default();
                         let card: Card = serde_json::from_value(serde_json::json!({
                             "id": terminal, "space": "", "tab": "", "phase": "shell",
-                            "cwd": "新终端",
+                            "cwd": t!("新终端"),
                         }))
                         .expect("a card needs only these");
                         this.open_remote_peek(index, card, &name, window, cx);
                     }
                     Err(e) => {
-                        this.error = Some(format!("没能在 {name} 上开终端：{e}"));
+                        this.error = Some(t!("没能在 {name} 上开终端：{e}", name = &name, e = e));
                         cx.notify();
                     }
                 });
@@ -340,7 +341,7 @@ impl Workbench {
                     Err(e) => {
                         if let Some(p) = &mut this.peek {
                             p.confirm_end = false;
-                            p.note = Some(format!("没关掉：{e}"));
+                            p.note = Some(t!("没关掉：{e}", e));
                         }
                         cx.notify();
                     }
@@ -388,9 +389,9 @@ pub(super) fn answer_remote(
     let linked = r.slot.lock().unwrap().clone();
     let terminal = r.terminal.clone();
     async move {
-        let linked = linked.ok_or_else(|| std::io::Error::other("那台电脑没连上"))?;
+        let linked = linked.ok_or_else(|| std::io::Error::other(t!("那台电脑没连上#workbench")))?;
         if !linked.answering {
-            return Err(std::io::Error::other("那台电脑不让这里回答审批"));
+            return Err(std::io::Error::other(t!("那台电脑不让这里回答审批")));
         }
         let op = Op::Answer {
             terminal,

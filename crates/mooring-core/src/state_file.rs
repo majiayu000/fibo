@@ -13,14 +13,14 @@ pub fn read_for_update<T: DeserializeOwned + Default>(path: &Path) -> io::Result
         Err(e) => {
             return Err(io::Error::new(
                 e.kind(),
-                format!("读不了 {}，未改动：{e}", path.display()),
+                t!("读不了 {path}，未改动：{e}", path = path.display(), e),
             ));
         }
     };
     serde_json::from_slice(&bytes).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("{} 格式不对，未改动：{e}", path.display()),
+            t!("{path} 格式不对，未改动：{e}", path = path.display(), e),
         )
     })
 }

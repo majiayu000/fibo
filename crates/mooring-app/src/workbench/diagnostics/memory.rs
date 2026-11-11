@@ -15,7 +15,7 @@ pub(super) fn memory_panel(memory: Option<Memory>) -> gpui::Div {
         Pressure::Critical => Some(Tone::Danger),
     });
     let ink = tone.map_or_else(|| T::color(T::primary()), Tone::ink);
-    let unread = || "不可读".to_string();
+    let unread = || t!("不可读").to_string();
     let reading = |key: &'static str, value: String, colored: bool| {
         div()
             .flex_1()
@@ -56,8 +56,8 @@ pub(super) fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                 .bg(tone.map_or_else(|| T::color(T::muted()), Tone::dot)),
         )
         .child(pressure.map_or_else(
-            || "压力不可读".to_string(),
-            |p| format!("压力{}", p.label()),
+            || t!("压力不可读").to_string(),
+            |p| t!("压力{label}", label = p.label()),
         ));
     let swap = memory.map_or(0, |m| m.swap_bytes);
     let (parts, hint) = match memory.filter(|m| m.total_bytes > 0) {
@@ -67,21 +67,21 @@ pub(super) fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                 vec![
                     (
                         share(m.app_bytes()),
-                        tone.map_or_else(|| T::color(T::secondary()), |t| t.colors().0),
+                        tone.map_or_else(|| T::color(T::secondary()), |tone| tone.colors().0),
                     ),
                     (share(m.wired_bytes), T::color(T::series_other())),
                     (share(m.compressed_bytes), T::color(T::hatch())),
                 ],
-                format!(
-                    // The gauge's three parts, in order; cache has its own reading above.
-                    "App {:.1} · 联动 {:.1} · 压缩 {:.1} GB",
-                    m.app_bytes() as f64 / GB,
-                    m.wired_bytes as f64 / GB,
-                    m.compressed_bytes as f64 / GB
+                // The gauge's three parts, in order; cache has its own reading above.
+                t!(
+                    "App {app} · 联动 {wired} · 压缩 {compressed} GB",
+                    app = format!("{:.1}", m.app_bytes() as f64 / GB),
+                    wired = format!("{:.1}", m.wired_bytes as f64 / GB),
+                    compressed = format!("{:.1}", m.compressed_bytes as f64 / GB)
                 ),
             )
         }
-        None => (Vec::new(), "内存读数不可读".into()),
+        None => (Vec::new(), t!("内存读数不可读").into()),
     };
     div()
         .flex_1()
@@ -98,7 +98,7 @@ pub(super) fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(label("内存 · 最新读数"))
+                .child(label(t!("内存 · 最新读数")))
                 .child(pill),
         )
         .child(
@@ -122,11 +122,11 @@ pub(super) fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                         .text_size(px(T::SMALL))
                         .text_color(T::color(T::secondary()))
                         .child(memory.map_or_else(unread, |m| {
-                            format!(
-                                "已用 {} / {:.0} GB · {:.0}%",
-                                gib(m.used_bytes).trim_end_matches(" GB"),
-                                m.total_bytes as f64 / GB,
-                                m.percent().unwrap_or_default()
+                            t!(
+                                "已用 {used} / {total} GB · {pct}%",
+                                used = gib(m.used_bytes).trim_end_matches(" GB"),
+                                total = format!("{:.0}", m.total_bytes as f64 / GB),
+                                pct = format!("{:.0}", m.percent().unwrap_or_default())
                             )
                         })),
                 ),
@@ -136,17 +136,17 @@ pub(super) fn memory_panel(memory: Option<Memory>) -> gpui::Div {
                 .flex()
                 .gap(px(T::S12))
                 .child(reading(
-                    "压缩",
+                    t!("压缩"),
                     memory.map_or_else(unread, |m| gib(m.compressed_bytes)),
                     false,
                 ))
                 .child(reading(
-                    "交换",
+                    t!("交换"),
                     memory.map_or_else(unread, |_| if swap == 0 { "0".into() } else { gib(swap) }),
                     swap > 0 && tone.is_some(),
                 ))
                 .child(reading(
-                    "缓存",
+                    t!("缓存"),
                     memory.map_or_else(unread, |m| gib(m.cached_bytes)),
                     false,
                 )),
@@ -182,13 +182,13 @@ impl DiagnosticView {
                     a.memory_bytes as f64 / GB,
                     colors.get(&a.name).copied().unwrap_or(T::series_other()),
                 )
-                .detail(format!("{} 个进程", a.processes))
+                .detail(t!("{count} 个进程", count = a.processes))
             })
             .collect();
         let others = report.apps.iter().filter(|a| a.memory_bytes > 0).count() - top.len();
         if others > 0 {
             let mut rest = Segment::new(
-                format!("其余 {others} 个应用"),
+                t!("其余 {others} 个应用", others),
                 total.saturating_sub(shown) as f64 / GB,
                 T::hatch(),
             );
@@ -199,10 +199,10 @@ impl DiagnosticView {
         let all = total as f64 / GB;
         let (stack, legend) = stack_chart("diag-mem", segments, |v| {
             (
-                format!(
-                    "{} · 各应用合计的 {:.1}%",
-                    mib((v * GB) as u64),
-                    v / all * 100.
+                t!(
+                    "{mem} · 各应用合计的 {pct}%",
+                    mem = mib((v * GB) as u64),
+                    pct = format!("{:.1}", v / all * 100.)
                 ),
                 mib((v * GB) as u64),
             )
@@ -221,7 +221,7 @@ impl DiagnosticView {
             ));
         }
         let used = report.memory.map_or_else(String::new, |m| {
-            format!("，所以比已用的 {} 多", gib(m.used_bytes))
+            t!("，所以比已用的 {used} 多", used = gib(m.used_bytes))
         });
         Some(
             div()
@@ -230,15 +230,16 @@ impl DiagnosticView {
                 .pb(px(T::S16))
                 .border_b(px(T::BORDER_WIDTH))
                 .border_color(T::color(T::border()))
-                .child(heading("内存都给了谁", "宽度 = 各应用占用 · 悬停看明细"))
+                .child(heading(t!("内存都给了谁"), t!("宽度 = 各应用占用 · 悬停看明细")))
                 .child(stack)
                 .child(scale)
                 .child(legend)
                 .child(chart_note(
-                    "说明",
-                    format!(
-                        "各应用合计 {}，按活动监视器「内存」列的口径：被压缩的页按原始大小算{used}。这条看谁占得多，还剩多少看压力和交换。",
-                        gib(total)
+                    t!("说明"),
+                    t!(
+                        "各应用合计 {total}，按活动监视器「内存」列的口径：被压缩的页按原始大小算{used}。这条看谁占得多，还剩多少看压力和交换。",
+                        total = gib(total),
+                        used
                     ),
                 )),
         )
@@ -252,7 +253,7 @@ impl DiagnosticView {
             .min_w_0()
             .px(px(T::S20))
             .py(px(T::S16))
-            .child(heading("内存占用排行", "最新读数 · 活动监视器口径"))
+            .child(heading(t!("内存占用排行"), t!("最新读数 · 活动监视器口径")))
             .child(axis_by(max, step, None, T::BAR_LABEL, |v| {
                 if v == 0. {
                     "0".into()
@@ -280,11 +281,17 @@ impl DiagnosticView {
             let mut terms: Vec<_> = report
                 .terminals
                 .iter()
-                .filter(|t| app.terminals.contains(&t.id) && !assigned.contains(t.id.as_str()))
-                .filter_map(|t| self.terminals.get(&t.id).map(|title| (t, title.clone())))
+                .filter(|term| {
+                    app.terminals.contains(&term.id) && !assigned.contains(term.id.as_str())
+                })
+                .filter_map(|term| {
+                    self.terminals
+                        .get(&term.id)
+                        .map(|title| (term, title.clone()))
+                })
                 .collect();
-            terms.sort_by_key(|t| std::cmp::Reverse(t.0.memory_bytes));
-            assigned.extend(terms.iter().map(|(t, _)| t.id.as_str()));
+            terms.sort_by_key(|term| std::cmp::Reverse(term.0.memory_bytes));
+            assigned.extend(terms.iter().map(|(term, _)| term.id.as_str()));
             let folded = self.memory_folded.contains(&app.name);
             let mut extra = div().flex().items_center().gap(px(T::S4)).flex_shrink_0();
             if app.processes > 1 {
@@ -307,10 +314,10 @@ impl DiagnosticView {
                         .text_color(T::color(T::link()))
                         .cursor_pointer()
                         .hover(|s| s.bg(T::color(T::button_hover())))
-                        .child(format!(
-                            "{} 终端 {}",
-                            terms.len(),
-                            if folded { "▾" } else { "▴" }
+                        .child(t!(
+                            "{count} 终端 {arrow}",
+                            count = terms.len(),
+                            arrow = if folded { "▾" } else { "▴" }
                         ))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if !this.memory_folded.remove(&name) {
@@ -332,8 +339,12 @@ impl DiagnosticView {
                 )
                 .tooltip(tip(vec![
                     app.name.clone(),
-                    format!("内存 {} · {} 个进程", mib(app.memory_bytes), app.processes),
-                    format!("CPU 平均 {:.1}%", app.cpu_percent),
+                    t!(
+                        "内存 {mem} · {count} 个进程",
+                        mem = mib(app.memory_bytes),
+                        count = app.processes
+                    ),
+                    t!("CPU 平均 {avg}%", avg = format!("{:.1}", app.cpu_percent)),
                 ])),
             );
             if !terms.is_empty() && !folded {
@@ -341,9 +352,9 @@ impl DiagnosticView {
                     .pb(px(T::S6))
                     .border_b(px(T::BORDER_WIDTH))
                     .border_color(T::color(T::border()));
-                for (t, title) in terms {
-                    let id = t.id.clone();
-                    let share = (t.memory_bytes as f64 / GB / max).min(1.) as f32;
+                for (term, title) in terms {
+                    let id = term.id.clone();
+                    let share = (term.memory_bytes as f64 / GB / max).min(1.) as f32;
                     list = list.child(
                         div()
                             .id(gpui::SharedString::from(format!("diag-memterm-{id}")))
@@ -397,17 +408,17 @@ impl DiagnosticView {
                                     .text_right()
                                     .text_size(px(T::SMALL))
                                     .text_color(T::color(T::secondary()))
-                                    .child(format!("{} ↗", mib(t.memory_bytes))),
+                                    .child(format!("{} ↗", mib(term.memory_bytes))),
                             )
                             .tooltip(tip(vec![
                                 title,
-                                format!(
-                                    "整棵进程树 {} · {} 个进程",
-                                    mib(t.memory_bytes),
-                                    t.processes
+                                t!(
+                                    "整棵进程树 {mem} · {count} 个进程",
+                                    mem = mib(term.memory_bytes),
+                                    count = term.processes
                                 ),
-                                "含 Agent 拉起的 node、MCP 等子进程".into(),
-                                "点击跳到这个终端".into(),
+                                t!("含 Agent 拉起的 node、MCP 等子进程").into(),
+                                t!("点击跳到这个终端").into(),
                             ]))
                             .on_click(cx.listener(move |_, _, _, cx| {
                                 cx.emit(DiagnosticAction::Terminal(id.clone()))
@@ -421,7 +432,9 @@ impl DiagnosticView {
                             .pt(px(T::S4))
                             .text_size(px(T::META))
                             .text_color(T::color(T::muted()))
-                            .child("按终端算整棵进程树，含它拉起的子进程；和上面应用的数不相加。"),
+                            .child(t!(
+                                "按终端算整棵进程树，含它拉起的子进程；和上面应用的数不相加。"
+                            )),
                     ),
                 );
             }
@@ -431,9 +444,9 @@ impl DiagnosticView {
                 button(
                     "diagnostic-memory-more",
                     if self.all_memory_rows {
-                        "收起".to_owned()
+                        t!("收起").to_owned()
                     } else {
-                        format!("再显示 {} 项", ranked.len() - first)
+                        t!("再显示 {count} 项", count = ranked.len() - first)
                     },
                 )
                 .mt(px(T::S6))
@@ -446,7 +459,7 @@ impl DiagnosticView {
             );
         }
         if ranked.is_empty() {
-            column = column.child(label("这次没有读到应用的内存。"));
+            column = column.child(label(t!("这次没有读到应用的内存。")));
         }
         column
     }

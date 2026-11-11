@@ -607,10 +607,12 @@ pub const MARKER_ENV: &str = "MOORING_ENV";
 /// process: names the Agent it runs.
 pub const AGENT_ENV: &str = "MOORING_AGENT";
 /// The terminal hint for an Agent the host sees running but cannot tie to a conversation yet.
-pub const AGENT_UNBOUND_PREFIX: &str = "未对上对话：";
+pub const AGENT_UNBOUND_PREFIX: &str = tk!("未对上对话：");
 /// The terminal hint for a Claude Code that saves no transcript: it inherited the nested
 /// session marker, so Mooring can never read or count it.
-pub const CLAUDE_TRANSCRIPT_OFF: &str = "Claude 没有保存对话记录（继承了 CLAUDE_CODE_CHILD_SESSION），无法统计；关掉这个终端重开后再运行 claude";
+pub const CLAUDE_TRANSCRIPT_OFF: &str = tk!(
+    "Claude 没有保存对话记录（继承了 CLAUDE_CODE_CHILD_SESSION），无法统计；关掉这个终端重开后再运行 claude"
+);
 /// A short note for a terminal's pane, and why, for an Agent seen there but not read.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TerminalNote {
@@ -694,7 +696,7 @@ impl Default for RecognitionStatus {
     fn default() -> Self {
         Self {
             phase: RecognitionPhase::Starting,
-            detail: "正在建立身份索引".into(),
+            detail: t!("正在建立身份索引").into(),
             scopes: vec![],
             metrics: RecognitionMetrics::default(),
             terminal_hints: Default::default(),

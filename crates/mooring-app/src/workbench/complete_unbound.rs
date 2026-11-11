@@ -28,8 +28,13 @@ impl Workbench {
                     Ok(Reply::ScreenAssociated { session: None }) => {
                         this.layout.confirm_close = Some(Closing::Unmatched(terminal));
                     }
-                    Ok(other) => this.error = Some(format!("认对话时后台答非所问：{other:?}")),
-                    Err(e) => this.error = Some(format!("认不出对话：{e}")),
+                    Ok(other) => {
+                        this.error = Some(t!(
+                            "认对话时后台答非所问：{other}",
+                            other = format!("{other:?}")
+                        ))
+                    }
+                    Err(e) => this.error = Some(t!("认不出对话：{e}", e)),
                 }
                 cx.notify();
             });

@@ -104,7 +104,7 @@ pub(super) fn panel(
         .px(px(T::S4))
         .rounded(px(T::S2))
         .text_size(px(T::SMALL))
-        .child(percent.map_or_else(|| "不可读".into(), |p| format!("{p:.0}%")));
+        .child(percent.map_or_else(|| t!("不可读").into(), |p| format!("{p:.0}%")));
     let badge = match group {
         Some(g) => {
             let (_, ink, wash) = g.colors();
@@ -223,7 +223,7 @@ pub(super) fn tick(text: String, at: f32) -> gpui::Div {
 pub(super) fn axis(max: f64, step: f64, reference: Option<f64>, label_width: f32) -> gpui::Div {
     axis_by(max, step, reference, label_width, |v| {
         if Some(v) == reference {
-            "1 核".to_owned()
+            t!("1 核").to_owned()
         } else {
             format!("{v:.0}%")
         }

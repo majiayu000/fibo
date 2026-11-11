@@ -33,11 +33,12 @@ impl SpaceThemes {
         }
     }
     fn save(&self) -> Result<(), String> {
-        let dir = config_dir().ok_or("找不到配置目录")?;
+        let dir = config_dir().ok_or(t!("找不到配置目录"))?;
         let text = serde_json::to_string_pretty(&self.chosen).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(&dir).map_err(|e| format!("无法保存 {}：{e}", dir.display()))?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| t!("无法保存 {path}：{e}", path = dir.display(), e))?;
         super::status_colors::write_atomic(&dir.join(FILE), text.as_bytes())
-            .map_err(|e| format!("无法保存 {}：{e}", dir.join(FILE).display()))
+            .map_err(|e| t!("无法保存 {path}：{e}", path = dir.join(FILE).display(), e))
     }
     pub fn of(&self, space: &str) -> Option<&str> {
         self.chosen.get(space).map(String::as_str)

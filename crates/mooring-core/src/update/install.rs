@@ -1,7 +1,6 @@
 //! Checking for and installing a release. Every outside effect goes through `Tools`, so each
 //! way a check or an install can fail is tested without a network or a signed build.
 use super::{BUNDLE_ID, OLD_BUNDLE_ID, Release, TEAM_ID, Version, select, sum_for};
-use crate::t;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 

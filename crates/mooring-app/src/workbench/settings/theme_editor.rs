@@ -67,12 +67,12 @@ impl Tab {
             Self::Window => UI_TOKENS
                 .iter()
                 .filter(|(key, _)| !key.starts_with("sidebar"))
-                .map(|(key, label)| item("ui", key, label))
+                .map(|(key, label)| item("ui", key, mooring_core::i18n::say(label)))
                 .collect(),
             Self::Sidebar => UI_TOKENS
                 .iter()
                 .filter(|(key, _)| key.starts_with("sidebar"))
-                .map(|(key, label)| item("ui", key, label))
+                .map(|(key, label)| item("ui", key, mooring_core::i18n::say(label)))
                 .collect(),
             Self::Meaning => Status::ALL
                 .iter()

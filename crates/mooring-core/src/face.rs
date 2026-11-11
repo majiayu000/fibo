@@ -63,40 +63,48 @@ impl Sheet {
     }
     fn check(&self, run_ms: u32) -> Result<(), String> {
         if self.frames.is_empty() || self.frames.len() > MAX_FRAMES {
-            return Err(format!("帧数要在 1–{MAX_FRAMES} 之间"));
+            return Err(t!("帧数要在 1–{MAX_FRAMES} 之间", MAX_FRAMES));
         }
         let shell = [&self.open, &self.close];
         if shell.iter().any(|s| s.chars().any(char::is_control)) {
-            return Err("外框不能有控制字符".into());
+            return Err(t!("外框不能有控制字符").into());
         }
         let mut width = None;
         for (i, f) in self.frames.iter().enumerate() {
             let at = i + 1;
             if !(MIN_HOLD_MS..=MAX_HOLD_MS).contains(&f.ms) {
-                return Err(format!(
-                    "第 {at} 帧的时长要在 {MIN_HOLD_MS}–{MAX_HOLD_MS} 毫秒之间"
+                return Err(t!(
+                    "第 {at} 帧的时长要在 {MIN_HOLD_MS}–{MAX_HOLD_MS} 毫秒之间",
+                    at,
+                    MIN_HOLD_MS,
+                    MAX_HOLD_MS
                 ));
             }
             let parts = [&f.left, &f.mouth, &f.right];
             if parts.iter().any(|p| p.chars().any(char::is_control)) {
-                return Err(format!("第 {at} 帧不能有控制字符"));
+                return Err(t!("第 {at} 帧不能有控制字符", at));
             }
             if parts.iter().any(|p| p.trim().is_empty()) {
-                return Err(format!("第 {at} 帧的眼睛和嘴不能空着"));
+                return Err(t!("第 {at} 帧的眼睛和嘴不能空着", at));
             }
             let n = self.text(f).chars().count();
             if n > MAX_WIDTH {
-                return Err(format!("第 {at} 帧太长了，最多 {MAX_WIDTH} 个字符"));
+                return Err(t!(
+                    "第 {at} 帧太长了，最多 {MAX_WIDTH} 个字符",
+                    at,
+                    MAX_WIDTH
+                ));
             }
             if *width.get_or_insert(n) != n {
-                return Err(format!("第 {at} 帧和第 1 帧不一样宽，播放时脸会抖"));
+                return Err(t!("第 {at} 帧和第 1 帧不一样宽，播放时脸会抖", at));
             }
         }
         let most = (run_ms as f32 * MAX_SHARE) as u32;
         if self.held_ms() > most {
-            return Err(format!(
-                "最后一帧之前加起来 {} 毫秒，这个动画最多 {most} 毫秒，再往后脸就要离开了",
-                self.held_ms()
+            return Err(t!(
+                "最后一帧之前加起来 {held} 毫秒，这个动画最多 {most} 毫秒，再往后脸就要离开了",
+                held = self.held_ms(),
+                most
             ));
         }
         Ok(())
@@ -358,18 +366,24 @@ pub fn save_plugin(
     Script::build(sheet.clone(), run_ms)?;
     let name = name.trim();
     if name.is_empty() {
-        return Err("给它起个名字".into());
+        return Err(t!("给它起个名字").into());
     }
-    let fail = |e: std::io::Error| format!("保存失败：{e}");
+    let fail = |e: std::io::Error| t!("保存失败：{e}", e);
     let staging = plugins.join(format!(".{id}.saving"));
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).map_err(fail)?;
+    let frames = sheet
+        .frames
+        .iter()
+        .map(|f| sheet.text(f))
+        .collect::<Vec<_>>()
+        .join(" → ");
     let manifest = serde_json::json!({
         "api": crate::plugin::API,
         "id": id,
-        "name": format!("完成动画：{name}"),
+        "name": t!("完成动画：{name}", name),
         "version": "1.0.0",
-        "description": format!("自己画的：{}", sheet.frames.iter().map(|f| sheet.text(f)).collect::<Vec<_>>().join(" → ")),
+        "description": t!("自己画的：{frames}", frames),
         "provides": ["effects"],
     });
     let effects = serde_json::json!({
@@ -387,7 +401,7 @@ pub fn save_plugin(
     };
     write("plugin.json", &manifest)?;
     write("effects.json", &effects)?;
-    crate::plugin::check(&staging).map_err(|e| format!("保存失败：{e}"))?;
+    crate::plugin::check(&staging).map_err(|e| t!("保存失败：{e}", e))?;
     let dir = plugins.join(id);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).map_err(fail)?;

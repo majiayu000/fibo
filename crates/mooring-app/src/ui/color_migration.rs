@@ -39,19 +39,19 @@ fn color(value: &serde_json::Value) -> Result<u32, String> {
     value
         .as_str()
         .and_then(parse_hex)
-        .ok_or_else(|| format!("应写成 #rrggbb，写的是 {value}"))
+        .ok_or_else(|| t!("应写成 #rrggbb，写的是 {value}", value))
 }
 fn parse(text: &str) -> Result<Overrides, String> {
     let root: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
     let mut out = Overrides::default();
     let keys = |name: &str| root.get(name).and_then(|v| v.as_object()).cloned();
     for (key, value) in keys("status").unwrap_or_default() {
-        let at = current_status(&key).ok_or_else(|| format!("不认识 status.{key}"))?;
+        let at = current_status(&key).ok_or_else(|| t!("不认识 status.{key}", key))?;
         out.colors.push(("status", at.to_owned(), color(&value)?));
     }
     for (key, value) in keys("tone").unwrap_or_default() {
         if !TONE_NAMES.contains(&key.as_str()) {
-            return Err(format!("不认识 tone.{key}"));
+            return Err(t!("不认识 tone.{key}", key));
         }
         out.colors.push(("tone", key, color(&value)?));
     }
@@ -60,11 +60,11 @@ fn parse(text: &str) -> Result<Overrides, String> {
             let named = SeenDot::ALL
                 .into_iter()
                 .find(|dot| value.as_str() == Some(dot.name()));
-            out.dot = Some(named.ok_or_else(|| format!("seen.dot 写的是 {value}"))?);
+            out.dot = Some(named.ok_or_else(|| t!("seen.dot 写的是 {value}", value))?);
         } else if SEEN_NAMES.contains(&key.as_str()) {
             out.colors.push(("seen", key, color(&value)?));
         } else {
-            return Err(format!("不认识 seen.{key}"));
+            return Err(t!("不认识 seen.{key}", key));
         }
     }
     Ok(out)
@@ -102,7 +102,7 @@ fn migrate(
             continue;
         }
         let mut file = entry.as_file();
-        file.name = format!("{} 我的状态色", entry.name);
+        file.name = t!("{name} 我的状态色", name = entry.name);
         overrides.apply(&mut file);
         let stem = file_stem(&file.name);
         write(&folder.join(format!("{stem}.json")), &file)?;

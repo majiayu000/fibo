@@ -27,10 +27,10 @@ impl Workbench {
         proofs.sort_by_key(|e| std::cmp::Reverse(e.1.record.at));
         fails.sort_by_key(|e| std::cmp::Reverse(e.1.record.at));
         let count = match (proofs.len(), fails.len()) {
-            (0, 0) => "0 条".to_owned(),
-            (0, f) => format!("0 条 · {f} 次失败"),
-            (n, 0) => format!("{n} 条证据"),
-            (n, f) => format!("{n} 条证据 · {f} 次失败"),
+            (0, 0) => t!("0 条").to_owned(),
+            (0, f) => t!("0 条 · {f} 次失败", f),
+            (n, 0) => t!("{n} 条证据", n),
+            (n, f) => t!("{n} 条证据 · {f} 次失败", n, f),
         };
         let expanded = self.tasks.expanded.contains(&criterion.id);
         let mut body = div().flex().flex_col().gap(px(T::S2)).mt(px(T::S4));
@@ -43,30 +43,30 @@ impl Workbench {
             body = body.child(self.evidence_row(task, i, *at, e, false, false, cx));
             let mut more = Vec::new();
             if let Some((_, next)) = proofs.get(1) {
-                more.push(format!(
-                    "另 {} 条：{} · {}",
-                    proofs.len() - 1,
-                    mooring_core::content::short(&next.record.summary, 28),
-                    hm(next.record.at)
+                more.push(t!(
+                    "另 {n} 条：{summary} · {when}",
+                    n = proofs.len() - 1,
+                    summary = mooring_core::content::short(&next.record.summary, 28),
+                    when = hm(next.record.at)
                 ));
             }
             if let Some((_, f)) = fails.first() {
-                more.push(format!(
-                    "{} {} 次失败：{} · {}",
-                    if f.record.at < e.record.at {
-                        "更早"
+                more.push(t!(
+                    "{order} {n} 次失败：{result} · {when}",
+                    order = if f.record.at < e.record.at {
+                        t!("更早")
                     } else {
-                        "之后又有"
+                        t!("之后又有")
                     },
-                    fails.len(),
-                    result_name(&f.record),
-                    hm(f.record.at)
+                    n = fails.len(),
+                    result = result_name(&f.record),
+                    when = hm(f.record.at)
                 ));
             }
             if !more.is_empty() {
                 let cid = criterion.id.clone();
                 body = body.child(
-                    button(("evidence-more", i), more.join("；"))
+                    button(("evidence-more", i), more.join(t!("；")))
                         .h(px(T::ICON_HEIGHT))
                         .px(px(T::S8))
                         .justify_start()
@@ -91,9 +91,12 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .text_color(T::color(T::muted()))
                     .child(if available.is_empty() {
-                        "还没有证据 · 关联会话里还没有测试、提交或文件改动".to_owned()
+                        t!("还没有证据 · 关联会话里还没有测试、提交或文件改动").to_owned()
                     } else {
-                        format!("还没有证据 · 关联会话里有 {} 条记录可以挂", available.len())
+                        t!(
+                            "还没有证据 · 关联会话里有 {n} 条记录可以挂",
+                            n = available.len()
+                        )
                     }),
             );
         }
@@ -109,9 +112,9 @@ impl Workbench {
                         link(
                             ("evidence-attach", i),
                             if picking {
-                                "收起"
+                                t!("收起")
                             } else {
-                                "挂一条证据 ▾"
+                                t!("挂一条证据 ▾")
                             },
                         )
                         .text_size(px(T::META))
@@ -128,7 +131,7 @@ impl Workbench {
                 .when(expanded, |d| {
                     let cid = cid.clone();
                     d.child(
-                        link(("evidence-fold", i), "收起较早的证据")
+                        link(("evidence-fold", i), t!("收起较早的证据"))
                             .text_size(px(T::META))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.tasks.expanded.remove(&cid);

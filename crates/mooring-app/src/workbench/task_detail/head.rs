@@ -44,18 +44,20 @@ impl Workbench {
             );
         if outcome == Outcome::Open {
             meta = meta.child(
-                div().flex().gap(px(T::S4)).child("结局").child(
+                div().flex().gap(px(T::S4)).child(t!("结局")).child(
                     div()
                         .text_color(T::color(T::primary()))
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .child("未定"),
+                        .child(t!("未定")),
                 ),
             );
         }
         if let Outcome::Deferred { reason, until } = &outcome {
-            meta = meta
-                .child(sep())
-                .child(format!("{} 再看 · {reason}", upcoming(*until, now())));
+            meta = meta.child(sep()).child(t!(
+                "{when} 再看 · {reason}",
+                when = upcoming(*until, now()),
+                reason = reason
+            ));
         }
         meta = meta.child(sep()).child(task.agent.name());
         if let Some(space) = space {
@@ -73,9 +75,9 @@ impl Workbench {
         }
         let settled = matches!(status, TaskStatus::Completed | TaskStatus::Abandoned);
         let running = self.workspace.task_terminal(&tid).is_some();
-        let outcome_button = |name: &'static str, to: Outcome| {
+        let outcome_button = |id: &'static str, name: &'static str, to: Outcome| {
             let tid = tid.clone();
-            button(name, name).on_click(cx.listener(move |this, _, _, cx| {
+            button(id, name).on_click(cx.listener(move |this, _, _, cx| {
                 if to == Outcome::Completed {
                     return this.complete_todo(&tid, cx);
                 }
@@ -91,19 +93,19 @@ impl Workbench {
         };
         let back = || {
             let tid = tid.clone();
-            button("task-back", "回到画面 →").on_click(cx.listener(move |this, _, _, cx| {
+            button("task-back", t!("回到画面 →")).on_click(cx.listener(move |this, _, _, cx| {
                 this.nav.task_detail = None;
                 this.ask_agent(tid.clone(), false, cx);
             }))
         };
         let another = || {
             let tid = tid.clone();
-            button("task-another", "再开一个会话 ▾")
+            button("task-another", t!("再开一个会话 ▾"))
                 .on_click(cx.listener(move |this, _, _, cx| this.ask_agent(tid.clone(), true, cx)))
         };
         let edit = {
             let task = task.clone();
-            button("task-edit", "编辑").on_click(
+            button("task-edit", t!("编辑")).on_click(
                 cx.listener(move |this, _, window, cx| this.edit_task_form(&task, window, cx)),
             )
         };
@@ -118,11 +120,19 @@ impl Workbench {
         if settled {
             // A settled todo has nothing to push forward: only undo and edit.
             actions = actions
-                .child(plain(outcome_button("撤销结局", Outcome::Open)))
+                .child(plain(outcome_button(
+                    "task-reopen",
+                    t!("撤销结局"),
+                    Outcome::Open,
+                )))
                 .child(edit);
         } else {
             if status == TaskStatus::Proven {
-                actions = actions.child(solid(outcome_button("标记完成", Outcome::Completed)));
+                actions = actions.child(solid(outcome_button(
+                    "task-complete",
+                    t!("标记完成"),
+                    Outcome::Completed,
+                )));
                 if running {
                     actions = actions.child(plain(back()));
                 }
@@ -132,31 +142,43 @@ impl Workbench {
                     .child(solid(back()))
                     .child(plain(another()))
                     .child(divider())
-                    .child(plain(outcome_button("标记完成", Outcome::Completed)));
+                    .child(plain(outcome_button(
+                        "task-complete",
+                        t!("标记完成"),
+                        Outcome::Completed,
+                    )));
             } else {
                 let start = tid.clone();
-                actions = actions.child(solid(button("task-start", "开始").on_click(
+                actions = actions.child(solid(button("task-start", t!("开始")).on_click(
                     cx.listener(move |this, _, _, cx| this.ask_agent(start.clone(), false, cx)),
                 )));
                 if has_sessions {
                     actions = actions.child(plain(another()));
                 }
-                actions = actions
-                    .child(divider())
-                    .child(plain(outcome_button("标记完成", Outcome::Completed)));
+                actions = actions.child(divider()).child(plain(outcome_button(
+                    "task-complete",
+                    t!("标记完成"),
+                    Outcome::Completed,
+                )));
             }
             if status == TaskStatus::Proven {
                 actions = actions.child(divider());
             }
             if let Outcome::Deferred { .. } = outcome {
-                actions = actions.child(outcome_button("撤销结局", Outcome::Open));
+                actions =
+                    actions.child(outcome_button("task-reopen", t!("撤销结局"), Outcome::Open));
             } else {
-                actions = actions.child(button("task-defer", "稍后再看…").on_click(cx.listener(
-                    |this, _, window, cx| this.show_form(FormKind::TaskDefer, window, cx),
-                )));
+                actions =
+                    actions.child(button("task-defer", t!("稍后再看…")).on_click(cx.listener(
+                        |this, _, window, cx| this.show_form(FormKind::TaskDefer, window, cx),
+                    )));
             }
             actions = actions
-                .child(outcome_button("放弃", Outcome::Abandoned))
+                .child(outcome_button(
+                    "task-abandon",
+                    t!("放弃"),
+                    Outcome::Abandoned,
+                ))
                 .child(edit);
         }
         div()

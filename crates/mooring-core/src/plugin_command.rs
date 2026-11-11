@@ -88,7 +88,7 @@ impl Finished {
     pub fn how(&self) -> String {
         self.status
             .code()
-            .map_or("被信号停止".into(), |c| format!("退出码 {c}"))
+            .map_or_else(|| t!("被信号停止").into(), |c| t!("退出码 {c}", c))
     }
 }
 
@@ -383,7 +383,9 @@ mod tests {
     fn the_login_path_is_told_from_what_a_profile_prints_and_never_hangs() {
         let (dir, exe) = stub_shell(
             "chatty",
-            "echo 欢迎; printf '\\n__MOORING_LOGIN_PATH__/opt/x/bin:/usr/bin\\n'; echo bye",
+            not_ui!(
+                "echo 欢迎; printf '\\n__MOORING_LOGIN_PATH__/opt/x/bin:/usr/bin\\n'; echo bye"
+            ),
         );
         assert_eq!(
             login_path_retrying(&exe, secs(2)).as_deref(),

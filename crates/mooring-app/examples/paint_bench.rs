@@ -5,6 +5,9 @@
 //!
 //! cargo run --release -p mooring-app --features visual-test --example paint_bench -- \
 //!     --panes 4 --frames 2000
+#[macro_use]
+extern crate mooring_core;
+
 #[path = "../src/model/mod.rs"]
 #[allow(dead_code)]
 mod model;

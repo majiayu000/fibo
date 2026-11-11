@@ -3,7 +3,7 @@ use super::*;
 
 mod here_card;
 
-const ROUTE_PENDING: &str = "会话还没载入，载入后自动打开";
+const ROUTE_PENDING: &str = tk!("会话还没载入，载入后自动打开");
 
 /// Which finished turns the user has not looked at yet.
 pub(super) struct Attention {
@@ -52,14 +52,17 @@ impl Workbench {
     pub(super) fn session_tip(&self, s: &AgentSession) -> Vec<String> {
         use mooring_core::content::short;
         let mut lines = vec![match self.workspace.session_naming(s) {
-            Some((_, source)) => format!("名字来自{} · 双击改名", source.label(s.runtime)),
-            None => "双击改名".into(),
+            Some((_, source)) => t!(
+                "名字来自{source} · 双击改名",
+                source = source.label(s.runtime)
+            ),
+            None => t!("双击改名").into(),
         }];
         if let Some(c) = self.workspace.content.get(&s.id) {
             let line =
                 |text: &str| short(&text.split_whitespace().collect::<Vec<_>>().join(" "), 120);
             if let Some(first) = c.asks.first().filter(|_| c.first_ask_known) {
-                lines.push(format!("最初：{}", line(&first.text)));
+                lines.push(t!("最初：{text}", text = line(&first.text)));
             }
             // Only when it is not the first ask shown above.
             if let Some(last) = c
@@ -67,7 +70,7 @@ impl Workbench {
                 .last()
                 .filter(|_| c.asks.len() > 1 || !c.first_ask_known)
             {
-                lines.push(format!("最近：{}", line(&last.text)));
+                lines.push(t!("最近：{text}", text = line(&last.text)));
             }
         }
         lines.push(format!("{} · {}", s.runtime.name(), s.cwd));
@@ -86,7 +89,7 @@ impl Workbench {
         });
         let current = session.name.clone();
         let field = cx.new(|cx| {
-            Field::new("会话名", &current, cx)
+            Field::new(t!("会话名"), &current, cx)
                 .inline()
                 .ends_on_click_out()
                 .placeholder(&automatic)
@@ -139,14 +142,14 @@ impl Workbench {
             .content
             .get(&s.id)
             .map(|c| mooring_core::content::short(&c.headline(), 100))
-            .unwrap_or_else(|| "内容尚未索引".into())
+            .unwrap_or_else(|| t!("内容尚未索引").into())
     }
     pub(super) fn save_session_task(&mut self, session: &AgentSession, cx: &mut Context<Self>) {
         let Some(c) = self.workspace.content.get(&session.id) else {
             return;
         };
         if c.asks.is_empty() {
-            self.error = Some("尾段没有用户原话，不能凭空建立待办".into());
+            self.error = Some(t!("尾段没有用户原话，不能凭空建立待办").into());
             cx.notify();
             return;
         }
@@ -159,7 +162,7 @@ impl Workbench {
                 .iter()
                 .map(|q| q.text.as_str())
                 .collect::<Vec<_>>()
-                .join("\n\n追加要求："),
+                .join(t!("\n\n追加要求：")),
             acceptance: vec![],
             agent: session.runtime,
         };
@@ -225,14 +228,14 @@ impl Workbench {
             .flex_col()
             .gap(px(T::S4))
             .on_click(|_, _, cx| cx.stop_propagation())
-            .child(
-                button("card-save", "存为待办").on_click(cx.listener(move |this, _, _, cx| {
+            .child(button("card-save", t!("存为待办")).on_click(cx.listener(
+                move |this, _, _, cx| {
                     cx.stop_propagation();
                     this.overview.card_menu = None;
                     this.save_session_task(&save, cx);
-                })),
-            )
-            .child(button("card-defer", "稍后再看").on_click(cx.listener(
+                },
+            )))
+            .child(button("card-defer", t!("稍后再看")).on_click(cx.listener(
                 move |this, _, window, cx| {
                     cx.stop_propagation();
                     this.overview.card_menu = None;
@@ -240,18 +243,18 @@ impl Workbench {
                     this.show_form(FormKind::Defer, window, cx);
                 },
             )));
-        for (label, outcome) in [
-            ("标记完成", Outcome::Completed),
-            ("放弃", Outcome::Abandoned),
-            ("撤销结局", Outcome::Open),
+        for (key, label, outcome) in [
+            ("complete", t!("标记完成"), Outcome::Completed),
+            ("abandon", t!("放弃"), Outcome::Abandoned),
+            ("reopen", t!("撤销结局"), Outcome::Open),
         ]
         .into_iter()
-        .filter(|(_, o)| *o != session.outcome)
+        .filter(|(_, _, o)| *o != session.outcome)
         {
             let id = session.id.clone();
             let settled = session.clone();
             menu = menu.child(
-                button(gpui::SharedString::from(format!("card-{label}")), label).on_click(
+                button(gpui::SharedString::from(format!("card-{key}")), label).on_click(
                     cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
                         this.overview.card_menu = None;
@@ -306,7 +309,7 @@ impl Workbench {
         } else {
             self.request(Request::Workspace, cx);
             // After the request: starting one clears the error line.
-            self.error = Some(ROUTE_PENDING.into());
+            self.error = Some(mooring_core::i18n::say(ROUTE_PENDING).into());
             self.pending_route = Some((id.to_owned(), self.nav.page()));
         }
     }
@@ -318,7 +321,7 @@ impl Workbench {
         };
         let moved = page != self.nav.page();
         if moved || self.workspace.agent_sessions.iter().any(|s| s.id == id) {
-            if self.error.as_deref() == Some(ROUTE_PENDING) {
+            if self.error.as_deref() == Some(mooring_core::i18n::say(ROUTE_PENDING)) {
                 self.error = None;
             }
             if !moved {
@@ -353,7 +356,7 @@ pub(super) fn done_items(
     for e in evidence.iter().rev().filter(|e| e.exit_code == Some(0)) {
         let (text, file) = match e.kind.as_str() {
             "file" => {
-                let path = e.summary.trim_start_matches("文件修改：");
+                let path = e.summary.trim_start_matches(not_ui!("文件修改："));
                 let inside = Path::new(path)
                     .strip_prefix(cwd)
                     .ok()
@@ -384,7 +387,7 @@ pub(super) fn session_open_in(
 /// Why the window's lists, counts and board leave a session out: it is automation, or its
 /// space is put aside (先不管).
 pub(super) fn session_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
-    automation_hidden_in(w, s).or_else(|| w.session_quiet(s).then_some("先不管"))
+    automation_hidden_in(w, s).or_else(|| w.session_quiet(s).then_some(t!("先不管")))
 }
 /// Hidden as automation, whichever space it is in: the only hiding search looks past.
 pub(super) fn automation_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
@@ -392,6 +395,6 @@ pub(super) fn automation_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Op
         Some(c) => c.hidden_for(s),
         // A hook can bind a new conversation before its first prompt writes anything.
         None if s.current && s.binding.is_some() => None,
-        None => Some("缺少交互入口证据"),
+        None => Some(t!("缺少交互入口证据#workbench")),
     }
 }

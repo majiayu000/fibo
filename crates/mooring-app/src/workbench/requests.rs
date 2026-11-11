@@ -147,7 +147,7 @@ impl Workbench {
             .py(px(T::S6))
             .child(label(error).text_color(Tone::Danger.ink()));
         if self.unsure.is_some() {
-            strip = strip.child(button("retry-request", "重试").on_click(cx.listener(
+            strip = strip.child(button("retry-request", t!("重试")).on_click(cx.listener(
                 |this, _, _, cx| {
                     if let Some(request) = this.unsure.take() {
                         this.error = None;

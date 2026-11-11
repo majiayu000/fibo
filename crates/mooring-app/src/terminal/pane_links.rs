@@ -73,7 +73,7 @@ impl Pane {
             return None;
         }
         if self.links.hover_link.is_some() {
-            return Some(crate::ui::words::local("⌘ 点击在浏览器打开"));
+            return Some(crate::ui::words::local(t!("⌘ 点击在浏览器打开")));
         }
         let target = self.shown_target()?;
         Some(crate::ui::words::local(&super::super::open_path::hint(
@@ -100,11 +100,11 @@ impl Pane {
     pub fn open_title(target: &Hovered) -> String {
         use super::super::open_path::Plan;
         match Self::open_plan(target, false) {
-            Plan::Reveal { .. } => crate::ui::words::local("在访达中显示（可执行文件不运行）"),
-            Plan::OpenFolder => crate::ui::words::local("在访达中打开"),
-            Plan::OpenFile => "打开".into(),
-            Plan::Editor { name, line, .. } => format!("在 {name} 打开第 {line} 行"),
-            Plan::Terminal { line, .. } => format!("用 $EDITOR 打开第 {line} 行"),
+            Plan::Reveal { .. } => crate::ui::words::local(t!("在访达中显示（可执行文件不运行）")),
+            Plan::OpenFolder => crate::ui::words::local(t!("在访达中打开")),
+            Plan::OpenFile => t!("打开").into(),
+            Plan::Editor { name, line, .. } => t!("在 {name} 打开第 {line} 行", name, line),
+            Plan::Terminal { line, .. } => t!("用 $EDITOR 打开第 {line} 行", line),
         }
     }
     /// Opens `target` by the rules in `open_path`; `reveal` only shows it in Finder.
@@ -115,7 +115,7 @@ impl Pane {
                 cx.reveal_path(&target.path);
                 if executable {
                     self.show_toast(
-                        crate::ui::words::local("可执行文件只在访达中显示，不会运行"),
+                        crate::ui::words::local(t!("可执行文件只在访达中显示，不会运行")),
                         cx,
                     );
                 }
@@ -140,7 +140,7 @@ impl Pane {
                 cx.spawn(async move |this, cx| {
                     if let Err(e) = task.await {
                         this.update(cx, |pane, cx| {
-                            pane.show_toast(format!("没能用 {name} 打开：{e}"), cx)
+                            pane.show_toast(t!("没能用 {name} 打开：{e}", name, e), cx)
                         })
                         .ok();
                     }

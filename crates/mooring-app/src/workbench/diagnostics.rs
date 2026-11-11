@@ -78,7 +78,7 @@ impl Sampling {
                     receive::<Reply>(&mut stream)?,
                     Reply::Hello { major: MAJOR, .. }
                 ) {
-                    return Err(io::Error::other("诊断连接握手失败"));
+                    return Err(io::Error::other(t!("诊断连接握手失败")));
                 }
                 send(&mut stream, CONTROL, &Request::Diagnose)?;
                 requested.store(true, Ordering::Release);
@@ -86,7 +86,7 @@ impl Sampling {
                     let report = match receive::<Reply>(&mut stream)? {
                         Reply::Diagnostics(report) => report,
                         Reply::Error(error) => return Err(io::Error::other(error)),
-                        _ => return Err(io::Error::other("诊断响应无效")),
+                        _ => return Err(io::Error::other(t!("诊断响应无效"))),
                     };
                     let complete = report.complete;
                     if tx.unbounded_send(Ok(report)).is_err() || complete {
@@ -270,7 +270,7 @@ impl DiagnosticView {
                                 this.report = Some(report);
                             }
                             Err(error) => {
-                                this.error = Some(format!("采样未完成：{error}"));
+                                this.error = Some(t!("采样未完成：{error}", error));
                                 this.sampling = None;
                             }
                         }
@@ -304,8 +304,8 @@ impl DiagnosticView {
         // CPU of every app, Mooring included, and a 120 Hz spinner inflated its own bar.
         super::pace::wake(&SPINNING, SPIN / SPINNER.len() as u32, cx);
         let spinner = || {
-            let t = super::pace::phase(SPIN);
-            let i = ((t * SPINNER.len() as f32) as usize).min(SPINNER.len() - 1);
+            let phase = super::pace::phase(SPIN);
+            let i = ((phase * SPINNER.len() as f32) as usize).min(SPINNER.len() - 1);
             div()
                 .text_color(T::color(T::primary()))
                 .child(SPINNER[i])
@@ -326,7 +326,7 @@ impl DiagnosticView {
                 spinner(),
                 div()
                     .text_color(T::color(T::primary()))
-                    .child("连接 Fibo 后台…")
+                    .child(t!("连接 Fibo 后台…"))
                     .into_any_element(),
             ));
         }
@@ -335,13 +335,13 @@ impl DiagnosticView {
             .child(line(
                 "diagnostic-connected",
                 done(),
-                div().child("连上后台").into_any_element(),
+                div().child(t!("连上后台")).into_any_element(),
             ))
             .child(line(
                 "diagnostic-first",
                 done(),
                 div()
-                    .child("后台记下第一次快照：进程、CPU 时间、GPU 计数")
+                    .child(t!("后台记下第一次快照：进程、CPU 时间、GPU 计数"))
                     .into_any_element(),
             ))
             .child(line(
@@ -353,12 +353,12 @@ impl DiagnosticView {
                     .child(
                         div()
                             .text_color(T::color(T::primary()))
-                            .child("隔几秒再记一次，用两次的差算占用"),
+                            .child(t!("隔几秒再记一次，用两次的差算占用")),
                     )
                     .child(if left > 0. {
-                        format!("· 还剩 {left} 秒")
+                        t!("· 还剩 {left} 秒", left)
                     } else {
-                        "· 马上就好".into()
+                        t!("· 马上就好").into()
                     })
                     .into_any_element(),
             ));

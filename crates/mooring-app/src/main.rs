@@ -141,7 +141,7 @@ fn load_workspace(root: &Path) -> io::Result<Workspace> {
                 request: None,
                 edit: Edit::AddSpace(Space {
                     id: "default".into(),
-                    name: "工作空间".into(),
+                    name: t!("工作空间").into(),
                     cwd,
                 }),
             },
@@ -338,10 +338,9 @@ fn run() -> io::Result<()> {
     // shared target/debug binary is often a plain build made by another checkout.
     #[cfg(not(feature = "visual-test"))]
     if args.iter().any(|a| a == "--visual-evidence") {
-        return Err(io::Error::other(
-            "这个版本没编进截图场景（visual-test），--visual-evidence 不起作用；\
-             用 cargo build -p mooring-app --features mooring-app/visual-test 重编",
-        ));
+        return Err(io::Error::other(t!(
+            "这个版本没编进截图场景（visual-test），--visual-evidence 不起作用；用 cargo build -p mooring-app --features mooring-app/visual-test 重编"
+        )));
     }
     let root = if let Some(i) = args.iter().position(|a| a == "--runtime") {
         PathBuf::from(

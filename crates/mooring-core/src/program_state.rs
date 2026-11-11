@@ -44,15 +44,15 @@ pub fn apply(c: &mut Content, r: &ProgramReport) {
         }
         if turn == Turn::Waiting {
             c.waiting = if said.is_empty() {
-                "程序说在等你".into()
+                t!("程序说在等你").into()
             } else {
-                format!("{said}（程序上报）")
+                t!("{said}（程序上报）", said)
             };
             c.waiting_episode += 1;
         }
         if turn == Turn::Error && c.error.is_empty() {
             c.error = if said.is_empty() {
-                "程序上报出错".into()
+                t!("程序上报出错").into()
             } else {
                 said.clone()
             };
@@ -62,9 +62,9 @@ pub fn apply(c: &mut Content, r: &ProgramReport) {
     if turn != Turn::Running && !idle {
         c.background = None;
     }
-    c.signal = "程序上报".into();
+    c.signal = not_ui!("程序上报").into();
     c.signal_at = r.since;
-    c.signal_detail = format!("终端里的程序通过 OSC 7501 报告 {}", r.state);
+    c.signal_detail = t!("终端里的程序通过 OSC 7501 报告 {state}", state = &r.state);
 }
 
 #[cfg(test)]

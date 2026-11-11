@@ -15,14 +15,20 @@ pub fn report_view(
     let who = [&r.app, &r.title]
         .into_iter()
         .find(|s| !s.is_empty())
-        .map_or("程序", String::as_str);
+        .map_or(t!("程序"), String::as_str);
     let progress = r.progress.map(|p| format!(" {p}%")).unwrap_or_default();
     let note = if r.msg.is_empty() {
         format!("{who} · {word}{progress}")
     } else {
-        format!("{who} · {word}{progress}：{}", r.msg)
+        t!(
+            "{who} · {word}{progress}：{msg}",
+            who,
+            word,
+            progress,
+            msg = &r.msg
+        )
     };
-    let mut why = "终端里的程序自己通过 OSC 7501 报告的状态".to_owned();
+    let mut why = t!("终端里的程序自己通过 OSC 7501 报告的状态").to_owned();
     if !r.title.is_empty() && r.title != who {
         why = format!("{}\n{why}", r.title);
     }
@@ -143,59 +149,67 @@ pub fn attachable_ids(workspace: &Workspace, ids: Vec<String>) -> Vec<String> {
 /// for a terminal whose Agent was seen but not tied to a conversation.
 pub fn state_reasons(w: &Workspace, terminal: &str, hint: Option<&str>, now: u64) -> Vec<String> {
     let Some(s) = w.current_agent(terminal) else {
-        let mut lines = vec!["这个画面里没有认出 Agent 对话，只按普通终端显示。".to_owned()];
+        let mut lines = vec![t!("这个画面里没有认出 Agent 对话，只按普通终端显示。").to_owned()];
         if let Some(hint) = hint {
-            lines.push(format!("识别提示：{hint}"));
+            lines.push(t!("识别提示：{hint}", hint));
         }
         return lines;
     };
-    let mut lines = vec![format!(
-        "{} 对话 {}",
-        s.runtime.name(),
-        &s.cli_session_id[..s.cli_session_id.len().min(8)]
+    let mut lines = vec![t!(
+        "{runtime} 对话 {id}",
+        runtime = s.runtime.name(),
+        id = &s.cli_session_id[..s.cli_session_id.len().min(8)]
     )];
     let Some(c) = w.content.get(&s.id) else {
-        lines.push("还没读到这段对话的记录：还没开始第一轮，按「新开的」显示。".into());
+        lines.push(t!("还没读到这段对话的记录：还没开始第一轮，按「新开的」显示。").into());
         return lines;
     };
     let status = status_of(w, s);
     let phase = match status {
-        Status::Fresh => "新开的 / 还没开始第一轮",
-        Status::Review => "等你验收 / 这一轮停了，做没做完由你定",
-        Status::Background => "等后台 / 这一轮停了，监视任务或定时唤醒会让它接着做",
-        Status::Closed => "做完了 / 你标记过完成",
-        Status::Paused => "停下了 / 这一轮被打断，或 Agent 没做完就退出了",
-        Status::Deferred => "稍后再看 / 你推迟到了以后",
+        Status::Fresh => t!("新开的 / 还没开始第一轮"),
+        Status::Review => t!("等你验收 / 这一轮停了，做没做完由你定"),
+        Status::Background => t!("等后台 / 这一轮停了，监视任务或定时唤醒会让它接着做"),
+        Status::Closed => t!("做完了 / 你标记过完成"),
+        Status::Paused => t!("停下了 / 这一轮被打断，或 Agent 没做完就退出了"),
+        Status::Deferred => t!("稍后再看 / 你推迟到了以后"),
         other => other.label(),
     };
-    lines.push(format!("现在：{phase}"));
+    lines.push(t!("现在：{phase}", phase));
     let why = match c.signal.as_str() {
-        "日志" => "Agent 写进对话记录的最后一条",
-        "Hook" => "Agent 通过 hook 报来的事件",
-        "画面" => "画面底部认出了提问框；对话记录里没有这一条",
-        "官方状态" => "Agent 自己报告的运行状态",
-        "标题" => "终端标题里的转圈，Agent 正在跑这一轮",
-        "画面在跑" => "画面上 Agent 每秒在走的计时行，正在跑这一轮",
-        "程序上报" => "终端里的程序自己通过 OSC 7501 报告的状态",
-        _ => "对话记录",
+        not_ui!("日志") => t!("Agent 写进对话记录的最后一条"),
+        "Hook" => t!("Agent 通过 hook 报来的事件"),
+        not_ui!("画面") => t!("画面底部认出了提问框；对话记录里没有这一条"),
+        not_ui!("官方状态") => t!("Agent 自己报告的运行状态"),
+        not_ui!("标题") => t!("终端标题里的转圈，Agent 正在跑这一轮"),
+        not_ui!("画面在跑") => t!("画面上 Agent 每秒在走的计时行，正在跑这一轮"),
+        not_ui!("程序上报") => t!("终端里的程序自己通过 OSC 7501 报告的状态"),
+        _ => t!("对话记录"),
     };
     let at = if c.signal_at > 0 {
         c.signal_at
     } else {
         c.updated
     };
-    lines.push(format!("依据：{why}（{}）", super::time::ago(at, now)));
+    lines.push(t!(
+        "依据：{why}（{ago}）",
+        why,
+        ago = super::time::ago(at, now)
+    ));
     // The record, hook event or screen rule behind it, as the daemon wrote it down.
     lines.extend(c.signal_detail.lines().map(str::to_owned));
     // Nothing on screen is waiting on you: say the rules looked and found no prompt.
     if !matches!(status, Status::Running | Status::Waiting) && !c.screen_check.is_empty() {
-        lines.push(format!("画面：{}，所以按「{phase}」显示。", c.screen_check));
+        lines.push(t!(
+            "画面：{check}，所以按「{phase}」显示。",
+            check = &c.screen_check,
+            phase
+        ));
     }
     if !c.waiting.is_empty() {
-        lines.push(format!("在等：{}", c.waiting));
+        lines.push(t!("在等：{waiting}", waiting = &c.waiting));
     }
     if !c.error.is_empty() {
-        lines.push(format!("出错：{}", c.error));
+        lines.push(t!("出错：{error}", error = &c.error));
     }
     if let Some(b) = (c.left_behind().filter(|_| status != Status::Background))
         .or_else(|| c.background.and_then(|b| b.describe()))
@@ -215,8 +229,8 @@ fn shared_files(w: &Workspace, s: &AgentSession, now: u64) -> Vec<String> {
             .iter()
             .find(|o| &o.id == id)
             .and_then(|o| w.session_name(o))
-            .map(|n| format!("「{n}」"))
-            .unwrap_or_else(|| "另一个 Agent".into())
+            .map(|n| t!("「{n}」", n))
+            .unwrap_or_else(|| t!("另一个 Agent").into())
     };
     let mut lines: Vec<String> = found
         .iter()
@@ -225,13 +239,17 @@ fn shared_files(w: &Workspace, s: &AgentSession, now: u64) -> Vec<String> {
             let path = std::path::Path::new(&c.path);
             let shown = path.strip_prefix(&s.cwd).unwrap_or(path).display();
             let others: Vec<_> = c.others.iter().map(name).collect();
-            format!("和{}都改了 {shown}", others.join("、"))
+            t!(
+                "和{others}都改了 {shown}",
+                others = others.join(t!("、")),
+                shown
+            )
         })
         .collect();
     if found.len() > 3 {
-        lines.push(format!(
-            "另有 {} 个文件也被别的 Agent 改过",
-            found.len() - 3
+        lines.push(t!(
+            "另有 {count} 个文件也被别的 Agent 改过",
+            count = found.len() - 3
         ));
     }
     lines
