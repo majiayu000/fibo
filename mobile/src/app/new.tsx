@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
+import { tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { resetDraft, setDraft, useDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
@@ -52,15 +53,15 @@ export default function NewTask() {
   const missing = busy
     ? ''
     : !m
-      ? '先在「我的」里配对一台电脑'
+      ? tr('先在「我的」里配对一台电脑')
       : m.status !== 'online'
-        ? '电脑没连上'
+        ? tr('电脑没连上')
         : !able
-          ? '这台电脑的 Fibo 还不能开新任务'
+          ? tr('这台电脑的 Fibo 还不能开新任务')
           : !cwd
-            ? '先选一个目录'
+            ? tr('先选一个目录')
             : !draft.prompt.trim() && !draft.resume
-              ? '写上要它做什么'
+              ? tr('写上要它做什么')
               : '';
 
   // Another directory, Agent or computer: another 「上次」.
@@ -76,7 +77,7 @@ export default function NewTask() {
     setNote('');
     try {
       const { session: found } = await r.request('lastsession', { cwd: cwd, agent: draft.agent });
-      if (!found) setNote(`这个目录里没有 ${agentName(draft.agent)} 的旧对话`);
+      if (!found) setNote(tr('这个目录里没有 {agent} 的旧对话', { agent: agentName(draft.agent) }));
       else if (found.terminal) router.replace({ pathname: '/chat', params: { machine: m.id, terminal: found.terminal } });
       else setDraft({ resume: { id: found.id, title: found.title, updated: found.updated } });
     } catch (e) {
@@ -123,13 +124,13 @@ export default function NewTask() {
 
   return (
     <KeyboardSafe style={{ backgroundColor: t.bg }}>
-      <Nav close big title="新任务" sub="在电脑上开一个新终端，运行 Agent" />
+      <Nav close big title={tr('新任务')} sub={tr('在电脑上开一个新终端，运行 Agent')} />
       <ScrollView ref={scroll} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <View style={s.field}>
-          <Label>电脑</Label>
+          <Label>{tr('电脑')}</Label>
           <Pressable onPress={() => setPicking(!picking)} style={[s.sel, { backgroundColor: t.card, borderColor: t.line }]}>
             <View style={[s.dot, { backgroundColor: m?.status === 'online' ? t.ok : t.dim }]} />
-            <Text style={[s.selText, { color: t.text }]}>{m?.name || '还没有配对电脑'}</Text>
+            <Text style={[s.selText, { color: t.text }]}>{m?.name || tr('还没有配对电脑')}</Text>
             <View style={{ marginLeft: 'auto', transform: [{ rotate: picking ? '90deg' : '0deg' }] }}>
               <Icon name="right" size={14} width={2} color={t.dim} />
             </View>
@@ -145,8 +146,8 @@ export default function NewTask() {
                 style={[s.sel, { backgroundColor: t.bg, borderColor: x.id === m?.id ? t.focus : t.line }]}
               >
                 <View style={[s.dot, { backgroundColor: x.status === 'online' ? t.ok : t.dim }]} />
-                <Text style={[s.selText, { color: t.text }]}>{x.name || '电脑'}</Text>
-                <Text style={{ marginLeft: 'auto', color: t.dim, fontSize: 13 }}>{x.status === 'online' ? '在线' : '不在线'}</Text>
+                <Text style={[s.selText, { color: t.text }]}>{x.name || tr('电脑')}</Text>
+                <Text style={{ marginLeft: 'auto', color: t.dim, fontSize: 13 }}>{x.status === 'online' ? tr('在线') : tr('不在线')}</Text>
               </Pressable>
             ))}
         </View>
@@ -164,7 +165,7 @@ export default function NewTask() {
           />
         )}
         <View style={s.field}>
-          <Label>目录</Label>
+          <Label>{tr('目录')}</Label>
           <Pressable
             disabled={!m}
             onPress={() => m && router.push({ pathname: '/dirs', params: { machine: m.id, ...(cwd && { at: cwd }) } })}
@@ -173,10 +174,10 @@ export default function NewTask() {
             <Icon name="folder" size={20} color={t.dim} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text numberOfLines={1} ellipsizeMode="head" style={{ fontFamily: mono, fontSize: 15, color: cwd ? t.text : t.dim }}>
-                {cwd ? tilde(cwd) : '选一个文件夹'}
+                {cwd ? tilde(cwd) : tr('选一个文件夹')}
               </Text>
               {!!draft.about && <Text style={{ fontSize: 12, color: t.dim }}>{draft.about}</Text>}
-              {!draft.cwd && !!cwd && <Text style={{ fontSize: 12, color: t.dim }}>空间「{land.space?.name}」的文件夹，点这里换</Text>}
+              {!draft.cwd && !!cwd && <Text style={{ fontSize: 12, color: t.dim }}>{tr('空间「{name}」的文件夹，点这里换', { name: land.space?.name })}</Text>}
             </View>
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Pressable>
@@ -200,7 +201,7 @@ export default function NewTask() {
           </View>
         </View>
         <View style={s.field}>
-          <Label>{draft.resume ? '接着说什么（可以不写）' : '要它做什么'}</Label>
+          <Label>{draft.resume ? tr('接着说什么（可以不写）') : tr('要它做什么')}</Label>
           <TextInput
             multiline
             value={draft.prompt}
@@ -215,44 +216,44 @@ export default function NewTask() {
               if (Keyboard.isVisible()) scroll.current?.scrollToEnd({ animated: true });
             }}
             onBlur={() => (typing.current = false)}
-            accessibilityLabel={draft.resume ? '接着说什么' : '要它做什么'}
-            placeholder="比如：把审批框里的终端内容换成等宽字体"
+            accessibilityLabel={draft.resume ? tr('接着说什么') : tr('要它做什么')}
+            placeholder={tr('比如：把审批框里的终端内容换成等宽字体')}
             placeholderTextColor={t.dim}
             style={[s.area, { color: t.text, backgroundColor: t.card, borderColor: t.line }, noOutline]}
           />
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Btn
-            label="从剪贴板粘贴"
+            label={tr('从剪贴板粘贴')}
             onPress={() =>
               Clipboard.getStringAsync()
                 .then((x) => x && setDraft({ prompt: draft.prompt ? `${draft.prompt}\n${x}` : x }))
                 .catch(() => undefined)
             }
           />
-          {canResume && !draft.resume && <Btn label="接着上次的对话" onPress={findLast} />}
+          {canResume && !draft.resume && <Btn label={tr('接着上次的对话')} onPress={findLast} />}
         </View>
         {!!draft.resume && (
           <View style={[s.resume, { backgroundColor: t.card, borderColor: t.line }]}>
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ fontSize: 12, color: t.dim }}>接着上次的对话 · {ago(draft.resume.updated)}</Text>
+              <Text style={{ fontSize: 12, color: t.dim }}>{tr('接着上次的对话 · {when}', { when: ago(draft.resume.updated) })}</Text>
               <Text numberOfLines={2} style={{ fontSize: 15, color: t.text }}>
                 {draft.resume.title}
               </Text>
             </View>
-            <Pressable onPress={() => setDraft({ resume: undefined })} style={[s.clear, { backgroundColor: t.well }]} accessibilityLabel="不接着这段对话">
+            <Pressable onPress={() => setDraft({ resume: undefined })} style={[s.clear, { backgroundColor: t.well }]} accessibilityLabel={tr('不接着这段对话')}>
               <Icon name="close" size={12} width={2.4} color={t.text} />
             </Pressable>
           </View>
         )}
         {!!note && <Notice text={note} />}
-        {m && m.status === 'online' && !able && <Notice text={NOT_YET} />}
-        {m && m.status !== 'online' && <Notice text={m.error ?? '电脑没连上'} />}
+        {m && m.status === 'online' && !able && <Notice text={tr(NOT_YET)} />}
+        {m && m.status !== 'online' && <Notice text={m.error ?? tr('电脑没连上')} />}
       </ScrollView>
       <View style={{ paddingHorizontal: 18, paddingBottom: bottom + 4, gap: 10 }}>
-        <Wide label={busy ? '正在打开…' : draft.resume ? '接着做' : '开始'} disabled={!ready} onPress={start} />
+        <Wide label={busy ? tr('正在打开…') : draft.resume ? tr('接着做') : tr('开始')} disabled={!ready} onPress={start} />
         <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>
-          {missing || (land.space ? `电脑上「${land.space.name}」里会出现一个新标签页，回到电脑前可以直接接着用` : '电脑上会出现一个新标签页，你回到电脑前可以直接接着用')}
+          {missing || (land.space ? tr('电脑上「{name}」里会出现一个新标签页，回到电脑前可以直接接着用', { name: land.space.name }) : tr('电脑上会出现一个新标签页，你回到电脑前可以直接接着用'))}
         </Text>
       </View>
     </KeyboardSafe>

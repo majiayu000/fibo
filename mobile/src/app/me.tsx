@@ -3,6 +3,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { type Machine, useHub } from '@/remote/hub';
+import { tk, tr } from '@/i18n';
 import { useSettings } from '@/store/settings';
 import { Icon } from '@/ui/icons';
 import { Label, Nav } from '@/ui/kit';
@@ -11,7 +12,7 @@ import { Bar, tightWords, useTightWindows } from '@/ui/quotaLine';
 import { TabBar } from '@/ui/tabs';
 import { type Theme, useTheme } from '@/ui/theme';
 
-const APPEARANCE = { system: '跟随系统', light: '浅色', dark: '深色' } as const;
+const APPEARANCE = { system: tk('跟随系统'), light: tk('浅色'), dark: tk('深色') } as const;
 
 function Line({ t, title, value, onPress, last }: { t: Theme; title: string; value?: string; onPress: () => void; last?: boolean }) {
   return (
@@ -34,12 +35,12 @@ function OnlineCard({ m, t }: { m: Machine; t: Theme }) {
       <Pressable accessibilityRole="button" onPress={() => router.push('/machines')} style={s.cardHead}>
         <View style={[s.dot, { backgroundColor: t.ok }]} />
         <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '600', color: t.text, flexShrink: 1 }}>
-          {m.name || '电脑'}
+          {m.name || tr('电脑')}
         </Text>
-        <Text style={{ marginLeft: 'auto', fontSize: 13, color: t.dim }}>{relayPlace(m.link.relay).lan ? '局域网' : '中继'}</Text>
+        <Text style={{ marginLeft: 'auto', fontSize: 13, color: t.dim }}>{relayPlace(m.link.relay).lan ? tr('局域网') : tr('中继')}</Text>
       </Pressable>
       {tight.length > 0 && (
-        <Pressable accessibilityRole="button" accessibilityLabel="看全部额度" onPress={() => router.push('/quota')} style={{ gap: 10 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('看全部额度')} onPress={() => router.push('/quota')} style={{ gap: 10 }}>
           {tight.map((q) => (
             <View key={q.agent} style={{ gap: 5 }}>
               <Text style={{ fontSize: 13, color: t.text }}>{tightWords(q, false)}</Text>
@@ -60,29 +61,29 @@ export default function Me() {
   const off = machines.length - online.length;
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Nav big tab title="我的" />
+      <Nav big tab title={tr('我的')} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: 24, gap: 10 }}>
         <View style={s.head}>
-          <Label>电脑</Label>
+          <Label>{tr('电脑#list')}</Label>
           <Pressable accessibilityRole="button" hitSlop={10} onPress={() => router.push('/pair')}>
-            <Text style={{ fontSize: 14, color: t.link }}>配对新电脑</Text>
+            <Text style={{ fontSize: 14, color: t.link }}>{tr('配对新电脑')}</Text>
           </Pressable>
         </View>
-        {machines.length === 0 && <Text style={{ fontSize: 14, color: t.dim }}>还没有配对电脑</Text>}
+        {machines.length === 0 && <Text style={{ fontSize: 14, color: t.dim }}>{tr('还没有配对电脑')}</Text>}
         {online.map((m) => (
           <OnlineCard key={m.id} m={m} t={t} />
         ))}
         {off > 0 && (
           <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
-            <Line t={t} title={`${off} 台电脑离线`} value="查看或移除" last onPress={() => router.push('/machines')} />
+            <Line t={t} title={tr('{n} 台电脑离线', { n: off })} value={tr('查看或移除')} last onPress={() => router.push('/machines')} />
           </View>
         )}
-        <Label style={{ marginTop: 14 }}>设置</Label>
+        <Label style={{ marginTop: 14 }}>{tr('设置')}</Label>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
-          <Line t={t} title="额度明细" onPress={() => router.push('/quota')} />
-          <Line t={t} title="外观" value={APPEARANCE[v.appearance]} onPress={() => router.push('/settings')} />
-          <Line t={t} title="打开时要 Face ID / 指纹" value={v.lock ? '开' : '关'} onPress={() => router.push('/settings')} />
-          <Line t={t} title="通知" value="推送还没接" last onPress={() => router.push('/settings')} />
+          <Line t={t} title={tr('额度明细')} onPress={() => router.push('/quota')} />
+          <Line t={t} title={tr('外观')} value={tr(APPEARANCE[v.appearance])} onPress={() => router.push('/settings')} />
+          <Line t={t} title={tr('打开时要 Face ID / 指纹')} value={v.lock ? tr('开') : tr('关')} onPress={() => router.push('/settings')} />
+          <Line t={t} title={tr('通知')} value={tr('推送还没接')} last onPress={() => router.push('/settings')} />
         </View>
       </ScrollView>
       <TabBar on="me" />

@@ -1,6 +1,7 @@
 // Where the inbox puts things, and when it may move them. A tap lands on what is under the
 // finger by the time it comes down: what asks you must not change places on its own, or
 // 「允许」 lands on another card. Pure, so tests run it without React Native.
+import { tr } from '../i18n';
 import type { Card, Machine } from '../remote/hub';
 import { cardTitle } from './format';
 import { rank, spaceName, statusKey, statusWord } from './status';
@@ -175,7 +176,7 @@ export function holdLeft(h: Hold, now: number): number {
 /** The home screen's title: what is yours to decide. Finished work to check is not counted. */
 export function headline(s: Shelf, paired: number): string {
   if (paired === 0) return 'Fibo';
-  return s.acts > 0 ? `${s.acts} 件要你决定` : '没有要你决定的事';
+  return s.acts > 0 ? tr('{n} 件要你决定', { n: s.acts }) : tr('没有要你决定的事');
 }
 
 /** How many of what runs show before 「看全部」: on a real phone 12 pushed everything else two screens down. */
@@ -190,9 +191,9 @@ export function connectionLine(machines: Linked[]): { text: string; alert: boole
   const online = machines.filter((m) => m.status === 'online');
   const off = machines.length - online.length;
   if (machines.length === 0) return { text: '', alert: false };
-  if (online.length === 0) return { text: machines.length === 1 ? `${machines[0].name || '电脑'}不在线` : '电脑都不在线', alert: true };
-  const here = online.length === 1 ? `${online[0].name || '电脑'} 在线` : `${online.length} 台电脑在线`;
-  return { text: off > 0 ? `${here} · ${off} 台离线` : here, alert: machines.some((m) => m.status === 'refused') };
+  if (online.length === 0) return { text: machines.length === 1 ? tr('{name}不在线', { name: machines[0].name || tr('电脑') }) : tr('电脑都不在线'), alert: true };
+  const here = online.length === 1 ? tr('{name} 在线', { name: online[0].name || tr('电脑') }) : tr('{n} 台电脑在线', { n: online.length });
+  return { text: off > 0 ? tr('{here} · {n} 台离线', { here, n: off }) : here, alert: machines.some((m) => m.status === 'refused') };
 }
 
 /** Computers that take a row on the home screen; the rest are counted in the line and listed under 我的. */

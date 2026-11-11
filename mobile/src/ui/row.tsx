@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, type StyleProp, StyleSheet, Text, type TextStyle, View } from 'react-native';
 import type { Card, Machine } from '../remote/hub';
+import { tr } from '../i18n';
 import { cardTitle } from './format';
 import { rowSaysFull } from './modes';
 import { SpaceMark } from './icons';
@@ -48,7 +49,7 @@ export function Row({
 }) {
   const t = useTheme();
   const stale = m.status !== 'online';
-  const word = right?.text ?? (stale ? `断开前：${statusWord(c)}` : statusWord(c));
+  const word = right?.text ?? (stale ? tr('断开前：{state}', { state: statusWord(c) }) : statusWord(c));
   const color = right ? (right.color ?? t.dim) : stale ? t.dim : statusColor(c, t);
   const space = spaceName(m, c);
   // 等你回答 says nothing on its own: what it asks, so the row is worth opening from here.
@@ -69,7 +70,7 @@ export function Row({
       <View style={[s.l1, (stale || dim) && { opacity: 0.6 }]}>
         <SpaceMark name={space} id={c.space || space} />
         <Text numberOfLines={1} style={[s.where, { color: t.dim }]}>
-          {named || stale ? `${space} · ${m.name || '电脑'}` : space}
+          {named || stale ? `${space} · ${m.name || tr('电脑')}` : space}
         </Text>
         {!right && !stale && c.running_since ? <RunningWord c={c} color={color} style={s.state} /> : <Text style={[s.state, { color }]}>{word}</Text>}
       </View>

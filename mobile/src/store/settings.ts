@@ -5,6 +5,8 @@ import { persisted } from './kv';
 
 export type Settings = {
   appearance: 'system' | 'light' | 'dark';
+  /** 自动 follows the phone's language; a phone saved before this had no field and reads as auto. */
+  language: 'auto' | 'zh' | 'en';
   /** Face ID / fingerprint on opening the app and before every 允许. */
   lock: boolean;
   /** Ask once more before allowing a push, rm, deploy and the like. */
@@ -14,6 +16,7 @@ export type Settings = {
 
 export const settings = persisted<Settings>('mooring.settings', {
   appearance: 'system',
+  language: 'auto',
   lock: false,
   confirmDanger: true,
   notify: { approval: true, waiting: true, error: true, done: false, quiet: false },

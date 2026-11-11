@@ -10,6 +10,7 @@ import { copyWithNote } from '@/ui/copy';
 import { Btn, Nav, Notice, mono, useBottom } from '@/ui/kit';
 import { type Theme, useTheme } from '@/ui/theme';
 import { allText, byteLength, bytes, extend, loaded, type Loaded, metaWords, missing, type ToolDetail, toolName, viewRows } from '@/ui/toolview';
+import { tr } from '@/i18n';
 
 type Part = 'input' | 'output';
 type Texts = { input: Loaded; output?: Loaded };
@@ -110,7 +111,7 @@ export default function ToolScreen() {
   const gap = useCallback(
     () => (
       <Text style={{ fontSize: 13, color: t.dim, textAlign: 'center' }} numberOfLines={1}>
-        {`… 中间还有 ${bytes(rest)} 没取 …`}
+        {tr('… 中间还有 {size} 没取 …', { size: bytes(rest) })}
       </Text>
     ),
     [t, rest],
@@ -118,7 +119,7 @@ export default function ToolScreen() {
 
   const copy = () => {
     if (!text) return;
-    copyWithNote(allText(text), rest > 0 ? `已复制取到的部分，中间还差 ${bytes(rest)}` : '已复制全部', setNote, () => left.current);
+    copyWithNote(allText(text), rest > 0 ? tr('已复制取到的部分，中间还差 {size}', { size: bytes(rest) }) : tr('已复制全部'), setNote, () => left.current);
   };
 
   const steps = detail?.steps ?? [];
@@ -126,7 +127,7 @@ export default function ToolScreen() {
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <Nav
         rule
-        title={detail ? toolName(detail.name) : '工具调用'}
+        title={detail ? toolName(detail.name) : tr('工具调用')}
         sub={
           detail ? (
             <Text numberOfLines={1} style={{ fontSize: 12, color: detail.failed ? t.err : t.dim }}>
@@ -136,9 +137,9 @@ export default function ToolScreen() {
         }
       />
       {!online ? (
-        <Notice text={m?.error ?? '电脑没连上'} />
+        <Notice text={m?.error ?? tr('电脑没连上')} />
       ) : !can ? (
-        <Notice text={NOT_YET} />
+        <Notice text={tr(NOT_YET)} />
       ) : error && !detail ? (
         <Notice text={error} />
       ) : !detail || !texts ? (
@@ -167,25 +168,25 @@ export default function ToolScreen() {
           )}
           <View style={s.bar}>
             <View style={[s.tabs, { backgroundColor: t.well }]} accessibilityRole="tablist">
-              <Tab t={t} on={part === 'output'} onPress={() => setPart('output')} label={detail.output ? `输出 ${bytes(detail.size ?? detail.output.total)}` : '输出'} />
-              <Tab t={t} on={part === 'input'} onPress={() => setPart('input')} label={`输入 ${bytes(detail.input.total)}`} />
+              <Tab t={t} on={part === 'output'} onPress={() => setPart('output')} label={detail.output ? tr('输出 {size}', { size: bytes(detail.size ?? detail.output.total) }) : tr('输出')} />
+              <Tab t={t} on={part === 'input'} onPress={() => setPart('input')} label={tr('输入 {size}', { size: bytes(detail.input.total) })} />
             </View>
-            <Btn label="复制" onPress={copy} disabled={!text} />
+            <Btn label={tr('复制')} onPress={copy} disabled={!text} />
           </View>
           {rest > 0 && (
             <View style={s.more}>
               <Text style={{ flex: 1, fontSize: 13, color: t.dim }} numberOfLines={1}>
-                {fetching ? '正在取…' : `中间还有 ${bytes(rest)}`}
+                {fetching ? tr('正在取…') : tr('中间还有 {size}', { size: bytes(rest) })}
               </Text>
-              <Btn label="再取一段" disabled={fetching} onPress={() => fetchMore(false)} />
-              <Btn label="全部取完" disabled={fetching} onPress={() => fetchMore(true)} />
+              <Btn label={tr('再取一段')} disabled={fetching} onPress={() => fetchMore(false)} />
+              <Btn label={tr('全部取完')} disabled={fetching} onPress={() => fetchMore(true)} />
             </View>
           )}
           {!!(note || error) && <Notice text={note || error} tone={error ? 'danger' : undefined} style={{ paddingVertical: 2 }} />}
           {part === 'output' && !detail.output ? (
-            <Notice text="还没有结果：可能还没跑完，也可能结果没有写进记录" />
+            <Notice text={tr('还没有结果：可能还没跑完，也可能结果没有写进记录')} />
           ) : text && !text.total ? (
-            <Notice text={part === 'output' ? '没有输出' : '没有输入'} />
+            <Notice text={part === 'output' ? tr('没有输出') : tr('没有输入')} />
           ) : (
             <CodeView rows={rows} gap={gap} footer={bottom + 24} />
           )}

@@ -4,6 +4,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { type Machine, NOT_YET, remote, supports, useHub } from '@/remote/hub';
+import { tr } from '@/i18n';
 import { type QuotaReading as Reading, quotaStore } from '@/store/quota';
 import { Nav, Notice, useBottom } from '@/ui/kit';
 import { level, quotaView, resetText, windowName } from '@/ui/parse';
@@ -17,7 +18,7 @@ function Gauge({ used, t }: { used: number; t: Theme }) {
   const lit = Math.round((Math.min(used, 100) / 100) * STRIPES);
   const color = t[level(used)];
   return (
-    <View style={s.gauge} accessibilityLabel={`用了 ${used}%`}>
+    <View style={s.gauge} accessibilityLabel={tr('用了 {n}%', { n: used })}>
       {Array.from({ length: STRIPES }, (_, i) => (
         <View key={i} style={[s.stripe, { backgroundColor: i < lit ? color : t.empty }]} />
       ))}
@@ -30,9 +31,9 @@ function AgentCard({ r, t }: { r: Reading; t: Theme }) {
     <View style={[s.card, { backgroundColor: t.card, borderColor: t.line }]}>
       <View style={s.row}>
         <Text style={{ fontSize: 17, fontWeight: '600', color: t.text }}>{agentName(r.agent)}</Text>
-        {!!r.plan && <Text style={{ fontSize: 13, color: t.dim }}>{r.plan[0].toUpperCase() + r.plan.slice(1)} 计划</Text>}
+        {!!r.plan && <Text style={{ fontSize: 13, color: t.dim }}>{tr('{plan} 计划', { plan: r.plan[0].toUpperCase() + r.plan.slice(1) })}</Text>}
       </View>
-      {r.windows.length === 0 && <Text style={{ color: t.dim, fontSize: 13 }}>没有读数</Text>}
+      {r.windows.length === 0 && <Text style={{ color: t.dim, fontSize: 13 }}>{tr('没有读数')}</Text>}
       {r.windows.map((w) => {
         const reset = resetText(w.resets_at);
         return (
@@ -83,7 +84,7 @@ function MachineQuota({ m, named, t }: { m: Machine; named: boolean; t: Theme })
   const view = quotaView(m.status === 'online', m.ops.includes('quota'), saved);
   const newest = saved?.reduce((n, a) => Math.max(n, a.at), 0);
   const when = newest ? ago(newest) : '';
-  const line = view === 'gone' ? `断开前${when ? ` · ${when}的读数` : ''}` : when ? `${when}更新` : '';
+  const line = view === 'gone' ? (when ? tr('断开前 · {when}的读数', { when }) : tr('断开前')) : when ? tr('{when}更新', { when }) : '';
 
   return (
     <View style={{ gap: 14 }}>
@@ -94,11 +95,11 @@ function MachineQuota({ m, named, t }: { m: Machine; named: boolean; t: Theme })
         </View>
       )}
       {!named && view === 'gone' && <Text style={{ fontSize: 13, color: t.dim }}>{line}</Text>}
-      {view === 'unsupported' && <Notice text={NOT_YET} />}
-      {view === 'never' && <Notice text="电脑没连上，也还没读到过" />}
+      {view === 'unsupported' && <Notice text={tr(NOT_YET)} />}
+      {view === 'never' && <Notice text={tr('电脑没连上，也还没读到过')} />}
       {view !== 'never' && view !== 'unsupported' && !!error && <Notice text={error} />}
       {view === 'loading' && !error && <ActivityIndicator style={{ marginTop: 24 }} />}
-      {(view === 'live' || view === 'gone') && saved?.length === 0 && <Notice text="这一周电脑上的 Agent 都没报过额度" />}
+      {(view === 'live' || view === 'gone') && saved?.length === 0 && <Notice text={tr('这一周电脑上的 Agent 都没报过额度')} />}
       {(view === 'live' || view === 'gone') && saved?.map((a) => <AgentCard key={a.agent} r={a} t={t} />)}
       {m.status === 'online' && <TodayTokens m={m} />}
     </View>
@@ -114,8 +115,8 @@ export default function Quota() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Nav big title="额度" sub={only ? `来自 ${only.name}` : undefined} />
-      {machines.length === 0 && <Notice text="还没有配对电脑" />}
+      <Nav big title={tr('额度')} sub={only ? tr('来自 {name}', { name: only.name }) : undefined} />
+      {machines.length === 0 && <Notice text={tr('还没有配对电脑')} />}
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 24, paddingBottom: bottom + 24 }}>
         {machines.map((m) => (
           <MachineQuota key={m.id} m={m} named={named} t={t} />

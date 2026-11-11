@@ -8,6 +8,7 @@ import { oops, switchMode } from '../actions';
 import { remote } from '../remote/hub';
 import type { ModeOption, ModeOptions } from './modes';
 import { useTheme } from './theme';
+import { tr } from '../i18n';
 
 export function EffortRow({ machine, terminal, start }: { machine: string; terminal: string; /** The models have been read: the terminal is free. */ start: boolean }) {
   const t = useTheme();
@@ -43,7 +44,7 @@ export function EffortRow({ machine, terminal, start }: { machine: string; termi
   return (
     <View style={[s.wrap, { borderColor: t.sep }]}>
       <View style={s.head}>
-        <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>强度</Text>
+        <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>{tr('强度')}</Text>
         {!!on?.detail && (
           <Text numberOfLines={1} style={{ flex: 1, color: t.dim, fontSize: 13 }}>
             {on.detail}
@@ -51,7 +52,7 @@ export function EffortRow({ machine, terminal, start }: { machine: string; termi
         )}
       </View>
       {!!error && <Text style={{ color: t.err, fontSize: 13, lineHeight: 18 }}>{error}</Text>}
-      {!got && !error && <ActivityIndicator accessibilityLabel="正在读强度" color={t.dim} style={{ alignSelf: 'flex-start' }} />}
+      {!got && !error && <ActivityIndicator accessibilityLabel={tr('正在读强度')} color={t.dim} style={{ alignSelf: 'flex-start' }} />}
       {!!got && (
         // Every level in sight: in a scrolling row the last one stood half off the sheet.
         <View style={s.chips}>
@@ -59,7 +60,7 @@ export function EffortRow({ machine, terminal, start }: { machine: string; termi
             <Pressable
               key={o.key}
               accessibilityRole="button"
-              accessibilityLabel={`强度 ${o.label}${o.current ? '，正在用' : ''}`}
+              accessibilityLabel={o.current ? tr('强度 {label}，正在用', { label: o.label }) : tr('强度 {label}', { label: o.label })}
               accessibilityState={{ selected: !!o.current, busy: busy === o.key }}
               disabled={!!o.current || !!busy}
               onPress={() => pick(o)}

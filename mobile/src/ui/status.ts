@@ -2,6 +2,7 @@
 // (`status::of` on the desktop, `status` and `status_label` on each card) and spells it;
 // a phone only pairs with hosts new enough to send both.
 import type { Card, Machine } from '../remote/hub';
+import { hostWords, tr } from '../i18n';
 import type { Theme } from './theme';
 
 export function statusKey(c: Card): string {
@@ -10,8 +11,9 @@ export function statusKey(c: Card): string {
 }
 
 export function statusWord(c: Card): string {
-  if (c.approval) return '等你审批';
-  return c.status_label ?? (c.phase === 'shell' ? '终端' : '');
+  if (c.approval) return tr('等你审批');
+  if (c.status_label) return hostWords(c.status_label);
+  return c.phase === 'shell' ? tr('终端') : '';
 }
 
 export function statusColor(c: Card, t: Theme): string {

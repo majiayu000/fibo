@@ -45,6 +45,7 @@
 | 11-05 | 同一部手机最多同时 20 条连接 | 时序 | 显示看着正常，翻 `remote-log.jsonl` 才看到成批连接；拨号途中再连会多拨 | `ef31787` | 见提交说明 |
 | 11-05 | 审批卡片写错命令：真 Claude Code 的 Tip 行顶替了命令；`git push` 的二次确认也丢了 | 真 CLI | 假 Agent 画的画面里没有 Tip 行 | `94ed0cc`：解析挪到电脑上，加 `ask` | 见 `v2-plan.md`「真机实测查出的问题」 |
 | 11-05 | 手机「停下」对 Codex 没真停；Codex 空闲时收到 Ctrl-C 会退出 | 真 CLI | 只有真 Codex 才这样，Esc 后命令还接着跑 | `38e4c5c` | `v2-plan.md` 的真实 CLI 行为表 |
+| 11-11 | 英文界面「我的」页额度写成「Codex This week 97%」，窗口名在句中却大写开头 | 真实的量和时长 | 网页版样例数据没有额度读数，这一行在网页版上根本不出现 | 句中的窗口名首字母改小写（`shortWindow` 挪进 `ui/parse.ts`） | `test/i18n.test.ts`「a quota window named mid-line…」 |
 
 11-05 之前的实测详情见 [v2-plan.md](v2-plan.md) 的「真机实测查出的问题」和「真机实测后留下的四件事」。
 

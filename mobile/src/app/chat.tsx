@@ -26,7 +26,7 @@ import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
 import { partialWords, readBackWords } from '@/ui/parse';
 import { WaitPanel } from '@/ui/waitpanel';
-import { STARTING, sendBlocked, waitView } from '@/ui/waits';
+import { sendBlocked, starting as startingView, waitView } from '@/ui/waits';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
 import { hasEffort, type ModeKind } from '@/ui/modes';
@@ -36,6 +36,7 @@ import { TrustAsk } from '@/ui/trust';
 import { sameWords, sendTarget, shownWords } from '@/ui/sent';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
+import { tr } from '@/i18n';
 
 /** `queued`: sent while the Agent worked; what that means depends on the CLI (ui/busy.ts). */
 type Pending = { text: string; at: number; queued?: boolean; pictures?: number; how?: How; now?: boolean };
@@ -44,7 +45,7 @@ const POLL_MS = 2000;
 const NO_CONVERSATION = /没有 Agent 对话/;
 
 /** A message on its way, as its bubble shows it. */
-const pendingText = (p: Pending) => (p.pictures ? `[${p.pictures} 张图片] ${p.text}`.trim() : p.text);
+const pendingText = (p: Pending) => (p.pictures ? `${tr('[{n} 张图片]', { n: p.pictures })} ${p.text}`.trim() : p.text);
 
 type Line = { kind: 'msg'; m: Message } | { kind: 'pending'; p: Pending } | { kind: 'unsent'; id: string; text: string; error?: string };
 
@@ -226,11 +227,11 @@ export default function Chat() {
     }
     const to = sendTarget(session, online, card?.session);
     if (!to) {
-      setError('尚未识别对话，暂时不能发送');
+      setError(tr('尚未识别对话，暂时不能发送'));
       return false;
     }
     if (!online && pictures.length) {
-      setError('电脑没连上，图片要连上后才能发');
+      setError(tr('电脑没连上，图片要连上后才能发'));
       return false;
     }
     if (!online) {
@@ -249,7 +250,7 @@ export default function Chat() {
     } catch (e) {
       setPending((p) => p.filter((x) => x.text !== text));
       const why = (e as Error).message;
-      setError(why === UNSURE ? why : `没发出去：${why}`);
+      setError(why === tr(UNSURE) ? why : tr('没发出去：{why}', { why }));
       return false;
     }
   }
@@ -262,7 +263,7 @@ export default function Chat() {
       setPending((p) => p.map((x) => (x.how === 'queue' ? { ...x, now: true } : x)));
       setError('');
     } catch (e) {
-      setError(`没立刻发出去：${(e as Error).message}`);
+      setError(tr('没立刻发出去：{why}', { why: (e as Error).message }));
     }
   }
 
@@ -279,7 +280,7 @@ export default function Chat() {
   async function stop() {
     try {
       const done = await write(machine, 'stop', { terminal });
-      setError(done?.closed_background ? '这一轮中断了。它后台没结束的命令也一起关了。' : '');
+      setError(done?.closed_background ? tr('这一轮中断了。它后台没结束的命令也一起关了。') : '');
       setTimeout(() => refresh(machine), 300);
     } catch (e) {
       setError((e as Error).message);
@@ -300,7 +301,7 @@ export default function Chat() {
   const settled = useSettled(`${ask.subject}|${ask.note}`);
   const waiting = online && card?.phase === 'waiting' && !card.approval ? card.waiting : null;
   const starting = online && card?.phase === 'shell' && !!card.agent && !card.trust;
-  const view = waitView(waiting) ?? (starting ? STARTING : null);
+  const view = waitView(waiting) ?? (starting ? startingView() : null);
   const agent = agentName(card?.agent);
   const running = online && card?.phase === 'working';
   const canSendNow = !!running && supports(m, 'sendnow') && sendsNow(card?.agent);
@@ -324,13 +325,13 @@ export default function Chat() {
         )
       ) : l.kind === 'pending' ? (
         l.p.how === 'queue' && !l.p.now && canSendNow ? (
-          <Mine text={pendingText(l.p)} note={QUEUED_TAP} tone="queued" onPress={openQueued} />
+          <Mine text={pendingText(l.p)} note={tr(QUEUED_TAP)} tone="queued" onPress={openQueued} />
         ) : (
-          <Mine text={pendingText(l.p)} note={l.p.now ? SENT_NOW : l.p.how ? HOW_NOTE[l.p.how] : l.p.queued ? whileBusy(card?.agent).note : '发送中…'} tone="pending" />
+          <Mine text={pendingText(l.p)} note={l.p.now ? tr(SENT_NOW) : l.p.how ? tr(HOW_NOTE[l.p.how]) : l.p.queued ? tr(whileBusy(card?.agent).note) : tr('发送中…')} tone="pending" />
         )
       ) : (
         <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
-          <Mine text={l.text} note={l.error ? `没发出去：${l.error}（点一下重发，按住删除）` : '重连后发送（按住删除）'} tone={l.error ? 'error' : 'pending'} />
+          <Mine text={l.text} note={l.error ? tr('没发出去：{why}（点一下重发，按住删除）', { why: l.error }) : tr('重连后发送（按住删除）')} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
     [agent, card?.agent, toTools, canSendNow, openQueued],
@@ -340,7 +341,7 @@ export default function Chat() {
     <KeyboardSafe style={{ backgroundColor: t.bg }}>
       <Nav
         rule
-        title={card ? cardTitle(card) : '对话'}
+        title={card ? cardTitle(card) : tr('对话')}
         sub={
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
             <Text numberOfLines={1} style={{ fontSize: 12, color: t.dim, flexShrink: 1 }}>
@@ -357,13 +358,13 @@ export default function Chat() {
         right={
           <Pill
             items={[
-              { icon: 'diff', label: '改动', onPress: toDiff },
-              { icon: 'terminal', label: '终端最后几行', onPress: () => setTerm(true) },
+              { icon: 'diff', label: tr('改动'), onPress: toDiff },
+              { icon: 'terminal', label: tr('终端最后几行'), onPress: () => setTerm(true) },
             ]}
           />
         }
       />
-      {!online && <Notice text={m?.status === 'connecting' ? '正在连接…' : `${m?.error ?? '电脑没连上'}；现在写的话会在重连后发送`} />}
+      {!online && <Notice text={m?.status === 'connecting' ? tr('正在连接…') : tr('{why}；现在写的话会在重连后发送', { why: m?.error ?? tr('电脑没连上') })} />}
       {loading && online ? (
         <ActivityIndicator style={{ marginTop: 40 }} />
       ) : (
@@ -403,14 +404,14 @@ export default function Chat() {
           }
           ListEmptyComponent={
             <Text onPress={canReadBack && !readingBack ? older : undefined} style={{ color: t.dim, textAlign: 'center' }}>
-              {canReadBack ? readBackWords(readingBack, readFailed) : partial ? partialWords(0) : !online ? '电脑没连上，连上后这里显示这段对话' : card?.session ? '这段对话还没有消息' : card?.trust ? '答完下面的问题，它才会开始' : card?.note || '这个终端里还没有 Agent 对话；Agent 起来后这里会接上'}
+              {canReadBack ? readBackWords(readingBack, readFailed) : partial ? partialWords(0) : !online ? tr('电脑没连上，连上后这里显示这段对话') : card?.session ? tr('这段对话还没有消息') : card?.trust ? tr('答完下面的问题，它才会开始') : card?.note || tr('这个终端里还没有 Agent 对话；Agent 起来后这里会接上')}
             </Text>
           }
         />
       )}
       {!!card?.approval && online && (
         <View style={{ marginHorizontal: 12, marginBottom: 10, padding: 14, gap: 10, borderRadius: 20, borderWidth: 1.5, borderColor: t.wait, backgroundColor: t.card }}>
-          <Text style={{ color: t.wait, fontSize: 14, fontWeight: '500' }}>等你审批</Text>
+          <Text style={{ color: t.wait, fontSize: 14, fontWeight: '500' }}>{tr('等你审批')}</Text>
           <Text numberOfLines={3} style={{ fontFamily: mono, fontSize: 13, color: t.text, backgroundColor: t.well, borderRadius: 10, padding: 10, overflow: 'hidden' }}>
             {ask.subject}
           </Text>
@@ -422,11 +423,11 @@ export default function Chat() {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {supports(m, 'answer') && (
               <>
-                <Btn primary icon="face" label="允许" disabled={!settled.ready} onPress={() => settled.passes() && approve(machine, card, ask).catch((e) => oops(e.message))} />
-                <Btn label="拒绝" disabled={!settled.ready} onPress={() => settled.passes() && deny(machine, card, ask).catch((e) => oops(e.message))} />
+                <Btn primary icon="face" label={tr('允许')} disabled={!settled.ready} onPress={() => settled.passes() && approve(machine, card, ask).catch((e) => oops(e.message))} />
+                <Btn label={tr('拒绝')} disabled={!settled.ready} onPress={() => settled.passes() && deny(machine, card, ask).catch((e) => oops(e.message))} />
               </>
             )}
-            <Btn label="详情" onPress={() => router.push({ pathname: '/approve', params: { machine, terminal } })} />
+            <Btn label={tr('详情')} onPress={() => router.push({ pathname: '/approve', params: { machine, terminal } })} />
           </View>
         </View>
       )}
@@ -440,16 +441,16 @@ export default function Chat() {
       )}
       {!!error && <Notice tone="danger" text={error} />}
       {online && !card ? (
-        <Notice text="这个终端已经关了" />
+        <Notice text={tr('这个终端已经关了')} />
       ) : card?.trust && online ? null :  m?.role && m.role !== 'full' && !supports(m, 'send') ? (
-        <Notice text={`这台手机的权限是「${m.role === 'view' ? '只看' : '能答审批'}」，不能发消息`} />
+        <Notice text={m.role === 'view' ? tr('这台手机的权限是「只看」，不能发消息') : tr('这台手机的权限是「能答审批」，不能发消息')} />
       ) : (
         <Composer
           agent={agent}
           model={card?.model}
           permission={card?.permission}
           running={!!running}
-          busyPlaceholder={whileBusy(card?.agent).placeholder}
+          busyPlaceholder={tr(whileBusy(card?.agent).placeholder)}
           canStop={supports(m, 'stop')}
           offline={!online}
           suggestion={suggestion}

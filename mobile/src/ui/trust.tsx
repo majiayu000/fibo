@@ -9,6 +9,7 @@ import { trustWords } from './parse';
 import { agentName } from './status';
 import { useTheme } from './theme';
 import { useSettled } from './useHold';
+import { tr } from '../i18n';
 
 /** `place` is where the card sits in its list: moved, a tap waits as it does for a new card. */
 export function TrustAsk({ machine, card, can, place = '' }: { machine: string; card: Card; can: boolean; place?: string }) {
@@ -33,11 +34,11 @@ export function TrustAsk({ machine, card, can, place = '' }: { machine: string; 
       <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19 }}>{words.means}</Text>
       {can ? (
         <View style={{ flexDirection: 'row', gap: 8 }} onStartShouldSetResponder={() => !settled.ready}>
-          <Btn primary label="信任这个文件夹" disabled={busy || !settled.ready} onPress={() => answer(true)} />
-          <Btn label="不信任" disabled={busy || !settled.ready} onPress={() => answer(false)} />
+          <Btn primary label={tr('信任这个文件夹')} disabled={busy || !settled.ready} onPress={() => answer(true)} />
+          <Btn label={tr('不信任')} disabled={busy || !settled.ready} onPress={() => answer(false)} />
         </View>
       ) : (
-        <Text style={{ color: t.dim, fontSize: 13 }}>这台手机的权限不够，到电脑上回答。</Text>
+        <Text style={{ color: t.dim, fontSize: 13 }}>{tr('这台手机的权限不够，到电脑上回答。')}</Text>
       )}
     </View>
   );

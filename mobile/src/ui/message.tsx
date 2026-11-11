@@ -10,6 +10,7 @@ import { readable } from './md/parse';
 import { span } from './parse';
 import { SelectSheet } from './sheets';
 import { clock, useTheme } from './theme';
+import { tk, tr } from '../i18n';
 
 export type Tools = { commands?: number; files?: { path: string; added: number; removed: number }[]; took?: number; calls?: number };
 export type Message = { seq: number; at: number; role: 'user' | 'agent'; text: string; tools?: Tools | null };
@@ -39,17 +40,18 @@ function Meta({ text, note, right, color, onSelect }: { text: string; note: stri
   const t = useTheme();
   return (
     <Text numberOfLines={1} style={[s.meta, { color }, right && { textAlign: 'right' }]}>
-      {note || text}
+      {note === COPIED ? tr(COPIED) : note || text}
       {note === COPIED && (
         <Text style={{ color: t.link }} onPress={onSelect}>
-          {' · 选择部分文字'}
+          {` · ${tr('选择部分文字')}`}
         </Text>
       )}
     </Text>
   );
 }
 
-const COPIED = '已复制全文';
+/** A `tk` key: said with `tr` where shown. */
+const COPIED = tk('已复制全文');
 
 export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress }: { text: string; at?: number; note?: string; tone?: 'pending' | 'queued' | 'error'; copyable?: boolean; onPress?: () => void }) {
   const t = useTheme();
@@ -99,13 +101,13 @@ export const Worked = memo(function Worked({ tools, onPress }: { tools: Tools; o
   if (!commands && !files.length && !calls && took < LONG_S) return null;
   const added = files.reduce((n, f) => n + f.added, 0);
   const removed = files.reduce((n, f) => n + f.removed, 0);
-  const name = files.length === 1 ? files[0].path.split('/').pop() : `${files.length} 个文件`;
+  const name = files.length === 1 ? files[0].path.split('/').pop() : tr('{n} 个文件', { n: files.length });
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={[s.worked, { borderColor: t.sep }]}>
       <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13, flex: 1 }}>
-        {[took > 0 ? `干了 ${span(took)}` : '', commands > 0 ? `跑了 ${commands} 个命令` : '', calls > 0 ? `用了 ${calls} 个工具` : ''].filter(Boolean).join(' · ')}
+        {[took > 0 ? tr('干了 {time}', { time: span(took) }) : '', commands > 0 ? tr('跑了 {n} 个命令', { n: commands }) : '', calls > 0 ? tr('用了 {n} 个工具', { n: calls }) : ''].filter(Boolean).join(' · ')}
         {(took > 0 || commands > 0) && files.length > 0 && ' · '}
-        {files.length > 0 && '改了 '}
+        {files.length > 0 && `${tr('改了')} `}
         {files.length > 0 && (
           <Text style={{ fontFamily: mono, color: t.ok }}>
             {name} +{added} −{removed}

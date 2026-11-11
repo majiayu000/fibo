@@ -3,6 +3,7 @@
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { fit } from './fit';
+import { tr } from '../i18n';
 
 export type Picture = { uri: string; base64: string };
 
@@ -26,7 +27,7 @@ async function shrink(asset: ImagePicker.ImagePickerAsset): Promise<Picture> {
     const out = await image.saveAsync({ format: SaveFormat.JPEG, compress, base64: true });
     if (out.base64 && out.base64.length <= MAX_BASE64) return { uri: out.uri, base64: out.base64 };
   }
-  throw new Error('这张图压缩后还是太大，换一张');
+  throw new Error(tr('这张图压缩后还是太大，换一张'));
 }
 
 /**
@@ -36,7 +37,7 @@ async function shrink(asset: ImagePicker.ImagePickerAsset): Promise<Picture> {
 export async function pick(from: 'camera' | 'library', room: number): Promise<Picture[] | null> {
   if (from === 'camera') {
     const p = await ImagePicker.requestCameraPermissionsAsync();
-    if (!p.granted) throw new Error('没有相机权限：到系统设置里给 Fibo 打开');
+    if (!p.granted) throw new Error(tr('没有相机权限：到系统设置里给 Fibo 打开'));
   }
   const options: ImagePicker.ImagePickerOptions = {
     mediaTypes: 'images',

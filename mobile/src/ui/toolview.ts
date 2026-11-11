@@ -1,6 +1,7 @@
 // A tool call's words and text as the two tool screens draw them, apart from React Native
 // so `bun test` runs them. A long text comes as its two ends with a gap to fetch between
 // them; what is drawn is fixed-height rows, however long the text or its lines.
+import { tr } from '../i18n';
 
 export type ToolCall = {
   id: string;
@@ -33,23 +34,23 @@ export function bytes(n: number): string {
 
 export function took(ms: number | undefined): string {
   if (ms === undefined) return '';
-  if (ms < 1000) return '不到 1 秒';
+  if (ms < 1000) return tr('不到 1 秒');
   const s = Math.round(ms / 1000);
-  if (s < 60) return `${s} 秒`;
+  if (s < 60) return tr('{s} 秒', { s });
   const m = Math.floor(s / 60);
-  return s % 60 ? `${m} 分 ${s % 60} 秒` : `${m} 分钟`;
+  return s % 60 ? tr('{m} 分 {s} 秒', { m, s: s % 60 }) : tr('{m} 分钟', { m });
 }
 
 /** The tool's own name, an MCP tool's as `server · tool`. */
 export function toolName(name: string): string {
   const short = name.startsWith('mcp__') ? name.slice(5).replace('__', ' · ') : name;
-  return short === 'exec' ? '脚本' : short === 'exec_command' || short === 'Bash' ? '命令' : short;
+  return short === 'exec' ? tr('脚本') : short === 'exec_command' || short === 'Bash' ? tr('命令') : short;
 }
 
 /** The dim line under a call: what happened to it, how long, how much. A title that already
  * names the tool leaves it out. */
 export function metaWords(call: ToolCall, named = true): string {
-  const ending = call.failed ? (call.code !== undefined && call.code !== 0 ? `失败 · 退出码 ${call.code}` : '失败') : call.open ? '还没有结果' : '';
+  const ending = call.failed ? (call.code !== undefined && call.code !== 0 ? tr('失败 · 退出码 {code}', { code: call.code }) : tr('失败')) : call.open ? tr('还没有结果') : '';
   return [ending, named && call.kind !== 'command' ? toolName(call.name) : '', took(call.took_ms), call.size !== undefined && !call.open ? bytes(call.size) : ''].filter(Boolean).join(' · ');
 }
 

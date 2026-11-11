@@ -14,6 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tr } from '../i18n';
 import { Icon, type IconName } from './icons';
 import { type Theme, useTheme } from './theme';
 
@@ -116,7 +117,7 @@ export function Nav({
   const top = useTop();
   return (
     <View style={[s.nav, { paddingTop: top + 9 }, rule && { borderBottomWidth: 1, borderColor: t.sep, paddingBottom: 10 }]}>
-      {!tab && <Round icon={close ? 'close' : 'back'} label={close ? '关闭' : '返回'} onPress={back} />}
+      {!tab && <Round icon={close ? 'close' : 'back'} label={close ? tr('关闭') : tr('返回')} onPress={back} />}
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
         {typeof title === 'string' ? (
           <Text numberOfLines={1} style={[big ? s.navBig : s.navTitle, { color: t.text }]}>

@@ -9,6 +9,7 @@ import { Icon } from './icons';
 import { mono } from './kit';
 import { useTheme } from './theme';
 import { lastLines, took, type ToolCall } from './toolview';
+import { tr } from '@/i18n';
 
 const POLL_MS = 2000;
 const STEPS = 3;
@@ -83,7 +84,7 @@ export const LiveWork = memo(function LiveWork({
   }, [machine, terminal, session, shown, focused, canSteps]);
 
   const latest = calls[calls.length - 1];
-  const head = doing ? `正在${doing}` : latest ? words(latest) : '看它到现在做了什么';
+  const head = doing ? tr('正在{doing}', { doing }) : latest ? words(latest) : tr('看它到现在做了什么');
   const pick = (m: Mode) => {
     chosen = m;
     setMode(m);
@@ -94,7 +95,7 @@ export const LiveWork = memo(function LiveWork({
       <View style={s.head}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${head}，看它到现在做了什么`}
+          accessibilityLabel={tr('{head}，看它到现在做了什么', { head })}
           disabled={!onOpen}
           onPress={onOpen}
           style={s.now}
@@ -116,7 +117,7 @@ export const LiveWork = memo(function LiveWork({
                 onPress={() => pick(m)}
                 style={[s.segOne, mode === m && { backgroundColor: t.card }]}
               >
-                <Text style={{ fontSize: 12, color: mode === m ? t.text : t.dim }}>{m === 'steps' ? '步骤' : '终端'}</Text>
+                <Text style={{ fontSize: 12, color: mode === m ? t.text : t.dim }}>{m === 'steps' ? tr('步骤') : tr('终端')}</Text>
               </Pressable>
             ))}
           </View>
@@ -131,7 +132,7 @@ export const LiveWork = memo(function LiveWork({
             <Text numberOfLines={1} ellipsizeMode="middle" style={{ flex: 1, fontFamily: mono, fontSize: 12.5, color: c.failed ? t.err : t.text }}>
               {words(c)}
             </Text>
-            <Text style={{ fontSize: 12, color: t.dim }}>{c.open ? '还没结束' : took(c.took_ms)}</Text>
+            <Text style={{ fontSize: 12, color: t.dim }}>{c.open ? tr('还没结束') : took(c.took_ms)}</Text>
           </View>
         ))}
       {shown === 'screen' && lines.length > 0 && (

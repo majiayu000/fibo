@@ -3,6 +3,7 @@
 // (it started at the root and cut the current folder off the screen, 2026-11-09).
 import { type ComponentRef, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { tr } from '../i18n';
 import { Icon } from './icons';
 import { pathChips } from './parse';
 import { useTheme } from './theme';
@@ -31,16 +32,16 @@ export function PathBar({ crumbs, onGo }: { crumbs: { label: string; path: strin
             {c.kind === 'more' ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`中间还有 ${c.hidden.length} 级`}
+                accessibilityLabel={tr('中间还有 {n} 级', { n: c.hidden.length })}
                 onPress={() => setOpen((o) => !o)}
                 style={[s.chip, { borderColor: t.line, backgroundColor: open ? t.well : t.card }]}
               >
-                <Text style={{ color: t.dim, fontSize: 13 }}>… {c.hidden.length} 级</Text>
+                <Text style={{ color: t.dim, fontSize: 13 }}>{`… ${tr('{n} 级', { n: c.hidden.length })}`}</Text>
               </Pressable>
             ) : (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={c.current ? `现在在 ${c.label}` : `去 ${c.label}`}
+                accessibilityLabel={c.current ? tr('现在在 {name}', { name: c.label }) : tr('去 {name}', { name: c.label })}
                 disabled={c.current}
                 onPress={() => go(c.path)}
                 style={({ pressed }) => [
@@ -48,7 +49,7 @@ export function PathBar({ crumbs, onGo }: { crumbs: { label: string; path: strin
                   c.current ? { borderColor: 'transparent', backgroundColor: t.well } : { borderColor: t.line, backgroundColor: pressed ? t.well : t.card },
                 ]}
               >
-                <Icon name={c.root && c.label === '电脑' ? 'computer' : 'folder'} size={15} width={1.8} color={t.link} />
+                <Icon name={c.root && crumbs[0]?.label === '/' ? 'computer' : 'folder'} size={15} width={1.8} color={t.link} />
                 <Text numberOfLines={1} style={{ color: t.text, fontSize: 13, fontWeight: c.current ? '600' : '400', maxWidth: 180 }}>
                   {c.label}
                 </Text>

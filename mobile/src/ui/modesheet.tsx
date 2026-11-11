@@ -10,6 +10,7 @@ import { Frame } from './sheets';
 import { kindName, type ModeKind, type ModeOption, type ModeOptions } from './modes';
 import { Icon } from './icons';
 import { useTheme } from './theme';
+import { tr } from '../i18n';
 
 export function ModeSheet({
   machine,
@@ -33,7 +34,7 @@ export function ModeSheet({
     let live = true;
     const r = remote(machine);
     if (!r) {
-      setError('电脑没连上');
+      setError(tr('电脑没连上'));
       return;
     }
     r.request('modes', { terminal, kind })
@@ -57,16 +58,16 @@ export function ModeSheet({
   }
   return (
     <Frame visible onClose={onClose}>
-      <Text style={[s.title, { color: t.text }]}>换{kindName(kind)}</Text>
+      <Text style={[s.title, { color: t.text }]}>{tr('换{kind}', { kind: kindName(kind) })}</Text>
       {!!error && <Text style={{ color: t.err, fontSize: 14, lineHeight: 20 }}>{error}</Text>}
-      {!got && !error && <ActivityIndicator accessibilityLabel="正在读" color={t.dim} />}
+      {!got && !error && <ActivityIndicator accessibilityLabel={tr('正在读')} color={t.dim} />}
       <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
         {got?.options.map((o) => (
           <Pressable
             key={o.key}
             accessibilityRole="button"
             accessibilityState={{ selected: !!o.current, busy: busy === o.key, disabled: !!o.current }}
-            accessibilityLabel={`${o.label}${o.current ? '，正在用' : ''}`}
+            accessibilityLabel={o.current ? tr('{label}，正在用', { label: o.label }) : o.label}
             disabled={!!o.current || !!busy}
             onPress={() => pick(o)}
             style={({ pressed }) => [

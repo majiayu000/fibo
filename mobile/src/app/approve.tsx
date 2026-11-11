@@ -16,6 +16,7 @@ import { agentName } from '@/ui/status';
 import { SayDialog } from '@/ui/sheets';
 import { ago, useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
+import { tr } from '@/i18n';
 
 export default function Approve() {
   const t = useTheme();
@@ -75,18 +76,18 @@ export default function Approve() {
           <SpaceMark name={space || 'M'} id={card?.space || space || machine} size={56} radius={16} />
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={[s.title, { color: t.text }]} numberOfLines={2}>
-              {card ? cardTitle(card) : '审批'}
+              {card ? cardTitle(card) : tr('审批')}
             </Text>
-            <Text style={{ fontSize: 15, color: gone ? t.dim : t.wait, fontWeight: '500' }}>{gone ? '已经不在等了' : '等你同意'}</Text>
+            <Text style={{ fontSize: 15, color: gone ? t.dim : t.wait, fontWeight: '500' }}>{gone ? tr('已经不在等了') : tr('等你同意')}</Text>
             <Text style={{ fontSize: 13, color: t.dim }} numberOfLines={1}>
               {[m?.name, space, agentName(card?.agent), card?.updated ? ago(card.updated) : ''].filter(Boolean).join(' · ')}
             </Text>
           </View>
         </View>
-        {!online && <Notice text={m?.error ?? '电脑没连上'} />}
+        {!online && <Notice text={m?.error ?? tr('电脑没连上')} />}
         {card?.approval && (
           <View style={[s.box, { borderColor: t.dark ? 'rgba(240,136,62,0.45)' : 'rgba(187,77,0,0.35)', backgroundColor: t.card }]}>
-            <Text style={{ fontSize: 14, color: t.wait, fontWeight: '500' }}>{/^edit|write|create/i.test(ask.kind) ? '它要改' : '它要运行'}</Text>
+            <Text style={{ fontSize: 14, color: t.wait, fontWeight: '500' }}>{/^edit|write|create/i.test(ask.kind) ? tr('它要改') : tr('它要运行')}</Text>
             {!!ask.note && (
               <Text selectable style={{ fontSize: 15, color: t.text, lineHeight: 22 }}>
                 {ask.note}
@@ -100,20 +101,20 @@ export default function Approve() {
                 {ask.detail}
               </Text>
             )}
-            {ask.truncated && <Text style={{ fontSize: 13, color: t.wait }}>电脑只读到这些，上面还有。打开终端能看全。</Text>}
+            {ask.truncated && <Text style={{ fontSize: 13, color: t.wait }}>{tr('电脑只读到这些，上面还有。打开终端能看全。')}</Text>}
             {!!said && (
               <Text style={{ fontSize: 13, color: t.dim, lineHeight: 20 }}>
-                它刚才说：「{said}」
+                {tr('它刚才说：「{said}」', { said })}
               </Text>
             )}
             {can ? (
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
-                  <Wide label="拒绝" kind="danger" disabled={off} onPress={() => run(() => deny(machine, card, ask))} textStyle={{ fontSize: 17 }} />
+                  <Wide label={tr('拒绝')} kind="danger" disabled={off} onPress={() => run(() => deny(machine, card, ask))} textStyle={{ fontSize: 17 }} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Wide
-                    label="允许"
+                    label={tr('允许')}
                     kind="allow"
                     icon="face"
                     disabled={off}
@@ -123,10 +124,10 @@ export default function Approve() {
                 </View>
               </View>
             ) : (
-              <Notice text="这台手机的权限是「只看」，不能答审批" />
+              <Notice text={tr('这台手机的权限是「只看」，不能答审批')} />
             )}
             <Text style={{ fontSize: 12, color: t.dim }}>
-              {lock ? '允许要 Face ID / 指纹。' : '允许不用验证；可以在设置里打开 Face ID。'}
+              {lock ? tr('允许要 Face ID / 指纹。') : tr('允许不用验证；可以在设置里打开 Face ID。')}
             </Text>
           </View>
         )}
@@ -144,17 +145,17 @@ export default function Approve() {
               />
             )}
             {supports(m, 'send') && (
-              <Wide kind="outline" height={46} label="拒绝，并告诉它…" disabled={busy} onPress={() => setTelling(true)} textStyle={{ fontSize: 15, fontWeight: '500' }} />
+              <Wide kind="outline" height={46} label={tr('拒绝，并告诉它…')} disabled={busy} onPress={() => setTelling(true)} textStyle={{ fontSize: 15, fontWeight: '500' }} />
             )}
           </View>
         )}
-        {gone && card && <Notice text="电脑上这个审批已经答过或者取消了。" />}
+        {gone && card && <Notice text={tr('电脑上这个审批已经答过或者取消了。')} />}
       </ScrollView>
       <SayDialog
         visible={telling}
-        title="拒绝，并告诉它"
-        placeholder="比如：先别推，等我回来看一眼"
-        action="拒绝并发送"
+        title={tr('拒绝，并告诉它')}
+        placeholder={tr('比如：先别推，等我回来看一眼')}
+        action={tr('拒绝并发送')}
         onClose={() => setTelling(false)}
         onSend={(text) => {
           setTelling(false);

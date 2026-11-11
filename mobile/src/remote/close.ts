@@ -1,6 +1,7 @@
 // Close codes the machine or the relay ends this phone's socket with, one per case, and
 // what each means here. The same numbers live in `crates/mooring-remote/src/close.rs`;
 // `vectors/v1.json` lists them and `test/close.test.ts` checks the two agree.
+import { tr } from '../i18n';
 
 export const Close = {
   /** The session ended on its own. */
@@ -40,24 +41,24 @@ const OLD_RELAY = /太旧|too old|upgrade the relay|升级中继/i;
  */
 export function closeOutcome(code?: number, reason?: string): Outcome {
   if (reason && OLD_RELAY.test(reason)) {
-    return { status: 'offline', retry: 'later', text: '中继版本太旧：请升级中继，或者换一个新的中继' };
+    return { status: 'offline', retry: 'later', text: tr('中继版本太旧：请升级中继，或者换一个新的中继') };
   }
   switch (code) {
     case Close.UNPAIRED:
-      return { status: 'refused', retry: 'never', text: '这台手机没有配对，或者已经被取消；重新扫码配对' };
+      return { status: 'refused', retry: 'never', text: tr('这台手机没有配对，或者已经被取消；重新扫码配对') };
     case Close.UNKNOWN_MACHINE:
-      return { status: 'refused', retry: 'never', text: '电脑换了配对码，需要重新配对' };
+      return { status: 'refused', retry: 'never', text: tr('电脑换了配对码，需要重新配对') };
     case Close.KICKED:
-      return { status: 'offline', retry: 'later', text: '电脑那边断开了这台手机，5 分钟后才能再连' };
+      return { status: 'offline', retry: 'later', text: tr('电脑那边断开了这台手机，5 分钟后才能再连') };
     case Close.ROLE_CHANGED:
-      return { status: 'offline', retry: 'now', text: '这台手机的权限改了，正在按新权限重连' };
+      return { status: 'offline', retry: 'now', text: tr('这台手机的权限改了，正在按新权限重连') };
     case Close.MACHINE_GONE:
-      return { status: 'offline', retry: 'later', text: '电脑上的 Fibo 不在线' };
+      return { status: 'offline', retry: 'later', text: tr('电脑上的 Fibo 不在线') };
     case Close.TOO_SLOW:
-      return { status: 'offline', retry: 'later', text: '网络太慢，中继断开了连接' };
+      return { status: 'offline', retry: 'later', text: tr('网络太慢，中继断开了连接') };
     case undefined:
-      return { status: 'offline', retry: 'later', text: '连不上：电脑或中继不在线，或者网络不通' };
+      return { status: 'offline', retry: 'later', text: tr('连不上：电脑或中继不在线，或者网络不通') };
     default:
-      return { status: 'offline', retry: 'later', text: `连不上：电脑或中继不在线，或者网络不通（${code}）` };
+      return { status: 'offline', retry: 'later', text: tr('连不上：电脑或中继不在线，或者网络不通（{code}）', { code }) };
   }
 }

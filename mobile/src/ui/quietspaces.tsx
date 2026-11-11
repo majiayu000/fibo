@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { oops, setSpaceQuiet } from '../actions';
+import { tr } from '../i18n';
 import { type Machine, supports } from '../remote/hub';
 import { type Aside, asideSpaces } from './spaces';
 import { Group } from './kit';
@@ -26,9 +27,9 @@ export function QuietSpaces({ machines, open, onToggle, named }: { machines: Mac
   }
   return (
     <>
-      <Group label={`先不管的空间 · ${aside.length}`} open={open} onPress={onToggle} />
+      <Group label={tr('先不管的空间 · {n}', { n: aside.length })} open={open} onPress={onToggle} />
       {open && (
-        <Text style={[s.note, { color: t.dim }]}>在电脑上点了「先不管」，这些空间的对话不会出现在手机上。</Text>
+        <Text style={[s.note, { color: t.dim }]}>{tr('在电脑上点了「先不管」，这些空间的对话不会出现在手机上。')}</Text>
       )}
       {open &&
         aside.map((a) => {
@@ -42,19 +43,19 @@ export function QuietSpaces({ machines, open, onToggle, named }: { machines: Mac
                 </Text>
                 {named && (
                   <Text numberOfLines={1} style={{ color: t.dim, fontSize: 12 }}>
-                    {a.m.name || '电脑'}
+                    {a.m.name || tr('电脑')}
                   </Text>
                 )}
               </View>
               {can && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`接着管 ${a.name}`}
+                  accessibilityLabel={tr('接着管 {name}', { name: a.name })}
                   disabled={!!busy}
                   onPress={() => back(a)}
                   style={({ pressed }) => [s.btn, { borderColor: t.line }, pressed && { backgroundColor: t.well }, !!busy && busy !== key && { opacity: 0.5 }]}
                 >
-                  {busy === key ? <ActivityIndicator color={t.dim} /> : <Text style={{ color: t.text, fontSize: 14 }}>接着管</Text>}
+                  {busy === key ? <ActivityIndicator color={t.dim} /> : <Text style={{ color: t.text, fontSize: 14 }}>{tr('接着管')}</Text>}
                 </Pressable>
               )}
             </View>

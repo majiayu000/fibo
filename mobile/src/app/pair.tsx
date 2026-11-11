@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { tr } from '@/i18n';
 import { pair } from '@/remote/hub';
 import { escape, type Link, parseLink } from '@/remote/link';
 import { Nav, TITLE_WEIGHT, Wide, useBottom } from '@/ui/kit';
@@ -29,7 +30,7 @@ export default function Pair() {
       setCandidate(parseLink(linkText));
       setError('');
     } catch (e) {
-      setError(`这不是 Fibo 的配对链接（${(e as Error).message}）`);
+      setError(tr('这不是 Fibo 的配对链接（{reason}）', { reason: (e as Error).message }));
     }
   }
 
@@ -43,7 +44,7 @@ export default function Pair() {
     } catch (e) {
       done.current = false;
       setCandidate(null);
-      setError(`没配上：${(e as Error).message}`);
+      setError(tr('没配上：{reason}', { reason: (e as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -64,24 +65,26 @@ export default function Pair() {
     const relay = candidate.relay.replace(/^\w+:\/\//, '');
     return (
       <View style={[s.page, { backgroundColor: t.bg }]}>
-        <Nav big title="配对电脑" />
+        <Nav big title={tr('配对电脑')} />
         <View style={s.body}>
-          <Text style={{ color: t.text, fontSize: 19, fontWeight: TITLE_WEIGHT }}>和「{candidate.name || '这台电脑'}」配对？</Text>
+          <Text style={{ color: t.text, fontSize: 19, fontWeight: TITLE_WEIGHT }}>{tr('和「{name}」配对？', { name: candidate.name || tr('这台电脑') })}</Text>
           <Text style={[s.hint, { color: t.dim }]}>
-            经过中继 {relay}。只在你刚在自己电脑的 Fibo 里点了「配对新手机」时才确认；别人发来的链接不要配。
+            {tr('经过中继 {relay}。只在你刚在自己电脑的 Fibo 里点了「配对新手机」时才确认；别人发来的链接不要配。', { relay })}
           </Text>
         </View>
         <View style={[s.foot, { paddingBottom: bottom + 4 }]}>
-          <Wide label={busy ? '正在连接…' : '配对'} disabled={busy} onPress={() => confirm(candidate)} />
-          <Wide label="取消" kind="grey" disabled={busy} onPress={() => setCandidate(null)} />
+          <Wide label={busy ? tr('正在连接…') : tr('配对')} disabled={busy} onPress={() => confirm(candidate)} />
+          <Wide label={tr('取消')} kind="grey" disabled={busy} onPress={() => setCandidate(null)} />
         </View>
       </View>
     );
   }
 
+  // The bold 「这里」 sits inside the sentence, wherever the language puts it.
+  const stepThree = tr('3. 用{here}对准它。微信和系统相机打不开这种码').split('{here}');
   return (
     <View style={[s.page, { backgroundColor: t.bg }]}>
-      <Nav big title="配对电脑" />
+      <Nav big title={tr('配对电脑')} />
       <View style={s.body}>
         <View style={[s.camera, { borderColor: t.line, backgroundColor: t.card }]}>
           {permission?.granted ? (
@@ -94,7 +97,7 @@ export default function Pair() {
           ) : (
             Platform.OS !== 'web' && (
               <View style={s.center}>
-                <Wide label="允许使用相机来扫码" kind="grey" height={44} onPress={requestPermission} />
+                <Wide label={tr('允许使用相机来扫码')} kind="grey" height={44} onPress={requestPermission} />
               </View>
             )
           )}
@@ -114,10 +117,12 @@ export default function Pair() {
           </View>
         </View>
         <View style={{ gap: 10 }}>
-          <Text style={[s.step, { color: t.dim }]}>1. 在电脑的 Fibo 里点标题栏的手机图标</Text>
-          <Text style={[s.step, { color: t.dim }]}>2. 选「配对新手机」，屏幕上会出现二维码</Text>
+          <Text style={[s.step, { color: t.dim }]}>{tr('1. 在电脑的 Fibo 里点标题栏的手机图标')}</Text>
+          <Text style={[s.step, { color: t.dim }]}>{tr('2. 选「配对新手机」，屏幕上会出现二维码')}</Text>
           <Text style={[s.step, { color: t.dim }]}>
-            3. 用<Text style={{ color: t.text, fontWeight: '700' }}>这里</Text>对准它。微信和系统相机打不开这种码
+            {stepThree[0]}
+            <Text style={{ color: t.text, fontWeight: '700' }}>{tr('这里')}</Text>
+            {stepThree[1]}
           </Text>
         </View>
         {pasting && (
@@ -139,12 +144,12 @@ export default function Pair() {
       <View style={[s.foot, { paddingBottom: bottom + 4 }]}>
         <Wide
           kind="grey"
-          label={pasting ? '下一步' : '粘贴配对链接'}
+          label={pasting ? tr('下一步') : tr('粘贴配对链接')}
           disabled={pasting && (!text || busy)}
           onPress={() => (pasting ? use(text) : setPasting(true))}
         />
         <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim, lineHeight: 18 }}>
-          手机和电脑最好在同一个 Wi‑Fi；不在时经中继连接，内容端到端加密
+          {tr('手机和电脑最好在同一个 Wi‑Fi；不在时经中继连接，内容端到端加密')}
         </Text>
       </View>
     </View>

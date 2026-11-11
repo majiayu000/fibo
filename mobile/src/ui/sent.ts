@@ -1,4 +1,5 @@
 // Whether a message the phone sent is now in the conversation's log, so its 「发送中」 copy can go.
+import { tr } from '../i18n';
 
 /** How each CLI writes a pasted picture into the message: Claude Code and Codex `[Image #1]`, OpenCode `[Image 1]`. */
 const PICTURE = /\[Image #?\d+\]/;
@@ -20,7 +21,7 @@ export function shownWords(logged: string) {
   const tags = logged.match(new RegExp(PICTURE, 'g'))?.length ?? 0;
   if (!tags) return logged;
   const words = logged.replace(new RegExp(PICTURE, 'g'), ' ').replace(/\s+/g, ' ').trim();
-  return `[${tags} 张图片] ${words}`.trim();
+  return `${tr('[{n} 张图片]', { n: tags })} ${words}`.trim();
 }
 
 /**

@@ -9,6 +9,7 @@ import { mono } from './mono';
 import { openable, parsed, pathOf } from './md/parse';
 import { columnWidths, monoWidth } from './md/table';
 import type { Theme } from './theme';
+import { tr } from '../i18n';
 
 /** The chat's side padding (`chat.tsx`), which a block's width is measured from. */
 const SIDE_PADDING = 36;
@@ -37,7 +38,7 @@ function follow(url: string, ctx: Ctx) {
   }
   const path = pathOf(url);
   Clipboard.setStringAsync(path).catch(() => undefined);
-  ctx.onNote?.(`已复制路径 ${path}`);
+  ctx.onNote?.(tr('已复制路径 {path}', { path }));
 }
 
 function flat(n: Nodes): string {
@@ -141,12 +142,12 @@ function CodeBlock({ node, ctx }: { node: Code; ctx: Ctx }) {
     <View style={[s.codeCard, { backgroundColor: t.well, borderColor: t.line }]}>
       <View style={s.codeHead}>
         <Text testID={CHROME} numberOfLines={1} style={[s.lang, { color: t.dim }]}>
-          {node.lang ?? '代码'}
+          {node.lang ?? tr('代码')}
         </Text>
         <Pressable
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="复制代码"
+          accessibilityLabel={tr('复制代码')}
           onPress={() => {
             Clipboard.setStringAsync(node.value).catch(() => undefined);
             setCopied(true);
@@ -154,7 +155,7 @@ function CodeBlock({ node, ctx }: { node: Code; ctx: Ctx }) {
           }}
         >
           <Text testID={CHROME} style={[s.lang, { color: copied ? t.ok : t.dim }]}>
-            {copied ? '已复制' : '复制'}
+            {copied ? tr('已复制') : tr('复制')}
           </Text>
         </Pressable>
       </View>
@@ -167,7 +168,7 @@ function CodeBlock({ node, ctx }: { node: Code; ctx: Ctx }) {
       )}
       {folded && (
         <Pressable onPress={() => setOpen(true)} style={[s.more, { borderColor: t.line }]}>
-          <Text testID={CHROME} style={[s.lang, { color: t.link }]}>{`展开其余 ${lines.length - FOLD_LINES} 行`}</Text>
+          <Text testID={CHROME} style={[s.lang, { color: t.link }]}>{tr('展开其余 {n} 行', { n: lines.length - FOLD_LINES })}</Text>
         </Pressable>
       )}
     </View>

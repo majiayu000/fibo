@@ -3,6 +3,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { tr } from '@/i18n';
 import { type Card, type Machine, useHub } from '@/remote/hub';
 import { Icon } from '@/ui/icons';
 import { arrange, itemKey, namesComputer, searchCards, shelve } from '@/ui/inbox';
@@ -31,28 +32,28 @@ export default function Search() {
         <View style={[s.field, { borderColor: t.line, backgroundColor: t.card }]}>
           <Icon name="search" size={18} width={2} color={t.dim} />
           <TextInput
-            accessibilityLabel="搜索会话"
+            accessibilityLabel={tr('搜索会话')}
             autoFocus
             value={query}
             onChangeText={setQuery}
-            placeholder="搜标题、空间或目录"
+            placeholder={tr('搜标题、空间或目录')}
             placeholderTextColor={t.dim}
             returnKeyType="search"
             style={[s.input, { color: t.text }, noOutline]}
           />
           {query.length > 0 && (
-            <Pressable accessibilityRole="button" accessibilityLabel="清空" hitSlop={10} onPress={() => setQuery('')}>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr('清空')} hitSlop={10} onPress={() => setQuery('')}>
               <Icon name="close" size={16} width={2} color={t.dim} />
             </Pressable>
           )}
         </View>
         <Pressable accessibilityRole="button" hitSlop={8} onPress={back} style={s.cancel}>
-          <Text style={{ fontSize: 15, color: t.text }}>取消</Text>
+          <Text style={{ fontSize: 15, color: t.text }}>{tr('取消')}</Text>
         </Pressable>
       </View>
       <SpaceChips chips={chips} filter={filter} onPick={setSpace} />
       <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: bottom + 16 }}>
-        {asked && <Text style={[s.count, { color: t.dim }]}>{found.length > 0 ? `找到 ${found.length} 个` : '没有找到'}</Text>}
+        {asked && <Text style={[s.count, { color: t.dim }]}>{found.length > 0 ? tr('找到 {n} 个', { n: found.length }) : tr('没有找到')}</Text>}
         {asked && found.map((i, n) => <Row key={itemKey(i)} m={i.m} c={i.c} named={named} last={n === found.length - 1} onPress={() => open(i.m, i.c)} />)}
       </ScrollView>
     </View>

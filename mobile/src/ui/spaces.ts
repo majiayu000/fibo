@@ -1,6 +1,8 @@
 // Which space a new task lands in. The computer used to decide alone: the space whose folder
 // holds the directory, else its first space, so a folder in none went to 工作空间 and the
 // phone never said so. Now the phone shows where it goes and sends the space it shows.
+import { tr } from '../i18n';
+
 export type Space = { id: string; name: string; cwd: string };
 
 /** `/a/b` holds `/a/b/c` but not `/a/bc`: by whole folder names, as the computer compares. */
@@ -34,10 +36,10 @@ export function landing(spaces: Space[], picked: string | undefined, cwd: string
 /** A line under the space when it may surprise: the folder is not that space's own. */
 export function landingNote(l: Landing, cwd: string | undefined): string {
   if (!cwd) return '';
-  if (!l.space) return '电脑上还没有空间，这个文件夹会成为第一个';
+  if (!l.space) return tr('电脑上还没有空间，这个文件夹会成为第一个');
   if (holds(l.space.cwd, cwd)) return '';
-  if (l.why === 'first') return `这个文件夹不在任何空间里，会放进「${l.space.name}」`;
-  return `文件夹不在「${l.space.name}」的目录里，也会放进这个空间`;
+  if (l.why === 'first') return tr('这个文件夹不在任何空间里，会放进「{name}」', { name: l.space.name });
+  return tr('文件夹不在「{name}」的目录里，也会放进这个空间', { name: l.space.name });
 }
 
 /**
@@ -65,7 +67,7 @@ export function ignoredPick(spaces: Space[], sent: string | undefined, cwd: stri
   if (!sent || reply.space) return '';
   const went = spaceOf(spaces, cwd) ?? spaces[0];
   if (!went || went.id === sent) return '';
-  return `电脑上的 Fibo 版本较旧，任务放进了「${went.name}」。换新版后可以选空间`;
+  return tr('电脑上的 Fibo 版本较旧，任务放进了「{name}」。换新版后可以选空间', { name: went.name });
 }
 
 /** A space put aside on a computer (先不管), with the computer it is on. */

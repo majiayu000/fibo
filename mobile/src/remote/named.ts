@@ -1,6 +1,7 @@
 // Writes named by a request id (docs/request-envelope): when the link drops before the
 // answer, the same request goes again once the machine is back, and the machine applies
 // it at most once. Kept apart from the hub so it runs without React Native.
+import { tk, tr } from '../i18n';
 import { RemoteError } from './client';
 
 /** How long a write waits for its machine to come back before saying it is unsure. */
@@ -12,7 +13,8 @@ export type Link = {
   request<T = any>(op: string, fields?: Record<string, unknown>): Promise<T>;
 };
 
-export const UNSURE = '连接断了，不确定发出去没有；看一眼对话再决定要不要重发';
+/** A key: the error's message is `tr(UNSURE)`, so compare a message with `tr(UNSURE)`. */
+export const UNSURE = tk('连接断了，不确定发出去没有；看一眼对话再决定要不要重发');
 
 export function requestId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -42,7 +44,7 @@ export async function named(
         if (!r.ended) throw e;
       }
     }
-    if (Date.now() > until) throw new RemoteError(UNSURE);
+    if (Date.now() > until) throw new RemoteError(tr(UNSURE));
     await new Promise((done) => setTimeout(done, stepMs));
   }
 }

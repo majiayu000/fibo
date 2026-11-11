@@ -3,6 +3,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { tr } from '@/i18n';
 import { supports, useHub } from '@/remote/hub';
 import { cardTitle } from '@/ui/format';
 import { foldLabel } from '@/ui/inbox';
@@ -52,7 +53,7 @@ export default function Todos() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Nav big tab title={shelf.total ? `待办 · ${shelf.total}` : '待办'} right={canAdd ? <Round icon="plus" label="记一件待办" onPress={() => router.push('/todonew')} /> : undefined} />
+      <Nav big tab title={shelf.total ? tr('待办 · {n}', { n: shelf.total }) : tr('待办')} right={canAdd ? <Round icon="plus" label={tr('记一件待办')} onPress={() => router.push('/todonew')} /> : undefined} />
       {shelf.chips.length > 0 && (
         <View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
@@ -66,7 +67,7 @@ export default function Todos() {
                   onPress={() => setSpace(c.space)}
                   style={[s.chip, { borderColor: on ? t.act : t.line, backgroundColor: on ? t.act : t.card }]}
                 >
-                  <Text style={{ fontSize: 14, color: on ? t.onAct : t.text }}>{c.space ?? '全部'}</Text>
+                  <Text style={{ fontSize: 14, color: on ? t.onAct : t.text }}>{c.space ?? tr('全部')}</Text>
                   <Text style={{ fontSize: 14, fontWeight: '700', color: on ? t.onAct : t.text }}>{c.count}</Text>
                 </Pressable>
               );
@@ -75,7 +76,7 @@ export default function Todos() {
         </View>
       )}
       <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
-        {shelf.groups.length === 0 && <Notice text={machines.length ? '没有没收尾的待办' : '还没有配对电脑'} />}
+        {shelf.groups.length === 0 && <Notice text={machines.length ? tr('没有没收尾的待办') : tr('还没有配对电脑')} />}
         {shelf.groups.map((g) => (
           <View key={g.space}>
             <View style={s.grp}>

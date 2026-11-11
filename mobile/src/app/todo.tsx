@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { oops } from '@/actions';
+import { tr } from '@/i18n';
 import { type Todo, refresh, supports, useHub, write } from '@/remote/hub';
 import { Nav, Notice, Wide, useBottom } from '@/ui/kit';
 import { agentName } from '@/ui/status';
@@ -28,8 +29,8 @@ export default function TodoScreen() {
   if (!m || !todo) {
     return (
       <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <Nav title="待办" />
-        <Notice text="这个待办不在了" />
+        <Nav title={tr('待办')} />
+        <Notice text={tr('这个待办不在了')} />
       </View>
     );
   }
@@ -70,19 +71,19 @@ export default function TodoScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Nav rule title="待办" right={closed ? undefined : <StateWord todo={todo} t={t} />} />
+      <Nav rule title={tr('待办')} right={closed ? undefined : <StateWord todo={todo} t={t} />} />
       <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
         <View style={{ paddingHorizontal: 18, paddingTop: 16, gap: 4 }}>
           <Text selectable style={{ fontSize: 19, lineHeight: 27, fontWeight: '600', color: t.text }}>
             {todo.title}
           </Text>
           <Text style={{ fontSize: 13, color: t.dim }}>
-            {[todoSpace(m, todo), agentName(todo.agent), todo.created ? `记于 ${ago(todo.created)}` : ''].filter(Boolean).join(' · ')}
+            {[todoSpace(m, todo), agentName(todo.agent), todo.created ? tr('记于 {when}', { when: ago(todo.created) }) : ''].filter(Boolean).join(' · ')}
           </Text>
         </View>
         {!!todo.said && (
           <>
-            <Text style={[s.sec, { color: t.dim }]}>你说的</Text>
+            <Text style={[s.sec, { color: t.dim }]}>{tr('你说的')}</Text>
             <Text selectable style={[s.box, { backgroundColor: t.well, color: t.text }]}>
               {todo.said}
             </Text>
@@ -90,7 +91,7 @@ export default function TodoScreen() {
         )}
         {(todo.acceptance?.length ?? 0) > 0 && (
           <>
-            <Text style={[s.sec, { color: t.dim }]}>怎样算做完</Text>
+            <Text style={[s.sec, { color: t.dim }]}>{tr('怎样算做完')}</Text>
             <View style={[s.box, { borderWidth: 1, borderColor: t.line, gap: 6 }]}>
               {todo.acceptance!.map((a, i) => (
                 <Text key={i} selectable style={{ fontSize: 15, lineHeight: 22, color: t.text }}>
@@ -100,8 +101,8 @@ export default function TodoScreen() {
             </View>
           </>
         )}
-        <Text style={[s.sec, { color: t.dim }]}>{notes.length ? `进展 · ${notes.length}` : '进展'}</Text>
-        {notes.length === 0 && <Text style={{ paddingHorizontal: 18, fontSize: 14, color: t.dim }}>还没有 Agent 写回进展</Text>}
+        <Text style={[s.sec, { color: t.dim }]}>{notes.length ? tr('进展 · {n}', { n: notes.length }) : tr('进展')}</Text>
+        {notes.length === 0 && <Text style={{ paddingHorizontal: 18, fontSize: 14, color: t.dim }}>{tr('还没有 Agent 写回进展')}</Text>}
         {notes.map((n, i) => (
           <View key={i} style={[s.note, { borderColor: t.sep }]}>
             <Text selectable style={{ fontSize: 14, lineHeight: 21, color: t.text }}>
@@ -113,20 +114,20 @@ export default function TodoScreen() {
       </ScrollView>
       {closed ? (
         <View style={[s.btns, { borderColor: t.sep, paddingBottom: bottom + 12 }]}>
-          <Text style={{ flex: 1, fontSize: 15, color: t.text }}>已标记完成</Text>
-          <Wide kind="outline" label="撤销" disabled={busy} onPress={() => settle('open')} height={44} />
+          <Text style={{ flex: 1, fontSize: 15, color: t.text }}>{tr('已标记完成')}</Text>
+          <Wide kind="outline" label={tr('撤销')} disabled={busy} onPress={() => settle('open')} height={44} />
         </View>
       ) : (
         (canClose || canStart) && (
           <View style={[s.btns, { borderColor: t.sep, paddingBottom: bottom + 12 }]}>
             {canClose && (
               <View style={{ flex: 1 }}>
-                <Wide kind="outline" label="标记完成" disabled={busy} onPress={() => settle('done')} />
+                <Wide kind="outline" label={tr('标记完成')} disabled={busy} onPress={() => settle('done')} />
               </View>
             )}
             {canStart && (
               <View style={{ flex: 1 }}>
-                <Wide label="接着做" disabled={busy} onPress={work} />
+                <Wide label={tr('接着做')} disabled={busy} onPress={work} />
               </View>
             )}
           </View>

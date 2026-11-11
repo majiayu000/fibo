@@ -3,6 +3,7 @@
 // the system back from a tab returns to it.
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { tk, tr } from '../i18n';
 import { Icon, type IconName } from './icons';
 import { back, useBottom } from './kit';
 import { useTheme } from './theme';
@@ -10,9 +11,9 @@ import { useTheme } from './theme';
 export type Tab = 'home' | 'todos' | 'me';
 
 const TABS: { key: Tab; label: string; icon: IconName; path: '/' | '/todos' | '/me' }[] = [
-  { key: 'home', label: '主页', icon: 'home', path: '/' },
-  { key: 'todos', label: '待办', icon: 'todo', path: '/todos' },
-  { key: 'me', label: '我的', icon: 'person', path: '/me' },
+  { key: 'home', label: tk('主页'), icon: 'home', path: '/' },
+  { key: 'todos', label: tk('待办'), icon: 'todo', path: '/todos' },
+  { key: 'me', label: tk('我的'), icon: 'person', path: '/me' },
 ];
 
 function go(from: Tab, to: (typeof TABS)[number]) {
@@ -36,13 +37,13 @@ export function TabBar({ on }: { on: Tab }) {
           <Pressable
             key={tab.key}
             accessibilityRole="tab"
-            accessibilityLabel={tab.label}
+            accessibilityLabel={tr(tab.label)}
             accessibilityState={{ selected: here }}
             onPress={() => go(on, tab)}
             style={({ pressed }) => [s.tab, pressed && { opacity: 0.6 }]}
           >
             <Icon name={tab.icon} size={22} width={here ? 2.2 : 1.8} color={color} />
-            <Text style={[s.label, { color }, here && { fontWeight: '600' }]}>{tab.label}</Text>
+            <Text style={[s.label, { color }, here && { fontWeight: '600' }]}>{tr(tab.label)}</Text>
           </Pressable>
         );
       })}

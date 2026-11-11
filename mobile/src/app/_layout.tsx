@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { AppState, Pressable, Text, View } from 'react-native';
 import { verify } from '@/actions';
+import { setLanguage, tr, useLang } from '@/i18n';
 import { start } from '@/remote/hub';
 import { Pump } from '@/remote/pump';
 import { settings, useSettings } from '@/store/settings';
@@ -17,24 +18,32 @@ function useLocked() {
     let live = true;
     settings.ready.then(async () => {
       if (!settings.get().lock) return live && setLocked(false);
-      const ok = await verify('打开 Fibo');
+      const ok = await verify(tr('打开 Fibo'));
       if (live) setLocked(!ok);
     });
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'background' && settings.get().lock) setLocked(true);
-      if (s === 'active' && settings.get().lock) verify('打开 Fibo').then((ok) => ok && setLocked(false));
+      if (s === 'active' && settings.get().lock) verify(tr('打开 Fibo')).then((ok) => ok && setLocked(false));
     });
     return () => {
       live = false;
       sub.remove();
     };
   }, []);
-  return [locked && lock, () => verify('打开 Fibo').then((ok) => ok && setLocked(false))] as const;
+  return [locked && lock, () => verify(tr('打开 Fibo')).then((ok) => ok && setLocked(false))] as const;
 }
 
 export default function Layout() {
   const t = useTheme();
   const [locked, unlock] = useLocked();
+  // The language setting reaches the words through i18n's own store; the tree is keyed by it, so
+  // every screen draws again in the new language (the stack starts over from the home page).
+  const lang = useLang();
+  useEffect(() => {
+    const sync = () => setLanguage(settings.get().language);
+    settings.ready.then(sync);
+    return settings.subscribe(sync);
+  }, []);
   useEffect(() => {
     // Screenshot builds only; inlined to false otherwise, so the fixture is dropped.
     if (process.env.EXPO_PUBLIC_FIXTURE === '1' || process.env.EXPO_PUBLIC_FIXTURE === 'promo') require('@/fixture').install();
@@ -44,7 +53,7 @@ export default function Layout() {
     <>
       <StatusBar style={t.dark ? 'light' : 'dark'} />
       <Pump />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }}>
+      <Stack key={lang} screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="todos" options={{ animation: 'none' }} />
         <Stack.Screen name="todo" />
@@ -62,7 +71,7 @@ export default function Layout() {
         <View style={{ position: 'absolute', inset: 0, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
           <Icon name="face" size={44} color={t.text} />
           <Pressable onPress={unlock} style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: t.act }}>
-            <Text style={{ color: t.onAct, fontSize: 16, fontWeight: '600' }}>解锁</Text>
+            <Text style={{ color: t.onAct, fontSize: 16, fontWeight: '600' }}>{tr('解锁')}</Text>
           </Pressable>
         </View>
       )}

@@ -7,6 +7,7 @@ import { Icon } from './icons';
 import { isFull } from './modes';
 import { Frame } from './sheets';
 import { useTheme } from './theme';
+import { tr } from '../i18n';
 
 export function AttachSheet({
   onClose,
@@ -30,16 +31,16 @@ export function AttachSheet({
   return (
     <Frame visible onClose={onClose}>
       <View style={s.head}>
-        <Text style={[s.title, { color: t.text }]}>添加到对话</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={onClose} hitSlop={8} style={[s.close, { borderColor: t.line }]}>
+        <Text style={[s.title, { color: t.text }]}>{tr('添加到对话')}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('关闭')} onPress={onClose} hitSlop={8} style={[s.close, { borderColor: t.line }]}>
           <Icon name="close" size={16} width={2} color={t.text} />
         </Pressable>
       </View>
       {pictures !== undefined && (
         <>
           <View style={s.cards}>
-            <Card label="拍照" icon="camera" disabled={!can} onPress={onCamera} />
-            <Card label="照片" icon="image" disabled={!can} onPress={onLibrary} />
+            <Card label={tr('拍照')} icon="camera" disabled={!can} onPress={onCamera} />
+            <Card label={tr('照片')} icon="image" disabled={!can} onPress={onLibrary} />
           </View>
           {!can && <Text style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>{pictures}</Text>}
         </>
@@ -48,7 +49,7 @@ export function AttachSheet({
         <View style={[s.group, { backgroundColor: t.well }]}>
           <Pressable
             accessibilityRole={onPermission ? 'button' : undefined}
-            accessibilityLabel={`权限：${permission ?? '还没读到'}`}
+            accessibilityLabel={tr('权限：{role}', { role: permission ?? tr('还没读到') })}
             disabled={!onPermission}
             onPress={onPermission}
             style={({ pressed }) => [s.row, pressed && { opacity: 0.6 }]}
@@ -56,8 +57,8 @@ export function AttachSheet({
             <View style={[s.rowIcon, { backgroundColor: t.card }]}>
               <Icon name="shield" size={16} width={1.8} color={t.text} />
             </View>
-            <Text style={{ flex: 1, color: t.text, fontSize: 15 }}>权限</Text>
-            <Text style={{ color: isFull(permission) ? t.err : t.dim, fontSize: 14 }}>{permission ?? '还没读到'}</Text>
+            <Text style={{ flex: 1, color: t.text, fontSize: 15 }}>{tr('权限')}</Text>
+            <Text style={{ color: isFull(permission) ? t.err : t.dim, fontSize: 14 }}>{permission ?? tr('还没读到')}</Text>
             {!!onPermission && <Icon name="right" size={14} width={2} color={t.dim} />}
           </Pressable>
         </View>
