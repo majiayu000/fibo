@@ -40,7 +40,7 @@
 
 ---
 
-> **Status:** latest release, [v0.2.0](https://github.com/majiayu000/fibo/releases/latest): Apple silicon, macOS 14 or later, signed and notarized. Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
+> **Status:** latest release, [v0.1.1](https://github.com/majiayu000/fibo/releases/latest): Apple silicon, macOS 14 or later, signed and notarized. Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
 
 ## Install
 

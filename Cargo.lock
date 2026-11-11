@@ -3687,7 +3687,7 @@ dependencies = [
 
 [[package]]
 name = "mooring-app"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "futures",
@@ -3707,7 +3707,7 @@ dependencies = [
 
 [[package]]
 name = "mooring-core"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.3.4",
@@ -3724,7 +3724,7 @@ dependencies = [
 
 [[package]]
 name = "mooring-host"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "chrono",
@@ -3751,7 +3751,7 @@ dependencies = [
 
 [[package]]
 name = "mooring-platform"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "libc",
  "regex",
@@ -3760,7 +3760,7 @@ dependencies = [
 
 [[package]]
 name = "mooring-plugin-host"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "wasmtime",
@@ -3769,7 +3769,7 @@ dependencies = [
 
 [[package]]
 name = "mooring-relay"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "base64",
@@ -3782,7 +3782,7 @@ dependencies = [
 
 [[package]]
 name = "mooring-remote"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "getrandom 0.3.4",

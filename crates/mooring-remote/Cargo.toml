@@ -1,6 +1,6 @@
 [package]
 name = "mooring-remote"
-version = "0.2.0"
+version = "0.1.1"
 edition = "2021"
 publish = false
 description = "Fibo's remote protocol: messages, pairing links, roles, the encrypted channel and the relay's frames"
