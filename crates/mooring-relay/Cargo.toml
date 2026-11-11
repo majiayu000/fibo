@@ -1,6 +1,6 @@
 [package]
 name = "mooring-relay"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 publish = false
 description = "Relay that lets a phone reach a Fibo machine from anywhere"
