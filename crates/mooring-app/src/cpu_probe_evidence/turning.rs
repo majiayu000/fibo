@@ -260,3 +260,94 @@ pub(super) async fn run(
         at_rest.0, at_rest.1
     )
 }
+
+/// A foreground-only native check, separate from the unattended performance gate.
+pub(super) async fn board_motion(
+    handle: WindowHandle<Workbench>,
+    directory: &std::path::Path,
+    cx: &mut gpui::AsyncApp,
+) -> String {
+    let executor = cx.background_executor().clone();
+    let wait = move |ms: u64| executor.timer(Duration::from_millis(ms));
+    handle
+        .update(cx, |v, _, a| v.visual_toggle_sidebar(a))
+        .unwrap();
+    let refreshed = |cx: &mut gpui::AsyncApp| {
+        cx.update_window(handle.into(), |_, w, a| {
+            w.refresh();
+            w.draw(a).clear(a);
+        })
+        .unwrap();
+    };
+    let shot = |cx: &mut gpui::AsyncApp| {
+        cx.update_window(handle.into(), |_, w, a| {
+            w.draw(a).clear(a);
+            w.render_to_image().unwrap()
+        })
+        .unwrap()
+    };
+    let scale = cx
+        .update_window(handle.into(), |_, w, _| w.scale_factor())
+        .unwrap();
+    let top = crate::ui::theme::Theme::TOP;
+    // The running overlay is not the board's only motion. The Needs halo and the
+    // Running cards' gold sweep must also stop. Activate the probe: an inactive
+    // window suppresses both even in the broken version and would prove nothing.
+    handle
+        .update(cx, |v, w, a| {
+            v.visual_turning_board(false, a);
+            w.activate_window();
+            a.activate(true);
+        })
+        .unwrap();
+    wait(300).await;
+    cx.update(|a| running_spin::choose(false, a).unwrap());
+    for reduced in [false, true] {
+        mooring_core::effect::set_reduce_motion(reduced);
+        refreshed(cx);
+        wait(300).await;
+        assert!(
+            cx.update_window(handle.into(), |_, w, _| w.is_window_active())
+                .unwrap(),
+            "the motion probe must be active"
+        );
+        refreshed(cx);
+        let before = shot(cx);
+        wait(350).await;
+        refreshed(cx);
+        let after = shot(cx);
+        before
+            .save(directory.join(format!("board-reduced-{reduced}-before.png")))
+            .unwrap();
+        after
+            .save(directory.join(format!("board-reduced-{reduced}-after.png")))
+            .unwrap();
+        // The sidebar is folded; five columns fill the window. Colored pixels
+        // isolate the gold sweep and orange halo from elapsed-time text.
+        for (column, name) in [(1, "running sweep"), (2, "needs halo")] {
+            let warm = |p: &image::Rgba<u8>| {
+                u16::from(p[0]) > u16::from(p[2]) * 3 / 2
+                    && u16::from(p[1]) > u16::from(p[2]) * 3 / 2
+            };
+            let x0 = before.width() * column / 5;
+            let x1 = before.width() * (column + 1) / 5;
+            let moved = before
+                .enumerate_pixels()
+                .filter(|(x, y, _)| *x >= x0 && *x < x1 && *y > (top * scale) as u32)
+                .filter(|(x, y, p)| {
+                    let q = after.get_pixel(*x, *y);
+                    *p != q && (warm(p) || warm(q))
+                })
+                .count();
+            assert_eq!(
+                moved == 0,
+                reduced,
+                "{name}: reduced={reduced}, moved={moved}"
+            );
+        }
+    }
+
+    mooring_core::effect::set_reduce_motion(false);
+    "frames-board-motion: running sweep and needs halo move normally and stop with reduced motion"
+        .into()
+}

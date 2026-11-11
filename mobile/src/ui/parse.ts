@@ -158,6 +158,20 @@ export function shortWindow(minutes: number): string {
 
 const WEEKDAYS = [tk('周日'), tk('周一'), tk('周二'), tk('周三'), tk('周四'), tk('周五'), tk('周六')];
 
+/** Same boundary as core Window::reset; zero means the reset time is unknown. */
+export const quotaReset = (resetsAt: number, now = Date.now() / 1000) => resetsAt !== 0 && resetsAt <= now;
+
+/** A past reading is not a measurement of the new window, even when it used to be full. */
+export function quotaWindowView(w: QuotaWindow, now = Date.now() / 1000) {
+  const reset = quotaReset(w.resets_at, now);
+  return {
+    used: reset ? 0 : w.used,
+    level: reset ? undefined : w.level,
+    text: reset ? tr('已重置') : `${w.used}%`,
+    hint: reset ? tr('等下次使用时更新') : resetText(w.resets_at, now),
+  };
+}
+
 /** "1 时 40 分后重置" within a day, else the weekday; empty when the time is unknown or past. */
 export function resetText(resetsAt: number, now = Date.now() / 1000): string {
   if (!resetsAt || resetsAt <= now) return '';
@@ -258,7 +272,7 @@ export function tightWindows(readings: { machine: string; agents: Reading[] | nu
     for (const a of agents ?? []) {
       // Old hosts/cached readings do not supply severity or a shared ordering.
       if (a.windows.some((w) => !w.level)) continue;
-      const top = a.windows.find((w) => !w.resets_at || w.resets_at > now);
+      const top = a.windows.find((w) => !quotaReset(w.resets_at, now));
       if (!top) continue;
       out.push({ machine, agent: a.agent, agent_name: a.agent_name, minutes: top.minutes, used: top.used, level: top.level });
     }

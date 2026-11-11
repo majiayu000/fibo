@@ -133,6 +133,10 @@ describe('inbox lists', () => {
 
   test('settled conversations stay settled unless something asks', () => {
     expect(where(plain({ outcome: 'done', status: 'closed', needs_you: false }))).toBe('done');
+    const abandoned = plain({ outcome: 'abandoned', status: 'closed', needs_you: false });
+    expect(where(abandoned)).toBe('none');
+    expect(shelve(arrange([machine([abandoned])], []), null).empty).toBe(true);
+    expect(where({ ...abandoned, phase: 'waiting' })).toBe('inbox');
     expect(where(plain({ outcome: 'done', phase: 'waiting', needs_you: false }))).toBe('inbox');
     expect(where(plain({ outcome: 'deferred', approval: 'Proceed?' }))).toBe('inbox');
   });
@@ -340,6 +344,7 @@ describe('the home screen', () => {
     expect(undoTo({ outcome: null })).toBe('open');
     expect(undoTo({ outcome: 'deferred' })).toBe('deferred');
     expect(undoTo({ outcome: 'done' })).toBe('done');
+    expect(undoTo({ outcome: 'abandoned' })).toBe('abandoned');
   });
 
   test('search finds title, space and directory, in 稍后提醒 and 已处理 too, narrowed to a space', () => {

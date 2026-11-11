@@ -7,18 +7,19 @@ import { type Machine, NOT_YET, remote, supports, useHub } from '@/remote/hub';
 import { tr } from '@/i18n';
 import { type QuotaReading as Reading, type QuotaLevel, quotaStore } from '@/store/quota';
 import { Nav, Notice, useBottom } from '@/ui/kit';
-import { quotaView, resetText, windowName } from '@/ui/parse';
+import { quotaView, quotaWindowView, windowName } from '@/ui/parse';
+import { useNow } from '@/ui/now';
 import { agentName } from '@/ui/status';
 import { type Theme, ago, useTheme } from '@/ui/theme';
 import { TodayTokens } from '@/ui/usage';
 
 const STRIPES = 20;
 
-function Gauge({ used, level, t }: { used: number; level?: QuotaLevel; t: Theme }) {
+function Gauge({ used, level, label, t }: { used: number; level?: QuotaLevel; label: string; t: Theme }) {
   const lit = Math.round((Math.min(used, 100) / 100) * STRIPES);
   const color = level ? t[level] : t.dim;
   return (
-    <View style={s.gauge} accessibilityLabel={tr('用了 {n}%', { n: used })}>
+    <View style={s.gauge} accessibilityLabel={label}>
       {Array.from({ length: STRIPES }, (_, i) => (
         <View key={i} style={[s.stripe, { backgroundColor: i < lit ? color : t.empty }]} />
       ))}
@@ -27,25 +28,27 @@ function Gauge({ used, level, t }: { used: number; level?: QuotaLevel; t: Theme 
 }
 
 function AgentCard({ r, t }: { r: Reading; t: Theme }) {
+  const now = useNow();
   return (
     <View style={[s.card, { backgroundColor: t.card, borderColor: t.line }]}>
       <View style={s.row}>
         <Text style={{ fontSize: 17, fontWeight: '600', color: t.text }}>{agentName(r)}</Text>
         {!!r.plan && <Text style={{ fontSize: 13, color: t.dim }}>{tr('{plan} 计划', { plan: r.plan[0].toUpperCase() + r.plan.slice(1) })}</Text>}
       </View>
+      {!!r.at && <Text style={{ color: t.dim, fontSize: 13 }}>{tr('{when}的读数', { when: ago(r.at) })}</Text>}
       {r.windows.length === 0 && <Text style={{ color: t.dim, fontSize: 13 }}>{tr('没有读数')}</Text>}
       {r.windows.map((w) => {
-        const reset = resetText(w.resets_at);
+        const view = quotaWindowView(w, now);
         return (
           <View key={w.minutes} style={{ gap: 8 }}>
             <View style={s.row}>
               <Text style={{ fontSize: 15, color: t.text }}>{windowName(w.minutes)}</Text>
               <Text style={{ fontSize: 14, color: t.dim }}>
-                <Text style={{ fontWeight: '700', color: w.level === 'high' ? t.high : t.text }}>{w.used}%</Text>
-                {reset ? ` · ${reset}` : ''}
+                <Text style={{ fontWeight: '700', color: view.level === 'high' ? t.high : t.text }}>{view.text}</Text>
+                {view.hint ? ` · ${view.hint}` : ''}
               </Text>
             </View>
-            <Gauge used={w.used} level={w.level} t={t} />
+            <Gauge used={view.used} level={view.level} label={view.hint ? `${view.text} · ${view.hint}` : view.text} t={t} />
           </View>
         );
       })}

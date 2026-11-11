@@ -5,7 +5,7 @@ use serde_json::Value;
 /// Claude Code's permission mode; a new mode keeps its own name.
 pub(super) fn claude(mode: &str) -> String {
     match mode {
-        "default" => "逐个确认",
+        "manual" | "default" => "逐个确认",
         "acceptEdits" => "自动接受编辑",
         "plan" => "只做计划",
         "auto" => "自动判断",

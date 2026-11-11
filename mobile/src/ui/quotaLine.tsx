@@ -8,6 +8,7 @@ import { tr } from '@/i18n';
 import { type Machine, remote, supports } from '@/remote/hub';
 import { type QuotaLevel, quotaStore } from '@/store/quota';
 import { type Tight, shortWindow, tightWindows } from './parse';
+import { useNow } from './now';
 import { agentName } from './status';
 import { type Theme } from './theme';
 
@@ -25,6 +26,8 @@ export function useTightWindows(machines: Machine[]): Tight[] {
     [ids],
   );
   const [tight, setTight] = useState<Tight[]>(read);
+  const now = useNow();
+  useEffect(() => setTight(read()), [now, read]);
   useEffect(() => {
     setTight(read());
     const subs = ids ? ids.split('\n').map((id) => quotaStore(id).subscribe(() => setTight(read()))) : [];

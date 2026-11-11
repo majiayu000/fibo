@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, diffWords, compact, dangerous, diffLines, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { quotaWindowView, askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, diffWords, compact, dangerous, diffLines, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -228,4 +228,17 @@ describe('diffWords', () => {
       expect(diffWords(d)).toEqual({ title: '未提交的改动', empty: '没有未提交的改动', note: '' });
     }
   });
+});
+
+
+test('expired quota is reset in detail and absent from the overview, including old cached readings', () => {
+  for (const level of ['high' as const, undefined]) {
+    const w = { minutes: 300, used: 95, resets_at: 1000, level };
+    expect(quotaWindowView(w, 999)).toMatchObject({ used: 95, level, text: '95%' });
+    for (const now of [1000, 1001]) {
+      expect(quotaWindowView(w, now)).toEqual({ used: 0, level: undefined, text: '已重置', hint: '等下次使用时更新' });
+      expect(tightWindows([{ machine: 'm', agents: [{ agent: 'codex', windows: [w] }] }], now)).toEqual([]);
+    }
+    expect(quotaWindowView({ ...w, resets_at: 0 }, 1001)).toMatchObject({ used: 95, level, text: '95%', hint: '' });
+  }
 });

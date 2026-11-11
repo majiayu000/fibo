@@ -110,7 +110,7 @@ pub fn pointed(menu: &Menu) -> Option<&Row> {
 /// The words `permission::codex`/`permission::claude` use for cards, for an option's key.
 pub fn card_words(agent: Agent, key: &str) -> String {
     match agent {
-        Agent::Claude => claude_words(key).to_owned(),
+        Agent::Claude => super::permission::claude(key),
         _ => match key {
             "Ask for approval" => "逐个确认",
             "Approve for me" => "只问不安全的",
@@ -136,17 +136,6 @@ pub const CLAUDE_CYCLE: [(&str, &str); 5] = [
     ("auto", "auto mode on"),
 ];
 pub const CLAUDE_FULL: &str = "bypassPermissions";
-
-fn claude_words(key: &str) -> &str {
-    match key {
-        "manual" | "default" => "逐个确认",
-        "acceptEdits" => "自动接受编辑",
-        "plan" => "只做计划",
-        "bypassPermissions" => "全部放行",
-        "auto" => "自动判断",
-        other => other,
-    }
-}
 
 /// What a card says for a Claude mode; a `key` is also what the host is asked to pick.
 pub fn claude_option_detail(key: &str) -> &'static str {
