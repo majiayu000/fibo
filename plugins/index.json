@@ -618,7 +618,7 @@
     {
       "id": "sidebar-status",
       "name": "状态左栏（WASM 示例）",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "用 WebAssembly 写的左栏排法：需要你的置顶，在跑的列出，其余合成一行；跑在沙盒里，读不到文件和网络",
       "provides": [
         "sidebar"
@@ -626,7 +626,7 @@
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "202095649bd8b719fc34432045e5af72947e3e2c664c88bfbdab7e49547bc1ce",
+          "sha256": "163b60b0ac24024a33ece97ea267f7202e8f3cb2073b01a25e06f87a28159bde",
           "size": 293
         },
         {
@@ -636,8 +636,8 @@
         },
         {
           "path": "sidebar_status.wasm",
-          "sha256": "5c193e71bd86329ed5b34fbfc76569392e7d20ddc5f068d5b870bd522e4ecd44",
-          "size": 86514
+          "sha256": "9a3037bf73eaab28b0de1da368cb8e6122b727912c7fcfb87db50329150b7645",
+          "size": 87744
         }
       ]
     },
