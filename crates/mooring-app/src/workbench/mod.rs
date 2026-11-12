@@ -24,6 +24,7 @@ pub struct Workbench {
     store: Store,
     workspace: Workspace,
     facts: frame_facts::FactsCache,
+    recent_dirs: recent_dirs::RecentDirs,
     /// A press on the top bar's empty space that has not moved the window yet.
     title_drag: bool,
     error: Option<String>,
@@ -241,6 +242,7 @@ mod frame_facts;
 mod hooks;
 mod layout;
 mod machines;
+mod recent_dirs;
 mod review_queue;
 #[cfg(feature = "visual-test")]
 pub use layout::ChangesProbe;
@@ -409,6 +411,7 @@ impl Workbench {
             store,
             workspace,
             facts: Default::default(),
+            recent_dirs: Default::default(),
             title_drag: false,
             error: None,
             unsure: None,
