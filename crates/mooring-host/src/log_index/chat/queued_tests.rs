@@ -53,3 +53,31 @@ fn calls_before_a_queued_message_count_on_the_reply() {
     assert_eq!((rows.len(), tools.unwrap().commands), (1, 1));
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// 2026-11-12 walk: 「停下」 ends a turn with no reply. Counting from the Agent's last message
+/// put the stopped ping on the next reply: 「干了 2 分钟 · 跑了 1 个命令」 for 20 seconds
+/// that ran no command. The interruption ends the stretch, as a reply would.
+#[test]
+fn a_stopped_turn_does_not_count_on_the_next_reply() {
+    let (dir, i) = index(&[
+        (10, "user", "跑一下"),
+        (12, "assistant", "ping3-done"),
+        (100, "user", "再跑 ping，我会停下"),
+        (101, "tool_call", PING),
+        (110, "turn", "Interrupted"),
+        (200, "user", "写 notes.txt"),
+        (201, "tool_call", "Write {\"file_path\":\"notes.txt\"}"),
+        (220, "assistant", "diff-ready"),
+    ]);
+    let (all, _) = i.chat("p", 0, None, None, 50, true).unwrap();
+    let reply = all.iter().find(|m| m.at == 220).unwrap();
+    let t = reply.tools.clone().unwrap();
+    assert_eq!((t.commands, t.took), (0, 20));
+    // A page starting on the reply, and the list behind its line, agree.
+    let (page, _) = i.chat("p", 0, None, Some(reply.seq + 1), 1, true).unwrap();
+    let t = page[0].tools.clone().unwrap();
+    assert_eq!((t.commands, t.took), (0, 20));
+    let (_, rows, _) = i.tool_calls("p", Some(reply.seq), None, 50).unwrap();
+    assert_eq!(rows.len(), 1);
+    std::fs::remove_dir_all(dir).unwrap();
+}
