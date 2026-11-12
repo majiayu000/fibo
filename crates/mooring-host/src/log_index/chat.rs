@@ -2,7 +2,7 @@
 //! with `tools` what the Agent did before each of its messages.
 use super::{err, Index};
 use crate::agents::codex::script_patches;
-use crate::content::{edit_lines, patch_lines, patch_text, LINES, PATCHED};
+use crate::content::{edit_lines, patch_lines, patch_text, spoken, LINES, PATCHED};
 use mooring_core::protocol::{ChatMessage, ChatTools};
 use rusqlite::OptionalExtension;
 use serde_json::Value;
@@ -193,17 +193,19 @@ impl Index {
 /// again: `task_complete` follows its message within seconds.
 const REPEAT_WITHIN: u64 = 60;
 
-/// Logs indexed before the parser told them apart hold a Codex turn's last message twice;
+/// Logs indexed before the parser told them apart hold a Codex turn's last message twice,
+/// or three times when one copy carried a memory citation (compared here without it);
 /// reindexing them would lose what only the old rows still have, so this reads past them.
 fn drop_repeats(messages: &mut Vec<ChatMessage>) {
     let mut before: Option<(String, u64)> = None;
     messages.retain(|m| {
-        let repeat = !m.user
-            && before.as_ref().is_some_and(|(text, at)| {
-                *text == m.text && m.at.saturating_sub(*at) <= REPEAT_WITHIN
-            });
+        let words = (!m.user).then(|| spoken(m.text.clone()));
+        let repeat = words.as_ref().is_some_and(|w| {
+            (before.as_ref())
+                .is_some_and(|(text, at)| text == w && m.at.saturating_sub(*at) <= REPEAT_WITHIN)
+        });
         if !repeat {
-            before = (!m.user).then(|| (m.text.clone(), m.at));
+            before = words.map(|w| (w, m.at));
         }
         !repeat
     });
@@ -283,6 +285,29 @@ pub(super) fn summary(calls: &[(String, bool)]) -> ChatTools {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rows indexed before 2026-11-12: one Codex answer as item, response with a memory
+    /// citation, and task_complete. Read back as one message, the first copy.
+    #[test]
+    fn an_answer_indexed_three_times_reads_once() {
+        let say = |seq, at, text: &str| ChatMessage {
+            seq,
+            at,
+            user: false,
+            text: text.to_owned(),
+            tools: None,
+        };
+        let a = "有。按调用量排";
+        let cited = format!("{a}\n\n<oai-mem-citation>\nMEMORY.md:1-2\n</oai-mem-citation>");
+        let mut messages = vec![
+            say(1, 100, a),
+            say(2, 100, &cited),
+            say(3, 104, a),
+            say(4, 500, a),
+        ];
+        drop_repeats(&mut messages);
+        assert_eq!(messages.iter().map(|m| m.seq).collect::<Vec<_>>(), [1, 4]);
+    }
     use serde_json::json;
 
     #[test]
