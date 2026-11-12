@@ -48,9 +48,9 @@
 # Launch & workbench helpers
 "缺少工作台响应" = "Missing workspace reply"
 "未设目录 · 从 ~ 开始" = "No folder set · starts in ~"
-"未设目录 · 从上次的 {dir} 开始" = "No folder set · starts where it last was, {dir}"
+"从上次的 {dir} 开始" = "Starts where you last were, {dir}"
+"换目录" = "Change"
 "设为空间目录：{dir}" = "Make {dir} this space’s folder"
-"选一个目录作为这个空间的目录" = "Pick a folder for this space"
 "其他目录…" = "Other folder…"
 "未结束" = "Open"
 "稍后再看：{reason} · {hours} 小时后" = "Snoozed: {reason} · in {hours} {hours|hour|hours}"

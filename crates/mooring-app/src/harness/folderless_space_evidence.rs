@@ -80,12 +80,20 @@ pub(super) fn start(
             assert!(renaming.is_none(), "Enter keeps the name");
             assert_eq!(spaces[before], ("草稿".to_owned(), String::new()));
             shot("1-folderless-named", cx);
+            handle
+                .update(cx, |v, _, cx| v.visual_change_dir(cx))
+                .unwrap();
+            wait(500).await;
+            shot("1b-folderless-change-dir", cx);
             handle.update(cx, |v, _, cx| v.visual_new_tab(cx)).unwrap();
             wait(1500).await;
             let cwd = handle.update(cx, |v, _, _| v.visual_shown_cwd()).unwrap();
             let home = std::env::var("HOME").unwrap();
             eprintln!("first terminal cwd: {cwd} (HOME {home})");
-            assert_eq!(cwd, home, "a space with no folder starts in $HOME");
+            // Nothing of its own yet: where you worked last, the first space's folder here.
+            let last = spaces[0].1.clone();
+            assert_ne!(cwd, home, "a new space does not start in $HOME");
+            assert_eq!(cwd, last, "a new space starts where you worked last");
             shot("2-folderless-terminal", cx);
             eprintln!("folderless space evidence PASS");
             cx.update(|cx| cx.quit());

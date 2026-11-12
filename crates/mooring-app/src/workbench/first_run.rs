@@ -133,7 +133,7 @@ impl Workbench {
             .spaces
             .iter()
             .find(|s| s.id == self.nav.space);
-        let place = space.map_or_else(|| "~".to_owned(), |s| space_dir_label(&self.workspace, s));
+        let place = space.map_or_else(|| "~".to_owned(), |s| self.space_label(s));
         let agents = self.first_run_agents(cx);
         let link = |id: &'static str, text: &'static str| {
             button(id, text)

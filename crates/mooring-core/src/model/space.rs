@@ -53,6 +53,26 @@ impl Workspace {
             .filter(|d| !d.is_empty() && seen.insert(*d))
             .collect()
     }
+    /// Folders a space could start in, newest first: `recent_dirs` that still exist, home
+    /// and `/` left out (a space with nothing better starts in home anyway).
+    pub fn offered_dirs(&self, home: Option<&str>, limit: usize) -> Vec<String> {
+        let home = home.map(|h| h.trim_end_matches('/'));
+        (self.recent_dirs().into_iter())
+            .filter(|d| Some(*d) != home && !d.is_empty())
+            .filter(|d| std::path::Path::new(d).is_dir())
+            .take(limit)
+            .map(str::to_owned)
+            .collect()
+    }
+    /// Where a new terminal in a space starts when no pane says: its own folder; else
+    /// where its own terminals last were; else the folder you worked in last anywhere, so
+    /// a new space does not start in home; "" is home.
+    pub fn space_start(&self, id: &str, home: Option<&str>) -> String {
+        match self.space_start_dir(id) {
+            "" => self.offered_dirs(home, 1).pop().unwrap_or_default(),
+            own => own.to_owned(),
+        }
+    }
     /// Whether you put this space aside (先不管).
     pub fn space_quiet(&self, id: &str) -> bool {
         self.quiet_spaces.contains(id)
