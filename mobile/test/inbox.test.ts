@@ -2,7 +2,7 @@
 // And it reads 要你处理 off the host, so what the host brings back shows here too.
 import { describe, expect, test } from 'bun:test';
 import type { Card, Machine } from '../src/remote/hub';
-import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, headline, namesComputer, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
+import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
 import { spaceName } from '../src/ui/status';
 
 const card = (id: string, status: string, updated = 0, more: Partial<Card> = {}) =>
@@ -289,12 +289,18 @@ describe('the space filter hides nothing silently', () => {
 describe('the home screen', () => {
   const one = (cards: Card[], status = 'online', name = 'm') => ({ ...machine(cards, name, status), name });
 
-  test('the title counts what is yours to decide, not finished work to check', () => {
-    const a = arrange([one([approval('a'), card('r', 'review'), card('run', 'running')])], []);
-    expect(headline(shelve(a, null), 1)).toBe('1 件要你决定');
-    const quiet = arrange([one([card('r', 'review')])], []);
-    expect(headline(shelve(quiet, null), 1)).toBe('没有要你决定的事');
-    expect(headline(shelve(arrange([], []), null), 0)).toBe('Fibo');
+  test('under the mark, what is going on: most urgent first, two kinds at most', () => {
+    const words = (status: string, label: string) => ({ status_label: label, ...(status === 'review' && { needs_you: true }) });
+    const run = (id: string) => card(id, 'running', 0, words('running', '在跑'));
+    const rev = (id: string) => card(id, 'review', 0, words('review', '等你验收'));
+    const ask = card('q', 'waiting', 0, words('waiting', '等你回答'));
+    expect(pulse(shelve(arrange([one([run('a'), run('b'), rev('c'), ask])], []), null))).toEqual({ text: '1 个等你回答 · 1 个等你验收', urgent: true });
+    expect(pulse(shelve(arrange([one([rev('c'), rev('d'), run('a')])], []), null))).toEqual({ text: '2 个等你验收 · 1 个在跑', urgent: false });
+    expect(pulse(shelve(arrange([one([])], []), null))).toEqual({ text: '都歇着', urgent: false });
+    // A space shown alone: the line says that space, as the list under it does.
+    const at = (space: string, c: Card) => ({ ...c, cwd: `/code/${space}` });
+    const two = arrange([machine([at('a', rev('r1')), at('b', run('x')), at('b', ask)])], []);
+    expect(pulse(shelve(two, 'a')).text).toBe('1 个等你验收');
   });
 
   test('what runs shows a few at first, all when asked', () => {

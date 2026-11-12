@@ -1,7 +1,7 @@
 // Where a new task lands: what the phone shows is what it sends, and a folder in no space
 // says where it is going instead of quietly going to the first space.
 import { describe, expect, test } from 'bun:test';
-import { asideSpaces, holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf } from '../src/ui/spaces';
+import { asideSpaces, chipSpace, holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf } from '../src/ui/spaces';
 
 const work = { id: 'w', name: '工作空间', cwd: '/Users/me' };
 const app = { id: 'a', name: 'mooring', cwd: '/Users/me/code/mooring' };
@@ -64,5 +64,32 @@ describe('the spaces put aside', () => {
     const old = { name: 'old', status: 'online' };
     const away = { name: 'away', status: 'offline', quietSpaces: [{ id: 'v', name: 'vsr', cwd: '/v' }] };
     expect(asideSpaces([on, old, away]).map((a) => `${a.m.name}/${a.name}`)).toEqual(['mac/her', 'mac/youtube']);
+  });
+});
+
+describe('chipSpace', () => {
+  const a = { id: 'a', name: 'vsr', cwd: '/w/vsr' };
+  const b = { id: 'b', name: 'vsr', cwd: '/x/vsr' };
+  const mac = { id: 'mac', status: 'online', spaceList: [a], cards: [] };
+  const pc = { id: 'pc', status: 'online', spaceList: [b], cards: [] };
+  test('the chip shown on home is the space 新任务 opens in', () => {
+    expect(chipSpace([mac, pc], 'vsr', undefined)).toEqual({ machine: 'mac', space: 'a' });
+    expect(chipSpace([mac, pc], 'vsr', 'pc')).toEqual({ machine: 'pc', space: 'b' });
+  });
+  test('全部, or a name no computer lists, picks nothing', () => {
+    expect(chipSpace([mac], null, 'mac')).toBeUndefined();
+    expect(chipSpace([mac], 'some-folder', 'mac')).toBeUndefined();
+    expect(chipSpace([{ ...mac, status: 'offline' }], 'vsr', undefined)).toBeUndefined();
+  });
+  test('a space with no folder starts where its latest conversation is', () => {
+    const bare = { id: 'm', name: 'mooring', cwd: '' };
+    const cards = [
+      { space: 'm', cwd: '/code/old', updated: 1 },
+      { space: 'm', cwd: '/code/mooring', updated: 9 },
+      { space: 'other', cwd: '/elsewhere', updated: 99 },
+    ];
+    expect(chipSpace([{ id: 'mac', status: 'online', spaceList: [bare], cards }], 'mooring', 'mac')).toEqual({ machine: 'mac', space: 'm', cwd: '/code/mooring' });
+    expect(chipSpace([{ id: 'mac', status: 'online', spaceList: [bare], cards: [] }], 'mooring', 'mac')).toEqual({ machine: 'mac', space: 'm' });
+    expect(landingNote({ space: bare, why: 'picked' }, '/code/mooring')).toBe('');
   });
 });

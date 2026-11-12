@@ -173,10 +173,27 @@ export function holdLeft(h: Hold, now: number): number {
   return Math.max(0, touch, scroll);
 }
 
-/** The home screen's title: what is yours to decide. Finished work to check is not counted. */
-export function headline(s: Shelf, paired: number): string {
-  if (paired === 0) return 'Fibo';
-  return s.acts > 0 ? tr('{n} 件要你决定', { n: s.acts }) : tr('没有要你决定的事');
+/**
+ * The line under the Fibo mark: what the space shown holds now, most urgent first, two kinds
+ * at most (「1 个等你回答 · 2 个等你验收」). The words are the computer's own status labels.
+ * `urgent` when something cannot go on without you.
+ */
+export function pulse(s: Shelf): { text: string; urgent: boolean } {
+  const items = [...s.pinned, ...s.ahead, ...s.running, ...s.review].filter((i) => i.m.status === 'online');
+  const groups = new Map<string, { rank: number; n: number }>();
+  for (const { c } of items) {
+    const word = statusWord(c);
+    if (!word) continue;
+    const g = groups.get(word) ?? { rank: rank(c), n: 0 };
+    g.rank = Math.min(g.rank, rank(c));
+    g.n += 1;
+    groups.set(word, g);
+  }
+  // In the list's order: what asks you, then 等你验收 above 在跑 (docs/decisions/2026-11-08-review-above-running.md).
+  const order = (r: number) => (r === 4 ? 3 : r === 3 ? 4 : r);
+  const top = [...groups].sort((a, b) => order(a[1].rank) - order(b[1].rank) || b[1].n - a[1].n).slice(0, 2);
+  if (!top.length) return { text: tr('都歇着'), urgent: false };
+  return { text: top.map(([word, g]) => tr('{n} 个{word}', { n: g.n, word })).join(' · '), urgent: top[0][1].rank <= 2 };
 }
 
 /** How many of what runs show before 「看全部」: on a real phone 12 pushed everything else two screens down. */
