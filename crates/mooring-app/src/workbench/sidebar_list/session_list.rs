@@ -117,7 +117,7 @@ impl Workbench {
             });
             let recent = preset.group == Grouping::Recent;
             out.push(if recent {
-                self.flat_fold("recent:pinned", t!("置顶"), top.len(), cx)
+                self.flat_fold("recent:pinned", t!("置顶"), top.len(), true, cx)
             } else {
                 self.heading(t!("置顶").into(), top.len(), cx)
                     .mt(px(T::S14))

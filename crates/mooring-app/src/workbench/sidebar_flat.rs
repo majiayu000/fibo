@@ -104,22 +104,6 @@ pub(super) fn flat_selected_edge() -> gpui::Div {
         .border_color(ink(F::selected_line()))
 }
 
-/// A folded group's line, without its contents; its state and text sit in the rows' columns.
-pub(super) fn flat_more_box(id: gpui::SharedString) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .mt(px(T::S2))
-        .mx(px(F::ROW_EDGE))
-        .px(px(F::ROW_PAD))
-        .py(px(F::ROW_PAD_Y))
-        .flex()
-        .items_center()
-        .gap(px(F::ROW_GAP))
-        .rounded(px(F::ROW_RADIUS))
-        .cursor_pointer()
-        .hover(|s| s.bg(ink(F::hover())))
-}
-
 impl Workbench {
     /// The column's top: the traffic lights' strip with the fold button at its right end
     /// (folded, the window keeps it beside the lights, on the same line).
@@ -263,28 +247,6 @@ impl Workbench {
                     .child(title.to_owned()),
             )
             .child(div().text_color(ink(F::third())).child(count.to_string()))
-    }
-    /// Folded sessions, one quiet line that opens them: `很久没动 3 个 ›`.
-    pub(super) fn flat_more(
-        &self,
-        key: &str,
-        text: String,
-        open: bool,
-        cx: &Context<Self>,
-    ) -> gpui::AnyElement {
-        let key = key.to_owned();
-        flat_more_box(gpui::SharedString::from(format!("sidebar-fold-{key}")))
-            .font_family(T::UI_FONT)
-            .text_size(px(T::SMALL))
-            .line_height(px(F::LINE_TEXT))
-            .text_color(ink(F::third()))
-            // An empty slot, not a state dot: the line is not a session (「为啥有个圆圈」),
-            // yet its text keeps the titles' column.
-            .child(div().w(px(F::STATE)).flex_shrink_0())
-            .child(div().flex_1().min_w_0().truncate().child(text))
-            .child(self.sidebar.fold_mark(&key, open))
-            .on_click(cx.listener(move |this, _, _, cx| this.toggle_sidebar_group(&key, open, cx)))
-            .into_any_element()
     }
     /// Closed sessions past the ones listed under 更早: one line that opens them in 鸟瞰.
     pub(super) fn flat_closed_more(&self, count: usize, cx: &Context<Self>) -> gpui::AnyElement {

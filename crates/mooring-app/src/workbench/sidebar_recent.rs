@@ -102,7 +102,7 @@ impl Workbench {
             if rows.is_empty() {
                 continue;
             }
-            out.push(self.flat_fold(key, title, rows.len(), cx));
+            out.push(self.flat_fold(key, title, rows.len(), true, cx));
             let open = self.sidebar.open(key, true);
             let showing = self.sidebar.showing(key, true);
             let (start, mut keep) = (out.len(), Vec::new());
@@ -148,30 +148,36 @@ impl Workbench {
             .collect();
         let (today, older) = split_today(history, crate::model::time::now());
         if !today.is_empty() {
-            out.push(self.flat_fold("recent:today", t!("今天"), today.len(), cx));
+            out.push(self.flat_fold("recent:today", t!("今天"), today.len(), true, cx));
             self.history_rows("recent:today", true, today, current, out, cx);
         }
         // Older ones a module was not handed are still counted, and open in 鸟瞰.
         let unlisted = closed.total.saturating_sub(closed.rows.len());
         if !older.is_empty() || unlisted > 0 {
-            // Narrowed to one space the list is short, so it opens by itself.
-            let open = self
-                .sidebar
-                .open("recent:older", self.space_filter().is_some());
-            out.push(self.flat_more(
-                "recent:older",
-                t!(
-                    "更早 {unlisted} 个 · 停着或做完了",
-                    unlisted = older.len() + unlisted
-                ),
-                open,
-                cx,
-            ));
+            // A heading beside 今天, not a line under it: as a quiet line it hung under a
+            // folded 今天 as if it were one of its rows. Narrowed to one space the list is
+            // short, so it opens by itself.
             let default = self.space_filter().is_some();
+            let open = self.sidebar.open("recent:older", default);
+            let count = older.len() + unlisted;
+            out.push(self.flat_fold("recent:older", t!("更早"), count, default, cx));
             self.history_rows("recent:older", default, older, current, out, cx);
             if open && unlisted > 0 {
                 out.push(self.flat_closed_more(unlisted, cx));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// 「这个排列位置有很大的问题」: 更早 drawn as a quiet indented line hung under a folded
+    /// 今天 as if it were one of its rows. It is a heading like 今天, beside it.
+    #[test]
+    fn earlier_is_a_heading_beside_today() {
+        let src = include_str!("sidebar_recent.rs");
+        let body = &src[..src.find("#[cfg(test)]").unwrap()];
+        assert!(body.contains("self.flat_fold(\"recent:older\""));
+        assert!(body.contains("self.flat_fold(\"recent:today\""));
     }
 }
