@@ -18,8 +18,9 @@ import { QuietSpaces } from '@/ui/quietspaces';
 import { Row, rowStyles, spaceName } from '@/ui/row';
 import { SpaceChips } from '@/ui/spacechips';
 import { chipSpace } from '@/ui/spaces';
+import { FiboTitle } from '@/ui/fibomark';
 import { getDraft, setDraft } from '@/store/draft';
-import { type Arranged, type Item, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
+import { type Arranged, type Item, arrange, connectionLine, foldLabel, itemKey, pulse, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
 import { TabBar } from '@/ui/tabs';
 import { statusColor } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
@@ -154,6 +155,7 @@ export default function Inbox() {
   const { pinned, ahead, review, running, behind, later, done } = shelf;
   const named = namesComputer(machines);
   const line = connectionLine(machines);
+  const now = pulse(shelf);
   const offline = offlineRows(machines);
   const runningOpen = view.running !== false;
   const [allRunning, setAllRunning] = useState(false);
@@ -178,17 +180,23 @@ export default function Inbox() {
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <View style={[s.hd, { paddingTop: top + 9 }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[s.title, { color: t.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-            {headline(shelf, machines.length)}
-          </Text>
-          {!!line.text && (
+          <FiboTitle color={t.text} />
+          {/* A computer away or refused says so here; otherwise the line says what is going on. */}
+          {machines.length > 0 && (line.alert || machines.some((m) => m.status !== 'online')) ? (
             <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/me')} style={s.line}>
               <View style={[s.dotSmall, { backgroundColor: machines.some((m) => m.status === 'online') ? t.ok : t.dim }]} />
               <Text numberOfLines={1} style={{ fontSize: 13, color: line.alert ? t.err : t.dim, flexShrink: 1 }}>
                 {line.text}
               </Text>
             </Pressable>
-          )}
+          ) : machines.length > 0 ? (
+            <View style={s.line}>
+              <View style={[s.dotSmall, { backgroundColor: now.urgent ? t.wait : t.ok }]} />
+              <Text numberOfLines={1} style={{ fontSize: 13, color: now.urgent ? t.wait : t.dim, flexShrink: 1 }}>
+                {now.text}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Round icon="search" label={tr('搜索')} onPress={() => router.push('/search')} />
         <Round icon="plus" label={tr('新任务')} onPress={() => newTask(machines, shelf.filter)} />
@@ -325,7 +333,6 @@ function newTask(machines: Machine[], filter: string | null) {
 const s = StyleSheet.create({
   hd: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
   elsewhere: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 18, borderBottomWidth: 1 },
-  title: { fontSize: 26, lineHeight: 32, fontWeight: '600', letterSpacing: -0.3 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   more: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1 },
   undo: { position: 'absolute', left: 12, right: 12, bottom: 8, minHeight: 48, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingLeft: 14, paddingRight: 4 },
