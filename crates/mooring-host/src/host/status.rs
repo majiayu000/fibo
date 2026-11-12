@@ -279,19 +279,21 @@ pub(super) fn check_screen_wait(
     if !veto {
         return Ok(None);
     }
-    // A dialog the hooks or the log reported but the screen no longer shows: ask the CLI.
+    // A dialog the hooks or the log reported but the screen no longer shows, or a prompt
+    // the log never recorded (taken back with Esc): ask the CLI.
     let Some(session) = host.workspace.current_agent(id).cloned() else {
         return Ok(None);
     };
-    let waiting = host
-        .workspace
-        .content
-        .get(&session.id)
-        .filter(|c| c.turn == mooring_core::content::Turn::Waiting);
-    let Some(card) = waiting else {
+    let card = host.workspace.content.get(&session.id);
+    let hold = match card {
+        Some(c) if c.turn == mooring_core::content::Turn::Waiting => RECONCILE_HOLD.as_secs(),
+        Some(c) if crate::content::prompt_unread(c) => crate::content::PROMPT_UNREAD_HOLD,
+        _ => return Ok(None),
+    };
+    let Some(card) = card else {
         return Ok(None);
     };
-    let held = card.signal_at + RECONCILE_HOLD.as_secs();
+    let held = card.signal_at + hold;
     let now = mooring_core::content::now();
     if held > now {
         return Ok(Some(Instant::now() + Duration::from_secs(held - now)));
