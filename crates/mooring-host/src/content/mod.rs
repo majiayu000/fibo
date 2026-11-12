@@ -14,6 +14,8 @@ use std::{
     sync::LazyLock,
 };
 mod children;
+mod citation;
+pub(crate) use citation::spoken;
 mod db;
 mod result;
 mod rules;

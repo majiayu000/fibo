@@ -11,8 +11,13 @@
 //! turn's last message `task_complete`'s `last_agent_message`. In the last 30 real rollouts
 //! 294 came as item+response, 120 as all three, 19 as the item alone, 15 as item and
 //! task_complete, 15 as the response alone. Whichever comes first is the record.
+//!
+//! When Codex drew on its memory, only the `response_item` copy ends with an
+//! `<oai-mem-citation>` block; the item and `task_complete` do not. Compared as logged, the
+//! one answer became three records (2026-11-12: 36 of 1211 replies in 104 recent rollouts).
+//! The block is for Codex's own UI, never shown: it is cut before comparing and recording.
 use super::tool_lines::{add_blocks, ToolCallLine, ToolOutput};
-use crate::content::{claims_done, Parser};
+use crate::content::{claims_done, spoken, Parser};
 use mooring_core::content::{short, Source};
 use serde_json::{json, Value};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -26,12 +31,14 @@ fn mark(s: &str) -> String {
 /// A message as a finished item (or the `agent_message` event older logs write): recorded,
 /// and the response item about to repeat it is expected.
 pub(super) fn item_said(parser: &mut Parser, s: String, at: u64, source: &Source, last: bool) {
+    let s = spoken(s);
     parser.reply = mark(&s);
     parser.message(false, s, at, source, last);
 }
 
 /// A message as a response item: the one the item just recorded, or a new one.
 pub(super) fn response_said(parser: &mut Parser, s: String, at: u64, source: &Source, last: bool) {
+    let s = spoken(s);
     if std::mem::take(&mut parser.reply) == mark(&s) {
         return;
     }
@@ -41,6 +48,7 @@ pub(super) fn response_said(parser: &mut Parser, s: String, at: u64, source: &So
 /// `task_complete` names the turn's last message, normally already recorded. It still says
 /// this message is the final answer.
 pub(super) fn final_said(parser: &mut Parser, s: String, at: u64, source: &Source) {
+    let s = spoken(s);
     if short(&s, 1400) == parser.card.last_reply {
         parser.card.completed_claim = claims_done(&s);
         parser.card.updated = parser.card.updated.max(at);
@@ -221,6 +229,28 @@ mod tests {
             assert_eq!(said(&p), [a], "{rows:?}");
             assert_eq!(p.card.last_reply, a);
         }
+    }
+
+    /// Real shape (2026-11-12): only the response copy carries the memory citation block. It
+    /// is one message, recorded without the block.
+    #[test]
+    fn a_memory_citation_on_one_copy_does_not_make_it_another_message() {
+        let a = "有。按调用量排：\n\n已验：路由／没验：效果\n\nMemory citations: none";
+        let cited = format!(
+            "{a}\n\n<oai-mem-citation>\n<citation_entries>\nMEMORY.md:1-2|note=[x]\n</citation_entries>\n<rollout_ids>\nr\n</rollout_ids>\n</oai-mem-citation>"
+        );
+        for rows in [
+            vec![item(a), response(&cited), done(a)],
+            vec![response(&cited), done(a)],
+            vec![item(a), response(&cited)],
+        ] {
+            let mut p = Parser::default();
+            feed(&mut p, &rows);
+            assert_eq!(said(&p), [a], "{rows:?}");
+            assert_eq!(p.card.last_reply, a);
+        }
+        let mid = "前<oai-mem-citation>x</oai-mem-citation>后".to_owned();
+        assert_eq!(crate::content::spoken(mid), "前后");
     }
 
     /// A sentence said again later is said twice; only the same one logged twice is one.
