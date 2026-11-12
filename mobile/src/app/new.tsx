@@ -3,16 +3,18 @@
 // up the last conversation there: then what you write is optional, its next message.
 // The space its tab goes in is shown and sent, so it never lands somewhere unsaid; the
 // keyboard's return key starts it (or puts the keyboard away and says what is missing).
+// Pictures picked here go with the first message, on a computer that says it takes them.
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
 import { tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { resetDraft, setDraft, useDraft } from '@/store/draft';
 import { Icon } from '@/ui/icons';
 import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
+import { MAX_PICTURES, type Picture, pick } from '@/ui/pictures';
 import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
 import { SpaceField } from '@/ui/spacefield';
 import { ignoredPick, landing, pickSpace } from '@/ui/spaces';
@@ -27,6 +29,7 @@ export default function NewTask() {
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const [pictures, setPictures] = useState<Picture[]>([]);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const typing = useRef(false);
   // The box is the last field: once the keyboard is up and the page has shrunk, bring it
@@ -48,6 +51,8 @@ export default function NewTask() {
   // No directory picked: the space's own folder, as a new tab in that space opens there.
   const cwd = draft.cwd || land.space?.cwd || undefined;
   const canResume = able && !!cwd && supports(m, 'lastsession');
+  // Older computers start the task without them: no button there rather than lost pictures.
+  const canPicture = able && supports(m, 'openimages') && supports(m, 'image');
   const ready = able && !!cwd && (!!draft.prompt.trim() || !!draft.resume) && !busy;
   /** What stops 开始, said where the button is: a grey button alone says nothing. */
   const missing = busy
@@ -91,8 +96,11 @@ export default function NewTask() {
     try {
       const prompt = draft.prompt.trim();
       const space = land.space?.id;
-      const where = space ? { space } : {};
+      const images: string[] = [];
+      for (const p of canPicture ? pictures : []) images.push((await write(m.id, 'image', { data: p.base64 })).path);
+      const where = { ...(space ? { space } : {}), ...(images.length ? { images } : {}) };
       const ok = await write(m.id, 'open', draft.resume ? { resume: draft.resume.id, ...where, ...(prompt ? { prompt } : {}) } : { cwd: cwd, agent: draft.agent, prompt, ...where });
+      setPictures([]);
       const ignored = ignoredPick(spaces, space, cwd, ok ?? {});
       resetDraft();
       await refresh(m.id);
@@ -103,6 +111,15 @@ export default function NewTask() {
       oops((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function addPictures() {
+    try {
+      const got = await pick('library', MAX_PICTURES - pictures.length);
+      if (got) setPictures((p) => [...p, ...got].slice(0, MAX_PICTURES));
+    } catch (e) {
+      oops((e as Error).message);
     }
   }
 
@@ -222,7 +239,25 @@ export default function NewTask() {
             style={[s.area, { color: t.text, backgroundColor: t.card, borderColor: t.line }, noOutline]}
           />
         </View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        {canPicture && pictures.length > 0 && (
+          <View style={s.pictures}>
+            {pictures.map((p, i) => (
+              <View key={p.uri}>
+                <Image source={{ uri: p.uri }} style={[s.thumb, { backgroundColor: t.well }]} accessibilityLabel={tr('第 {n} 张图片', { n: i + 1 })} />
+                <Pressable
+                  onPress={() => setPictures((all) => all.filter((x) => x !== p))}
+                  style={[s.unpick, { backgroundColor: t.text }]}
+                  accessibilityLabel={tr('去掉第 {n} 张图片', { n: i + 1 })}
+                  hitSlop={8}
+                >
+                  <Icon name="close" size={9} width={2.4} color={t.bg} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {canPicture && pictures.length < MAX_PICTURES && <Btn label={tr('加图片')} onPress={addPictures} />}
           <Btn
             label={tr('从剪贴板粘贴')}
             onPress={() =>
@@ -269,5 +304,8 @@ const s = StyleSheet.create({
   segItem: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   resume: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, padding: 14 },
   clear: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingRight: 4 },
+  thumb: { width: 56, height: 56, borderRadius: 12 },
+  unpick: { position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   area: { minHeight: 150, borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 15, lineHeight: 22, textAlignVertical: 'top' },
 });

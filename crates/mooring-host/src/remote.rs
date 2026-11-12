@@ -27,6 +27,7 @@ mod dirs;
 mod images;
 mod list;
 mod modes;
+mod open_pictures;
 mod quota;
 mod resume;
 mod todos;

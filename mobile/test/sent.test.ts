@@ -21,6 +21,9 @@ test('a logged message shows its pictures the way it read while sending', () => 
   expect(shownWords('[Image #1] [Image #2] 看这两张')).toBe('[2 张图片] 看这两张');
   expect(shownWords('[Image #1]')).toBe('[1 张图片]');
   expect(shownWords('没有图')).toBe('没有图');
+  // A new task's pictures, as Claude Code logs its first message.
+  expect(shownWords('看这两张\n\n@/u/.local/share/fibo/phone-images/a.jpg @/u/.local/share/fibo/phone-images/b.jpg')).toBe('[2 张图片] 看这两张');
+  expect(shownWords('@me 你好')).toBe('@me 你好');
 });
 
 test('written while the computer is away, a message still knows its conversation', () => {
