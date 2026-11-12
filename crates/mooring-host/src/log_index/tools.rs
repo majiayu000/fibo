@@ -91,16 +91,39 @@ impl Index {
     /// Where the stretch ending at `end` begins: the Agent's message before it. A message you
     /// send while it works lands mid-stretch, between its calls; starting there lost the calls
     /// before it from every count (2026-11-10 walk). The `IN` lets SQLite walk the
-    /// messages' partial index instead of every record.
+    /// messages' partial index instead of every record. A turn stopped or refused after that
+    /// message ends with no reply; the stretch starts at its interruption, or the stopped
+    /// calls counted on the next reply (2026-11-12 walk). Looking only past the Agent's
+    /// message keeps the search to this stretch.
     pub(super) fn stretch_start(&self, path: &str, end: (i64, i64)) -> io::Result<i64> {
-        Ok(self
+        let said: i64 = self
             .db
             .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind IN ('user','assistant') AND kind='assistant' AND (offset,ordinal)<(?2,?3) ORDER BY offset DESC,ordinal DESC LIMIT 1"))
             .map_err(err)?
             .query_row(params![path, end.0, end.1], |r| r.get(0))
             .optional()
             .map_err(err)?
-            .unwrap_or(0))
+            .unwrap_or(0);
+        Ok(self
+            .interruptions(path, place(said), end)?
+            .pop()
+            .unwrap_or(said))
+    }
+
+    /// Where turns were stopped between two places, in order.
+    pub(super) fn interruptions(
+        &self,
+        path: &str,
+        from: (i64, i64),
+        until: (i64, i64),
+    ) -> io::Result<Vec<i64>> {
+        self.db
+            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND (offset,ordinal)>(?2,?3) AND (offset,ordinal)<(?4,?5) AND kind='turn' AND text='Interrupted' ORDER BY offset,ordinal"))
+            .map_err(err)?
+            .query_map(params![path, from.0, from.1, until.0, until.1], |r| r.get(0))
+            .map_err(err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(err)
     }
 
     /// Which log the turn begun at `since` is in and where its opening message is, so reading

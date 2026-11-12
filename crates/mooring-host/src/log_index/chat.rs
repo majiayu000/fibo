@@ -146,14 +146,32 @@ impl Index {
             .map_err(err)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(err)?;
+        // A stopped turn has no reply to count on; its calls stop with it.
+        let mut stops = self
+            .interruptions(path, from, until)?
+            .into_iter()
+            .peekable();
         let mut calls = calls.into_iter().peekable();
         let mut before = Vec::new();
         for m in messages.iter_mut() {
-            while let Some((_, text, failed, at)) = calls.next_if(|c| c.0 < m.seq) {
-                if began == 0 {
-                    began = at;
+            loop {
+                let stop = stops.peek().copied().filter(|&s| s < m.seq);
+                let call = calls.peek().map(|c| c.0).filter(|&c| c < m.seq);
+                match (stop, call) {
+                    (Some(s), c) if c.is_none_or(|c| s < c) => {
+                        stops.next();
+                        before.clear();
+                        began = 0;
+                    }
+                    (_, Some(_)) => {
+                        let (_, text, failed, at) = calls.next().unwrap();
+                        if began == 0 {
+                            began = at;
+                        }
+                        before.push((text, failed));
+                    }
+                    _ => break,
                 }
-                before.push((text, failed));
             }
             if m.user {
                 if began == 0 {

@@ -9,7 +9,8 @@ pub fn schema(db: &Connection) -> io::Result<()> {
         CREATE INDEX IF NOT EXISTS session_records_messages ON session_records(path,inode,offset,ordinal) WHERE kind IN ('user','assistant');
         CREATE INDEX IF NOT EXISTS session_records_call ON session_records(path,call_id,kind,offset,ordinal);
         CREATE INDEX IF NOT EXISTS session_records_turn_start ON session_records(path,at) WHERE kind='turn' AND text='Running';
-        CREATE INDEX IF NOT EXISTS session_records_tools ON session_records(path,offset,ordinal) WHERE kind='tool_call';").map_err(db_err)
+        CREATE INDEX IF NOT EXISTS session_records_tools ON session_records(path,offset,ordinal) WHERE kind='tool_call';
+        CREATE INDEX IF NOT EXISTS session_records_stops ON session_records(path,inode,offset,ordinal) WHERE kind='turn' AND text='Interrupted';").map_err(db_err)
 }
 pub fn load(db: &Connection, path: &str) -> io::Result<Parser> {
     let value: Option<String> = db
