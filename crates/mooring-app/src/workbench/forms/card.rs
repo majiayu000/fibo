@@ -172,7 +172,7 @@ impl Workbench {
             .spaces
             .iter()
             .find(|s| s.id == form.space)
-            .map(space_dir_label)
+            .map(|s| space_dir_label(&self.workspace, s))
             .unwrap_or_default();
         let mut row = segments();
         // A todo already there can stay; a new one does not go where nothing shows it.

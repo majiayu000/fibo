@@ -69,7 +69,7 @@ impl Workbench {
                         .text_size(px(T::META))
                         .min_w_0()
                         .truncate()
-                        .child(space_dir_label(space)),
+                        .child(space_dir_label(&self.workspace, space)),
                 );
             }
         }

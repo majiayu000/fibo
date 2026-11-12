@@ -3,6 +3,7 @@
 use super::*;
 use mooring_platform::local;
 mod edit;
+mod last_dir;
 mod modes;
 mod once;
 mod stop;

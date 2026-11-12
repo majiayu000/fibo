@@ -331,6 +331,7 @@ impl Workspace {
                 self.tabs.retain(|t| t.space != id);
                 self.spaces.retain(|s| s.id != id);
                 self.quiet_spaces.remove(&id);
+                self.space_last_cwd.remove(&id);
             }
             Edit::SetSpaceQuiet { id, quiet } => {
                 if !self.spaces.iter().any(|s| s.id == id) {

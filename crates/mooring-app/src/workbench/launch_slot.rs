@@ -172,6 +172,8 @@ impl Workbench {
             .as_ref()
             .and_then(|id| self.workspace.terminals.iter().find(|t| &t.id == id))
             .filter(|t| t.space == space.id);
+        // The space's own folder, else where its terminals last were (core decides).
+        let space_dir = self.workspace.space_start_dir(&space.id).to_owned();
         let cwd = resume
             .map(|r| r.1)
             .or(task_cwd)
@@ -180,9 +182,9 @@ impl Workbench {
                 previous
                     .map(|t| t.cwd)
                     .or_else(|| inherited.map(|t| t.cwd.clone()))
-                    .unwrap_or_else(|| space.cwd.clone())
+                    .unwrap_or_else(|| space_dir.clone())
             });
-        let cwd = usable_cwd([cwd, space.cwd.clone()]);
+        let cwd = usable_cwd([cwd, space_dir]);
         let cwd_source = inherited
             .filter(|t| t.state == ProcessState::Running)
             .filter(|_| task_id.is_none() && resuming.is_none())

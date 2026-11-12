@@ -28,6 +28,15 @@ impl Workspace {
                     .map(|p| p.id.as_str())
             })
     }
+    /// Where a new terminal in a space starts when no pane or conversation says: the
+    /// space's own folder; else where its terminals last were; else "" (home).
+    pub fn space_start_dir(&self, id: &str) -> &str {
+        let pinned = (self.spaces.iter().find(|s| s.id == id)).map_or("", |s| s.cwd.as_str());
+        if !pinned.is_empty() {
+            return pinned;
+        }
+        self.space_last_cwd.get(id).map_or("", String::as_str)
+    }
     /// Whether you put this space aside (先不管).
     pub fn space_quiet(&self, id: &str) -> bool {
         self.quiet_spaces.contains(id)
