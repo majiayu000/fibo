@@ -162,8 +162,8 @@ function CodeBlock({ node, ctx }: { node: Code; ctx: Ctx }) {
       {fits ? (
         <View style={s.codeBody}>{body}</View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.codeBody}>
-          {body}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled contentContainerStyle={s.codeBody}>
+          <View onStartShouldSetResponder={claim}>{body}</View>
         </ScrollView>
       )}
       {folded && (
@@ -174,6 +174,13 @@ function CodeBlock({ node, ctx }: { node: Code; ctx: Ctx }) {
     </View>
   );
 }
+
+/**
+ * What scrolls sideways takes the touch itself. The message around it copies on long press,
+ * and on Android inside the inverted chat list that held the swipe: a wide table or code
+ * block did not move (2026-11-12, real phone). Long press on it no longer copies the message.
+ */
+const claim = () => true;
 
 function TableBlock({ node, ctx }: { node: TableNode; ctx: Ctx }) {
   const { t, color, width } = ctx;
@@ -202,8 +209,8 @@ function TableBlock({ node, ctx }: { node: TableNode; ctx: Ctx }) {
       {total <= width - 2 ? (
         grid
       ) : (
-        <ScrollView horizontal persistentScrollbar>
-          <View>{grid}</View>
+        <ScrollView horizontal persistentScrollbar nestedScrollEnabled>
+          <View onStartShouldSetResponder={claim}>{grid}</View>
         </ScrollView>
       )}
     </View>
