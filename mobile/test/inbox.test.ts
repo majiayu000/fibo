@@ -289,11 +289,20 @@ describe('the space filter hides nothing silently', () => {
 describe('the home screen', () => {
   const one = (cards: Card[], status = 'online', name = 'm') => ({ ...machine(cards, name, status), name });
 
-  test('the title counts what is yours to decide, not finished work to check', () => {
-    const a = arrange([one([approval('a'), card('r', 'review'), card('run', 'running')])], []);
-    expect(headline(shelve(a, null), 1)).toBe('1 件要你决定');
-    const quiet = arrange([one([card('r', 'review')])], []);
-    expect(headline(shelve(quiet, null), 1)).toBe('没有要你决定的事');
+  test('the title counts what needs you as the Mac does, finished work to check included', () => {
+    // The computer marks 等你验收 needs_you (core `Status::needs_you`).
+    const r = card('r', 'review', 0, { needs_you: true });
+    const a = arrange([one([approval('a'), r, card('run', 'running')])], []);
+    expect(headline(shelve(a, null), 1)).toBe('2 项要你处理');
+    const review = arrange([one([r])], []);
+    expect(headline(shelve(review, null), 1)).toBe('1 项要你处理');
+    const quiet = arrange([one([card('run', 'running')])], []);
+    expect(headline(shelve(quiet, null), 1)).toBe('没有要你处理的');
+    // A space shown alone: the title counts that space, as the list under it does.
+    const at = (space: string, c: Card) => ({ ...c, cwd: `/code/${space}` });
+    const two = arrange([machine([at('a', card('r1', 'review', 0, { needs_you: true })), at('b', card('r2', 'review', 0, { needs_you: true })), at('b', approval('q'))])], []);
+    expect(headline(shelve(two, 'a'), 1)).toBe('1 项要你处理');
+    expect(headline(shelve(two, null), 1)).toBe('3 项要你处理');
     expect(headline(shelve(arrange([], []), null), 0)).toBe('Fibo');
   });
 

@@ -81,6 +81,9 @@ const reminder = ({ c }: Item) => statusKey(c) === 'review' && c.outcome === 'de
 /** What is yours to act on now, on a computer that can hear you. Finished work to check is not. */
 const acts = (i: Item) => i.m.status === 'online' && (rank(i.c) <= 2 || reminder(i));
 
+/** All the computer counts as yours, 等你验收 included: the Mac's 要你处理. */
+const needsYou = (i: Item) => acts(i) || (i.m.status === 'online' && !!i.c.needs_you);
+
 /** One entry of the space filter; `name` null is 全部. `count` is its inbox, `acts` what of that is yours to act on. */
 export type Chip = { name: string | null; count: number; acts: number };
 
@@ -105,6 +108,8 @@ export type Shelf = {
   /** Over all spaces: what is yours to act on, and all the host counts as yours, 等你验收 included. */
   acts: number;
   waiting: number;
+  /** What needs you in the space shown (all of them without a filter): the title's count. */
+  yours: number;
   /** Nothing of the inbox in the space shown; folded cards count as something. */
   empty: boolean;
 };
@@ -135,7 +140,8 @@ export function shelve(a: Arranged, selected: string | null): Shelf {
     done: a.done.filter(here),
     elsewhere: inbox.filter((i) => !here(i) && acts(i)).length,
     acts: inbox.filter(acts).length,
-    waiting: inbox.filter((i) => acts(i) || (i.m.status === 'online' && i.c.needs_you)).length,
+    waiting: inbox.filter(needsYou).length,
+    yours: inbox.filter((i) => here(i) && needsYou(i)).length,
     empty: !inbox.some(here),
   };
 }
@@ -176,7 +182,8 @@ export function holdLeft(h: Hold, now: number): number {
 /** The home screen's title: what is yours to decide. Finished work to check is not counted. */
 export function headline(s: Shelf, paired: number): string {
   if (paired === 0) return 'Fibo';
-  return s.acts > 0 ? tr('{n} 件要你决定', { n: s.acts }) : tr('没有要你决定的事');
+  // The same count and words as the Mac's menu bar panel: 等你验收 is yours too.
+  return s.yours > 0 ? tr('{n} 项要你处理', { n: s.yours }) : tr('没有要你处理的');
 }
 
 /** How many of what runs show before 「看全部」: on a real phone 12 pushed everything else two screens down. */
