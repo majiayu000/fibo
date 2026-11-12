@@ -80,3 +80,23 @@ export function asideSpaces<M extends { status: string; quietSpaces?: Space[] }>
     .flatMap((m) => (m.quietSpaces ?? []).map((s) => ({ m, id: s.id, name: s.name })))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * The space a home-screen chip names, for 新任务 opened while it is shown: on the computer
+ * the draft already has when that one has it, else the first online one that does. Chips
+ * go by name, the draft by id; a name no computer lists (a folder's) finds nothing.
+ */
+export function chipSpace<M extends { id: string; status: string; spaceList?: Space[] }>(
+  machines: M[],
+  name: string | null,
+  current: string | undefined,
+): { machine: string; space: string } | undefined {
+  if (name === null) return undefined;
+  const has = (m: M) => m.spaceList?.find((s) => s.name === name);
+  const order = [...machines.filter((m) => m.id === current), ...machines.filter((m) => m.id !== current && m.status === 'online')];
+  for (const m of order) {
+    const s = has(m);
+    if (s) return { machine: m.id, space: s.id };
+  }
+  return undefined;
+}

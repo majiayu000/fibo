@@ -23,6 +23,8 @@ export function setDraft(patch: Partial<Draft>) {
   listeners.forEach((l) => l());
 }
 
+export const getDraft = () => draft;
+
 export const resetDraft = () => setDraft({ cwd: undefined, about: undefined, space: undefined, prompt: '', resume: undefined });
 
 export const useDraft = () =>

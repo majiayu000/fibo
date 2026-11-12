@@ -17,6 +17,8 @@ import { Btn, Group, Round, TITLE_WEIGHT, Wide, mono, useTop } from '@/ui/kit';
 import { QuietSpaces } from '@/ui/quietspaces';
 import { Row, rowStyles, spaceName } from '@/ui/row';
 import { SpaceChips } from '@/ui/spacechips';
+import { chipSpace } from '@/ui/spaces';
+import { getDraft, setDraft } from '@/store/draft';
 import { type Arranged, type Item, arrange, connectionLine, foldLabel, headline, itemKey, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
 import { TabBar } from '@/ui/tabs';
 import { statusColor } from '@/ui/status';
@@ -189,7 +191,7 @@ export default function Inbox() {
           )}
         </View>
         <Round icon="search" label={tr('搜索')} onPress={() => router.push('/search')} />
-        <Round icon="plus" label={tr('新任务')} onPress={() => router.push('/new')} />
+        <Round icon="plus" label={tr('新任务')} onPress={() => newTask(machines, shelf.filter)} />
       </View>
       <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
       <View style={{ flex: 1 }} {...hold.touch}>
@@ -310,6 +312,14 @@ export default function Inbox() {
       <TabBar on="home" />
     </View>
   );
+}
+
+/** 新任务 from a space shown alone goes in that space: the chip was the choice already. */
+function newTask(machines: Machine[], filter: string | null) {
+  const d = getDraft();
+  const at = chipSpace(machines, filter, d.machine);
+  if (at && (at.space !== d.space || at.machine !== d.machine)) setDraft({ machine: at.machine, space: at.space, cwd: undefined, about: undefined });
+  router.push('/new');
 }
 
 const s = StyleSheet.create({
