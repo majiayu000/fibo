@@ -86,6 +86,7 @@ export const home: Record<string, Entry> = {
   接着说什么: 'What next',
   '比如：把审批框里的终端内容换成等宽字体': 'e.g. Show the terminal text in the approval box in a monospace font',
   从剪贴板粘贴: 'Paste from clipboard',
+  加图片: 'Add images',
   接着上次的对话: 'Continue last conversation',
   '接着上次的对话 · {when}': 'Continue last conversation · {when}',
   不接着这段对话: "Don't continue this conversation",

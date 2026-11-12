@@ -162,10 +162,25 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         Some(s) => Some(w.resume_command(s)),
         None => agent.map(|a| a.command()),
     };
+    // Pictures picked with the task: checked before anything opens, so a refused one
+    // leaves no terminal behind.
+    let pictures = super::images::wanted(socket, request)?;
+    let started = match command {
+        Some(c) => {
+            let runtime = session.map(|s| s.runtime).or(agent);
+            let label = runtime.map(control::agent_label).unwrap_or_default();
+            Some(super::open_pictures::attach(&label, c, prompt, &pictures)?)
+        }
+        None if !pictures.is_empty() => return Err(io::Error::other("图片要和 agent 一起")),
+        None => None,
+    };
     let launch = Request::Launch {
         id: terminal.clone(),
         space: space.id.clone(),
-        argv: command.map_or_else(|| shell::stay(&shell), |c| agent_argv(&shell, &c, prompt)),
+        argv: started.map_or_else(
+            || shell::stay(&shell),
+            |(c, prompt)| agent_argv(&shell, &c, prompt.as_deref()),
+        ),
         cwd,
         cols: 100,
         rows: 30,

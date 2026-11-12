@@ -1,8 +1,11 @@
 // Whether a message the phone sent is now in the conversation's log, so its 「发送中」 copy can go.
 import { tr } from '../i18n';
 
-/** How each CLI writes a pasted picture into the message: Claude Code and Codex `[Image #1]`, OpenCode `[Image 1]`. */
-const PICTURE = /\[Image #?\d+\]/;
+/**
+ * How a picture shows in the logged message: Claude Code and Codex `[Image #1]`, OpenCode
+ * `[Image 1]`; a new task's pictures reach Claude Code as `@<runtime>/phone-images/<file>`.
+ */
+const PICTURE = /\[Image #?\d+\]|@\S*[\\/]phone-images[\\/]\S+/;
 
 /**
  * The same words, wherever the pictures' tags landed: Claude Code logs the words first and the
