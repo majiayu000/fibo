@@ -33,6 +33,14 @@ pub(super) fn start(
                     .update(cx, |v, w, a| v.visual_space_state(w, a))
                     .unwrap()
             };
+            // A folder used elsewhere, for the empty tab's 「选一个目录」 list to offer.
+            let project = directory.join("proj-a");
+            std::fs::create_dir_all(&project).unwrap();
+            let project = project.to_string_lossy().into_owned();
+            handle
+                .update(cx, |v, _, cx| v.visual_add_space("proj-a", &project, cx))
+                .unwrap();
+            wait(500).await;
             let before = state(cx).2.len();
             handle
                 .update(cx, |v, w, cx| v.visual_new_space(w, cx))

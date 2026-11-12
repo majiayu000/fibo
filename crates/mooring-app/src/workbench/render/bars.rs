@@ -299,6 +299,7 @@ impl Workbench {
                         d.child(label(super::super::space_dir_label(&self.workspace, s)))
                     }),
             )
+            .children(space.and_then(|s| self.recent_dirs_view(s, cx)))
             .child(
                 super::super::overview::solid(marked_button(
                     format!("empty-tab-{}", first.executable()),

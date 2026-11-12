@@ -37,6 +37,22 @@ impl Workspace {
         }
         self.space_last_cwd.get(id).map_or("", String::as_str)
     }
+    /// Folders worked in lately, each once, newest first: where conversations ran, then
+    /// spaces' folders and where their terminals last were. Whether one still exists is
+    /// the caller's to check.
+    pub fn recent_dirs(&self) -> Vec<&str> {
+        let mut ran: Vec<(u64, &str)> = (self.agent_sessions.iter())
+            .map(|s| (self.session_updated(s), s.cwd.as_str()))
+            .collect();
+        ran.sort_by_key(|r| std::cmp::Reverse(r.0));
+        let spaces = (self.spaces.iter().map(|s| s.cwd.as_str()))
+            .chain(self.space_last_cwd.values().map(String::as_str));
+        let mut seen = std::collections::HashSet::new();
+        (ran.into_iter().map(|(_, dir)| dir).chain(spaces))
+            .map(|d| d.trim_end_matches('/'))
+            .filter(|d| !d.is_empty() && seen.insert(*d))
+            .collect()
+    }
     /// Whether you put this space aside (先不管).
     pub fn space_quiet(&self, id: &str) -> bool {
         self.quiet_spaces.contains(id)
