@@ -37,7 +37,8 @@ export function landing(spaces: Space[], picked: string | undefined, cwd: string
 export function landingNote(l: Landing, cwd: string | undefined): string {
   if (!cwd) return '';
   if (!l.space) return tr('电脑上还没有空间，这个文件夹会成为第一个');
-  if (holds(l.space.cwd, cwd)) return '';
+  // A space with no folder of its own holds whatever folder it is given.
+  if (!l.space.cwd || holds(l.space.cwd, cwd)) return '';
   if (l.why === 'first') return tr('这个文件夹不在任何空间里，会放进「{name}」', { name: l.space.name });
   return tr('文件夹不在「{name}」的目录里，也会放进这个空间', { name: l.space.name });
 }
@@ -84,19 +85,23 @@ export function asideSpaces<M extends { status: string; quietSpaces?: Space[] }>
 /**
  * The space a home-screen chip names, for 新任务 opened while it is shown: on the computer
  * the draft already has when that one has it, else the first online one that does. Chips
- * go by name, the draft by id; a name no computer lists (a folder's) finds nothing.
+ * go by name, the draft by id; a name no computer lists (a folder's) finds nothing. A space
+ * with no folder of its own starts where its latest conversation is, not with no directory.
  */
-export function chipSpace<M extends { id: string; status: string; spaceList?: Space[] }>(
+type Held = { space: string; cwd: string; updated?: number | null };
+export function chipSpace<M extends { id: string; status: string; spaceList?: Space[]; cards: Held[] }>(
   machines: M[],
   name: string | null,
   current: string | undefined,
-): { machine: string; space: string } | undefined {
+): { machine: string; space: string; cwd?: string } | undefined {
   if (name === null) return undefined;
-  const has = (m: M) => m.spaceList?.find((s) => s.name === name);
   const order = [...machines.filter((m) => m.id === current), ...machines.filter((m) => m.id !== current && m.status === 'online')];
   for (const m of order) {
-    const s = has(m);
-    if (s) return { machine: m.id, space: s.id };
+    const s = m.spaceList?.find((x) => x.name === name);
+    if (!s) continue;
+    if (s.cwd) return { machine: m.id, space: s.id };
+    const latest = m.cards.filter((c) => c.space === s.id && c.cwd).sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0))[0];
+    return { machine: m.id, space: s.id, ...(latest && { cwd: latest.cwd }) };
   }
   return undefined;
 }

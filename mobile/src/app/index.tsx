@@ -318,7 +318,7 @@ export default function Inbox() {
 function newTask(machines: Machine[], filter: string | null) {
   const d = getDraft();
   const at = chipSpace(machines, filter, d.machine);
-  if (at && (at.space !== d.space || at.machine !== d.machine)) setDraft({ machine: at.machine, space: at.space, cwd: undefined, about: undefined });
+  if (at && (at.space !== d.space || at.machine !== d.machine)) setDraft({ machine: at.machine, space: at.space, cwd: at.cwd, about: undefined });
   router.push('/new');
 }
 
