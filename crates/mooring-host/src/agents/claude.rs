@@ -504,7 +504,8 @@ pub(crate) fn subagents(dir: &Path) -> Vec<mooring_core::content::Subagent> {
             let id = name.strip_prefix("agent-")?.strip_suffix(".meta.json")?;
             let meta = std::fs::metadata(&path).ok()?;
             let v: Value = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
-            let log = std::fs::metadata(dir.join(format!("agent-{id}.jsonl"))).ok();
+            let log_path = dir.join(format!("agent-{id}.jsonl"));
+            let log = std::fs::metadata(&log_path).ok();
             let written = unix(meta.modified())?;
             let started = log
                 .as_ref()
@@ -518,12 +519,21 @@ pub(crate) fn subagents(dir: &Path) -> Vec<mooring_core::content::Subagent> {
                 .find(|n| !n.is_empty())
                 .unwrap_or("")
                 .to_owned();
-            let stopped = v["stoppedByUser"] == true;
+            let finished = v["finished"] == true;
+            let stopped = v["stoppedByUser"] == true
+                || !finished && super::claude_subagent_end::stopped_in_log(&log_path);
+            // Stopped without a meta mark: it ended when its own log was last written.
+            let written = match &log {
+                Some(m) if stopped && v["stoppedByUser"] != true => {
+                    unix(m.modified()).unwrap_or(written).max(written)
+                }
+                _ => written,
+            };
             Some(mooring_core::content::Subagent {
                 id: id.to_owned(),
                 name,
                 started,
-                ended: (v["finished"] == true || stopped).then_some(written),
+                ended: (finished || stopped).then_some(written),
                 // Older Claude Code wrote no shape; its subagents ran in the foreground.
                 foreground: v["requestShape"].as_str() != Some("background"),
                 stopped,
@@ -562,13 +572,23 @@ mod tests {
             serde_json::json!({"description": "Stopped", "requestShape": "background",
             "stoppedByUser": true}),
         );
+        // Stopped by a rejected tool: no meta mark, its own log ends on the interruption.
+        meta(
+            "a5",
+            serde_json::json!({"description": "Fork", "requestShape": "background"}),
+        );
+        std::fs::write(
+            dir.join("agent-a5.jsonl"),
+            "{}\n{\"type\":\"user\",\"message\":{\"content\":\"[Request interrupted by user for tool use]\"}}\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("agent-a3.jsonl"), "{}\n").unwrap();
         std::fs::write(dir.join("notes.txt"), "").unwrap();
         let subs = subagents(&dir);
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
             subs.len(),
-            3,
+            4,
             "a log without its meta is not listed: {subs:?}"
         );
         assert_eq!(subs[0].name, "Audit drift");
@@ -578,6 +598,7 @@ mod tests {
         assert_eq!(subs[1].name, "Explore");
         assert!(subs[1].running() && subs[1].foreground);
         assert!(subs[2].stopped && !subs[2].running());
+        assert!(subs[3].stopped && !subs[3].running(), "{:?}", subs[3]);
         assert!(subagents(Path::new("/nonexistent/subagents")).is_empty());
     }
 

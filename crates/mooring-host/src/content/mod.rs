@@ -17,6 +17,8 @@ mod children;
 mod citation;
 pub(crate) use citation::spoken;
 mod db;
+mod prompt_unread;
+pub use prompt_unread::{prompt_unread, PROMPT_UNREAD_HOLD};
 mod result;
 mod rules;
 pub use children::{children, link_child, Children, CHILD_SIGNAL};
@@ -622,6 +624,10 @@ impl Parser {
                     Turn::Interrupted
                 };
                 self.phase(settled, "", at, &source);
+            }
+            // Taken back with Esc before the log recorded it: nothing else ends it.
+            Official::Idle if self.prompt_unread() => {
+                self.phase(Turn::Interrupted, "", at, &source);
             }
             _ => (),
         }
