@@ -147,7 +147,12 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     if session.is_some() && !asked.is_some_and(|c| Path::new(c).is_dir()) {
         return Err(io::Error::other("这段对话的目录已经不在了"));
     }
-    let cwd = asked.map_or_else(|| space.cwd.clone(), str::to_owned);
+    // A space made just now for this open is not in `w` yet; its folder is all it has.
+    let start = || match space.cwd.as_str() {
+        "" => w.space_start_dir(&space.id).to_owned(),
+        own => own.to_owned(),
+    };
+    let cwd = asked.map_or_else(start, str::to_owned);
     let cwd = Some(cwd)
         .filter(|c| Path::new(c).is_dir())
         .or_else(mooring_platform::dirs::home_str)

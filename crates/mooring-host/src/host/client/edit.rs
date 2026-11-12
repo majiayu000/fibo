@@ -86,6 +86,7 @@ fn apply(
     if let Err(e) = next.edit(edit) {
         return Ok(Err(e));
     }
+    super::last_dir::remember(host, &stopped, &mut next);
     host.commit_applying(next, request)?;
     for id in &stopped {
         if let Some(Err(e)) = host.terminals.get(id).map(stop_terminal) {

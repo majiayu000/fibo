@@ -125,6 +125,9 @@ impl Workbench {
                 this.choose_space_dir(Some(folder.clone()), window, cx);
             }))
             .into_any_element(),
+        ]);
+        entries.extend(self.space_pin_last_entry(id, cx));
+        entries.extend([
             self.space_quiet_entry(id, cx),
             // Two presses: the first says what goes with it, the second removes it.
             button(
@@ -153,5 +156,35 @@ impl Workbench {
         self.popup(position, entries, window, cx, |this| {
             this.layout.space_menu = None
         })
+    }
+    /// For a space with no folder whose terminals were last somewhere: one press makes
+    /// that its folder, so it no longer moves with wherever the last tab closed.
+    fn space_pin_last_entry(&self, id: &str, cx: &Context<Self>) -> Option<gpui::AnyElement> {
+        let space = self.workspace.spaces.iter().find(|s| s.id == id)?;
+        if !space.cwd.is_empty() {
+            return None;
+        }
+        let last = self.workspace.space_start_dir(id).to_owned();
+        if last.is_empty() {
+            return None;
+        }
+        let pinned = Space {
+            cwd: last.clone(),
+            ..space.clone()
+        };
+        Some(
+            button(
+                "space-menu-pin-last",
+                t!("设为空间目录：{dir}", dir = home_relative(&last)),
+            )
+            .w_full()
+            .justify_start()
+            .border_0()
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.layout.space_menu = None;
+                this.edit(Edit::UpdateSpace(pinned.clone()), cx);
+            }))
+            .into_any_element(),
+        )
     }
 }

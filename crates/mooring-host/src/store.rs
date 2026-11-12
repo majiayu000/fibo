@@ -91,6 +91,7 @@ impl Store {
             -- A removed space keeps its row: its terminals and settled tasks still point at it.
             CREATE TABLE IF NOT EXISTS removed_spaces (space_id TEXT PRIMARY KEY REFERENCES spaces(id));
             CREATE TABLE IF NOT EXISTS quiet_spaces (space_id TEXT PRIMARY KEY REFERENCES spaces(id));
+            CREATE TABLE IF NOT EXISTS space_last_cwd (space_id TEXT PRIMARY KEY REFERENCES spaces(id), cwd TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS tab_order (tab_id TEXT PRIMARY KEY REFERENCES tabs(id), position INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS task_criteria (task_id TEXT NOT NULL REFERENCES tasks(id), id TEXT NOT NULL, position INTEGER NOT NULL,
                 description TEXT NOT NULL, evidence TEXT, PRIMARY KEY(task_id,id), UNIQUE(task_id,position));
@@ -284,6 +285,16 @@ impl Store {
         {
             w.quiet_spaces.insert(row.map_err(db_error)?);
         }
+        for row in self
+            .0
+            .prepare("SELECT space_id,cwd FROM space_last_cwd")
+            .map_err(db_error)?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .map_err(db_error)?
+        {
+            let (id, cwd) = row.map_err(db_error)?;
+            w.space_last_cwd.insert(id, cwd);
+        }
         let mut statement = self
             .0
             .prepare("SELECT id,space_id,title,description,runtime FROM tasks ORDER BY rowid")
@@ -463,6 +474,21 @@ impl Store {
         for id in w.quiet_spaces.difference(&before.quiet_spaces) {
             tx.execute("INSERT OR IGNORE INTO quiet_spaces VALUES(?1)", [id])
                 .map_err(db_error)?;
+        }
+        for id in before.space_last_cwd.keys() {
+            if !w.space_last_cwd.contains_key(id) {
+                tx.execute("DELETE FROM space_last_cwd WHERE space_id=?1", [id])
+                    .map_err(db_error)?;
+            }
+        }
+        for (id, cwd) in &w.space_last_cwd {
+            if before.space_last_cwd.get(id) != Some(cwd) {
+                tx.execute(
+                    "INSERT OR REPLACE INTO space_last_cwd VALUES(?1,?2)",
+                    [id, cwd],
+                )
+                .map_err(db_error)?;
+            }
         }
         for t in removed(&before.tabs, &w.tabs, |t| &t.id) {
             tx.execute("DELETE FROM tab_order WHERE tab_id=?1", [&t.id])

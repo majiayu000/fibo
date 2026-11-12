@@ -296,7 +296,7 @@ impl Workbench {
                             }),
                     )
                     .when_some(space, |d, s| {
-                        d.child(label(super::super::space_dir_label(s)))
+                        d.child(label(super::super::space_dir_label(&self.workspace, s)))
                     }),
             )
             .child(
