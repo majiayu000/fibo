@@ -379,9 +379,10 @@ impl Workbench {
         key: &str,
         title: &str,
         count: usize,
+        default: bool,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
-        let open = self.sidebar.open(key, true);
+        let open = self.sidebar.open(key, default);
         let key = key.to_owned();
         Self::flat_group(title, count)
             .id(gpui::SharedString::from(format!("sidebar-group-{key}")))

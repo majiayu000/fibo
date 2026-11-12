@@ -422,7 +422,7 @@ impl Workbench {
         ] {
             let part = format!("{key}:{part}");
             if !rows.is_empty() {
-                out.push(self.flat_fold(&part, title, rows.len(), cx));
+                out.push(self.flat_fold(&part, title, rows.len(), true, cx));
                 let showing = self.sidebar.showing(&part, true);
                 let (start, mut keep) = (out.len(), Vec::new());
                 for r in rows.into_iter().filter(|r| showing || r.shown) {

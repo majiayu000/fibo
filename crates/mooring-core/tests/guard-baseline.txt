@@ -75,7 +75,6 @@ word 做完了	crates/mooring-app/src/model/session_state.rs	1
 word 做完了	crates/mooring-app/src/remote_board_evidence.rs	2
 word 做完了	crates/mooring-app/src/workbench/board_drawer.rs	1
 word 做完了	crates/mooring-app/src/workbench/layout/turn_bar.rs	1
-word 做完了	crates/mooring-app/src/workbench/sidebar_recent.rs	1
 word 做完了	crates/mooring-app/src/workbench/task_detail.rs	1
 word 停下了	crates/mooring-app/src/model/session_state.rs	1
 word 出错(无了)	crates/mooring-app/src/model/session_state.rs	1

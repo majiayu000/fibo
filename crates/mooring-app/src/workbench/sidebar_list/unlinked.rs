@@ -204,12 +204,9 @@ mod tests {
     fn a_rows_box_lines_up_with_the_controls_above_it() {
         let id = || gpui::SharedString::from("row");
         let mut session = flat_row_box(id(), false, false);
-        let mut older = crate::workbench::sidebar_flat::flat_more_box(id());
-        for row in [&mut session, &mut older] {
-            let style = row.style();
-            assert_eq!(points(style.margin.left), T::S12);
-            assert_eq!(points(style.margin.right), T::S12);
-        }
+        let style = session.style();
+        assert_eq!(points(style.margin.left), T::S12);
+        assert_eq!(points(style.margin.right), T::S12);
     }
 
     /// 「会话 7」 over 3 sessions while the same column says 「未关联的终端 4」.
@@ -221,29 +218,18 @@ mod tests {
         assert!(view.contains("self.flat_column(sidebar, listed_count, cx)"));
     }
 
-    /// 「好像没对齐」: dot and text in the columns of 会话优先's own rows and 更早's line,
+    /// 「好像没对齐」: dot and text in the columns of 会话优先's own rows,
     /// in the size of the session titles beside them.
     #[test]
     fn a_placeholder_row_takes_the_columns_of_the_rows_around_it() {
         let id = || gpui::SharedString::from("row");
         let mut placeholder = row_box(id(), Look::Flat, false);
         let mut session = flat_row_box(id(), false, false);
-        let mut older = crate::workbench::sidebar_flat::flat_more_box(id());
         let at = columns(&mut placeholder, F::STATE);
         assert_eq!(at, columns(&mut session, F::STATE));
-        assert_eq!(at, columns(&mut older, F::STATE));
         assert_eq!(at, (F::EDGE, F::EDGE + F::STATE + F::ROW_GAP));
         let TextStyleRefinement { font_size, .. } =
             row_text(Look::Flat, String::new()).style().text.clone();
         assert_eq!(font_size, Some(px(F::TITLE).into()));
-    }
-
-    /// 「这里为啥有个圆圈」: the 更早 line holds a blank slot, not a session's state dot.
-    #[test]
-    fn the_older_line_draws_no_state_dot() {
-        let flat = include_str!("../sidebar_flat.rs");
-        let start = flat.find("pub(super) fn flat_more(").unwrap();
-        let end = start + flat[start..].find("into_any_element()").unwrap();
-        assert!(!flat[start..end].contains("flat_state("));
     }
 }
