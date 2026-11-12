@@ -764,14 +764,9 @@ fn a_space_without_a_folder_is_not_missing() {
     assert!(!space_dir_missing(&space("")));
     assert!(!space_dir_missing(&space("/")));
     assert!(space_dir_missing(&space("/nonexistent/mooring-gone")));
-    let mut w = Workspace::default();
-    w.spaces.push(space(""));
-    assert_eq!(space_dir_label(&w, &space("")), "未设目录 · 从 ~ 开始");
-    w.space_last_cwd.insert("s".into(), "/tmp".into());
-    assert_eq!(
-        space_dir_label(&w, &space("")),
-        "未设目录 · 从上次的 /tmp 开始"
-    );
+    assert_eq!(space_dir_label(&space(""), ""), "未设目录 · 从 ~ 开始");
+    assert_eq!(space_dir_label(&space(""), "/tmp"), "从上次的 /tmp 开始");
+    assert_eq!(space_dir_label(&space("/tmp"), "/elsewhere"), "/tmp");
     assert_eq!(usable_cwd([String::new()]), std::env::var("HOME").unwrap());
 }
 #[test]

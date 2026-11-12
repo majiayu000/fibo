@@ -87,15 +87,15 @@ pub(super) fn usable_cwd(candidates: impl IntoIterator<Item = String>) -> String
 pub(super) fn space_dir_missing(space: &Space) -> bool {
     !space.cwd.is_empty() && !Path::new(&space.cwd).is_dir()
 }
-/// The space's folder as shown: home as `~`, or where an unset one starts (where its
-/// terminals last were, else home).
-pub(super) fn space_dir_label(w: &Workspace, space: &Space) -> String {
+/// The space's folder as shown: its own as `~/…`; for one with none, `start` (where it
+/// will start: its last folder or the one worked in last anywhere), else home.
+pub(super) fn space_dir_label(space: &Space, start: &str) -> String {
     if !space.cwd.is_empty() {
         return home_relative(&space.cwd);
     }
-    match w.space_start_dir(&space.id) {
+    match start {
         "" => t!("未设目录 · 从 ~ 开始").to_owned(),
-        last => t!("未设目录 · 从上次的 {dir} 开始", dir = home_relative(last)),
+        last => t!("从上次的 {dir} 开始", dir = home_relative(last)),
     }
 }
 /// The new terminal's command line. A resume is the shell's first command, so it cannot be
@@ -498,6 +498,7 @@ impl Workbench {
                 subagents_all: HashSet::new(),
                 space_menu: None,
                 space_removing: false,
+                choosing_dir: None,
                 space_quieting: false,
                 adding_machine_space: None,
                 space_switch: false,

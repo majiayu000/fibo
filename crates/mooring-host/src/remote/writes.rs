@@ -149,7 +149,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     }
     // A space made just now for this open is not in `w` yet; its folder is all it has.
     let start = || match space.cwd.as_str() {
-        "" => w.space_start_dir(&space.id).to_owned(),
+        "" => w.space_start(&space.id, mooring_platform::dirs::home_str().as_deref()),
         own => own.to_owned(),
     };
     let cwd = asked.map_or_else(start, str::to_owned);

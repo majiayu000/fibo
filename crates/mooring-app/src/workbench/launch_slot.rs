@@ -172,8 +172,10 @@ impl Workbench {
             .as_ref()
             .and_then(|id| self.workspace.terminals.iter().find(|t| &t.id == id))
             .filter(|t| t.space == space.id);
-        // The space's own folder, else where its terminals last were (core decides).
-        let space_dir = self.workspace.space_start_dir(&space.id).to_owned();
+        // The space's own folder, else where its terminals last were, else the folder
+        // worked in last anywhere (core decides).
+        let home = mooring_platform::dirs::home_str();
+        let space_dir = self.workspace.space_start(&space.id, home.as_deref());
         let cwd = resume
             .map(|r| r.1)
             .or(task_cwd)

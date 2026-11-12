@@ -24,6 +24,11 @@ impl Workbench {
             .as_ref()
             .is_some_and(|m| matches!(m.page, MenuPage::Why))
     }
+    /// The empty tab's 「换目录」, pressed for the current space.
+    pub fn visual_change_dir(&mut self, cx: &mut Context<Self>) {
+        self.layout.choosing_dir = Some(self.nav.space.clone());
+        cx.notify();
+    }
     pub fn visual_spaces(&self) -> Vec<String> {
         self.workspace.spaces.iter().map(|s| s.id.clone()).collect()
     }

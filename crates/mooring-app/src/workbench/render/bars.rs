@@ -295,11 +295,9 @@ impl Workbench {
                                 None => t!("在这里开始").to_owned(),
                             }),
                     )
-                    .when_some(space, |d, s| {
-                        d.child(label(super::super::space_dir_label(&self.workspace, s)))
-                    }),
+                    .when_some(space, |d, s| d.child(self.space_dir_line(s, cx))),
             )
-            .children(space.and_then(|s| self.recent_dirs_view(s, cx)))
+            .children(space.and_then(|s| self.dir_picker(s, cx)))
             .child(
                 super::super::overview::solid(marked_button(
                     format!("empty-tab-{}", first.executable()),

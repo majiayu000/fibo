@@ -1,28 +1,18 @@
-//! A new space's empty tab offers the folders you worked in lately: one press makes it the
-//! space's folder, so a fresh space does not have to start in home or wait for a 设置目录….
+//! Where a space with no folder starts, and the folders it can switch to: a new space
+//! starts in the folder you worked in last; 「换目录」 under the empty tab's title lists
+//! the others, and one press makes it the space's folder.
 use super::*;
 use std::{cell::RefCell, rc::Rc};
 
-/// How many folders the empty tab lists.
-const SHOWN: usize = 5;
+/// How many folders 「换目录」 lists.
+const SHOWN: usize = 6;
 
-/// The list as of a workspace revision; the empty tab draws each frame, the list only
-/// changes with the workspace.
+/// Core's offered folders as of a workspace revision: the empty tab draws each frame,
+/// the list only changes with the workspace.
 #[derive(Default)]
 pub(super) struct RecentDirs(RefCell<Option<(Key, Rc<Vec<String>>)>>);
 /// The workspace revision and how many sessions it holds.
 type Key = (u64, usize);
-
-/// The folders worth offering, from core's order: existing ones, home left out (a space
-/// with no folder starts there already).
-pub(super) fn offered(w: &Workspace, home: Option<&str>) -> Vec<String> {
-    (w.recent_dirs().into_iter())
-        .filter(|d| Some(*d) != home.map(|h| h.trim_end_matches('/')) && *d != "/")
-        .filter(|d| Path::new(d).is_dir())
-        .take(SHOWN)
-        .map(str::to_owned)
-        .collect()
-}
 
 impl Workbench {
     fn recent_dirs(&self) -> Rc<Vec<String>> {
@@ -34,35 +24,74 @@ impl Workbench {
             return Rc::clone(dirs);
         }
         let home = mooring_platform::dirs::home_str();
-        let dirs = Rc::new(offered(&self.workspace, home.as_deref()));
+        let dirs = Rc::new(self.workspace.offered_dirs(home.as_deref(), SHOWN + 1));
         *cache = Some((key, Rc::clone(&dirs)));
         dirs
     }
-    /// Under a space with no folder and nothing remembered: 「从最近的目录开始」 and the
-    /// folders, then 其他目录… for the system picker.
-    pub(super) fn recent_dirs_view(
-        &self,
-        space: &Space,
-        cx: &Context<Self>,
-    ) -> Option<gpui::AnyElement> {
-        if !self.workspace.space_start_dir(&space.id).is_empty() {
+    /// `Workspace::space_start`, from the cached list.
+    fn space_start_shown(&self, space: &Space) -> String {
+        match self.workspace.space_start_dir(&space.id) {
+            "" => self.recent_dirs().first().cloned().unwrap_or_default(),
+            own => own.to_owned(),
+        }
+    }
+    /// Where the space's terminals start, as every surface names it.
+    pub(super) fn space_label(&self, space: &Space) -> String {
+        space_dir_label(space, &self.space_start_shown(space))
+    }
+    /// The empty tab's line under its title: where it starts, and 「换目录」.
+    pub(super) fn space_dir_line(&self, space: &Space, cx: &Context<Self>) -> gpui::AnyElement {
+        let open = self.layout.choosing_dir.as_deref() == Some(space.id.as_str());
+        let id = space.id.clone();
+        div()
+            .flex()
+            .items_center()
+            .gap(px(T::S6))
+            .child(label(self.space_label(space)))
+            .child(
+                button(
+                    "empty-tab-change-dir",
+                    if open { t!("收起") } else { t!("换目录") },
+                )
+                .border_0()
+                .px(px(T::S4))
+                .text_size(px(T::SMALL))
+                .text_color(T::color(T::link()))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let open = this.layout.choosing_dir.as_deref() == Some(id.as_str());
+                    this.layout.choosing_dir = (!open).then(|| id.clone());
+                    cx.notify();
+                })),
+            )
+            .into_any_element()
+    }
+    /// Opened by 「换目录」: the other recent folders, then 其他目录… for the system
+    /// picker; a press makes it the space's folder.
+    pub(super) fn dir_picker(&self, space: &Space, cx: &Context<Self>) -> Option<gpui::AnyElement> {
+        if self.layout.choosing_dir.as_deref() != Some(space.id.as_str()) {
             return None;
         }
-        let dirs = self.recent_dirs();
+        let start = self.space_start_shown(space);
         let mut rows = vec![];
-        for (n, dir) in dirs.iter().enumerate() {
+        let others = self.recent_dirs();
+        for (n, dir) in others
+            .iter()
+            .filter(|d| **d != start)
+            .take(SHOWN)
+            .enumerate()
+        {
             let pinned = Space {
                 cwd: dir.clone(),
                 ..space.clone()
             };
             rows.push(
                 button(format!("empty-tab-dir-{n}"), home_relative(dir))
-                    .w_full()
-                    .justify_start()
+                    .h(px(T::ROW * 0.8))
                     .border_0()
+                    .px(px(T::S8))
                     .text_size(px(T::SMALL))
-                    .font(T::mono(cx))
                     .on_click(cx.listener(move |this, _, _, cx| {
+                        this.layout.choosing_dir = None;
                         this.edit(Edit::UpdateSpace(pinned.clone()), cx);
                     }))
                     .into_any_element(),
@@ -71,23 +100,22 @@ impl Workbench {
         let other = space.id.clone();
         rows.push(
             button("empty-tab-dir-other", t!("其他目录…"))
-                .w_full()
-                .justify_start()
+                .h(px(T::ROW * 0.8))
                 .border_0()
+                .px(px(T::S8))
                 .text_size(px(T::SMALL))
                 .text_color(T::color(T::link()))
                 .on_click(cx.listener(move |this, _, window, cx| {
+                    this.layout.choosing_dir = None;
                     this.choose_space_dir(Some(other.clone()), window, cx);
                 }))
                 .into_any_element(),
         );
         Some(
             div()
-                .w(px(T::HERE_WIDTH))
                 .flex()
                 .flex_col()
-                .gap(px(T::S2))
-                .child(label(t!("选一个目录作为这个空间的目录")))
+                .items_center()
                 .children(rows)
                 .into_any_element(),
         )
@@ -136,7 +164,12 @@ mod tests {
             cwd: pinned.clone(),
         });
         w.space_last_cwd.insert("q".into(), last.clone());
-        assert_eq!(offered(&w, Some(&home)), [new, old, pinned, last]);
+        assert_eq!(
+            w.offered_dirs(Some(&home), 9),
+            [new.clone(), old, pinned, last]
+        );
+        // A space with nothing of its own starts where you worked last.
+        assert_eq!(w.space_start("fresh", Some(&home)), new);
         let _ = std::fs::remove_dir_all(base);
     }
 }

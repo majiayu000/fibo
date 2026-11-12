@@ -51,6 +51,8 @@ pub(super) struct LayoutState {
     pub(super) space_switch: bool,
     /// 删除空间 was pressed once in the open space menu; the second press removes it.
     pub(super) space_removing: bool,
+    /// The space whose empty tab has 「换目录」 open.
+    pub(super) choosing_dir: Option<String>,
     /// 先不管 pressed once on a space with something running: the menu says so and asks.
     pub(super) space_quieting: bool,
     /// A new space being chosen for another machine, from under its chips.
