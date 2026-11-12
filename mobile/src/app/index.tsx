@@ -23,7 +23,7 @@ import { StickyBelow, StickyOffset } from '@/ui/sticky';
 import { chipSpace } from '@/ui/spaces';
 import { FiboTitle } from '@/ui/fibomark';
 import { getDraft, setDraft } from '@/store/draft';
-import { type Arranged, type Item, arrange, connectionLine, foldLabel, itemKey, pulse, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
+import { type Arranged, type Item, arrange, connectionLine, elsewhereLine, foldLabel, itemKey, pulse, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
 import { TabBar } from '@/ui/tabs';
 import { statusColor } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
@@ -159,6 +159,7 @@ export default function Inbox() {
   const named = namesComputer(machines);
   const line = connectionLine(machines);
   const now = pulse(shelf);
+  const away = elsewhereLine(shelf);
   const offline = offlineRows(machines);
   const runningOpen = view.running !== false;
   const [allRunning, setAllRunning] = useState(false);
@@ -208,10 +209,13 @@ export default function Inbox() {
   // What asks you first: a computer coming and going, or a group opening, pushes nothing you could tap.
   pinned.forEach((i, n) => nodes.push(<Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} nth={String(n)} named={named} boxed onSettle={onSettle} />));
   offline.forEach((m) => nodes.push(<Offline key={m.id} m={m} t={t} />));
-  if (shelf.filter !== null && shelf.elsewhere > 0)
+  if (away)
     nodes.push(
       <Pressable key="elsewhere" accessibilityRole="button" onPress={() => setInboxView({ space: null })} style={({ pressed }) => [s.elsewhere, { borderColor: t.sep }, pressed && { backgroundColor: t.well }]}>
-        <Text style={{ fontSize: 14, color: t.wait, flex: 1 }}>{tr('其他空间还有 {n} 件等你', { n: shelf.elsewhere })}</Text>
+        <Text style={{ fontSize: 14, flex: 1 }} numberOfLines={1}>
+          {!!away.asks && <Text style={{ color: t.wait }}>{away.asks}</Text>}
+          {!!away.runs && <Text style={{ color: t.dim }}>{away.runs}</Text>}
+        </Text>
         <Text style={{ fontSize: 13, color: t.dim }}>{tr('看全部')}</Text>
       </Pressable>,
     );
