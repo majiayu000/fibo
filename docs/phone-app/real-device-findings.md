@@ -47,6 +47,7 @@
 | 11-05 | 手机「停下」对 Codex 没真停；Codex 空闲时收到 Ctrl-C 会退出 | 真 CLI | 只有真 Codex 才这样，Esc 后命令还接着跑 | `38e4c5c` | `v2-plan.md` 的真实 CLI 行为表 |
 | 11-11 | 英文界面「我的」页额度写成「Codex This week 97%」，窗口名在句中却大写开头 | 真实的量和时长 | 网页版样例数据没有额度读数，这一行在网页版上根本不出现 | 句中的窗口名首字母改小写（`shortWindow` 挪进 `ui/parse.ts`） | `test/i18n.test.ts`「a quota window named mid-line…」 |
 | 11-12 | 对话里比屏幕宽的表格左右滑不动，第二列一直被切掉；首页的空间筛选同样是横向滚动却能滑 | 平台差异 | 网页版和测试不跑安卓的触摸分发；表格外面包着长按复制的 Pressable，又在倒置（安卓转 180°）的对话列表里 | 本分支：表格和宽代码块里的内容自己接住触摸，加 `nestedScrollEnabled`。代价是长按表格不再复制整条消息 | 没有自动测试；真机同一张表滑动前后截图（`~/Documents/claude-pages/mooring/2026-11-12-table-scroll/v2-compare.png`） |
+| 11-12 | 「终端最后几行」里 Claude 底栏的 `⏵⏵`（bypass permissions 前面那两个）显示成两个方框 | 平台差异 | 安卓等宽字体没有这个字形，网页版和电脑上有 | 没修，只记下 | 没有；真机截图 `2026-11-12-phone-walk-2/chat.terminal-1.png` |
 
 11-05 之前的实测详情见 [v2-plan.md](v2-plan.md) 的「真机实测查出的问题」和「真机实测后留下的四件事」。
 
