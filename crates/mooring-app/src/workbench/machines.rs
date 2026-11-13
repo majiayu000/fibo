@@ -361,13 +361,9 @@ pub(super) fn remote_key(view: &crate::machines::View, terminal: &str) -> String
     format!("remote:{machine}:{terminal}")
 }
 
-/// The name that machine's host gave the session (its `session_title`), else what it says
-/// about an Agent it cannot read, else the folder.
+/// The final title supplied by the host, also for unbound terminals.
 pub(super) fn shown_title(card: &Card) -> String {
-    card.title
-        .clone()
-        .or_else(|| card.note.clone())
-        .unwrap_or_else(|| card.cwd.clone())
+    card.title.clone().unwrap_or_else(|| card.id.clone())
 }
 
 impl Workbench {

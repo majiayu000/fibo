@@ -4,14 +4,14 @@ use super::*;
 /// A stable slot: the state and close control trade visibility, never layout space.
 pub(super) fn tab_tail(
     close: gpui::Stateful<gpui::Div>,
-    status: Option<Status>,
+    mark: Option<gpui::AnyElement>,
     group: gpui::SharedString,
 ) -> gpui::Div {
     div()
         .relative()
         .flex_shrink_0()
         .size(px(T::ICON_HEIGHT))
-        .when_some(status, |d, g| {
+        .when_some(mark, |d, mark| {
             d.child(
                 div()
                     .absolute()
@@ -21,13 +21,45 @@ pub(super) fn tab_tail(
                     .justify_center()
                     .text_size(px(T::CHIP_SIZE))
                     .group_hover(group, |s| s.opacity(0.))
-                    .child(crate::ui::widgets::status_mark(g)),
+                    .child(mark),
             )
         })
         .child(close.absolute().size_full().px_0())
 }
 
 impl Workbench {
+    /// A tab's state mark. Under the pointer it stands still: the turning arc is painted by
+    /// an overlay the slot's hover fade cannot reach, so it would keep turning over ×.
+    pub(super) fn tab_mark(
+        &self,
+        status: Option<Status>,
+        id: &str,
+        cx: &Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let g = status?;
+        Some(if self.layout.hovered_tab.as_deref() == Some(id) {
+            crate::ui::widgets::status_mark_seen(g, false)
+        } else {
+            self.session_mark(g, false, false, cx)
+        })
+    }
+
+    pub(super) fn tab_hover(
+        &self,
+        tab: gpui::Stateful<gpui::Div>,
+        id: &str,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let id = id.to_string();
+        tab.on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+            let was = this.layout.hovered_tab.as_deref() == Some(id.as_str());
+            if *hovered != was {
+                this.layout.hovered_tab = hovered.then(|| id.clone());
+                cx.notify();
+            }
+        }))
+    }
+
     #[cfg(feature = "visual-test")]
     pub fn visual_tab_agent_sample(&mut self, cx: &mut Context<Self>) {
         let tab = self

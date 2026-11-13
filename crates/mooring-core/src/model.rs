@@ -177,9 +177,7 @@ impl Task {
         self.acceptance.iter().filter(|c| c.proven()).count()
     }
 }
-pub fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
+pub use mooring_platform::shell::quote_posix as shell_quote;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tab {

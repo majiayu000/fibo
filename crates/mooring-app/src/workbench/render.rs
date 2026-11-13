@@ -358,7 +358,8 @@ impl Render for Workbench {
             let tail = if terminal_style {
                 close.into_any_element()
             } else {
-                tabs::tab_tail(close, after, group_name.clone()).into_any_element()
+                let mark = self.tab_mark(after, &id, cx);
+                tabs::tab_tail(close, mark, group_name.clone()).into_any_element()
             };
             strip = strip.child(
                 div()
@@ -444,6 +445,7 @@ impl Render for Workbench {
                     })
                     // Tabs move along the strip; panes dropped on one join it.
                     .map(|d| self.tab_landing(d, dragged, cx))
+                    .map(|d| self.tab_hover(d, &id, cx))
                     .on_mouse_down(gpui::MouseButton::Right, {
                         let id = id.clone();
                         cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {

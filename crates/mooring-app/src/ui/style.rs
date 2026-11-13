@@ -41,7 +41,7 @@ impl Style {
         let path = path().ok_or(t!("找不到配置目录"))?;
         path.parent()
             .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| std::fs::write(&path, self.name()))
+            .and_then(|()| super::status_colors::write_atomic(&path, self.name().as_bytes()))
             .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))
     }
 }

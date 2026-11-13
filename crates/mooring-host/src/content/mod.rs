@@ -103,6 +103,7 @@ fn kept_input(args: &Value) -> Value {
         "notebook_path",
         "cmd",
         "command",
+        PLAN_PATH,
     ] {
         if let Some(v) = args.get(key) {
             kept.insert(key.into(), v.clone());
@@ -272,7 +273,7 @@ pub struct Parser {
     pub(crate) rules: u32,
 }
 /// Bumped when parsing rules change what a saved state means; such states are reseeded.
-pub const RULES: u32 = 14;
+pub const RULES: u32 = 15;
 fn current_rules<S: serde::Serializer>(_: &u32, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_u32(RULES)
 }
@@ -448,6 +449,11 @@ impl Parser {
             self.child_wait_from = None;
             self.card.waiting = question_summary(&args);
             self.card.choices = question_choices(&args);
+        } else if name == "ExitPlanMode" {
+            self.card.turn = Turn::Waiting;
+            self.child_wait_from = None;
+            self.card.waiting = plan_waiting(&args);
+            self.card.choices.clear();
         }
         self.calls.insert(
             id.into(),
@@ -467,6 +473,9 @@ impl Parser {
                 .unwrap();
             self.calls.remove(&oldest);
             self.card.unknown_records += 1;
+        }
+        if name == "ExitPlanMode" {
+            self.refresh_plan();
         }
         self.card.updated = self.card.updated.max(at);
     }
@@ -589,6 +598,7 @@ impl Parser {
             }
             _ => (),
         }
+        self.refresh_plan();
     }
     fn wait(&mut self, reason: &str, at: u64, source: &Source) {
         // A dialog already known from the transcript or screen keeps its richer text.
@@ -783,6 +793,7 @@ pub fn hook_facts(v: &Value) -> HookFacts {
     }
 }
 mod hook_question;
-use hook_question::hook_question;
+pub(crate) use hook_question::claude_plan_args;
+use hook_question::{hook_question, plan_waiting, PLAN_PATH};
 #[cfg(test)]
 mod tests;

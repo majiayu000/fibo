@@ -133,12 +133,22 @@ describe('inbox lists', () => {
 
   test('settled conversations stay settled unless something asks', () => {
     expect(where(plain({ outcome: 'done', status: 'closed', needs_you: false }))).toBe('done');
+    const abandoned = plain({ outcome: 'abandoned', status: 'closed', needs_you: false });
+    expect(where(abandoned)).toBe('none');
+    expect(shelve(arrange([machine([abandoned])], []), null).empty).toBe(true);
+    expect(where({ ...abandoned, phase: 'waiting' })).toBe('inbox');
     expect(where(plain({ outcome: 'done', phase: 'waiting', needs_you: false }))).toBe('inbox');
     expect(where(plain({ outcome: 'deferred', approval: 'Proceed?' }))).toBe('inbox');
   });
 
-  test('shells are not conversations', () => {
+  test('recognized unbound Agents stay visible, ordinary shells stay hidden', () => {
     expect(where(plain({ phase: 'shell', agent: null }))).toBe('none');
+    const unbound = plain({ phase: 'shell', agent: 'codex', session: null, title: 'codex · 未关联对话' });
+    expect(where(unbound)).toBe('inbox');
+    const view = shelve(arrange([machine([unbound])], []), null);
+    expect(view.behind.map((i) => i.c.id)).toEqual(['c']);
+    expect(view.empty).toBe(false);
+    expect(view.acts).toBe(0);
   });
 
   test('a 稍后提醒 the host brought back joins the inbox but is not pinned: it asks nothing', () => {
@@ -354,6 +364,7 @@ describe('the home screen', () => {
     expect(undoTo({ outcome: null })).toBe('open');
     expect(undoTo({ outcome: 'deferred' })).toBe('deferred');
     expect(undoTo({ outcome: 'done' })).toBe('done');
+    expect(undoTo({ outcome: 'abandoned' })).toBe('abandoned');
   });
 
   test('search finds title, space and directory, in 稍后提醒 and 已处理 too, narrowed to a space', () => {

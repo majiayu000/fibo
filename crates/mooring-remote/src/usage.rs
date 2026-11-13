@@ -13,6 +13,8 @@ pub struct Usage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentUsage {
     pub agent: String,
+    #[serde(default)]
+    pub agent_name: String,
     /// Input and output, new to the model: cache writes count, cache reads do not.
     pub tokens: u64,
     /// Read back from its cache, counted apart: a long session re-reads its whole context
@@ -30,15 +32,22 @@ pub struct Quotas {
 pub struct AgentQuota {
     /// `claude`, `codex`… as cards name them.
     pub agent: String,
+    #[serde(default)]
+    pub agent_name: String,
     pub plan: String,
     /// When the CLI recorded it, Unix seconds.
     pub at: u64,
+    /// Core decides when this reading becomes historical; absent means unknown.
+    #[serde(default)]
+    pub fresh_until: Option<u64>,
     pub windows: Vec<QuotaWindow>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuotaWindow {
     pub minutes: u32,
+    #[serde(default)]
+    pub level: String,
     /// Percent used.
     pub used: u16,
     /// Unix seconds; 0 when unknown.

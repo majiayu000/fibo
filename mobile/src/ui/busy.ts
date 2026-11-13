@@ -1,3 +1,4 @@
+import type { AgentControls } from '../remote/hub';
 // What a message sent while the Agent works becomes, per CLI: the phone pastes it and presses
 // Enter, and each CLI decides. Measured on the real CLIs (docs/phone-app/cli-turn-input.md):
 // Claude Code queues it for after the step at hand, Codex puts it into the step now. A CLI not
@@ -33,25 +34,22 @@ export type How = 'queue' | 'steer';
 export const HOW_NOTE: Record<How, string> = { queue: QUEUES.note, steer: STEERS.note };
 
 /** Whether this CLI was measured to queue and steer on keys the computer knows (host `turn_input`). */
-export function steerable(agent: string | null | undefined) {
-  return agent === 'claude' || agent === 'codex';
+export function steerable(controls: AgentControls | null | undefined) {
+  return !!controls?.steer;
 }
 
-/**
- * Whether the Agent sends its whole queue now on its steer key with nothing typed: Claude Code
- * says `ctrl+enter to send now` under a queued message, measured 2026-11-09. Codex not yet.
- */
-export function sendsNow(agent: string | null | undefined) {
-  return agent === 'claude';
+/** Whether the host adapter can send its queue now with an empty composer. */
+export function sendsNow(controls: AgentControls | null | undefined) {
+  return !!controls?.send_now;
 }
 
 /** Under a queued message the phone can send now; after that is done. */
 export const QUEUED_TAP = tk('排队中 · 点一下可以立刻发送');
 export const SENT_NOW = tk('已立刻发送 · 它马上会看到');
 
-/** `agent` as cards name it: `claude`, `codex`… */
-export function whileBusy(agent: string | null | undefined): BusyWords {
-  if (agent === 'claude') return QUEUES;
-  if (agent === 'codex') return STEERS;
+/** The host derives Enter behavior from the adapter's actual keys. */
+export function whileBusy(controls: AgentControls | null | undefined): BusyWords {
+  if (controls?.busy_input === 'queue') return QUEUES;
+  if (controls?.busy_input === 'steer') return STEERS;
   return UNKNOWN;
 }

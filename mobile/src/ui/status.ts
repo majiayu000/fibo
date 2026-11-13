@@ -45,10 +45,10 @@ export function rank(c: Card): number {
 }
 
 /** What a row's third line says after its branch: what it is doing now, else its Agent. */
-export const rowDetail = (c: Card) => c.doing || agentName(c.agent);
+export const rowDetail = (c: Card) => c.doing || agentName(c);
 
-export const agentName = (agent?: string | null) =>
-  agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : agent ? agent[0].toUpperCase() + agent.slice(1) : '';
+export const agentName = (source?: { agent?: string | null; agent_name?: string } | null) =>
+  source?.agent_name || source?.agent || '';
 
 /** A path with the home directory as `~`. */
 export function tilde(path: string): string {

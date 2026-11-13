@@ -1,3 +1,4 @@
+import type { QuotaWindow, QuotaLevel } from '../store/quota';
 // Reading what the machine sends into what the screens show: whether an approval is
 // dangerous, the options a question offers, a patch's lines, quota windows. Pure, so
 // tests run it without React Native.
@@ -157,6 +158,24 @@ export function shortWindow(minutes: number): string {
 
 const WEEKDAYS = [tk('周日'), tk('周一'), tk('周二'), tk('周三'), tk('周四'), tk('周五'), tk('周六')];
 
+/** The host supplies the deadline; old cached readings with none are not called fresh. */
+export const quotaStale = (reading: { fresh_until?: number | null }, now = Date.now() / 1000) =>
+  reading.fresh_until == null || now > reading.fresh_until;
+
+/** Same boundary as core Window::reset; zero means the reset time is unknown. */
+export const quotaReset = (resetsAt: number, now = Date.now() / 1000) => resetsAt !== 0 && resetsAt <= now;
+
+/** A past reading is not a measurement of the new window, even when it used to be full. */
+export function quotaWindowView(w: QuotaWindow, now = Date.now() / 1000, stale = false) {
+  const reset = quotaReset(w.resets_at, now);
+  return {
+    used: reset ? 0 : w.used,
+    level: reset || stale ? undefined : w.level,
+    text: reset ? tr('已重置') : `${w.used}%`,
+    hint: reset ? tr('等下次使用时更新') : resetText(w.resets_at, now),
+  };
+}
+
 /** "1 时 40 分后重置" within a day, else the weekday; empty when the time is unknown or past. */
 export function resetText(resetsAt: number, now = Date.now() / 1000): string {
   if (!resetsAt || resetsAt <= now) return '';
@@ -172,7 +191,7 @@ export function resetText(resetsAt: number, now = Date.now() / 1000): string {
 }
 
 /** How full a window is, as the gauge colours it: under half, past half, past 80%. */
-export const level = (used: number): 'low' | 'mid' | 'high' => (used > 80 ? 'high' : used >= 50 ? 'mid' : 'low');
+
 
 /** A stretch of time as people say it: 「45 秒」「12 分钟」「1 小时 20 分钟」. */
 export function span(seconds: number): string {
@@ -247,18 +266,19 @@ export function quotaView(online: boolean, asks: boolean, saved: unknown[] | nul
   return saved ? 'live' : 'loading';
 }
 
-type Reading = { agent: string; windows: { minutes: number; used: number; resets_at: number }[] };
-export type Tight = { machine: string; agent: string; minutes: number; used: number };
+type Reading = { agent: string; agent_name?: string; fresh_until?: number | null; windows: QuotaWindow[] };
+export type Tight = { machine: string; agent: string; agent_name?: string; minutes: number; used: number; level?: QuotaLevel };
 
 /** Each Agent's most used window on each computer, fullest first. Never added up: see `app/quota.tsx`. A window past its reset says nothing. */
 export function tightWindows(readings: { machine: string; agents: Reading[] | null }[], now = Date.now() / 1000): Tight[] {
   const out: Tight[] = [];
   for (const { machine, agents } of readings) {
     for (const a of agents ?? []) {
-      const live = a.windows.filter((w) => !w.resets_at || w.resets_at > now);
-      if (!live.length) continue;
-      const top = live.reduce((x, y) => (y.used > x.used ? y : x));
-      out.push({ machine, agent: a.agent, minutes: top.minutes, used: top.used });
+      // Old hosts/cached readings do not supply severity or a shared ordering.
+      if (a.windows.some((w) => !w.level)) continue;
+      const top = a.windows.find((w) => !quotaReset(w.resets_at, now));
+      if (!top) continue;
+      out.push({ machine, agent: a.agent, agent_name: a.agent_name, minutes: top.minutes, used: top.used, level: quotaStale(a, now) ? undefined : top.level });
     }
   }
   return out.sort((x, y) => y.used - x.used);

@@ -336,10 +336,10 @@ impl Workbench {
         let row = gpui::SharedString::from(format!("session-{}", session.id));
         flat_row_box(row, selected, two)
             .child(
-                div().flex_shrink_0().when(two, |d| d.mt(px(T::S4))).child(
-                    self.turning_mark(g, "icons/state-run.svg", F::STATE, cx)
-                        .unwrap_or_else(|| flat_state(g, attention)),
-                ),
+                div()
+                    .flex_shrink_0()
+                    .when(two, |d| d.mt(px(T::S4)))
+                    .child(self.flat_session_mark(g, attention, cx)),
             )
             .child(
                 div()

@@ -44,9 +44,7 @@ pub fn stay(shell: &str) -> Vec<String> {
     vec![shell.into(), "-l".into()]
 }
 
-pub fn quote(word: &str) -> String {
-    format!("'{}'", word.replace('\'', "'\\''"))
-}
+pub use super::quote_posix as quote;
 
 pub fn past_functions(program: &str) -> String {
     format!("command {program}")

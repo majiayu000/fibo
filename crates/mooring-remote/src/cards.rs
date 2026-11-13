@@ -42,3 +42,14 @@ pub struct Cards {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed: Vec<Card>,
 }
+
+/// Capabilities of the actual host adapter; old hosts leave them absent.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AgentControls {
+    pub steer: bool,
+    pub send_now: bool,
+    pub effort: bool,
+    #[serde(default)]
+    pub suggestion: bool,
+    pub busy_input: Option<String>,
+}

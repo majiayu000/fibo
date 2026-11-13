@@ -53,8 +53,8 @@ impl Adapter for Claude {
     fn screen_rules(&self) -> &'static str {
         include_str!("screen/claude.json")
     }
-    fn input_suggestion(&self, vt: &mooring_core::terminal::Vt) -> std::io::Result<Option<String>> {
-        super::claude_suggestion::read(vt)
+    fn input_suggestion(&self) -> Option<super::SuggestionReader> {
+        Some(super::claude_suggestion::read)
     }
     fn root(&self, home: &Path) -> PathBuf {
         home_dir(home, "CLAUDE_CONFIG_DIR", ".claude").join("projects")
@@ -233,7 +233,9 @@ impl Adapter for Claude {
         // Written whenever the mode is in force, and again on each prompt.
         if ty == "permission-mode" || ty == "user" {
             if let Some(mode) = v["permissionMode"].as_str() {
-                parser.card.permission = super::permission::claude(mode);
+                let reading = super::permission::claude(mode);
+                parser.card.permission = reading.words;
+                parser.card.permission_full = reading.full;
             }
         }
         // Handed to Claude Code's background daemon: the conversation goes on in a forked
@@ -300,7 +302,11 @@ impl Adapter for Claude {
                     Some("tool_use") => parser.tool(
                         b["id"].as_str().unwrap_or(""),
                         b["name"].as_str().unwrap_or(""),
-                        b["input"].clone(),
+                        if b["name"] == "ExitPlanMode" {
+                            crate::content::claude_plan_args(v, &b["input"], source)
+                        } else {
+                            b["input"].clone()
+                        },
                         at,
                         source,
                     ),

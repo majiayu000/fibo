@@ -10,9 +10,6 @@ use mooring_core::quota::{NEAR, OVER, Quota, Window as QuotaWindow};
 
 mod sessions;
 
-/// A reading older than this is marked `*`: the CLI has not been used since.
-const STALE_AFTER: u64 = 3600;
-
 /// Which of the bar's popovers is open.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum StatusPop {
@@ -198,7 +195,7 @@ impl Workbench {
         let marks = true;
         let mut said = Vec::new();
         for (agent, quota, _) in readings.iter().take(BAR_CELLS) {
-            let stale = now.saturating_sub(quota.at) > STALE_AFTER;
+            let stale = quota.stale(now);
             let mut cell = div()
                 .flex()
                 .items_center()
@@ -315,7 +312,7 @@ impl Workbench {
             panel = panel.child(label(t!("这一周用过的 Agent 都还没留下额度记录")));
         }
         for (agent, quota, _) in &readings {
-            let stale = now.saturating_sub(quota.at) > STALE_AFTER;
+            let stale = quota.stale(now);
             let mut head = div().flex().items_baseline().gap(px(T::S6)).child(
                 div().font_weight(gpui::FontWeight::SEMIBOLD).child(format!(
                     "{}{}",
@@ -488,16 +485,9 @@ impl Workbench {
 
 /// Every CLI with a reading, the one closest to its limit first, with that window.
 fn tightest_first(all: &[(mooring_core::agent::Agent, Quota)], now: u64) -> Vec<Reading<'_>> {
-    let mut out: Vec<_> = all.iter().map(|(a, q)| (*a, q, tightest(q, now))).collect();
+    let mut out: Vec<_> = all.iter().map(|(a, q)| (*a, q, q.tightest(now))).collect();
     out.sort_by_key(|(_, _, w)| std::cmp::Reverse(w.map_or(0, |w| w.used)));
     out
-}
-
-fn tightest(q: &Quota, now: u64) -> Option<&QuotaWindow> {
-    q.windows
-        .iter()
-        .filter(|w| !w.reset(now))
-        .max_by_key(|w| w.used)
 }
 
 type Reading<'a> = (
@@ -539,7 +529,8 @@ fn save_quota_pin(pin: Option<mooring_core::agent::Agent>) {
     match pin {
         Some(a) => {
             let _ = path.parent().map(std::fs::create_dir_all);
-            let _ = std::fs::write(path, format!("{}\n", a.key()));
+            let _ =
+                crate::ui::status_colors::write_atomic(&path, format!("{}\n", a.key()).as_bytes());
         }
         None => {
             let _ = std::fs::remove_file(path);
@@ -571,10 +562,10 @@ fn share(w: &QuotaWindow) -> f64 {
 
 /// The bar's fill and the number's ink: green, orange from 80%, red from 95%; gray once stale.
 fn colors(w: &QuotaWindow, stale: bool) -> (gpui::Hsla, gpui::Hsla) {
-    match w.used {
+    match w.level() {
         _ if stale => (T::color(T::muted()), T::color(T::muted())),
-        u if u >= OVER => (Tone::Danger.dot(), Tone::Danger.ink()),
-        u if u >= NEAR => (Tone::Warn.dot(), Tone::Warn.ink()),
+        "high" => (Tone::Danger.dot(), Tone::Danger.ink()),
+        "mid" => (Tone::Warn.dot(), Tone::Warn.ink()),
         _ => (Tone::Ok.dot(), T::color(T::body())),
     }
 }

@@ -92,11 +92,19 @@ impl Workbench {
                     .items_center()
                     .gap(px(T::S8))
                     .child({
-                        let spin = active && count > 0;
-                        if spin && matches!(column, Column::Running | Column::Needs) {
+                        let spin = active && count > 0 && !mooring_core::effect::reduce_motion();
+                        if spin && column == Column::Needs {
                             super::pace::wake(&MOTION, MOTION_STEP, cx);
                         }
-                        animated_column_icon(column, spin)
+                        self.column_icon(
+                            column,
+                            if column == Column::Running {
+                                count > 0 && self.overview.drawer.is_none()
+                            } else {
+                                spin
+                            },
+                            cx,
+                        )
                     })
                     .child(
                         div()
@@ -211,7 +219,7 @@ impl Workbench {
         let count = ids.len();
         let entity = cx.entity();
         gpui::list(state, move |index, window, app| {
-            let animate = window.is_window_active();
+            let animate = window.is_window_active() && !mooring_core::effect::reduce_motion();
             entity.update(app, |this, cx| {
                 let card = if column == Column::Todo {
                     let card = this.todo_card(

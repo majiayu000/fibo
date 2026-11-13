@@ -72,7 +72,7 @@ impl Workbench {
                 .font_family(mono.clone())
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_size(px(T::SMALL))
-                .child(self.session_mark(g, attention, cx))
+                .child(self.session_mark(g, attention, true, cx))
         };
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))

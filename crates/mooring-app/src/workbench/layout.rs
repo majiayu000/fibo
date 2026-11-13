@@ -69,6 +69,8 @@ pub(super) struct LayoutState {
     pub(super) subagents_all: HashSet<String>,
     /// A tab's right-click menu: the tab and where it was opened.
     pub(super) tab_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
+    /// The tab under the pointer: its turning mark stands still while × shows in its slot.
+    pub(super) hovered_tab: Option<String>,
     /// The title-bar logo's menu for choosing the app icon, where it was opened.
     pub(super) icon_menu: Option<gpui::Point<gpui::Pixels>>,
     /// A close that would stop a running Agent, waiting for the user to confirm it.
@@ -402,7 +404,7 @@ impl PaneAction for gpui::Stateful<gpui::Div> {
 /// The pane header's status: the group's wash, its ink and its dot.
 /// The state word, and after it why the session needs you when a reasons rule knows:
 /// 「等你回答 · 批准 WebSearch」. The phrase is already cut to the rules' width.
-fn state_chip(group: Status, reason: Option<String>) -> gpui::Div {
+fn state_chip(group: Status, reason: Option<String>, mark: gpui::AnyElement) -> gpui::Div {
     let (_, ink, wash) = group.colors();
     div()
         .flex_shrink_0()
@@ -416,7 +418,7 @@ fn state_chip(group: Status, reason: Option<String>) -> gpui::Div {
         .text_color(ink)
         .text_size(px(T::META))
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .child(crate::ui::widgets::status_mark(group))
+        .child(mark)
         .child(group.label())
         .when_some(reason, |d, r| {
             d.child(div().opacity(0.6).child("·"))

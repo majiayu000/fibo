@@ -15,6 +15,7 @@ export function AttachSheet({
   onCamera,
   onLibrary,
   permission,
+  permissionFull,
   onPermission,
 }: {
   onClose: () => void;
@@ -24,6 +25,7 @@ export function AttachSheet({
   onLibrary: () => void;
   /** What the computer says is on; onPermission absent: it cannot be changed from here. */
   permission?: string | null;
+  permissionFull?: boolean | null;
   onPermission?: () => void;
 }) {
   const t = useTheme();
@@ -58,7 +60,7 @@ export function AttachSheet({
               <Icon name="shield" size={16} width={1.8} color={t.text} />
             </View>
             <Text style={{ flex: 1, color: t.text, fontSize: 15 }}>{tr('权限')}</Text>
-            <Text style={{ color: isFull(permission) ? t.err : t.dim, fontSize: 14 }}>{permission ?? tr('还没读到')}</Text>
+            <Text style={{ color: isFull(permissionFull) ? t.err : t.dim, fontSize: 14 }}>{permission ?? tr('还没读到')}</Text>
             {!!onPermission && <Icon name="right" size={14} width={2} color={t.dim} />}
           </Pressable>
         </View>

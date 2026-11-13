@@ -377,7 +377,14 @@ pub fn machine(socket: &Path) -> io::Result<Machine> {
         .map(|n| n.trim().to_owned())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(mooring_platform::system::host_name);
-    Ok(Machine { id, name })
+    Ok(Machine {
+        id,
+        name,
+        agent_names: mooring_core::agent::Agent::all()
+            .into_iter()
+            .map(|a| (a.key().to_lowercase(), a.name().to_owned()))
+            .collect(),
+    })
 }
 
 /// The name phones show for this machine when its owner gave one: a host name like

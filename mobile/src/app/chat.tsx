@@ -302,12 +302,12 @@ export default function Chat() {
   const waiting = online && card?.phase === 'waiting' && !card.approval ? card.waiting : null;
   const starting = online && card?.phase === 'shell' && !!card.agent && !card.trust;
   const view = waitView(waiting) ?? (starting ? startingView() : null);
-  const agent = agentName(card?.agent);
+  const agent = agentName(card);
   const running = online && card?.phase === 'working';
-  const canSendNow = !!running && supports(m, 'sendnow') && sendsNow(card?.agent);
+  const canSendNow = !!running && supports(m, 'sendnow') && sendsNow(card?.controls);
   // Only Claude offers one, only between turns with nothing else being asked. The card names
   // the turn, so this does not wait on the messages of a conversation still being read.
-  const turnEnded = online && card?.agent === 'claude' && card.phase === 'idle' && !card.trust && supports(m, 'suggestion');
+  const turnEnded = online && card?.controls?.suggestion && card.phase === 'idle' && !card.trust && supports(m, 'suggestion');
   const suggestion = useSuggestion(machine, terminal, card?.session ?? null, turnEnded ? (card.turn ?? null) : null);
   const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
   const toTools = useCallback(
@@ -327,14 +327,14 @@ export default function Chat() {
         l.p.how === 'queue' && !l.p.now && canSendNow ? (
           <Mine text={pendingText(l.p)} note={tr(QUEUED_TAP)} tone="queued" onPress={openQueued} />
         ) : (
-          <Mine text={pendingText(l.p)} note={l.p.now ? tr(SENT_NOW) : l.p.how ? tr(HOW_NOTE[l.p.how]) : l.p.queued ? tr(whileBusy(card?.agent).note) : tr('发送中…')} tone="pending" />
+          <Mine text={pendingText(l.p)} note={l.p.now ? tr(SENT_NOW) : l.p.how ? tr(HOW_NOTE[l.p.how]) : l.p.queued ? tr(whileBusy(card?.controls).note) : tr('发送中…')} tone="pending" />
         )
       ) : (
         <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
           <Mine text={l.text} note={l.error ? tr('没发出去：{why}（点一下重发，按住删除）', { why: l.error }) : tr('重连后发送（按住删除）')} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, card?.agent, toTools, canSendNow, openQueued],
+    [agent, card?.controls, toTools, canSendNow, openQueued],
   );
 
   return (
@@ -449,14 +449,15 @@ export default function Chat() {
           agent={agent}
           model={card?.model}
           permission={card?.permission}
+          permissionFull={card?.permission_full}
           running={!!running}
-          busyPlaceholder={tr(whileBusy(card?.agent).placeholder)}
+          busyPlaceholder={tr(whileBusy(card?.controls).placeholder)}
           canStop={supports(m, 'stop')}
           offline={!online}
           suggestion={suggestion}
           onSend={send}
           canAttach={supports(m, 'image')}
-          canSteer={supports(m, 'steer') && steerable(card?.agent)}
+          canSteer={supports(m, 'steer') && steerable(card?.controls)}
           onError={setError}
           onStop={() => stop()}
           onUseSuggestion={() => suggestionStats.set(countUse)}
@@ -476,7 +477,7 @@ export default function Chat() {
           machine={machine}
           terminal={terminal}
           kind={picking}
-          effort={picking === 'model' && supports(m, 'effort') && hasEffort(card?.agent)}
+          effort={picking === 'model' && supports(m, 'effort') && hasEffort(card?.controls)}
           onClose={() => setPicking(null)}
         />}
     </KeyboardSafe>

@@ -35,6 +35,8 @@ pub enum ModeReply {
     Now {
         model: String,
         permission: String,
+        #[serde(default)]
+        permission_full: Option<bool>,
         /// Clients before it never asked for one, so never miss it.
         #[serde(default)]
         effort: String,
@@ -73,6 +75,9 @@ pub struct TerminalModes {
     pub model: Option<(String, String)>,
     #[serde(default)]
     pub permission: Option<(String, String)>,
+    /// Semantic flag from the CLI; None means it has not been read.
+    #[serde(default)]
+    pub permission_full: Option<bool>,
 }
 
 /// Terminal -> what was last set there. Live state, not stored.

@@ -44,7 +44,7 @@ function OnlineCard({ m, t }: { m: Machine; t: Theme }) {
           {tight.map((q) => (
             <View key={q.agent} style={{ gap: 5 }}>
               <Text style={{ fontSize: 13, color: t.text }}>{tightWords(q, false)}</Text>
-              <Bar used={q.used} t={t} />
+              <Bar used={q.used} level={q.level} t={t} />
             </View>
           ))}
         </Pressable>

@@ -436,8 +436,8 @@ fn remote_quota_reports_each_agents_reading_from_the_last_week() {
     assert_eq!(
         a["windows"],
         json!([
-            { "minutes": 300, "used": 42, "resets_at": 1_900_000_000u64 },
-            { "minutes": 10080, "used": 7, "resets_at": 0 }
+            { "minutes": 300, "used": 42, "resets_at": 1_900_000_000u64, "level": "low" },
+            { "minutes": 10080, "used": 7, "resets_at": 0, "level": "low" }
         ])
     );
 }

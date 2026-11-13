@@ -123,12 +123,12 @@ def main():
     measured.update(found)
     # The turning mark needs rows running on screen, which changes the column for the rest.
     turning = probe(bindir, out / 'turning', 'frames-turning', catch_up=False, running=True)
-    t = re.search(r'frames-turning: ([\d.]+) ms CPU per step, ([\d.]+) M instructions; at rest (\d+) rows (\d+) draws; rows (\d+); moved (\d+) px; sidebar kept its draw (\w+); folded (\d+) drew (\d+) opened (\d+); off (\d+) rows (\d+) draws', turning)
+    t = re.search(r'frames-turning: ([\d.]+) ms CPU per step, ([\d.]+) M instructions; at rest (\d+) rows (\d+) draws; rows (\d+); moved (\d+) px; sidebar kept its draw (\w+); folded (\d+) drew (\d+) main (\d+) opened (\d+); off (\d+) rows (\d+) draws', turning)
     if not t:
         fails.append('no frames-turning line in the probe output')
     else:
         used, cost = float(t[1]), float(t[2])
-        rest_rows, rest_draws, rows, moved, kept, folded, drew, opened, off_rows, off_draws = int(t[3]), int(t[4]), int(t[5]), int(t[6]), t[7], int(t[8]), int(t[9]), int(t[10]), int(t[11]), int(t[12])
+        rest_rows, rest_draws, rows, moved, kept, folded, drew, main_rows, opened, off_rows, off_draws = int(t[3]), int(t[4]), int(t[5]), int(t[6]), t[7], int(t[8]), int(t[9]), int(t[10]), int(t[11]), int(t[12]), int(t[13])
         measured['frames-turning'] = cost
         if rest_rows or rest_draws:
             fails.append(f'the setting off still drew turning marks: {rest_rows} rows, {rest_draws} draws')
@@ -138,8 +138,8 @@ def main():
             fails.append('a turning step drew the sidebar again: it must stay cached')
         if folded or opened != rows:
             fails.append(f'marks did not follow their rows: {rows} rows, folded {folded}, opened {opened}')
-        if drew:
-            fails.append(f'with no mark on screen the view kept stepping: {drew} draws')
+        if bool(drew) != bool(main_rows):
+            fails.append(f'folded sidebar: {main_rows} main-area marks but {drew} steps')
         if off_rows or off_draws:
             fails.append(f'turned off, the marks kept drawing: {off_rows} rows, {off_draws} draws')
     plugin_text = probe(bindir, out / 'plugins', 'frames-plugins', catch_up=False)

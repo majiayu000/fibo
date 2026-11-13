@@ -27,7 +27,7 @@ fn ours(line: Option<&Value>) -> bool {
         .is_some_and(|c| c.starts_with(MARK))
 }
 fn quote(path: &Path) -> String {
-    format!("'{}'", path.display().to_string().replace('\'', "'\\''"))
+    mooring_platform::shell::quote_posix(&path.to_string_lossy())
 }
 fn wrapper(data: &Path) -> io::Result<String> {
     let exe = std::env::current_exe()?;

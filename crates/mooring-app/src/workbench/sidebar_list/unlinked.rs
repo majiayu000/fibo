@@ -4,7 +4,7 @@
 //! rows take the columns of the rows around them.
 use super::*;
 use crate::ui::theme::Flat as F;
-use crate::workbench::sidebar_flat::{flat_row_box, flat_selected_edge, flat_state};
+use crate::workbench::sidebar_flat::{flat_row_box, flat_selected_edge};
 
 const TITLE: &str = tk!("未关联的终端");
 
@@ -56,36 +56,6 @@ fn row_box(id: gpui::SharedString, look: Look, focused: bool) -> gpui::Stateful<
     }
 }
 
-fn row_mark(look: Look, group: Option<Status>) -> gpui::AnyElement {
-    let Some(group) = group else {
-        return match look {
-            Look::Flat => crate::workbench::sidebar_flat::flat_unknown(),
-            Look::Dense | Look::Standard => div()
-                .w(px(T::BOARD_MARK))
-                .flex_shrink_0()
-                .flex()
-                .justify_center()
-                .child(crate::ui::widgets::unknown_mark(
-                    T::BOARD_MARK,
-                    T::SMALL,
-                    T::color(T::muted()),
-                ))
-                .into_any_element(),
-        };
-    };
-    match look {
-        Look::Flat => flat_state(group, false),
-        // Centered where the neighbours draw their Agent's mark.
-        Look::Dense | Look::Standard => div()
-            .w(px(T::BOARD_MARK))
-            .flex_shrink_0()
-            .flex()
-            .justify_center()
-            .child(seen_dot(group))
-            .into_any_element(),
-    }
-}
-
 fn row_text(look: Look, note: String) -> gpui::Div {
     let text = div().flex_1().min_w_0().truncate();
     match look {
@@ -105,6 +75,36 @@ fn row_text(look: Look, note: String) -> gpui::Div {
 }
 
 impl Workbench {
+    fn row_mark(&self, look: Look, group: Option<Status>, cx: &Context<Self>) -> gpui::AnyElement {
+        let Some(group) = group else {
+            return match look {
+                Look::Flat => crate::workbench::sidebar_flat::flat_unknown(),
+                Look::Dense | Look::Standard => div()
+                    .w(px(T::BOARD_MARK))
+                    .flex_shrink_0()
+                    .flex()
+                    .justify_center()
+                    .child(crate::ui::widgets::unknown_mark(
+                        T::BOARD_MARK,
+                        T::SMALL,
+                        T::color(T::muted()),
+                    ))
+                    .into_any_element(),
+            };
+        };
+        match look {
+            Look::Flat => self.flat_session_mark(group, false, cx),
+            // Centered where the neighbours draw their Agent's mark.
+            Look::Dense | Look::Standard => div()
+                .w(px(T::BOARD_MARK))
+                .flex_shrink_0()
+                .flex()
+                .justify_center()
+                .child(seen_dot(group))
+                .into_any_element(),
+        }
+    }
+
     /// The group under the column's lists, in the chosen preset's look.
     pub(in crate::workbench) fn unlinked_rows(
         &self,
@@ -137,7 +137,7 @@ impl Workbench {
                     row_selected(self.nav.focused.as_deref(), &terminal, self.peek.is_some());
                 let id = gpui::SharedString::from(format!("unread-row-{terminal}"));
                 row_box(id, look, focused)
-                    .child(row_mark(look, group))
+                    .child(self.row_mark(look, group, cx))
                     .child(row_text(look, note))
                     .when(recent && focused, |d| d.child(flat_selected_edge()))
                     .tooltip(move |_, cx| {

@@ -1,5 +1,5 @@
 //! A card's detail drawer: what the session is, what it was asked and what happened.
-use super::super::board::{agent_mark, column_icon, mesh};
+use super::super::board::{agent_mark, mesh};
 use super::*;
 use gpui::relative;
 
@@ -40,7 +40,7 @@ impl Workbench {
             if marked {
                 dot(group).into_any_element()
             } else {
-                column_icon(column)
+                self.column_icon(column, true, cx)
             }
         };
         let open = s.clone();

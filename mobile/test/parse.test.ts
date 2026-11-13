@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Close, closeOutcome } from '../src/remote/close';
-import { askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, diffWords, compact, dangerous, diffLines, level, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
+import { quotaStale, quotaWindowView, askFrom, tightWindows, asksTwice, partialWords, readBackWords, trustWords, checkLine, choices, diffWords, compact, dangerous, diffLines, modelName, questionText, pathChips, quotaView, relayPlace, resetText, runningFor, span, trail, windowName } from '../src/ui/parse';
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
@@ -101,9 +101,6 @@ describe('quota words', () => {
     expect(resetText(1000 + 100 * 60, 1000)).toBe('1 时 40 分后重置');
     expect(resetText(0, 1000)).toBe('');
   });
-  test('orange starts past 80%', () => {
-    expect([49, 50, 80, 81].map(level)).toEqual(['low', 'mid', 'mid', 'high']);
-  });
 });
 
 test('a private relay address reads as the local network', () => {
@@ -177,13 +174,17 @@ describe('the gaps against the design', () => {
 });
 
 describe('tightWindows', () => {
+  test('old unordered readings are not guessed and host severity is preserved', () => {
+    expect(tightWindows([{ machine: 'old', agents: [{ agent: 'codex', windows: [{ minutes: 300, used: 90, resets_at: 0 }] }] }])).toEqual([]);
+    expect(tightWindows([{ machine: 'new', agents: [{ agent: 'future', agent_name: 'Future CLI', fresh_until: Number.MAX_SAFE_INTEGER, windows: [{ minutes: 300, used: 81, resets_at: 0, level: 'mid' }] }] }])[0]).toMatchObject({ agent_name: 'Future CLI', level: 'mid' });
+  });
   const now = 1000;
-  const w = (minutes: number, used: number, resets_at = 2000) => ({ minutes, used, resets_at });
+  const w = (minutes: number, used: number, resets_at = 2000) => ({ minutes, used, resets_at, level: 'low' as const });
   test('the fullest window of each Agent, fullest Agent first', () => {
-    const got = tightWindows([{ machine: 'mac', agents: [{ agent: 'codex', windows: [w(300, 10), w(10080, 40)] }, { agent: 'claude', windows: [w(300, 62), w(10080, 30)] }] }], now);
+    const got = tightWindows([{ machine: 'mac', agents: [{ agent: 'codex', fresh_until: 3000, windows: [w(10080, 40), w(300, 10)] }, { agent: 'claude', fresh_until: 3000, windows: [w(300, 62), w(10080, 30)] }] }], now);
     expect(got).toEqual([
-      { machine: 'mac', agent: 'claude', minutes: 300, used: 62 },
-      { machine: 'mac', agent: 'codex', minutes: 10080, used: 40 },
+      { machine: 'mac', agent: 'claude', minutes: 300, used: 62, agent_name: undefined, level: 'low' },
+      { machine: 'mac', agent: 'codex', minutes: 10080, used: 40, agent_name: undefined, level: 'low' },
     ]);
   });
   test('a window past its reset says nothing, and computers are never added up', () => {
@@ -227,4 +228,34 @@ describe('diffWords', () => {
       expect(diffWords(d)).toEqual({ title: '未提交的改动', empty: '没有未提交的改动', note: '' });
     }
   });
+});
+
+
+test('expired quota is reset in detail and absent from the overview, including old cached readings', () => {
+  for (const level of ['high' as const, undefined]) {
+    const w = { minutes: 300, used: 95, resets_at: 1000, level };
+    expect(quotaWindowView(w, 999)).toMatchObject({ used: 95, level, text: '95%' });
+    for (const now of [1000, 1001]) {
+      expect(quotaWindowView(w, now)).toEqual({ used: 0, level: undefined, text: '已重置', hint: '等下次使用时更新' });
+      expect(tightWindows([{ machine: 'm', agents: [{ agent: 'codex', windows: [w] }] }], now)).toEqual([]);
+    }
+    expect(quotaWindowView({ ...w, resets_at: 0 }, 1001)).toMatchObject({ used: 95, level, text: '95%', hint: '' });
+  }
+});
+
+
+test('quota freshness has one host deadline in detail and overview, also while offline', () => {
+  const w = { minutes: 300, used: 95, resets_at: 9000, level: 'high' as const };
+  for (const fresh_until of [2000, null, undefined]) {
+    const reading = { agent: 'codex', fresh_until, windows: [w] };
+    for (const now of [1999, 2000, 2001]) {
+      const stale = fresh_until == null || now > fresh_until;
+      expect(quotaStale(reading, now)).toBe(stale);
+      const detail = quotaWindowView(w, now, quotaStale(reading, now));
+      const overview = tightWindows([{ machine: 'm', agents: [reading] }], now)[0];
+      expect(detail.used).toBe(95);
+      expect(detail.level).toBe(stale ? undefined : 'high');
+      expect(overview.level).toBe(detail.level);
+    }
+  }
 });

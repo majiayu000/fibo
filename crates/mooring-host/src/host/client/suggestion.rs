@@ -16,7 +16,10 @@ pub(super) fn read(shared: &Shared, id: &str) -> io::Result<Reply> {
             text: None,
         });
     };
-    let text = crate::agents::adapter(session.runtime).input_suggestion(&lock(terminal)?.vt)?;
+    let text = match crate::agents::adapter(session.runtime).input_suggestion() {
+        Some(read) => read(&lock(terminal)?.vt)?,
+        None => None,
+    };
     Ok(Reply::InputSuggestion {
         session: Some(session.id.clone()),
         text,

@@ -100,25 +100,26 @@ test('confirmed, and through Face ID if on, it carries allow_full', async () => 
   expect(sent[0].choice).toBe('bypassPermissions');
 });
 
-test('the word on a card is what marks it', () => {
-  expect(isFull(FULL_WORDS)).toBe(true);
-  expect(isFull('自动判断')).toBe(false);
+test('a host flag marks permission independently of display words', () => {
+  expect(isFull(true)).toBe(true);
+  expect(isFull(false)).toBe(false);
+  expect(isFull(undefined)).toBe(false);
   expect(isFull(null)).toBe(false);
 });
 
 test('a row says it only when it is the exception', () => {
-  const full = { permission: FULL_WORDS };
-  const asks = { permission: '逐个确认' };
+  const full = { permission: 'Fully allowed', permission_full: true };
+  const asks = { permission: FULL_WORDS, permission_full: false };
   expect(rowSaysFull(full, [full, full])).toBe(false);
   expect(rowSaysFull(full, [full, asks])).toBe(true);
-  expect(rowSaysFull(full, [full, { permission: null }])).toBe(false);
+  expect(rowSaysFull(full, [full, { permission_full: null }])).toBe(false);
   expect(rowSaysFull(asks, [full, asks])).toBe(false);
 });
 
-test('an effort goes as its own kind, and only claude and codex offer it', async () => {
+test('an effort goes as its own kind, and the host says whether it is offered', async () => {
   expect(await switchMode('modes-m', 't', 'effort', { key: 'xhigh', label: 'xhigh' })).toBe(true);
   expect(asked).toEqual([]);
   expect(plain()).toEqual([{ op: 'setmode', terminal: 't', kind: 'effort', choice: 'xhigh' }]);
   expect(kindName('effort')).toBe('强度');
-  expect([hasEffort('claude'), hasEffort('codex'), hasEffort('grok'), hasEffort(undefined)]).toEqual([true, true, false, false]);
+  expect([hasEffort({ steer: false, send_now: false, effort: true }), hasEffort({ steer: true, send_now: true, effort: true }), hasEffort({ steer: false, send_now: false, effort: false }), hasEffort(undefined)]).toEqual([true, true, false, false]);
 });

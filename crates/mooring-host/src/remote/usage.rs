@@ -74,6 +74,10 @@ pub(super) fn usage(request: &Value) -> io::Result<Value> {
         agents: (tally.totals.iter())
             .map(|(agent, (tokens, cached))| rp::AgentUsage {
                 agent: agent.clone(),
+                agent_name: Agent::all()
+                    .into_iter()
+                    .find(|a| crate::control::agent_label(*a) == *agent)
+                    .map_or_else(|| agent.clone(), |a| a.name().to_owned()),
                 tokens: *tokens,
                 cached: *cached,
             })

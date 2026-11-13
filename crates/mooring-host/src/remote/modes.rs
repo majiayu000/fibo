@@ -51,8 +51,11 @@ pub(super) fn set(socket: &Path, request: &Value, client: Option<&str>) -> io::R
         Reply::Modes(ModeReply::Now {
             model,
             permission,
+            permission_full,
             effort,
-        }) => Ok(json!({ "model": model, "permission": permission, "effort": effort })),
+        }) => Ok(
+            json!({ "model": model, "permission": permission, "permission_full": permission_full, "effort": effort }),
+        ),
         // A resend after a lost reply: the first one took.
         Reply::Ok => Ok(json!({})),
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),

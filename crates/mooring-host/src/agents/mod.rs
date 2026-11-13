@@ -111,6 +111,9 @@ pub struct TurnKeys {
     pub steer: &'static [u8],
 }
 
+/// A CLI's screen reader; its presence also advertises suggestion support.
+pub type SuggestionReader = fn(&mooring_core::terminal::Vt) -> io::Result<Option<String>>;
+
 pub trait Adapter: Sync {
     /// The directory this CLI writes transcripts under, honouring its own home override.
     fn root(&self, home: &Path) -> PathBuf;
@@ -245,11 +248,11 @@ pub trait Adapter: Sync {
     fn title_busy(&self, _title: &str) -> Option<bool> {
         None
     }
-    /// The same from the bottom of the screen, `tail` as `Vt::tail_text` gives it: the
-    /// line a CLI ticks while a turn runs ("Working (12s • esc to interrupt)").
-    fn input_suggestion(&self, _vt: &mooring_core::terminal::Vt) -> io::Result<Option<String>> {
-        Ok(None)
+    /// Reads the next-prompt suggestion, when this adapter knows how.
+    fn input_suggestion(&self) -> Option<SuggestionReader> {
+        None
     }
+    /// A running turn's line at the bottom of the screen.
     fn screen_busy(&self, _tail: &str) -> Option<bool> {
         None
     }

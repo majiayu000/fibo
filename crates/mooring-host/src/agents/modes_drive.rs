@@ -32,6 +32,7 @@ pub trait Terminal {
 pub struct Changed {
     pub model: Option<String>,
     pub permission: Option<String>,
+    pub permission_full: Option<bool>,
     /// In the CLI's own word for it.
     pub effort: Option<String>,
 }
@@ -320,6 +321,7 @@ impl<'a> Steps<'a> {
         Ok(Changed {
             model: Some(now),
             permission: None,
+            permission_full: None,
             effort: None,
         })
     }
@@ -351,6 +353,7 @@ impl<'a> Steps<'a> {
         Ok(Changed {
             model: Some(now),
             permission: None,
+            permission_full: None,
             effort: None,
         })
     }
@@ -395,6 +398,7 @@ impl<'a> Steps<'a> {
                 return Ok(Changed {
                     model: None,
                     permission: Some(read::card_words(Agent::Claude, choice)),
+                    permission_full: Some(full),
                     effort: None,
                 });
             }
@@ -485,6 +489,7 @@ impl<'a> Steps<'a> {
         Ok(Changed {
             model: None,
             permission: Some(read::card_words(agent, choice)),
+            permission_full: super::permission::codex_option(choice).full,
             effort: None,
         })
     }

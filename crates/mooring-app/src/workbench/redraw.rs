@@ -255,6 +255,7 @@ impl Workbench {
     /// sidebar draws the new place next frame.
     pub(super) fn before_render(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.redraw(cx);
+        self.begin_turning_frame();
         if self.pending_route.is_none() {
             return;
         }

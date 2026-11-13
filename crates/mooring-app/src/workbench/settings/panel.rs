@@ -4,6 +4,17 @@ use super::*;
 impl Render for SettingsView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let searching = !self.query(cx).is_empty();
+        if !self.market.loaded()
+            && if searching {
+                self.page_matches(Page::Plugins, cx)
+            } else {
+                self.page == Page::Plugins
+            }
+        {
+            let scroll = self.market.scroll.clone();
+            self.market = plugins::Market::read(cx);
+            self.market.scroll = scroll;
+        }
         let body = self.body(cx);
         let (title, description) = if searching {
             (t!("搜索结果"), t!("在所有分类中查找。"))
@@ -271,6 +282,11 @@ impl Workbench {
     ) -> (gpui::ScrollHandle, Option<Agent>) {
         let settings = self.settings.as_ref().unwrap().read(cx);
         (settings.agent_scroll.clone(), settings.agent_menu)
+    }
+    pub(crate) fn visual_settings_plugins_loaded(&self, cx: &gpui::App) -> bool {
+        self.settings
+            .as_ref()
+            .is_some_and(|v| v.read(cx).market.loaded())
     }
     pub(crate) fn visual_settings_open(&self) -> bool {
         self.settings.is_some()

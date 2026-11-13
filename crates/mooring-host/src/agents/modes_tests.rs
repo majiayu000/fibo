@@ -225,3 +225,26 @@ fn a_detail_wrapped_by_a_narrow_terminal_reads_whole() {
     );
     assert!(offers_session(&m.keys), "{}", m.keys);
 }
+
+#[test]
+fn claude_log_and_menu_share_permission_words() {
+    for mode in [
+        "default",
+        "acceptEdits",
+        "plan",
+        "auto",
+        "dontAsk",
+        "bypassPermissions",
+        "future",
+    ] {
+        assert_eq!(
+            card_words(Agent::Claude, mode),
+            super::super::permission::claude(mode).words,
+            "{mode}"
+        );
+    }
+    assert_eq!(
+        card_words(Agent::Claude, "manual"),
+        card_words(Agent::Claude, "default")
+    );
+}

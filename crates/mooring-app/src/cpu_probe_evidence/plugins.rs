@@ -153,6 +153,15 @@ pub(super) async fn run(
             (instructions() - ins) as f64 / 1e6,
         ));
     }
+    assert!(
+        !handle
+            .update(cx, |v, _, a| v.visual_settings_plugins_loaded(a))
+            .unwrap(),
+        "opening General read the unused plugin catalog"
+    );
+    out.push(format!(
+        "settings-open-samples (ms, M instructions): {opens:?}"
+    ));
     let first = opens[0];
     opens.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.total_cmp(&b.0)));
     let middle = opens[OPENS / 2];
@@ -180,9 +189,26 @@ pub(super) async fn run(
         "frames-settingsbase: {:.2} ms CPU, {:.2} M instructions",
         base.0, base.1
     ));
+    let (at, ins) = (Instant::now(), instructions());
     handle
         .update(cx, |v, _, a| v.visual_settings_show("插件", a))
         .unwrap();
+    cx.update_window(handle.into(), |_, w, a| {
+        w.refresh();
+        w.draw(a).clear(a);
+    })
+    .unwrap();
+    out.push(format!(
+        "settings-plugins-first-frame: {:.2} ms wall, {:.2} M instructions (catalog plus layout)",
+        at.elapsed().as_secs_f64() * 1000.,
+        (instructions() - ins) as f64 / 1e6
+    ));
+    assert!(
+        handle
+            .update(cx, |v, _, a| v.visual_settings_plugins_loaded(a))
+            .unwrap(),
+        "opening Plugins did not load its catalog"
+    );
     handle
         .update(cx, |v, _, cx| v.visual_plugins_grid(None, cx))
         .unwrap();

@@ -22,11 +22,12 @@ export function sort(machines: Machine[]) {
   const done: Item[] = [];
   for (const m of machines) {
     for (const c of m.cards) {
-      if (!c.agent || c.phase === 'shell') continue;
+      if (!c.agent) continue;
       const item = { m, c };
       // The host's 要你处理 (a 稍后提醒 whose hour is up counts), or something new to
       // answer, brings a settled conversation back.
       const answers = Boolean(c.needs_you || c.approval || c.phase === 'waiting');
+      if (c.outcome === 'abandoned' && !answers) continue;
       if (c.outcome === 'done' && !answers) done.push(item);
       else if (c.outcome === 'deferred' && !answers) later.push(item);
       else inbox.push(item);
@@ -237,8 +238,8 @@ export function offlineRows<T extends Linked>(machines: T[]): T[] {
 export const namesComputer = (machines: Linked[]) => machines.filter((m) => m.status === 'online').length > 1;
 
 /** What 撤销 puts back: where the conversation was before it was swiped. */
-export const undoTo = (c: Pick<Card, 'outcome'>): 'done' | 'deferred' | 'open' =>
-  c.outcome === 'done' || c.outcome === 'deferred' ? c.outcome : 'open';
+export const undoTo = (c: Pick<Card, 'outcome'>): 'done' | 'deferred' | 'abandoned' | 'open' =>
+  c.outcome === 'done' || c.outcome === 'deferred' || c.outcome === 'abandoned' ? c.outcome : 'open';
 
 /** Every conversation, 稍后提醒 and 已处理 too, narrowed to a space and to words in its title, space or directory. */
 export function searchCards(a: Arranged, query: string, space: string | null): Item[] {

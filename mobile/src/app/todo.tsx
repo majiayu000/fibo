@@ -78,7 +78,7 @@ export default function TodoScreen() {
             {todo.title}
           </Text>
           <Text style={{ fontSize: 13, color: t.dim }}>
-            {[todoSpace(m, todo), agentName(todo.agent), todo.created ? tr('记于 {when}', { when: ago(todo.created) }) : ''].filter(Boolean).join(' · ')}
+            {[todoSpace(m, todo), agentName(todo), todo.created ? tr('记于 {when}', { when: ago(todo.created) }) : ''].filter(Boolean).join(' · ')}
           </Text>
         </View>
         {!!todo.said && (

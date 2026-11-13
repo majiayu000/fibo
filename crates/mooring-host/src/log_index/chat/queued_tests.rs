@@ -81,3 +81,36 @@ fn a_stopped_turn_does_not_count_on_the_next_reply() {
     assert_eq!(rows.len(), 1);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// 2026-11-11 walk, the same bug with a long gap: a picture asked for 75 minutes after a
+/// stopped ping read 「干了 1 小时 15 分钟 · 跑了 1 个命令」. Also checks the last few calls.
+#[test]
+fn an_interruption_ends_the_stretch_even_without_an_assistant_reply() {
+    // Existing indexes already keep this explicit turn marker. No log replay is needed.
+    let (dir, i) = index(&[
+        (10, "user", "run ping"),
+        (14, "tool_call", PING),
+        (22, "turn", "Interrupted"),
+        (4523, "user", "read this picture"),
+        (4527, "assistant", "WALK 4217"),
+        (4530, "user", "run another command"),
+        (4531, "tool_call", PING),
+        (4535, "assistant", "done"),
+    ]);
+    let (all, _) = i.chat("p", 0, None, None, 50, true).unwrap();
+    let reply = all.iter().find(|m| m.at == 4527).unwrap();
+    let tools = reply.tools.as_ref().unwrap();
+    assert_eq!((tools.commands, tools.calls, tools.took), (0, 0, 4));
+    let seq = reply.seq;
+    // A page starting at this reply must use the same boundary as a whole page.
+    let (page, _) = i.chat("p", 0, None, Some(seq + 1), 1, true).unwrap();
+    assert_eq!(page[0].tools, reply.tools);
+    let (summary, rows, _) = i.tool_calls("p", Some(seq), None, 50).unwrap();
+    assert_eq!(summary.unwrap().calls, 0);
+    assert!(rows.is_empty());
+    let (_, rows, _) = i.last_tool_calls("p", Some(seq), 3).unwrap();
+    assert!(rows.is_empty());
+    let last = all.last().unwrap().tools.as_ref().unwrap();
+    assert_eq!((last.commands, last.took), (1, 5));
+    std::fs::remove_dir_all(dir).unwrap();
+}

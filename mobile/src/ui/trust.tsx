@@ -17,7 +17,7 @@ export function TrustAsk({ machine, card, can, place = '' }: { machine: string; 
   const [busy, setBusy] = useState(false);
   const settled = useSettled(`${card.trust?.folder}|${place}`);
   if (!card.trust) return null;
-  const words = trustWords(agentName(card.agent));
+  const words = trustWords(agentName(card));
   const answer = (yes: boolean) => {
     if (busy || !settled.passes()) return;
     setBusy(true);

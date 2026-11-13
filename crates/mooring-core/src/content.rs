@@ -164,6 +164,9 @@ pub struct Content {
     /// phone shows (`agents::claude`, `agents::codex`); empty when no log said.
     #[serde(default)]
     pub permission: String,
+    /// Semantic flag from the CLI; None means it has not been read.
+    #[serde(default)]
+    pub permission_full: Option<bool>,
 }
 /// A background shell the agent started and left running when its turn stopped.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

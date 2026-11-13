@@ -221,8 +221,9 @@ impl Adapter for Codex {
             if let Some(model) = p["model"].as_str() {
                 parser.card.model = model.to_owned();
             }
-            if let Some(words) = super::permission::codex(p) {
-                parser.card.permission = words;
+            if let Some(reading) = super::permission::codex(p) {
+                parser.card.permission = reading.words;
+                parser.card.permission_full = reading.full;
             }
             return;
         }

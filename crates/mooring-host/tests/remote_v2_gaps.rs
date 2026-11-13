@@ -416,8 +416,8 @@ fn usage_counts_each_reply_once_and_only_since_the_moment_asked() {
     assert_eq!(
         u["agents"],
         json!([
-            { "agent": "claude", "tokens": 10 + 6, "cached": 200 },
-            { "agent": "codex", "tokens": 30, "cached": 30 },
+            { "agent": "claude", "agent_name": "Claude Code", "tokens": 10 + 6, "cached": 200 },
+            { "agent": "codex", "agent_name": "Codex", "tokens": 30, "cached": 30 },
         ]),
         "{u}"
     );

@@ -190,15 +190,40 @@ fn wait_bars(waited: u64, hue: Hsla) -> gpui::Div {
         }))
 }
 
-pub(super) fn column_icon(column: Column) -> gpui::AnyElement {
-    animated_column_icon(column, false)
+impl Workbench {
+    pub(super) fn column_icon(
+        &self,
+        column: Column,
+        animate: bool,
+        cx: &Context<Self>,
+    ) -> gpui::AnyElement {
+        if column == Column::Running
+            && animate
+            && let Some(arc) =
+                self.turning_mark(Status::Running, "icons/arc.svg", HEAD_ICON, false, cx)
+        {
+            return div()
+                .relative()
+                .size(px(HEAD_ICON))
+                .flex_shrink_0()
+                .child(
+                    svg()
+                        .path("icons/ring.svg")
+                        .size(px(HEAD_ICON))
+                        .text_color(Status::Running.colors().0.opacity(0.25)),
+                )
+                .child(div().absolute().top_0().left_0().child(arc))
+                .into_any_element();
+        }
+        animated_column_icon(column, animate)
+    }
 }
 fn animated_column_icon(column: Column, animate: bool) -> gpui::AnyElement {
     let icon =
         |path: &'static str, color: Hsla| svg().path(path).size(px(HEAD_ICON)).text_color(color);
     let frame = || div().relative().size(px(HEAD_ICON)).flex_shrink_0();
     let overlay = |e: gpui::AnyElement| div().absolute().top_0().left_0().child(e);
-    if !animate && column == Column::Running {
+    if column == Column::Running {
         return frame()
             .child(icon(
                 "icons/ring.svg",
@@ -216,19 +241,7 @@ fn animated_column_icon(column: Column, animate: bool) -> gpui::AnyElement {
         Column::Todo => icon("icons/dashed.svg", T::color(T::muted())).into_any_element(),
         Column::Stale => icon("icons/dashed.svg", Status::Stale.colors().0).into_any_element(),
         Column::Review => icon("icons/half.svg", Status::Paused.colors().0).into_any_element(),
-        Column::Running => {
-            let hue = Status::Running.colors().0;
-            frame()
-                .child(icon("icons/ring.svg", hue.opacity(0.25)))
-                .child(overlay(
-                    icon("icons/arc.svg", hue)
-                        .with_transformation(Transformation::rotate(gpui::percentage(
-                            super::pace::phase(SPIN),
-                        )))
-                        .into_any_element(),
-                ))
-                .into_any_element()
-        }
+        Column::Running => unreachable!("handled above"),
         Column::Needs => {
             // A halo that grows from the target and fades, once per HALO.
             let hue = Status::Waiting.colors().0;
@@ -590,7 +603,6 @@ fn card_quote(text: impl Into<gpui::SharedString>) -> gpui::Div {
         .child(text.into())
 }
 /// One turn of the running column's arc, and one pass of a working card's comet.
-const SPIN: Duration = Duration::from_millis(1600);
 const SWEEP: Duration = Duration::from_millis(2400);
 /// One pulse of 要你处理's halo.
 const HALO: Duration = Duration::from_millis(2000);
