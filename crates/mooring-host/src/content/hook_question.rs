@@ -9,8 +9,10 @@ use std::sync::LazyLock;
 /// Claude versions and modes, so a plan gets no buttons: a phone shows the terminal and keys.
 static PLAN_STEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\s*)(\d+)[.)]\s+").unwrap());
 /// A plan is markdown, and a phone shows the card as plain words: `# 计划` and `**要点**`
-/// read as their marks (2026-11-10 walk), so the heading marks and bold go.
+/// read as their marks (2026-11-10 walk), so the heading marks and bold go; and the
+/// backticks round inline code (`` `epsilon` ``, 2026-11-12 walk). A fence line stays.
 static PLAN_HEADING: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\s*)#{1,6}\s+").unwrap());
+static PLAN_CODE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`\n]+)`").unwrap());
 pub(super) fn hook_question(v: &Value) -> Option<(String, Vec<String>)> {
     let name = v["tool_name"].as_str()?;
     let input = &v["tool_input"];
@@ -23,6 +25,7 @@ pub(super) fn hook_question(v: &Value) -> Option<(String, Vec<String>)> {
         let plan = plan
             .lines()
             .map(|l| PLAN_HEADING.replace(l, "${1}").replace("**", ""))
+            .map(|l| PLAN_CODE.replace_all(&l, "${1}").into_owned())
             .map(|l| PLAN_STEP.replace(&l, "${1}${2}、").into_owned())
             .collect::<Vec<_>>()
             .join("\n");

@@ -567,7 +567,7 @@ fn a_question_asked_through_the_permission_hook_keeps_its_question_and_choices()
     let bash = json!({"tool_name": "Bash", "tool_input": {"command": "ls"}});
     assert_eq!(hook_facts(&bash).question, None);
     // A plan to approve says what it is, and the plan; its menu is read off the terminal.
-    let plan = json!({"tool_name": "ExitPlanMode", "tool_input": {"plan": "# 建 hello.txt\n## Context\n1. 写入 **hi**\n  2) 读回来"}});
+    let plan = json!({"tool_name": "ExitPlanMode", "tool_input": {"plan": "# 建 hello.txt\n## Context\n1. 写入 **hi** 到 `hello.txt`\n  2) 读回来\n```sh\ncat a\n```"}});
     let (asked, choices) = hook_facts(&plan).question.unwrap();
     assert!(
         asked.starts_with("【计划】") && asked.contains("建 hello.txt"),
@@ -575,14 +575,15 @@ fn a_question_asked_through_the_permission_hook_keeps_its_question_and_choices()
     );
     // Its steps never read as numbered options a phone would turn into buttons.
     assert!(
-        asked.contains("1、写入 hi") && asked.contains("  2、读回来"),
+        asked.contains("1、写入 hi 到 hello.txt") && asked.contains("  2、读回来"),
         "{asked}"
     );
     // Markdown marks a phone would show as they are: no `#` or `**`, the words stay.
     assert!(
         asked.contains("\n建 hello.txt\nContext\n")
             && !asked.contains('#')
-            && !asked.contains("**"),
+            && !asked.contains("**")
+            && asked.contains("\n```sh\ncat a\n```"),
         "{asked}"
     );
     assert!(choices.is_empty());
