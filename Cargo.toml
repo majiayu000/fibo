@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/mooring-platform", "crates/mooring-core", "crates/mooring-host", "crates/mooring-remote", "crates/mooring-relay", "crates/mooring-app", "crates/mooring-plugin-host"]
-default-members = ["crates/mooring-platform", "crates/mooring-core", "crates/mooring-host", "crates/mooring-remote", "crates/mooring-relay"]
+members = ["crates/fibo-platform", "crates/fibo-core", "crates/fibo-host", "crates/fibo-remote", "crates/fibo-relay", "crates/fibo-app", "crates/fibo-plugin-host"]
+default-members = ["crates/fibo-platform", "crates/fibo-core", "crates/fibo-host", "crates/fibo-remote", "crates/fibo-relay"]
 exclude = [".deps/zed", ".deps/libghostty-rs", "plugins"]
 
 [workspace.dependencies]

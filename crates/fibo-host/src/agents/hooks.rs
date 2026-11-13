@@ -1,0 +1,499 @@
+//! Installing the host's hook into a CLI's own settings. One command serves every CLI and
+//! every Fibo: it reads the host from the terminal's environment and does nothing
+//! outside a Fibo terminal, so it is installed once and never rewritten per build.
+use super::{adapter, Hooks};
+use fibo_core::{model::Agent, protocol::HOOK_ENV};
+use serde_json::{json, Map, Value};
+use std::{fs, io, path::Path};
+
+/// The settings entry, recognised again by `HOOK_ENV` alone. It reads the payload, hands it
+/// to the host in the background and returns at once: the CLI waits on some hooks (a prompt
+/// is not sent until UserPromptSubmit returns), and the host's reply is never needed.
+/// Terminals opened before the rename to Mooring carry only the old variable, so it is the
+/// fallback: an Agent started there later still reports.
+pub fn command(agent: Agent) -> String {
+    let old = fibo_core::legacy::old_name(HOOK_ENV).unwrap_or_default();
+    format!(
+        "h=\"${{{HOOK_ENV}:-${old}}}\"; [ -n \"$h\" ] || exit 0; p=$(cat); (printf '%s' \"$p\" | \"$h\" hook --agent {} >/dev/null 2>&1 &); exit 0",
+        agent.executable()
+    )
+}
+/// The one event whose output the CLI adds to the conversation: starting, resuming or
+/// compacting. The rest stay silent and in the background.
+const TOLD_AT: &str = "SessionStart";
+/// `command`, for the entry at `event`. What the Agent is told lives in the binary, so
+/// changing it never rewrites the user's settings; a build without it says nothing.
+pub fn command_at(agent: Agent, event: &str) -> String {
+    let base = command(agent);
+    if event != TOLD_AT {
+        return base;
+    }
+    let told = "\"$h\" --skill session 2>/dev/null; exit 0";
+    base.strip_suffix("exit 0")
+        .map(|start| format!("{start}{told}"))
+        .unwrap_or(base)
+}
+/// Seconds the CLI may wait on our entry; it returns at once, so this only bounds a stuck shell.
+const TIMEOUT: u64 = 5;
+fn ours(entry: &Value) -> bool {
+    entry["command"].as_str().is_some_and(|c| {
+        // Entries written before the rename test the old name; they are replaced.
+        let old = fibo_core::legacy::old_name(HOOK_ENV).unwrap_or_default();
+        c.contains(HOOK_ENV) || c.contains(&old)
+    })
+}
+pub fn target(agent: Agent, home: &Path) -> io::Result<Hooks> {
+    adapter(agent).hooks(home).ok_or_else(|| {
+        io::Error::other(t!(
+            "{agent} 不需要 Hook：它的进程或文件已能说明对话",
+            agent = agent.name()
+        ))
+    })
+}
+pub(crate) fn read(path: &Path) -> io::Result<Map<String, Value>> {
+    match fs::read(path) {
+        Ok(bytes) if bytes.iter().all(u8::is_ascii_whitespace) => Ok(Map::new()),
+        Ok(bytes) => match serde_json::from_slice(&bytes).map_err(io::Error::other)? {
+            Value::Object(map) => Ok(map),
+            _ => Err(io::Error::other(t!("settings 不是 JSON 对象，未改动"))),
+        },
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Map::new()),
+        Err(e) => Err(e),
+    }
+}
+/// How the entries of ours compare with what `install` would write now.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Status {
+    Current,
+    /// Ours, but not as `install` writes them now: one line per kind of difference.
+    Outdated(Vec<String>),
+    Missing,
+}
+/// Current when every event has exactly one entry of ours, written as `install` writes it
+/// now. Reads the one settings file and never writes it.
+pub fn status(agent: Agent, hooks: &Hooks) -> io::Result<Status> {
+    let settings = Value::Object(read(&hooks.settings)?);
+    // (event, its group's matcher, the entry) for every entry of ours.
+    let mut found = vec![];
+    for (event, groups) in settings["hooks"].as_object().into_iter().flatten() {
+        for group in groups.as_array().into_iter().flatten() {
+            for entry in group["hooks"].as_array().into_iter().flatten() {
+                if ours(entry) {
+                    found.push((event.as_str(), group["matcher"].as_str(), entry));
+                }
+            }
+        }
+    }
+    if found.is_empty() {
+        return Ok(Status::Missing);
+    }
+    let count = |event: &str| found.iter().filter(|(e, ..)| *e == event).count();
+    let changed: Vec<_> = found
+        .iter()
+        .filter(|(event, .., entry)| entry["command"] != command_at(agent, event).as_str())
+        .collect();
+    let mut differs = vec![];
+    note(
+        &mut differs,
+        t!("缺少事件"),
+        hooks
+            .events
+            .iter()
+            .filter(|e| count(e) == 0)
+            .map(|e| e.to_string()),
+    );
+    note(
+        &mut differs,
+        t!("重复"),
+        hooks
+            .events
+            .iter()
+            .filter(|e| count(e) > 1)
+            .map(|e| t!("{e} 有 {n} 条", e, n = count(e))),
+    );
+    note(
+        &mut differs,
+        t!("多余的事件"),
+        found
+            .iter()
+            .filter(|(e, ..)| !hooks.events.contains(e))
+            .map(|(e, ..)| e.to_string()),
+    );
+    note(
+        &mut differs,
+        t!("命令和现在要写的不同"),
+        changed.iter().map(|(e, ..)| e.to_string()),
+    );
+    note(
+        &mut differs,
+        t!("指向的路径不存在"),
+        changed
+            .iter()
+            .flat_map(|(.., entry)| absent_paths(entry["command"].as_str().unwrap_or(""))),
+    );
+    // Claude reads an empty matcher or `*` as every case; anything else drops some.
+    note(
+        &mut differs,
+        t!("限定了 matcher，会漏掉事件"),
+        found.iter().filter_map(|(e, matcher, _)| {
+            let m = matcher.filter(|m| !m.is_empty() && *m != "*")?;
+            Some(t!("{e}（{m}）", e, m))
+        }),
+    );
+    note(
+        &mut differs,
+        &t!("超时不是 {secs} 秒", secs = TIMEOUT),
+        found
+            .iter()
+            .filter(|(.., entry)| entry["timeout"] != TIMEOUT)
+            .map(|(e, ..)| e.to_string()),
+    );
+    Ok(if differs.is_empty() {
+        Status::Current
+    } else {
+        Status::Outdated(differs)
+    })
+}
+/// Adds `kind：a、b` with each item once, in first-seen order; nothing when there are none.
+fn note(differs: &mut Vec<String>, kind: &str, items: impl Iterator<Item = String>) {
+    let mut seen: Vec<String> = vec![];
+    for item in items {
+        if !seen.contains(&item) {
+            seen.push(item);
+        }
+    }
+    if !seen.is_empty() {
+        let sep = t!("、");
+        differs.push(t!("{kind}：{items}", kind, items = seen.join(sep)));
+    }
+}
+/// Absolute paths a command names that are not on disk, such as an old build's binary.
+fn absent_paths(command: &str) -> Vec<String> {
+    command
+        .split(|c: char| c.is_whitespace() || ";|&()<>=".contains(c))
+        .map(|word| word.trim_matches(|c| c == '\'' || c == '"'))
+        .filter(|word| word.starts_with('/') && !Path::new(word).exists())
+        .map(str::to_owned)
+        .collect()
+}
+/// Drops our entries (and groups left empty by that) from every event, keeping the rest.
+fn strip(settings: &mut Map<String, Value>) -> bool {
+    let Some(Value::Object(events)) = settings.get_mut("hooks") else {
+        return false;
+    };
+    let mut changed = false;
+    for groups in events.values_mut() {
+        let Some(groups) = groups.as_array_mut() else {
+            continue;
+        };
+        for group in groups.iter_mut() {
+            if let Some(entries) = group.get_mut("hooks").and_then(Value::as_array_mut) {
+                let before = entries.len();
+                entries.retain(|e| !ours(e));
+                changed |= entries.len() != before;
+            }
+        }
+        groups.retain(|g| g["hooks"].as_array().is_none_or(|e| !e.is_empty()));
+    }
+    events.retain(|_, groups| groups.as_array().is_none_or(|g| !g.is_empty()));
+    if events.is_empty() {
+        settings.remove("hooks");
+    }
+    changed
+}
+fn write(path: &Path, settings: &Map<String, Value>) -> io::Result<()> {
+    let mut text = serde_json::to_string_pretty(settings).map_err(io::Error::other)?;
+    text.push('\n');
+    fibo_platform::fs::replace_file(path, text.as_bytes()).map(|_| ())
+}
+/// Returns whether the file changed. Outdated entries of ours are replaced, not added to.
+pub fn install(agent: Agent, hooks: &Hooks) -> io::Result<bool> {
+    if status(agent, hooks)? == Status::Current {
+        return Ok(false);
+    }
+    let mut settings = read(&hooks.settings)?;
+    strip(&mut settings);
+    let events = settings
+        .entry("hooks")
+        .or_insert_with(|| Value::Object(Map::new()))
+        .as_object_mut()
+        .ok_or_else(|| io::Error::other(t!("settings 里的 hooks 不是对象，未改动")))?;
+    for event in hooks.events {
+        let groups = events
+            .entry(*event)
+            .or_insert_with(|| Value::Array(vec![]))
+            .as_array_mut()
+            .ok_or_else(|| io::Error::other(t!("hooks.{event} 不是数组，未改动", event = event)))?;
+        groups.push(json!({
+            "hooks": [{ "type": "command", "command": command_at(agent, event), "timeout": TIMEOUT }]
+        }));
+    }
+    write(&hooks.settings, &settings)?;
+    Ok(true)
+}
+pub fn uninstall(hooks: &Hooks) -> io::Result<bool> {
+    let mut settings = read(&hooks.settings)?;
+    if !strip(&mut settings) {
+        return Ok(false);
+    }
+    write(&hooks.settings, &settings)?;
+    Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn target(dir: &Path) -> Hooks {
+        Hooks {
+            settings: dir.join("settings.json"),
+            events: &["SessionStart", "Stop"],
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installing_and_removing_keep_a_private_linked_settings_file_as_it_was() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let hooks = target(&dir);
+        let dotfiles = dir.join("dotfiles.json");
+        fs::write(&dotfiles, r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"sk-test"}}"#).unwrap();
+        fs::set_permissions(&dotfiles, fs::Permissions::from_mode(0o600)).unwrap();
+        symlink(&dotfiles, &hooks.settings).unwrap();
+        let unchanged = |what: &str| {
+            let link = fs::symlink_metadata(&hooks.settings).unwrap();
+            assert!(link.is_symlink(), "{what} replaced the link");
+            let mode = fs::metadata(&dotfiles).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600, "{what} widened the permissions");
+        };
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        unchanged("install");
+        let written = fs::read_to_string(&dotfiles).unwrap();
+        assert!(written.contains(HOOK_ENV) && written.contains("sk-test"));
+        assert!(uninstall(&hooks).unwrap());
+        unchanged("uninstall");
+        assert!(!fs::read_to_string(&dotfiles).unwrap().contains(HOOK_ENV));
+    }
+
+    #[test]
+    fn only_session_start_speaks_and_a_build_without_the_words_stays_silent() {
+        let told = command_at(Agent::Claude, "SessionStart");
+        assert!(
+            told.contains("--skill session 2>/dev/null; exit 0"),
+            "{told}"
+        );
+        assert!(
+            told.contains("hook --agent claude >/dev/null 2>&1 &"),
+            "{told}"
+        );
+        assert_eq!(command_at(Agent::Claude, "Stop"), command(Agent::Claude));
+    }
+
+    #[test]
+    fn an_entry_from_before_session_start_spoke_is_outdated_and_install_replaces_it() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let hooks = target(&dir);
+        let entry = json!([{ "hooks": [{ "type": "command", "command": command(Agent::Claude), "timeout": TIMEOUT }] }]);
+        fs::write(
+            &hooks.settings,
+            json!({ "hooks": { "SessionStart": entry, "Stop": entry } }).to_string(),
+        )
+        .unwrap();
+        assert!(matches!(
+            status(Agent::Claude, &hooks).unwrap(),
+            Status::Outdated(_)
+        ));
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        let written: Value = serde_json::from_slice(&fs::read(&hooks.settings).unwrap()).unwrap();
+        assert_eq!(
+            written["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+            command_at(Agent::Claude, "SessionStart").as_str()
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn install_adds_one_entry_per_event_and_keeps_everything_else_in_order() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let hooks = target(&dir);
+        let mine = r#"{"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"remem summarize"}]}]},"alwaysThinkingEnabled":true}"#;
+        fs::write(&hooks.settings, mine).unwrap();
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Missing);
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        // A second install is a no-op, not a second entry.
+        assert!(!install(Agent::Claude, &hooks).unwrap());
+        let text = fs::read_to_string(&hooks.settings).unwrap();
+        let v: Value = serde_json::from_str(&text).unwrap();
+        let keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, ["model", "hooks", "alwaysThinkingEnabled"]);
+        assert_eq!(
+            v["hooks"]["Stop"][0]["hooks"][0]["command"],
+            "remem summarize"
+        );
+        assert_eq!(
+            v["hooks"]["Stop"][1]["hooks"][0]["command"],
+            command(Agent::Claude)
+        );
+        assert_eq!(v["hooks"]["SessionStart"].as_array().unwrap().len(), 1);
+        assert!(uninstall(&hooks).unwrap());
+        let v: Value = serde_json::from_str(&fs::read_to_string(&hooks.settings).unwrap()).unwrap();
+        assert_eq!(
+            v,
+            serde_json::from_str::<Value>(mine).unwrap(),
+            "uninstall restores the user's own settings"
+        );
+        assert!(!uninstall(&hooks).unwrap());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_missing_file_is_created_and_a_malformed_one_is_left_alone() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        let hooks = target(&dir.join("nested"));
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        fs::write(&hooks.settings, "[1,2]").unwrap();
+        assert!(install(Agent::Claude, &hooks).is_err());
+        assert_eq!(fs::read_to_string(&hooks.settings).unwrap(), "[1,2]");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_drifted_entry_is_named_by_what_differs_and_only_install_rewrites_it() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let hooks = target(&dir);
+        // An older build: a fixed binary path, a matcher, a longer timeout, an event since
+        // dropped, and SessionStart never written.
+        let old =
+            format!("[ -n \"${HOOK_ENV}\" ] || exit 0; exec '/gone/mooring' hook --agent claude");
+        let drifted = json!({"hooks": {
+            "Stop": [{"matcher": "startup", "hooks": [{"type": "command", "command": old, "timeout": 30}]}],
+            "PreToolUse": [{"hooks": [{"type": "command", "command": command(Agent::Claude), "timeout": 5}]}],
+            "SessionEnd": [{"hooks": [{"type": "command", "command": "remem summarize"}]}],
+        }});
+        let text = serde_json::to_string_pretty(&drifted).unwrap();
+        fs::write(&hooks.settings, &text).unwrap();
+        let Status::Outdated(differs) = status(Agent::Claude, &hooks).unwrap() else {
+            panic!("drifted entries read as outdated");
+        };
+        assert_eq!(
+            differs,
+            [
+                "缺少事件：SessionStart",
+                "多余的事件：PreToolUse",
+                "命令和现在要写的不同：Stop",
+                "指向的路径不存在：/gone/mooring",
+                "限定了 matcher，会漏掉事件：Stop（startup）",
+                "超时不是 5 秒：Stop",
+            ]
+        );
+        assert_eq!(
+            fs::read_to_string(&hooks.settings).unwrap(),
+            text,
+            "status only reads"
+        );
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        let v: Value = serde_json::from_str(&fs::read_to_string(&hooks.settings).unwrap()).unwrap();
+        assert_eq!(v["hooks"]["SessionEnd"], drifted["hooks"]["SessionEnd"]);
+        assert!(v["hooks"].get("PreToolUse").is_none());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn entries_written_under_the_old_name_are_ours_and_replaced() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        let hooks = target(&dir);
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        // As Keepline wrote them: the same entries, testing KEEPLINE_HOOK.
+        let ours = fs::read_to_string(&hooks.settings).unwrap();
+        fs::write(
+            &hooks.settings,
+            ours.replace("MOORING_HOOK", "KEEPLINE_HOOK"),
+        )
+        .unwrap();
+        assert!(matches!(
+            status(Agent::Claude, &hooks).unwrap(),
+            Status::Outdated(_)
+        ));
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        let now = fs::read_to_string(&hooks.settings).unwrap();
+        assert_eq!(now, ours, "replaced, not kept beside");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_doubled_entry_is_outdated_and_install_leaves_one() {
+        let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
+        let hooks = target(&dir);
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        let mut v: Value =
+            serde_json::from_str(&fs::read_to_string(&hooks.settings).unwrap()).unwrap();
+        let again = v["hooks"]["Stop"][0].clone();
+        v["hooks"]["Stop"].as_array_mut().unwrap().push(again);
+        fs::write(&hooks.settings, v.to_string()).unwrap();
+        assert_eq!(
+            status(Agent::Claude, &hooks).unwrap(),
+            Status::Outdated(vec!["重复：Stop 有 2 条".into()])
+        );
+        assert!(install(Agent::Claude, &hooks).unwrap());
+        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_command_is_a_no_op_outside_a_mooring_terminal() {
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", &command(Agent::Claude)])
+            .env_remove(HOOK_ENV)
+            .env_remove("KEEPLINE_HOOK")
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        assert!(out.stdout.is_empty() && out.stderr.is_empty());
+    }
+
+    #[test]
+    fn a_terminal_from_before_the_rename_still_reports() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("kl-hookcall-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let (fake, got) = (dir.join("fake-host"), dir.join("got"));
+        fs::write(
+            &fake,
+            format!("#!/bin/sh\necho \"$@\" > '{}'\n", got.display()),
+        )
+        .unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+        // Only the old variable, as in a terminal the Keepline host opened.
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", &command(Agent::Claude)])
+            .env_remove(HOOK_ENV)
+            .env("KEEPLINE_HOOK", &fake)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        // The fake host runs in the background; a loaded machine can take seconds to start it.
+        for _ in 0..1000 {
+            // The shell creates the file before it writes to it.
+            if fs::read_to_string(&got).is_ok_and(|said| said.ends_with('\n')) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert_eq!(
+            fs::read_to_string(&got).unwrap().trim(),
+            "hook --agent claude"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+}

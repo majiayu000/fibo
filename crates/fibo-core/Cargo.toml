@@ -1,0 +1,19 @@
+[package]
+name = "fibo-core"
+version = "0.1.2"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+uuid = { version = "1", features = ["v4"] }
+serde.workspace = true
+serde_json.workspace = true
+regex = "1"
+fibo-platform = { path = "../fibo-platform" }
+sha2 = "0.10"
+rustc-hash = "2"
+ed25519-dalek = "2"
+getrandom = "0.3"
+libghostty-vt.workspace = true
+similar = { version = "3.2.1", default-features = false, features = ["std"] }

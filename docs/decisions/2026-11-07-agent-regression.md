@@ -47,9 +47,9 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   python3 scripts/check-agent-clis.py /tmp/mooring-agent-evidence
 
 # 迭代时只运行相关用例。
-cargo test -p mooring-host --test agent_cli_contracts
-cargo test -p mooring-host --test more_agent_adapters daemon_discovers
-cargo clippy -p mooring-host -p mooring-core -p mooring-remote --all-targets -- -D warnings
+cargo test -p fibo-host --test agent_cli_contracts
+cargo test -p fibo-host --test more_agent_adapters daemon_discovers
+cargo clippy -p fibo-host -p fibo-core -p fibo-remote --all-targets -- -D warnings
 cargo fmt --all --check
 ```
 

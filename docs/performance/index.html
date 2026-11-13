@@ -43,7 +43,7 @@
 <body>
 <main>
 <h1>界面性能：测量、规则与门禁</h1>
-<p class="sub">Mooring 窗口进程（mooring-app）和后台（mooring serve）的性能指南。来源：2026-11-03 至 11-04 的优化与门禁工作。改界面、加视图、碰窗格观察或排版前先读「规则」；门禁报警时读「排查流程」。</p>
+<p class="sub">Mooring 窗口进程（fibo-app）和后台（mooring serve）的性能指南。来源：2026-11-03 至 11-04 的优化与门禁工作。改界面、加视图、碰窗格观察或排版前先读「规则」；门禁报警时读「排查流程」。</p>
 
 <nav><b>目录</b>
 <ol>
@@ -78,7 +78,7 @@
 <table>
   <tr><th>工具</th><th>用途</th></tr>
   <tr><td><code>scripts/perf-fixture.py prepare RUN_DIR BIN [N] [T] [SPIN]</code></td><td>在本轮独立的 RUN_DIR 造测试工作区（不调模型、不碰用户数据）。无论成功或失败，最后执行 <code>perf-fixture.py stop RUN_DIR</code>；后台先退出时也会清理已记录的测试进程组。<code>NORUN=1</code> 不留在跑的回合，时钟不会触发侧栏</td></tr>
-  <tr><td><code>perf-fixture.py probe RUN_DIR BIN OUT 阶段</code></td><td>跑窗口 CPU 探针。需要 <code>cargo build --release -p mooring-host -p mooring-app --features mooring-app/visual-test</code></td></tr>
+  <tr><td><code>perf-fixture.py probe RUN_DIR BIN OUT 阶段</code></td><td>跑窗口 CPU 探针。需要 <code>cargo build --release -p fibo-host -p fibo-app --features fibo-app/visual-test</code></td></tr>
   <tr><td>探针阶段 <code>frames-pane</code></td><td>只通知窗格的帧 ×300（终端输出的真实情况）</td></tr>
   <tr><td>探针阶段 <code>frames-main</code> / <code>frames-overview</code></td><td>强制整窗重画 ×300</td></tr>
   <tr><td>探针阶段 <code>frames-plugins</code></td><td>设置 › 插件：打开设置、动画卡片静止和播放（16 个动画各走完整个过程，取最贵的）；背景图和半透明主题下的终端帧；播放时复用的页面和重画的页面逐像素比对；静止时有没有请求下一帧</td></tr>
@@ -118,7 +118,7 @@
 <div class="card rule"><b>R8 一小块要连续动时，不要让整页跟着重排。</b><code>request_animation_frame</code> 通知的是当前视图和它所有祖先，整页会每帧重新排版。把动的部分放进单独的小视图画在上层，播放期间让页面当缓存视图（<code>workbench/complete/stage.rs</code> 的 <code>Player</code>，<code>settings/overlay.rs</code>）。动画卡片这样从每帧 79 M 降到 12 M。</div>
 
 <h2 id="gate">5. 性能门禁</h2>
-<p>CI 任务「Window performance gate」（<code>.github/workflows/ci.yml</code>），和 Rust 检查并行跑，单独编一份探针版 release，约 8 分钟。脚本 <code>scripts/perf-gate.py</code>，基线 <code>crates/mooring-app/perf-baseline.txt</code>。</p>
+<p>CI 任务「Window performance gate」（<code>.github/workflows/ci.yml</code>），和 Rust 检查并行跑，单独编一份探针版 release，约 8 分钟。脚本 <code>scripts/perf-gate.py</code>，基线 <code>crates/fibo-app/perf-baseline.txt</code>。</p>
 <table>
   <tr><th>检查</th><th>失败条件</th><th>拦的是什么</th></tr>
   <tr><td>终端帧、整窗重画的指令数</td><td>超基线 15%</td><td>任何变慢（真机）</td></tr>
@@ -179,7 +179,7 @@
   <li><b>把设计内的晚一帧当差异</b>：标签栏溢出提示本就晚一帧，比对前要先让那一帧画出来。</li>
   <li><b>整理提交时 <code>git reset --soft main</code></b>：如果 main 已被其他会话推进，工作区相对新 main 会显得在撤销别人的改动。正确做法是 <code>git rebase main</code>，或从原起点导出自己的补丁再套用。</li>
   <li><b>测试文件超过 800 行</b>：VibeGuard 只允许变短；改断言时要同时压缩周围代码。</li>
-  <li><strong>一堆 8192K 的「owned unmapped (graphics)」不是我们的缓存</strong>：进程第一次用渲染通道，Metal 驱动分配 28 块 8 MB；第一次用 blit，再加 20 块。一个几十行的最小 Metal 程序也一样，<code>MTLDevice.currentAllocatedSize</code> 不计入，和窗口大小、会话数无关。所以正常帧不能用 blit 编码器，<code>crates/mooring-core/tests/gpui_present.rs</code> 守着。</li>
+  <li><strong>一堆 8192K 的「owned unmapped (graphics)」不是我们的缓存</strong>：进程第一次用渲染通道，Metal 驱动分配 28 块 8 MB；第一次用 blit，再加 20 块。一个几十行的最小 Metal 程序也一样，<code>MTLDevice.currentAllocatedSize</code> 不计入，和窗口大小、会话数无关。所以正常帧不能用 blit 编码器，<code>crates/fibo-core/tests/gpui_present.rs</code> 守着。</li>
 </ul>
 
 <p><b>防门禁空转要写成断言。</b>插件页门禁第一次跑就报「旧纸主题没生效」：探针把浅色主题设到了深色一侧，主题根本没换，数字却很好看。背景图的 CPU 开销本来就小（一张贴图），光看数字分不出来。凡是「数字很好」的测量，都要断言被测的东西确实发生了。</p>

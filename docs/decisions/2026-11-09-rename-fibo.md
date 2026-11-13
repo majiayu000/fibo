@@ -20,7 +20,7 @@ decision-makers: 用户
 
 - 不改 crate、模块和程序文件名。包里的程序还是 `mooring`，`fibo`（和以前的 `keepline`、`keeplined`）是指向它的链接：老终端的 `MOORING_HOOK` 路径和代码里找 `mooring` 的地方都不用动。开发构建另有一个小程序 `fibo`，转给旁边的 `mooring`。
 - 不把 `MOORING_*` 换成 `FIBO_*`。hook 条目仍然测 `$MOORING_HOOK`：老后台开的终端在后台交接后还活着，环境里只有 `MOORING_*`，换成 `$FIBO_HOOK` 会让这些终端的 hook 悄悄失效。程序拿到的环境另外带上 `FIBO_*`（和 `KEEPLINE_*` 一样由 `legacy::with_old_names` 加），启动时 `FIBO_*` 也会被收进 `MOORING_*`。
-- 不改手机端连接的加密字符串、中继路径 `/keepline`、报告标签 `<mooring from=…>`、插件清单里的 `"mooring"` 级别字段、签名过的官方插件目录、`~/.local/share/mooring/sources`、Codex skill 目录 `~/.codex/skills/mooring`、GitHub 仓库名。
+- 不改手机端连接的加密字符串、中继路径 `/keepline`、报告标签 `<fibo from=…>`、插件清单里的 `"mooring"` 级别字段、签名过的官方插件目录、`~/.local/share/mooring/sources`、Codex skill 目录 `~/.codex/skills/mooring`、GitHub 仓库名。
 - 这次不改手机 App 和 Windows 安装包的名字（要真机和 Windows 机器验）。
 
 ## Consequences
@@ -32,17 +32,17 @@ decision-makers: 用户
 
 ## Implementation Plan
 
-- `crates/mooring-core/src/legacy.rs`：`other_names`、`with_old_names` 加 `FIBO_*`，`adopt_old_env` 先收 `FIBO_*` 再收 `KEEPLINE_*`，`move_old_config` 依次搬 `mooring`、`keepline`，`runtime_dir` 先找 `fibo-workbench`，再找 `mooring-workbench`、`keepline-workbench`。
-- `crates/mooring-core/src/cli_entry.rs`：PATH 上放 `fibo` 和 `mooring` 两个链接。
-- `crates/mooring-core/src/update/`：`BUNDLE_ID`、`OLD_BUNDLE_ID`、资产名、cask。
+- `crates/fibo-core/src/legacy.rs`：`other_names`、`with_old_names` 加 `FIBO_*`，`adopt_old_env` 先收 `FIBO_*` 再收 `KEEPLINE_*`，`move_old_config` 依次搬 `mooring`、`keepline`，`runtime_dir` 先找 `fibo-workbench`，再找 `mooring-workbench`、`keepline-workbench`。
+- `crates/fibo-core/src/cli_entry.rs`：PATH 上放 `fibo` 和 `mooring` 两个链接。
+- `crates/fibo-core/src/update/`：`BUNDLE_ID`、`OLD_BUNDLE_ID`、资产名、cask。
 - `package-macos.py`、`scripts/release-macos.py`：Fibo.app、`fibo` 链接、包标识、版本号取自 crate。
 - 避免：在代码里把裸的 `"mooring"` 换成 `"fibo"`，它是程序文件名；按 `mooring serve` 找后台进程的地方要同时认 `fibo serve`（`main.rs` 的 pkill）。
 
 ## Verification
 
 ```sh
-cargo test -p mooring-core legacy:: update:: cli_entry::
-cargo test -p mooring-host cli_setup:: pty::
+cargo test -p fibo-core legacy:: update:: cli_entry::
+cargo test -p fibo-host cli_setup:: pty::
 python3 package-macos.py --sign-identity - --output target/bundle/Fibo.app
 target/bundle/Fibo.app/Contents/MacOS/fibo --version
 target/bundle/Fibo.app/Contents/MacOS/mooring --version
@@ -58,3 +58,7 @@ target/bundle/Fibo.app/Contents/MacOS/mooring --version
 
 - 用户原话：「我觉得 Fibo 非常不错。」「先用 fibo.page 吧，如果不错我再买 fibo.sh」。
 - 重开条件：Fibo 遇到商标异议，或用户买了 fibo.sh 要换主域名（只改 README 和官网链接）。
+
+## 2026-11-13 追加
+
+「不改 crate、模块和程序文件名」被 [2026-11-13-rename-files-fibo.md](2026-11-13-rename-files-fibo.md) 推翻：用户要求文件名也改。`MOORING_*` 等兼容项仍不动。

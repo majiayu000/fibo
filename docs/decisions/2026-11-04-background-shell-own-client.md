@@ -98,16 +98,16 @@ Codex 的 hook 不报后台 shell，它上报的 `working` 也不分任务和服
 
 ## Implementation Plan
 
-* **Affected paths**: `crates/mooring-host/src/background_shells.rs`（`judge`、`Sockets`、`known_cases`），`crates/mooring-host/src/shell_log.rs`（重启后从日志找回命令），`crates/mooring-host/src/cli_commands.rs`、`crates/mooring-host/src/host/found_shells.rs`（Codex），状态归类仍只在 `crates/mooring-core/src/status.rs`。
+* **Affected paths**: `crates/fibo-host/src/background_shells.rs`（`judge`、`Sockets`、`known_cases`），`crates/fibo-host/src/shell_log.rs`（重启后从日志找回命令），`crates/fibo-host/src/cli_commands.rs`、`crates/fibo-host/src/host/found_shells.rs`（Codex），状态归类仍只在 `crates/fibo-core/src/status.rs`。
 * **Patterns to follow**: 探测结果只叠加在快照上（`Background.jobs`），状态只由 `status::of` 判定；每次规则改动都先加案例。
 * **Patterns to avoid**: 不要退回只数 shell 个数；不要按命令文字判断；不要用「shell 外面包了一层脚本」判断，`npm run dev` 也是这样。
 
 ### Verification
 
-- [ ] `cargo test -p mooring-host --lib background_shells`：`known_cases` 是案例表，`a_real_script_using_its_own_port_differs_from_a_server_with_an_outside_client` 用真实进程验证。
-- [ ] `cargo test -p mooring-host --test managed_session codex_background`：假 Codex 接管后还在跑、开端口的算等后台。
-- [ ] `cargo test -p mooring-host --lib shell_log a_job_a_subagent`：子 Agent 的日志（含工作流那层）和 Monitor 的写法都找得回，真实进程下仍是任务。
-- [ ] `cargo test -p mooring-host --test managed_session restart_binding`：判定之前的一步，新宿主要先找到安静 Agent 的进程，否则这些规则根本轮不到。
+- [ ] `cargo test -p fibo-host --lib background_shells`：`known_cases` 是案例表，`a_real_script_using_its_own_port_differs_from_a_server_with_an_outside_client` 用真实进程验证。
+- [ ] `cargo test -p fibo-host --test managed_session codex_background`：假 Codex 接管后还在跑、开端口的算等后台。
+- [ ] `cargo test -p fibo-host --lib shell_log a_job_a_subagent`：子 Agent 的日志（含工作流那层）和 Monitor 的写法都找得回，真实进程下仍是任务。
+- [ ] `cargo test -p fibo-host --test managed_session restart_binding`：判定之前的一步，新宿主要先找到安静 Agent 的进程，否则这些规则根本轮不到。
 
 ## Alternatives
 

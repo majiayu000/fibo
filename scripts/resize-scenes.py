@@ -3,7 +3,7 @@
 
   python3 scripts/resize-scenes.py BIN_DIR OUT
 
-BIN_DIR must contain mooring and mooring-app built with mooring-app/visual-test.
+BIN_DIR must contain fibo and fibo-app built with fibo-app/visual-test.
 Any assertion, timeout, missing completion marker or process failure fails the run.
 """
 import json
@@ -59,7 +59,7 @@ def main():
                'CLAUDE_CONFIG_DIR': str(root / 'home/.claude'),
                'MOORING_RESIZE_EVIDENCE': '1', 'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1'}
         with (out / 'host.log').open('w') as log:
-            host = subprocess.Popen([str(binaries / 'mooring'), 'serve', '--runtime', str(runtime)],
+            host = subprocess.Popen([str(binaries / 'fibo'), 'serve', '--runtime', str(runtime)],
                                     env=env, stdout=log, stderr=subprocess.STDOUT)
             try:
                 deadline = time.monotonic() + 30
@@ -80,7 +80,7 @@ def main():
                     'id': 'resize', 'space': 'resize', 'title': 'Resize regression',
                     'default_task': None, 'layout': tree}}}}})
                 with (out / 'app.log').open('w') as app_log:
-                    run = subprocess.run([str(binaries / 'mooring-app'), '--runtime', str(runtime),
+                    run = subprocess.run([str(binaries / 'fibo-app'), '--runtime', str(runtime),
                         '--visual-evidence', str(out)], env=env, stdout=app_log,
                         stderr=subprocess.STDOUT, timeout=180)
                 assert run.returncode == 0, f'native resize regression failed; see {out / "app.log"}'

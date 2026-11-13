@@ -25,11 +25,11 @@
 
 ### G1 · 分组规则收进 core（README 批次 4 之前；修 A2、A3）
 
-- 新增 core 的分组函数（`status.rs` 当前 574 行，放进新文件 `crates/mooring-core/src/status_group.rs`），覆盖看板列（要你处理 / 在跑 / 停下了 / 很久没动 / 做完了）、侧栏桶、侧栏排序层级。
+- 新增 core 的分组函数（`status.rs` 当前 574 行，放进新文件 `crates/fibo-core/src/status_group.rs`），覆盖看板列（要你处理 / 在跑 / 停下了 / 很久没动 / 做完了）、侧栏桶、侧栏排序层级。
 - 以下几处改为调用这个函数：`workbench/board.rs` 的 `column_of`、`workbench/board/remote.rs` 的 `remote_column`、`workbench/sidebar_list.rs` 的 `bucket`、`workbench/sidebar.rs` 的 `sidebar_rank`。删掉 `sidebar.rs` 自己那份 `NEEDS_YOU` 常量，它漏了「等后台」。
 - `app/src/model/session_state.rs` 的 `session_space` 移到 core 的 `Workspace`。`host/src/remote.rs` 组远程卡片时改用它，不再用终端的 `t.space`。
 - 远程协议的 `Card` 增加算好的 `column` 字段。手机 `mobile/src/app/board.tsx` 和桌面 `remote_column` 只读这个字段，同时删掉 `mobile/src/ui/status.ts` 里按 `phase` 猜状态的兜底。
-- `crates/mooring-core/tests/one_owner.rs` 增加对照：对 `sample::every_state()`，本机看板列、远程卡片的 `column`、侧栏桶三者一致。
+- `crates/fibo-core/tests/one_owner.rs` 增加对照：对 `sample::every_state()`，本机看板列、远程卡片的 `column`、侧栏桶三者一致。
 
 ### G2 · `Pane` 字段分组（单独排期，不卡拆分）
 

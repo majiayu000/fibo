@@ -146,7 +146,7 @@
   }
 
   /* ---------- 完成动画里的字符表情 ----------
-     帧表、时间点和周围的字符照 App 里的写法（mooring-core 的 face.rs、mooring-app 的 complete/cozy.rs）：
+     帧表、时间点和周围的字符照 App 里的写法（fibo-core 的 face.rs、fibo-app 的 complete/cozy.rs）：
      每帧是 [左眼, 嘴, 右眼, 毫秒, 乱码进场]，一轮 3 秒，笑了以后变暖色，最后缩小变绿回到侧栏那一行。 */
   const stage = $('.motion .stage');
   if (stage) {

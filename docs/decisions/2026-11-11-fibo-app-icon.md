@@ -13,7 +13,7 @@ decision-makers: majiayu000
 ## 决定
 
 - 设置 › 外观 › 应用图标多一个「Fibo 标志」，排第一，没选过的人默认是它。存过「系泊环」「二次元」「吉祥物」的人保持原样，存过的值不迁移。
-- Dock：`assets/Mooring.icon` 的两层换成渐变底和 f 加点，仍经 actool 编译，避免 macOS 26 套底板；`assets/Mooring.icns` 由同一张图按苹果网格（1024 里占 824）生成，只给旧系统。运行时的 Dock 图 `dock-fibo.png` 和标题栏图 `title-fibo.png` 也出自这份 SVG。
+- Dock：`assets/Fibo.icon` 的两层换成渐变底和 f 加点，仍经 actool 编译，避免 macOS 26 套底板；`assets/Fibo.icns` 由同一张图按苹果网格（1024 里占 824）生成，只给旧系统。运行时的 Dock 图 `dock-fibo.png` 和标题栏图 `title-fibo.png` 也出自这份 SVG。
 - 托盘：模板图画 f 加点，在线时有点，连不上后台时去掉点（以前是去掉方桩）。f 的轮廓从 SVG 路径转成 `native.m` 里的 `F_MARK` 数据，不另画。
 
 不做：不删系泊环、二次元、吉祥物；不改 og.png。
@@ -25,7 +25,7 @@ decision-makers: majiayu000
 
 ## 验证
 
-- `cargo test -p mooring-app app_icon`：没存过、存了不认识的值都回到 Fibo 标志，存过系泊环保持系泊环。
+- `cargo test -p fibo-app app_icon`：没存过、存了不认识的值都回到 Fibo 标志，存过系泊环保持系泊环。
 - 设置 › 关于里显示的图标，应和 Dock 上的一样。
 
 ## 否掉的
@@ -35,4 +35,4 @@ decision-makers: majiayu000
 
 ## 更多
 
-取代 [系泊环](2026-11-05-mooring-ring-icon.md)。
+取代 [系泊环](2026-11-05-ring-icon.md)。

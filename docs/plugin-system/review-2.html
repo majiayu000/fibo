@@ -169,7 +169,7 @@ ol li,ul li{margin:4px 0}
 
 <h2>验证记录</h2>
 <div class="box">
-<p><b>已验：</b>下面的探针都在临时 HOME、配置目录和 runtime 里跑，用的是 <code>target/release/mooring</code>（构建晚于这些插件代码的最后一次改动 <code>e0742f2</code>），或直接链接 <code>mooring-core</code> 调真实加载器。所有输出都亲眼看过。</p>
+<p><b>已验：</b>下面的探针都在临时 HOME、配置目录和 runtime 里跑，用的是 <code>target/release/fibo</code>（构建晚于这些插件代码的最后一次改动 <code>e0742f2</code>），或直接链接 <code>fibo-core</code> 调真实加载器。所有输出都亲眼看过。</p>
 <p><b>没验：</b>标了「源码」的条目没有在真实 App 里点过，包括 F02 的两个按钮和 F11 的后台行为；F25 的卡顿程度没量；App 和 CLI 同时装卸、替换目录时崩溃，都没做故障注入；真实 webhook 没发过。Codex 也没有跑当前 HEAD 的端到端，它的条目都由 Claude 复核，复核方式见依据列。</p>
 <p><b>相邻情况：</b>hook 和装饰的进程组、quota 的代际已确认没问题，所以没有重复报。setup 的 F13、F14 是实跑；quota 同样的写法只读了源码，没跑。</p>
 </div>

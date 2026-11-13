@@ -1,6 +1,6 @@
 name: Windows check
 
-# The crates that already run on Windows, on Windows: what they and mooring-platform promise
+# The crates that already run on Windows, on Windows: what they and fibo-platform promise
 # (docs/platform/index.html). Not a required check yet (docs/decisions/2026-11-06-main-requires-ci.md),
 # so red here shows and blocks nothing. Another platform's implementation files do not start
 # it: they are not compiled here. A file of its own: ci.yml is part of the macOS cache key, and
@@ -10,20 +10,20 @@ on:
     branches:
       - main
     paths:
-      - crates/mooring-platform/**
-      - crates/mooring-core/**
-      - crates/mooring-remote/**
-      - crates/mooring-relay/**
-      - crates/mooring-plugin-host/**
-      - crates/mooring-host/**
-      - crates/mooring-app/**
+      - crates/fibo-platform/**
+      - crates/fibo-core/**
+      - crates/fibo-remote/**
+      - crates/fibo-relay/**
+      - crates/fibo-plugin-host/**
+      - crates/fibo-host/**
+      - crates/fibo-app/**
       - Cargo.lock
       - rust-toolchain.toml
       - bootstrap.sh
       - .github/workflows/platform-windows.yml
-      - '!crates/mooring-platform/src/**/unix.rs'
-      - '!crates/mooring-platform/src/**/macos.rs'
-      - '!crates/mooring-platform/src/**/linux.rs'
+      - '!crates/fibo-platform/src/**/unix.rs'
+      - '!crates/fibo-platform/src/**/macos.rs'
+      - '!crates/fibo-platform/src/**/linux.rs'
   workflow_dispatch:
 
 concurrency:
@@ -64,18 +64,18 @@ jobs:
         run: sh bootstrap.sh
 
       - name: Clippy
-        run: cargo clippy -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --all-targets -- -D warnings
+        run: cargo clippy -p fibo-platform -p fibo-core -p fibo-remote -p fibo-relay -p fibo-plugin-host --all-targets -- -D warnings
 
       - name: Cargo test
-        run: cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
+        run: cargo test -p fibo-platform -p fibo-core -p fibo-remote -p fibo-relay -p fibo-plugin-host --no-fail-fast
 
       # The host's own tests still assume Unix; this much says it builds and works here.
       - name: Clippy on the host
-        run: cargo clippy -p mooring-host --lib --bins -- -D warnings
+        run: cargo clippy -p fibo-host --lib --bins -- -D warnings
 
       # The window compiles here; nobody has looked at it on a screen in CI.
       - name: Clippy on the window app
-        run: cargo clippy -p mooring-app --bins -- -D warnings
+        run: cargo clippy -p fibo-app --bins -- -D warnings
 
       - name: A real terminal through the host
-        run: cargo test -p mooring-host --test terminal_chain
+        run: cargo test -p fibo-host --test terminal_chain

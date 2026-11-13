@@ -23,7 +23,7 @@ decision-makers: majiayu000
 
 ## 验证
 
-`cargo test -p mooring-host --lib store::tests::the_workbench_db_commits_with_synchronous_normal`
+`cargo test -p fibo-host --lib store::tests::the_workbench_db_commits_with_synchronous_normal`
 
 ## 重开条件
 

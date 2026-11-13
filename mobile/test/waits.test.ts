@@ -1,5 +1,5 @@
 // Every way an Agent can wait on you gets a way forward on the phone. The waits are the
-// host's own list (crates/mooring-core/assets/reasons.json): one added there fails here until
+// host's own list (crates/fibo-core/assets/reasons.json): one added there fails here until
 // it has a sample below and the phone's answer to it is decided (2026-11-08: a question the
 // phone could not read left 「等你回答」 and Esc, and the conversation stuck).
 import { describe, expect, test } from 'bun:test';
@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { sendBlocked, waitView } from '../src/ui/waits';
 
 type Rule = { id: string; kind: string; match: string };
-const rules: Rule[] = JSON.parse(readFileSync(new URL('../../crates/mooring-core/assets/reasons.json', import.meta.url), 'utf8')).rules ?? [];
+const rules: Rule[] = JSON.parse(readFileSync(new URL('../../crates/fibo-core/assets/reasons.json', import.meta.url), 'utf8')).rules ?? [];
 
 /** What the host puts in `waiting` for each, as written by the code or CLI that says it. */
 const SAMPLES: Record<string, string> = {

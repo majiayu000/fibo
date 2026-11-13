@@ -70,7 +70,7 @@ def main():
                 subprocess.run(FIXTURE + ['prepare', str(root), str(bindir), '2000', '60', '4'], env=env,
                                           check=True, capture_output=True, text=True)
                 home = root / 'home'
-                config = home / '.config/mooring'
+                config = home / '.config/fibo'
                 config.mkdir(parents=True, exist_ok=True)
                 if plugin:
                     shutil.copytree(ROOT / 'plugins' / plugin, config / 'plugins' / plugin)
@@ -102,7 +102,7 @@ def main():
             finally:
                 subprocess.run(FIXTURE + ['stop', str(root)], check=True)
             cpu = float(re.search(r'([\d.]+)% of a core', live).group(1))
-            shown = fronts.count('mooring-app') / max(len(fronts), 1)
+            shown = fronts.count('fibo-app') / max(len(fronts), 1)
             server_gpu = used.get('server', float('nan'))
             seen[name][0].append(cpu)
             if shown >= 0.9:

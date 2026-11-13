@@ -42,10 +42,10 @@ decision-makers: 用户、Codex
 
 ## Verification
 
-- `cargo test -p mooring-core --test shared_quota --test guard --test file_size`
-- `cargo test -p mooring-platform shell::tests`
-- `cargo test -p mooring-host --bin mooring remote::list`
-- `cargo clippy --workspace --all-targets --features mooring-app/visual-test -- -D warnings`
+- `cargo test -p fibo-core --test shared_quota --test guard --test file_size`
+- `cargo test -p fibo-platform shell::tests`
+- `cargo test -p fibo-host --bin mooring remote::list`
+- `cargo clippy --workspace --all-targets --features fibo-app/visual-test -- -D warnings`
 - `cd mobile && bun test && bun run typecheck`
 - 原生 `frames-turning` 检查像素变化、侧栏缓存、栏头/抽屉、关闭开关和减少动效；完整 `scripts/perf-gate.py` 检查帧成本。
 - 手机须按 `docs/phone-app/walkthrough.md` 在安装新构建后走完整清单；本地单测不能替代这一步。

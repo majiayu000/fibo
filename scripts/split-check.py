@@ -22,10 +22,10 @@ BASE = pathlib.Path(__file__).resolve().parents[1]
 CACHE = pathlib.Path.home() / 'Library/Caches/MooringVisual'
 XCODE = '/Applications/Xcode.app/Contents/Developer'
 ENV = {**os.environ, 'LIBGHOSTTY_VT_SYS_OPTIMIZE': 'ReleaseFast', **({'DEVELOPER_DIR': XCODE} if os.path.isdir(XCODE) else {})}
-APP_MANIFEST = 'crates/mooring-app/Cargo.toml'
+APP_MANIFEST = 'crates/fibo-app/Cargo.toml'
 SPLIT = 'refactor(split):'
 # Files a split commit may touch besides Rust sources.
-BOOKKEEPING = {'crates/mooring-core/tests/file-size-baseline.txt', 'crates/mooring-core/tests/guard-baseline.txt', 'docs/file-split/README.md'}
+BOOKKEEPING = {'crates/fibo-core/tests/file-size-baseline.txt', 'crates/fibo-core/tests/guard-baseline.txt', 'docs/file-split/README.md'}
 
 
 def git(*args, cwd=BASE):
@@ -131,7 +131,7 @@ def compare(before, after):
 def audit(args):
     commits = git('log', '--reverse', '--no-merges', '--format=%H\t%s', f'{args.base}..{args.end}').splitlines()
     problems, done = [], 0
-    big = {l.split('\t')[0] for l in git('show', f'{args.base}:crates/mooring-core/tests/file-size-baseline.txt').splitlines()}
+    big = {l.split('\t')[0] for l in git('show', f'{args.base}:crates/fibo-core/tests/file-size-baseline.txt').splitlines()}
     for line in commits:
         sha, subject = line.split('\t', 1)
         files = git('diff', '--no-renames', '--name-only', f'{sha}^', sha).splitlines()
@@ -150,7 +150,7 @@ def audit(args):
             return out
         changed, lost, gained = compare(tree(f'{sha}^'), tree(sha))
         other = [f for f in files if not f.endswith('.rs') and f not in BOOKKEEPING]
-        new = [f for f in files if f.startswith(('crates/mooring-app/src/terminal/pane', 'crates/mooring-app/src/desktop')) and f.endswith('.rs')]
+        new = [f for f in files if f.startswith(('crates/fibo-app/src/terminal/pane', 'crates/fibo-app/src/desktop')) and f.endswith('.rs')]
         if changed or lost or gained or other:
             problems.append(sha)
             print(f'READ {sha[:9]} {subject}')
@@ -162,16 +162,16 @@ def audit(args):
             print(f'ok   {sha[:9]} {subject}')
         if new:
             # The list is in the theme's tests, wherever a split of its own put them.
-            listed = git('grep', '-h', '"terminal/', args.end, '--', 'crates/mooring-app/src/ui') + git('grep', '-h', '"desktop.rs"', args.end, '--', 'crates/mooring-app/src/ui')
+            listed = git('grep', '-h', '"terminal/', args.end, '--', 'crates/fibo-app/src/ui') + git('grep', '-h', '"desktop.rs"', args.end, '--', 'crates/fibo-app/src/ui')
             for f in new:
-                short = f.removeprefix('crates/mooring-app/src/')
+                short = f.removeprefix('crates/fibo-app/src/')
                 if git('cat-file', '-t', f'{args.end}:{f}').strip() == 'blob' and f'"{short}"' not in listed and not short.endswith('_tests.rs'):
                     problems.append(sha)
                     print(f'TRAP {short}: not in the color guard list in ui/theme.rs')
     # MOORING_GUARD_UPDATE turns a guard green whatever moved, so its totals are checked here.
     def totals(rev):
         counts = collections.Counter()
-        for row in git('show', f'{rev}:crates/mooring-core/tests/guard-baseline.txt').splitlines():
+        for row in git('show', f'{rev}:crates/fibo-core/tests/guard-baseline.txt').splitlines():
             kind, _, n = row.split('\t')
             counts[kind] += int(n)
         return counts
@@ -231,14 +231,14 @@ def step(out, name, cmd, cwd, env=ENV, timeout=2400):
 def scene(bin_dir, name, value, out):
     root = pathlib.Path(tempfile.mkdtemp(prefix='sc-', dir='/tmp'))
     try:
-        for d in ('home', 'cfg/mooring', 'claude'):
+        for d in ('home', 'cfg/fibo', 'claude'):
             (root / d).mkdir(parents=True)
         (root / 'rt').mkdir(mode=0o700)
         out.mkdir(parents=True, exist_ok=True)
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(root / 'home'), 'XDG_CONFIG_HOME': str(root / 'cfg'), 'CLAUDE_CONFIG_DIR': str(root / 'claude'),
                'CODEX_HOME': str(root / 'home/.codex'), 'LANG': 'en_US.UTF-8', 'SHELL': '/bin/zsh', 'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', f'MOORING_{name}_EVIDENCE': value}
         try:
-            p = subprocess.run([str(bin_dir / 'mooring-app'), '--runtime', str(root / 'rt'), '--visual-evidence', str(out)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace', timeout=240)
+            p = subprocess.run([str(bin_dir / 'fibo-app'), '--runtime', str(root / 'rt'), '--visual-evidence', str(out)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace', timeout=240)
             code, log = p.returncode, p.stdout
         except subprocess.TimeoutExpired as e:
             code, log = 'timeout', (e.stdout or b'').decode(errors='replace')
@@ -362,23 +362,23 @@ def measure(args):
         for name, cmd, cwd in (
             ('fmt', ['cargo', 'fmt', '--check'], work),
             ('clippy', ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'], work),
-            ('check-visual', ['cargo', 'check', '-p', 'mooring-app', '--all-targets', *visual], work),
+            ('check-visual', ['cargo', 'check', '-p', 'fibo-app', '--all-targets', *visual], work),
             ('ci-test', ['sh', 'ci-test.sh'], work),
-            ('app-visual', ['cargo', 'test', '-p', 'mooring-app', *visual, '--no-fail-fast'], work),
+            ('app-visual', ['cargo', 'test', '-p', 'fibo-app', *visual, '--no-fail-fast'], work),
             ('mobile-install', ['bun', 'install', '--frozen-lockfile'], work / 'mobile'),
             ('mobile-test', ['bun', 'test'], work / 'mobile'),
             ('mobile-types', ['bun', 'run', 'typecheck'], work / 'mobile'),
             ('protocol', [sys.executable, '-I', 'check.py'], work / 'eval/protocol-contract'),
-            ('build-release', ['cargo', 'build', '--release', '-p', 'mooring-host', '-p', 'mooring-app', '--features', 'mooring-app/visual-test'], work),
+            ('build-release', ['cargo', 'build', '--release', '-p', 'fibo-host', '-p', 'fibo-app', '--features', 'fibo-app/visual-test'], work),
             ('perf-gate', None, work),
             ('theme-scenes', [sys.executable, 'scripts/theme-scenes.py', 'target/release', str(out / 'theme-scenes')], work),
         ):
             r[name] = perf_step(out, work) if name == 'perf-gate' else step(out, name, cmd, cwd)
-        for name, cmd in (('default', ['cargo', 'test', '--workspace', '--', '--list']), ('visual-test', ['cargo', 'test', '-p', 'mooring-app', *visual, '--', '--list'])):
+        for name, cmd in (('default', ['cargo', 'test', '--workspace', '--', '--list']), ('visual-test', ['cargo', 'test', '-p', 'fibo-app', *visual, '--', '--list'])):
             step(out, f'list-{name}', cmd, work)
         names = [f'default\t{n}' for n in test_names(out / 'list-default.log')] + [f'visual-test\t{n}' for n in test_names(out / 'list-visual-test.log')]
         (out / 'tests.txt').write_text('\n'.join(sorted(names)) + '\n')
-    step(out, 'build-debug', ['cargo', 'build', '-p', 'mooring-host', '-p', 'mooring-app', '--features', 'mooring-app/visual-test'], work)
+    step(out, 'build-debug', ['cargo', 'build', '-p', 'fibo-host', '-p', 'fibo-app', '--features', 'fibo-app/visual-test'], work)
     r['scenes'] = scenes(work, out, set(args.only.split(',')) if args.only else None, args.fixture_from)
     (out / 'measure.json').write_text(json.dumps(r, indent=1, ensure_ascii=False))
     stop_processes(f'{work}/target/')  # hosts a failed fixture run left behind

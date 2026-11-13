@@ -3,7 +3,7 @@
 
     python3 scripts/i18n-wrap.py <file.rs>... [--dry-run]
 
-What it does, per file (the same literals crates/mooring-core/tests/i18n.rs counts):
+What it does, per file (the same literals crates/fibo-core/tests/i18n.rs counts):
 - "中文"                    -> t!("中文")
 - format!("共 {n} 个")       -> t!("共 {n} 个", n)
 - format!("{} 个", a.len()) -> t!("{len} 个", len = a.len())
@@ -11,7 +11,7 @@ What it does, per file (the same literals crates/mooring-core/tests/i18n.rs coun
 Anything it cannot rewrite safely (a literal in a `const`, a `match` pattern, a format! it
 cannot parse) is left as it is and listed as SKIP. Then it prints every t! key in the file
 that has no English yet, as TOML lines with an empty value to fill in, and appends them to
-nothing: copy them into a crates/mooring-core/locales/en/<area>.toml yourself.
+nothing: copy them into a crates/fibo-core/locales/en/<area>.toml yourself.
 
 Read the diff afterwards. A string the code compares or stores (matched against an Agent's
 screen, written to a file) is data, not UI: put it back, or mark it not_ui!("…").
@@ -254,7 +254,7 @@ def english(key):
 
 def load_table():
     table = {}
-    d = os.path.join(ROOT, "crates/mooring-core/locales/en")
+    d = os.path.join(ROOT, "crates/fibo-core/locales/en")
     for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
         if not f.endswith(".toml"):
             continue

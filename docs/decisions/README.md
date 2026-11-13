@@ -8,6 +8,7 @@
 
 | 日期 | 决定 | 状态 |
 |---|---|---|
+| 2026-11-13 | [文件、crate 和程序也改名 Fibo；旧名字留成链接](2026-11-13-rename-files-fibo.md) | 采用 |
 | 2026-11-11 | [中断结束统计区间；计划正文从 CLI 自己的记录定位](2026-11-11-phone-turn-boundaries.md) | 采用 |
 | 2026-11-11 | [同一功能的规则由现有所有者提供](2026-11-11-shared-feature-rules.md) | 采用 |
 | 2026-11-11 | [App 图标换成 Fibo 标志：f 加金点，晚霞渐变底](2026-11-11-fibo-app-icon.md) | 采用 |
@@ -15,7 +16,7 @@
 | 2026-11-10 | [分隔条按两侧窗格确认身份](2026-11-10-divider-identity.md) | 采用 |
 | 2026-11-10 | [Hook 不静默安装：欢迎页默认勾选随启动装，设置 › 通用是它的家](2026-11-10-hook-with-first-start.md) | 采用 |
 | 2026-11-10 | [性能测试各自记录并清理进程](2026-11-10-perf-fixture-cleanup.md) | 采用 |
-| 2026-11-09 | [对外改名 Fibo；内部名字和 `MOORING_*` 不动](2026-11-09-rename-fibo.md) | 采用 |
+| 2026-11-09 | [对外改名 Fibo；内部名字和 `MOORING_*` 不动](2026-11-09-rename-fibo.md) | 内部名字部分被 [2026-11-13](2026-11-13-rename-files-fibo.md) 推翻 |
 | 2026-11-09 | [「后台连接断开」只说连接；识别状态不再借用它](2026-11-09-cut-off-means-the-link.md) | 采用 |
 | 2026-11-08 | [发布版从 GitHub Releases 自己更新，换包靠改名，终端靠后台交接](2026-11-08-self-update.md) | 采用 |
 | 2026-11-08 | [手机主页：等你验收排在在跑上面](2026-11-08-review-above-running.md) | 采用 |
@@ -35,7 +36,7 @@
 | 2026-11-03 | [后台 shell 一律算等后台](2026-11-03-count-background-shells-as-waiting.md) | 被取代 |
 | 2026-11-03 | [后台 shell 按监听端口分任务和服务](2026-11-03-split-background-shells-by-listening-port.md) | 采用 |
 | 2026-11-04 | [后台 shell：脚本自己连的端口不算服务，规则和真实案例记在这一处](2026-11-04-background-shell-own-client.md) | 采用 |
-| 2026-11-05 | [第一版图标用系泊环，信号黄加墨色](2026-11-05-mooring-ring-icon.md) | 被取代 |
+| 2026-11-05 | [第一版图标用系泊环，信号黄加墨色](2026-11-05-ring-icon.md) | 被取代 |
 | 2026-11-05 | [工作台主库改 synchronous=NORMAL](2026-11-05-workbench-db-synchronous-normal.md) | 采用 |
 | 2026-11-05 | [本地 main 只跟随远端](2026-11-05-local-main-follows-origin.md) | 采用，推送方式已改 |
 | 2026-11-06 | [main 必须走 PR 且 CI 通过](2026-11-06-main-requires-ci.md) | 采用 |

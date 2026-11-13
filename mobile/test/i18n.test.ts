@@ -86,7 +86,7 @@ test('a quota window named mid-line starts lower-case in English, unchanged in C
 
 test('every state word the computer can send has English on the phone', async () => {
   // Core spells them (`Status::label`, the todo states' `label`); the phone only says them.
-  const core = readFileSync(join(import.meta.dir, '../../crates/mooring-core/src/status.rs'), 'utf8');
+  const core = readFileSync(join(import.meta.dir, '../../crates/fibo-core/src/status.rs'), 'utf8');
   const labels = [...core.matchAll(/pub fn label\(self\)[^{]*\{([\s\S]*?)\n {4}\}/g)]
     .flatMap((m) => [...m[1].matchAll(/t!\("([^"#]+)"\)/g)].map((x) => x[1]));
   expect(labels).toContain('在跑');

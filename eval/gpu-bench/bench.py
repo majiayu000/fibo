@@ -1,4 +1,4 @@
-"""GPU / CPU cost of the Mooring client under fixed terminal workloads, beside Ghostty.
+"""GPU / CPU cost of the Fibo client under fixed terminal workloads, beside Ghostty.
 
 Isolated fixture daemon, /bin/sh workloads only (no Agents, no real runtime). Per-process GPU
 time is read from the AGX user clients' accumulatedGPUTime in ioreg; CPU from proc_pid_rusage.
@@ -10,7 +10,7 @@ import argparse, ctypes, glob, json, os, pathlib, re, shutil, socket, struct, su
 HERE = pathlib.Path(__file__).resolve().parent
 NEXT = HERE.parents[1]
 ap = argparse.ArgumentParser()
-ap.add_argument('--app', default=str(NEXT / 'target/release/mooring-app'))
+ap.add_argument('--app', default=str(NEXT / 'target/release/fibo-app'))
 ap.add_argument('--scenes', default='idle,hidden4,vis1,vis4,flood')
 ap.add_argument('--ghostty', action='store_true')
 ap.add_argument('--secs', type=float, default=15)
@@ -89,7 +89,7 @@ class Fixture:
         self.host.terminate(); self.host.wait(5)
         # The app takes the terminals over into its own detached host, which outlives both
         # the app and the fixture and keeps every workload loop running.
-        pattern = f'mooring serve --runtime {self.root}( |$)'
+        pattern = f'(mooring|fibo) serve --runtime {self.root}( |$)'
         for sig, wait in ((15, 50), (9, 20)):
             pids = [int(p) for p in subprocess.run(['pgrep', '-f', pattern], capture_output=True, text=True).stdout.split()]
             if not pids: return
@@ -115,7 +115,7 @@ SCENES = {
     'mixed':   (lambda: split(split(leaf('v0'), leaf('v1'), 'Down'), split(leaf('v2'), leaf('v3'), 'Down')), None, {'v0': IDLE, 'v1': SPIN, 'v2': SPIN, 'v3': SPIN}),
 }
 
-def run_mooring(scene):
+def run_fibo(scene):
     shown, hidden, scripts = SCENES[scene]
     fx = Fixture()
     home = fx.root / 'home'; home.mkdir()
@@ -172,8 +172,8 @@ def run_ghostty(scene):
 (HERE / 'out').mkdir(exist_ok=True)
 results = {}
 for scene in args.scenes.split(','):
-    results[f'mooring/{scene}'] = run_mooring(scene)
-    print(f'mooring {scene:8} {results[f"mooring/{scene}"]}', flush=True)
+    results[f'fibo/{scene}'] = run_fibo(scene)
+    print(f'fibo {scene:8} {results[f"fibo/{scene}"]}', flush=True)
     if args.ghostty:
         g = run_ghostty(scene)
         if g:

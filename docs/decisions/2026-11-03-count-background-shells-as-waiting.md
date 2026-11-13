@@ -21,7 +21,7 @@ Claude 回合结束后，还可能留着后台 shell。最早一律算「在跑�
 
 ## Implementation Plan
 
-* **Affected paths**: `crates/mooring-core` 的状态判定（`status::of`）。
+* **Affected paths**: `crates/fibo-core` 的状态判定（`status::of`）。
 
 ### Verification
 

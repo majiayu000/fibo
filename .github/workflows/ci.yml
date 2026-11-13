@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 jobs:
-  mooring:
+  workbench:
     name: Workbench Rust checks
     runs-on: macos-latest
     permissions:
@@ -102,7 +102,7 @@ jobs:
       # Neither clippy nor the tests turn on visual-test or build examples/, so that code broke
       # unnoticed (docs/file-split/README.md, 陷阱 4、5).
       - name: Clippy app with visual-test (incl. examples)
-        run: cargo clippy -p mooring-app --all-targets --features visual-test -- -D warnings
+        run: cargo clippy -p fibo-app --all-targets --features visual-test -- -D warnings
 
       # managed_session runs real terminals against wall-clock limits; its failed cases get
       # one retry each, every other failure fails the step (see ci-test.sh).
@@ -113,7 +113,7 @@ jobs:
       # the optional performance job. Compilation alone does not exercise its events.
       - name: Native split resize and tab geometry regressions
         run: |
-          cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
+          cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test
           python3 scripts/resize-scenes.py target/debug target/resize-scenes
           python3 scripts/tab-scenes.py target/debug target/tab-scenes
 
@@ -190,12 +190,12 @@ jobs:
         run: sh bootstrap.sh
 
       - name: Build the probe
-        run: cargo build --release -p mooring-host -p mooring-app --features mooring-app/visual-test
+        run: cargo build --release -p fibo-host -p fibo-app --features fibo-app/visual-test
 
       - name: Performance fixture cleanup regression
         run: python3 -I scripts/test_perf_fixture.py target/release
 
-      # Instructions per frame against crates/mooring-app/perf-baseline.txt, pixel checks
+      # Instructions per frame against crates/fibo-app/perf-baseline.txt, pixel checks
       # of each redraw, and no catch-up loop (see the script's header).
       - name: Window performance gate
         run: python3 scripts/perf-gate.py target/release target/perf-gate
@@ -229,7 +229,7 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      # Also checks the app against crates/mooring-remote/vectors/v1.json.
+      # Also checks the app against crates/fibo-remote/vectors/v1.json.
       - name: Bun test
         run: bun test
 
@@ -244,22 +244,22 @@ jobs:
 
       # The image docs/relay/self-host.md tells people to build; built here, not pushed.
       - name: Build the relay image
-        run: docker build -f crates/mooring-relay/Dockerfile -t mooring-relay:ci .
+        run: docker build -f crates/fibo-relay/Dockerfile -t fibo-relay:ci .
 
       - name: The image starts and passes its own health check
         run: |
-          docker run --rm mooring-relay:ci --version
-          docker run -d --name relay -p 127.0.0.1:8787:8787 mooring-relay:ci
+          docker run --rm fibo-relay:ci --version
+          docker run -d --name relay -p 127.0.0.1:8787:8787 fibo-relay:ci
           for i in $(seq 20); do curl -fs 127.0.0.1:8787/healthz && break; sleep 1; done
           curl -fs 127.0.0.1:8787/healthz | grep -q '"ok":true'
-          docker exec relay mooring-relay --check
+          docker exec relay fibo-relay --check
 
       - name: Take the binary out of the image
         run: |
-          docker create --name out mooring-relay:ci
-          docker cp out:/usr/local/bin/mooring-relay mooring-relay-linux-x86_64
+          docker create --name out fibo-relay:ci
+          docker cp out:/usr/local/bin/fibo-relay fibo-relay-linux-x86_64
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mooring-relay-linux-x86_64
-          path: mooring-relay-linux-x86_64
+          name: fibo-relay-linux-x86_64
+          path: fibo-relay-linux-x86_64

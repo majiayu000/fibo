@@ -28,8 +28,8 @@ decision-makers: 用户、Codex
 
 ## Verification
 
-- `cargo test -p mooring-host --lib`：旧索引、整页与分页首条回复、中断后的下一轮、排队消息、首次空计划、Write 后落盘、重启、审批 Hook、路径来源。
-- `cargo test -p mooring-core --test guard --test file_size --test i18n`
+- `cargo test -p fibo-host --lib`：旧索引、整页与分页首条回复、中断后的下一轮、排队消息、首次空计划、Write 后落盘、重启、审批 Hook、路径来源。
+- `cargo test -p fibo-core --test guard --test file_size --test i18n`
 - 真手机证据另存 `~/Documents/claude-pages/fibo/2026-11-11-phone-regressions-fixed/`，完整清单按 `docs/phone-app/walkthrough.md` 单独报告，不用单测代替。
 
 ## Alternatives

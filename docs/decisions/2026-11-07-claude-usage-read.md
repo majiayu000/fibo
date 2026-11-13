@@ -38,10 +38,10 @@ Mooring 的 Claude 额度只来自状态栏：Claude 不刷新状态栏就不更
 
 ## Implementation Plan
 
-受影响：`crates/mooring-host/src/agents/claude_quota/`（`mooring claude-quota status|usage|setup|teardown`）、`plugins/claude-quota`（不再带脚本，`versions/0.1.3` 留给旧 App）、`crates/mooring-core/src/quota.rs`、`quota_merge.rs`、插件级别 8。
+受影响：`crates/fibo-host/src/agents/claude_quota/`（`mooring claude-quota status|usage|setup|teardown`）、`plugins/claude-quota`（不再带脚本，`versions/0.1.3` 留给旧 App）、`crates/fibo-core/src/quota.rs`、`quota_merge.rs`、插件级别 8。
 
 Windows：解析和设置都是 Rust，时区库打包进去，但没有在 Windows 上跑过；host 进 Windows CI 之前，这些测试只在 macOS 和 Linux 跑。
 
 ## Verification
 
-`crates/mooring-host/tests/claude_quota.rs` 用假 `claude` 真跑程序，`agents/claude_quota/usage_text_tests.rs` 用真实输出测解析，`quota_merge::tests` 管合并。
+`crates/fibo-host/tests/claude_quota.rs` 用假 `claude` 真跑程序，`agents/claude_quota/usage_text_tests.rs` 用真实输出测解析，`quota_merge::tests` 管合并。

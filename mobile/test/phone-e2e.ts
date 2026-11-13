@@ -1,5 +1,5 @@
 // The phone client against a real machine, run by the Rust test
-// `the_js_phone_client_chats_through_a_real_relay` (mooring-host/tests/managed_session.rs):
+// `the_js_phone_client_chats_through_a_real_relay` (fibo-host/tests/managed_session.rs):
 //   bun test/phone-e2e.ts '<pairing link>' <terminal>
 // Prints one JSON line of what it saw; the Rust side asserts on it and on the terminal.
 import { Remote } from '../src/remote/client';

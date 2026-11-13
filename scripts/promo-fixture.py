@@ -4,7 +4,7 @@
 Same machinery as visual-fixture.py (private HOME and runtime, synthetic logs, no model calls,
 credentials or user data), but the sessions, spaces and terminal screens read as a day of work
 on an English-speaking team, so screenshots can be shown to strangers. Needs a debug build with
-visual tests: `cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test`.
+visual tests: `cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test`.
 
   python3 scripts/promo-fixture.py prepare
   MOORING_LANG=en MOORING_PAGE_LIST=Main,Overview python3 scripts/promo-fixture.py capture DIR
@@ -143,7 +143,7 @@ if sys.argv[1] == 'prepare':
     for project in (root / 'projects').iterdir():
         subprocess.run(['git', '-C', str(project), 'init', '-q', '-b', 'main'], check=True)
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
-    host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
+    host = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 30
     while not (root / 'runtime/workbench.sock').exists():
         assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
@@ -196,7 +196,7 @@ if sys.argv[1] == 'prepare':
                 path = folder / f'{cid}.jsonl'; path.write_text(claude_records(cid, str(project), title, st, stamp))
             os.utime(path, (stamp, stamp)); far_logs[n] = (cid, path)
         far_env = dict(env, HOME=str(far_home), CODEX_HOME=str(far_home / '.codex'), CLAUDE_CONFIG_DIR=str(far_home / '.claude'))
-        far_host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(far / 'runtime')], env=far_env, stdout=subprocess.DEVNULL, stderr=open(far / 'host.log', 'w'), start_new_session=True)
+        far_host = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime', str(far / 'runtime')], env=far_env, stdout=subprocess.DEVNULL, stderr=open(far / 'host.log', 'w'), start_new_session=True)
         while not (far / 'runtime/workbench.sock').exists():
             assert far_host.poll() is None and time.monotonic() < deadline + 60; time.sleep(.05)
         for n, name in enumerate(FAR_SPACES): edit(far, {'AddSpace': {'id': f'f{n}', 'name': name, 'cwd': str(far / 'projects' / name)}})
@@ -223,7 +223,7 @@ if sys.argv[1] == 'prepare':
         ssh.write_text('#!/bin/sh\n# Fake ssh: drops options and the host, runs the command here.\nwhile [ $# -gt 0 ]; do case "$1" in -o) shift 2 ;; -*) shift ;; *) shift; break ;; esac; done\n'
                        f'export HOME={shlex.quote(str(far_home))} CODEX_HOME={shlex.quote(str(far_home / ".codex"))} CLAUDE_CONFIG_DIR={shlex.quote(str(far_home / ".claude"))}\nexec /bin/sh -c "$*"\n')
         ssh.chmod(0o755)
-        wrapper = far / 'mooring'; wrapper.write_text(f'#!/bin/sh\nexec {shlex.quote(str(BIN / "mooring"))} "$@" --runtime {shlex.quote(str(far / "runtime"))}\n'); wrapper.chmod(0o755)
+        wrapper = far / 'fibo'; wrapper.write_text(f'#!/bin/sh\nexec {shlex.quote(str(BIN / "fibo"))} "$@" --runtime {shlex.quote(str(far / "runtime"))}\n'); wrapper.chmod(0o755)
         (home / '.config/fibo').mkdir(parents=True, exist_ok=True)
         (home / '.config/fibo/machines.json').write_text(json.dumps([{'host': 'mac2', 'path': str(wrapper)}]))
         edit(root, {'SetSpaceQuiet': {'id': 's3', 'quiet': True}})
@@ -237,7 +237,7 @@ else:
                'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', 'MOORING_PAGE_EVIDENCE': '1', 'MOORING_PAGE_LIST': os.environ.get('MOORING_PAGE_LIST', 'Main,Overview')}
         if os.environ.get('MOORING_LANG'): env['MOORING_LANG'] = os.environ['MOORING_LANG']
         if (root / 'bin/ssh').exists(): env['PATH'] = str(root / 'bin') + ':' + env['PATH']
-        result = subprocess.run([str(BIN / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
+        result = subprocess.run([str(BIN / 'fibo-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
         (directory / 'native-render.log').write_bytes(result.stdout); assert result.returncode == 0, result.stdout.decode()[-4000:]
         print('native captures', sorted(p.name for p in directory.glob('*-native.png')))
     elif sys.argv[1] == 'workspace':

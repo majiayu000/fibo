@@ -7,7 +7,7 @@ import { Close, closeOutcome } from '../src/remote/close';
 import { CHUNK } from '../src/remote/noise';
 
 const v = JSON.parse(
-  readFileSync(join(import.meta.dir, '../../crates/mooring-remote/vectors/v1.json'), 'utf8'),
+  readFileSync(join(import.meta.dir, '../../crates/fibo-remote/vectors/v1.json'), 'utf8'),
 );
 
 describe('the same numbers as the machine', () => {

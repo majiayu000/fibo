@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """The native theme scenes, each in a real window with its own config, home and runtime.
-Builds nothing: BIN_DIR holds `mooring` and a `mooring-app` built with `--features
-mooring-app/visual-test`.
+Builds nothing: BIN_DIR holds `fibo` and a `fibo-app` built with `--features
+fibo-app/visual-test`.
 
   python3 scripts/theme-scenes.py BIN_DIR [OUT]
 
-A scene fails on any assertion inside it (crates/mooring-app/src/settings_evidence.rs).
+A scene fails on any assertion inside it (crates/fibo-app/src/settings_evidence.rs).
 Its waits are in wall-clock time, so a failure is run once more, as ci-test.sh does for
 real terminals; a second failure is a failure.
 """
@@ -21,21 +21,21 @@ def run(scene):
     # A unix socket's path is limited to about 104 bytes, so a short directory.
     root = pathlib.Path(tempfile.mkdtemp(prefix='ms-', dir='/tmp'))
     try:
-        for name in ('home', 'cfg/mooring', 'claude'):
+        for name in ('home', 'cfg/fibo', 'claude'):
             (root / name).mkdir(parents=True)
         runtime = root / 'rt'
         runtime.mkdir(mode=0o700)
         # The scenes look at themes in a workbench already in use: a fresh config would be
         # greeted with the first-run page instead of the shell tab they type into.
-        (root / 'cfg/mooring/first-run-done').write_text('')
+        (root / 'cfg/fibo/first-run-done').write_text('')
         if scene == 'migrate':
-            (root / 'cfg/mooring/colors.json').write_text(json.dumps(COLORS))
+            (root / 'cfg/fibo/colors.json').write_text(json.dumps(COLORS))
         out = OUT / scene
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
         env = {**os.environ, 'MOORING_SETTINGS_EVIDENCE': scene, 'XDG_CONFIG_HOME': str(root / 'cfg'),
                'CLAUDE_CONFIG_DIR': str(root / 'claude'), 'HOME': str(root / 'home')}
-        app = subprocess.Popen([str(BIN / 'mooring-app'), '--runtime', str(runtime), '--visual-evidence', str(out)],
+        app = subprocess.Popen([str(BIN / 'fibo-app'), '--runtime', str(runtime), '--visual-evidence', str(out)],
                                env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         try:
             log, _ = app.communicate(timeout=TIMEOUT)

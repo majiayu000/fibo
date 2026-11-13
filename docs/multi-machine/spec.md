@@ -7,7 +7,7 @@
 Mooring 能不能把另一台机器上的终端和会话，像本机的一样放进侧栏：看状态、看画面、打字、答审批，之后再加上接管、改尺寸、新开终端和对话卡片。约束有两条：
 
 - 本机宿主的信任模型不变，只认本机当前用户；
-- 和手机共用同一套远程协议（`crates/mooring-remote`），不另开一套内部协议。
+- 和手机共用同一套远程协议（`crates/fibo-remote`），不另开一套内部协议。
 
 ## 11-03 定下的
 
@@ -26,15 +26,15 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
 | 2 打字和审批 | `send`、`keys`、`answer` 走信封；画面里按键直接发 | 第 1 阶段；审批 id 用第 2 阶段的指纹 | 按键回显 p95 ≤ 200 ms（局域网） |
 | 3 接管和改尺寸 | 协议加 `take`、`resize`，`hello` 的 `ops` 声明 | 第 2 步 | 远程终端在本机窗格里可写、跟着窗格改尺寸，远端本机的 Mooring 让出写入 |
 | 4 新开、关闭终端和对话卡片 | 远程会话进看板、卡片、鸟瞰 | 第 3 步 | 远程会话在看板里和本机会话一样能拖、能标完成 |
-| 5 不走 SSH，改走中继 | 用 `full` 权限的设备身份，复用 `mooring-remote` | 第 4 阶段的独立 token | 两台不在一个网络里的 Mac 能互连 |
+| 5 不走 SSH，改走中继 | 用 `full` 权限的设备身份，复用 `fibo-remote` | 第 4 阶段的独立 token | 两台不在一个网络里的 Mac 能互连 |
 
 ## 第 1 步的做法
 
-- **连接**：`crates/mooring-app` 新加一个远程机器模块，每台机器一个线程：起 `ssh -T -o BatchMode=yes 主机 <路径> remote --stdio`，用 `mooring-remote` 的请求和回复类型收发；`hello` 之后 `list`，再开 `events` 流，有事件就重新 `list`（150 ms 内合并）。断开后按 1、2、4…30 秒重连。
-- **远端路径**：每台机器可以填；不填时依次试 PATH 里的 `mooring`、`~/Applications/Mooring.app` 和 `/Applications/Mooring.app` 里的 `mooring`。
+- **连接**：`crates/fibo-app` 新加一个远程机器模块，每台机器一个线程：起 `ssh -T -o BatchMode=yes 主机 <路径> remote --stdio`，用 `fibo-remote` 的请求和回复类型收发；`hello` 之后 `list`，再开 `events` 流，有事件就重新 `list`（150 ms 内合并）。断开后按 1、2、4…30 秒重连。
+- **远端路径**：每台机器可以填；不填时依次试 PATH 里的 `fibo`、`~/Applications/Mooring.app` 和 `/Applications/Mooring.app` 里的 `fibo`。
 - **侧栏**：本机在最上面；每台远程机器一个分组，标题写机器名和连接状态。行的内容直接用 `list` 回复里算好的值（plan.md 第 7 条：对外数据带上算好的值），不在 App 里重新判断状态。
 - **窗格**：点开远程终端，用 `watch` 收整屏和后续输出，喂给现有的终端模拟器，只读；标题栏标出机器名。
-- **测试**：连接命令可替换。集成测试不经过 ssh，直接起本地的 `mooring remote --stdio --runtime <临时目录>`；`ssh localhost` 只在本机手动验证时用。
+- **测试**：连接命令可替换。集成测试不经过 ssh，直接起本地的 `fibo remote --stdio --runtime <临时目录>`；`ssh localhost` 只在本机手动验证时用。
 
 ## 放弃条件
 
@@ -44,14 +44,14 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
 ## 没验
 
 - 没跨两台真实机器测过，只测过 `ssh localhost`。
-- 远端 `mooring` 和本机版本不一致时的提示，还没设计。
+- 远端 `fibo` 和本机版本不一致时的提示，还没设计。
 
 ## 结果
 
 ### 第 1 步「只看」（2026-11-03）：部分完成，待真机验收
 
 - 代码：
-  - `mooring-remote` 加了 Rust 客户端（`client.rs`）：按 id 对回复，按流 id 分发流消息；对方断开时，等着的请求和流都会收到原因，ssh 的报错取自它的 stderr。
+  - `fibo-remote` 加了 Rust 客户端（`client.rs`）：按 id 对回复，按流 id 分发流消息；对方断开时，等着的请求和流都会收到原因，ssh 的报错取自它的 stderr。
   - App 加了远程机器模块（`machines.rs`）：每台机器一个监管线程，负责重连。
   - 远程终端走只读的 `Connection::remote` 和 `Pane::remote`，用浮层预览显示，标题栏写「机器名 · 会话名」，标「只读」，不显示「↗ 打开」和审批按钮。
   - 侧栏底部按机器分组；设置 › 手机与远程 › 其他电脑，可以添加和移除机器。
@@ -59,13 +59,13 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
 - 守卫基线多了一处 `card.title`：读的是远端宿主用 `session_title` 算好的名字，不是原始字段。
 - 已验：
   - 单测：客户端 4 个、机器模块 3 个。
-  - 集成测试 `the_desktop_client_lists_and_watches_another_machine`：经 `mooring remote --stdio` 连真实后台，能拿到列表，watch 的整屏能还原出终端文字，之后的输出也能跟上。
+  - 集成测试 `the_desktop_client_lists_and_watches_another_machine`：经 `fibo remote --stdio` 连真实后台，能拿到列表，watch 的整屏能还原出终端文字，之后的输出也能跟上。
   - 隔离环境里真的走了一遍 `ssh localhost`：侧栏出现「Agent-OS.local · 2 个会话」，两个会话的状态词和颜色都来自远端（在跑、等你回答），并显示「另有 1 个普通终端」。截图在本地，没进仓库。
 - 没验：
   - 点开远程会话后的浮层画面没在真窗口里看到。模拟点击时测试窗口被别的窗口挡住，点击没落到 App 上，之后不再用模拟点击。
   - 没在真的另一台 Mac 上测，也没测断网后 5 秒内连回。
 - 隔离验证的做法：
-  - App 用 `HOME=<临时目录> mooring-app --runtime <短路径>` 启动；
+  - App 用 `HOME=<临时目录> fibo-app --runtime <短路径>` 启动；
   - ssh 用 PATH 里的包装脚本，加上 `-o UserKnownHostsFile=<临时文件>`，不碰 `~/.ssh`；
   - 远端用 `phone_demo_machine` 的运行目录，路径指向一个带 `--runtime` 的小脚本。
 
@@ -84,7 +84,7 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
   - 按键回显延迟，验收线是 p95 ≤ 200 ms（`key_echo_latency`，ignored 测试）：
     - 本机：p95 0.3 ms。
     - 经 ssh 连真的 apple，各 100 次、跑了 3 轮：p95 分别为 15.1、45.9、18.9 ms，最慢一次 128 ms。
-    - 在 apple 上测时，用的是 `/tmp` 下一个隔离的后台和新版 `mooring`，测完已经清掉，apple 自己的 Mooring 没动。
+    - 在 apple 上测时，用的是 `/tmp` 下一个隔离的后台和新版 `fibo`，测完已经清掉，apple 自己的 Mooring 没动。
   - 窗口端到端（`scripts/remote-typing-evidence.sh`）：本机再起一个后台当作「另一台电脑」，用假 ssh 连过去。harness 像点侧栏那样打开它的终端，往偷看窗里打一行字，对面收到一次。截图里标题栏没有「只读」，也没有「↗ 打开」。
   - 全部测试通过。
 - 没验：
@@ -132,7 +132,7 @@ Mooring 能不能把另一台机器上的终端和会话，像本机的一样放
   - 只看某个空间、只看有变化、只看已关闭这些筛选只对本机生效，打开时远程卡片不显示；按 Agent 的筛选两边都生效。
   - 侧栏机器标题右边的「＋」发 `open`，开好后在偷看窗里打开。远程偷看窗标题栏有「关闭终端」，点了先问一句，再发 `end`。
   - 那台电脑的 hello 里没有 open、end、outcome（旧版）：不显示「＋」和「关闭终端」，卡片也不能拖。
-  - 代码在 `crates/mooring-app/src/workbench/board/remote.rs`；`board.rs` 的测试挪进了 `board/tests.rs`。
+  - 代码在 `crates/fibo-app/src/workbench/board/remote.rs`；`board.rs` 的测试挪进了 `board/tests.rs`。
 - 已验：`scripts/remote-board-evidence.sh`（本机另起一个后台当作另一台电脑，里面放一个 Codex 会话，已经交了一轮）：PASS。
   - 卡片出现在「要你处理」。
   - 拖到「做完了」后，等 20 秒那台电脑重新列出来，卡片还在「做完了」；那台电脑记下的结局是 Completed。

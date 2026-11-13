@@ -425,13 +425,13 @@ function startSession(t,again){
   const steps=[];
   if(again){
     steps.push(()=>{t.term.push({k:'tool',x:'读到上次的进展，从那里接着做…'});paint()});
-    steps.push(()=>{const x=sc.second;t.term.push({k:'cmd',x:`mooring todo note ${t.id} "${x}"`});addNote(x);paint()});
+    steps.push(()=>{const x=sc.second;t.term.push({k:'cmd',x:`fibo todo note ${t.id} "${x}"`});addNote(x);paint()});
     steps.push(()=>{t.term.push({k:'say',x:'改好了，等你验收。'});end('review');update(true)});
   }else{
     sc.tools.forEach(x=>steps.push(()=>{t.term.push({k:'tool',x:x+'…'});paint()}));
-    steps.push(()=>{t.term.push({k:'cmd',x:`mooring todo note ${t.id} --context "${sc.context.slice(0,28)}…"`});t.context=sc.context;S.flash='ctx'+t.id;S.did.back=true;paint()});
-    steps.push(()=>{sc.criteria.forEach(c=>t.term.push({k:'cmd',x:`mooring todo note ${t.id} --criterion "${c}"`}));t.criteria=sc.criteria.slice();paint()});
-    steps.push(()=>{t.term.push({k:'cmd',x:`mooring todo note ${t.id} "${sc.note.slice(0,28)}…"`});addNote(sc.note);paint()});
+    steps.push(()=>{t.term.push({k:'cmd',x:`fibo todo note ${t.id} --context "${sc.context.slice(0,28)}…"`});t.context=sc.context;S.flash='ctx'+t.id;S.did.back=true;paint()});
+    steps.push(()=>{sc.criteria.forEach(c=>t.term.push({k:'cmd',x:`fibo todo note ${t.id} --criterion "${c}"`}));t.criteria=sc.criteria.slice();paint()});
+    steps.push(()=>{t.term.push({k:'cmd',x:`fibo todo note ${t.id} "${sc.note.slice(0,28)}…"`});addNote(sc.note);paint()});
     steps.push(()=>{t.term.push({k:'say',x:'方案写好了，等你看。'});end('review');update(true)});
   }
   run(t,steps);
@@ -480,7 +480,7 @@ document.addEventListener('submit',e=>{
     s.term.push({k:'in',x});$('#say').value='';paint();
     if(!/记/.test(x)){setTimeout(()=>{s.term.push({k:'say',x:'（演示）说“记一下”才会记成 ToDo。'});paint()},600);return}
     const title=s.record?s.record.title:s.title;
-    setTimeout(()=>{s.term.push({k:'cmd',x:`mooring todo add "${title}" --session ${s.code}`});paint()},700);
+    setTimeout(()=>{s.term.push({k:'cmd',x:`fibo todo add "${title}" --session ${s.code}`});paint()},700);
     setTimeout(()=>{
       s.term.push({k:'say',x:'记好了。'});
       Object.assign(s,{kind:'todo',id:'T-'+S.next++,title,said:x,from:'Agent 记的 · 来自会话 '+s.code,created:'今天 '+now(),day:'today',context:'',criteria:[],notes:[],sessions:[{code:s.code,title:s.words,state:s.state}]});

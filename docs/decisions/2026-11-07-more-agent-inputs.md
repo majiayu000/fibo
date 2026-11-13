@@ -37,20 +37,20 @@ Hermes 和 DSH 的输入不是只追加的普通文本，因此在 `agents/` 内
 
 ## Implementation
 
-`mooring-core/src/agent.rs` 只注册身份与命令；`mooring-host/src/agents/{hermes,droid,pi,dsh}.rs` 解释记录，`hermes_store.rs`、`dsh_store.rs` 读取非追加/压缩来源，由现有镜像启动入口启动。公共索引、状态规则和 UI 不增加品牌分支。
+`fibo-core/src/agent.rs` 只注册身份与命令；`fibo-host/src/agents/{hermes,droid,pi,dsh}.rs` 解释记录，`hermes_store.rs`、`dsh_store.rs` 读取非追加/压缩来源，由现有镜像启动入口启动。公共索引、状态规则和 UI 不增加品牌分支。
 
 ## Verification
 
 ```sh
-cargo test -p mooring-host --lib
-cargo test -p mooring-host --test more_agent_adapters --test subagent_adapters --test architecture_boundary
-cargo test -p mooring-core --lib agent::tests
-cargo test -p mooring-core --test guard --test file_size
-cargo clippy -p mooring-host -p mooring-core --all-targets -- -D warnings
+cargo test -p fibo-host --lib
+cargo test -p fibo-host --test more_agent_adapters --test subagent_adapters --test architecture_boundary
+cargo test -p fibo-core --lib agent::tests
+cargo test -p fibo-core --test guard --test file_size
+cargo clippy -p fibo-host -p fibo-core --all-targets -- -D warnings
 cargo fmt --all --check
 ```
 
-Hermes 的真实回放只对私有数据库副本运行：设置 `MOORING_REPLAY_HERMES_DB`，执行 `cargo test -p mooring-host --lib replay_hermes_database_copy -- --ignored --nocapture`。本机副本在近 30 天窗口读出 2 个会话，两个都经过真实 Index 建立卡片；不输出/提交对话原文。子代理、修改、撤回、核心 schema、等待/继续由合成 SQLite 夹具验收。
+Hermes 的真实回放只对私有数据库副本运行：设置 `MOORING_REPLAY_HERMES_DB`，执行 `cargo test -p fibo-host --lib replay_hermes_database_copy -- --ignored --nocapture`。本机副本在近 30 天窗口读出 2 个会话，两个都经过真实 Index 建立卡片；不输出/提交对话原文。子代理、修改、撤回、核心 schema、等待/继续由合成 SQLite 夹具验收。
 
 另以隔离 HOME 启动真实 `mooring serve`：五个主会话经各自文件/数据库自动进入 Workspace；Hermes、Droid、omp、DSH 各有一个直接子任务，Pi 无虚构子任务。全程零模型调用，结束后停止隔离 host。
 

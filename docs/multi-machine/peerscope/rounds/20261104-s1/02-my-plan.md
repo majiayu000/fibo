@@ -7,7 +7,7 @@
 
 | | 电脑连电脑 | 手机连电脑 |
 |---|---|---|
-| 走法 | 只有 ssh（用户自己保证能连，比如 Tailscale） | 只有自建中继 `mooring-relay`，配对链接带中继地址 |
+| 走法 | 只有 ssh（用户自己保证能连，比如 Tailscale） | 只有自建中继 `fibo-relay`，配对链接带中继地址 |
 | 加密 | ssh | Noise 端到端（和 Paseo 同类做法）；每台手机独立路由码 |
 | 断线后 | 重新 `watch`，整屏重发（11-04 经 ssh 到 apple 实测，打开到第一屏 1.1–1.3 秒，其中网络一个来回约 400 ms） | 同左 |
 | 官方服务器 | 没有 | 没部署 |
@@ -27,11 +27,11 @@
 | 选项 | 做什么 | 参照 | 谁能看到什么 |
 |---|---|---|---|
 | **Tailscale（推荐给已有 Tailscale 的人）** | Mooring 后台用 tsnet 作为一台独立设备加入你的 tailnet；对方按 Tailscale 账号放行，默认只放你自己；去连的设备要装 Tailscale | Rex（兼容实现） | Tailscale 的 DERP 只看到公钥和 WireGuard 密文；若开 HTTPS 证书，设备名会进公开的证书透明日志 |
-| **Mooring 官方中继** | 走你部署的 `mooring-relay`；配对码 + 路由码，不用账号 | Happy、Paseo | 看不到内容；能看到两端 IP、路由码哈希、时间、字节数 |
+| **Mooring 官方中继** | 走你部署的 `fibo-relay`；配对码 + 路由码，不用账号 | Happy、Paseo | 看不到内容；能看到两端 IP、路由码哈希、时间、字节数 |
 | **自建中继** | 同上，换成你自己的地址和可选的注册 key | RustDesk、Happy、sshx | 同上，只是服务器是你的 |
 | **ssh**（现在的方式） | `ssh 主机 mooring remote --stdio` | Paseo 的 remoteSsh、VS Code Remote-SSH | 由 ssh 决定 |
 
-默认值待定，见文末。不论选哪个，跑的都是同一套远程协议（`crates/mooring-remote`）：现在 ssh 那条路跑的就是 `mooring remote --stdio`，其他选项只是多几种传输方式。
+默认值待定，见文末。不论选哪个，跑的都是同一套远程协议（`crates/fibo-remote`）：现在 ssh 那条路跑的就是 `fibo remote --stdio`，其他选项只是多几种传输方式。
 
 ## 要做的事，按顺序
 
@@ -40,7 +40,7 @@
 3. **桌面连桌面也走中继**（多机第 5 步）：复用第 4 阶段的设备配对。
 4. **Tailscale 选项用 tsnet**：后台作为独立 tailnet 设备，按 WhoIs 账号放行。tsnet 是 Go 库，Mooring 是 Rust，要么嵌一个小 Go 辅助进程，要么用 libtailscale 的 C 接口；先做一个可行性试验，量体积和启动时间。
 5. **连上后继续找更好的路**：走中继时每分钟试一次已知的局域网 / Tailscale 地址，通了就换（学 Syncthing、Tailscale）。完整打洞（iroh）等前面做完再评估。
-6. **官方中继**：部署 `mooring-relay`，要你授权和机器。先定机房（国内用户多就放国内）、限速、带宽费用。不加账号。
+6. **官方中继**：部署 `fibo-relay`，要你授权和机器。先定机房（国内用户多就放国内）、限速、带宽费用。不加账号。
 7. **自建中继说明页**：一条 `docker run`，加上设置里填的两个值。
 
 ## 不建议做

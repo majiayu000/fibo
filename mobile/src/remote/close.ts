@@ -1,5 +1,5 @@
 // Close codes the machine or the relay ends this phone's socket with, one per case, and
-// what each means here. The same numbers live in `crates/mooring-remote/src/close.rs`;
+// what each means here. The same numbers live in `crates/fibo-remote/src/close.rs`;
 // `vectors/v1.json` lists them and `test/close.test.ts` checks the two agree.
 import { tr } from '../i18n';
 

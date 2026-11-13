@@ -1,8 +1,8 @@
 # Windows 原生支持：现状和下一步
 
-要支撑的决定：`mooring-host` 的 Windows 工作有多大。**顺序和代码放哪里以 [多平台架构](../platform/index.html) 为准：平台代码只进 `mooring-platform`，不写进业务文件；先做 Linux，再做 Windows。**下文的步骤写于那之前。放弃条件见「第 2 步」。
+要支撑的决定：`fibo-host` 的 Windows 工作有多大。**顺序和代码放哪里以 [多平台架构](../platform/index.html) 为准：平台代码只进 `fibo-platform`，不写进业务文件；先做 Linux，再做 Windows。**下文的步骤写于那之前。放弃条件见「第 2 步」。
 
-结论：`mooring-core` 已能编译到 Windows。host 不是小 `cfg` 能解决的，要新设计三处：终端、连接、交接。最该先做的是用真 ConPTY 验证读屏，它决定整个方案成不成立。
+结论：`fibo-core` 已能编译到 Windows。host 不是小 `cfg` 能解决的，要新设计三处：终端、连接、交接。最该先做的是用真 ConPTY 验证读屏，它决定整个方案成不成立。
 
 下文的「未运行」指只编译过，没有在 Windows 上跑过。
 
@@ -12,16 +12,16 @@
 
 | crate | 结果 |
 |---|---|
-| `mooring-core`（含测试目标） | 通过，clippy 无警告；未运行 |
-| `mooring-relay`、`mooring-remote`、`mooring-plugin-host` | 不用改就通过；未运行 |
-| `mooring-host`（lib） | 21 个文件 249 个错误 |
-| `mooring-app` | 没试。`.deps/zed` 里有 `gpui_windows`，但 `patches/gpui-*` 和窗口代码没看 |
+| `fibo-core`（含测试目标） | 通过，clippy 无警告；未运行 |
+| `fibo-relay`、`fibo-remote`、`fibo-plugin-host` | 不用改就通过；未运行 |
+| `fibo-host`（lib） | 21 个文件 249 个错误 |
+| `fibo-app` | 没试。`.deps/zed` 里有 `gpui_windows`，但 `patches/gpui-*` 和窗口代码没看 |
 
 `libghostty-vt-sys` 的构建脚本用 Zig 交叉编出了 `ghostty-vt.dll` 和 `.lib`，读屏用的解析库在 Windows 上至少能编出来，同样未运行。
 
-core 里的 Windows 实现（已搬到 `mooring-platform`）：
+core 里的 Windows 实现（已搬到 `fibo-platform`）：
 
-- 进程组用 job object（`mooring-platform/src/process`）。std 不能让进程一启动就在 job 里，它刚启动时开的子进程会漏在外面。2026-11-07 已在真机运行，接口测试通过。
+- 进程组用 job object（`fibo-platform/src/process`）。std 不能让进程一启动就在 job 里，它刚启动时开的子进程会漏在外面。2026-11-07 已在真机运行，接口测试通过。
 - 进程是否存在用 `OpenProcess`，无权打开算存在，避免误删它还在用的文件。同样已运行。
 - 本地时间用 CRT 的 `localtime_s` 和 `gmtime_s`。CRT 优先看 `TZ`，从 Git Bash 启动时要留意。同样已运行。
 - 文件锁改用 std 的 `File::lock`。macOS 上它就是原来的 `flock`。
@@ -30,7 +30,7 @@ core 里故意报错、还不能用的：
 
 - `delivery::attempt` 回「Windows 版后台还没有做好」。
 - `cli_entry` 放不了 PATH 链接。
-- 额度：`mooring claude-quota` 是 Rust，时区库打包，但要等 host 能在 Windows 跑才测得到；`claude -p /usage` 在 Windows 上的输出、`claude.cmd` 带引号参数还没验。
+- 额度：`fibo claude-quota` 是 Rust，时区库打包，但要等 host 能在 Windows 跑才测得到；`claude -p /usage` 在 Windows 上的输出、`claude.cmd` 带引号参数还没验。
 - 插件命令要 `sh`，只有装了 Git for Windows 才有，会到 PATH、`git.exe` 旁边和默认安装位置找；都没有时启动失败并报错。
 
 core 编译得过但在 Windows 上还不对的，第 0 步处理：
@@ -39,7 +39,7 @@ core 编译得过但在 Windows 上还不对的，第 0 步处理：
 - `secret.rs` 写死 `/usr/bin/security`：存时报错，读时当没有。要换成凭据管理器。
 - `create_private_dir` 只继承上级权限，在用户目录外不算私有。
 
-## mooring-host 清单
+## fibo-host 清单
 
 错误数来自编译：`ring` 和 SQLite 的 C 代码用 scratch 里一个调 `zig cc` 的小脚本编过，没有安装任何东西。这是下限：未解析的类型会盖住后面的错误，`main.rs` 和测试都还没编到。「要做什么」来自读代码，ConPTY 的行为大多凭记忆，要第 2 步核实。
 
@@ -121,12 +121,12 @@ host 单元测试约 343 个，集成测试约 203 个，共约 16000 行集成�
 
 | 步 | 内容 | 需要真机吗 | 大小 |
 |---|---|---|---|
-| 0 | core 收尾：`home_dir`、路径分隔、`secret` 接凭据管理器；在 GitHub 的 Windows runner 上跑 `mooring-core` 测试 | 否 | 小 |
+| 0 | core 收尾：`home_dir`、路径分隔、`secret` 接凭据管理器；在 GitHub 的 Windows runner 上跑 `fibo-core` 测试 | 否 | 小 |
 | 1 | host 编译骨架：249 个错误全部过，做不到的明确报错；CI 交叉检查扩到 host | 否 | 中 |
 | 2 | **ConPTY 验证**：一个小示例，真 ConPTY 接 libghostty-vt，检查 OSC 133/7/7501、宽字符、改大小；再录真实的 `claude`、`codex` 画面 | **是** | 小，但决定方向 |
-| 3 | `Pty` 和传输层，host 在 Windows 上跑起来，`mooring list/read/send` 通，手机和 Mac 窗口经远程协议连上 | 是 | 大 |
+| 3 | `Pty` 和传输层，host 在 Windows 上跑起来，`fibo list/read/send` 通，手机和 Mac 窗口经远程协议连上 | 是 | 大 |
 | 4 | 文件事件、日志游标、进程退出、识别、钩子、PowerShell 集成：Agent 状态可信 | 是 | 大 |
-| 5 | 决定交接 A 或 B；诊断；原生窗口（`mooring-app`）另算 | 是 | 大 |
+| 5 | 决定交接 A 或 B；诊断；原生窗口（`fibo-app`）另算 | 是 | 大 |
 
 第 3 步之后就有一个可用的里程碑：Windows 机器跑无窗口的 host，从手机或 Mac 窗口看和操作。`relay`、`remote` 已能编译，窗口可以最后做。这一点我只看了编译和 `Cargo.toml` 的说明，没验证过。
 

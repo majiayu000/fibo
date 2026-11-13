@@ -8,19 +8,19 @@
 
 ```sh
 git clone https://github.com/majiayu000/fibo && cd fibo
-docker build -f crates/mooring-relay/Dockerfile -t mooring-relay .
-docker run -d --name mooring-relay --restart unless-stopped \
+docker build -f crates/fibo-relay/Dockerfile -t fibo-relay .
+docker run -d --name fibo-relay --restart unless-stopped \
   --log-opt max-size=20m --log-opt max-file=10 \
   -p 127.0.0.1:8787:8787 \
   -e RELAY_REGISTRATION_KEY="$(openssl rand -hex 24)" \
   -e RELAY_TRUST_PROXY=1 \
-  mooring-relay
-docker exec mooring-relay printenv RELAY_REGISTRATION_KEY   # 记下这个密钥，第 3 步要填
+  fibo-relay
+docker exec fibo-relay printenv RELAY_REGISTRATION_KEY   # 记下这个密钥，第 3 步要填
 ```
 
 - 端口只开在 `127.0.0.1`，外面由第 2 步的 HTTPS 代理接进来。`RELAY_TRUST_PROXY=1` 让中继按代理转来的真实 IP 限流；端口直接暴露在公网时不要设它，否则别人能伪造 IP 绕过限流。
 - 注册密钥决定哪些电脑能挂到这个中继上，手机不需要它。不设密钥时谁都能挂，只适合内网试用。
-- 不想用 Docker 时，`cargo build --release -p mooring-relay`，然后运行 `target/release/mooring-relay --listen 127.0.0.1:8787 --key <密钥>`。CI 每次也会产出一份 Linux x86_64 的二进制，在 Actions 页面的 `mooring-relay-linux-x86_64` 里。
+- 不想用 Docker 时，`cargo build --release -p fibo-relay`，然后运行 `target/release/fibo-relay --listen 127.0.0.1:8787 --key <密钥>`。CI 每次也会产出一份 Linux x86_64 的二进制，在 Actions 页面的 `fibo-relay-linux-x86_64` 里。
 
 ## 2. 加上 HTTPS
 
@@ -67,13 +67,13 @@ location / {
 
 ```sh
 cd fibo && git pull
-docker build -f crates/mooring-relay/Dockerfile -t mooring-relay .
-docker rm -f mooring-relay   # 然后用第 1 步同样的 docker run 启动，填同一个密钥
+docker build -f crates/fibo-relay/Dockerfile -t fibo-relay .
+docker rm -f fibo-relay   # 然后用第 1 步同样的 docker run 启动，填同一个密钥
 ```
 
 中继不存东西，重启后电脑会自己连回来，已配对的手机不受影响。
 
-这台 Fibo 需要协议 3 以上的中继。中继太旧时，App 会显示「没连上：中继版本太旧（协议 N，这台 Fibo 要 3 以上）：请升级中继」，并且不再重试。升级中继后，在设置里把「让手机连过来」关掉再打开。中继的版本可以用 `docker exec mooring-relay mooring-relay --version` 查看。
+这台 Fibo 需要协议 3 以上的中继。中继太旧时，App 会显示「没连上：中继版本太旧（协议 N，这台 Fibo 要 3 以上）：请升级中继」，并且不再重试。升级中继后，在设置里把「让手机连过来」关掉再打开。中继的版本可以用 `docker exec fibo-relay fibo-relay --version` 查看。
 
 ## 中继能看到什么
 
@@ -86,7 +86,7 @@ docker rm -f mooring-relay   # 然后用第 1 步同样的 docker run 启动，�
 - 一台中继最多挂 10,000 台电脑，每台电脑最多同时开 256 个手机连接。
 - 手机落后超过 16 MB 时会被断开，重连后从最新画面接着看。
 
-后两项在 `crates/mooring-relay/src/server.rs` 的 `Config` 里，要改就改源码重新构建。还没有按流量计的配额：对所有人开放的中继，先用注册密钥控制谁能挂上来。
+后两项在 `crates/fibo-relay/src/server.rs` 的 `Config` 里，要改就改源码重新构建。还没有按流量计的配额：对所有人开放的中继，先用注册密钥控制谁能挂上来。
 
 ## 看每台电脑用了多少流量
 
@@ -99,7 +99,7 @@ usage machine=3f9a1c0b7d2e from_machine=1834221 to_machine=402117
 `machine` 是这台电脑令牌哈希的前 12 位，`from_machine` / `to_machine` 是这一小时电脑发出 / 收到的字节，它的手机的流量都算在里面。服务器实际出入的流量约是两者之和的两倍。中继自己不存历史，按天或按月汇总就加日志：
 
 ```sh
-docker logs mooring-relay 2>/dev/null | awk -F'[ =]' '/^usage /{b[$3]+=$5+$7} END{for(m in b) printf "%s %.1f MB\n", m, b[m]/1e6}'
+docker logs fibo-relay 2>/dev/null | awk -F'[ =]' '/^usage /{b[$3]+=$5+$7} END{for(m in b) printf "%s %.1f MB\n", m, b[m]/1e6}'
 ```
 
 日志会一直涨，`docker run` 时加 `--log-opt max-size=20m --log-opt max-file=10` 让它轮转（每行约 80 字节，挂 100 台电脑时约能存两年多的用量行）。容器删掉重建后，旧日志也跟着没了，要长期留就定期把上面的汇总存下来。

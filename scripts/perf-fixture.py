@@ -3,8 +3,8 @@
 T terminals in tabs of three panes, each bound to a session so the sidebar lists them
 (2000 and 60 by default, near a long-used install), each log with an account-limit
 reading as Codex writes one. No model calls, credentials or user
-data. Needs `cargo build --release -p mooring-host -p mooring-app --features
-mooring-app/visual-test`; BIN_DIR is where those binaries are.
+data. Needs `cargo build --release -p fibo-host -p fibo-app --features
+fibo-app/visual-test`; BIN_DIR is where those binaries are.
 
   python3 scripts/perf-fixture.py prepare RUN_DIR BIN_DIR [N] [T] [SPIN]  # SPIN terminals print a spinner
   python3 scripts/perf-fixture.py probe RUN_DIR BIN_DIR OUT frames-pane,frames-main,redraw-check
@@ -123,7 +123,7 @@ def prepare(root, bindir, N=2000, T=60, SPIN=0):
             os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
         with (root / 'host.log').open('w') as log:
-            host = subprocess.Popen([str(bindir / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
+            host = subprocess.Popen([str(bindir / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
         state = {'root': str(root), 'home': str(home), 'host': host.pid, 'processes': owned_processes(processes(), [host.pid])}
         (root / 'state.json').write_text(json.dumps(state))
         deadline = time.monotonic() + 300
@@ -150,8 +150,8 @@ def prepare(root, bindir, N=2000, T=60, SPIN=0):
         w = rpc(root, 'Workspace')['Workspace']
         bound = sum(1 for s in w['agent_sessions'] if s.get('terminal'))
         if os.environ.get('MACHINE'):  # a machine that never connects, for the column's layouts
-            config = home / '.config/mooring'; config.mkdir(parents=True, exist_ok=True)
-            (config / 'machines.json').write_text('[{"host": "mooring-perf-nowhere.invalid"}]')
+            config = home / '.config/fibo'; config.mkdir(parents=True, exist_ok=True)
+            (config / 'machines.json').write_text('[{"host": "fibo-perf-nowhere.invalid"}]')
         state['processes'] = owned_processes(processes(), [host.pid])
         (root / 'state.json').write_text(json.dumps(state))
         print('bound', bound)
@@ -181,14 +181,14 @@ def main():
         # CI caches target/, where the gate keeps its output: a result from an older run must
         # not stand in for this one when the probe dies before writing its own.
         (out / 'cpu.txt').unlink(missing_ok=True)
-        r = subprocess.run([str(bindir / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(out)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+        r = subprocess.run([str(bindir / 'fibo-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(out)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         (out / 'app.log').write_bytes(r.stdout)
         ok = r.returncode == 0 and (out / 'cpu.txt').exists()
         print((out / 'cpu.txt').read_text() if ok else f'probe exited {r.returncode}:\n' + r.stdout.decode()[-3000:])
     elif cmd == 'live':
         bindir = pathlib.Path(sys.argv[3]); secs = int(sys.argv[4]) if len(sys.argv) > 4 else 20
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
-        app = subprocess.Popen([str(bindir / 'mooring-app'), '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        app = subprocess.Popen([str(bindir / 'fibo-app'), '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         def cpu():
             t = subprocess.run(['ps', '-o', 'cputime=', '-p', str(app.pid)], capture_output=True, text=True).stdout.strip()
             m, sec = t.split(':'); return int(m) * 60 + float(sec)

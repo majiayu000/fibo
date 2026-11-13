@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/mooring-1024.png" alt="Fibo" width="120" />
+<img src="assets/fibo-1024.png" alt="Fibo" width="120" />
 
 # Fibo
 
@@ -89,7 +89,7 @@ printf '\033]7501;state=working:app=deploy:progress=30\033\\'
 
 ### 04 · Agents drive Fibo, and each other
 
-Inside a Fibo terminal, an agent can read and drive the others with the `fibo` command. `fibo run` starts another agent with a task; each turn it ends comes back into the caller's input as a `<mooring from=…>` report, so nobody polls.
+Inside a Fibo terminal, an agent can read and drive the others with the `fibo` command. `fibo run` starts another agent with a task; each turn it ends comes back into the caller's input as a `<fibo from=…>` report, so nobody polls.
 
 ```sh
 fibo list
@@ -130,11 +130,11 @@ A release build checks GitHub once a day and shows the new version in the status
 Only when you install hooks (`fibo hooks install`), which adds Fibo's entries to the agent's settings file; `fibo hooks uninstall` removes them. Without hooks, state comes from transcripts and the screen.
 
 **How do I connect from my phone?**
-Fibo on macOS works standalone locally without any server or account. To answer sessions away from your desk, deploy `mooring-relay` ([self-hosting guide](docs/relay/self-host.md)), enter your relay URL under Settings › Phones & Remote, and pair the Expo app in [`mobile/`](mobile/) — traffic is end-to-end encrypted with Noise so the relay never sees plaintext. Official hosted relay is in private beta.
+Fibo on macOS works standalone locally without any server or account. To answer sessions away from your desk, deploy `fibo-relay` ([self-hosting guide](docs/relay/self-host.md)), enter your relay URL under Settings › Phones & Remote, and pair the Expo app in [`mobile/`](mobile/) — traffic is end-to-end encrypted with Noise so the relay never sees plaintext. Official hosted relay is in private beta.
 
 ## Repository
 
-- `crates/mooring-app`: the GPUI window. `crates/mooring-host`: the background host and the `fibo` command. `crates/mooring-core`: the shared model and protocol. `crates/mooring-remote`, `mooring-relay`: the phone link and its relay.
+- `crates/fibo-app`: the GPUI window. `crates/fibo-host`: the background host and the `fibo` command. `crates/fibo-core`: the shared model and protocol. `crates/fibo-remote`, `fibo-relay`: the phone link and its relay.
 - `plugins/`: example plugins. `mobile/`: the phone chat app (Expo). `eval/`: terminal and protocol checks.
 
 Issues: [GitHub Issues](https://github.com/majiayu000/fibo/issues).

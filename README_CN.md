@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/mooring-1024.png" alt="Fibo" width="120" />
+<img src="assets/fibo-1024.png" alt="Fibo" width="120" />
 
 # Fibo
 
@@ -89,7 +89,7 @@ printf '\033]7501;state=working:app=deploy:progress=30\033\\'
 
 ### 04 · Agent 能驱动 Fibo，也能互相派活
 
-在 Fibo 终端里，Agent 可以用 `fibo` 命令读别的终端、给别的 Agent 发话。`fibo run` 派另一个 Agent 去做一件事；它每结束一轮，结果会以 `<mooring from=…>` 自动回到派活那一方的输入框，谁都不用轮询。
+在 Fibo 终端里，Agent 可以用 `fibo` 命令读别的终端、给别的 Agent 发话。`fibo run` 派另一个 Agent 去做一件事；它每结束一轮，结果会以 `<fibo from=…>` 自动回到派活那一方的输入框，谁都不用轮询。
 
 ```sh
 fibo list
@@ -130,11 +130,11 @@ fibo plugins          # 哪些插件生效了，没生效的为什么
 只有安装 hook（`fibo hooks install`）时会在 Agent 的配置文件里加上 Fibo 的条目，`fibo hooks uninstall` 会移除。不装 hook 时，状态从对话记录和画面读。
 
 **怎么用手机连过来？**
-桌面端在本机完全独立运行，不需要账号或服务器。想在离开电脑时用手机看状态、审批或发话，现阶段请按[自建中继说明](docs/relay/self-host.md)部署 `mooring-relay`，在「设置 › 手机与远程」填入中继地址，再用仓库 [`mobile/`](mobile/) 下的 Expo 应用扫码配对；两端之间用 Noise 端到端加密，中继读不到内容。官方托管中继正在内测。
+桌面端在本机完全独立运行，不需要账号或服务器。想在离开电脑时用手机看状态、审批或发话，现阶段请按[自建中继说明](docs/relay/self-host.md)部署 `fibo-relay`，在「设置 › 手机与远程」填入中继地址，再用仓库 [`mobile/`](mobile/) 下的 Expo 应用扫码配对；两端之间用 Noise 端到端加密，中继读不到内容。官方托管中继正在内测。
 
 ## 仓库结构
 
-- `crates/mooring-app` 是 GPUI 窗口，`crates/mooring-host` 是后台和 `fibo` 命令，`crates/mooring-core` 是共用的模型和协议，`crates/mooring-remote`、`mooring-relay` 是手机连接和中继。
+- `crates/fibo-app` 是 GPUI 窗口，`crates/fibo-host` 是后台和 `fibo` 命令，`crates/fibo-core` 是共用的模型和协议，`crates/fibo-remote`、`fibo-relay` 是手机连接和中继。
 - `plugins/` 是示例插件，`mobile/` 是手机聊天 App（Expo），`eval/` 是终端和协议的检查工具。
 
 问题反馈：[GitHub Issues](https://github.com/majiayu000/fibo/issues)。

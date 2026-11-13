@@ -21,7 +21,7 @@ export const GALLERY = [
 | 文件 | 改了什么 | 为什么 | 风险 |
 |---|---|---|---|
 | \`mobile/src/ui/markdown.tsx\` | 解析换成语法树，渲染继续自己画 | 真实语料里三成最终回复被弄坏 | 低，只影响显示 |
-| \`crates/mooring-core/src/content/plain.rs\` | 只把真正的表格按列切开 | \`a \\| b\` 这样的行不该被切 | 低 |
+| \`crates/fibo-core/src/content/plain.rs\` | 只把真正的表格按列切开 | \`a \\| b\` 这样的行不该被切 | 低 |
 
 \`\`\`rust
 fn plain_line(text: &str) -> String { text.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ") }

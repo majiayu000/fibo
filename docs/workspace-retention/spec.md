@@ -19,7 +19,7 @@
 - **每改一次版本号的固定开销**（Agent 输出时约每秒一次）：
   - 调用方 `let mut next = host.workspace.clone()`（宿主里 28 处）——全量克隆 1 次；
   - `save_applying` 用 `changed()` 给 terminals、tabs、agent_sessions 各建一张 HashMap 再逐条比较——全量扫描 1 次；
-  - 有 hook、`mooring events` 订阅者或 `mooring run` 汇报时，`snapshot()` 再全量克隆 1 次，`events::Tracker` 扫一遍；
+  - 有 hook、`fibo events` 订阅者或 `fibo run` 汇报时，`snapshot()` 再全量克隆 1 次，`events::Tracker` 扫一遍；
   - 窗口看到 `workspace_revision` 变大就发 `Request::Workspace`（`workbench/mod.rs`），菜单栏也会发（`desktop.rs`），手机列表读同一份回复（`remote/list.rs`）：每次又是 `snapshot()` 的全量克隆，加上把保留下来的部分序列化成 JSON。
   - 合计：每个版本号至少 3 次全量克隆、1 次全量比较、1–2 次回复序列化。
 

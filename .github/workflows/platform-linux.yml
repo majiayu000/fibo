@@ -1,6 +1,6 @@
 name: Linux check
 
-# The crates that already run on Linux, on Linux: what they and mooring-platform promise
+# The crates that already run on Linux, on Linux: what they and fibo-platform promise
 # (docs/platform/index.html). Not a required check yet (docs/decisions/2026-11-06-main-requires-ci.md),
 # so red here shows and blocks nothing. Another platform's implementation files do not start
 # it: they are not compiled here. A file of its own: ci.yml is part of the macOS cache key, and
@@ -10,18 +10,18 @@ on:
     branches:
       - main
     paths:
-      - crates/mooring-platform/**
-      - crates/mooring-core/**
-      - crates/mooring-host/**
-      - crates/mooring-remote/**
-      - crates/mooring-relay/**
-      - crates/mooring-plugin-host/**
+      - crates/fibo-platform/**
+      - crates/fibo-core/**
+      - crates/fibo-host/**
+      - crates/fibo-remote/**
+      - crates/fibo-relay/**
+      - crates/fibo-plugin-host/**
       - Cargo.lock
       - rust-toolchain.toml
       - bootstrap.sh
       - .github/workflows/platform-linux.yml
-      - '!crates/mooring-platform/src/**/windows.rs'
-      - '!crates/mooring-platform/src/**/macos.rs'
+      - '!crates/fibo-platform/src/**/windows.rs'
+      - '!crates/fibo-platform/src/**/macos.rs'
   workflow_dispatch:
 
 concurrency:
@@ -66,10 +66,10 @@ jobs:
 
       - name: Clippy
         run: |
-          cargo clippy -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --all-targets -- -D warnings
-          cargo clippy -p mooring-host --all-targets -- -D warnings
+          cargo clippy -p fibo-platform -p fibo-core -p fibo-remote -p fibo-relay -p fibo-plugin-host --all-targets -- -D warnings
+          cargo clippy -p fibo-host --all-targets -- -D warnings
 
       - name: Cargo test
         run: |
-          cargo test -p mooring-platform -p mooring-core -p mooring-remote -p mooring-relay -p mooring-plugin-host --no-fail-fast
-          cargo test -p mooring-host --tests --no-fail-fast
+          cargo test -p fibo-platform -p fibo-core -p fibo-remote -p fibo-relay -p fibo-plugin-host --no-fail-fast
+          cargo test -p fibo-host --tests --no-fail-fast

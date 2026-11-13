@@ -10,8 +10,8 @@ on:
       - main
     paths:
       - plugins/**
-      - crates/mooring-core/src/market*.rs
-      - crates/mooring-host/src/plugins_cmd.rs
+      - crates/fibo-core/src/market*.rs
+      - crates/fibo-host/src/plugins_cmd.rs
       - scripts/publish-catalog.sh
       - .github/workflows/sign-catalog.yml
   workflow_dispatch:
@@ -48,12 +48,12 @@ jobs:
         run: sh bootstrap.sh
 
       - name: Build
-        run: cargo build --locked -p mooring-host --bin mooring
+        run: cargo build --locked -p fibo-host --bin fibo
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: mooring
-          path: target/debug/mooring
+          name: fibo
+          path: target/debug/fibo
           retention-days: 1
 
   # Holds the key and can push, and compiles nothing.
@@ -71,7 +71,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: mooring
+          name: fibo
           path: ${{ runner.temp }}/bin
 
       - name: Sign and push to the catalog branch
@@ -80,7 +80,7 @@ jobs:
           # To retire this key, change the name to MOORING_PUBLISHER_KEY_SPARE, then build the
           # next pair into OFFICIAL_KEYS and ship an app that has it.
           PUBLISHER_KEY: ${{ secrets.MOORING_PUBLISHER_KEY }}
-          BIN: ${{ runner.temp }}/bin/mooring
+          BIN: ${{ runner.temp }}/bin/fibo
           KEY_FILE: ${{ runner.temp }}/publisher.key
         run: |
           chmod +x "$BIN"

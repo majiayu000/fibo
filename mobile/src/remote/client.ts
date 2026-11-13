@@ -1,6 +1,6 @@
-// A client of one Mooring machine through a relay: the WebSocket, the Noise handshake,
+// A client of one Fibo machine through a relay: the WebSocket, the Noise handshake,
 // JSON lines both ways, ACKs, requests by id and streams. What
-// `next/crates/mooring-relay/examples/phone.rs` does, for the app. Protocol shapes:
+// `next/crates/fibo-relay/examples/phone.rs` does, for the app. Protocol shapes:
 // the Keepline repo's `specs/extensions/remote-protocol.md` (not moved here).
 import { tr } from '../i18n';
 import { concat, text, utf8 } from './bytes';

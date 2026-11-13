@@ -64,7 +64,7 @@ Rex 和 Mooring 几乎同一个定位：后台持有会话，窗口只是客户�
 | **iroh-relay** | 无状态，按 EndpointId 转发 | EndpointId（Ed25519 公钥） | 对端 IP、EndpointId、字节数；TLS 校验对端公钥必须等于目标 EndpointId | [verifier.rs#L33-L75](https://github.com/n0-computer/iroh/blob/f35039493803c240595cc7b56a976b8bb14f8f05/iroh/src/tls/verifier.rs#L33)、[http_server.rs#L491](https://github.com/n0-computer/iroh/blob/f35039493803c240595cc7b56a976b8bb14f8f05/iroh-relay/src/server/http_server.rs#L491) [E3] |
 | **upterm uptermd** | 做 SSH 中间人：先当服务端接访客，再当客户端连主机 | 会话名 | **能读到内容** | [sshstock.go#L281](https://github.com/owenthereal/upterm/blob/87f8ee86fb34a7a9ca8e0f0e9f34a0189758a0da/server/sshstock.go#L281)、[#L395](https://github.com/owenthereal/upterm/blob/87f8ee86fb34a7a9ca8e0f0e9f34a0189758a0da/server/sshstock.go#L395) [E3] |
 | **sshx 服务器** | 有状态，转发加密的终端流 | 会话链接 | 密钥只在链接 `#` 后面；服务器只收到加密后的零块和口令哈希；AES-128-CTR，Argon2id 的盐是固定字符串 | [controller.rs#L83-L90](https://github.com/ekzhang/sshx/blob/3604e8ec5ce0e741bd4a7de2e339b980ca8a2d40/crates/sshx/src/controller.rs#L83)、[encrypt.rs#L5-L31](https://github.com/ekzhang/sshx/blob/3604e8ec5ce0e741bd4a7de2e339b980ca8a2d40/crates/sshx/src/encrypt.rs#L5) [E3] |
-| **Mooring mooring-relay**（对照） | 无状态 WebSocket 转发 | 每台手机自己的路由码，中继只存 sha256 | Noise 端到端；能看到两端 IP、路由码哈希、时间和字节数 | [server.rs](https://github.com/majiayu000/mooring/blob/d1c8e70d2f32b027512967318e6e7debcfe05ab2/crates/mooring-relay/src/server.rs) |
+| **Mooring fibo-relay**（对照） | 无状态 WebSocket 转发 | 每台手机自己的路由码，中继只存 sha256 | Noise 端到端；能看到两端 IP、路由码哈希、时间和字节数 | [server.rs](https://github.com/majiayu000/mooring/blob/d1c8e70d2f32b027512967318e6e7debcfe05ab2/crates/fibo-relay/src/server.rs) |
 
 ## 默认值和设置项（源码）
 

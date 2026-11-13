@@ -70,11 +70,11 @@ ol li,ul li{margin:4px 0}
 <tr><td>会话名、标签名</td><td><code>session_title</code>（名字只存会话上）、<code>tab_title</code> / <code>terminal_tab_title</code></td><td>侧栏、标签、通知、菜单栏、CLI 标签列与按名找终端、手机、插件、<code>mooring events</code></td></tr>
 <tr><td>要你处理（集合和组名）</td><td><code>status::needs_you</code>、<code>status::NEEDS_YOU</code></td><td>顶栏芯片、看板列、按状态排法、菜单栏计数与标题、系统通知、手机排序</td></tr>
 <tr><td>最后更新时间</td><td><code>session_updated</code></td><td>侧栏、窗格、命令面板排序与时间、状态栏、菜单栏、待办详情</td></tr>
-<tr><td>「N 前」文字</td><td><code>mooring_core::time</code></td><td>窗口、菜单栏、手机页设备时间、<code>mooring remote --devices</code>（手机端 TS 例外）</td></tr>
+<tr><td>「N 前」文字</td><td><code>fibo_core::time</code></td><td>窗口、菜单栏、手机页设备时间、<code>mooring remote --devices</code>（手机端 TS 例外）</td></tr>
 <tr><td>目录</td><td><code>terminal_cwd</code></td><td>侧栏、<code>mooring list</code>、手机卡片</td></tr>
 <tr><td>待办状态</td><td><code>status::task_state</code></td><td>待办详情、侧栏待办行</td></tr>
 <tr><td>快捷键提示</td><td><code>keymap::keycap</code></td><td>侧栏、状态栏、顶栏芯片</td></tr>
-<tr><td>手机断开原因</td><td><code>mooring_remote::close</code> 码表（TS 镜像有测试对照）</td><td>宿主中继连接、手机 hub</td></tr>
+<tr><td>手机断开原因</td><td><code>fibo_remote::close</code> 码表（TS 镜像有测试对照）</td><td>宿主中继连接、手机 hub</td></tr>
 </table></div>
 
 <h3>状态机：待办 × 会话</h3>
@@ -220,7 +220,7 @@ ol li,ul li{margin:4px 0}
 <h2>L · 手机连接</h2>
 <div class="wrap"><table>
 <tr><th>#</th><th>概念</th><th>两个来源</th><th>什么时候对不上</th><th>严重</th><th>结论</th></tr>
-<tr><td>L1</td><td>断开的原因</td><td>电脑上取消配对、点「断开」(<code>kicked</code>)、改权限，三种都发 4401 (relay.rs:474，已核源码) ↔ 手机把 4401 一律当成「被取消」(client.ts:52, hub.ts:86)</td><td>电脑上只点了「断开」，手机却提示「重新扫码配对」，而且不再自动重连</td><td class="s h">高</td><td class="d y">采用：分成三个关闭码，码表由 mooring-remote 导出</td></tr>
+<tr><td>L1</td><td>断开的原因</td><td>电脑上取消配对、点「断开」(<code>kicked</code>)、改权限，三种都发 4401 (relay.rs:474，已核源码) ↔ 手机把 4401 一律当成「被取消」(client.ts:52, hub.ts:86)</td><td>电脑上只点了「断开」，手机却提示「重新扫码配对」，而且不再自动重连</td><td class="s h">高</td><td class="d y">采用：分成三个关闭码，码表由 fibo-remote 导出</td></tr>
 <tr><td>L2</td><td>重新配对后的旧设备</td><td>手机覆盖成新的连接 (machines.ts:51) ↔ 电脑每次新加一台设备 (devices.rs:77)</td><td>同一部手机扫两次码，电脑上列出两部手机，旧密钥仍然有效（安全问题）</td><td class="s m">中</td><td class="d y">采用：配对时替换同名设备；手机移除时通知电脑</td></tr>
 <tr><td>L3</td><td>聊天页用哪个会话</td><td>chat.tsx:84 只取进入时的 session ↔ 卡片每次刷新都会带上新的 session</td><td>终端里开了新对话，手机还在看旧对话，发出的消息找不到回复</td><td class="s m">中高</td><td class="d y">采用</td></tr>
 <tr><td>L4</td><td>换新码之后</td><td>中继对不认识的 token 回 502 ↔ 手机当成「离线」</td><td>手机永远显示「电脑不在线」，不会提示重新配对</td><td class="s m">中</td><td class="d y">采用</td></tr>
@@ -239,7 +239,7 @@ ol li,ul li{margin:4px 0}
 <tr><td>M5</td><td>示例插件用了宿主不认的值</td><td>sidebar-status 发 <code>detail_mode: "hover"</code> ↔ 宿主只认 always/selected</td><td>选了 WASM 左栏后，第二行永远不显示</td><td class="s l">中低</td><td class="d w">待验证</td></tr>
 <tr><td>M6</td><td>colors.json</td><td>一个键写错整份就被忽略 (status_colors.rs:93) ↔ 文档说缺了的键保持默认</td><td>拼错一个键，所有自定义颜色都失效，也没有提示</td><td class="s l">中低</td><td class="d y">采用</td></tr>
 <tr><td>M7</td><td>只给 Claude 用的动作</td><td>common-actions 的 <code>claude --resume</code> 只要有会话就出现</td><td>在 Codex 窗格里点它，必然失败</td><td class="s l">中低</td><td class="d y">采用</td></tr>
-<tr><td>M8</td><td>文档和代码</td><td>plugins.md 关于完成动画、生效方式、排法列表的说法和代码不一致；帮助里缺 <code>hooks</code>、<code>serve</code>、<code>plugins install</code> 等；stdin 超过 64 KiB 被悄悄截断；<code>explain --json</code> 的 phase 用的是另一套词；CLAUDE.md 和 README 漏了 mooring-plugin-host；引用的 specs 文件在仓库里不存在</td><td>Agent 和插件作者照着文档写，结果和预期不符</td><td class="s l">低</td><td class="d y">采用：统一改一遍文档</td></tr>
+<tr><td>M8</td><td>文档和代码</td><td>plugins.md 关于完成动画、生效方式、排法列表的说法和代码不一致；帮助里缺 <code>hooks</code>、<code>serve</code>、<code>plugins install</code> 等；stdin 超过 64 KiB 被悄悄截断；<code>explain --json</code> 的 phase 用的是另一套词；CLAUDE.md 和 README 漏了 fibo-plugin-host；引用的 specs 文件在仓库里不存在</td><td>Agent 和插件作者照着文档写，结果和预期不符</td><td class="s l">低</td><td class="d y">采用：统一改一遍文档</td></tr>
 </table></div>
 
 <h2>建议的顺序</h2>

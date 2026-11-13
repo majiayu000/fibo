@@ -1,0 +1,24 @@
+[package]
+name = "fibo-relay"
+version = "0.1.2"
+edition = "2021"
+publish = false
+description = "Relay that lets a phone reach a Fibo machine from anywhere"
+license = "MIT"
+
+[[bin]]
+name = "fibo-relay"
+path = "src/main.rs"
+
+[dependencies]
+fibo-remote = { path = "../fibo-remote" }
+serde_json = "1"
+base64 = "0.22"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync", "time"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws", "json", "original-uri"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
+[dev-dependencies]
+# Added to the features above for tests and examples/phone.rs.
+tokio = { version = "1", features = ["io-std", "io-util"] }
+tokio-tungstenite = "0.29"

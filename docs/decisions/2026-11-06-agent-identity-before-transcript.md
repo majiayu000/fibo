@@ -26,9 +26,9 @@ A Codex before its first message can display its icon. A newly recognized CLI ta
 
 ## Verification
 
-`cargo test -p mooring-host --lib quiet_agent_identity`
+`cargo test -p fibo-host --lib quiet_agent_identity`
 
-`cargo test -p mooring-app pane_agent`
+`cargo test -p fibo-app pane_agent`
 
 `MOORING_FIXTURE_UNBOUND_AGENT=1 python3 scripts/visual-check.py shots <fix-commit> <out> --pages UnboundAgent@1225`
 
