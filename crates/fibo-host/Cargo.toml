@@ -6,8 +6,8 @@ publish = false
 description = "Fibo workbench host"
 license = "MIT"
 
-# The program and the command. The app bundle also links the old names (`mooring`,
-# `keepline`, `keeplined`) to it, for terminals and hooks started before the renames.
+# The program and the command. The app bundle also links the old name `mooring` to it,
+# for terminals and hooks started before the rename.
 [[bin]]
 name = "fibo"
 path = "src/main.rs"

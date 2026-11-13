@@ -48,10 +48,10 @@ for binary in ('fibo-app', 'fibo'):
     shutil.copy2(args.release_dir / binary, mac / binary)
     subprocess.run([*sign, str(mac / binary)], check=True)
 # The program and command are `fibo`. Older names stay as links to it: terminals started
-# before a rename keep MOORING_HOOK=.../MacOS/mooring or KEEPLINE_HOOK=.../MacOS/<keepline
-# or keeplined>, and scripts may still look for the window's old program file.
-for name in ('mooring', 'keepline', 'keeplined'):
-    (mac / name).symlink_to('fibo')
+# before the rename keep MOORING_HOOK=.../MacOS/mooring, and scripts may still look for the
+# window's old program file. Keepline's `keepline` and `keeplined` went on 11-13: it was never
+# released, and no terminal still carried only its variables.
+(mac / 'mooring').symlink_to('fibo')
 (mac / 'mooring-app').symlink_to('fibo-app')
 shutil.copy2(root / 'crates/fibo-app/assets/NERD-FONTS-LICENSE', resources / 'NERD-FONTS-LICENSE')
 shutil.copy2(args.icon, resources / 'Fibo.icns')

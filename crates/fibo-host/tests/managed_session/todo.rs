@@ -155,7 +155,7 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
     let binary = PathBuf::from(env!("CARGO_BIN_EXE_fibo"));
     let settings = h.root.join("hooks.json");
     let command = format!(
-        "MOORING_HOOK={}; {}",
+        "MOORING_HOOK={}; FIBO_HOOK=\"$MOORING_HOOK\"; {}",
         shell_quote(&binary.to_string_lossy()),
         fibo_host::hooks::command(Agent::Claude)
     );
@@ -191,6 +191,7 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
                 .chain([
                     path.clone(),
                     format!("MOORING_HOOK={}", binary.display()),
+                    format!("FIBO_HOOK={}", binary.display()),
                     claude.clone(),
                     "--dangerously-skip-permissions".into(),
                     "--settings".into(),
@@ -321,7 +322,7 @@ fn real_claude_notes_a_todo_when_told_and_only_then() {
     let settings = h.root.join("hooks.json");
     let entry = |event: &str| {
         let command = format!(
-            "MOORING_HOOK={}; {}",
+            "MOORING_HOOK={}; FIBO_HOOK=\"$MOORING_HOOK\"; {}",
             shell_quote(&binary.to_string_lossy()),
             fibo_host::hooks::command_at(Agent::Claude, event)
         );

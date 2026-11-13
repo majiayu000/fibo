@@ -10,7 +10,7 @@
 [ "$MOORING_ENV" = 1 ] || echo "不在 Fibo 终端里"
 ```
 
-Fibo 以前叫 Mooring，更早叫 Keepline：旧的 `mooring`、`keepline`、`keeplined` 命令和 `KEEPLINE_*` 变量还能用。新写的命令一律用 `fibo`；变量读 `MOORING_*`（老终端里只有它），`FIBO_*` 是同样的值。
+Fibo 以前叫 Mooring：旧的 `mooring` 命令还能用。新写的命令一律用 `fibo`；变量读 `MOORING_*`（老终端里只有它），`FIBO_*` 是同样的值。
 
 `MOORING_ENV` 不是 `1` 就停下，告诉用户这些命令只在 Fibo 打开的终端里能用，不要猜运行目录、不要自己启动 `fibo serve`。`MOORING_TERMINAL` 是你自己所在终端的编号，别把话发给自己。
 

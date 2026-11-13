@@ -6,15 +6,20 @@ use fibo_core::{model::Agent, protocol::HOOK_ENV};
 use serde_json::{json, Map, Value};
 use std::{fs, io, path::Path};
 
+/// What the entry tests first; the host sets it beside `HOOK_ENV` in every terminal.
+const BRAND_HOOK: &str = "FIBO_HOOK";
+/// Entries an older build wrote test only `HOOK_ENV`, or this (Keepline, before Mooring).
+/// Still in users' settings, so still ours: install replaces them rather than adding beside.
+const KEEPLINE_HOOK: &str = "KEEPLINE_HOOK";
+
 /// The settings entry, recognised again by `HOOK_ENV` alone. It reads the payload, hands it
 /// to the host in the background and returns at once: the CLI waits on some hooks (a prompt
 /// is not sent until UserPromptSubmit returns), and the host's reply is never needed.
-/// Terminals opened before the rename to Mooring carry only the old variable, so it is the
-/// fallback: an Agent started there later still reports.
+/// It tests the product's name first; terminals an older host opened carry only
+/// `MOORING_HOOK`, so that is the fallback: an Agent started there later still reports.
 pub fn command(agent: Agent) -> String {
-    let old = fibo_core::legacy::old_name(HOOK_ENV).unwrap_or_default();
     format!(
-        "h=\"${{{HOOK_ENV}:-${old}}}\"; [ -n \"$h\" ] || exit 0; p=$(cat); (printf '%s' \"$p\" | \"$h\" hook --agent {} >/dev/null 2>&1 &); exit 0",
+        "h=\"${{{BRAND_HOOK}:-${HOOK_ENV}}}\"; [ -n \"$h\" ] || exit 0; p=$(cat); (printf '%s' \"$p\" | \"$h\" hook --agent {} >/dev/null 2>&1 &); exit 0",
         agent.executable()
     )
 }
@@ -37,9 +42,10 @@ pub fn command_at(agent: Agent, event: &str) -> String {
 const TIMEOUT: u64 = 5;
 fn ours(entry: &Value) -> bool {
     entry["command"].as_str().is_some_and(|c| {
-        // Entries written before the rename test the old name; they are replaced.
-        let old = fibo_core::legacy::old_name(HOOK_ENV).unwrap_or_default();
-        c.contains(HOOK_ENV) || c.contains(&old)
+        // Entries written before the renames test an old name; they are replaced.
+        [BRAND_HOOK, HOOK_ENV, KEEPLINE_HOOK]
+            .iter()
+            .any(|name| c.contains(name))
     })
 }
 pub fn target(agent: Agent, home: &Path) -> io::Result<Hooks> {
@@ -412,21 +418,24 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("kl-hooks-{}", uuid::Uuid::new_v4()));
         let hooks = target(&dir);
         assert!(install(Agent::Claude, &hooks).unwrap());
-        // As Keepline wrote them: the same entries, testing KEEPLINE_HOOK.
         let ours = fs::read_to_string(&hooks.settings).unwrap();
-        fs::write(
-            &hooks.settings,
-            ours.replace("MOORING_HOOK", "KEEPLINE_HOOK"),
-        )
-        .unwrap();
-        assert!(matches!(
-            status(Agent::Claude, &hooks).unwrap(),
-            Status::Outdated(_)
-        ));
-        assert!(install(Agent::Claude, &hooks).unwrap());
-        assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
-        let now = fs::read_to_string(&hooks.settings).unwrap();
-        assert_eq!(now, ours, "replaced, not kept beside");
+        let now = r#"h=\"${FIBO_HOOK:-$MOORING_HOOK}\""#;
+        assert!(ours.contains(now), "{ours}");
+        // As v0.1.0–0.1.2 wrote them, and as Keepline did: the same entries, other names.
+        for old in [
+            r#"h=\"${MOORING_HOOK:-$KEEPLINE_HOOK}\""#,
+            r#"h=\"$KEEPLINE_HOOK\""#,
+        ] {
+            fs::write(&hooks.settings, ours.replace(now, old)).unwrap();
+            assert!(matches!(
+                status(Agent::Claude, &hooks).unwrap(),
+                Status::Outdated(_)
+            ));
+            assert!(install(Agent::Claude, &hooks).unwrap());
+            assert_eq!(status(Agent::Claude, &hooks).unwrap(), Status::Current);
+            let again = fs::read_to_string(&hooks.settings).unwrap();
+            assert_eq!(again, ours, "replaced, not kept beside: {old}");
+        }
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -454,7 +463,8 @@ mod tests {
         let out = std::process::Command::new("/bin/sh")
             .args(["-c", &command(Agent::Claude)])
             .env_remove(HOOK_ENV)
-            .env_remove("KEEPLINE_HOOK")
+            .env_remove(BRAND_HOOK)
+            .env_remove(KEEPLINE_HOOK)
             .output()
             .unwrap();
         assert!(out.status.success());
@@ -473,11 +483,11 @@ mod tests {
         )
         .unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
-        // Only the old variable, as in a terminal the Keepline host opened.
+        // Only MOORING_HOOK, as in a terminal a host from before 11-09 opened.
         let out = std::process::Command::new("/bin/sh")
             .args(["-c", &command(Agent::Claude)])
-            .env_remove(HOOK_ENV)
-            .env("KEEPLINE_HOOK", &fake)
+            .env_remove(BRAND_HOOK)
+            .env(HOOK_ENV, &fake)
             .stdin(std::process::Stdio::null())
             .output()
             .unwrap();

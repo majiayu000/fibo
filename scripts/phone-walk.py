@@ -37,7 +37,7 @@ CHECKLIST = REPO / "docs/phone-app/walkthrough.md"
 PAGES = Path.home() / "Documents/claude-pages/mooring"
 # Each terminal keeps its own run: two sessions walking at once must not write into each
 # other's (2026-11-09 one did). The phone itself is one: the lock says who walks it now.
-WHO = os.environ.get("MOORING_TERMINAL") or os.environ.get("KEEPLINE_TERMINAL") or "shell"
+WHO = os.environ.get("FIBO_TERMINAL") or os.environ.get("MOORING_TERMINAL") or "shell"
 CURRENT = PAGES / f".phone-walk-current-{re.sub(r'[^A-Za-z0-9_-]', '_', WHO)}"
 LOCK = PAGES / ".phone-walk-lock"
 # A run untouched this long has stopped; its lock no longer holds the phone.

@@ -193,8 +193,8 @@ impl Payload {
                 self.duration_ms.map(|d| d.to_string()).unwrap_or_default(),
             ),
         ];
-        // Plugins written for Keepline read the old names.
-        crate::legacy::with_old_names(vars.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
+        // Plugins written for Fibo read `FIBO_*`.
+        crate::legacy::with_fibo_names(vars.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
     }
 }
 

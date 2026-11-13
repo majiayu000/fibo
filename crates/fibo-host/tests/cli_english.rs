@@ -44,8 +44,7 @@ fn run_cli(home: &Path, envs: &[(&str, &str)], args: &[&str]) -> (bool, String, 
         .env("HOME", home)
         .env_remove("XDG_CONFIG_HOME")
         .env_remove("MOORING_LANG")
-        .env_remove("FIBO_LANG")
-        .env_remove("KEEPLINE_LANG");
+        .env_remove("FIBO_LANG");
     for (k, v) in envs {
         cmd.env(k, v);
     }
