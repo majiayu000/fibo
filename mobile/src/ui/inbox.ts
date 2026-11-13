@@ -102,6 +102,9 @@ export type Shelf = {
   done: Item[];
   /** What is yours to act on in the spaces the filter hides. Never hidden without this. */
   elsewhere: number;
+  /** What runs in the spaces the filter hides, on a computer that can hear you: said beside
+   *  `elsewhere`, or a filter hides every 在跑 without a word (2026-11-12, on a real phone). */
+  runningElsewhere: Item[];
   /** Over all spaces: what is yours to act on, and all the host counts as yours, 等你验收 included. */
   acts: number;
   waiting: number;
@@ -134,6 +137,7 @@ export function shelve(a: Arranged, selected: string | null): Shelf {
     later: a.later.filter(here),
     done: a.done.filter(here),
     elsewhere: inbox.filter((i) => !here(i) && acts(i)).length,
+    runningElsewhere: inbox.filter((i) => !here(i) && i.m.status === 'online' && rank(i.c) === 3),
     acts: inbox.filter(acts).length,
     waiting: inbox.filter((i) => acts(i) || (i.m.status === 'online' && i.c.needs_you)).length,
     empty: !inbox.some(here),
@@ -145,6 +149,16 @@ export const foldLabel = (items: Item[]) => {
   const word = items[0] ? statusWord(items[0].c) : '';
   return word ? `${word} · ${items.length}` : `${items.length}`;
 };
+
+/** The banner over a filtered list: what asks you elsewhere, then what runs there, in the host's word. */
+export function elsewhereLine(s: Shelf): { asks: string; runs: string } | null {
+  if (s.filter === null) return null;
+  const n = s.runningElsewhere.length;
+  const word = n ? statusWord(s.runningElsewhere[0].c) : '';
+  const runs = n && word ? tr('{n} 个{word}', { n, word }) : '';
+  if (s.elsewhere > 0) return { asks: tr('其他空间还有 {n} 件等你', { n: s.elsewhere }), runs: runs && ` · ${runs}` };
+  return runs ? { asks: '', runs: tr('其他空间 {what}', { what: runs }) } : null;
+}
 
 /** How long after a card appears or changes a tap on its buttons does nothing. */
 export const SETTLE_MS = 600;

@@ -22,6 +22,7 @@ export const home: Record<string, Entry> = {
     'In Fibo on your computer, click the phone button in the title bar, choose “Pair new phone…”, then scan the code here.',
   扫码配对: 'Scan to pair',
   '其他空间还有 {n} 件等你': (a) => `${a.n} more waiting for you in other spaces`,
+  '其他空间 {what}': 'Other spaces: {what}',
   看全部: 'Show all',
   '看全部 {n} 个': 'Show all {n}',
   没有要处理的事: 'Nothing needs you',

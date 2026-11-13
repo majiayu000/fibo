@@ -2,7 +2,7 @@
 // And it reads 要你处理 off the host, so what the host brings back shows here too.
 import { describe, expect, test } from 'bun:test';
 import type { Card, Machine } from '../src/remote/hub';
-import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
+import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, elsewhereLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
 import { spaceName } from '../src/ui/status';
 
 const card = (id: string, status: string, updated = 0, more: Partial<Card> = {}) =>
@@ -258,6 +258,20 @@ describe('the space filter hides nothing silently', () => {
     const s = lay([at('a', card('run', 'running')), at('b', card('r', 'review', 0, { needs_you: true }))], 'a');
     expect(s.elsewhere).toBe(0);
     expect(s.waiting).toBe(1);
+  });
+  test('what runs elsewhere is said too, or a filter hides every 在跑 without a word', () => {
+    const run = (id: string) => card(id, 'running', 0, { status_label: '在跑' });
+    // On a real phone: mooring shown, its 5 等你验收 listed, the 4 在跑 all in other spaces.
+    const only = lay([at('a', card('r', 'review', 0, { needs_you: true })), at('b', run('x')), at('b', run('y'))], 'a');
+    expect(ids(only.runningElsewhere)).toEqual(['x', 'y']);
+    expect(elsewhereLine(only)).toEqual({ asks: '', runs: '其他空间 2 个在跑' });
+    const both = lay([at('a', run('x')), at('b', approval('q')), at('b', run('y'))], 'a');
+    expect(elsewhereLine(both)).toEqual({ asks: '其他空间还有 1 件等你', runs: ' · 1 个在跑' });
+    expect(elsewhereLine(lay([at('a', run('x')), at('b', approval('q'))], 'a'))).toEqual({ asks: '其他空间还有 1 件等你', runs: '' });
+    expect(elsewhereLine(lay([at('a', run('x')), at('b', run('y'))], null))).toBeNull();
+    // A computer that cannot hear you has nothing running to tell.
+    const off = shelve(arrange([machine([at('a', run('x'))]), machine([at('b', run('y'))], 'n', 'offline')], []), 'a');
+    expect(elsewhereLine(off)).toBeNull();
   });
   test('no filter, no banner', () => {
     expect(lay(two(), null).elsewhere).toBe(0);
