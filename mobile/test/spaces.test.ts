@@ -1,7 +1,7 @@
 // Where a new task lands: what the phone shows is what it sends, and a folder in no space
 // says where it is going instead of quietly going to the first space.
 import { describe, expect, test } from 'bun:test';
-import { asideSpaces, chipSpace, holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf } from '../src/ui/spaces';
+import { asideSpaces, chipSpace, holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf, temporary } from '../src/ui/spaces';
 
 const work = { id: 'w', name: '工作空间', cwd: '/Users/me' };
 const app = { id: 'a', name: 'mooring', cwd: '/Users/me/code/mooring' };
@@ -91,5 +91,18 @@ describe('chipSpace', () => {
     expect(chipSpace([{ id: 'mac', status: 'online', spaceList: [bare], cards }], 'mooring', 'mac')).toEqual({ machine: 'mac', space: 'm', cwd: '/code/mooring' });
     expect(chipSpace([{ id: 'mac', status: 'online', spaceList: [bare], cards: [] }], 'mooring', 'mac')).toEqual({ machine: 'mac', space: 'm' });
     expect(landingNote({ space: bare, why: 'picked' }, '/code/mooring')).toBe('');
+  });
+
+  test('a temp folder conversation is not where a new task starts', () => {
+    const bare = { id: 'm', name: 'mooring', cwd: '' };
+    const walk = '/private/var/folders/3_/x/T/phone-walk-abc';
+    const cards = [
+      { space: 'm', cwd: '/code/mooring', updated: 1 },
+      { space: 'm', cwd: walk, updated: 9 },
+      { space: 'm', cwd: '/tmp/scratch', updated: 8 },
+    ];
+    expect(chipSpace([{ id: 'mac', status: 'online', spaceList: [bare], cards }], 'mooring', 'mac')).toEqual({ machine: 'mac', space: 'm', cwd: '/code/mooring' });
+    expect(chipSpace([{ id: 'mac', status: 'online', spaceList: [bare], cards: [cards[1]] }], 'mooring', 'mac')).toEqual({ machine: 'mac', space: 'm' });
+    expect(temporary('/tmpfiles/x')).toBe(false);
   });
 });
