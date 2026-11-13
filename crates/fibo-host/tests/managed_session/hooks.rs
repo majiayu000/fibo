@@ -244,7 +244,7 @@ fn the_installed_hook_binds_a_new_claude_before_its_transcript_exists() {
     let command = fibo_host::hooks::command(Agent::Claude);
     let status = h.root.join("hook-status");
     let detached = format!(
-        "( sleep 0.3; MOORING_HOOK={} /bin/sh -c {} < {}; echo $? > {} ) & exit 0",
+        "( sleep 0.3; export MOORING_HOOK={}; export FIBO_HOOK=\"$MOORING_HOOK\"; /bin/sh -c {} < {}; echo $? > {} ) & exit 0",
         shell_quote(env!("CARGO_BIN_EXE_fibo")),
         shell_quote(&command),
         shell_quote(&payload.to_string_lossy()),
@@ -370,9 +370,9 @@ fn real_claude_hooks_bind_at_startup_before_any_prompt() {
     .unwrap();
     let settings = h.root.join("hooks.json");
     // The installed entry, with the host executable set first: this fixture's own
-    // `MOORING_HOOK` is the test binary.
+    // `MOORING_HOOK` and `FIBO_HOOK` are the test binary.
     let command = format!(
-        "MOORING_HOOK={}; {}",
+        "MOORING_HOOK={}; FIBO_HOOK=\"$MOORING_HOOK\"; {}",
         shell_quote(env!("CARGO_BIN_EXE_fibo")),
         fibo_host::hooks::command(Agent::Claude)
     );

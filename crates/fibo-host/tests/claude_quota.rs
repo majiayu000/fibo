@@ -272,24 +272,6 @@ fn setup_takes_over_from_the_old_script_keeping_the_users_line() {
 }
 
 #[test]
-fn a_keepline_wrapper_is_replaced_by_the_line_it_wrapped() {
-    let s = Sandbox::new("keepline");
-    let wrapped = json!({"type": "command", "command": "echo wrapped"});
-    let dir = s.root.join("home/.keepline");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(
-        dir.join("claude-statusline-original.json"),
-        wrapped.to_string(),
-    )
-    .unwrap();
-    let old =
-        json!({"statusLine": {"type": "command", "command": "/x/keepline-claude-statusline"}});
-    std::fs::write(s.settings(), old.to_string()).unwrap();
-    assert!(s.run_ok("setup").contains("Keepline"));
-    assert_eq!(s.status("{}"), "wrapped\n");
-}
-
-#[test]
 fn settings_it_cant_read_are_left_alone() {
     let s = Sandbox::new("broken");
     std::fs::write(s.settings(), "{ not json").unwrap();

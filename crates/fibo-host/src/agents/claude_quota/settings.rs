@@ -1,7 +1,7 @@
 //! Puts the status line into Claude Code's settings (`setup`) and takes it out again
 //! (`teardown`). The one set before is kept in the plugin's data directory and keeps printing.
 //! The entry is known by `MARK`, which every version has written, so whichever version runs
-//! next takes over from the last; a Keepline install's wrapper is replaced the same way.
+//! next takes over from the last.
 use crate::agents::hooks;
 use fibo_core::model::Agent;
 use fibo_platform::fs::{replace_file, write_private};
@@ -11,7 +11,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 const MARK: &str = "MOORING_PLUGIN=claude-quota ";
-const KEEPLINE_WRAPPER: &str = "keepline-claude-statusline";
 
 fn home() -> io::Result<PathBuf> {
     fibo_platform::dirs::home().ok_or_else(|| io::Error::other("找不到家目录"))
@@ -95,18 +94,7 @@ pub(super) fn setup(data: &Path) -> io::Result<()> {
         println!("更新了状态栏命令");
         return Ok(());
     }
-    let from_keepline = current
-        .as_ref()
-        .and_then(command_of)
-        .is_some_and(|c| c.contains(KEEPLINE_WRAPPER));
-    let original = if from_keepline {
-        fs::read(home.join(".keepline/claude-statusline-original.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-            .filter(|v| !v.is_null())
-    } else {
-        current
-    };
+    let original = current;
     save_original(data, original.as_ref())?;
     back_up(&path, &backup)?;
     let mut line = match original {
@@ -117,14 +105,7 @@ pub(super) fn setup(data: &Path) -> io::Result<()> {
     line["command"] = command.into();
     settings.insert("statusLine".into(), line);
     write_settings(&path, &settings)?;
-    println!(
-        "{}",
-        if from_keepline {
-            "换掉了 Keepline 的旧包装，原来的状态栏照常显示"
-        } else {
-            "接上了，原来的状态栏照常显示"
-        }
-    );
+    println!("接上了，原来的状态栏照常显示");
     Ok(())
 }
 

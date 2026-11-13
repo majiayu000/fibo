@@ -411,7 +411,7 @@ mod builtins;
 use builtins::builtin;
 
 /// `$XDG_CONFIG_HOME/fibo`, else `~/.config/fibo` (`legacy::move_old_config` brings an
-/// older `mooring` or `keepline` one here).
+/// older `mooring` one here).
 pub fn config_dir() -> Option<PathBuf> {
     fibo_platform::dirs::config_home().map(|base| base.join("fibo"))
 }

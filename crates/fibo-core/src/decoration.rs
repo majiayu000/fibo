@@ -134,8 +134,8 @@ impl Decoration {
             .parent()
             .map(crate::plugin_context::env)
             .unwrap_or_default();
-        // Plugins written for Keepline read the old names too.
-        env.extend(crate::legacy::with_old_names(vec![
+        // Plugins written for Fibo read `FIBO_*`.
+        env.extend(crate::legacy::with_fibo_names(vec![
             ("MOORING_CWD".to_owned(), pane.cwd.clone()),
             (
                 "MOORING_AGENT".to_owned(),

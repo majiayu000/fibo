@@ -10,7 +10,7 @@ When the user asks you to customize Fibo itself (add commands, change the sideba
 [ "$MOORING_ENV" = 1 ] || echo "Not in a Fibo terminal"
 ```
 
-Fibo was previously named Mooring, and earlier Keepline: legacy `mooring`, `keepline`, and `keeplined` commands and `KEEPLINE_*` variables still work. Always write new commands with `fibo`; read `MOORING_*` variables (older terminals only carry those), while `FIBO_*` holds the same values.
+Fibo was previously named Mooring: the legacy `mooring` command still works. Always write new commands with `fibo`; read `MOORING_*` variables (older terminals only carry those), while `FIBO_*` holds the same values.
 
 If `MOORING_ENV` is not `1`, stop and tell the user these commands only work inside terminals opened by Fibo — do not guess the runtime directory or start `fibo serve` yourself. `MOORING_TERMINAL` is the ID of your own terminal; do not send prompts to yourself.
 
