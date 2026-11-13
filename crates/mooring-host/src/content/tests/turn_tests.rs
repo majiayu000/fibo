@@ -589,6 +589,108 @@ fn a_question_asked_through_the_permission_hook_keeps_its_question_and_choices()
 }
 
 #[test]
+fn claude_empty_plan_call_reads_the_cli_plan_on_its_first_approval() {
+    let root = std::env::temp_dir().join(format!("fibo-plan-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join("plans")).unwrap();
+    let source = Source {
+        path: root
+            .join("projects/p/session.jsonl")
+            .to_string_lossy()
+            .into_owned(),
+        ..Default::default()
+    };
+    let add = |p: &mut Parser, name: &str, args: Value, id: &str| {
+        p.add(
+            Agent::Claude,
+            json!({"type":"assistant","slug":"first-plan",
+            "message":{"content":[{"type":"tool_use","name":name,"id":id,"input":args}]}})
+            .to_string()
+            .as_bytes(),
+            source.clone(),
+        );
+    };
+    let plan = root.join("plans/first-plan.md");
+    std::fs::write(&plan, "# First plan\n1. Write **hello**\n2. Read it back").unwrap();
+    let mut p = Parser::default();
+    add(&mut p, "ExitPlanMode", json!({}), "exit");
+    assert_eq!(p.card.turn, Turn::Waiting);
+    assert!(
+        p.card.waiting.contains("1、Write hello"),
+        "{}",
+        p.card.waiting
+    );
+    assert!(p.card.choices.is_empty());
+    p.hook(
+        "Notification",
+        &HookFacts {
+            notification: Some("permission_prompt".into()),
+            ..Default::default()
+        },
+        1,
+        source.clone(),
+    );
+    assert!(p.card.waiting.contains("Read it back"));
+    // Write and ExitPlanMode can be logged together, before the file is written.
+    std::fs::remove_file(&plan).unwrap();
+    let mut p = Parser::default();
+    add(
+        &mut p,
+        "Write",
+        json!({"file_path":plan,"content":"plan"}),
+        "write",
+    );
+    add(&mut p, "ExitPlanMode", json!({}), "exit");
+    assert_eq!(p.card.turn, Turn::Waiting);
+    // Pending calls already survive a host restart; keep the plan path there as well.
+    let mut p: Parser = serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
+    std::fs::write(&plan, "# Updated plan\n1. Write hello\n2. Check it").unwrap();
+    p.result(
+        "write",
+        &json!("File created successfully"),
+        Some(0),
+        true,
+        2,
+        &source,
+    );
+    assert_eq!(p.card.turn, Turn::Waiting);
+    assert!(
+        p.card.waiting.contains("Updated plan"),
+        "{}",
+        p.card.waiting
+    );
+    std::fs::write(&plan, "# Latest plan\n1. A\n2. B").unwrap();
+    p.hook(
+        "PermissionRequest",
+        &hook_facts(&json!({"tool_name":"ExitPlanMode", "tool_input":{}})),
+        2,
+        source.clone(),
+    );
+    assert!(p.card.waiting.contains("Latest plan"));
+    // Claude's actual ExitPlanMode result has no exit code.
+    p.result("exit", &json!("User approved"), None, true, 3, &source);
+    assert_eq!(p.card.turn, Turn::Running);
+    assert!(p.card.waiting.is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn plan_file_identity_is_from_the_cli_record_not_tool_arguments() {
+    let source = Source {
+        path: "/config/projects/project/session.jsonl".into(),
+        ..Default::default()
+    };
+    let args = json!({"planFilePath":"/private/secret",PLAN_PATH:"/private/secret"});
+    let safe = claude_plan_args(&json!({"slug":"my-plan"}), &args, &source);
+    assert_eq!(safe[PLAN_PATH], "/config/plans/my-plan.md");
+    for slug in ["../secret", "/private/secret", "..", ""] {
+        let args = claude_plan_args(&json!({"slug":slug}), &args, &source);
+        assert!(args.get(PLAN_PATH).is_none(), "{slug}");
+    }
+    let args = claude_plan_args(&json!({}), &args, &source);
+    assert!(args.get(PLAN_PATH).is_none());
+}
+
+#[test]
 fn parsed_permission_semantics_follow_new_modes_not_the_display_words() {
     let mut p = Parser::default();
     for (mode, full) in [

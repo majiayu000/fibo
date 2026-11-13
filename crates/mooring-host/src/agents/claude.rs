@@ -302,7 +302,11 @@ impl Adapter for Claude {
                     Some("tool_use") => parser.tool(
                         b["id"].as_str().unwrap_or(""),
                         b["name"].as_str().unwrap_or(""),
-                        b["input"].clone(),
+                        if b["name"] == "ExitPlanMode" {
+                            crate::content::claude_plan_args(v, &b["input"], source)
+                        } else {
+                            b["input"].clone()
+                        },
                         at,
                         source,
                     ),

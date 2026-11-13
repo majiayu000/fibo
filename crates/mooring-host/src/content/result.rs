@@ -182,6 +182,7 @@ impl Parser {
         if self.card.turn == Turn::Waiting
             && (code.is_some()
                 || call.name == "AskUserQuestion"
+                || call.name == "ExitPlanMode"
                 || call.name.contains("request_user_input"))
         {
             self.card.turn = Turn::Running;
@@ -190,6 +191,7 @@ impl Parser {
         }
         self.calls.remove(id);
         self.executions.retain(|_, v| v != id);
+        self.refresh_plan();
         self.card.updated = self.card.updated.max(at);
     }
 }
