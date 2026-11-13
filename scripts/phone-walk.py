@@ -419,19 +419,45 @@ lb.addEventListener('touchend', e => {
 """
 
 
+def walk_terminal(t):
+    """A terminal the walk opened: its task or screen carries the marker (new.task writes
+    `echo phone-walk-task`). Anything else in a test dir is yours."""
+    if MARKER in f"{t.get('title') or ''} {t.get('tab') or ''}":
+        return True
+    screen = subprocess.run([fibo(), "read", t["id"], "--lines", "400"],
+                            capture_output=True, text=True).stdout
+    return MARKER in screen
+
+
 def teardown():
     s = state()
     dirs = [os.path.realpath(t["dir"]) for t in s.get("tests", [])]
-    # Terminals the phone opened (new.task) are not in the state: close every one in a test dir.
+    # Terminals the phone opened (new.task) are not in the state. A test dir also takes tasks
+    # you start yourself from the phone (a space with no folder starts in its latest
+    # conversation's dir): close only those that show the marker, keep the rest and their dir.
     listed = json.loads(subprocess.run([fibo(), "list", "--json"], capture_output=True,
                                        text=True).stdout or "[]")
     listed = listed if isinstance(listed, list) else listed.get("terminals", [])
-    closing = {t["terminal"] for t in s.get("tests", [])} | {
-        t["id"] for t in listed
-        if any(os.path.realpath(t.get("cwd") or "/").startswith(d) for d in dirs)}
+    ours = {t["terminal"] for t in s.get("tests", [])}
+    closing, kept = set(ours), []
+    for t in listed:
+        cwd = os.path.realpath(t.get("cwd") or "/")
+        home = next((d for d in dirs if cwd == d or cwd.startswith(d + "/")), None)
+        if not home or t["id"] in ours:
+            continue
+        if walk_terminal(t):
+            closing.add(t["id"])
+        else:
+            kept.append((t, home))
     for terminal in closing:
         subprocess.run([fibo(), "close", terminal], capture_output=True)
+    keep_dirs = {home for _, home in kept}
+    for t, home in kept:
+        print(f"没关「{t.get('title') or t.get('tab') or t['id']}」（{t['id']}）：不是走查开的；"
+              f"它的目录 {home} 也留着，用完自己删")
     for d in dirs:
+        if d in keep_dirs:
+            continue
         shutil.rmtree(d, ignore_errors=True)
         slug = re.sub(r"[^A-Za-z0-9]", "-", d)
         shutil.rmtree(Path.home() / ".claude/projects" / slug, ignore_errors=True)
@@ -445,7 +471,7 @@ def teardown():
             "-d", f"file://{p}")
     if LOCK.exists() and LOCK.read_text().startswith(f"{WHO}\n"):
         LOCK.unlink()
-    print(f"关了 {len(closing)} 个测试终端，删了 {len(dirs)} 个测试目录和 {len(s.get('pushed', []))} 张测试图")
+    print(f"关了 {len(closing)} 个测试终端，删了 {len(dirs) - len(keep_dirs)} 个测试目录和 {len(s.get('pushed', []))} 张测试图")
 
 
 def main(argv):

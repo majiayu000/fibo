@@ -86,8 +86,15 @@ export function asideSpaces<M extends { status: string; quietSpaces?: Space[] }>
  * The space a home-screen chip names, for 新任务 opened while it is shown: on the computer
  * the draft already has when that one has it, else the first online one that does. Chips
  * go by name, the draft by id; a name no computer lists (a folder's) finds nothing. A space
- * with no folder of its own starts where its latest conversation is, not with no directory.
+ * with no folder of its own starts where its latest conversation is, not with no directory,
+ * skipping conversations in a system temp folder: those are a test's or a script's, and the
+ * folder may be gone (a phone walk's test dir took a real task once and closed it with the walk).
  */
+const TEMP = ['/tmp/', '/private/tmp/', '/var/folders/', '/private/var/folders/'];
+export function temporary(path: string): boolean {
+  return TEMP.some((t) => path.startsWith(t) || `${path}/` === t);
+}
+
 type Held = { space: string; cwd: string; updated?: number | null };
 export function chipSpace<M extends { id: string; status: string; spaceList?: Space[]; cards: Held[] }>(
   machines: M[],
@@ -100,7 +107,7 @@ export function chipSpace<M extends { id: string; status: string; spaceList?: Sp
     const s = m.spaceList?.find((x) => x.name === name);
     if (!s) continue;
     if (s.cwd) return { machine: m.id, space: s.id };
-    const latest = m.cards.filter((c) => c.space === s.id && c.cwd).sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0))[0];
+    const latest = m.cards.filter((c) => c.space === s.id && c.cwd && !temporary(c.cwd)).sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0))[0];
     return { machine: m.id, space: s.id, ...(latest && { cwd: latest.cwd }) };
   }
   return undefined;
