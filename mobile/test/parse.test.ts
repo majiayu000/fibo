@@ -7,7 +7,7 @@ import { quotaStale, quotaWindowView, askFrom, tightWindows, asksTwice, partialW
 
 /** The screens the machine's parser is held to, and what it reads off each. */
 const fixture = (cli: string): Record<string, { ask?: { subject: string; kind: string } }> =>
-  JSON.parse(readFileSync(new URL(`../../crates/mooring-host/tests/fixtures/screens/${cli}/expected.json`, import.meta.url), 'utf8'));
+  JSON.parse(readFileSync(new URL(`../../crates/fibo-host/tests/fixtures/screens/${cli}/expected.json`, import.meta.url), 'utf8'));
 
 describe('an approval the machine read', () => {
   test('the real Tip screen asks about the command, and git push is dangerous', () => {

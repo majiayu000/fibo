@@ -19,10 +19,10 @@ FAIL 表示 Mooring 依赖的字段变了，需要先改代码再升级；WARN �
 
 ## Hook 载荷样本
 
-`crates/mooring-host/tests/fixtures/hook_shapes.jsonl` 是从旧版 Mooring 记下的真实 Hook 事件中提取的结构样本，只保留事件名、字段名、后台任务的类型和状态、定时唤醒的数量、通知类型，以及是否带 `agent_id`，不含 ID、路径或正文。单元测试 `recorded_hook_payload_shapes_parse_as_their_task_lists_say` 会逐条解析。重新生成：
+`crates/fibo-host/tests/fixtures/hook_shapes.jsonl` 是从旧版 Mooring 记下的真实 Hook 事件中提取的结构样本，只保留事件名、字段名、后台任务的类型和状态、定时唤醒的数量、通知类型，以及是否带 `agent_id`，不含 ID、路径或正文。单元测试 `recorded_hook_payload_shapes_parse_as_their_task_lists_say` 会逐条解析。重新生成：
 
 ```bash
-python3 -I hook_shapes.py ~/.mooring/spool/events > ../../crates/mooring-host/tests/fixtures/hook_shapes.jsonl
+python3 -I hook_shapes.py ~/.mooring/spool/events > ../../crates/fibo-host/tests/fixtures/hook_shapes.jsonl
 ```
 
 2026-10-23 生成：74515 条事件，共 94 种结构。后台任务的 `status` 只出现过 `running`；Codex 0.163 的 Stop 不带 `background_tasks` 和 `session_crons`。

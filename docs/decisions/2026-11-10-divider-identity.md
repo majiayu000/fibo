@@ -29,15 +29,15 @@ decision-makers: lifcc
 
 ## Implementation Plan
 
-- `crates/mooring-core/src/layout.rs` 定义锚点与身份判定；`model/edit.rs`、`model/tabs.rs` 使用新保存操作。
-- `crates/mooring-app/src/workbench/layout/resize.rs` 在按下时捕获身份，用于快照保留；`layout.rs` 原样带到保存请求。
-- `crates/mooring-app/src/harness/split_evidence.rs` 的原生回放继续在必需 CI 检查内运行。
+- `crates/fibo-core/src/layout.rs` 定义锚点与身份判定；`model/edit.rs`、`model/tabs.rs` 使用新保存操作。
+- `crates/fibo-app/src/workbench/layout/resize.rs` 在按下时捕获身份，用于快照保留；`layout.rs` 原样带到保存请求。
+- `crates/fibo-app/src/harness/split_evidence.rs` 的原生回放继续在必需 CI 检查内运行。
 
 ## Verification
 
-- `cargo test -p mooring-app split_drag`
-- `cargo test -p mooring-core --lib model::tabs`
-- `cargo test -p mooring-host --test request_receipts layout_changes_from_two_hands_all_stay`
+- `cargo test -p fibo-app split_drag`
+- `cargo test -p fibo-core --lib model::tabs`
+- `cargo test -p fibo-host --test request_receipts layout_changes_from_two_hands_all_stay`
 - `python3 scripts/resize-scenes.py target/debug target/resize-scenes`
 
 覆盖父拖动期间子比例变化、替位分隔条不被旧请求修改、2%/98% 既有比例、旧请求被新后台拒绝。用旧后台进程额外验证新操作不被静默接收。

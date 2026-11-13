@@ -18,7 +18,7 @@ decision-makers: 用户确认改成下拉选择
 
 ## Consequences / Implementation Plan
 
-修改 `crates/mooring-app/src/workbench/settings/general.rs`、`settings.rs` 和
+修改 `crates/fibo-app/src/workbench/settings/general.rs`、`settings.rs` 和
 `settings/panel.rs`。点击选项或回车保存，Esc、再次点击按钮或点击外部关闭菜单。
 旧的设置值和保存格式保持原样；其他设置行不改。
 

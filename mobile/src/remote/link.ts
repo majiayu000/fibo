@@ -1,4 +1,4 @@
-// The pairing link the machine shows as a QR code, as `mooring-remote/src/link.rs` reads
+// The pairing link the machine shows as a QR code, as `fibo-remote/src/link.rs` reads
 // and writes it, and the relay URL it leads to.
 import { sha256 } from '@noble/hashes/sha2.js';
 import { tr } from '../i18n';

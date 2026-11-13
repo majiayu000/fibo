@@ -3,18 +3,18 @@
 # host here, reached through a fake ssh, and a third machine that never connects. Each
 # host has one Codex session that finished a turn.
 # Needs a debug build with visual tests:
-#   cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
+#   cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test
 # Prints PASS and saves every step to $R/shots.
 set -u
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-rs}
-rm -rf $R; mkdir -p $R/home/.config/mooring $R/home/.codex/sessions $R/claude $R/shots $R/bin $R/farhome/.codex/sessions $R/farhome/.claude/projects
+rm -rf $R; mkdir -p $R/home/.config/fibo $R/home/.codex/sessions $R/claude $R/shots $R/bin $R/farhome/.codex/sessions $R/farhome/.claude/projects
 # A blinking cursor would read as something changing right of the column.
-printf '{"cursor_blink": false}\n' > $R/home/.config/mooring/terminal-text.json
+printf '{"cursor_blink": false}\n' > $R/home/.config/fibo/terminal-text.json
 # MOORING_EVIDENCE_THEME=<mode>:<theme id> looks at everything in that theme, e.g. light:paper.
 if [ -n "${MOORING_EVIDENCE_THEME:-}" ]; then
-  printf '%s' "${MOORING_EVIDENCE_THEME%%:*}" > $R/home/.config/mooring/appearance
-  printf '%s' "${MOORING_EVIDENCE_THEME#*:}" > $R/home/.config/mooring/theme-${MOORING_EVIDENCE_THEME%%:*}
+  printf '%s' "${MOORING_EVIDENCE_THEME%%:*}" > $R/home/.config/fibo/appearance
+  printf '%s' "${MOORING_EVIDENCE_THEME#*:}" > $R/home/.config/fibo/theme-${MOORING_EVIDENCE_THEME%%:*}
 fi
 mkdir -m 700 $R/far $R/rt
 # A folder to make a space of over there. The fake ssh keeps this HOME, so that is where the
@@ -33,14 +33,14 @@ done
 exec /bin/sh -c "$*"
 SH
 chmod +x $R/bin/ssh
-printf '#!/bin/sh\nexec %s/target/debug/mooring "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-mooring; chmod +x $R/far-mooring
-printf '[{"host":"me@far","path":"%s/far-mooring"},{"host":"gone","path":"/nonexistent/mooring"}]' "$R" > $R/home/.config/mooring/machines.json
+printf '#!/bin/sh\nexec %s/target/debug/fibo "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-fibo; chmod +x $R/far-fibo
+printf '[{"host":"me@far","path":"%s/far-fibo"},{"host":"gone","path":"/nonexistent/fibo"}]' "$R" > $R/home/.config/fibo/machines.json
 ln -s /bin/sh $R/codex
 env -i PATH=/usr/bin:/bin HOME=$R/farhome CODEX_HOME=$R/farhome/.codex CLAUDE_CONFIG_DIR=$R/farhome/.claude LANG=en_US.UTF-8 \
-  $REPO/target/debug/mooring serve --runtime $R/far > $R/far.log 2>&1 &
+  $REPO/target/debug/fibo serve --runtime $R/far > $R/far.log 2>&1 &
 FAR=$!
 env -i PATH=/usr/bin:/bin HOME=$R/home CODEX_HOME=$R/home/.codex CLAUDE_CONFIG_DIR=$R/claude LANG=en_US.UTF-8 \
-  $REPO/target/debug/mooring serve --runtime $R/rt > $R/here.log 2>&1 &
+  $REPO/target/debug/fibo serve --runtime $R/rt > $R/here.log 2>&1 &
 HERE=$!
 python3 -I - "$R" <<'PY'
 import json, socket, struct, sys, time
@@ -80,12 +80,12 @@ setup(R + '/far/workbench.sock', R + '/farhome', 'far-codex', 'far', '整理远�
 setup(R + '/rt/workbench.sock', R + '/home', 'here-codex', 'here', '整理本机的验收清单')
 PY
 PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude CODEX_HOME=$R/home/.codex MOORING_REMOTE_SIDEBAR_EVIDENCE=1 MOORING_FAR_PID=$FAR \
-  perl -e 'alarm 300; exec @ARGV' $REPO/target/debug/mooring-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
+  perl -e 'alarm 300; exec @ARGV' $REPO/target/debug/fibo-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
 echo "app exit $?"
 grep -E "PASS|panicked|assert|left:|right:" -A1 $R/app.log | head -12
 # A new launch reads 先不管 back from machines.json.
 PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude CODEX_HOME=$R/home/.codex MOORING_REMOTE_SIDEBAR_EVIDENCE=1 MOORING_QUIET_RESTART=1 MOORING_FAR_PID=$FAR \
-  perl -e 'alarm 60; exec @ARGV' $REPO/target/debug/mooring-app --runtime $R/rt --visual-evidence $R/shots > $R/relaunch.log 2>&1
+  perl -e 'alarm 60; exec @ARGV' $REPO/target/debug/fibo-app --runtime $R/rt --visual-evidence $R/shots > $R/relaunch.log 2>&1
 echo "relaunch exit $?"
 grep -E "PASS|panicked|assert|left:|right:" -A1 $R/relaunch.log | head -6
 kill $FAR $HERE 2>/dev/null; sleep 1; pkill -f "$R/" 2>/dev/null

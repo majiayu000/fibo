@@ -27,14 +27,14 @@ decision-makers: majiayu000
 
 ## Implementation Plan
 
-* **Affected paths**: `crates/mooring-host/src/background_shells.rs`（`judge`、`look`、`JOB_LIMIT`、`EPHEMERAL`），`crates/mooring-host/src/host/shell_watch.rs`。
+* **Affected paths**: `crates/fibo-host/src/background_shells.rs`（`judge`、`look`、`JOB_LIMIT`、`EPHEMERAL`），`crates/fibo-host/src/host/shell_watch.rs`。
 * **Dependencies**: Stop hook 的 `background_tasks` 带每个 shell 的 description 和 command（Claude Code 2.1.317）。
 * **Patterns to follow**: 命令只放在后台内存里用来对上子进程，不写进存储；结果只叠加在快照上（`Background.jobs`、`ShellTask.job`）。
 * **Patterns to avoid**: 不要回到只数 shell 个数；不要按命令文字判断。
 
 ### Verification
 
-- [ ] `cargo test -p mooring-host background_shells` 通过（5 个用例，含 `only_a_chosen_port_makes_a_server`）
+- [ ] `cargo test -p fibo-host background_shells` 通过（5 个用例，含 `only_a_chosen_port_makes_a_server`）
 
 ## More Information
 

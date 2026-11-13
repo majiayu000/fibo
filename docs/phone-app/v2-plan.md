@@ -29,7 +29,7 @@
 | 通知与设置（只存在本机：外观、打开时要 Face ID、危险命令多确认一次） | 无 |
 | 配对（App 内扫码，粘贴链接作备用） | 现有 |
 
-## 新增的协议（`crates/mooring-remote/src/protocol.rs`，hello 的 `ops` 会列出）
+## 新增的协议（`crates/fibo-remote/src/protocol.rs`，hello 的 `ops` 会列出）
 
 所有写操作都带 `request`，规则和第 4 阶段一样。权限检查只在电脑端做；dirs 会暴露电脑上的目录结构，所以只给 full。
 
@@ -42,7 +42,7 @@
 | `answer` | 现有字段加上 `always?:bool`。为 true 时选终端菜单里「本会话不再询问」那一项；画面上没有这一项就报错，不退回到普通允许 | 不变 | approve 和 full |
 | `stop` | `{terminal, request}`。电脑先确认画面上 Agent 正在跑，再中断它，效果和桌面端的停止一样；没在跑就报错 | `{}` | full |
 | `chat` | 现有字段加上 `tools?:bool`。为 true 时，每条 Agent 消息带 `tools:{commands:N, files:[{path, added, removed}]}`，统计的是它和上一条用户消息之间的工具调用 | 不变 | 三档 |
-| `quota` | `{}` | `{agents:[{agent, plan, at, windows:[{minutes, used, resets_at}]}]}`，直接取 `mooring_core::quota`，读数不超过 7 天 | 三档 |
+| `quota` | `{}` | `{agents:[{agent, plan, at, windows:[{minutes, used, resets_at}]}]}`，直接取 `fibo_core::quota`，读数不超过 7 天 | 三档 |
 | `hello` | 不变 | 回复加上 `os:"macos"/"linux"` 和 `version` | — |
 
 「终端最后几行」继续用 `read`。延迟由手机自己量：从发出 `ping` 到收到回复的时间。
@@ -52,7 +52,7 @@
 - 推送（原因见上）。
 - 看板里的「待办」一列：桌面端的待办还没进远程协议，这一列写「待办只在电脑上」。
 - 审批的失效时间、按命令类型写后果说明（例如「推送 6 个提交」）：电脑端拿不到可靠的数据，这一轮不做，只给出命令全文和它上一句话。
-- 传图片。（11-08 已做：输入框左边的 + 拍照或从相册选，电脑存进运行目录的 `phone-images`，再把路径单独粘贴给 Agent；见 `crates/mooring-host/src/remote/images.rs`。）
+- 传图片。（11-08 已做：输入框左边的 + 拍照或从相册选，电脑存进运行目录的 `phone-images`，再把路径单独粘贴给 Agent；见 `crates/fibo-host/src/remote/images.rs`。）
 
 ## 已定的外观细节
 
@@ -61,7 +61,7 @@
 
 ## 结果
 
-2026-11-05 电脑端协议做完（分支 `feat/phone-v2-host`）。测试在 `crates/mooring-host/tests/remote_v2.rs`、`remote_v2_agents.rs`，全部经 `mooring remote --stdio` 走。协议文档还在旧仓库 keepline，这里以 `crates/mooring-remote/src/protocol.rs` 的注释为准。
+2026-11-05 电脑端协议做完（分支 `feat/phone-v2-host`）。测试在 `crates/fibo-host/tests/remote_v2.rs`、`remote_v2_agents.rs`，全部经 `mooring remote --stdio` 走。协议文档还在旧仓库 keepline，这里以 `crates/fibo-remote/src/protocol.rs` 的注释为准。
 
 上表都已实现，下面这些和上表不完全一样，等手机端确认：
 
@@ -74,7 +74,7 @@
 - `open` 的 `agent` 认注册过的所有 CLI，不只 claude 和 codex。
 - `mkdir` 时文件夹已经在也算成功，所以重发安全。
 - `diff` 的回复保证不超过一行上限（1 MiB）：内容转成 JSON 后变长时，从后往前丢 patch，计数保留。未跟踪的符号链接只列出，不读目标。
-- 新增 `mooring remote --stdio --role view|answer|full`，只能收窄权限，测试和只读的 ssh 连接用。
+- 新增 `fibo remote --stdio --role view|answer|full`，只能收窄权限，测试和只读的 ssh 连接用。
 ## 结果（2026-11-05，分支 feat/phone-v2-ui）
 
 **决定：界面和协议接线采用；「整件事能不能只靠手机处理完」待验证**，要等真手机走一遍「收件箱 → 审批 → 会话 → 改动 → 新任务」。
@@ -159,13 +159,13 @@
 
 ### 已验 / 没验
 
-已验：全量 `cargo test`（core、remote、host、relay）569 个通过，clippy 和 fmt 过；`mooring remote --stdio` 测了每个新字段和 op，含权限和重发；网页版 390×844 浅深两色连真后台看了每个新元素。恢复时终端打出 `fake claude: --resume <id> 接着把 $(touch /tmp/pwned-gaps) 'x' 做完`，文件没有被创建。`list` 在 8 张卡片时中位 1.4 ms（debug 包，经 stdio）。
+已验：全量 `cargo test`（core、remote、host、relay）569 个通过，clippy 和 fmt 过；`fibo remote --stdio` 测了每个新字段和 op，含权限和重发；网页版 390×844 浅深两色连真后台看了每个新元素。恢复时终端打出 `fake claude: --resume <id> 接着把 $(touch /tmp/pwned-gaps) 'x' 做完`，文件没有被创建。`list` 在 8 张卡片时中位 1.4 ms（debug 包，经 stdio）。
 
 没验：真手机；真 Claude Code 和真 Codex 跑 `open resume`（`--resume id prompt` 只对过两个 CLI 的 `--help`，假 CLI 上跑通）；iOS 和 Android 原生的新界面；真后台上 Codex 卡片的标签（解析器用真实日志验过，界面没有）；Shift+Tab 之后标签多久变（只看过日志顺序）。
 
 ### 怎么复现
 
-`cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture` 起演示电脑（假 Agent、真后台、真中继、独立的 HOME 和真 git 仓库），`cd mobile && bunx expo start --web`，粘贴打印的链接。对照图是 [v2-compare/](v2-compare/) 的 `gaps-*.png`，左设计稿右 App。测试在 `crates/mooring-host/tests/remote_v2_gaps.rs`。
+`cargo test -p fibo-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture` 起演示电脑（假 Agent、真后台、真中继、独立的 HOME 和真 git 仓库），`cd mobile && bunx expo start --web`，粘贴打印的链接。对照图是 [v2-compare/](v2-compare/) 的 `gaps-*.png`，左设计稿右 App。测试在 `crates/fibo-host/tests/remote_v2_gaps.rs`。
 
 ## 工具调用的完整还原（2026-11-05，分支 feat/phone-tools）
 
@@ -187,7 +187,7 @@
 
 ### 怎么读
 
-- **不靠截断的索引，也不扫日志。** `session_records` 每行记着日志的 inode 和这一行的起始偏移。后台用单独的 SQLite 连接（`fork_current`，WAL 读不挡写，也不拿后台的大锁）查出行号和偏移，`mooring remote` 进程自己 seek 过去读那一行。一行最多读 32 MiB，超过的写「这条输出超过 32 MB，手机不显示」，不算记录不在；同一进程同时只读一个；清单读够 3 秒就停，剩下的不给 `size`，手机 10 秒的请求上限不会被碰到。
+- **不靠截断的索引，也不扫日志。** `session_records` 每行记着日志的 inode 和这一行的起始偏移。后台用单独的 SQLite 连接（`fork_current`，WAL 读不挡写，也不拿后台的大锁）查出行号和偏移，`fibo remote` 进程自己 seek 过去读那一行。一行最多读 32 MiB，超过的写「这条输出超过 32 MB，手机不显示」，不算记录不在；同一进程同时只读一个；清单读够 3 秒就停，剩下的不给 `size`，手机 10 秒的请求上限不会被碰到。
 - **文件对不上就说不在。** 打开失败、inode 不同、那一行解析不出来：单条报「原始记录已不在」，清单仍给索引留下的说明并带 `gone:true`，手机写「只剩下这份清单」。
 - **Claude**：按 `tool_use.id` / `tool_use_id` 在这一行的内容块里找（一行可能有多个）。`is_error` 只算失败，没有退出码；输出首行或末行写了 `Exit code N` 才显示 N（索引把 `is_error` 记成 1，显示出来会误导）。
 - **Codex**：`function_call`、`custom_tool_call`、`CommandExecution` 都认。`exec` 脚本用 `agents/codex_script.rs` 拆：跳过字符串和注释，读 `tools.x(...)` 里写死的字符串。真实日志里脚本用到的工具主要是 `exec_command`、`web__run`、`write_stdin`、`apply_patch`、`view_image`。运行时才拼出来的命令和补丁写明「读不到内容」，详情页也有一句说明。只跑命令、且命令有自己一行的脚本不单独列，否则同一条命令出现两次。`write_stdin` 的结果归到原命令上。
@@ -195,9 +195,9 @@
 
 ### 打码
 
-`crates/mooring-host/src/redact.rs` 的 `redact` 是唯一入口，由 `tool_text::clean` 调用：去终端颜色和控制字符、长 base64 换成占位、然后打码。**所有切片都从打码后的文本上切**，所以密钥不会跨在切口上，offset 每次也一样。清单的一行说明也是先打码再截短，截短后的半截密钥就认不出来了。规则：私钥块（没写完也隐藏到结尾）、URL 里的账号密码、已知前缀（`sk-`、`ghp_`、`github_pat_`、`xox*`、`AKIA`、`AIza`、`glpat-`、`npm_`、`hf_`、`ya29.`、`sk_live_`、JWT 等）、`Authorization` 和 `Bearer`、`--token xxx`、名字带 token/secret/password/api_key/credential 的赋值。
+`crates/fibo-host/src/redact.rs` 的 `redact` 是唯一入口，由 `tool_text::clean` 调用：去终端颜色和控制字符、长 base64 换成占位、然后打码。**所有切片都从打码后的文本上切**，所以密钥不会跨在切口上，offset 每次也一样。清单的一行说明也是先打码再截短，截短后的半截密钥就认不出来了。规则：私钥块（没写完也隐藏到结尾）、URL 里的账号密码、已知前缀（`sk-`、`ghp_`、`github_pat_`、`xox*`、`AKIA`、`AIza`、`glpat-`、`npm_`、`hf_`、`ya29.`、`sk_live_`、JWT 等）、`Authorization` 和 `Bearer`、`--token xxx`、名字带 token/secret/password/api_key/credential 的赋值。
 
-真实日志统计（最近 200 个日志，58,008 段工具文本，814 MB，`cargo test --release -p mooring-host --test redact_corpus -- --ignored --nocapture`，只输出计数，没有写出或提交原文）：
+真实日志统计（最近 200 个日志，58,008 段工具文本，814 MB，`cargo test --release -p fibo-host --test redact_corpus -- --ignored --nocapture`，只输出计数，没有写出或提交原文）：
 
 | 规则 | 命中 | 不同取值 |
 |---|---|---|
@@ -265,7 +265,7 @@
 
 ### 怎么复现
 
-`cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（`review` 会话的第二段是这次加的），`cd mobile && bunx expo start --web`，粘贴打印的链接。杀掉 `mooring remote --relay` 进程，5 秒后它会自己起来，可以试重连。测试：`crates/mooring-host/tests/remote_tools.rs`。
+`cargo test -p fibo-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（`review` 会话的第二段是这次加的），`cd mobile && bunx expo start --web`，粘贴打印的链接。杀掉 `fibo remote --relay` 进程，5 秒后它会自己起来，可以试重连。测试：`crates/fibo-host/tests/remote_tools.rs`。
 
 ## 真机实测查出的问题（2026-11-05，分支 fix/phone-real-run）
 
@@ -312,7 +312,7 @@
 | 279 MB 最大的真对话 | 首次扫描 | 0.0 s | 10 MB | 3 |
 | 279 MB 最大的真对话 | 整份（275 MB/s） | 1.0 s | 21 MB | 500（上限） |
 
-复现：`cargo run --release -p mooring-host --example index_bench -- claude <日志> [first]`，只出数字。
+复现：`cargo run --release -p fibo-host --example index_bench -- claude <日志> [first]`，只出数字。
 
 相邻的真问题：电脑第一次见到一份已有日志时只读最后 128 KiB，超过 7 天的连这段也不读，手机看着像对话就这么长。这轮只让手机明说（`partial`）。
 
@@ -322,7 +322,7 @@
 
 一句回复的写法：item+response 294，三处都有 120，只有 item 19，item+task_complete 15，只有 response 15。修复前记 568 条（445 种），修复后 477 条（464 种）；多出的 19 种是以前丢的，余下 13 条是真的说了两遍。升级前已索引的旧行在读取时跳过（相邻、一字不差、60 秒内），不重建：重建只读尾部，会丢历史。
 
-完成事件的覆盖率（有一行 / 日志里的总数）：McpToolCall 581/581（其中 44 条是新加的，其余本来有 function_call）、FileChange 26/26、ImageView 37/37、web.search 161/161、image_gen 42/42。`cargo test -p mooring-host --lib real_rollout_counts -- --ignored --nocapture`。
+完成事件的覆盖率（有一行 / 日志里的总数）：McpToolCall 581/581（其中 44 条是新加的，其余本来有 function_call）、FileChange 26/26、ImageView 37/37、web.search 161/161、image_gen 42/42。`cargo test -p fibo-host --lib real_rollout_counts -- --ignored --nocapture`。
 
 运行时才拼出来的 patch：**能靠 FileChange 解决文件和行数**（统计时 47 个文件里有 4 个在脚本原文里找不到），前提是这个 Codex 版本写这个事件；脚本里拼补丁的代码本身还是读不到。
 
@@ -443,7 +443,7 @@
 
 ### 怎么复现
 
-`cargo test -p mooring-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（多了 `long-history` 这张长对话），`cd mobile && bunx expo start --web`，粘贴链接。耗时：`MOORING_TOOLS_LOG=<日志> cargo test --release -p mooring-host --test remote_backfill -- --ignored --exact real_backfill_costs --nocapture`，`cargo run --release -p mooring-host --example backfill_bench -- claude <日志>`。
+`cargo test -p fibo-host --test phone_gaps_demo -- --ignored --exact phone_gaps_demo --nocapture`（多了 `long-history` 这张长对话），`cd mobile && bunx expo start --web`，粘贴链接。耗时：`MOORING_TOOLS_LOG=<日志> cargo test --release -p fibo-host --test remote_backfill -- --ignored --exact real_backfill_costs --nocapture`，`cargo run --release -p fibo-host --example backfill_bench -- claude <日志>`。
 
 ## 收件箱折叠和空间筛选（2026-11-06，分支 feat/phone-inbox-fold）
 
@@ -469,7 +469,7 @@
 
 ### 已验 / 没验
 
-已验：`bun test` 132 个通过（新增 18 个）；两个 tsc；`expo-doctor` 20/20；`inbox.ts` 的 28 个变异全部被测试抓到（第一轮有 1 个「已处理不跟筛选」活下来，补了用例）；网页版桩数据 390×844 浅深两色 18 项各跑一遍，包括别的空间来审批时当前空间「允许」的 y 不变（252 → 252）、点允许答到瞄准的卡片、折叠和筛选刷新后还在、保存的空间没了显示全部；360、320 宽量过「123 件等你」没有被截断；`cargo test -p mooring-core --test guard` 通过，基线没改（它抓到过一次 `c.name`，改了变量名）。网页走查在这次改名之前跑的，之后 `inbox.ts` 只动了这个变量名，单测和变异重跑过。
+已验：`bun test` 132 个通过（新增 18 个）；两个 tsc；`expo-doctor` 20/20；`inbox.ts` 的 28 个变异全部被测试抓到（第一轮有 1 个「已处理不跟筛选」活下来，补了用例）；网页版桩数据 390×844 浅深两色 18 项各跑一遍，包括别的空间来审批时当前空间「允许」的 y 不变（252 → 252）、点允许答到瞄准的卡片、折叠和筛选刷新后还在、保存的空间没了显示全部；360、320 宽量过「123 件等你」没有被截断；`cargo test -p fibo-core --test guard` 通过，基线没改（它抓到过一次 `c.name`，改了变量名）。网页走查在这次改名之前跑的，之后 `inbox.ts` 只动了这个变量名，单测和变异重跑过。
 
 没验：
 
@@ -599,7 +599,7 @@
 
 - 目标（≤10 MB/时）在这个条件下达到。之前真机峰值 54–76 MB/时是每分钟 72 个事件时量的，事件率不同，不能直接相除；按整份列表 13 KB 估，这个事件率下旧版约 8 MB/时（只算载荷）。
 - 峰值事件率的真机数字没有；模拟 6.3 MB/时。改动到显示的延迟真机没量，模拟约 0.4 秒。
-- 跑完 10 分钟增量后，屏幕上的 6 个标题和状态与 `mooring list` 一致，等你的数量实时从 15 变成 12。
+- 跑完 10 分钟增量后，屏幕上的 6 个标题和状态与 `fibo list` 一致，等你的数量实时从 15 变成 12。
 - 决定：采用。下一次高峰时补量，超过 10 MB/时再查。
 
 ## 手机主页（11-07）

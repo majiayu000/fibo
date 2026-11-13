@@ -66,7 +66,7 @@ test('a table that fits fills the width; one that does not keeps its columns rea
   const fits = columnWidths([['项目', '结果'], ['a', 'b']], 13, 340);
   expect(fits.reduce((a, b) => a + b)).toBeLessThanOrEqual(340);
   expect(fits.reduce((a, b) => a + b)).toBeGreaterThan(330);
-  const wide = columnWidths([['第一列的说明文字很长很长很长很长很长很长很长很长很长很长', 'crates/mooring-core/src/content/plain.rs', '第三列的说明文字也很长很长很长很长很长很长很长很长']], 13, 340);
+  const wide = columnWidths([['第一列的说明文字很长很长很长很长很长很长很长很长很长很长', 'crates/fibo-core/src/content/plain.rs', '第三列的说明文字也很长很长很长很长很长很长很长很长']], 13, 340);
   expect(wide.every((w) => w >= 56 && w <= 220)).toBe(true);
   expect(wide.reduce((a, b) => a + b)).toBeGreaterThan(340);
   // No column narrower than its text a few lines tall: no towers of single characters.

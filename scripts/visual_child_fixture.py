@@ -36,7 +36,7 @@ def prepare(root, home, binary_dir, now):
     db.close()
     # Each build uses its own declaration, against the same source database shapes.
     declaration = binary_dir.parent.parent / 'plugins/opencode/agent.json'
-    config = home / '.config/mooring/agents'
+    config = home / '.config/fibo/agents'
     config.mkdir(parents=True, exist_ok=True)
     (config / 'opencode.json').write_bytes(declaration.read_bytes())
     chat = home / f'.cursor/chats/hash/{PARENT}'

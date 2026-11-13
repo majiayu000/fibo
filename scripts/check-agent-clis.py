@@ -47,14 +47,14 @@ def main():
     env = os.environ.copy()
     env["MOORING_CLI_MANIFEST"] = str(manifest)
     suites = [
-        ["cargo", "test", "-p", "mooring-host", "--lib"],
-        ["cargo", "test", "-p", "mooring-host", "--test", "agent_cli_contracts",
+        ["cargo", "test", "-p", "fibo-host", "--lib"],
+        ["cargo", "test", "-p", "fibo-host", "--test", "agent_cli_contracts",
          "--test", "subagent_adapters", "--test", "more_subagent_adapters",
          "--test", "kimi_gemini_adapters", "--test", "more_agent_adapters",
          "--test", "architecture_boundary"],
-        ["cargo", "test", "-p", "mooring-core", "--lib", "agent::tests"],
-        ["cargo", "test", "-p", "mooring-core", "--test", "guard", "--test", "file_size"],
-        ["cargo", "test", "-p", "mooring-remote"],
+        ["cargo", "test", "-p", "fibo-core", "--lib", "agent::tests"],
+        ["cargo", "test", "-p", "fibo-core", "--test", "guard", "--test", "file_size"],
+        ["cargo", "test", "-p", "fibo-remote"],
         ["bun", "test"],
         ["bun", "run", "typecheck"],
     ]
@@ -87,7 +87,7 @@ def main():
                 print(f"{spec['key']}: unavailable (not passed)", flush=True)
                 continue
             checks = {}
-            with tempfile.TemporaryDirectory(prefix="mooring-cli-help-") as temp:
+            with tempfile.TemporaryDirectory(prefix="fibo-cli-help-") as temp:
                 # No credentials, user configuration, or provider-specific home overrides.
                 isolated = {"PATH": os.environ["PATH"], "HOME": temp, "TMPDIR": temp,
                             "TERM": "dumb", "NO_COLOR": "1", "CI": "true",

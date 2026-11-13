@@ -34,15 +34,15 @@ decision-makers: majiayu000
 
 ## Implementation Plan
 
-* **Affected paths**: `crates/mooring-core/src/status.rs`（`live`、`recorded`、`left_behind`），`crates/mooring-core/src/content.rs`（`Content::left_behind`、`ShellTask.port/ended`），`crates/mooring-host/src/background_shells.rs`（`Seen.port`），`crates/mooring-host/src/remote/list.rs`（手机的第三行），`crates/mooring-app/src/workbench/review_queue.rs`。
+* **Affected paths**: `crates/fibo-core/src/status.rs`（`live`、`recorded`、`left_behind`），`crates/fibo-core/src/content.rs`（`Content::left_behind`、`ShellTask.port/ended`），`crates/fibo-host/src/background_shells.rs`（`Seen.port`），`crates/fibo-host/src/remote/list.rs`（手机的第三行），`crates/fibo-app/src/workbench/review_queue.rs`。
 * **Patterns to follow**: 端口和 `ended` 同 `job`，只叠加在活快照上。
 * **Patterns to avoid**: 不要让 `reviewable` 只看状态；不要把进程没看过的情况写成「服务」。
 
 ### Verification
 
-- [ ] `cargo test -p mooring-host --test managed_session a_server_codex`：真 `http.server`，等你验收，小字带端口。
-- [ ] `cargo test -p mooring-core a_finished_turn_names`：小字的各种情况。
-- [ ] `cargo test -p mooring-app review_queue`：留着服务时不可标记。
+- [ ] `cargo test -p fibo-host --test managed_session a_server_codex`：真 `http.server`，等你验收，小字带端口。
+- [ ] `cargo test -p fibo-core a_finished_turn_names`：小字的各种情况。
+- [ ] `cargo test -p fibo-app review_queue`：留着服务时不可标记。
 
 ## Alternatives
 

@@ -4,7 +4,7 @@
 Private HOME and runtime, synthetic Codex logs (40 sessions over 5 spaces, with tests,
 patches, questions and finished turns), three todos, a split tab. No model calls,
 credentials or user data. Needs a debug build with visual tests:
-`cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test`.
+`cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test`.
 
   python3 scripts/visual-fixture.py prepare          # start an isolated host and seed it
   python3 scripts/visual-fixture.py capture DIR      # render MOORING_PAGE_LIST into DIR
@@ -71,7 +71,7 @@ LONG_TITLES = {12: 'Opus 5.5 dev环境 run_8746132f59319f2d27c0a1b2c3d4e5f6a7b8c
 titles = ['修标签命名', '查 tab_name 从哪来', '核对标签测试', '审查反馈接口改动', '实现缓存结果补传', '核查指纹变更', '评估视频队列方案', '整理项目说明']
 TASKS = [
     ('标签命名依旧有问题', '新开的终端标签还是叫 zsh。启动 Agent 时应该用待办标题命名标签；Agent 退出后保留这个名字，不要退回进程名。',
-     ['新开 Codex 标签显示待办标题，不是 zsh', 'Agent 退出后标签名保留', 'cargo test -p mooring-app 全部通过']),
+     ['新开 Codex 标签显示待办标题，不是 zsh', 'Agent 退出后标签名保留', 'cargo test -p fibo-app 全部通过']),
     ('健身', '', []),
     ('睡觉', '', []),
 ]
@@ -96,7 +96,7 @@ if sys.argv[1] == 'prepare':
     if os.environ.get('MOORING_FIXTURE_EMPTY'):
         project = root / 'projects/Resize regression'; project.mkdir(parents=True)
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
-        host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
+        host = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
         deadline = time.monotonic() + 30
         while not (root / 'runtime/workbench.sock').exists():
             assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
@@ -108,11 +108,11 @@ if sys.argv[1] == 'prepare':
     if named:
         # What claude-quota's /usage source gives, from a plugin of its own: Codex is what has
         # sessions here. The reading is kept beside the newer one its logs give.
-        plugin = home / '.config/mooring/plugins/fixture-quota'; plugin.mkdir(parents=True)
+        plugin = home / '.config/fibo/plugins/fixture-quota'; plugin.mkdir(parents=True)
         (plugin / 'plugin.json').write_text(json.dumps({'api': 1, 'id': 'fixture-quota', 'name': 'fixture', 'provides': ['quota'], 'mooring': 8}))
         (plugin / 'quota.json').write_text(json.dumps({'api': 1, 'sources': [{'agent': 'codex', 'file': 'named.json', 'at': '/at', 'windows': [
             {'minutes': 10080, 'name': '/name', 'used': '/used', 'resets_at': '/resets_at'}]}]}))
-        data = home / '.config/mooring/plugin-data/fixture-quota'; data.mkdir(parents=True)
+        data = home / '.config/fibo/plugin-data/fixture-quota'; data.mkdir(parents=True)
         at = int(time.time())
         (data / 'named.json').write_text(json.dumps({'at': at - 800, 'name': 'Fable', 'used': 91 if named == 'near' else 12, 'resets_at': at + 5 * 86400}))
     now = int(time.time())
@@ -123,9 +123,9 @@ if sys.argv[1] == 'prepare':
                    (stamp - 3600, 'event_msg', {'type': 'user_message', 'message': (LONG_TITLES.get(n) if os.environ.get('MOORING_FIXTURE_BOARD') else None) or titles[n % 8] + ('' if n < 8 else ' · ' + names[n // 8])}),
                    (stamp - 3600, 'event_msg', {'type': 'task_started', 'turn_id': cid + '-turn'})]
         if n == 0:
-            records += call(cid, 1, None, patch('crates/mooring-app/src/workbench/tabs.rs'), stamp - 1500)
-            records += call(cid, 2, 'cargo test -p mooring-app tab_title', 'Process exited with code 0\ntest result: ok. 4 passed; 0 failed', stamp - 1260)
-            records += call(cid, 3, 'cargo test -p mooring-app', 'Process exited with code 101\ntest result: FAILED. 211 passed; 2 failed', stamp - 720)
+            records += call(cid, 1, None, patch('crates/fibo-app/src/workbench/tabs.rs'), stamp - 1500)
+            records += call(cid, 2, 'cargo test -p fibo-app tab_title', 'Process exited with code 0\ntest result: ok. 4 passed; 0 failed', stamp - 1260)
+            records += call(cid, 3, 'cargo test -p fibo-app', 'Process exited with code 101\ntest result: FAILED. 211 passed; 2 failed', stamp - 720)
             # The account's usage windows, so the status bar has a quota cell to draw.
             records.append((stamp - 700, 'event_msg', {'type': 'token_count', 'rate_limits': {
                 'primary': {'used_percent': 42.0, 'window_minutes': 300, 'resets_at': now + 7200},
@@ -136,9 +136,9 @@ if sys.argv[1] == 'prepare':
                 'model_context_window': 475000,
                 'last_token_usage': {'input_tokens': [399000, 290000, 180000][n % 3]}}}))
         if n == 1:
-            records += call(cid, 1, None, patch('crates/mooring-core/src/model.rs'), stamp - 400)
-            records += call(cid, 2, 'cargo test -p mooring-app tab_title_survives_exit', 'Process exited with code 0\ntest result: ok. 1 passed; 0 failed', stamp - 300)
-            records += call(cid, 3, 'cargo test -p mooring-app', 'Process exited with code 0\ntest result: ok. 213 passed; 0 failed', stamp - 200)
+            records += call(cid, 1, None, patch('crates/fibo-core/src/model.rs'), stamp - 400)
+            records += call(cid, 2, 'cargo test -p fibo-app tab_title_survives_exit', 'Process exited with code 0\ntest result: ok. 1 passed; 0 failed', stamp - 300)
+            records += call(cid, 3, 'cargo test -p fibo-app', 'Process exited with code 0\ntest result: ok. 213 passed; 0 failed', stamp - 200)
         group = n % 8
         if group == 0: records.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '标签名在退出后要不要保留？我倾向保留，等你确认。', 'questions': [{'question': '标签名在退出后要不要保留？', 'options': [{'label': '保留，下次打开还叫这个名字'}, {'label': '不保留，按目录重新起名'}]}]}))
         elif group == 1: records.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已找到 tab_name 的来源。'}))
@@ -169,7 +169,7 @@ if sys.argv[1] == 'prepare':
                          if os.environ['MOORING_FIXTURE_CHILD_ADAPTERS'] == 'more'
                          else visual_child_fixture.prepare(root, home, BIN, now))
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
-    host = subprocess.Popen([str(BIN / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
+    host = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 30
     while not (root / 'runtime/workbench.sock').exists():
         assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
@@ -278,7 +278,7 @@ else:
         # MOORING_LANG=en|zh renders the window in that language; without it the private HOME
         # has no choice saved and the window follows this Mac's language.
         if os.environ.get('MOORING_LANG'): env['MOORING_LANG'] = os.environ['MOORING_LANG']
-        result = subprocess.run([str(BIN / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        result = subprocess.run([str(BIN / 'fibo-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
         (directory / 'native-render.log').write_bytes(result.stdout); assert result.returncode == 0, result.stdout.decode()[-4000:]
         print('native captures', sorted(p.name for p in directory.glob('*-native.png')))
     elif sys.argv[1] == 'readback':

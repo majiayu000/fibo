@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""The window's performance gate. Builds nothing: BIN_DIR holds `mooring` and a
-`mooring-app` built with `--release --features mooring-app/visual-test`.
+"""The window's performance gate. Builds nothing: BIN_DIR holds `fibo` and a
+`fibo-app` built with `--release --features fibo-app/visual-test`.
 
   python3 scripts/perf-gate.py BIN_DIR [OUT]
 
 On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
 - a frame that only a terminal asked for, and a full redraw, must stay within BUDGET of
-  the instructions in crates/mooring-app/perf-baseline.txt. Retired instructions, not
+  the instructions in crates/fibo-app/perf-baseline.txt. Retired instructions, not
   time: the same build's CPU time moves 2.5x with machine load, its instructions <1%.
   MOORING_PERF_UPDATE=1 writes the measured numbers there (only for a change you mean).
   A virtual machine (the CI runner) counts no instructions; there a terminal frame's CPU
@@ -43,7 +43,7 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
 import fcntl, os, pathlib, re, signal, subprocess, sys, tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-BASELINE = ROOT / 'crates/mooring-app/perf-baseline.txt'
+BASELINE = ROOT / 'crates/fibo-app/perf-baseline.txt'
 BUDGET = 0.15
 SHARE_BUDGET = 2.0
 FIXTURE = [sys.executable, str(ROOT / 'scripts/perf-fixture.py')]

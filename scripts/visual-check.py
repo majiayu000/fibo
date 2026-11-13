@@ -7,7 +7,7 @@ look at the new code alone.
       (visual-fixture.py with MOORING_FIXTURE_BOARD=1), writes OUT/compare.html.
       A look decides: the old build must show the bug, the new one must not.
 
-  python3 scripts/visual-check.py guard SHA TEST --undo FILE OLD NEW [--package mooring-app]
+  python3 scripts/visual-check.py guard SHA TEST --undo FILE OLD NEW [--package fibo-app]
       At SHA: TEST must pass, then with OLD replaced by NEW in FILE it must fail. A compile
       error is not a failure of the test and is reported as such.
 
@@ -43,7 +43,7 @@ def checkout(sha):
 
 def capture(sha, out, pages):
     resolved = checkout(sha)
-    run('cargo', 'build', '-q', '-p', 'mooring-host', '-p', 'mooring-app', '--features', 'mooring-app/visual-test')
+    run('cargo', 'build', '-q', '-p', 'fibo-host', '-p', 'fibo-app', '--features', 'fibo-app/visual-test')
     env = {**ENV, 'MOORING_VISUAL_BIN': str(WORK / 'target/debug'), 'MOORING_FIXTURE_BOARD': '1', 'MOORING_PAGE_LIST': pages}
     # The fixture is this checkout's, so an old commit gets the same data as the new one.
     fixture = BASE / 'scripts/visual-fixture.py'
@@ -95,6 +95,6 @@ def guard(args):
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 commands = parser.add_subparsers(required=True)
 s = commands.add_parser('shots'); s.add_argument('sha'); s.add_argument('out'); s.add_argument('--pages', default='Overview@1420,Overview@1225'); s.set_defaults(go=shots)
-g = commands.add_parser('guard'); g.add_argument('sha'); g.add_argument('test'); g.add_argument('--undo', nargs=3, required=True, metavar=('FILE', 'OLD', 'NEW')); g.add_argument('--package', default='mooring-app'); g.set_defaults(go=guard)
+g = commands.add_parser('guard'); g.add_argument('sha'); g.add_argument('test'); g.add_argument('--undo', nargs=3, required=True, metavar=('FILE', 'OLD', 'NEW')); g.add_argument('--package', default='fibo-app'); g.set_defaults(go=guard)
 args = parser.parse_args()
 args.go(args)

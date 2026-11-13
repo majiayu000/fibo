@@ -199,19 +199,19 @@ const pageLines = n => {
 const created = (path, n) => ({path, kind:'新文件', hunks:[{o:0,n:1,lines:pageLines(n).map(l => '+'+l)}]});
 const edit = (path, hunks) => ({path, hunks});
 const three = [
-  edit('crates/mooring-app/src/workbench/layout/turn_bar.rs', [
+  edit('crates/fibo-app/src/workbench/layout/turn_bar.rs', [
     {o:219,n:219,lines:[' let open = self.layout.changes_open.as_deref() == Some(id);',' let toggle = id.to_owned();','-// 看改动: this turn\'s files, each with its own line counts, listed under the bar.','+// 看改动: opens the panel over the terminal; the terminal keeps its size.',' let changes = (files > 0).then(|| {','     button(']},
     {o:243,n:243,lines:[' });','-let list = open.then(|| {','-    let started = content.map_or(0, |c| c.turn_started);','-    let mut rows: Vec<_> = content','-        .map(|c| c.files.iter().filter(|t| t.at >= started).collect())','-        .unwrap_or_default();','+let panel = open.then(|| self.changes_panel(id, s, cx));',' let bar = div()','     .h(px(T::TURN_BAR))']},
   ]),
-  edit('crates/mooring-app/src/workbench/layout/changes_panel.rs', [{o:0,n:1,lines:['//! The panel 看改动 opens: this turn\'s edits, read only.','use super::*;','','impl Workbench {','    pub(super) fn changes_panel(&self, id: &str, s: &AgentSession, cx: &Context<Self>) -> gpui::Div {','        div().absolute().top_0().left_0().right_0().h(relative(0.56))','    }','}'].map(l=>'+'+l)}], ),
-  edit('crates/mooring-host/src/content/result.rs', [{o:118,n:118,lines:['             let (added, removed) = counts(&result);','-            self.card.touch(&path, at, added, removed);','+            self.card.touch(&path, at, added, removed);','+            self.card.keep_patch(&path, at, result.get("structuredPatch"));','         }']}]),
+  edit('crates/fibo-app/src/workbench/layout/changes_panel.rs', [{o:0,n:1,lines:['//! The panel 看改动 opens: this turn\'s edits, read only.','use super::*;','','impl Workbench {','    pub(super) fn changes_panel(&self, id: &str, s: &AgentSession, cx: &Context<Self>) -> gpui::Div {','        div().absolute().top_0().left_0().right_0().h(relative(0.56))','    }','}'].map(l=>'+'+l)}], ),
+  edit('crates/fibo-host/src/content/result.rs', [{o:118,n:118,lines:['             let (added, removed) = counts(&result);','-            self.card.touch(&path, at, added, removed);','+            self.card.touch(&path, at, added, removed);','+            self.card.keep_patch(&path, at, result.get("structuredPatch"));','         }']}]),
 ];
 three[1].kind = '新文件';
 const SCENES = [
  {key:'create', name:'新文件（你截图这一轮）', files:[created('docs/design/agent-web-tools-decisions-20261106.html',104)]},
  {key:'three', name:'编辑了 3 个文件', files:three},
  {key:'stale', name:'文件之后又被改过', warn:'这是 Agent 当时的改动。文件后来又变了，和磁盘上的内容可能不一样。', files:[three[0]]},
- {key:'many', name:'改了 40 个文件', files:Array.from({length:40},(_,i)=>edit(`crates/mooring-app/src/group_${String(i+1).padStart(2,'0')}/module.rs`,[{o:10+i,n:10+i,lines:[' fn run() {',`-    old_call(${i});`,`+    new_call(${i});`,' }']}]))},
+ {key:'many', name:'改了 40 个文件', files:Array.from({length:40},(_,i)=>edit(`crates/fibo-app/src/group_${String(i+1).padStart(2,'0')}/module.rs`,[{o:10+i,n:10+i,lines:[' fn run() {',`-    old_call(${i});`,`+    new_call(${i});`,' }']}]))},
  {key:'huge', name:'文件特别大', files:[{path:'data/fixtures/generated.json',hunks:[{o:0,n:1,lines:Array.from({length:2000},(_,i)=>`+  { "id": ${i}, "name": "item-${i}" },`)}],count:[6214,0],cut:'只显示前 2000 行，共 6214 行。完整内容请打开文件。'}]},
  {key:'norecord', name:'只有行数，没有内容', files:[{path:'src/main.py',none:true,count:[12,3]}]},
  {key:'loading', name:'正在读取', files:[{path:'docs/design/notes.md',loading:true,count:[8,1]}]},

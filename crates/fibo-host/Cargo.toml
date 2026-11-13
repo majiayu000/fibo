@@ -1,0 +1,46 @@
+[package]
+name = "fibo-host"
+version = "0.1.2"
+edition = "2021"
+publish = false
+description = "Fibo workbench host"
+license = "MIT"
+
+# The program and the command. The app bundle also links the old names (`mooring`,
+# `keepline`, `keeplined`) to it, for terminals and hooks started before the renames.
+[[bin]]
+name = "fibo"
+path = "src/main.rs"
+
+[dependencies]
+regex = "1"
+zstd = "0.13"
+memchr = "2"
+shlex = "1"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+# `/usage` names the zone a window resets in. The system's zone database, and a bundled one only
+# on Windows, which has none.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
+fibo-core = { path = "../fibo-core" }
+fibo-platform = { path = "../fibo-platform" }
+rusqlite = { version = "0.41", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+libc.workspace = true
+# `fibo remote` carries terminal bytes inside JSON lines.
+base64 = "0.22"
+serde.workspace = true
+# `fibo remote --relay`: this machine on a relay, for phones anywhere.
+fibo-remote = { path = "../fibo-remote" }
+tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros"] }
+tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
+# Not named in the code: picks ring as tokio-tungstenite's TLS provider.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+qrcode = { version = "0.14", default-features = false }
+# Hook installs rewrite the CLI's own settings file; its keys keep their order.
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+fibo-relay = { path = "../fibo-relay" }
+rusqlite = { version = "0.41", features = ["hooks"] }

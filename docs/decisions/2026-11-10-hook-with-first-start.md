@@ -35,14 +35,14 @@ Hook 是 Claude Code 的状态和审批准不准的前提：不装就只能读�
 
 ## Implementation Plan
 
-- `crates/mooring-app/src/workbench/hooks.rs`：窗口知道的 Hook 状态、`hint`、`installs_with_start`、状态栏那一项、欢迎页的启动。
-- `crates/mooring-app/src/workbench/first_run.rs`：勾选框；`settings/hooks.rs`、`settings/general.rs`：卡片；`ui/hook_hint.rs`：提醒开关；`palette/`：`Hit::Hooks`；`frame_facts.rs`：`running`。
+- `crates/fibo-app/src/workbench/hooks.rs`：窗口知道的 Hook 状态、`hint`、`installs_with_start`、状态栏那一项、欢迎页的启动。
+- `crates/fibo-app/src/workbench/first_run.rs`：勾选框；`settings/hooks.rs`、`settings/general.rs`：卡片；`ui/hook_hint.rs`：提醒开关；`palette/`：`Hit::Hooks`；`frame_facts.rs`：`running`。
 - 别在别处再加能写 CLI 设置的按钮；新入口都通到设置 › 通用。
 - 别在 render 里为这个提醒扫全部会话，用 `FrameFacts::running`。
 
 ## Verification
 
-- `cargo test -p mooring-app hooks first_run`
+- `cargo test -p fibo-app hooks first_run`
 - `MOORING_FIRST_RUN_EVIDENCE=1`（`first_run_evidence.rs`）：全新 HOME 里勾着启动后 `fibo hooks status` 报已安装；加 `MOORING_FIRST_RUN_NO_HOOK=1` 后设置文件不存在。
 
 ## Alternatives
@@ -54,4 +54,4 @@ Hook 是 Claude Code 的状态和审批准不准的前提：不装就只能读�
 ## More Information
 
 - 重开条件：其他 CLI 也有了 Hook 且写法不同；或状态栏提醒被普遍关掉。
-- 来源：11-10 的会话（欢迎页 Agent 列表 #293 之后），提交见 `git log -- crates/mooring-app/src/workbench/hooks.rs`。
+- 来源：11-10 的会话（欢迎页 Agent 列表 #293 之后），提交见 `git log -- crates/fibo-app/src/workbench/hooks.rs`。

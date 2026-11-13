@@ -1,4 +1,4 @@
-// One connection to a machine, whatever calls for it. On a real phone `mooring remote --status`
+// One connection to a machine, whatever calls for it. On a real phone `fibo remote --status`
 // showed three for one device and its log bursts of twenty: a dial in flight was invisible to
 // the guard, and a timer forgotten by `retry.delete` fired anyway, so each lost connection came
 // back as many.

@@ -48,7 +48,7 @@ jobs:
       - name: Release build
         env:
           LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
-        run: cargo build --release -p mooring-app -p mooring-host
+        run: cargo build --release -p fibo-app -p fibo-host
 
       - name: Stage
         run: python packaging/windows/stage.py --output target/windows-stage
@@ -58,8 +58,8 @@ jobs:
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
-          $version = (Select-String -Path crates/mooring-app/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
-          & $iscc "/DStage=$PWD\target\windows-stage" "/DVersion=$version" "/O$PWD\target\installer" packaging\windows\mooring.iss
+          $version = (Select-String -Path crates/fibo-app/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          & $iscc "/DStage=$PWD\target\windows-stage" "/DVersion=$version" "/O$PWD\target\installer" packaging\windows\fibo.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem target\installer | ForEach-Object { "$($_.Name) $([int]($_.Length/1MB)) MB" }
 
@@ -67,11 +67,11 @@ jobs:
       - name: Smoke test the staged host
         shell: pwsh
         run: |
-          $rt = "$env:RUNNER_TEMP\mooring-rt"
-          $host_ = Start-Process -FilePath target\windows-stage\bin\mooring.exe -ArgumentList @('serve','--runtime',$rt) -PassThru -WindowStyle Hidden
+          $rt = "$env:RUNNER_TEMP\fibo-rt"
+          $host_ = Start-Process -FilePath target\windows-stage\bin\fibo.exe -ArgumentList @('serve','--runtime',$rt) -PassThru -WindowStyle Hidden
           Start-Sleep 3
           $env:MOORING_RUNTIME = $rt
-          & target\windows-stage\bin\mooring.exe list
+          & target\windows-stage\bin\fibo.exe list
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Stop-Process -Id $host_.Id -Force
 

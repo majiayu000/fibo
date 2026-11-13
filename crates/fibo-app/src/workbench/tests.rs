@@ -1,0 +1,792 @@
+use super::*;
+
+pub(super) fn fixture() -> Workspace {
+    let mut w = Workspace::default();
+    w.spaces.push(Space {
+        id: "space".into(),
+        name: "Space".into(),
+        cwd: "/tmp".into(),
+    });
+    w.tabs.push(Tab {
+        id: "tab".into(),
+        space: "space".into(),
+        title: "four panes".into(),
+        layout: Some({
+            let mut l = Layout::Leaf("t0".into());
+            for i in 1..4 {
+                l.split(&format!("t{}", i - 1), format!("t{i}"), Axis::Right);
+            }
+            l
+        }),
+        default_task: None,
+    });
+    for i in 0..4 {
+        w.terminals.push(Terminal {
+            id: format!("t{i}"),
+            space: "space".into(),
+            argv: vec!["/bin/sh".into()],
+            cwd: "/tmp".into(),
+            pid: None,
+            state: if i == 1 {
+                ProcessState::Interrupted
+            } else {
+                ProcessState::Running
+            },
+            exit_code: None,
+            error: None,
+        });
+    }
+    w.agent_sessions.push(AgentSession {
+        id: "history".into(),
+        runtime: Agent::Codex,
+        cli_session_id: "cli".into(),
+        terminal: Some("t1".into()),
+        current: false,
+        task: None,
+        outcome: Outcome::Completed,
+        updated: 1,
+        cwd: "/tmp".into(),
+        transcript: "".into(),
+        binding: None,
+        name: String::new(),
+    });
+    w
+}
+
+#[test]
+fn navigation_uses_live_identity_and_path_boundaries() {
+    let mut w = fixture();
+    let mut s = w.agent_sessions[0].clone();
+    s.current = true;
+    assert!(live_terminal(&w, &s).is_none());
+    s.terminal = Some("t0".into());
+    assert_eq!(live_terminal(&w, &s).unwrap().id, "t0");
+    s.current = false;
+    assert!(live_terminal(&w, &s).is_none());
+    s.terminal = None;
+    s.cwd = "/tmp/project".into();
+    assert_eq!(w.session_space(&s), Some("space"));
+    s.cwd = "/tmp-other/project".into();
+    assert_eq!(w.session_space(&s), None);
+    w.spaces.push(Space {
+        id: "nested".into(),
+        name: "Nested".into(),
+        cwd: "/tmp/project".into(),
+    });
+    s.cwd = "/tmp/project/sub".into();
+    assert_eq!(w.session_space(&s), Some("nested"));
+    // One opened in a Fibo terminal of the broader space follows its project too.
+    s.terminal = Some("t0".into());
+    assert_eq!(w.session_space(&s), Some("nested"));
+    s.cwd = "/tmp/other".into();
+    assert_eq!(w.session_space(&s), Some("space"));
+    s.terminal = None;
+    s.cwd = "/tmp/project/sub".into();
+    s.updated = 100;
+    assert!(!changed_since(&w, &s, 100));
+    assert!(changed_since(&w, &s, 99));
+    assert!(!changed_since(&w, &s, 0));
+    w.content.insert(
+        s.id.clone(),
+        fibo_core::content::Content {
+            updated: 90,
+            ..Default::default()
+        },
+    );
+    assert!(
+        !changed_since(&w, &s, 99),
+        "index mtime cannot mark an old conversation new"
+    );
+    assert!(!show_on_return(100, 1900, 30));
+    assert!(show_on_return(100, 1901, 30));
+    assert!(!show_on_return(0, 1901, 30));
+}
+
+#[test]
+fn interrupted_terminals_never_enter_the_connection_creation_list() {
+    let mut w = fixture();
+    assert_eq!(
+        attachable_ids(&w, w.tab_terminals("tab")),
+        ["t0", "t2", "t3"]
+    );
+    for terminal in &mut w.terminals {
+        terminal.state = ProcessState::Interrupted;
+    }
+    assert!(attachable_ids(&w, w.tab_terminals("tab")).is_empty());
+}
+
+#[test]
+fn reopening_full_tab_replaces_exact_slot_and_preserves_history() {
+    let mut w = fixture();
+    let history = w.agent_sessions.clone();
+    let mut replacement = w.terminals[1].clone();
+    replacement.id = "new".into();
+    replacement.state = ProcessState::Running;
+    w.terminals.push(replacement);
+    w.edit(Edit::ReplacePane {
+        old: "t1".into(),
+        new: "new".into(),
+    })
+    .unwrap();
+    assert_eq!(w.tab_terminals("tab"), ["t0", "new", "t2", "t3"]);
+    assert!(w.terminal_tab("t1").is_none());
+    assert_eq!(w.terminals[1].state, ProcessState::Interrupted);
+    assert_eq!(w.agent_sessions, history);
+}
+
+#[test]
+fn closing_interrupted_pane_only_removes_its_placement() {
+    let mut w = fixture();
+    let history = w.agent_sessions.clone();
+    w.edit(Edit::ClosePane {
+        terminal: "t1".into(),
+    })
+    .unwrap();
+    assert_eq!(w.tab_terminals("tab"), ["t0", "t2", "t3"]);
+    assert_eq!(w.terminals.len(), 4);
+    assert_eq!(w.agent_sessions, history);
+}
+
+#[test]
+fn an_empty_agent_reads_as_fresh_not_done() {
+    use fibo_core::content::{Content, Quote, Turn};
+    let mut w = fixture();
+    let mut s = w.agent_sessions[0].clone();
+    s.id = "live".into();
+    s.terminal = Some("t0".into());
+    s.current = true;
+    s.outcome = Outcome::Open;
+    let unseen = HashSet::new();
+    // Just opened: no record yet, then a record with no ask and no turn.
+    assert!(session_status(&w, &unseen, &s) == (Status::Fresh, false));
+    w.content.insert("live".into(), Content::default());
+    assert!(session_status(&w, &unseen, &s) == (Status::Fresh, false));
+    assert_eq!(Status::Fresh.label(), "新开的");
+    // Its own bucket in 状态 / 目录 and to plugins, not counted under 做完了.
+    assert!(super::sidebar_list::bucket(Status::Fresh) == fibo_core::sidebar::Bucket::Fresh);
+    // Nor a card on the board until it has done something.
+    assert!(super::board::column_of(&w, &s, now()).is_none());
+    // Once it has an ask or a finished turn it is no longer new: it waits for you to
+    // say whether the work is done.
+    w.content.insert(
+        "live".into(),
+        Content {
+            turn: Turn::Completed,
+            ..Default::default()
+        },
+    );
+    assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
+    w.content.insert(
+        "live".into(),
+        Content {
+            asks: vec![Quote::default()],
+            ..Default::default()
+        },
+    );
+    assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
+    assert!(super::board::column_of(&w, &s, now()).is_some());
+}
+
+/// Only you say the work is done: a live turn that ended is 等你验收 whatever its reply
+/// claimed, 等后台 while something it started still runs, and 做完了 once you mark it.
+#[test]
+fn a_live_turn_is_done_only_when_you_say_so() {
+    use fibo_core::content::{Background, Content, Turn};
+    let mut w = fixture();
+    let mut s = w.agent_sessions[0].clone();
+    s.id = "live".into();
+    s.terminal = Some("t0".into());
+    s.current = true;
+    s.outcome = Outcome::Open;
+    w.agent_sessions.push(s.clone());
+    let mut unseen = HashSet::new();
+    let ended = |claim: bool, background: Option<Background>| Content {
+        turn: Turn::Completed,
+        completed_claim: claim,
+        background,
+        updated: now(),
+        turn_started: now(),
+        ..Default::default()
+    };
+    let shell = Some(Background {
+        shells: 1,
+        ..Default::default()
+    });
+    let wakeup = Some(Background {
+        crons: 1,
+        ..Default::default()
+    });
+
+    // Said done or not, a finished turn waits for you, and so does the inbox.
+    for claim in [false, true] {
+        w.content.insert("live".into(), ended(claim, None));
+        assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
+        assert!(status_of(&w, &s) == Status::Review);
+    }
+    assert_eq!(Status::Review.label(), "等你验收");
+    assert_eq!(Status::Review.label(), "等你验收");
+    unseen.insert("live".to_owned());
+    assert!(session_status(&w, &unseen, &s) == (Status::Review, true));
+    unseen.clear();
+
+    // A server left running wakes nothing: the turn is over, and the row says what is left.
+    w.content.insert("live".into(), ended(true, shell));
+    assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
+    assert_eq!(
+        fibo_core::status::left_behind(&w, &s).as_deref(),
+        Some("后台留着 1 个进程")
+    );
+    // A wakeup will bring it back: that one is really waited for.
+    w.content.insert("live".into(), ended(true, wakeup));
+    assert!(session_status(&w, &unseen, &s) == (Status::Background, false));
+    assert_eq!(Status::Background.label(), "等后台");
+    // 要你处理 holds it with the finished ones (11-03: 处理 and 验收 are one group).
+    assert!(
+        super::sidebar_list::bucket(Status::Background) == fibo_core::sidebar::Bucket::Attention
+    );
+
+    // A failed turn says so.
+    w.content.insert(
+        "live".into(),
+        Content {
+            turn: Turn::Error,
+            ..Default::default()
+        },
+    );
+    assert!(session_status(&w, &unseen, &s).0 == Status::Error);
+
+    // 做完了 is what you marked complete, and nothing else.
+    s.outcome = Outcome::Completed;
+    w.content.insert("live".into(), ended(false, shell));
+    assert!(session_status(&w, &unseen, &s) == (Status::Closed, false));
+    assert_eq!(Status::Closed.label(), "做完了");
+}
+
+#[test]
+fn live_phase_reads_only_running_mooring_terminals() {
+    use fibo_core::content::{Background, Content, Turn};
+    let mut w = fixture();
+    let mut s = w.agent_sessions[0].clone();
+    s.id = "live".into();
+    s.terminal = Some("t0".into());
+    s.current = true;
+    assert_eq!(live_phase(&w, &s), Some(Phase::Idle));
+    for (turn, background, phase) in [
+        (Turn::Running, None, Phase::Working),
+        (Turn::Waiting, None, Phase::Waiting),
+        (Turn::Completed, None, Phase::Idle),
+        (Turn::Error, None, Phase::Idle),
+        (
+            Turn::Completed,
+            Some(Background {
+                agents: 1,
+                ..Default::default()
+            }),
+            Phase::Working,
+        ),
+        (
+            Turn::Completed,
+            Some(Background {
+                monitors: 1,
+                ..Default::default()
+            }),
+            Phase::Idle,
+        ),
+    ] {
+        w.content.insert(
+            "live".into(),
+            Content {
+                turn,
+                background,
+                ..Default::default()
+            },
+        );
+        assert_eq!(live_phase(&w, &s), Some(phase), "{turn:?}");
+    }
+    // An exited terminal, a past conversation or a scanned log keep the inbox grouping.
+    s.terminal = Some("t1".into());
+    assert_eq!(live_phase(&w, &s), None);
+    s.terminal = Some("t0".into());
+    s.current = false;
+    assert_eq!(live_phase(&w, &s), None);
+    s.terminal = None;
+    assert_eq!(live_phase(&w, &s), None);
+}
+
+#[test]
+fn finished_turn_stays_unseen_until_its_pane_is_shown() {
+    let mut phases = HashMap::new();
+    let mut unseen = HashSet::new();
+    let step = |phases: &mut _, unseen: &mut _, phase, shown| {
+        track_unseen(phases, unseen, [("s".to_string(), phase, shown)]);
+    };
+    // Already idle when first seen (e.g. after a restart): nothing new to look at.
+    step(&mut phases, &mut unseen, Phase::Idle, false);
+    assert!(unseen.is_empty());
+    // Ends out of view: done, and stays done across later idle snapshots.
+    step(&mut phases, &mut unseen, Phase::Working, false);
+    step(&mut phases, &mut unseen, Phase::Idle, false);
+    step(&mut phases, &mut unseen, Phase::Idle, false);
+    assert!(unseen.contains("s"));
+    // Showing the pane marks it seen.
+    step(&mut phases, &mut unseen, Phase::Idle, true);
+    assert!(unseen.is_empty());
+    // Ends in view: seen at once.
+    step(&mut phases, &mut unseen, Phase::Working, true);
+    step(&mut phases, &mut unseen, Phase::Idle, true);
+    assert!(unseen.is_empty());
+    // A new turn clears done; a vanished session is forgotten.
+    step(&mut phases, &mut unseen, Phase::Waiting, false);
+    step(&mut phases, &mut unseen, Phase::Idle, false);
+    assert!(unseen.contains("s"));
+    step(&mut phases, &mut unseen, Phase::Working, false);
+    assert!(unseen.is_empty());
+    step(&mut phases, &mut unseen, Phase::Idle, false);
+    track_unseen(&mut phases, &mut unseen, []);
+    assert!(unseen.is_empty() && phases.is_empty());
+}
+
+#[test]
+fn sidebar_rows_rank_by_the_shown_state() {
+    let rank = sidebar::sidebar_rank;
+    // A finished turn you have not seen is colored, so it sits with the others that need you.
+    assert!(rank(Status::Review, true) < rank(Status::Running, false));
+    assert!(rank(Status::Waiting, true) < rank(Status::Review, true));
+    // Live work comes before sessions resting at their prompt.
+    assert!(rank(Status::Running, false) < rank(Status::Review, false));
+    // Opened but not yet spoken to: after the resting rows, before what has gone quiet.
+    assert!(rank(Status::Review, false) < rank(Status::Fresh, false));
+    assert!(rank(Status::Fresh, false) < rank(Status::Stale, false));
+    // Resting rows share a tier, so the newest of them comes first whatever its state.
+    assert_eq!(rank(Status::Review, false), rank(Status::Review, false));
+    assert_eq!(rank(Status::Paused, false), rank(Status::Review, false));
+}
+
+#[test]
+fn reopening_a_failed_resume_returns_to_its_terminal() {
+    let mut w = fixture();
+    let s = w.agent_sessions[0].clone();
+    let mut resumed = HashMap::new();
+    assert!(live_terminal(&w, &s).is_none());
+    assert!(resume_terminal(&w, &resumed, &s).is_none());
+    resumed.insert(s.id.clone(), "t2".into());
+    assert_eq!(resume_terminal(&w, &resumed, &s).unwrap().id, "t2");
+    // Closed or exited: the next click resumes afresh.
+    w.terminals[2].state = ProcessState::Interrupted;
+    assert!(resume_terminal(&w, &resumed, &s).is_none());
+    w.terminals[2].state = ProcessState::Running;
+    w.tabs.clear();
+    assert!(resume_terminal(&w, &resumed, &s).is_none());
+}
+
+/// Whatever is asked during another action waits its turn; only a repeat of something
+/// still pending is dropped: a second creation of the same kind, a second refresh.
+#[test]
+fn requests_wait_behind_a_busy_action_and_only_repeats_are_dropped() {
+    use crate::host::store::repeat_key;
+    let w = fixture();
+    let edit = |edit| Request::Edit {
+        request: Some(RequestId::fresh()),
+        edit,
+    };
+    for queued in [
+        edit(Edit::CloseTab {
+            id: "tab".into(),
+            expect: None,
+        }),
+        edit(Edit::SetTaskOutcome {
+            seen: None,
+            id: "task".into(),
+            outcome: Outcome::Abandoned,
+        }),
+        Request::StopAgent { id: "t".into() },
+    ] {
+        assert_eq!(repeat_key(&queued), None);
+    }
+    let space = |id: &str| {
+        let mut s = w.spaces[0].clone();
+        s.id = id.into();
+        edit(Edit::AddSpace(s))
+    };
+    assert_eq!(repeat_key(&space("a")), repeat_key(&space("b")));
+    assert!(repeat_key(&space("a")).is_some());
+    assert_ne!(
+        repeat_key(&space("a")),
+        repeat_key(&edit(Edit::AddTask(Task {
+            id: "t".into(),
+            space: "s".into(),
+            title: "t".into(),
+            description: String::new(),
+            acceptance: vec![],
+            agent: Agent::Claude,
+        })))
+    );
+    assert!(repeat_key(&Request::Workspace).is_some());
+}
+#[test]
+fn a_removed_directory_falls_back_to_one_that_exists() {
+    let gone = "/nonexistent/mooring-idle-test/next".to_owned();
+    let tmp = std::env::temp_dir().to_string_lossy().into_owned();
+    assert_eq!(usable_cwd([gone.clone(), tmp.clone()]), tmp);
+    assert_eq!(
+        usable_cwd([gone.clone(), gone]),
+        std::env::var("HOME").unwrap()
+    );
+}
+#[test]
+fn close_confirms_only_work_in_progress_or_a_pending_question() {
+    let agent = |p| vec![("a".to_owned(), p)];
+    assert!(!interrupts(&[]));
+    assert!(!interrupts(&agent(Some(Phase::Idle))));
+    assert!(!interrupts(&agent(None)));
+    assert!(interrupts(&agent(Some(Phase::Working))));
+    assert!(interrupts(&agent(Some(Phase::Waiting))));
+    let mut mixed = agent(Some(Phase::Idle));
+    mixed.push(("b".to_owned(), Some(Phase::Working)));
+    assert!(interrupts(&mixed));
+}
+#[test]
+fn closing_a_tab_of_several_splits_counts_them() {
+    let mut w = fixture();
+    assert_eq!(splits_closed(&w, &Closing::Tab("tab".into())), 4);
+    assert_eq!(splits_closed(&w, &Closing::Pane("t0".into())), 0);
+    assert_eq!(splits_closed(&w, &Closing::Host), 0);
+    w.tabs[0].layout = Some(Layout::Leaf("t0".into()));
+    assert_eq!(splits_closed(&w, &Closing::Tab("tab".into())), 0);
+}
+#[test]
+fn closed_sessions_past_the_stale_days_leave_the_sidebar_count() {
+    let mut w = fixture();
+    let s = &mut w.agent_sessions[0];
+    s.outcome = Outcome::Open;
+    s.updated = now();
+    assert!(closed_recently(&w, &w.agent_sessions[0]));
+    // Quiet longer than the stale days: still in the overview, no longer counted.
+    w.agent_sessions[0].updated = 1;
+    assert!(!closed_recently(&w, &w.agent_sessions[0]));
+    // Settled ones never count.
+    w.agent_sessions[0].updated = now();
+    w.agent_sessions[0].outcome = Outcome::Completed;
+    assert!(!closed_recently(&w, &w.agent_sessions[0]));
+}
+#[test]
+fn a_shown_interrupted_pane_reopens_once() {
+    let w = fixture();
+    let shown = w.tab_terminals("tab");
+    let mut tried = HashSet::new();
+    assert_eq!(reopen_candidate(&w, &shown, &tried).as_deref(), Some("t1"));
+    // Tried once: a failed launch leaves its reopen button instead of retrying forever.
+    tried.insert("t1".to_owned());
+    assert_eq!(reopen_candidate(&w, &shown, &tried), None);
+    // Only panes in view; another tab's lost shells wait until it shows.
+    assert_eq!(reopen_candidate(&w, &shown[2..], &HashSet::new()), None);
+}
+#[test]
+fn a_reopened_pane_resumes_its_latest_open_conversation() {
+    let mut w = fixture();
+    // Only a finished conversation ran there: reopen a plain shell.
+    assert!(interrupted_session(&w, "t1").is_none());
+    let mut open = w.agent_sessions[0].clone();
+    open.outcome = Outcome::Open;
+    let older = AgentSession {
+        id: "older".into(),
+        updated: 2,
+        ..open.clone()
+    };
+    let latest = AgentSession {
+        id: "latest".into(),
+        updated: 3,
+        ..open.clone()
+    };
+    let elsewhere = AgentSession {
+        id: "elsewhere".into(),
+        terminal: Some("t0".into()),
+        updated: 9,
+        ..open
+    };
+    w.agent_sessions.extend([older, latest, elsewhere]);
+    // Lost before the host kept a record: the latest open conversation there.
+    assert_eq!(interrupted_session(&w, "t1").unwrap().id, "latest");
+    // The host's record wins, including that nothing but the shell was running.
+    w.lost_agents.insert("t1".into(), Some("older".into()));
+    assert_eq!(interrupted_session(&w, "t1").unwrap().id, "older");
+    w.lost_agents.insert("t1".into(), None);
+    assert!(interrupted_session(&w, "t1").is_none());
+}
+/// A conversation lost in `t1` of the fixture, open and recorded by the host.
+fn lost_in_t1(w: &mut Workspace) -> AgentSession {
+    let lost = AgentSession {
+        id: "lost".into(),
+        outcome: Outcome::Open,
+        ..w.agent_sessions[0].clone()
+    };
+    w.agent_sessions.push(lost.clone());
+    w.lost_agents.insert("t1".into(), Some("lost".into()));
+    lost
+}
+#[test]
+fn resuming_a_session_finds_the_lost_pane_it_left() {
+    let mut w = fixture();
+    lost_in_t1(&mut w);
+    assert_eq!(interrupted_pane(&w, "lost").unwrap().id, "t1");
+    assert!(interrupted_pane(&w, "other").is_none());
+    // Its tab is gone: nothing to come back to, the resume opens a tab.
+    w.edit(Edit::ClosePane {
+        terminal: "t1".into(),
+    })
+    .unwrap();
+    assert!(interrupted_pane(&w, "lost").is_none());
+}
+#[test]
+fn a_lost_pane_stays_lost_while_its_session_runs_elsewhere() {
+    let mut w = fixture();
+    let lost = lost_in_t1(&mut w);
+    let mut resumed = HashMap::new();
+    assert!(lost_session_runs_in(&w, &resumed, "t1").is_none());
+    // Being resumed, not bound yet: the launch would otherwise start it a second time.
+    resumed.insert("lost".to_owned(), "t3".to_owned());
+    assert_eq!(lost_session_runs_in(&w, &resumed, "t1").unwrap().id, "t3");
+    resumed.clear();
+    // Bound to a running terminal.
+    let s = w.agent_sessions.iter_mut().find(|s| s.id == lost.id);
+    let s = s.unwrap();
+    (s.terminal, s.current) = (Some("t2".into()), true);
+    assert_eq!(lost_session_runs_in(&w, &resumed, "t1").unwrap().id, "t2");
+    // A pane that ran no conversation has nothing to be running elsewhere.
+    w.lost_agents.insert("t1".into(), None);
+    assert!(lost_session_runs_in(&w, &resumed, "t1").is_none());
+}
+#[test]
+fn a_lost_pane_of_a_closed_conversation_does_not_come_back_by_itself() {
+    let mut w = fixture();
+    lost_in_t1(&mut w);
+    let at = 1_000;
+    for (outcome, settled) in [
+        (Outcome::Completed, true),
+        (Outcome::Abandoned, true),
+        (Outcome::Open, false),
+    ] {
+        let s = w.agent_sessions.iter_mut().find(|s| s.id == "lost");
+        s.unwrap().outcome = outcome;
+        assert_eq!(lost_session_settled(&w, "t1", at), settled);
+    }
+    // A click still finds the pane, so a closed conversation resumes in its own tab.
+    let s = w.agent_sessions.iter_mut().find(|s| s.id == "lost");
+    s.unwrap().outcome = Outcome::Completed;
+    assert_eq!(interrupted_pane(&w, "lost").unwrap().id, "t1");
+    // A pane that ran no conversation stays a shell to bring back.
+    w.lost_agents.insert("t1".into(), None);
+    assert!(!lost_session_settled(&w, "t1", at));
+}
+#[test]
+fn a_resume_is_the_new_shells_first_command_not_typed_later() {
+    assert_eq!(launch_argv("/bin/zsh".into(), None), ["/bin/zsh", "-l"]);
+    let command = Agent::Claude.resume_command("it's-1", &[]);
+    let argv = launch_argv("/bin/sh".into(), Some(&command));
+    assert_eq!(&argv[..4], ["/bin/sh", "-l", "-i", "-c"]);
+    // Run it for real with `claude` stubbed: the quoted id arrives intact, then the shell
+    // that takes over reads the empty stdin and ends.
+    let out = std::process::Command::new(&argv[0])
+        .args(&argv[1..3])
+        .arg("-c")
+        .arg(format!("claude() {{ printf '%s|' \"$@\"; }}; {}", argv[4]))
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "--resume|it's-1|");
+}
+#[test]
+fn the_pane_menu_says_which_signal_set_the_state() {
+    let mut w = fixture();
+    let lines = state_reasons(&w, "t0", Some("Claude 没保存对话记录"), 1000);
+    assert_eq!(lines.len(), 2);
+    assert!(lines[1].contains("Claude 没保存对话记录"));
+    w.agent_sessions[0].terminal = Some("t0".into());
+    w.agent_sessions[0].current = true;
+    let c = fibo_core::content::Content {
+        turn: fibo_core::content::Turn::Waiting,
+        signal: "画面".into(),
+        signal_at: 1000 - 120,
+        waiting: "Do you want to proceed?（画面上的提示）".into(),
+        ..Default::default()
+    };
+    w.content.insert("history".into(), c);
+    let lines = state_reasons(&w, "t0", None, 1000);
+    assert_eq!(lines[0], "Codex 对话 cli");
+    assert_eq!(lines[1], "现在：等你回答");
+    assert_eq!(
+        lines[2],
+        "依据：画面底部认出了提问框；对话记录里没有这一条（2 分钟前）"
+    );
+    assert!(lines[3].starts_with("在等：Do you want to proceed?"));
+
+    // The rule and the lines it saw, as the daemon wrote them.
+    let detail = "规则：approval 审批（codex 内置 2026.10.31.1）\n看到：Do you want to proceed? / ❯ 1. Yes / 2. No";
+    w.content.get_mut("history").unwrap().signal_detail = detail.into();
+    let lines = state_reasons(&w, "t0", None, 1000);
+    assert_eq!(lines[3], "规则：approval 审批（codex 内置 2026.10.31.1）");
+    assert_eq!(lines[4], "看到：Do you want to proceed? / ❯ 1. Yes / 2. No");
+    assert!(lines[5].starts_with("在等："));
+
+    // A finished turn from the log, and a quiet screen no rule took.
+    let c = fibo_core::content::Content {
+        turn: fibo_core::content::Turn::Completed,
+        signal: "日志".into(),
+        signal_at: 1000 - 30,
+        signal_detail: "记录：assistant「测试都过了，已经提交。」".into(),
+        completed_claim: true,
+        screen_check: "没认出提问框（底部没有审批或选择题的提示；规则 codex 内置 2026.10.31.1）"
+            .into(),
+        ..Default::default()
+    };
+    w.content.insert("history".into(), c);
+    let lines = state_reasons(&w, "t0", None, 1000);
+    assert_eq!(lines[1], "现在：做完了 / 你标记过完成");
+    assert_eq!(lines[3], "记录：assistant「测试都过了，已经提交。」");
+    assert_eq!(
+        lines[4],
+        "画面：没认出提问框（底部没有审批或选择题的提示；规则 codex 内置 2026.10.31.1），所以按「做完了 / 你标记过完成」显示。"
+    );
+    // Not marked complete yet: it waits for you, whatever the reply claimed.
+    w.agent_sessions[0].outcome = Outcome::Open;
+    let lines = state_reasons(&w, "t0", None, 1000);
+    assert_eq!(lines[1], "现在：等你验收 / 这一轮停了，做没做完由你定");
+    for line in &lines {
+        println!("{line}");
+    }
+
+    // While it runs, a screen with no prompt is not news.
+    w.content.get_mut("history").unwrap().turn = fibo_core::content::Turn::Running;
+    let lines = state_reasons(&w, "t0", None, 1000);
+    assert!(!lines.iter().any(|l| l.starts_with("画面：")), "{lines:?}");
+}
+
+#[test]
+fn here_card_counts_receipts_and_merges_changed_files() {
+    use fibo_core::content::{Evidence, Source};
+    let fact = |kind: &str, summary: &str, code: Option<i32>| Evidence {
+        kind: kind.into(),
+        summary: summary.into(),
+        exit_code: code,
+        at: 0,
+        source: Source::default(),
+    };
+    let evidence = vec![
+        fact("command", "cargo test", Some(0)),
+        fact("test", "cargo test：ok", Some(0)),
+        fact("file", "文件修改：/repo/src/a.rs", Some(0)),
+        fact("command", "rg x", Some(1)),
+        fact("error", "exec_command: no match", Some(1)),
+        fact("file", "文件修改：/repo/src/a.rs", Some(0)),
+        fact("file", "文件修改：/elsewhere/b.rs", Some(0)),
+        fact("approval", "等你允许", None),
+    ];
+    assert_eq!(sessions::evidence_tally(&evidence), (1, 3, 1));
+    assert_eq!(
+        sessions::done_items(&evidence, "/repo"),
+        vec![
+            ("/elsewhere/b.rs".to_owned(), 1, true),
+            ("src/a.rs".to_owned(), 2, true),
+            ("cargo test：ok".to_owned(), 1, false),
+        ]
+    );
+}
+
+/// The empty tab's 「运行 Claude Code」 and the right-click 新会话 list pick an Agent with no
+/// todo: the new shell must start it, not stay a bare shell.
+#[test]
+fn a_picked_agent_starts_without_a_todo() {
+    // Each start mints its own session id, so compare the executable that runs.
+    let exe = |s: Option<(String, Option<String>)>| {
+        s.map(|(c, text)| (c.split_whitespace().next().unwrap_or("").to_owned(), text))
+    };
+    assert_eq!(
+        exe(start_command(Some(Agent::Claude), None, None)),
+        Some(("claude".into(), None))
+    );
+    assert_eq!(start_command(None, None, None), None);
+    // A plugin action's command still wins over a stale pick.
+    assert_eq!(
+        start_command(Some(Agent::Claude), None, Some("vim a.rs")),
+        Some(("vim a.rs".into(), None))
+    );
+    let task = Task {
+        id: "t".into(),
+        space: "space".into(),
+        title: "Fix it".into(),
+        description: String::new(),
+        acceptance: vec![],
+        agent: Agent::Codex,
+    };
+    // A todo keeps its text; a pick overrides only its Agent.
+    assert_eq!(
+        exe(start_command(Some(Agent::Claude), Some(&task), None)),
+        Some(("claude".into(), Some(task.prompt())))
+    );
+    assert_eq!(
+        exe(start_command(None, Some(&task), None)).map(|s| s.0),
+        Some("codex".into())
+    );
+}
+
+/// Every coarse view of a state (the sidebar's buckets, the plugin words, the palette's
+/// counts) derives from the one `Status` and agrees on what is in flight and what needs
+/// you (Keepline repo, specs/status-model).
+#[test]
+fn every_projection_of_a_status_agrees() {
+    use fibo_core::sidebar::Bucket;
+    for s in Status::ALL {
+        let b = super::sidebar_list::bucket(s);
+        assert_eq!(b == Bucket::Running, s.working(), "{s:?}");
+        assert_eq!(b == Bucket::Attention, s.needs_you(), "{s:?}");
+    }
+}
+
+#[test]
+fn a_question_reads_without_its_scope_and_choices() {
+    assert_eq!(
+        super::layout::ask_prompt("【侧栏】参考哪两家？（按状态 / 按空间）"),
+        "参考哪两家？"
+    );
+    assert_eq!(
+        super::layout::ask_prompt("要覆盖 config.toml 吗？"),
+        "要覆盖 config.toml 吗？"
+    );
+}
+#[test]
+fn a_space_without_a_folder_is_not_missing() {
+    let space = |cwd: &str| Space {
+        id: "s".into(),
+        name: "s".into(),
+        cwd: cwd.into(),
+    };
+    assert!(!space_dir_missing(&space("")));
+    assert!(!space_dir_missing(&space("/")));
+    assert!(space_dir_missing(&space("/nonexistent/mooring-gone")));
+    assert_eq!(space_dir_label(&space(""), ""), "未设目录 · 从 ~ 开始");
+    assert_eq!(space_dir_label(&space(""), "/tmp"), "从上次的 /tmp 开始");
+    assert_eq!(space_dir_label(&space("/tmp"), "/elsewhere"), "/tmp");
+    assert_eq!(usable_cwd([String::new()]), std::env::var("HOME").unwrap());
+}
+#[test]
+fn new_spaces_take_the_next_free_name() {
+    let named = |names: &[&str]| -> Vec<Space> {
+        names
+            .iter()
+            .map(|n| Space {
+                id: n.to_string(),
+                name: n.to_string(),
+                cwd: String::new(),
+            })
+            .collect()
+    };
+    assert_eq!(
+        sidebar_spaces::new_space_name(&named(&["工作空间"])),
+        "新空间"
+    );
+    assert_eq!(
+        sidebar_spaces::new_space_name(&named(&["新空间", "新空间 2"])),
+        "新空间 3"
+    );
+}

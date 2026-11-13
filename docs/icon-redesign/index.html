@@ -88,7 +88,7 @@ const D={
   ring:{
     name:'B　留墨环',
     why:'Dock 图保持现在这张，托盘用同一个缺口环加一枚小印，连不上后台时小印消失。改动最小，已经认熟的样子不丢。缺点是形状没说明产品做什么；到了托盘大小更像“刷新/加载中”的转圈，尤其小印消失时。',
-    dockImg:'../../crates/mooring-app/assets/dock-ink.png',
+    dockImg:'../../crates/fibo-app/assets/dock-ink.png',
     tray(off){const a=-46;const x=9+6.6*Math.cos(a*Math.PI/180),y=9+6.6*Math.sin(a*Math.PI/180);return `<svg viewBox="0 0 18 18" WH fill="none" stroke="currentColor"><path d="${ringPath(9,9,6.6,-6,-86)}" stroke-width="1.8" stroke-linecap="round"/>${off?'':`<rect x="${(x-1.6).toFixed(2)}" y="${(y-1.1).toFixed(2)}" width="3.2" height="2.2" rx=".5" transform="rotate(${a} ${x.toFixed(2)} ${y.toFixed(2)})" fill="currentColor" stroke="none"/>`}</svg>`},
   },
   bollard:{
@@ -125,7 +125,7 @@ function sizes(tile){
   return `<p class="label">Dock 与窗口标题栏的真实尺寸（pt）</p><div class="sizes">${[128,64,48,32,20,16].map(n=>`<figure>${tile(n)}<figcaption>${n}</figcaption></figure>`).join('')}</div>`;
 }
 
-let html=`<section><div class="head"><h2>现在</h2></div><p class="why">托盘是文字 K，改名 Mooring 之后已经对不上。连不上后台时，K 前面多一个 9pt 空心圈。</p><div class="grid"><div class="hero"><img src="../../crates/mooring-app/assets/dock-ink.png" alt="现在的 Dock 图标"></div><div>${sizes(n=>`<img src="../../crates/mooring-app/assets/dock-ink.png" width="${n}" height="${n}" alt="">`)}<p class="label">菜单栏：平时 / 3 个要你处理 / 连不上后台</p><div class="bars">${[['K'],['K 3'],['<svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4.5" cy="4.5" r="3.25"/></svg>K']].map(([k])=>bar('light',k)+bar('dark',k)).join('')}</div></div></div></section>`;
+let html=`<section><div class="head"><h2>现在</h2></div><p class="why">托盘是文字 K，改名 Mooring 之后已经对不上。连不上后台时，K 前面多一个 9pt 空心圈。</p><div class="grid"><div class="hero"><img src="../../crates/fibo-app/assets/dock-ink.png" alt="现在的 Dock 图标"></div><div>${sizes(n=>`<img src="../../crates/fibo-app/assets/dock-ink.png" width="${n}" height="${n}" alt="">`)}<p class="label">菜单栏：平时 / 3 个要你处理 / 连不上后台</p><div class="bars">${[['K'],['K 3'],['<svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4.5" cy="4.5" r="3.25"/></svg>K']].map(([k])=>bar('light',k)+bar('dark',k)).join('')}</div></div></div></section>`;
 
 const zoomJobs=[];
 for(const [key,d] of Object.entries(D)){

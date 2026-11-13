@@ -58,16 +58,18 @@ def die(msg):
     sys.exit(f"phone-walk: {msg}")
 
 
-def mooring():
-    found = shutil.which("mooring")
+def fibo():
+    found = shutil.which("fibo") or shutil.which("mooring")
     if found:
         return found
-    # An app updated in place keeps its folder name, so an old install is still Mooring.app.
+    # An app updated in place keeps its folder name, so an old install is still Mooring.app,
+    # and one from before the program rename has only `mooring` inside.
     for name in ("Fibo", "Mooring"):
-        app = Path(f"/Applications/{name}.app/Contents/MacOS/mooring")
-        if app.exists():
-            return str(app)
-    return die("找不到 mooring 命令")
+        for program in ("fibo", "mooring"):
+            app = Path(f"/Applications/{name}.app/Contents/MacOS/{program}")
+            if app.exists():
+                return str(app)
+    return die("找不到 fibo 命令")
 
 
 def adb(*args, out=False):
@@ -162,7 +164,7 @@ def setup():
                     "commit", "-qm", "init"], check=True)
     task = (f"This is a Mooring {MARKER} test session. Run `echo {MARKER}-ready` and reply "
             f"with only {MARKER}-ready. Later messages come from the phone test; keep replies short.")
-    r = subprocess.run([mooring(), "run", "claude", task, "--cwd", str(d), "--no-report", "--json"],
+    r = subprocess.run([fibo(), "run", "claude", task, "--cwd", str(d), "--no-report", "--json"],
                        capture_output=True, text=True)
     if r.returncode:
         # A new temp dir always asks whether to trust it; answer for this dir only.
@@ -172,13 +174,13 @@ def setup():
         terminal = stuck.group(0)
         s["tests"].append({"dir": str(d), "terminal": terminal})
         save(s)
-        screen = subprocess.run([mooring(), "read", terminal, "--lines", "20"],
+        screen = subprocess.run([fibo(), "read", terminal, "--lines", "20"],
                                 capture_output=True, text=True).stdout
         if "trust this folder" not in screen or str(d.name) not in screen:
-            die(f"测试会话停在别的画面上：mooring read {terminal}")
+            die(f"测试会话停在别的画面上：fibo read {terminal}")
         send_keys(terminal, ["down", "enter"])
         time.sleep(4)
-        subprocess.run([mooring(), "prompt", terminal, task, "--wait", "--timeout", "120"], check=True)
+        subprocess.run([fibo(), "prompt", terminal, task, "--wait", "--timeout", "120"], check=True)
     else:
         terminal = json.loads(r.stdout.strip().splitlines()[-1]).get("terminal")
         s["tests"].append({"dir": str(d), "terminal": terminal})
@@ -190,7 +192,7 @@ def send_keys(terminal, keys):
     lines = [{"id": 1, "op": "hello", "version": 1, "client": MARKER},
              {"id": 2, "op": "keys", "terminal": terminal, "keys": keys}]
     body = "".join(json.dumps(l) + "\n" for l in lines)
-    r = subprocess.run([mooring(), "remote", "--stdio", "--role", "full"], input=body,
+    r = subprocess.run([fibo(), "remote", "--stdio", "--role", "full"], input=body,
                        capture_output=True, text=True, timeout=20)
     if '"id":2' not in r.stdout.replace(" ", "") or "error" in r.stdout:
         die(f"按键没送到：{r.stdout[-300:]}{r.stderr[-300:]}")
@@ -421,14 +423,14 @@ def teardown():
     s = state()
     dirs = [os.path.realpath(t["dir"]) for t in s.get("tests", [])]
     # Terminals the phone opened (new.task) are not in the state: close every one in a test dir.
-    listed = json.loads(subprocess.run([mooring(), "list", "--json"], capture_output=True,
+    listed = json.loads(subprocess.run([fibo(), "list", "--json"], capture_output=True,
                                        text=True).stdout or "[]")
     listed = listed if isinstance(listed, list) else listed.get("terminals", [])
     closing = {t["terminal"] for t in s.get("tests", [])} | {
         t["id"] for t in listed
         if any(os.path.realpath(t.get("cwd") or "/").startswith(d) for d in dirs)}
     for terminal in closing:
-        subprocess.run([mooring(), "close", terminal], capture_output=True)
+        subprocess.run([fibo(), "close", terminal], capture_output=True)
     for d in dirs:
         shutil.rmtree(d, ignore_errors=True)
         slug = re.sub(r"[^A-Za-z0-9]", "-", d)

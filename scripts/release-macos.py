@@ -3,7 +3,7 @@
 as Fibo-<version>-<arch>.zip (arm64 or x86_64; what the in-app updater installs) and .dmg (what people drag into
 Applications), plus SHA256SUMS. It does not publish anything; `gh release create` does that.
 
-Needs: `cargo build --release -p mooring-host -p mooring-app` done first (for Intel, add
+Needs: `cargo build --release -p fibo-host -p fibo-app` done first (for Intel, add
 `--target x86_64-apple-darwin` there and here), the Developer ID
 identity in the keychain, and a notarytool keychain profile (`xcrun notarytool store-credentials`).
 """
@@ -27,7 +27,7 @@ parser.add_argument('--skip-notarize', action='store_true', help='local dry run:
 parser.add_argument('--target', help='a cargo target such as x86_64-apple-darwin; default: this Mac')
 args = parser.parse_args()
 
-version = tomllib.loads((root / 'crates/mooring-app/Cargo.toml').read_text())['package']['version']
+version = tomllib.loads((root / 'crates/fibo-app/Cargo.toml').read_text())['package']['version']
 arch = {'arm64': 'arm64', 'x86_64': 'x86_64', 'aarch64': 'arm64'}[(args.target or platform.machine()).split('-')[0]]
 release_dir = root / 'target' / args.target / 'release' if args.target else root / 'target/release'
 name = f'Fibo-{version}-{arch}'

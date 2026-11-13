@@ -3,7 +3,7 @@
 Keeps only structure: event name, field names, background task type/status pairs, cron
 count, notification type and whether an agent_id was present. No ids, paths or text.
 
-    python3 -I hook_shapes.py ~/.mooring/spool/events > ../../crates/mooring-host/tests/fixtures/hook_shapes.jsonl
+    python3 -I hook_shapes.py ~/.mooring/spool/events > ../../crates/fibo-host/tests/fixtures/hook_shapes.jsonl
 """
 import json
 import os

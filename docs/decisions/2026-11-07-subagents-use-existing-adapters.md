@@ -10,7 +10,7 @@ decision-makers: 用户、Codex
 
 用户要求把 Codex、OpenCode、Cursor 的父子会话/子 Agent 都接入，随后要求分析并再接入几个工具，询问是否应采用策略模式以及现有架构是否混乱。
 
-`mooring-host::agents::Adapter` 已经是按 CLI 选择的策略接口。Claude 的 `subagents()` 读取独立元数据；Codex 的 `links_children()` 使用子日志中的父线程 ID。两种数据都由 core 的 `Content::keep_subagents` 筛选并输出 `Subagent`，侧栏无需识别 CLI。
+`fibo-host::agents::Adapter` 已经是按 CLI 选择的策略接口。Claude 的 `subagents()` 读取独立元数据；Codex 的 `links_children()` 使用子日志中的父线程 ID。两种数据都由 core 的 `Content::keep_subagents` 筛选并输出 `Subagent`，侧栏无需识别 CLI。
 
 缺口在输入：OpenCode 声明只选 `parent_id IS NULL` 的根会话，Cursor 扫描跳过 `subagents/`；共享子日志查询又没有隔离 CLI 名称空间。OpenCode 原查询只返回毫秒游标 `_t`，没有解析器需要的秒级 `timestamp`。
 
@@ -38,21 +38,21 @@ Cursor 没有给每条记录写时间；用户消息时间沿用现有 timestamp
 
 ## Implementation Plan
 
-- `crates/mooring-core/src/agent_transcripts.rs`：从达到文件大小上限的 agent.rs 拆出已有声明类型，并补父字段。
-- `crates/mooring-host/src/agents/{cursor,declared,mirror}.rs`：各来源的归一化。
-- `crates/mooring-host/src/content/children.rs`：从 db.rs 拆出已有父子投影，按 CLI 隔离。
-- `crates/mooring-host/src/log_index*`：复用日志监听、持久化、父会话更新。
+- `crates/fibo-core/src/agent_transcripts.rs`：从达到文件大小上限的 agent.rs 拆出已有声明类型，并补父字段。
+- `crates/fibo-host/src/agents/{cursor,declared,mirror}.rs`：各来源的归一化。
+- `crates/fibo-host/src/content/children.rs`：从 db.rs 拆出已有父子投影，按 CLI 隔离。
+- `crates/fibo-host/src/log_index*`：复用日志监听、持久化、父会话更新。
 - `plugins/opencode/agent.json`：读取父子关系、时间转换、问题回答后的继续事件。
 
 ## Verification
 
-- `cargo test -p mooring-host --test subagent_adapters`：OpenCode SQLite → mirror → adapter → index；Cursor 子日志 → 同一个 index；同 ID 跨 CLI 隔离、运行/等待/结束/中断、父日志不动、重启。
-- `cargo test -p mooring-host --lib`：Codex、Claude、mirror 与 Cursor 相邻路径。
-- `cargo test -p mooring-host --test architecture_boundary`：适配器之外不识别 CLI 品牌。
-- `cargo test -p mooring-core --test guard --test file_size`：单一事实所有者、文件大小约束。
+- `cargo test -p fibo-host --test subagent_adapters`：OpenCode SQLite → mirror → adapter → index；Cursor 子日志 → 同一个 index；同 ID 跨 CLI 隔离、运行/等待/结束/中断、父日志不动、重启。
+- `cargo test -p fibo-host --lib`：Codex、Claude、mirror 与 Cursor 相邻路径。
+- `cargo test -p fibo-host --test architecture_boundary`：适配器之外不识别 CLI 品牌。
+- `cargo test -p fibo-core --test guard --test file_size`：单一事实所有者、文件大小约束。
 - 原生窗口同源数据前后对照；撤销父关系接入后的回归失败。
 
-真实日志回放使用 `MOORING_REPLAY_OPENCODE_DB` / `MOORING_REPLAY_CURSOR_CHILD`，单独运行 `cargo test -p mooring-host --test subagent_adapters replay_local_child_records -- --ignored --nocapture`（Agent 注册表是进程内单例）。源数据库只读；Cursor 原文复制进临时目录后回放。旧样本越过日期窗口只发生在测试，生产查询不回填历史。
+真实日志回放使用 `MOORING_REPLAY_OPENCODE_DB` / `MOORING_REPLAY_CURSOR_CHILD`，单独运行 `cargo test -p fibo-host --test subagent_adapters replay_local_child_records -- --ignored --nocapture`（Agent 注册表是进程内单例）。源数据库只读；Cursor 原文复制进临时目录后回放。旧样本越过日期窗口只发生在测试，生产查询不回填历史。
 
 实际命令结果记录在提交说明和本地验收产物中。
 
@@ -76,7 +76,7 @@ Cursor 没有给每条记录写时间；用户消息时间沿用现有 timestamp
 
 来源：[Qoder subagents](https://docs.qoder.com/cli/subagent)、[Grok subagents](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/16-subagents.md)、本机 Grok 随版本附带的 `user-guide/17-sessions.md` 与真实 meta；[Kimi data locations](https://moonshotai.github.io/kimi-cli/en/configuration/data-locations.html)、[Gemini subagents](https://geminicli.com/docs/core/subagents/)。
 
-新增验证：`cargo test -p mooring-host --test more_subagent_adapters`；设置 MOORING_REPLAY_QODER_CHILD / MOORING_REPLAY_GROK_PARENT 后，使用 `replay_qoder_child_and_grok_metadata_read_only -- --ignored --nocapture` 只读回放。
+新增验证：`cargo test -p fibo-host --test more_subagent_adapters`；设置 MOORING_REPLAY_QODER_CHILD / MOORING_REPLAY_GROK_PARENT 后，使用 `replay_qoder_child_and_grok_metadata_read_only -- --ignored --nocapture` 只读回放。
 
 
 ## Kimi / Gemini integration
@@ -92,4 +92,4 @@ Cursor 没有给每条记录写时间；用户消息时间沿用现有 timestamp
 
 来源：[Kimi data locations](https://www.kimi.com/code/docs/en/kimi-code-cli/configuration/data-locations.html)、本机 `kimi --help` / `--version`；[Gemini recording](https://github.com/google-gemini/gemini-cli/blob/62bab5b232c15b925d31e655ce844ab939c882b7/packages/core/src/services/chatRecordingService.ts)、[Gemini local executor](https://github.com/google-gemini/gemini-cli/blob/62bab5b232c15b925d31e655ce844ab939c882b7/packages/core/src/agents/local-executor.ts)、[Gemini project directory marker](https://github.com/google-gemini/gemini-cli/blob/62bab5b232c15b925d31e655ce844ab939c882b7/packages/core/src/config/projectRegistry.ts)。
 
-验证入口：`cargo test -p mooring-host --test kimi_gemini_adapters`；真实 Kimi 回放设置 `MOORING_REPLAY_KIMI_CHILD`，运行该文件的 ignored 测试；原生对照使用 `MOORING_FIXTURE_CHILD_ADAPTERS=kimi-gemini python3 scripts/visual-check.py shots HEAD /tmp/mooring-kimi-gemini --pages MainSpace@1420`。安装版、在线 Gemini 调用和真手机未验。
+验证入口：`cargo test -p fibo-host --test kimi_gemini_adapters`；真实 Kimi 回放设置 `MOORING_REPLAY_KIMI_CHILD`，运行该文件的 ignored 测试；原生对照使用 `MOORING_FIXTURE_CHILD_ADAPTERS=kimi-gemini python3 scripts/visual-check.py shots HEAD /tmp/mooring-kimi-gemini --pages MainSpace@1420`。安装版、在线 Gemini 调用和真手机未验。

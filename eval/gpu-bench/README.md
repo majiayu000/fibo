@@ -3,8 +3,8 @@
 隔离的 fixture daemon 与 `/bin/sh` 负载（不跑 Agent、不读真实数据），测 Mooring 客户端在固定终端负载下的 GPU / CPU，并可与 Ghostty 同负载对照。
 
 ```sh
-cargo build --release -p mooring-app
-cargo test -p mooring-host --test managed_session --no-run   # fixture daemon
+cargo build --release -p fibo-app
+cargo test -p fibo-host --test managed_session --no-run   # fixture daemon
 python3 bench.py --ghostty                 # 全部场景，各 15 s
 python3 bench.py --scenes mixed --interact # 鼠标扫过窗口并打字
 GPUI_DAMAGE_VERIFY=1 python3 bench.py      # 每个局部重画帧与完整渲染逐像素比对

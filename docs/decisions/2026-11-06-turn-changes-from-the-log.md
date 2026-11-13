@@ -13,7 +13,7 @@ decision-makers: majiayu000
 ## Decision
 
 - **内容来自 Agent 的会话记录，不用 git。** 用户截图那一轮的目录不是 git 仓库，用 git 一行都拿不到。这一轮已提交的改动也看不到，还会混进别的会话的改动。
-- **显示净改动。** 同一文件的多次编辑合成一份（`mooring_core::turn_diff`），改过两次的行只出现一次，改了又改回去的不出现。行号和已知内容对不上说明中途有别的程序写过文件，这时不合成，按次显示并写明。
+- **显示净改动。** 同一文件的多次编辑合成一份（`fibo_core::turn_diff`），改过两次的行只出现一次，改了又改回去的不出现。行号和已知内容对不上说明中途有别的程序写过文件，这时不合成，按次显示并写明。
 - **点开时才读，不进工作区快照。** 快照每次变化都整份发给窗口，改动内容放进去会超过同步开销 1% 的放弃线（`docs/performance`）。
 - **打开只取文件列表，选中才取内容。** 列表带每个文件的编辑在日志里的位置，选中时直接读那几行，不重新扫日志。5000 个文件时只有屏幕上那个文件花钱，实测点一个文件约 32 ms（调试版）。第一版一次取回全部内容，64 个文件各 2000 行就是 15 MB，已否定。
 - **数字必须准确。** 会话卡片只列 64 个文件（列表会进快照），但这一轮被挤掉的文件和行数单独记下，回合条写真实总数。第一版超过 64 个文件时悄悄显示 64，比卡更糟，已否定。
@@ -32,12 +32,12 @@ decision-makers: majiayu000
 
 ## Implementation Plan
 
-受影响：`crates/mooring-core/src/turn_diff.rs`、`crates/mooring-host/src/agents/turn_edits.rs`、`crates/mooring-host/src/host/client/turn_changes.rs`、`crates/mooring-app/src/workbench/layout/changes_panel.rs`、`changes_files.rs`、`changes_rows.rs`、`changes_slots.rs`、`crates/mooring-core/src/content.rs`（`Evicted`）、`scripts/perf-gate.py`。接新的 Agent：实现 `edit_marker` 和 `logged_edits`。
+受影响：`crates/fibo-core/src/turn_diff.rs`、`crates/fibo-host/src/agents/turn_edits.rs`、`crates/fibo-host/src/host/client/turn_changes.rs`、`crates/fibo-app/src/workbench/layout/changes_panel.rs`、`changes_files.rs`、`changes_rows.rs`、`changes_slots.rs`、`crates/fibo-core/src/content.rs`（`Evicted`）、`scripts/perf-gate.py`。接新的 Agent：实现 `edit_marker` 和 `logged_edits`。
 
 ## Verification
 
-- `cargo test -p mooring-core turn_diff`：含 400 轮随机编辑序列，合成结果必须把原文件变成最终文件。
-- 真实窗口：`MOORING_CHANGES_EVIDENCE=1 mooring-app --visual-evidence <目录>`（需 `visual-test`），逐条走状态表。
+- `cargo test -p fibo-core turn_diff`：含 400 轮随机编辑序列，合成结果必须把原文件变成最终文件。
+- 真实窗口：`MOORING_CHANGES_EVIDENCE=1 fibo-app --visual-evidence <目录>`（需 `visual-test`），逐条走状态表。
 - `scripts/perf-gate.py` 的 `frames-changes` 和 `frames-changesdraw`（都是 5000 个文件）：终端输出时面板不重画，面板自己重画的开销不随文件数涨，都不超基线 15%。
 
 ## Alternatives

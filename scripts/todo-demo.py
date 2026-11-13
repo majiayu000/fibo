@@ -5,7 +5,7 @@ your Mooring and its data are not touched, with simulated agents that call no mo
   python3 scripts/todo-demo.py start target/release
   python3 scripts/todo-demo.py stop
 
-Needs `cargo build --release -p mooring-host -p mooring-app`. `claude`, `codex` and `grok`
+Needs `cargo build --release -p fibo-host -p fibo-app`. `claude`, `codex` and `grok`
 in its terminals are a script that writes a Codex log, so every card shows Codex's mark.
 """
 import json, os, pathlib, shutil, socket, struct, subprocess, sys, tempfile, time
@@ -42,7 +42,7 @@ put('session_meta', {'id': cid, 'cwd': os.getcwd(), 'source': 'cli', 'originator
 hook()
 def todo(*args):
     import subprocess
-    return subprocess.run(['mooring', 'todo', *args, '--runtime', ROOT + '/runtime'], capture_output=True, text=True).stdout
+    return subprocess.run(['fibo', 'todo', *args, '--runtime', ROOT + '/runtime'], capture_output=True, text=True).stdout
 print('模拟 Agent：不调用模型。这条待办：')
 print(todo('show'))
 print('按回车开始。')
@@ -79,7 +79,7 @@ if cmd == 'start':
     tools = root / 'bin'; tools.mkdir()
     for name in ('claude', 'codex', 'grok'):
         (tools / name).write_text(AGENT % (str(root), str(home))); (tools / name).chmod(0o755)
-    (tools / 'mooring').symlink_to(bindir / 'mooring')
+    (tools / 'fibo').symlink_to(bindir / 'fibo')
     now = int(time.time())
     for n, (title, sp, ago, state) in enumerate(SESSIONS):
         project = root / 'projects' / SPACES[sp]; project.mkdir(parents=True, exist_ok=True)
@@ -94,7 +94,7 @@ if cmd == 'start':
         os.utime(logs / (cid + '.jsonl'), (at, at))
     env = {'PATH': f'{tools}:/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8', 'SHELL': '/bin/zsh'}
     (home / '.zshrc').write_text(f'export PATH={tools}:$PATH\n')
-    host = subprocess.Popen([str(bindir / 'mooring'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
+    host = subprocess.Popen([str(bindir / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
     deadline = time.monotonic() + 120
     while not (root / 'runtime/workbench.sock').exists():
         assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
@@ -122,7 +122,7 @@ if cmd == 'start':
     evidence = sys.argv[3:] and ['--visual-evidence', str(pathlib.Path(sys.argv[3]).resolve())]
     if evidence: env['MOORING_REVIEW_QUEUE_EVIDENCE' if os.environ.get('MOORING_REVIEW_QUEUE_EVIDENCE') else 'MOORING_TODO_DEMO_EVIDENCE'] = '1'
     if os.environ.get('MOORING_TODO_FUZZ_SEED'): env['MOORING_TODO_FUZZ_SEED'] = os.environ['MOORING_TODO_FUZZ_SEED']
-    app = subprocess.Popen([str(bindir / 'mooring-app'), '--runtime', str(root / 'runtime'), *evidence], env=env, stdout=open(root / 'app.log', 'w'), stderr=subprocess.STDOUT, start_new_session=True)
+    app = subprocess.Popen([str(bindir / 'fibo-app'), '--runtime', str(root / 'runtime'), *evidence], env=env, stdout=open(root / 'app.log', 'w'), stderr=subprocess.STDOUT, start_new_session=True)
     STATE.write_text(json.dumps({'root': str(root), 'home': str(home), 'host': host.pid, 'app': app.pid}))
     print('started', 'app', app.pid, 'host', host.pid, 'root', root)
 elif cmd == 'stop':

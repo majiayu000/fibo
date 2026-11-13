@@ -110,7 +110,7 @@
     <tr><td>Syncthing strelaysrv</td><td>B：拼接</td><td>IP、谁找谁、字节数（还会公开在状态页）；两端 TLS</td><td><span class="tag src">源码</span> <a href="https://github.com/syncthing/syncthing/blob/b34734376128492fa4e1b01412193de033e20613/cmd/strelaysrv/session.go#L247">session.go</a></td></tr>
     <tr><td>RustDesk hbbs + hbbr</td><td>B：hbbs 签公钥、帮打洞，hbbr 转字节</td><td class="fix">验签失败会退回明文</td><td><span class="tag src">源码</span> <a href="https://github.com/rustdesk/rustdesk/blob/55786aaa5709ac0a450aabcf06f9d1fee3119908/src/client.rs#L1689">client.rs#L1689</a></td></tr>
     <tr><td>upterm uptermd</td><td>SSH 中间人</td><td class="fix">能读到内容</td><td><span class="tag src">源码</span> <a href="https://github.com/owenthereal/upterm/blob/87f8ee86fb34a7a9ca8e0f0e9f34a0189758a0da/server/sshstock.go#L281">sshstock.go</a></td></tr>
-    <tr><td>Mooring mooring-relay</td><td>B：WebSocket 转发</td><td>Noise 端到端；IP、路由码哈希、时间、字节数</td><td>本仓库</td></tr>
+    <tr><td>Mooring fibo-relay</td><td>B：WebSocket 转发</td><td>Noise 端到端；IP、路由码哈希、时间、字节数</td><td>本仓库</td></tr>
   </table>
 
   <h2>3 默认值、换路</h2>
@@ -144,7 +144,7 @@
     <tr><td>3</td><td>桌面连桌面也能走中继（多机第 5 步）</td><td>—</td><td>中</td></tr>
     <tr><td>4</td><td>Tailscale 内置：tsnet 作为独立设备，按账号放行（Go 库，要做可行性试验）</td><td>Rex（兼容实现）</td><td>中到大</td></tr>
     <tr><td>5</td><td>走中继时每分钟试一次直连地址，通了就换</td><td>Syncthing、Tailscale</td><td>小</td></tr>
-    <tr><td>6</td><td>官方中继：部署 mooring-relay（机房、域名、限速、费用先定；不加账号）</td><td>Happy、Paseo</td><td>要你授权和机器</td></tr>
+    <tr><td>6</td><td>官方中继：部署 fibo-relay（机房、域名、限速、费用先定；不加账号）</td><td>Happy、Paseo</td><td>要你授权和机器</td></tr>
     <tr><td>7</td><td>自建中继说明：一条 docker run + 两个设置</td><td>—</td><td>小</td></tr>
   </table>
   <p class="muted">不建议做：自己写打洞（用 Tailscale 或 iroh）；中继退回明文或解开内容（RustDesk、upterm 的反面例子）；另做账号体系。</p>

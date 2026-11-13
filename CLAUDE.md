@@ -1,13 +1,13 @@
 # CLAUDE.md
 
-Fibo (https://fibo.page): a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt). It was called Mooring, and before that Keepline; see "Compatibility" below. The crates, modules, the program file `mooring` and the `MOORING_*` variables keep the old name on purpose; what users see says Fibo.
+Fibo (https://fibo.page): a native macOS workbench for coding agents (Rust, GPUI, libghostty-vt). It was called Mooring, and before that Keepline; see "Compatibility" below. Since 2026-11-13 the crates (`crates/fibo-*`), modules and programs (`fibo`, `fibo-app`) are named Fibo too (docs/decisions/2026-11-13-rename-files-fibo.md); the `MOORING_*` variables, plugin manifests' `"mooring"` level, `mooring://` links, the phone's package id and the old names kept as links stay on purpose.
 
 ## Layout
 
-- `crates/mooring-app`: the GPUI window.
-- `crates/mooring-host`: the background host (`mooring serve`) and the `mooring` command Agents use inside its terminals (`mooring --skill`, `mooring --skill plugins`).
-- `crates/mooring-core`: model, protocol, status rules and plugin formats shared by both.
-- `crates/mooring-remote`, `crates/mooring-relay`: the phone link and its relay. `mobile/`: the phone app (Expo).
+- `crates/fibo-app`: the GPUI window.
+- `crates/fibo-host`: the background host (`fibo serve`) and the `fibo` command Agents use inside its terminals (`fibo --skill`, `fibo --skill plugins`).
+- `crates/fibo-core`: model, protocol, status rules and plugin formats shared by both.
+- `crates/fibo-remote`, `crates/fibo-relay`: the phone link and its relay. `mobile/`: the phone app (Expo).
 - `plugins/`: example plugins. Don't commit `plugins/index.json` or `index.sig` by hand: after a push, `.github/workflows/sign-catalog.yml` regenerates and signs them. `eval/`: terminal rendering and protocol checks.
 
 ## Build and check
@@ -22,9 +22,9 @@ Fibo (https://fibo.page): a native macOS workbench for coding agents (Rust, GPUI
 - A decision that outlasts one change (spans several places, was reversed once, or the same option was rejected twice) also gets a record in `docs/decisions/` (see its README). The first time a Claude session reads or edits a file, its recent `Rejected:` / `Guarded-by:` lines and the decisions naming it are shown (a hook); however a file was edited, an agent commit is stopped once when a staged file has such lines the session has not been shown: fix the change or say why in the message, then run the same commit again; `git why <file>:<line>` (or a sha) prints the commit message, the user's words that asked for it and the agent reply they answered. Agent commits carry `Agent-Session` / `Agent-Prompt` trailers from a global hook (`~/.config/agent-trace`, this machine only); keep them when rewriting commits.
 - Before changing code, read `docs/lessons.md`: the mistakes made more than once, with the commits that show them. A rule seen on three days moves here.
 - Changing a state rule, an interface or a file format: try it with the old one still there (the host just restarted, a plugin updated after the host started, a file or script an older build wrote), and say what a fix that only holds for new data does to the old. Seen on four days (`docs/lessons.md`).
-- One owner per fact (docs/plan.md principle 7): a session's state, name, 要你处理, time, folder and state words come from core (`status::of`, `session_title`, `status::needs_you`, `session_updated`, `terminal_cwd`, `Status::label`). `crates/mooring-core/tests/guard.rs` counts raw-field reads and hand-written state words per file; rewrite `tests/guard-baseline.txt` (`MOORING_GUARD_UPDATE=1`) only for a use you mean to keep.
-- Words the window shows go through `t!("中文")` with English in `crates/mooring-core/locales/en/*.toml`; `tests/i18n.rs` checks every key has English and that unconverted Chinese only goes down. How to convert a file: docs/decisions/2026-11-08-english-ui.md.
-- File size: no source file grows past 800 lines, however it was written (`crates/mooring-core/tests/file_size.rs`). Put new code in a new file. Files in `tests/file-size-baseline.txt` can only get shorter; `MOORING_GUARD_UPDATE=1` lowers their numbers and never raises one.
+- One owner per fact (docs/plan.md principle 7): a session's state, name, 要你处理, time, folder and state words come from core (`status::of`, `session_title`, `status::needs_you`, `session_updated`, `terminal_cwd`, `Status::label`). `crates/fibo-core/tests/guard.rs` counts raw-field reads and hand-written state words per file; rewrite `tests/guard-baseline.txt` (`MOORING_GUARD_UPDATE=1`) only for a use you mean to keep.
+- Words the window shows go through `t!("中文")` with English in `crates/fibo-core/locales/en/*.toml`; `tests/i18n.rs` checks every key has English and that unconverted Chinese only goes down. How to convert a file: docs/decisions/2026-11-08-english-ui.md.
+- File size: no source file grows past 800 lines, however it was written (`crates/fibo-core/tests/file_size.rs`). Put new code in a new file. Files in `tests/file-size-baseline.txt` can only get shorter; `MOORING_GUARD_UPDATE=1` lowers their numbers and never raises one.
 
 ## Reaching main
 
@@ -37,8 +37,8 @@ Local `main` only follows `origin/main`: never commit or merge on it. It drifted
 
 ## Compatibility with Mooring installs
 
-The rename to Fibo (docs/decisions/2026-11-09-rename-fibo.md) works like the Keepline one below: `~/.config/mooring` moves to `~/.config/fibo` once, an existing `~/.local/share/mooring-workbench` stays the runtime, the command is `fibo` and `mooring` still answers (PATH links for both; in the bundle `fibo` links to the program `mooring`), `MOORING_*` stays what code reads and hooks test, with `FIBO_*` set beside it and adopted at start. The updater accepts the old bundle id `local.mooring.workbench` and the `mooring` cask.
+The rename to Fibo (docs/decisions/2026-11-09-rename-fibo.md) works like the Keepline one below: `~/.config/mooring` moves to `~/.config/fibo` once, an existing `~/.local/share/mooring-workbench` stays the runtime, the program and command are `fibo` and `mooring` still answers (PATH links for both; in the bundle `mooring` links to the program `fibo` and `mooring-app` to `fibo-app`, so `MOORING_HOOK=.../MacOS/mooring` in old terminals still runs; Windows ships `mooring.exe` as a copy), `MOORING_*` stays what code reads and hooks test, with `FIBO_*` set beside it and adopted at start. The updater accepts the old bundle id `local.mooring.workbench` and the `mooring` cask.
 
 ## Compatibility with Keepline installs
 
-`crates/mooring-core/src/legacy.rs` keeps an install from before the rename working: `KEEPLINE_*` variables are adopted at start and set beside `MOORING_*` for terminals and plugins, `~/.config/keepline` moves to `~/.config/mooring` once, an existing `~/.local/share/keepline-workbench` stays the runtime, hook entries testing `$KEEPLINE_HOOK` count as ours (outdated), and the app bundle links `keepline` and `keeplined` to `mooring`. The phone link's crypto strings and the relay path `/keepline` keep their old spelling on purpose: changing them breaks paired phones and deployed relays.
+`crates/fibo-core/src/legacy.rs` keeps an install from before the rename working: `KEEPLINE_*` variables are adopted at start and set beside `MOORING_*` for terminals and plugins, `~/.config/keepline` moves to `~/.config/mooring` once, an existing `~/.local/share/keepline-workbench` stays the runtime, hook entries testing `$KEEPLINE_HOOK` count as ours (outdated), and the app bundle links `keepline` and `keeplined` to `fibo`. The phone link's crypto strings and the relay path `/keepline` keep their old spelling on purpose: changing them breaks paired phones and deployed relays.

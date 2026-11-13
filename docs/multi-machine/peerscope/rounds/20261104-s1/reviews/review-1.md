@@ -10,9 +10,9 @@
 | 漏了「中继兜底默认开还是先问」 | 加进 02、00、HTML 的待定项 |
 | 「标配」只抽了 5 家 | 改为「抽查的 5 家都写明了」 |
 | 400 ms 走中转是推断 | 写明是推测，本机没有 tailscale 命令行可验 |
-| 官方中继能看到什么是套 Syncthing | 按 mooring-relay 实现改写 |
+| 官方中继能看到什么是套 Syncthing | 按 fibo-relay 实现改写 |
 | 手机直连要开监听端口 | 02 加一段 |
-| 「远程协议共用」没出处 | 02 补 crates/mooring-remote 和 remote --stdio |
+| 「远程协议共用」没出处 | 02 补 crates/fibo-remote 和 remote --stdio |
 | 直连只比了 iroh | 02 加 tsnet / mDNS 候选，标为未比较 |
 
 # 审查 2（新的审查 agent）：需修改 → 已改

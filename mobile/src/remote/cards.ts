@@ -1,5 +1,5 @@
 // What a `cards` reply means for the cards a phone has: most refreshes change one or two of them,
-// so the computer sends those and the order only when it moved (crates/mooring-host/src/remote/cards.rs).
+// so the computer sends those and the order only when it moved (crates/fibo-host/src/remote/cards.rs).
 // Kept apart from the hub so a test can walk it without a connection.
 
 export type CardsReply<C> = { rev: number; order?: string[]; changed?: C[] };

@@ -10,7 +10,7 @@
 
 ## 范围
 
-只管 `crates/mooring-core/tests/file_size.rs` 认定的源文件，即 `file-size-baseline.txt` 的 30 项。
+只管 `crates/fibo-core/tests/file_size.rs` 认定的源文件，即 `file-size-baseline.txt` 的 30 项。
 
 不在范围内：`mobile/bun.lock`（生成）、`patches/gpui-retained-backbuffer.patch`（生成）、`docs/multi-machine/sidebar-directions.html`、`docs/phone-app/design.html`（设计稿，不是源文件）。
 
@@ -22,7 +22,7 @@
 - **一个提交只拆一个文件**，标题写 `refactor(split): <文件路径>`。验收按这个前缀逐个审计，所以 main 同时有别的提交也不影响。
 - **测试和被测不同时动**：批次 2 靠没动过的 `managed_session.rs` 把关，批次 3 再拆它，此时产品代码不动。`harness.rs`、`visual.rs` 是看画面的工具，放到最后。
 - **用 worktree 做，每批尽快合入 main**：这些文件几乎每天都有别的会话在改，分支拖久了会不断冲突。
-- 每拆完一个文件，运行 `MOORING_GUARD_UPDATE=1 cargo test -p mooring-core --test file_size` 降低基线，和拆分一起提交。
+- 每拆完一个文件，运行 `MOORING_GUARD_UPDATE=1 cargo test -p fibo-core --test file_size` 降低基线，和拆分一起提交。
 
 ## 文件清单
 
@@ -101,9 +101,9 @@
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy -p mooring-app --all-targets --features visual-test -- -D warnings   # 陷阱 4、5
+cargo clippy -p fibo-app --all-targets --features visual-test -- -D warnings   # 陷阱 4、5
 cargo test -p <改动的 crate>
-cargo test -p mooring-core --test file_size --test guard
+cargo test -p fibo-core --test file_size --test guard
 ```
 
 开 `visual-test` 的 clippy 原先有几个旧报错，所以这里和 CI 曾经只用 `cargo check`；报错修掉后两边都改成了 clippy。
@@ -170,7 +170,7 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 | 主题、透明、背景图 | `theme-scenes` 六个场景 | 肉眼看透明窗口 |
 | 完成动画 | `COMPLETE`、`IconMascot` 等页面 | 标记完成一次 |
 | 插件和市场 | `plugin_tests`、`market_tests`、`plugins_cmd_tests`、`sidebar_wasm_tests` | 装卸一个插件 |
-| `mooring` 命令行 | `managed_session`、`--skill` | Agent 在终端里调一次 |
+| `fibo` 命令行 | `managed_session`、`--skill` | Agent 在终端里调一次 |
 | 手机连接 | `remote_v2`、`remote_v2_agents`、`vectors`、`mobile` 测试、`PHONES` | 真手机配对、聊天 |
 | 多机 | `remote_*`、三个 `remote-*-evidence.sh`（假 ssh） | 真 SSH 连另一台 |
 | 中继 | `relay`、`old_relay`、CI 镜像任务 | 连已部署的中继 |

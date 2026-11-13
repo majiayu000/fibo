@@ -146,7 +146,7 @@ a { color: inherit; text-underline-offset: 3px; }
 <p><b>换电脑上的 Mooring</b>（从 <code>origin/main</code> 的干净工作区）</p>
 <pre>export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 export LIBGHOSTTY_VT_SYS_OPTIMIZE=ReleaseFast
-nice -n 10 cargo build --release -p mooring-app -p mooring-host
+nice -n 10 cargo build --release -p fibo-app -p fibo-host
 python3 package-macos.py --output ~/Desktop/code/AI/tools/mooring/target/bundle-here/Mooring.app
 osascript -e 'tell application id "local.mooring.workbench" to quit'
 env -i HOME=$HOME USER=$USER LOGNAME=$USER SHELL=/bin/zsh TMPDIR=$TMPDIR LANG=en_US.UTF-8 \

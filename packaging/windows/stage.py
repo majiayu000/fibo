@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Lay out a Windows release build the way the installer copies it; no signing or publishing.
 
-bin/        mooring-app.exe (the window), mooring.exe (host and CLI) and fibo.exe, which runs
-            mooring.exe with the same arguments so either name works in a terminal
+bin/        fibo-app.exe (the window) and fibo.exe (host and CLI), with mooring.exe a copy of
+            it: terminals opened before the rename run `mooring` and hooks point at it
 Resources/  the plugin catalog and notices, where market::bundled_dir looks beside bin/
 """
 import argparse
@@ -36,30 +36,32 @@ def subsystem(exe: pathlib.Path) -> int:
 
 
 # A console program double-clicked gets a command prompt opened beside it, which only shows
-# on Windows: the window must be a GUI program (`windows_subsystem` in mooring-app's
+# on Windows: the window must be a GUI program (`windows_subsystem` in fibo-app's
 # main.rs), and the CLI that Agents run inside terminals must stay a console one.
 for binary, want, words in (
-    ('mooring-app.exe', GUI, '窗口程序，否则打开时旁边会多一个命令行窗口'),
-    ('mooring.exe', CONSOLE, '命令行程序，否则在终端里敲 mooring 没有输出'),
+    ('fibo-app.exe', GUI, '窗口程序，否则打开时旁边会多一个命令行窗口'),
     ('fibo.exe', CONSOLE, '命令行程序，否则在终端里敲 fibo 没有输出'),
 ):
     got = subsystem(args.release_dir / binary)
     if got != want:
         raise SystemExit(f'{binary} 应该是{words}（PE Subsystem 是 {got}，应为 {want}）')
     shutil.copy2(args.release_dir / binary, bin_dir / binary)
+# Windows links need extra rights; a copy keeps the old command's name working, and an
+# upgrade overwrites the old program instead of leaving it behind.
+shutil.copy2(bin_dir / 'fibo.exe', bin_dir / 'mooring.exe')
 # A build linked against a shared libghostty-vt needs it beside the programs.
 for dll in args.release_dir.glob('ghostty-vt*.dll'):
     shutil.copy2(dll, bin_dir / dll.name)
-shutil.copy2(root / 'crates/mooring-app/assets/NERD-FONTS-LICENSE', resources / 'NERD-FONTS-LICENSE')
+shutil.copy2(root / 'crates/fibo-app/assets/NERD-FONTS-LICENSE', resources / 'NERD-FONTS-LICENSE')
 shutil.copy2(root / 'LICENSE', resources / 'LICENSE')
-shutil.copy2(root / 'assets/Mooring.ico', resources / 'Mooring.ico')
+shutil.copy2(root / 'assets/Fibo.ico', resources / 'Fibo.ico')
 # The catalog 设置 › 插件 installs from: index.json and exactly the files it lists.
 catalog = root / 'plugins'
 for plugin in json.loads((catalog / 'index.json').read_text(encoding='utf-8'))['plugins']:
     for f in plugin['files']:
         src = catalog / plugin['id'] / f['path']
         if hashlib.sha256(src.read_bytes()).hexdigest() != f['sha256']:
-            raise SystemExit(f'{src} 和 plugins/index.json 不一致：运行 mooring plugins index plugins')
+            raise SystemExit(f'{src} 和 plugins/index.json 不一致：运行 fibo plugins index plugins')
         dst = resources / 'plugins' / plugin['id'] / f['path']
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)

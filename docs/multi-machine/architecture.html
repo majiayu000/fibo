@@ -54,7 +54,7 @@
     <text class="t" x="26" y="34">本机（Agent-OS）</text>
 
     <rect class="box" x="30" y="50" width="480" height="150" rx="8"/>
-    <text class="t" x="44" y="72">窗口 mooring-app</text>
+    <text class="t" x="44" y="72">窗口 fibo-app</text>
     <rect class="box" x="44" y="84" width="140" height="100" rx="6"/>
     <text x="56" y="104">侧栏</text><text class="m" x="56" y="122">机器分组 + 会话行</text><text class="m" x="56" y="138">「＋」开终端</text><text class="m" x="56" y="154">旧版 / 断开提示</text>
     <rect class="box" x="194" y="84" width="140" height="100" rx="6"/>
@@ -112,7 +112,7 @@
     <rect class="box" x="660" y="438" width="180" height="96" rx="8"/>
     <text x="672" y="458">手机 App</text><text class="m" x="672" y="476">Noise 加密，设备 key</text><text class="m" x="672" y="492">10 秒超时、15 秒 ping</text><text class="m" x="672" y="508">写操作带 request id</text>
     <rect class="box" x="864" y="438" width="186" height="96" rx="8"/>
-    <text x="876" y="458">中继 mooring-relay</text><text class="m" x="876" y="476">协议 3：每台手机自己的</text><text class="m" x="876" y="492">路由码，看不到内容</text><text class="m" x="876" y="508">电脑侧：mooring remote --relay</text>
+    <text x="876" y="458">中继 fibo-relay</text><text class="m" x="876" y="476">协议 3：每台手机自己的</text><text class="m" x="876" y="492">路由码，看不到内容</text><text class="m" x="876" y="508">电脑侧：mooring remote --relay</text>
 
     <!-- arrows -->
     <path class="ln" d="M150 200 V226" marker-end="url(#a)"/>
@@ -205,7 +205,7 @@
     <tr><td>—</td><td>侧栏多机布局</td><td class="todo">另一个会话在做</td></tr>
     <tr><td>5 改走中继</td><td>桌面连桌面也走中继，不走 ssh</td><td class="todo">第 4 阶段已做完，可以开工</td></tr>
   </table>
-  <p class="muted">文件：窗口侧 <code>crates/mooring-app/src/machines.rs</code>、<code>connection.rs</code>（Connection::remote）、<code>workbench/machines.rs</code>、<code>workbench/peek.rs</code>、<code>workbench/board/remote.rs</code>；协议 <code>crates/mooring-remote</code>；服务端 <code>crates/mooring-host/src/remote.rs</code>、<code>remote/writes.rs</code>；中继 <code>crates/mooring-relay</code>。</p>
+  <p class="muted">文件：窗口侧 <code>crates/fibo-app/src/machines.rs</code>、<code>connection.rs</code>（Connection::remote）、<code>workbench/machines.rs</code>、<code>workbench/peek.rs</code>、<code>workbench/board/remote.rs</code>；协议 <code>crates/fibo-remote</code>；服务端 <code>crates/fibo-host/src/remote.rs</code>、<code>remote/writes.rs</code>；中继 <code>crates/fibo-relay</code>。</p>
 </main>
 </body>
 </html>

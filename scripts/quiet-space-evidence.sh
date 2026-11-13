@@ -3,18 +3,18 @@
 # one still working, in a space of their own and the window driven with real mouse events, then a second launch that
 # reads the state back (docs/quiet-space/index.html).
 # Needs a debug build with visual tests:
-#   cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
+#   cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test
 # Prints PASS twice and saves every step to $R/shots.
 set -u
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-qs}
-rm -rf "$R"; mkdir -p "$R/home/.config/mooring" "$R/home/.codex/sessions" "$R/claude" "$R/shots"
-printf '{"cursor_blink": false}\n' > "$R/home/.config/mooring/terminal-text.json"
-printf on > "$R/home/.config/mooring/peek"
+rm -rf "$R"; mkdir -p "$R/home/.config/fibo" "$R/home/.codex/sessions" "$R/claude" "$R/shots"
+printf '{"cursor_blink": false}\n' > "$R/home/.config/fibo/terminal-text.json"
+printf on > "$R/home/.config/fibo/peek"
 mkdir -m 700 "$R/rt"
 ln -s /bin/sh "$R/codex"
 env -i PATH=/usr/bin:/bin HOME="$R/home" CODEX_HOME="$R/home/.codex" CLAUDE_CONFIG_DIR="$R/claude" LANG=en_US.UTF-8 \
-  "$REPO/target/debug/mooring" serve --runtime "$R/rt" > "$R/here.log" 2>&1 &
+  "$REPO/target/debug/fibo" serve --runtime "$R/rt" > "$R/here.log" 2>&1 &
 HERE=$!
 python3 -I - "$R" <<'PY'
 import json, socket, struct, sys, time
@@ -59,7 +59,7 @@ session('busy-codex', 'busy', 't2', '继续跑工作空间的迁移', False)
 PY
 run() {
   HOME="$R/home" CLAUDE_CONFIG_DIR="$R/claude" CODEX_HOME="$R/home/.codex" MOORING_QUIET_SPACE_EVIDENCE=1 "$@" \
-    perl -e 'alarm 120; exec @ARGV' "$REPO/target/debug/mooring-app" --runtime "$R/rt" --visual-evidence "$R/shots"
+    perl -e 'alarm 120; exec @ARGV' "$REPO/target/debug/fibo-app" --runtime "$R/rt" --visual-evidence "$R/shots"
 }
 run env > "$R/app.log" 2>&1
 echo "app exit $?"

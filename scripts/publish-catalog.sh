@@ -1,7 +1,7 @@
 #!/bin/sh
 # Regenerates plugins/index.json, signs it and pushes both to the catalog-signed branch,
 # which the workflow turns into a pull request. Only CI runs this: see
-# .github/workflows/sign-catalog.yml. Usage: publish-catalog.sh <mooring binary> <key file>
+# .github/workflows/sign-catalog.yml. Usage: publish-catalog.sh <fibo binary> <key file>
 set -eu
 bin=$1
 key=$2

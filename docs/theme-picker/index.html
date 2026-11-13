@@ -66,7 +66,7 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 </style></head><body><main>
 
 <h1>主题：默认好看，想改什么都能改</h1>
-<p class="sub">阶段 0 到 5 已实现，结果和取舍见文末；本页留作设计依据。当时要定的事：外观页用哪个方向，以及按什么顺序把外观全部开放给用户。推荐方向 A。下面的外观页可以直接点，整块面板会跟着换色。配色小图的颜色取自 <code>mooring-core/src/terminal.rs</code> 和 <code>ui/theme.rs</code>；面板自身的卡片层次是近似值，以实现时的原生截图为准。</p>
+<p class="sub">阶段 0 到 5 已实现，结果和取舍见文末；本页留作设计依据。当时要定的事：外观页用哪个方向，以及按什么顺序把外观全部开放给用户。推荐方向 A。下面的外观页可以直接点，整块面板会跟着换色。配色小图的颜色取自 <code>fibo-core/src/terminal.rs</code> 和 <code>ui/theme.rs</code>；面板自身的卡片层次是近似值，以实现时的原生截图为准。</p>
 
 <h2>现在哪里不对</h2>
 <ul>
@@ -117,7 +117,7 @@ ul{margin:6px 0 10px;padding-left:20px;max-width:800px}li{margin:3px 0}
 
 <h2>这次要做的范围</h2>
 <ul>
-<li><code>mooring-core/src/terminal.rs</code>：<code>Scheme::Dark</code>、<code>Scheme::Light</code> 的显示名改为曜黑、纸白，内部名不动，不影响终端颜色和 OSC 回报。</li>
+<li><code>fibo-core/src/terminal.rs</code>：<code>Scheme::Dark</code>、<code>Scheme::Light</code> 的显示名改为曜黑、纸白，内部名不动，不影响终端颜色和 OSC 回报。</li>
 <li><code>ui/appearance.rs</code>：<code>Appearance</code> 拆成明暗和两组主题，负责迁移和判定；保留测试并补迁移、跟随系统两组。</li>
 <li><code>workbench/settings.rs</code>：主题卡片重画，预览小图改取真实颜色，搜索词更新。</li>
 <li><code>main.rs</code>：菜单分三组，<code>ChooseAppearance</code> 随之拆开。<code>settings_evidence.rs</code>：<code>themes</code> 场景走新结构，加跟随系统和亮色模式的截图。</li>

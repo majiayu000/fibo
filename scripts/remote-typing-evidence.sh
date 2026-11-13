@@ -1,12 +1,12 @@
 #!/bin/bash
 # Typing into another machine's terminal from its peek, end to end without a second Mac:
 # a second host here, reached through a fake ssh. Needs a debug build with visual tests:
-#   cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
+#   cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test
 # Prints PASS and saves the peek to $R/shots/remote-typing.png.
 set -u
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-rt}
-rm -rf $R; mkdir -p $R/home/.config/mooring $R/claude $R/shots $R/bin; mkdir -m 700 $R/far $R/rt
+rm -rf $R; mkdir -p $R/home/.config/fibo $R/claude $R/shots $R/bin; mkdir -m 700 $R/far $R/rt
 cat > $R/bin/ssh <<'SH'
 #!/bin/sh
 # Fake ssh: drops options and the host, runs the command here.
@@ -20,9 +20,9 @@ done
 exec /bin/sh -c "$*"
 SH
 chmod +x $R/bin/ssh
-printf '#!/bin/sh\nexec %s/target/debug/mooring "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-mooring; chmod +x $R/far-mooring
-printf '[{"host":"far","path":"%s/far-mooring"}]' "$R" > $R/home/.config/mooring/machines.json
-$REPO/target/debug/mooring serve --runtime $R/far > $R/far.log 2>&1 &
+printf '#!/bin/sh\nexec %s/target/debug/fibo "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-fibo; chmod +x $R/far-fibo
+printf '[{"host":"far","path":"%s/far-fibo"}]' "$R" > $R/home/.config/fibo/machines.json
+$REPO/target/debug/fibo serve --runtime $R/far > $R/far.log 2>&1 &
 FAR=$!
 python3 -I - "$R" <<'PY'
 import json, socket, struct, sys, time
@@ -46,7 +46,7 @@ print(list(rpc({'Launch': {'id': 'far', 'space': 's', 'argv': ['/bin/sh', '-c', 
 print(list(rpc({'Edit': {'edit': {'CreateTab': {'tab': {'id': 't', 'space': 's', 'title': '', 'default_task': None, 'layout': {'Leaf': 'far'}}}}}})))
 PY
 PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude MOORING_REMOTE_TYPING_EVIDENCE=1 MOORING_FAR_TYPED=$R/typed.txt \
-  perl -e 'alarm 90; exec @ARGV' $REPO/target/debug/mooring-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
+  perl -e 'alarm 90; exec @ARGV' $REPO/target/debug/fibo-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
 echo "app exit $?"
 grep -E "PASS|panicked|assert" -A2 $R/app.log | head
 echo "typed: $(cat $R/typed.txt 2>/dev/null | tr '\n' '|')"

@@ -24,7 +24,7 @@ const CODE_LINES = [
   'const page = await remote.request(\'chat\', { session, after: last.current, limit: 50 });',
   'fn plain_line(text: &str) -> String { text.lines().map(str::trim).collect() }',
   '# 先确认没有别的进程占着这个端口，再启动中继',
-  'cargo test -p mooring-core --test guard',
+  'cargo test -p fibo-core --test guard',
   'if (!online) return;',
   'let merged = [...have, ...fresh].sort((a, b) => a.seq - b.seq);',
   'adb shell dumpsys gfxinfo dev.mooring.mobile reset',

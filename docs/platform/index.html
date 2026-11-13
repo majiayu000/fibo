@@ -54,7 +54,7 @@
 <p class="meta">2026-11-07 · 状态：待验证（第 2 步做完 Linux 后复核）· 工作清单见 <a href="../windows/plan.md">Windows 计划</a></p>
 
 <div class="lead">
-<p><strong>结论：新建一个 <code>mooring-platform</code> crate，所有依赖操作系统的代码只能放在里面，上层只调它的统一接口。</strong>每个平台一个目录，Windows 的文件在 Mac 上根本不参与编译。</p>
+<p><strong>结论：新建一个 <code>fibo-platform</code> crate，所有依赖操作系统的代码只能放在里面，上层只调它的统一接口。</strong>每个平台一个目录，Windows 的文件在 Mac 上根本不参与编译。</p>
 <p>这样改一个平台的实现，影响不到另一个平台。唯一能同时影响多个平台的地方是接口本身，而改接口时，每个平台都会编译报错或测试失败，不会悄悄出错。</p>
 <p><strong>要支撑的决定：</strong>按什么结构移植 Windows 和 Linux。<strong>放弃条件：</strong>见文末。</p>
 </div>
@@ -63,20 +63,20 @@
 <p>现在平台代码散在各处。下面是扫描仓库源码的结果（不含测试文件，正则统计，是估算）：</p>
 <div class="wrap"><table>
 <tr><th>crate</th><th class="n">碰系统的文件 / 总数</th><th class="n"><code>libc::</code></th><th class="n">Unix socket 等</th><th class="n">写死路径</th><th class="n">读 <code>HOME</code></th></tr>
-<tr><td><code>mooring-host</code></td><td class="n">50 / 116</td><td class="n">231</td><td class="n">74</td><td class="n">31</td><td class="n">13</td></tr>
-<tr><td><code>mooring-app</code></td><td class="n">35 / 244</td><td class="n">28</td><td class="n">36</td><td class="n">62</td><td class="n">14</td></tr>
-<tr><td><code>mooring-core</code></td><td class="n">18 / 51</td><td class="n">28</td><td class="n">16</td><td class="n">14</td><td class="n">8</td></tr>
-<tr><td><code>mooring-remote</code></td><td class="n">1 / 13</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
-<tr><td><code>mooring-relay</code>、<code>mooring-plugin-host</code></td><td class="n">0 / 8</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+<tr><td><code>fibo-host</code></td><td class="n">50 / 116</td><td class="n">231</td><td class="n">74</td><td class="n">31</td><td class="n">13</td></tr>
+<tr><td><code>fibo-app</code></td><td class="n">35 / 244</td><td class="n">28</td><td class="n">36</td><td class="n">62</td><td class="n">14</td></tr>
+<tr><td><code>fibo-core</code></td><td class="n">18 / 51</td><td class="n">28</td><td class="n">16</td><td class="n">14</td><td class="n">8</td></tr>
+<tr><td><code>fibo-remote</code></td><td class="n">1 / 13</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+<tr><td><code>fibo-relay</code>、<code>fibo-plugin-host</code></td><td class="n">0 / 8</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
 </table></div>
 <p>如果直接给这些文件加 <code>#[cfg(windows)]</code>，平台分支会散进 100 多个文件的业务逻辑里。每次改业务都要同时想三个平台，这正是要避免的情况。<code>relay</code> 和 <code>plugin-host</code> 不用改就能在 Windows 上通过测试，说明没碰系统的代码本来就跨平台，要收拢的只是那些碰系统的部分。</p>
 
 <h2>分层</h2>
 <div class="layers">
-  <div class="layer"><b>产品层：<code>mooring-app</code>、<code>mooring-host</code></b><span>窗口、状态判断、Agent 管理、远程协议处理。不写任何平台判断，不直接调系统接口。</span></div>
-  <div class="layer"><b>共享逻辑：<code>mooring-core</code>、<code>mooring-remote</code>、<code>mooring-relay</code></b><span>状态规则、协议、插件格式。手机和中继看到的内容与平台无关。</span></div>
+  <div class="layer"><b>产品层：<code>fibo-app</code>、<code>fibo-host</code></b><span>窗口、状态判断、Agent 管理、远程协议处理。不写任何平台判断，不直接调系统接口。</span></div>
+  <div class="layer"><b>共享逻辑：<code>fibo-core</code>、<code>fibo-remote</code>、<code>fibo-relay</code></b><span>状态规则、协议、插件格式。手机和中继看到的内容与平台无关。</span></div>
   <div class="arrow">↓ 只能经过这一层</div>
-  <div class="layer contract"><b>接口：<code>mooring-platform</code> 的公开 API</b><span>每个能力一组函数和类型，加一份能力表。这是唯一跨平台的代码。</span></div>
+  <div class="layer contract"><b>接口：<code>fibo-platform</code> 的公开 API</b><span>每个能力一组函数和类型，加一份能力表。这是唯一跨平台的代码。</span></div>
   <div class="arrow">↓ 编译时只选一个</div>
   <div class="row3">
     <div class="layer"><b><code>macos/</code></b><span>kqueue、proc_pidinfo、Keychain</span></div>
@@ -85,7 +85,7 @@
   </div>
   <div class="arrow">macOS 和 Linux 相同的部分放 <code>unix/</code>，只被这两个目录引用</div>
 </div>
-<pre><code>crates/mooring-platform/
+<pre><code>crates/fibo-platform/
   src/lib.rs            选平台，导出接口，不写实现
   src/terminal/         mod.rs（接口） unix.rs windows.rs
   src/file_watch/       mod.rs macos.rs linux.rs windows.rs
@@ -114,7 +114,7 @@
 <tr><td><b>Shell</b></td><td colspan="2"><code>/bin/sh</code></td><td>Git 的 <code>sh</code>，PowerShell</td><td><code>plugin_command.rs</code>、<code>background_shells.rs</code></td></tr>
 <tr><td><b>密钥</b></td><td>Keychain</td><td>Secret Service</td><td>凭据管理器</td><td><code>core/secret.rs</code></td></tr>
 <tr><td><b>系统信息</b></td><td>mach</td><td>/proc</td><td>PDH 等</td><td><code>diagnostics.rs</code>（可选能力）</td></tr>
-<tr><td><b>桌面集成</b></td><td colspan="3">通知、打开链接、开机启动，各平台实现</td><td><code>mooring-app</code>（窗口自己的 platform 模块）</td></tr>
+<tr><td><b>桌面集成</b></td><td colspan="3">通知、打开链接、开机启动，各平台实现</td><td><code>fibo-app</code>（窗口自己的 platform 模块）</td></tr>
 </table></div>
 <p>具体函数签名在迁移每个能力时才定，届时有两个实现可以对照。这里不提前设计，避免接口被第一个平台绑死。</p>
 
@@ -131,9 +131,9 @@ if platform::capabilities().handoff {
 <h2>五条规则，靠机器检查</h2>
 <div class="wrap"><table>
 <tr><th>规则</th><th>怎么检查</th></tr>
-<tr><td><b>1. 平台代码不出界。</b><code>mooring-platform</code> 之外不能有 <code>cfg(target_os/unix/windows)</code>、<code>libc::</code>、<code>std::os::unix</code>、写死的 <code>/bin/sh</code>、直接读 <code>HOME</code>。</td><td>扩展现有的 guard 棘轮：现状记成基线，<strong>只能减少</strong>，新增就失败。不用一次改完。</td></tr>
+<tr><td><b>1. 平台代码不出界。</b><code>fibo-platform</code> 之外不能有 <code>cfg(target_os/unix/windows)</code>、<code>libc::</code>、<code>std::os::unix</code>、写死的 <code>/bin/sh</code>、直接读 <code>HOME</code>。</td><td>扩展现有的 guard 棘轮：现状记成基线，<strong>只能减少</strong>，新增就失败。不用一次改完。</td></tr>
 <tr><td><b>2. 行为由同一套测试约定。</b>接口的每条承诺写成一个测试，三个平台跑同一份。</td><td><code>tests/contract/</code>。这也是发现平台差异最便宜的办法，比如这次的 <code>sh</code> 缺失。</td></tr>
-<tr><td><b>3. 平台依赖不外泄。</b><code>libc</code>、<code>windows-sys</code> 只出现在 <code>mooring-platform</code> 的 <code>[target.*]</code> 依赖里。</td><td>guard 检查各 <code>Cargo.toml</code>。</td></tr>
+<tr><td><b>3. 平台依赖不外泄。</b><code>libc</code>、<code>windows-sys</code> 只出现在 <code>fibo-platform</code> 的 <code>[target.*]</code> 依赖里。</td><td>guard 检查各 <code>Cargo.toml</code>。</td></tr>
 <tr><td><b>4. CI 按改动范围跑。</b>只改 Windows 实现，Linux 不跑；改接口或共享代码，三个平台全跑。</td><td>GitHub Actions 路径过滤：<code>platform-linux.yml</code>、<code>platform-windows.yml</code>，改别的平台的实现文件不会启动它们。macOS 的检查是必过项，每个 PR 都跑，不能按路径跳过，但 <code>windows.rs</code> 不参与 Mac 编译，所以它只多花时间，不会被别的平台影响。新平台先不挡合入，稳定后再改成必过。</td></tr>
 <tr><td><b>5. 协议不带平台。</b>手机和中继不解析路径、不判断系统。路径在协议里是不透明的字符串，只负责显示。</td><td>协议测试向量加入 Windows 路径的样例。</td></tr>
 </table></div>
@@ -177,11 +177,11 @@ if platform::capabilities().handoff {
   <li><b>第 4 步，已登录的 CLI（真机）：</b>没能完成一轮真实回复：这台机器上 Claude 配置的中转地址 TLS 握手失败（不经过 Mooring 也一样），Codex 的登录已过期。走通的部分：Claude 的 Hook 经 Git Bash 报到 host（依据 Hook，UserPromptSubmit），<code>--settings</code> 让 Hook 留在测试目录，真实设置不用改；真实 Codex 靠屏幕绑定；host 中断 Codex，420 毫秒后屏幕停下，状态变成“停下了”。发现的问题：Codex 0.60.1 报错时日志没有任何事件，host 一直显示“在跑”；屏幕判断只用来显示忙，不会结束一轮。没测：模型真实回复、提问和回答、审批框。复现工具：<code>terminal_chain by_hand</code>。</li>
   <li><b>第 4 步，Codex 重新登录后（真机，codex-cli 0.167.0，<code>gpt-5.6-luna</code>）：</b>真实回复 3 秒上屏；状态依次是在跑 → 等你验收，审批框出现时是等你回答（规则 approval），批准后回到在跑；host 中断后屏幕立即停、状态变停下了（<code>turn_aborted</code>）；模型不存在时变出错了。0.60.1 上“报错后一直在跑”在这个版本不出现：它写 <code>task_complete</code>，也上报 OSC 7501。host 全程 CPU 约 0.5–1 秒、内存 5 MB。没测到：拒绝审批（<code>mooring send</code> 不允许发 Esc；同样的提示词 Codex 有时不弹框，直接进沙箱）、问答选择题、Claude 的真实回复（中转仍不通）。</li>
   <li><b>PowerShell 传参（真机 5.1；7 由 Windows CI 跑）：</b>5.1 把参数交给外部程序时不转义，双引号被吞，空参数丢失，<code>C:\a b\</code> 会吃掉后面的引号；常规的 <code>\"</code> 也不够，<code>k="v w"</code> 仍会被拆成两个词，因为它判断加不加外层引号时把 <code>\"</code> 也算作引号。<code>shell::quote</code> 现在运行时看 <code>$PSNativeCommandArgumentPassing</code>：7.3 起原样传，否则用转义形式，含空白时引号写成 <code>""</code>。代价：<code>quote</code> 的结果只适合给外部程序（含 npm 的 <code>.ps1</code> 转发），给 cmdlet 会多出转义。没测：7.0–7.2；<code>.cmd</code> 启动器。</li>
-  <li><b>第 5 步，窗口编译（Windows，交叉检查）：</b><code>gpui_windows</code> 本身能编译；<code>mooring-app</code> 原来只有 24 个错误，都在单实例锁、结束和启动后台、内存压力、字体注册、本地时间、可执行判断几处。这些搬进 <code>mooring-platform</code>（<code>process::detach</code>、<code>start_after_exit</code>、<code>exit_now</code>，<code>system::watch_pressure</code>，<code>desktop::register_font</code>，<code>fs::is_program</code>），<code>mooring-app</code> 通过编译，Mac 语义不变。发布版编译要 <code>fxc.exe</code>（Windows SDK）。还不算能用：没链接、没在屏幕上开过；Windows 的内存压力和符号字体先不做。</li>
-  <li><b>第 5 步，窗口上屏（真机，调试版，GNU 工具链，150% 缩放）：</b><code>mooring-app.exe</code> 在已登录的桌面会话里 1.1–1.5 秒开窗，自己启动后台，开出真实 PowerShell；侧栏、标签、状态栏和中文都正常，内存 132 MB，空闲 15 秒 CPU 约 0.3 秒，没有报错。还不能日常用：① 没有最小化、最大化、关闭按钮（窗口隐藏了系统标题栏，只有 macOS 自带按钮）；② 快捷键提示和绑定还是 <code>⌘</code>；③ 键盘、鼠标、分屏、运行 Agent 都没在窗口里点过；④ 菜单栏、通知、Dock 图标的等价物和符号字体未做；⑤ 发布版要 <code>fxc.exe</code>，安装包和签名未做。</li>
+  <li><b>第 5 步，窗口编译（Windows，交叉检查）：</b><code>gpui_windows</code> 本身能编译；<code>fibo-app</code> 原来只有 24 个错误，都在单实例锁、结束和启动后台、内存压力、字体注册、本地时间、可执行判断几处。这些搬进 <code>fibo-platform</code>（<code>process::detach</code>、<code>start_after_exit</code>、<code>exit_now</code>，<code>system::watch_pressure</code>，<code>desktop::register_font</code>，<code>fs::is_program</code>），<code>fibo-app</code> 通过编译，Mac 语义不变。发布版编译要 <code>fxc.exe</code>（Windows SDK）。还不算能用：没链接、没在屏幕上开过；Windows 的内存压力和符号字体先不做。</li>
+  <li><b>第 5 步，窗口上屏（真机，调试版，GNU 工具链，150% 缩放）：</b><code>fibo-app.exe</code> 在已登录的桌面会话里 1.1–1.5 秒开窗，自己启动后台，开出真实 PowerShell；侧栏、标签、状态栏和中文都正常，内存 132 MB，空闲 15 秒 CPU 约 0.3 秒，没有报错。还不能日常用：① 没有最小化、最大化、关闭按钮（窗口隐藏了系统标题栏，只有 macOS 自带按钮）；② 快捷键提示和绑定还是 <code>⌘</code>；③ 键盘、鼠标、分屏、运行 Agent 都没在窗口里点过；④ 菜单栏、通知、Dock 图标的等价物和符号字体未做；⑤ 发布版要 <code>fxc.exe</code>，安装包和签名未做。</li>
   <li><b>第 5 步，窗口按钮和快捷键：</b>Windows 上自绘最小化、最大化、关闭，标成窗口控制区，由系统处理点击和拖动。没有 ⌘ 的系统里，<code>⌘</code> 按 <code>Ctrl+Shift</code>，<code>⌘⇧</code> 按 <code>Ctrl+Shift+Alt</code>，<code>⌘⌥</code> 按 <code>Ctrl+Alt</code>，单独的 <code>Ctrl</code> 留给终端；文本框和点链接用 <code>Ctrl</code>。翻译逻辑有单元测试，每个默认快捷键都验证“按提示的键能回到同一动作”。截图确认按钮和提示正确；真实的点击、拖动和按键还没测，要人在机器前试。还有写死的 <code>⌘</code>、“访达”文字和 <code>open -R</code> 没改。</li>
-  <li><b>第 3 步，性能（真机 9800X3D，PowerShell 5.1；对照 Mac，release 构建）：</b>20 个终端空闲 30 秒 host CPU 都约为 0。按键到屏幕的中位数 Windows 16 毫秒（conhost 一帧），Mac 0.1 毫秒。打开 20 个 shell Windows 3.6 秒（PowerShell 自身慢），Mac 0.15 秒。host 内存 Windows 41 MB（另有 20 个 conhost 共 26 MB），Mac 25 MB，统计口径不同（私有提交和 RSS）。50 MB 输出 Windows 25 秒，host CPU 6.4 秒；Mac 0.5 秒，host CPU 0.45 秒。裸 ConPTY 不经过 host 也是 25 秒，所以 2 MB/s 是系统上限，不是 host 拖慢。复现：<code>cargo test --release -p mooring-host --test terminal_chain how_ -- --ignored --nocapture --test-threads=1</code>。</li>
-  <li><b>第 4 步，文件监听和探进程的开销（真机 9800X3D，机器本身负载 30–70%，CPU 读数的精度约 16 毫秒，Defender 实时防护是关的）：</b><code>ReadDirectoryChangesW</code> 接上完成端口，接口测试不再给 Windows 留例外。写入方一直开着文件时目录通知等不到（去掉定时器，「开着文件追加」的接口测试 15 秒超时失败），所以被跟随的文件每 250 毫秒看一次，只在有被跟随文件时才醒；40 个文件约 1.6% 单核（Mac 用系统通知，约 0）。Windows 不清父进程号，号码被重新分配后，20 个终端曾走到全机 262 个进程里的 235 个，一次 858 毫秒；现在要求子进程比父进程晚启动、一次快照走完，正好 20 个，5 毫秒。同一个用例 Windows 和 Mac 对照：读 2000 个旧日志（30 MB）host CPU 2.8 秒和 1.3 秒；4 个日志每秒 10 行、每次关文件 1.6–2% 和 1.0%；4 个终端按 Agent 的速度输出 0.7–2% 和 1.2–1.6%；20 个终端空闲 30 秒都约为 0；一次 <code>mooring list</code> 30 毫秒和 4 毫秒。50 MB 灌输时 host CPU 约 6.9 秒，是 Mac 的 15 倍，原因没查，平时碰不到。复现：<code>cargo test --release -p mooring-host --test system_cost how_much -- --ignored --nocapture --test-threads=1</code>；测试 exe 旁边要有 <code>ghostty-vt.dll</code>。</li>
+  <li><b>第 3 步，性能（真机 9800X3D，PowerShell 5.1；对照 Mac，release 构建）：</b>20 个终端空闲 30 秒 host CPU 都约为 0。按键到屏幕的中位数 Windows 16 毫秒（conhost 一帧），Mac 0.1 毫秒。打开 20 个 shell Windows 3.6 秒（PowerShell 自身慢），Mac 0.15 秒。host 内存 Windows 41 MB（另有 20 个 conhost 共 26 MB），Mac 25 MB，统计口径不同（私有提交和 RSS）。50 MB 输出 Windows 25 秒，host CPU 6.4 秒；Mac 0.5 秒，host CPU 0.45 秒。裸 ConPTY 不经过 host 也是 25 秒，所以 2 MB/s 是系统上限，不是 host 拖慢。复现：<code>cargo test --release -p fibo-host --test terminal_chain how_ -- --ignored --nocapture --test-threads=1</code>。</li>
+  <li><b>第 4 步，文件监听和探进程的开销（真机 9800X3D，机器本身负载 30–70%，CPU 读数的精度约 16 毫秒，Defender 实时防护是关的）：</b><code>ReadDirectoryChangesW</code> 接上完成端口，接口测试不再给 Windows 留例外。写入方一直开着文件时目录通知等不到（去掉定时器，「开着文件追加」的接口测试 15 秒超时失败），所以被跟随的文件每 250 毫秒看一次，只在有被跟随文件时才醒；40 个文件约 1.6% 单核（Mac 用系统通知，约 0）。Windows 不清父进程号，号码被重新分配后，20 个终端曾走到全机 262 个进程里的 235 个，一次 858 毫秒；现在要求子进程比父进程晚启动、一次快照走完，正好 20 个，5 毫秒。同一个用例 Windows 和 Mac 对照：读 2000 个旧日志（30 MB）host CPU 2.8 秒和 1.3 秒；4 个日志每秒 10 行、每次关文件 1.6–2% 和 1.0%；4 个终端按 Agent 的速度输出 0.7–2% 和 1.2–1.6%；20 个终端空闲 30 秒都约为 0；一次 <code>mooring list</code> 30 毫秒和 4 毫秒。50 MB 灌输时 host CPU 约 6.9 秒，是 Mac 的 15 倍，原因没查，平时碰不到。复现：<code>cargo test --release -p fibo-host --test system_cost how_much -- --ignored --nocapture --test-threads=1</code>；测试 exe 旁边要有 <code>ghostty-vt.dll</code>。</li>
   <li><b>第 3 步，ConPTY：</b>同一份终端接口测试在 Windows 实机上过（输出、输入、改大小、退出码、关闭）。Mac 的主路径搬动后，CI 的完整检查和窗口性能门禁都过。</li>
   <li><b>第 2 步接口复核：</b>第二个实现没有让任何已有能力改签名，只新增了能力，不触发放弃条件。Linux 和 Mac 的差异都在接口之内吸收：没有重放（<code>MUST_SCAN</code>）、临时端口从 32768 开始（<code>first_handed_out_port</code>）、进程名按文件取。</li>
   <li><b>接口第一次被第二个实现检验（第 1 步）：</b>Linux 的 inotify 没有日志可重放。接口没有改签名：<code>start</code> 从旧检查点开始时报 <code>MUST_SCAN</code>，由已有的补扫接手。代价是 Linux 上 host 每次重启都要扫一遍日志目录。</li>

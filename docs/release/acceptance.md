@@ -47,7 +47,7 @@
 
 | 编号 | 怎么走 | 看什么 |
 |---|---|---|
-| `in.cask` | `brew install --cask` | 装得上；`fibo` 和 `mooring` 都在 PATH |
+| `in.cask` | `brew install --cask` | 装得上；`fibo` 和 `fibo` 都在 PATH |
 | `in.dmg` | 下载 DMG，拖进应用程序 | Gatekeeper 不拦；`spctl -a -vv` 显示已公证 |
 | `in.first` | 第一次打开 | 后台起来；hook 装进 Claude 设置；没有报错弹窗 |
 | `in.agent` | 在里面开一个真的 Claude 做一件事 | 被认出、状态会变、侧栏标题对 |

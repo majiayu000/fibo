@@ -1,6 +1,6 @@
 import type { Entry } from './index';
 
-/** State words, as the desktop says them (crates/mooring-core/locales/en/core.toml). */
+/** State words, as the desktop says them (crates/fibo-core/locales/en/core.toml). */
 export const common: Record<string, Entry> = {
   等你回答: 'Waiting for you',
   出错了: 'Error',

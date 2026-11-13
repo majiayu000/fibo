@@ -1,0 +1,12 @@
+apple	crates/fibo-app/src/main.rs	1
+cfg	crates/fibo-app/src/desktop.rs	2
+cfg	crates/fibo-host/src/remote.rs	1
+dep libc	crates/fibo-app/Cargo.toml	1
+dep libc	crates/fibo-host/Cargo.toml	1
+libc	crates/fibo-host/src/relay/regressions.rs	8
+unix-path	crates/fibo-app/src/lifecycle.rs	1
+unix-path	crates/fibo-app/src/main.rs	1
+unix-path	crates/fibo-core/src/sample.rs	1
+unix-path	crates/fibo-core/src/secret.rs	1
+unix-path	crates/fibo-host/src/agents/mod.rs	2
+unix-path	crates/fibo-host/src/plugin_hooks.rs	1

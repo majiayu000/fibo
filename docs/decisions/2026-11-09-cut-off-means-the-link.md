@@ -30,17 +30,17 @@ decision-makers: 用户（「修复吧」）、Claude
 
 ## Implementation Plan
 
-- `crates/mooring-app/src/connection.rs`：`StatusLink`；`RecognitionConnection` 发它。
-- `crates/mooring-app/src/host/store.rs`：`take_link`、`link_down`、`cut_off_reason`；`set_recognition` 只清断开。
-- `crates/mooring-app/src/workbench/{mod,render,statusbar}.rs`、`desktop.rs`（菜单栏照旧把 Lost 当 Interrupted 看）。
-- `crates/mooring-host/src/host/association.rs`：`recover_logs` 结尾。
+- `crates/fibo-app/src/connection.rs`：`StatusLink`；`RecognitionConnection` 发它。
+- `crates/fibo-app/src/host/store.rs`：`take_link`、`link_down`、`cut_off_reason`；`set_recognition` 只清断开。
+- `crates/fibo-app/src/workbench/{mod,render,statusbar}.rs`、`desktop.rs`（菜单栏照旧把 Lost 当 Interrupted 看）。
+- `crates/fibo-host/src/host/association.rs`：`recover_logs` 结尾。
 - 别再写 `phase == Interrupted` 来判断连接。
 
 ## Verification
 
 ```sh
-cargo test -p mooring-app --bins -- store_link
-cargo test -p mooring-host --lib a_deleted_log_folder_ends_its_repair_healthy
+cargo test -p fibo-app --bins -- store_link
+cargo test -p fibo-host --lib a_deleted_log_folder_ends_its_repair_healthy
 ```
 
 两个测试在各自的改动撤回后都会失败（已验）。

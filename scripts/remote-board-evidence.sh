@@ -2,12 +2,12 @@
 # Another machine's sessions on the board, end to end without a second Mac: a second
 # host here, reached through a fake ssh, with one Codex session that finished a turn.
 # Needs a debug build with visual tests:
-#   cargo build -p mooring-host -p mooring-app --features mooring-app/visual-test
+#   cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test
 # Prints PASS, what the other machine recorded, and saves the board to $R/shots.
 set -u
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-rb}
-rm -rf $R; mkdir -p $R/home/.config/mooring $R/claude $R/shots $R/bin $R/farhome/.codex/sessions $R/farhome/.claude/projects
+rm -rf $R; mkdir -p $R/home/.config/fibo $R/claude $R/shots $R/bin $R/farhome/.codex/sessions $R/farhome/.claude/projects
 mkdir -m 700 $R/far $R/rt
 cat > $R/bin/ssh <<'SH'
 #!/bin/sh
@@ -22,11 +22,11 @@ done
 exec /bin/sh -c "$*"
 SH
 chmod +x $R/bin/ssh
-printf '#!/bin/sh\nexec %s/target/debug/mooring "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-mooring; chmod +x $R/far-mooring
-printf '[{"host":"far","path":"%s/far-mooring"}]' "$R" > $R/home/.config/mooring/machines.json
+printf '#!/bin/sh\nexec %s/target/debug/fibo "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-fibo; chmod +x $R/far-fibo
+printf '[{"host":"far","path":"%s/far-fibo"}]' "$R" > $R/home/.config/fibo/machines.json
 ln -s /bin/sh $R/codex
 env -i PATH=/usr/bin:/bin HOME=$R/farhome CODEX_HOME=$R/farhome/.codex CLAUDE_CONFIG_DIR=$R/farhome/.claude LANG=en_US.UTF-8 \
-  $REPO/target/debug/mooring serve --runtime $R/far > $R/far.log 2>&1 &
+  $REPO/target/debug/fibo serve --runtime $R/far > $R/far.log 2>&1 &
 FAR=$!
 python3 -I - "$R" <<'PY'
 import json, socket, struct, sys, time
@@ -62,7 +62,7 @@ pid = next(t for t in rpc('Workspace')['Workspace']['terminals'] if t['id'] == '
 print(list(rpc({'Hook': {'runtime': 'Codex', 'pid': pid, 'cli_session_id': 'far-codex', 'transcript': log, 'ended': False, 'event': None}})))
 PY
 PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude CODEX_HOME=$R/home/.codex MOORING_REMOTE_BOARD_EVIDENCE=1 \
-  perl -e 'alarm 120; exec @ARGV' $REPO/target/debug/mooring-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
+  perl -e 'alarm 120; exec @ARGV' $REPO/target/debug/fibo-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
 echo "app exit $?"
 grep -E "PASS|panicked|assert" -A2 $R/app.log | head
 python3 -I - "$R" <<'PY'
