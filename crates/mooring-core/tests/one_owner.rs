@@ -20,7 +20,8 @@ fn names_agree(w: &Workspace) -> Result<(), String> {
                 s.id
             ));
         }
-        if !tab.title.is_empty() {
+        // A side tab keeps the default it was opened with for when it holds several.
+        if !tab.title.is_empty() && !tab.is_side() {
             return Err(format!("{}: tab {} still keeps its own name", s.id, tab.id));
         }
     }

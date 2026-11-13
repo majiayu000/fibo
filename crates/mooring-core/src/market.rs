@@ -33,10 +33,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path, PathBuf};
 
+#[path = "market_follow.rs"]
+mod follow;
 #[path = "market_install.rs"]
 mod install;
 #[path = "market_sign.rs"]
 mod sign;
+pub use follow::follow_bundled;
 pub use install::*;
 pub use sign::*;
 

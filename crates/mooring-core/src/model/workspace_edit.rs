@@ -159,7 +159,7 @@ impl Workspace {
         }
         let Some(tab) = self
             .sole_session_tab(s)
-            .filter(|t| !t.title.trim().is_empty())
+            .filter(|t| !t.is_side() && !t.title.trim().is_empty())
             .map(|t| t.id.clone())
         else {
             return;
@@ -175,6 +175,13 @@ impl Workspace {
     /// Moves names pinned on tabs onto the conversation each holds alone; run once
     /// after loading a workspace saved before names had one owner.
     pub fn adopt_tab_names(&mut self) {
+        // Builds up to 0.1.2 handed a side tab's default to the conversation it held,
+        // so `fibo run` sessions were all 「Claude Code 的旁屏」; that was never a name.
+        for s in &mut self.agent_sessions {
+            if side_tab_default(&s.name) {
+                s.name.clear();
+            }
+        }
         let ids: Vec<String> = self
             .agent_sessions
             .iter()
@@ -376,4 +383,24 @@ impl Workspace {
         self.revision += 1;
         Ok(())
     }
+}
+
+/// Whether `name` is a title a side tab was opened with: 「<CLI 或 终端> 的旁屏」 with an
+/// optional number, in either language.
+fn side_tab_default(name: &str) -> bool {
+    let name = name.trim();
+    let base = match name.rsplit_once(' ') {
+        Some((head, n)) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => head,
+        _ => name,
+    };
+    let Some(who) = (base.strip_suffix(not_ui!("的旁屏")))
+        .or_else(|| base.strip_suffix(" side"))
+        .map(str::trim_end)
+    else {
+        return false;
+    };
+    [not_ui!("终端"), "Terminal"].contains(&who)
+        || crate::agent::Agent::all()
+            .into_iter()
+            .any(|a| a.name() == who)
 }

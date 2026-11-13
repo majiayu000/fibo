@@ -286,6 +286,9 @@ pub fn install(config: &Path) -> &'static [Found] {
         let plugins = dir(config);
         if plugins.is_dir() {
             crate::market::recover(&plugins);
+            for line in crate::market::follow_bundled(&plugins) {
+                eprintln!("plugins: {line}");
+            }
         }
         discover(&plugins)
     })
