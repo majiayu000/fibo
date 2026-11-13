@@ -284,6 +284,6 @@ export function install() {
     return remote(l.machine) as never;
   });
   outboxReady.then(() => {
-    if (!PROMO && !unsent().length) enqueue({ machine: 'air', terminal: 'x', session: 'fixture-air', text: '测完把 APK 装到手机上' });
-  });
+    if (!PROMO && !unsent().length) return enqueue({ machine: 'air', terminal: 'x', session: 'fixture-air', text: '测完把 APK 装到手机上' });
+  }).catch(() => console.warn('Could not save the screenshot outbox fixture'));
 }

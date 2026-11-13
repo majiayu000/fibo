@@ -174,4 +174,9 @@ export const chat: Record<string, Entry> = {
   这个终端已经关了: 'This terminal is closed',
   '这台手机的权限是「只看」，不能发消息': 'This phone is View only and can’t send messages',
   '这台手机的权限是「能答审批」，不能发消息': 'This phone can approve but can’t send messages',
+  '未能保存待发送消息，文字还留在输入框里，请重试': "Couldn't save the message to send later. Your words are still in the box; try again.",
+  '未能保存重试状态，请重试': "Couldn't save the retry. Try again.",
+  '未能删除待发送消息，请重试': "Couldn't delete the unsent message. Try again.",
+  '未能保存待发送消息的状态，已暂停自动重试。请重启 Fibo 后再试；原消息编号会保留，避免重复执行。':
+    "Couldn't save the unsent message's state, so automatic retries are paused. Restart Fibo and try again; the message keeps its ID so it won't run twice.",
 };

@@ -5,7 +5,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert, Platform } from 'react-native';
 import { tr } from './i18n';
 import { type Card, NOT_YET, refresh, write } from './remote/hub';
-import { settings } from './store/settings';
+import { readSettings } from './store/settings';
 import { FULL_CONFIRM, type ModeKind, type ModeOption } from './ui/modes';
 import { type Ask, asksTwice } from './ui/parse';
 
@@ -22,9 +22,11 @@ export function confirm(title: string, detail: string, ok: string, destructive =
 
 /** Face ID / fingerprint (or the passcode) when the lock setting is on; true when it is off. */
 export async function verify(reason: string): Promise<boolean> {
-  if (!settings.get().lock || Platform.OS === 'web') return true;
   try {
-    if (!(await LocalAuthentication.hasHardwareAsync())) return true;
+    // Unread or unreadable settings are not 「lock off」, and a phone without Face ID or a
+    // fingerprint does not skip the lock: the system then asks for the passcode.
+    if (!(await readSettings()).lock) return true;
+    if (Platform.OS === 'web') return false;
     const r = await LocalAuthentication.authenticateAsync({ promptMessage: reason, cancelLabel: tr('取消') });
     return r.success;
   } catch {
@@ -38,7 +40,7 @@ export async function verify(reason: string): Promise<boolean> {
  * the menu's "don't ask again" option, the one `ask.always` words: refused if it has changed.
  */
 export async function approve(machine: string, card: Card, ask: Ask, always = false): Promise<boolean> {
-  if (settings.get().confirmDanger && asksTwice(ask)) {
+  if ((await readSettings()).confirmDanger && asksTwice(ask)) {
     const what = ask.known ? ask.subject : tr('电脑没读出它要做什么，打开终端看一眼更稳妥。');
     const sure = await confirm(tr('确定允许？'), always ? `${what}\n\n${ask.always}` : what, tr('允许'));
     if (!sure) return false;
