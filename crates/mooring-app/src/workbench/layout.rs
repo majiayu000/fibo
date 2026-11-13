@@ -69,6 +69,8 @@ pub(super) struct LayoutState {
     pub(super) subagents_all: HashSet<String>,
     /// A tab's right-click menu: the tab and where it was opened.
     pub(super) tab_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
+    /// The tab under the pointer: its turning mark stands still while × shows in its slot.
+    pub(super) hovered_tab: Option<String>,
     /// The title-bar logo's menu for choosing the app icon, where it was opened.
     pub(super) icon_menu: Option<gpui::Point<gpui::Pixels>>,
     /// A close that would stop a running Agent, waiting for the user to confirm it.

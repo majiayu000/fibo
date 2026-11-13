@@ -28,6 +28,38 @@ pub(super) fn tab_tail(
 }
 
 impl Workbench {
+    /// A tab's state mark. Under the pointer it stands still: the turning arc is painted by
+    /// an overlay the slot's hover fade cannot reach, so it would keep turning over ×.
+    pub(super) fn tab_mark(
+        &self,
+        status: Option<Status>,
+        id: &str,
+        cx: &Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let g = status?;
+        Some(if self.layout.hovered_tab.as_deref() == Some(id) {
+            crate::ui::widgets::status_mark_seen(g, false)
+        } else {
+            self.session_mark(g, false, false, cx)
+        })
+    }
+
+    pub(super) fn tab_hover(
+        &self,
+        tab: gpui::Stateful<gpui::Div>,
+        id: &str,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let id = id.to_string();
+        tab.on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+            let was = this.layout.hovered_tab.as_deref() == Some(id.as_str());
+            if *hovered != was {
+                this.layout.hovered_tab = hovered.then(|| id.clone());
+                cx.notify();
+            }
+        }))
+    }
+
     #[cfg(feature = "visual-test")]
     pub fn visual_tab_agent_sample(&mut self, cx: &mut Context<Self>) {
         let tab = self
