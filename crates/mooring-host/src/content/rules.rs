@@ -125,8 +125,10 @@ pub(crate) fn user_text(s: &str) -> String {
     }
 
     // Codex wraps a pasted image in `<image name=[Image #1] path="…">…</image>`; the
-    // ask itself keeps "[Image #1]". Only that exact opening, so a user asking about
-    // an SVG `<image>` keeps their words.
+    // ask itself keeps "[Image #1]". One attached with `--image` (a phone's new task,
+    // 2026-11-13 walk) has no such tag in the words: the wrapper leaves its tag behind,
+    // or the message would read as if it had no picture. Only that exact opening, so a
+    // user asking about an SVG `<image>` keeps their words.
     let image_open = "<image name=[Image #";
     while let Some(start) = clean.find(image_open) {
         let Some(end) = clean[start..]
@@ -135,7 +137,11 @@ pub(crate) fn user_text(s: &str) -> String {
         else {
             break;
         };
-        clean.replace_range(start..end, "\n");
+        let name = start + "<image name=".len();
+        let tag = (clean[name..end].find(']')).map(|close| clean[name..=name + close].to_owned());
+        let said = |t: &str| clean[..start].contains(t) || clean[end..].contains(t);
+        let keep = tag.filter(|t| !said(t));
+        clean.replace_range(start..end, keep.as_deref().unwrap_or("\n"));
     }
 
     for tag in [

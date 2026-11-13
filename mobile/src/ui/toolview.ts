@@ -154,6 +154,13 @@ export function viewRows(l: Loaded, end: number, kind: string): ViewRow[] {
   return rows;
 }
 
+/**
+ * A terminal's marks the phone's monospace face lacks, as ones it has: Android drew Claude's
+ * `⏵⏵` as two boxes and `⏺` as an orange emoji (real phone, 2026-11-09 and 11-12).
+ */
+const GLYPHS: Record<string, string> = { '⏵': '▸', '⏴': '◂', '⏸': '‖', '⏺': '●' };
+export const screenText = (text: string) => text.replace(/[⏵⏴⏸⏺]/g, (c) => GLYPHS[c]);
+
 /** A whole text as rows, none wrapped. */
 export const textRows = (text: string): ViewRow[] => {
   const rows: ViewRow[] = [];
@@ -186,7 +193,7 @@ const RULE = /^\s*[─━]{8,}/;
  * bottom gone. Its last lines alone were Claude's box, tips and footer (2026-11-09).
  */
 export function lastLines(text: string, n: number): string[] {
-  let lines = text.replace(/\s+$/, '').split('\n').map((l) => l.replace(/\s+$/, ''));
+  let lines = screenText(text).replace(/\s+$/, '').split('\n').map((l) => l.replace(/\s+$/, ''));
   const rules = lines.map((l, i) => (RULE.test(l) ? i : -1)).filter((i) => i >= 0);
   if (rules.length >= 2 && lines.length - rules[rules.length - 1] <= 6) lines = lines.slice(0, rules[rules.length - 2]);
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop();

@@ -12,6 +12,7 @@ import { oops } from '@/actions';
 import { tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { resetDraft, setDraft, useDraft } from '@/store/draft';
+import { rememberSent } from '@/store/sentPictures';
 import { Icon } from '@/ui/icons';
 import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
 import { MAX_PICTURES, type Picture, pick } from '@/ui/pictures';
@@ -100,6 +101,7 @@ export default function NewTask() {
       for (const p of canPicture ? pictures : []) images.push((await write(m.id, 'image', { data: p.base64 })).path);
       const where = { ...(space ? { space } : {}), ...(images.length ? { images } : {}) };
       const ok = await write(m.id, 'open', draft.resume ? { resume: draft.resume.id, ...where, ...(prompt ? { prompt } : {}) } : { cwd: cwd, agent: draft.agent, prompt, ...where });
+      if (ok?.terminal && images.length) rememberSent(m.id, ok.terminal, prompt, pictures);
       setPictures([]);
       const ignored = ignoredPick(spaces, space, cwd, ok ?? {});
       resetDraft();

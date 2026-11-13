@@ -2,7 +2,7 @@
 // Agent's flat across the width, and the work between them folded into one line.
 import * as Clipboard from 'expo-clipboard';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from './icons';
 import { mono } from './kit';
 import { Markdown } from './markdown';
@@ -53,7 +53,7 @@ function Meta({ text, note, right, color, onSelect }: { text: string; note: stri
 /** A `tk` key: said with `tr` where shown. */
 const COPIED = tk('已复制全文');
 
-export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress }: { text: string; at?: number; note?: string; tone?: 'pending' | 'queued' | 'error'; copyable?: boolean; onPress?: () => void }) {
+export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress, pictures }: { text: string; at?: number; note?: string; tone?: 'pending' | 'queued' | 'error'; copyable?: boolean; onPress?: () => void; pictures?: string[] }) {
   const t = useTheme();
   const [said, say] = useCopied();
   const [selecting, setSelecting] = useState(false);
@@ -78,7 +78,16 @@ export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress
             </View>
           </View>
         ) : (
-          <Text style={{ color: t.text, fontSize: 15, lineHeight: 22 }}>{text}</Text>
+          <>
+            {!!pictures?.length && (
+              <View style={s.pictures}>
+                {pictures.map((uri, i) => (
+                  <Image key={uri} source={{ uri }} style={[s.thumb, { backgroundColor: t.well }]} accessibilityLabel={tr('第 {n} 张图片', { n: i + 1 })} />
+                ))}
+              </View>
+            )}
+            {!!text && <Text style={{ color: t.text, fontSize: 15, lineHeight: 22 }}>{text}</Text>}
+          </>
         )}
       </Pressable>
       <Meta text={note ?? (at ? clock(at) : '')} note={said} right color={tone === 'error' ? t.err : tone === 'queued' ? t.run : t.dim} onSelect={() => setSelecting(true)} />
@@ -143,6 +152,8 @@ export const Theirs = memo(function Theirs({ m, agent, onTools }: { m: Message; 
 const s = StyleSheet.create({
   enter: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   mine: { alignSelf: 'flex-end', maxWidth: '80%', borderRadius: 20, paddingVertical: 11, paddingHorizontal: 15 },
+  pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
+  thumb: { width: 96, height: 96, borderRadius: 12 },
   meta: { fontSize: 12 },
   worked: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, borderBottomWidth: 1 },
 });

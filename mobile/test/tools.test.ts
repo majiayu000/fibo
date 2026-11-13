@@ -1,7 +1,7 @@
 // A tool's text as the phone holds and draws it: bytes against the machine's offsets, the gap
 // between head and tail, rows of one height however long a line is.
 import { describe, expect, test } from 'bun:test';
-import { allText, byteLength, lastLines, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, opensAtEnd, textRows, took, toolName, viewRows } from '../src/ui/toolview';
+import { allText, byteLength, lastLines, screenText, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, opensAtEnd, textRows, took, toolName, viewRows } from '../src/ui/toolview';
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
@@ -111,10 +111,15 @@ describe('the live block', () => {
     expect(lastLines('a\nb  \nc\n\n   \n', 2)).toEqual(['b', 'c']);
     expect(lastLines('only', 8)).toEqual(['only']);
   });
+  test('draws the marks the phone font lacks as ones it has', () => {
+    // Real phone 2026-11-12: `⏵⏵` as two boxes, `⏺` as an orange emoji.
+    expect(screenText('⏵⏵ bypass permissions on\n⏺ done\n⏸ manual mode on')).toBe('▸▸ bypass permissions on\n● done\n‖ manual mode on');
+    expect(lastLines('⏺ ping3-done', 2)).toEqual(['● ping3-done']);
+  });
   test('leaves out the input box and the footer under it', () => {
     const rule = '─'.repeat(40);
     const claude = ['⏺ Bash(ping -c 90 127.0.0.1)', '  ⎿  64 bytes from 127.0.0.1', '', '✶ Thundering… (36s)', '', rule, '❯ Press up to edit queued messages', rule, '  🔥7天', '  ⏵⏵ bypass permissions on'].join('\n');
-    expect(lastLines(claude, 8)).toEqual(['⏺ Bash(ping -c 90 127.0.0.1)', '  ⎿  64 bytes from 127.0.0.1', '', '✶ Thundering… (36s)']);
+    expect(lastLines(claude, 8)).toEqual(['● Bash(ping -c 90 127.0.0.1)', '  ⎿  64 bytes from 127.0.0.1', '', '✶ Thundering… (36s)']);
     // A rule far above the bottom is the Agent's own output, not its box.
     const table = [rule, 'a', rule, '1', '2', '3', '4', '5', '6', '7', '8'].join('\n');
     expect(lastLines(table, 3)).toEqual(['6', '7', '8']);

@@ -678,6 +678,12 @@ fn injected_messages_and_quoted_completion_are_not_user_intent_or_claims() {
         user_text("<image name=[Image #1] path=\"/var/folders/x/codex-clipboard-a.png\">\n</image>\n你帮我看看[Image #1] 这是哪个环境"),
         "你帮我看看[Image #1] 这是哪个环境"
     );
+    // Attached with `--image` (a phone's new task): the words carry no tag, the wrapper
+    // leaves it, so the phone still knows the message had a picture.
+    assert_eq!(
+        user_text("<image name=[Image #1] path=\"/r/phone-images/a.jpg\">\n</image>\n<image name=[Image #2] path=\"/r/phone-images/b.jpg\">\n</image>\n看图"),
+        "[Image #1]\n[Image #2]\n看图"
+    );
     assert_eq!(
         user_text("SVG 里的 <image href=\"a.png\"> 为什么不显示"),
         "SVG 里的 <image href=\"a.png\"> 为什么不显示"

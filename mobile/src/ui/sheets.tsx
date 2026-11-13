@@ -7,7 +7,7 @@ import { CodeView, LINE } from './codeview';
 import { copyWithNote } from './copy';
 import { KeyboardSafe, useBottomOverKeyboard } from './keyboard';
 import { Btn, Notice, Wide, noOutline, useBottom } from './kit';
-import { opensAtEnd, textRows } from './toolview';
+import { opensAtEnd, screenText, textRows } from './toolview';
 import { useTheme } from './theme';
 import { tr } from '../i18n';
 
@@ -109,7 +109,7 @@ export function TerminalSheet({ visible, machine, terminal, onClose }: { visible
     setError('');
     r.request('read', { terminal, lines: 40 })
       .then((x) => {
-        setText(String(x.text ?? '').replace(/\s+$/, ''));
+        setText(screenText(String(x.text ?? '')).replace(/\s+$/, ''));
         setLoaded(true);
       })
       .catch((e) => setError((e as Error).message));
