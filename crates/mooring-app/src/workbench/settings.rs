@@ -360,6 +360,8 @@ pub(super) struct SettingsView {
     runtime: Option<PathBuf>,
     /// The action waiting for its new chord.
     pub(super) recording: Option<Action>,
+    agent_menu: Option<Agent>,
+    agent_scroll: gpui::ScrollHandle,
     /// A recorded chord another action already has: it moves only when confirmed.
     pub(super) taken: Option<(Action, Chord, Action)>,
     /// Why the last recorded chord was refused, shown under its row.
@@ -415,7 +417,11 @@ impl SettingsView {
                 .compact()
                 .placeholder(t!("搜索设置"))
         });
-        cx.observe(&query, |_, _, cx| cx.notify()).detach();
+        cx.observe(&query, |this, _, cx| {
+            this.agent_menu = None;
+            cx.notify();
+        })
+        .detach();
         cx.observe_global::<crate::update::Updates>(|_, cx| cx.notify())
             .detach();
         // Closing 设置 mid-edit puts the saved theme back.
@@ -446,6 +452,8 @@ impl SettingsView {
             query,
             runtime,
             recording: None,
+            agent_menu: None,
+            agent_scroll: gpui::ScrollHandle::new(),
             taken: None,
             refused: None,
             hooks: None,

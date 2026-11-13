@@ -117,6 +117,9 @@ jobs:
           python3 scripts/resize-scenes.py target/debug target/resize-scenes
           python3 scripts/tab-scenes.py target/debug target/tab-scenes
 
+      - name: Native Agent picker regression
+        run: python3 scripts/agent-picker-scenes.py target/debug target/agent-picker-scenes
+
       - name: Keep native regression evidence
         if: failure()
         uses: actions/upload-artifact@v4
@@ -125,6 +128,7 @@ jobs:
           path: |
             target/resize-scenes
             target/tab-scenes
+            target/agent-picker-scenes
           if-no-files-found: ignore
 
       - name: Upload managed_session retries

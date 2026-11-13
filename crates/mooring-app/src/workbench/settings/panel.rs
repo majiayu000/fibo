@@ -28,7 +28,11 @@ impl Render for SettingsView {
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .capture_key_down(
                 cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
-                    if this.recording.is_some() {
+                    if this.agent_menu.is_some() {
+                        this.agent_menu_key(&event.keystroke.key, cx);
+                        cx.stop_propagation();
+                        window.prevent_default();
+                    } else if this.recording.is_some() {
                         this.key(&event.keystroke, cx);
                         cx.stop_propagation();
                         window.prevent_default();
@@ -255,6 +259,18 @@ impl Workbench {
     pub(crate) fn visual_settings_close(&mut self, cx: &mut Context<Self>) {
         self.settings = None;
         cx.notify();
+    }
+    pub(crate) fn visual_agent_menu_open(&self, cx: &gpui::App) -> bool {
+        self.settings
+            .as_ref()
+            .is_some_and(|s| s.read(cx).agent_menu.is_some())
+    }
+    pub(crate) fn visual_agent_menu_scroll(
+        &self,
+        cx: &gpui::App,
+    ) -> (gpui::ScrollHandle, Option<Agent>) {
+        let settings = self.settings.as_ref().unwrap().read(cx);
+        (settings.agent_scroll.clone(), settings.agent_menu)
     }
     pub(crate) fn visual_settings_open(&self) -> bool {
         self.settings.is_some()

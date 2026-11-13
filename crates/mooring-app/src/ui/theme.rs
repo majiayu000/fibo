@@ -544,6 +544,9 @@ impl Theme {
     pub const PROGRESS_CELL_RADIUS: f32 = 3.;
     pub const DISABLED_OPACITY: f32 = 0.45;
     pub const SETTINGS_WIDTH: f32 = 940.;
+    /// The default Agent dropdown and its scrollable menu.
+    pub const SETTINGS_AGENT_WIDTH: f32 = 180.;
+    pub const SETTINGS_AGENT_MENU_HEIGHT: f32 = 400.;
     pub const SETTINGS_NAV: f32 = 164.;
     /// A plugin setting being typed in its row.
     pub const OPTION_FIELD: f32 = 220.;
