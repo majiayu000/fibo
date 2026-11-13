@@ -137,7 +137,9 @@ const THUMB_H: f32 = 64.;
 pub(in crate::workbench) fn tilde(path: &str) -> String {
     let home = mooring_platform::dirs::home_str().unwrap_or_default();
     match path.strip_prefix(&home) {
-        Some(rest) if !home.is_empty() => format!("~{rest}"),
+        Some(rest) if !home.is_empty() && (rest.is_empty() || rest.starts_with('/')) => {
+            format!("~{rest}")
+        }
         _ => path.to_owned(),
     }
 }

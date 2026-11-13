@@ -139,7 +139,9 @@ impl Workbench {
             })
             // The hover card would cover the right-click menu.
             .when(self.layout.session_menu.is_none(), |d| {
-                d.tooltip(super::super::diagnostics::tip(self.session_tip(session)))
+                d.tooltip(super::super::diagnostics::tip_lines(
+                    self.session_tip(session),
+                ))
             })
             .on_mouse_down(
                 gpui::MouseButton::Right,

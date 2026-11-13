@@ -83,10 +83,11 @@
 
 # Sessions & "You are here" card
 "会话还没载入，载入后自动打开" = "Session hasn't loaded yet; it will open once loaded"
-"名字来自{source} · 双击改名" = "Named from {source} · double-click to rename"
+"{source} · 双击改名" = "{source} · double-click to rename"
 "双击改名" = "Double-click to rename"
-"最初：{text}" = "First: {text}"
-"最近：{text}" = "Latest: {text}"
+"最初" = "First"
+"最近" = "Latest"
+"[图]" = "[image]"
 "会话名" = "Session name"
 "尾段没有用户原话，不能凭空建立待办" = "No user prompt in the indexed tail; can't create a to-do from nothing"
 "\n\n追加要求：" = "\n\nFollow-up: "

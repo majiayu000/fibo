@@ -2,6 +2,7 @@
 use super::*;
 
 mod here_card;
+mod tip;
 
 const ROUTE_PENDING: &str = tk!("会话还没载入，载入后自动打开");
 
@@ -46,35 +47,6 @@ impl Workbench {
     /// See `Workspace::session_title`; every surface names a conversation the same way.
     pub(super) fn session_title(&self, s: &AgentSession) -> String {
         self.workspace.session_title(s)
-    }
-    /// What hovering a conversation's row shows: where its name comes from, what it
-    /// was first and last asked, and where it runs.
-    pub(super) fn session_tip(&self, s: &AgentSession) -> Vec<String> {
-        use mooring_core::content::short;
-        let mut lines = vec![match self.workspace.session_naming(s) {
-            Some((_, source)) => t!(
-                "名字来自{source} · 双击改名",
-                source = source.label(s.runtime)
-            ),
-            None => t!("双击改名").into(),
-        }];
-        if let Some(c) = self.workspace.content.get(&s.id) {
-            let line =
-                |text: &str| short(&text.split_whitespace().collect::<Vec<_>>().join(" "), 120);
-            if let Some(first) = c.asks.first().filter(|_| c.first_ask_known) {
-                lines.push(t!("最初：{text}", text = line(&first.text)));
-            }
-            // Only when it is not the first ask shown above.
-            if let Some(last) = c
-                .asks
-                .last()
-                .filter(|_| c.asks.len() > 1 || !c.first_ask_known)
-            {
-                lines.push(t!("最近：{text}", text = line(&last.text)));
-            }
-        }
-        lines.push(format!("{} · {}", s.runtime.name(), s.cwd));
-        lines
     }
     /// Double-click names a conversation; an empty name hands it back to its CLI and
     /// first ask.
