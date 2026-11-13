@@ -178,9 +178,13 @@ def main():
     if cmd == 'probe':
         bindir = pathlib.Path(sys.argv[3]); out = pathlib.Path(sys.argv[4]).resolve(); out.mkdir(parents=True, exist_ok=True)
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8', 'GPUI_PAUSE_IDLE_DISPLAY_LINK': '1', 'MOORING_CPU_PROBE': sys.argv[5], 'PERF_DROP': os.environ.get('PERF_DROP', ''), **({'MOORING_PERF_NO_COUNTER': '1'} if os.environ.get('MOORING_PERF_NO_COUNTER') else {}), **({'MOORING_NO_CATCH_UP': '1'} if os.environ.get('MOORING_NO_CATCH_UP') else {})}
+        # CI caches target/, where the gate keeps its output: a result from an older run must
+        # not stand in for this one when the probe dies before writing its own.
+        (out / 'cpu.txt').unlink(missing_ok=True)
         r = subprocess.run([str(bindir / 'mooring-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(out)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
         (out / 'app.log').write_bytes(r.stdout)
-        print((out / 'cpu.txt').read_text() if (out / 'cpu.txt').exists() else r.stdout.decode()[-3000:])
+        ok = r.returncode == 0 and (out / 'cpu.txt').exists()
+        print((out / 'cpu.txt').read_text() if ok else f'probe exited {r.returncode}:\n' + r.stdout.decode()[-3000:])
     elif cmd == 'live':
         bindir = pathlib.Path(sys.argv[3]); secs = int(sys.argv[4]) if len(sys.argv) > 4 else 20
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}

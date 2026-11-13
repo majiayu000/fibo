@@ -141,10 +141,6 @@ pub(super) async fn run(
         .unwrap();
     let top = crate::ui::theme::Theme::TOP;
     assert!(
-        bounds.iter().any(|b| f32::from(b.origin.y) < top),
-        "running tab did not register"
-    );
-    assert!(
         bounds.iter().any(|b| f32::from(b.origin.y) >= top),
         "running pane header did not register"
     );
@@ -158,6 +154,36 @@ pub(super) async fn run(
                     .any(|x| before.get_pixel(x, y) != after.get_pixel(x, y))
             }),
             "a running mark stayed still with the sidebar collapsed: {bound:?}"
+        );
+    }
+    // Tabs: the selected one shows × instead, so look from a tab with nothing running.
+    handle
+        .update(cx, |v, _, a| v.visual_turning_focus_idle(a))
+        .unwrap();
+    refreshed(cx);
+    let tabs: Vec<_> = handle
+        .update(cx, |v, _, _| v.visual_turning_frame_bounds())
+        .unwrap()
+        .into_iter()
+        .filter(|b| f32::from(b.origin.y) < top)
+        .collect();
+    step(cx);
+    let before = shot(cx);
+    wait(350).await;
+    step(cx);
+    let after = shot(cx);
+    after.save(directory.join("running-tabs.png")).unwrap();
+    assert!(!tabs.is_empty(), "running tab did not register");
+    for bound in &tabs {
+        let x = (f32::from(bound.origin.x) * scale) as u32;
+        let y = (f32::from(bound.origin.y) * scale) as u32;
+        let size = (f32::from(bound.size.width) * scale) as u32;
+        assert!(
+            (y..(y + size).min(before.height())).any(|y| {
+                (x..(x + size).min(before.width()))
+                    .any(|x| before.get_pixel(x, y) != after.get_pixel(x, y))
+            }),
+            "a running tab mark stayed still: {bound:?}"
         );
     }
     // The column and both drawer headers use exactly the same overlay and setting.
