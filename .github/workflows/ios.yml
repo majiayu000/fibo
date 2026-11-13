@@ -1,0 +1,42 @@
+name: iOS native build
+
+on:
+  pull_request:
+    paths: ['mobile/**', 'crates/fibo-remote/vectors/**', '.github/workflows/ios.yml']
+  push:
+    branches: [main]
+    paths: ['mobile/**', 'crates/fibo-remote/vectors/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Build the standalone Release app
+        run: bash mobile/tools/build-ios-simulator.sh
+      - name: Install and cold-start twice
+        run: python3 mobile/tools/smoke-ios-simulator.py
+      - name: Keep native evidence and the simulator package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator
+          path: |
+            target/ios-evidence/build-manifest.txt
+            target/ios-evidence/simulator-build.log
+            target/ios-evidence/Fibo-ios-simulator.zip
+            target/ios-evidence/native-smoke
