@@ -35,3 +35,34 @@ export function shownWords(logged: string) {
 export function sendTarget(read: string | null, online: boolean, card: string | null | undefined) {
   return read ?? (online ? null : card ?? null);
 }
+
+/** Pictures this phone sent with a message: copies kept here, as the log holds only a tag. */
+export type SentPictures = { machine: string; terminal: string; words: string; at: number; files: string[] };
+
+/** How far apart the send and the logged message may be and still be the same one. */
+const SAME_SEND_S = 600;
+
+/**
+ * The copies of the pictures a logged message was sent with, from this phone: same
+ * conversation's terminal, the same words, a picture tag in the log, close in time.
+ * Pictures sent from elsewhere have none here, and keep their 「[N 张图片]」.
+ */
+export function picturesFor(sent: SentPictures[], machine: string, terminal: string, logged: string, at: number): string[] | null {
+  for (let i = sent.length - 1; i >= 0; i--) {
+    const s = sent[i];
+    if (s.machine !== machine || s.terminal !== terminal || Math.abs(at - s.at) > SAME_SEND_S) continue;
+    if (sameWords(logged, s.words, s.files.length)) return s.files;
+  }
+  return null;
+}
+
+/** The words a bubble shows next to its own thumbnails: the tags, and the count, go. */
+export function wordsBeside(logged: string) {
+  return logged.replace(new RegExp(PICTURE, 'g'), ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** The newest `most` sends; the ones that fall off, whose copies can go. */
+export function keepNewest(sent: SentPictures[], most: number): { kept: SentPictures[]; dropped: SentPictures[] } {
+  const over = Math.max(0, sent.length - most);
+  return { kept: sent.slice(over), dropped: sent.slice(0, over) };
+}

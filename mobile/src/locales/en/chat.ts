@@ -167,6 +167,7 @@ export const chat: Record<string, Entry> = {
 
   // The conversation page
   '{why}；现在写的话会在重连后发送': '{why}. What you write now sends after reconnecting',
+  '{why}；下面是上次连上时看到的，现在写的话会在重连后发送': '{why}. Below is what it showed last time; what you write now sends after reconnecting',
   '电脑没连上，连上后这里显示这段对话': 'Computer not connected. This conversation shows here once it reconnects',
   这段对话还没有消息: 'No messages in this conversation yet',
   '答完下面的问题，它才会开始': 'It starts once you answer the question below',

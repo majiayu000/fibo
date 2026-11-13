@@ -11,7 +11,9 @@ import { refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub
 import { UNSURE } from '@/remote/named';
 import { useAsk } from '@/remote/useAsk';
 import { useSuggestion } from '@/remote/useSuggestion';
+import { cacheChat, cachedChat } from '@/store/chatCache';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
+import { rememberSent, useSentPictures } from '@/store/sentPictures';
 import { countUse } from '@/store/suggestionCounts';
 import { suggestionStats } from '@/store/suggestions';
 import { HOW_NOTE, type How, QUEUED_TAP, SENT_NOW, sendsNow, steerable, whileBusy } from '@/ui/busy';
@@ -33,7 +35,7 @@ import { hasEffort, type ModeKind } from '@/ui/modes';
 import { ModeSheet } from '@/ui/modesheet';
 import { agentName, statusColor } from '@/ui/status';
 import { TrustAsk } from '@/ui/trust';
-import { sameWords, sendTarget, shownWords } from '@/ui/sent';
+import { picturesFor, sameWords, sendTarget, shownWords, wordsBeside } from '@/ui/sent';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 import { tr } from '@/i18n';
@@ -59,8 +61,13 @@ export default function Chat() {
   const tools = speaksV2(m);
   const outbox = useOutbox().filter((u) => u.machine === machine && u.terminal === terminal);
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [session, setSession] = useState<string | null>(null);
+  // Opened while the computer is away: the messages seen last time, until it answers.
+  const [cached] = useState(() => cachedChat<Message>(machine, terminal));
+  const [messages, setMessages] = useState<Message[]>(() => cached?.messages ?? []);
+  const [session, setSession] = useState<string | null>(() => cached?.session ?? null);
+  const [fromCache, setFromCache] = useState(!!cached);
+  const showingCache = useRef(!!cached);
+  const sentPictures = useSentPictures();
   const [more, setMore] = useState(false);
   const [partial, setPartial] = useState(false);
   const [readingBack, setReadingBack] = useState(false);
@@ -103,7 +110,10 @@ export default function Chat() {
     readChatPage<Message>(fields => r.request('chat', fields), { terminal, limit: 50, ...extra }, requestedGeneration)
       .then(async (page) => {
         if (!live || (shown.current === page.session && generation.current !== requestedGeneration)) return;
-        const same = shown.current === null || shown.current === page.session;
+        // What was kept from last time is replaced, never merged: the log may have moved on.
+        const same = !showingCache.current && (shown.current === null || shown.current === page.session);
+        showingCache.current = false;
+        setFromCache(false);
         const had = same && !page.reset ? last.current : 0;
         generation.current = page.generation;
         shown.current = page.session;
@@ -131,6 +141,13 @@ export default function Chat() {
       live = false;
     };
   }, [online, machine, terminal, cardSession, tools]);
+
+  // Kept for next time the computer is away; a second after the last change, not on every one.
+  useEffect(() => {
+    if (!online || !session || fromCache || !messages.length) return;
+    const keep = setTimeout(() => cacheChat(machine, terminal, session, messages), 1000);
+    return () => clearTimeout(keep);
+  }, [online, session, fromCache, messages, machine, terminal]);
 
   // New messages: the Agent's words mid-turn raise no event, so ask every two seconds.
   // Only while this screen shows: a tool's page opened over it asks nothing, and the next tick
@@ -245,6 +262,7 @@ export default function Chat() {
       // A line separate from the pictures: each CLI shows them as [Image #1] right before it.
       const words = images.length && text ? ` ${text}` : text;
       await write(machine, 'send', { terminal, session, text: words, enter: true, ...(images.length ? { images } : {}), ...(how ? { how } : {}) });
+      rememberSent(machine, terminal, text, pictures);
       setError('');
       return true;
     } catch (e) {
@@ -319,7 +337,7 @@ export default function Chat() {
     ({ item: l }: { item: Line }) =>
       l.kind === 'msg' ? (
         l.m.role === 'user' ? (
-          <Mine text={shownWords(l.m.text)} at={l.m.at} copyable />
+          <UserLine m={l.m} files={picturesFor(sentPictures, machine, terminal, l.m.text, l.m.at)} />
         ) : (
           <Theirs m={l.m} agent={agent} onTools={toTools} />
         )
@@ -334,7 +352,7 @@ export default function Chat() {
           <Mine text={l.text} note={l.error ? tr('没发出去：{why}（点一下重发，按住删除）', { why: l.error }) : tr('重连后发送（按住删除）')} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, card?.controls, toTools, canSendNow, openQueued],
+    [agent, card?.controls, toTools, canSendNow, openQueued, sentPictures, machine, terminal],
   );
 
   return (
@@ -364,8 +382,18 @@ export default function Chat() {
           />
         }
       />
-      {!online && <Notice text={m?.status === 'connecting' ? tr('正在连接…') : tr('{why}；现在写的话会在重连后发送', { why: m?.error ?? tr('电脑没连上') })} />}
-      {loading && online ? (
+      {!online && (
+        <Notice
+          text={
+            m?.status === 'connecting'
+              ? tr('正在连接…')
+              : fromCache
+                ? tr('{why}；下面是上次连上时看到的，现在写的话会在重连后发送', { why: m?.error ?? tr('电脑没连上') })
+                : tr('{why}；现在写的话会在重连后发送', { why: m?.error ?? tr('电脑没连上') })
+          }
+        />
+      )}
+      {loading && online && !messages.length ? (
         <ActivityIndicator style={{ marginTop: 40 }} />
       ) : (
         <FlatList
@@ -484,3 +512,7 @@ export default function Chat() {
   );
 }
 
+/** Your message: with the pictures this phone kept, they show instead of 「[N 张图片]」. */
+function UserLine({ m, files }: { m: Message; files: string[] | null }) {
+  return files ? <Mine text={wordsBeside(m.text)} pictures={files} at={m.at} copyable /> : <Mine text={shownWords(m.text)} at={m.at} copyable />;
+}
