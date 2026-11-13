@@ -246,6 +246,29 @@ impl Workbench {
         self.sync_panes(cx);
         cx.notify();
     }
+    /// Shows the first tab with nothing running. The selected tab gives its mark slot to ×,
+    /// and in a narrow window (1024 pt on CI) the tab bar scrolls to keep it in view, folding
+    /// far tabs away; with an idle tab up front, the earlier running tabs show their marks.
+    pub fn visual_turning_focus_idle(&mut self, cx: &mut Context<Self>) {
+        self.nav.tab = self
+            .workspace
+            .tabs
+            .iter()
+            .find(|tab| {
+                tab.space == self.nav.space
+                    && !self.workspace.tab_terminals(&tab.id).iter().any(|id| {
+                        self.pane_status(id)
+                            .is_some_and(|(g, _)| g == Status::Running)
+                    })
+            })
+            .map(|tab| tab.id.clone());
+        assert!(
+            self.nav.tab.is_some(),
+            "fixture needs a tab with nothing running"
+        );
+        self.sync_panes(cx);
+        cx.notify();
+    }
     pub fn visual_turning_board(&mut self, drawer: bool, cx: &mut Context<Self>) {
         self.show_overview(cx);
         self.overview.drawer = drawer.then(|| {
