@@ -189,6 +189,16 @@ pub struct Tab {
     pub layout: Option<Layout>,
 }
 
+/// Side tabs `fibo split`/`run` opens are `side~<terminal>`, then `~2`, `~3`.
+pub const SIDE_TAB: &str = "side~";
+impl Tab {
+    /// A side tab's title is the default it was opened with (「Codex 的旁屏」), never a
+    /// name someone gave: it stays on the tab and is not handed to a conversation.
+    pub fn is_side(&self) -> bool {
+        self.id.starts_with(SIDE_TAB)
+    }
+}
+
 /// A managed PTY. Its shell may run many distinct agent conversations over time.
 /// Placement belongs exclusively to Tab.layout; PTY identity survives closing its view.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -649,3 +659,5 @@ mod workspace_edit;
 
 #[cfg(test)]
 mod identity_tests;
+#[cfg(test)]
+mod side_tab_tests;

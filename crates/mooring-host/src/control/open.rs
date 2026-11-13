@@ -5,7 +5,7 @@ use super::*;
 /// split would leave a half too small, the pane goes to a side tab instead.
 const MAX_PANES: usize = 4;
 /// Side tabs are named after the terminal they serve: `side~<terminal>`, then `~2`, `~3`.
-const SIDE: &str = "side~";
+const SIDE: &str = mooring_core::model::SIDE_TAB;
 
 /// Where a new pane goes: beside a pane, or into a side tab that does not exist yet.
 enum Placement {
@@ -51,13 +51,12 @@ fn side_placement(
     socket: &Path,
     w: &Workspace,
     owner: &str,
-    asking: &str,
+    command: &[String],
 ) -> io::Result<Placement> {
-    // Named for the Agent asking, or the one where the user started.
-    let name = [asking, owner]
-        .iter()
-        .find_map(|term| w.current_agent(term))
-        .map(|s| s.runtime.name().to_owned())
+    // Named for what it runs, not for who asked: `fibo run codex` from Claude opens
+    // 「Codex 的旁屏」; a plain shell opens 「终端的旁屏」.
+    let name = launched_agent(command)
+        .map(|g| g.name().to_owned())
         .unwrap_or_else(|| t!("终端").into());
     // 「Claude 的旁屏」, 「终端的旁屏」.
     let ascii = name.ends_with(|c: char| c.is_ascii());
@@ -93,6 +92,14 @@ fn side_placement(
         }
     }
     unreachable!("there is always a next side tab")
+}
+/// The Agent a pane's command starts, by the first word naming a registered CLI:
+/// `OPENCODE_SERVER_PASSWORD=… opencode --port 0` and `command claude …` both count.
+fn launched_agent(command: &[String]) -> Option<mooring_core::agent::Agent> {
+    command
+        .iter()
+        .flat_map(|part| part.split_whitespace())
+        .find_map(mooring_core::agent::Agent::from_executable)
 }
 /// A pane opened beside a terminal, or in its side tab.
 pub(super) struct Opened {
@@ -198,7 +205,7 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
     let overflow = placement.is_none();
     let placement = match placement {
         Some(p) => p,
-        None => side_placement(&a.socket, &w, &side_owner(&w, tab, &target), &target)?,
+        None => side_placement(&a.socket, &w, &side_owner(&w, tab, &target), command)?,
     };
     let cwd = match a.value("cwd") {
         Some(dir) => mooring_platform::fs::canonical(Path::new(dir))
@@ -325,5 +332,34 @@ pub(super) fn close(a: Args) -> io::Result<()> {
     match deliver(&a.socket, &close, PATIENCE).into_result()? {
         Reply::Workspace(_) => Ok(()),
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::launched_agent;
+    use mooring_core::agent::Agent;
+
+    /// The side tab is named for what runs in it, not for the Agent that asked.
+    #[test]
+    fn a_side_tab_is_named_for_the_agent_it_starts() {
+        let name = |c: &[&str]| {
+            let c: Vec<String> = c.iter().map(|s| s.to_string()).collect();
+            launched_agent(&c).map(Agent::name)
+        };
+        assert_eq!(
+            name(&[Agent::Codex.command().as_str()]),
+            Some(Agent::Codex.name())
+        );
+        assert_eq!(
+            name(&["command claude --permission-mode default"]),
+            Some(Agent::Claude.name())
+        );
+        assert_eq!(
+            name(&["X=$(uuidgen) codex --port 0"]),
+            Some(Agent::Codex.name())
+        );
+        assert_eq!(name(&["npm", "run", "dev"]), None);
+        assert_eq!(name(&[]), None);
     }
 }
