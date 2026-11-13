@@ -30,7 +30,7 @@ mock.module('../src/store/machines', () => ({
   machineId: (l: any) => l.machine,
 }));
 mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined }));
-mock.module('../src/store/settings', () => ({ settings: { get: () => ({ lock, confirmDanger: true }) } }));
+mock.module('../src/store/settings', () => ({ settings: { get: () => ({ lock, confirmDanger: true }) }, readSettings: async () => ({ lock, confirmDanger: true }) }));
 const hub = await import('../src/remote/hub');
 const { switchMode } = await import('../src/actions');
 const { FULL_CONFIRM, FULL_WORDS, hasEffort, isFull, kindName, rowSaysFull } = await import('../src/ui/modes');

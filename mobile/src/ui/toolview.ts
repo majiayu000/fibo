@@ -82,7 +82,17 @@ export const missing = (l: Loaded, end: number) => Math.max(0, l.tailAt - end);
 
 /** A fetched stretch on the end of the head, up to where the tail begins. */
 export function extend(l: Loaded, text: string): Loaded {
-  return { ...l, head: l.head + text };
+  const left = missing(l, byteLength(l.head));
+  let bytes = 0;
+  let end = 0;
+  // The host returns a fixed-size chunk, which may cross into the saved tail.
+  // Count whole code points against its UTF-8 byte offset, not JS code units.
+  for (const char of text) {
+    bytes += byteLength(char);
+    if (bytes > left) break;
+    end += char.length;
+  }
+  return { ...l, head: l.head + text.slice(0, end) };
 }
 
 /** All of it, when nothing is missing; else what has come, in order. */

@@ -247,7 +247,7 @@ export default function Inbox() {
     const { m, c } = where(u.machine, u.terminal);
     const space = m && c ? spaceName(m, c) : '';
     nodes.push(
-      <Swipe key={u.id} left={{ label: tr('删除'), color: t.errBg, fg: t.err, run: () => drop(u.id) }}>
+      <Swipe key={u.id} left={{ label: tr('删除'), color: t.errBg, fg: t.err, run: () => drop(u.id).catch(() => oops(tr('未能删除待发送消息，请重试'))) }}>
         <Pressable
           onPress={() => router.push({ pathname: '/chat', params: { machine: u.machine, terminal: u.terminal } })}
           style={[s.unsent, { borderColor: t.sep, backgroundColor: t.bg }, i === unsent.length - 1 && { borderBottomWidth: 0 }]}

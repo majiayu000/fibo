@@ -1,6 +1,7 @@
 // What this phone remembers about how it should behave; none of it reaches the computer.
 // Notifications are switches only: push is not wired yet (docs/phone-app/v2-plan.md).
 import { useSyncExternalStore } from 'react';
+import { notUi } from '../i18n';
 import { persisted } from './kv';
 
 export type Settings = {
@@ -23,3 +24,11 @@ export const settings = persisted<Settings>('mooring.settings', {
 });
 
 export const useSettings = () => useSyncExternalStore(settings.subscribe, settings.get);
+
+/** An unreadable security choice must never become an unlocked app. */
+export async function readSettings() {
+  await settings.ready;
+  const value = settings.get();
+  if (typeof value.lock !== 'boolean' || typeof value.confirmDanger !== 'boolean') throw new Error(notUi('安全设置无法读取'));
+  return value;
+}

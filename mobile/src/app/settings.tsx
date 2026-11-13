@@ -44,17 +44,25 @@ export default function SettingsScreen() {
   const bottom = useBottom();
   const v = useSettings();
   const stats = useSuggestionStats();
-  const notify = (k: keyof Settings['notify']) => (on: boolean) => settings.set({ notify: { ...v.notify, [k]: on } });
+  // A setting changes once it is saved; a failed save says so rather than showing what was not kept.
+  const save = (patch: Partial<Settings> | ((value: Settings) => Settings)) => settings.set(patch).catch(() => oops(tr('设置没有保存，请重试')));
+  const notify = (k: keyof Settings['notify']) => (on: boolean) => save((value) => ({ ...value, notify: { ...value.notify, [k]: on } }));
 
   async function setLock(on: boolean) {
-    if (on && Platform.OS !== 'web') {
-      const has = await LocalAuthentication.hasHardwareAsync().catch(() => false);
-      const enrolled = has && (await LocalAuthentication.isEnrolledAsync().catch(() => false));
-      if (!enrolled) return oops(tr('这台手机没有设置 Face ID 或指纹'));
-      const r = await LocalAuthentication.authenticateAsync({ promptMessage: tr('打开 Face ID / 指纹锁') });
-      if (!r.success) return;
+    // A browser has no Face ID: a lock it could not check would let everything through.
+    if (on && Platform.OS === 'web') return oops(tr('请在手机上设置 Face ID / 指纹锁'));
+    try {
+      if (on) {
+        const has = await LocalAuthentication.hasHardwareAsync().catch(() => false);
+        const enrolled = has && (await LocalAuthentication.isEnrolledAsync().catch(() => false));
+        if (!enrolled) return oops(tr('这台手机没有设置 Face ID 或指纹'));
+        const r = await LocalAuthentication.authenticateAsync({ promptMessage: tr('打开 Face ID / 指纹锁') });
+        if (!r.success) return;
+      }
+      await save({ lock: on });
+    } catch {
+      oops(tr('无法完成身份验证，请重试'));
     }
-    settings.set({ lock: on });
   }
 
   return (
@@ -89,11 +97,11 @@ export default function SettingsScreen() {
         </Text>
         <Label style={{ marginTop: 8 }}>{tr('外观与安全')}</Label>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
-          <Item t={t} title={tr('外观')} onPress={() => settings.set({ appearance: NEXT[v.appearance] })}>
+          <Item t={t} title={tr('外观')} onPress={() => save({ appearance: NEXT[v.appearance] })}>
             <Text style={{ fontSize: 15, color: t.dim }}>{tr(APPEARANCE[v.appearance])}</Text>
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Item>
-          <Item t={t} title={tr('语言')} onPress={() => settings.set({ language: NEXT_LANGUAGE[v.language] })}>
+          <Item t={t} title={tr('语言')} onPress={() => save({ language: NEXT_LANGUAGE[v.language] })}>
             <Text style={{ fontSize: 15, color: t.dim }}>{v.language === 'auto' ? tr(LANGUAGE.auto) : LANGUAGE[v.language]}</Text>
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Item>
@@ -101,7 +109,7 @@ export default function SettingsScreen() {
             <Switch label={tr('打开时要 Face ID / 指纹')} on={v.lock} onChange={setLock} />
           </Item>
           <Item t={t} title={tr('允许前再确认一次')} sub={tr('只对 push、rm、部署这类命令')} last>
-            <Switch label={tr('允许前再确认一次')} on={v.confirmDanger} onChange={(on) => settings.set({ confirmDanger: on })} />
+            <Switch label={tr('允许前再确认一次')} on={v.confirmDanger} onChange={(on) => save({ confirmDanger: on })} />
           </Item>
         </View>
         <Label style={{ marginTop: 8 }}>{tr('输入建议')}</Label>

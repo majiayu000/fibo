@@ -609,3 +609,69 @@ fn only_a_screen_tied_thread_can_leave_its_pane_and_only_for_an_open_one() {
     let process = held(Some(Binding::Process));
     assert!(!screen_candidate(true, false, Some(&process), true));
 }
+
+#[test]
+fn an_open_file_binding_follows_a_new_transcript_in_the_same_process() {
+    let dir = std::env::temp_dir().join(format!("mooring-open-switch-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    let old = Transcript {
+        runtime: Agent::Codex,
+        cli_id: "old-thread".into(),
+        path: dir.join("old.jsonl").to_string_lossy().into_owned(),
+        cwd: dir.to_string_lossy().into_owned(),
+        updated: 1,
+    };
+    let new = Transcript {
+        cli_id: "new-thread".into(),
+        path: dir.join("new.jsonl").to_string_lossy().into_owned(),
+        updated: 2,
+        ..old.clone()
+    };
+    std::fs::write(&old.path, "").unwrap();
+    let held = std::fs::File::create(&new.path).unwrap();
+    let pid = std::process::id();
+    let mut w = Workspace::default();
+    w.terminals.push(Terminal {
+        id: "pty".into(),
+        space: "s".into(),
+        argv: vec!["codex".into()],
+        cwd: old.cwd.clone(),
+        pid: Some(pid),
+        state: ProcessState::Running,
+        exit_code: None,
+        error: None,
+    });
+    w.observe_agent(bound(&old, "pty".into(), Binding::OpenFile))
+        .unwrap();
+    let processes = [Process {
+        pid,
+        parent: 1,
+        runtime: Some(Agent::Codex),
+        cli_session_id: None,
+        no_daemon: true,
+        launch: vec![],
+    }];
+    let files = open_transcripts(&w, &processes).unwrap();
+    assert!(files
+        .get(&pid)
+        .is_some_and(|paths| paths.contains(&new.path)));
+    let transcripts = [old, new];
+    reconcile(&mut w, &transcripts, &processes, &files).unwrap();
+    assert_eq!(w.current_agent("pty").unwrap().cli_session_id, "new-thread");
+    // Real Codex may retain the prior writer: neither open log then proves ownership.
+    let ambiguous = HashMap::from([(pid, transcripts.iter().map(|t| t.path.clone()).collect())]);
+    for binding in [Binding::OpenFile, Binding::Hook, Binding::Process] {
+        let mut check = w.clone();
+        let mut current = check.current_agent("pty").unwrap().clone();
+        current.binding = Some(binding);
+        check.observe_agent(current).unwrap();
+        reconcile(&mut check, &transcripts, &processes, &ambiguous).unwrap();
+        assert_eq!(
+            check.current_agent("pty").is_none(),
+            binding == Binding::OpenFile
+        );
+    }
+    drop(held);
+    std::fs::remove_dir_all(dir).unwrap();
+}

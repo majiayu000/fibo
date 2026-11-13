@@ -71,9 +71,9 @@ function MachineQuota({ m, named, t }: { m: Machine; named: boolean; t: Theme })
     const load = () =>
       r
         .request('quota', {})
-        .then((q) => {
+        .then(async (q) => {
           if (!live) return;
-          store.set({ agents: q.agents ?? [] });
+          await store.set({ agents: q.agents ?? [] });
           setError('');
         })
         .catch((e) => live && setError((e as Error).message));

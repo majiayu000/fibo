@@ -7,24 +7,25 @@ export type Unsent = { id: string; machine: string; terminal: string; session: s
 
 const box = persisted<{ items: Unsent[] }>('mooring.outbox', { items: [] });
 export const outboxReady = box.ready;
+export const reloadOutbox = () => box.reload();
 
-export function enqueue(u: Omit<Unsent, 'id' | 'at'>) {
+export async function enqueue(u: Omit<Unsent, 'id' | 'at'>) {
   const item = { ...u, id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, at: Date.now() / 1000 };
-  box.set((v) => ({ items: [...v.items, item] }));
+  await box.set((v) => ({ items: [...v.items, item] }));
   return item;
 }
 
 export function drop(id: string) {
-  box.set((v) => ({ items: v.items.filter((x) => x.id !== id) }));
+  return box.set((v) => ({ items: v.items.filter((x) => x.id !== id) }));
 }
 
 export function mark(id: string, error: string) {
-  box.set((v) => ({ items: v.items.map((x) => (x.id === id ? { ...x, error } : x)) }));
+  return box.set((v) => ({ items: v.items.map((x) => (x.id === id ? { ...x, error } : x)) }));
 }
 
 /** Tries a failed one again: the pump picks it up once its error is gone. */
 export function retry(id: string) {
-  box.set((v) => ({ items: v.items.map((x) => (x.id === id ? { ...x, error: undefined } : x)) }));
+  return box.set((v) => ({ items: v.items.map((x) => (x.id === id ? { ...x, error: undefined } : x)) }));
 }
 
 export const unsent = () => box.get().items;

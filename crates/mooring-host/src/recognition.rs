@@ -403,6 +403,18 @@ pub fn reconcile(
                     }
             })
             .collect();
+        // Codex can retain an old writer after /new. Ambiguous file evidence must
+        // retire the previous file-only binding, so queued sends cannot target it.
+        if matching.len() > 1 && process.cli_session_id.is_none() {
+            if let Some(mut current) = workspace
+                .current_agent(&terminal)
+                .filter(|s| s.binding == Some(Binding::OpenFile))
+                .cloned()
+            {
+                current.current = false;
+                workspace.observe_agent(current).map_err(io::Error::other)?;
+            }
+        }
         // A node wrapper and its native Codex child carry the same argv: one binding, not two.
         let binding = match process.cli_session_id {
             Some(_) => Binding::Process,
@@ -570,8 +582,13 @@ pub fn open_transcripts(
         .filter(|p| {
             p.runtime.is_some()
                 && p.cli_session_id.is_none()
-                && terminal_for_process(p.pid, processes, workspace)
-                    .is_some_and(|id| workspace.current_agent(&id).is_none())
+                && terminal_for_process(p.pid, processes, workspace).is_some_and(|id| {
+                    // /new can replace the open log without replacing the CLI process.
+                    // File evidence must stay current even after its first association.
+                    workspace
+                        .current_agent(&id)
+                        .is_none_or(|s| s.binding == Some(Binding::OpenFile))
+                })
         })
         .map(|p| p.pid)
         .collect::<Vec<u32>>();
