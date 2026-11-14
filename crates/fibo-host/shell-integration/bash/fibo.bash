@@ -7,18 +7,18 @@
 if [[ -n "${MOORING_BASH_LOGIN-}" ]]; then
     builtin unset MOORING_BASH_LOGIN
     [[ -r /etc/profile ]] && builtin source /etc/profile
-    for _mooring_file in ~/.bash_profile ~/.bash_login ~/.profile; do
-        if [[ -r "$_mooring_file" ]]; then
-            builtin source "$_mooring_file"
+    for _fibo_file in ~/.bash_profile ~/.bash_login ~/.profile; do
+        if [[ -r "$_fibo_file" ]]; then
+            builtin source "$_fibo_file"
             break
         fi
     done
 else
     [[ -r ~/.bashrc ]] && builtin source ~/.bashrc
 fi
-builtin unset _mooring_file MOORING_SHELL_INTEGRATION_DIR
+builtin unset _fibo_file MOORING_SHELL_INTEGRATION_DIR
 
-_mooring_report_pwd() {
+_fibo_report_pwd() {
     # Byte by byte, so a path in any language encodes as its UTF-8 bytes.
     builtin local LC_ALL=C dir="$PWD" out='' c i n
     for (( i = 0; i < ${#dir}; i++ )); do
@@ -39,10 +39,10 @@ _mooring_report_pwd() {
 # Reads the command's status, ends its mark and hands the status on unchanged, so a
 # prompt command that shows it still sees the command's own. A prompt with no command
 # before it also says D; Fibo only counts a D that follows a C.
-_mooring_prompt() {
+_fibo_prompt() {
     builtin local status=$?
     builtin printf '\e]133;D;%s\e\\' "$status"
-    _mooring_report_pwd
+    _fibo_report_pwd
     return "$status"
 }
 # PS0 shows when a command line runs (bash 4.4 and later), not for an empty one; older
@@ -50,7 +50,7 @@ _mooring_prompt() {
 PS0="${PS0-}\e]133;C\a"
 # Ahead of the user's own prompt command, whether they keep it as a string or an array.
 if [[ "$(builtin declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
-    PROMPT_COMMAND=(_mooring_prompt "${PROMPT_COMMAND[@]}")
+    PROMPT_COMMAND=(_fibo_prompt "${PROMPT_COMMAND[@]}")
 else
-    PROMPT_COMMAND="_mooring_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+    PROMPT_COMMAND="_fibo_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 fi

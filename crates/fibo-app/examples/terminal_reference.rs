@@ -3,7 +3,7 @@
 //! single-instance lock, so it never touches a running Fibo Workbench.
 //!
 //! cargo run -p fibo-app --features visual-test --example terminal_reference -- \
-//!     --cols 100 --rows 30 --out out/mooring fixtures/*.vt
+//!     --cols 100 --rows 30 --out out/fibo fixtures/*.vt
 //! KL_REF_FONT=Menlo overrides Theme::mono when Ghostty cannot load the same family.
 #[macro_use]
 extern crate fibo_core;
@@ -109,7 +109,7 @@ fn main() {
     };
     let cols: u16 = value("--cols").map_or(100, |v| v.parse().unwrap());
     let rows: u16 = value("--rows").map_or(30, |v| v.parse().unwrap());
-    let out = PathBuf::from(value("--out").unwrap_or_else(|| "out/mooring".into()));
+    let out = PathBuf::from(value("--out").unwrap_or_else(|| "out/fibo".into()));
     let skip: Vec<&String> = ["--cols", "--rows", "--out"]
         .iter()
         .filter_map(|f| args.iter().position(|a| a == f).map(|i| &args[i + 1]))
@@ -144,7 +144,7 @@ fn main() {
         probe.update(cx, |_, w, _| w.remove_window()).unwrap();
         let grid = size(metrics.width * cols as f32, metrics.height * rows as f32);
         eprintln!(
-            "mooring font={} size={} cell={:?}x{:?} ratio(h/w)={:.4} grid={grid:?}",
+            "fibo font={} size={} cell={:?}x{:?} ratio(h/w)={:.4} grid={grid:?}",
             font.family,
             screen::font_size(),
             metrics.width,
@@ -181,7 +181,7 @@ fn main() {
                     window.draw(app).clear(app);
                     window.render_to_image().unwrap().save(&file).unwrap();
                     eprintln!(
-                        "mooring {name}: scale={} -> {}",
+                        "fibo {name}: scale={} -> {}",
                         window.scale_factor(),
                         file.display()
                     );

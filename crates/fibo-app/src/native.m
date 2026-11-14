@@ -21,7 +21,7 @@ static KLDesktop *desktop;
 // Audit only routing identifiers, never notification text or conversation content.
 static os_log_t notification_log(void) {
     static os_log_t log; static dispatch_once_t once;
-    dispatch_once(&once, ^{log=os_log_create("local.mooring.desktop", "notifications");});
+    dispatch_once(&once, ^{log=os_log_create("page.fibo.app", "notifications");});
     return log;
 }
 void kl_desktop_route_applied(const char *session,const char *terminal,const char *tab) {
@@ -422,7 +422,7 @@ void kl_desktop_withdraw(const char *session) {
     [[UNUserNotificationCenter currentNotificationCenter]removePendingNotificationRequestsWithIdentifiers:@[sid]];
 }
 void kl_desktop_show(void) { [desktop show:nil]; }
-// A terminal bell while Mooring is in the background: one Dock bounce, as in Terminal.app.
+// A terminal bell while Fibo is in the background: one Dock bounce, as in Terminal.app.
 void kl_request_attention(void) { [NSApp requestUserAttention:NSInformationalRequest]; }
 // The running app's Dock tile; the bundle's .icns still shows while it is not running.
 void kl_set_dock_icon(const unsigned char *png, size_t length) {

@@ -176,7 +176,7 @@ impl Tracker {
     }
 }
 
-/// Notices one `mooring events` connection may have waiting before more are dropped and
+/// Notices one `fibo events` connection may have waiting before more are dropped and
 /// it is told `lagged`. Counted in notices, not frames: one commit carries one notice or
 /// hundreds, so how many frames a burst makes depends on how fast the host is, and a frame
 /// limit called a reading client lagged on a slow machine and missed a stalled one on a

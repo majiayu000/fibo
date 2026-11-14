@@ -58,7 +58,7 @@ struct Host {
     /// Transcript roots after plugins changed, for the log subscription to restart with.
     new_roots: Option<Vec<(Agent, std::path::PathBuf)>>,
     recognition_subscribers: HashMap<u64, Subscriber>,
-    /// `mooring events` connections, and what they were last told.
+    /// `fibo events` connections, and what they were last told.
     event_subscribers: HashMap<u64, events::EventSubscriber>,
     events: events::Tracker,
     exits: Option<fibo_platform::exit_watch::ExitWatch>,

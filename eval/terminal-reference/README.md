@@ -1,6 +1,6 @@
 # 终端渲染对照（Ghostty 作参照）
 
-把同一段 VT 字节流分别放进 Ghostty 和 Mooring 的真实绘制代码，用同一字体、字号和行列数截图，生成差异图和数字报告。实测结论见 [specs/terminal-workbench/terminal-reference-gaps.md](../../../specs/terminal-workbench/terminal-reference-gaps.md)。
+把同一段 VT 字节流分别放进 Ghostty 和 Fibo 的真实绘制代码，用同一字体、字号和行列数截图，生成差异图和数字报告。实测结论见 [specs/terminal-workbench/terminal-reference-gaps.md](../../../specs/terminal-workbench/terminal-reference-gaps.md)。
 
 ```bash
 ./run.sh            # 重新生成合成 fixture，两边渲染，比较
@@ -21,6 +21,6 @@
 注意事项：
 
 - Ghostty 窗口必须是前台焦点，否则所有光标都画成空心块；脚本通过 `open -na` 启动并激活它，`compare.py` 会检查并报警。跑的时候 Ghostty 窗口会短暂跳到前台。
-- `screencapture` 带的是显示器色彩配置，脚本用 `sips` 转回 sRGB 后才和 Mooring 比较。
+- `screencapture` 带的是显示器色彩配置，脚本用 `sips` 转回 sRGB 后才和 Fibo 比较。
 - `run.sh` 只编译 example，不会重写 `target/debug/fibo-app`（那个文件可能正在运行）。
 - `out/` 是生成物；需要留证据时，把 `out/compare/*.png` 和 `out/report.*` 复制到 `specs/terminal-workbench/evidence/` 下。

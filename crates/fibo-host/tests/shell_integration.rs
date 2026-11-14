@@ -122,7 +122,7 @@ fn daemon_fixture() {
     let root = PathBuf::from(
         std::env::var_os("MOORING_FIXTURE_RUNTIME").expect("fixture subprocess only"),
     );
-    // As mooring's main does, so the home's plugins are loaded.
+    // As fibo's main does, so the home's plugins are loaded.
     fibo_core::agent::install();
     fibo_core::hook::install();
     let roots = Agent::all()
@@ -441,7 +441,7 @@ fn bash_reports_its_directory_and_is_left_as_the_user_set_it_up() {
     );
     assert_eq!(
         st.trim(),
-        "0|.bash_history|_mooring_prompt;echo -n;|unset",
+        "0|.bash_history|_fibo_prompt;echo -n;|unset",
         "POSIX mode off, history and the user's prompt command kept, ENV gone"
     );
     assert_eq!(
@@ -458,7 +458,7 @@ fn bash_reports_its_directory_and_is_left_as_the_user_set_it_up() {
     let st = state(
         &h,
         &mut s,
-        r#"PROMPT_COMMAND='_mooring_prompt;echo "status=$?" > "$HOME/state"'; false"#,
+        r#"PROMPT_COMMAND='_fibo_prompt;echo "status=$?" > "$HOME/state"'; false"#,
     );
     assert_eq!(st.trim(), "status=1");
     commands_reach_hooks(&h, &mut s);
@@ -482,7 +482,7 @@ fn macos_bash_3_reports_its_directory_too() {
     // that profile may add its own. What is promised: ours first, the user's kept.
     let st = st.trim();
     assert!(
-        st.starts_with("0|_mooring_prompt") && st.contains("echo -n;"),
+        st.starts_with("0|_fibo_prompt") && st.contains("echo -n;"),
         "not in POSIX mode, the user's prompt command kept: {st}"
     );
     assert_eq!(h.loads("bash_profile"), 1);

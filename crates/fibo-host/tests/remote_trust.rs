@@ -1,4 +1,4 @@
-//! An Agent asking to be trusted with a new folder, through `mooring remote --stdio`: the
+//! An Agent asking to be trusted with a new folder, through `fibo remote --stdio`: the
 //! card says it waits, and the keys go out only as the screen allows. The screens are the
 //! real ones (fixtures/screens/*/trust-real.txt); Claude Code's starts on 「No, exit」.
 #[path = "remote_v2/common.rs"]

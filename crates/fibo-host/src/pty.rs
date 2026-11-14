@@ -377,7 +377,7 @@ mod integration_tests {
         std::fs::create_dir_all(&home).unwrap();
         std::fs::create_dir_all(&cwd).unwrap();
         let cwd = cwd.canonicalize().unwrap();
-        // A login bash reads the profile; mooring must not skip it.
+        // A login bash reads the profile; fibo must not skip it.
         std::fs::write(home.join(".bash_profile"), "echo PROFILE_LOADED\n").unwrap();
         let encoded = cwd
             .to_str()

@@ -36,7 +36,7 @@ impl SettingsView {
         })
         .detach();
     }
-    /// One row per CLI whose hooks Fibo installs: their state as `mooring hooks
+    /// One row per CLI whose hooks Fibo installs: their state as `fibo hooks
     /// status` read it when the panel opened, and the one thing to do about it.
     fn hook_rows(&self, first: bool, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         let hooks = match &self.hooks {

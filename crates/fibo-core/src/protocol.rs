@@ -111,7 +111,7 @@ pub enum Request {
         id: String,
         takeover: bool,
         /// Only looks: never becomes the writer and never sizes the terminal, however
-        /// many writers come and go (`mooring remote`'s watch). Hosts before it ignore it.
+        /// many writers come and go (`fibo remote`'s watch). Hosts before it ignore it.
         #[serde(default)]
         watch: bool,
     },
@@ -286,7 +286,7 @@ pub enum Request {
     /// Scripts, other Agents and other clients: the sessions' states now, then every
     /// change as it happens, until this socket closes (`fibo events`).
     Subscribe,
-    /// `mooring split` asks before it starts anything: `Size`, the new pane's cells,
+    /// `fibo split` asks before it starts anything: `Size`, the new pane's cells,
     /// when the pane, at the size it is shown now, has room for both halves of that split.
     SplitRoom {
         target: String,

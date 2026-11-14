@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """A throwaway window for trying todos and sessions by hand: its own host, data and HOME, so
-your Mooring and its data are not touched, with simulated agents that call no model.
+your Fibo and its data are not touched, with simulated agents that call no model.
 
   python3 scripts/todo-demo.py start target/release
   python3 scripts/todo-demo.py stop

@@ -113,7 +113,7 @@ fibo plugins          # 哪些插件生效了，没生效的为什么
 3. `fibo explain <终端>` 看 Fibo 怎么读这块屏；`fibo hooks status` 看 Agent 的 hook 装了没有、是不是最新。
 
 **以前用的是 Mooring 或 Keepline，要做什么？**
-不用重来。Fibo 第一次启动时会把 `~/.config/mooring`（或 `~/.config/keepline`）搬到 `~/.config/fibo`（原位置留一个链接），继续用旧的运行目录，让老后台把终端交接过来；`mooring`、`keepline`、`keeplined` 命令和 `MOORING_*`、`KEEPLINE_*` 变量也照样认，终端里的程序另外还能读到 `FIBO_*`。原地更新的 App 文件夹名不变（还叫 `Mooring.app`）；App 的标识换了，macOS 会再问一次通知权限。Keepline 的 hook 条目还在的话，运行一次 `fibo hooks install`。
+不用重来。Fibo 第一次启动时会把 `~/.config/mooring` 搬到 `~/.config/fibo`（原位置留一个链接），继续用旧的运行目录，让老后台把终端交接过来；`mooring` 命令和 `MOORING_*` 变量也照样认，终端里的程序另外还能读到 `FIBO_*`。原地更新的 App 文件夹名不变（还叫 `Mooring.app`）；App 的标识换了，macOS 会再问一次通知权限。Keepline 的 hook 条目还在的话，运行一次 `fibo hooks install`。
 
 **退出、更新或重启会怎样？**
 退出或更新 App，终端都继续跑。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。

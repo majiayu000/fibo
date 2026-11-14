@@ -29,13 +29,13 @@ fn main() {
     assert!(status.success(), "native bridge compilation failed");
     let status = Command::new("ar")
         .arg("crs")
-        .arg(out.join("libmooring_native.a"))
+        .arg(out.join("libfibo_native.a"))
         .arg(object)
         .status()
         .expect("archive native bridge");
     assert!(status.success(), "native bridge archive failed");
     println!("cargo:rustc-link-search=native={}", out.display());
-    println!("cargo:rustc-link-lib=static=mooring_native");
+    println!("cargo:rustc-link-lib=static=fibo_native");
     println!("cargo:rustc-link-lib=framework=AppKit");
     println!("cargo:rustc-link-lib=framework=UserNotifications");
 }

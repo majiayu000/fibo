@@ -190,7 +190,7 @@ impl Supervisor {
                 }
                 (inner.config.clone(), inner.generation)
             };
-            // Tests run the host inside their own binary and name mooring here.
+            // Tests run the host inside their own binary and name fibo here.
             let exe = match std::env::var_os("MOORING_REMOTE_EXE")
                 .map(PathBuf::from)
                 .map_or_else(std::env::current_exe, Ok)

@@ -162,7 +162,7 @@ def setup():
     subprocess.run(["git", "-C", str(d), "add", "."], check=True)
     subprocess.run(["git", "-C", str(d), "-c", "user.name=t", "-c", "user.email=t@t",
                     "commit", "-qm", "init"], check=True)
-    task = (f"This is a Mooring {MARKER} test session. Run `echo {MARKER}-ready` and reply "
+    task = (f"This is a Fibo {MARKER} test session. Run `echo {MARKER}-ready` and reply "
             f"with only {MARKER}-ready. Later messages come from the phone test; keep replies short.")
     r = subprocess.run([fibo(), "run", "claude", task, "--cwd", str(d), "--no-report", "--json"],
                        capture_output=True, text=True)
@@ -220,8 +220,8 @@ def nodes():
 
 
 def in_front():
-    """Mooring is the app on screen. Another one there (a picker, the gallery) is tapped only
-    where the walk says so; a tap meant for Mooring must not land in the person's own apps."""
+    """Fibo is the app on screen. Another one there (a picker, the gallery) is tapped only
+    where the walk says so; a tap meant for Fibo must not land in the person's own apps."""
     focus = adb("shell", "dumpsys", "window", out=True).decode()
     line = next((l for l in focus.splitlines() if "mCurrentFocus" in l), "")
     return PACKAGE in line, line.strip()
@@ -230,7 +230,7 @@ def in_front():
 def tap(text, contains=False):
     ours, line = in_front()
     if not ours and "--any-app" not in sys.argv:
-        die(f"前台不是 Mooring（{line}），不点「{text}」。系统选图之类要点别的 App 时加 --any-app")
+        die(f"前台不是 Fibo（{line}），不点「{text}」。系统选图之类要点别的 App 时加 --any-app")
     if any(w in text for w in NEVER):
         die(f"「{text}」在永远不按的名单里")
     xml, found = nodes()

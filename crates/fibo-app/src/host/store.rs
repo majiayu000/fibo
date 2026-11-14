@@ -1,4 +1,4 @@
-//! The client's link to mooring: the socket, the in-flight user action, background
+//! The client's link to the host: the socket, the in-flight user action, background
 //! syncs and the recognition status the host pushes. Views never call `rpc` themselves.
 use crate::connection::{RecognitionConnection, StatusLink};
 use fibo_core::delivery::{PATIENCE, Settled, deliver};
