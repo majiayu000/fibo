@@ -23,9 +23,9 @@ h2{font-weight:520;font-size:clamp(32px,3.5vw,52px);line-height:1.06;letter-spac
 h2 em{font-style:italic;font-weight:460;color:var(--soft);font-variation-settings:"SOFT" 100,"WONK" 1}
 .start h2 span{font-style:italic;font-weight:460;color:rgba(255,255,255,.6);font-variation-settings:"SOFT" 100,"WONK" 1}
 
-/* 首屏：画装在一个圆角画框里，整张应用截图都在画里面（用户 11-10 要求，原来是一半压在画上） */
+/* 首屏：画铺满整个窗口，不留白边；只有底部两个角收圆，接到下面的米白底（用户 11-15 要求），整张应用截图都在画里面 */
 .hero{background:var(--paper)}
-.hero .bg{inset:10px 10px 0 10px;height:auto;border-radius:26px;overflow:hidden;background:#0bb0c4!important}
+.hero .bg{inset:0;height:auto;border-radius:0 0 26px 26px;overflow:hidden;background:#0bb0c4!important}
 /* 图保持原来的构图（看得到太阳、云和右边的树），只占画框上面一段；下面是同一个颜色的海面一直铺到应用截图下方 */
 .hero .bg::before{content:"";position:absolute;inset:0 0 auto 0;height:clamp(640px,84vw,1500px);background:var(--w-hero) center 18%/cover no-repeat;-webkit-mask-image:linear-gradient(#000 80%,transparent);mask-image:linear-gradient(#000 80%,transparent)}
 .hero .bg::after{border-radius:inherit;background:radial-gradient(ellipse 58% 42% at 50% 36%,rgba(8,62,98,.34),transparent 72%),linear-gradient(rgba(8,62,98,.30),rgba(8,62,98,.08) 14%,transparent 28%)}
@@ -73,7 +73,7 @@ h2 em{font-style:italic;font-weight:460;color:var(--soft);font-variation-setting
 footer{background:var(--night)}
 
 @media (max-width:900px){
-  .hero .bg{inset:6px 6px 0 6px;border-radius:18px}
+  .hero .bg{border-radius:0 0 18px 18px}
   .hero .bg::before{height:100%;-webkit-mask-image:none;mask-image:none}
   .hero .in{padding:118px 16px 34px}
   .nav .wrap{height:72px;padding-top:6px}
