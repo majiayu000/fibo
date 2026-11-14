@@ -175,10 +175,9 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String, String)> {
         lines.next().unwrap_or_default(),
         lines.next().unwrap_or_default(),
     );
-    let shell = Some(lines.next().unwrap_or_default())
-        .filter(|s| s.starts_with('/'))
-        .unwrap_or("/bin/sh");
-    if !path.starts_with('/') || !home.starts_with('/') {
+    // The script answers `${SHELL:-/bin/sh}`, so an empty line is a broken answer.
+    let shell = lines.next().unwrap_or_default();
+    if ![path, home, shell].iter().all(|l| l.starts_with('/')) {
         let why = String::from_utf8_lossy(&out.stderr).trim().to_owned();
         return Err(io::Error::other(t!(
             "在 {host} 上找不到 Fibo 的后台：{why}",
