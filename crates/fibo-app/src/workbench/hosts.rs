@@ -136,6 +136,42 @@ impl Workbench {
                 .on_click(cx.listener(|_, _, _, cx| cx.emit(HostEvent::Home))),
         )
     }
+    /// Under another machine's space chips, where this window lists the other machines:
+    /// 本机, as a chip of theirs, back to this machine's own.
+    pub(super) fn home_chip(&self, cx: &Context<Self>) -> Option<gpui::AnyElement> {
+        use crate::ui::theme::Flat as F;
+        if !self.hosts.embedded {
+            return None;
+        }
+        let chip = div()
+            .id("host-home-chip")
+            .role(gpui::accesskit::Role::Button)
+            .aria_label(t!("回到本机"))
+            .h(px(F::CHIP))
+            .px(px(T::S8))
+            .flex()
+            .items_center()
+            .gap(px(F::CHIP_GAP))
+            .rounded(px(F::CHIP / 2.))
+            .border(px(T::BORDER_WIDTH))
+            .border_color(T::color(F::chip_line()))
+            .cursor_pointer()
+            .hover(|s| s.border_color(T::color(F::chip_on_line())))
+            .text_size(px(F::CHIP_TEXT))
+            .text_color(T::color(F::quiet()))
+            .child(t!("本机"))
+            .on_click(cx.listener(|_, _, _, cx| cx.emit(HostEvent::Home)));
+        Some(
+            div()
+                .flex()
+                .px(px(T::S12))
+                .pt(px(T::S10))
+                .pb(px(T::S2))
+                .font_family(T::UI_FONT)
+                .child(chip)
+                .into_any_element(),
+        )
+    }
     /// A machine's session from this window's sidebar or board: in its own workbench here,
     /// or floated up for a look when peek is turned on in settings. False leaves it to peek.
     pub(super) fn open_on_host(
