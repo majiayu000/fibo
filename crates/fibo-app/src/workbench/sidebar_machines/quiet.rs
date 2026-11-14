@@ -179,7 +179,7 @@ impl Workbench {
         window: &Window,
         cx: &Context<Self>,
     ) -> Vec<gpui::AnyElement> {
-        let mut out = Vec::new();
+        let mut out: Vec<_> = self.dock_menu(window, cx).into_iter().collect();
         if let Some((id, position)) = &self.layout.space_menu {
             out.push(self.space_menu_view(id, *position, window, cx));
         }

@@ -10,6 +10,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         self.nav.tab = Some(id.to_owned());
+        self.close_dock(cx);
         if self.nav.overview || !self.overview.cleanup.is_empty() {
             self.leave_overview(cx);
         }
@@ -50,8 +51,25 @@ impl Workbench {
                 self.launch(false, None, cx);
                 return true;
             }
+            // ⌘W closes what is shown, never the local pane hidden under it.
+            Action::Close if self.dock.is_some() || self.remote_start.is_some() => {
+                match self.dock.as_ref().map(|d| d.focused.clone()) {
+                    Some(focused) => self.close_dock_pane(&focused, cx),
+                    None => self.close_dock(cx),
+                }
+                return true;
+            }
             Action::Close => {
                 self.close_focused(cx);
+                return true;
+            }
+            Action::SplitRight | Action::SplitDown if self.dock.is_some() => {
+                let axis = if action == Action::SplitDown {
+                    Axis::Down
+                } else {
+                    Axis::Right
+                };
+                self.split_dock(axis, window, cx);
                 return true;
             }
             Action::SplitRight | Action::SplitDown => {

@@ -542,9 +542,9 @@ impl Workbench {
                         .text_color(T::color(F::second()))
                         .cursor_pointer()
                         .hover(|s| s.border_color(T::color(F::chip_on_line())))
-                        .child(t!("在这里开一个终端"))
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.open_remote_shell(index, Some(cwd.clone()), window, cx);
+                        .child(t!("在这里开始"))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.show_remote_start(index, Some(cwd.clone()), cx);
                         })),
                 )
             })

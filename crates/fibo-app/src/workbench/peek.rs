@@ -17,6 +17,9 @@ pub(super) struct Peek {
     /// Set for another machine's terminal: what its title bar says, from that machine's
     /// card, and the link its answers go over. Nothing to open here.
     pub(super) remote: Option<RemoteTitle>,
+    /// In the main area where the tab's panes go, worked from the start, instead of
+    /// floated over them: another machine's session opened as this one's opens in a tab.
+    pub(super) docked: bool,
 }
 
 pub(super) struct RemoteTitle {
@@ -85,6 +88,7 @@ impl Workbench {
                 note: None,
                 confirm_end: false,
                 remote: None,
+                docked: false,
             });
         }
         if let Some(peek) = &self.peek {
@@ -121,8 +125,7 @@ impl Workbench {
                 .is_some_and(|s| s.id == session)
     }
     /// The approval question the peeked session's screen shows, if any.
-    fn peek_approval(&self) -> Option<String> {
-        let peek = self.peek.as_ref()?;
+    fn approval_of(&self, peek: &Peek) -> Option<String> {
         if let Some(r) = &peek.remote {
             return self.remote_approval(r);
         }
@@ -132,15 +135,18 @@ impl Workbench {
             .map(|c| c.approval.clone())
             .filter(|a| !a.is_empty())
     }
-    fn answer_peek(&mut self, allow: bool, cx: &mut Context<Self>) {
-        let Some(question) = self.peek_approval() else {
+    fn answer_peek(&mut self, key: &str, allow: bool, cx: &mut Context<Self>) {
+        let Some(question) = self.peek_by(key).and_then(|p| self.approval_of(p)) else {
             return;
         };
-        let Some(peek) = self.peek.as_mut().filter(|p| !p.answering) else {
+        let Some(peek) = self.peek_by_mut(key).filter(|p| !p.answering) else {
             return;
         };
         peek.answering = true;
         peek.note = None;
+        let Some(peek) = self.peek_by(key) else {
+            return;
+        };
         let terminal = peek.terminal.clone();
         let machine = (peek.remote.as_ref())
             .and_then(|r| self.machines.get(r.machine))
@@ -160,7 +166,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                if let Some(peek) = this.peek.as_mut().filter(|p| p.terminal == terminal) {
+                if let Some(peek) = this.peek_by_mut(&terminal) {
                     peek.answering = false;
                     peek.note = result.err().map(|e| e.to_string());
                 }
@@ -176,12 +182,14 @@ impl Workbench {
             .agent_sessions
             .iter()
             .find(|s| s.id == peek.session);
+        // Another machine's title and state as its latest list says, else as when opened.
+        let now = peek.remote.as_ref().and_then(|r| self.remote_now(r));
         let group = match &peek.remote {
-            Some(r) => r.status,
+            Some(r) => now.as_ref().map_or(r.status, |n| n.1),
             None => session.map(|s| status_of(&self.workspace, s)),
         };
         let title = match &peek.remote {
-            Some(r) => r.title.clone(),
+            Some(r) => now.map_or_else(|| r.title.clone(), |n| n.0),
             None => session
                 .map(|s| self.session_title(s))
                 .unwrap_or_else(|| t!("终端").into()),
@@ -193,7 +201,8 @@ impl Workbench {
         // Another machine's terminal can be ended from here when that machine allows it.
         let ends = (peek.remote.as_ref())
             .is_some_and(|r| r.slot.lock().unwrap().as_ref().is_some_and(|l| l.managing));
-        let approval = self.peek_approval();
+        let approval = self.approval_of(peek);
+        let key = peek.terminal.clone();
         let state = match (&approval, group) {
             (Some(_), _) => Some(t!("等你批准").to_owned()),
             (None, Some(g)) => Some(g.label().to_owned()),
@@ -211,6 +220,9 @@ impl Workbench {
             .border_color(T::color(T::border()))
             .bg(T::color(T::panel()))
             .when_some(group, |d, g| d.child(dot(g)))
+            .when_some(peek.remote.as_ref().filter(|_| peek.docked), |d, r| {
+                d.child(label(r.host.clone()).text_size(px(T::CHIP_SIZE)))
+            })
             .child(
                 div()
                     .min_w_0()
@@ -237,38 +249,49 @@ impl Workbench {
                         .bg(T::color(T::raised()))
                         .text_color(T::color(T::link()))
                         .when(busy, |b| b.opacity(0.5))
-                        .on_click(cx.listener(|this, _, _, cx| this.answer_peek(true, cx))),
+                        .on_click(cx.listener({
+                            let key = key.clone();
+                            move |this, _, _, cx| this.answer_peek(&key, true, cx)
+                        })),
                 )
                 .child(
                     button("peek-deny", t!("拒绝"))
                         .when(busy, |b| b.opacity(0.5))
-                        .on_click(cx.listener(|this, _, _, cx| this.answer_peek(false, cx))),
+                        .on_click(cx.listener({
+                            let key = key.clone();
+                            move |this, _, _, cx| this.answer_peek(&key, false, cx)
+                        })),
                 )
             })
             .when(ends, |d| match peek.confirm_end {
-                false => d.child(button("peek-end", t!("关闭终端")).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        if let Some(p) = &mut this.peek {
+                false => d.child(button("peek-end", t!("关闭终端")).on_click(cx.listener({
+                    let key = key.clone();
+                    move |this, _, _, cx| {
+                        if let Some(p) = this.peek_by_mut(&key) {
                             p.confirm_end = true;
                         }
                         cx.notify();
-                    },
-                ))),
+                    }
+                }))),
                 true => d
                     .child(label(t!("关掉那边这个终端？")).text_size(px(T::CHIP_SIZE)))
                     .child(
                         button("peek-end-yes", t!("关闭"))
                             .text_color(Tone::Danger.ink())
-                            .on_click(cx.listener(|this, _, _, cx| this.end_remote(cx))),
+                            .on_click(cx.listener({
+                                let key = key.clone();
+                                move |this, _, _, cx| this.end_remote(&key, cx)
+                            })),
                     )
-                    .child(button("peek-end-no", t!("取消")).on_click(cx.listener(
-                        |this, _, _, cx| {
-                            if let Some(p) = &mut this.peek {
+                    .child(button("peek-end-no", t!("取消")).on_click(cx.listener({
+                        let key = key.clone();
+                        move |this, _, _, cx| {
+                            if let Some(p) = this.peek_by_mut(&key) {
                                 p.confirm_end = false;
                             }
                             cx.notify();
-                        },
-                    ))),
+                        }
+                    }))),
             })
             .when(!remote, |d| {
                 d.child(button("peek-open", t!("↗ 打开")).on_click(cx.listener(
@@ -280,11 +303,50 @@ impl Workbench {
                     },
                 )))
             })
+            .when(peek.docked && read_only, |d| {
+                d.child(label(t!("只读")).text_size(px(T::CHIP_SIZE)))
+            })
             .child(
                 button("peek-close", "✕")
-                    .aria_label(t!("关闭偷看"))
-                    .on_click(cx.listener(|this, _, _, cx| this.close_peek(cx))),
+                    .aria_label(if peek.docked {
+                        t!("关闭画面")
+                    } else {
+                        t!("关闭偷看")
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if this.peek_by(&key).is_some_and(|p| p.docked) {
+                            this.close_dock_pane(&key, cx);
+                        } else {
+                            this.close_peek(cx);
+                        }
+                    })),
             );
+        let screen = div()
+            .flex_1()
+            .min_h_0()
+            .pl(px(T::S4))
+            .child(peek.pane.clone());
+        let note = peek.note.clone().map(|note| {
+            label(note)
+                .px(px(T::S12))
+                .py(px(T::S4))
+                .text_size(px(T::META))
+                .text_color(Tone::Danger.ink())
+        });
+        // Docked, it is where the tab's panes go: no band, and Esc reaches the Agent.
+        if peek.docked {
+            return div()
+                .id("peek")
+                .size_full()
+                .flex()
+                .flex_col()
+                .overflow_hidden()
+                .bg(T::surface(T::pane()))
+                .child(bar)
+                .children(note)
+                .child(screen)
+                .into_any_element();
+        }
         // A band says what this is: a layer over the tab, whose machine gets the typing
         // (direction C, docs/multi-machine/peek-marker.html, chosen 11-04).
         let (what, how) = match &peek.remote {
@@ -339,22 +401,8 @@ impl Workbench {
             }))
             .child(band)
             .child(bar)
-            .when_some(peek.note.clone(), |d, note| {
-                d.child(
-                    label(note)
-                        .px(px(T::S12))
-                        .py(px(T::S4))
-                        .text_size(px(T::META))
-                        .text_color(Tone::Danger.ink()),
-                )
-            })
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .pl(px(T::S4))
-                    .child(peek.pane.clone()),
-            )
+            .children(note)
+            .child(screen)
             .into_any_element()
     }
 }
@@ -397,10 +445,15 @@ impl Workbench {
     /// The peeked terminal, the approval it offers to answer, and the host's last refusal.
     pub fn visual_peek_state(&self) -> Option<(String, Option<String>, Option<String>)> {
         let p = self.peek.as_ref()?;
-        Some((p.terminal.clone(), self.peek_approval(), p.note.clone()))
+        Some((p.terminal.clone(), self.approval_of(p), p.note.clone()))
     }
     pub fn visual_peek_answer(&mut self, allow: bool, cx: &mut Context<Self>) {
-        self.answer_peek(allow, cx);
+        let key = self
+            .peek
+            .as_ref()
+            .map(|p| p.terminal.clone())
+            .unwrap_or_default();
+        self.answer_peek(&key, allow, cx);
     }
     pub fn visual_peek_focused(&self, window: &Window, cx: &gpui::App) -> bool {
         self.peek

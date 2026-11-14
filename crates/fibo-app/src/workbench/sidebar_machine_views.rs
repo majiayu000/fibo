@@ -316,9 +316,9 @@ impl Workbench {
                         .text_color(T::color(F::second()))
                         .hover(|s| s.bg(T::color(F::selected())))
                         .child("+")
-                        .on_click(cx.listener(move |this, _, window, cx| {
+                        .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
-                            this.open_remote_shell(index, None, window, cx);
+                            this.show_remote_start(index, None, cx);
                         })),
                 )
             })

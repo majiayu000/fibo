@@ -3,6 +3,7 @@ use super::*;
 
 impl Workbench {
     pub(super) fn sync_panes(&mut self, cx: &mut Context<Self>) {
+        self.drop_moved_dock();
         let ids = if self.nav.overview {
             Vec::new()
         } else {

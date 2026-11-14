@@ -500,7 +500,7 @@ fn menu_rule(i: usize) -> gpui::AnyElement {
 }
 /// The chord that runs a menu item without the menu, as the user has it bound; copy
 /// and paste are the terminal's own fixed ⌘C and ⌘V.
-fn menu_shortcut(title: &str, keys: &crate::keymap::Keymap) -> Option<String> {
+pub(super) fn menu_shortcut(title: &str, keys: &crate::keymap::Keymap) -> Option<String> {
     use crate::keymap::Action;
     let action = match title {
         tk!("复制") => return Some(crate::ui::words::local("⌘C")),

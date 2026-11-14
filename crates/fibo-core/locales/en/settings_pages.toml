@@ -103,7 +103,7 @@
 "自动找那台电脑上的 fibo" = "Finds fibo on that computer automatically"
 "移除" = "Remove"
 "加一台电脑" = "Add a computer"
-"填 ssh 能免密登录的主机名；那台电脑上要装着 Fibo。侧栏里只看，不能打字" = "A host name ssh can log in to without a password, with Fibo installed. View-only in the sidebar; you can't type"
+"填 ssh 能免密登录的主机名；那台电脑上要装着 Fibo。连上后在侧栏里开会话、打字，和本机一样" = "A host name ssh can log in to without a password, with Fibo installed. Once connected, start sessions and type there from the sidebar, as on this machine"
 "添加" = "Add"
 "{host} 已经加过了" = "{host} is already added"
 "没存上：{e}" = "Couldn't save: {e}"

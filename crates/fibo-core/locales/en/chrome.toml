@@ -185,6 +185,7 @@
 "找不到运行目录" = "Runtime folder not found"
 "没能启动后台：{e}" = "Couldn't start the host: {e}"
 "在 {name} 里开始" = "Start in {name}"
+"在 {name} 上开始" = "Start on {name}"
 "在这里开始" = "Start here"
 "运行 {name}" = "Run {name}"
 "打开后可以右键分屏，或按 {keys} 向右分屏" = "Once open, right-click to split, or press {keys} to split right"
