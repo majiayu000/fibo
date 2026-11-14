@@ -499,7 +499,6 @@ impl Workbench {
                         confirm_end: false,
                         remote: None,
                         docked: false,
-                        home: None,
                     }
                 });
                 self.layout.space_menu = (parts.get(4) == Some(&"menu"))

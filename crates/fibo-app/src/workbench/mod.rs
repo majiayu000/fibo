@@ -50,6 +50,8 @@ pub struct Workbench {
     peek: Option<peek::Peek>,
     /// 「＋」 on another machine: its start page, in place of the current tab.
     remote_start: Option<remote_tab::Start>,
+    /// Other machines' terminals in the main area, split as a tab's panes are.
+    dock: Option<remote_tab::Dock>,
     redraw: Option<redraw::Redraw>,
     phones: phones::Phones,
     /// Other machines shown under this one's sessions (docs/multi-machine/spec.md).
@@ -261,6 +263,7 @@ use palette::Search;
 mod peek;
 mod phones;
 mod redraw;
+mod remote_dock;
 mod remote_tab;
 mod render;
 mod requests;
@@ -406,6 +409,7 @@ impl Workbench {
             sidebar: sidebar_list::SidebarPrefs::load(),
             peek: None,
             remote_start: None,
+            dock: None,
             redraw: None,
             phones: Default::default(),
             machines: Self::start_machines(cx),

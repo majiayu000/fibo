@@ -1,9 +1,11 @@
-//! Another machine's work in the main area, as this machine's is in a tab: its terminal
-//! docked where the panes go, worked from the start and sized to it, and 「＋」's start page
-//! that offers its Agents as an empty tab does. Either stays until the tab underneath, or
-//! the view, changes.
+//! Another machine's work in the main area, as this machine's is in a tab: its terminals
+//! docked where the panes go, worked from the start and sized to them, split from a
+//! pane's right-click menu, and 「＋」's start page that offers its Agents as an empty tab
+//! does. Both stay until the tab underneath, or the view, changes.
+use super::peek::Peek;
 use super::render::marked_button;
 use super::*;
+use std::collections::HashMap;
 
 /// 「＋」 on a machine: where to start there, shown in place of the current tab.
 pub(super) struct Start {
@@ -12,6 +14,20 @@ pub(super) struct Start {
     pub(super) cwd: Option<String>,
     /// The tab this covers; showing another one drops it.
     pub(super) home: Option<String>,
+}
+
+/// Other machines' terminals in the main area, laid out as a tab's panes are. Lives only in
+/// this window: each terminal is in a tab of its own over there.
+pub(super) struct Dock {
+    pub(super) tree: Layout,
+    pub(super) panes: HashMap<String, Peek>,
+    pub(super) focused: String,
+    /// The tab this covers; showing another one drops it.
+    pub(super) home: Option<String>,
+    /// The right-clicked pane and where; with a side, the page that picks what opens there.
+    pub(super) menu: Option<(String, gpui::Point<gpui::Pixels>, Option<Axis>)>,
+    /// Where the terminal being opened goes: beside this pane, on this side.
+    pub(super) split: Option<(String, Axis)>,
 }
 
 impl Workbench {
@@ -23,6 +39,7 @@ impl Workbench {
     ) {
         self.leave_for_dock(cx);
         self.peek = None;
+        self.dock = None;
         self.remote_start = Some(Start {
             machine,
             cwd,
@@ -40,31 +57,100 @@ impl Workbench {
     /// Another tab shown, or the board: what was docked over the old one goes.
     pub(super) fn drop_moved_dock(&mut self) {
         let away = |home: &Option<String>| self.nav.overview || home != &self.nav.tab;
-        if self
-            .peek
-            .as_ref()
-            .is_some_and(|p| p.docked && away(&p.home))
-        {
-            self.peek = None;
+        if self.dock.as_ref().is_some_and(|d| away(&d.home)) {
+            self.dock = None;
         }
         if self.remote_start.as_ref().is_some_and(|s| away(&s.home)) {
             self.remote_start = None;
         }
     }
     pub(super) fn close_dock(&mut self, cx: &mut Context<Self>) {
-        self.remote_start = None;
+        if self.remote_start.take().is_some() || self.dock.take().is_some() {
+            self.nav.pending_focus = true;
+        }
         self.close_peek(cx);
+    }
+    /// The floating peek or a docked pane showing `key`.
+    pub(super) fn peek_by(&self, key: &str) -> Option<&Peek> {
+        (self.peek.as_ref().filter(|p| p.terminal == key))
+            .or_else(|| self.dock.as_ref()?.panes.get(key))
+    }
+    pub(super) fn peek_by_mut(&mut self, key: &str) -> Option<&mut Peek> {
+        if self.peek.as_ref().is_some_and(|p| p.terminal == key) {
+            return self.peek.as_mut();
+        }
+        self.dock.as_mut()?.panes.get_mut(key)
+    }
+    pub(super) fn dock_shows(&self, key: &str) -> bool {
+        self.dock
+            .as_ref()
+            .is_some_and(|d| d.panes.contains_key(key))
+    }
+    /// A docked terminal goes beside the pane its split was asked from; anything else
+    /// opened replaces what was docked, as opening a session elsewhere switches tabs.
+    pub(super) fn dock_in(&mut self, peek: Peek) {
+        let key = peek.terminal.clone();
+        if let Some(dock) = &mut self.dock
+            && let Some((target, axis)) = dock.split.take()
+            && dock.tree.split(&target, key.clone(), axis)
+        {
+            dock.panes.insert(key.clone(), peek);
+            dock.focused = key;
+            return;
+        }
+        self.dock = Some(Dock {
+            tree: Layout::Leaf(key.clone()),
+            panes: HashMap::from([(key.clone(), peek)]),
+            focused: key,
+            home: self.nav.tab.clone(),
+            menu: None,
+            split: None,
+        });
+    }
+    pub(super) fn focus_dock_pane(
+        &mut self,
+        key: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(dock) = &mut self.dock
+            && let Some(peek) = dock.panes.get(key)
+        {
+            dock.focused = key.to_owned();
+            window.focus(&peek.pane.focus_handle(cx), cx);
+        }
+        cx.notify();
+    }
+    /// ✕ on a docked pane: it leaves this window; its terminal keeps running there.
+    pub(super) fn close_dock_pane(&mut self, key: &str, cx: &mut Context<Self>) {
+        let Some(dock) = &mut self.dock else {
+            return;
+        };
+        dock.panes.remove(key);
+        match dock.tree.clone().without(key) {
+            Some(tree) => {
+                if dock.focused == key {
+                    dock.focused = tree.ids().first().cloned().unwrap_or_default();
+                }
+                dock.tree = tree;
+            }
+            None => {
+                self.dock = None;
+                self.nav.pending_focus = true;
+            }
+        }
+        cx.notify();
     }
     /// What the main area shows instead of the tab's panes, if anything is docked there.
     pub(super) fn docked_view(&self, cx: &Context<Self>) -> Option<gpui::AnyElement> {
-        if let Some(peek) = self.peek.as_ref().filter(|p| p.docked) {
-            return Some(self.peek_view(peek, cx));
+        if let Some(dock) = &self.dock {
+            return Some(self.dock_tree(dock, &dock.tree, cx));
         }
         let start = self.remote_start.as_ref()?;
         Some(self.remote_start_view(start, cx))
     }
-    fn remote_start_view(&self, start: &Start, cx: &Context<Self>) -> gpui::AnyElement {
-        let index = start.machine;
+    /// The Agents another machine knows, the one to offer first, and its name.
+    pub(super) fn machine_agents(&self, index: usize) -> (String, Vec<Agent>, Option<Agent>) {
         let (name, known) = match self.machines.get(index) {
             Some(remote) => {
                 let view = remote.view.lock().unwrap();
@@ -73,9 +159,9 @@ impl Workbench {
                     None => (view.spec.host.clone(), Default::default()),
                 }
             }
-            None => return div().into_any_element(),
+            None => return (String::new(), Vec::new(), None),
         };
-        // The Agents that machine knows; an older one that names none is offered them all.
+        // An older machine that names none is offered them all.
         let agents: Vec<Agent> = Agent::all()
             .into_iter()
             .filter(|a| known.is_empty() || known.contains_key(&a.key().to_lowercase()))
@@ -83,6 +169,14 @@ impl Workbench {
         let first = Some(self.first_agent())
             .filter(|a| agents.contains(a))
             .or(agents.first().copied());
+        (name, agents, first)
+    }
+    fn remote_start_view(&self, start: &Start, cx: &Context<Self>) -> gpui::AnyElement {
+        let index = start.machine;
+        let (name, agents, first) = self.machine_agents(index);
+        if name.is_empty() {
+            return div().into_any_element();
+        }
         let mark = |agent: Agent, ink| super::board::agent_mark_in(agent, ink, T::SMALL);
         let run = |agent: Option<Agent>| {
             let cwd = start.cwd.clone();
@@ -167,21 +261,5 @@ impl Workbench {
     }
     pub fn visual_remote_start_shown(&self) -> bool {
         self.remote_start.is_some()
-    }
-    /// The start page's button for `agent` on `machine`.
-    pub fn visual_open_remote_agent(
-        &mut self,
-        machine: usize,
-        agent: Agent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_remote_shell(machine, None, Some(agent), window, cx);
-    }
-    /// The open peek: whether it is docked in the main area, and whether its terminal is
-    /// worked (taken and sized here) rather than looked at.
-    pub fn visual_peek_docked(&self, cx: &gpui::App) -> Option<(bool, bool)> {
-        let peek = self.peek.as_ref()?;
-        Some((peek.docked, !peek.pane.read(cx).peek))
     }
 }

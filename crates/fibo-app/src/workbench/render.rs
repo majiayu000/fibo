@@ -720,7 +720,7 @@ impl Render for Workbench {
             main = main.child(grid);
         }
         main = main.children(bottom_tabs);
-        if let Some(peek) = self.peek.as_ref().filter(|p| !p.docked) {
+        if let Some(peek) = &self.peek {
             main = main.relative().child(self.peek_view(peek, cx));
         }
         // Beside 会话优先's column the status bar belongs to the main column, so the

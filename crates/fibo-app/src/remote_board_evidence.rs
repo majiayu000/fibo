@@ -1,9 +1,11 @@
 //! MOORING_REMOTE_BOARD_EVIDENCE: another machine's sessions on the board (multi-machine
 //! step 4, direction A). The outer script starts that machine's host with one Codex
 //! session waiting for review in terminal `far`. Checks the card shows up in 要你处理,
-//! moves to 做完了 when dropped there, and that 「＋」 shows its start page, whose shell and
-//! Agent open docked in the main area and worked from here, and 「关闭终端」 ends them.
+//! moves to 做完了 when dropped there, and that 「＋」 shows its start page, whose shell opens
+//! docked in the main area and worked from here; its right-click splits Codex beside it,
+//! and 「关闭终端」 ends both.
 use super::*;
+use fibo_core::layout::Axis;
 
 pub(super) fn start(
     handle: WindowHandle<workbench::Workbench>,
@@ -68,57 +70,74 @@ pub(super) fn start(
             "「＋」 showed no start page"
         );
         shoot("remote-start.png", cx);
-        let mut opened = vec![];
-        for (name, agent) in [("shell", None), ("codex", Some(fibo_core::agent::Agent::Codex))] {
-            handle
-                .update(cx, |v, window, cx| match agent {
-                    None => v.visual_open_remote_shell(0, window, cx),
-                    Some(a) => v.visual_open_remote_agent(0, a, window, cx),
-                })
-                .unwrap();
-            let mut key = None;
-            for _ in 0..60 {
-                wait(250).await;
-                key = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
-                if key.is_some() {
-                    break;
-                }
+        handle
+            .update(cx, |v, window, cx| v.visual_open_remote_shell(0, window, cx))
+            .unwrap();
+        let mut panes = vec![];
+        for _ in 0..60 {
+            wait(250).await;
+            panes = handle.update(cx, |v, _, cx| v.visual_dock_panes(cx)).unwrap();
+            if !panes.is_empty() {
+                break;
             }
-            let key = key.unwrap_or_else(|| panic!("the start page's {name} opened nothing"));
-            assert!(key.contains(":remote-"), "{key}");
-            let docked = handle
-                .update(cx, |v, _, cx| v.visual_peek_docked(cx))
-                .unwrap();
-            assert_eq!(
-                docked,
-                Some((true, true)),
-                "{name}: not docked and taken (docked, taken)"
-            );
-            assert!(
-                !handle.update(cx, |v, _, _| v.visual_remote_start_shown()).unwrap(),
-                "the start page stayed over the opened {name}"
-            );
-            wait(1500).await;
-            shoot(&format!("remote-open-{name}.png"), cx);
+        }
+        assert!(
+            panes.len() == 1 && panes[0].1 && panes[0].0.contains(":remote-"),
+            "the start page's shell is not docked and taken: {panes:?}"
+        );
+        assert!(
+            !handle.update(cx, |v, _, _| v.visual_remote_start_shown()).unwrap(),
+            "the start page stayed over the opened shell"
+        );
+        wait(1500).await;
+        shoot("remote-open-shell.png", cx);
+        // Right-click: split right, then pick Codex; it opens beside the shell, worked too.
+        handle
+            .update(cx, |v, _, cx| v.visual_dock_menu(None, cx))
+            .unwrap();
+        wait(400).await;
+        shoot("remote-menu.png", cx);
+        handle
+            .update(cx, |v, _, cx| v.visual_dock_menu(Some(Axis::Right), cx))
+            .unwrap();
+        wait(400).await;
+        shoot("remote-menu-right.png", cx);
+        handle
+            .update(cx, |v, window, cx| {
+                v.visual_dock_split(Axis::Right, Some(fibo_core::agent::Agent::Codex), window, cx)
+            })
+            .unwrap();
+        for _ in 0..60 {
+            wait(250).await;
+            panes = handle.update(cx, |v, _, cx| v.visual_dock_panes(cx)).unwrap();
+            if panes.len() == 2 {
+                break;
+            }
+        }
+        assert!(
+            panes.len() == 2 && panes.iter().all(|p| p.1),
+            "the split did not open a second worked pane: {panes:?}"
+        );
+        let focused = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
+        assert_eq!(focused.as_ref(), Some(&panes[1].0), "the new pane is not focused");
+        wait(1500).await;
+        shoot("remote-split.png", cx);
+        // 「关闭终端」 on each ends it there; the last one leaves the main area to the tab.
+        for left in [1, 0] {
             handle
                 .update(cx, |v, _, cx| v.visual_end_remote(cx))
                 .unwrap();
-            let mut closed = false;
             for _ in 0..60 {
                 wait(250).await;
-                closed = handle
-                    .update(cx, |v, _, _| v.visual_peek_key())
-                    .unwrap()
-                    .is_none();
-                if closed {
+                panes = handle.update(cx, |v, _, cx| v.visual_dock_panes(cx)).unwrap();
+                if panes.len() == left {
                     break;
                 }
             }
-            assert!(closed, "「关闭终端」 left the {name} open");
-            opened.push(key);
+            assert_eq!(panes.len(), left, "「关闭终端」 left {panes:?}");
         }
         eprintln!(
-            "remote board PASS: card in 要你处理, kept in 做完了, start page shown, opened and ended {opened:?} docked"
+            "remote board PASS: card in 要你处理, kept in 做完了, start page shown, shell docked, split right with Codex, both ended"
         );
         cx.update(|cx| cx.quit());
     })
