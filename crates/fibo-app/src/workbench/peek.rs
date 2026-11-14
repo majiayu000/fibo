@@ -125,9 +125,6 @@ impl Workbench {
                 .is_some_and(|s| s.id == session)
     }
     /// The approval question the peeked session's screen shows, if any.
-    fn peek_approval(&self) -> Option<String> {
-        self.approval_of(self.peek.as_ref()?)
-    }
     fn approval_of(&self, peek: &Peek) -> Option<String> {
         if let Some(r) = &peek.remote {
             return self.remote_approval(r);
@@ -448,7 +445,7 @@ impl Workbench {
     /// The peeked terminal, the approval it offers to answer, and the host's last refusal.
     pub fn visual_peek_state(&self) -> Option<(String, Option<String>, Option<String>)> {
         let p = self.peek.as_ref()?;
-        Some((p.terminal.clone(), self.peek_approval(), p.note.clone()))
+        Some((p.terminal.clone(), self.approval_of(p), p.note.clone()))
     }
     pub fn visual_peek_answer(&mut self, allow: bool, cx: &mut Context<Self>) {
         let key = self
