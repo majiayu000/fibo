@@ -71,6 +71,7 @@ impl Workbench {
             self.nav.pending_focus = true;
         }
         self.close_peek(cx);
+        cx.notify();
     }
     /// The floating peek or a docked pane showing `key`.
     pub(super) fn peek_by(&self, key: &str) -> Option<&Peek> {
@@ -121,6 +122,10 @@ impl Workbench {
             && let Some(peek) = dock.panes.get(key)
         {
             dock.focused = key.to_owned();
+            // A pane shown while another is zoomed brings the split back, as it must show.
+            if dock.zoomed.as_deref().is_some_and(|z| z != key) {
+                dock.zoomed = None;
+            }
             window.focus(&peek.pane.focus_handle(cx), cx);
         }
         cx.notify();

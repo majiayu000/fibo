@@ -226,15 +226,15 @@ impl Workbench {
             cx,
         );
     }
-    /// The start page's button for `agent` on `machine`.
+    /// The start page's solid button on `machine`: the Agent it offers first.
     pub fn visual_open_remote_agent(
         &mut self,
         machine: usize,
-        agent: Agent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open_remote_shell(machine, None, Some(agent), window, cx);
+        let (_, _, first) = self.machine_agents(machine);
+        self.open_remote_shell(machine, None, first, window, cx);
     }
     /// The docked panes in layout order, each with whether it is worked from here.
     pub fn visual_dock_panes(&self, cx: &gpui::App) -> Vec<(String, bool)> {
