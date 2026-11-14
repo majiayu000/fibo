@@ -51,9 +51,12 @@ impl Workbench {
                 self.launch(false, None, cx);
                 return true;
             }
-            Action::Close if self.dock.is_some() => {
-                let focused = self.dock.as_ref().map(|d| d.focused.clone());
-                self.close_dock_pane(&focused.unwrap_or_default(), cx);
+            // ⌘W closes what is shown, never the local pane hidden under it.
+            Action::Close if self.dock.is_some() || self.remote_start.is_some() => {
+                match self.dock.as_ref().map(|d| d.focused.clone()) {
+                    Some(focused) => self.close_dock_pane(&focused, cx),
+                    None => self.close_dock(cx),
+                }
                 return true;
             }
             Action::Close => {
