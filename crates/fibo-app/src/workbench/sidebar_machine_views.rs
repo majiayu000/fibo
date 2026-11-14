@@ -149,6 +149,7 @@ impl Workbench {
                             t!("{name} · 断开", name)
                         }),
                 )
+                .children(super::latency::latency_tag(&host).map(|d| d.text_size(px(F::CHIP_TEXT))))
                 .when(need > 0, |d| d.child(need_badge(need)))
                 .tooltip(super::diagnostics::tip(vec![
                     match self.machine_limit(index) {
@@ -385,10 +386,16 @@ impl Workbench {
         let open = self.sidebar.open(&key, online);
         let name = machine_label(&host).to_owned();
         let note = match &link {
-            Link::Online => match self.machine_limit(index) {
-                Some(limit) => t!("{len} 个会话 · {limit}", len = rows.len(), limit),
-                None => t!("{len} 个会话", len = rows.len()),
-            },
+            Link::Online => {
+                let note = match self.machine_limit(index) {
+                    Some(limit) => t!("{len} 个会话 · {limit}", len = rows.len(), limit),
+                    None => t!("{len} 个会话", len = rows.len()),
+                };
+                match crate::machines::latency(&host) {
+                    Some(rtt) => t!("{note} · {ms} ms", note, ms = rtt.as_millis().to_string()),
+                    None => note,
+                }
+            }
             Link::Connecting => t!("连接中…").to_owned(),
             Link::Offline(why) => t!("断开：{why}", why),
         };

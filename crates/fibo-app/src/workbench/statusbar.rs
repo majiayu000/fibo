@@ -62,6 +62,13 @@ impl Workbench {
                         }),
                 )
             })
+            // Another machine's host: the round trip typing there waits for.
+            .when(self.host.attached() && !cut, |d| {
+                d.children(
+                    super::latency::latency_tag(&self.host.name())
+                        .map(|tag| div().flex().gap(px(T::S4)).child("·").child(tag)),
+                )
+            })
             .tooltip(super::diagnostics::tip(vec![
                 if cut {
                     t!("和后台 Fibo 的连接断了，侧栏和看板停在断开那一刻").into()
