@@ -135,3 +135,10 @@ MOORING_ATTACH_EVIDENCE=1 target/debug/fibo-app --runtime /tmp/fibo-attach --att
 - PR #340：https://github.com/majiayu000/fibo/pull/340
 - 同类：[Zed 远程开发](https://zed.dev/docs/remote-development)、[WezTerm 多路复用](https://wezterm.org/multiplexing.html) 和 [SshDomain](https://wezterm.org/config/lua/SshDomain.html)、[VS Code Remote-SSH](https://code.visualstudio.com/blogs/2019/07/25/remote-ssh) 和 [远程扩展](https://code.visualstudio.com/api/advanced-topics/remote-extensions.md)、[iTerm2 tmux 集成](https://iterm2.com/documentation-tmux-integration.html)。
 - 相关：`docs/multi-machine/spec.md`（第 1–4 步和放弃条件）、[电脑 → 空间 → 会话](2026-11-07-machines-hold-spaces.md)、[发布版自己更新，终端靠后台交接](2026-11-08-self-update.md)。
+
+## 后来的发现
+
+- 2026-11-14 第 1 步 1b：挂接窗口里两样暂时不显示，因为它们读的是本机文件，要由那台后台算好送来，需要改协议：
+  - 窗格标题上的上下文圈（`fibo_core::context_fill`，读会话记录）。
+  - 空间的 git 领先 / 落后（`workbench/divergence.rs`，读仓库）。
+  另外，终端里的文件链接在挂接窗口里关掉了，以后要做就经 ssh 在那台用编辑器打开。第 2 步之前定做不做。
