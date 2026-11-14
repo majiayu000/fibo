@@ -34,6 +34,10 @@ pub fn home_str() -> Option<String> {
         false => fibo_platform::dirs::home_str(),
     }
 }
+/// What a new terminal starts: the attached machine's login shell, else this one's.
+pub fn shell() -> String {
+    crate::attach::shell().unwrap_or_else(fibo_platform::shell::interactive)
+}
 fn not_attached() -> io::Result<()> {
     refuse_attached(attached())
 }

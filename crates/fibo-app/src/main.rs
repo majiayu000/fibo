@@ -372,13 +372,10 @@ fn run() -> io::Result<()> {
         )
     };
     fibo_core::plugin_context::set_runtime(&root);
-    if let Some(host) = &attach {
-        attach::start(host, &root)?;
-    }
     // An attached window is one beside this machine's own, with its own lock: opening it
-    // again brings the same window back.
+    // again brings the same window back, before a second forward starts.
     let instance_dir = match attach {
-        Some(_) => root.join("attached-client"),
+        Some(_) => root.join("client"),
         None => fibo_platform::dirs::home()
             .ok_or_else(|| io::Error::other("HOME unavailable"))?
             .join(".local/share/mooring-client"),
@@ -395,6 +392,9 @@ fn run() -> io::Result<()> {
         lifecycle::Admission::Forwarded => return Ok(()),
         lifecycle::Admission::Primary(guard, events) => (guard, events),
     };
+    if let Some(host) = &attach {
+        attach::start(host, &root)?;
+    }
     let initial = load_workspace(&root);
     let icon_file = instance_dir.join("app-icon");
     #[cfg(feature = "visual-test")]

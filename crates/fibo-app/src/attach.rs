@@ -1,6 +1,6 @@
 //! `--attach <host>`: this window works another machine's own host, with the same code as
 //! this machine's (docs/decisions/2026-11-14-one-window-many-hosts.md). An `ssh -L` keeps
-//! that host's socket at `<runtime>/machines/<host>/workbench.sock` here; a thread starts
+//! that host's socket at `<runtime>/m/<host>/workbench.sock` here; a thread starts
 //! it again whenever it ends, until the window quits. The host there is never started,
 //! stopped or replaced from here (`lifecycle::attached`).
 use crate::machines::Spec;
@@ -17,6 +17,8 @@ struct Forward {
     remote: String,
     /// `$HOME` there.
     home: String,
+    /// `$SHELL` there: what its terminals start, as its own window's do.
+    shell: String,
     local: PathBuf,
     child: Mutex<Option<Child>>,
 }
@@ -27,22 +29,22 @@ const BACKOFF_MAX: Duration = Duration::from_secs(30);
 pub fn root(host: &str) -> io::Result<PathBuf> {
     let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?;
     Ok(fibo_core::legacy::runtime_dir(&home)
-        .join("machines")
+        .join("m")
         .join(dir_name(host)))
 }
-/// `user@host` or an ssh alias as one folder name: nothing that leaves the folder.
+/// `user@host` or an ssh alias as one short folder name: a readable start and a hash of
+/// the whole destination, so `alice@server` and `alice-server` never share a socket or a
+/// lock, and the socket path stays under the 104-byte limit however long the host is.
 fn dir_name(host: &str) -> String {
-    (host.chars())
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .trim_start_matches('.')
-        .to_owned()
+    let start: String = (host.chars())
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect();
+    // FNV-1a: the same name on every run and every build.
+    let hash = (host.bytes()).fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    });
+    format!("{start}-{:08x}", hash as u32)
 }
 
 /// Asks `host` where its host listens, starts the forward and keeps it up.
@@ -50,12 +52,13 @@ pub fn start(host: &str, root: &Path) -> io::Result<()> {
     let spec = (crate::machines::load().unwrap_or_default().into_iter())
         .find(|s| s.host == host)
         .unwrap_or_else(|| Spec::new(host.to_owned()));
-    let (remote, home) = remote_socket(&spec)?;
+    let (remote, home, shell) = remote_socket(&spec)?;
     fibo_platform::fs::create_private_dir(root)?;
     let forward = Forward {
         spec,
         remote,
         home,
+        shell,
         local: root.join("workbench.sock"),
         child: Mutex::new(None),
     };
@@ -69,6 +72,10 @@ pub fn start(host: &str, root: &Path) -> io::Result<()> {
 /// `$HOME` on the attached machine.
 pub fn home() -> Option<String> {
     FORWARD.get().map(|f| f.home.clone())
+}
+/// `$SHELL` on the attached machine.
+pub fn shell() -> Option<String> {
+    FORWARD.get().map(|f| f.shell.clone())
 }
 
 /// `fibo <args>` on the attached machine, as the program finds it there, quoted.
@@ -136,12 +143,13 @@ pub fn stop() {
 
 /// `fibo socket` there; a Fibo from before it has none, so its socket is found as that
 /// version finds its runtime (`legacy::runtime_dir`).
-/// Its home comes back on the line after, for folders this window offers there.
-fn remote_socket(spec: &Spec) -> io::Result<(String, String)> {
+/// Its home and login shell come back on the lines after: the folders this window offers
+/// there, and what its terminals start.
+fn remote_socket(spec: &Spec) -> io::Result<(String, String, String)> {
     let script = format!(
         "{}; {{ \"$p\" socket 2>/dev/null || for d in fibo-workbench mooring-workbench keepline-workbench; \
          do [ -d \"$HOME/.local/share/$d\" ] && {{ echo \"$HOME/.local/share/$d/workbench.sock\"; break; }}; done; }}; \
-         echo \"$HOME\"",
+         echo \"$HOME\"; echo \"${{SHELL:-/bin/sh}}\"",
         spec.find_program()
     );
     let argv = spec.ssh(&script);
@@ -155,6 +163,9 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String)> {
         lines.next().unwrap_or_default(),
         lines.next().unwrap_or_default(),
     );
+    let shell = Some(lines.next().unwrap_or_default())
+        .filter(|s| s.starts_with('/'))
+        .unwrap_or("/bin/sh");
     if !path.starts_with('/') || !home.starts_with('/') {
         let why = String::from_utf8_lossy(&out.stderr).trim().to_owned();
         return Err(io::Error::other(t!(
@@ -163,7 +174,7 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String)> {
             why
         )));
     }
-    Ok((path.to_owned(), home.to_owned()))
+    Ok((path.to_owned(), home.to_owned(), shell.to_owned()))
 }
 
 /// Runs the `ssh -L` and starts it again after it ends, waiting longer each time it ends
@@ -240,14 +251,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_host_is_one_folder_that_stays_inside() {
-        assert_eq!(dir_name("agentos"), "agentos");
-        assert_eq!(
-            dir_name("lifcc@agent-os.tailc3193d.ts.net"),
-            "lifcc-agent-os.tailc3193d.ts.net"
+    fn a_host_is_one_short_folder_of_its_own() {
+        let alias = dir_name("alice-server");
+        assert_ne!(
+            dir_name("alice@server"),
+            alias,
+            "two destinations, one socket"
         );
-        assert_eq!(dir_name("../../etc"), "-..-etc");
-        assert!(!dir_name("../x").contains('/'));
+        assert_eq!(alias, dir_name("alice-server"), "the same name every run");
+        assert!(!dir_name("../x").contains(['/', '.']));
+        // The longest path under it, the window's lock socket, stays under macOS's 104
+        // bytes for a long host under a usual home.
+        let root = Path::new("/Users/someone-long/.local/share/mooring-workbench/m")
+            .join(dir_name(
+                "lifcc@agent-os.tailc3193d.ts.net.example.internal",
+            ))
+            .join("client/client.sock");
+        assert!(root.as_os_str().len() < 104, "{}", root.display());
     }
     #[test]
     fn the_socket_is_asked_for_then_found_as_an_older_fibo_finds_it() {

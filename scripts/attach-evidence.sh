@@ -16,7 +16,7 @@ mkdir -m 700 "$R/far"
 cat > "$R/bin/ssh" <<SH
 #!/bin/bash
 # Fake ssh: drops options and the host. \`-N -L here:there\` links here to there and stays
-# up like a forward; anything else runs on "the other machine", whose HOME is farhome.
+# up like a forward; anything else runs on "the other machine": HOME farhome, bash its shell.
 forward=""
 while [ \$# -gt 0 ]; do
   case "\$1" in
@@ -30,7 +30,7 @@ if [ -n "\$forward" ]; then
   ln -sf "\${forward#*:}" "\${forward%%:*}"
   exec -a "fake-forward-$R" sleep 86400
 fi
-HOME=$R/farhome exec /bin/sh -c "\$*"
+HOME=$R/farhome SHELL=/bin/bash exec /bin/sh -c "\$*"
 SH
 chmod +x "$R/bin/ssh"
 printf '#!/bin/sh\nMOORING_RUNTIME=%s/far exec %s/target/debug/fibo "$@"\n' "$R" "$REPO" > "$R/far-fibo"
@@ -69,7 +69,9 @@ rpc '"Workspace"' | python3 -I -c '
 import json, sys
 w = json.load(sys.stdin)["Workspace"]
 print("far tabs left:", [t["id"] for t in w["tabs"]])
-print("far terminals:", sorted({t["state"] for t in w["terminals"]}))'
+print("far terminals:", sorted({t["state"] for t in w["terminals"]}))
+shells = sorted({t["argv"][0] for t in w["terminals"]})
+print("far shells:", shells, "(its own: /bin/bash)" if shells == ["/bin/bash"] else "WRONG: not its own shell")'
 pgrep -f "fake-forward-$R" >/dev/null && echo "a fake forward outlived the window" || echo "forward ended with the window"
 pkill -f "fake-forward-$R" 2>/dev/null
 kill $FAR 2>/dev/null; sleep 1; pkill -f "$R/far" 2>/dev/null

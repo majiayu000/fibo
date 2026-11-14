@@ -92,7 +92,7 @@ impl Workbench {
             )
         };
         let argv = launch_argv(
-            fibo_platform::shell::interactive(),
+            crate::lifecycle::shell(),
             resume.as_ref().map(|r| r.0.as_str()),
         );
         // A new tab may move to the space of the project it opens in; a split or a
