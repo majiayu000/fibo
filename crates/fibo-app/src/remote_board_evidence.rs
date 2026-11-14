@@ -1,9 +1,9 @@
 //! MOORING_REMOTE_BOARD_EVIDENCE: another machine's sessions on the board (multi-machine
 //! step 4, direction A). The outer script starts that machine's host with one Codex
 //! session waiting for review in terminal `far`. Checks the card shows up in 要你处理,
-//! moves to 做完了 when dropped there, and that 「＋」 shows its start page, whose shell opens
-//! docked in the main area and worked from here; its right-click splits Codex beside it,
-//! and 「关闭终端」 ends both.
+//! moves to 做完了 when dropped there, and that 「＋」 shows its start page, whose Codex opens
+//! docked in the main area and worked from here; right-click 向右分屏 puts a shell beside
+//! it, and 「关闭终端」 ends both.
 use super::*;
 use fibo_core::layout::Axis;
 
@@ -71,7 +71,9 @@ pub(super) fn start(
         );
         shoot("remote-start.png", cx);
         handle
-            .update(cx, |v, window, cx| v.visual_open_remote_shell(0, window, cx))
+            .update(cx, |v, window, cx| {
+                v.visual_open_remote_agent(0, fibo_core::agent::Agent::Codex, window, cx)
+            })
             .unwrap();
         let mut panes = vec![];
         for _ in 0..60 {
@@ -83,29 +85,22 @@ pub(super) fn start(
         }
         assert!(
             panes.len() == 1 && panes[0].1 && panes[0].0.contains(":remote-"),
-            "the start page's shell is not docked and taken: {panes:?}"
+            "the start page's Codex is not docked and taken: {panes:?}"
         );
         assert!(
             !handle.update(cx, |v, _, _| v.visual_remote_start_shown()).unwrap(),
-            "the start page stayed over the opened shell"
+            "the start page stayed over the opened Codex"
         );
         wait(1500).await;
-        shoot("remote-open-shell.png", cx);
-        // Right-click: split right, then pick Codex; it opens beside the shell, worked too.
+        shoot("remote-open-codex.png", cx);
+        // Right-click 向右分屏, as on this machine: an empty terminal beside it at once.
         handle
-            .update(cx, |v, _, cx| v.visual_dock_menu(None, cx))
+            .update(cx, |v, _, cx| v.visual_dock_menu(cx))
             .unwrap();
         wait(400).await;
         shoot("remote-menu.png", cx);
         handle
-            .update(cx, |v, _, cx| v.visual_dock_menu(Some(Axis::Right), cx))
-            .unwrap();
-        wait(400).await;
-        shoot("remote-menu-right.png", cx);
-        handle
-            .update(cx, |v, window, cx| {
-                v.visual_dock_split(Axis::Right, Some(fibo_core::agent::Agent::Codex), window, cx)
-            })
+            .update(cx, |v, window, cx| v.visual_dock_split(Axis::Right, window, cx))
             .unwrap();
         for _ in 0..60 {
             wait(250).await;
@@ -137,7 +132,7 @@ pub(super) fn start(
             assert_eq!(panes.len(), left, "「关闭终端」 left {panes:?}");
         }
         eprintln!(
-            "remote board PASS: card in 要你处理, kept in 做完了, start page shown, shell docked, split right with Codex, both ended"
+            "remote board PASS: card in 要你处理, kept in 做完了, start page shown, Codex docked, split right with a shell, both ended"
         );
         cx.update(|cx| cx.quit());
     })

@@ -51,8 +51,22 @@ impl Workbench {
                 self.launch(false, None, cx);
                 return true;
             }
+            Action::Close if self.dock.is_some() => {
+                let focused = self.dock.as_ref().map(|d| d.focused.clone());
+                self.close_dock_pane(&focused.unwrap_or_default(), cx);
+                return true;
+            }
             Action::Close => {
                 self.close_focused(cx);
+                return true;
+            }
+            Action::SplitRight | Action::SplitDown if self.dock.is_some() => {
+                let axis = if action == Action::SplitDown {
+                    Axis::Down
+                } else {
+                    Axis::Right
+                };
+                self.split_dock(axis, window, cx);
                 return true;
             }
             Action::SplitRight | Action::SplitDown => {

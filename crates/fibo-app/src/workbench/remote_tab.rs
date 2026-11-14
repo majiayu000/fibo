@@ -24,8 +24,10 @@ pub(super) struct Dock {
     pub(super) focused: String,
     /// The tab this covers; showing another one drops it.
     pub(super) home: Option<String>,
-    /// The right-clicked pane and where; with a side, the page that picks what opens there.
-    pub(super) menu: Option<(String, gpui::Point<gpui::Pixels>, Option<Axis>)>,
+    /// The right-clicked pane and where.
+    pub(super) menu: Option<(String, gpui::Point<gpui::Pixels>)>,
+    /// 放大: this pane alone fills the main area.
+    pub(super) zoomed: Option<String>,
     /// Where the terminal being opened goes: beside this pane, on this side.
     pub(super) split: Option<(String, Axis)>,
 }
@@ -94,6 +96,7 @@ impl Workbench {
             && let Some((target, axis)) = dock.split.take()
             && dock.tree.split(&target, key.clone(), axis)
         {
+            dock.zoomed = None;
             dock.panes.insert(key.clone(), peek);
             dock.focused = key;
             return;
@@ -104,6 +107,7 @@ impl Workbench {
             focused: key,
             home: self.nav.tab.clone(),
             menu: None,
+            zoomed: None,
             split: None,
         });
     }
@@ -127,6 +131,9 @@ impl Workbench {
             return;
         };
         dock.panes.remove(key);
+        if dock.zoomed.as_deref() == Some(key) {
+            dock.zoomed = None;
+        }
         match dock.tree.clone().without(key) {
             Some(tree) => {
                 if dock.focused == key {
@@ -144,7 +151,8 @@ impl Workbench {
     /// What the main area shows instead of the tab's panes, if anything is docked there.
     pub(super) fn docked_view(&self, cx: &Context<Self>) -> Option<gpui::AnyElement> {
         if let Some(dock) = &self.dock {
-            return Some(self.dock_tree(dock, &dock.tree, cx));
+            let zoomed = dock.zoomed.clone().map(Layout::Leaf);
+            return Some(self.dock_tree(dock, zoomed.as_ref().unwrap_or(&dock.tree), cx));
         }
         let start = self.remote_start.as_ref()?;
         Some(self.remote_start_view(start, cx))

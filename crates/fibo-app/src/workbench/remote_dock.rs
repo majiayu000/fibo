@@ -66,7 +66,8 @@ impl Workbench {
                 gpui::MouseButton::Right,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
                     if let Some(dock) = &mut this.dock {
-                        dock.menu = Some((right.clone(), event.position, None));
+                        dock.menu = Some((right.clone(), event.position));
+                        dock.focused = right.clone();
                     }
                     cx.stop_propagation();
                     cx.notify();
@@ -75,79 +76,66 @@ impl Workbench {
             .child(self.peek_view(peek, cx))
             .into_any_element()
     }
-    /// The open right-click menu on a docked pane, over everything.
+    /// The open right-click menu on a docked pane, over everything: the native pane menu's
+    /// rows that mean something for another machine's terminal.
     pub(super) fn dock_menu(
         &self,
         window: &Window,
         cx: &Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let dock = self.dock.as_ref()?;
-        let (key, at, side) = dock.menu.clone()?;
+        let (key, at) = dock.menu.clone()?;
         let r = dock.panes.get(&key)?.remote.as_ref()?;
-        let item = |id: String, title: String| {
-            button(gpui::SharedString::from(id), title)
-                .w_full()
-                .justify_start()
-                .border_0()
-        };
+        let manages = r.slot.lock().unwrap().as_ref().is_some_and(|l| l.managing);
+        let zoomed = dock.zoomed.as_deref() == Some(key.as_str());
+        let keys = crate::keymap::current(cx);
         let mut entries = Vec::new();
-        match side {
-            None => {
-                let manages = r.slot.lock().unwrap().as_ref().is_some_and(|l| l.managing);
-                if manages {
-                    for (axis, title) in
-                        [(Axis::Right, t!("向右分屏")), (Axis::Down, t!("向下分屏"))]
-                    {
-                        let key = key.clone();
-                        entries.push(
-                            item(format!("dock-split-{axis:?}"), format!("{title}…"))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    if let Some(dock) = &mut this.dock {
-                                        dock.menu = Some((key.clone(), at, Some(axis)));
-                                    }
-                                    cx.notify();
-                                }))
-                                .into_any_element(),
-                        );
-                    }
-                }
-                let key = key.clone();
-                entries.push(
-                    item("dock-close".into(), t!("关闭画面").into())
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if let Some(dock) = &mut this.dock {
-                                dock.menu = None;
-                            }
-                            this.close_dock_pane(&key, cx);
-                        }))
-                        .into_any_element(),
-                );
-            }
-            Some(axis) => {
-                let machine = r.machine;
-                let (_, agents, first) = self.machine_agents(machine);
-                let cwd = self.machine_card_cwd(r);
-                let mut choices: Vec<(String, Option<Agent>)> = first
-                    .into_iter()
-                    .chain(agents.into_iter().filter(|a| Some(*a) != first))
-                    .map(|a| (a.name().to_owned(), Some(a)))
-                    .collect();
-                choices.push((t!("空终端").to_owned(), None));
-                for (title, agent) in choices {
-                    let (key, cwd) = (key.clone(), cwd.clone());
+        let rows = [
+            manages.then_some(tk!("向右分屏")),
+            manages.then_some(tk!("向下分屏")),
+            Some(if zoomed { tk!("还原") } else { tk!("放大") }),
+            None,
+            Some(tk!("复制")),
+            Some(tk!("粘贴")),
+            None,
+            Some(tk!("关闭画面")),
+        ];
+        for title in rows.into_iter() {
+            let Some(title) = title else {
+                if !entries.is_empty() {
                     entries.push(
-                        item(format!("dock-split-with-{title}"), title)
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                if let Some(dock) = &mut this.dock {
-                                    dock.menu = None;
-                                    dock.split = Some((key.clone(), axis));
-                                }
-                                this.open_remote_shell(machine, cwd.clone(), agent, window, cx);
-                            }))
+                        div()
+                            .h(px(T::ROW))
+                            .flex()
+                            .items_center()
+                            .child(
+                                div()
+                                    .w_full()
+                                    .h(px(T::BORDER_WIDTH))
+                                    .bg(T::color(T::border())),
+                            )
                             .into_any_element(),
                     );
                 }
-            }
+                continue;
+            };
+            let key = key.clone();
+            let shortcut = super::layout::menu_shortcut(title, &keys);
+            entries.push(
+                button(gpui::SharedString::from(format!("dock-menu-{title}")), "")
+                    .aria_label(fibo_core::i18n::say(title))
+                    .w_full()
+                    .justify_between()
+                    .border_0()
+                    .child(div().flex_1().child(fibo_core::i18n::say(title)))
+                    .when_some(shortcut, |d, keys| {
+                        d.child(div().text_color(T::color(T::muted())).child(keys))
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.dock_menu_action(&key, title, window, cx)
+                    }))
+                    .into_any_element(),
+            );
         }
         Some(self.popup(at, entries, window, cx, |this| {
             if let Some(dock) = &mut this.dock {
@@ -155,23 +143,10 @@ impl Workbench {
             }
         }))
     }
-}
-
-#[cfg(feature = "visual-test")]
-impl Workbench {
-    /// The focused docked pane's right-click menu, on its first page or a side's.
-    pub fn visual_dock_menu(&mut self, side: Option<Axis>, cx: &mut Context<Self>) {
-        if let Some(dock) = &mut self.dock {
-            let at = gpui::point(px(T::SIDEBAR * 2.), px(T::TOP * 4.));
-            dock.menu = Some((dock.focused.clone(), at, side));
-        }
-        cx.notify();
-    }
-    /// The menu's split beside the focused pane, with `agent` or a shell.
-    pub fn visual_dock_split(
+    fn dock_menu_action(
         &mut self,
-        axis: Axis,
-        agent: Option<Agent>,
+        key: &str,
+        title: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -179,13 +154,87 @@ impl Workbench {
             return;
         };
         dock.menu = None;
-        dock.split = Some((dock.focused.clone(), axis));
+        dock.focused = key.to_owned();
+        match title {
+            tk!("向右分屏") => self.split_dock(Axis::Right, window, cx),
+            tk!("向下分屏") => self.split_dock(Axis::Down, window, cx),
+            tk!("放大") | tk!("还原") => {
+                dock.zoomed = (dock.zoomed.as_deref() != Some(key)).then(|| key.to_owned());
+                self.focus_dock_pane(key, window, cx);
+            }
+            tk!("复制") | tk!("粘贴") => {
+                if let Some(pane) = dock.panes.get(key).map(|p| p.pane.clone()) {
+                    pane.update(cx, |p, cx| {
+                        if title == tk!("复制") {
+                            p.copy(cx)
+                        } else {
+                            p.paste(cx)
+                        }
+                    });
+                    window.focus(&pane.focus_handle(cx), cx);
+                }
+            }
+            tk!("关闭画面") => self.close_dock_pane(key, cx),
+            _ => (),
+        }
+        cx.notify();
+    }
+    /// 向右分屏 / 向下分屏 on the focused docked pane, as on this machine's: an empty
+    /// terminal beside it, in its folder, on the same machine.
+    pub(super) fn split_dock(&mut self, axis: Axis, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(dock) = &mut self.dock else {
+            return;
+        };
         let focused = dock.focused.clone();
+        dock.split = Some((focused.clone(), axis));
         let Some(r) = self.peek_by(&focused).and_then(|p| p.remote.as_ref()) else {
             return;
         };
+        if !r.slot.lock().unwrap().as_ref().is_some_and(|l| l.managing) {
+            return;
+        }
         let (machine, cwd) = (r.machine, self.machine_card_cwd(r));
-        self.open_remote_shell(machine, cwd, agent, window, cx);
+        self.open_remote_shell(machine, cwd, None, window, cx);
+    }
+}
+
+#[cfg(feature = "visual-test")]
+impl Workbench {
+    /// The focused docked pane's right-click menu.
+    pub fn visual_dock_menu(&mut self, cx: &mut Context<Self>) {
+        if let Some(dock) = &mut self.dock {
+            let at = gpui::point(px(T::SIDEBAR * 2.), px(T::TOP * 4.));
+            dock.menu = Some((dock.focused.clone(), at));
+        }
+        cx.notify();
+    }
+    /// The menu's 向右分屏 / 向下分屏 on the focused pane.
+    pub fn visual_dock_split(&mut self, axis: Axis, window: &mut Window, cx: &mut Context<Self>) {
+        let focused = self
+            .dock
+            .as_ref()
+            .map(|d| d.focused.clone())
+            .unwrap_or_default();
+        self.dock_menu_action(
+            &focused,
+            if axis == Axis::Down {
+                tk!("向下分屏")
+            } else {
+                tk!("向右分屏")
+            },
+            window,
+            cx,
+        );
+    }
+    /// The start page's button for `agent` on `machine`.
+    pub fn visual_open_remote_agent(
+        &mut self,
+        machine: usize,
+        agent: Agent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_remote_shell(machine, None, Some(agent), window, cx);
     }
     /// The docked panes in layout order, each with whether it is worked from here.
     pub fn visual_dock_panes(&self, cx: &gpui::App) -> Vec<(String, bool)> {

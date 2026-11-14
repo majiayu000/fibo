@@ -540,15 +540,6 @@ impl Workbench {
         };
         self.settle_remote(&card, to, cx);
     }
-    /// The sidebar's 「＋」 on machine `index`'s heading.
-    pub fn visual_open_remote_shell(
-        &mut self,
-        index: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_remote_shell(index, None, None, window, cx);
-    }
     /// Into the open peek: keys as you type them, or a mouse report.
     pub fn visual_in_peek(&mut self, text: &str, mouse: bool, cx: &mut Context<Self>) {
         let key = self.visual_peek_key().expect("a peek is open");
