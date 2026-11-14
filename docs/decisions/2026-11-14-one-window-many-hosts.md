@@ -142,3 +142,4 @@ MOORING_ATTACH_EVIDENCE=1 target/debug/fibo-app --runtime /tmp/fibo-attach --att
   - 窗格标题上的上下文圈（`fibo_core::context_fill`，读会话记录）。
   - 空间的 git 领先 / 落后（`workbench/divergence.rs`，读仓库）。
   另外，终端里的文件链接在挂接窗口里关掉了，以后要做就经 ssh 在那台用编辑器打开。第 2 步之前定做不做。
+- 2026-11-14 第 1 步 1c：`scripts/attach-evidence.sh`（假 ssh，本机再起一个后台当另一台）和 agentos 真后台各跑一遍，都 PASS：⌘T、⌘D、⇧⌘D、⌘W、运行 Agent，掐掉 `ssh -L` 后自己重建并继续开得了终端，最后关掉这里开的标签。真后台前后都是 46 个标签、40 个在跑，agentos 自己的窗口和后台进程没换过。agentos 的 Fibo 还没有 `fibo socket`，走的是按旧版运行目录找（`keepline-workbench`）。没做：窗口崩掉时 `ssh -L` 会留下（正常退出会收掉），下次挂接用 `StreamLocalBindUnlink` 顶掉旧 socket，不影响使用。

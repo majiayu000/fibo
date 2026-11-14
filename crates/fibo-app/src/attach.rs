@@ -220,6 +220,21 @@ fn supervise() {
     }
 }
 
+/// The running `ssh -L`, for the evidence that drops it and sees it come back.
+#[cfg(feature = "visual-test")]
+pub fn visual_link_pid() -> Option<u32> {
+    (FORWARD.get()?.child.lock().unwrap().as_ref()).map(Child::id)
+}
+/// Ends the running `ssh -L` as a dropped network would; the supervisor starts another.
+#[cfg(feature = "visual-test")]
+pub fn visual_drop_link() {
+    if let Some(forward) = FORWARD.get()
+        && let Some(child) = forward.child.lock().unwrap().as_mut()
+    {
+        let _ = child.kill();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

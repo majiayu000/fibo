@@ -26,6 +26,24 @@ impl Workbench {
         self.run_agent_here(agent, cx);
         agent.name().to_owned()
     }
+    pub fn visual_tab_ids(&self) -> Vec<String> {
+        self.workspace.tabs.iter().map(|t| t.id.clone()).collect()
+    }
+    /// Closes tab `id` on the host, its terminals with it, with no question: the
+    /// evidence leaves the attached machine as it found it.
+    pub fn visual_close_tab_id(&mut self, id: &str, cx: &mut Context<Self>) {
+        let edit = Edit::CloseTab {
+            id: id.to_owned(),
+            expect: None,
+        };
+        self.request(
+            Request::Edit {
+                request: None,
+                edit,
+            },
+            cx,
+        );
+    }
     /// What the window shows as its last error, and whether a launch waits on a busy host.
     pub fn visual_attach_error(&self) -> String {
         format!("error {:?}, busy {}", self.error, self.store.busy())
