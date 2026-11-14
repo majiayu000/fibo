@@ -8,6 +8,24 @@ use std::{
     time::Duration,
 };
 
+/// `--attach`: this window works a host it does not own, such as another machine's through
+/// a forwarded socket. It never starts, stops or replaces that host, and a build that
+/// differs from this app's is not stale here: replacing it would hand its terminals to a
+/// host on this machine, or stop whatever local process has its pid.
+static ATTACHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn attach() {
+    ATTACHED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+pub fn attached() -> bool {
+    ATTACHED.load(std::sync::atomic::Ordering::Relaxed)
+}
+fn not_attached() -> io::Result<()> {
+    match attached() {
+        true => Err(io::Error::other(t!("挂接的后台不由这个窗口启动或停止"))),
+        false => Ok(()),
+    }
+}
+
 pub struct Instance {
     _lock: File,
     socket: PathBuf,
@@ -121,6 +139,7 @@ pub fn host_program() -> io::Result<PathBuf> {
 /// Stops the host serving `root` and waits until its socket stops answering; the
 /// next start runs this app's host. Its terminals end with it.
 pub fn stop_host(root: &Path, host: &fibo_core::protocol::Build) -> io::Result<()> {
+    not_attached()?;
     let pid = if host.pid != 0 {
         host.pid
     } else {
@@ -158,6 +177,7 @@ pub fn stop_host(root: &Path, host: &fibo_core::protocol::Build) -> io::Result<(
 /// Starts this app's own host for `root` and waits until it serves. With `takeover` it
 /// first takes the running terminals over from the host serving there now, which exits.
 pub fn spawn_host(root: &Path, takeover: bool) -> io::Result<()> {
+    not_attached()?;
     if !root.exists() {
         fibo_platform::fs::create_private_dir(root)?;
     }
@@ -267,7 +287,7 @@ pub fn connected_host(socket: &Path) -> io::Result<bool> {
             // An already running host keeps serving the code it started with, however
             // often its binary is rebuilt; fixes then look like they never landed.
             let sibling = host_program()?;
-            set_stale_host(build.stale(&sibling).then_some(build));
+            set_stale_host((build.stale(&sibling) && !attached()).then_some(build));
             Ok(true)
         }
         Reply::Error(message) if message.starts_with("protocol major ") => {

@@ -353,9 +353,17 @@ fn run() -> io::Result<()> {
         )
     };
     fibo_core::plugin_context::set_runtime(&root);
-    let instance_dir = fibo_platform::dirs::home()
-        .ok_or_else(|| io::Error::other("HOME unavailable"))?
-        .join(".local/share/mooring-client");
+    // An attached window is a second one beside this machine's own, with its own lock.
+    let attach = args.iter().any(|a| a == "--attach");
+    if attach {
+        lifecycle::attach();
+    }
+    let instance_dir = match attach {
+        true => root.join("attached-client"),
+        false => fibo_platform::dirs::home()
+            .ok_or_else(|| io::Error::other("HOME unavailable"))?
+            .join(".local/share/mooring-client"),
+    };
     // Visual evidence uses its explicitly isolated runtime without forwarding to or
     // replacing the user's running workbench.
     #[cfg(feature = "visual-test")]
