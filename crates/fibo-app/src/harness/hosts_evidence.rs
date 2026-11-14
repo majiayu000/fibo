@@ -2,7 +2,8 @@
 //! 2). The outer script gives the window a machine `far` reached through a fake ssh, with a
 //! space `far`. Picking that space draws far's own workbench here; ⌘T there opens in that
 //! space on far; 「← 本机」 comes back with this machine's tabs as they were; picking far again
-//! finds its tab still there; what was opened there is closed again.
+//! finds its tab still there; what was opened there is closed again. MOORING_HOSTS_HOST and
+//! MOORING_HOSTS_SPACE name another machine and space (a real one) instead of far's.
 use super::*;
 
 pub(super) fn start(
@@ -32,11 +33,13 @@ pub(super) fn start(
             })
             .unwrap();
         };
+        let host = std::env::var("MOORING_HOSTS_HOST").unwrap_or_else(|_| "far".into());
+        let picked = std::env::var("MOORING_HOSTS_SPACE").unwrap_or_else(|_| "far".into());
         let home_tabs = handle.update(cx, |v, _, _| v.visual_tab_ids()).unwrap();
         // Picking far's space: its own workbench, reached in the background, drawn here.
         handle
             .update(cx, |v, window, cx| {
-                v.visual_show_host("far", Some("far"), window, cx)
+                v.visual_show_host(&host, Some(&picked), window, cx)
             })
             .unwrap();
         let mut shown = (None, None);
@@ -48,9 +51,9 @@ pub(super) fn start(
             }
         }
         assert_eq!(
-            shown.0.as_deref(),
-            Some("far"),
-            "far was never drawn: {shown:?}"
+            shown.0.as_ref(),
+            Some(&host),
+            "{host} was never drawn: {shown:?}"
         );
         let far = handle
             .update(cx, |v, _, _| v.visual_hosted())
@@ -82,8 +85,8 @@ pub(super) fn start(
             opened.unwrap_or_else(|| panic!("⌘T on far opened nothing: {:?}", far_state(cx)));
         let space = far.read_with(cx, |w, _| w.visual_tab_space(&opened));
         assert_eq!(
-            space.as_deref(),
-            Some("far"),
+            space.as_ref(),
+            Some(&picked),
             "⌘T opened outside the space picked"
         );
         wait(1500).await;
@@ -101,12 +104,16 @@ pub(super) fn start(
         // far again: the same workbench, its tab still there.
         handle
             .update(cx, |v, window, cx| {
-                v.visual_show_host("far", None, window, cx)
+                v.visual_show_host(&host, None, window, cx)
             })
             .unwrap();
         wait(400).await;
         let again = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
-        assert_eq!(again, (Some("far".into()), None), "far was reached again");
+        assert_eq!(
+            again,
+            (Some(host.clone()), None),
+            "{host} was reached again"
+        );
         let kept = far.read_with(cx, |w, _| w.visual_tab_ids());
         assert!(kept.contains(&opened), "far lost its tab meanwhile");
         shoot("hosts-4-far-again.png", cx);
@@ -125,7 +132,7 @@ pub(super) fn start(
                 break;
             }
         }
-        eprintln!("hosts PASS: far drawn here, ⌘T in its space, home kept, far kept its tab");
+        eprintln!("hosts PASS: {host} drawn here, ⌘T in {picked}, home kept, {host} kept its tab");
         cx.update(|cx| cx.quit());
     })
     .detach();
