@@ -416,7 +416,7 @@ fn a_dialog_gone_from_the_screen_is_settled_by_claude_official_status() {
     );
 }
 
-/// The Agent draws its approval before Mooring knows which conversation it is (here the
+/// The Agent draws its approval before Fibo knows which conversation it is (here the
 /// log appears 3 s later, as when identification is slow under load). The screen stays
 /// still after that, so only binding the conversation can trigger the check.
 #[test]

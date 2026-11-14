@@ -25,7 +25,7 @@ pub fn link_dir(to: &Path, at: &Path) -> io::Result<()> {
 pub fn link_program(_to: &Path, _at: &Path) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "Windows 上还不能把 mooring 放到 PATH",
+        "Windows 上还不能把 fibo 放到 PATH",
     ))
 }
 

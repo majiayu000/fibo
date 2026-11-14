@@ -1,6 +1,6 @@
 # GPU 占用基准
 
-隔离的 fixture daemon 与 `/bin/sh` 负载（不跑 Agent、不读真实数据），测 Mooring 客户端在固定终端负载下的 GPU / CPU，并可与 Ghostty 同负载对照。
+隔离的 fixture daemon 与 `/bin/sh` 负载（不跑 Agent、不读真实数据），测 Fibo 客户端在固定终端负载下的 GPU / CPU，并可与 Ghostty 同负载对照。
 
 ```sh
 cargo build --release -p fibo-app

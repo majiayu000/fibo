@@ -8,12 +8,12 @@ else
 fi
 
 {
-    'builtin' 'typeset' _mooring_file="${ZDOTDIR-$HOME}/.zshenv"
-    [[ ! -r "$_mooring_file" ]] || 'builtin' 'source' '--' "$_mooring_file"
+    'builtin' 'typeset' _fibo_file="${ZDOTDIR-$HOME}/.zshenv"
+    [[ ! -r "$_fibo_file" ]] || 'builtin' 'source' '--' "$_fibo_file"
 } always {
     if [[ -o 'interactive' ]]; then
-        'builtin' 'typeset' _mooring_file="${MOORING_SHELL_INTEGRATION_DIR}/zsh/fibo-integration"
-        [[ ! -r "$_mooring_file" ]] || 'builtin' 'source' '--' "$_mooring_file"
+        'builtin' 'typeset' _fibo_file="${MOORING_SHELL_INTEGRATION_DIR}/zsh/fibo-integration"
+        [[ ! -r "$_fibo_file" ]] || 'builtin' 'source' '--' "$_fibo_file"
     fi
-    'builtin' 'unset' '_mooring_file' 'MOORING_SHELL_INTEGRATION_DIR'
+    'builtin' 'unset' '_fibo_file' 'MOORING_SHELL_INTEGRATION_DIR'
 }

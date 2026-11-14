@@ -113,7 +113,7 @@ fibo plugins          # which plugins take effect, and why not
 3. `fibo explain <terminal>` shows how Fibo read that screen; `fibo hooks status` shows whether the agent's hooks are installed and current.
 
 **I used Mooring or Keepline. What changes?**
-Nothing to redo. On first start Fibo moves `~/.config/mooring` (or `~/.config/keepline`) to `~/.config/fibo` (a link stays at the old place), keeps using the old runtime directory so the old host hands its terminals over, and still answers to `mooring`, `keepline`, `keeplined`, `MOORING_*` and `KEEPLINE_*`; programs in its terminals also get `FIBO_*`. An app updated in place keeps its folder name (`Mooring.app`); macOS asks once more for notifications, since the app's identifier changed. Run `fibo hooks install` once if Keepline's hook entries are still there.
+Nothing to redo. On first start Fibo moves `~/.config/mooring` to `~/.config/fibo` (a link stays at the old place), keeps using the old runtime directory so the old host hands its terminals over, and still answers to `mooring` and `MOORING_*`; programs in its terminals also get `FIBO_*`. An app updated in place keeps its folder name (`Mooring.app`); macOS asks once more for notifications, since the app's identifier changed. Run `fibo hooks install` once if Keepline's hook entries are still there.
 
 **What happens when I quit, update or restart?**
 Quitting or updating the app leaves every terminal running. Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.

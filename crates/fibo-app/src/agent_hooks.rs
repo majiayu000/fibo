@@ -24,7 +24,7 @@ pub struct Hook {
 
 /// The daemon beside this app, as `lifecycle` starts it; an attached window's, on that
 /// machine, where its Agents run and their settings are.
-fn mooring(host: &crate::attach::Host, args: &[&str]) -> io::Result<Vec<u8>> {
+fn fibo(host: &crate::attach::Host, args: &[&str]) -> io::Result<Vec<u8>> {
     let out = match host.run(args) {
         Some(out) => out?,
         None => Command::new(crate::lifecycle::host_program()?)
@@ -39,13 +39,13 @@ fn mooring(host: &crate::attach::Host, args: &[&str]) -> io::Result<Vec<u8>> {
     Ok(out.stdout)
 }
 pub fn check(host: &crate::attach::Host) -> io::Result<Vec<Hook>> {
-    parse(&mooring(host, &["hooks", "status", "--json"])?)
+    parse(&fibo(host, &["hooks", "status", "--json"])?)
 }
 pub fn install(host: &crate::attach::Host, agent: &str) -> io::Result<()> {
-    mooring(host, &["hooks", "install", "--agent", agent]).map(drop)
+    fibo(host, &["hooks", "install", "--agent", agent]).map(drop)
 }
 pub fn uninstall(host: &crate::attach::Host, agent: &str) -> io::Result<()> {
-    mooring(host, &["hooks", "uninstall", "--agent", agent]).map(drop)
+    fibo(host, &["hooks", "uninstall", "--agent", agent]).map(drop)
 }
 fn parse(bytes: &[u8]) -> io::Result<Vec<Hook>> {
     let rows: Vec<serde_json::Value> = serde_json::from_slice(bytes).map_err(io::Error::other)?;

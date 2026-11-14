@@ -1,6 +1,6 @@
 # CLI 状态接口复验
 
-Mooring 的回合状态规则（[tech.md 回合状态判定](../../../specs/terminal-workbench/tech.md)）读取四个不由我们维护的接口。Codex 的 app-server 协议标为实验性，`claude agents --json` 还是研究预览。升级 Codex 或 Claude Code 后先跑一次：
+Fibo 的回合状态规则（[tech.md 回合状态判定](../../../specs/terminal-workbench/tech.md)）读取四个不由我们维护的接口。Codex 的 app-server 协议标为实验性，`claude agents --json` 还是研究预览。升级 Codex 或 Claude Code 后先跑一次：
 
 ```bash
 python3 -I check.py --live
@@ -8,14 +8,14 @@ python3 -I check.py --live
 
 不带 `--live` 只检查 schema 和命令输出的结构；带上后，会对正在运行的 Codex 后台做一次只读的 `thread/read`。两种方式都不订阅线程，也不修改任何配置。
 
-| 检查 | 保护的规则 | 失败时 Mooring 的表现 |
+| 检查 | 保护的规则 | 失败时 Fibo 的表现 |
 |---|---|---|
 | `ThreadStatus` 的 `idle` / `active`，以及 `activeFlags` 里的 `waitingOnApproval` / `waitingOnUserInput` | S06 只读对账 | 对账结果被跳过，界面上提示「Codex 官方状态查询不可用」 |
 | `thread/read` 的参数，未加载的线程返回错误 | S06 | 同上 |
 | 子 Agent 的会话记录头带 `parent_thread_id` | Codex 子 Agent 日志跟踪 | 父会话不再统计子 Agent，回合结束后可能过早进入「待核对」 |
 | `claude agents --json` 的 `sessionId`、`status`、`state`、`waitingFor` | S03 | 对账结果被跳过，界面上提示「Claude 官方状态查询不可用」 |
 
-FAIL 表示 Mooring 依赖的字段变了，需要先改代码再升级；WARN 表示出现了新取值，Mooring 会忽略它而不是去猜，需要判断要不要支持。
+FAIL 表示 Fibo 依赖的字段变了，需要先改代码再升级；WARN 表示出现了新取值，Fibo 会忽略它而不是去猜，需要判断要不要支持。
 
 ## Hook 载荷样本
 

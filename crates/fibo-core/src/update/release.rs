@@ -1,7 +1,7 @@
 //! What GitHub says the latest release is, and which of its files this Mac installs.
 //!
 //! The release contract: tag `vX.Y.Z`; assets `Fibo-X.Y.Z-<arch>.zip` (a `ditto -c -k
-//! --keepParent` zip of the signed, notarized, stapled Mooring.app), `Mooring-X.Y.Z-<arch>.dmg`
+//! --keepParent` zip of the signed, notarized, stapled Fibo.app), `Fibo-X.Y.Z-<arch>.dmg`
 //! and `SHA256SUMS` (`sha256sum` lines: `<hex>  <file name>`).
 use super::version::Version;
 use serde::Deserialize;

@@ -48,7 +48,7 @@ fn run_cli(home: &Path, envs: &[(&str, &str)], args: &[&str]) -> (bool, String, 
     for (k, v) in envs {
         cmd.env(k, v);
     }
-    let out = cmd.output().expect("spawn mooring");
+    let out = cmd.output().expect("spawn fibo");
     (
         out.status.success(),
         String::from_utf8_lossy(&out.stdout).into_owned(),

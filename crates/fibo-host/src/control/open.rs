@@ -126,7 +126,7 @@ pub(super) fn split(a: Args) -> io::Result<()> {
     } else {
         println!("{}", opened.id);
         if let Some(why) = &opened.overflow {
-            // On stderr, so `id=$(mooring split …)` still captures only the id.
+            // On stderr, so `id=$(fibo split …)` still captures only the id.
             eprintln!(
                 "{}",
                 t!(

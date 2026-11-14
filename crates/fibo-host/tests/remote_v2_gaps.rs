@@ -1,4 +1,4 @@
-//! What the phone was still missing against its design, through `mooring remote --stdio`:
+//! What the phone was still missing against its design, through `fibo remote --stdio`:
 //! cards with branch, running time, model and permission; the board's todos; 「接着上次的
 //! 对话」; 设为空间; 今天的 tokens; a diff's test results (docs/phone-app/v2-plan.md).
 #[path = "remote_v2/common.rs"]

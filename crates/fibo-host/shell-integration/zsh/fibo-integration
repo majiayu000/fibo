@@ -4,7 +4,7 @@
 # plugins can hear about finished commands.
 'builtin' 'autoload' '-Uz' '--' 'add-zsh-hook'
 
-_mooring_report_pwd() {
+_fibo_report_pwd() {
     'builtin' 'emulate' '-L' 'zsh'
     # Byte by byte, so a path in any language encodes as its UTF-8 bytes.
     'builtin' 'local' LC_ALL=C dir="$PWD" out='' c
@@ -21,14 +21,14 @@ _mooring_report_pwd() {
 
 # Every precmd function sees the command's own status. A prompt with no command before it
 # also says D; Fibo only counts a D that follows a C.
-_mooring_command_end() {
+_fibo_command_end() {
     'builtin' 'printf' '\e]133;D;%s\e\\' "$?"
 }
-_mooring_command_start() {
+_fibo_command_start() {
     'builtin' 'printf' '\e]133;C\e\\'
 }
 
-add-zsh-hook precmd _mooring_command_end
-add-zsh-hook preexec _mooring_command_start
-add-zsh-hook precmd _mooring_report_pwd
-add-zsh-hook chpwd _mooring_report_pwd
+add-zsh-hook precmd _fibo_command_end
+add-zsh-hook preexec _fibo_command_start
+add-zsh-hook precmd _fibo_report_pwd
+add-zsh-hook chpwd _fibo_report_pwd

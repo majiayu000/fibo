@@ -117,7 +117,7 @@ impl Workbench {
             .child(self.title_drag_area(cx))
             .child(self.sidebar_toggle(cx))
     }
-    /// MOORING and the machine the column shows.
+    /// FIBO and the machine the column shows.
     pub(super) fn flat_brand(&self) -> gpui::Div {
         let letters = "FIBO".chars().map(|ch| div().child(ch.to_string()));
         let (machine, up) = self.column_machine();

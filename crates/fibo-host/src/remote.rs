@@ -1,6 +1,6 @@
 //! `fibo remote --stdio`: this machine's terminals for a client elsewhere, a phone
 //! app or another machine's workbench, one JSON object per line each way. Over ssh today
-//! (`ssh host mooring remote --stdio`); a later transport carries the same lines.
+//! (`ssh host fibo remote --stdio`); a later transport carries the same lines.
 //! Requests run one after another in the order sent, so text then Enter arrive in that
 //! order; `events` and `watch` are streams that run beside them until closed.
 //! The message shapes are in the Keepline repo's `specs/extensions/remote-protocol.md`

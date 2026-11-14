@@ -179,7 +179,7 @@ impl Flat {
     pub const WIDTH: f32 = Theme::SIDEBAR;
     pub const BRAND_ROW: f32 = 26.;
     pub const BRAND_TEXT: f32 = 11.;
-    /// Letter spacing for MOORING, drawn as gaps between its letters.
+    /// Letter spacing for FIBO, drawn as gaps between its letters.
     pub const BRAND_TRACK: f32 = 2.;
     pub const ICON_BUTTON: f32 = 26.;
     pub const ICON: f32 = 14.;
