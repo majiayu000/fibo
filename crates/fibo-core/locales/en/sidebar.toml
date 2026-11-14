@@ -48,6 +48,8 @@
 "{name}，点一下展开" = "{name}, click to expand"
 "在 {name} 上开一个新终端" = "Open a new terminal on {name}"
 "本机" = "This Mac"
+"在新窗口打开" = "Open in New Window"
+"没能打开 {host} 的窗口：{e}" = "Couldn't open a window for {host}: {e}"
 "{len} 个会话 · {limit}" = "{len} {len|session|sessions} · {limit}"
 "{len} 个会话" = "{len} {len|session|sessions}"
 "连接中…" = "Connecting…"
@@ -58,6 +60,7 @@
 "添加一台电脑" = "Add a computer"
 "{machine} · {len} 个会话" = "{machine} · {len} {len|session|sessions}"
 "本机 · {len} 个空间 · {sessions} 个会话" = "{len} {len|space|spaces} · {sessions} {sessions|session|sessions}"
+"{machine} · {len} 个空间 · {sessions} 个会话" = "{machine} · {len} {len|space|spaces} · {sessions} {sessions|session|sessions}"
 
 [machines]
 "旧版，只能看" = "Old version, view only"
