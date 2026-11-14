@@ -407,6 +407,10 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let colors = colors.unwrap_or(scheme.colors());
             geometry(cols, rows)?;
             let mut host = lock(shared)?;
+            // A folder that is gone here (another machine's window asked for it, and only
+            // this host can look) starts in its space's folder, else home, as the window
+            // does for its own host.
+            let cwd = super::start_dir::start_dir(&host.workspace, &space, cwd);
             if let Some(existing) = host.workspace.terminals.iter().find(|s| s.id == id) {
                 if existing.argv != argv || existing.cwd != cwd || existing.space != space {
                     return Err(io::Error::other(

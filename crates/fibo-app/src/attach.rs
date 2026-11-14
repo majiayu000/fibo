@@ -73,6 +73,18 @@ pub fn start(host: &str, root: &Path) -> io::Result<()> {
 pub fn home() -> Option<String> {
     FORWARD.get().map(|f| f.home.clone())
 }
+/// `fibo` on the attached machine as its terminals reach it: the path written down for it,
+/// else the name on their PATH.
+pub fn program() -> Option<String> {
+    let forward = FORWARD.get()?;
+    Some(
+        forward
+            .spec
+            .path
+            .clone()
+            .unwrap_or_else(|| fibo_core::cli_entry::NAME.to_owned()),
+    )
+}
 /// `$SHELL` on the attached machine.
 pub fn shell() -> Option<String> {
     FORWARD.get().map(|f| f.shell.clone())
