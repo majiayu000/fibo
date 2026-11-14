@@ -8,7 +8,7 @@ decision-makers: majiayu000
 
 **要支撑的决定：** 另一台电脑上的会话怎么做到和本机「完全一致」：是继续给远程补一套界面，还是让窗口像连本机一样连它。
 
-用户的话：「能不能两端都做到完全一致？……这个差异是来自于哪里呢？」「先试统一方案」「先出正式方案」。
+用户的话：「能不能两端都做到完全一致？……这个差异是来自于哪里呢？」「先试统一方案」「先出正式方案」「这是最好的方案吗？其他的平台是这样做的吗？」。
 
 ## Context
 
@@ -34,6 +34,17 @@ decision-makers: majiayu000
   1. 版本不同的后台会被当成旧后台。窗口会去接管它的终端，或者**按那台的 pid 停本机进程**。原型加了挂接模式，这种情况一律不启动、不停止、不替换后台。
   2. 开终端前在本机查目录是否存在，不在就退回本机 home，被那台后台拒绝。挂接时改成交给那台后台判断。
 
+**同类产品怎么做（2026-11-14 查过）**
+
+| 产品 | 状态在哪 | 怎么连 | 版本 |
+|---|---|---|---|
+| VS Code Remote-SSH | 远程的 VS Code Server | 本地界面经 SSH 连过去 | 和客户端完全一致，连接时自动装进 `~/.vscode-server` |
+| Zed 远程开发 | 远程的 `zed-remote-server`（终端、语言服务、文件） | 调用系统 `ssh` | 和本地一致，自动下载或上传 |
+| WezTerm SSH 多路复用 | 远程的多路复用服务，标签和窗格在那边 | 经 SSH 连远程的 Unix socket；本机和远程的标签可以在同一个窗口（「域」） | 两边都装 WezTerm；往返延迟超过阈值时本地预测回显 |
+| iTerm2 + `tmux -CC` | 远程 tmux | tmux 控制协议翻译成原生标签和分屏 | 依赖 tmux；常被抱怨重连卡 |
+
+共同点：状态留在那台，本地只是界面，用的是和连本机同一套协议，没有另造一套摘要协议再在本地补界面。iTerm2 那种「翻译别人的协议」最接近 PR #340 的路，也是毛病最多的。
+
 ## Decision
 
 窗口对每台电脑都用原生协议连它自己的后台。界面只有一套代码：标签、分屏、菜单、快捷键、看板、待办都读「当前这台」的工作区。
@@ -41,7 +52,8 @@ decision-makers: majiayu000
 - **连接由窗口自己管。** 每台电脑起一个 `ssh -N -L <本机 socket>:<那台 socket> <host>`，断了按退避重连，ssh 选项沿用 `machines.rs` 现有那组（BatchMode、ConnectTimeout、ServerAlive）。本机 socket 放在 `<runtime>/machines/<host>/workbench.sock`。
 - **挂接的后台不归这个窗口管。** 不启动、不停止、不替换、不当成旧后台。这一条已在原型里，正式版加测试守住。
 - **那台的 socket 在哪由那台说。** 后台新增 `fibo socket`，打印自己正在用的 socket 路径（agentos 用的还是 `~/.local/share/keepline-workbench`）；没有这个命令的旧版提示「先更新那台的 Fibo」。
-- **协议主版本不同就不连。** 和本机现在的规则一样（`Hello { major }`），并说清是哪台、该更新哪边。
+- **版本不同就帮着更新那台。** 协议主版本不同不连（和本机现在的规则一样，`Hello { major }`）；不只是提示，给一个「更新 <那台> 上的 Fibo」按钮，经 ssh 让那台走[自己的更新](2026-11-08-self-update.md)，后台交接，终端不断。不照 VS Code / Zed 另装一份服务端：那样它和那台自己的窗口不是同一个后台，两边就又不一致了。
+- **慢了先本地预测回显。** 照 WezTerm：往返延迟超过阈值时，窗口先按本地预测把按键显示出来，再以那台回来的画面为准。第 1 步只测量，不做；测出来慢才做。
 
 **不做的：**
 
@@ -66,10 +78,10 @@ decision-makers: majiayu000
 | 步 | 做什么 | 验收 | 估计 |
 |---|---|---|---|
 | 1 一台一个窗口 | 侧栏机器标题菜单加「在新窗口打开」：窗口自己起 `ssh -L`、挂接、重连；名字改成那台的；上表前三行 | 假 ssh 证据脚本（照 `remote-board-evidence.sh`，再起一个本机后台当另一台）：⌘T / ⌘D / ⇧⌘D / ⌘W / 运行 Agent、断线重连、旧版提示；真 agentos 走一遍 | 1.5–2 天 |
-| 2 同一个窗口切换电脑 | `store`、`workspace`、`layout.panes`、`nav` 收进一个按电脑分的结构，点侧栏电脑或它的空间就切过去；其他电脑在侧栏仍用现有卡片摘要 | 切过去再切回来，两边的标签、焦点、分屏都在；性能门（`scripts/perf-gate.py`）不退 | 3–4 天 |
+| 2 一个窗口里，空间带着电脑走 | `store`、`workspace`、`layout.panes`、`nav` 收进按电脑分的结构。不做全局「切换电脑」：点哪台的空间，标签栏和主区域就是哪台的（像 WezTerm 的域，也合[电脑 → 空间 → 会话](2026-11-07-machines-hold-spaces.md)）。其他电脑在侧栏仍用现有卡片摘要 | 本机空间和 agentos 空间来回点，两边的标签、焦点、分屏都在；性能门（`scripts/perf-gate.py`）不退 | 3–4 天 |
 | 3 侧栏和看板也直接读各台工作区 | 每台的工作区都保持订阅，侧栏、看板、⌘J 跨电脑排序用同一套规则；删掉桌面里的偷看远程分支和卡片摘要 | `crates/fibo-core/tests/guard.rs` 的读数只降；远程会话在看板里和本机一样能拖 | 2–3 天 |
 
-第 1 步做完就能日常用（agentos 一个窗口、本机一个窗口）；第 2、3 步做的是「一个窗口看全部」。
+第 1 步做完就能日常用（agentos 一个窗口、本机一个窗口），这正是 VS Code 和 Zed 的默认形态；第 2、3 步做的是 WezTerm 那样「一个窗口看全部」。
 
 ## PR #340 怎么办
 
@@ -86,7 +98,7 @@ decision-makers: majiayu000
 
 ## 放弃条件
 
-- 第 1 步做完，经 Tailscale 连 agentos 打字回显 p95 > 200 ms（手机协议实测是 15–46 ms），说明原生协议过 ssh 太慢 → 回到给手机协议补字段。
+- 第 1 步做完，经 Tailscale 连 agentos 打字回显 p95 > 200 ms（手机协议实测是 15–46 ms）：先做本地预测回显；做了还 > 200 ms，说明原生协议过 ssh 太慢 → 回到给手机协议补字段。
 - 第 2 步发现窗口里按电脑切换要改的地方远超上面的数（`self.workspace` 436 处、`self.store` 66 处），三天收不住 → 停在第 1 步「一台一个窗口」。
 - 你两周内没用第 1 步的窗口连过 agentos → 停在第 1 步，不做第 2、3 步。
 
@@ -94,7 +106,7 @@ decision-makers: majiayu000
 
 | 问题 | 影响 | 最晚 |
 |---|---|---|
-| 第 1 步先用「新窗口」，还是直接做第 2 步「同一窗口切换」？ | 先新窗口能早两三天用上，但第 2 步要重做入口 | 开工前 |
+| 第 1 步先用「新窗口」，还是直接做第 2 步「空间带着电脑走」？ | 先新窗口能早两三天用上，但第 2 步要重做入口 | 开工前 |
 | PR #340 关掉，还是先合进去当过渡？ | 合进去要先修 9 条接缝问题，约半天，之后再删 | 开工前 |
 | 「在访达中显示」这类只能本机的功能，置灰还是隐藏？ | 只影响菜单 | 第 1 步验收前 |
 
@@ -112,6 +124,8 @@ MOORING_ATTACH_EVIDENCE=1 target/debug/fibo-app --runtime /tmp/fibo-attach --att
 
 - **继续给远程补界面（PR #340 的路）。** 否：每个本机功能都要再写一遍，一天 11 条接缝问题，而且分屏只能存在于这个窗口里，那台自己的窗口看不到。
 - **给手机协议补标签、布局和全部编辑请求。** 否：等于把原生协议再抄一遍，两份协议要一起维护。只有当原生协议过 ssh 太慢时才回到这条（见放弃条件）。
+- **照 VS Code / Zed 在那台另装一份版本完全一致的服务端。** 否：版本省心，但它是另一个后台，那台自己的窗口看不到这里开的标签和分屏，又回到两边不一致。用「帮着更新那台」代替。
+- **全局「切换电脑」模式。** 否：多一个入口，也和「空间属于电脑」重复；点空间就带着电脑走。
 - **一条 `ssh host fibo bridge` 走 stdio，把原生协议塞进一条连接。** 否：原生协议一个窗格一条连接，塞进一条要自己做多路复用；`ssh -L` 现成支持。
 - **不加挂接模式，直接把窗口指向转发过来的 socket。** 否：版本不同会被当成旧后台，去接管那台的终端，或按那台的 pid 停本机进程。
 
@@ -119,4 +133,5 @@ MOORING_ATTACH_EVIDENCE=1 target/debug/fibo-app --runtime /tmp/fibo-attach --att
 
 - 原型：分支 `proto/attach-remote-host`，提交 `29c917e1`；场景 `crates/fibo-app/src/harness/attach_evidence.rs`。
 - PR #340：https://github.com/majiayu000/fibo/pull/340
+- 同类：[Zed 远程开发](https://zed.dev/docs/remote-development)、[WezTerm 多路复用](https://wezterm.org/multiplexing.html) 和 [SshDomain](https://wezterm.org/config/lua/SshDomain.html)、[VS Code Remote-SSH](https://code.visualstudio.com/blogs/2019/07/25/remote-ssh) 和 [远程扩展](https://code.visualstudio.com/api/advanced-topics/remote-extensions.md)、[iTerm2 tmux 集成](https://iterm2.com/documentation-tmux-integration.html)。
 - 相关：`docs/multi-machine/spec.md`（第 1–4 步和放弃条件）、[电脑 → 空间 → 会话](2026-11-07-machines-hold-spaces.md)、[发布版自己更新，终端靠后台交接](2026-11-08-self-update.md)。
