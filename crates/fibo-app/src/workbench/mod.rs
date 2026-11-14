@@ -368,6 +368,10 @@ impl Workbench {
             .detach();
         cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() {
+                // A hook written from a terminal (`fibo hooks install`, another session)
+                // while the window was open would otherwise keep the status bar's
+                // "过期了" until the next restart.
+                this.read_hooks(cx);
                 if let Some(left) = this.away.take() {
                     if show_on_return(left, now(), this.workspace.settings.away_minutes) {
                         this.overview.since = left;
