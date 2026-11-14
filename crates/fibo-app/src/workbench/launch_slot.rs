@@ -91,10 +91,7 @@ impl Workbench {
                 },
             )
         };
-        let argv = launch_argv(
-            crate::lifecycle::shell(),
-            resume.as_ref().map(|r| r.0.as_str()),
-        );
+        let argv = launch_argv(self.host.shell(), resume.as_ref().map(|r| r.0.as_str()));
         // A new tab may move to the space of the project it opens in; a split or a
         // relaunch stays in its tab's space.
         let new_tab = !split && previous.is_none();
@@ -174,7 +171,7 @@ impl Workbench {
             .filter(|t| t.space == space.id);
         // The space's own folder, else where its terminals last were, else the folder
         // worked in last anywhere (core decides).
-        let home = crate::lifecycle::home_str();
+        let home = self.host.home();
         let space_dir = self.workspace.space_start(&space.id, home.as_deref());
         let cwd = resume
             .map(|r| r.1)
@@ -186,7 +183,7 @@ impl Workbench {
                     .or_else(|| inherited.map(|t| t.cwd.clone()))
                     .unwrap_or_else(|| space_dir.clone())
             });
-        let cwd = usable_cwd([cwd, space_dir]);
+        let cwd = usable_cwd(&self.host, [cwd, space_dir]);
         let cwd_source = inherited
             .filter(|t| t.state == ProcessState::Running)
             .filter(|_| task_id.is_none() && resuming.is_none())

@@ -89,9 +89,10 @@ impl Workbench {
     /// set up before from a new one: with hooks already there, the welcome page is over and
     /// the window opens the shell it always opened with.
     pub(super) fn read_hooks(&mut self, cx: &mut Context<Self>) {
+        let host = self.host.clone();
         cx.spawn(async move |this, cx| {
             let result = cx
-                .background_spawn(async { crate::agent_hooks::check() })
+                .background_spawn(async move { crate::agent_hooks::check(&host) })
                 .await
                 .map_err(|e| e.to_string());
             let _ = this.update(cx, |this, cx| {
@@ -124,15 +125,16 @@ impl Workbench {
         self.hooks.installing = true;
         cx.notify();
         let executable = agent.executable().to_owned();
+        let host = self.host.clone();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
-                    let hooks = crate::agent_hooks::check()?;
+                    let hooks = crate::agent_hooks::check(&host)?;
                     if !installs_with_start(&hooks, &executable, true) {
                         return Ok(hooks);
                     }
-                    crate::agent_hooks::install(&executable)?;
-                    crate::agent_hooks::check()
+                    crate::agent_hooks::install(&host, &executable)?;
+                    crate::agent_hooks::check(&host)
                 })
                 .await
                 .map_err(|e| e.to_string());

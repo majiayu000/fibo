@@ -480,7 +480,7 @@ impl Workbench {
                     .find(|tab| tab.layout.as_ref().is_some_and(|l| l.contains(&t.id)))
                     .map(|tab| tab.title.clone())
                     .filter(|t| !t.is_empty())
-                    .unwrap_or_else(|| home_relative(&t.cwd));
+                    .unwrap_or_else(|| home_relative(&self.host, &t.cwd));
                 (t.id.clone(), title)
             })
             .collect();

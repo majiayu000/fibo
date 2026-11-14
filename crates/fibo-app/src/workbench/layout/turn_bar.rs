@@ -279,8 +279,8 @@ impl Workbench {
     ) -> Option<String> {
         let cwd = self.pane_cwd(id, session, cx)?;
         Some(match self.git_branch(&cwd, cx) {
-            Some(b) => format!("{} · {b}", home_relative(&cwd)),
-            None => home_relative(&cwd),
+            Some(b) => format!("{} · {b}", home_relative(&self.host, &cwd)),
+            None => home_relative(&self.host, &cwd),
         })
     }
     /// The title's hover card lines about the conversation: what it was asked, and where

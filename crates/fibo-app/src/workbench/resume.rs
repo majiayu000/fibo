@@ -107,13 +107,13 @@ impl Workbench {
     /// resume command is in that machine's plugin, not here, and guessing would start a new
     /// conversation instead. Says so, and true when nothing should launch.
     fn resume_unknown_here(&mut self, session: &AgentSession, cx: &mut Context<Self>) -> bool {
-        if !crate::lifecycle::attached() || session.runtime.spec().is_some() {
+        if !self.host.attached() || session.runtime.spec().is_some() {
             return false;
         }
         self.error = Some(t!(
             "{agent} 只装在 {host} 上，这里还接不上那段对话；请在那台的窗口里接着",
             agent = session.runtime.name(),
-            host = crate::lifecycle::here()
+            host = self.host.name()
         ));
         cx.notify();
         true

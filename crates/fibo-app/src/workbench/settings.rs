@@ -387,6 +387,15 @@ pub(super) struct SettingsView {
 }
 impl gpui::EventEmitter<SettingsAction> for SettingsView {}
 impl SettingsView {
+    /// The machine whose host these settings are: its Agents' hooks are there.
+    fn host(&self) -> crate::attach::Host {
+        self.runtime
+            .as_deref()
+            .map(crate::attach::Host::of)
+            .unwrap_or_default()
+    }
+}
+impl SettingsView {
     pub(super) fn new(
         values: Settings,
         busy: bool,
@@ -437,7 +446,14 @@ impl SettingsView {
             }
         })
         .detach();
-        Self::change_hooks(None, cx);
+        Self::change_hooks(
+            runtime
+                .as_deref()
+                .map(crate::attach::Host::of)
+                .unwrap_or_default(),
+            None,
+            cx,
+        );
         let (machines, machines_error) = match crate::machines::load() {
             Ok(machines) => (machines, None),
             Err(e) => (Vec::new(), Some(t!("没读到电脑配置：{e}", e))),

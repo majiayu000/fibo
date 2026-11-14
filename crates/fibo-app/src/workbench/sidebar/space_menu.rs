@@ -46,7 +46,7 @@ impl Workbench {
                     })
                     .child(dot(group))
                     .child(div().min_w_0().truncate().child(space.name.clone()))
-                    .when(space_dir_missing(space), |d| {
+                    .when(space_dir_missing(&self.host, space), |d| {
                         d.child(
                             label(t!("目录不在了"))
                                 .flex_shrink_0()
@@ -175,7 +175,10 @@ impl Workbench {
         Some(
             button(
                 "space-menu-pin-last",
-                t!("设为空间目录：{dir}", dir = home_relative(&last)),
+                t!(
+                    "设为空间目录：{dir}",
+                    dir = home_relative(&self.host, &last)
+                ),
             )
             .w_full()
             .justify_start()

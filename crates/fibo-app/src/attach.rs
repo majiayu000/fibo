@@ -1,14 +1,14 @@
-//! `--attach <host>`: this window works another machine's own host, with the same code as
-//! this machine's (docs/decisions/2026-11-14-one-window-many-hosts.md). An `ssh -L` keeps
-//! that host's socket at `<runtime>/m/<host>/workbench.sock` here; a thread starts
-//! it again whenever it ends, until the window quits. The host there is never started,
-//! stopped or replaced from here (`lifecycle::attached`).
+//! Other machines' own hosts, worked with the same code as this machine's
+//! (docs/decisions/2026-11-14-one-window-many-hosts.md). For each, an `ssh -L` keeps that
+//! host's socket at `<runtime>/m/<host>/workbench.sock` here; a thread starts it again
+//! whenever it ends, until the app quits. A host there is never started, stopped or replaced
+//! from here. `Host` says, for any socket this app talks to, which machine it is.
 use crate::machines::Spec;
 use fibo_platform::local;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 struct Forward {
@@ -19,11 +19,86 @@ struct Forward {
     home: String,
     /// `$SHELL` there: what its terminals start, as its own window's do.
     shell: String,
+    /// Where it is forwarded to here: `<root>/workbench.sock`.
     local: PathBuf,
     child: Mutex<Option<Child>>,
 }
-static FORWARD: OnceLock<Forward> = OnceLock::new();
+/// Every forward this app keeps, found by the folder its socket is in.
+static FORWARDS: Mutex<Vec<Arc<Forward>>> = Mutex::new(Vec::new());
 const BACKOFF_MAX: Duration = Duration::from_secs(30);
+
+/// The machine a host runs on, as this app reaches it: this one, or another through its
+/// forward. Cheap to clone; ask it rather than assuming the machine is this one.
+#[derive(Clone, Default)]
+pub struct Host(Option<Arc<Forward>>);
+
+impl Host {
+    /// The host behind `socket` (a `workbench.sock`, or a folder holding one).
+    pub fn of(socket: &Path) -> Host {
+        let local = match socket.file_name().is_some_and(|n| n == "workbench.sock") {
+            true => socket.to_owned(),
+            false => socket.join("workbench.sock"),
+        };
+        let forwards = FORWARDS.lock().unwrap();
+        Host(forwards.iter().find(|f| f.local == local).cloned())
+    }
+    /// Another machine's: its folders, files, shell and Agents are there, not here.
+    pub fn attached(&self) -> bool {
+        self.0.is_some()
+    }
+    /// What this app calls that machine: 本机, or the name it was written down by.
+    pub fn name(&self) -> String {
+        match &self.0 {
+            Some(f) => f.spec.host.clone(),
+            None => t!("本机").to_owned(),
+        }
+    }
+    /// `$HOME` on that machine: the folders this app offers there start from it.
+    pub fn home(&self) -> Option<String> {
+        match &self.0 {
+            Some(f) => Some(f.home.clone()),
+            None => fibo_platform::dirs::home_str(),
+        }
+    }
+    /// What a new terminal there starts: its login shell.
+    pub fn shell(&self) -> String {
+        match &self.0 {
+            Some(f) => f.shell.clone(),
+            None => fibo_platform::shell::interactive(),
+        }
+    }
+    /// `fibo` there as its terminals reach it: the path written down for it, else the name
+    /// on their PATH. None for this machine, which finds its own.
+    pub fn program(&self) -> Option<String> {
+        let f = self.0.as_ref()?;
+        Some(
+            f.spec
+                .path
+                .clone()
+                .unwrap_or_else(|| fibo_core::cli_entry::NAME.to_owned()),
+        )
+    }
+    /// `fibo <args>` run there over ssh; None for this machine, which runs its own.
+    pub fn run(&self, args: &[&str]) -> Option<io::Result<std::process::Output>> {
+        let f = self.0.as_ref()?;
+        let quoted: Vec<String> = args
+            .iter()
+            .map(|a| fibo_platform::shell::quote_posix(a))
+            .collect();
+        let script = format!(
+            "{}; exec \"$p\" {}",
+            f.spec.find_program(),
+            quoted.join(" ")
+        );
+        let argv = f.spec.ssh(&script);
+        Some(
+            Command::new(&argv[0])
+                .args(&argv[1..])
+                .stdin(Stdio::null())
+                .output(),
+        )
+    }
+}
 
 /// Where this machine keeps the forwarded socket of `host`.
 pub fn root(host: &str) -> io::Result<PathBuf> {
@@ -47,74 +122,38 @@ fn dir_name(host: &str) -> String {
     format!("{start}-{:08x}", hash as u32)
 }
 
-/// Asks `host` where its host listens, starts the forward and keeps it up.
-pub fn start(host: &str, root: &Path) -> io::Result<()> {
+/// Asks `host` where its host listens, starts the forward to `root` and keeps it up; one
+/// already kept for `root` is reused.
+pub fn start(host: &str, root: &Path) -> io::Result<Host> {
+    let found = Host::of(root);
+    if found.attached() {
+        return Ok(found);
+    }
     let spec = (crate::machines::load().unwrap_or_default().into_iter())
         .find(|s| s.host == host)
         .unwrap_or_else(|| Spec::new(host.to_owned()));
     let (remote, home, shell) = remote_socket(&spec)?;
     fibo_platform::fs::create_private_dir(root)?;
-    let forward = Forward {
+    let forward = Arc::new(Forward {
         spec,
         remote,
         home,
         shell,
         local: root.join("workbench.sock"),
         child: Mutex::new(None),
-    };
-    if FORWARD.set(forward).is_err() {
-        return Err(io::Error::other("attached twice"));
-    }
-    std::thread::spawn(supervise);
-    Ok(())
-}
-
-/// `$HOME` on the attached machine.
-pub fn home() -> Option<String> {
-    FORWARD.get().map(|f| f.home.clone())
-}
-/// `fibo` on the attached machine as its terminals reach it: the path written down for it,
-/// else the name on their PATH.
-pub fn program() -> Option<String> {
-    let forward = FORWARD.get()?;
-    Some(
-        forward
-            .spec
-            .path
-            .clone()
-            .unwrap_or_else(|| fibo_core::cli_entry::NAME.to_owned()),
-    )
-}
-/// `$SHELL` on the attached machine.
-pub fn shell() -> Option<String> {
-    FORWARD.get().map(|f| f.shell.clone())
-}
-
-/// `fibo <args>` on the attached machine, as the program finds it there, quoted.
-pub fn run(args: &[&str]) -> Option<io::Result<std::process::Output>> {
-    let forward = FORWARD.get()?;
-    let quoted: Vec<String> = args
-        .iter()
-        .map(|a| fibo_platform::shell::quote_posix(a))
-        .collect();
-    let script = format!(
-        "{}; exec \"$p\" {}",
-        forward.spec.find_program(),
-        quoted.join(" ")
-    );
-    let argv = forward.spec.ssh(&script);
-    Some(
-        Command::new(&argv[0])
-            .args(&argv[1..])
-            .stdin(Stdio::null())
-            .output(),
-    )
+    });
+    FORWARDS.lock().unwrap().push(forward.clone());
+    let kept = forward.clone();
+    std::thread::spawn(move || supervise(&kept));
+    Ok(Host(Some(forward)))
 }
 
 /// Waits until the forwarded socket answers; what `spawn_host` does for an attached host.
 pub fn ensure(root: &Path) -> io::Result<()> {
-    let forward = FORWARD
-        .get()
+    let host = Host::of(root);
+    let forward = host
+        .0
+        .as_ref()
         .ok_or_else(|| io::Error::other("not attached"))?;
     let socket = root.join("workbench.sock");
     let until = Instant::now() + Duration::from_secs(20);
@@ -143,13 +182,13 @@ pub fn open_window(host: &str) -> io::Result<()> {
     command.spawn().map(drop)
 }
 
-/// Ends the forward as the window quits.
+/// Ends every forward as the app quits.
 pub fn stop() {
-    if let Some(forward) = FORWARD.get()
-        && let Some(mut child) = forward.child.lock().unwrap().take()
-    {
-        let _ = child.kill();
-        let _ = child.wait();
+    for forward in FORWARDS.lock().unwrap().drain(..) {
+        if let Some(mut child) = forward.child.lock().unwrap().take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -190,10 +229,7 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String, String)> {
 
 /// Runs the `ssh -L` and starts it again after it ends, waiting longer each time it ends
 /// quickly, until `stop` takes it.
-fn supervise() {
-    let Some(forward) = FORWARD.get() else {
-        return;
-    };
+fn supervise(forward: &Forward) {
     let mut backoff = Duration::from_millis(500);
     loop {
         let mut argv = forward.spec.ssh_options("-N");
@@ -242,15 +278,17 @@ fn supervise() {
     }
 }
 
-/// The running `ssh -L`, for the evidence that drops it and sees it come back.
+/// The first forward's running `ssh -L`, for the evidence that drops it and sees it back.
 #[cfg(feature = "visual-test")]
 pub fn visual_link_pid() -> Option<u32> {
-    (FORWARD.get()?.child.lock().unwrap().as_ref()).map(Child::id)
+    let forwards = FORWARDS.lock().unwrap();
+    (forwards.first()?.child.lock().unwrap().as_ref()).map(Child::id)
 }
-/// Ends the running `ssh -L` as a dropped network would; the supervisor starts another.
+/// Ends that `ssh -L` as a dropped network would; its supervisor starts another.
 #[cfg(feature = "visual-test")]
 pub fn visual_drop_link() {
-    if let Some(forward) = FORWARD.get()
+    let forwards = FORWARDS.lock().unwrap();
+    if let Some(forward) = forwards.first()
         && let Some(child) = forward.child.lock().unwrap().as_mut()
     {
         let _ = child.kill();

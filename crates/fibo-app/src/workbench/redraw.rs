@@ -19,39 +19,49 @@ const CATCH_UP: Duration = Duration::from_secs(1);
 
 /// The newest account limits per CLI, worked out at most once a second per workspace
 /// revision: every pane header asks, and finding them looks at each session's content.
-pub(super) fn quotas(w: &Workspace, now: u64) -> Rc<[(Agent, Quota)]> {
-    type Seen = Option<(u64, u64, Rc<[(Agent, Quota)]>)>;
+pub(super) fn quotas(w: &Workspace, now: u64, attached: bool) -> Rc<[(Agent, Quota)]> {
+    type Seen = Option<(usize, u64, u64, Rc<[(Agent, Quota)]>)>;
     thread_local!(static SEEN: std::cell::RefCell<Seen> = const { std::cell::RefCell::new(None) });
     SEEN.with_borrow_mut(|seen| match seen {
-        Some((r, t, q)) if *r == w.revision && *t == now => q.clone(),
+        Some((at, r, t, q)) if *at == at_of(w) && *r == w.revision && *t == now => q.clone(),
         _ => {
             // Plugins' readings are files on this machine: an attached window shows the
             // other machine's, which its host reads from its own sessions.
-            let plugins = match crate::lifecycle::attached() {
+            let plugins = match attached {
                 true => Vec::new(),
                 false => fibo_core::quota::from_plugins(),
             };
             let q: Rc<[_]> = fibo_core::quota::latest(w, &plugins, now).into();
-            *seen = Some((w.revision, now, q.clone()));
+            *seen = Some((at_of(w), w.revision, now, q.clone()));
             q
         }
     })
 }
 
+/// Which workspace a reading is of: a window that holds several hosts' workspaces asks with
+/// each, and their revisions count independently. Each stays where its view put it.
+fn at_of(w: &Workspace) -> usize {
+    std::ptr::from_ref(w) as usize
+}
+
 /// Each open conversation's context reading, once a second per revision like `quotas`: every
 /// pane header asks each frame, and Claude's are files.
-pub(super) fn context_fills(w: &Workspace, now: u64) -> Rc<fibo_core::context_fill::Fills> {
-    type Seen = Option<(u64, u64, Rc<fibo_core::context_fill::Fills>)>;
+pub(super) fn context_fills(
+    w: &Workspace,
+    now: u64,
+    attached: bool,
+) -> Rc<fibo_core::context_fill::Fills> {
+    type Seen = Option<(usize, u64, u64, Rc<fibo_core::context_fill::Fills>)>;
     thread_local!(static SEEN: std::cell::RefCell<Seen> = const { std::cell::RefCell::new(None) });
     SEEN.with_borrow_mut(|seen| match seen {
-        Some((r, t, f)) if *r == w.revision && *t == now => f.clone(),
+        Some((at, r, t, f)) if *at == at_of(w) && *r == w.revision && *t == now => f.clone(),
         _ => {
             // Read from transcripts on this machine; another machine's are not here.
-            let fills = Rc::new(match crate::lifecycle::attached() {
+            let fills = Rc::new(match attached {
                 true => Default::default(),
                 false => fibo_core::context_fill::of(w),
             });
-            *seen = Some((w.revision, now, fills.clone()));
+            *seen = Some((at_of(w), w.revision, now, fills.clone()));
             fills
         }
     })
@@ -67,6 +77,7 @@ pub(super) fn tab_name(
     now: u64,
 ) -> String {
     type Key = (
+        usize,
         u64,
         u64,
         Option<String>,
@@ -75,11 +86,21 @@ pub(super) fn tab_name(
     type Seen = Option<(Key, Vec<(Tab, String)>)>;
     thread_local!(static SEEN: std::cell::RefCell<Seen> = const { std::cell::RefCell::new(None) });
     SEEN.with_borrow_mut(|seen| {
-        let fresh = seen.as_ref().is_some_and(|((r, t, f, ts), _)| {
-            *r == w.revision && *t == now && f.as_deref() == focused && ts == titles
+        let fresh = seen.as_ref().is_some_and(|((at, r, t, f, ts), _)| {
+            *at == at_of(w)
+                && *r == w.revision
+                && *t == now
+                && f.as_deref() == focused
+                && ts == titles
         });
         if !fresh {
-            let key = (w.revision, now, focused.map(str::to_owned), titles.clone());
+            let key = (
+                at_of(w),
+                w.revision,
+                now,
+                focused.map(str::to_owned),
+                titles.clone(),
+            );
             *seen = Some((key, Default::default()));
         }
         // A rename asks with the title cleared, so the whole tab is the key.
@@ -428,7 +449,7 @@ mod tests {
             ..Default::default()
         };
         w.content.insert("a".into(), reading(10));
-        let used = |w: &Workspace, now| quotas(w, now)[0].1.windows[0].used;
+        let used = |w: &Workspace, now| quotas(w, now, false)[0].1.windows[0].used;
         assert_eq!(used(&w, 2000), 10);
         w.content.insert("a".into(), reading(90));
         assert_eq!(

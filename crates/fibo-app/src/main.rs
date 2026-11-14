@@ -135,7 +135,7 @@ fn load_workspace(root: &Path) -> io::Result<Workspace> {
         _ => return Err(io::Error::other("workspace response missing")),
     };
     if workspace.spaces.is_empty() {
-        let cwd = default_space_dir()?.to_string_lossy().into_owned();
+        let cwd = default_space_dir(root)?.to_string_lossy().into_owned();
         if let Reply::Workspace(w) = rpc(
             &socket,
             &Request::Edit {
@@ -154,9 +154,12 @@ fn load_workspace(root: &Path) -> io::Result<Workspace> {
 }
 /// The desktop starts apps somewhere nobody means to open a terminal: use the home directory
 /// then, and the launch directory otherwise (`run.sh`, a shell).
-fn default_space_dir() -> io::Result<PathBuf> {
-    // The first space of an attached host starts in that machine's home.
-    if let Some(home) = attach::home() {
+fn default_space_dir(root: &Path) -> io::Result<PathBuf> {
+    // The first space of another machine's host starts in that machine's home.
+    let host = attach::Host::of(root);
+    if host.attached()
+        && let Some(home) = host.home()
+    {
         return Ok(PathBuf::from(home));
     }
     let cwd = std::env::current_dir()?;
@@ -356,9 +359,6 @@ fn run() -> io::Result<()> {
         ),
         None => None,
     };
-    if let Some(host) = &attach {
-        lifecycle::attach(host);
-    }
     let root = if let Some(i) = args.iter().position(|a| a == "--runtime") {
         PathBuf::from(
             args.get(i + 1)

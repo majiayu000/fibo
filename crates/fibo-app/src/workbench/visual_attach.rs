@@ -2,6 +2,10 @@
 use super::*;
 
 impl Workbench {
+    /// The machine this window's host runs on.
+    pub fn visual_host(&self) -> crate::attach::Host {
+        self.host.clone()
+    }
     /// Runs keymap action `id` (`new_tab`, `split_right`, `split_down`, `close`) as its
     /// shortcut does; whether it ran.
     pub fn visual_shortcut(
@@ -25,6 +29,12 @@ impl Workbench {
         let agent = self.first_agent();
         self.run_agent_here(agent, cx);
         agent.name().to_owned()
+    }
+    /// The space tab `id` is in.
+    pub fn visual_tab_space(&self, id: &str) -> Option<String> {
+        (self.workspace.tabs.iter())
+            .find(|t| t.id == id)
+            .map(|t| t.space.clone())
     }
     pub fn visual_tab_ids(&self) -> Vec<String> {
         self.workspace.tabs.iter().map(|t| t.id.clone()).collect()

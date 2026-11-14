@@ -48,6 +48,10 @@ pub struct Workbench {
     sidebar: sidebar_list::SidebarPrefs,
     /// A session's live screen floated over the current tab from the sidebar.
     peek: Option<peek::Peek>,
+    /// The machine this window's host runs on: this one, or another through its forward.
+    host: crate::attach::Host,
+    /// Other machines' workbenches drawn in this window's place (`hosts`).
+    hosts: hosts::Hosts,
     redraw: Option<redraw::Redraw>,
     phones: phones::Phones,
     /// Other machines shown under this one's sessions (docs/multi-machine/spec.md).
@@ -75,12 +79,15 @@ struct PaneMenu {
 }
 /// The first of `candidates` that still exists, else the home directory: a directory
 /// removed since (a deleted worktree) must not stop a new terminal.
-pub(super) fn usable_cwd(candidates: impl IntoIterator<Item = String>) -> String {
-    // An attached host's folders are on its machine: that host checks them, not this one.
-    if crate::lifecycle::attached() {
+pub(super) fn usable_cwd(
+    host: &crate::attach::Host,
+    candidates: impl IntoIterator<Item = String>,
+) -> String {
+    // Another machine's folders are there: its host checks them, not this one.
+    if host.attached() {
         let mut candidates = candidates.into_iter();
         return (candidates.find(|d| d.starts_with('/')))
-            .or_else(crate::lifecycle::home_str)
+            .or_else(|| host.home())
             .unwrap_or_else(|| "/".into());
     }
     candidates
@@ -91,18 +98,18 @@ pub(super) fn usable_cwd(candidates: impl IntoIterator<Item = String>) -> String
 }
 /// A space whose folder was set but is gone. A space with no folder set is not missing:
 /// its terminals start in `$HOME` until one is chosen.
-pub(super) fn space_dir_missing(space: &Space) -> bool {
-    !space.cwd.is_empty() && !crate::lifecycle::attached() && !Path::new(&space.cwd).is_dir()
+pub(super) fn space_dir_missing(host: &crate::attach::Host, space: &Space) -> bool {
+    !space.cwd.is_empty() && !host.attached() && !Path::new(&space.cwd).is_dir()
 }
 /// The space's folder as shown: its own as `~/…`; for one with none, `start` (where it
 /// will start: its last folder or the one worked in last anywhere), else home.
-pub(super) fn space_dir_label(space: &Space, start: &str) -> String {
+pub(super) fn space_dir_label(host: &crate::attach::Host, space: &Space, start: &str) -> String {
     if !space.cwd.is_empty() {
-        return home_relative(&space.cwd);
+        return home_relative(host, &space.cwd);
     }
     match start {
         "" => t!("未设目录 · 从 ~ 开始").to_owned(),
-        last => t!("从上次的 {dir} 开始", dir = home_relative(last)),
+        last => t!("从上次的 {dir} 开始", dir = home_relative(host, last)),
     }
 }
 /// The new terminal's command line. A resume is the shell's first command, so it cannot be
@@ -182,8 +189,9 @@ fn id() -> String {
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     )
 }
-fn home_relative(path: &str) -> String {
-    match crate::lifecycle::home_str() {
+/// `path` with its machine's home as `~`.
+fn home_relative(host: &crate::attach::Host, path: &str) -> String {
+    match host.home() {
         Some(home) if !home.is_empty() && path.starts_with(&home) => {
             format!("~{}", &path[home.len()..])
         }
@@ -192,8 +200,8 @@ fn home_relative(path: &str) -> String {
 }
 /// Where a pane runs, short enough for its title: home as `~`, and past two folders only
 /// the last two, `~/…/tools/mooring`.
-fn short_place(path: &str) -> String {
-    let full = home_relative(path);
+fn short_place(host: &crate::attach::Host, path: &str) -> String {
+    let full = home_relative(host, path);
     let (root, rest) = match full.strip_prefix("~/") {
         Some(rest) => ("~/", rest),
         None => ("/", full.trim_start_matches('/')),
@@ -263,6 +271,7 @@ mod pressure;
 use overview::OverviewState;
 mod palette;
 use palette::Search;
+mod hosts;
 mod peek;
 mod phones;
 mod redraw;
@@ -290,6 +299,8 @@ mod tabs;
 mod task_detail;
 mod tasks;
 use tasks::TaskUi;
+#[cfg(test)]
+mod folder_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "visual-test")]
@@ -322,6 +333,7 @@ impl Workbench {
             .find(|t| t.space == space)
             .map(|t| t.id.clone());
         let (status_tx, mut status_rx) = futures::channel::mpsc::unbounded();
+        let host = crate::attach::Host::of(&socket);
         let store = Store::new(socket, status_tx);
         cx.spawn(async move |this, cx| {
             use futures::StreamExt;
@@ -411,9 +423,11 @@ impl Workbench {
             settings: None,
             sidebar: sidebar_list::SidebarPrefs::load(),
             peek: None,
+            host: host.clone(),
+            hosts: Default::default(),
             redraw: None,
             phones: Default::default(),
-            machines: Self::start_machines(cx),
+            machines: Self::start_machines(&host, cx),
             statusbar: None,
             quota_pin: statusbar::load_quota_pin(),
             copied: None,

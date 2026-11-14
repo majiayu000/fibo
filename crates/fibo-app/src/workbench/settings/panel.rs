@@ -192,7 +192,7 @@ impl Workbench {
             SettingsAction::HooksChanged => this.read_hooks(cx),
             SettingsAction::MachinesChanged => {
                 // Dropping the old connections ends their ssh children.
-                this.machines = Workbench::start_machines(cx);
+                this.machines = Workbench::start_machines(&this.host, cx);
                 cx.notify();
             }
             SettingsAction::PluginsChanged => {

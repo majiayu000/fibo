@@ -11,6 +11,11 @@ pub(super) use tabs::hidden_tabs;
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Another machine's spaces picked: its own workbench, in this one's place.
+        if let Some(view) = self.hosted_view() {
+            return div().size_full().child(view);
+        }
+        self.settle_hosts(window, cx);
         self.follow_space_theme(cx);
         self.settle_changes(window, cx);
         // Whenever the current tab changes (a click, the sidebar, a shortcut, a new tab),
@@ -780,21 +785,6 @@ impl Render for Workbench {
         if let Some(view) = &self.settings {
             root = root.child(self.settings_overlay(view.clone(), cx));
         }
-        root.on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
-            if let Some(action) = crate::keymap::action(&event.keystroke, cx)
-                && this.shortcut(action, window, cx)
-            {
-                cx.stop_propagation();
-            }
-        }))
-        .on_mouse_move(cx.listener(Self::resize_drag))
-        .on_mouse_up(
-            gpui::MouseButton::Left,
-            cx.listener(|this, _, _, cx| this.finish_drag(cx)),
-        )
-        .on_mouse_up_out(
-            gpui::MouseButton::Left,
-            cx.listener(|this, _, _, cx| this.finish_drag(cx)),
-        )
+        self.root_handlers(root, cx)
     }
 }

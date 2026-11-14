@@ -193,3 +193,29 @@ impl Workbench {
         cx.notify();
     }
 }
+
+impl Workbench {
+    /// The window's own keys and the drags that run past a pane.
+    pub(in crate::workbench) fn root_handlers(
+        &self,
+        root: gpui::Div,
+        cx: &Context<Self>,
+    ) -> gpui::Div {
+        root.on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+            if let Some(action) = crate::keymap::action(&event.keystroke, cx)
+                && this.shortcut(action, window, cx)
+            {
+                cx.stop_propagation();
+            }
+        }))
+        .on_mouse_move(cx.listener(Self::resize_drag))
+        .on_mouse_up(
+            gpui::MouseButton::Left,
+            cx.listener(|this, _, _, cx| this.finish_drag(cx)),
+        )
+        .on_mouse_up_out(
+            gpui::MouseButton::Left,
+            cx.listener(|this, _, _, cx| this.finish_drag(cx)),
+        )
+    }
+}

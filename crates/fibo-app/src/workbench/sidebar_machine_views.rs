@@ -56,6 +56,12 @@ struct Heading {
 impl Workbench {
     /// What the list opens with: the space chips, and what the layout adds to them.
     pub(super) fn column_top(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
+        let mut out = self.column_top_of_layout(cx);
+        // Another machine's own column in this window: this machine, where the others sit.
+        out.extend(self.home_chip(cx));
+        out
+    }
+    fn column_top_of_layout(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         match (self.machine_layout(), self.machine_scope()) {
             (Machines::Rail, Some(index)) => {
                 let rows = self.listed_remote_rows().len();
@@ -228,7 +234,13 @@ impl Workbench {
                         .child(space.name),
                 )
                 .when(need > 0, |d| d.child(need_badge(need)))
-                .on_click(cx.listener(move |this, _, _, cx| this.toggle_machine_space(&pick, cx)))
+                // That space in that machine's own workbench here; with peek on, as before.
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    let go = super::hosts::Go::Space(pick.clone());
+                    if !this.open_on_host(index, go, window, cx) {
+                        this.toggle_machine_space(&pick, cx);
+                    }
+                }))
         });
         div()
             .flex()
@@ -342,7 +354,7 @@ impl Workbench {
             Heading {
                 key: "machine:local".into(),
                 mark: None,
-                name: crate::lifecycle::here(),
+                name: self.host.name(),
                 note: local_note(
                     sessions,
                     open,
@@ -486,7 +498,7 @@ impl Workbench {
         let online = view.as_ref().is_none_or(|v| v.link == Link::Online);
         let host = view.as_ref().map(|v| v.spec.host.clone());
         let name =
-            (host.as_deref()).map_or_else(crate::lifecycle::here, |h| machine_label(h).to_owned());
+            (host.as_deref()).map_or_else(|| self.host.name(), |h| machine_label(h).to_owned());
         // While the mark slides to it the mark says so.
         let on = self.machine_scope() == index;
         let lit = on && self.sidebar.motion.rail_at().is_none();
@@ -708,7 +720,7 @@ impl Workbench {
                     (t!("{name} · 断开", name), false)
                 })
             })
-            .unwrap_or_else(|| (crate::lifecycle::here(), true))
+            .unwrap_or_else(|| (self.host.name(), true))
     }
     /// The foot's first words.
     pub(super) fn column_foot(&self, sessions: usize) -> String {
@@ -721,9 +733,9 @@ impl Workbench {
                 machine = self.column_machine().0,
                 len = self.remote_rows_of(i).len()
             ),
-            None if crate::lifecycle::attached() => t!(
+            None if self.host.attached() => t!(
                 "{machine} · {len} 个空间 · {sessions} 个会话",
-                machine = crate::lifecycle::here(),
+                machine = self.host.name(),
                 len = self.workspace.spaces.len(),
                 sessions
             ),

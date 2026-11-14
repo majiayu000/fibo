@@ -86,7 +86,7 @@ impl Workbench {
                 );
                 continue;
             }
-            let missing = space_dir_missing(space);
+            let missing = space_dir_missing(&self.host, space);
             sidebar = sidebar.child(
                 button(gpui::SharedString::from(format!("space-{id}")), "")
                     .aria_label(space.name.clone())

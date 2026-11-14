@@ -12,9 +12,12 @@ use fibo_remote::protocol::{Card, Op, Phase, Space};
 
 impl Workbench {
     /// One connection per machine in `<config>/machines.json`; with none, nothing runs.
-    pub(super) fn start_machines(cx: &mut Context<Self>) -> Vec<Remote> {
-        // An attached window is that machine's own: no other machines beside it.
-        if crate::lifecycle::attached() {
+    pub(super) fn start_machines(
+        host: &crate::attach::Host,
+        cx: &mut Context<Self>,
+    ) -> Vec<Remote> {
+        // Another machine's own view: no other machines beside it.
+        if host.attached() {
             return Vec::new();
         }
         let specs = match crate::machines::load() {
@@ -216,6 +219,15 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Worked in that machine's own workbench here, as a session of this one is.
+        if self.open_on_host(
+            index,
+            super::hosts::Go::Terminal(card.id.clone()),
+            window,
+            cx,
+        ) {
+            return;
+        }
         let Some(remote) = self.machines.get(index) else {
             return;
         };
