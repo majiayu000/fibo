@@ -119,7 +119,9 @@ impl Workbench {
                 .program_title()
                 .unwrap_or_else(|| t!("终端").into()),
         };
-        let place = self.pane_cwd(id, session, cx).map(|c| short_place(&c));
+        let place = self
+            .pane_cwd(id, session, cx)
+            .map(|c| short_place(&self.host, &c));
         let left = div()
             .id(gpui::SharedString::from(format!("pane-title-{id}")))
             .map(|d| self.grip_title(id, terminal_style, d))

@@ -11,7 +11,7 @@ const SEGMENTS: usize = 48;
 impl Workbench {
     pub(super) fn context_ring(&self, session: &AgentSession) -> Option<gpui::Stateful<gpui::Div>> {
         let now = fibo_core::content::now();
-        let fills = super::redraw::context_fills(&self.workspace, now);
+        let fills = super::redraw::context_fills(&self.workspace, now, self.host.attached());
         let fill = *fills.get(&session.id).filter(|f| f.shown())?;
         let text: gpui::SharedString = fill.text().into();
         let tip = text.clone();

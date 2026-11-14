@@ -329,7 +329,7 @@ impl Workbench {
             }
             let on = filter.as_deref() == Some(id.as_str());
             let dimmed = filter.is_some() && !on;
-            let missing = space_dir_missing(space);
+            let missing = space_dir_missing(&self.host, space);
             let need = needs.get(id.as_str()).copied().unwrap_or(0);
             let fix = id.clone();
             chips = chips.child(

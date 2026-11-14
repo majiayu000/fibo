@@ -257,7 +257,10 @@ impl Workbench {
             Some(Ok(hooks)) if hooks.is_empty() => return None,
             Some(Ok(hooks)) => hooks,
         };
-        let files: Vec<String> = hooks.iter().map(|h| home_relative(&h.settings)).collect();
+        let files: Vec<String> = hooks
+            .iter()
+            .map(|h| home_relative(&self.host, &h.settings))
+            .collect();
         let names: Vec<&str> = hooks.iter().map(|h| h.name.as_str()).collect();
         let all_current = hooks.iter().all(|h| h.state == State::Current);
         let unreadable = hooks.iter().find(|h| h.state == State::Unreadable);

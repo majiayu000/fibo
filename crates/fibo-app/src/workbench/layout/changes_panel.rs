@@ -459,7 +459,7 @@ impl ChangesPanel {
                         .truncate()
                         .font(T::mono(cx))
                         .text_color(T::color(T::muted()))
-                        .child(super::super::home_relative(dir)),
+                        .child(super::super::home_relative(&self.pane.read(cx).host(), dir)),
                 )
                 .child(line_counts((file.added, file.removed)))
                 .children(note.map(|n| {
@@ -478,16 +478,19 @@ impl ChangesPanel {
         };
         row.child(div().flex_1())
             // Files on an attached machine do not open here (`Pane::open_target`).
-            .when(summary.is_some() && !crate::lifecycle::attached(), |d| {
-                d.child(
-                    button("changes-open-file", t!("打开文件"))
-                        .flex_shrink_0()
-                        .h(px(T::ICON_HEIGHT))
-                        .px(px(T::S6))
-                        .text_color(T::color(T::secondary()))
-                        .on_click(cx.listener(|this, _, _, cx| this.open_file(cx))),
-                )
-            })
+            .when(
+                summary.is_some() && !self.pane.read(cx).host().attached(),
+                |d| {
+                    d.child(
+                        button("changes-open-file", t!("打开文件"))
+                            .flex_shrink_0()
+                            .h(px(T::ICON_HEIGHT))
+                            .px(px(T::S6))
+                            .text_color(T::color(T::secondary()))
+                            .on_click(cx.listener(|this, _, _, cx| this.open_file(cx))),
+                    )
+                },
+            )
             .child(
                 button("changes-close", "✕")
                     .flex_shrink_0()

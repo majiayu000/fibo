@@ -286,7 +286,7 @@ impl Workbench {
             .or(ids.first());
         let cwd = first
             .and_then(|id| self.workspace.terminals.iter().find(|t| &t.id == id))
-            .map(|t| home_relative(&t.cwd));
+            .map(|t| home_relative(&self.host, &t.cwd));
         TabTip {
             title: title.to_owned(),
             status,

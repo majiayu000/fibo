@@ -280,7 +280,7 @@ impl Workbench {
                     .text_color(T::color(T::muted()))
                     .opacity(0.)
                     .group_hover(row_group, |s| s.opacity(1.))
-                    .child(home_relative(cwd)),
+                    .child(home_relative(&self.host, cwd)),
             )
             .when(needs > 0, |d| {
                 d.child(

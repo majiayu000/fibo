@@ -180,7 +180,7 @@ impl Workbench {
             .filter(|s| !self.workspace.space_quiet(&s.id) || s.id == form.space);
         for space in offered {
             let sid = space.id.clone();
-            let missing = space_dir_missing(space);
+            let missing = space_dir_missing(&self.host, space);
             row = row.child(
                 segment(
                     gpui::SharedString::from(format!("project-{sid}")),

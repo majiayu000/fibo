@@ -15,7 +15,7 @@ impl Workbench {
         let content = self.workspace.content.get(&s.id);
         let place = (self.workspace.session_space(s))
             .and_then(|space| self.space_name(space))
-            .unwrap_or_else(|| home_relative(&s.cwd));
+            .unwrap_or_else(|| home_relative(&self.host, &s.cwd));
         let fact = |name: &'static str, value: gpui::AnyElement| {
             div()
                 .flex()
@@ -120,7 +120,7 @@ impl Workbench {
                         .text_size(px(T::META))
                         .text_color(T::color(T::secondary()))
                         .font_family(T::mono(cx).family)
-                        .child(home_relative(&s.cwd)),
+                        .child(home_relative(&self.host, &s.cwd)),
                 )
                 .child(facts)
                 .when_some(content.and_then(|c| ask_track(&c.asks)), |d, track| {

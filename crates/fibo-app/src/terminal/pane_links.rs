@@ -34,9 +34,18 @@ impl Pane {
         })
         .detach();
     }
+    /// The machine this terminal runs on.
+    pub fn host(&self) -> crate::attach::Host {
+        crate::attach::Host::of(&self.socket)
+    }
+    /// Its files are on another machine: a peek of one there, or an attached host's.
+    fn elsewhere(&self) -> bool {
+        self.remote.is_some() || self.host().attached()
+    }
     /// The whole word when it names a file, else a piece of a broken one that does.
     fn check_hover_path(&mut self, cx: &mut Context<Self>) {
         let cwd = self.cwd.as_deref();
+        let elsewhere = self.elsewhere();
         let found = self.links.hover_word.as_ref().and_then(|w| {
             [(Some(w.uri.as_str()), true), (w.alone.as_deref(), false)]
                 .into_iter()
@@ -44,8 +53,8 @@ impl Pane {
                     let word = word?;
                     // An attached host's paths are on its machine: one here by the same name
                     // is another file, so nothing opens from there.
-                    let path = screen::resolve_path(word, cwd)
-                        .filter(|p| !crate::lifecycle::attached() && p.exists())?;
+                    let path =
+                        screen::resolve_path(word, cwd).filter(|p| !elsewhere && p.exists())?;
                     Some(Hovered {
                         path,
                         at: screen::split_position(word).1,
@@ -115,8 +124,8 @@ impl Pane {
         use super::super::open_path::Plan;
         // Every way to open a path comes here: an attached host's file is on its machine,
         // and one here by the same path is another file.
-        if crate::lifecycle::attached() {
-            let host = crate::lifecycle::here();
+        if self.elsewhere() {
+            let host = self.host().name();
             self.show_toast(t!("这个文件在 {host} 上，这里打不开", host), cx);
             return;
         }

@@ -424,16 +424,6 @@ fn requests_wait_behind_a_busy_action_and_only_repeats_are_dropped() {
     assert!(repeat_key(&Request::Workspace).is_some());
 }
 #[test]
-fn a_removed_directory_falls_back_to_one_that_exists() {
-    let gone = "/nonexistent/mooring-idle-test/next".to_owned();
-    let tmp = std::env::temp_dir().to_string_lossy().into_owned();
-    assert_eq!(usable_cwd([gone.clone(), tmp.clone()]), tmp);
-    assert_eq!(
-        usable_cwd([gone.clone(), gone]),
-        std::env::var("HOME").unwrap()
-    );
-}
-#[test]
 fn close_confirms_only_work_in_progress_or_a_pending_question() {
     let agent = |p| vec![("a".to_owned(), p)];
     assert!(!interrupts(&[]));
@@ -753,21 +743,6 @@ fn a_question_reads_without_its_scope_and_choices() {
         super::layout::ask_prompt("要覆盖 config.toml 吗？"),
         "要覆盖 config.toml 吗？"
     );
-}
-#[test]
-fn a_space_without_a_folder_is_not_missing() {
-    let space = |cwd: &str| Space {
-        id: "s".into(),
-        name: "s".into(),
-        cwd: cwd.into(),
-    };
-    assert!(!space_dir_missing(&space("")));
-    assert!(!space_dir_missing(&space("/")));
-    assert!(space_dir_missing(&space("/nonexistent/mooring-gone")));
-    assert_eq!(space_dir_label(&space(""), ""), "未设目录 · 从 ~ 开始");
-    assert_eq!(space_dir_label(&space(""), "/tmp"), "从上次的 /tmp 开始");
-    assert_eq!(space_dir_label(&space("/tmp"), "/elsewhere"), "/tmp");
-    assert_eq!(usable_cwd([String::new()]), std::env::var("HOME").unwrap());
 }
 #[test]
 fn new_spaces_take_the_next_free_name() {

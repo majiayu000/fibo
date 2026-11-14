@@ -138,7 +138,7 @@ impl Workbench {
                         _ => {
                             let place = (self.workspace.session_space(s))
                                 .and_then(|space| self.space_name(space))
-                                .unwrap_or_else(|| home_relative(&s.cwd));
+                                .unwrap_or_else(|| home_relative(&self.host, &s.cwd));
                             let mut sub = format!("{place} · {}", s.runtime.executable());
                             if let Some(c) = self.workspace.content.get(&s.id)
                                 && !query.is_empty()

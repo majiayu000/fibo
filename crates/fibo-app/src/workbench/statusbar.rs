@@ -35,7 +35,7 @@ impl Workbench {
         let host = item("status-host", open == Some(StatusPop::Sessions))
             .aria_label(t!(
                 "{name}，{listed} 个会话",
-                name = crate::lifecycle::here(),
+                name = self.host.name(),
                 listed
             ))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status(StatusPop::Sessions, cx)))
@@ -56,13 +56,9 @@ impl Workbench {
                         .child(if cut {
                             t!("后台断开，正在重连").to_owned()
                         } else if fit.working {
-                            t!(
-                                "{name} · {listed} 个会话",
-                                name = crate::lifecycle::here(),
-                                listed
-                            )
+                            t!("{name} · {listed} 个会话", name = self.host.name(), listed)
                         } else {
-                            crate::lifecycle::here()
+                            self.host.name()
                         }),
                 )
             })
@@ -186,7 +182,7 @@ impl Workbench {
     /// for the popover, which lists them all.
     fn quota_cells(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
         let now = now();
-        let all = super::redraw::quotas(&self.workspace, now);
+        let all = super::redraw::quotas(&self.workspace, now, self.host.attached());
         let readings = bar_order(&tightest_first(&all, now), self.quota_pin);
         let on = self.statusbar == Some(StatusPop::Quota);
         let mut b = item("status-quota", on)
@@ -301,7 +297,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         let now = now();
-        let all = super::redraw::quotas(&self.workspace, now);
+        let all = super::redraw::quotas(&self.workspace, now, self.host.attached());
         let readings = tightest_first(&all, now);
         panel = panel.child(heading(
             t!("额度"),
@@ -464,7 +460,7 @@ impl Workbench {
     /// The pane header's warning when the CLI running there has used up a window.
     pub(super) fn quota_alert(&self, session: &AgentSession) -> Option<String> {
         let now = now();
-        let all = super::redraw::quotas(&self.workspace, now);
+        let all = super::redraw::quotas(&self.workspace, now, self.host.attached());
         let (_, quota) = all.iter().find(|(a, _)| *a == session.runtime)?;
         let w = quota
             .windows

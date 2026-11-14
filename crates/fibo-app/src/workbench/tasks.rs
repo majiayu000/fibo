@@ -51,7 +51,7 @@ impl Workbench {
     pub(super) fn task_handoff(&self, task: &Task) -> String {
         // An attached host's Agent runs there: its own `fibo`, which its terminals already
         // point at their host (MOORING_RUNTIME).
-        if let Some(program) = crate::attach::program() {
+        if let Some(program) = self.host.program() {
             let note = format!("{} todo note", shell_quote(&program));
             return self.workspace.task_handoff(task, &note);
         }

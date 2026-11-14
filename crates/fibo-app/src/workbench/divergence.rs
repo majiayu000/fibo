@@ -117,7 +117,7 @@ impl Workbench {
     /// counts again in the background only after one of them changed.
     pub(super) fn git_divergence(&self, dir: &str, cx: &Context<Self>) -> Option<Divergence> {
         // Counted from the repository on this machine; an attached one's is on its own.
-        if dir.is_empty() || crate::lifecycle::attached() {
+        if dir.is_empty() || self.host.attached() {
             return None;
         }
         let mut cache = CACHE.lock().ok()?;

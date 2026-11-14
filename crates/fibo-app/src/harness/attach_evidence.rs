@@ -15,7 +15,6 @@ pub(super) fn start(
     if std::env::var_os("MOORING_ATTACH_EVIDENCE").is_none() {
         return false;
     }
-    assert!(crate::lifecycle::attached(), "run it with --attach");
     cx.spawn(async move |cx| {
         let executor = cx.background_executor().clone();
         let wait = move |ms| executor.timer(Duration::from_millis(ms));
@@ -59,7 +58,9 @@ pub(super) fn start(
         let start = until!("the host's workspace", |s: (usize, usize, usize)| s.0 > 0);
         let first_tabs = handle.update(cx, |v, _, _| v.visual_tab_ids()).unwrap();
         // What is that machine's is read there: its home, and its Agents' hooks.
-        let home = crate::lifecycle::home_str().expect("the attached machine's home");
+        let host = handle.update(cx, |v, _, _| v.visual_host()).unwrap();
+        assert!(host.attached(), "run it with --attach");
+        let home = host.home().expect("the attached machine's home");
         assert_ne!(
             Some(&home),
             fibo_platform::dirs::home_str().as_ref(),
@@ -67,7 +68,7 @@ pub(super) fn start(
         );
         let hooks = cx
             .background_executor()
-            .spawn(async { crate::agent_hooks::check() })
+            .spawn(async move { crate::agent_hooks::check(&host) })
             .await
             .expect("hooks status on the attached machine");
         let hooks: Vec<String> = (hooks.iter())

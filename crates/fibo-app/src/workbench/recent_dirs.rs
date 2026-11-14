@@ -23,7 +23,7 @@ impl Workbench {
         {
             return Rc::clone(dirs);
         }
-        let home = crate::lifecycle::home_str();
+        let home = self.host.home();
         let dirs = Rc::new(self.workspace.offered_dirs(home.as_deref(), SHOWN + 1));
         *cache = Some((key, Rc::clone(&dirs)));
         dirs
@@ -37,7 +37,7 @@ impl Workbench {
     }
     /// Where the space's terminals start, as every surface names it.
     pub(super) fn space_label(&self, space: &Space) -> String {
-        space_dir_label(space, &self.space_start_shown(space))
+        space_dir_label(&self.host, space, &self.space_start_shown(space))
     }
     /// The empty tab's line under its title: where it starts, and 「换目录」.
     pub(super) fn space_dir_line(&self, space: &Space, cx: &Context<Self>) -> gpui::AnyElement {
@@ -85,7 +85,7 @@ impl Workbench {
                 ..space.clone()
             };
             rows.push(
-                button(format!("empty-tab-dir-{n}"), home_relative(dir))
+                button(format!("empty-tab-dir-{n}"), home_relative(&self.host, dir))
                     .h(px(T::ROW * 0.8))
                     .border_0()
                     .px(px(T::S8))

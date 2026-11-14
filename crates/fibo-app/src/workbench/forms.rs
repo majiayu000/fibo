@@ -45,10 +45,10 @@ pub(super) struct FormChecks {
 }
 /// The commands among `names` that a login shell finds, functions and aliases included,
 /// as a new terminal would; None when the shell is not one we can ask or it does not answer.
-fn login_commands(names: &[String]) -> Option<HashSet<String>> {
+fn login_commands(names: &[String], attached: bool) -> Option<HashSet<String>> {
     use std::process::{Command, Stdio};
     // This machine's shell says nothing of what another machine's has.
-    if crate::lifecycle::attached() {
+    if attached {
         return None;
     }
     let shell = std::env::var("SHELL")
@@ -221,11 +221,12 @@ impl Workbench {
             .into_iter()
             .map(|a| a.executable().to_owned())
             .collect();
+        let attached = self.host.attached();
         cx.spawn(async move |this, cx| {
             let asked = names.clone();
             let found = cx
                 .background_executor()
-                .spawn(async move { login_commands(&names) })
+                .spawn(async move { login_commands(&names, attached) })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 let now: Vec<String> = Agent::all()
@@ -337,7 +338,7 @@ impl Workbench {
                 .spaces
                 .iter()
                 .find(|s| s.id == form.space)
-                .is_some_and(space_dir_missing),
+                .is_some_and(|s| space_dir_missing(&self.host, s)),
             agent_missing: self
                 .tasks
                 .found

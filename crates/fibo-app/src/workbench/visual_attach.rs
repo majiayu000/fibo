@@ -2,6 +2,10 @@
 use super::*;
 
 impl Workbench {
+    /// The machine this window's host runs on.
+    pub fn visual_host(&self) -> crate::attach::Host {
+        self.host.clone()
+    }
     /// Runs keymap action `id` (`new_tab`, `split_right`, `split_down`, `close`) as its
     /// shortcut does; whether it ran.
     pub fn visual_shortcut(

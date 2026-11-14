@@ -8,17 +8,21 @@ impl SettingsView {
     /// Installs (`true`) or removes `agent`'s hooks first when given (only ever from a
     /// click), then reads every CLI's again. Both run in the background: they spawn
     /// `fibo` and read small files.
-    pub(super) fn change_hooks(change: Option<(String, bool)>, cx: &mut Context<Self>) {
+    pub(super) fn change_hooks(
+        host: crate::attach::Host,
+        change: Option<(String, bool)>,
+        cx: &mut Context<Self>,
+    ) {
         let changed = change.is_some();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
                     match &change {
-                        Some((agent, true)) => crate::agent_hooks::install(agent)?,
-                        Some((agent, false)) => crate::agent_hooks::uninstall(agent)?,
+                        Some((agent, true)) => crate::agent_hooks::install(&host, agent)?,
+                        Some((agent, false)) => crate::agent_hooks::uninstall(&host, agent)?,
                         None => {}
                     }
-                    crate::agent_hooks::check()
+                    crate::agent_hooks::check(&host)
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -91,7 +95,7 @@ impl SettingsView {
                             // Writes the CLI's settings: only ever from this click.
                             this.installing = Some(agent.clone());
                             cx.notify();
-                            Self::change_hooks(Some((agent.clone(), install)), cx);
+                            Self::change_hooks(this.host(), Some((agent.clone(), install)), cx);
                         }))
                 });
                 self.file_row(
