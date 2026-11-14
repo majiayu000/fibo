@@ -1,8 +1,8 @@
 //! MOORING_REMOTE_BOARD_EVIDENCE: another machine's sessions on the board (multi-machine
 //! step 4, direction A). The outer script starts that machine's host with one Codex
 //! session waiting for review in terminal `far`. Checks the card shows up in 要你处理,
-//! moves to 做完了 when dropped there, and that 「＋」 opens a shell there which
-//! 「关闭终端」 ends; saves the board before and after.
+//! moves to 做完了 when dropped there, and that 「＋」 shows its start page, whose shell and
+//! Agent open docked in the main area and worked from here, and 「关闭终端」 ends them.
 use super::*;
 
 pub(super) fn start(
@@ -58,40 +58,67 @@ pub(super) fn start(
         assert!(done, "dropped on 做完了 but the other machine put it back");
         shoot("remote-board-done.png", cx);
 
+        // 「＋」 shows that machine's start page where the tab's panes go.
         handle
-            .update(cx, |v, window, cx| {
-                v.visual_open_remote_shell(0, window, cx)
-            })
+            .update(cx, |v, _, cx| v.visual_remote_start(0, cx))
             .unwrap();
-        let mut key = None;
-        for _ in 0..60 {
-            wait(250).await;
-            key = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
-            if key.is_some() {
-                break;
+        wait(800).await;
+        assert!(
+            handle.update(cx, |v, _, _| v.visual_remote_start_shown()).unwrap(),
+            "「＋」 showed no start page"
+        );
+        shoot("remote-start.png", cx);
+        let mut opened = vec![];
+        for (name, agent) in [("shell", None), ("codex", Some(fibo_core::agent::Agent::Codex))] {
+            handle
+                .update(cx, |v, window, cx| match agent {
+                    None => v.visual_open_remote_shell(0, window, cx),
+                    Some(a) => v.visual_open_remote_agent(0, a, window, cx),
+                })
+                .unwrap();
+            let mut key = None;
+            for _ in 0..60 {
+                wait(250).await;
+                key = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
+                if key.is_some() {
+                    break;
+                }
             }
-        }
-        let key = key.expect("「＋」 opened no peek");
-        assert!(key.contains(":remote-"), "{key}");
-        wait(1500).await;
-        shoot("remote-open.png", cx);
-        handle
-            .update(cx, |v, _, cx| v.visual_end_remote(cx))
-            .unwrap();
-        let mut closed = false;
-        for _ in 0..60 {
-            wait(250).await;
-            closed = handle
-                .update(cx, |v, _, _| v.visual_peek_key())
-                .unwrap()
-                .is_none();
-            if closed {
-                break;
+            let key = key.unwrap_or_else(|| panic!("the start page's {name} opened nothing"));
+            assert!(key.contains(":remote-"), "{key}");
+            let docked = handle
+                .update(cx, |v, _, cx| v.visual_peek_docked(cx))
+                .unwrap();
+            assert_eq!(
+                docked,
+                Some((true, true)),
+                "{name}: not docked and taken (docked, taken)"
+            );
+            assert!(
+                !handle.update(cx, |v, _, _| v.visual_remote_start_shown()).unwrap(),
+                "the start page stayed over the opened {name}"
+            );
+            wait(1500).await;
+            shoot(&format!("remote-open-{name}.png"), cx);
+            handle
+                .update(cx, |v, _, cx| v.visual_end_remote(cx))
+                .unwrap();
+            let mut closed = false;
+            for _ in 0..60 {
+                wait(250).await;
+                closed = handle
+                    .update(cx, |v, _, _| v.visual_peek_key())
+                    .unwrap()
+                    .is_none();
+                if closed {
+                    break;
+                }
             }
+            assert!(closed, "「关闭终端」 left the {name} open");
+            opened.push(key);
         }
-        assert!(closed, "「关闭终端」 left the peek open");
         eprintln!(
-            "remote board PASS: card in 要你处理, kept in 做完了, shell opened {key} and ended"
+            "remote board PASS: card in 要你处理, kept in 做完了, start page shown, opened and ended {opened:?} docked"
         );
         cx.update(|cx| cx.quit());
     })

@@ -122,9 +122,7 @@ impl Workbench {
                                 .px(px(T::S6))
                                 .text_color(T::color(T::secondary()))
                                 .on_click(cx.listener(
-                                    move |this, _, window, cx| {
-                                        this.open_remote_shell(index, None, window, cx)
-                                    },
+                                    move |this, _, _, cx| this.show_remote_start(index, None, cx),
                                 )),
                             )
                         },
@@ -203,6 +201,8 @@ impl Workbench {
         out
     }
 
+    /// A row or card of another machine opens as one of this machine's does: in the main
+    /// area, or floated up for a look when peek is turned on in settings.
     pub(super) fn open_remote_peek(
         &mut self,
         index: usize,
@@ -211,14 +211,31 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(remote) = self.machines.get(index) else {
+        let docked = !crate::ui::peek::enabled(cx);
+        self.open_remote_terminal(index, card, name, docked, window, cx);
+    }
+    fn open_remote_terminal(
+        &mut self,
+        index: usize,
+        card: Card,
+        name: &str,
+        docked: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if index >= self.machines.len() {
             return;
-        };
+        }
+        if docked {
+            self.leave_for_dock(cx);
+        }
+        self.remote_start = None;
+        let remote = &self.machines[index];
         let key = remote_key(&remote.view.lock().unwrap(), &card.id);
-        if self.peek.as_ref().is_none_or(|p| p.terminal != key) {
+        if (self.peek.as_ref()).is_none_or(|p| p.terminal != key || p.docked != docked) {
             let slot = remote.slot();
             let id = card.id.clone();
-            let pane = cx.new(|cx| Pane::remote(slot, &id, cx));
+            let pane = cx.new(|cx| Pane::remote(slot, &id, docked, cx));
             cx.observe(&pane, |this, _, cx| this.pane_changed(cx))
                 .detach();
             // Typing here is typing: it brings a machine put aside back, as it does a space.
@@ -245,6 +262,8 @@ impl Workbench {
                     terminal: card.id.clone(),
                     slot: remote.slot(),
                 }),
+                docked,
+                home: self.nav.tab.clone(),
             });
         }
         if let Some(peek) = &self.peek {
@@ -255,12 +274,14 @@ impl Workbench {
 }
 
 impl Workbench {
-    /// 「＋」 on a machine's heading: a shell in a new tab there, in `cwd` or its first
-    /// space's folder, then that shell in the peek. Named, so a resend opens one.
+    /// The start page's choice: a shell in a new tab there, in `cwd` or its first space's
+    /// folder, running `agent` when one was picked, docked here. Named, so a resend opens
+    /// one.
     pub(super) fn open_remote_shell(
         &mut self,
         index: usize,
         cwd: Option<String>,
+        agent: Option<Agent>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -277,7 +298,7 @@ impl Workbench {
         let op = fibo_remote::protocol::Op::Open {
             cwd,
             space: None,
-            agent: None,
+            agent: agent.map(|a| a.key().to_lowercase()),
             prompt: None,
             resume: None,
             request: Some(fibo_core::protocol::RequestId::fresh().id),
@@ -294,12 +315,16 @@ impl Workbench {
                 let _ = this.update(cx, |this, cx| match opened {
                     Ok(reply) => {
                         let terminal = reply["terminal"].as_str().unwrap_or_default();
+                        let title = agent.map_or(t!("新终端"), |a| a.name());
                         let card: Card = serde_json::from_value(serde_json::json!({
                             "id": terminal, "space": "", "tab": "", "phase": "shell",
-                            "cwd": t!("新终端"),
+                            "cwd": t!("新终端"), "title": title,
                         }))
                         .expect("a card needs only these");
-                        this.open_remote_peek(index, card, &name, window, cx);
+                        if let Some(agent) = agent {
+                            this.tasks.last_agent = Some(agent);
+                        }
+                        this.open_remote_terminal(index, card, &name, true, window, cx);
                     }
                     Err(e) => {
                         this.error = Some(t!("没能在 {name} 上开终端：{e}", name = &name, e = e));
@@ -367,6 +392,18 @@ pub(super) fn shown_title(card: &Card) -> String {
 }
 
 impl Workbench {
+    /// The title and state another machine's terminal has now, as its last list says.
+    pub(super) fn remote_now(
+        &self,
+        r: &super::peek::RemoteTitle,
+    ) -> Option<(String, Option<Status>)> {
+        let view = self.machines.get(r.machine)?.view.lock().unwrap();
+        let card = view.terminals.iter().find(|c| c.id == r.terminal)?;
+        Some((
+            shown_title(card),
+            card.status.as_deref().and_then(Status::from_key),
+        ))
+    }
     /// The approval another machine's terminal asks now, as that machine's list says.
     pub(super) fn remote_approval(&self, r: &super::peek::RemoteTitle) -> Option<String> {
         let view = self.machines.get(r.machine)?.view.lock().unwrap();
@@ -478,7 +515,7 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open_remote_shell(index, None, window, cx);
+        self.open_remote_shell(index, None, None, window, cx);
     }
     /// Into the open peek: keys as you type them, or a mouse report.
     pub fn visual_in_peek(&mut self, text: &str, mouse: bool, cx: &mut Context<Self>) {

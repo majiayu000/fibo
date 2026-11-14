@@ -48,6 +48,8 @@ pub struct Workbench {
     sidebar: sidebar_list::SidebarPrefs,
     /// A session's live screen floated over the current tab from the sidebar.
     peek: Option<peek::Peek>,
+    /// 「＋」 on another machine: its start page, in place of the current tab.
+    remote_start: Option<remote_tab::Start>,
     redraw: Option<redraw::Redraw>,
     phones: phones::Phones,
     /// Other machines shown under this one's sessions (docs/multi-machine/spec.md).
@@ -259,6 +261,7 @@ use palette::Search;
 mod peek;
 mod phones;
 mod redraw;
+mod remote_tab;
 mod render;
 mod requests;
 mod resume;
@@ -402,6 +405,7 @@ impl Workbench {
             settings: None,
             sidebar: sidebar_list::SidebarPrefs::load(),
             peek: None,
+            remote_start: None,
             redraw: None,
             phones: Default::default(),
             machines: Self::start_machines(cx),

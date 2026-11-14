@@ -73,6 +73,8 @@
 "关掉那边这个终端？" = "Close this terminal over there?"
 "↗ 打开" = "↗ Open"
 "关闭偷看" = "Close peek"
+"回到本机标签" = "Back to this machine's tab"
+"只读" = "Read only"
 "只读：那边的 Fibo 太旧，更新后才能打字" = "Read-only: Fibo over there is too old; update it to type"
 "只读：没连上" = "Read-only: not connected"
 "正在偷看 {host} 上的终端" = "Peeking at terminal on {host}"

@@ -82,7 +82,6 @@
 "看全部空间" = "Show all spaces"
 "看全部" = "Show all"
 "这个空间还没有会话。" = "No sessions in this space yet."
-"在这里开一个终端" = "Open a terminal here"
 
 [quiet]
 "{name} · 先不管" = "{name} · quiet"

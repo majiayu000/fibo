@@ -17,6 +17,11 @@ pub(super) struct Peek {
     /// Set for another machine's terminal: what its title bar says, from that machine's
     /// card, and the link its answers go over. Nothing to open here.
     pub(super) remote: Option<RemoteTitle>,
+    /// In the main area where the tab's panes go, worked from the start, instead of
+    /// floated over them: another machine's session opened as this one's opens in a tab.
+    pub(super) docked: bool,
+    /// The tab a docked one covers; showing another one drops it.
+    pub(super) home: Option<String>,
 }
 
 pub(super) struct RemoteTitle {
@@ -85,6 +90,8 @@ impl Workbench {
                 note: None,
                 confirm_end: false,
                 remote: None,
+                docked: false,
+                home: None,
             });
         }
         if let Some(peek) = &self.peek {
@@ -176,12 +183,14 @@ impl Workbench {
             .agent_sessions
             .iter()
             .find(|s| s.id == peek.session);
+        // Another machine's title and state as its latest list says, else as when opened.
+        let now = peek.remote.as_ref().and_then(|r| self.remote_now(r));
         let group = match &peek.remote {
-            Some(r) => r.status,
+            Some(r) => now.as_ref().map_or(r.status, |n| n.1),
             None => session.map(|s| status_of(&self.workspace, s)),
         };
         let title = match &peek.remote {
-            Some(r) => r.title.clone(),
+            Some(r) => now.map_or_else(|| r.title.clone(), |n| n.0),
             None => session
                 .map(|s| self.session_title(s))
                 .unwrap_or_else(|| t!("终端").into()),
@@ -211,6 +220,9 @@ impl Workbench {
             .border_color(T::color(T::border()))
             .bg(T::color(T::panel()))
             .when_some(group, |d, g| d.child(dot(g)))
+            .when_some(peek.remote.as_ref().filter(|_| peek.docked), |d, r| {
+                d.child(label(r.host.clone()).text_size(px(T::CHIP_SIZE)))
+            })
             .child(
                 div()
                     .min_w_0()
@@ -280,11 +292,44 @@ impl Workbench {
                     },
                 )))
             })
+            .when(peek.docked && read_only, |d| {
+                d.child(label(t!("只读")).text_size(px(T::CHIP_SIZE)))
+            })
             .child(
                 button("peek-close", "✕")
-                    .aria_label(t!("关闭偷看"))
+                    .aria_label(if peek.docked {
+                        t!("回到本机标签")
+                    } else {
+                        t!("关闭偷看")
+                    })
                     .on_click(cx.listener(|this, _, _, cx| this.close_peek(cx))),
             );
+        let screen = div()
+            .flex_1()
+            .min_h_0()
+            .pl(px(T::S4))
+            .child(peek.pane.clone());
+        let note = peek.note.clone().map(|note| {
+            label(note)
+                .px(px(T::S12))
+                .py(px(T::S4))
+                .text_size(px(T::META))
+                .text_color(Tone::Danger.ink())
+        });
+        // Docked, it is where the tab's panes go: no band, and Esc reaches the Agent.
+        if peek.docked {
+            return div()
+                .id("peek")
+                .size_full()
+                .flex()
+                .flex_col()
+                .overflow_hidden()
+                .bg(T::surface(T::pane()))
+                .child(bar)
+                .children(note)
+                .child(screen)
+                .into_any_element();
+        }
         // A band says what this is: a layer over the tab, whose machine gets the typing
         // (direction C, docs/multi-machine/peek-marker.html, chosen 11-04).
         let (what, how) = match &peek.remote {
@@ -339,22 +384,8 @@ impl Workbench {
             }))
             .child(band)
             .child(bar)
-            .when_some(peek.note.clone(), |d, note| {
-                d.child(
-                    label(note)
-                        .px(px(T::S12))
-                        .py(px(T::S4))
-                        .text_size(px(T::META))
-                        .text_color(Tone::Danger.ink()),
-                )
-            })
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .pl(px(T::S4))
-                    .child(peek.pane.clone()),
-            )
+            .children(note)
+            .child(screen)
             .into_any_element()
     }
 }

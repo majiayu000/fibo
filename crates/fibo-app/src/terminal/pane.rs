@@ -163,13 +163,21 @@ impl Pane {
         let connection = Connection::new(socket, id, takeover, tx.clone());
         Self::with(connection, socket.to_owned(), None, id, tx, rx, cx)
     }
-    /// Another machine's terminal, looked at until it is used (`take_size`).
-    pub fn remote(slot: crate::machines::Slot, id: &str, cx: &mut Context<Self>) -> Self {
+    /// Another machine's terminal: looked at until it is used (`take_size`), or with `take`
+    /// worked from the start, sized to this pane as a terminal in a tab is.
+    pub fn remote(
+        slot: crate::machines::Slot,
+        id: &str,
+        take: bool,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let (tx, rx) = unbounded();
         let linked = slot.lock().unwrap().clone();
-        let connection = Connection::remote(linked, id, false, tx.clone());
+        // A machine that cannot hand its terminal over is looked at, as `take_size` does.
+        let take = take && linked.as_ref().is_some_and(|l| l.resizing);
+        let connection = Connection::remote(linked, id, take, tx.clone());
         let mut pane = Self::with(connection, Default::default(), Some(slot), id, tx, rx, cx);
-        pane.peek = true;
+        pane.peek = !take;
         pane
     }
     fn with(

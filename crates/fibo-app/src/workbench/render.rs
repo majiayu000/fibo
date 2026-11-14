@@ -696,10 +696,7 @@ impl Render for Workbench {
         } else {
             // No strip for the tab's todo above the panes: its acceptance progress is in the
             // turn bar of the pane that waits for you, and 待办详情 in each pane's ⋯ menu.
-            let ids = current
-                .map(|t| self.workspace.tab_terminals(&t.id))
-                .unwrap_or_default();
-            let count = ids.len();
+            let count = current.map_or(0, |t| self.workspace.tab_terminals(&t.id).len());
             // The standard style sets its panes as rounded cards with a gap around them
             // (flat.html); the terminal style keeps its own frames.
             let cards = crate::ui::style::current(cx) != crate::ui::style::Style::Terminal;
@@ -709,7 +706,9 @@ impl Render for Workbench {
                 .min_w_0()
                 .relative()
                 .when(cards, |d| d.p(px(T::S8)).bg(T::surface(T::pane())));
-            if let Some(zoomed) = &self.nav.zoomed {
+            if let Some(docked) = self.docked_view(cx) {
+                grid = grid.child(docked);
+            } else if let Some(zoomed) = &self.nav.zoomed {
                 grid = grid.child(self.pane_view(zoomed, false, window, cx));
             } else if let Some(tree) = current.and_then(|t| t.layout.as_ref()) {
                 grid = grid.child(self.layout_view(tree, vec![], count > 1, window, cx));
@@ -721,7 +720,7 @@ impl Render for Workbench {
             main = main.child(grid);
         }
         main = main.children(bottom_tabs);
-        if let Some(peek) = &self.peek {
+        if let Some(peek) = self.peek.as_ref().filter(|p| !p.docked) {
             main = main.relative().child(self.peek_view(peek, cx));
         }
         // Beside 会话优先's column the status bar belongs to the main column, so the

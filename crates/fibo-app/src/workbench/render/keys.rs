@@ -10,6 +10,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         self.nav.tab = Some(id.to_owned());
+        self.close_dock(cx);
         if self.nav.overview || !self.overview.cleanup.is_empty() {
             self.leave_overview(cx);
         }

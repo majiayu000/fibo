@@ -25,7 +25,7 @@ chmod +x $R/bin/ssh
 printf '#!/bin/sh\nexec %s/target/debug/fibo "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-fibo; chmod +x $R/far-fibo
 printf '[{"host":"far","path":"%s/far-fibo"}]' "$R" > $R/home/.config/fibo/machines.json
 ln -s /bin/sh $R/codex
-env -i PATH=/usr/bin:/bin HOME=$R/farhome CODEX_HOME=$R/farhome/.codex CLAUDE_CONFIG_DIR=$R/farhome/.claude LANG=en_US.UTF-8 \
+env -i PATH=$R:/usr/bin:/bin HOME=$R/farhome CODEX_HOME=$R/farhome/.codex CLAUDE_CONFIG_DIR=$R/farhome/.claude LANG=en_US.UTF-8 \
   $REPO/target/debug/fibo serve --runtime $R/far > $R/far.log 2>&1 &
 FAR=$!
 python3 -I - "$R" <<'PY'
@@ -80,7 +80,7 @@ with socket.socket(socket.AF_UNIX) as s:
     s.settimeout(10); s.connect(R + '/far/workbench.sock'); send(s, {'Hello': {'major': 3}}); recv(s)
     send(s, 'Workspace'); w = recv(s)['Workspace']
 print('far outcome:', [x['outcome'] for x in w['agent_sessions']])
-print('far terminals:', [(t['id'], t['state']) for t in w['terminals']])
+print('far terminals:', [(t['id'], t['state'], t.get('argv'), t.get('command')) for t in w['terminals']])
 print('far tabs:', [t['id'] for t in w['tabs']])
 PY
 kill $FAR 2>/dev/null; sleep 1; pkill -f "$R/far" 2>/dev/null
