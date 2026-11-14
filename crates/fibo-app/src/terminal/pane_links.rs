@@ -42,7 +42,10 @@ impl Pane {
                 .into_iter()
                 .find_map(|(word, whole)| {
                     let word = word?;
-                    let path = screen::resolve_path(word, cwd).filter(|p| p.exists())?;
+                    // An attached host's paths are on its machine: one here by the same name
+                    // is another file, so nothing opens from there.
+                    let path = screen::resolve_path(word, cwd)
+                        .filter(|p| !crate::lifecycle::attached() && p.exists())?;
                     Some(Hovered {
                         path,
                         at: screen::split_position(word).1,

@@ -49,6 +49,7 @@
 "在 {name} 上开一个新终端" = "Open a new terminal on {name}"
 "本机" = "This Mac"
 "在新窗口打开" = "Open in New Window"
+"{host} 上的目录不能在访达里选：在空间的目录列表里选，或在终端里 cd 过去" = "Folders on {host} can't be picked in Finder: choose one from the space's folder list, or cd there in a terminal"
 "没能打开 {host} 的窗口：{e}" = "Couldn't open a window for {host}: {e}"
 "{len} 个会话 · {limit}" = "{len} {len|session|sessions} · {limit}"
 "{len} 个会话" = "{len} {len|session|sessions}"

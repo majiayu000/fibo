@@ -155,6 +155,10 @@ fn load_workspace(root: &Path) -> io::Result<Workspace> {
 /// The desktop starts apps somewhere nobody means to open a terminal: use the home directory
 /// then, and the launch directory otherwise (`run.sh`, a shell).
 fn default_space_dir() -> io::Result<PathBuf> {
+    // The first space of an attached host starts in that machine's home.
+    if let Some(home) = attach::home() {
+        return Ok(PathBuf::from(home));
+    }
     let cwd = std::env::current_dir()?;
     Ok(match fibo_platform::dirs::home() {
         Some(home) if fibo_platform::dirs::is_system_start(&cwd) => home,

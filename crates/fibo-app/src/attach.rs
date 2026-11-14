@@ -15,6 +15,8 @@ struct Forward {
     spec: Spec,
     /// That host's socket on its machine, as it said (`fibo socket`).
     remote: String,
+    /// `$HOME` there.
+    home: String,
     local: PathBuf,
     child: Mutex<Option<Child>>,
 }
@@ -48,11 +50,12 @@ pub fn start(host: &str, root: &Path) -> io::Result<()> {
     let spec = (crate::machines::load().unwrap_or_default().into_iter())
         .find(|s| s.host == host)
         .unwrap_or_else(|| Spec::new(host.to_owned()));
-    let remote = remote_socket(&spec)?;
+    let (remote, home) = remote_socket(&spec)?;
     fibo_platform::fs::create_private_dir(root)?;
     let forward = Forward {
         spec,
         remote,
+        home,
         local: root.join("workbench.sock"),
         child: Mutex::new(None),
     };
@@ -61,6 +64,32 @@ pub fn start(host: &str, root: &Path) -> io::Result<()> {
     }
     std::thread::spawn(supervise);
     Ok(())
+}
+
+/// `$HOME` on the attached machine.
+pub fn home() -> Option<String> {
+    FORWARD.get().map(|f| f.home.clone())
+}
+
+/// `fibo <args>` on the attached machine, as the program finds it there, quoted.
+pub fn run(args: &[&str]) -> Option<io::Result<std::process::Output>> {
+    let forward = FORWARD.get()?;
+    let quoted: Vec<String> = args
+        .iter()
+        .map(|a| fibo_platform::shell::quote_posix(a))
+        .collect();
+    let script = format!(
+        "{}; exec \"$p\" {}",
+        forward.spec.find_program(),
+        quoted.join(" ")
+    );
+    let argv = forward.spec.ssh(&script);
+    Some(
+        Command::new(&argv[0])
+            .args(&argv[1..])
+            .stdin(Stdio::null())
+            .output(),
+    )
 }
 
 /// Waits until the forwarded socket answers; what `spawn_host` does for an attached host.
@@ -107,10 +136,12 @@ pub fn stop() {
 
 /// `fibo socket` there; a Fibo from before it has none, so its socket is found as that
 /// version finds its runtime (`legacy::runtime_dir`).
-fn remote_socket(spec: &Spec) -> io::Result<String> {
+/// Its home comes back on the line after, for folders this window offers there.
+fn remote_socket(spec: &Spec) -> io::Result<(String, String)> {
     let script = format!(
-        "{}; \"$p\" socket 2>/dev/null || for d in fibo-workbench mooring-workbench keepline-workbench; \
-         do [ -d \"$HOME/.local/share/$d\" ] && {{ echo \"$HOME/.local/share/$d/workbench.sock\"; break; }}; done",
+        "{}; {{ \"$p\" socket 2>/dev/null || for d in fibo-workbench mooring-workbench keepline-workbench; \
+         do [ -d \"$HOME/.local/share/$d\" ] && {{ echo \"$HOME/.local/share/$d/workbench.sock\"; break; }}; done; }}; \
+         echo \"$HOME\"",
         spec.find_program()
     );
     let argv = spec.ssh(&script);
@@ -118,8 +149,13 @@ fn remote_socket(spec: &Spec) -> io::Result<String> {
         .args(&argv[1..])
         .stdin(Stdio::null())
         .output()?;
-    let path = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-    if !path.starts_with('/') {
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let mut lines = text.lines().map(str::trim);
+    let (path, home) = (
+        lines.next().unwrap_or_default(),
+        lines.next().unwrap_or_default(),
+    );
+    if !path.starts_with('/') || !home.starts_with('/') {
         let why = String::from_utf8_lossy(&out.stderr).trim().to_owned();
         return Err(io::Error::other(t!(
             "在 {host} 上找不到 Fibo 的后台：{why}",
@@ -127,7 +163,7 @@ fn remote_socket(spec: &Spec) -> io::Result<String> {
             why
         )));
     }
-    Ok(path)
+    Ok((path.to_owned(), home.to_owned()))
 }
 
 /// Runs the `ssh -L` and starts it again after it ends, waiting longer each time it ends

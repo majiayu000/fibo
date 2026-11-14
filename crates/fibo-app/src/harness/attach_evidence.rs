@@ -1,6 +1,7 @@
 //! MOORING_ATTACH_EVIDENCE: a window attached (`--attach`) to another machine's host
 //! through a forwarded socket works it with this machine's own code: a tab (⌘T), splits
-//! (⌘D, ⇧⌘D), an Agent, ⌘W. The outer script checks the tabs and layouts on that host.
+//! (⌘D, ⇧⌘D), an Agent, ⌘W; its home and its Agents' hooks are that machine's. The outer
+//! script checks the tabs and layouts on that host.
 use super::*;
 
 pub(super) fn start(
@@ -56,6 +57,26 @@ pub(super) fn start(
             }};
         }
         let start = until!("the host's workspace", |s: (usize, usize, usize)| s.0 > 0);
+        // What is that machine's is read there: its home, and its Agents' hooks.
+        let home = crate::lifecycle::home_str().expect("the attached machine's home");
+        assert_ne!(
+            Some(&home),
+            fibo_platform::dirs::home_str().as_ref(),
+            "this machine's home"
+        );
+        let hooks = cx
+            .background_executor()
+            .spawn(async { crate::agent_hooks::check() })
+            .await
+            .expect("hooks status on the attached machine");
+        let hooks: Vec<String> = (hooks.iter())
+            .map(|h| format!("{} {:?} {}", h.name, h.state, h.settings))
+            .collect();
+        assert!(
+            hooks.iter().all(|h| h.contains(&home)),
+            "hook settings outside {home}: {hooks:?}"
+        );
+        eprintln!("attach: home {home}; hooks {hooks:?}");
         wait(800).await;
         shoot("attach-1-start.png", cx);
         let key = |id: &'static str, cx: &mut gpui::AsyncApp| {

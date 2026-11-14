@@ -79,7 +79,9 @@ pub(super) fn usable_cwd(candidates: impl IntoIterator<Item = String>) -> String
     // An attached host's folders are on its machine: that host checks them, not this one.
     if crate::lifecycle::attached() {
         let mut candidates = candidates.into_iter();
-        return (candidates.find(|d| d.starts_with('/'))).unwrap_or_else(|| "/".into());
+        return (candidates.find(|d| d.starts_with('/')))
+            .or_else(crate::lifecycle::home_str)
+            .unwrap_or_else(|| "/".into());
     }
     candidates
         .into_iter()
@@ -181,7 +183,7 @@ fn id() -> String {
     )
 }
 fn home_relative(path: &str) -> String {
-    match fibo_platform::dirs::home_str() {
+    match crate::lifecycle::home_str() {
         Some(home) if !home.is_empty() && path.starts_with(&home) => {
             format!("~{}", &path[home.len()..])
         }

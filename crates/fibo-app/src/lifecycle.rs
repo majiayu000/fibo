@@ -27,6 +27,13 @@ pub fn here() -> String {
         .cloned()
         .unwrap_or_else(|| t!("本机").to_owned())
 }
+/// `$HOME` of the machine whose host this window works: the folders it offers are there.
+pub fn home_str() -> Option<String> {
+    match attached() {
+        true => crate::attach::home(),
+        false => fibo_platform::dirs::home_str(),
+    }
+}
 fn not_attached() -> io::Result<()> {
     refuse_attached(attached())
 }
