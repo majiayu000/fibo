@@ -219,6 +219,15 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Worked in that machine's own workbench here, as a session of this one is.
+        if self.open_on_host(
+            index,
+            super::hosts::Go::Terminal(card.id.clone()),
+            window,
+            cx,
+        ) {
+            return;
+        }
         let Some(remote) = self.machines.get(index) else {
             return;
         };

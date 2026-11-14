@@ -17,6 +17,7 @@ mod diagnostic_evidence;
 mod first_run_evidence;
 mod folderless_space_evidence;
 mod follow_input_evidence;
+mod hosts_evidence;
 mod keymap_evidence;
 mod layout_evidence;
 mod link_evidence;
@@ -80,6 +81,7 @@ pub fn start(
         || phones_evidence::start(handle, evidence.clone(), cx)
         || remote_typing_evidence::start(handle, evidence.clone(), cx)
         || attach_evidence::start(handle, evidence.clone(), cx)
+        || hosts_evidence::start(handle, evidence.clone(), cx)
         || cpu_probe_evidence::start(handle, evidence.clone(), cx)
         || pane_drag_evidence::start(handle, evidence.clone(), cx)
         || resume_evidence::start(handle, evidence.clone(), cx)

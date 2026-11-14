@@ -30,6 +30,12 @@ impl Workbench {
         self.run_agent_here(agent, cx);
         agent.name().to_owned()
     }
+    /// The space tab `id` is in.
+    pub fn visual_tab_space(&self, id: &str) -> Option<String> {
+        (self.workspace.tabs.iter())
+            .find(|t| t.id == id)
+            .map(|t| t.space.clone())
+    }
     pub fn visual_tab_ids(&self) -> Vec<String> {
         self.workspace.tabs.iter().map(|t| t.id.clone()).collect()
     }

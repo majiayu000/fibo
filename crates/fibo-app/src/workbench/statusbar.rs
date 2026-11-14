@@ -84,6 +84,7 @@ impl Workbench {
             .text_size(px(T::CHIP_SIZE))
             .font_features(T::tabular())
             .whitespace_nowrap()
+            .children(self.home_button(cx))
             .child(host)
             .child(div().flex_1())
             .children(self.update_item(cx))

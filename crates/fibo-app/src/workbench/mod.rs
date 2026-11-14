@@ -50,6 +50,8 @@ pub struct Workbench {
     peek: Option<peek::Peek>,
     /// The machine this window's host runs on: this one, or another through its forward.
     host: crate::attach::Host,
+    /// Other machines' workbenches drawn in this window's place (`hosts`).
+    hosts: hosts::Hosts,
     redraw: Option<redraw::Redraw>,
     phones: phones::Phones,
     /// Other machines shown under this one's sessions (docs/multi-machine/spec.md).
@@ -269,6 +271,7 @@ mod pressure;
 use overview::OverviewState;
 mod palette;
 use palette::Search;
+mod hosts;
 mod peek;
 mod phones;
 mod redraw;
@@ -421,6 +424,7 @@ impl Workbench {
             sidebar: sidebar_list::SidebarPrefs::load(),
             peek: None,
             host: host.clone(),
+            hosts: Default::default(),
             redraw: None,
             phones: Default::default(),
             machines: Self::start_machines(&host, cx),
