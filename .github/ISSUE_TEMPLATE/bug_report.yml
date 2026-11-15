@@ -1,0 +1,36 @@
+name: Bug report
+description: Something in Fibo does not work the way it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead. A screenshot helps.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Fibo version
+      description: The release you installed, for example 0.1.2 (Settings › About).
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: For example "macOS 15.1, Apple silicon" or "Windows 11 x64".
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent CLI
+      description: Which agent was running in the terminal, and its version (for example "Claude Code 2.1").
+  - type: textarea
+    id: explain
+    attributes:
+      label: Output of `fibo explain <terminal>` and `fibo hooks status`
+      description: If a session shows the wrong state or does not appear, paste both. Remove anything private first.
+      render: text

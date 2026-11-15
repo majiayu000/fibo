@@ -107,6 +107,9 @@ fibo plugins          # 哪些插件生效了，没生效的为什么
 
 ## 常见问题
 
+**和 tmux、和普通终端 App 有什么不同？**
+tmux 能让终端在窗口关掉后继续跑，Fibo 的后台也一样。tmux 和终端 App 给你看的是屏幕上的字，它们不知道里面的 Agent 在做什么。Fibo 读每个 Agent 自己的会话记录和事件，所以能说出哪个会话在等你、哪个在跑、哪个刚结束一轮，把它们放在同一块看板上，重启电脑后接回的是原来那段对话，不是一个空 shell。终端本身由 libghostty（Ghostty 的终端内核）绘制。Fibo 不碰 Agent 的模型和循环。
+
 **Agent 没出现在左栏。**
 1. 要在 Fibo 的终端里运行；在别处启动的会话只在看板上以「外部·只读」出现。
 2. 套在包装器（沙盒、虚拟机）里运行时，启动前设 `MOORING_AGENT=claude`（或 `codex` 等），让 Fibo 认得它。
@@ -117,6 +120,9 @@ fibo plugins          # 哪些插件生效了，没生效的为什么
 
 **退出、更新或重启会怎样？**
 退出或更新 App，终端都继续跑。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。
+
+**有 Windows 或 Linux 版吗？**
+Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 在发布页有预览版安装包：还没有代码签名，在 Windows 11 上试过，不会自动更新。没有 Linux 发布版。
 
 **数据放在哪，会不会传出去？**
 终端和会话索引在 `~/.local/share/fibo-workbench`，设置和插件在 `~/.config/fibo`。Fibo 只读 Agent 自己的对话记录，不上传。手机中继要你自己开启，内容端到端加密。
