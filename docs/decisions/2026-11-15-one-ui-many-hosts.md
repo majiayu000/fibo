@@ -166,3 +166,8 @@ cargo test -p fibo-core --test guard
 - 来源提交：12d9cea4（每台一份工作台）、973b799d（那台侧栏里的"本机"）、29932b42（`attach::Host` 改成每个后台一份，Rejected 里写了不在同一个工作台里换 store 的原因）。
 - 相关：[2026-11-14 一个窗口多台后台](2026-11-14-one-window-many-hosts.md)、[电脑下面是空间](2026-11-07-machines-hold-spaces.md)、`docs/multi-machine/connection-options.html`（Rex 等的连接方式）、`docs/performance/index.html`。
 - 同类：[WezTerm 多路复用](https://wezterm.org/multiplexing.html)、[Zed 远程开发](https://zed.dev/docs/remote-development)、[Rex 远程访问](https://www.superlogical.com/rex/docs/linux/remote-access.md)。
+
+## 后来的发现
+
+- 2026-11-15 第 1 步做完（#349 侧栏不跳、#350 后台刷新断了重发且不留旧报错、#351 侧栏点亮正在看的空间），真 agentos 上 `scripts/hosts-evidence.sh` PASS。agentos 的工作区约 3 MB，经 ssh 一次 0.22–0.26 秒。
+- 2026-11-15 顺序改成**先做第 3 步**：第 2 步要改读工作区 470 处、连接 80 处、窗格 56 处，外加 54 处异步回调和 34 处订阅，用户看不到变化；第 3 步不依赖它，每台电脑已经有一份自己的工作台，启动时就建好并保持订阅，侧栏和看板读它们的工作区即可。第 3 步做完再看第 2 步还要不要做。用户：「能不能先做第3步吧？」
