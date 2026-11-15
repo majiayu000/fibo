@@ -1,6 +1,7 @@
 //! MOORING_HOSTS_EVIDENCE: another machine in this window (one window, many hosts, step
 //! 2; one UI, step 1). The outer script gives the window a machine `far` reached through a
-//! fake ssh, with a space `far`. Picking that space draws far's own main area beside this
+//! fake ssh, with a space `far`. far is reached as the window opens, before any click and
+//! without being drawn. Picking that space draws far's own main area beside this
 //! window's own sidebar, which stays; ⌘T there opens in that space on far; 「← 本机」 comes
 //! back with this machine's tabs as they were; picking far again finds its tab still there,
 //! and one of this machine's spaces picked in the sidebar comes back too; what was opened
@@ -38,20 +39,26 @@ pub(super) fn start(
         let host = std::env::var("MOORING_HOSTS_HOST").unwrap_or_else(|_| "far".into());
         let picked = std::env::var("MOORING_HOSTS_SPACE").unwrap_or_else(|_| "far".into());
         let home_tabs = handle.update(cx, |v, _, _| v.visual_tab_ids()).unwrap();
+        // Reached as the window opens, before any click, and not drawn.
+        let mut reached = false;
+        for _ in 0..120 {
+            wait(250).await;
+            reached = handle.update(cx, |v, _, _| v.visual_reached(&host)).unwrap();
+            if reached {
+                break;
+            }
+        }
+        assert!(reached, "{host} was not reached as the window opened");
+        let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
+        assert_eq!(shown.0, None, "{host} was drawn without being picked");
         // Picking far's space: its own workbench, reached in the background, drawn here.
         handle
             .update(cx, |v, window, cx| {
                 v.visual_show_host(&host, Some(&picked), window, cx)
             })
             .unwrap();
-        let mut shown = (None, None);
-        for _ in 0..120 {
-            wait(250).await;
-            shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
-            if shown.0.is_some() {
-                break;
-            }
-        }
+        // Already reached: drawn at the click, nothing to wait for.
+        let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
         assert_eq!(
             shown.0.as_ref(),
             Some(&host),

@@ -321,6 +321,8 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        // Other machines' own hosts, reached once it is drawn and kept (`hosts`).
+        cx.defer_in(window, |this, window, cx| this.reach_hosts(window, cx));
         // Opening where you left off is the host's to say; a space put aside is not where
         // to start.
         let space = (workspace.spaces.iter())

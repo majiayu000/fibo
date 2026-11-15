@@ -12,8 +12,11 @@ pub(super) struct Hosts {
     views: Vec<(String, Entity<Workbench>)>,
     /// The one drawn in this window's place; None draws this workbench.
     showing: Option<String>,
-    /// Being reached: its forward and first workspace come in the background.
-    pub(super) opening: Option<String>,
+    /// Being reached: their forwards and first workspaces come in the background.
+    pub(super) opening: Vec<String>,
+    /// The machine last picked before it was reached, and where to go there: drawn once
+    /// it is.
+    wanted: Option<(String, Option<Go>)>,
     /// This workbench is another machine's, drawn in a window of this one.
     pub(super) embedded: bool,
     /// Drawn embedded: how wide the window's own sidebar is beside it, None while folded.
@@ -64,11 +67,34 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.hosts.opening.is_some() {
+        self.hosts.wanted = Some((host.clone(), go));
+        self.reach_host(host, window, cx);
+        cx.notify();
+    }
+    /// Each machine in machines.json reached when the window opens, and kept: its main area
+    /// is there at the first click, and its workspace is this window's to read meanwhile.
+    pub(super) fn reach_hosts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Another machine's own view has none beside it; with peek on, nothing opens here.
+        if self.host.attached() || crate::ui::peek::enabled(cx) {
             return;
         }
-        self.hosts.opening = Some(host.clone());
-        cx.notify();
+        let hosts: Vec<String> = (self.machines.iter())
+            .map(|m| m.view.lock().unwrap().spec.clone())
+            .filter(|spec| !spec.quiet)
+            .map(|spec| spec.host)
+            .collect();
+        for host in hosts {
+            self.reach_host(host, window, cx);
+        }
+    }
+    /// Reaches `host` in the background once; drawn when it was the one last picked. A
+    /// machine reached unasked that cannot be reached says nothing until it is picked.
+    fn reach_host(&mut self, host: String, window: &mut Window, cx: &mut Context<Self>) {
+        let known = self.hosts.views.iter().any(|(h, _)| *h == host);
+        if known || self.hosts.opening.contains(&host) {
+            return;
+        }
+        self.hosts.opening.push(host.clone());
         let reach = cx.background_spawn({
             let host = host.clone();
             async move {
@@ -81,24 +107,31 @@ impl Workbench {
         cx.spawn_in(window, async move |this, cx| {
             let reached = reach.await;
             let _ = this.update_in(cx, |this, window, cx| {
-                this.hosts.opening = None;
+                this.hosts.opening.retain(|h| *h != host);
+                let wanted = (this.hosts.wanted.as_ref())
+                    .is_some_and(|(h, _)| *h == host)
+                    .then(|| this.hosts.wanted.take())
+                    .flatten();
                 match reached {
                     Ok((root, workspace)) => {
                         let socket = root.join("workbench.sock");
                         let view = cx.new(|cx| Workbench::new(socket, workspace, window, cx));
-                        view.update(cx, |w, _| {
-                            w.hosts.embedded = true;
-                            w.hosts.go = go;
-                        });
+                        view.update(cx, |w, _| w.hosts.embedded = true);
                         cx.subscribe_in(&view, window, |this, _, event, window, cx| match event {
                             HostEvent::Home => this.show_home(window, cx),
                             HostEvent::ToggleSidebar => this.toggle_sidebar(cx),
                         })
                         .detach();
-                        this.hosts.views.push((host.clone(), view));
-                        this.hosts.showing = Some(host);
+                        this.hosts.views.push((host.clone(), view.clone()));
+                        if let Some((_, go)) = wanted {
+                            view.update(cx, |w, _| w.hosts.go = go);
+                            this.hosts.showing = Some(host);
+                        }
                     }
-                    Err(e) => this.error = Some(t!("没能打开 {host}：{e}", host = &host, e)),
+                    Err(e) if wanted.is_some() => {
+                        this.error = Some(t!("没能打开 {host}：{e}", host = &host, e));
+                    }
+                    Err(e) => eprintln!("reaching {host}: {e}"),
                 }
                 cx.notify();
             });
@@ -221,7 +254,14 @@ impl Workbench {
 impl Workbench {
     /// Which machine's workbench is drawn here, and whether one is still being reached.
     pub fn visual_hosts(&self) -> (Option<String>, Option<String>) {
-        (self.hosts.showing.clone(), self.hosts.opening.clone())
+        (
+            self.hosts.showing.clone(),
+            self.hosts.opening.first().cloned(),
+        )
+    }
+    /// Whether `host` has its own workbench here, drawn or not.
+    pub fn visual_reached(&self, host: &str) -> bool {
+        self.hosts.views.iter().any(|(h, _)| h == host)
     }
     pub fn visual_hosted(&self) -> Option<Entity<Workbench>> {
         self.hosted_view()
