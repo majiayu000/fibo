@@ -1975,6 +1975,7 @@ version = "0.1.2"
 dependencies = [
  "ed25519-dalek",
  "fibo-platform",
+ "fibo-remote",
  "getrandom 0.3.4",
  "libghostty-vt",
  "regex",

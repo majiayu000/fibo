@@ -213,6 +213,9 @@ pub struct View {
     pub machine: Option<Machine>,
     pub spaces: Vec<Space>,
     pub terminals: Vec<Card>,
+    /// Its spaces and cards come from its own host's workspace in this window (`hosts`),
+    /// not this connection's list; the connection still says whether it is online.
+    pub native: bool,
 }
 
 /// A machine's live connection and what its `hello` lets this desktop do there.
@@ -256,6 +259,7 @@ impl Remote {
             machine: None,
             spaces: Vec::new(),
             terminals: Vec::new(),
+            native: false,
         }));
         let client = Arc::new(Mutex::new(None));
         let stop = Arc::new(AtomicBool::new(false));
@@ -273,6 +277,7 @@ impl Remote {
             machine: None,
             spaces,
             terminals,
+            native: false,
         };
         Self {
             view: Arc::new(Mutex::new(view)),
@@ -446,20 +451,24 @@ fn not_running(e: io::Error) -> io::Error {
 fn apply(view: &Mutex<View>, machine: Option<Machine>, list: List) -> bool {
     let mut v = view.lock().unwrap();
     let machine = machine.or(Some(list.machine));
-    let same = v.link == Link::Online
-        && v.machine == machine
-        && v.spaces == list.spaces
-        && v.terminals == list.terminals;
+    let listed = v.native || (v.spaces == list.spaces && v.terminals == list.terminals);
+    let same = v.link == Link::Online && v.machine == machine && listed;
     v.link = Link::Online;
     v.machine = machine;
-    v.spaces = list.spaces;
-    v.terminals = list.terminals;
+    if !v.native {
+        v.spaces = list.spaces;
+        v.terminals = list.terminals;
+    }
     !same
 }
 
 fn parse<T: serde::de::DeserializeOwned>(v: serde_json::Value) -> io::Result<T> {
     serde_json::from_value(v).map_err(|e| io::Error::other(t!("对方的回复读不懂：{e}", e)))
 }
+
+#[cfg(test)]
+#[path = "machines_native_tests.rs"]
+mod native_tests;
 
 #[cfg(test)]
 mod tests {

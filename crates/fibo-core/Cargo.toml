@@ -11,6 +11,7 @@ serde.workspace = true
 serde_json.workspace = true
 regex = "1"
 fibo-platform = { path = "../fibo-platform" }
+fibo-remote = { path = "../fibo-remote" }
 sha2 = "0.10"
 rustc-hash = "2"
 ed25519-dalek = "2"
