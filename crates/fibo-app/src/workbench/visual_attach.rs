@@ -20,6 +20,7 @@ impl Workbench {
             "split_right" => Action::SplitRight,
             "split_down" => Action::SplitDown,
             "close" => Action::Close,
+            "next_waiting" => Action::NextWaiting,
             _ => return false,
         };
         self.shortcut(action, window, cx)

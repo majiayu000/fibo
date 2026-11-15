@@ -64,6 +64,17 @@ pub(super) struct OverviewState {
     pub(super) toggle_at: Option<gpui::Bounds<gpui::Pixels>>,
 }
 impl Workbench {
+    /// The title row's 鸟瞰: into the board, or out of it when `on`. As another machine's
+    /// main area, the window's board, which holds every machine's sessions.
+    pub(super) fn toggle_overview(&mut self, on: bool, cx: &mut Context<Self>) {
+        if on {
+            self.leave_overview(cx);
+        } else if self.hosts.embedded {
+            cx.emit(super::hosts::HostEvent::Overview);
+        } else {
+            self.show_overview(cx);
+        }
+    }
     /// Swaps the panes for the overview in the same window: top bar, sidebar and tabs stay.
     pub(super) fn show_overview(&mut self, cx: &mut Context<Self>) {
         self.overview.closed_only = false;

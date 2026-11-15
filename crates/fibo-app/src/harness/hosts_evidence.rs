@@ -85,6 +85,9 @@ pub(super) fn start(
             beside.is_some(),
             "{host} was drawn without this window's sidebar"
         );
+        // Its title row counts what needs you as this window does, on every machine.
+        let counted = far.read_with(cx, |w, _| w.visual_board_and_wants().1);
+        assert!(counted.is_some(), "{host}'s title row counts only its own");
         // Its space chip in this sidebar is lit while its main area shows that space.
         let lit = handle.update(cx, |v, _, cx| v.visual_shown_space(cx)).unwrap();
         assert_eq!(
@@ -156,6 +159,44 @@ pub(super) fn start(
         let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
         assert_eq!(shown.0, None, "this machine's space left {host} drawn");
         shoot("hosts-5-home-space.png", cx);
+        // ⌘J in far's main area, with something waiting: the window's next, so input moves.
+        if counted.is_some_and(|n| n > 1) {
+            let before = far.read_with(cx, |w, _| w.visual_focused());
+            handle
+                .update(cx, |v, window, cx| {
+                    v.visual_show_host(&host, None, window, cx);
+                    far.update(cx, |w, cx| {
+                        assert!(w.visual_shortcut("next_waiting", window, cx))
+                    })
+                })
+                .unwrap();
+            wait(1500).await;
+            let after = far.read_with(cx, |w, _| w.visual_focused());
+            let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
+            assert!(
+                after != before || shown.0.is_none(),
+                "⌘J in {host} went nowhere: {before:?}"
+            );
+            shoot("hosts-5b-next.png", cx);
+        }
+        // 鸟瞰 pressed in far's main area: this window's board, which holds every machine.
+        handle
+            .update(cx, |v, window, cx| {
+                v.visual_show_host(&host, None, window, cx)
+            })
+            .unwrap();
+        wait(400).await;
+        handle
+            .update(cx, |_, _, cx| far.update(cx, |w, cx| w.visual_press_board(cx)))
+            .unwrap();
+        wait(400).await;
+        let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
+        let board = handle.update(cx, |v, _, _| v.visual_board_and_wants().0).unwrap();
+        assert!(
+            shown.0.is_none() && board,
+            "鸟瞰 in {host} did not open this window's board: {shown:?}"
+        );
+        shoot("hosts-6-board.png", cx);
         // Leaves far as it was.
         handle
             .update(cx, |_, _, cx| {
