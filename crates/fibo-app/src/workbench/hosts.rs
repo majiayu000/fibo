@@ -122,6 +122,13 @@ impl Workbench {
                             HostEvent::ToggleSidebar => this.toggle_sidebar(cx),
                         })
                         .detach();
+                        // Its rows in this sidebar, from its own workspace from now on.
+                        let feed = host.clone();
+                        cx.observe(&view, move |this, view, cx| {
+                            this.feed_machine(&feed, &view, cx)
+                        })
+                        .detach();
+                        this.feed_machine(&host, &view, cx);
                         this.hosts.views.push((host.clone(), view.clone()));
                         if let Some((_, go)) = wanted {
                             view.update(cx, |w, _| w.hosts.go = go);
@@ -166,6 +173,31 @@ impl Workbench {
             .child(row)
             .children(self.turning_view(cx));
         self.window_layers(root, window, cx)
+    }
+    /// `host`'s spaces and cards in this sidebar, made from its own workspace by the rules
+    /// its host lists them with for phones (`remote_cards`); redrawn only when they change.
+    fn feed_machine(&mut self, host: &str, view: &Entity<Workbench>, cx: &mut Context<Self>) {
+        let Some(machine) =
+            (self.machines.iter()).find(|m| m.view.lock().unwrap().spec.host == host)
+        else {
+            return;
+        };
+        let (spaces, cards) = {
+            let w = view.read(cx);
+            let now = fibo_core::content::now();
+            let (spaces, _) = fibo_core::remote_cards::spaces(&w.workspace);
+            let cards = fibo_core::remote_cards::cards(&w.workspace, w.store.recognition(), now);
+            (spaces, cards)
+        };
+        let mut v = machine.view.lock().unwrap();
+        let changed = !v.native || v.spaces != spaces || v.terminals != cards;
+        v.native = true;
+        v.spaces = spaces;
+        v.terminals = cards;
+        drop(v);
+        if changed {
+            cx.notify();
+        }
     }
     /// The machine drawn here and the space its main area shows, or is about to show.
     pub(super) fn shown_space(&self, cx: &gpui::App) -> Option<(String, String)> {
@@ -258,6 +290,12 @@ impl Workbench {
             self.hosts.showing.clone(),
             self.hosts.opening.first().cloned(),
         )
+    }
+    /// Whether `host`'s sidebar rows come from its own workspace here, and its spaces there.
+    pub fn visual_machine_rows(&self, host: &str) -> Option<(bool, Vec<String>)> {
+        let machine = (self.machines.iter()).find(|m| m.view.lock().unwrap().spec.host == host)?;
+        let v = machine.view.lock().unwrap();
+        Some((v.native, v.spaces.iter().map(|s| s.id.clone()).collect()))
     }
     /// Whether `host` has its own workbench here, drawn or not.
     pub fn visual_reached(&self, host: &str) -> bool {

@@ -2,8 +2,7 @@
 //! burst of events), so everything here reads what the host already has, and a card's
 //! branch comes from `.git/HEAD` through a short cache, never a git process.
 use crate::control;
-use fibo_core::modes::TerminalModes;
-use fibo_core::{git_head, model::*, protocol::*, status, status_group};
+use fibo_core::{git_head, model::*, protocol::*, status};
 use fibo_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -11,22 +10,6 @@ use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-
-/// A question tool's question with its options as numbered lines (`1. 新对话继续`), the
-/// way a phone offers a screen's options as buttons and answers one with its number key.
-/// The card keeps them apart; as one text, a phone from before this reads them too.
-fn asked(c: &fibo_core::content::Content) -> Option<String> {
-    if c.choices.is_empty() || c.waiting.is_empty() {
-        return None;
-    }
-    let first = c.waiting.lines().next().unwrap_or_default();
-    let listed = format!("（{}）", c.choices.join(" / "));
-    let question = first.strip_suffix(listed.as_str()).unwrap_or(first);
-    let options = (c.choices.iter().take(9).enumerate())
-        .map(|(i, o)| format!("{}. {}", i + 1, o.replace('\n', " ")))
-        .collect::<Vec<_>>();
-    Some(format!("{question}\n{}", options.join("\n")))
-}
 
 /// How long a directory's branch is believed: a checkout shows within this.
 const BRANCH_FOR: Duration = Duration::from_secs(3);
@@ -54,115 +37,15 @@ fn branch(cwd: &str) -> Option<String> {
 /// Spaces and running terminals as cards: what each Agent is doing and what it asks.
 pub(super) fn list(w: &Workspace, seen: &RecognitionStatus, socket: &Path) -> io::Result<Value> {
     let now = fibo_core::content::now();
-    let terminals: Vec<_> = w
-        .terminals
-        .iter()
-        .filter(|t| t.state == ProcessState::Running)
-        // A space put aside stays off phones and other machines, older ones included.
-        .filter(|t| !w.terminal_quiet(&t.id))
-        .map(|t| {
-            let session = w.current_agent(&t.id);
-            let cwd = w.terminal_cwd(t);
-            let content = session.and_then(|s| w.content.get(&s.id));
-            let trust = seen.terminal_trust.get(&t.id);
-            let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
-            // What a change here set, until the log says something newer.
-            let set = seen
-                .terminal_modes
-                .get(&t.id)
-                .filter(|m| m.session.as_deref() == session.map(|s| s.id.as_str()));
-            let log_model = content.map_or("", |c| c.model.as_str());
-            let log_permission = content.map_or("", |c| c.permission.as_str());
-            let set_permission =
-                set.and_then(|m| TerminalModes::read(&m.permission, log_permission));
-            let permission_full = if set_permission.is_some() {
-                set.and_then(|m| m.permission_full)
-            } else {
-                content.and_then(|c| c.permission_full)
-            };
-            let status = status::of_terminal(w, &t.id, trust.is_some(), now);
-            let phase = match status.map(status::Status::phase) {
-                Some(status::Phase::Working) => rp::Phase::Working,
-                Some(status::Phase::Waiting) => rp::Phase::Waiting,
-                Some(status::Phase::Idle) => rp::Phase::Idle,
-                None => rp::Phase::Shell,
-            };
-            // An Agent here that no conversation is tied to: what it is, in the host's words.
-            let unbound = session
-                .is_none()
-                .then(|| seen.terminal_agents.get(&t.id).copied())
-                .flatten()
-                .or(trust.map(|p| p.agent));
-            let note = unbound
-                .filter(|_| trust.is_none())
-                .and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
-            let agent = session.map(|s| s.runtime).or(unbound);
-            rp::Card {
-                agent_name: agent.map_or_else(String::new, |a| a.name().to_owned()),
-                controls: agent.map(controls),
-                id: t.id.clone(),
-                // The space the window lists the conversation under; a shell's own.
-                space: session
-                    .and_then(|s| w.session_space(s))
-                    .unwrap_or(&t.space)
-                    .to_owned(),
-                tab: control::tab_title(w, &t.id),
-                cwd: cwd.clone(),
-                phase,
-                agent: agent.map(control::agent_label),
-                session: session.map(|s| s.id.clone()),
-                title: Some(
-                    session
-                        .map(|s| w.session_title(s))
-                        .or_else(|| note.clone())
-                        .unwrap_or_else(|| cwd.clone()),
-                ),
-                approval: content.and_then(|c| said(&c.approval)),
-                waiting: content.and_then(|c| asked(c).or_else(|| said(&c.waiting))),
-                status: status.map(|s| s.key().to_owned()),
-                status_label: status.map(|s| s.label().to_owned()),
-                needs_you: trust.is_some() || session.is_some_and(|s| w.needs_you(s, now)),
-                trust: trust.map(|p| rp::TrustAsk {
-                    question: p.question.clone(),
-                    folder: p.folder.clone(),
-                }),
-                column: session
-                    .and_then(|s| status_group::column(w, s, now))
-                    .map(|c| c.key().to_owned()),
-                note,
-                turn: content
-                    .map(|c| c.turn_key.clone())
-                    .filter(|t| !t.is_empty()),
-                outcome: session.map(|s| outcome_key(&s.outcome).to_owned()),
-                updated: session.map(|s| w.session_updated(s)),
-                branch: branch(&cwd),
-                running_since: session.and_then(|s| status::running_since(w, s, now)),
-                // Its first ask is the card's title already; only a record says more.
-                doing: content
-                    .filter(|_| status == Some(status::Status::Running))
-                    .and_then(|c| c.doing())
-                    .filter(|d| !d.starts_with("做 "))
-                    // A finished turn's row says what it left running, as the sidebar does.
-                    .or_else(|| {
-                        session
-                            .filter(|_| status == Some(status::Status::Review))
-                            .and_then(|s| status::left_behind(w, s))
-                    }),
-                model: (set.and_then(|m| TerminalModes::read(&m.model, log_model)))
-                    .or_else(|| content.and_then(|c| said(&c.model))),
-                permission_full,
-                permission: set_permission.or_else(|| content.and_then(|c| said(&c.permission))),
-            }
+    // The rules are core's (`remote_cards`); what only this host can tell is added here.
+    let terminals: Vec<_> = (fibo_core::remote_cards::cards(w, seen, now).into_iter())
+        .map(|mut card| {
+            card.controls = fibo_core::remote_cards::agent(w, seen, &card.id).map(controls);
+            card.branch = branch(&card.cwd);
+            card
         })
         .collect();
-    let space = |s: &fibo_core::model::Space| rp::Space {
-        id: s.id.clone(),
-        name: s.name.clone(),
-        cwd: s.cwd.clone(),
-    };
-    let (quiet, spaces): (Vec<_>, Vec<_>) = w.spaces.iter().partition(|s| w.space_quiet(&s.id));
-    let spaces = spaces.into_iter().map(space).collect();
-    let quiet = quiet.into_iter().map(space).collect();
+    let (spaces, quiet) = fibo_core::remote_cards::spaces(w);
     let todos = (status::unfinished_todos(w, now).into_iter())
         .map(|t| todo(w, t, now))
         .collect();
@@ -226,37 +109,11 @@ fn todo(w: &Workspace, t: &Task, now: u64) -> rp::Todo {
     }
 }
 
-fn outcome_key(o: &Outcome) -> &'static str {
-    match o {
-        Outcome::Open => "open",
-        Outcome::Completed => "done",
-        Outcome::Deferred { .. } => "deferred",
-        Outcome::Abandoned => "abandoned",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The phone turns numbered lines into buttons (`choices` in mobile/src/ui/parse.ts).
-    #[test]
-    fn a_question_reaches_the_phone_with_numbered_options() {
-        let c = fibo_core::content::Content {
-            waiting: "【下一步】接下来怎么继续？（新对话继续 / 就在这里继续）".into(),
-            choices: vec!["新对话继续".into(), "就在这里继续".into()],
-            ..Default::default()
-        };
-        assert_eq!(
-            asked(&c).as_deref(),
-            Some("【下一步】接下来怎么继续？\n1. 新对话继续\n2. 就在这里继续")
-        );
-        let approval = fibo_core::content::Content {
-            waiting: "CLI 请求工具审批（Hook）".into(),
-            ..Default::default()
-        };
-        assert_eq!(asked(&approval), None, "no options: the text as it is");
-    }
+    use fibo_core::modes::TerminalModes;
+    use fibo_core::status_group;
 
     /// A space put aside stays off phones and other machines, its todos too.
     #[test]

@@ -49,6 +49,12 @@ pub(super) fn start(
             }
         }
         assert!(reached, "{host} was not reached as the window opened");
+        // Its rows in this sidebar come from its own workspace, its spaces included.
+        let rows = handle.update(cx, |v, _, _| v.visual_machine_rows(&host)).unwrap();
+        assert!(
+            rows.as_ref().is_some_and(|(native, spaces)| *native && spaces.contains(&picked)),
+            "{host}'s rows are not from its own workspace: {rows:?}"
+        );
         let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
         assert_eq!(shown.0, None, "{host} was drawn without being picked");
         // Picking far's space: its own workbench, reached in the background, drawn here.
