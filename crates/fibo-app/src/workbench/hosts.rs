@@ -1,7 +1,9 @@
 //! Other machines in this window (docs/decisions/2026-11-14-one-window-many-hosts.md, step
 //! 2): a machine's own host, worked by a workbench of its own, the same code as this one's,
-//! drawn in this window's place while one of its spaces or sessions is picked. 「← 本机」
-//! comes back; each keeps its tabs, splits and focus meanwhile.
+//! drawn beside this window's own sidebar while one of its spaces or sessions is picked
+//! (docs/decisions/2026-11-15-one-ui-many-hosts.md, step 1): the sidebar is the window's and
+//! stays as it is, only the main area is that machine's. One of this machine's spaces or
+//! sessions in the sidebar, or 「← 本机」, comes back; each keeps its tabs, splits and focus.
 use super::*;
 
 #[derive(Default)]
@@ -14,6 +16,8 @@ pub(super) struct Hosts {
     pub(super) opening: Option<String>,
     /// This workbench is another machine's, drawn in a window of this one.
     pub(super) embedded: bool,
+    /// Drawn embedded: how wide the window's own sidebar is beside it, None while folded.
+    pub(super) beside: Option<f32>,
     /// Where to go the next time it draws: asked for before it was shown.
     go: Option<Go>,
 }
@@ -29,6 +33,8 @@ pub(super) enum Go {
 pub(super) enum HostEvent {
     /// 「← 本机」.
     Home,
+    /// Its sidebar toggle or ⌘\: the window's own sidebar folds or comes back.
+    ToggleSidebar,
 }
 impl gpui::EventEmitter<HostEvent> for Workbench {}
 
@@ -86,6 +92,7 @@ impl Workbench {
                         });
                         cx.subscribe_in(&view, window, |this, _, event, window, cx| match event {
                             HostEvent::Home => this.show_home(window, cx),
+                            HostEvent::ToggleSidebar => this.toggle_sidebar(cx),
                         })
                         .detach();
                         this.hosts.views.push((host.clone(), view));
@@ -97,6 +104,48 @@ impl Workbench {
             });
         })
         .detach();
+    }
+    /// This window's sidebar beside another machine's main area: the sidebar stays as it
+    /// is, only the main area, its title row and status bar are that machine's.
+    pub(super) fn hosted_frame(
+        &mut self,
+        view: Entity<Workbench>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        self.before_render(window, cx);
+        let sidebar = self.cached_sidebar(window, cx);
+        let beside = sidebar.is_some().then(|| self.sidebar_width());
+        view.update(cx, |w, cx| {
+            if w.hosts.beside != beside {
+                w.hosts.beside = beside;
+                cx.notify();
+            }
+        });
+        let row = div()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .children(sidebar)
+            .child(div().flex_1().min_w_0().h_full().child(view));
+        let root = Self::window_root(cx)
+            .relative()
+            .child(row)
+            .children(self.turning_view(cx));
+        self.window_layers(root, window, cx)
+    }
+    /// Whether the sidebar is folded away; drawn embedded, whether the window's own is.
+    pub(super) fn sidebar_folded(&self) -> bool {
+        match self.hosts.embedded {
+            true => self.hosts.beside.is_none(),
+            false => self.sidebar.collapsed,
+        }
+    }
+    /// One of this machine's spaces or sessions picked: its main area again.
+    pub(super) fn leave_host(&mut self) {
+        if self.hosts.showing.take().is_some() {
+            self.nav.pending_focus = true;
+        }
     }
     /// 「← 本机」: this window's own workbench again.
     pub(super) fn show_home(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -134,42 +183,6 @@ impl Workbench {
                 .hover(|s| s.bg(T::color(T::button_hover())))
                 .child(home)
                 .on_click(cx.listener(|_, _, _, cx| cx.emit(HostEvent::Home))),
-        )
-    }
-    /// Under another machine's space chips, where this window lists the other machines:
-    /// 本机, as a chip of theirs, back to this machine's own.
-    pub(super) fn home_chip(&self, cx: &Context<Self>) -> Option<gpui::AnyElement> {
-        use crate::ui::theme::Flat as F;
-        if !self.hosts.embedded {
-            return None;
-        }
-        let chip = div()
-            .id("host-home-chip")
-            .role(gpui::accesskit::Role::Button)
-            .aria_label(t!("回到本机"))
-            .h(px(F::CHIP))
-            .px(px(T::S8))
-            .flex()
-            .items_center()
-            .gap(px(F::CHIP_GAP))
-            .rounded(px(F::CHIP / 2.))
-            .border(px(T::BORDER_WIDTH))
-            .border_color(T::color(F::chip_line()))
-            .cursor_pointer()
-            .hover(|s| s.border_color(T::color(F::chip_on_line())))
-            .text_size(px(F::CHIP_TEXT))
-            .text_color(T::color(F::quiet()))
-            .child(t!("本机"))
-            .on_click(cx.listener(|_, _, _, cx| cx.emit(HostEvent::Home)));
-        Some(
-            div()
-                .flex()
-                .px(px(T::S12))
-                .pt(px(T::S10))
-                .pb(px(T::S2))
-                .font_family(T::UI_FONT)
-                .child(chip)
-                .into_any_element(),
         )
     }
     /// A machine's session from this window's sidebar or board: in its own workbench here,
@@ -213,5 +226,10 @@ impl Workbench {
     }
     pub fn visual_go_home(&mut self, cx: &mut Context<Self>) {
         cx.emit(HostEvent::Home);
+    }
+    /// Drawn embedded: how wide the window's own sidebar beside it was, None when it was
+    /// not drawn beside one.
+    pub fn visual_beside(&self) -> Option<f32> {
+        self.hosts.beside
     }
 }

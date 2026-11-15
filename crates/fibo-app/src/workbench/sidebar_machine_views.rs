@@ -56,12 +56,6 @@ struct Heading {
 impl Workbench {
     /// What the list opens with: the space chips, and what the layout adds to them.
     pub(super) fn column_top(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
-        let mut out = self.column_top_of_layout(cx);
-        // Another machine's own column in this window: this machine, where the others sit.
-        out.extend(self.home_chip(cx));
-        out
-    }
-    fn column_top_of_layout(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         match (self.machine_layout(), self.machine_scope()) {
             (Machines::Rail, Some(index)) => {
                 let rows = self.listed_remote_rows().len();

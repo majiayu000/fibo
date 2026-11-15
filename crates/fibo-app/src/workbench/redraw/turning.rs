@@ -177,7 +177,7 @@ impl Workbench {
     pub(in crate::workbench) fn begin_turning_frame(&self) {
         if let Some(r) = &self.redraw {
             r.marks.frame.borrow_mut().clear();
-            if self.sidebar.collapsed {
+            if self.sidebar.collapsed || self.hosts.embedded {
                 r.marks.clear();
             }
         }

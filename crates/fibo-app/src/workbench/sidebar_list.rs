@@ -161,6 +161,11 @@ impl Workbench {
     }
     /// ⌘B: the column folds to a rail and back, as Claude's desktop app does.
     pub(super) fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        // Drawn embedded, the sidebar is the window's.
+        if self.hosts.embedded {
+            cx.emit(super::hosts::HostEvent::ToggleSidebar);
+            return;
+        }
         self.sidebar.collapsed = !self.sidebar.collapsed;
         self.sidebar.save();
         cx.notify();

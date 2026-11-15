@@ -49,12 +49,12 @@ impl Workbench {
         // T3 Code's mark: the panel with a chevron saying which way a click moves it.
         icon_button(
             "sidebar-toggle",
-            if self.sidebar.collapsed {
+            if self.sidebar_folded() {
                 "icons/sidebar-open.svg"
             } else {
                 "icons/sidebar.svg"
             },
-            if self.sidebar.collapsed {
+            if self.sidebar_folded() {
                 t!("展开左栏")
             } else {
                 t!("收起左栏")
@@ -347,4 +347,68 @@ pub(in crate::workbench) fn marked_button(
         .hover(|s| s.bg(T::color(T::button_hover())))
         .when_some(mark, |d, m| d.child(m))
         .child(text)
+}
+
+impl Workbench {
+    /// The window's outermost box: its ground, text and font.
+    pub(in crate::workbench) fn window_root(cx: &Context<Self>) -> gpui::Div {
+        let terminal_style = crate::ui::style::current(cx) == crate::ui::style::Style::Terminal;
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .bg(T::base())
+            .text_color(T::color(T::primary()))
+            .text_size(px(T::BODY_SIZE))
+            .line_height(gpui::relative(T::LINE_HEIGHT))
+            .font_family(T::UI_FONT)
+            .when(terminal_style, |d| d.font(T::mono(cx)))
+    }
+    /// What lies over the window's content, the same whichever machine's main area is
+    /// drawn: menus, the search, settings and diagnostics, and the window's own keys.
+    pub(in crate::workbench) fn window_layers(
+        &mut self,
+        mut root: gpui::Div,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        // 标记完成 runs leave their panes for the sidebar: over everything but the menus.
+        if let Some(overlay) = self.completing_overlay(window) {
+            root = root.child(overlay);
+        }
+        if let Some(menu) = &self.layout.menu {
+            root = root.child(self.menu_view(menu, window, cx));
+        }
+        if let Some(position) = self.sidebar.view_menu {
+            root = root.child(self.view_menu_view(position, window, cx));
+        }
+        if self.phones.open {
+            root = root.child(self.phones_panel(window, cx));
+        }
+        root = root.children(self.overlays(cx));
+        if let Some(position) = self.layout.icon_menu {
+            root = root.child(self.icon_menu_view(position, window, cx));
+        }
+        if let Some((id, position)) = &self.layout.tab_menu {
+            root = root.child(self.tab_menu_view(id, *position, window, cx));
+        }
+        if let Some((id, position)) = &self.layout.session_menu {
+            root = root.child(self.session_menu_view(id, *position, window, cx));
+        }
+        root = root.children(self.sidebar_menus(window, cx));
+        if let Some(closing) = &self.layout.confirm_close {
+            root = root.child(self.confirm_close_view(closing, cx));
+        }
+        if self.search.is_open() {
+            root = root.child(self.search_palette(cx));
+        }
+        if let Some(view) = &self.diagnostics {
+            root = root.child(self.diagnostic_overlay(view.clone(), cx));
+        }
+        if let Some(view) = &self.settings {
+            root = root.child(self.settings_overlay(view.clone(), cx));
+        }
+        self.root_handlers(root, cx)
+    }
 }

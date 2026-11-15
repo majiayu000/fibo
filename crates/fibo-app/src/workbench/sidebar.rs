@@ -137,6 +137,7 @@ impl Workbench {
     }
     /// Shows a space: its first tab, or over the overview, its sessions only.
     pub(super) fn pick_space(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.leave_host();
         if self.nav.overview {
             self.overview.filter_space = Some(id.to_owned());
         }

@@ -11,9 +11,9 @@ pub(super) use tabs::hidden_tabs;
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Another machine's spaces picked: its own workbench, in this one's place.
+        // Another machine's spaces picked: its own workbench beside this window's sidebar.
         if let Some(view) = self.hosted_view() {
-            return div().size_full().child(view);
+            return self.hosted_frame(view, window, cx);
         }
         self.settle_hosts(window, cx);
         self.follow_space_theme(cx);
@@ -77,17 +77,7 @@ impl Render for Workbench {
             self.nav.pending_focus = false;
         }
         let terminal_style = crate::ui::style::current(cx) == crate::ui::style::Style::Terminal;
-        let mut root = div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            .bg(T::base())
-            .text_color(T::color(T::primary()))
-            .text_size(px(T::BODY_SIZE))
-            .line_height(gpui::relative(T::LINE_HEIGHT))
-            .font_family(T::UI_FONT)
-            .when(terminal_style, |d| d.font(T::mono(cx)));
+        let mut root = Self::window_root(cx);
         let space_name = self
             .workspace
             .spaces
@@ -98,7 +88,7 @@ impl Render for Workbench {
         // The main column's own title row, as T3 Code has it: where you are on the left,
         // what needs you and the overview on the right. The window's top edge belongs to
         // the sidebar; collapsed, its toggle stays beside the traffic lights right here.
-        let collapsed = self.sidebar.collapsed;
+        let collapsed = self.sidebar_folded();
         // Standard style puts the tabs in this row, so the current tab is not named a
         // second time; only the overview and a task's page, which no tab stands for.
         let here = if self.nav.overview || !self.overview.cleanup.is_empty() {
@@ -235,7 +225,7 @@ impl Render for Workbench {
         });
         // Phones are reached from the sidebar's foot (连接手机); once one is paired its
         // button stays up here too, showing who is online.
-        if !self.sidebar.collapsed {
+        if !collapsed {
             tail.extend(
                 self.phones_button(cx)
                     .filter(|_| !self.store.recognition().remote.devices.is_empty())
@@ -731,7 +721,8 @@ impl Render for Workbench {
         }
         // Beside 会话优先's column the status bar belongs to the main column, so the
         // column runs to the window's foot (flat.html); otherwise it spans the window.
-        let width = f32::from(window.viewport_size().width);
+        // Drawn embedded, the window's own sidebar takes its share of the width.
+        let width = f32::from(window.viewport_size().width) - self.hosts.beside.unwrap_or(0.);
         let beside = sidebar.is_some()
             && self.sidebar.preset().group == fibo_core::sidebar::Grouping::Recent;
         if beside {
@@ -749,42 +740,6 @@ impl Render for Workbench {
             )
             .when(!beside, |d| d.child(self.statusbar_view(width, cx)))
             .children(self.turning_view(cx));
-        // 标记完成 runs leave their panes for the sidebar: over everything but the menus.
-        if let Some(overlay) = self.completing_overlay(window) {
-            root = root.child(overlay);
-        }
-        if let Some(menu) = &self.layout.menu {
-            root = root.child(self.menu_view(menu, window, cx));
-        }
-        if let Some(position) = self.sidebar.view_menu {
-            root = root.child(self.view_menu_view(position, window, cx));
-        }
-        if self.phones.open {
-            root = root.child(self.phones_panel(window, cx));
-        }
-        root = root.children(self.overlays(cx));
-        if let Some(position) = self.layout.icon_menu {
-            root = root.child(self.icon_menu_view(position, window, cx));
-        }
-        if let Some((id, position)) = &self.layout.tab_menu {
-            root = root.child(self.tab_menu_view(id, *position, window, cx));
-        }
-        if let Some((id, position)) = &self.layout.session_menu {
-            root = root.child(self.session_menu_view(id, *position, window, cx));
-        }
-        root = root.children(self.sidebar_menus(window, cx));
-        if let Some(closing) = &self.layout.confirm_close {
-            root = root.child(self.confirm_close_view(closing, cx));
-        }
-        if self.search.is_open() {
-            root = root.child(self.search_palette(cx));
-        }
-        if let Some(view) = &self.diagnostics {
-            root = root.child(self.diagnostic_overlay(view.clone(), cx));
-        }
-        if let Some(view) = &self.settings {
-            root = root.child(self.settings_overlay(view.clone(), cx));
-        }
-        self.root_handlers(root, cx)
+        self.window_layers(root, window, cx)
     }
 }
