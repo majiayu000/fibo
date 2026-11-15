@@ -272,6 +272,7 @@ use overview::OverviewState;
 mod palette;
 use palette::Search;
 mod hosts;
+mod latency;
 mod peek;
 mod phones;
 mod redraw;

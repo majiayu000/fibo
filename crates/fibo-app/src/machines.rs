@@ -19,6 +19,37 @@ const SETTLE: Duration = Duration::from_millis(150);
 const BACKOFF_MAX: Duration = Duration::from_secs(30);
 /// How stale the list may get when no event says anything changed.
 const REFRESH: Duration = Duration::from_secs(3);
+/// How often a machine is pinged for the round trip shown beside its name.
+const PING_EVERY: Duration = Duration::from_secs(5);
+
+/// Each connected machine's last round trip, by its host: what typing there waits for. One
+/// owner for it, read by every view that names the machine; gone while it is not connected.
+static LATENCY: Mutex<Option<std::collections::HashMap<String, Duration>>> = Mutex::new(None);
+
+/// The last round trip to `host`, while it is connected.
+pub fn latency(host: &str) -> Option<Duration> {
+    LATENCY.lock().unwrap().as_ref()?.get(host).copied()
+}
+/// Records `rtt` for `host` (None: not connected); true when it moved enough to show.
+fn set_latency(host: &str, rtt: Option<Duration>) -> bool {
+    let mut all = LATENCY.lock().unwrap();
+    let all = all.get_or_insert_with(Default::default);
+    let before = match rtt {
+        Some(rtt) => all.insert(host.to_owned(), rtt),
+        None => all.remove(host),
+    };
+    moved(before, rtt)
+}
+/// Worth a redraw: appeared, went, or changed by more than 5 ms and a fifth.
+fn moved(before: Option<Duration>, now: Option<Duration>) -> bool {
+    match (before, now) {
+        (Some(a), Some(b)) => {
+            let d = a.abs_diff(b);
+            d > Duration::from_millis(5) && d * 5 > a
+        }
+        (a, b) => a.is_some() != b.is_some(),
+    }
+}
 
 /// One machine as the user wrote it down, kept in `<config>/machines.json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -278,6 +309,7 @@ fn supervise(
             Err(e) => e.to_string(),
         };
         slot.lock().unwrap().take();
+        set_latency(&spec.host, None);
         if stop.load(Ordering::Relaxed) {
             return;
         }
@@ -347,6 +379,9 @@ fn run_once(
     apply(view, Some(hello.machine), list);
     changed();
     let mut listed = std::time::Instant::now();
+    // A host from before `ping` is never asked; its name shows without a round trip.
+    let pings = hello.ops.iter().any(|o| o == "ping");
+    let mut pinged: Option<std::time::Instant> = None;
     loop {
         if stop.load(Ordering::Relaxed) {
             return Ok(());
@@ -372,6 +407,14 @@ fn run_once(
             Err(RecvTimeoutError::Timeout) => {
                 if let Some(why) = client.ended() {
                     return Err(io::Error::other(why));
+                }
+                if pings && pinged.is_none_or(|at| at.elapsed() >= PING_EVERY) {
+                    let at = std::time::Instant::now();
+                    client.request(Op::Ping, REPLY)?;
+                    pinged = Some(at);
+                    if set_latency(&spec.host, Some(at.elapsed())) {
+                        changed();
+                    }
                 }
                 // `events` only says when a session changes state; an Agent started in a
                 // plain terminal, a new title or a closed terminal is not one. Ask again.
@@ -420,6 +463,17 @@ fn parse<T: serde::de::DeserializeOwned>(v: serde_json::Value) -> io::Result<T> 
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_round_trip_redraws_only_when_it_moves_enough() {
+        let ms = |n| Some(Duration::from_millis(n));
+        assert!(moved(None, ms(20)), "appeared");
+        assert!(moved(ms(20), None), "went");
+        assert!(!moved(ms(20), ms(24)), "jitter under 5 ms");
+        assert!(!moved(ms(200), ms(220)), "a tenth");
+        assert!(moved(ms(20), ms(40)));
+        assert!(moved(ms(200), ms(260)));
+    }
     use super::*;
     use serde_json::{Value, json};
     use std::io::{BufRead, BufReader, Write};
