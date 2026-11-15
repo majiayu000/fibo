@@ -217,12 +217,21 @@ impl Workbench {
                 cx.notify();
             }
         });
+        // A peek floats over the main area here too, as over this machine's.
+        let peek = (self.peek.as_ref()).map(|peek| self.peek_view(peek, cx));
+        let main = div()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .relative()
+            .child(view)
+            .children(peek);
         let row = div()
             .flex_1()
             .min_h_0()
             .flex()
             .children(sidebar)
-            .child(div().flex_1().min_w_0().h_full().child(view));
+            .child(main);
         let root = Self::window_root(cx)
             .relative()
             .child(row)
@@ -455,6 +464,10 @@ impl Workbench {
     /// Machine `index`'s own workbench here, once reached.
     pub fn visual_machine_workbench(&self, index: usize) -> Option<Entity<Workbench>> {
         self.machine_view(index)
+    }
+    /// The open peek's pane, wherever it is drawn.
+    pub fn visual_peek_bounds(&self, cx: &gpui::App) -> Option<gpui::Bounds<gpui::Pixels>> {
+        self.peek.as_ref()?.pane.read(cx).visual_bounds()
     }
     /// Whether `host` has its own workbench here, drawn or not.
     pub fn visual_reached(&self, host: &str) -> bool {
