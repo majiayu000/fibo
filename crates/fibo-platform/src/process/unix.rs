@@ -65,15 +65,31 @@ pub fn was_signalled(status: &std::process::ExitStatus) -> bool {
 
 pub fn detach(command: &mut std::process::Command) {
     use std::os::unix::process::CommandExt;
-    // SAFETY: setsid is async-signal-safe.
+    // SAFETY: setsid and signal are async-signal-safe.
     unsafe {
         command.pre_exec(|| {
             if libc::setsid() < 0 {
                 return Err(io::Error::last_os_error());
             }
-            Ok(())
+            default_term()
         });
     }
+}
+
+pub fn takes_term(command: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: signal is async-signal-safe.
+    unsafe { command.pre_exec(default_term) };
+}
+
+/// TERM as a program starts with: a window's process ignores it (AppKit quits the app its
+/// own way) and what it starts would keep that across exec.
+fn default_term() -> io::Result<()> {
+    // SAFETY: resets one signal's disposition in the child before exec.
+    if unsafe { libc::signal(libc::SIGTERM, libc::SIG_DFL) } == libc::SIG_ERR {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 pub fn start_after_exit(
