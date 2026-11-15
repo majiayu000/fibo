@@ -28,6 +28,8 @@ pub struct Store {
     /// A background refresh is in flight; it never blocks input or shows a label.
     syncing: bool,
     sync_again: bool,
+    /// What the last background refresh put on the window's error line, while it failed.
+    sync_error: Option<String>,
     /// The user action in flight, when it is a request (launches are not).
     in_flight: Option<Request>,
     /// Requests made while another user action was in flight, in order.
@@ -50,6 +52,7 @@ impl Store {
             busy_seq: 0,
             syncing: false,
             sync_again: false,
+            sync_error: None,
             in_flight: None,
             queued: VecDeque::new(),
             held_launch: None,
@@ -170,6 +173,23 @@ impl Store {
     pub fn end_sync(&mut self) -> bool {
         self.syncing = false;
         std::mem::take(&mut self.sync_again)
+    }
+    /// A background refresh's outcome on the window's error line: a failure shows, and a
+    /// later success clears only what a refresh put there, never a user action's error.
+    pub fn settle_sync(&mut self, shown: &mut Option<String>, failure: Option<String>) {
+        match failure {
+            Some(words) => {
+                *shown = Some(words.clone());
+                self.sync_error = Some(words);
+            }
+            None => {
+                if let Some(old) = self.sync_error.take()
+                    && shown.as_deref() == Some(old.as_str())
+                {
+                    *shown = None;
+                }
+            }
+        }
     }
     pub fn send(&self, request: Request) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();

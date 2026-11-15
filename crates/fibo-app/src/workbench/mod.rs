@@ -611,16 +611,22 @@ impl Workbench {
         if !self.store.begin_sync() {
             return;
         }
-        let task = cx.background_spawn(self.store.send(Request::Workspace));
+        // Resent while the host is away for a moment (a newer one taking over drops the
+        // replies in flight), as a read safely is.
+        let task = cx.background_spawn(self.store.deliver(Request::Workspace));
         cx.spawn(async move |this, cx| {
-            let reply = task.await;
+            let reply = task.await.into_result();
             let _ = this.update(cx, |this, cx| {
                 let again = this.store.end_sync();
-                match reply {
-                    Ok(Reply::Workspace(w)) => this.apply_workspace(w, cx),
-                    Ok(_) => (),
-                    Err(e) => this.error = Some(e.to_string()),
-                }
+                let failure = match reply {
+                    Ok(Reply::Workspace(w)) => {
+                        this.apply_workspace(w, cx);
+                        None
+                    }
+                    Ok(_) => None,
+                    Err(e) => Some(e.to_string()),
+                };
+                this.store.settle_sync(&mut this.error, failure);
                 if again || this.store.behind(this.workspace.revision) {
                     this.sync(cx);
                 }
