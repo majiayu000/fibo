@@ -179,6 +179,35 @@ pub(super) fn start(
             );
             shoot("hosts-5b-next.png", cx);
         }
+        // With peek on, a peek opened while far's main area is drawn floats over it. Only
+        // against the outer script's far: peek is a setting of the HOME it runs in.
+        let fake = std::env::var_os("MOORING_HOSTS_HOST").is_none();
+        let shell = far.read_with(cx, |w, _| w.visual_focused()).filter(|_| fake);
+        if let Some(shell) = shell {
+            handle
+                .update(cx, |v, window, cx| {
+                    crate::ui::peek::choose(true, cx).unwrap();
+                    v.visual_show_host(&host, None, window, cx);
+                    v.visual_peek_remote(0, &shell, window, cx)
+                })
+                .unwrap();
+            let mut drawn = None;
+            for _ in 0..40 {
+                wait(250).await;
+                shoot("hosts-5c-peek.png", cx);
+                drawn = handle.update(cx, |v, _, cx| v.visual_peek_bounds(cx)).unwrap();
+                if drawn.is_some() {
+                    break;
+                }
+            }
+            assert!(drawn.is_some(), "a peek opened over {host} was never drawn");
+            handle
+                .update(cx, |v, _, cx| {
+                    v.visual_close_peek(cx);
+                    crate::ui::peek::choose(false, cx).unwrap();
+                })
+                .unwrap();
+        }
         // 鸟瞰 pressed in far's main area: this window's board, which holds every machine.
         handle
             .update(cx, |v, window, cx| {
