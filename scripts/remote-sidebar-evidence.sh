@@ -90,8 +90,9 @@ def setup(sock, home, name, term, say):
 setup(R + '/far/workbench.sock', R + '/farhome', 'far-codex', 'far', '整理远程的验收清单')
 setup(R + '/rt/workbench.sock', R + '/home', 'here-codex', 'here', '整理本机的验收清单')
 PY
+# About forty screenshots, each read back from the GPU: minutes on a busy machine.
 PATH=$R/bin:$PATH HOME=$R/home CLAUDE_CONFIG_DIR=$R/claude CODEX_HOME=$R/home/.codex MOORING_REMOTE_SIDEBAR_EVIDENCE=1 MOORING_FAR_PID=$FAR \
-  perl -e 'alarm 300; exec @ARGV' $REPO/target/debug/fibo-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
+  perl -e 'alarm 600; exec @ARGV' $REPO/target/debug/fibo-app --runtime $R/rt --visual-evidence $R/shots > $R/app.log 2>&1
 echo "app exit $?"
 grep -E "PASS|panicked|assert|left:|right:" -A1 $R/app.log | head -12
 # A new launch reads 先不管 back from machines.json.
