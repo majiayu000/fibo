@@ -22,19 +22,29 @@ mkdir -m 700 $R/far $R/rt
 mkdir -p $R/home/brandnew
 cat > $R/bin/ssh <<'SH'
 #!/bin/sh
-# Fake ssh: drops options and the host, runs the command here.
+# Fake ssh: drops options and the host, runs the command here. `-N -L here:there` links
+# here to there and stays up like the window's forward to that machine's own host.
+forward=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    -L) forward="$2"; shift 2 ;;
     -o) shift 2 ;;
     -*) shift ;;
     *) shift; break ;;
   esac
 done
+if [ -n "$forward" ]; then
+  ln -sf "${forward#*:}" "${forward%%:*}"
+  exec sleep 86400
+fi
 exec /bin/sh -c "$*"
 SH
 chmod +x $R/bin/ssh
 printf '#!/bin/sh\nexec %s/target/debug/fibo "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-fibo; chmod +x $R/far-fibo
 printf '[{"host":"me@far","path":"%s/far-fibo"},{"host":"gone","path":"/nonexistent/fibo"}]' "$R" > $R/home/.config/fibo/machines.json
+# These look at the other machine in the peek: since 11-14 a click opens that machine itself
+# unless peek is turned on in settings.
+echo on > $R/home/.config/fibo/peek
 ln -s /bin/sh $R/codex
 env -i PATH=/usr/bin:/bin HOME=$R/farhome CODEX_HOME=$R/farhome/.codex CLAUDE_CONFIG_DIR=$R/farhome/.claude LANG=en_US.UTF-8 \
   $REPO/target/debug/fibo serve --runtime $R/far > $R/far.log 2>&1 &

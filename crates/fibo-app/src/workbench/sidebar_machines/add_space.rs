@@ -26,6 +26,8 @@ pub(in crate::workbench) struct AddingSpace {
     error: Option<String>,
     /// Which question the next reply must answer: a later one makes it stale.
     asked: u64,
+    /// Folders there are listed, and the space made, over this short exchange.
+    brief: crate::machines::Brief,
 }
 
 fn is_path(text: &str) -> bool {
@@ -91,12 +93,9 @@ impl Workbench {
     fn machine_index(&self, host: &str) -> Option<usize> {
         (0..self.machines.len()).find(|i| self.machine_host(*i).as_deref() == Some(host))
     }
-    /// Whether its host, connected now, lets this window pick folders and make spaces.
+    /// Whether its host is connected now, so folders there can be picked.
     fn machine_adds_spaces(&self, index: usize) -> bool {
-        self.machines.get(index).is_some_and(|m| {
-            m.view.lock().unwrap().link == Link::Online
-                && (m.slot().lock().unwrap().as_ref()).is_some_and(|l| l.adding_spaces)
-        })
+        (self.machines.get(index)).is_some_and(|m| m.view.lock().unwrap().link == Link::Online)
     }
     /// The space this machine's rows are narrowed to; one that has since gone narrows
     /// nothing.
@@ -139,7 +138,12 @@ impl Workbench {
             }
         });
         window.focus(&field.focus_handle(cx), cx);
+        let spec = (self.machine_index(&host))
+            .and_then(|i| self.machines.get(i))
+            .map(|m| m.view.lock().unwrap().spec.clone())
+            .unwrap_or_else(|| crate::machines::Spec::new(host.clone()));
         self.layout.adding_machine_space = Some(AddingSpace {
+            brief: crate::machines::Brief::new(spec),
             host,
             field,
             _watch: [events, changes],
@@ -159,10 +163,8 @@ impl Workbench {
             cx.notify();
         }
     }
-    fn adding_link(&self) -> Option<crate::machines::Linked> {
-        let adding = self.layout.adding_machine_space.as_ref()?;
-        let remote = self.machines.get(self.machine_index(&adding.host)?)?;
-        remote.slot().lock().unwrap().clone()
+    fn adding_link(&self) -> Option<crate::machines::Brief> {
+        Some(self.layout.adding_machine_space.as_ref()?.brief.clone())
     }
     fn list_machine_dirs(&mut self, settle: bool, cx: &mut Context<Self>) {
         let Some(linked) = self.adding_link() else {
@@ -179,7 +181,7 @@ impl Workbench {
             if settle {
                 timer.timer(SETTLE).await;
             }
-            linked.client.request(op, REPLY)
+            linked.request(op, REPLY)
         });
         cx.spawn(async move |this, cx| {
             let reply = sent.await;
@@ -232,7 +234,7 @@ impl Workbench {
             path,
             request: Some(fibo_core::protocol::RequestId::fresh().id),
         };
-        let sent = cx.background_spawn(async move { linked.client.request(op, REPLY) });
+        let sent = cx.background_spawn(async move { linked.request(op, REPLY) });
         cx.notify();
         cx.spawn(async move |this, cx| {
             let reply = sent.await;

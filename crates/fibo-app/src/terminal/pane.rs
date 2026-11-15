@@ -51,9 +51,6 @@ const ASK_RELOCATE_MS: u64 = 3000;
 pub struct Pane {
     terminal: String,
     socket: std::path::PathBuf,
-    /// Set for another machine's terminal: where its live connection is found, read
-    /// only. Reattaching takes whatever connection that machine has then.
-    remote: Option<crate::machines::Slot>,
     /// Wakes this pane on terminal output; every connection it opens shares it.
     wake: futures::channel::mpsc::UnboundedSender<()>,
     connection: Connection,
@@ -74,6 +71,9 @@ pub struct Pane {
     /// Device-pixel cell size last sent with the size, for the program's size reports.
     requested_cell: (u32, u32),
     local_error: Option<String>,
+    /// Typed into a look at another machine's terminal while its input was being taken
+    /// over: sent once the new link has the screen.
+    held: Vec<u8>,
     handoff: Option<Handoff>,
     select: Selection,
     /// Backing scale of the last paint, for drags reported outside the pane.
@@ -161,21 +161,18 @@ impl Pane {
     pub fn new(socket: &Path, id: &str, takeover: bool, cx: &mut Context<Self>) -> Self {
         let (tx, rx) = unbounded();
         let connection = Connection::new(socket, id, takeover, tx.clone());
-        Self::with(connection, socket.to_owned(), None, id, tx, rx, cx)
+        Self::with(connection, socket.to_owned(), id, tx, rx, cx)
     }
-    /// Another machine's terminal, looked at until it is used (`take_size`).
-    pub fn remote(slot: crate::machines::Slot, id: &str, cx: &mut Context<Self>) -> Self {
-        let (tx, rx) = unbounded();
-        let linked = slot.lock().unwrap().clone();
-        let connection = Connection::remote(linked, id, false, tx.clone());
-        let mut pane = Self::with(connection, Default::default(), Some(slot), id, tx, rx, cx);
+    /// Another machine's terminal through its forward here, floated up for a look: looked
+    /// at until it is used (`take_size`), as a peek of this machine's is.
+    pub fn peek_at(socket: &Path, id: &str, cx: &mut Context<Self>) -> Self {
+        let mut pane = Self::new(socket, id, false, cx);
         pane.peek = true;
         pane
     }
     fn with(
         connection: Connection,
         socket: std::path::PathBuf,
-        remote: Option<crate::machines::Slot>,
         id: &str,
         tx: futures::channel::mpsc::UnboundedSender<()>,
         mut rx: futures::channel::mpsc::UnboundedReceiver<()>,
@@ -217,7 +214,6 @@ impl Pane {
         Self {
             terminal: id.into(),
             socket,
-            remote,
             wake: tx,
             connection,
             reconnecting: false,
@@ -235,6 +231,7 @@ impl Pane {
             requested_size: (0, 0),
             requested_cell: (0, 0),
             local_error: None,
+            held: Vec::new(),
             handoff: None,
             select: Selection::new(),
             scale: 1.,
@@ -269,6 +266,7 @@ impl Pane {
     /// Attaches again after the host dropped this pane's stream; the snapshot restores
     /// the screen, and input works again once the pane owns the terminal.
     fn recover(&mut self, cx: &mut Context<Self>) {
+        self.send_held();
         let (dropped, failed, live) =
             self.connection
                 .state
@@ -297,13 +295,8 @@ impl Pane {
                 .timer(std::time::Duration::from_millis(delay))
                 .await;
             let _ = this.update(cx, |pane, cx| {
-                pane.connection = match &pane.remote {
-                    Some(slot) => {
-                        let linked = slot.lock().unwrap().clone();
-                        Connection::remote(linked, &pane.terminal, !pane.peek, pane.wake.clone())
-                    }
-                    None => Connection::new(&pane.socket, &pane.terminal, false, pane.wake.clone()),
-                };
+                pane.connection =
+                    Connection::new(&pane.socket, &pane.terminal, false, pane.wake.clone());
                 pane.reconnecting = false;
                 pane.bells_seen = 0;
                 pane.requested_cell = (0, 0);

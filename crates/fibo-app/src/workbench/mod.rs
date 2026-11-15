@@ -430,7 +430,7 @@ impl Workbench {
             hosts: Default::default(),
             redraw: None,
             phones: Default::default(),
-            machines: Self::start_machines(&host, cx),
+            machines: Self::start_machines(&host),
             statusbar: None,
             quota_pin: statusbar::load_quota_pin(),
             copied: None,

@@ -60,7 +60,6 @@
 "这个文件在 {host} 上，这里打不开" = "This file is on {host} and can't be opened here"
 "{host} 上的目录不能在访达里选：在空间的目录列表里选，或在终端里 cd 过去" = "Folders on {host} can't be picked in Finder: choose one from the space's folder list, or cd there in a terminal"
 "没能打开 {host} 的窗口：{e}" = "Couldn't open a window for {host}: {e}"
-"{len} 个会话 · {limit}" = "{len} {len|session|sessions} · {limit}"
 "{len} 个会话" = "{len} {len|session|sessions}"
 "连接中…" = "Connecting…"
 "断开：{why}" = "Offline: {why}"
@@ -73,8 +72,6 @@
 "{machine} · {len} 个空间 · {sessions} 个会话" = "{machine} · {len} {len|space|spaces} · {sessions} {sessions|session|sessions}"
 
 [machines]
-"旧版，只能看" = "Old version, view only"
-"旧版，不能开关终端" = "Old version, can't open or close terminals"
 "断开" = "Offline"
 "{machine} 现在没连上" = "{machine} isn't connected"
 "{machine} 没连上：{why}" = "{machine} not connected: {why}"

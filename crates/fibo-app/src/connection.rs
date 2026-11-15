@@ -34,14 +34,9 @@ pub struct Connection {
     /// Separate from `state`: the callback runs while the reader holds that lock.
     pub clipboard: Arc<Mutex<Option<String>>>,
     sender: SyncSender<Request>,
-    /// Another machine's terminal: the `watch` stream to close when this goes.
-    remote: Option<(Arc<fibo_remote::client::Client>, u64)>,
 }
 impl Drop for Connection {
     fn drop(&mut self) {
-        if let Some((client, stream)) = self.remote.take() {
-            client.close(stream);
-        }
         if let Ok(s) = self.state.lock()
             && let Some(socket) = &s.socket
         {
@@ -73,7 +68,6 @@ impl Connection {
             bells: Arc::clone(&bells),
             clipboard: Arc::clone(&clipboard),
             sender,
-            remote: None,
         };
         let socket = socket.to_owned();
         let id = id.to_owned();
@@ -220,136 +214,9 @@ impl Connection {
         });
         result
     }
-    /// Another machine's terminal through `watch`, never resized from here; typed into
-    /// (`input`) when that machine lets this desktop. `linked` is `None` while that
-    /// machine is unreachable; the pane says so.
-    /// `take`: as the writer that sizes it (`watch` with `take`); that machine's own panes
-    /// then look only.
-    pub fn remote(
-        linked: Option<crate::machines::Linked>,
-        id: &str,
-        take: bool,
-        wake: UnboundedSender<()>,
-    ) -> Self {
-        use base64::Engine;
-        use fibo_remote::protocol::{Op, StreamBody};
-        let state = Arc::new(Mutex::new(State {
-            vt: None,
-            writable: false,
-            error: None,
-            cols: 80,
-            rows: 24,
-            socket: None,
-            ended: false,
-            dropped: false,
-            scheme: None,
-            cursor_shape: None,
-        }));
-        let dirty = Arc::new(AtomicBool::new(false));
-        let (sender, typed) = sync_channel(128);
-        let mut result = Self {
-            state: Arc::clone(&state),
-            dirty: Arc::clone(&dirty),
-            bells: Arc::new(AtomicU64::new(0)),
-            clipboard: Arc::new(Mutex::new(None)),
-            sender,
-            remote: None,
-        };
-        let Some(linked) = linked else {
-            state.lock().unwrap().error = Some(t!("那台电脑没连上").into());
-            return result;
-        };
-        let client = linked.client;
-        let take = take && linked.resizing;
-        state.lock().unwrap().writable = linked.typing;
-        let on = {
-            let (state, dirty, wake) = (Arc::clone(&state), Arc::clone(&dirty), wake.clone());
-            move |body: StreamBody| {
-                let b64 = base64::engine::general_purpose::STANDARD;
-                let mut s = state.lock().unwrap();
-                let fed = match body {
-                    StreamBody::Screen { cols, rows, vt } => {
-                        b64.decode(vt).map_err(io::Error::other).and_then(|bytes| {
-                            let mut fresh = Vt::new(cols, rows)?;
-                            fresh.feed(&bytes);
-                            s.vt = Some(fresh);
-                            s.scheme = None;
-                            s.cursor_shape = None;
-                            s.cols = cols;
-                            s.rows = rows;
-                            Ok(())
-                        })
-                    }
-                    StreamBody::Output { vt } => {
-                        b64.decode(vt).map_err(io::Error::other).map(|bytes| {
-                            if let Some(v) = s.vt.as_mut() {
-                                v.feed(&bytes);
-                            }
-                        })
-                    }
-                    StreamBody::Resized { cols, rows } => match s.vt.as_mut() {
-                        Some(v) => v.resize(cols, rows).map(|()| {
-                            s.cols = cols;
-                            s.rows = rows;
-                        }),
-                        None => Ok(()),
-                    },
-                    StreamBody::Exited { .. } => {
-                        s.ended = true;
-                        Ok(())
-                    }
-                    StreamBody::End { reason } => {
-                        if !s.ended {
-                            s.error = Some(t!("连接已断开：{error}", error = reason));
-                            s.dropped = s.vt.is_some();
-                        }
-                        Ok(())
-                    }
-                    StreamBody::Event { .. } => Ok(()),
-                };
-                if let Err(e) = fed {
-                    s.error = Some(t!("画面读不懂：{e}", e));
-                }
-                drop(s);
-                if !dirty.swap(true, Ordering::AcqRel) {
-                    let _ = wake.unbounded_send(());
-                }
-            }
-        };
-        let opened = client.stream(
-            Op::Watch {
-                terminal: id.to_owned(),
-                take,
-            },
-            on,
-            std::time::Duration::from_secs(10),
-        );
-        match opened {
-            Ok((stream, _)) => {
-                if linked.typing {
-                    let (client, id) = (Arc::clone(&client), id.to_owned());
-                    let (state, wake) = (Arc::clone(&state), wake.clone());
-                    std::thread::spawn(move || {
-                        let sizes = take.then_some(stream);
-                        if let Err(e) = remote_typing(&client, &id, sizes, &typed) {
-                            state.lock().unwrap().error = Some(t!("没发过去：{e}", e));
-                            let _ = wake.unbounded_send(());
-                        }
-                    });
-                }
-                result.remote = Some((client, stream));
-            }
-            Err(e) => {
-                state.lock().unwrap().error = Some(t!("打不开那台电脑的终端：{e}", e));
-                let _ = wake.unbounded_send(());
-            }
-        }
-        result
-    }
     pub fn send(&self, request: Request) -> Result<(), String> {
         let state = self.state.lock().map_err(|_| "terminal lock poisoned")?;
-        // Another machine's terminal queues what is typed while its screen is on the way.
-        if (state.vt.is_none() && self.remote.is_none()) || !state.writable {
+        if state.vt.is_none() || !state.writable {
             return Err(t!("终端尚未恢复或当前为只读").into());
         }
         drop(state);
@@ -468,58 +335,6 @@ impl Drop for RecognitionConnection {
             let _ = socket.shutdown(std::net::Shutdown::Both);
         }
     }
-}
-
-/// Sends what is typed into another machine's terminal, in order: whatever queued while
-/// the last one was on its way goes as one `input`, so a fast typist waits one round
-/// trip, not one per key. Each carries a request id, so that machine types it once.
-/// With `sizes` (the taken stream), the pane's size changes go too, as `resize`.
-fn remote_typing(
-    client: &fibo_remote::client::Client,
-    terminal: &str,
-    sizes: Option<u64>,
-    typed: &std::sync::mpsc::Receiver<Request>,
-) -> io::Result<()> {
-    use base64::Engine;
-    use fibo_remote::protocol::Op;
-    let wait = std::time::Duration::from_secs(10);
-    let mut next = typed.recv().ok();
-    while let Some(request) = next.take() {
-        let mut bytes = match request {
-            Request::Input { bytes, .. } => bytes,
-            Request::Resize { cols, rows, .. } => {
-                if let Some(stream) = sizes {
-                    client.request(Op::Resize { stream, cols, rows }, wait)?;
-                }
-                next = typed.recv().ok();
-                continue;
-            }
-            _ => Vec::new(),
-        };
-        // Input queued meanwhile joins this one; anything else waits its turn.
-        while bytes.len() < 32 << 10 {
-            match typed.try_recv() {
-                Ok(Request::Input { bytes: more, .. }) => bytes.extend(more),
-                Ok(other) => {
-                    next = Some(other);
-                    break;
-                }
-                Err(_) => break,
-            }
-        }
-        if !bytes.is_empty() {
-            let op = Op::Input {
-                terminal: terminal.to_owned(),
-                data: base64::engine::general_purpose::STANDARD.encode(&bytes),
-                request: Some(fibo_core::protocol::RequestId::fresh().id),
-            };
-            client.request(op, wait)?;
-        }
-        if next.is_none() {
-            next = typed.recv().ok();
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -19,6 +19,7 @@ pub(super) struct Peek {
     pub(super) remote: Option<RemoteTitle>,
 }
 
+#[derive(Clone)]
 pub(super) struct RemoteTitle {
     pub(super) title: String,
     /// That machine's name, for the band above the title bar.
@@ -27,7 +28,6 @@ pub(super) struct RemoteTitle {
     /// Which of `Workbench::machines`, and the terminal's id there.
     pub(super) machine: usize,
     pub(super) terminal: String,
-    pub(super) slot: crate::machines::Slot,
 }
 
 impl Workbench {
@@ -142,11 +142,12 @@ impl Workbench {
         peek.answering = true;
         peek.note = None;
         let terminal = peek.terminal.clone();
-        let machine = (peek.remote.as_ref())
+        let remote = peek.remote.clone();
+        let machine = (remote.as_ref())
             .and_then(|r| self.machines.get(r.machine))
             .map(|m| m.view.lock().unwrap().spec.host.clone());
-        let task = match &peek.remote {
-            Some(r) => cx.background_spawn(super::machines::answer_remote(r, question, allow)),
+        let task = match &remote {
+            Some(r) => cx.background_spawn(self.answer_remote(r, question, allow, cx)),
             None => cx.background_spawn(self.store.send(Request::AnswerApproval {
                 id: terminal.clone(),
                 question,
@@ -187,12 +188,11 @@ impl Workbench {
                 .unwrap_or_else(|| t!("终端").into()),
         };
         let remote = peek.remote.is_some();
-        // Read only unless that machine lets this desktop type there.
-        let read_only = (peek.remote.as_ref())
-            .is_some_and(|r| !r.slot.lock().unwrap().as_ref().is_some_and(|l| l.typing));
-        // Another machine's terminal can be ended from here when that machine allows it.
-        let ends = (peek.remote.as_ref())
-            .is_some_and(|r| r.slot.lock().unwrap().as_ref().is_some_and(|l| l.managing));
+        // Another machine's terminal is typed into and ended here while it is reached.
+        let reached =
+            (peek.remote.as_ref()).is_some_and(|r| self.machine_view(r.machine).is_some());
+        let read_only = remote && !reached;
+        let ends = remote && reached;
         let approval = self.peek_approval();
         let state = match (&approval, group) {
             (Some(_), _) => Some(t!("等你批准").to_owned()),
@@ -289,12 +289,7 @@ impl Workbench {
         // (direction C, docs/multi-machine/peek-marker.html, chosen 11-04).
         let (what, how) = match &peek.remote {
             Some(r) if read_only => {
-                let linked = r.slot.lock().unwrap().is_some();
-                let why = if linked {
-                    t!("只读：那边的 Fibo 太旧，更新后才能打字")
-                } else {
-                    t!("只读：没连上")
-                };
+                let why = t!("只读：没连上");
                 (t!("正在偷看 {host} 上的终端", host = &r.host), why)
             }
             Some(r) => (

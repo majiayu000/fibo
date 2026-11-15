@@ -145,12 +145,7 @@ impl Workbench {
                 )
                 .children(super::latency::latency_tag(&host).map(|d| d.text_size(px(F::CHIP_TEXT))))
                 .when(need > 0, |d| d.child(need_badge(need)))
-                .tooltip(super::diagnostics::tip(vec![
-                    match self.machine_limit(index) {
-                        Some(limit) => format!("{name} · {limit}"),
-                        None => name.clone(),
-                    },
-                ]))
+                .tooltip(super::diagnostics::tip(vec![name.clone()]))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     let again = this.sidebar.machine_scope.as_deref() == Some(host.as_str());
                     this.set_machine_scope((!again).then(|| host.clone()));
@@ -388,10 +383,7 @@ impl Workbench {
         let name = machine_label(&host).to_owned();
         let note = match &link {
             Link::Online => {
-                let note = match self.machine_limit(index) {
-                    Some(limit) => t!("{len} 个会话 · {limit}", len = rows.len(), limit),
-                    None => t!("{len} 个会话", len = rows.len()),
-                };
+                let note = t!("{len} 个会话", len = rows.len());
                 match crate::machines::latency(&host) {
                     Some(rtt) => t!("{note} · {ms} ms", note, ms = rtt.as_millis().to_string()),
                     None => note,
@@ -569,12 +561,7 @@ impl Workbench {
             .cursor_pointer()
             .hover(|s| s.bg(T::color(F::hover())))
             .child(face)
-            .tooltip(super::diagnostics::tip(vec![
-                match index.and_then(|i| self.machine_limit(i)) {
-                    Some(limit) => format!("{label} · {limit}"),
-                    None => label,
-                },
-            ]))
+            .tooltip(super::diagnostics::tip(vec![label]))
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.set_machine_scope(host.clone());
                 this.sidebar.space_filter = None;

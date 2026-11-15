@@ -9,19 +9,29 @@ R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-rt}
 rm -rf $R; mkdir -p $R/home/.config/fibo $R/claude $R/shots $R/bin; mkdir -m 700 $R/far $R/rt
 cat > $R/bin/ssh <<'SH'
 #!/bin/sh
-# Fake ssh: drops options and the host, runs the command here.
+# Fake ssh: drops options and the host, runs the command here. `-N -L here:there` links
+# here to there and stays up like the window's forward to that machine's own host.
+forward=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    -L) forward="$2"; shift 2 ;;
     -o) shift 2 ;;
     -*) shift ;;
     *) shift; break ;;
   esac
 done
+if [ -n "$forward" ]; then
+  ln -sf "${forward#*:}" "${forward%%:*}"
+  exec sleep 86400
+fi
 exec /bin/sh -c "$*"
 SH
 chmod +x $R/bin/ssh
 printf '#!/bin/sh\nexec %s/target/debug/fibo "$@" --runtime %s/far\n' "$REPO" "$R" > $R/far-fibo; chmod +x $R/far-fibo
 printf '[{"host":"far","path":"%s/far-fibo"}]' "$R" > $R/home/.config/fibo/machines.json
+# These look at the other machine in the peek: since 11-14 a click opens that machine itself
+# unless peek is turned on in settings.
+echo on > $R/home/.config/fibo/peek
 $REPO/target/debug/fibo serve --runtime $R/far > $R/far.log 2>&1 &
 FAR=$!
 python3 -I - "$R" <<'PY'

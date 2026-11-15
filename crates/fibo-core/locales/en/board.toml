@@ -44,11 +44,9 @@
 [board.remote]
 "{machine} 上的会话：{title}" = "Session on {machine}: {title}"
 "断开" = "Offline"
-"{machine}没连上，或那边的 Fibo 太旧，不能在这里标" = "{machine} isn't connected, or its Fibo is too old to mark from here"
 "「{title}」移到{label}" = "Moved “{title}” to {label}"
 "「{title}」退回{needs}" = "Moved “{title}” back to {needs}"
 "{text}（{machine}）" = "{text} ({machine})"
-"{machine}没标上：{e}" = "Couldn't mark on {machine}: {e}"
 
 [board_drawer]
 "{needs}只能拖到「{done}」，表示做完了" = "{needs} can only go to “{done}”, meaning finished"
@@ -213,3 +211,4 @@
 "这一轮已处理完，可以返回鸟瞰。" = "All handled. You can go back to the board."
 "← 上一个" = "← Previous"
 "跳过 →" = "Skip →"
+"{machine}没连上，不能在这里标" = "{machine} isn't connected; can't mark it from here"

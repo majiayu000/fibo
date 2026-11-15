@@ -8,51 +8,23 @@ use crate::machines::{Link, Remote};
 use crate::terminal::pane::Pane;
 use crate::ui::widgets::{dot, label};
 use fibo_core::status::Status;
-use fibo_remote::protocol::{Card, Op, Phase, Space};
+use fibo_remote::protocol::{Card, Phase, Space};
 
 impl Workbench {
-    /// One connection per machine in `<config>/machines.json`; with none, nothing runs.
-    pub(super) fn start_machines(
-        host: &crate::attach::Host,
-        cx: &mut Context<Self>,
-    ) -> Vec<Remote> {
+    /// Each machine in `<config>/machines.json`, not reached yet: `reach_hosts` reaches
+    /// them once the window is drawn.
+    pub(super) fn start_machines(host: &crate::attach::Host) -> Vec<Remote> {
         // Another machine's own view: no other machines beside it.
         if host.attached() {
             return Vec::new();
         }
-        let specs = match crate::machines::load() {
-            Ok(specs) => specs,
+        match crate::machines::load() {
+            Ok(specs) => specs.into_iter().map(Remote::new).collect(),
             Err(e) => {
                 eprintln!("读取其他电脑配置失败：{e}");
-                return Vec::new();
+                Vec::new()
             }
-        };
-        if specs.is_empty() {
-            return Vec::new();
         }
-        let (tx, mut rx) = futures::channel::mpsc::unbounded::<()>();
-        cx.spawn(async move |this, cx| {
-            use futures::StreamExt;
-            while rx.next().await.is_some() {
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
-                    break;
-                }
-            }
-        })
-        .detach();
-        specs
-            .into_iter()
-            .map(|spec| {
-                let tx = tx.clone();
-                Remote::start(
-                    spec,
-                    |s| fibo_remote::client::Client::spawn(&s.command()),
-                    move || {
-                        let _ = tx.unbounded_send(());
-                    },
-                )
-            })
-            .collect()
     }
 
     pub(super) fn machine_rows(&self, recent: bool, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
@@ -74,18 +46,7 @@ impl Workbench {
                 .collect();
             let shells = view.terminals.len() - sessions.len();
             let (note, bad) = match &view.link {
-                // A host older than this window still lists; say what it cannot do yet.
-                Link::Online => match remote.slot().lock().unwrap().as_ref() {
-                    Some(l) if !l.typing => (
-                        t!("{len} 个会话 · 旧版，只能看", len = sessions.len()),
-                        false,
-                    ),
-                    Some(l) if !l.managing => (
-                        t!("{len} 个会话 · 旧版，不能开关终端", len = sessions.len()),
-                        false,
-                    ),
-                    _ => (t!("{len} 个会话", len = sessions.len()), false),
-                },
+                Link::Online => (t!("{len} 个会话", len = sessions.len()), false),
                 Link::Connecting => (t!("连接中…").to_owned(), false),
                 Link::Offline(why) => (t!("没连上：{detail}", detail = why), true),
             };
@@ -231,11 +192,22 @@ impl Workbench {
         let Some(remote) = self.machines.get(index) else {
             return;
         };
+        // Its terminal over that machine's own link here, as its workbench reaches it.
+        let Some(socket) = (self.machine_view(index)).map(|v| v.read(cx).store.socket().to_owned())
+        else {
+            let host = remote.view.lock().unwrap().spec.host.clone();
+            self.error = Some(t!(
+                "没能打开 {host}：{e}",
+                host = &host,
+                e = t!("那台电脑没连上")
+            ));
+            cx.notify();
+            return;
+        };
         let key = remote_key(&remote.view.lock().unwrap(), &card.id);
         if self.peek.as_ref().is_none_or(|p| p.terminal != key) {
-            let slot = remote.slot();
             let id = card.id.clone();
-            let pane = cx.new(|cx| Pane::remote(slot, &id, cx));
+            let pane = cx.new(|cx| Pane::peek_at(&socket, &id, cx));
             cx.observe(&pane, |this, _, cx| this.pane_changed(cx))
                 .detach();
             // Typing here is typing: it brings a machine put aside back, as it does a space.
@@ -260,7 +232,6 @@ impl Workbench {
                     status: card.status.as_deref().and_then(Status::from_key),
                     machine: index,
                     terminal: card.id.clone(),
-                    slot: remote.slot(),
                 }),
             });
         }
@@ -272,8 +243,8 @@ impl Workbench {
 }
 
 impl Workbench {
-    /// 「＋」 on a machine's heading: a shell in a new tab there, in `space` (else where its
-    /// host puts it), then that shell in the peek. Named, so a resend opens one.
+    /// 「＋」 on a machine's heading: a shell in a new tab there, in `space` (else in the
+    /// space it shows), in that machine's own workbench here, which is then drawn.
     pub(super) fn open_remote_shell(
         &mut self,
         index: usize,
@@ -281,44 +252,16 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(remote) = self.machines.get(index) else {
+        let (Some(view), Some(host)) = (self.machine_view(index), self.machine_host(index)) else {
             return;
         };
-        let Some(linked) = remote.slot().lock().unwrap().clone() else {
-            return;
-        };
-        let name = {
-            let view = remote.view.lock().unwrap();
-            (view.machine.as_ref()).map_or_else(|| view.spec.host.clone(), |m| m.name.clone())
-        };
-        let op = open_shell(space.as_ref(), fibo_core::protocol::RequestId::fresh().id);
-        let sent = cx.background_spawn(async move {
-            linked
-                .client
-                .request(op, std::time::Duration::from_secs(15))
+        view.update(cx, |w, cx| {
+            if let Some(space) = &space {
+                w.pick_space(&space.id, cx);
+            }
+            w.launch(false, None, cx);
         });
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            let opened = sent.await;
-            let _ = window.update(cx, |_, window, cx| {
-                let _ = this.update(cx, |this, cx| match opened {
-                    Ok(reply) => {
-                        let terminal = reply["terminal"].as_str().unwrap_or_default();
-                        let card: Card = serde_json::from_value(serde_json::json!({
-                            "id": terminal, "space": "", "tab": "", "phase": "shell",
-                            "cwd": t!("新终端"),
-                        }))
-                        .expect("a card needs only these");
-                        this.open_remote_peek(index, card, &name, window, cx);
-                    }
-                    Err(e) => {
-                        this.error = Some(t!("没能在 {name} 上开终端：{e}", name = &name, e = e));
-                        cx.notify();
-                    }
-                });
-            });
-        })
-        .detach();
+        self.show_host(host, None, window, cx);
     }
 
     /// 「关闭终端」 in a remote peek, once confirmed: ends that terminal there and closes
@@ -327,52 +270,17 @@ impl Workbench {
         let Some(r) = self.peek.as_ref().and_then(|p| p.remote.as_ref()) else {
             return;
         };
-        let Some(linked) = r.slot.lock().unwrap().clone().filter(|l| l.managing) else {
+        let terminal = r.terminal.clone();
+        let Some(view) = self.machine_view(r.machine) else {
+            if let Some(p) = &mut self.peek {
+                p.confirm_end = false;
+                p.note = Some(t!("没关掉：{e}", e = t!("那台电脑没连上")));
+            }
+            cx.notify();
             return;
         };
-        let op = fibo_remote::protocol::Op::End {
-            terminal: r.terminal.clone(),
-            request: Some(fibo_core::protocol::RequestId::fresh().id),
-        };
-        let key = self.peek.as_ref().map(|p| p.terminal.clone());
-        let sent = cx.background_spawn(async move {
-            linked
-                .client
-                .request(op, std::time::Duration::from_secs(10))
-        });
-        cx.spawn(async move |this, cx| {
-            let ended = sent.await;
-            let _ = this.update(cx, |this, cx| {
-                if this.peek.as_ref().map(|p| p.terminal.clone()) != key {
-                    return;
-                }
-                match ended {
-                    Ok(_) => this.close_peek(cx),
-                    Err(e) => {
-                        if let Some(p) = &mut this.peek {
-                            p.confirm_end = false;
-                            p.note = Some(t!("没关掉：{e}", e));
-                        }
-                        cx.notify();
-                    }
-                }
-            });
-        })
-        .detach();
-    }
-}
-
-/// The `open` for a shell there. A space picked in this window is named, so one with no
-/// folder (its host cannot match it by `cwd`) still gets it; its folder goes too, for a host
-/// too old to read `space`. With none, the host picks, as before.
-fn open_shell(space: Option<&Space>, request: String) -> Op {
-    Op::Open {
-        cwd: space.map(|s| s.cwd.clone()).filter(|c| !c.is_empty()),
-        space: space.map(|s| s.id.clone()),
-        agent: None,
-        prompt: None,
-        resume: None,
-        request: Some(request),
+        view.update(cx, |w, cx| w.edit(Edit::ClosePane { terminal }, cx));
+        self.close_peek(cx);
     }
 }
 
@@ -399,33 +307,29 @@ impl Workbench {
     }
 }
 
-/// Answers another machine's approval over its link, named so a resend answers once.
-pub(super) fn answer_remote(
-    r: &super::peek::RemoteTitle,
-    question: String,
-    allow: bool,
-) -> impl std::future::Future<Output = std::io::Result<fibo_core::protocol::Reply>> + use<> {
-    use fibo_remote::protocol::Op;
-    let linked = r.slot.lock().unwrap().clone();
-    let terminal = r.terminal.clone();
-    async move {
-        let linked = linked.ok_or_else(|| std::io::Error::other(t!("那台电脑没连上#workbench")))?;
-        if !linked.answering {
-            return Err(std::io::Error::other(t!("那台电脑不让这里回答审批")));
+impl Workbench {
+    /// Answers another machine's approval through its own workbench here.
+    pub(super) fn answer_remote(
+        &self,
+        r: &super::peek::RemoteTitle,
+        question: String,
+        allow: bool,
+        cx: &gpui::App,
+    ) -> impl std::future::Future<Output = std::io::Result<fibo_core::protocol::Reply>> + use<>
+    {
+        let sent = (self.machine_view(r.machine)).map(|view| {
+            view.read(cx).store.send(Request::AnswerApproval {
+                id: r.terminal.clone(),
+                question,
+                allow,
+            })
+        });
+        async move {
+            match sent {
+                Some(sent) => sent.await,
+                None => Err(std::io::Error::other(t!("那台电脑没连上#workbench"))),
+            }
         }
-        let op = Op::Answer {
-            terminal,
-            question,
-            allow,
-            always: false,
-            subject: None,
-            always_label: None,
-            request: Some(fibo_core::protocol::RequestId::fresh().id),
-        };
-        linked
-            .client
-            .request(op, std::time::Duration::from_secs(10))
-            .map(|_| fibo_core::protocol::Reply::Ok)
     }
 }
 
@@ -530,43 +434,8 @@ impl Workbench {
     /// The open peek's pane, and whether its title bar says 只读.
     pub fn visual_peek_pane(&self) -> Option<(Entity<Pane>, bool)> {
         let peek = self.peek.as_ref()?;
-        let read_only = (peek.remote.as_ref())
-            .is_some_and(|r| !r.slot.lock().unwrap().as_ref().is_some_and(|l| l.typing));
+        let read_only =
+            (peek.remote.as_ref()).is_some_and(|r| self.machine_view(r.machine).is_none());
         Some((peek.pane.clone(), read_only))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn space(id: &str, cwd: &str) -> Space {
-        Space {
-            id: id.into(),
-            name: id.into(),
-            cwd: cwd.into(),
-        }
-    }
-    fn picked(op: Op) -> (Option<String>, Option<String>) {
-        match op {
-            Op::Open { cwd, space, .. } => (cwd, space),
-            other => panic!("{other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_shell_opened_in_a_picked_space_names_that_space() {
-        // A space with no folder: only its id can put the shell there.
-        let blank = space("blank", "");
-        assert_eq!(
-            picked(open_shell(Some(&blank), "r1".into())),
-            (None, Some("blank".into()))
-        );
-        let own = space("own", "/work/own");
-        assert_eq!(
-            picked(open_shell(Some(&own), "r2".into())),
-            (Some("/work/own".into()), Some("own".into()))
-        );
-        assert_eq!(picked(open_shell(None, "r3".into())), (None, None));
     }
 }
