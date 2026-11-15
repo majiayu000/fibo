@@ -72,6 +72,13 @@ pub(super) fn start(
             beside.is_some(),
             "{host} was drawn without this window's sidebar"
         );
+        // Its space chip in this sidebar is lit while its main area shows that space.
+        let lit = handle.update(cx, |v, _, cx| v.visual_shown_space(cx)).unwrap();
+        assert_eq!(
+            lit,
+            Some((host.clone(), picked.clone())),
+            "the sidebar did not mark the space shown"
+        );
         // ⌘T there: a tab on far, in the space picked.
         handle
             .update(cx, |_, window, cx| {
