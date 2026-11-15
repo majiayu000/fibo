@@ -761,4 +761,6 @@ fn hostname() -> String {
 #[cfg(test)]
 mod recognition_tests;
 #[cfg(test)]
+mod slow_reader_tests;
+#[cfg(test)]
 mod tests;

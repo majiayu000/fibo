@@ -13,6 +13,13 @@ mod turn_changes;
 mod typing;
 pub(super) use typing::*;
 
+/// How long writing a reply may go without a byte taken before that client is given up. A
+/// write that moves at all keeps going: another machine's window reads a 3 MB workspace
+/// through an ssh forward that slows to tens of KB/s and stalls for seconds at a time, and
+/// 5 seconds cut it off every time (2026-11-16). A client that stops reading holds only its
+/// own thread meanwhile; no lock is held while a reply is written.
+pub(super) const REPLY_STALL: Duration = Duration::from_secs(30);
+
 pub(super) fn serve_client(
     mut stream: local::Stream,
     host: Shared,
@@ -24,7 +31,7 @@ pub(super) fn serve_client(
             "peer uid mismatch",
         ));
     }
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(REPLY_STALL))?;
     match receive::<Request>(&mut stream)? {
         Request::Hello { major: MAJOR } => send(
             &mut stream,

@@ -248,6 +248,10 @@ fn supervise(forward: &Forward) {
     loop {
         let mut argv = forward.spec.ssh_options("-N");
         argv.extend([
+            // A workspace is JSON and goes whole on each change: compressed, a slow link
+            // carries it several times faster.
+            "-o".into(),
+            "Compression=yes".into(),
             "-o".into(),
             "ExitOnForwardFailure=yes".into(),
             "-o".into(),

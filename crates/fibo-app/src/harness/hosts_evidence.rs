@@ -38,10 +38,14 @@ pub(super) fn start(
         };
         let host = std::env::var("MOORING_HOSTS_HOST").unwrap_or_else(|_| "far".into());
         let picked = std::env::var("MOORING_HOSTS_SPACE").unwrap_or_else(|_| "far".into());
+        // A real machine's every change comes back as its whole workspace over its link,
+        // seconds on a slow one: each wait stretches four times (none against far).
+        let slow = if std::env::var_os("MOORING_HOSTS_HOST").is_some() { 4 } else { 1 };
         let home_tabs = handle.update(cx, |v, _, _| v.visual_tab_ids()).unwrap();
-        // Reached as the window opens, before any click, and not drawn.
+        // Reached as the window opens, before any click, and not drawn. A real machine on a
+        // slow link takes two ssh setups and its whole workspace: up to two minutes.
         let mut reached = false;
-        for _ in 0..120 {
+        for _ in 0..120 * slow {
             wait(250).await;
             reached = handle.update(cx, |v, _, _| v.visual_reached(&host)).unwrap();
             if reached {
@@ -104,7 +108,7 @@ pub(super) fn start(
             })
             .unwrap();
         let mut opened = None;
-        for _ in 0..80 {
+        for _ in 0..80 * slow {
             wait(250).await;
             let now = far.read_with(cx, |w, _| w.visual_tab_ids());
             opened = now.into_iter().find(|t| !far_tabs.contains(t));
@@ -170,13 +174,17 @@ pub(super) fn start(
                     })
                 })
                 .unwrap();
-            wait(1500).await;
-            let after = far.read_with(cx, |w, _| w.visual_focused());
-            let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
-            assert!(
-                after != before || shown.0.is_none(),
-                "⌘J in {host} went nowhere: {before:?}"
-            );
+            let mut moved = false;
+            for _ in 0..6 * slow {
+                wait(250).await;
+                let after = far.read_with(cx, |w, _| w.visual_focused());
+                let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
+                moved = after != before || shown.0.is_none();
+                if moved {
+                    break;
+                }
+            }
+            assert!(moved, "⌘J in {host} went nowhere: {before:?}");
             shoot("hosts-5b-next.png", cx);
         }
         // With peek on, a peek opened while far's main area is drawn floats over it. Only
@@ -232,15 +240,18 @@ pub(super) fn start(
                 far.update(cx, |w, cx| w.visual_close_tab_id(&opened, cx))
             })
             .unwrap();
-        for _ in 0..40 {
+        // Waited out, so a close still on its way over a slow link is not cut by quitting.
+        let mut left = true;
+        for _ in 0..40 * slow {
             wait(250).await;
-            if !far
+            left = far
                 .read_with(cx, |w, _| w.visual_tab_ids())
-                .contains(&opened)
-            {
+                .contains(&opened);
+            if !left {
                 break;
             }
         }
+        assert!(!left, "the tab opened on {host} was left there");
         eprintln!(
             "hosts PASS: {host} beside this sidebar, ⌘T in {picked}, home kept, {host} kept its tab, a space here came back"
         );
