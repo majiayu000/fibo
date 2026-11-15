@@ -22,7 +22,8 @@ while [ $# -gt 0 ]; do
 done
 if [ -n "$forward" ]; then
   ln -sf "${forward#*:}" "${forward%%:*}"
-  exec sleep 86400
+  # Named after this run's folder so the end of the script finds it (bin/ssh is in it).
+  exec -a "fake-forward-$(dirname "$(dirname "$0")")" sleep 86400
 fi
 exec /bin/sh -c "$*"
 SH
@@ -79,3 +80,5 @@ with socket.socket(socket.AF_UNIX) as s:
 PY
 kill $FAR 2>/dev/null; sleep 1; pkill -f "$R/far" 2>/dev/null
 ls $R/shots
+# The window's children shrug off TERM: the forward it left goes with KILL.
+pkill -9 -f "fake-forward-$R" 2>/dev/null
