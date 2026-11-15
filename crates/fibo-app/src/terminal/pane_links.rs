@@ -38,9 +38,9 @@ impl Pane {
     pub fn host(&self) -> crate::attach::Host {
         crate::attach::Host::of(&self.socket)
     }
-    /// Its files are on another machine: a peek of one there, or an attached host's.
+    /// Its files are on another machine: a terminal of a host reached through its forward.
     fn elsewhere(&self) -> bool {
-        self.remote.is_some() || self.host().attached()
+        self.host().attached()
     }
     /// The whole word when it names a file, else a piece of a broken one that does.
     fn check_hover_path(&mut self, cx: &mut Context<Self>) {

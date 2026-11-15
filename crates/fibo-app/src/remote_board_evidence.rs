@@ -1,8 +1,9 @@
 //! MOORING_REMOTE_BOARD_EVIDENCE: another machine's sessions on the board (multi-machine
 //! step 4, direction A). The outer script starts that machine's host with one Codex
 //! session waiting for review in terminal `far`. Checks the card shows up in 要你处理,
-//! moves to 做完了 when dropped there, and that 「＋」 opens a shell there which
-//! 「关闭终端」 ends; saves the board before and after.
+//! moves to 做完了 when dropped there, that 「＋」 opens a shell in a new tab there, drawn
+//! here, and that 「关闭终端」 in a peek of its terminal ends it; saves the board before and
+//! after. Run with peek on (the script turns it on).
 use super::*;
 
 pub(super) fn start(
@@ -58,40 +59,63 @@ pub(super) fn start(
         assert!(done, "dropped on 做完了 but the other machine put it back");
         shoot("remote-board-done.png", cx);
 
+        // 「＋」: a shell in a new tab there, that machine drawn here.
+        let far = handle
+            .update(cx, |v, _, _| v.visual_machine_workbench(0))
+            .unwrap()
+            .expect("the other machine was never reached");
+        let before = far.read_with(cx, |w, _| w.visual_tab_ids());
         handle
             .update(cx, |v, window, cx| {
                 v.visual_open_remote_shell(0, window, cx)
             })
             .unwrap();
-        let mut key = None;
+        let mut opened = None;
         for _ in 0..60 {
             wait(250).await;
-            key = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
-            if key.is_some() {
+            let now = far.read_with(cx, |w, _| w.visual_tab_ids());
+            opened = now.into_iter().find(|t| !before.contains(t));
+            if opened.is_some() {
                 break;
             }
         }
-        let key = key.expect("「＋」 opened no peek");
-        assert!(key.contains(":remote-"), "{key}");
+        let opened = opened.expect("「＋」 opened no tab there");
+        let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
+        assert!(shown.0.is_some(), "「＋」 did not draw that machine here");
         wait(1500).await;
         shoot("remote-open.png", cx);
         handle
-            .update(cx, |v, _, cx| v.visual_end_remote(cx))
+            .update(cx, |_, _, cx| far.update(cx, |w, cx| w.visual_close_tab_id(&opened, cx)))
             .unwrap();
-        let mut closed = false;
-        for _ in 0..60 {
+        // 「关闭终端」 in a peek of its session's terminal ends it there.
+        let mut peeked = false;
+        for _ in 0..40 {
             wait(250).await;
-            closed = handle
-                .update(cx, |v, _, _| v.visual_peek_key())
-                .unwrap()
-                .is_none();
-            if closed {
+            peeked = handle
+                .update(cx, |v, window, cx| v.visual_peek_remote(0, "far", window, cx))
+                .unwrap();
+            if peeked {
                 break;
             }
         }
-        assert!(closed, "「关闭终端」 left the peek open");
+        assert!(peeked, "no peek of its terminal");
+        wait(1000).await;
+        handle
+            .update(cx, |v, _, cx| v.visual_end_remote(cx))
+            .unwrap();
+        let mut ended = false;
+        for _ in 0..60 {
+            wait(250).await;
+            let peek = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
+            let open = far.read_with(cx, |w, _| w.visual_tab_ids()).contains(&"t".to_owned());
+            ended = peek.is_none() && !open;
+            if ended {
+                break;
+            }
+        }
+        assert!(ended, "「关闭终端」 left its terminal there");
         eprintln!(
-            "remote board PASS: card in 要你处理, kept in 做完了, shell opened {key} and ended"
+            "remote board PASS: card in 要你处理, kept in 做完了, 「＋」 opened a tab there, 「关闭终端」 ended one"
         );
         cx.update(|cx| cx.quit());
     })

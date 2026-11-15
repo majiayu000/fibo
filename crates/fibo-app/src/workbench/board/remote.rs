@@ -8,8 +8,7 @@ use super::super::board_drawer::{DraggedCard, lift_card};
 use super::super::machines::shown_title;
 use super::*;
 use crate::machines::Link;
-use fibo_core::protocol::RequestId;
-use fibo_remote::protocol::{Card, Op};
+use fibo_remote::protocol::Card;
 
 const PREFIX: &str = "remote:";
 
@@ -227,21 +226,15 @@ impl Workbench {
             .when_some(quote, |d, q| d.child(card_quote(q)))
             .child(div().flex().items_center().gap(px(T::S6)).children(state))
     }
-    /// Whether machine `index` is linked now and lets this desktop open, end and settle.
+    /// Whether machine `index` is reached here, so its conversations can be settled.
     pub(in crate::workbench) fn machine_manages(&self, index: usize) -> bool {
-        (self.machines.get(index)).is_some_and(|m| {
-            m.slot()
-                .lock()
-                .unwrap()
-                .as_ref()
-                .is_some_and(|l| l.managing)
-        })
+        self.machine_view(index).is_some()
     }
 
     /// A remote card dropped on 做完了, or back on 要你处理: the outcome goes to that
-    /// machine's host with the turn the card showed, so an Agent that began another turn
-    /// meanwhile keeps its card. The card moves at once; that machine's next list keeps
-    /// it there or puts it back.
+    /// machine's host, through its own workbench here, with the turn the card showed, so an
+    /// Agent that began another turn meanwhile keeps its card. The card moves at once;
+    /// that machine's next workspace keeps it there or puts it back.
     pub(in crate::workbench) fn settle_remote(
         &mut self,
         card: &DraggedCard,
@@ -254,12 +247,8 @@ impl Workbench {
         let Some(session) = r.card.session.clone() else {
             return;
         };
-        let linked = self.machines[r.index].slot().lock().unwrap().clone();
-        let Some(linked) = linked.filter(|l| l.managing) else {
-            let text = t!(
-                "{machine}没连上，或那边的 Fibo 太旧，不能在这里标",
-                machine = r.machine
-            );
+        let Some(view) = self.machine_view(r.index) else {
+            let text = t!("{machine}没连上，不能在这里标", machine = r.machine);
             self.show_toast(text, None, true, cx);
             return;
         };
@@ -292,26 +281,31 @@ impl Workbench {
             false,
             cx,
         );
-        let op = Op::Outcome {
-            session,
-            outcome: outcome.to_owned(),
-            turn: r.card.turn.clone(),
-            request: Some(RequestId::fresh().id),
+        // What the card showed: refused there once that Agent began another turn.
+        let outcome = match outcome {
+            "done" => Outcome::Completed,
+            _ => Outcome::Open,
         };
-        let sent = cx.background_spawn(async move {
-            linked
-                .client
-                .request(op, std::time::Duration::from_secs(10))
-        });
-        let machine = r.machine;
-        cx.spawn(async move |this, cx| {
-            if let Err(e) = sent.await {
-                let _ = this.update(cx, |this, cx| {
-                    this.show_toast(t!("{machine}没标上：{e}", machine, e), None, true, cx);
-                });
+        let turn = r.card.turn.clone();
+        view.update(cx, |w, cx| {
+            let mut edit = Edit::SetOutcome {
+                id: session,
+                outcome,
+                seen: None,
+            };
+            w.workspace.stamp(&mut edit);
+            if let (
+                Edit::SetOutcome {
+                    seen: Some(fibo_core::model::SeenSession { turn: was, .. }),
+                    ..
+                },
+                Some(turn),
+            ) = (&mut edit, turn)
+            {
+                *was = turn;
             }
-        })
-        .detach();
+            w.edit(edit, cx);
+        });
     }
 }
 

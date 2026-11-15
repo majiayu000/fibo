@@ -19,6 +19,9 @@ struct Forward {
     home: String,
     /// `$SHELL` there: what its terminals start, as its own window's do.
     shell: String,
+    /// Its id and name as its host gives them to phones (`machine-id`, `machine-name`
+    /// beside its socket, else its host name); the id is empty before a phone asked.
+    machine: (String, String),
     /// Where it is forwarded to here: `<root>/workbench.sock`.
     local: PathBuf,
     child: Mutex<Option<Child>>,
@@ -61,6 +64,10 @@ impl Host {
         }
     }
     /// What a new terminal there starts: its login shell.
+    /// That machine's id and name as its host gives them; None for this machine.
+    pub fn machine(&self) -> Option<(String, String)> {
+        self.0.as_ref().map(|f| f.machine.clone())
+    }
     pub fn shell(&self) -> String {
         match &self.0 {
             Some(f) => f.shell.clone(),
@@ -132,13 +139,14 @@ pub fn start(host: &str, root: &Path) -> io::Result<Host> {
     let spec = (crate::machines::load().unwrap_or_default().into_iter())
         .find(|s| s.host == host)
         .unwrap_or_else(|| Spec::new(host.to_owned()));
-    let (remote, home, shell) = remote_socket(&spec)?;
+    let (remote, home, shell, machine) = remote_socket(&spec)?;
     fibo_platform::fs::create_private_dir(root)?;
     let forward = Arc::new(Forward {
         spec,
         remote,
         home,
         shell,
+        machine,
         local: root.join("workbench.sock"),
         child: Mutex::new(None),
     });
@@ -196,11 +204,13 @@ pub fn stop() {
 /// version finds its runtime (`legacy::runtime_dir`).
 /// Its home and login shell come back on the lines after: the folders this window offers
 /// there, and what its terminals start.
-fn remote_socket(spec: &Spec) -> io::Result<(String, String, String)> {
+fn remote_socket(spec: &Spec) -> io::Result<(String, String, String, (String, String))> {
     let script = format!(
-        "{}; {{ \"$p\" socket 2>/dev/null || for d in fibo-workbench mooring-workbench keepline-workbench; \
-         do [ -d \"$HOME/.local/share/$d\" ] && {{ echo \"$HOME/.local/share/$d/workbench.sock\"; break; }}; done; }}; \
-         echo \"$HOME\"; echo \"${{SHELL:-/bin/sh}}\"",
+        "{}; s=$({{ \"$p\" socket 2>/dev/null || for d in fibo-workbench mooring-workbench keepline-workbench; \
+         do [ -d \"$HOME/.local/share/$d\" ] && {{ echo \"$HOME/.local/share/$d/workbench.sock\"; break; }}; done; }}); \
+         echo \"$s\"; echo \"$HOME\"; echo \"${{SHELL:-/bin/sh}}\"; d=$(dirname \"$s\"); \
+         echo \"$(cat \"$d/machine-id\" 2>/dev/null)\"; n=$(cat \"$d/machine-name\" 2>/dev/null); \
+         echo \"${{n:-$(hostname)}}\"",
         spec.find_program()
     );
     let argv = spec.ssh(&script);
@@ -216,6 +226,10 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String, String)> {
     );
     // The script answers `${SHELL:-/bin/sh}`, so an empty line is a broken answer.
     let shell = lines.next().unwrap_or_default();
+    let machine = (
+        lines.next().unwrap_or_default().to_owned(),
+        lines.next().unwrap_or_default().to_owned(),
+    );
     if ![path, home, shell].iter().all(|l| l.starts_with('/')) {
         let why = String::from_utf8_lossy(&out.stderr).trim().to_owned();
         return Err(io::Error::other(t!(
@@ -224,7 +238,7 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String, String)> {
             why
         )));
     }
-    Ok((path.to_owned(), home.to_owned(), shell.to_owned()))
+    Ok((path.to_owned(), home.to_owned(), shell.to_owned(), machine))
 }
 
 /// Runs the `ssh -L` and starts it again after it ends, waiting longer each time it ends

@@ -57,14 +57,9 @@
 "✓ 已复制" = "✓ Copied"
 
 # Other machines
-"{len} 个会话 · 旧版，只能看" = "{len} {len|session|sessions} · old version, view only"
-"{len} 个会话 · 旧版，不能开关终端" = "{len} {len|session|sessions} · old version, can't open or close terminals"
 "另有 {shells} 个普通终端" = "{shells} plain {shells|terminal|terminals}"
-"新终端" = "New terminal"
-"没能在 {name} 上开终端：{e}" = "Couldn't open a terminal on {name}: {e}"
 "没关掉：{e}" = "Couldn't close: {e}"
 "那台电脑没连上#workbench" = "That Mac isn't connected"
-"那台电脑不让这里回答审批" = "That Mac doesn't allow answering approvals from here"
 
 # Peek overlay
 "等你批准" = "Waiting for approval"
@@ -73,7 +68,6 @@
 "关掉那边这个终端？" = "Close this terminal over there?"
 "↗ 打开" = "↗ Open"
 "关闭偷看" = "Close peek"
-"只读：那边的 Fibo 太旧，更新后才能打字" = "Read-only: Fibo over there is too old; update it to type"
 "只读：没连上" = "Read-only: not connected"
 "正在偷看 {host} 上的终端" = "Peeking at terminal on {host}"
 "打的字会发到那台电脑" = "keys go to that Mac"

@@ -5,6 +5,7 @@
 //! stays as it is, only the main area is that machine's. One of this machine's spaces or
 //! sessions in the sidebar, or 「← 本机」, comes back; each keeps its tabs, splits and focus.
 use super::*;
+use crate::machines::Link;
 
 #[derive(Default)]
 pub(super) struct Hosts {
@@ -25,6 +26,33 @@ pub(super) struct Hosts {
     pub(super) window_wants: Option<(usize, fibo_core::status::Status)>,
     /// Where to go the next time it draws: asked for before it was shown.
     go: Option<Go>,
+    /// The machines list changed: reach those new to it on the next frame.
+    pub(super) reach_again: bool,
+}
+
+/// How long a machine that could not be reached waits before it is tried again.
+const RETRY: std::time::Duration = std::time::Duration::from_secs(15);
+/// How often a machine's round trip is timed.
+const PING_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
+
+fn socket_of(root: &std::path::Path) -> std::path::PathBuf {
+    root.join("workbench.sock")
+}
+
+/// One request's round trip on a link already open: what typing there waits for. Opening
+/// the link through its forward costs more, so it is left out.
+fn round_trip(socket: &std::path::Path) -> std::io::Result<std::time::Duration> {
+    use fibo_core::protocol::{CONTROL, MAJOR, Reply, receive, send};
+    let mut stream = fibo_platform::local::Stream::connect(socket)?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(10)))?;
+    send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
+    receive::<Reply>(&mut stream)?;
+    let at = std::time::Instant::now();
+    // A terminal no one has: answered at once, whatever the host's version.
+    let probe = Request::TerminalCwd { id: String::new() };
+    send(&mut stream, CONTROL, &probe)?;
+    receive::<Reply>(&mut stream)?;
+    Ok(at.elapsed())
 }
 
 /// Where another machine's workbench opens at.
@@ -80,8 +108,8 @@ impl Workbench {
     /// Each machine in machines.json reached when the window opens, and kept: its main area
     /// is there at the first click, and its workspace is this window's to read meanwhile.
     pub(super) fn reach_hosts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // Another machine's own view has none beside it; with peek on, nothing opens here.
-        if self.host.attached() || crate::ui::peek::enabled(cx) {
+        // Another machine's own view has none beside it.
+        if self.host.attached() {
             return;
         }
         let hosts: Vec<String> = (self.machines.iter())
@@ -93,8 +121,9 @@ impl Workbench {
             self.reach_host(host, window, cx);
         }
     }
-    /// Reaches `host` in the background once; drawn when it was the one last picked. A
-    /// machine reached unasked that cannot be reached says nothing until it is picked.
+    /// Reaches `host` in the background once; drawn when it was the one last picked. One
+    /// that cannot be reached shows why in the sidebar and is tried again (`RETRY`); only a
+    /// pick of it says so on the error line.
     fn reach_host(&mut self, host: String, window: &mut Window, cx: &mut Context<Self>) {
         let known = self.hosts.views.iter().any(|(h, _)| *h == host);
         if known || self.hosts.opening.contains(&host) {
@@ -120,7 +149,7 @@ impl Workbench {
                     .flatten();
                 match reached {
                     Ok((root, workspace)) => {
-                        let socket = root.join("workbench.sock");
+                        let socket = socket_of(&root);
                         let view = cx.new(|cx| Workbench::new(socket, workspace, window, cx));
                         view.update(cx, |w, _| w.hosts.embedded = true);
                         cx.subscribe_in(&view, window, |this, _, event, window, cx| match event {
@@ -140,17 +169,29 @@ impl Workbench {
                             this.feed_machine(&feed, &view, cx)
                         })
                         .detach();
+                        this.name_machine(&host, &root);
                         this.feed_machine(&host, &view, cx);
+                        this.time_machine(host.clone(), socket_of(&root), cx);
                         this.hosts.views.push((host.clone(), view.clone()));
                         if let Some((_, go)) = wanted {
                             view.update(cx, |w, _| w.hosts.go = go);
                             this.hosts.showing = Some(host);
                         }
                     }
-                    Err(e) if wanted.is_some() => {
-                        this.error = Some(t!("没能打开 {host}：{e}", host = &host, e));
+                    Err(e) => {
+                        this.set_link(&host, Link::Offline(e.to_string()));
+                        if wanted.is_some() {
+                            this.error = Some(t!("没能打开 {host}：{e}", host = &host, e));
+                        }
+                        let again = host.clone();
+                        cx.spawn_in(window, async move |this, cx| {
+                            cx.background_executor().timer(RETRY).await;
+                            let _ = this.update_in(cx, |this, window, cx| {
+                                this.reach_host(again, window, cx)
+                            });
+                        })
+                        .detach();
                     }
-                    Err(e) => eprintln!("reaching {host}: {e}"),
                 }
                 cx.notify();
             });
@@ -189,29 +230,101 @@ impl Workbench {
         self.window_layers(root, window, cx)
     }
     /// `host`'s spaces and cards in this sidebar, made from its own workspace by the rules
-    /// its host lists them with for phones (`remote_cards`); redrawn only when they change.
+    /// its host lists them with for phones (`remote_cards`), and whether its link holds;
+    /// redrawn only when something changed.
     fn feed_machine(&mut self, host: &str, view: &Entity<Workbench>, cx: &mut Context<Self>) {
-        let Some(machine) =
-            (self.machines.iter()).find(|m| m.view.lock().unwrap().spec.host == host)
-        else {
+        let Some(machine) = self.machine_of(host) else {
             return;
         };
-        let (spaces, cards) = {
+        let (spaces, cards, link) = {
             let w = view.read(cx);
             let now = fibo_core::content::now();
             let (spaces, _) = fibo_core::remote_cards::spaces(&w.workspace);
             let cards = fibo_core::remote_cards::cards(&w.workspace, w.store.recognition(), now);
-            (spaces, cards)
+            let link = match w.store.cut_off_reason() {
+                Some(why) if w.store.cut_off() => Link::Offline(why.to_owned()),
+                _ => Link::Online,
+            };
+            (spaces, cards, link)
         };
         let mut v = machine.view.lock().unwrap();
-        let changed = !v.native || v.spaces != spaces || v.terminals != cards;
-        v.native = true;
+        let changed = v.link != link || v.spaces != spaces || v.terminals != cards;
+        v.link = link;
         v.spaces = spaces;
         v.terminals = cards;
         drop(v);
         if changed {
             cx.notify();
         }
+    }
+    fn machine_of(&self, host: &str) -> Option<&crate::machines::Remote> {
+        (self.machines.iter()).find(|m| m.view.lock().unwrap().spec.host == host)
+    }
+    fn set_link(&mut self, host: &str, link: Link) {
+        if let Some(machine) = self.machine_of(host) {
+            machine.view.lock().unwrap().link = link;
+        }
+    }
+    /// Its name and id as its host gives them to phones, read when it was reached.
+    fn name_machine(&mut self, host: &str, root: &std::path::Path) {
+        let Some((id, name)) = crate::attach::Host::of(root).machine() else {
+            return;
+        };
+        let Some(machine) = self.machine_of(host) else {
+            return;
+        };
+        let agent_names = (fibo_core::agent::Agent::all().into_iter())
+            .map(|a| (a.key().to_lowercase(), a.name().to_owned()))
+            .collect();
+        machine.view.lock().unwrap().machine = Some(fibo_remote::protocol::Machine {
+            id: if id.is_empty() { host.to_owned() } else { id },
+            name: if name.is_empty() {
+                host.to_owned()
+            } else {
+                name
+            },
+            agent_names,
+        });
+    }
+    /// The round trip shown beside its name, timed every `PING_EVERY` on its own link while
+    /// this window lasts; gone while that link is down.
+    fn time_machine(&mut self, host: String, socket: std::path::PathBuf, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                let socket = socket.clone();
+                let rtt = cx
+                    .background_spawn(async move { round_trip(&socket).ok() })
+                    .await;
+                let moved = crate::machines::set_latency(&host, rtt);
+                if this
+                    .update(cx, |_, cx| {
+                        if moved {
+                            cx.notify()
+                        }
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+                cx.background_executor().timer(PING_EVERY).await;
+            }
+        })
+        .detach();
+    }
+    /// The workbench of machine `index` in machines.json, once reached; drawn or not.
+    pub(super) fn machine_view(&self, index: usize) -> Option<Entity<Workbench>> {
+        let host = self
+            .machines
+            .get(index)?
+            .view
+            .lock()
+            .unwrap()
+            .spec
+            .host
+            .clone();
+        (self.hosts.views.iter())
+            .find(|(h, _)| *h == host)
+            .map(|(_, v)| v.clone())
     }
     /// The machine drawn here and the space its main area shows, or is about to show.
     pub(super) fn shown_space(&self, cx: &gpui::App) -> Option<(String, String)> {
@@ -257,6 +370,9 @@ impl Workbench {
     }
     /// Each frame: goes where it was asked to while it was not drawn.
     pub(super) fn settle_hosts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.hosts.reach_again) {
+            self.reach_hosts(window, cx);
+        }
         match self.hosts.go.take() {
             Some(Go::Terminal(id)) => {
                 self.focus_terminal(&id, window, cx);
@@ -315,11 +431,14 @@ impl Workbench {
             self.hosts.opening.first().cloned(),
         )
     }
-    /// Whether `host`'s sidebar rows come from its own workspace here, and its spaces there.
+    /// Whether `host` is online here as its own host says, and its spaces there.
     pub fn visual_machine_rows(&self, host: &str) -> Option<(bool, Vec<String>)> {
         let machine = (self.machines.iter()).find(|m| m.view.lock().unwrap().spec.host == host)?;
         let v = machine.view.lock().unwrap();
-        Some((v.native, v.spaces.iter().map(|s| s.id.clone()).collect()))
+        Some((
+            v.link == Link::Online,
+            v.spaces.iter().map(|s| s.id.clone()).collect(),
+        ))
     }
     /// The terminal input goes to, here.
     pub fn visual_focused(&self) -> Option<String> {
@@ -332,6 +451,10 @@ impl Workbench {
     /// Whether the board shows, and the count the title row shows as the window's own.
     pub fn visual_board_and_wants(&self) -> (bool, Option<usize>) {
         (self.nav.overview, self.hosts.window_wants.map(|(n, _)| n))
+    }
+    /// Machine `index`'s own workbench here, once reached.
+    pub fn visual_machine_workbench(&self, index: usize) -> Option<Entity<Workbench>> {
+        self.machine_view(index)
     }
     /// Whether `host` has its own workbench here, drawn or not.
     pub fn visual_reached(&self, host: &str) -> bool {

@@ -79,26 +79,47 @@ impl Pane {
         })
         .detach();
     }
-    /// A peek that is used, not just looked at, sizes the terminal to itself.
-    /// Another machine's terminal is taken over, where it allows that, to be sized here.
+    /// A peek that is used, not just looked at, sizes the terminal to itself. A look at
+    /// another machine's terminal also takes its input over, as 点击接管输入 does.
     pub(super) fn take_size(&mut self, cx: &mut Context<Self>) {
         if !self.peek {
             return;
         }
-        if let Some(slot) = &self.remote {
-            let Some(linked) = slot.lock().unwrap().clone().filter(|l| l.resizing) else {
-                return;
-            };
-            let wake = self.wake.clone();
-            self.connection = Connection::remote(Some(linked), &self.terminal, true, wake);
-        }
         self.peek = false;
+        if self.host().attached() {
+            let wake = self.wake.clone();
+            self.connection = Connection::new(&self.socket, &self.terminal, true, wake);
+        }
         cx.notify();
+    }
+    /// What was typed while input was being taken over, once the link has the screen.
+    pub(super) fn send_held(&mut self) {
+        let ready = self.connection.state.lock().is_ok_and(|s| s.vt.is_some());
+        if self.held.is_empty() || !ready {
+            return;
+        }
+        let bytes = std::mem::take(&mut self.held);
+        if let Err(error) = self.connection.send(Request::Input {
+            bytes,
+            lossy: false,
+        }) {
+            self.local_error = Some(error);
+        }
     }
     pub(super) fn send_input(&mut self, bytes: Vec<u8>, lossy: bool, cx: &mut Context<Self>) {
         self.take_size(cx);
         self.typed = Some(Instant::now());
         self.restart_blink(cx);
+        // Behind what is still waiting for the taken link, in order.
+        if !self.held.is_empty() {
+            self.held.extend(bytes);
+            return;
+        }
+        let ready = self.connection.state.lock().is_ok_and(|s| s.vt.is_some());
+        if !ready && self.host().attached() {
+            self.held = bytes;
+            return;
+        }
         if let Err(error) = self.connection.send(Request::Input { bytes, lossy }) {
             self.local_error = Some(error);
             cx.notify();
