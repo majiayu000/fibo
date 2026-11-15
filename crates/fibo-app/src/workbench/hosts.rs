@@ -21,6 +21,8 @@ pub(super) struct Hosts {
     pub(super) embedded: bool,
     /// Drawn embedded: how wide the window's own sidebar is beside it, None while folded.
     pub(super) beside: Option<f32>,
+    /// Drawn embedded: how many need you on every machine, as the window counts them.
+    pub(super) window_wants: Option<(usize, fibo_core::status::Status)>,
     /// Where to go the next time it draws: asked for before it was shown.
     go: Option<Go>,
 }
@@ -38,6 +40,10 @@ pub(super) enum HostEvent {
     Home,
     /// Its sidebar toggle or ⌘\: the window's own sidebar folds or comes back.
     ToggleSidebar,
+    /// 下一个要你的 (⌘J or its chip): the next on any machine, as the window finds it.
+    NextWaiting,
+    /// 鸟瞰: the window's board, every machine's sessions on it.
+    Overview,
 }
 impl gpui::EventEmitter<HostEvent> for Workbench {}
 
@@ -120,6 +126,12 @@ impl Workbench {
                         cx.subscribe_in(&view, window, |this, _, event, window, cx| match event {
                             HostEvent::Home => this.show_home(window, cx),
                             HostEvent::ToggleSidebar => this.toggle_sidebar(cx),
+                            HostEvent::NextWaiting => this.next_waiting(window, cx),
+                            HostEvent::Overview => {
+                                this.leave_host();
+                                this.show_overview(cx);
+                                cx.notify();
+                            }
                         })
                         .detach();
                         // Its rows in this sidebar, from its own workspace from now on.
@@ -156,9 +168,11 @@ impl Workbench {
         self.before_render(window, cx);
         let sidebar = self.cached_sidebar(window, cx);
         let beside = sidebar.is_some().then(|| self.sidebar_width());
+        let wants = Some(self.wants());
         view.update(cx, |w, cx| {
-            if w.hosts.beside != beside {
+            if w.hosts.beside != beside || w.hosts.window_wants != wants {
                 w.hosts.beside = beside;
+                w.hosts.window_wants = wants;
                 cx.notify();
             }
         });
@@ -210,6 +224,16 @@ impl Workbench {
             None => None,
         };
         Some((host, space.unwrap_or_else(|| w.nav.space.clone())))
+    }
+    /// The terminal focused in the machine drawn here, as 下一个要你的 names it.
+    pub(super) fn hosted_focus(&self, cx: &gpui::App) -> Option<String> {
+        let host = self.hosts.showing.as_ref()?;
+        let terminal = self.hosted_view()?.read(cx).nav.focused.clone()?;
+        let machine = (self.machines.iter()).find(|m| m.view.lock().unwrap().spec.host == *host)?;
+        Some(super::machines::remote_key(
+            &machine.view.lock().unwrap(),
+            &terminal,
+        ))
     }
     /// Whether the sidebar is folded away; drawn embedded, whether the window's own is.
     pub(super) fn sidebar_folded(&self) -> bool {
@@ -296,6 +320,18 @@ impl Workbench {
         let machine = (self.machines.iter()).find(|m| m.view.lock().unwrap().spec.host == host)?;
         let v = machine.view.lock().unwrap();
         Some((v.native, v.spaces.iter().map(|s| s.id.clone()).collect()))
+    }
+    /// The terminal input goes to, here.
+    pub fn visual_focused(&self) -> Option<String> {
+        self.nav.focused.clone()
+    }
+    /// The title row's 鸟瞰 pressed.
+    pub fn visual_press_board(&mut self, cx: &mut Context<Self>) {
+        self.toggle_overview(false, cx);
+    }
+    /// Whether the board shows, and the count the title row shows as the window's own.
+    pub fn visual_board_and_wants(&self) -> (bool, Option<usize>) {
+        (self.nav.overview, self.hosts.window_wants.map(|(n, _)| n))
     }
     /// Whether `host` has its own workbench here, drawn or not.
     pub fn visual_reached(&self, host: &str) -> bool {

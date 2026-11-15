@@ -214,13 +214,7 @@ impl Render for Workbench {
                 })
                 .into()
             })
-            .on_click(cx.listener(move |this, _, _, cx| {
-                if on {
-                    this.leave_overview(cx);
-                } else {
-                    this.show_overview(cx);
-                }
-            }));
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle_overview(on, cx)));
             self.record_toggle(toggle, cx).into_any_element()
         });
         // Phones are reached from the sidebar's foot (连接手机); once one is paired its

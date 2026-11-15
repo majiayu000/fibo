@@ -410,17 +410,18 @@ impl Workbench {
     }
     /// Whether the title row shows 下一个要你的.
     pub(super) fn anything_waits(&self) -> bool {
-        !self.needs_you().is_empty() || self.remote_wants().0 > 0
+        self.wants().0 > 0
     }
-    /// 下一个要你的: every session 要你处理 counts, on every machine, since the key goes to
-    /// all of them. The chip takes the color of the most urgent kind it holds (asking, then
-    /// failed, then finished for you to check).
-    pub(super) fn next_waiting_chip(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
+    /// How many need you on every machine and the most urgent kind among them (asking,
+    /// then failed, then finished for you to check). Drawn as another machine's main area,
+    /// the window's count, which sees every machine (`hosts`).
+    pub(super) fn wants(&self) -> (usize, Status) {
+        if let Some(window) = self.hosts.window_wants {
+            return window;
+        }
         let needs = self.needs_you();
         let (there, asks, failed) = self.remote_wants();
-        let count = needs.len() + there;
         let has = |want: Status| needs.iter().any(|s| status_of(&self.workspace, s) == want);
-        // One count for everything that needs you; the color says the most urgent kind.
         let group = if asks || has(Status::Waiting) {
             Status::Waiting
         } else if failed || has(Status::Error) {
@@ -428,6 +429,14 @@ impl Workbench {
         } else {
             Status::Review
         };
+        (needs.len() + there, group)
+    }
+    /// 下一个要你的: every session 要你处理 counts, on every machine, since the key goes to
+    /// all of them. The chip takes the color of the most urgent kind it holds (asking, then
+    /// failed, then finished for you to check).
+    pub(super) fn next_waiting_chip(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
+        // One count for everything that needs you; the color says the most urgent kind.
+        let (count, group) = self.wants();
         let text = fibo_core::status::needs_you_word();
         let (dot_color, ink, wash) = group.colors();
         let key = crate::keymap::current(cx)
@@ -462,6 +471,11 @@ impl Workbench {
             .on_click(cx.listener(|this, _, window, cx| this.next_waiting(window, cx)))
     }
     pub(super) fn next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // As another machine's main area, the window's key: it goes to every machine.
+        if self.hosts.embedded {
+            cx.emit(super::hosts::HostEvent::NextWaiting);
+            return;
+        }
         enum Next {
             Here(AgentSession),
             There(usize, Box<Card>, String),
@@ -483,6 +497,7 @@ impl Workbench {
         }
         let current = match self.peek.as_ref().filter(|p| p.remote.is_some()) {
             Some(peek) => Some(peek.terminal.clone()),
+            None if self.hosted_view().is_some() => self.hosted_focus(cx),
             None => self
                 .nav
                 .focused
