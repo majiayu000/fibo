@@ -39,9 +39,17 @@ pub fn kill(pid: i32) {
     }
 }
 
-/// Lets `command` outlive this process and whatever session it runs in.
+/// Lets `command` outlive this process and whatever session it runs in; TERM still stops it
+/// (`takes_term`).
 pub fn detach(command: &mut std::process::Command) {
     imp::detach(command)
+}
+
+/// Lets TERM stop `command` though this process ignores it: a window's process does (AppKit
+/// quits the app its own way), and what it starts would inherit that, so a forward left by a
+/// window that crashed, or a host asked to stop, would not.
+pub fn takes_term(command: &mut std::process::Command) {
+    imp::takes_term(command)
 }
 
 /// Starts `program` with `args` once process `pid` has ended, for a program replacing itself.

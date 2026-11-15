@@ -15,6 +15,9 @@ const DETACHED_PROCESS: u32 = 0x0000_0008;
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// Windows has no TERM to inherit.
+pub fn takes_term(_command: &mut Command) {}
+
 pub fn detach(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
