@@ -107,6 +107,9 @@ fibo plugins          # which plugins take effect, and why not
 
 ## FAQ
 
+**How is it different from tmux, or from a terminal app?**
+tmux keeps terminals running after the window closes, and Fibo's host does the same. What tmux and a terminal app show is the text on the screen; they do not know what the agent in it is doing. Fibo reads each agent's own session records and events, so it can say which session is waiting for you, which is running and which ended a turn, put them all on one board, and after a reboot reopen the same conversation rather than an empty shell. The terminals themselves are drawn by libghostty, Ghostty's terminal core. Fibo does not touch an agent's model or loop.
+
 **An agent does not show up in the sidebar.**
 1. It has to run inside a Fibo terminal; sessions started elsewhere appear on the board only.
 2. If it runs behind a wrapper (a sandbox, a VM), start it with `MOORING_AGENT=claude` (or `codex`, …) so Fibo knows what it is.
@@ -117,6 +120,9 @@ Nothing to redo. On first start Fibo moves `~/.config/mooring` to `~/.config/fib
 
 **What happens when I quit, update or restart?**
 Quitting or updating the app leaves every terminal running. Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.
+
+**Windows or Linux?**
+Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 has a preview installer on the release page: not code-signed yet, tried on Windows 11, and it does not update itself. There is no Linux release.
 
 **Where is my data, and does anything leave my machine?**
 Terminals and the session index live in `~/.local/share/fibo-workbench`, settings and plugins in `~/.config/fibo`. Fibo reads the agents' own transcripts and never uploads them. The phone relay is opt-in and end-to-end encrypted.
