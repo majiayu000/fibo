@@ -134,6 +134,18 @@ impl Workbench {
             .children(self.turning_view(cx));
         self.window_layers(root, window, cx)
     }
+    /// The machine drawn here and the space its main area shows, or is about to show.
+    pub(super) fn shown_space(&self, cx: &gpui::App) -> Option<(String, String)> {
+        let host = self.hosts.showing.clone()?;
+        let view = self.hosted_view()?;
+        let w = view.read(cx);
+        let space = match &w.hosts.go {
+            Some(Go::Space(id)) => Some(id.clone()),
+            Some(Go::Terminal(id)) => w.workspace.terminal_tab(id).map(|t| t.space.clone()),
+            None => None,
+        };
+        Some((host, space.unwrap_or_else(|| w.nav.space.clone())))
+    }
     /// Whether the sidebar is folded away; drawn embedded, whether the window's own is.
     pub(super) fn sidebar_folded(&self) -> bool {
         match self.hosts.embedded {
@@ -226,6 +238,9 @@ impl Workbench {
     }
     pub fn visual_go_home(&mut self, cx: &mut Context<Self>) {
         cx.emit(HostEvent::Home);
+    }
+    pub fn visual_shown_space(&self, cx: &gpui::App) -> Option<(String, String)> {
+        self.shown_space(cx)
     }
     /// Drawn embedded: how wide the window's own sidebar beside it was, None when it was
     /// not drawn beside one.

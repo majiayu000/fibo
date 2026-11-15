@@ -179,6 +179,10 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::Div {
         let rows = self.remote_rows_of(index);
+        let host = self.machine_host(index);
+        let shown = (self.shown_space(cx))
+            .filter(|(h, _)| host.as_deref() == Some(h.as_str()))
+            .map(|(_, space)| space);
         let spaces = self
             .machines
             .get(index)
@@ -188,7 +192,10 @@ impl Workbench {
                 .iter()
                 .filter(|r| r.online && r.card.needs_you && r.card.space == space.id)
                 .count();
-            let on = self.sidebar.machine_space.as_deref() == Some(space.id.as_str());
+            // Lit while it is the list's filter or the space that machine's main area shows
+            // here; only the filter changes what a click does.
+            let filtered = self.sidebar.machine_space.as_deref() == Some(space.id.as_str());
+            let on = filtered || shown.as_deref() == Some(space.id.as_str());
             let pick = space.id.clone();
             div()
                 .id(gpui::SharedString::from(format!(
@@ -196,7 +203,7 @@ impl Workbench {
                     space.id
                 )))
                 .role(gpui::accesskit::Role::Button)
-                .aria_label(if on {
+                .aria_label(if filtered {
                     t!("{name}，点一下看全部空间", name = space.name)
                 } else {
                     t!("只看 {name}", name = space.name)
