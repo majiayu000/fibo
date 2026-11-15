@@ -1,8 +1,10 @@
 //! MOORING_HOSTS_EVIDENCE: another machine in this window (one window, many hosts, step
-//! 2). The outer script gives the window a machine `far` reached through a fake ssh, with a
-//! space `far`. Picking that space draws far's own workbench here; ⌘T there opens in that
-//! space on far; 「← 本机」 comes back with this machine's tabs as they were; picking far again
-//! finds its tab still there; what was opened there is closed again. MOORING_HOSTS_HOST and
+//! 2; one UI, step 1). The outer script gives the window a machine `far` reached through a
+//! fake ssh, with a space `far`. Picking that space draws far's own main area beside this
+//! window's own sidebar, which stays; ⌘T there opens in that space on far; 「← 本机」 comes
+//! back with this machine's tabs as they were; picking far again finds its tab still there,
+//! and one of this machine's spaces picked in the sidebar comes back too; what was opened
+//! there is closed again. MOORING_HOSTS_HOST and
 //! MOORING_HOSTS_SPACE name another machine and space (a real one) instead of far's.
 use super::*;
 
@@ -64,6 +66,12 @@ pub(super) fn start(
         assert!(far.read_with(cx, |w, _| w.visual_host().attached()));
         wait(800).await;
         shoot("hosts-1-far.png", cx);
+        // The sidebar is the window's: far's main area is drawn beside it, far's own is not.
+        let beside = far.read_with(cx, |w, _| w.visual_beside());
+        assert!(
+            beside.is_some(),
+            "{host} was drawn without this window's sidebar"
+        );
         // ⌘T there: a tab on far, in the space picked.
         handle
             .update(cx, |_, window, cx| {
@@ -117,6 +125,17 @@ pub(super) fn start(
         let kept = far.read_with(cx, |w, _| w.visual_tab_ids());
         assert!(kept.contains(&opened), "far lost its tab meanwhile");
         shoot("hosts-4-far-again.png", cx);
+        // One of this machine's spaces in the sidebar: this machine's main area again.
+        handle
+            .update(cx, |v, _, cx| {
+                let home = v.visual_spaces().into_iter().next().expect("a space here");
+                v.visual_pick_space(&home, cx)
+            })
+            .unwrap();
+        wait(400).await;
+        let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
+        assert_eq!(shown.0, None, "this machine's space left {host} drawn");
+        shoot("hosts-5-home-space.png", cx);
         // Leaves far as it was.
         handle
             .update(cx, |_, _, cx| {
@@ -132,7 +151,9 @@ pub(super) fn start(
                 break;
             }
         }
-        eprintln!("hosts PASS: {host} drawn here, ⌘T in {picked}, home kept, {host} kept its tab");
+        eprintln!(
+            "hosts PASS: {host} beside this sidebar, ⌘T in {picked}, home kept, {host} kept its tab, a space here came back"
+        );
         cx.update(|cx| cx.quit());
     })
     .detach();

@@ -204,7 +204,8 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let view = self.redraw.as_ref()?.sidebar.clone();
-        if self.sidebar.collapsed {
+        // Drawn embedded, the window's own sidebar stands beside it instead.
+        if self.sidebar.collapsed || self.hosts.embedded {
             return None;
         }
         let state = view.read(cx);
@@ -232,13 +233,20 @@ impl Workbench {
                 .detach();
             }
         }
-        let recent = self.sidebar.preset().group == fibo_core::sidebar::Grouping::Recent;
         let style = gpui::StyleRefinement::default()
-            .w(px(if recent { F::WIDTH } else { T::SIDEBAR }))
+            .w(px(self.sidebar_width()))
             .h_full()
             .min_h_0()
             .flex_shrink_0();
         Some(view.cached(style).into_any_element())
+    }
+    /// How wide the sidebar is in the current layout.
+    pub(super) fn sidebar_width(&self) -> f32 {
+        if self.sidebar.preset().group == fibo_core::sidebar::Grouping::Recent {
+            F::WIDTH
+        } else {
+            T::SIDEBAR
+        }
     }
     /// Drawn over the window's content: the status bar's popover, and the empty view a
     /// pane's change redraws through.
