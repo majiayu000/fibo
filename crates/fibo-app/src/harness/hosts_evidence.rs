@@ -177,6 +177,9 @@ pub(super) fn start(
             let mut moved = false;
             for _ in 0..6 * slow {
                 wait(250).await;
+                // That machine's workbench goes where it was sent when it next draws; this
+                // window draws only when shot.
+                shoot("hosts-5b-next.png", cx);
                 let after = far.read_with(cx, |w, _| w.visual_focused());
                 let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
                 moved = after != before || shown.0.is_none();

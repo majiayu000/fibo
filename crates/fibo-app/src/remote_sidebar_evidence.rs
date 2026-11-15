@@ -6,6 +6,19 @@
 //! row stays, faded. Saves every step.
 use super::*;
 
+/// Whether the pixels right of the column are as they were: a label that ticks meanwhile
+/// (a pane's age going from 2分 to 3分 on a slow run) is a few hundred pixels; anything
+/// laid out anew moves far more than a thousandth of them.
+fn untouched(now: &[u8], before: &[u8]) -> bool {
+    if now == before {
+        return true;
+    }
+    let changed = (now.chunks(4).zip(before.chunks(4)))
+        .filter(|(a, b)| a != b)
+        .count();
+    now.len() == before.len() && changed * 1000 <= now.len() / 4
+}
+
 pub(super) fn start(
     handle: WindowHandle<workbench::Workbench>,
     directory: PathBuf,
@@ -124,7 +137,7 @@ pub(super) fn start(
             ("B on the other machine", &rail_far),
             ("C", &sections),
         ] {
-            assert!(*shot == base, "{name} changed something right of the column");
+            assert!(untouched(shot, &base), "{name} changed something right of the column");
         }
 
         // the next-waiting key goes across machines and the rail follows.
@@ -173,20 +186,20 @@ pub(super) fn start(
             ask(cx);
             let shot = shoot(&format!("motion-{name}.png"), cx);
             assert!(moving(cx), "{name} should still be moving");
-            assert!(shot == rest, "{name} moved something right of the column");
+            assert!(untouched(&shot, &rest), "{name} moved something right of the column");
         }
         hold(Some(1000), cx);
         ask(cx);
         let shut = shoot("motion-closed.png", cx);
         assert!(!moving(cx), "closing never ended");
-        assert!(shut == rest, "closed moved something right of the column");
+        assert!(untouched(&shut, &rest), "closed moved something right of the column");
         handle.update(cx, |v, _, cx| v.visual_toggle_group(local, cx)).unwrap();
         for (ms, name) in [(1060, "open-60"), (1110, "open-110"), (1170, "open-170")] {
             hold(Some(ms), cx);
             ask(cx);
             let shot = shoot(&format!("motion-{name}.png"), cx);
             assert!(moving(cx), "{name} should still be moving");
-            assert!(shot == rest, "{name} moved something right of the column");
+            assert!(untouched(&shot, &rest), "{name} moved something right of the column");
         }
         // A section moves as one block: done with its one row, not at the longest stagger.
         hold(Some(1200), cx);
@@ -215,7 +228,7 @@ pub(super) fn start(
             hold(Some(ms), cx);
             ask(cx);
             let shot = shoot(&format!("motion-{name}.png"), cx);
-            assert!(shot == rail, "{name} moved something right of the column");
+            assert!(untouched(&shot, &rail), "{name} moved something right of the column");
         }
         hold(Some(11_000), cx);
         ask(cx);
@@ -238,7 +251,7 @@ pub(super) fn start(
         settle(14_000, cx);
         let on_own = shoot("space-own.png", cx);
         assert_eq!(column(cx).0, 1, "its own space lost the row");
-        assert!(on_own == rail, "a machine's space moved something right of the column");
+        assert!(untouched(&on_own, &rail), "a machine's space moved something right of the column");
         handle.update(cx, |v, _, cx| v.visual_machine_space(&own, cx)).unwrap();
         settle(15_000, cx);
         assert_eq!(column(cx).0, 1, "all spaces again");
@@ -343,7 +356,7 @@ pub(super) fn start(
             "the new space was not chosen"
         );
         let made_right = shoot("spaces-made.png", cx);
-        assert!(made_right == spaces_right, "a new space moved something right of the column");
+        assert!(untouched(&made_right, &spaces_right), "a new space moved something right of the column");
         // By name, the folder that already is a space: nothing new, the same one chosen.
         handle.update(cx, |v, _, cx| v.visual_machine_space(chosen.as_deref().unwrap(), cx)).unwrap();
         handle.update(cx, |v, w, cx| v.visual_begin_add_machine_space(0, w, cx)).unwrap();
