@@ -74,10 +74,12 @@ impl Workbench {
         let w = &self.workspace;
         let mut rows: Vec<_> = (w.agent_sessions.iter())
             .filter(|s| {
-                w.session_home(s) == Some(id)
+                // Cheapest first: few sessions are open, and finding one's space compares
+                // paths; the sidebar asks this per space put aside on every draw.
+                // A restart ends what ran: still yours to go back to, so still listed.
+                (self.session_open(s) || w.lost_agents.values().flatten().any(|l| l == &s.id))
+                    && w.session_home(s) == Some(id)
                     && sessions::automation_hidden_in(w, s).is_none()
-                    // A restart ends what ran: still yours to go back to, so still listed.
-                    && (self.session_open(s) || w.lost_agents.values().flatten().any(|l| l == &s.id))
             })
             .collect();
         let at = now();
@@ -100,9 +102,9 @@ impl Workbench {
     fn space_running(&self, id: &str) -> usize {
         (self.workspace.agent_sessions.iter())
             .filter(|s| {
-                self.workspace.session_home(s) == Some(id)
-                    && s.managed()
+                s.managed()
                     && self.session_open(s)
+                    && self.workspace.session_home(s) == Some(id)
                     && status_of(&self.workspace, s).working()
             })
             .count()
