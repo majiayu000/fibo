@@ -411,10 +411,18 @@ impl Workbench {
         }
         let needs = self.needs_you();
         let (there, asks, failed) = self.remote_wants();
-        let has = |want: Status| needs.iter().any(|s| status_of(&self.workspace, s) == want);
-        let group = if asks || has(Status::Waiting) {
+        // One look at each: a state is a walk over every terminal.
+        let (mut waiting, mut error) = (false, false);
+        for s in &needs {
+            match status_of(&self.workspace, s) {
+                Status::Waiting => waiting = true,
+                Status::Error => error = true,
+                _ => (),
+            }
+        }
+        let group = if asks || waiting {
             Status::Waiting
-        } else if failed || has(Status::Error) {
+        } else if failed || error {
             Status::Error
         } else {
             Status::Review

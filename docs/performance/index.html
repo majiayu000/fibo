@@ -171,6 +171,7 @@
   <tr><td>2026-11-16 单行会话行</td><td>真实窗口采样侧栏重画占主线程约一半；去掉「今天」50 行整窗重画 96 → 16.5 M，一行约 1.6 M，贵的是每行而不是行数（只画前 20 行几乎不省）</td><td>单行的行不套纵向容器、行高写死（R9）</td><td>105 M → 57 M</td></tr>
   <tr><td>2026-11-16 标签名</td><td>标签名缓存每秒失效一次，失效那帧给 15 个标签起名约 8 ms：每个标签把同空间前面的标签重新起名，每次起名扫两遍全部会话</td><td>先按终端收好当前会话，<code>Workspace::tab_titles</code> 一次起完</td><td>起名样本 84 → 15</td></tr>
   <tr><td>2026-11-16 先不管的空间</td><td>每个先不管的空间每次重画都先比路径找会话的空间，再逐个比 <code>lost_agents</code></td><td>先判开没开（R10），<code>lost_agents</code> 收成集合；<code>space_counts</code> 同样换顺序</td><td>3 个先不管的空间：238 M → 98 M → 61.5 M</td></tr>
+  <tr><td>2026-11-16 菜单栏要整份工作区</td><td>真实安装上换上 #365 后窗口仍约 23.6%：侧栏降到每 10 秒 308 ms（优化前约 840 ms），但菜单栏图标每来一次状态就另开连接要整份工作区（725 个会话、3.7 MB JSON），后台序列化每 10 秒 339 ms、窗口解析 120 ms，窗口同步早已走增量</td><td>菜单栏也走 <code>Request::Brief</code>，用自己的 <code>Held</code>；<code>wants</code> 每个会话只取一次状态</td><td>见提交说明（换 App 后量）</td></tr>
 </table>
 
 <h2 id="pitfalls">8. 踩过的坑</h2>
@@ -208,6 +209,7 @@
   <li><span class="tag">已否定</span> 11-05 怀疑窗口 CPU 退化（App 采到 6–17%）：同一夹具真实窗口对比 <code>bc292cf</code> 和 <code>aadb906</code>，6 个终端有输出时指令数从 291–312 M/s 降到 195–257 M/s，占用从 556–575 MB 降到 405–416 MB。App 自己也回落到 4.5%，当时是重启后的恢复负载。窗口被挡住时不画，数字会低到约 2 M/s，要剔除；空闲场景 1–110 M/s 波动太大，没有下结论。</li>
   <li><span class="tag">未查</span> 开启补画时，开头那帧顶栏「＋」附近有 803 px 差异；新 main（11-04）才出现，门禁目前只比对关闭补画的那轮，不拦。</li>
   <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>
+  <li><span class="tag">下一步</span> <code>status::of</code> 每次都按 id 顺着扫全部终端找它的终端（<code>live_terminal</code>），真实窗口每 10 秒 146 ms，大半是字符串比较；要么在 <code>FrameFacts</code> 里每秒算好状态，要么给终端建索引（core 里一处改）。</li>
   <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
   <li><span class="tag">已改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：原先主库因存的是用户操作（待办、完成状态）保留 <code>synchronous=FULL</code>；11-05 按 <code>docs/plan.md</code> 第 3 阶段改成 WAL + NORMAL，进程崩溃不丢，只有掉电或系统崩溃可能丢最后几笔（见 <code>docs/decisions/2026-11-05-workbench-db-synchronous-normal.md</code>）。写库挪出锁还没做。日志索引本来就是 NORMAL。</li>
   <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试。</li>
