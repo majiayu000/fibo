@@ -16,6 +16,23 @@
 "超时不是 {secs} 秒" = "timeout is not {secs}s"
 "{kind}：{items}" = "{kind}: {items}"
 
+# agents/{mod,claude,codex,codex_items,declared}.rs: the note and hint the host puts on a
+# terminal whose Agent it sees but cannot read (sidebar row, pane header, state menu)
+"{cli} · 发出第一句后对上对话" = "{cli} · links after your first message"
+"Fibo 看到这个 {cli} 在跑，但它的命令行没写是哪段对话。发出第一句话后，按画面上的提示词对上；想启动就认出，运行一次 fibo hooks install 装上 Hook。" = "Fibo sees this {cli} running, but its command line doesn't say which conversation it is. After you send the first message, Fibo matches it by the prompt on screen; to have it recognized at launch, run fibo hooks install once to install the hook."
+"{name} 不写对话记录，无法关联" = "{name} keeps no transcript, so it can't be linked"
+"{cli} · 没有对话记录" = "{cli} · no transcript"
+"{name} 的声明（{file}）没有写 transcripts，Fibo 认得出它在运行，但读不到对话，所以不能挂到待办或从菜单停止。" = "{name}'s declaration ({file}) has no transcripts, so Fibo can tell it is running but can't read its conversation; it can't be attached to a to-do or stopped from the menu."
+"claude · 没有保存记录" = "claude · no transcript saved"
+"这个 Claude 继承了 CLAUDE_CODE_CHILD_SESSION，自认为是别的会话的子会话，不写对话记录，Fibo 读不到也统计不了。关掉这个终端重新打开，再运行 claude。" = "This Claude inherited CLAUDE_CODE_CHILD_SESSION, so it thinks it is a child of another session and writes no transcript; Fibo can't read or track it. Close this terminal, open a new one, and run claude again."
+"仅显示状态：{state}；发下一句后自动关联对话" = "Status only: {state}; links to its conversation after your next message"
+"未关联：发下一句后自动关联对话" = "Unlinked: links to its conversation after your next message"
+"codex · {state} · 未关联对话" = "codex · {state} · unlinked"
+"codex · 未关联对话" = "codex · unlinked"
+"这个窗格还没关联到对话，Fibo 暂时只看得到它忙不忙。在这里发下一句话后会自动关联。" = "This pane isn't linked to a conversation yet, so for now Fibo only sees whether it is busy. It links automatically after you send the next message here."
+"需要你处理" = "Needs you"
+"工作中" = "Working"
+
 # bin/fibo.rs & cli_setup.rs
 "没有放入口：目录不可写，或那里已有别的 {name}" = "CLI shim not installed: directory not writable or another {name} already exists there"
 "放 {name} 入口失败：{e}" = "failed to install {name} CLI shim: {e}"
