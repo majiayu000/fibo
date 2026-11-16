@@ -11,6 +11,7 @@ pub mod decoration;
 pub mod delivery;
 pub mod effect;
 pub mod face;
+pub mod git;
 pub mod git_head;
 pub mod hook;
 pub mod launch;

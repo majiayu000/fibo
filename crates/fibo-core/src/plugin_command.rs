@@ -137,6 +137,7 @@ pub fn run(spec: Run) -> Result<Finished, Failed> {
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    crate::git::configure(&mut cmd);
     if let Some(cwd) = spec.cwd {
         cmd.current_dir(cwd);
     }

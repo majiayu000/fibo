@@ -90,20 +90,8 @@ fn signature(files: &[PathBuf]) -> Signature {
 }
 /// Counts with git, read-only: no index refresh, no fsmonitor, no optional locks.
 pub(super) fn count(dir: &Path) -> Option<Divergence> {
-    let out = std::process::Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args([
-            "--no-optional-locks",
-            "-c",
-            "core.fsmonitor=false",
-            "rev-list",
-            "--left-right",
-            "--count",
-            "HEAD...@{upstream}",
-        ])
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+    let out = fibo_core::git::command(dir)
+        .args(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
         .output()
         .ok()
         .filter(|o| o.status.success())?;
