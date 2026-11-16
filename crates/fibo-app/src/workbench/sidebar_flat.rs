@@ -363,12 +363,7 @@ impl Workbench {
         // size comes from its content has taffy measure the row again, and a redraw of
         // the column with 50 rows spent half its time there (docs/performance).
         let content = if two {
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(line)
+            div().flex_1().min_w_0().flex().flex_col().child(line)
         } else {
             line.flex_1().min_w_0()
         };

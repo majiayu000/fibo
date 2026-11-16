@@ -68,7 +68,8 @@ pub(super) fn context_fills(
 }
 
 /// Tab names, worked out at most once a second per workspace revision, terminal titles
-/// and focus: every frame names every tab, and naming one looks at every session.
+/// and focus, all tabs together: every frame names every tab, and naming them looks at
+/// every session.
 pub(super) fn tab_name(
     w: &Workspace,
     tab: &Tab,
@@ -101,7 +102,9 @@ pub(super) fn tab_name(
                 focused.map(str::to_owned),
                 titles.clone(),
             );
-            *seen = Some((key, Default::default()));
+            // Every tab at once: they share one walk over the sessions.
+            let names = w.tabs.iter().cloned().zip(w.tab_titles(titles, focused));
+            *seen = Some((key, names.collect()));
         }
         // A rename asks with the title cleared, so the whole tab is the key.
         let names = &mut seen.as_mut().expect("set above").1;
