@@ -234,7 +234,7 @@ impl Workbench {
         // Rows fit this many before the foot scrolls, and the height is definite (docs/
         // performance: a wrapper sized by max_h measures its content again every frame).
         const SHOWN: usize = 6;
-        let row = F::ONE_PAD_Y * 2. + F::TITLE_LINE;
+        let row = super::super::sidebar_flat::ONE_LINE_ROW;
         let mut out = if foot_holds_spaces(self.machine_layout()) {
             self.quiet_space_lines(cx)
         } else {

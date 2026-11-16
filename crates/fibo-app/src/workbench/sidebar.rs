@@ -100,9 +100,11 @@ impl Workbench {
             .agent_sessions
             .iter()
             .filter(|s| {
-                self.session_hidden(s).is_none()
-                    && self.session_open(s)
+                // Cheapest first: asked per space on every draw, and most sessions are
+                // not open; whether one is hidden compares paths.
+                self.session_open(s)
                     && self.workspace.session_space(s) == Some(id)
+                    && self.session_hidden(s).is_none()
             })
             .collect();
         let needs = |g: Status| {

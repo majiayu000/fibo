@@ -416,93 +416,6 @@ impl Workspace {
             })
     }
 
-    /// Like Warp: the name you gave it, then what runs in it (todo, conversation,
-    /// the title the program set), then the program itself, numbered among same-named
-    /// tabs. The space's directory is not a tab name; every tab in one space shares it.
-    /// `titles` holds every terminal's program title, so a tab keeps its name while
-    /// another tab is in front; `focused` breaks ties between a tab's own panes.
-    pub fn tab_title(
-        &self,
-        tab: &Tab,
-        titles: &std::collections::HashMap<String, String>,
-        focused: Option<&str>,
-    ) -> String {
-        if let Some(title) = self.tab_given_title(tab, titles, focused) {
-            return title;
-        }
-        let name = self.tab_program(tab);
-        let same = self
-            .tabs
-            .iter()
-            .filter(|t| t.space == tab.space)
-            .take_while(|t| t.id != tab.id)
-            .filter(|t| {
-                self.tab_given_title(t, titles, None).is_none() && self.tab_program(t) == name
-            })
-            .count();
-        if same == 0 {
-            name
-        } else {
-            format!("{name} {}", same + 1)
-        }
-    }
-    fn tab_given_title(
-        &self,
-        tab: &Tab,
-        titles: &std::collections::HashMap<String, String>,
-        focused: Option<&str>,
-    ) -> Option<String> {
-        let ids = self.tab_terminals(&tab.id);
-        // A tab holding one conversation is called what the conversation is called,
-        // everywhere the same: `session_name` is the one owner of that name.
-        let mut live = self
-            .agent_sessions
-            .iter()
-            .filter(|s| s.current && s.terminal.as_ref().is_some_and(|id| ids.contains(id)));
-        if let (Some(only), None) = (live.next(), live.next())
-            && let Some(name) = self.session_name(only)
-        {
-            return Some(name);
-        }
-        if !tab.title.trim().is_empty() {
-            return Some(tab.title.clone());
-        }
-        let sessions: Vec<_> = self
-            .agent_sessions
-            .iter()
-            .filter(|s| s.current && s.terminal.as_ref().is_some_and(|id| ids.contains(id)))
-            .collect();
-        if sessions.is_empty()
-            && let Some(task) = tab
-                .default_task
-                .as_ref()
-                .and_then(|id| self.tasks.iter().find(|t| &t.id == id))
-        {
-            return Some(task.title.clone());
-        }
-        if let Some(first) = sessions.first().and_then(|s| s.task.as_ref())
-            && sessions.iter().all(|s| s.task.as_ref() == Some(first))
-            && let Some(task) = self.tasks.iter().find(|t| &t.id == first)
-        {
-            return Some(task.title.clone());
-        }
-        if let Some(title) = sessions
-            .iter()
-            .filter_map(|s| Some((self.session_updated(s), self.session_name(s)?)))
-            .max_by_key(|(updated, _)| *updated)
-            .map(|(_, t)| t)
-        {
-            return Some(title);
-        }
-        let mut ids = ids;
-        if let Some(i) = ids.iter().position(|id| Some(id.as_str()) == focused) {
-            ids.swap(0, i);
-        }
-        ids.iter()
-            .filter_map(|id| titles.get(id))
-            .find(|t| !t.trim().is_empty())
-            .cloned()
-    }
     /// The tab name of a terminal as every surface outside the window shows it (the
     /// CLI, the phone, plugins): `tab_title` without the titles programs set, which
     /// only the window reads. Empty when the terminal sits in no tab.
@@ -510,25 +423,6 @@ impl Workspace {
         self.terminal_tab(terminal)
             .map(|tab| self.tab_title(tab, &std::collections::HashMap::new(), None))
             .unwrap_or_default()
-    }
-    /// What runs in the tab's first pane: its agent, else its program ("zsh").
-    fn tab_program(&self, tab: &Tab) -> String {
-        let ids = self.tab_terminals(&tab.id);
-        let Some(id) = ids.first() else {
-            return t!("终端").into();
-        };
-        if let Some(session) = self.current_agent(id) {
-            return session.runtime.name().into();
-        }
-        self.terminals
-            .iter()
-            .find(|t| &t.id == id)
-            .and_then(|t| t.argv.first())
-            .and_then(|program| program.rsplit('/').next())
-            .map(|program| program.trim_start_matches('-'))
-            .filter(|program| !program.is_empty())
-            .unwrap_or(t!("终端"))
-            .into()
     }
     pub fn tab_terminals(&self, id: &str) -> Vec<String> {
         self.tabs
@@ -652,6 +546,7 @@ pub use edit::{Edit, SeenSession};
 mod space;
 mod task_log;
 pub use task_log::{NOTE_LIMIT, TaskLog, TaskNote, short_id};
+mod tab_names;
 mod tabs;
 #[cfg(test)]
 mod tests;

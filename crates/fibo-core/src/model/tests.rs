@@ -318,8 +318,11 @@ fn tab_title_prefers_given_name_then_contents_then_program() {
     })
     .unwrap();
     let mut titles = std::collections::HashMap::new();
+    // Each tab alone and all at once (the window's way) name it the same.
     let title = |w: &Workspace, titles: &std::collections::HashMap<String, String>, i: usize| {
-        w.tab_title(&w.tabs[i], titles, None)
+        let one = w.tab_title(&w.tabs[i], titles, None);
+        assert_eq!(w.tab_titles(titles, None)[i], one);
+        one
     };
     // Never a bare position: the program, numbered only among same-named tabs.
     assert_eq!(title(&w, &titles, 0), "sh");
