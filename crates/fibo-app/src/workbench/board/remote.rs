@@ -233,8 +233,8 @@ impl Workbench {
 
     /// A remote card dropped on 做完了, or back on 要你处理: the outcome goes to that
     /// machine's host, through its own workbench here, with the turn the card showed, so an
-    /// Agent that began another turn meanwhile keeps its card. The card moves at once;
-    /// that machine's next workspace keeps it there or puts it back.
+    /// Agent that began another turn meanwhile keeps its card. The card moves only after
+    /// that host confirms the edit.
     pub(in crate::workbench) fn settle_remote(
         &mut self,
         card: &DraggedCard,
@@ -268,26 +268,13 @@ impl Workbench {
                 t!("「{title}」退回{needs}", title = card.title, needs),
             )
         };
-        {
-            let mut view = self.machines[r.index].view.lock().unwrap();
-            if let Some(c) = view.terminals.iter_mut().find(|c| c.id == r.card.id) {
-                c.outcome = Some(outcome.to_owned());
-                c.needs_you = outcome == "open";
-            }
-        }
-        self.show_toast(
-            t!("{text}（{machine}）", text, machine = r.machine),
-            None,
-            false,
-            cx,
-        );
         // What the card showed: refused there once that Agent began another turn.
         let outcome = match outcome {
             "done" => Outcome::Completed,
             _ => Outcome::Open,
         };
         let turn = r.card.turn.clone();
-        view.update(cx, |w, cx| {
+        let id = view.update(cx, |w, cx| {
             let mut edit = Edit::SetOutcome {
                 id: session,
                 outcome,
@@ -304,8 +291,19 @@ impl Workbench {
             {
                 *was = turn;
             }
-            w.edit(edit, cx);
+            let id = RequestId::fresh();
+            w.request(
+                Request::Edit {
+                    request: Some(id.clone()),
+                    edit,
+                },
+                cx,
+            );
+            id
         });
+        self.hosts
+            .outcomes
+            .push((id, t!("{text}（{machine}）", text, machine = r.machine)));
     }
 }
 

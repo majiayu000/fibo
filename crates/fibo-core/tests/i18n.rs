@@ -334,6 +334,24 @@ fn every_key_has_english() {
             used.insert(lit.value);
         }
     }
+    // Official manifests are dynamic UI keys, translated when listed, not when signed.
+    let plugins = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+    for entry in std::fs::read_dir(plugins).unwrap().flatten() {
+        let path = entry.path().join("plugin.json");
+        if !path.is_file() {
+            continue;
+        }
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        for key in ["name", "description"] {
+            if let Some(words) = manifest[key].as_str().filter(|s| cjk(s)) {
+                if i18n::english(words).is_none() {
+                    problems.push(format!("{}: no English for {key}", path.display()));
+                }
+                used.insert(words.to_owned());
+            }
+        }
+    }
     for (k, (_, file)) in &seen {
         if !used.contains(k) {
             problems.push(format!(

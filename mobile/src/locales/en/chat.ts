@@ -175,4 +175,9 @@ export const chat: Record<string, Entry> = {
   这个终端已经关了: 'This terminal is closed',
   '这台手机的权限是「只看」，不能发消息': 'This phone is View only and can’t send messages',
   '这台手机的权限是「能答审批」，不能发消息': 'This phone can approve but can’t send messages',
+  '它在等你审批，先允许或拒绝，再发送消息': 'Allow or deny the pending approval before sending a message',
+  '原对话已离开这个终端，说明未发送': 'The original conversation has left this terminal. Your explanation was not sent.',
+  '审批框还没有退出，说明未发送；请稍后在对话里发送': 'The approval is still open. Your explanation was not sent; send it in the conversation once the menu closes.',
+  '手机和电脑的 Fibo 协议不一致，请把两端更新到同一版本': 'The phone and computer use different Fibo protocols. Update both to the same version.',
+  '连接长时间没有传输进展，正在重连': 'No transfer progress for too long. Reconnecting…',
 };

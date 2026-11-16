@@ -13,7 +13,12 @@ impl Pane {
             // Claude Code and Codex read an image off the clipboard themselves on Ctrl+V.
             // Sent whatever runs here, as libghostty-swift does: a pane is not always
             // known to hold an Agent, and a shell only takes it as quoted-insert.
-            PasteAction::Image => return self.input(vec![0x16], cx),
+            PasteAction::Image => {
+                if !self.refuse_remote_file(cx) {
+                    self.input(vec![0x16], cx);
+                }
+                return;
+            }
             PasteAction::Nothing => return,
         };
         if needs_paste_confirm(&text, self.bracketed()) {
@@ -23,6 +28,16 @@ impl Pane {
         } else {
             self.prefill(&text, cx);
         }
+    }
+    pub(super) fn refuse_remote_file(&mut self, cx: &mut Context<Self>) -> bool {
+        if !crate::attach::Host::of(&self.socket).attached() {
+            return false;
+        }
+        self.local_error = Some(
+            t!("文件和图片还不能从这里传到另一台电脑；请先上传，再输入那台电脑上的路径").into(),
+        );
+        cx.notify();
+        true
     }
     pub(super) fn confirm_paste(&mut self, cx: &mut Context<Self>) {
         if let Some(text) = self.paste_confirm.take() {

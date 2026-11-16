@@ -93,6 +93,7 @@ impl Workbench {
         cx.notify();
     }
     pub(super) fn close_peek(&mut self, cx: &mut Context<Self>) {
+        self.hosts.closing = None;
         if self.peek.take().is_some() {
             self.nav.pending_focus = true;
             cx.notify();

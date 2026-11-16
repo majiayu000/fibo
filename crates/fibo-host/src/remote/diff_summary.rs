@@ -10,19 +10,19 @@ use serde_json::{json, Value};
 use std::io;
 use std::path::Path;
 
-pub(super) const BY_TERMINAL_ONLY: &str = "这台设备只能看终端里这一轮改了哪些文件";
+pub(super) const BY_TERMINAL_ONLY: &str = tk!("这台设备只能看终端里这一轮改了哪些文件");
 
 pub(super) fn diff(socket: &Path, request: &Value) -> io::Result<Value> {
     // A folder names nothing the workbench has worked out.
     let (Some(terminal), None) = (request["terminal"].as_str(), request["cwd"].as_str()) else {
-        return Err(io::Error::other(BY_TERMINAL_ONLY));
+        return Err(io::Error::other(fibo_core::i18n::text(BY_TERMINAL_ONLY)));
     };
     let w = match rpc(socket, &Request::Workspace)? {
         Reply::Workspace(w) => w,
         other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     };
     let term = (w.terminals.iter().find(|x| x.id == terminal))
-        .ok_or_else(|| io::Error::other("终端不存在"))?;
+        .ok_or_else(|| io::Error::other(t!("终端不存在")))?;
     let cwd = w.terminal_cwd(term);
     let files = match w.current_agent(terminal) {
         Some(session) => match rpc(

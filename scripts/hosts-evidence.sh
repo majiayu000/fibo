@@ -72,7 +72,8 @@ if [ -z "$added" ]; then
 fi
 PATH="$R/bin:$PATH" HOME="$R/home" MOORING_HOSTS_EVIDENCE=1 \
   perl -e 'alarm 180; exec @ARGV' "$REPO/target/debug/fibo-app" --runtime "$R/rt" --visual-evidence "$R/shots" > "$R/app.log" 2>&1
-echo "app exit $?"
+APP_STATUS=$?
+echo "app exit $APP_STATUS"
 grep -E "^hosts|panicked" -A2 "$R/app.log" | head
 rpc '"Workspace"' | python3 -I -c '
 import json, sys
@@ -85,3 +86,5 @@ pgrep -f "fake-forward-$R" >/dev/null && echo "a fake forward outlived the windo
 pkill -9 -f "fake-forward-$R" 2>/dev/null  # the window's children shrug off TERM
 kill $FAR 2>/dev/null; sleep 1; pkill -f "$R/far" 2>/dev/null; pkill -f "serve --runtime $R/rt" 2>/dev/null
 ls "$R/shots"
+
+exit "$APP_STATUS"

@@ -13,6 +13,7 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
     if !matches!(
         inner,
         Request::SendText { .. }
+            | Request::SendTurn(..)
             | Request::SendKeys { .. }
             | Request::SendInput { .. }
             | Request::AnswerApproval { .. }
@@ -21,9 +22,9 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
             | Request::Interrupt { .. }
             | Request::Modes(_)
     ) {
-        return Err(io::Error::other(
-            "只有打字、按键和回答审批能这样带请求 id；编辑用 Edit 自己的 request",
-        ));
+        return Err(io::Error::other(t!(
+            "只有打字、按键和回答审批能这样带请求 id；编辑用 Edit 自己的 request"
+        )));
     }
     let _turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(first) = lock(shared)?.store.settled(&request)? {

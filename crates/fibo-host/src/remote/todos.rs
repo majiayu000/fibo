@@ -10,12 +10,12 @@ use std::path::Path;
 pub(super) fn add(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
     let title = text(request, "title")?.trim().to_owned();
     if title.is_empty() {
-        return Err(io::Error::other("待办要有标题"));
+        return Err(io::Error::other(t!("待办要有标题")));
     }
     let w = workspace(socket)?;
     let space = text(request, "space")?;
     let space = (w.spaces.iter().find(|s| s.id == space))
-        .ok_or_else(|| io::Error::other("没有这个空间"))?;
+        .ok_or_else(|| io::Error::other(t!("没有这个空间")))?;
     let task = Task {
         id: uuid::Uuid::new_v4().to_string(),
         space: space.id.clone(),
@@ -43,13 +43,14 @@ pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> i
         "abandoned" => Outcome::Abandoned,
         "open" => Outcome::Open,
         other => {
-            return Err(io::Error::other(format!(
-                "outcome 只能是 done、abandoned 或 open，不是 {other}"
-            )))
+            return Err(io::Error::other(t!(
+                "outcome 只能是 done、abandoned 或 open，不是 {other}",
+                other
+            )));
         }
     };
     if !workspace(socket)?.tasks.iter().any(|t| t.id == id) {
-        return Err(io::Error::other("这个待办不在了"));
+        return Err(io::Error::other(t!("这个待办不在了")));
     }
     edit_once(
         socket,

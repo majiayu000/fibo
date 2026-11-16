@@ -212,7 +212,7 @@ impl Supervisor {
             let mut child = match command.spawn() {
                 Ok(child) => child,
                 Err(e) => {
-                    self.failed(generation, format!("启动失败：{e}"));
+                    self.failed(generation, t!("启动失败：{e}", e));
                     continue;
                 }
             };
@@ -250,7 +250,10 @@ impl Supervisor {
                         generation,
                         RemoteLive {
                             state: RemoteState::Connecting,
-                            detail: format!("连接中继的进程意外结束，{} 秒后重启", pause.as_secs()),
+                            detail: t!(
+                                "连接中继的进程意外结束，{as_secs} 秒后重启",
+                                as_secs = pause.as_secs()
+                            ),
                             online: vec![],
                         },
                     );

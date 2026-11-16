@@ -4,7 +4,7 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert, Platform } from 'react-native';
 import { tr } from './i18n';
-import { type Card, NOT_YET, refresh, write } from './remote/hub';
+import { type Card, getMachine, NOT_YET, refresh, write } from './remote/hub';
 import { settings } from './store/settings';
 import { FULL_CONFIRM, type ModeKind, type ModeOption } from './ui/modes';
 import { type Ask, asksTwice } from './ui/parse';
@@ -32,33 +32,71 @@ export async function verify(reason: string): Promise<boolean> {
   }
 }
 
+// All approval entry points share the same lock, including taps before React redraws.
+const answering = new Set<string>();
+async function answerOnce(machine: string, terminal: string, run: () => Promise<boolean>): Promise<boolean> {
+  const key = JSON.stringify([machine, terminal]);
+  if (answering.has(key)) return false;
+  answering.add(key);
+  try {
+    return await run();
+  } finally {
+    answering.delete(key);
+  }
+}
+
 /**
  * Allows the approval `card` shows. `ask` is what it asks about, for the second
  * confirmation; the machine refuses if the screen has moved on to another. `always` picks
  * the menu's "don't ask again" option, the one `ask.always` words: refused if it has changed.
  */
 export async function approve(machine: string, card: Card, ask: Ask, always = false): Promise<boolean> {
-  if (settings.get().confirmDanger && asksTwice(ask)) {
-    const what = ask.known ? ask.subject : tr('电脑没读出它要做什么，打开终端看一眼更稳妥。');
-    const sure = await confirm(tr('确定允许？'), always ? `${what}\n\n${ask.always}` : what, tr('允许'));
-    if (!sure) return false;
-  }
-  if (!(await verify(tr('允许 {what}', { what: ask.subject })))) return false;
-  await write(machine, 'answer', {
-    terminal: card.id,
-    question: card.approval,
-    allow: true,
-    ...(ask.known ? { subject: ask.subject } : {}),
-    ...(always ? { always: true, always_label: ask.always } : {}),
+  return answerOnce(machine, card.id, async () => {
+    if (settings.get().confirmDanger && asksTwice(ask)) {
+      const what = ask.known ? ask.subject : tr('电脑没读出它要做什么，打开终端看一眼更稳妥。');
+      const sure = await confirm(tr('确定允许？'), always ? `${what}\n\n${ask.always}` : what, tr('允许'));
+      if (!sure) return false;
+    }
+    if (!(await verify(tr('允许 {what}', { what: ask.subject })))) return false;
+    await write(machine, 'answer', {
+      terminal: card.id,
+      question: card.approval,
+      allow: true,
+      ...(ask.known ? { subject: ask.subject } : {}),
+      ...(always ? { always: true, always_label: ask.always } : {}),
+    });
+    setTimeout(() => refresh(machine), 300);
+    return true;
   });
-  setTimeout(() => refresh(machine), 300);
-  return true;
 }
 
 /** Refuses it; `ask` as with `approve`, so an answer that took a while refuses nothing newer. */
 export async function deny(machine: string, card: Card, ask: Ask) {
-  await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false, ...(ask.known ? { subject: ask.subject } : {}) });
-  setTimeout(() => refresh(machine), 300);
+  return answerOnce(machine, card.id, async () => {
+    await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false, ...(ask.known ? { subject: ask.subject } : {}) });
+    setTimeout(() => refresh(machine), 300);
+    return true;
+  });
+}
+
+/** A refusal must succeed and leave its menu before feedback can become chat input. */
+export async function denyAndTell(machine: string, card: Card, ask: Ask, text: string): Promise<boolean> {
+  if (!(await deny(machine, card, ask))) return false;
+  const until = Date.now() + 5000;
+  while (Date.now() < until) {
+    await refresh(machine);
+    const m = getMachine(machine);
+    const current = m?.cards.find((c) => c.id === card.id);
+    if (m?.status !== 'online' || !current || !card.session || current.session !== card.session) {
+      throw new Error(tr('原对话已离开这个终端，说明未发送'));
+    }
+    if (!current.approval && !current.trust) {
+      await write(machine, 'send', { terminal: card.id, session: card.session, text, enter: true });
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(tr('审批框还没有退出，说明未发送；请稍后在对话里发送'));
 }
 
 /** Says whether to trust the folder a card asks about; the machine presses the keys. */

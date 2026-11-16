@@ -8,6 +8,7 @@ use fibo_platform::local;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -25,6 +26,7 @@ struct Forward {
     /// Where it is forwarded to here: `<root>/workbench.sock`.
     local: PathBuf,
     child: Mutex<Option<Child>>,
+    stopped: AtomicBool,
 }
 /// Every forward this app keeps, found by the folder its socket is in.
 static FORWARDS: Mutex<Vec<Arc<Forward>>> = Mutex::new(Vec::new());
@@ -149,6 +151,7 @@ pub fn start(host: &str, root: &Path) -> io::Result<Host> {
         machine,
         local: root.join("workbench.sock"),
         child: Mutex::new(None),
+        stopped: AtomicBool::new(false),
     });
     FORWARDS.lock().unwrap().push(forward.clone());
     let kept = forward.clone();
@@ -190,20 +193,30 @@ pub fn open_window(host: &str) -> io::Result<()> {
     command.spawn().map(drop)
 }
 
+/// Ends only the local forward; the other machine's host keeps running.
+fn stop_forward(forward: &Forward) {
+    forward.stopped.store(true, Ordering::Release);
+    if let Some(mut child) = forward.child.lock().unwrap().take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+pub fn forget(host: &str) {
+    FORWARDS.lock().unwrap().retain(|f| {
+        if f.spec.host != host {
+            return true;
+        }
+        stop_forward(f);
+        false
+    });
+}
 /// Ends every forward as the app quits.
 pub fn stop() {
     for forward in FORWARDS.lock().unwrap().drain(..) {
-        if let Some(mut child) = forward.child.lock().unwrap().take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        stop_forward(&forward);
     }
 }
 
-/// `fibo socket` there; a Fibo from before it has none, so its socket is found as that
-/// version finds its runtime (`legacy::runtime_dir`).
-/// Its home and login shell come back on the lines after: the folders this window offers
-/// there, and what its terminals start.
 fn remote_socket(spec: &Spec) -> io::Result<(String, String, String, (String, String))> {
     let script = format!(
         "{}; s=$({{ \"$p\" socket 2>/dev/null || for d in fibo-workbench mooring-workbench keepline-workbench; \
@@ -245,7 +258,7 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String, String, (String, St
 /// quickly, until `stop` takes it.
 fn supervise(forward: &Forward) {
     let mut backoff = Duration::from_millis(500);
-    loop {
+    while !forward.stopped.load(Ordering::Acquire) {
         let mut argv = forward.spec.ssh_options("-N");
         argv.extend([
             // A workspace is JSON and goes whole on each change: compressed, a slow link
@@ -271,7 +284,15 @@ fn supervise(forward: &Forward) {
         let child = command.spawn();
         let started = Instant::now();
         match child {
-            Ok(child) => *forward.child.lock().unwrap() = Some(child),
+            Ok(mut child) => {
+                let mut slot = forward.child.lock().unwrap();
+                if forward.stopped.load(Ordering::Acquire) {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return;
+                }
+                *slot = Some(child);
+            }
             Err(e) => {
                 eprintln!("ssh -L {}: {e}", forward.spec.host);
                 std::thread::sleep(BACKOFF_MAX);

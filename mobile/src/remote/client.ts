@@ -28,7 +28,7 @@ export const closeText = (code: number) => closeOutcome(code).text;
 /** WebSocket.send's types want bytes over a plain ArrayBuffer, which these always are. */
 const own = (b: Uint8Array) => b as Uint8Array<ArrayBuffer>;
 
-type Pending = { resolve: (ok: any) => void; reject: (e: Error) => void };
+type Pending = { resolve: (ok: any) => void; reject: (e: Error) => void; progressedAt: number; uploadEnd: number };
 /** How long a request may go unanswered before the link counts as dead (plan stage 4). */
 export const REQUEST_TIMEOUT_MS = 10_000;
 /** How often a quiet connection asks `ping`, so a dead link shows within a heartbeat. */
@@ -42,6 +42,8 @@ export class Remote {
   private buffer: Uint8Array = new Uint8Array(0);
   private endedHandlers: ((e: Ended) => void)[] = [];
   ended: Ended | null = null;
+  private sentBytes = 0;
+  private acknowledgedBytes = 0;
 
   private constructor(
     private ws: WebSocket,
@@ -82,25 +84,32 @@ export class Remote {
 
   /**
    * One request; resolves with `ok`, rejects with the machine's `error`. No answer within
-   * REQUEST_TIMEOUT_MS means the link is dead though the socket never said so (Wi-Fi to
-   * cellular, a NAT forgetting it): it is ended, so the hub reconnects instead of showing
-   * a machine online whose answers never come.
+   * REQUEST_TIMEOUT_MS without progress on its upload or reply ends the link, so the hub
+   * reconnects instead of showing answers that never come. Other streams cannot renew it.
    */
   request<T = any>(op: string, fields: Record<string, unknown> = {}): Promise<T> {
     if (this.ended) return Promise.reject(new RemoteError(tr('连接已断开')));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const line = utf8(JSON.stringify({ ...fields, id, op }) + '\n');
+      this.sentBytes += line.length;
+      const check = () => {
         if (!this.pending.has(id)) return;
-        this.end({ code: 4408, reason: 'no answer' });
+        const left = REQUEST_TIMEOUT_MS - (Date.now() - pending.progressedAt);
+        if (left > 0) { timer = setTimeout(check, left); return; }
+        this.end({ code: 4408, reason: 'no progress' });
         this.ws.close();
-      }, REQUEST_TIMEOUT_MS);
+      };
+      let timer = setTimeout(check, REQUEST_TIMEOUT_MS);
       const done = () => clearTimeout(timer);
-      this.pending.set(id, {
+      const pending: Pending = {
+        progressedAt: Date.now(),
+        uploadEnd: this.sentBytes,
         resolve: (ok) => (done(), resolve(ok)),
         reject: (e) => (done(), reject(e)),
-      });
-      this.send({ ...fields, id, op });
+      };
+      this.pending.set(id, pending);
+      this.send(line);
     });
   }
 
@@ -130,8 +139,7 @@ export class Remote {
     this.ws.close(1000);
   }
 
-  private send(value: unknown) {
-    const line = utf8(JSON.stringify(value) + '\n');
+  private send(line: Uint8Array) {
     for (let at = 0; at < line.length; at += CHUNK) {
       this.ws.send(own(this.channel.data(line.subarray(at, at + CHUNK))));
     }
@@ -146,14 +154,41 @@ export class Remote {
       this.ws.close(4000, 'undecryptable');
       return;
     }
-    if (message.kind !== 'data') return;
+    if (message.kind === 'ack') {
+      const until = Math.min(this.sentBytes, this.acknowledgedBytes + message.n);
+      if (until > this.acknowledgedBytes) {
+        // Ordered bytes ahead of this request also have to arrive first. Once its whole
+        // line is acknowledged, ACKs for later requests must never extend its deadline.
+        for (const p of this.pending.values()) {
+          if (this.acknowledgedBytes < p.uploadEnd) p.progressedAt = Date.now();
+        }
+        this.acknowledgedBytes = until;
+      }
+      return;
+    }
     this.ws.send(own(this.channel.ack(message.bytes.length)));
+    let continued = this.buffer.length > 0;
+    let finishedReply = false;
     this.buffer = concat(this.buffer, message.bytes);
     let nl;
     while ((nl = this.buffer.indexOf(10)) >= 0) {
       const line = text(this.buffer.subarray(0, nl));
       this.buffer = this.buffer.slice(nl + 1);
-      if (line.trim()) this.line(JSON.parse(line));
+      if (line.trim()) {
+        const value = JSON.parse(line);
+        if (continued && this.pending.has(value.id)) finishedReply = true;
+        this.line(value);
+      }
+      continued = false;
+    }
+    // The host writes each reply as one whole JSON line. While a known reply is still
+    // arriving, the other pending replies are blocked behind it too. Complete replies
+    // and terminal stream events do not extend another request's deadline.
+    const id = /^\s*\{\s*"id"\s*:\s*(\d+)\s*,/.exec(text(this.buffer.subarray(0, 64)))?.[1];
+    const receiving = id === undefined ? undefined : this.pending.get(Number(id));
+    // Its final frame also releases the queue; the next reply may be in a later frame.
+    if (message.bytes.length && (receiving || finishedReply)) {
+      for (const p of this.pending.values()) p.progressedAt = Date.now();
     }
   }
 

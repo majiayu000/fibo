@@ -44,10 +44,10 @@ static TALLY: Mutex<Option<Tally>> = Mutex::new(None);
 pub(super) fn usage(request: &Value) -> io::Result<Value> {
     let asked = request["since"]
         .as_u64()
-        .ok_or_else(|| io::Error::other("usage 需要 since"))?;
+        .ok_or_else(|| io::Error::other(t!("usage 需要 since")))?;
     let now = fibo_core::content::now();
     let since = asked.max(now.saturating_sub(MOST_DAYS * 86_400));
-    let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other("没有 HOME"))?;
+    let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other(t!("没有 HOME")))?;
     let roots: Vec<(Agent, PathBuf)> = fibo_host::agent_log_roots(&home)
         .into_iter()
         .filter(|(a, _)| usage_marker(*a).is_some())

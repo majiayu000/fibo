@@ -18,7 +18,7 @@ fn tool_log(shared: &Shared, session: &str) -> io::Result<(ToolLog, crate::log_i
     let host = lock(shared)?;
     let s = (host.workspace.agent_sessions.iter())
         .find(|s| s.id == session)
-        .ok_or_else(|| io::Error::other("会话不存在"))?;
+        .ok_or_else(|| io::Error::other(t!("会话不存在")))?;
     let log = ToolLog {
         path: s.transcript.clone(),
         runtime: s.runtime,
@@ -41,7 +41,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 .agent_sessions
                 .iter()
                 .find(|s| s.id == session)
-                .ok_or_else(|| io::Error::other("会话不存在"))?;
+                .ok_or_else(|| io::Error::other(t!("会话不存在")))?;
             let floor = match host.workspace.content.get(&session) {
                 Some(c) if c.partial_history => {
                     host.index.read_from(&s.transcript, c.from_offset)?
@@ -84,7 +84,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let (log, index) = tool_log(shared, &session)?;
             let row = index
                 .tool_call(&log.path, &call)?
-                .ok_or_else(|| io::Error::other("这条工具调用不在记录里"))?;
+                .ok_or_else(|| io::Error::other(t!("这条工具调用不在记录里")))?;
             Ok(Reply::ToolCall { log, row })
         }
         Request::Backfill { session } => {
@@ -95,7 +95,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 index.backfill(log.runtime, &log.path)
             })
             .join()
-            .map_err(|_| io::Error::other("读更早的消息时出错"))??;
+            .map_err(|_| io::Error::other(t!("读更早的消息时出错")))??;
             Ok(Reply::Backfilled {
                 added: read.added,
                 done: read.done,

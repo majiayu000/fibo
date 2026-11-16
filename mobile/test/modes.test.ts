@@ -42,7 +42,7 @@ const PLAIN = { key: 'plan', label: '只做计划' };
 class Fake {
   ended = null;
   async request(op: string, fields: any = {}) {
-    if (op === 'hello') return { role: 'full', ops: ['setmode'], machine: { name: 'mac' }, os: 'macos' };
+    if (op === 'hello') return { version: 2, role: 'full', ops: ['setmode'], machine: { name: 'mac' }, os: 'macos' };
     if (op === 'setmode') sent.push({ op, ...fields });
     return { terminals: [], spaces: [] };
   }

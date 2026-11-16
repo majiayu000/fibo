@@ -138,7 +138,7 @@ Hooks go into an agent's settings file only when you install them: `fibo hooks i
 Apart from hooks, the packaged app sets up its command line each time it starts: it links `fibo` and `mooring` into `/opt/homebrew/bin` or `/usr/local/bin` when it can write there, and when `~/.codex` exists it writes a skill to `~/.codex/skills/fibo` that teaches Codex the `fibo todo` commands. Set `MOORING_NO_CLI_SETUP=1` to skip both; a build from source does neither.
 
 **How do I connect from my phone?**
-Fibo on macOS works standalone locally without any server or account. To answer sessions away from your desk, deploy `fibo-relay` ([self-hosting guide](docs/relay/self-host.md), in Chinese), enter your relay URL under Settings › Phone & remote, and pair the Expo app in [`mobile/`](mobile/) — traffic is end-to-end encrypted with Noise so the relay never sees plaintext. Official hosted relay is in private beta.
+Fibo on macOS works standalone locally without any server or account. To answer sessions away from your desk, deploy `fibo-relay` ([self-hosting guide](docs/relay/self-host.en.md)), enter your relay URL under Settings › Phone & remote, and pair the Expo app in [`mobile/`](mobile/) — traffic is end-to-end encrypted with Noise so the relay never sees plaintext. The phone app currently requires a source build and your own relay; there is no public mobile installer or default hosted relay.
 
 ## Repository
 

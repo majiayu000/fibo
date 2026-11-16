@@ -11,6 +11,8 @@ use crate::machines::Link;
 pub(super) struct Hosts {
     /// A workbench for each machine opened here, by its host in machines.json.
     views: Vec<(String, Entity<Workbench>)>,
+    pub(super) outcomes: Vec<(RequestId, String)>,
+    pub(super) closing: Option<(RequestId, String)>,
     /// The one drawn in this window's place; None draws this workbench.
     showing: Option<String>,
     /// Being reached: their forwards and first workspaces come in the background.
@@ -69,6 +71,10 @@ pub(super) enum Go {
 pub(super) enum HostEvent {
     /// 「← 本机」.
     Home,
+    Receipt {
+        id: Option<RequestId>,
+        error: Option<String>,
+    },
     /// Its sidebar toggle or ⌘\: the window's own sidebar folds or comes back.
     ToggleSidebar,
     /// 下一个要你的 (⌘J or its chip): the next on any machine, as the window finds it.
@@ -124,10 +130,48 @@ impl Workbench {
             self.reach_host(host, window, cx);
         }
     }
+    pub(super) fn reload_machines(&mut self, cx: &mut Context<Self>) {
+        let fresh = Self::start_machines(&self.host);
+        let mut old = std::mem::take(&mut self.machines);
+        self.machines = fresh
+            .into_iter()
+            .map(|remote| {
+                let spec = remote.view.lock().unwrap().spec.clone();
+                match old
+                    .iter()
+                    .position(|m| m.view.lock().unwrap().spec.host == spec.host)
+                {
+                    Some(i) => {
+                        let kept = old.remove(i);
+                        kept.view.lock().unwrap().spec = spec;
+                        kept
+                    }
+                    None => remote,
+                }
+            })
+            .collect();
+        self.close_peek(cx); // Its machine index may have changed.
+        for removed in old {
+            let host = removed.view.lock().unwrap().spec.host.clone();
+            if self.hosts.showing.as_ref() == Some(&host) {
+                self.leave_host(cx);
+            }
+            self.hosts.views.retain(|(h, _)| h != &host);
+            self.hosts.opening.retain(|h| h != &host);
+            if self.hosts.wanted.as_ref().is_some_and(|(h, _)| h == &host) {
+                self.hosts.wanted = None;
+            }
+            crate::attach::forget(&host);
+        }
+        self.hosts.reach_again = true;
+    }
     /// Reaches `host` in the background once; drawn when it was the one last picked. One
     /// that cannot be reached shows why in the sidebar and is tried again (`RETRY`); only a
     /// pick of it says so on the error line.
     fn reach_host(&mut self, host: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.machine_of(&host).is_none() {
+            return;
+        }
         let known = self.hosts.views.iter().any(|(h, _)| *h == host);
         if known || self.hosts.opening.contains(&host) {
             return;
@@ -138,7 +182,13 @@ impl Workbench {
             async move {
                 let root = crate::attach::root(&host)?;
                 crate::attach::start(&host, &root)?;
-                let workspace = crate::load_workspace(&root)?;
+                let workspace = crate::load_workspace(&root).map_err(|e| {
+                    std::io::Error::other(t!(
+                        "无法读取 {host} 的工作区：{e}。请确认那台电脑已打开 Fibo，再重试",
+                        host,
+                        e
+                    ))
+                })?;
                 std::io::Result::Ok((root, workspace))
             }
         });
@@ -146,6 +196,10 @@ impl Workbench {
             let reached = reach.await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.hosts.opening.retain(|h| *h != host);
+                if this.machine_of(&host).is_none() {
+                    crate::attach::forget(&host);
+                    return;
+                }
                 let wanted = (this.hosts.wanted.as_ref())
                     .is_some_and(|(h, _)| *h == host)
                     .then(|| this.hosts.wanted.take())
@@ -155,6 +209,9 @@ impl Workbench {
                         let socket = socket_of(&root);
                         let view = cx.new(|cx| Workbench::embedded(socket, workspace, window, cx));
                         cx.subscribe_in(&view, window, |this, _, event, window, cx| match event {
+                            HostEvent::Receipt { id, error } => {
+                                this.remote_receipt(id.as_ref(), error.as_deref(), cx)
+                            }
                             HostEvent::Home => this.show_home(window, cx),
                             HostEvent::ToggleSidebar => this.toggle_sidebar(cx),
                             HostEvent::NextWaiting => this.next_waiting(window, cx),
@@ -300,8 +357,19 @@ impl Workbench {
     /// The round trip shown beside its name, timed every `PING_EVERY` on its own link while
     /// this window lasts; gone while that link is down.
     fn time_machine(&mut self, host: String, socket: std::path::PathBuf, cx: &mut Context<Self>) {
+        let owner = self.machine_of(&host).unwrap().view.clone();
         cx.spawn(async move |this, cx| {
             loop {
+                if !this
+                    .update(cx, |this, _| {
+                        this.machine_of(&host)
+                            .is_some_and(|m| std::sync::Arc::ptr_eq(&m.view, &owner))
+                    })
+                    .unwrap_or(false)
+                {
+                    crate::machines::set_latency(&host, None);
+                    return;
+                }
                 let socket = socket.clone();
                 let rtt = cx
                     .background_spawn(async move { round_trip(&socket).ok() })
@@ -503,6 +571,17 @@ impl Workbench {
         self.peek.as_ref()?.pane.read(cx).visual_bounds()
     }
     /// `host`'s own workbench here, once reached.
+    pub fn visual_failed_host_request(&mut self, cx: &mut Context<Self>) {
+        self.request(
+            Request::SendText {
+                id: "missing-evidence-terminal".into(),
+                session: None,
+                text: "evidence".into(),
+                submit: false,
+            },
+            cx,
+        );
+    }
     pub fn visual_host_view(&self, host: &str) -> Option<Entity<Workbench>> {
         (self.hosts.views.iter())
             .find(|(h, _)| h == host)

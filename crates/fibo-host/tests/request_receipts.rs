@@ -390,7 +390,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
         ])
         .unwrap();
         let hello = Op::Hello {
-            version: Some(1),
+            version: Some(fibo_remote::protocol::VERSION),
             client: Some("phone-1".into()),
         };
         let hello: Hello = serde_json::from_value(c.request(hello, t).unwrap()).unwrap();

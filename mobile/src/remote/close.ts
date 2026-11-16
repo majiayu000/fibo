@@ -44,6 +44,8 @@ export function closeOutcome(code?: number, reason?: string): Outcome {
     return { status: 'offline', retry: 'later', text: tr('中继版本太旧：请升级中继，或者换一个新的中继') };
   }
   switch (code) {
+    case 4408:
+      return { status: 'offline', retry: 'later', text: tr('连接长时间没有传输进展，正在重连') };
     case Close.UNPAIRED:
       return { status: 'refused', retry: 'never', text: tr('这台手机没有配对，或者已经被取消；重新扫码配对') };
     case Close.UNKNOWN_MACHINE:

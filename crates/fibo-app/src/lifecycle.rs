@@ -331,8 +331,10 @@ pub fn connected_host(socket: &Path) -> io::Result<bool> {
             let sibling = host_program()?;
             let attached = socket.parent().is_some_and(attached_at);
             let stale = treated_stale(build.stale(&sibling), attached);
-            set_misplaced_host(&build, stale, attached);
-            set_stale_host(stale.then_some(build));
+            if !attached {
+                set_misplaced_host(&build, stale, false);
+                set_stale_host(stale.then_some(build));
+            }
             Ok(true)
         }
         Reply::Error(message) if message.starts_with("protocol major ") => {

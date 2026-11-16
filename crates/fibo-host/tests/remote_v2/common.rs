@@ -260,7 +260,7 @@ impl Remote {
             n: 0,
             hello: Value::Null,
         };
-        r.hello = r.ask(json!({ "op": "hello", "client": "phone-1" }));
+        r.hello = r.ask(json!({ "op": "hello", "version": fibo_remote::protocol::VERSION, "client": "phone-1" }));
         assert!(r.hello["ok"].is_object(), "{}", r.hello);
         r
     }

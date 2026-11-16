@@ -189,7 +189,7 @@ def setup():
 
 
 def send_keys(terminal, keys):
-    lines = [{"id": 1, "op": "hello", "version": 1, "client": MARKER},
+    lines = [{"id": 1, "op": "hello", "version": 2, "client": MARKER},
              {"id": 2, "op": "keys", "terminal": terminal, "keys": keys}]
     body = "".join(json.dumps(l) + "\n" for l in lines)
     r = subprocess.run([fibo(), "remote", "--stdio", "--role", "full"], input=body,
