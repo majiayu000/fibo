@@ -124,7 +124,13 @@ fn four_agents_write_for_thirty_seconds_without_repeated_process_probes() {
     let mut load = [0.; 1];
     assert_eq!(unsafe { libc::getloadavg(load.as_mut_ptr(), 1) }, 1);
     let cores = std::thread::available_parallelism().unwrap().get() as f64;
-    let scale = (load[0] / cores).ceil().clamp(1., 3.) as u64;
+    // A VM exposes no retired-instruction counter: its checks are byte/probe counts,
+    // whose workload coverage does not improve by occupying the fixture lane longer.
+    let scale = if usage(h.child.id()).instructions == 0 {
+        1
+    } else {
+        (load[0] / cores).ceil().clamp(1., 3.) as u64
+    };
     let window = 30 * scale;
     let logs = h.root.join("logs/codex");
     fs::create_dir_all(&logs).unwrap();

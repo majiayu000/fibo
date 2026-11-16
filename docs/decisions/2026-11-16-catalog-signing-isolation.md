@@ -26,7 +26,7 @@ decision-makers: majiayu000
 
 ## Verification
 
-`actionlint`；`OPENSSL=/opt/homebrew/opt/openssl@3/bin/openssl python3 -I scripts/test-ci-workflows.py`。使用 RFC 8032 公开向量逐字比较签名和公钥，检查不可信公钥失败、仓库同名模块/下载程序不执行、额外暂存路径阻止发布。没有读取真实私钥或运行远程发布。
+`actionlint`；`OPENSSL=/opt/homebrew/opt/openssl@3/bin/openssl python3 -I scripts/test-ci-workflows.py`。使用 RFC 8032 公开向量逐字比较签名和公钥，检查不可信公钥失败、仓库同名模块/下载程序不执行、额外暂存路径阻止发布。同一回放也在本机 Docker 的 `rust:1-bookworm` Linux/OpenSSL 环境通过。没有读取真实私钥或运行远程发布。
 
 ## Alternatives
 

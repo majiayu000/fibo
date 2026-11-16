@@ -15,7 +15,10 @@ export MOORING_LANG=zh
 # than that is the suite getting worse, not one unlucky case, so it fails without a retry.
 max_retries=2
 retries=target/ci-test-retries.txt
+# target/ may come from another run's cache, including one that needed retries.
+rm -f "$retries"
 log=$(mktemp)
+trap 'rm -f "$log" "$log.status"' EXIT
 # A pipeline's status is tee's; keep cargo's own.
 {
 	cargo test --workspace --no-fail-fast 2>&1

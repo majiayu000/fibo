@@ -32,6 +32,22 @@ class WorkflowPrograms(unittest.TestCase):
             env={**os.environ, **env}, capture_output=True, text=True,
         )
 
+    def test_cached_retries_are_removed_even_when_first_run_passes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "target").mkdir()
+            old = root / "target/ci-test-retries.txt"
+            old.write_text("stale failure from yesterday\n")
+            cargo = root / "cargo"
+            cargo.write_text("#!/bin/sh\nexit 0\n")
+            cargo.chmod(0o755)
+            result = subprocess.run(
+                ["sh", str(ROOT / "ci-test.sh")], cwd=root,
+                env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}"},
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(old.exists(), "an all-green run must not upload old failures")
 
     def test_signer_matches_rfc8032_and_rejects_an_untrusted_key(self):
         # RFC 8032 section 7.1, TEST 2. Public test data, never a publisher key.
@@ -86,6 +102,34 @@ class WorkflowPrograms(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("outside the catalog", result.stderr)
 
+    def test_prose_filter_keeps_product_markdown_and_failed_diffs_in_checks(self):
+        source = inline_python("ci.yml", "Skip native builds only for prose-only pull requests")
+        # Substitute just the git transport: execute the unmodified selection/output logic.
+        for event, paths, expected in [
+            ("pull_request", ["docs/decisions/note.md", "README.md"], "false"),
+            ("pull_request", ["crates/fibo-host/src/todo_skill.md"], "true"),
+            ("pull_request", ["docs/site/extra.js"], "true"),
+            ("pull_request", [], "true"),
+            ("push", ["README.md"], "true"),
+            ("workflow_dispatch", ["README.md"], "true"),
+        ]:
+            with self.subTest(event=event, paths=paths), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                output = root / "out"
+                injected = "import subprocess\nsubprocess.check_output = lambda _: " + repr("\0".join(paths).encode()) + "\n" + source
+                result = self.run_python(injected, root, EVENT_NAME=event, GITHUB_OUTPUT=str(output))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text(), f"native={expected}\n")
+
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "out"
+            result = self.run_python(source, temp, EVENT_NAME="pull_request", GITHUB_OUTPUT=str(output))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(output.exists(), "a failed git diff must never emit native=false")
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        self.assertEqual(workflow.count("if: always() && needs.changes.outputs.native != 'false'"), 2)
+        self.assertIn("if: needs.changes.result != 'success'", workflow)
+        self.assertIn("Workflow regressions or path selection failed", workflow)
 
 
 if __name__ == "__main__":
