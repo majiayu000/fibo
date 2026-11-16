@@ -1,3 +1,4 @@
+use fibo_core::outbox::{Outbox, Refused};
 use fibo_core::{protocol::*, terminal::Vt};
 use fibo_platform::local;
 use futures::channel::mpsc::UnboundedSender;
@@ -6,8 +7,9 @@ use std::path::Path;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
-    mpsc::{SyncSender, sync_channel},
 };
+/// Input waiting for the host beyond this is refused: no hand types it, a runaway does.
+const OUTBOX_LIMIT: usize = 1 << 20;
 
 pub struct State {
     pub vt: Option<Vt>,
@@ -33,10 +35,11 @@ pub struct Connection {
     /// Latest OSC 52 clipboard write from the program; the UI thread applies it.
     /// Separate from `state`: the callback runs while the reader holds that lock.
     pub clipboard: Arc<Mutex<Option<String>>>,
-    sender: SyncSender<Request>,
+    outbox: Arc<Outbox>,
 }
 impl Drop for Connection {
     fn drop(&mut self) {
+        self.outbox.abandon();
         if let Ok(s) = self.state.lock()
             && let Some(socket) = &s.socket
         {
@@ -61,13 +64,15 @@ impl Connection {
         let dirty = Arc::new(AtomicBool::new(false));
         let bells = Arc::new(AtomicU64::new(0));
         let clipboard = Arc::new(Mutex::new(None));
-        let (sender, receiver) = sync_channel(128);
+        let outbox = Arc::new(Outbox::new(OUTBOX_LIMIT));
+        let receiver = Arc::clone(&outbox);
+        let unsent = Arc::clone(&outbox);
         let result = Self {
             state: Arc::clone(&state),
             dirty: Arc::clone(&dirty),
             bells: Arc::clone(&bells),
             clipboard: Arc::clone(&clipboard),
-            sender,
+            outbox,
         };
         let socket = socket.to_owned();
         let id = id.to_owned();
@@ -107,20 +112,25 @@ impl Connection {
                 let write_state = Arc::clone(&state);
                 let write_wake = wake.clone();
                 std::thread::spawn(move || {
-                    for request in receiver {
-                        let sent = match &request {
-                            Request::Input { bytes, lossy } => {
-                                send_input(&mut writer, bytes, *lossy)
+                    // Whatever queued while the last batch was on its way goes together.
+                    'batches: while let Some(batch) = receiver.take() {
+                        for request in batch {
+                            let sent = match &request {
+                                Request::Input { bytes, lossy } => {
+                                    send_input(&mut writer, bytes, *lossy)
+                                }
+                                _ => send(&mut writer, CONTROL, &request),
+                            };
+                            if let Err(error) = sent {
+                                receiver.abandon();
+                                let mut state = write_state.lock().unwrap();
+                                state.error =
+                                    Some(t!("{error}；输入结果未知，请勿自动重发", error));
+                                state.writable = false;
+                                let _ = write_wake.unbounded_send(());
+                                let _ = writer.shutdown(std::net::Shutdown::Both);
+                                break 'batches;
                             }
-                            _ => send(&mut writer, CONTROL, &request),
-                        };
-                        if let Err(error) = sent {
-                            let mut state = write_state.lock().unwrap();
-                            state.error = Some(t!("{error}；输入结果未知，请勿自动重发", error));
-                            state.writable = false;
-                            let _ = write_wake.unbounded_send(());
-                            let _ = writer.shutdown(std::net::Shutdown::Both);
-                            break;
                         }
                     }
                 });
@@ -202,6 +212,7 @@ impl Connection {
                 }
             })();
             if let Err(error) = work {
+                unsent.abandon();
                 let mut state = state.lock().unwrap();
                 state.error = Some(t!("连接已断开：{error}", error));
                 state.dropped = state.vt.is_some() && !state.ended;
@@ -220,9 +231,10 @@ impl Connection {
             return Err(t!("终端尚未恢复或当前为只读").into());
         }
         drop(state);
-        self.sender
-            .try_send(request)
-            .map_err(|_| t!("输入队列已满或连接已断开；未自动重试").into())
+        self.outbox.push(request).map_err(|refused| match refused {
+            Refused::Full => t!("还有 1 MiB 输入没送到终端，这次的没发；未自动重试").into(),
+            Refused::Closed => t!("连接已断开，这次的输入没发；未自动重试").into(),
+        })
     }
 }
 

@@ -6,6 +6,8 @@ use fibo_platform::local;
 pub(super) type Frame = (u8, Arc<Vec<u8>>);
 /// Unread input above which mouse reports are dropped; the queue holds about 1 KiB.
 pub(super) const POINTER_BACKLOG: usize = 256;
+/// Input read off a viewer's socket but not yet written to the PTY; past this it is refused.
+const INBOX_LIMIT: usize = 4 << 20;
 pub(super) struct Subscriber {
     pub(super) tx: SyncSender<Frame>,
     pub(super) socket: local::Stream,
@@ -496,82 +498,115 @@ pub(super) fn attach(
         }
         let _ = writer_guard.shutdown(std::net::Shutdown::Both);
     });
-    loop {
-        let request = receive::<Request>(&mut stream)?;
-        let submitted = matches!(&request, Request::Input {bytes, ..} if bytes.contains(&b'\r') || bytes.contains(&b'\n'));
-        let typed = matches!(&request, Request::Input { .. });
-        let result = (|| -> io::Result<()> {
-            let mut live = lock(&terminal)?;
-            if live.owner != Some(connection) || live.exited {
-                return Err(io::Error::other("只读或进程已退出；需明确接管"));
-            }
-            match request {
-                // A mouse report is dropped once the program falls behind: written into
-                // a nearly full input queue it can be cut after its ESC, and the program
-                // then reads the rest as typed text ("[<65;20;10M" in Codex's input box).
-                Request::Input { lossy: true, .. }
-                    if live.master.backlog().is_some_and(|n| n > POINTER_BACKLOG) => {}
-                Request::Input { bytes, lossy } => {
-                    if bytes.len() > 64 * 1024 {
-                        return Err(io::Error::other("单次输入超过 64 KiB"));
-                    }
-                    live.master.write(&bytes)?;
-                    if !lossy {
-                        live.input_at = Some(Instant::now());
+    // The socket is read on its own thread into a queue counted in bytes, so input never
+    // waits behind this terminal's or the host's lock: a stall here only grows the queue,
+    // it no longer backs the window up until it drops keys (`fibo_core::outbox`).
+    let inbox = Arc::new(fibo_core::outbox::Outbox::new(INBOX_LIMIT));
+    let ended = Arc::new(Mutex::new(None::<io::Error>));
+    {
+        let (inbox, ended, tx) = (Arc::clone(&inbox), Arc::clone(&ended), tx.clone());
+        let mut reader = stream.try_clone()?;
+        thread::spawn(move || loop {
+            match receive::<Request>(&mut reader) {
+                Ok(request) => {
+                    if inbox.push(request) == Err(fibo_core::outbox::Refused::Full) {
+                        let refused = Reply::Error("输入积压超过 4 MiB，这段没写进终端".into());
+                        if let Ok(bytes) = serde_json::to_vec(&refused) {
+                            let _ = tx.try_send((ACK, Arc::new(bytes)));
+                        }
                     }
                 }
-                Request::Scheme(scheme) => live.vt.set_scheme(scheme)?,
-                Request::Colors(colors) => live.vt.set_colors(colors)?,
-                Request::ClearHistory => {
-                    let clear = fibo_core::terminal::clear_history(live.vt.terminal())?;
-                    if !clear.is_empty() {
-                        // Same bytes into the daemon's terminal and every display, in output order.
-                        live.vt.feed(&clear);
-                        live.broadcast(OUTPUT, clear);
-                    }
-                }
-                Request::Resize {
-                    cols,
-                    rows,
-                    cell_width,
-                    cell_height,
-                } => {
-                    geometry(cols, rows)?;
-                    live.cell.set(cell_width, cell_height);
-                    live.master.resize(cols, rows, (cell_width, cell_height))?;
-                    live.vt.resize(cols, rows)?;
-                    live.cols = cols;
-                    live.rows = rows;
-                    live.broadcast(
-                        RESIZED,
-                        serde_json::to_vec(&(cols, rows)).map_err(io::Error::other)?,
-                    );
-                }
-                _ => {
-                    return Err(io::Error::other(
-                        "attached connection accepts input, resize and scheme only",
-                    ));
+                Err(e) => {
+                    *ended.lock().unwrap_or_else(|p| p.into_inner()) = Some(e);
+                    inbox.close();
+                    return;
                 }
             }
-            Ok(())
-        })();
-        if typed && result.is_ok() {
+        });
+    }
+    while let Some(batch) = inbox.take() {
+        let (mut typed_ok, mut submitted_ok) = (false, false);
+        for request in batch {
+            let submitted = matches!(&request, Request::Input {bytes, ..} if bytes.contains(&b'\r') || bytes.contains(&b'\n'));
+            let typed = matches!(&request, Request::Input { .. });
+            let result = (|| -> io::Result<()> {
+                let mut live = lock(&terminal)?;
+                if live.owner != Some(connection) || live.exited {
+                    return Err(io::Error::other("只读或进程已退出；需明确接管"));
+                }
+                match request {
+                    // A mouse report is dropped once the program falls behind: written into
+                    // a nearly full input queue it can be cut after its ESC, and the program
+                    // then reads the rest as typed text ("[<65;20;10M" in Codex's input box).
+                    Request::Input { lossy: true, .. }
+                        if live.master.backlog().is_some_and(|n| n > POINTER_BACKLOG) => {}
+                    Request::Input { bytes, lossy } => {
+                        if bytes.len() > 64 * 1024 {
+                            return Err(io::Error::other("单次输入超过 64 KiB"));
+                        }
+                        live.master.write(&bytes)?;
+                        if !lossy {
+                            live.input_at = Some(Instant::now());
+                        }
+                    }
+                    Request::Scheme(scheme) => live.vt.set_scheme(scheme)?,
+                    Request::Colors(colors) => live.vt.set_colors(colors)?,
+                    Request::ClearHistory => {
+                        let clear = fibo_core::terminal::clear_history(live.vt.terminal())?;
+                        if !clear.is_empty() {
+                            // Same bytes into the daemon's terminal and every display, in output order.
+                            live.vt.feed(&clear);
+                            live.broadcast(OUTPUT, clear);
+                        }
+                    }
+                    Request::Resize {
+                        cols,
+                        rows,
+                        cell_width,
+                        cell_height,
+                    } => {
+                        geometry(cols, rows)?;
+                        live.cell.set(cell_width, cell_height);
+                        live.master.resize(cols, rows, (cell_width, cell_height))?;
+                        live.vt.resize(cols, rows)?;
+                        live.cols = cols;
+                        live.rows = rows;
+                        live.broadcast(
+                            RESIZED,
+                            serde_json::to_vec(&(cols, rows)).map_err(io::Error::other)?,
+                        );
+                    }
+                    _ => {
+                        return Err(io::Error::other(
+                            "attached connection accepts input, resize and scheme only",
+                        ));
+                    }
+                }
+                Ok(())
+            })();
+            typed_ok |= typed && result.is_ok();
+            submitted_ok |= submitted && result.is_ok();
+            let reply = result
+                .map(|_| Reply::Ok)
+                .unwrap_or_else(|e| Reply::Error(e.to_string()));
+            // A lagging viewer misses this acknowledgement; its resync says where it stands.
+            if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx.try_send((
+                ACK,
+                Arc::new(serde_json::to_vec(&reply).map_err(io::Error::other)?),
+            )) {
+                lagged.store(true, Ordering::Release);
+            }
+        }
+        // Once per batch, not per key: these take the host's lock.
+        if typed_ok {
             // The user is answering here; the prompt is no longer waiting on them.
             lock(&host)?.set_screen_wait(&terminal_id, None)?;
         }
-        if submitted && result.is_ok() {
+        if submitted_ok {
             record_submission(&host, &terminal_id)?;
         }
-        let reply = result
-            .map(|_| Reply::Ok)
-            .unwrap_or_else(|e| Reply::Error(e.to_string()));
-        // A lagging viewer misses this acknowledgement; its resync says where it stands.
-        if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx.try_send((
-            ACK,
-            Arc::new(serde_json::to_vec(&reply).map_err(io::Error::other)?),
-        )) {
-            lagged.store(true, Ordering::Release);
-        }
-        let _ = &guard;
     }
+    let _ = &guard;
+    let reason = ended.lock().unwrap_or_else(|p| p.into_inner()).take();
+    Err(reason.unwrap_or_else(|| io::ErrorKind::UnexpectedEof.into()))
 }
