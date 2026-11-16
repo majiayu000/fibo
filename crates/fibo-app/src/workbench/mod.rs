@@ -44,6 +44,8 @@ pub struct Workbench {
     attention: Attention,
     resuming: Resuming,
     diagnostics: Option<Entity<diagnostics::DiagnosticView>>,
+    /// 本机诊断 closed while it was still sampling: it runs on, shown in the status bar.
+    diagnostics_away: Option<Entity<diagnostics::DiagnosticView>>,
     settings: Option<Entity<settings::SettingsView>>,
     sidebar: sidebar_list::SidebarPrefs,
     /// A session's live screen floated over the current tab from the sidebar.
@@ -423,6 +425,7 @@ impl Workbench {
         let mut this = Self {
             away: None,
             diagnostics: None,
+            diagnostics_away: None,
             settings: None,
             sidebar: sidebar_list::SidebarPrefs::load(),
             peek: None,
