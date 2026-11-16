@@ -397,6 +397,18 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
         let held = crate::host::brief::Held::default();
         while let Some(status) = status_rx.next().await {
             let status: RecognitionStatus = crate::connection::StatusLink::into_status(status);
+            link.phase = status.phase;
+            // Most statuses are recognition news on an unchanged workspace: nothing to
+            // fetch, as the window does. Unequal rather than newer, since a restarted host
+            // may count from lower.
+            if ready && link.error.is_none() && status.workspace_revision == before.revision {
+                let value = panel(&before, &link);
+                if previous_panel != value {
+                    cx.update(|_| native::update(&value));
+                    previous_panel = value;
+                }
+                continue;
+            }
             let (socket_read, held, brief) = (socket.clone(), held.clone(), status.brief);
             let result = cx
                 .background_spawn(async move {
@@ -404,7 +416,6 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                         .into_result()
                 })
                 .await;
-            link.phase = status.phase;
             if let Err(e) = &result {
                 // Keep the last numbers on screen, marked with the minute they date from.
                 if link.error.is_none() {
