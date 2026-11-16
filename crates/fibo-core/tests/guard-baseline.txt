@@ -17,7 +17,6 @@ field content-title	crates/fibo-app/src/workbench/board_drawer.rs	3
 field content-title	crates/fibo-app/src/workbench/machines.rs	1
 field content-title	mobile/src/ui/format.ts	1
 field session-updated	crates/fibo-app/src/model/session_state.rs	1
-field session-updated	crates/fibo-app/src/workbench/layout/turn_bar.rs	2
 field session-updated	crates/fibo-host/src/host/association.rs	2
 field session-updated	crates/fibo-host/src/host/mod.rs	1
 field session-updated	crates/fibo-host/src/host/screen_match.rs	1
