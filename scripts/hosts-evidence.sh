@@ -3,7 +3,9 @@
 # second Mac: this window runs its own isolated host; a second host with its own HOME plays
 # machine `far`, reached through a fake ssh whose `-L` is a link to its socket. Picking far's
 # space draws far's own workbench in the window, ⌘T opens in that space on far, 「← 本机」
-# comes back with this machine's tabs as they were, and far keeps its tab meanwhile.
+# comes back with this machine's tabs as they were, and far keeps its tab meanwhile. Before
+# far is picked the window holds none of its panes and opens nothing there; the tab ⌘T
+# opened runs far's own shell (checked inside, the tab is closed again at the end).
 # Needs a debug build with visual tests:
 #   cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test
 # Prints PASS and what the other machine holds afterwards; saves shots to $R/shots.
@@ -60,7 +62,14 @@ for _ in range(100):
         time.sleep(0.1)
 PY
 }
-rpc "{\"Edit\":{\"edit\":{\"AddSpace\":{\"id\":\"far\",\"name\":\"far\",\"cwd\":\"$R/farhome/code\"}}}}" > /dev/null
+# A host that has not answered by then (a binary just built waits on macOS checking it) would
+# leave far without its space, and the window would fail further on for a reason not its own.
+added=$(rpc "{\"Edit\":{\"edit\":{\"AddSpace\":{\"id\":\"far\",\"name\":\"far\",\"cwd\":\"$R/farhome/code\"}}}}")
+if [ -z "$added" ]; then
+  echo "far's host did not answer within 10 s; run again (its log: $R/far.log)"
+  kill $FAR 2>/dev/null
+  exit 1
+fi
 PATH="$R/bin:$PATH" HOME="$R/home" MOORING_HOSTS_EVIDENCE=1 \
   perl -e 'alarm 180; exec @ARGV' "$REPO/target/debug/fibo-app" --runtime "$R/rt" --visual-evidence "$R/shots" > "$R/app.log" 2>&1
 echo "app exit $?"

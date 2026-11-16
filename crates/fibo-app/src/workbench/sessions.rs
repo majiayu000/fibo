@@ -36,7 +36,7 @@ impl Workbench {
         };
         self.nav.space = tab.space.clone();
         self.nav.tab = Some(tab.id.clone());
-        self.leave_host();
+        self.leave_host(cx);
         self.nav.overview = false;
         self.sync_panes(cx);
         if let Some(pane) = self.layout.panes.get(terminal_id) {

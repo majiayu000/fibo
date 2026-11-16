@@ -5,7 +5,9 @@
 //! window's own sidebar, which stays; ⌘T there opens in that space on far; 「← 本机」 comes
 //! back with this machine's tabs as they were; picking far again finds its tab still there,
 //! and one of this machine's spaces picked in the sidebar comes back too; what was opened
-//! there is closed again. MOORING_HOSTS_HOST and
+//! there is closed again. Until far is drawn its workbench holds no pane (a pane takes the
+//! terminal's input from far's own window) and opens no terminal there; put away again, it
+//! is back to that. MOORING_HOSTS_HOST and
 //! MOORING_HOSTS_SPACE name another machine and space (a real one) instead of far's.
 use super::*;
 
@@ -61,6 +63,23 @@ pub(super) fn start(
         );
         let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
         assert_eq!(shown.0, None, "{host} was drawn without being picked");
+        // Not drawn, it does nothing there on its own. Waited, so a shell it opened for an
+        // empty far, or a pane it attached, would have come back by now.
+        let fake = std::env::var_os("MOORING_HOSTS_HOST").is_none();
+        wait(1500 * slow).await;
+        let far = handle
+            .update(cx, |v, _, _| v.visual_host_view(&host))
+            .unwrap()
+            .expect("far's view");
+        let (drawn, panes, terminals) = far.read_with(cx, |w, _| w.visual_embedded_state());
+        assert!(
+            !drawn && panes == 0,
+            "{host} holds {panes} panes before it was picked: its own window lost their input"
+        );
+        assert!(
+            !fake || terminals == 0,
+            "{terminals} terminals were opened on {host} before it was picked"
+        );
         // Picking far's space: its own workbench, reached in the background, drawn here.
         handle
             .update(cx, |v, window, cx| {
@@ -74,15 +93,15 @@ pub(super) fn start(
             Some(&host),
             "{host} was never drawn: {shown:?}"
         );
-        let far = handle
-            .update(cx, |v, _, _| v.visual_hosted())
-            .unwrap()
-            .expect("far's view");
         let far_state = |cx: &mut gpui::AsyncApp| far.read_with(cx, |w, _| w.visual_attach_state());
         let far_tabs = far.read_with(cx, |w, _| w.visual_tab_ids());
         assert!(far.read_with(cx, |w, _| w.visual_host().attached()));
         wait(800).await;
         shoot("hosts-1-far.png", cx);
+        assert!(
+            far.read_with(cx, |w, _| w.visual_embedded_state().0),
+            "{host} is drawn but still counts as put away"
+        );
         // The sidebar is the window's: far's main area is drawn beside it, far's own is not.
         let beside = far.read_with(cx, |w, _| w.visual_beside());
         assert!(
@@ -126,6 +145,14 @@ pub(super) fn start(
         );
         wait(1500).await;
         shoot("hosts-2-far-tab.png", cx);
+        // Drawn, the tab opened there has its pane here, running far's own shell.
+        let panes = far.read_with(cx, |w, _| w.visual_embedded_state().1);
+        assert!(panes > 0, "the tab opened on {host} has no pane here");
+        let programs = far.read_with(cx, |w, _| w.visual_tab_programs(&opened));
+        assert!(
+            !fake || programs == ["/bin/bash"],
+            "⌘T on far ran {programs:?}, not far's own shell"
+        );
         // 「← 本机」: this machine's own, as it was.
         handle
             .update(cx, |_, _, cx| far.update(cx, |w, cx| w.visual_go_home(cx)))
@@ -133,6 +160,10 @@ pub(super) fn start(
         wait(400).await;
         let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
         assert_eq!(shown.0, None, "「← 本机」 left far drawn");
+        assert!(
+            !far.read_with(cx, |w, _| w.visual_embedded_state().0),
+            "{host} was put away but still counts as drawn"
+        );
         let tabs = handle.update(cx, |v, _, _| v.visual_tab_ids()).unwrap();
         assert_eq!(tabs, home_tabs, "this machine's tabs changed");
         shoot("hosts-3-home.png", cx);
@@ -192,7 +223,6 @@ pub(super) fn start(
         }
         // With peek on, a peek opened while far's main area is drawn floats over it. Only
         // against the outer script's far: peek is a setting of the HOME it runs in.
-        let fake = std::env::var_os("MOORING_HOSTS_HOST").is_none();
         let shell = far.read_with(cx, |w, _| w.visual_focused()).filter(|_| fake);
         if let Some(shell) = shell {
             handle

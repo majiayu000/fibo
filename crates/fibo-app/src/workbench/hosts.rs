@@ -20,6 +20,9 @@ pub(super) struct Hosts {
     wanted: Option<(String, Option<Go>)>,
     /// This workbench is another machine's, drawn in a window of this one.
     pub(super) embedded: bool,
+    /// Embedded and the one drawn now. Kept undrawn it only follows its machine's
+    /// workspace for the sidebar: it opens no terminal there and takes no input (`undrawn`).
+    shown: bool,
     /// Drawn embedded: how wide the window's own sidebar is beside it, None while folded.
     pub(super) beside: Option<f32>,
     /// Drawn embedded: how many need you on every machine, as the window counts them.
@@ -97,7 +100,7 @@ impl Workbench {
                 w.nav.pending_focus = true;
                 cx.notify();
             });
-            self.hosts.showing = Some(host);
+            self.draw_host(host, cx);
             cx.notify();
             return;
         }
@@ -150,14 +153,13 @@ impl Workbench {
                 match reached {
                     Ok((root, workspace)) => {
                         let socket = socket_of(&root);
-                        let view = cx.new(|cx| Workbench::new(socket, workspace, window, cx));
-                        view.update(cx, |w, _| w.hosts.embedded = true);
+                        let view = cx.new(|cx| Workbench::embedded(socket, workspace, window, cx));
                         cx.subscribe_in(&view, window, |this, _, event, window, cx| match event {
                             HostEvent::Home => this.show_home(window, cx),
                             HostEvent::ToggleSidebar => this.toggle_sidebar(cx),
                             HostEvent::NextWaiting => this.next_waiting(window, cx),
                             HostEvent::Overview => {
-                                this.leave_host();
+                                this.leave_host(cx);
                                 this.show_overview(cx);
                                 cx.notify();
                             }
@@ -175,7 +177,7 @@ impl Workbench {
                         this.hosts.views.push((host.clone(), view.clone()));
                         if let Some((_, go)) = wanted {
                             view.update(cx, |w, _| w.hosts.go = go);
-                            this.hosts.showing = Some(host);
+                            this.draw_host(host, cx);
                         }
                     }
                     Err(e) => {
@@ -364,15 +366,39 @@ impl Workbench {
             false => self.sidebar.collapsed,
         }
     }
+    /// Whether this is another machine's workbench kept in a window without being drawn.
+    /// What a workbench does on its own when it shows a tab (taking the tab's input,
+    /// bringing back a shell its host lost) waits until it is the one drawn: until then
+    /// that machine's own window is where someone is typing.
+    pub(super) fn undrawn(&self) -> bool {
+        self.hosts.embedded && !self.hosts.shown
+    }
+    /// `host`'s workbench is the one drawn from now on; the one drawn before is put away.
+    fn draw_host(&mut self, host: String, cx: &mut Context<Self>) {
+        if self.hosts.showing.as_ref() != Some(&host) {
+            self.put_away(cx);
+        }
+        self.hosts.showing = Some(host);
+    }
+    /// The machine drawn here is no longer drawn; false when none was.
+    fn put_away(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(host) = self.hosts.showing.take() else {
+            return false;
+        };
+        if let Some((_, view)) = self.hosts.views.iter().find(|(h, _)| *h == host) {
+            view.update(cx, |w, _| w.hosts.shown = false);
+        }
+        true
+    }
     /// One of this machine's spaces or sessions picked: its main area again.
-    pub(super) fn leave_host(&mut self) {
-        if self.hosts.showing.take().is_some() {
+    pub(super) fn leave_host(&mut self, cx: &mut Context<Self>) {
+        if self.put_away(cx) {
             self.nav.pending_focus = true;
         }
     }
     /// 「← 本机」: this window's own workbench again.
     pub(super) fn show_home(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.hosts.showing = None;
+        self.put_away(cx);
         self.nav.pending_focus = true;
         window.refresh();
         cx.notify();
@@ -381,6 +407,13 @@ impl Workbench {
     pub(super) fn settle_hosts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if std::mem::take(&mut self.hosts.reach_again) {
             self.reach_hosts(window, cx);
+        }
+        // Drawn for the first time, or again after another was: the shown tab's panes are
+        // made now, and its machine's hooks read as a window coming to the front reads them.
+        if self.undrawn() {
+            self.hosts.shown = true;
+            self.sync_panes(cx);
+            self.read_hooks(cx);
         }
         match self.hosts.go.take() {
             Some(Go::Terminal(id)) => {
@@ -468,6 +501,29 @@ impl Workbench {
     /// The open peek's pane, wherever it is drawn.
     pub fn visual_peek_bounds(&self, cx: &gpui::App) -> Option<gpui::Bounds<gpui::Pixels>> {
         self.peek.as_ref()?.pane.read(cx).visual_bounds()
+    }
+    /// `host`'s own workbench here, once reached.
+    pub fn visual_host_view(&self, host: &str) -> Option<Entity<Workbench>> {
+        (self.hosts.views.iter())
+            .find(|(h, _)| h == host)
+            .map(|(_, v)| v.clone())
+    }
+    /// Embedded: whether it is the one drawn, the panes it holds, and the terminals its
+    /// machine has.
+    pub fn visual_embedded_state(&self) -> (bool, usize, usize) {
+        (
+            self.hosts.shown,
+            self.layout.panes.len(),
+            self.workspace.terminals.len(),
+        )
+    }
+    /// The programs tab `id`'s terminals run.
+    pub fn visual_tab_programs(&self, id: &str) -> Vec<String> {
+        let ids = self.workspace.tab_terminals(id);
+        (self.workspace.terminals.iter())
+            .filter(|t| ids.contains(&t.id))
+            .filter_map(|t| t.argv.first().cloned())
+            .collect()
     }
     /// Whether `host` has its own workbench here, drawn or not.
     pub fn visual_reached(&self, host: &str) -> bool {

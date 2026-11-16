@@ -321,6 +321,26 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        Self::build(socket, workspace, false, window, cx)
+    }
+    /// Another machine's workbench kept in this window (`hosts`). The window is this
+    /// machine's: when you left it and the board that greets you back are its own
+    /// workbench's to keep, and nothing is opened on that machine before it is drawn.
+    fn embedded(
+        socket: PathBuf,
+        workspace: Workspace,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::build(socket, workspace, true, window, cx)
+    }
+    fn build(
+        socket: PathBuf,
+        workspace: Workspace,
+        embedded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         // Other machines' own hosts, reached once it is drawn and kept (`hosts`).
         cx.defer_in(window, |this, window, cx| this.reach_hosts(window, cx));
         // Opening where you left off is the host's to say; a space put aside is not where
@@ -385,12 +405,18 @@ impl Workbench {
             .detach();
         pressure::watch(cx);
         let since = workspace.last_left;
-        let overview = show_on_return(since, now(), workspace.settings.away_minutes);
+        let overview = !embedded && show_on_return(since, now(), workspace.settings.away_minutes);
         let search = Search::new(window, cx);
         // 跟随系统 switches with macOS; a fixed choice ignores it.
         cx.observe_window_appearance(window, |_, _, cx| crate::ui::appearance::apply(cx))
             .detach();
         cx.observe_window_activation(window, |this, window, cx| {
+            if this.hosts.embedded {
+                if window.is_window_active() && !this.undrawn() {
+                    this.read_hooks(cx);
+                }
+                return;
+            }
             if window.is_window_active() {
                 // A hook written from a terminal (`fibo hooks install`, another session)
                 // while the window was open would otherwise keep the status bar's
@@ -418,8 +444,12 @@ impl Workbench {
             }
         })
         .detach();
-        cx.on_release(|this, _| record_left(this.store.socket(), this.away.unwrap_or_else(now)))
-            .detach();
+        cx.on_release(|this, _| {
+            if !this.hosts.embedded {
+                record_left(this.store.socket(), this.away.unwrap_or_else(now))
+            }
+        })
+        .detach();
         let mut this = Self {
             away: None,
             diagnostics: None,
@@ -557,6 +587,12 @@ impl Workbench {
                 resumed: HashMap::new(),
             },
         };
+        if embedded {
+            this.hosts.embedded = true;
+            // The welcome is this machine's (its marker is read here), never another's.
+            this.first_run.on = false;
+            return this;
+        }
         this.sync_panes(cx);
         this.read_hooks(cx);
         // A fresh install is greeted where the empty tab is, instead of with a bare shell.
