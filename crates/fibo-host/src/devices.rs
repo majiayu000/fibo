@@ -730,11 +730,11 @@ mod tests {
         assert!(!device.pairing_expired(deadline - 1));
         assert!(device.pairing_expired(deadline));
         device.pairing_expires = Some(now() - 1);
-        save(&socket, &[device.clone()]).unwrap();
+        save(&socket, std::slice::from_ref(&device)).unwrap();
         assert!(confirm_pairing(&socket, &device.id).is_err());
         assert!(routes(&load(&socket)).is_empty());
         device.pairing_expires = Some(now() + 600);
-        save(&socket, &[device.clone()]).unwrap();
+        save(&socket, std::slice::from_ref(&device)).unwrap();
         confirm_pairing(&socket, &device.id).unwrap();
         assert!(!load(&socket)[0].pairing_expired(u64::MAX));
         let mut old = serde_json::to_value(&device).unwrap();
