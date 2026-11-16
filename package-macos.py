@@ -47,9 +47,14 @@ resources.mkdir(parents=True, exist_ok=True)
 for binary in ('fibo-app', 'fibo'):
     shutil.copy2(args.release_dir / binary, mac / binary)
     subprocess.run([*sign, str(mac / binary)], check=True)
-# The program and command are `fibo`. Older names stay as links to it: terminals started
-# before the rename keep MOORING_HOOK=.../MacOS/mooring, and scripts may still look for the
-# window's old program file. Keepline's `keepline` and `keeplined` went on 11-13: it was never
+# The program and command are `fibo`. Older names stay as links to it, and installs in use
+# need both (crates/fibo-core/tests/old_names.rs holds them here):
+# - `mooring-app`: the updater of v0.1.0–0.1.2 swaps the bundle and then starts
+#   Contents/MacOS/mooring-app. Without the link an update from those ends with no window
+#   and no error.
+# - `mooring`: terminals started before the rename keep MOORING_HOOK=.../MacOS/mooring,
+#   claude-quota wrote that path into Claude's statusLine, and other machines look for it.
+# Keepline's `keepline` and `keeplined` went on 11-13: it was never
 # released, and no terminal still carried only its variables.
 (mac / 'mooring').symlink_to('fibo')
 (mac / 'mooring-app').symlink_to('fibo-app')
