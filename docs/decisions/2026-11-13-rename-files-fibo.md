@@ -32,13 +32,15 @@ decision-makers: 用户
 - `~/.config/mooring`（已是指向 `~/.config/fibo` 的链接）、运行目录 `keepline-workbench` / `mooring-workbench`、旧 bundle id、旧 cask 名。
 - `docs/decisions` 里的历史记录照原文。
 
-旧名字留成链接：App 包里 `mooring` → `fibo`、`mooring-app` → `fibo-app`（还有 `keepline`、`keeplined`）；PATH 上 `fibo` 和 `mooring` 都指向包里的 `fibo`；Windows 把 `fibo.exe` 复制成 `mooring.exe`；中继镜像里 `mooring-relay` 链到 `fibo-relay`。新 skill 写进 `skills/fibo` 时，删掉旧的 `skills/mooring`（只删我们写的）。
+旧名字留成链接：App 包里 `mooring` → `fibo`、`mooring-app` → `fibo-app`（`keepline`、`keeplined` 同一天由 [compat-retire](2026-11-13-compat-retire.md) 去掉）；PATH 上 `fibo` 和 `mooring` 都指向包里的 `fibo`；Windows 把 `fibo.exe` 复制成 `mooring.exe`；中继镜像里 `mooring-relay` 链到 `fibo-relay`。新 skill 写进 `skills/fibo` 时，删掉旧的 `skills/mooring`（只删我们写的）。
 
 ## Consequences
 
 - 老终端的 `MOORING_HOOK=.../MacOS/mooring` 照样能跑；找后台进程的地方认 `mooring serve` 和 `fibo serve` 两种。
 - 别的会话手上的分支会和这次改名冲突，要 rebase（git 能认出改名，多数自动合上）。
 - 活动监视器里看到的是 `fibo` 和 `fibo-app`。
+- GitHub 上不要再建叫 `majiayu000/mooring` 的仓库：v0.1.0 的更新器查的是这个旧名字，靠改名后的重定向才找得到新版，同名仓库一建重定向就没了（11-16 补）。
+- Windows 上 0.1.2 装的窗口程序 `mooring-app.exe` 升级时删掉，不留副本：留着的话钉在任务栏的图标会一直打开旧窗口（11-16 补）。
 
 ## Implementation Plan
 

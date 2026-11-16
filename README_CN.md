@@ -50,7 +50,7 @@
 brew install --cask majiayu000/tap/fibo
 ```
 
-打开 Fibo，在它的终端里运行 `claude` 或 `codex`，会话就会出现在左栏。发布版会自己更新（见[常见问题](#常见问题)里的「怎么更新」）。
+打开 Fibo，在它的终端里运行 `claude` 或 `codex`，会话就会出现在左栏。从 GitHub 下载的发布版会自己更新，用 Homebrew 装的用 `brew upgrade --cask fibo` 更新（见[常见问题](#常见问题)里的「怎么更新」）。
 
 **Windows（预览版）：** 运行 `Fibo-Setup-<版本>.exe`，只装给当前用户，不用管理员权限。安装程序还没有代码签名，SmartScreen 会提示「未知发布者」：点「更多信息」，再点「仍要运行」。Windows 版不会自己更新，要更新就运行新版安装程序。目前只在 Windows 11 x64 上试过。
 
@@ -133,7 +133,9 @@ Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 在发布页�
 发布版每天向 GitHub 查一次，有新版本时状态栏会显示，点它或在「设置 › 关于 › 检查更新」里更新。Fibo 下载发布的 zip，按发布里的 `SHA256SUMS` 校验，确认是 Fibo 的 Developer ID（团队 `C5UWZ934C2`）签名并通过 Gatekeeper，再把它换到正在运行的 App 的位置并重启；终端都继续运行。任何一项校验不通过都不会安装。用 Homebrew 装的请运行 `brew upgrade --cask fibo`；App 所在的文件夹没有写权限（比如 App 属于 root）时请从发布页下载。从源码运行的版本不自动更新，`git pull` 后重新构建。
 
 **Fibo 会改我的 Agent 配置吗？**
-只有安装 hook（`fibo hooks install`）时会在 Agent 的配置文件里加上 Fibo 的条目，`fibo hooks uninstall` 会移除。不装 hook 时，状态从对话记录和画面读。
+hook 只在你安装时才写进 Agent 的配置文件：`fibo hooks install`、「设置 › 通用」，或在第一次打开的欢迎页里勾着「启动时一起装上」启动 Agent（默认勾着，页面上写明改哪个文件）。`fibo hooks uninstall` 会移除。不装 hook 时，状态从对话记录和画面读。
+
+hook 之外，打包版每次启动还会准备命令行：`/opt/homebrew/bin` 或 `/usr/local/bin` 可写时，在里面放 `fibo` 和 `mooring` 两个链接；有 `~/.codex` 时，往 `~/.codex/skills/fibo` 写一个 skill，告诉 Codex 怎么用 `fibo todo`。设 `MOORING_NO_CLI_SETUP=1` 两样都不做；从源码构建的不做这两件事。
 
 **怎么用手机连过来？**
 桌面端在本机完全独立运行，不需要账号或服务器。想在离开电脑时用手机看状态、审批或发话，现阶段请按[自建中继说明](docs/relay/self-host.md)部署 `fibo-relay`，在「设置 › 手机与远程」填入中继地址，再用仓库 [`mobile/`](mobile/) 下的 Expo 应用扫码配对；两端之间用 Noise 端到端加密，中继读不到内容。官方托管中继正在内测。

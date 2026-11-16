@@ -21,8 +21,11 @@ impl Workbench {
         } else {
             ids
         };
+        // Another machine's workbench kept here undrawn shows no tab yet.
+        let undrawn = self.undrawn();
         // A shell the host lost on restart comes back in place as soon as its tab shows.
-        if !self.store.busy()
+        if !undrawn
+            && !self.store.busy()
             && self.resuming.resume.is_none()
             && self.tasks.chosen_agent.is_none()
             && let Some(id) = reopen_candidate(&self.workspace, &ids, &self.layout.reopened)
@@ -43,7 +46,8 @@ impl Workbench {
         self.prune_pins();
         let split = ids.len() > 1;
         for id in ids {
-            if !self.layout.panes.contains_key(&id) {
+            // A pane made here takes the terminal's input from whoever had it.
+            if !undrawn && !self.layout.panes.contains_key(&id) {
                 let pane = cx.new(|cx| Pane::new(self.store.socket(), &id, true, cx));
                 Self::adopt_pane(&pane, cx);
                 self.layout.panes.insert(id, pane);

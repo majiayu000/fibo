@@ -50,7 +50,7 @@ Download from the [latest release](https://github.com/majiayu000/fibo/releases/l
 brew install --cask majiayu000/tap/fibo
 ```
 
-Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in the sidebar. Releases update themselves (see [How do I update?](#faq)).
+Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in the sidebar. A release downloaded from GitHub updates itself; one installed with Homebrew updates with `brew upgrade --cask fibo` (see [How do I update?](#faq)).
 
 **Windows (preview):** run `Fibo-Setup-<version>.exe`; it installs for your user only, no admin needed. The installer is not code-signed yet, so SmartScreen warns about an unknown publisher: choose *More info*, then *Run anyway*. The Windows build does not update itself; run the newer installer to update. It has been tried on Windows 11 x64 only.
 
@@ -71,7 +71,7 @@ The first build also downloads the Ghostty source and takes a while. Run `claude
 
 ### 01 · See which agent needs you
 
-Each session has one state, shown the same way in the sidebar, tabs, panes and the board: **waiting for you** (a question or an approval), **running**, **ready for review** (a turn ended), **done**. A turn ending is not the work being done: only you mark a session complete. The board (鸟瞰) lays every session out in columns, and the status bar shows your Codex, Claude and Grok quota.
+Each session has one state, shown the same way in the sidebar, tabs, panes and the board: **waiting for you** (a question or an approval), **running**, **ready for review** (a turn ended), **done**. A turn ending is not the work being done: only you mark a session complete. The board lays every session out in columns, and the status bar shows your Codex, Claude and Grok quota.
 
 ![The board: sessions in columns To-do, Running, Needs you, Stopped and Done](docs/site/assets/shot-board.webp)
 
@@ -81,7 +81,7 @@ Terminals live in a background host (`fibo serve`), not in the window. Quit, upd
 
 ### 03 · Any agent CLI
 
-Claude Code, Codex, Grok Build, Cursor Agent, Qoder CLI, Hermes, Factory Droid, Pi, oh-my-pi, DeepSeek Harness, Kimi Code and Gemini CLI are built in. Fibo reads the session records and events each tool provides; see the [integration boundaries](docs/decisions/2026-11-07-more-agent-inputs.md) for supported formats, child relationships and state signals. Others are added with a JSON plugin (OpenCode ships as an example). Any program can report its own state with one `printf`, using the OSC 7501 status protocol:
+Claude Code, Codex, Grok Build, Cursor Agent, Qoder CLI, Hermes, Factory Droid, Pi, oh-my-pi, DeepSeek Harness, Kimi Code and Gemini CLI are built in. Fibo reads the session records and events each tool provides; see the [integration boundaries](docs/decisions/2026-11-07-more-agent-inputs.md) (in Chinese) for supported formats, child relationships and state signals. Others are added with a JSON plugin (OpenCode ships as an example). Any program can report its own state with one `printf`, using the OSC 7501 status protocol:
 
 ```sh
 printf '\033]7501;state=working:app=deploy:progress=30\033\\'
@@ -133,10 +133,12 @@ The update check is the only network request the app makes on its own: at most o
 A release build checks GitHub once a day and shows the new version in the status bar; click it, or use Settings › About › Check for updates. Fibo downloads the release zip, checks it against the release's `SHA256SUMS`, checks that it is signed by Fibo's Developer ID (team `C5UWZ934C2`) and passes Gatekeeper, swaps it in place of the running app and restarts; every terminal keeps running. Nothing is installed if a check fails. Installed with Homebrew: run `brew upgrade --cask fibo`. In a folder you cannot write to (an app owned by root): download it from the release page. A build from source never updates itself; `git pull` and rebuild.
 
 **Does Fibo change my agent settings?**
-Only when you install hooks (`fibo hooks install`), which adds Fibo's entries to the agent's settings file; `fibo hooks uninstall` removes them. Without hooks, state comes from transcripts and the screen.
+Hooks go into an agent's settings file only when you install them: `fibo hooks install`, Settings › General, or starting an agent from the first-run welcome page with its hook box ticked (it is ticked by default, and the page names the file it changes). `fibo hooks uninstall` removes them. Without hooks, state comes from transcripts and the screen.
+
+Apart from hooks, the packaged app sets up its command line each time it starts: it links `fibo` and `mooring` into `/opt/homebrew/bin` or `/usr/local/bin` when it can write there, and when `~/.codex` exists it writes a skill to `~/.codex/skills/fibo` that teaches Codex the `fibo todo` commands. Set `MOORING_NO_CLI_SETUP=1` to skip both; a build from source does neither.
 
 **How do I connect from my phone?**
-Fibo on macOS works standalone locally without any server or account. To answer sessions away from your desk, deploy `fibo-relay` ([self-hosting guide](docs/relay/self-host.md)), enter your relay URL under Settings › Phones & Remote, and pair the Expo app in [`mobile/`](mobile/) — traffic is end-to-end encrypted with Noise so the relay never sees plaintext. Official hosted relay is in private beta.
+Fibo on macOS works standalone locally without any server or account. To answer sessions away from your desk, deploy `fibo-relay` ([self-hosting guide](docs/relay/self-host.md), in Chinese), enter your relay URL under Settings › Phone & remote, and pair the Expo app in [`mobile/`](mobile/) — traffic is end-to-end encrypted with Noise so the relay never sees plaintext. Official hosted relay is in private beta.
 
 ## Repository
 

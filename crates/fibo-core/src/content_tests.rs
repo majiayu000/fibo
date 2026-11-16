@@ -52,9 +52,12 @@ fn a_running_turn_reads_as_words_not_a_raw_command() {
     };
     // A record from an earlier turn says nothing about this one: the ask does.
     assert_eq!(c.doing().as_deref(), Some("做 写主界面 A / C 两种样式"));
+    // A row titled by the ask (a phone's, another machine's) is not told it again.
+    assert_eq!(c.doing_recorded(), None);
     c.evidence
         .push(record("file", "文件修改：next/crates/app/src/tabs.rs", 120));
     assert_eq!(c.doing().as_deref(), Some("改 tabs.rs"));
+    assert_eq!(c.doing_recorded().as_deref(), Some("改 tabs.rs"));
     c.evidence.push(record("command", "S=/private/tmp/x", 130));
     assert_eq!(c.doing().as_deref(), Some("改 tabs.rs"));
     c.evidence.push(record(

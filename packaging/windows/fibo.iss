@@ -47,6 +47,9 @@ Source: "{#Stage}\Resources\*"; DestDir: "{app}\Resources"; Flags: ignoreversion
 ; Shortcuts a Mooring install made; the upgraded install makes Fibo ones instead.
 Type: files; Name: "{autoprograms}\Mooring.lnk"
 Type: files; Name: "{autodesktop}\Mooring.lnk"
+; The window program 0.1.2 installed. Left behind, an icon pinned to the taskbar keeps
+; starting that old window, which then runs beside the new host.
+Type: files; Name: "{app}\bin\mooring-app.exe"
 
 [Icons]
 Name: "{autoprograms}\Fibo"; Filename: "{app}\bin\fibo-app.exe"; IconFilename: "{app}\Resources\Fibo.ico"
@@ -58,4 +61,4 @@ Filename: "{app}\bin\fibo-app.exe"; Description: "{cm:LaunchProgram,Fibo}"; Flag
 [UninstallRun]
 ; The host outlives the window; stop this install's own (by path, never another copy's)
 ; before its files go.
-Filename: "powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process fibo,mooring,fibo-app -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\bin\*' } | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "StopMooring"
+Filename: "powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process fibo,mooring,fibo-app,mooring-app -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\bin\*' } | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "StopMooring"
