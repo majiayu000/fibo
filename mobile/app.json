@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fibo",
     "slug": "mooring-mobile",
-    "version": "1.0.0",
+    "version": "0.1.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -14,7 +14,8 @@
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
@@ -29,7 +30,8 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
