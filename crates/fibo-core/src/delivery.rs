@@ -50,11 +50,27 @@ impl Settled {
     }
 }
 
+impl crate::protocol::RequestId {
+    /// A new id from this process: one client for the process's life, ids in order.
+    pub fn fresh() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CLIENT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Self {
+            client: CLIENT
+                .get_or_init(|| uuid::Uuid::new_v4().to_string())
+                .clone(),
+            id: NEXT.fetch_add(1, Ordering::Relaxed).to_string(),
+        }
+    }
+}
+
 /// Safe to send again after it may have arrived: a named edit, a launch (its id makes
 /// it once), or one that only reads.
 pub fn resendable(request: &Request) -> bool {
     match request {
         Request::Edit { request, .. } => request.is_some(),
+        Request::Brief(_, request) => resendable(request),
         Request::Launch { .. }
         | Request::Once { .. }
         | Request::Workspace

@@ -103,7 +103,7 @@ pub(super) fn serve_client(
             }
             continue;
         }
-        let result = dispatch(&host, request);
+        let result = super::brief::dispatch(&host, request);
         let reply = result.unwrap_or_else(|e| Reply::Error(e.to_string()));
         send(&mut stream, CONTROL, &reply)?;
     }
