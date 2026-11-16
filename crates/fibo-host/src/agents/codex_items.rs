@@ -172,11 +172,11 @@ pub(super) fn codex_state(title: &str) -> Option<&'static str> {
     if title.trim().is_empty() {
         None
     } else if title.contains("Action Required") {
-        Some("需要你处理")
+        Some(tk!("需要你处理"))
     } else if title.chars().any(|c| "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".contains(c)) {
-        Some("工作中")
+        Some(tk!("工作中"))
     } else {
-        Some("空闲")
+        Some(tk!("空闲"))
     }
 }
 

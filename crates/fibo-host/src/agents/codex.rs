@@ -377,18 +377,20 @@ impl Adapter for Codex {
         }
     }
     fn title_status(&self, title: &str) -> Option<Hint> {
-        let state = codex_state(title);
+        // The state stays the Chinese key inside (`title_busy` matches it); only the words
+        // put on the terminal are said in the host's language.
+        let state = codex_state(title).map(fibo_core::i18n::say);
         let why =
-            "这个窗格还没关联到对话，Fibo 暂时只看得到它忙不忙。在这里发下一句话后会自动关联。";
+            t!("这个窗格还没关联到对话，Fibo 暂时只看得到它忙不忙。在这里发下一句话后会自动关联。");
         Some(Hint {
             text: match state {
-                Some(state) => format!("仅显示状态：{state}；发下一句后自动关联对话"),
-                None => "未关联：发下一句后自动关联对话".into(),
+                Some(state) => t!("仅显示状态：{state}；发下一句后自动关联对话", state),
+                None => t!("未关联：发下一句后自动关联对话").into(),
             },
             note: TerminalNote {
                 note: match state {
-                    Some(state) => format!("codex · {state} · 未关联对话"),
-                    None => "codex · 未关联对话".into(),
+                    Some(state) => t!("codex · {state} · 未关联对话", state),
+                    None => t!("codex · 未关联对话").into(),
                 },
                 why: why.into(),
             },

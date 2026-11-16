@@ -89,11 +89,15 @@ pub fn unclaimed(
 pub fn unbound_hint(agent: Agent) -> Hint {
     let cli = agent.executable();
     Hint {
-        text: format!("{}{cli}", fibo_core::protocol::AGENT_UNBOUND_PREFIX),
+        text: format!(
+            "{}{cli}",
+            fibo_core::i18n::say(fibo_core::protocol::AGENT_UNBOUND_PREFIX)
+        ),
         note: TerminalNote {
-            note: format!("{cli} · 发出第一句后对上对话"),
-            why: format!(
-                "Fibo 看到这个 {cli} 在跑，但它的命令行没写是哪段对话。发出第一句话后，按画面上的提示词对上；想启动就认出，运行一次 fibo hooks install 装上 Hook。"
+            note: t!("{cli} · 发出第一句后对上对话", cli),
+            why: t!(
+                "Fibo 看到这个 {cli} 在跑，但它的命令行没写是哪段对话。发出第一句话后，按画面上的提示词对上；想启动就认出，运行一次 fibo hooks install 装上 Hook。",
+                cli
             ),
         },
     }
