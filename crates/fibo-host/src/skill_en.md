@@ -42,7 +42,7 @@ Every command accepts only its documented flags: a misspelled flag (such as `--t
 
 ### Todos
 
-When the user says "note this down" or you spot follow-up work out of scope for the current turn, record it with `fibo todo add` (Claude Code is told this at session start via `fibo --skill session`; Codex reads `~/.codex/skills/mooring`). Do not record questions answered on the spot. For sessions launched from a todo, write a brief note after each milestone. **You cannot mark a todo done — there is no command for it: record progress as a note and let the user complete it in the window.**
+When the user says "note this down" or you spot follow-up work out of scope for the current turn, record it with `fibo todo add` (Claude Code is told this at session start via `fibo --skill session`; Codex reads `~/.codex/skills/fibo`). Do not record questions answered on the spot. For sessions launched from a todo, write a brief note after each milestone. **You cannot mark a todo done — there is no command for it: record progress as a note and let the user complete it in the window.**
 
 | Command | Purpose |
 |---|---|

@@ -42,7 +42,7 @@ Fibo 以前叫 Mooring：旧的 `mooring` 命令还能用。新写的命令一�
 
 ### 待办
 
-用户说「记一下」、或你发现这次不处理但要跟进的事，用 `fibo todo add`（Claude Code 在会话开始时会被 hook 告知这一点，内容是 `fibo --skill session`；Codex 靠 Fibo 写入的 skill：`~/.codex/skills/mooring`）。当场问完答完的不记。从待办启动的会话，每做完一段写一条进展。**你不能标完成，没有这个命令：结果写成进展，由用户在窗口里标记。**
+用户说「记一下」、或你发现这次不处理但要跟进的事，用 `fibo todo add`（Claude Code 在会话开始时会被 hook 告知这一点，内容是 `fibo --skill session`；Codex 靠 Fibo 写入的 skill：`~/.codex/skills/fibo`）。当场问完答完的不记。从待办启动的会话，每做完一段写一条进展。**你不能标完成，没有这个命令：结果写成进展，由用户在窗口里标记。**
 
 | 命令 | 做什么 |
 |---|---|
