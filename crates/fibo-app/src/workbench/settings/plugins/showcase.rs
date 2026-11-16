@@ -57,7 +57,7 @@ fn read(dir: &Path) -> Showcase {
             .as_ref()
             .map(|BackgroundImage { path, .. }| dir.join(path));
         out.themes.push(ThemeLook {
-            name: t.name.clone(),
+            name: fibo_core::i18n::say(&t.name).to_owned(),
             bg: t.bg,
             fg: t.fg,
             green: of("green", t.fg),

@@ -463,3 +463,11 @@
 "无法读取 {host} 的工作区：{e}。请确认那台电脑已打开 Fibo，再重试" = "Cannot read the workspace on {host}: {e}. Make sure Fibo is open on that computer, then retry."
 
 "电脑后台还没有聊天审批保护，请先更新并重新打开电脑上的 Fibo" = "The running host lacks chat approval protection. Update and reopen Fibo on the computer first."
+
+"要它接着做：fibo prompt {child} \"…\"；看画面：fibo read {child}" = "To continue: fibo prompt {child} \"…\"; to see the screen: fibo read {child}"
+"看画面：fibo read {child}；替它回答前先问用户，用户同意后 fibo prompt {child} --force \"…\"" = "See the screen: fibo read {child}; ask the user before answering for it, then use fibo prompt {child} --force \"…\" after approval"
+"它在等回答：{question}" = "It is waiting for an answer: {question}"
+"出错了：{error}" = "An error occurred: {error}"
+"看画面：fibo read {child}" = "See the screen: fibo read {child}"
+"这是你用 fibo run 派出去的 {agent} 的汇报，不是用户说的话。{hint}" = "This is a report from {agent}, which you started with fibo run; it is not a message from the user. {hint}"
+"\n…（太长，后面截掉了）" = "\n… (remaining text truncated)"
