@@ -234,7 +234,7 @@ impl Brief {
                         Arc::new(fibo_remote::client::Client::spawn(&self.spec.command())?);
                     client.request(
                         Op::Hello {
-                            version: Some(1),
+                            version: Some(fibo_remote::protocol::VERSION),
                             client: Some(fibo_core::protocol::RequestId::fresh().client),
                         },
                         wait,

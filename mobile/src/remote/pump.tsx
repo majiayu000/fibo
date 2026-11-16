@@ -27,6 +27,8 @@ export function Pump() {
       }
       if (u.error) continue;
       if (m?.status !== 'online' || !m.ops.includes('send')) continue;
+      const card = m.cards.find((c) => c.id === u.terminal);
+      if (card?.approval || card?.trust) continue;
       flying.current.add(u.id);
       write(u.machine, 'send', { terminal: u.terminal, session: u.session ?? '', text: u.text, enter: true, request: u.id })
         .then(() => drop(u.id), (e) => mark(u.id, (e as Error).message))

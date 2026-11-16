@@ -39,11 +39,11 @@ fn apply(
             .iter()
             .find(|s| &s.id == session)
         else {
-            return Ok(Err("会话不存在".into()));
+            return Ok(Err(t!("会话不存在").into()));
         };
         task.description = host.index.original_words(&s.transcript)?;
         if task.description.is_empty() {
-            return Ok(Err("已索引内容没有用户原话，不能建立待办".into()));
+            return Ok(Err(t!("已索引内容没有用户原话，不能建立待办").into()));
         }
         if host
             .workspace
@@ -52,7 +52,7 @@ fn apply(
             .is_some_and(|c| c.partial_history)
         {
             task.description
-                .push_str("\n\n（历史仅覆盖索引尾段及之后的增量；此前要求未知。）");
+                .push_str(t!("\n\n（历史仅覆盖索引尾段及之后的增量；此前要求未知。）"));
         }
     }
     // A pane split from outside the app must leave both halves usable, judged by the

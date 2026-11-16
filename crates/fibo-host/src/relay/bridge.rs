@@ -54,9 +54,23 @@ impl Bridge {
         }
         let (input, inbox) = std_mpsc::sync_channel::<Vec<u8>>(INPUT_QUEUE);
         {
+            let (channel, out, id) = (channel.clone(), out.clone(), id.to_owned());
             thread::spawn(move || {
                 for bytes in inbox {
                     if writer.write_all(&bytes).is_err() {
+                        break;
+                    }
+                    // Acknowledge bytes actually accepted by the session, before the
+                    // whole JSON request has arrived (a slow image can take minutes).
+                    let Ok(mut channel) = channel.lock() else {
+                        break;
+                    };
+                    let Ok(ack) = channel.ack(bytes.len() as u32) else {
+                        break;
+                    };
+                    // Hold the channel through enqueue: ACK and reply nonces must reach
+                    // the phone in the same order they were sealed.
+                    if out.blocking_send(to_phone(proto, &id, &ack)).is_err() {
                         break;
                     }
                 }
@@ -143,9 +157,11 @@ fn pump(
             }
             s.0 += n as u64;
         }
-        let sealed = match channel.lock().map(|mut c| c.data(&buf[..n])) {
-            Ok(Ok(sealed)) => sealed,
-            _ => break,
+        let Ok(mut channel) = channel.lock() else {
+            break;
+        };
+        let Ok(sealed) = channel.data(&buf[..n]) else {
+            break;
         };
         if out.blocking_send(to_phone(proto, id, &sealed)).is_err() {
             return;
@@ -161,4 +177,51 @@ fn pump(
         reason: None,
     };
     let _ = out.blocking_send(Message::text(frame.to_text()));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn an_incomplete_upload_gets_acknowledged_before_any_reply() {
+        use fibo_remote::secure::{initiate, respond, Code};
+        let code = Code::generate().unwrap();
+        let (hs, first) = initiate(&code).unwrap();
+        let (machine, answer) = respond(&code, &first).unwrap();
+        let mut phone = hs.finish(&answer).unwrap();
+        let (out, mut received) = mpsc::channel(8);
+        let bridge = Bridge::start(
+            "phone",
+            machine,
+            out,
+            Path::new("/unused.sock"),
+            2,
+            Access {
+                role: fibo_remote::role::Role::Full,
+                device: None,
+                log: None,
+                observer: None,
+            },
+        )
+        .unwrap();
+        let bytes = b"{\"id\":1,\"op\":\"image\",\"data\":\"partial";
+        bridge.receive(&phone.data(bytes).unwrap()).unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let frame = loop {
+            if let Ok(frame) = received.try_recv() {
+                break frame;
+            }
+            assert!(
+                std::time::Instant::now() < until,
+                "partial uploads need progress before a full request exists"
+            );
+            thread::sleep(std::time::Duration::from_millis(10));
+        };
+        let tokio_tungstenite::tungstenite::Message::Binary(raw) = frame else {
+            panic!("expected encrypted ACK")
+        };
+        let (_, id, sealed) = fibo_remote::wire::decode(&raw).unwrap();
+        assert_eq!(id, "phone");
+        assert_eq!(phone.open(sealed).unwrap(), Secure::Ack(bytes.len() as u32));
+    }
 }

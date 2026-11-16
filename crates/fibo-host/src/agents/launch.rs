@@ -64,7 +64,7 @@ fn attach(
                 .collect();
             Ok((format!("{command} {}", flags.join(" ")), prompt))
         }
-        _ => Err(io::Error::other("这个 Agent 开新任务时还不能带图片")),
+        _ => Err(io::Error::other(t!("这个 Agent 开新任务时还不能带图片"))),
     }
 }
 

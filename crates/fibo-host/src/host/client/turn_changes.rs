@@ -25,7 +25,7 @@ pub(super) fn read(shared: &Shared, session: &str) -> io::Result<Reply> {
         let host = lock(shared)?;
         let s = (host.workspace.agent_sessions.iter())
             .find(|s| s.id == session)
-            .ok_or_else(|| io::Error::other("会话不存在"))?;
+            .ok_or_else(|| io::Error::other(t!("会话不存在")))?;
         let content = host.workspace.content.get(session);
         let touched: Vec<_> = (content.into_iter())
             .flat_map(|c| c.turn_files().rev())
@@ -73,7 +73,7 @@ pub(super) fn read_file(
         let host = lock(shared)?;
         let s = (host.workspace.agent_sessions.iter())
             .find(|s| s.id == session)
-            .ok_or_else(|| io::Error::other("会话不存在"))?;
+            .ok_or_else(|| io::Error::other(t!("会话不存在")))?;
         (s.transcript.clone(), s.runtime, s.cwd.clone())
     };
     let sum = sum_of(agent, Path::new(&log), log_id, &cwd, path, lines)?;
@@ -90,7 +90,7 @@ fn sum_of(
 ) -> io::Result<Composer> {
     let file = std::fs::File::open(log)?;
     if fibo_platform::fs::open_file_id(&file)?.inode != log_id {
-        return Err(io::Error::other("记录文件已经换了"));
+        return Err(io::Error::other(t!("记录文件已经换了")));
     }
     let mut reader = BufReader::with_capacity(1 << 16, file);
     let mut sum = Composer::default();

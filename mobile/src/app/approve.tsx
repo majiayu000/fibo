@@ -161,9 +161,12 @@ export default function Approve() {
         action={tr('拒绝并发送')}
         onClose={() => setTelling(false)}
         onSend={(text) => {
-          setTelling(false);
           if (!card) return;
-          run(() => deny(machine, card, ask, text));
+          run(async () => {
+            const sent = await deny(machine, card, ask, text);
+            if (sent) setTelling(false);
+            return sent;
+          });
         }}
       />
     </View>

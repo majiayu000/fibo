@@ -552,14 +552,18 @@ impl Parser {
                 self.card.waiting = question;
                 self.card.choices = choices;
             }
-            "PermissionRequest" => self.wait("CLI 请求工具审批（Hook）", at, source),
+            "PermissionRequest" => self.wait(tk!("CLI 请求工具审批（Hook）"), at, source),
             "Notification" => match facts.notification.as_deref() {
-                Some("permission_prompt") => self.wait("CLI 请求工具审批（Hook）", at, source),
-                Some("elicitation_dialog") => self.wait("MCP 表单等待填写（Hook）", at, source),
-                Some("elicitation_url_dialog") => {
-                    self.wait("MCP 请求在浏览器中完成（Hook）", at, source)
+                Some("permission_prompt") => self.wait(tk!("CLI 请求工具审批（Hook）"), at, source),
+                Some("elicitation_dialog") => {
+                    self.wait(tk!("MCP 表单等待填写（Hook）"), at, source)
                 }
-                Some("agent_needs_input") => self.wait("Agent 等待你的输入（Hook）", at, source),
+                Some("elicitation_url_dialog") => {
+                    self.wait(tk!("MCP 请求在浏览器中完成（Hook）"), at, source)
+                }
+                Some("agent_needs_input") => {
+                    self.wait(tk!("Agent 等待你的输入（Hook）"), at, source)
+                }
                 _ => (),
             },
             "Stop" => {
@@ -571,7 +575,7 @@ impl Parser {
             }
             "StopFailure" => {
                 if self.card.error.is_empty() {
-                    self.card.error = "API 错误中止了回合（Hook）".into();
+                    self.card.error = tk!("API 错误中止了回合（Hook）").into();
                 }
                 self.phase(Turn::Error, "", at, source);
             }
@@ -599,13 +603,6 @@ impl Parser {
             _ => (),
         }
         self.refresh_plan();
-    }
-    fn wait(&mut self, reason: &str, at: u64, source: &Source) {
-        // A dialog already known from the transcript or screen keeps its richer text.
-        if self.card.turn != Turn::Waiting {
-            self.card.waiting = reason.into();
-            self.phase(Turn::Waiting, "", at, source);
-        }
     }
     /// Applies `claude agents --json`. It only settles a dialog: it never starts or ends a
     /// turn the transcript and hooks have not reported, because it can lag either of them.

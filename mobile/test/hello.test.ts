@@ -41,7 +41,7 @@ describe('a refused hello', () => {
     await hub.start();
     await new Promise((done) => setTimeout(done, 0));
     const m = hub.getMachine('m');
-    expect(m?.status).toBe('offline');
+    expect(m?.status).toBe('refused');
     expect(m?.error).toContain('unsupported version 1');
     hub.forget('m');
   });

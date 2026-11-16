@@ -192,8 +192,7 @@ impl Workbench {
             SettingsAction::HooksChanged => this.read_hooks(cx),
             SettingsAction::MachinesChanged => {
                 // The list as the file now has it; machines new to it are reached next frame.
-                this.machines = Workbench::start_machines(&this.host);
-                this.hosts.reach_again = true;
+                this.reload_machines(cx);
                 cx.notify();
             }
             SettingsAction::PluginsChanged => {

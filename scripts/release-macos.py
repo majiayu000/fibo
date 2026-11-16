@@ -22,7 +22,7 @@ os.environ.setdefault('DEVELOPER_DIR', '/Applications/Xcode.app/Contents/Develop
 root = pathlib.Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--notary-profile', required=True, help='notarytool keychain profile name')
-parser.add_argument('--out', type=pathlib.Path, default=root / 'target/dist')
+parser.add_argument('--out', type=pathlib.Path, help='Architecture-specific output folder; default: target/dist/<arch>')
 parser.add_argument('--skip-notarize', action='store_true', help='local dry run: sign only')
 parser.add_argument('--target', help='a cargo target such as x86_64-apple-darwin; default: this Mac')
 args = parser.parse_args()
@@ -31,7 +31,7 @@ version = tomllib.loads((root / 'crates/fibo-app/Cargo.toml').read_text())['pack
 arch = {'arm64': 'arm64', 'x86_64': 'x86_64', 'aarch64': 'arm64'}[(args.target or platform.machine()).split('-')[0]]
 release_dir = root / 'target' / args.target / 'release' if args.target else root / 'target/release'
 name = f'Fibo-{version}-{arch}'
-out = args.out.resolve()
+out = (args.out or root / 'target/dist' / arch).resolve()
 shutil.rmtree(out, ignore_errors=True)
 out.mkdir(parents=True)
 app = out / 'Fibo.app'
@@ -84,6 +84,9 @@ if not args.skip_notarize:
     run('spctl', '--assess', '--type', 'open', '--context', 'context:primary-signature', '-vv', dmg)
 
 sums = [f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}' for p in (zip_path, dmg)]
-(out / 'SHA256SUMS').write_text('\n'.join(sums) + '\n')
+sums_path = out / f'SHA256SUMS-{arch}'
+sums_path.write_text('\n'.join(sums) + '\n')
 print('\n'.join(sums))
-print(f'\nready: {zip_path}\n       {dmg}\n       {out / "SHA256SUMS"}')
+print(f'\nready: {zip_path}\n       {dmg}\n       {sums_path}')
+
+print('When both architectures are ready: python3 scripts/release-checksums.py <arm64-dir> <x86_64-dir> --out <release-dir>')

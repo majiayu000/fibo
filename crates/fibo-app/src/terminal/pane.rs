@@ -336,6 +336,9 @@ impl Pane {
     }
     /// Dropped files arrive as their paths, escaped for a shell, like any terminal.
     fn drop_paths(&mut self, paths: &gpui::ExternalPaths, cx: &mut Context<Self>) {
+        if self.refuse_remote_file(cx) {
+            return;
+        }
         let text = crate::terminal::terminal_input::dropped_paths(paths.paths());
         if !text.is_empty() {
             self.prefill(&text, cx);

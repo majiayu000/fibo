@@ -28,10 +28,7 @@ fn remote_hello_names_the_os_and_build_and_v2_ops_follow_the_role() {
         .find_map(|l| l.strip_prefix("version = "))
         .unwrap();
     assert_eq!(full.hello["ok"]["app_version"], shown.trim_matches('"'));
-    assert_eq!(
-        full.hello["ok"]["version"], 1,
-        "the protocol's version stays"
-    );
+    assert_eq!(full.hello["ok"]["version"], fibo_remote::protocol::VERSION);
     for op in ["diff", "dirs", "mkdir", "stop", "quota"] {
         assert!(full.ops().iter().any(|o| o == op), "{op}");
     }

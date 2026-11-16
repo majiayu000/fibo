@@ -158,6 +158,7 @@ fn kinds(provides: &[Kind]) -> String {
 /// An animation plugin's name inside 完成动画, without the 「完成动画：」 its name starts with.
 fn short_name(name: &str) -> String {
     name.strip_prefix(not_ui!("完成动画："))
+        .or_else(|| name.strip_prefix("Completion: "))
         .unwrap_or(name)
         .to_owned()
 }

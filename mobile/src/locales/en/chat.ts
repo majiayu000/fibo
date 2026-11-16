@@ -180,4 +180,9 @@ export const chat: Record<string, Entry> = {
   '未能删除待发送消息，请重试': "Couldn't delete the unsent message. Try again.",
   '未能保存待发送消息的状态，已暂停自动重试。请重启 Fibo 后再试；原消息编号会保留，避免重复执行。':
     "Couldn't save the unsent message's state, so automatic retries are paused. Restart Fibo and try again; the message keeps its ID so it won't run twice.",
+  '它在等你审批，先允许或拒绝，再发送消息': 'Allow or deny the pending approval before sending a message',
+  '原对话已离开这个终端，说明未发送': 'The original conversation has left this terminal. Your explanation was not sent.',
+  '审批框还没有退出，说明未发送；请稍后在对话里发送': 'The approval is still open. Your explanation was not sent; send it in the conversation once the menu closes.',
+  '手机和电脑的 Fibo 协议不一致，请把两端更新到同一版本': 'The phone and computer use different Fibo protocols. Update both to the same version.',
+  '连接长时间没有传输进展，正在重连': 'No transfer progress for too long. Reconnecting…',
 };

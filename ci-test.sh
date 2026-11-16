@@ -9,6 +9,8 @@
 # listed in the job summary and in $retries (uploaded as an artifact) so it can be counted and
 # made deterministic later.
 set -u
+# Fixtures assert Chinese messages; product startup follows the OS language.
+export MOORING_LANG=zh
 # One random case per run is the expected noise; two in one run can still be bad luck. More
 # than that is the suite getting worse, not one unlucky case, so it fails without a retry.
 max_retries=2

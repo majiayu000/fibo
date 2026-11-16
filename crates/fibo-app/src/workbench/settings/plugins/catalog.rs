@@ -91,8 +91,11 @@ pub(super) fn items(offers: &[Offer]) -> Vec<Item> {
         });
         out.push(Item {
             id: p.id.clone(),
-            name: short_name(&p.name),
-            description: p.description.clone(),
+            name: short_name(fibo_core::i18n::say(&p.name)),
+            description: p
+                .description
+                .as_deref()
+                .map(|s| fibo_core::i18n::say(s).to_owned()),
             version: p.version.clone(),
             provides: p.provides.clone(),
             touches: p.touches.clone(),
@@ -114,8 +117,11 @@ pub(super) fn items(offers: &[Offer]) -> Vec<Item> {
         let e = &o.entry;
         out.push(Item {
             id: e.id.clone(),
-            name: short_name(&e.name),
-            description: e.description.clone(),
+            name: short_name(fibo_core::i18n::say(&e.name)),
+            description: e
+                .description
+                .as_deref()
+                .map(|s| fibo_core::i18n::say(s).to_owned()),
             version: Some(e.version.clone()),
             provides: e.provides.clone(),
             touches: e.touches.clone(),

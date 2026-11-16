@@ -8,12 +8,12 @@ pub(super) struct Reading {
 
 pub(super) fn claude(mode: &str) -> Reading {
     let (words, full) = match mode {
-        "manual" | "default" => ("逐个确认", Some(false)),
-        "acceptEdits" => ("自动接受编辑", Some(false)),
-        "plan" => ("只做计划", Some(false)),
-        "auto" => ("自动判断", Some(false)),
-        "dontAsk" => ("不问就拒绝", Some(false)),
-        "bypassPermissions" => ("全部放行", Some(true)),
+        "manual" | "default" => (t!("逐个确认"), Some(false)),
+        "acceptEdits" => (t!("自动接受编辑"), Some(false)),
+        "plan" => (t!("只做计划"), Some(false)),
+        "auto" => (t!("自动判断"), Some(false)),
+        "dontAsk" => (t!("不问就拒绝"), Some(false)),
+        "bypassPermissions" => (t!("全部放行"), Some(true)),
         other => (other, None),
     };
     Reading {
@@ -25,11 +25,11 @@ pub(super) fn claude(mode: &str) -> Reading {
 pub(super) fn codex(turn: &Value) -> Option<Reading> {
     let sandbox = turn["sandbox_policy"]["type"].as_str();
     let (words, full) = match (turn["approval_policy"].as_str()?, sandbox) {
-        ("never", Some("danger-full-access")) => ("全部放行", Some(true)),
-        ("never", Some("read-only")) => ("只读", Some(false)),
-        ("never", Some("workspace-write")) => ("不问 · 沙箱内", Some(false)),
-        ("never", _) => ("不问 · 沙箱内", None),
-        ("on-request" | "on-failure" | "untrusted", _) => ("逐个确认", Some(false)),
+        ("never", Some("danger-full-access")) => (t!("全部放行"), Some(true)),
+        ("never", Some("read-only")) => (t!("只读"), Some(false)),
+        ("never", Some("workspace-write")) => (t!("不问 · 沙箱内"), Some(false)),
+        ("never", _) => (t!("不问 · 沙箱内"), None),
+        ("on-request" | "on-failure" | "untrusted", _) => (t!("逐个确认"), Some(false)),
         (other, _) => (other, None),
     };
     Some(Reading {
@@ -41,10 +41,10 @@ pub(super) fn codex(turn: &Value) -> Option<Reading> {
 /// A Codex permission menu's label is its protocol key, not our translated words.
 pub(super) fn codex_option(key: &str) -> Reading {
     let (words, full) = match key {
-        "Ask for approval" => ("逐个确认", Some(false)),
-        "Approve for me" => ("只问不安全的", Some(false)),
-        "Full Access" => ("全部放行", Some(true)),
-        "Read Only" => ("只读", Some(false)),
+        "Ask for approval" => (t!("逐个确认"), Some(false)),
+        "Approve for me" => (t!("只问不安全的"), Some(false)),
+        "Full Access" => (t!("全部放行"), Some(true)),
+        "Read Only" => (t!("只读"), Some(false)),
         other => (other, None),
     };
     Reading {

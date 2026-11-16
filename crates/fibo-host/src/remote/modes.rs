@@ -13,7 +13,7 @@ fn kind(request: &Value) -> io::Result<ModeKind> {
         "model" => Ok(ModeKind::Model),
         "permission" => Ok(ModeKind::Permission),
         "effort" => Ok(ModeKind::Effort),
-        other => Err(io::Error::other(format!("不认识的 kind {other}"))),
+        other => Err(io::Error::other(t!("不认识的 kind {other}", other))),
     }
 }
 
@@ -81,7 +81,9 @@ pub(super) fn not_cycling(socket: &Path, request: &Value) -> io::Result<()> {
     let agent = (w.current_agent(terminal).map(|s| s.runtime))
         .or_else(|| seen.terminal_agents.get(terminal).copied());
     if agent.is_some_and(fibo_host::agent_modes_switch) {
-        return Err(io::Error::other("换权限要用权限标签，不能直接按 Shift+Tab"));
+        return Err(io::Error::other(t!(
+            "换权限要用权限标签，不能直接按 Shift+Tab"
+        )));
     }
     Ok(())
 }

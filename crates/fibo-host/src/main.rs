@@ -51,15 +51,7 @@ fn apply_language() {
     let saved_choice = fibo_core::agent::config_dir()
         .and_then(|dir| std::fs::read_to_string(dir.join("language")).ok())
         .and_then(|text| Choice::from_key(&text));
-    let bundled = std::env::current_exe()
-        .and_then(|p| p.canonicalize())
-        .is_ok_and(|exe| fibo_core::cli_entry::in_bundle(&exe));
-    let Some(choice) = env_choice
-        .or(saved_choice)
-        .or_else(|| bundled.then_some(Choice::Auto))
-    else {
-        return;
-    };
+    let choice = env_choice.or(saved_choice).unwrap_or(Choice::Auto);
     i18n::set(choice.resolve(&fibo_platform::desktop::preferred_languages()));
 }
 

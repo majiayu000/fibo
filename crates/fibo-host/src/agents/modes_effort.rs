@@ -16,7 +16,7 @@ pub(crate) const CLAUDE_LEVELS: [&str; 5] = ["low", "medium", "high", "xhigh", "
 const CLAUDE_HINT: &str = "←/→ to adjust";
 const CODEX_MORE: &str = "More reasoning…";
 const CODEX_ADVANCED: &str = "Advanced Reasoning";
-const ONLY_SESSION: &str = "只对这次会话有效。";
+const ONLY_SESSION: &str = tk!("只对这次会话有效。");
 
 /// The level Claude Code's slider points at, `None` when the slider is not showing.
 pub(crate) fn claude_slider(tail: &str) -> Option<&'static str> {
@@ -57,11 +57,11 @@ pub(crate) fn claude_effort_set(tail: &str) -> Option<String> {
 
 fn claude_detail(level: &str) -> &'static str {
     match level {
-        "low" => "最快，想得最少",
-        "medium" => "快和深之间",
-        "high" => "想得更深，用量更多",
-        "xhigh" => "比 high 再深一些",
-        "max" => "最深，很费 token，只留给最难的事",
+        "low" => t!("最快，想得最少"),
+        "medium" => t!("快和深之间"),
+        "high" => t!("想得更深，用量更多"),
+        "xhigh" => t!("比 high 再深一些"),
+        "max" => t!("最深，很费 token，只留给最难的事"),
         _ => "",
     }
 }
@@ -121,7 +121,7 @@ impl Steps<'_> {
             Some(on) => Ok(on),
             None => {
                 self.close(1)?;
-                Err(io::Error::other("强度没有打开，请打开终端看一眼"))
+                Err(io::Error::other(t!("强度没有打开，请打开终端看一眼")))
             }
         }
     }
@@ -140,13 +140,13 @@ impl Steps<'_> {
                     full: false,
                 })
                 .collect(),
-            note: ONLY_SESSION.into(),
+            note: fibo_core::i18n::text(ONLY_SESSION).into(),
         })
     }
 
     pub(super) fn set_claude_effort(&self, choice: &str) -> io::Result<Changed> {
         let Some(goal) = CLAUDE_LEVELS.iter().position(|l| *l == choice) else {
-            return Err(io::Error::other(NOT_FOUND));
+            return Err(io::Error::other(fibo_core::i18n::text(NOT_FOUND)));
         };
         let mut on = self.claude_slider_open()?;
         for _ in 0..CLAUDE_LEVELS.len() {
@@ -161,13 +161,13 @@ impl Steps<'_> {
             })?;
             let Some(moved) = moved else {
                 self.close(1)?;
-                return Err(io::Error::other("按了，但滑杆没动，没有换"));
+                return Err(io::Error::other(t!("按了，但滑杆没动，没有换")));
             };
             on = moved;
         }
         if on != choice {
             self.close(1)?;
-            return Err(io::Error::other(format!("没移到 {choice}，没有换")));
+            return Err(io::Error::other(t!("没移到 {choice}，没有换", choice)));
         }
         let hint = self.screen()?;
         if !(hint.lines().rev())
@@ -175,9 +175,9 @@ impl Steps<'_> {
             .is_some_and(read::offers_session)
         {
             self.close(1)?;
-            return Err(io::Error::other(
-                "强度没有只改这次会话的选项，没有换，请在终端里换",
-            ));
+            return Err(io::Error::other(t!(
+                "强度没有只改这次会话的选项，没有换，请在终端里换"
+            )));
         }
         self.keys(&["s"])?;
         let said = self.wait(Duration::from_secs(3), |t| {
@@ -186,7 +186,9 @@ impl Steps<'_> {
                 .filter(|_| read::composer(self.agent, t).is_some())
         })?;
         let Some(now) = said else {
-            return Err(io::Error::other("按了，但画面上没说换好，请打开终端看一眼"));
+            return Err(io::Error::other(t!(
+                "按了，但画面上没说换好，请打开终端看一眼"
+            )));
         };
         Ok(Changed {
             effort: Some(now),
@@ -205,7 +207,7 @@ impl Steps<'_> {
             .map(|r| r.label.clone())
         else {
             self.close(1)?;
-            return Err(io::Error::other("读不出现在用的模型"));
+            return Err(io::Error::other(t!("读不出现在用的模型")));
         };
         self.point(title, &models, &using)?;
         self.keys(&["enter"])?;
@@ -216,7 +218,7 @@ impl Steps<'_> {
             Some(m) => Ok(m),
             None => {
                 self.close(2)?;
-                Err(io::Error::other("没看到选档位的菜单，请在终端里换"))
+                Err(io::Error::other(t!("没看到选档位的菜单，请在终端里换")))
             }
         }
     }
@@ -230,7 +232,7 @@ impl Steps<'_> {
             Some(m) => Ok(m),
             None => {
                 self.close(1)?;
-                Err(io::Error::other("没看到更多档位的菜单，请在终端里换"))
+                Err(io::Error::other(t!("没看到更多档位的菜单，请在终端里换")))
             }
         }
     }
@@ -256,7 +258,7 @@ impl Steps<'_> {
         let menus: Vec<&Menu> = std::iter::once(&levels).chain(advanced.as_ref()).collect();
         Ok(ModeOptions {
             options: codex_options_of(&menus, said.as_deref()),
-            note: ONLY_SESSION.into(),
+            note: fibo_core::i18n::text(ONLY_SESSION).into(),
         })
     }
 
@@ -275,13 +277,13 @@ impl Steps<'_> {
                 })?;
                 let Some(label) = row(&more) else {
                     self.close(3)?;
-                    return Err(io::Error::other(NOT_FOUND));
+                    return Err(io::Error::other(fibo_core::i18n::text(NOT_FOUND)));
                 };
                 (CODEX_ADVANCED, more, label, 3)
             }
             None => {
                 self.close(2)?;
-                return Err(io::Error::other(NOT_FOUND));
+                return Err(io::Error::other(fibo_core::i18n::text(NOT_FOUND)));
             }
         };
         // `point` closes the menu it gave up on; the ones above it are left.
@@ -290,9 +292,9 @@ impl Steps<'_> {
         })?;
         if !read::offers_session(&menu.keys) {
             self.close(deep)?;
-            return Err(io::Error::other(
-                "菜单没有只改这次会话的选项，没有换，请在终端里换",
-            ));
+            return Err(io::Error::other(t!(
+                "菜单没有只改这次会话的选项，没有换，请在终端里换"
+            )));
         }
         self.keys(&["s"])?;
         let word = codex_word(choice);
@@ -301,7 +303,7 @@ impl Steps<'_> {
         })?;
         if took.is_none() {
             let saw = read::codex_footer(&self.screen()?).unwrap_or_default();
-            return Err(io::Error::other(format!("按了，但它现在写的是「{saw}」")));
+            return Err(io::Error::other(t!("按了，但它现在写的是「{saw}」", saw)));
         }
         Ok(Changed {
             effort: Some(choice.to_owned()),

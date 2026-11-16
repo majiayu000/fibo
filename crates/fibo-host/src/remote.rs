@@ -218,7 +218,7 @@ pub fn serve(
             break;
         }
         if line.len() as u64 > MAX_LINE {
-            let _ = out.send(json!({ "error": "一行超过 1 MiB，连接结束" }));
+            let _ = out.send(json!({ "error": t!("一行超过 1 MiB，连接结束") }));
             break;
         }
         if line.iter().all(u8::is_ascii_whitespace) {
@@ -227,12 +227,12 @@ pub fn serve(
         let request: Value = match serde_json::from_slice(&line) {
             Ok(v) => v,
             Err(e) => {
-                let _ = out.send(json!({ "error": format!("不是 JSON：{e}") }));
+                let _ = out.send(json!({ "error": t!("不是 JSON：{e}", e) }));
                 continue;
             }
         };
         let Some(id) = request["id"].as_u64() else {
-            let _ = out.send(json!({ "error": "缺少数字 id" }));
+            let _ = out.send(json!({ "error": t!("缺少数字 id") }));
             continue;
         };
         let op = request["op"].as_str().unwrap_or_default();
@@ -241,6 +241,11 @@ pub fn serve(
         };
         match op {
             "hello" => {
+                greeted = false;
+                if request["version"].as_u64() != Some(u64::from(rp::VERSION)) {
+                    fail(t!("手机和电脑的 Fibo 协议不一致，请把两端更新到同一版本").into());
+                    continue;
+                }
                 client = (request["client"].as_str())
                     .filter(|c| !c.is_empty())
                     .map(str::to_owned);
@@ -249,13 +254,14 @@ pub fn serve(
                         greeted = true;
                         let _ = out.send(json!({ "id": id, "ok": ok }));
                     }
-                    Err(e) => fail(format!("记不住本机标识：{e}")),
+                    Err(e) => fail(t!("记不住本机标识：{e}", e)),
                 }
             }
-            _ if !greeted => fail("先发 hello".into()),
-            _ if !access.role.allows(op) => fail(format!(
-                "这台设备的权限是「{}」，不能 {op}",
-                access.role.label()
+            _ if !greeted => fail(t!("先发 hello").into()),
+            _ if !access.role.allows(op) => fail(t!(
+                "这台设备的权限是「{label}」，不能 {op}",
+                label = access.role.label(),
+                op
             )),
             "events" | "watch" => {
                 let (out, socket, streams) = (out.clone(), socket.to_owned(), streams.clone());
@@ -312,12 +318,12 @@ pub fn serve(
                     }
                     let _ = out.send(json!({ "id": id, "ok": {} }));
                 }
-                None => fail("close 需要 stream".into()),
+                None => fail(t!("close 需要 stream").into()),
             },
             _ if OPS.contains(&op) => {
                 let _ = work.send((id, request, client.clone()));
             }
-            _ => fail(format!("不认识的 op {op:?}")),
+            _ => fail(t!("不认识的 op {op}", op = format!("{:?}", op))),
         }
     }
     // The client is gone: end every stream, finish queued requests, flush the replies.
@@ -382,7 +388,7 @@ fn named_id(client: Option<&str>, request: &Value) -> Option<RequestId> {
 fn text<'a>(request: &'a Value, key: &str) -> io::Result<&'a str> {
     request[key]
         .as_str()
-        .ok_or_else(|| io::Error::other(format!("缺少 {key}")))
+        .ok_or_else(|| io::Error::other(t!("缺少 {key}", key)))
 }
 fn ok_reply(reply: Reply) -> io::Result<Value> {
     match reply {
@@ -427,11 +433,10 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
             }
         }
         "send" => {
-            asks::not_asking_trust(socket, &terminal()?)?;
             let session = match request.get("session") {
                 None => None,
                 Some(serde_json::Value::String(s)) => Some(s.clone()),
-                Some(_) => return Err(io::Error::other("session 需要字符串")),
+                Some(_) => return Err(io::Error::other(t!("session 需要字符串"))),
             };
             let pictures = images::wanted(socket, request)?;
             let how = turn_input::how(request)?;
@@ -451,11 +456,11 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
             modes::not_cycling(socket, request)?;
             let keys = request["keys"]
                 .as_array()
-                .ok_or_else(|| io::Error::other("keys 需要字符串数组"))?
+                .ok_or_else(|| io::Error::other(t!("keys 需要字符串数组")))?
                 .iter()
                 .map(|k| k.as_str().map(str::to_owned))
                 .collect::<Option<Vec<_>>>()
-                .ok_or_else(|| io::Error::other("keys 需要字符串数组"))?;
+                .ok_or_else(|| io::Error::other(t!("keys 需要字符串数组")))?;
             let keys = Request::SendKeys {
                 id: terminal()?,
                 keys,
@@ -466,7 +471,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
             use base64::Engine;
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(text(request, "data")?)
-                .map_err(|e| io::Error::other(format!("data 不是 base64：{e}")))?;
+                .map_err(|e| io::Error::other(t!("data 不是 base64：{e}", e)))?;
             let input = Request::SendInput {
                 id: terminal()?,
                 bytes,
@@ -479,7 +484,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
             let allow = request["allow"].as_bool();
             let answer = match request["always"].as_bool().unwrap_or(false) {
                 true if allow == Some(false) => {
-                    Err(io::Error::other("always 只能和 allow: true 一起"))
+                    Err(io::Error::other(t!("always 只能和 allow: true 一起")))
                 }
                 true => Ok(Request::AnswerAlways { id, question }),
                 false => allow
@@ -488,7 +493,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
                         question,
                         allow,
                     })
-                    .ok_or_else(|| io::Error::other("answer 需要 allow: true 或 false")),
+                    .ok_or_else(|| io::Error::other(t!("answer 需要 allow: true 或 false"))),
             }?;
             ok_reply(rpc(socket, &named(client, request, answer))?)
         }
@@ -513,7 +518,10 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         "todooutcome" => todos::outcome(socket, request, client),
         "image" => images::upload(socket, request),
         "sendnow" => turn_input::send_now(socket, request, client),
-        op => Err(io::Error::other(format!("不认识的 op {op:?}"))),
+        op => Err(io::Error::other(t!(
+            "不认识的 op {op}",
+            op = format!("{:?}", op)
+        ))),
     }
 }
 
@@ -521,23 +529,23 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
 fn resize(streams: &Streams, request: &Value) -> io::Result<()> {
     let stream = request["stream"]
         .as_u64()
-        .ok_or_else(|| io::Error::other("resize 需要 stream"))?;
+        .ok_or_else(|| io::Error::other(t!("resize 需要 stream")))?;
     let size = |key: &str| {
         (request[key].as_u64())
             .and_then(|n| u16::try_from(n).ok())
             .filter(|n| *n > 0)
-            .ok_or_else(|| io::Error::other(format!("resize 需要 {key}")))
+            .ok_or_else(|| io::Error::other(t!("resize 需要 {key}", key)))
     };
     let (cols, rows) = (size("cols")?, size("rows")?);
     let r = streams
         .lock()
         .map_err(|_| io::Error::other("streams lock poisoned"))?;
     if !r.writers.contains(&stream) {
-        return Err(io::Error::other("这个画面没有接管，不能改尺寸"));
+        return Err(io::Error::other(t!("这个画面没有接管，不能改尺寸")));
     }
     let mut socket = (r.open.get(&stream))
         .and_then(|s| s.as_ref())
-        .ok_or_else(|| io::Error::other("画面已经关了"))?
+        .ok_or_else(|| io::Error::other(t!("画面已经关了")))?
         .try_clone()?;
     drop(r);
     send(
@@ -555,7 +563,16 @@ fn connect(socket: &Path, request: &Request) -> io::Result<local::Stream> {
     let mut stream = local::Stream::connect(socket)?;
     send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
     match receive::<Reply>(&mut stream)? {
-        Reply::Hello { major: MAJOR, .. } => (),
+        Reply::Hello {
+            major: MAJOR,
+            build,
+            ..
+        } if build.guarded_chat => (),
+        Reply::Hello { .. } => {
+            return Err(io::Error::other(t!(
+                "电脑后台还没有聊天审批保护，请先更新并重新打开电脑上的 Fibo"
+            )))
+        }
         r => return Err(io::Error::other(format!("handshake: {r:?}"))),
     }
     send(&mut stream, CONTROL, request)?;
@@ -603,7 +620,7 @@ fn stream(id: u64, request: &Value, socket: &Path, out: &Out, streams: &Streams,
             access.tell(Activity::Watching(t.clone()));
             let take = request["take"].as_bool().unwrap_or(false);
             if take && !access.role.allows("resize") {
-                return Err(io::Error::other("这台设备只能看，不能接管"));
+                return Err(io::Error::other(t!("这台设备只能看，不能接管")));
             }
             let watched = watch(&mut s, &t, socket, take);
             access.tell(Activity::Unwatched(t));
@@ -692,5 +709,55 @@ fn watch(st: &mut Stream, terminal: &str, socket: &Path, take: bool) -> io::Resu
             }
             _ => (),
         }
+    }
+}
+
+#[cfg(test)]
+mod handshake_tests {
+    use super::*;
+    #[test]
+    fn old_running_host_receives_no_chat_bytes_after_a_cli_upgrade() {
+        let root = std::env::temp_dir().join(format!("fibo-old-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let socket = root.join("workbench.sock");
+        let listener = local::Listener::bind(&socket).unwrap();
+        let peer = thread::spawn(move || {
+            let mut stream = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+                .unwrap();
+            assert!(matches!(
+                receive::<Request>(&mut stream).unwrap(),
+                Request::Hello { .. }
+            ));
+            send(
+                &mut stream,
+                CONTROL,
+                &Reply::Hello {
+                    major: MAJOR,
+                    instance: "old".into(),
+                    build: Build::default(),
+                },
+            )
+            .unwrap();
+            assert!(
+                receive::<Request>(&mut stream).is_err(),
+                "new CLI sent chat to an unprotected host"
+            );
+        });
+        let error = connect(
+            &socket,
+            &Request::SendText {
+                id: "old".into(),
+                session: None,
+                text: "must not approve".into(),
+                submit: true,
+            },
+        )
+        .err()
+        .expect("the old host must be refused");
+        assert!(error.to_string().contains("Fibo"));
+        peer.join().unwrap();
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

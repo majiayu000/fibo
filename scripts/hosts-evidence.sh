@@ -80,7 +80,8 @@ if [ -z "$added" ]; then
 fi
 PATH="$R/bin:$PATH" HOME="$R/home" MOORING_HOSTS_EVIDENCE=1 \
   perl -e 'alarm 180; exec @ARGV' "$REPO/target/debug/fibo-app" --runtime "$R/rt" --visual-evidence "$R/shots" > "$R/app.log" 2>&1
-echo "app exit $?"
+APP_STATUS=$?
+echo "app exit $APP_STATUS"
 grep '^hosts PASS:' "$R/app.log"
 rpc '"Workspace"' | python3 -I -c '
 import json, sys
@@ -96,3 +97,5 @@ if pgrep -f "fake-forward-$R" >/dev/null; then
 fi
 echo "forward ended with the window"
 ls "$R/shots"
+
+exit "$APP_STATUS"

@@ -4,7 +4,7 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert, Platform } from 'react-native';
 import { tr } from './i18n';
-import { type Card, NOT_YET, refresh, write } from './remote/hub';
+import { type Card, getMachine, NOT_YET, refresh, write } from './remote/hub';
 import { readSettings } from './store/settings';
 import { FULL_CONFIRM, type ModeKind, type ModeOption } from './ui/modes';
 import { type Ask, asksTwice } from './ui/parse';
@@ -73,18 +73,29 @@ export async function approve(machine: string, card: Card, ask: Ask, always = fa
   return done === true;
 }
 
-/** Refuses it, then sends feedback only if this operation answered the shown question. */
+/** Refuses it, then sends feedback only after the original conversation leaves its menu. */
 export async function deny(machine: string, card: Card, ask: Ask, feedback?: string): Promise<boolean> {
   const target = { id: card.id, session: card.session };
   return answerOnce(machine, card.id, async () => {
     await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false, ...(ask.known ? { subject: ask.subject } : {}) });
     setTimeout(() => refresh(machine), 300);
-    if (feedback) {
-      // Keep the shared lock while the prompt closes and feedback reaches the same conversation.
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      await sendToConversation(machine, target, feedback);
+    if (!feedback) return true;
+    // Keep the shared lock through the acknowledgement, menu exit, and feedback delivery.
+    const until = Date.now() + 5000;
+    while (Date.now() < until) {
+      await refresh(machine);
+      const m = getMachine(machine);
+      const current = m?.cards.find((c) => c.id === target.id);
+      if (m?.status !== 'online' || !current || !target.session || current.session !== target.session) {
+        throw new Error(tr('原对话已离开这个终端，说明未发送'));
+      }
+      if (!current.approval && !current.trust) {
+        await sendToConversation(machine, target, feedback);
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
     }
-    return true;
+    throw new Error(tr('审批框还没有退出，说明未发送；请稍后在对话里发送'));
   }).then((done) => done === true);
 }
 

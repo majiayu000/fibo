@@ -15,7 +15,7 @@ use std::path::Path;
 pub(super) fn agent_named(name: &str) -> io::Result<Agent> {
     (Agent::all().into_iter())
         .find(|a| control::agent_label(*a) == name)
-        .ok_or_else(|| io::Error::other(format!("不认识的 agent {name}")))
+        .ok_or_else(|| io::Error::other(t!("不认识的 agent {name}", name)))
 }
 
 /// `open`: a shell in a new tab of the space that holds `cwd` (else the first space),
@@ -35,7 +35,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         None => None,
         Some(id) => Some(
             (w.tasks.iter().find(|t| t.id == id))
-                .ok_or_else(|| io::Error::other("这个待办不在了"))?,
+                .ok_or_else(|| io::Error::other(t!("这个待办不在了")))?,
         ),
     };
     let agent = agent.or(task.map(|t| t.agent));
@@ -44,7 +44,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         (request["prompt"].as_str().filter(|p| !p.trim().is_empty())).or(handoff.as_deref());
     let resume = request["resume"].as_str().filter(|r| !r.is_empty());
     if prompt.is_some() && agent.is_none() && resume.is_none() {
-        return Err(io::Error::other("prompt 要和 agent 一起"));
+        return Err(io::Error::other(t!("prompt 要和 agent 一起")));
     }
     // Named after the request, a resend finds what the first one opened.
     let name = named_id(client, request).map_or_else(
@@ -55,7 +55,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     let session = resume
         .map(|id| {
             (w.agent_sessions.iter().find(|s| s.id == id))
-                .ok_or_else(|| io::Error::other("这段对话找不到了"))
+                .ok_or_else(|| io::Error::other(t!("这段对话找不到了")))
         })
         .transpose()?;
     // Validate launch arguments before returning an existing terminal or creating a tab.
@@ -72,7 +72,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
             let label = runtime.map(control::agent_label).unwrap_or_default();
             fibo_host::agent_launch_argv(&shell, &label, c, prompt, &pictures, session.is_some())?
         }
-        None if !pictures.is_empty() => return Err(io::Error::other("图片要和 agent 一起")),
+        None if !pictures.is_empty() => return Err(io::Error::other(t!("图片要和 agent 一起"))),
         None => shell::stay(&shell),
     };
     // Running already: never a second copy of it. The resend of this very open is not that.
@@ -96,7 +96,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     let picked = picked
         .map(|id| {
             (w.spaces.iter().find(|s| s.id == id))
-                .ok_or_else(|| io::Error::other("这个空间已经不在了"))
+                .ok_or_else(|| io::Error::other(t!("这个空间已经不在了")))
         })
         .transpose()?;
     let space = picked
@@ -120,7 +120,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
                 .filter(|c| Path::new(c).is_dir())
                 .map(str::to_owned)
                 .or_else(fibo_platform::dirs::home_str)
-                .ok_or_else(|| io::Error::other("那台电脑还没有空间"))?;
+                .ok_or_else(|| io::Error::other(t!("那台电脑还没有空间")))?;
             let folder = folder.trim_end_matches('/').to_owned();
             let space = Space {
                 id: uuid::Uuid::new_v4().simple().to_string(),
@@ -162,7 +162,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     // A conversation's log belongs to its directory: resumed anywhere else, the CLI would
     // not find it.
     if session.is_some() && !asked.is_some_and(|c| Path::new(c).is_dir()) {
-        return Err(io::Error::other("这段对话的目录已经不在了"));
+        return Err(io::Error::other(t!("这段对话的目录已经不在了")));
     }
     // A space made just now for this open is not in `w` yet; its folder is all it has.
     let start = || match space.cwd.as_str() {
@@ -173,7 +173,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     let cwd = Some(cwd)
         .filter(|c| Path::new(c).is_dir())
         .or_else(fibo_platform::dirs::home_str)
-        .ok_or_else(|| io::Error::other("目录不存在"))?;
+        .ok_or_else(|| io::Error::other(t!("目录不存在")))?;
     let launch = Request::Launch {
         id: terminal.clone(),
         space: space.id.clone(),
@@ -205,7 +205,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         );
         // A resend that raced the first one finds the tab already there.
         if let Err(e) = placed {
-            if !e.to_string().contains("标签已存在") {
+            if !e.to_string().contains(t!("标签已存在")) {
                 return Err(e);
             }
         }
@@ -218,7 +218,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
 pub(super) fn add_space(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
     let path = super::dirs::expand(super::text(request, "path")?)?;
     if !path.is_dir() {
-        return Err(io::Error::other("目录不存在"));
+        return Err(io::Error::other(t!("目录不存在")));
     }
     let cwd = path.to_string_lossy().trim_end_matches('/').to_owned();
     let w = match rpc(socket, &Request::Workspace)? {
@@ -249,8 +249,8 @@ pub(super) fn space_quiet(
     client: Option<&str>,
 ) -> io::Result<Value> {
     let id = super::text(request, "space")?.to_owned();
-    let quiet =
-        (request["quiet"].as_bool()).ok_or_else(|| io::Error::other("quiet 要是 true 或 false"))?;
+    let quiet = (request["quiet"].as_bool())
+        .ok_or_else(|| io::Error::other(t!("quiet 要是 true 或 false")))?;
     edit_once(socket, request, client, Edit::SetSpaceQuiet { id, quiet })?;
     Ok(json!({}))
 }
@@ -276,15 +276,15 @@ pub(super) fn mkdir(request: &Value) -> io::Result<Value> {
     let path = super::dirs::expand(text(request, "path")?)?;
     let parent = (path.parent())
         .filter(|p| p.is_dir())
-        .ok_or_else(|| io::Error::other("上一级文件夹不存在"))?;
+        .ok_or_else(|| io::Error::other(t!("上一级文件夹不存在")))?;
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if name.is_empty() || name == "." || name == ".." {
-        return Err(io::Error::other("文件夹名不对"));
+        return Err(io::Error::other(t!("文件夹名不对")));
     }
     match std::fs::create_dir(parent.join(name)) {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists && path.is_dir() => (),
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-            return Err(io::Error::other("这里已经有同名文件"))
+            return Err(io::Error::other(t!("这里已经有同名文件")));
         }
         r => r?,
     }
@@ -309,15 +309,16 @@ pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> i
     let outcome = match text(request, "outcome")? {
         "done" => Outcome::Completed,
         "deferred" => Outcome::Deferred {
-            reason: "在手机上选了稍后提醒".into(),
+            reason: t!("在手机上选了稍后提醒").into(),
             until: fibo_core::time::now() + DEFERRED_FOR,
         },
         "abandoned" => Outcome::Abandoned,
         "open" => Outcome::Open,
         other => {
-            return Err(io::Error::other(format!(
-                "outcome 只能是 done、deferred、abandoned 或 open，不是 {other}"
-            )))
+            return Err(io::Error::other(t!(
+                "outcome 只能是 done、deferred、abandoned 或 open，不是 {other}",
+                other
+            )));
         }
     };
     let seen = match request["turn"].as_str() {
@@ -328,7 +329,7 @@ pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> i
                 other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
             };
             let now = (w.agent_sessions.iter().find(|s| s.id == id))
-                .ok_or_else(|| io::Error::other("会话不存在"))?;
+                .ok_or_else(|| io::Error::other(t!("会话不存在")))?;
             // The turn is what the client saw; who else changed the outcome it cannot say.
             Some(SeenSession {
                 outcome: now.outcome.clone(),

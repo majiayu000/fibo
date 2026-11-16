@@ -23,7 +23,7 @@ const STATUS: Duration = Duration::from_secs(3);
 const AT_ONCE: usize = 8;
 
 pub(super) fn home() -> io::Result<PathBuf> {
-    fibo_platform::dirs::home().ok_or_else(|| io::Error::other("没有家目录"))
+    fibo_platform::dirs::home().ok_or_else(|| io::Error::other(t!("没有家目录")))
 }
 /// `~` and `~/…` from home; anything else must be absolute.
 pub(super) fn expand(path: &str) -> io::Result<PathBuf> {
@@ -38,7 +38,7 @@ pub(super) fn expand_exact(path: &str) -> io::Result<PathBuf> {
         _ => PathBuf::from(path),
     };
     if !full.is_absolute() {
-        return Err(io::Error::other("路径要从 / 或 ~ 开始"));
+        return Err(io::Error::other(t!("路径要从 / 或 ~ 开始")));
     }
     Ok(full)
 }
@@ -67,7 +67,7 @@ pub(super) fn dirs(socket: &Path, request: &Value) -> io::Result<Value> {
                 None => home.clone(),
             };
             if !path.is_dir() {
-                return Err(io::Error::other("文件夹不存在"));
+                return Err(io::Error::other(t!("文件夹不存在")));
             }
             let parent = path.parent().map(|p| p.to_string_lossy().into_owned());
             (

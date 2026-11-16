@@ -32,12 +32,12 @@ pub(super) fn diff(socket: &Path, request: &Value, role: super::Role) -> io::Res
         (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
             Reply::Workspace(w) => {
                 let term = (w.terminals.iter().find(|x| x.id == t))
-                    .ok_or_else(|| io::Error::other("终端不存在"))?;
+                    .ok_or_else(|| io::Error::other(t!("终端不存在")))?;
                 (PathBuf::from(w.terminal_cwd(term)), checks(&w, t))
             }
             other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
-        (None, None) => return Err(io::Error::other("diff 需要 terminal 或 cwd")),
+        (None, None) => return Err(io::Error::other(t!("diff 需要 terminal 或 cwd"))),
     };
     let mut diff = read(&cwd)?;
     diff.checks = checks;
@@ -87,9 +87,9 @@ fn fields(bytes: &[u8]) -> Vec<String> {
 
 /// The diff of the work tree holding `cwd`.
 pub(crate) fn read(cwd: &Path) -> io::Result<rp::Diff> {
-    let not_git = || io::Error::other("这里不是 git 仓库");
+    let not_git = || io::Error::other(t!("这里不是 git 仓库"));
     if !cwd.is_dir() {
-        return Err(io::Error::other("目录不存在"));
+        return Err(io::Error::other(t!("目录不存在")));
     }
     let top = output(git(cwd).args(["rev-parse", "--show-toplevel"]))?.ok_or_else(not_git)?;
     // Only the line's end: a folder's name may itself end in a space.

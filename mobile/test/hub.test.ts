@@ -28,14 +28,16 @@ mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined })
 const hub = await import('../src/remote/hub');
 
 /** A connection a fake relay hands out; `end` is its socket closing. */
+let protocolVersion = 2;
 class Fake {
   ended: any = null;
   closed = false;
   handlers: ((e: any) => void)[] = [];
+  lists = 0;
   async request(op: string) {
     if (this.ended) throw new Error('gone');
-    if (op === 'hello') return { role: 'full', ops: ['send'], machine: { name: 'mac' }, os: 'macos' };
-    if (op === 'list') return { terminals: [], spaces: [] };
+    if (op === 'hello') return { version: protocolVersion, role: 'full', ops: ['send'], machine: { name: 'mac' }, os: 'macos' };
+    if (op === 'list') { this.lists++; return { terminals: [], spaces: [] }; }
     return {};
   }
   async stream() {
@@ -244,4 +246,42 @@ test('failed unpairing keeps the usable connection and a successful retry remove
   expect(socket.closed).toBe(true);
   expect(hub.remote('forget-fails')).toBeNull();
   expect(hub.getMachine('forget-fails')).toBeUndefined();
+});
+
+test('a quiet machine refreshes cards on the existing heartbeat', async () => {
+  const original = globalThis.setInterval;
+  let heartbeat: (() => void) | undefined;
+  globalThis.setInterval = ((fn: () => void, ms: number) => {
+    if (ms === 15_000) heartbeat = fn;
+    return original(fn, ms);
+  }) as typeof setInterval;
+  try {
+    for (const d of dials) d.socket?.close();
+    hub.reconnect('m1');
+    await answerAll();
+    const socket = dials.at(-1)!.socket!;
+    const before = socket.lists;
+    expect(heartbeat).toBeDefined();
+    heartbeat!();
+    await settle();
+    expect(socket.lists).toBe(before + 1);
+  } finally {
+    globalThis.setInterval = original;
+  }
+});
+
+test('an old computer shows update guidance and receives no list or queued input', async () => {
+  protocolVersion = 1;
+  try {
+    for (const d of dials) d.socket?.close();
+    hub.reconnect('m1');
+    await answerAll();
+    const socket = dials.at(-1)!.socket!;
+    expect(hub.getMachine('m1')?.status).toBe('refused');
+    expect(hub.getMachine('m1')?.error).toMatch(/更新|Update/);
+    expect(socket.lists).toBe(0);
+    expect(socket.closed).toBe(true);
+  } finally {
+    protocolVersion = 2;
+  }
 });

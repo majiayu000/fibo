@@ -15,7 +15,7 @@ const PERMISSIONS_TITLE: &str = "Update Model Permissions";
 const FULL_CONFIRM: &str = "Enable full access?";
 const FULL_YES: &str = "Yes, continue anyway";
 const EFFORT_TITLE: &str = "Select Reasoning Level";
-const NOT_FOUND: &str = "菜单里没有这一项，请重新打开看一眼";
+const NOT_FOUND: &str = tk!("菜单里没有这一项，请重新打开看一眼");
 
 /// The terminal as the host gives it to this file.
 pub trait Terminal {
@@ -88,10 +88,10 @@ impl<'a> Steps<'a> {
         };
         let tail = s.screen()?;
         if read::working(&tail) {
-            return Err(io::Error::other("这一轮还没结束，等它停下再换"));
+            return Err(io::Error::other(t!("这一轮还没结束，等它停下再换")));
         }
         if read::composer(agent, &tail).is_none() {
-            return Err(io::Error::other("画面上有别的提示，先在终端里处理"));
+            return Err(io::Error::other(t!("画面上有别的提示，先在终端里处理")));
         }
         Ok(s)
     }
@@ -130,7 +130,7 @@ impl<'a> Steps<'a> {
     fn open(&self, command: &str, title: &str) -> io::Result<Menu> {
         self.run(command)?;
         let menu = self.wait(Duration::from_secs(3), |t| read::menu(t, title))?;
-        menu.ok_or_else(|| io::Error::other("菜单没有打开，请打开终端看一眼"))
+        menu.ok_or_else(|| io::Error::other(t!("菜单没有打开，请打开终端看一眼")))
     }
 
     /// Types `command` and presses Enter, as `open` does, without waiting for a menu.
@@ -143,7 +143,7 @@ impl<'a> Steps<'a> {
         if typed.is_none() {
             let erase = vec!["backspace"; command.chars().count()];
             self.keys(&erase)?;
-            return Err(io::Error::other("输入框里有还没发的字，先在终端里处理"));
+            return Err(io::Error::other(t!("输入框里有还没发的字，先在终端里处理")));
         }
         self.keys(&["enter"])
     }
@@ -210,10 +210,10 @@ impl<'a> Steps<'a> {
         Ok(ModeOptions {
             options,
             note: if more {
-                "只对这次会话有效，更早的型号在电脑上选。聊过之后换，下一句会重读历史，慢一些也多用 token。"
+                t!("只对这次会话有效，更早的型号在电脑上选。聊过之后换，下一句会重读历史，慢一些也多用 token。")
                     .into()
             } else {
-                "只对这次会话有效。".into()
+                t!("只对这次会话有效。").into()
             },
         })
     }
@@ -237,7 +237,7 @@ impl<'a> Steps<'a> {
             note: if offered {
                 String::new()
             } else {
-                "这次启动没有带 --allow-dangerously-skip-permissions，Claude 这里没有「全部放行」。"
+                t!("这次启动没有带 --allow-dangerously-skip-permissions，Claude 这里没有「全部放行」。")
                     .into()
             },
         })
@@ -284,7 +284,7 @@ impl<'a> Steps<'a> {
             now = m;
         }
         self.close(1)?;
-        Err(io::Error::other(NOT_FOUND))
+        Err(io::Error::other(fibo_core::i18n::text(NOT_FOUND)))
     }
 
     fn set_claude_model(&self, choice: &str) -> io::Result<Changed> {
@@ -292,14 +292,14 @@ impl<'a> Steps<'a> {
         let menu = self.open(MODEL_MENU.0, title)?;
         if !menu.rows.iter().any(|r| r.label == choice) || choice == "More models" {
             self.close(1)?;
-            return Err(io::Error::other(NOT_FOUND));
+            return Err(io::Error::other(fibo_core::i18n::text(NOT_FOUND)));
         }
         let menu = self.point(title, &menu, choice)?;
         if !read::offers_session(&menu.keys) {
             self.close(1)?;
-            return Err(io::Error::other(
-                "菜单没有只改这次会话的选项，没有换，请在终端里换",
-            ));
+            return Err(io::Error::other(t!(
+                "菜单没有只改这次会话的选项，没有换，请在终端里换"
+            )));
         }
         self.keys(&["s"])?;
         let took = |t: &str| {
@@ -316,7 +316,9 @@ impl<'a> Steps<'a> {
             self.keys(&["enter"])?;
         }
         let Some(now) = self.wait(Duration::from_secs(3), took)? else {
-            return Err(io::Error::other("按了，但画面上没说换好，请打开终端看一眼"));
+            return Err(io::Error::other(t!(
+                "按了，但画面上没说换好，请打开终端看一眼"
+            )));
         };
         Ok(Changed {
             model: Some(now),
@@ -334,13 +336,15 @@ impl<'a> Steps<'a> {
         let effort = self.wait(Duration::from_secs(2), |t| read::menu(t, EFFORT_TITLE))?;
         let Some(effort) = effort else {
             self.close(2)?;
-            return Err(io::Error::other("没看到选档位的菜单，没有换，请在终端里换"));
+            return Err(io::Error::other(t!(
+                "没看到选档位的菜单，没有换，请在终端里换"
+            )));
         };
         if !read::offers_session(&effort.keys) {
             self.close(2)?;
-            return Err(io::Error::other(
-                "菜单没有只改这次会话的选项，没有换，请在终端里换",
-            ));
+            return Err(io::Error::other(t!(
+                "菜单没有只改这次会话的选项，没有换，请在终端里换"
+            )));
         }
         self.keys(&["s"])?;
         let footer = self.wait(Duration::from_secs(3), |t| {
@@ -348,7 +352,7 @@ impl<'a> Steps<'a> {
         })?;
         let Some(now) = footer else {
             let saw = read::codex_footer(&self.screen()?).unwrap_or_default();
-            return Err(io::Error::other(format!("按了，但它现在写的是「{saw}」")));
+            return Err(io::Error::other(t!("按了，但它现在写的是「{saw}」", saw)));
         };
         Ok(Changed {
             model: Some(now),
@@ -372,24 +376,24 @@ impl<'a> Steps<'a> {
 
     fn set_claude_mode(&self, choice: &str, allow_full: bool) -> io::Result<Changed> {
         if !read::CLAUDE_CYCLE.iter().any(|(k, _)| *k == choice) {
-            return Err(io::Error::other(NOT_FOUND));
+            return Err(io::Error::other(fibo_core::i18n::text(NOT_FOUND)));
         }
         let full = choice == read::CLAUDE_FULL;
         if full && !allow_full {
-            return Err(io::Error::other("切到全部放行要先在手机上确认"));
+            return Err(io::Error::other(t!("切到全部放行要先在手机上确认")));
         }
         let start = read::claude_mode(&self.screen()?)
-            .ok_or_else(|| io::Error::other("读不出现在是哪一档"))?;
+            .ok_or_else(|| io::Error::other(t!("读不出现在是哪一档")))?;
         let offered = self.offers_full(start)?;
         if full && !offered {
-            return Err(io::Error::other(
-                "这次启动没有带 --allow-dangerously-skip-permissions，没有这一档",
-            ));
+            return Err(io::Error::other(t!(
+                "这次启动没有带 --allow-dangerously-skip-permissions，没有这一档"
+            )));
         }
         if offered && !full && read::claude_crosses_full(start, choice) {
-            return Err(io::Error::other(format!(
-                "从这一档到「{}」要经过全部放行，手机不替你经过，请在终端里切",
-                read::card_words(Agent::Claude, choice)
+            return Err(io::Error::other(t!(
+                "从这一档到「{v1}」要经过全部放行，手机不替你经过，请在终端里切",
+                v1 = read::card_words(Agent::Claude, choice)
             )));
         }
         let mut now = start;
@@ -408,33 +412,33 @@ impl<'a> Steps<'a> {
                 read::claude_mode(t).filter(|m| *m != before)
             })?;
             let Some(landed) = landed else {
-                return Err(io::Error::other(format!(
-                    "按了，但它还在「{}」",
-                    read::card_words(Agent::Claude, now)
+                return Err(io::Error::other(t!(
+                    "按了，但它还在「{v1}」",
+                    v1 = read::card_words(Agent::Claude, now)
                 )));
             };
             now = landed;
             if now == start {
-                return Err(io::Error::other("这个会话里没有这一档，已回到原来那档"));
+                return Err(io::Error::other(t!("这个会话里没有这一档，已回到原来那档")));
             }
             // Started some other way than its flags say: nothing may rest here unasked.
             // The next key leaves it, and the next look says if it did not.
         }
-        Err(io::Error::other(format!(
-            "没切到，现在是「{}」",
-            read::card_words(Agent::Claude, now)
+        Err(io::Error::other(t!(
+            "没切到，现在是「{v1}」",
+            v1 = read::card_words(Agent::Claude, now)
         )))
     }
 
     fn set_codex_mode(&self, choice: &str, allow_full: bool) -> io::Result<Changed> {
         let full = read::codex_is_full(choice);
         if full && !allow_full {
-            return Err(io::Error::other("切到全部放行要先在手机上确认"));
+            return Err(io::Error::other(t!("切到全部放行要先在手机上确认")));
         }
         let menu = self.open("/permissions", PERMISSIONS_TITLE)?;
         if !menu.rows.iter().any(|r| r.label == choice) {
             self.close(1)?;
-            return Err(io::Error::other(NOT_FOUND));
+            return Err(io::Error::other(fibo_core::i18n::text(NOT_FOUND)));
         }
         self.point(PERMISSIONS_TITLE, &menu, choice)?;
         self.keys(&["enter"])?;
@@ -457,19 +461,21 @@ impl<'a> Steps<'a> {
                 let on_yes = read::pointed(&m).is_some_and(|r| r.label == FULL_YES);
                 if !(full && allow_full && on_yes) {
                     self.close(2)?;
-                    return Err(io::Error::other(
-                        "它问得和平时不一样，没有放行，请在终端里看",
-                    ));
+                    return Err(io::Error::other(t!(
+                        "它问得和平时不一样，没有放行，请在终端里看"
+                    )));
                 }
                 self.keys(&["enter"])?;
             }
             None => {
                 self.close(2)?;
-                return Err(io::Error::other("它弹了没见过的提示，请打开终端看一眼"));
+                return Err(io::Error::other(t!("它弹了没见过的提示，请打开终端看一眼")));
             }
         }
         if !self.at_prompt()? {
-            return Err(io::Error::other("按了，但没回到输入框，请打开终端看一眼"));
+            return Err(io::Error::other(t!(
+                "按了，但没回到输入框，请打开终端看一眼"
+            )));
         }
         // What it says now, from its own menu.
         let again = self.open("/permissions", PERMISSIONS_TITLE)?;
@@ -480,10 +486,11 @@ impl<'a> Steps<'a> {
             .find(|r| r.current)
             .map(|r| r.label.clone());
         if on.as_deref() != Some(choice) {
-            return Err(io::Error::other(format!(
-                "按了，但它现在是「{}」",
-                on.as_deref()
-                    .map_or("读不出".into(), |l| read::card_words(agent, l))
+            return Err(io::Error::other(t!(
+                "按了，但它现在是「{v1}」",
+                v1 = on
+                    .as_deref()
+                    .map_or(t!("读不出").into(), |l| read::card_words(agent, l))
             )));
         }
         Ok(Changed {

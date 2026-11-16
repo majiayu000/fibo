@@ -273,6 +273,17 @@ pub(super) fn start(
             "鸟瞰 in {host} did not open this window's board: {shown:?}"
         );
         shoot("hosts-6-board.png", cx);
+        if fake {
+            handle.update(cx, |_, _, cx| far.update(cx, |w, cx| w.visual_failed_host_request(cx))).unwrap();
+            let mut error = String::new();
+            for _ in 0..40 {
+                wait(100).await;
+                error = handle.update(cx, |v, _, _| v.visual_attach_error()).unwrap();
+                if error.contains("terminal not found") { break; }
+            }
+            shoot("hosts-6b-failure.png", cx);
+            assert!(error.contains("terminal not found"), "hidden host failure was not shown: {error:?}");
+        }
         // Leaves far as it was.
         handle
             .update(cx, |_, _, cx| {

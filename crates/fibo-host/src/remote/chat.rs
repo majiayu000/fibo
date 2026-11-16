@@ -18,12 +18,12 @@ pub(super) fn session_of(socket: &Path, request: &Value) -> io::Result<String> {
             Reply::Workspace(w) => w
                 .current_agent(t)
                 .map(|s| s.id.clone())
-                .ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话")),
+                .ok_or_else(|| io::Error::other(t!("这个终端里没有 Agent 对话"))),
             other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
         },
-        (None, None) => Err(io::Error::other(format!(
-            "{} 需要 terminal 或 session",
-            request["op"].as_str().unwrap_or("chat")
+        (None, None) => Err(io::Error::other(t!(
+            "{v1} 需要 terminal 或 session",
+            v1 = request["op"].as_str().unwrap_or("chat")
         ))),
     }
 }

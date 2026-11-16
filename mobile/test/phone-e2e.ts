@@ -13,7 +13,7 @@ const link = parseLink(linkText);
 const remote = await Remote.connect(link);
 out.connect_ms = Math.round(performance.now() - t0);
 // The device id names this phone for its writes' request ids, as the hub does.
-const hello = await remote.request('hello', { version: 1, client: link.device });
+const hello = await remote.request('hello', { version: 2, client: link.device });
 out.role = hello.role;
 out.ops = hello.ops;
 const events: string[] = [];
@@ -58,7 +58,7 @@ out.pong = await remote.request('ping');
 remote.close();
 // The answer was lost, say: a new connection sends the same request again.
 const again = await Remote.connect(link);
-await again.request('hello', { version: 1, client: link.device });
+await again.request('hello', { version: 2, client: link.device });
 out.resent = await again.request('send', named);
 await sleep(500);
 again.close();

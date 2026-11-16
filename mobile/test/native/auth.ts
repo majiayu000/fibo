@@ -12,7 +12,7 @@ mock.module('expo-local-authentication', () => ({
   authenticateAsync: async () => { calls++; if (mode === 'throw') throw new Error('not available'); return { success: mode === 'success' }; }
 }));
 mock.module('../../src/store/settings', () => ({ readSettings: () => reading }));
-mock.module('../../src/remote/hub', () => ({ refresh() {}, write: async (_machine: string, _op: string, fields: unknown) => { writes++; sent.push(fields); if (writing) await writing; }, NOT_YET: '' }));
+mock.module('../../src/remote/hub', () => ({ getMachine: () => ({ status: 'online', cards: [{ id: 'terminal', session: 'denied-session' }] }), refresh() {}, write: async (_machine: string, _op: string, fields: unknown) => { writes++; sent.push(fields); if (writing) await writing; }, NOT_YET: '' }));
 const { verify, approve, deny, answerTrust, sendToConversation } = await import('../../src/actions');
 let resolved = false;
 const pending = verify('open').then(ok => { resolved = true; return ok; });

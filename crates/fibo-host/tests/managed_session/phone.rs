@@ -90,7 +90,7 @@ fn remote_chat_pages_a_conversation_by_terminal_and_session() {
             })
             .collect()
     };
-    let hello = ask(json!({ "op": "hello" }));
+    let hello = ask(json!({ "op": "hello", "version": fibo_remote::protocol::VERSION }));
     assert!(hello["ok"]["ops"]
         .as_array()
         .unwrap()

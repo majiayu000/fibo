@@ -236,7 +236,9 @@ export default function Chat() {
    * computer first, which then pastes each before the words; they need it online.
    */
   async function send(text: string, pictures: Picture[] = [], how?: How): Promise<boolean> {
-    const blocked = sendBlocked(view, waiting, warned.current === text);
+    const blocked = online && card?.approval
+      ? tr('它在等你审批，先允许或拒绝，再发送消息')
+      : sendBlocked(view, waiting, warned.current === text);
     warned.current = blocked ? text : '';
     if (blocked) {
       setError(blocked);

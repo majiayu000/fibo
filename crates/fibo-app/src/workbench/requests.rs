@@ -74,6 +74,12 @@ impl Workbench {
                 if resized && !confirmed {
                     this.sync(cx);
                 }
+                if this.hosts.embedded {
+                    cx.emit(super::hosts::HostEvent::Receipt {
+                        id: id.clone(),
+                        error: this.error.clone(),
+                    });
+                }
                 this.form_settled(id, confirmed);
                 if let Some(view) = &this.settings {
                     view.update(cx, |v, cx| {
@@ -90,6 +96,44 @@ impl Workbench {
             });
         })
         .detach();
+    }
+    pub(super) fn remote_receipt(
+        &mut self,
+        id: Option<&RequestId>,
+        error: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(error) = error {
+            self.error = Some(error.to_owned());
+        }
+        if let Some(index) = self
+            .hosts
+            .outcomes
+            .iter()
+            .position(|(pending, _)| Some(pending) == id)
+        {
+            let (_, text) = self.hosts.outcomes.remove(index);
+            self.show_toast(error.unwrap_or(&text).to_owned(), None, error.is_some(), cx);
+        }
+        if self
+            .hosts
+            .closing
+            .as_ref()
+            .is_some_and(|(pending, _)| Some(pending) == id)
+        {
+            let (_, terminal) = self.hosts.closing.take().unwrap();
+            if self.peek.as_ref().is_some_and(|p| p.terminal == terminal) {
+                if let Some(error) = error {
+                    let peek = self.peek.as_mut().unwrap();
+                    peek.answering = false;
+                    peek.confirm_end = false;
+                    peek.note = Some(error.to_owned());
+                } else {
+                    self.close_peek(cx);
+                }
+            }
+        }
+        cx.notify();
     }
     /// Starts what waited for the action that just ended: the next request, else the
     /// held launch. The ended action's error stays shown.
