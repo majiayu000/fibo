@@ -89,9 +89,29 @@ flowchart LR
 
 多机探针走通隐藏订阅、远程开标签、返回、切回和鸟瞰。第一次因测试 HOME 太长（socket 126 字节）失败，缩短测试运行目录后通过。退出后没有远程标签、运行中的 shell 或 SSH 转发；Exited 记录属于历史，脚本已改为区分历史与运行进程，并真正传播检查失败。
 
-第一轮性能：整窗 57.73 M（旧基线 106.89 M）、展开 54.19 M（85.82 M），机器相关帧下降 23%–43%。正在复测及收紧改善项的基线；其他项不放宽。
+性能重复测量：整窗 57.73 / 57.50 / 57.78 M（旧基线 106.89 M），展开最终 52.25 M；第三轮完整门禁通过。只收紧 6 项改善指标，没有放宽终端与主题预算。随后 #365 将同一优化和略严的基线合入主线，本分支采用主线基线；第三轮数据仍在该基线预算内。前后两种窗口宽度的截图只差运行计时末位，布局不变。
+
+隐藏工作台的反证也完成：只撤销 embedded 构造时的提前返回，探针真实报错“远程机器尚未选中就创建了 1 个终端”；保留修复时通过。探针的退出检查区分历史 Exited 记录与仍在运行的 shell。
 
 本地 Mac 候选包为 `target/closeout/Fibo.app`，版本 0.1.2/build 1212，Developer ID 已签名，未公证/未发布。Android arm64 测试 APK 已生成（SHA256 `37cb1136b17e5d5d9147503eb5efa95283cd2fe45f43fcd67d959c96fc68cffa`）；未换包前不能将旧手机上的结果归到它。
+
+### 平台验证回执（2026-11-16）
+
+草稿 PR #366 首轮 head `24ee0778` 的 CI、Windows check、Linux check、Windows installer、Linux installer 已通过。Windows Server 2025 runner 实际安装、调用已安装后台得到 `[]`、运行旧 CLI，再卸载确认可执行文件移除。Ubuntu 24.04 的 x64 与 ARM64 实际安装 Debian 包、读回 CLI 版本和空工作区，终端链路完成创建、列出、读屏、打字；需要真实 Agent 的测试明确保持 ignored。
+
+上述产物来自 PR 合并测试提交 `4f27163b`，不是 head 的独立构建。下载后的 ZIP 哈希与 GitHub artifact digest 一致，包清单读回如下：
+
+| 产物 | SHA256 | 边界 |
+|---|---|---|
+| Windows `Fibo-Setup-0.1.2.exe` | `db5a6419de2f8c7b75327ef3d54822d83a3129e65b5a7bd4478096edf5fb1f6d` | unsigned、未发布，未验桌面交互 |
+| Ubuntu amd64 `.deb` | `2f21ad9f0b1c885d3bb5f46473467d1dcac96b043cd7e81e4b1cfed5a276b718` | 安装与后台通过，未验图形桌面 |
+| Ubuntu arm64 `.deb` | `c9fd0149c150ff69b4a2bfc81ae856318b3200186a7a9e152da65649bcceb431` | 同上 |
+
+Linux 首轮 manifest 的 dirty 为 true。已确认工作流把 Zig 缓存写在仓库根目录而没有忽略；本轮补入 `.gitignore`，清单同时保留具体状态行，下一轮核对是否还有其他改动。不能把这批清单改写成 clean。
+
+iOS 本地 Release 模拟器包和无签名设备 archive 都已构建。第一次启动截图显示完整配对首页；第二次 5 秒截图是白屏，即使进程存活也不算 UI 通过。进一步诊断遇到 CoreSimulator 安装服务 4097 错误及开机阶段停住，尚不能归因于 App。脚本保存安装/启动失败日志、限制清理等待，并把 simulator App 移到稳定证据目录，避免后续 Expo prebuild 清除它。之后对同一 simulator App 记录两次启动的 5/15/30 秒画面，六张都显示完整配对首页，首启和重启仅系统时钟 1217 像素不同。此前白屏未复现且根因未确认，保留为间歇启动问题，不能声称已修复。设备 archive 没有签名，不能安装到真 iPhone，不能称 IPA 或完整交付。
+
+已验：远程标签实际创建/返回/清理、锁超时保留原文件、性能重复测量及前后截图、Windows 安装后台与卸载、Ubuntu 两架构安装和终端输入；没验：Android 候选全表 30 项、iPhone、桌面 17 项和干净安装 6 项；相邻情况：旧设备文件与竞争写入已有回归，真实 Claude/Codex/OpenCode 手机闭环及 Windows/Linux 图形会话未验。
 
 ### 签名环境具备后的交付命令
 

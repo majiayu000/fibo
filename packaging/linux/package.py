@@ -94,9 +94,10 @@ Description: Native workbench for coding agents
 ''')
     subprocess.run(['dpkg-deb', '--root-owner-group', '--build', str(stage), str(package)], check=True)
 
+worktree_status = subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True)
 manifest = {
     'source': head, 'version': version, 'architecture': arch,
-    'dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)),
+    'dirty': bool(worktree_status), 'worktree_status': worktree_status.splitlines(),
     'package': package.name, 'sha256': hashlib.sha256(package.read_bytes()).hexdigest(),
     'published': False,
 }

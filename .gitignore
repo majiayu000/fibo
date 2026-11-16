@@ -1,4 +1,5 @@
 /.deps
+/.zig-cache/
 /target/
 /runtime/
 __pycache__/

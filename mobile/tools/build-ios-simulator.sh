@@ -22,7 +22,11 @@ CI=1 bunx expo prebuild -p ios --no-install
 app="ios/build/ios-release/Build/Products/Release-iphonesimulator/Fibo.app"
 codesign --verify --deep --strict "$app"
 test -s "$app/main.jsbundle"
-ditto -c -k --sequesterRsrc --keepParent "$app" "$evidence/Fibo-ios-simulator.zip"
+# Expo prebuild for a later device archive can clear ios/build. Keep the exact simulator
+# app beside its receipt, so a later smoke run still tests the package that was recorded.
+rm -rf "$evidence/Fibo.app"
+ditto "$app" "$evidence/Fibo.app"
+ditto -c -k --sequesterRsrc --keepParent "$evidence/Fibo.app" "$evidence/Fibo-ios-simulator.zip"
 {
   git rev-parse HEAD
   git status --short

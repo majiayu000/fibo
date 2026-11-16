@@ -31,6 +31,7 @@ jobs:
       - name: Install and cold-start twice
         run: python3 mobile/tools/smoke-ios-simulator.py
       - name: Compile for physical iPhones
+        if: ${{ !cancelled() }}
         run: bash mobile/tools/build-ios-device.sh
       - name: Keep native evidence and the simulator package
         if: always()
