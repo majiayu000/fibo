@@ -1,7 +1,7 @@
 //! Event-driven macOS status item and notification delivery; no timers or process probes.
 use crate::{connection::RecognitionConnection, ui::theme::Theme as T};
 use fibo_core::{
-    content::{now, short},
+    content::{Content, now, short},
     model::*,
     protocol::*,
     status::{self, Status as State},
@@ -49,34 +49,38 @@ extern "C" fn event(value: *const c_char) {
         let _ = tx.unbounded_send(value);
     }
 }
-/// A session's news for a banner: its dedupe key, the state, and the line under the title.
+/// A session's news for a banner: its dedupe key, the state, and its content for `body`.
 /// Waiting and failed sessions call you; a finished turn (Review) gets a banner too, but
 /// no sound: it does not block anything.
-fn fact(w: &Workspace, s: &AgentSession) -> Option<(String, State, String)> {
+fn fact<'a>(w: &'a Workspace, s: &AgentSession) -> Option<(String, State, &'a Content)> {
     let c = w.content.get(&s.id)?;
     // Banners follow the one count of 要你处理: nothing the window would not list.
     if !status::needs_you(w, s, now()) {
         return None;
     }
     let group = status::of(w, s, now());
-    let body = match group {
-        State::Waiting => c.waiting.clone(),
-        State::Error => c.error.clone(),
-        State::Review => c.headline(),
-        _ => return None,
-    };
     // One dialog is one event however many signals report it or refine its text; an error
-    // is keyed by its text; a finished turn by the turn.
+    // is keyed by its text; a finished turn by the turn. The line under the title is not
+    // part of it: `body` works it out only for a banner that goes up.
     let event = match group {
         State::Waiting => format!("episode {}", c.waiting_episode),
+        State::Error => c.error.clone(),
         State::Review => String::new(),
-        _ => body.clone(),
+        _ => return None,
     };
     Some((
         format!("{:?}:{}:{}:{}", group, c.turn_key, c.turn_started, event),
         group,
-        body,
+        c,
     ))
+}
+/// The line under a banner's title.
+fn body(c: &Content, group: State) -> String {
+    match group {
+        State::Waiting => c.waiting.clone(),
+        State::Error => c.error.clone(),
+        _ => c.headline(),
+    }
 }
 /// The banner's title, as the landing page shows it: who and what, e.g.
 /// "Claude Code is ready for review".
@@ -108,7 +112,7 @@ fn entered(before: &Workspace, after: &Workspace, watching: Option<&str>) -> Vec
         // a burst of banners; its next new fact is a banner again.
         .filter(|s| !before.session_quiet(s))
         .filter_map(|s| {
-            let (key, group, body) = fact(after, s)?;
+            let (key, group, c) = fact(after, s)?;
             // The sound alone only speaks for what blocks the Agent.
             if !notify && !group.blocked() {
                 return None;
@@ -122,7 +126,7 @@ fn entered(before: &Workspace, after: &Workspace, watching: Option<&str>) -> Vec
                 return None;
             }
             // Name the project first: several panes often run the same kind of task.
-            let detail = match short(&body, 180) {
+            let detail = match short(&body(c, group), 180) {
                 d if d.is_empty() => short(&after.session_title(s), 72),
                 d => d,
             };
