@@ -218,7 +218,13 @@ impl Workbench {
                 .filter(|w| !w.reset(now) && w.on_bar())
                 .collect();
             if windows.is_empty() {
-                cell = cell.child(div().text_color(T::color(T::muted())).child(t!("已重置")));
+                cell = cell.child(div().text_color(T::color(T::muted())).child(
+                    if quota.error.is_empty() {
+                        t!("已重置")
+                    } else {
+                        t!("等待读数")
+                    },
+                ));
             }
             for (i, w) in windows.iter().enumerate() {
                 let (fill, ink) = colors(w, stale);
@@ -333,7 +339,11 @@ impl Workbench {
             }
             head = head
                 .child(div().flex_1())
-                .child(label(t!("读数 {v1}", v1 = ago(quota.at, now))))
+                .child(label(if quota.at == 0 {
+                    t!("等待读数").into()
+                } else {
+                    t!("读数 {v1}", v1 = ago(quota.at, now))
+                }))
                 .child(self.pin_chip(*agent, on_bar.contains(agent), cx));
             let mut block = div()
                 .flex()
@@ -341,6 +351,9 @@ impl Workbench {
                 .gap(px(T::S4))
                 .py(px(T::S4))
                 .child(head);
+            if !quota.error.is_empty() {
+                block = block.child(label(quota.error.clone()));
+            }
             let named =
                 (readings.iter()).any(|(_, q, _)| q.windows.iter().any(|w| !w.name.is_empty()));
             let label_w = T::S20 + if named { T::S20 + T::S20 } else { T::S10 };
@@ -378,7 +391,7 @@ impl Workbench {
                         )
                         .child(div().flex_1())
                         .child(label(if reset {
-                            t!("等下次使用时更新").into()
+                            t!("等待新读数").into()
                         } else if w.resets_at == 0 {
                             String::new()
                         } else if let Some(spare) = w.spare(now) {
@@ -404,7 +417,7 @@ impl Workbench {
         }
         panel.child(
             label(t!(
-                "读各家留在本机的记录和插件的读数。* 表示读数超过 1 小时"
+                "读各家本机记录和插件采集的额度。* 表示读数过期或刷新失败"
             ))
             .pt(px(T::S4))
             .border_t(px(T::BORDER_WIDTH))
@@ -658,6 +671,7 @@ mod tests {
     #[test]
     fn the_bar_puts_the_pinned_cli_first_then_the_tightest() {
         let q = Quota {
+            error: String::new(),
             at: 0,
             plan: String::new(),
             windows: Vec::new(),

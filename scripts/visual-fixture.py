@@ -116,6 +116,9 @@ if sys.argv[1] == 'prepare':
         at = int(time.time())
         (data / 'named.json').write_text(json.dumps({'at': at - 800, 'name': 'Fable', 'used': 91 if named == 'near' else 12, 'resets_at': at + 5 * 86400}))
     now = int(time.time())
+    if os.environ.get('MOORING_FIXTURE_CLAUDE_QUOTA'):
+        import visual_quota_fixture
+        visual_quota_fixture.prepare(home, BIN, now, os.environ['MOORING_FIXTURE_CLAUDE_QUOTA'])
     for n in range(40):
         project = root / 'projects' / names[n // 8]; project.mkdir(parents=True, exist_ok=True)
         stamp = now - (6 * 86400 if n % 8 == 5 else 60 * (n + 1)); cid = f'visual-{n}'

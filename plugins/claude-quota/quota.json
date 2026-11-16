@@ -3,25 +3,9 @@
   "sources": [
     {
       "agent": "claude",
-      "file": "statusline.json",
-      "windows": [
-        {
-          "minutes": 300,
-          "used": "/rate_limits/five_hour/used_percentage",
-          "resets_at": "/rate_limits/five_hour/resets_at"
-        },
-        {
-          "minutes": 10080,
-          "used": "/rate_limits/seven_day/used_percentage",
-          "resets_at": "/rate_limits/seven_day/resets_at"
-        }
-      ]
-    },
-    {
-      "agent": "claude",
       "command": "\"$MOORING_BIN\" claude-quota usage",
       "refresh_s": 60,
-      "timeout_ms": 90000,
+      "timeout_ms": 20000,
       "at": "/at",
       "windows": [
         {
@@ -52,7 +36,8 @@
           "used": "/models/2/used",
           "resets_at": "/models/2/resets_at"
         }
-      ]
+      ],
+      "error": "/error"
     }
   ]
 }

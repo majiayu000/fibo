@@ -57,7 +57,7 @@ fibo plugins run git-tools <声明 id>   # hook、装饰、额度命令：用和
 - `files` 可选：插件还要带上的其他文件（命令要跑的脚本），相对插件目录写。不写进来的文件从插件目录安装时不会被带上。
 - `touches` 可选：setup 会改的别的程序的文件，如 `["~/.claude/settings.json"]`；`network` 可选：命令会不会联网。安装确认里照写给用户看，Fibo 不拦截，所以要如实写。
 - 命令行安装会跑命令的插件时先列出这些，交互终端里问 y/N，非交互（Agent、脚本）要加 `--yes`。
-- `fibo` 可选：插件需要的插件级别（现在是 8：`setup`、`quota`、`files`、`options` 是 2 级加的，`themes` 和动作的 `agent`、设置项的 `secret` 是 3 级加的，`agent.json` 的 `screen_rules` 和 `interrupt` 是 4 级加的，它的 `answers` 是 5 级加的）。不写时按 `plugin.json` 里用到的类型和字段自动算；用了 2 级以后加的类型文件字段（比如动作的 `agent`）要自己写上。级别不够的 Fibo 会拒绝它并提示更新。
+- `fibo` 可选：插件需要的插件级别（现在是 9：`setup`、`quota`、`files`、`options` 是 2 级加的，`themes` 和动作的 `agent`、设置项的 `secret` 是 3 级加的，`agent.json` 的 `screen_rules` 和 `interrupt` 是 4 级加的，它的 `answers` 是 5 级加的）。不写时按 `plugin.json` 里用到的类型和字段自动算；用了 2 级以后加的类型文件字段（比如动作的 `agent`）要自己写上。级别不够的 Fibo 会拒绝它并提示更新。
 - `plugin.json` 里新版本才有的类型和字段，旧版本会跳过并在设置页写一条警告，其余照常加载；只有一类都不认识时才整个不加载。hooks 的 `on` 里不认识的事件也只跳过这个事件。
 - `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `setup` `quota` `themes` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。
 - 每个类型文件里也都写 `"api": 1`（`agent.json` 除外，见最后）。类型文件里不认识的字段会让这一份文件不生效，这样写错字段名能马上看到。
@@ -224,20 +224,24 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 ```json
 {"api": 1, "sources": [{
   "agent": "claude",
-  "file": "statusline.json",
+  "command": "\"$MOORING_BIN\" claude-quota usage",
+  "refresh_s": 60,
+  "at": "/at",
+  "error": "/error",
   "windows": [
-    {"minutes": 300, "used": "/rate_limits/five_hour/used_percentage", "resets_at": "/rate_limits/five_hour/resets_at"},
-    {"minutes": 10080, "used": "/rate_limits/seven_day/used_percentage", "resets_at": "/rate_limits/seven_day/resets_at"}
+    {"minutes": 300, "used": "/session/used", "resets_at": "/session/resets_at"},
+    {"minutes": 10080, "used": "/week/used", "resets_at": "/week/resets_at"}
   ]
 }]}
 ```
 
 - `agent`：CLI 的可执行文件名或名字。显示在状态栏的额度里，和内置的读数比谁新。
 - 数据来源二选一：`file` 是一个 JSON 文件（相对 `MOORING_PLUGIN_DATA`，也可以写绝对路径或 `~/`），文件变了就重读；`command` 是输出 JSON 的命令，App 开着时每 `refresh_s` 秒（60–86400，默认 300）在插件目录里跑一次，默认最多 20 秒，`timeout_ms`（100–300000，需要插件级别 8）可以改。App 和后台各跑各的，会真的去查的命令要自己加锁。命令退出码非 0 时保留上次读数，记进运行记录；退出码 0 但取不到窗口（比如开关关了）就不再显示。
-- `windows` 里每个窗口写 `minutes`（300 显示成 5h，10080 显示成 周），`used` 和 `resets_at` 是 JSON 指针（以 `/` 开头）：已用百分比、重置时间（Unix 秒）。取不到 `used` 的窗口不显示；一个都没有就不显示这家。
+- `windows` 里每个窗口写 `minutes`（300 显示成 5h，10080 显示成 周），`used` 和 `resets_at` 是 JSON 指针（以 `/` 开头）：已用百分比、重置时间（Unix 秒）。取不到 `used` 的窗口不显示；一个都没有且没有 `error` 就不显示这家。
 - `name` 可选，也是 JSON 指针：窗口自己的名字，给只算一部分的窗口用（某个模型的周额度，弹层显示成 `Fable 周`）。不带名字的是整个账号的。带名字的平时不占状态栏，到 80% 才出现，也不发给手机。同一个 Agent 有多条来源时显示最新的那条，1 小时内其他来源独有的带名字窗口留在旁边。需要插件级别 8：写了就在 `plugin.json` 写 `"mooring": 8`，并把上一个版本放进 `versions/`，旧 App 读到不认识的字段会让这份文件不生效。
 - `at`、`plan` 可选，也是 JSON 指针：记录时间（Unix 秒，不写就用文件修改时间或命令运行时间）、套餐名。
-- 要联网查的话写在 `command` 里；Fibo 自己不联网，这类插件的说明里要写清楚。
+- `error` 可选，刷新失败信息的 JSON 指针（插件级别 9）。失败时仍输出 JSON、退出 0：有旧快照就保留原 `at` 和窗口，界面标为过期并显示错误；没有可用快照时输出 `{"at":0,"error":"原因"}`，显示等待读数，不沿用上个账号的值。不要用本次失败时间覆盖采集时间。
+- 要联网查的话写在 `command` 里，并在插件清单声明 `network: true`。Claude 额度现用原生 HTTP、120 秒共享缓存、进程锁和凭据指纹；不再读会话状态栏里的账号额度。详见 `docs/decisions/2026-11-16-claude-quota-http.md`。
 
 ## agent：让 Fibo 认识一个新 CLI（`agent.json` 或 `agents/*.json`）
 

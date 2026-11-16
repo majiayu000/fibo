@@ -18,7 +18,7 @@ pub const API: u32 = 1;
 /// its `answers`, 6 transcript parent links and source metadata headers, 7 an agent's
 /// `input_hint`, 8 a quota window's `name`. A plugin needing a higher level says so in `fibo`, and is refused with
 /// "update Fibo".
-pub const LEVEL: u32 = 8;
+pub const LEVEL: u32 = 9;
 
 /// What a plugin can extend. The file each kind reads is fixed, so a manifest only says
 /// which kinds it means to provide and a missing file is reported rather than ignored.

@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by 2026-11-16-claude-quota-http
 date: 2026-11-07
 decision-makers: majiayu000
 ---
@@ -45,3 +45,7 @@ Windows：解析和设置都是 Rust，时区库打包进去，但没有在 Wind
 ## Verification
 
 `crates/fibo-host/tests/claude_quota.rs` 用假 `claude` 真跑程序，`agents/claude_quota/usage_text_tests.rs` 用真实输出测解析，`quota_merge::tests` 管合并。
+
+## 2026-11-16 修订
+
+额度来源与调度被 [集中 HTTP 查询](2026-11-16-claude-quota-http.md) 取代。上文保留当时取舍；原有状态栏转发和各会话上下文采集继续使用。

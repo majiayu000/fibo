@@ -337,6 +337,7 @@ fn credits_quota(v: &Value) -> Option<Quota> {
     let start = time(&config["currentPeriod"]["start"])?;
     let end = time(&config["currentPeriod"]["end"])?;
     Some(Quota {
+        error: String::new(),
         at: time(&v["ts"])?,
         plan: v["ctx"]["subscriptionTier"].as_str().unwrap_or("").into(),
         windows: vec![Window {
