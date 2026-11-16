@@ -1,0 +1,64 @@
+name: Linux installer
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['crates/**', 'packaging/linux/**', 'Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**', '.github/workflows/package-linux.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: 0
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and native dependencies
+        run: |
+          rustup toolchain install --no-self-update
+          sudo apt-get update -qq
+          sudo apt-get install -y clang cmake libasound2-dev libfontconfig-dev libglib2.0-dev libssl-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libzstd-dev libvulkan1 desktop-file-utils dpkg-dev zsh
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.16.0
+          use-cache: false
+      - run: sh bootstrap.sh
+      - name: Build the window and host
+        run: cargo build --release -p fibo-app -p fibo-host
+      - name: Package and install
+        run: |
+          python3 packaging/linux/package.py
+          sudo apt-get install -y ./target/linux-package/*.deb
+          test -x /usr/lib/fibo/bin/fibo-app
+          test -f /usr/lib/fibo/Resources/plugins/index.json
+          desktop-file-validate /usr/share/applications/page.fibo.app.desktop
+          fibo --version
+          mooring --version
+      - name: Installed host and native terminal
+        run: |
+          rt=$(mktemp -d)
+          fibo serve --runtime "$rt" > target/linux-package/host.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do test -S "$rt/workbench.sock" && break; sleep 0.1; done
+          MOORING_RUNTIME="$rt" fibo list --json
+          cargo test -p fibo-host --test terminal_chain
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Fibo-linux-${{ matrix.runner }}
+          path: target/linux-package/
+          retention-days: 14

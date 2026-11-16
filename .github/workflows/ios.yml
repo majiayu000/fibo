@@ -30,6 +30,8 @@ jobs:
         run: bash mobile/tools/build-ios-simulator.sh
       - name: Install and cold-start twice
         run: python3 mobile/tools/smoke-ios-simulator.py
+      - name: Compile for physical iPhones
+        run: bash mobile/tools/build-ios-device.sh
       - name: Keep native evidence and the simulator package
         if: always()
         uses: actions/upload-artifact@v4
@@ -40,3 +42,5 @@ jobs:
             target/ios-evidence/simulator-build.log
             target/ios-evidence/Fibo-ios-simulator.zip
             target/ios-evidence/native-smoke
+            target/ios-device-evidence/build-manifest.txt
+            target/ios-device-evidence/device-build.log
