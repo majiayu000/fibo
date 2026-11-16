@@ -73,12 +73,19 @@ export async function approve(machine: string, card: Card, ask: Ask, always = fa
   return done === true;
 }
 
-/** Refuses it; `ask` as with `approve`, so an answer that took a while refuses nothing newer. */
-export async function deny(machine: string, card: Card, ask: Ask) {
+/** Refuses it, then sends feedback only if this operation answered the shown question. */
+export async function deny(machine: string, card: Card, ask: Ask, feedback?: string): Promise<boolean> {
+  const target = { id: card.id, session: card.session };
   return answerOnce(machine, card.id, async () => {
     await write(machine, 'answer', { terminal: card.id, question: card.approval, allow: false, ...(ask.known ? { subject: ask.subject } : {}) });
     setTimeout(() => refresh(machine), 300);
-  });
+    if (feedback) {
+      // Keep the shared lock while the prompt closes and feedback reaches the same conversation.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await sendToConversation(machine, target, feedback);
+    }
+    return true;
+  }).then((done) => done === true);
 }
 
 /** Says whether to trust the folder a card asks about; the machine presses the keys. */

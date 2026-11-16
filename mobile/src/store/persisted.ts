@@ -18,13 +18,13 @@ export function persistedValue<T extends object>(storage: Storage, key: string, 
   // Consumers may mount later. Keep the rejection available to them without an
   // unhandled promise during module initialization.
   void ready.catch(() => undefined);
-  let pending: Promise<unknown> = Promise.resolve();
+  let pending: Promise<unknown> = ready.catch(() => undefined);
   return {
     get ready() { return ready; },
     get: () => value,
     reload() {
       ready = pending.then(read).then((next) => { value = next; emit(); });
-      void ready.catch(() => undefined);
+      pending = ready.catch(() => undefined);
       return ready;
     },
     set(patch: Partial<T> | ((v: T) => T)): Promise<void> {
@@ -32,11 +32,12 @@ export function persistedValue<T extends object>(storage: Storage, key: string, 
       const changed = pending.then(async () => {
         await loaded;
         const next = typeof patch === 'function' ? patch(value) : { ...value, ...patch };
+        if (next === value || JSON.stringify(next) === JSON.stringify(value)) return;
         await storage.set(key, JSON.stringify(next));
         value = next;
         emit();
       });
-      // Serialize read-modify-write operations, including a retry after a failed write.
+      // Reads and writes share one sequence: a late startup read cannot replace a save.
       pending = changed.catch(() => undefined);
       return changed;
     },

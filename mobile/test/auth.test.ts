@@ -17,6 +17,10 @@ test('authentication waits for settings and rejects cancellation and native erro
     cancelled: false, unavailable: false, approved: false, writes: 0,
     unreadable: false, unlocked: true,
     answers: { duplicate: false, duplicateTrust: false, whilePending: 1, afterRetry: 2 },
+    denial: { retried: true, told: true, writes: [
+      { terminal: 'terminal', question: 'question', allow: false, subject: 'test' },
+      { terminal: 'terminal', session: 'denied-session', text: 'try a different approach', enter: true },
+    ] },
     sent: [
       { terminal: 'terminal', session: 'original-session', text: 'feedback', enter: true },
       { terminal: 'terminal', session: '', text: 'unidentified', enter: true },

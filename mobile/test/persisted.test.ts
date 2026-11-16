@@ -83,3 +83,24 @@ test('a value an older build saved reads its missing fields as their defaults', 
   await settings.ready;
   expect(settings.get()).toEqual({ lock: true, language: 'auto' });
 });
+
+test('startup retries serialize reads so an older snapshot cannot erase a saved message', async () => {
+  const storage = disk('{"items":["saved"]}');
+  let release!: (value: string | null) => void;
+  let reads = 0;
+  const first = new Promise<string | null>(done => { release = done; });
+  const box = persistedValue({
+    get: async () => ++reads === 1 ? first : storage.text,
+    set: storage.set.bind(storage),
+  }, 'outbox', { items: [] as string[] });
+  const initial = box.ready;
+  const retry = box.reload();
+  const writing = retry.then(() => box.set(v => ({ items: [...v.items, 'new message'] })));
+  // Let a competing reload and its write settle if they incorrectly bypass the first read.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  release('{"items":["saved"]}');
+  await Promise.all([initial, retry, writing]);
+  await box.set(v => ({ items: [...v.items, 'next message'] }));
+  expect(box.get().items).toEqual(['saved', 'new message', 'next message']);
+  expect(JSON.parse(storage.text!).items).toEqual(['saved', 'new message', 'next message']);
+});

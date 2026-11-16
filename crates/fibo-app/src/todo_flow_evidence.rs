@@ -169,7 +169,10 @@ pub(super) fn start(
         shot("5-from-clicked.png", cx);
         let left = handle.update(cx, |v, _, _| v.visual_task_detail()).unwrap();
         let focused = handle.update(cx, |v, _, _| v.visual_nav()).unwrap().0;
-        assert_eq!(left, None, "opening the conversation leaves the detail page");
+        assert_eq!(
+            left, None,
+            "opening the conversation leaves the detail page"
+        );
         assert_eq!(
             focused.as_deref(),
             Some(terminal.as_str()),

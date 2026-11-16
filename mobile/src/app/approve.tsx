@@ -4,7 +4,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { approve, deny, oops, sendToConversation } from '@/actions';
+import { approve, deny, oops } from '@/actions';
 import { remote, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
 import { useSettings } from '@/store/settings';
@@ -163,12 +163,7 @@ export default function Approve() {
         onSend={(text) => {
           setTelling(false);
           if (!card) return;
-          run(async () => {
-            await deny(machine, card, ask);
-            // The prompt closes first; then the sentence lands in the Agent's input.
-            await new Promise((r) => setTimeout(r, 600));
-            await sendToConversation(machine, card, text);
-          });
+          run(() => deny(machine, card, ask, text));
         }}
       />
     </View>
