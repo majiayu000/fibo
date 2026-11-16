@@ -18,7 +18,14 @@ fn main() {
     let code = match ran {
         Ok(()) => 0,
         Err(err) => {
-            eprintln!("fibo: {err}");
+            if fibo_core::delivery::host_absent(&err) {
+                eprintln!(
+                    "fibo: {}",
+                    t!("Fibo 没在运行：先打开 Fibo 再试（{err}）", err)
+                );
+            } else {
+                eprintln!("fibo: {err}");
+            }
             1
         }
     };
@@ -149,7 +156,8 @@ fn run() -> std::io::Result<()> {
         }
         "--version" => {
             println!(
-                "fibo protocol {}.{} experimental",
+                "fibo {} (protocol {}.{} experimental)",
+                env!("CARGO_PKG_VERSION"),
                 fibo_host::PROTOCOL_MAJOR,
                 fibo_host::PROTOCOL_MINOR
             );
