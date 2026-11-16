@@ -176,7 +176,7 @@ fn remote_watches_and_drives_a_terminal_without_taking_or_resizing_it() {
         .contains("hello"));
     say(json!({ "id": 2, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     let hello = next(&reply(2)).1;
-    assert_eq!(hello["ok"]["version"], 1);
+    assert_eq!(hello["ok"]["version"], fibo_remote::protocol::VERSION);
     let machine = hello["ok"]["machine"]["id"].as_str().unwrap().to_owned();
     assert!(!machine.is_empty());
 

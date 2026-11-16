@@ -28,7 +28,7 @@ pub(super) fn prompt(a: Args) -> io::Result<()> {
         // Typing into an approval or a choice would answer it, so refuse.
         Phase::Waiting if !a.has("force") => {
             return Err(io::Error::other(t!(
-                "Agent 正在等你回答（审批或选择题），没有发送；确认要发请加 --force"
+                "Agent 正在等你回答，没有发送；请先处理审批，普通问题可用 --force 代答"
             )));
         }
         _ => (),
