@@ -42,6 +42,6 @@
 
 ## 告警验收（11-16）
 
-`relay-health.yml` 对当前 IP 入口和将来的域名都可用，不用等 DNS。地址放仓库变量 `RELAY_URL`，不放注册密钥。每 6 小时检查一次，证书不足 48 小时或健康接口失败即使工作流失败。GitHub 定时任务可能延迟，不承诺精确到点。
+`relay-health.yml` 对当前 IP 入口和将来的域名都可用，不用等 DNS。地址放仓库 secret `RELAY_URL`（日志不打印地址），不放注册密钥。每 6 小时检查一次，证书不足 48 小时或健康接口失败即使工作流失败。GitHub 定时任务可能延迟，不承诺精确到点。
 
 邮件通知依赖操作者的 [Actions 通知设置](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)，可选择只收失败；定时运行通知送给最后修改 cron 的用户。工作流通过只能证明探测成功，邮件实际送达需单独确认。
