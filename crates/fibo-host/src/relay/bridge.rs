@@ -210,7 +210,9 @@ mod tests {
         )
         .unwrap();
         let bytes = b"{\"id\":1,\"op\":\"image\",\"data\":\"partial";
-        bridge.receive(&phone.data(bytes).unwrap()).unwrap();
+        bridge
+            .receive(&phone.data(bytes).unwrap(), || Ok(()))
+            .unwrap();
         let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
         let frame = loop {
             if let Ok(frame) = received.try_recv() {

@@ -36,6 +36,9 @@ impl Role {
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
             | "mkdir" | "stop" | "lastsession" | "addspace" | "spacequiet" | "trust" | "modes"
             | "setmode" | "todoadd" | "todooutcome" | "image" | "sendnow" => self == Self::Full,
+            // Words `hello` lists to say what an op also takes: each goes with its op.
+            "steer" | "effort" | "openimages" => self == Self::Full,
+            "toolslast" => true,
             "answer" => self != Self::View,
             "hello" | "ping" | "list" | "cards" | "read" | "chat" | "watch" | "events"
             | "close" | "diff" | "quota" | "usage" | "toolcalls" | "toolcall" | "backfill"
@@ -72,6 +75,16 @@ pub fn acts(op: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_listed_op_reaches_a_full_phone() {
+        for op in crate::ops::OPS {
+            assert!(
+                Role::Full.allows(op),
+                "{op} is listed in hello but no role allows it"
+            );
+        }
+    }
 
     #[test]
     fn roles_allow_only_what_they_name() {

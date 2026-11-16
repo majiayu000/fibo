@@ -329,8 +329,9 @@ fn layout_changes_from_two_hands_all_stay() {
         }}}}),
     )
     .unwrap();
+    // Refused at decode with an error, and the connection keeps serving.
     assert!(
-        receive::<Reply>(&mut legacy).is_err(),
+        matches!(receive::<Reply>(&mut legacy), Ok(Reply::Error(e)) if e.contains("unsupported or invalid request")),
         "old request must be rejected at decode"
     );
     assert_eq!(
