@@ -36,7 +36,7 @@
 <main class="post">
 <p class="kicker">工程笔记 · 2026 年 11 月</p>
 <h1>一个窗口，管多台电脑上的终端</h1>
-<p class="lede">Coding Agent 一多，终端就不只在一台电脑上：长任务放在常开的 Mac mini 上，笔记本上也开着一排。Fibo 要做的是多台电脑、一个窗口：另一台 Mac 上的终端，和本机的一样开标签、一样分屏、一样打字，侧栏一眼看到每台电脑上谁在等你。这篇讲为什么这样做、背后的原理，以及在一条只有 54 KB/s 的慢链路上，一次刷新怎么从 3.59 MB 降到 660 字节。</p>
+<p class="lede">Coding Agent 一多，终端就会分散在好几台电脑上。Fibo 要做的是多台电脑、一个窗口：另一台电脑上的终端，和本机的一样开标签、一样分屏、一样打字，侧栏一眼看到每台电脑上谁在等你。这篇讲为什么这样做、背后的原理，以及在一条只有 54 KB/s 的慢链路上，一次刷新怎么从 3.59 MB 降到 660 字节。</p>
 
 <nav class="toc" aria-label="目录">
   <a href="#why">为什么要做</a>
@@ -85,7 +85,7 @@
 <p>Fibo 本来就是客户端和服务端分开的。后台持有终端、工作区和状态规则；窗口经 Unix socket 发请求，协议是带长度前缀的 JSON 帧；每个终端窗格单独一条连接，收画面、发按键。</p>
 <p>所以连另一台电脑，并不需要新协议，只要能连上那台的 socket。OpenSSH 能直接转发 Unix socket：</p>
 <pre><code>ssh -N -o Compression=yes -o StreamLocalBindUnlink=yes \
-    -L ~/.local/share/fibo/m/mac-mini/workbench.sock:&lt;那台的 workbench.sock&gt; mac-mini</code></pre>
+    -L ~/.local/share/fibo/m/remote/workbench.sock:&lt;那台的 workbench.sock&gt; remote</code></pre>
 <p>窗口照连本机的方式连这个本地 socket，后面就是同一套代码：标签、分屏、⌘T、⌘D、运行 Agent。那台的后台存下这些标签和分屏，那台自己的窗口也看得到。一条 <code>ssh -L</code> 上可以跑任意多条连接，正好对上一个窗格一条连接。</p>
 
 <figure>

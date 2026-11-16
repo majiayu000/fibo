@@ -36,7 +36,7 @@
 <main class="post">
 <p class="kicker">Engineering notes · November 2026</p>
 <h1>One window for terminals on every Mac</h1>
-<p class="lede">Run enough coding agents and their terminals stop fitting on one machine: long tasks go to an always-on Mac mini while the laptop runs a row of its own. Fibo&#39;s goal is many machines, one window: a terminal on another Mac opens, splits and takes typing exactly like a local one, and the sidebar shows who is waiting on every machine. This post covers why we built it this way, how it works underneath, and how, on a link of 54 KB/s, one refresh went from 3.59 MB to 660 bytes.</p>
+<p class="lede">Run enough coding agents and their terminals end up spread across several machines. Fibo&#39;s goal is many machines, one window: a terminal on another machine opens, splits and takes typing exactly like a local one, and the sidebar shows who is waiting on every machine. This post covers why we built it this way, how it works underneath, and how, on a link of 54 KB/s, one refresh went from 3.59 MB to 660 bytes.</p>
 
 <nav class="toc" aria-label="Contents">
   <a href="#why">Why we did it</a>
@@ -85,7 +85,7 @@
 <p>Fibo was already split into client and server. The host owns the terminals, the workspace and the state rules; the window sends requests over a Unix socket using length-prefixed JSON frames, and every terminal pane opens its own connection for screen updates and keystrokes.</p>
 <p>So reaching another machine needs no new protocol, only a way to reach that machine's socket. OpenSSH forwards Unix sockets directly:</p>
 <pre><code>ssh -N -o Compression=yes -o StreamLocalBindUnlink=yes \
-    -L ~/.local/share/fibo/m/mac-mini/workbench.sock:&lt;its workbench.sock&gt; mac-mini</code></pre>
+    -L ~/.local/share/fibo/m/remote/workbench.sock:&lt;its workbench.sock&gt; remote</code></pre>
 <p>The window connects to that local socket the same way it connects to its own, and from there it's the same code: tabs, splits, ⌘T, ⌘D, running an agent. The other host stores those tabs and splits, so that machine's own window sees them too. One <code>ssh -L</code> carries any number of connections, which fits one connection per pane.</p>
 
 <figure>
