@@ -1,6 +1,6 @@
 //! The client's link to the host: the socket, the in-flight user action, background
 //! syncs and the recognition status the host pushes. Views never call `rpc` themselves.
-use super::brief::Held;
+use super::brief::{Held, Understood};
 use crate::connection::{RecognitionConnection, StatusLink};
 use fibo_core::delivery::Settled;
 use fibo_core::{model::*, protocol::*};
@@ -204,7 +204,7 @@ impl Store {
     /// confirmed, refused, or `PATIENCE` says its outcome is unknown.
     pub fn deliver(&self, request: Request) -> impl Future<Output = Settled> + use<> {
         let socket = self.socket.clone();
-        let (held, brief) = (self.deltas.clone(), self.recognition.brief);
+        let (held, brief) = (self.deltas.clone(), Understood::of(&self.recognition));
         async move { held.deliver(&socket, request, brief) }
     }
     /// How long a refresh that took `took` keeps the next one waiting. Another machine's
@@ -228,7 +228,7 @@ impl Store {
         mut place: Edit,
     ) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();
-        let (held, brief) = (self.deltas.clone(), self.recognition.brief);
+        let (held, brief) = (self.deltas.clone(), Understood::of(&self.recognition));
         async move {
             // A shell that ended or moved somewhere unreadable keeps the recorded directory.
             if let Some(id) = cwd_source

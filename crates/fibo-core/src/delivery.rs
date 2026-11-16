@@ -70,7 +70,7 @@ impl crate::protocol::RequestId {
 pub fn resendable(request: &Request) -> bool {
     match request {
         Request::Edit { request, .. } => request.is_some(),
-        Request::Brief(_, request) => resendable(request),
+        Request::Brief(_, request) | Request::BriefAll(_, request) => resendable(request),
         Request::Launch { .. }
         | Request::Once { .. }
         | Request::Workspace

@@ -1,4 +1,4 @@
-use super::Held;
+use super::{Held, Understood};
 use fibo_core::delivery::Settled;
 use fibo_core::protocol::{CONTROL, MAJOR, Reply, Request, receive, send};
 use fibo_core::workspace_delta::{Index, diff};
@@ -36,8 +36,10 @@ fn serve(name: &str) -> (std::path::PathBuf, Arc<Fake>) {
                 build: Default::default(),
             };
             send(&mut stream, CONTROL, &hello).unwrap();
-            let Request::Brief(since, _) = receive(&mut stream).unwrap() else {
-                panic!("not brief");
+            let (since, fields) = match receive(&mut stream).unwrap() {
+                Request::Brief(since, _) => (since, false),
+                Request::BriefAll(since, _) => (since, true),
+                other => panic!("not brief: {other:?}"),
             };
             host.asked.lock().unwrap().push(since);
             let mut sent = host.sent.lock().unwrap();
@@ -46,7 +48,7 @@ fn serve(name: &str) -> (std::path::PathBuf, Arc<Fake>) {
                 true => sent.last(),
                 false => sent.iter().find(|i| Some(i.stamp) == since),
             };
-            let (delta, index) = diff(host.now.lock().unwrap().clone(), base);
+            let (delta, index) = diff(host.now.lock().unwrap().clone(), base, fields).unwrap();
             sent.push(index);
             send(
                 &mut stream,
@@ -58,6 +60,10 @@ fn serve(name: &str) -> (std::path::PathBuf, Arc<Fake>) {
     });
     (socket, fake)
 }
+const ALL: Understood = Understood {
+    brief: true,
+    all: true,
+};
 fn workspace(settled: Settled) -> fibo_core::model::Workspace {
     match settled {
         Settled::Confirmed(Reply::Workspace(w)) => w,
@@ -72,7 +78,7 @@ fn workspace(settled: Settled) -> fibo_core::model::Workspace {
 fn a_refresh_asks_for_what_changed_since_the_last_and_gets_the_whole() {
     let (socket, fake) = serve("brief-refresh");
     let held = Held::default();
-    let first = workspace(held.deliver(&socket, Request::Workspace, true));
+    let first = workspace(held.deliver(&socket, Request::Workspace, ALL));
     let session = first.agent_sessions[0].id.clone();
     fake.now
         .lock()
@@ -81,7 +87,7 @@ fn a_refresh_asks_for_what_changed_since_the_last_and_gets_the_whole() {
         .get_mut(&session)
         .unwrap()
         .title = "新标题".into();
-    let second = workspace(held.deliver(&socket, Request::Workspace, true));
+    let second = workspace(held.deliver(&socket, Request::Workspace, ALL));
     let asked = fake.asked.lock().unwrap().clone();
     assert_eq!(asked[0], None);
     assert_eq!(asked[1], Some(fake.sent.lock().unwrap()[0].stamp));
@@ -94,10 +100,10 @@ fn a_refresh_asks_for_what_changed_since_the_last_and_gets_the_whole() {
 fn a_delta_whose_base_is_gone_here_is_asked_for_whole() {
     let (socket, fake) = serve("brief-gone");
     let held = Held::default();
-    workspace(held.deliver(&socket, Request::Workspace, true));
+    workspace(held.deliver(&socket, Request::Workspace, ALL));
     held.0.lock().unwrap().clear();
     *fake.stale.lock().unwrap() = true;
-    let w = workspace(held.deliver(&socket, Request::Workspace, true));
+    let w = workspace(held.deliver(&socket, Request::Workspace, ALL));
     assert_eq!(fake.asked.lock().unwrap().len(), 3, "asked again");
     assert_eq!(fake.asked.lock().unwrap()[2], None);
     assert_eq!(
