@@ -29,6 +29,8 @@ export function persisted<T extends object>(key: string, initial: T, options?: {
  */
 export function remembered<T extends object>(key: string, initial: T) {
   let value = initial;
+  let readable = false;
+  let reported = false;
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((l) => l());
   const ready = kv
@@ -48,9 +50,7 @@ export function remembered<T extends object>(key: string, initial: T) {
     },
     subscribe(l: () => void) {
       listeners.add(l);
-      return () => {
-        listeners.delete(l);
-      };
+      return () => { listeners.delete(l); };
     },
   };
 }

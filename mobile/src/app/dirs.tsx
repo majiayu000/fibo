@@ -2,7 +2,7 @@
 // level, search them by name, type a full path, or make a new folder. Folders only; the
 // computer gives this to full-control phones alone.
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { oops } from '@/actions';
 import { tr } from '@/i18n';
@@ -61,6 +61,7 @@ export default function Dirs() {
   const can = supports(m, 'dirs');
   const [path, setPath] = useState<string | undefined>(at || undefined);
   const [list, setList] = useState<Listing | null>(null);
+  const hasListed = useRef(false);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<Dir[] | null>(null);
   const [picked, setPicked] = useState<Dir | null>(null);
@@ -80,20 +81,21 @@ export default function Dirs() {
     r.request('dirs', path ? { path } : {})
       .then((l: Listing) => {
         if (!live) return;
+        hasListed.current = true;
         setList(l);
         setError('');
       })
       .catch((e) => {
         if (!live) return;
         // The directory it opened at is gone: home, not a screen with nowhere to go.
-        if (path && path === at && !list) setPath(undefined);
+        if (path && path === at && !hasListed.current) setPath(undefined);
         else setError((e as Error).message);
       })
       .finally(() => live && setBusy(false));
     return () => {
       live = false;
     };
-  }, [online, can, machine, path]);
+  }, [online, can, machine, path, at]);
 
   // Searching by name, a moment after typing stops.
   useEffect(() => {

@@ -44,7 +44,6 @@ import { tr } from '@/i18n';
 type Pending = { text: string; at: number; queued?: boolean; pictures?: number; how?: How; now?: boolean };
 
 const POLL_MS = 2000;
-const NO_CONVERSATION = /没有 Agent 对话/;
 
 /** A message on its way, as its bubble shows it. */
 const pendingText = (p: Pending) => (p.pictures ? `${tr('[{n} 张图片]', { n: p.pictures })} ${p.text}`.trim() : p.text);
@@ -59,7 +58,8 @@ export default function Chat() {
   const card = m?.cards.find((c) => c.id === terminal);
   const online = m?.status === 'online';
   const tools = speaksV2(m);
-  const outbox = useOutbox().filter((u) => u.machine === machine && u.terminal === terminal);
+  const unsentItems = useOutbox();
+  const outbox = useMemo(() => unsentItems.filter((u) => u.machine === machine && u.terminal === terminal), [unsentItems, machine, terminal]);
 
   // Opened while the computer is away: the messages seen last time, until it answers.
   const [cached] = useState(() => cachedChat<Message>(machine, terminal));
@@ -99,10 +99,10 @@ export default function Chat() {
   // card names another conversation (a new one started in the same terminal).
   const shown = useRef<string | null>(null);
   const cardSession = card?.session ?? null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: A session notification must refetch the terminal's current conversation.
   useEffect(() => {
     const r = online ? remote(machine) : null;
-    if (!r) {
+    // A shell without a session has nothing to fetch; do not inspect translated errors.
+    if (!r || !cardSession) {
       setLoading(false);
       return;
     }
@@ -135,9 +135,7 @@ export default function Chat() {
         );
         if (live && gap.length && shown.current === page.session && generation.current === page.generation) setMessages((have) => merge(have, gap));
       })
-      // A shell whose Agent has not started has no conversation yet: the empty state says
-      // so, and the card naming a session brings this effect back.
-      .catch((e) => live && !NO_CONVERSATION.test(e.message) && setError(e.message))
+      .catch((e) => live && setError(e.message))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;

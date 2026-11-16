@@ -5,12 +5,7 @@ import { rn } from './rn';
 import { GAP_MS, MERGE_MS, patch, refreshWait } from '../src/remote/cards';
 
 mock.module('react-native', () => rn());
-mock.module('../src/store/machines', () => ({
-  loadMachines: async () => [],
-  saveMachine: async () => undefined,
-  forgetMachine: async () => undefined,
-  machineId: (l: any) => l.machine,
-}));
+mock.module('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined }));
 const hub = await import('../src/remote/hub');
 

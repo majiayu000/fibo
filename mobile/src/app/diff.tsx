@@ -3,7 +3,7 @@
 // (「提交吧」). A phone paired as 只看 or 能答审批 gets `summary`: what this turn changed,
 // names and counts only, from the conversation's log (the computer runs no git for it).
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { oops, sendToConversation } from '@/actions';
 import { NOT_YET, remote, supports, useHub } from '@/remote/hub';
@@ -22,7 +22,7 @@ type Diff = { session?: string | null; cwd: string; branch?: string; files: File
 function FileCard({ f, t, seen, onTick, open, onOpen, names }: { f: File; t: Theme; seen: boolean; onTick: () => void; open: boolean; onOpen: () => void; names: boolean }) {
   // Names only: nothing to open.
   open = open && !names;
-  const lines = open ? diffLines(f.patch) : [];
+  const lines = useMemo(() => open ? diffLines(f.patch) : [], [open, f.patch]);
   return (
     <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
       <Pressable disabled={names} onPress={onOpen} style={[s.fh, open && { borderBottomWidth: 1, borderColor: t.sep }]}>

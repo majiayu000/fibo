@@ -56,6 +56,8 @@ export function closeOutcome(code?: number, reason?: string): Outcome {
       return { status: 'offline', retry: 'now', text: tr('这台手机的权限改了，正在按新权限重连') };
     case Close.MACHINE_GONE:
       return { status: 'offline', retry: 'later', text: tr('电脑上的 Fibo 不在线') };
+    case 4408:
+      return { status: 'offline', retry: 'later', text: tr('连接长时间没有传输进展，正在重连') };
     case Close.TOO_SLOW:
       return { status: 'offline', retry: 'later', text: tr('网络太慢，中继断开了连接') };
     case undefined:

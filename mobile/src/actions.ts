@@ -133,17 +133,11 @@ export function sendToConversation(machine: string, card: Pick<Card, 'id' | 'ses
 /** Settles a conversation: 已处理 is `done`, 稍后提醒 `deferred` (the machine brings it back in an hour), back to the inbox `open`. */
 export async function settle(machine: string, card: Card, outcome: 'done' | 'deferred' | 'abandoned' | 'open') {
   if (!card.session) throw new Error(tr('这个终端里没有 Agent 对话'));
-  try {
-    await write(machine, 'outcome', {
-      session: card.session,
-      outcome,
-      ...(card.turn && outcome !== 'open' ? { turn: card.turn } : {}),
-    });
-  } catch (e) {
-    // A host that only knows done, abandoned and open names what it refused.
-    if (outcome === 'deferred' && /只能是|deferred/.test((e as Error).message)) throw new Error(tr('稍后提醒：{why}', { why: tr(NOT_YET) }));
-    throw e;
-  }
+  await write(machine, 'outcome', {
+    session: card.session,
+    outcome,
+    ...(card.turn && outcome !== 'open' ? { turn: card.turn } : {}),
+  });
   setTimeout(() => refresh(machine), 200);
 }
 
