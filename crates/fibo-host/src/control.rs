@@ -239,7 +239,7 @@ fibo --skill session                       Fibo 在会话开始时告诉 Agent �
         valued: &[],
         switches: &[],
         usage: tk!("\
-fibo --version                             打印协议版本"),
+fibo --version                             打印版本和协议版本"),
     },
 ];
 const FOOTER: &str = tk!("\

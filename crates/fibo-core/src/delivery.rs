@@ -80,6 +80,18 @@ pub fn resendable(request: &Request) -> bool {
     }
 }
 
+/// The step `attempt` names when it could not reach the host's socket.
+const CONNECT: &str = "connect";
+
+/// Whether `error` is `attempt` finding nothing listening: no socket file, or one no host
+/// answers on. Another missing file (a path the user typed) is not this.
+pub fn host_absent(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
+    ) && error.to_string().starts_with(&format!("RPC {CONNECT}: "))
+}
+
 /// One try. The error keeps its kind and says at which step it failed.
 pub fn attempt(socket: &Path, request: &Request) -> Settled {
     let stage = |name, e: io::Error| io::Error::new(e.kind(), format!("RPC {name}: {e}"));
@@ -89,13 +101,13 @@ pub fn attempt(socket: &Path, request: &Request) -> Settled {
     };
     let mut stream = match fibo_platform::local::Stream::connect(socket) {
         Ok(s) => s,
-        Err(e) => return unsent("connect", e),
+        Err(e) => return unsent(CONNECT, e),
     };
     let timeouts = stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .and_then(|()| stream.set_write_timeout(Some(Duration::from_secs(10))));
     if let Err(e) = timeouts {
-        return unsent("connect", e);
+        return unsent(CONNECT, e);
     }
     if let Err(e) = send(&mut stream, CONTROL, &Request::Hello { major: MAJOR }) {
         return unsent("send hello", e);
@@ -152,6 +164,23 @@ mod tests {
     use fibo_platform::local;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn only_a_missing_host_counts_as_absent() {
+        let nowhere = std::env::temp_dir().join(format!("kl-dl-{}", uuid::Uuid::new_v4().simple()));
+        let Settled::Unknown { sent, error } = attempt(&nowhere.join("s"), &Request::Workspace)
+        else {
+            panic!("no host, yet settled");
+        };
+        assert!(!sent);
+        assert!(host_absent(&error), "{error}");
+        // A file the user named that is not there is some other NotFound.
+        assert!(!host_absent(&io::Error::from(io::ErrorKind::NotFound)));
+        assert!(!host_absent(&io::Error::new(
+            io::ErrorKind::TimedOut,
+            "RPC connect: timed out"
+        )));
+    }
 
     /// A host that answers the handshake, reads the request, then does `then`.
     fn host(then: fn(&mut fibo_platform::local::Stream)) -> (std::path::PathBuf, Arc<AtomicUsize>) {
