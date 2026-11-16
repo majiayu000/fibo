@@ -72,12 +72,19 @@ impl Workbench {
     /// then the latest.
     fn quiet_space_sessions(&self, id: &str) -> Vec<&AgentSession> {
         let w = &self.workspace;
+        // Looked up per session: a set, not a walk over every terminal a restart cut off.
+        let lost: rustc_hash::FxHashSet<&str> = w
+            .lost_agents
+            .values()
+            .flatten()
+            .map(String::as_str)
+            .collect();
         let mut rows: Vec<_> = (w.agent_sessions.iter())
             .filter(|s| {
                 // Cheapest first: few sessions are open, and finding one's space compares
                 // paths; the sidebar asks this per space put aside on every draw.
                 // A restart ends what ran: still yours to go back to, so still listed.
-                (self.session_open(s) || w.lost_agents.values().flatten().any(|l| l == &s.id))
+                (self.session_open(s) || lost.contains(s.id.as_str()))
                     && w.session_home(s) == Some(id)
                     && sessions::automation_hidden_in(w, s).is_none()
             })
