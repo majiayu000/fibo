@@ -46,6 +46,17 @@ impl Store {
     pub fn refused(&mut self, request: &RequestId, error: &str) -> io::Result<()> {
         record(&self.0, request, Some(error))
     }
+    /// Drops a named act turned away before it touched anything, so the same request
+    /// sent again is tried again instead of answered with that refusal.
+    pub fn forgotten(&mut self, request: &RequestId) -> io::Result<()> {
+        self.0
+            .execute(
+                "DELETE FROM requests WHERE client=?1 AND id=?2",
+                params![request.client, request.id],
+            )
+            .map_err(db_error)?;
+        Ok(())
+    }
 }
 
 /// Records an outcome and forgets those older than a day.
@@ -95,6 +106,10 @@ mod tests {
         );
         store.applied(&id("typing")).unwrap();
         assert_eq!(store.settled(&id("typing")).unwrap(), Some(Ok(())));
+        // Turned away before typing anything: no outcome, the resend acts.
+        store.started(&id("waiting")).unwrap();
+        store.forgotten(&id("waiting")).unwrap();
+        assert_eq!(store.settled(&id("waiting")).unwrap(), None);
         std::fs::remove_dir_all(root).unwrap();
     }
 }
