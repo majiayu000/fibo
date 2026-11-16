@@ -66,15 +66,22 @@ export function Composer({
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const empty = !draft.trim() && !pictures.length;
   const stop = running && canStop && empty;
+  // A second tap before the box redraws empty would send the same words twice.
+  const sending = useRef(false);
   async function go(text: string, with_: Picture[] = []) {
-    if (!text.trim() && !with_.length) return;
+    if ((!text.trim() && !with_.length) || sending.current) return;
+    sending.current = true;
     setDraft('');
     setPictures([]);
     // Sent while it works, a message queues; tapping it then sends it now (ui/queuedsheet).
     const choose: How | undefined = running && canSteer ? 'queue' : undefined;
-    if (!(await onSend(text.trim(), with_, choose))) {
-      setDraft(text);
-      setPictures(with_);
+    try {
+      if (!(await onSend(text.trim(), with_, choose))) {
+        setDraft(text);
+        setPictures(with_);
+      }
+    } finally {
+      sending.current = false;
     }
   }
   async function add(from: 'camera' | 'library') {

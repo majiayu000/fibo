@@ -3,7 +3,7 @@
 // offline one can be retried or removed; the relays they go through are listed below.
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { confirm } from '@/actions';
+import { confirm, oops } from '@/actions';
 import { tk, tr } from '@/i18n';
 import { type Machine, forget, reconnect, useHub } from '@/remote/hub';
 import { Btn, Label, Nav, Round, Wide, useBottom } from '@/ui/kit';
@@ -20,7 +20,7 @@ async function remove(m: Machine) {
     tr('移除'),
     true,
   );
-  if (ok) forget(m.id);
+  if (ok) await forget(m.id).catch(() => oops(tr('未能移除这台电脑，请重试')));
 }
 
 function Stat({ k, v, unit, t }: { k: string; v: string; unit?: string; t: Theme }) {

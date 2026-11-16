@@ -231,6 +231,7 @@
 # devices.rs, remote.rs, relay.rs, relay/status_text.rs
 "--role 只能是 view（只看）、answer（能答审批）或 full（完全控制），不是 {s}" = "--role must be view, answer, or full, got {s}"
 "没有配对过的设备叫 {needle}" = "no paired device matching {needle}"
+"设备文件正被另一项操作占用，请稍后重试" = "Another operation is using the device file. Please try again shortly."
 "{needle} 匹配到 {n} 台设备，请写编号" = "{needle} matches {n} devices; specify the device ID"
 "，有密钥" = ", key set"
 "中继：没打开（fibo remote --enable --relay <中继地址>）" = "Relay: disabled (enable with `fibo remote --enable --relay <url>`)"

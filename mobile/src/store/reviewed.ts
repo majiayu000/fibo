@@ -2,6 +2,8 @@
 // patch it was given to: change the file and it is unticked again.
 import { useSyncExternalStore } from 'react';
 import { persisted } from './kv';
+import { oops } from '../actions';
+import { tr } from '../i18n';
 
 const ticks = persisted<{ seen: Record<string, string> }>('mooring.reviewed', { seen: {} });
 
@@ -26,7 +28,7 @@ export function useReviewed(machine: string, cwd: string) {
         if (on) delete next[k];
         else next[k] = fingerprint(patch);
         return { seen: next };
-      });
+      }).catch(() => oops(tr('未能保存「看过」标记，请重试')));
     },
   };
 }

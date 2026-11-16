@@ -393,12 +393,13 @@ export async function pair(link: Link) {
 }
 
 export async function forget(id: string) {
+  // Keep the live machine usable until removing its saved identity succeeds.
+  await forgetMachine(id);
   const old = remotes.get(id);
   remotes.delete(id);
   old?.close();
   dialing.delete(id);
   stopRetry(id);
-  await forgetMachine(id);
   await forgetQuota(id);
   state = { ...state, machines: state.machines.filter((m) => m.id !== id) };
   listeners.forEach((l) => l());

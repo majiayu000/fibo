@@ -16,10 +16,11 @@ mock.module('react-native', () =>
     },
   }),
 );
+let forgetFailure = false;
 mock.module('../src/store/machines', () => ({
   loadMachines: async () => [],
   saveMachine: async () => undefined,
-  forgetMachine: async () => undefined,
+  forgetMachine: async () => { if (forgetFailure) throw new Error('Keychain delete failed'); },
   machineId: (l: any) => l.machine,
 }));
 mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined }));
@@ -225,4 +226,22 @@ test('pairing again mid-dial drops that dial and dials the new link', async () =
   await settle();
   expect(hub.remote('m3')).toBe(now as any);
   expect(hub.getMachine('m3')?.status).toBe('online');
+});
+
+
+test('failed unpairing keeps the usable connection and a successful retry removes it', async () => {
+  const socket = await paired(linkFor('forget-fails'));
+  forgetFailure = true;
+  try {
+    await expect(hub.forget('forget-fails')).rejects.toThrow('Keychain delete failed');
+    expect(socket.closed).toBe(false);
+    expect(hub.remote('forget-fails')).toBe(socket as any);
+    expect(hub.getMachine('forget-fails')?.status).toBe('online');
+  } finally {
+    forgetFailure = false;
+  }
+  await hub.forget('forget-fails');
+  expect(socket.closed).toBe(true);
+  expect(hub.remote('forget-fails')).toBeNull();
+  expect(hub.getMachine('forget-fails')).toBeUndefined();
 });

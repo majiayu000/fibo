@@ -80,7 +80,7 @@ w = json.load(sys.stdin)["Workspace"]
 print("far tabs left:", [t["id"] for t in w["tabs"]])
 print("far terminals:", sorted({t["state"] for t in w["terminals"]}))
 shells = sorted({t["argv"][0] for t in w["terminals"]})
-print("far shells:", shells, "(its own: /bin/bash)" if shells == ["/bin/bash"] else "WRONG: not its own shell")'
+print("far shells left:", shells, "WRONG: the window left a terminal on far" if shells else "(none: the window closed what it opened)")'
 pgrep -f "fake-forward-$R" >/dev/null && echo "a fake forward outlived the window" || echo "forward ended with the window"
 pkill -9 -f "fake-forward-$R" 2>/dev/null  # the window's children shrug off TERM
 kill $FAR 2>/dev/null; sleep 1; pkill -f "$R/far" 2>/dev/null; pkill -f "serve --runtime $R/rt" 2>/dev/null

@@ -2,10 +2,10 @@
 // 拒绝 and 允许 (Face ID when settings ask), the menu's own 「don't ask again」 option in its
 // words (none when the menu has none), and 「拒绝，并告诉它…」.
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { approve, deny, oops } from '@/actions';
-import { remote, supports, useHub, write } from '@/remote/hub';
+import { approve, deny, oops, sendToConversation } from '@/actions';
+import { remote, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
 import { useSettings } from '@/store/settings';
 import { cardTitle } from '@/ui/format';
@@ -31,6 +31,7 @@ export default function Approve() {
   const [said, setSaid] = useState('');
   const [telling, setTelling] = useState(false);
   const [busy, setBusy] = useState(false);
+  const answering = useRef(false);
 
   // What it said just before asking: its last message.
   useEffect(() => {
@@ -56,7 +57,8 @@ export default function Approve() {
   const space = m && card ? spaceName(m, card) : '';
 
   async function run(f: () => Promise<unknown>) {
-    if (busy || !settled.passes()) return;
+    if (answering.current || !settled.passes()) return;
+    answering.current = true;
     setBusy(true);
     try {
       const done = await f();
@@ -64,6 +66,7 @@ export default function Approve() {
     } catch (e) {
       oops((e as Error).message);
     } finally {
+      answering.current = false;
       setBusy(false);
     }
   }
@@ -164,7 +167,7 @@ export default function Approve() {
             await deny(machine, card, ask);
             // The prompt closes first; then the sentence lands in the Agent's input.
             await new Promise((r) => setTimeout(r, 600));
-            await write(machine, 'send', { terminal, text, enter: true });
+            await sendToConversation(machine, card, text);
           });
         }}
       />
