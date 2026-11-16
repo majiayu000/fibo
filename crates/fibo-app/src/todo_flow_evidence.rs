@@ -7,7 +7,7 @@
 //! the picture to read it from. Each step is checked against the host's workspace:
 //! 1. 开始, then the Agent picked: Claude starts and gets the text as its first ask;
 //! 2. nobody presses Enter: it does the work and writes progress back on its own;
-//! 3. the progress panel's 来自 opens the conversation that wrote the note;
+//! 3. 来自 or the linked conversation's 打开 opens the conversation that wrote the note;
 //! 4. 标记完成 closes the todo, with its time, and its conversation with it.
 use super::pane_drag_evidence::{down, send, up};
 use super::*;
@@ -169,7 +169,7 @@ pub(super) fn start(
         shot("5-from-clicked.png", cx);
         let left = handle.update(cx, |v, _, _| v.visual_task_detail()).unwrap();
         let focused = handle.update(cx, |v, _, _| v.visual_nav()).unwrap().0;
-        assert_eq!(left, None, "来自 leaves the detail page");
+        assert_eq!(left, None, "opening the conversation leaves the detail page");
         assert_eq!(
             focused.as_deref(),
             Some(terminal.as_str()),
@@ -183,14 +183,23 @@ pub(super) fn start(
         let Some(at) = spot(&spec, "done") else {
             return done(cx);
         };
+        let session = workspace().current_agent(&terminal).unwrap().id.clone();
         click(at, cx);
         wait(1000).await;
         shot("6-done.png", cx);
         let w = workspace();
         assert_eq!(w.task_outcomes.get(TODO), Some(&Outcome::Completed));
         assert!(w.task_logs[TODO].closed.is_some(), "closed at a time");
-        let s = w.current_agent(&terminal).unwrap();
+        // Completing a stopped conversation closes its terminal. Its history remains,
+        // but it is no longer the current agent of that now-closed terminal.
+        let s = w.agent_sessions.iter().find(|s| s.id == session).unwrap();
         assert_eq!(status::of(&w, s, fibo_core::time::now()), Status::Closed);
+        assert!(
+            !w.terminals
+                .iter()
+                .any(|t| t.id == terminal && t.state == ProcessState::Running),
+            "completing the todo closes its stopped conversation's terminal"
+        );
         eprintln!("TODO-FLOW PASS");
         done(cx);
     })

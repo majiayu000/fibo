@@ -71,7 +71,7 @@ flowchart LR
 
 现有实现涉及 `crates/fibo-app` 的 hosts、pane_sync、sidebar、redraw，`fibo-core` 的标签名、内容摘要，`fibo-host` 的识别、审批与设备文件，`mobile/src` 的动作、存储和页面入口。新增设计与验收记录放 `docs/release/`；运行截图和日志放 `~/Documents/claude-pages/fibo/`。
 
-不引入新的抽象层、协议主版本、文件格式、配置表或依赖。启动上下文工作区目前只有原型，不在缺少用户可见行为设计时直接纳入。
+不引入新的抽象层、协议主版本、文件格式、配置表或依赖。开工时启动上下文工作区只有原型，未直接纳入。施工期间 #368 将它正式合入主线，后续整合主线时沿用其实现和已有证据。
 
 ## 开工时的缺口
 
@@ -107,9 +107,13 @@ flowchart LR
 | Ubuntu amd64 `.deb` | `2f21ad9f0b1c885d3bb5f46473467d1dcac96b043cd7e81e4b1cfed5a276b718` | 安装与后台通过，未验图形桌面 |
 | Ubuntu arm64 `.deb` | `c9fd0149c150ff69b4a2bfc81ae856318b3200186a7a9e152da65649bcceb431` | 同上 |
 
-Linux 首轮 manifest 的 dirty 为 true。已确认工作流把 Zig 缓存写在仓库根目录而没有忽略；本轮补入 `.gitignore`，清单同时保留具体状态行，下一轮核对是否还有其他改动。不能把这批清单改写成 clean。
+Linux 首轮 manifest 的 dirty 为 true。已确认工作流把 Zig 缓存写在仓库根目录而没有忽略；本轮补入 `.gitignore`，清单同时保留具体状态行，下一轮核对是否还有其他改动。不能把这批清单改写成 clean。第二轮 `f462126e` 的 Ubuntu ARM64 manifest 已读回 `dirty: false`、`worktree_status: []`；相关安装和终端读写再次通过。
 
-iOS 本地 Release 模拟器包和无签名设备 archive 都已构建。第一次启动截图显示完整配对首页；第二次 5 秒截图是白屏，即使进程存活也不算 UI 通过。进一步诊断遇到 CoreSimulator 安装服务 4097 错误及开机阶段停住，尚不能归因于 App。脚本保存安装/启动失败日志、限制清理等待，并把 simulator App 移到稳定证据目录，避免后续 Expo prebuild 清除它。之后对同一 simulator App 记录两次启动的 5/15/30 秒画面，六张都显示完整配对首页，首启和重启仅系统时钟 1217 像素不同。此前白屏未复现且根因未确认，保留为间歇启动问题，不能声称已修复。设备 archive 没有签名，不能安装到真 iPhone，不能称 IPA 或完整交付。
+iOS 本地 Release 模拟器包和无签名设备 archive 都已构建。第一次启动截图显示完整配对首页；第二次 5 秒截图是白屏，即使进程存活也不算 UI 通过。进一步诊断遇到 CoreSimulator 安装服务 4097 错误及开机阶段停住，尚不能归因于 App。脚本保存安装/启动失败日志、限制清理等待，并把 simulator App 移到稳定证据目录，避免后续 Expo prebuild 清除它。之后对同一 simulator App 记录两次启动的 5/15/30 秒画面，六张都显示完整配对首页，首启和重启仅系统时钟 1217 像素不同。首轮 iOS CI 也已完成模拟器和设备 archive；下载 artifact 后人工检查首启/冷重启两张截图，均为完整配对首页。此前白屏未复现且根因未确认，保留为间歇启动问题，不能声称已修复。设备 archive 没有签名，不能安装到真 iPhone，不能称 IPA 或完整交付。
+
+Ubuntu 图形补验：直接安装首轮 CI 的 ARM64 包，在 Ubuntu 24.04 + Xvfb + Mesa 容器中打开实际窗口，中文欢迎页和侧栏完整绘出；点击“空终端”，从 X11 键盘输入 `printf 'FIBO_LINUX_INPUT_20261116\n'`，截图与 host 读屏均看到输出。关闭终端后 `fibo list --json` 为 `[]`，本轮容器已停止。这证明软件渲染下的开窗与键鼠终端链路，不替代硬件 GPU、Wayland、桌面钥匙串或真实 Agent 登录。
+
+待办补验：真实 Claude 收到待办标题、原说明和上次进展，仅数 plugins，实际调用 `todo note`；窗口显示新进展和“等你验收”，Agent 没有自己标完成。关联会话“打开”回到正确终端，窗口“标记完成”后待办显示已完成、会话显示做完了、终端消失。旧探针随后通过已关闭终端找 current_agent 而误报；已改为保存关闭前会话 ID、核对历史 Closed 和没有运行终端。早一次“来自”点击因进展折行坐标落到正文，不能记为链接失败；本轮实际走的是关联会话入口，文字链接未单独验。
 
 已验：远程标签实际创建/返回/清理、锁超时保留原文件、性能重复测量及前后截图、Windows 安装后台与卸载、Ubuntu 两架构安装和终端输入；没验：Android 候选全表 30 项、iPhone、桌面 17 项和干净安装 6 项；相邻情况：旧设备文件与竞争写入已有回归，真实 Claude/Codex/OpenCode 手机闭环及 Windows/Linux 图形会话未验。
 
