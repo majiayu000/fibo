@@ -169,14 +169,7 @@ impl Hooks {
                 Event::Done => c.last_reply.clone(),
                 Event::Started | Event::CommandDone | Event::CommandFailed => String::new(),
             };
-            let key = match e {
-                Event::Waiting => {
-                    format!("{}:{}:{}", c.turn_key, c.turn_started, c.waiting_episode)
-                }
-                Event::Error => format!("{}:{}:{}", c.turn_key, c.turn_started, c.error),
-                _ => format!("{}:{}", c.turn_key, c.turn_started),
-            };
-            let key = format!("{}:{key}", e.name());
+            let key = c.event_key(e);
             // Seen but not told, as the banners do: coming back sends no burst, and the next
             // new fact is told again.
             if self.seeded && self.last.get(&s.id) != Some(&key) && !w.session_quiet(s) {

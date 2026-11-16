@@ -2,6 +2,7 @@
 use crate::{connection::RecognitionConnection, ui::theme::Theme as T};
 use fibo_core::{
     content::{Content, now, short},
+    hook::Event,
     model::*,
     protocol::*,
     status::{self, Status as State},
@@ -60,19 +61,15 @@ fn fact<'a>(w: &'a Workspace, s: &AgentSession) -> Option<(String, State, &'a Co
     }
     let group = status::of(w, s, now());
     // One dialog is one event however many signals report it or refine its text; an error
-    // is keyed by its text; a finished turn by the turn. The line under the title is not
-    // part of it: `body` works it out only for a banner that goes up.
+    // is keyed by its text; a finished turn by the turn (`Content::event_key`). The line
+    // under the title is not part of it: `body` works it out only for a banner that goes up.
     let event = match group {
-        State::Waiting => format!("episode {}", c.waiting_episode),
-        State::Error => c.error.clone(),
-        State::Review => String::new(),
+        State::Waiting => Event::Waiting,
+        State::Error => Event::Error,
+        State::Review => Event::Done,
         _ => return None,
     };
-    Some((
-        format!("{:?}:{}:{}:{}", group, c.turn_key, c.turn_started, event),
-        group,
-        c,
-    ))
+    Some((c.event_key(event), group, c))
 }
 /// The line under a banner's title.
 fn body(c: &Content, group: State) -> String {
