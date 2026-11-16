@@ -654,6 +654,14 @@ impl Content {
     /// turn read as words (`改 tabs.rs`, `运行 cargo build -p app`), else what it was
     /// asked (`做 修复登录`). `None` when neither says anything.
     pub fn doing(&self) -> Option<String> {
+        self.doing_recorded().or_else(|| {
+            let ask = plain_line(&self.asks.last()?.text);
+            (!ask.is_empty()).then(|| t!("做 {ask}", ask = short(&ask, DOING_CHARS)))
+        })
+    }
+    /// `doing` without its last resort, the ask: only what a job or a record says. A row
+    /// titled by that ask shows this, so its title is not said twice in any language.
+    pub fn doing_recorded(&self) -> Option<String> {
         // The turn stopped and a job it started still runs: that is what it is doing.
         if self.turn != Turn::Running {
             let jobs: Vec<&ShellTask> = self.shells.iter().filter(|t| t.job).collect();
@@ -675,29 +683,24 @@ impl Content {
             return Some(t!("运行 {c}", c));
         }
         let this_turn = |e: &&Evidence| self.turn_started == 0 || e.at >= self.turn_started;
-        let from_record =
-            self.evidence
-                .iter()
-                .rev()
-                .filter(this_turn)
-                .find_map(|e| match e.kind.as_str() {
-                    "file" => {
-                        let path = e.summary.split_once('：').map_or(&*e.summary, |(_, p)| p);
-                        let name = path.trim().rsplit('/').next().unwrap_or(path).trim();
-                        (!name.is_empty()).then(|| t!("改 {name}", name))
-                    }
-                    "test" => {
-                        let command = e.summary.split(['：', '（']).next().unwrap_or_default();
-                        command_gist(command).map(|c| t!("跑测试 {c}", c))
-                    }
-                    "commit" => Some(t!("提交 {s}", s = short(e.summary.trim(), 12))),
-                    "command" => command_gist(&e.summary).map(|c| t!("运行 {c}", c)),
-                    _ => None,
-                });
-        from_record.or_else(|| {
-            let ask = plain_line(&self.asks.last()?.text);
-            (!ask.is_empty()).then(|| t!("做 {ask}", ask = short(&ask, DOING_CHARS)))
-        })
+        self.evidence
+            .iter()
+            .rev()
+            .filter(this_turn)
+            .find_map(|e| match e.kind.as_str() {
+                "file" => {
+                    let path = e.summary.split_once('：').map_or(&*e.summary, |(_, p)| p);
+                    let name = path.trim().rsplit('/').next().unwrap_or(path).trim();
+                    (!name.is_empty()).then(|| t!("改 {name}", name))
+                }
+                "test" => {
+                    let command = e.summary.split(['：', '（']).next().unwrap_or_default();
+                    command_gist(command).map(|c| t!("跑测试 {c}", c))
+                }
+                "commit" => Some(t!("提交 {s}", s = short(e.summary.trim(), 12))),
+                "command" => command_gist(&e.summary).map(|c| t!("运行 {c}", c)),
+                _ => None,
+            })
     }
 }
 /// How long a `doing` phrase's command or ask may run before it is cut.

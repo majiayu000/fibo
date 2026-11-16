@@ -125,8 +125,7 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
         // Its first ask is the card's title already; only a record says more.
         doing: content
             .filter(|_| status == Some(status::Status::Running))
-            .and_then(|c| c.doing())
-            .filter(|d| !d.starts_with(not_ui!("做 ")))
+            .and_then(|c| c.doing_recorded())
             // A finished turn's row says what it left running, as the sidebar does.
             .or_else(|| {
                 session
