@@ -95,10 +95,37 @@ fn files(root: &Path, dir: &str, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Lines from the file outside `#[cfg(test)]` modules (a test module runs to the end
-/// of its file in this codebase).
+/// An out-of-line test module does not hide the product code after it. Inline test
+/// modules are at the end of their file, as in the i18n scanner.
 fn code(text: &str) -> &str {
-    text.find("#[cfg(test)]").map_or(text, |i| &text[..i])
+    let mut from = 0;
+    while let Some(i) = text[from..].find("#[cfg(test)]") {
+        let at = from + i;
+        let rest = text[at + 12..].trim_start();
+        let inline = rest
+            .strip_prefix("mod ")
+            .and_then(|r| r.find(['{', ';']).map(|j| r.as_bytes()[j] == b'{'))
+            .unwrap_or(false);
+        if inline {
+            return &text[..at];
+        }
+        from = at + 12;
+    }
+    text
+}
+
+#[test]
+fn out_of_line_test_modules_do_not_hide_product_code() {
+    let product = "#[cfg(test)]\nmod tests;\nfn product() { session.turn; }\n";
+    assert_eq!(code(product), product);
+    assert_eq!(
+        code(&format!(
+            "{product}#[cfg(test)]\nmod inline {{ session.turn; }}"
+        )),
+        product
+    );
+    let helper = "#[cfg(test)]\nfn helper() {}\nfn product() { session.turn; }";
+    assert_eq!(code(helper), helper);
 }
 
 fn count(root: &Path) -> BTreeMap<String, usize> {

@@ -59,8 +59,8 @@ mod tests {
             }
         }
     }
-    /// Each file's code before its `#[cfg(test)]`, skipping files that are only tests or
-    /// screenshot scenes.
+    /// Product code before an inline test module; out-of-line test declarations
+    /// leave the following product code visible (same rule as the core guards).
     fn product_code() -> Vec<(String, String)> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut files = vec![];
@@ -78,10 +78,29 @@ mod tests {
                     return None;
                 }
                 let text = std::fs::read_to_string(&path).unwrap();
-                let code = text.split("#[cfg(test)]").next().unwrap().to_owned();
+                let code = product_prefix(&text).to_owned();
                 Some((name, code))
             })
             .collect()
+    }
+
+    /// An out-of-line test module does not hide the product code after it. Inline test
+    /// modules are at the end of their file, as in the i18n scanner.
+    fn product_prefix(text: &str) -> &str {
+        let mut from = 0;
+        while let Some(i) = text[from..].find("#[cfg(test)]") {
+            let at = from + i;
+            let rest = text[at + 12..].trim_start();
+            let inline = rest
+                .strip_prefix("mod ")
+                .and_then(|r| r.find(['{', ';']).map(|j| r.as_bytes()[j] == b'{'))
+                .unwrap_or(false);
+            if inline {
+                return &text[..at];
+            }
+            from = at + 12;
+        }
+        text
     }
 
     /// One judgment (Keepline repo, specs/status-model): what a session is doing is
