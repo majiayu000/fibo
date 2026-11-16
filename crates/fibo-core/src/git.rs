@@ -32,9 +32,10 @@ pub fn command(dir: &Path) -> Command {
 
 #[cfg(test)]
 mod tests {
-    #![cfg(unix)]
+    #[cfg(unix)]
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn native_and_plugin_inspection_never_run_repository_fsmonitor() {
         use std::os::unix::fs::PermissionsExt;
@@ -118,6 +119,7 @@ mod tests {
         assert!(!marker.exists(), "repository fsmonitor must never run");
         std::fs::remove_dir_all(dir).unwrap();
     }
+    #[cfg(unix)]
     #[test]
     fn automatic_pane_facts_does_not_run_worktree_clean_filters() {
         let dir = std::env::temp_dir().join(format!("fibo-git-clean-{}", std::process::id()));
