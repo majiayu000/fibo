@@ -5,6 +5,9 @@ use fibo_platform::local;
 
 fn ask(window: &mut local::Stream, since: Option<u64>, request: Request) -> Delta {
     send(window, CONTROL, &Request::Brief(since, Box::new(request))).unwrap();
+    take(window)
+}
+fn take(window: &mut local::Stream) -> Delta {
     match receive::<Reply>(window).unwrap() {
         Reply::WorkspaceDelta(delta) => *delta,
         other => panic!("{other:?}"),
@@ -19,7 +22,7 @@ fn a_brief_request_gets_only_the_sessions_that_changed() {
     let (mut host, _root) = super::tests::fixture();
     host.workspace = fibo_core::sample::every_state();
     assert!(
-        status::recognition_status(&host).brief,
+        status::recognition_status(&host).brief && status::recognition_status(&host).brief_all,
         "the window learns it may ask"
     );
     let shared = Arc::new(Mutex::new(host));
@@ -55,8 +58,16 @@ fn a_brief_request_gets_only_the_sessions_that_changed() {
         request: None,
         edit: Edit::AddSpace(space),
     };
-    let edited = ask(&mut window, Some(changed.stamp), edit);
+    // As `BriefAll`, of the rest only what the edit changed.
+    let all = Request::BriefAll(Some(changed.stamp), Box::new(edit));
+    send(&mut window, CONTROL, &all).unwrap();
+    let edited = take(&mut window);
     assert_eq!(edited.base, Some(changed.stamp));
-    assert!(edited.rest.spaces.iter().any(|s| s.id == "new"));
+    assert!(edited.fields && edited.rest["spaces"].to_string().contains("新空间"));
+    assert!(
+        !edited.rest.contains_key("terminals"),
+        "{:?}",
+        edited.rest.keys()
+    );
     assert!(edited.content.is_empty());
 }

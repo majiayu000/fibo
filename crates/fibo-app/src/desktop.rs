@@ -413,7 +413,8 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
                 }
                 continue;
             }
-            let (socket_read, held, brief) = (socket.clone(), held.clone(), status.brief);
+            let brief = crate::host::brief::Understood::of(&status);
+            let (socket_read, held) = (socket.clone(), held.clone());
             let result = cx
                 .background_spawn(async move {
                     held.deliver(&socket_read, Request::Workspace, brief)

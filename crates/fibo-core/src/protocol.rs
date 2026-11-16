@@ -134,6 +134,8 @@ pub enum Request {
     ClearHistory,
     /// The request, its workspace reply as a `WorkspaceDelta` against the stamp given.
     Brief(Option<u64>, Box<Request>),
+    /// As `Brief`, and of the rest of the workspace only the fields that changed go.
+    BriefAll(Option<u64>, Box<Request>),
     TerminalCwd {
         id: String,
     },
@@ -678,6 +680,9 @@ pub struct RecognitionStatus {
     /// Understands [`Request::Brief`]: hosts before it drop a connection that sends one.
     #[serde(default)]
     pub brief: bool,
+    /// Understands [`Request::BriefAll`], as `brief` does `Brief`.
+    #[serde(default)]
+    pub brief_all: bool,
     /// Bumped whenever the host reloads plugins: a `fibo plugins` in a terminal changed
     /// them, or a window did, and every window has to read them again.
     #[serde(default)]
@@ -707,6 +712,7 @@ impl Default for RecognitionStatus {
             terminal_modes: Default::default(),
             workspace_revision: 0,
             brief: false,
+            brief_all: false,
             plugins_revision: 0,
             official: Default::default(),
             remote: Default::default(),
@@ -767,31 +773,4 @@ pub fn rpc(socket: &std::path::Path, request: &Request) -> io::Result<Reply> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::Build;
-
-    #[test]
-    fn a_host_is_stale_only_when_the_code_differs() {
-        let dir = std::env::temp_dir().join(format!("kl-build-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let binary = dir.join("fibo");
-        std::fs::write(&binary, "v1").unwrap();
-        let started = Build {
-            binary: binary.to_string_lossy().into_owned(),
-            digest: Build::digest(&binary).unwrap(),
-            pid: 1,
-            handoff: true,
-            guarded_chat: true,
-            launch: vec![],
-        };
-        assert!(!started.stale(&dir.join("absent")));
-        // A copy with other timestamps (re-signed, touched) is the same build.
-        let copy = dir.join("bundled");
-        std::fs::write(&copy, "v1").unwrap();
-        assert!(!started.stale(&copy));
-        std::fs::write(&copy, "v2").unwrap();
-        assert!(started.stale(&copy));
-        assert!(Build::default().stale(&binary), "hosts before digests");
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-}
+mod tests;

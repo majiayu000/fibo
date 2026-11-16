@@ -4,9 +4,13 @@ use crate::sample::every_state;
 fn same(a: &Workspace, b: &Workspace) -> bool {
     serde_json::to_value(a).unwrap() == serde_json::to_value(b).unwrap()
 }
+fn whole(w: &Workspace) -> (Kept, Index) {
+    let (delta, index) = diff(w.clone(), None, true).unwrap();
+    (apply(delta, None).unwrap(), index)
+}
 /// Sends `next` against what `held` was sent as, as the host and a window do.
-fn roundtrip(held: &Workspace, index: &Index, next: &Workspace) -> (Delta, Workspace, Index) {
-    let (delta, after) = diff(next.clone(), Some(index));
+fn roundtrip(held: &Kept, index: &Index, next: &Workspace, fields: bool) -> (Delta, Kept, Index) {
+    let (delta, after) = diff(next.clone(), Some(index), fields).unwrap();
     let wire: Delta = serde_json::from_slice(&serde_json::to_vec(&delta).unwrap()).unwrap();
     let applied = apply(wire, Some(held)).unwrap();
     (delta, applied, after)
@@ -15,29 +19,56 @@ fn roundtrip(held: &Workspace, index: &Index, next: &Workspace) -> (Delta, Works
 #[test]
 fn only_what_changed_goes_and_the_window_ends_with_the_whole() {
     let first = every_state();
-    let (whole, index) = diff(first.clone(), None);
+    let (whole, index) = diff(first.clone(), None, true).unwrap();
     assert_eq!(whole.base, None);
     let held = apply(whole, None).unwrap();
-    assert!(same(&held, &first));
+    assert!(same(&held.workspace, &first));
 
     let mut next = first.clone();
     next.revision += 1;
     let session = next.agent_sessions[1].id.clone();
     next.content.get_mut(&session).unwrap().title = "改了".into();
     next.agent_sessions[2].updated += 5;
-    let (delta, applied, _) = roundtrip(&held, &index, &next);
+    let (delta, applied, _) = roundtrip(&held, &index, &next, false);
     assert_eq!(delta.base, Some(index.stamp));
     assert_eq!(delta.content.keys().collect::<Vec<_>>(), [&session]);
     assert_eq!(delta.sessions.len(), 1);
     assert_eq!(delta.order, None);
-    assert!(same(&applied, &next));
+    assert!(
+        !delta.fields && delta.rest.contains_key("tabs"),
+        "Brief: rest whole"
+    );
+    assert!(same(&applied.workspace, &next));
+}
+
+/// On agentos the rest was 352 KB on every refresh, terminals most of it, and between
+/// refreshes none of it changed.
+#[test]
+fn of_the_rest_only_the_fields_that_changed_go() {
+    let first = every_state();
+    let (held, index) = whole(&first);
+    let mut next = first.clone();
+    next.revision += 1;
+    let (delta, applied, _) = roundtrip(&held, &index, &next, true);
+    assert_eq!(delta.rest.keys().collect::<Vec<_>>(), ["revision"]);
+    assert!(same(&applied.workspace, &next));
+}
+
+/// A field left out of a `BriefAll` reply is read as unchanged, so none may be left out
+/// for being empty.
+#[test]
+fn every_field_of_a_workspace_is_written_even_empty() {
+    let fields = |w: &Workspace| {
+        let v = serde_json::to_value(w).unwrap();
+        v.as_object().unwrap().keys().cloned().collect::<Vec<_>>()
+    };
+    assert_eq!(fields(&Workspace::default()), fields(&every_state()));
 }
 
 #[test]
 fn a_session_gone_new_or_moved_is_followed() {
     let first = every_state();
-    let (whole, index) = diff(first.clone(), None);
-    let held = apply(whole, None).unwrap();
+    let (held, index) = whole(&first);
     let mut next = first.clone();
     let gone = next.agent_sessions.remove(0);
     next.content.remove(&gone.id);
@@ -45,31 +76,48 @@ fn a_session_gone_new_or_moved_is_followed() {
     let mut new = next.agent_sessions[0].clone();
     new.id = "new".into();
     next.agent_sessions.push(new);
-    let (delta, applied, _) = roundtrip(&held, &index, &next);
+    let (delta, applied, _) = roundtrip(&held, &index, &next, true);
     assert_eq!(delta.gone, [gone.id]);
     assert!(delta.order.is_some());
-    assert!(same(&applied, &next));
+    assert!(same(&applied.workspace, &next));
 }
 
 #[test]
 fn nothing_changed_sends_no_session() {
     let first = every_state();
-    let (_, index) = diff(first.clone(), None);
-    let (delta, again) = diff(first, Some(&index));
+    let (_, index) = diff(first.clone(), None, true).unwrap();
+    let (delta, again) = diff(first, Some(&index), true).unwrap();
     assert!(delta.sessions.is_empty() && delta.content.is_empty() && delta.gone.is_empty());
+    assert!(delta.rest.is_empty());
     assert_eq!(again.stamp, index.stamp);
 }
 
 #[test]
 fn a_delta_needs_its_base_and_one_id_twice_goes_whole() {
     let mut first = every_state();
-    let (_, index) = diff(first.clone(), None);
+    let (_, index) = diff(first.clone(), None, true).unwrap();
     first.revision += 1;
-    let (delta, _) = diff(first.clone(), Some(&index));
+    let (delta, _) = diff(first.clone(), Some(&index), true).unwrap();
     assert!(apply(delta, None).is_err());
     let twice = first.agent_sessions[0].clone();
     first.agent_sessions.push(twice);
-    let (delta, _) = diff(first.clone(), Some(&index));
+    let (delta, _) = diff(first.clone(), Some(&index), true).unwrap();
     assert_eq!(delta.base, None);
-    assert!(same(&apply(delta, None).unwrap(), &first));
+    assert!(same(&apply(delta, None).unwrap().workspace, &first));
+}
+
+/// A window before `BriefAll` reads the rest of a `Brief` reply as a workspace.
+#[test]
+fn a_brief_reply_still_reads_as_the_old_delta() {
+    #[derive(Deserialize)]
+    struct Old {
+        rest: Workspace,
+    }
+    let first = every_state();
+    let (_, index) = diff(first.clone(), None, false).unwrap();
+    let (delta, _) = diff(first.clone(), Some(&index), false).unwrap();
+    let wire = serde_json::to_vec(&delta).unwrap();
+    let old: Old = serde_json::from_slice(&wire).unwrap();
+    assert_eq!(old.rest.tabs.len(), first.tabs.len());
+    assert!(!String::from_utf8(wire).unwrap().contains("\"fields\""));
 }
