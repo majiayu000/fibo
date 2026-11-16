@@ -13,16 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
-      RELAY_URL: ${{ vars.RELAY_URL }}
+      RELAY_URL: ${{ secrets.RELAY_URL }}
     steps:
       - name: Check HTTPS, health and certificate lifetime
         run: |
           python3 - <<'PYTHON'
-          import json, os, socket, ssl, time, urllib.parse, urllib.request
+          import json, os, socket, ssl, sys, time, urllib.parse, urllib.request
+          sys.excepthook = lambda kind, error, trace: print("::error::Relay probe failed (" + kind.__name__ + "); check HTTPS, DNS and health", file=sys.stderr)
           url = os.environ['RELAY_URL'].rstrip('/')
           parsed = urllib.parse.urlparse(url)
           if parsed.scheme != 'https' or not parsed.hostname:
-              raise SystemExit('Set repository variable RELAY_URL to the HTTPS relay address')
+              raise SystemExit('Set repository secret RELAY_URL to the HTTPS relay address')
           context = ssl.create_default_context()
           with socket.create_connection((parsed.hostname, parsed.port or 443), timeout=15) as sock:
               with context.wrap_socket(sock, server_hostname=parsed.hostname) as tls:

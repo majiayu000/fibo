@@ -99,9 +99,13 @@ fn cli_renders_english_via_env_and_saved_preference_without_cjk() {
     assert!(stdout.contains("List terminals"), "{stdout}");
     assert!(!has_cjk(&stdout), "{stdout}");
 
-    // Unbundled binary with no language file or env var stays deterministic in Chinese.
+    // A source build without a saved choice follows the same system language as the app.
     let fresh_home = TempDir::new("zh");
     let (ok, stdout, _stderr) = run_cli(fresh_home.path(), &[], &["--help"]);
     assert!(ok);
-    assert!(stdout.contains("终端列表"), "{stdout}");
+    let expected = match fibo_core::i18n::system(&fibo_platform::desktop::preferred_languages()) {
+        fibo_core::i18n::Lang::Zh => "终端列表",
+        fibo_core::i18n::Lang::En => "List terminals",
+    };
+    assert!(stdout.contains(expected), "{stdout}");
 }
