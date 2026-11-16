@@ -392,11 +392,17 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
         let mut link = Link::fresh(RecognitionPhase::Starting);
         let mut previous_panel = panel(&before, &link);
         let mut fresh = now();
+        // Only what changed since the last one, as the window asks: a whole workspace on
+        // every status was most of the host's serializing and this process's parsing.
+        let held = crate::host::brief::Held::default();
         while let Some(status) = status_rx.next().await {
             let status: RecognitionStatus = crate::connection::StatusLink::into_status(status);
-            let socket_read = socket.clone();
+            let (socket_read, held, brief) = (socket.clone(), held.clone(), status.brief);
             let result = cx
-                .background_spawn(async move { rpc(&socket_read, &Request::Workspace) })
+                .background_spawn(async move {
+                    held.deliver(&socket_read, Request::Workspace, brief)
+                        .into_result()
+                })
                 .await;
             link.phase = status.phase;
             if let Err(e) = &result {
