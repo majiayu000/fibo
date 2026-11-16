@@ -16,6 +16,8 @@
 ## 证据和边界
 
 - `remote_message_safety` 真实 PTY：审批期间普通文字、图片、queue、steer、sendnow 和直接 SendText 均没有写入；拒绝后只出现 Esc、说明与回车。撤掉第二次检查会复现错误提交。
+- 独立测试目录中的真实 Claude Code 2.1.325 与 Codex 0.169.0 均实际出现默认允许的审批菜单；发送聊天返回审批错误，测试命令的标记文件未产生，显式拒绝返回成功。测试后台已停止。这是电脑端真实 CLI 证据，不计入真手机走查。
+- `prompt --force` 同样不能用聊天回答审批。CLI 回归检查普通发送和强制发送都没有让菜单读到回答；帮助与 Agent skill 已说明此边界。
 - `old_running_host_receives_no_chat_bytes_after_a_cli_upgrade`：旧后台的 hello 不声明 `guarded_chat` 时，新 CLI 不发聊天请求。只换文件而没换运行进程也不能绕过保护。
 - `an_incomplete_upload_gets_acknowledged_before_any_reply`：不完整 JSON 还没产生任何回复时，真实 Noise 帧已确认写入的字节。手机测试覆盖慢上传、卡死、分段回复、排队 ping 和无关事件。
 - `cli_english` 实际运行英文 explain（命中/未命中、文本/JSON），规则名和原因中不再出现中文；匹配条件及终端原文不翻译。
