@@ -68,6 +68,7 @@ impl Workbench {
             Closing::Host => {
                 self.running_terminals().is_empty()
                     || crate::lifecycle::stale_build().is_some_and(|b| b.handoff)
+                    || crate::lifecycle::misplaced_host().is_some()
             }
             // An Agent whose turn has ended loses nothing it can't resume: only work in
             // progress or a question waiting for an answer is worth a confirmation, and

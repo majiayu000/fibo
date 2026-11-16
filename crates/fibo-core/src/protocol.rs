@@ -540,6 +540,10 @@ pub struct Build {
     /// The host can hand its running terminals to a newer one, so updating it ends none.
     #[serde(default)]
     pub handoff: bool,
+    /// What is off about how the host was started (`launch::of_host`); none from hosts
+    /// before it, and an older window ignores it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub launch: Vec<crate::launch::LaunchIssue>,
 }
 impl Build {
     pub fn current() -> Self {
@@ -550,6 +554,7 @@ impl Build {
             pid: std::process::id(),
             // Windows cannot pass a running console over: a newer host there waits for a restart.
             handoff: fibo_platform::terminal::CAN_HAND_OVER,
+            launch: vec![],
         }
     }
     /// Identifies a file by its bytes (FNV-1a and length), so a re-signed or copied
@@ -776,6 +781,7 @@ mod tests {
             digest: Build::digest(&binary).unwrap(),
             pid: 1,
             handoff: true,
+            launch: vec![],
         };
         assert!(!started.stale(&dir.join("absent")));
         // A copy with other timestamps (re-signed, touched) is the same build.
