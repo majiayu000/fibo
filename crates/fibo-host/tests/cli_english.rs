@@ -109,3 +109,34 @@ fn cli_renders_english_via_env_and_saved_preference_without_cjk() {
     };
     assert!(stdout.contains(expected), "{stdout}");
 }
+
+#[test]
+fn explain_translates_the_rule_name_and_the_reason_below_its_heading() {
+    let tmp = TempDir::new("explain");
+    let screen = tmp.path().join("screen.txt");
+    for text in [
+        "Do you want to proceed?\n❯ 1. Yes\n  2. No\n",
+        "$ ls\nsrc\n$ ",
+    ] {
+        std::fs::write(&screen, text).unwrap();
+        for json in [false, true] {
+            let mut args = vec![
+                "explain",
+                "--file",
+                screen.to_str().unwrap(),
+                "--agent",
+                "claude",
+            ];
+            if json {
+                args.push("--json");
+            }
+            let (ok, out, err) = run_cli(tmp.path(), &[("MOORING_LANG", "en")], &args);
+            assert!(ok, "{err}");
+            assert!(!has_cjk(&out), "explain leaked Chinese: {out}");
+            assert!(
+                out.contains(if json { "\"state\"" } else { "State:" }),
+                "{out}"
+            );
+        }
+    }
+}

@@ -135,24 +135,24 @@ impl Rules {
         let mut rules: Rules = serde_json::from_str(text).map_err(|e| e.to_string())?;
         rules.source = source;
         if rules.version.trim().is_empty() {
-            return Err("version 不能为空".into());
+            return Err(t!("version 不能为空").into());
         }
         if !(1..=200).contains(&rules.bottom_lines) {
-            return Err("bottom_lines 要在 1..=200".into());
+            return Err(t!("bottom_lines 要在 1..=200").into());
         }
         if rules.rules.is_empty() {
-            return Err("rules 不能为空".into());
+            return Err(t!("rules 不能为空").into());
         }
         for (i, r) in rules.rules.iter_mut().enumerate() {
             let at = |what: &str| format!("rules[{i}] {}: {what}", r.id);
             if r.id.is_empty() || r.name.is_empty() {
-                return Err(format!("rules[{i}]: id 和 name 不能为空"));
+                return Err(t!("rules[{i}]: id 和 name 不能为空", i));
             }
             if r.state != "waiting" {
-                return Err(at("state 只能是 waiting"));
+                return Err(at(t!("state 只能是 waiting")));
             }
             if r.anchor.is_empty() || r.not.iter().any(Line::is_empty) {
-                return Err(at("anchor 和 not 的每一项至少要有一个条件"));
+                return Err(at(t!("anchor 和 not 的每一项至少要有一个条件")));
             }
             for line in std::iter::once(&mut r.anchor).chain(r.not.iter_mut()) {
                 for n in &mut line.contains {
@@ -163,19 +163,19 @@ impl Rules {
         let mut ids: Vec<&str> = rules.rules.iter().map(|r| r.id.as_str()).collect();
         ids.sort_unstable();
         if ids.windows(2).any(|w| w[0] == w[1]) {
-            return Err("rule id 重复".into());
+            return Err(t!("rule id 重复").into());
         }
         Ok(rules)
     }
     /// "claude 内置 2026.10.31.1", or the override file it came from.
     pub fn origin(&self) -> String {
         match &self.source {
-            Source::Bundled => format!("{} 内置 {}", self.id, self.version),
-            Source::Override(path) => format!(
-                "{} 覆盖文件 {} {}",
-                self.id,
-                path.file_name().unwrap_or_default().to_string_lossy(),
-                self.version
+            Source::Bundled => t!("{id} 内置 {version}", id = self.id, version = self.version),
+            Source::Override(path) => t!(
+                "{id} 覆盖文件 {file} {version}",
+                id = self.id,
+                file = path.file_name().unwrap_or_default().to_string_lossy(),
+                version = self.version
             ),
         }
     }
@@ -284,17 +284,17 @@ impl Miss {
     }
     pub fn describe(&self, rule: &Rule) -> String {
         match self {
-            Self::NoAnchor => "底部没有这类提示".into(),
-            Self::AnchorHigh => "提示不在最底部，已经滚上去了".into(),
-            Self::Excluded(line) => format!("画面上有排除行「{}」", short(line, 40)),
-            Self::NoFirst => "提示旁边没有 1 号选项".into(),
-            Self::FirstMismatch => format!(
-                "1 号选项不是「{}」开头",
-                rule.menu.first_starts_with.as_deref().unwrap_or("")
+            Self::NoAnchor => t!("底部没有这类提示").into(),
+            Self::AnchorHigh => t!("提示不在最底部，已经滚上去了").into(),
+            Self::Excluded(line) => t!("画面上有排除行「{line}」", line = short(line, 40)),
+            Self::NoFirst => t!("提示旁边没有 1 号选项").into(),
+            Self::FirstMismatch => t!(
+                "1 号选项不是「{prefix}」开头",
+                prefix = rule.menu.first_starts_with.as_deref().unwrap_or("")
             ),
-            Self::Answered => "选项下面还有输出，像是已经答过了".into(),
-            Self::NoCursor => "选项上没有光标，不是待选的菜单".into(),
-            Self::NoAsk => "选项上面没有问题".into(),
+            Self::Answered => t!("选项下面还有输出，像是已经答过了").into(),
+            Self::NoCursor => t!("选项上没有光标，不是待选的菜单").into(),
+            Self::NoAsk => t!("选项上面没有问题").into(),
         }
     }
 }
@@ -420,12 +420,12 @@ impl Explained {
         if hit.evidence.len() > seen.len() {
             seen.push("…".into());
         }
-        format!(
-            "规则：{} {}（{}）\n看到：{}",
-            rule.id,
-            rule.name,
-            self.rules.origin(),
-            seen.join(" / ")
+        t!(
+            "规则：{id} {name}（{origin}）\n看到：{seen}",
+            id = rule.id,
+            name = fibo_core::i18n::say(&rule.name),
+            origin = self.rules.origin(),
+            seen = seen.join(" / ")
         )
     }
     /// Why the screen counts as no prompt: one line, naming the rules that came closest.
@@ -437,15 +437,30 @@ impl Explained {
             .iter()
             .zip(&self.rules.rules)
             .filter(|(m, _)| **m != Miss::NoAnchor)
-            .map(|(m, r)| format!("{}——{}", r.name, m.describe(r)))
+            .map(|(m, r)| {
+                t!(
+                    "{name}——{why}",
+                    name = fibo_core::i18n::say(&r.name),
+                    why = m.describe(r)
+                )
+            })
             .collect();
         let why = if near.is_empty() {
-            let names: Vec<&str> = self.rules.rules.iter().map(|r| r.name.as_str()).collect();
-            format!("底部没有{}的提示", names.join("或"))
+            let names: Vec<&str> = self
+                .rules
+                .rules
+                .iter()
+                .map(|r| fibo_core::i18n::say(&r.name))
+                .collect();
+            t!("底部没有{names}的提示", names = names.join(t!("或")))
         } else {
-            near.join("；")
+            near.join(t!("；"))
         };
-        format!("没认出提问框（{why}；规则 {}）", self.rules.origin())
+        t!(
+            "没认出提问框（{why}；规则 {origin}）",
+            why,
+            origin = self.rules.origin()
+        )
     }
     pub fn to_json(&self) -> serde_json::Value {
         let rule = self.rule();
