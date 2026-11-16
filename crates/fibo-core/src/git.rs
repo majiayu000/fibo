@@ -30,9 +30,9 @@ pub fn command(dir: &Path) -> Command {
     command
 }
 
-#[cfg(unix)]
 #[cfg(test)]
 mod tests {
+    #![cfg(unix)]
     use super::*;
 
     #[test]
