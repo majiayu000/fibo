@@ -1,7 +1,7 @@
 /* Long-form posts under /blog. Same fonts and ink as the home page. */
 :root{
   --ink:#0b0d12; --body:#3d4350; --soft:#6b7180; --line:#e7e7e4; --paper:#fff; --mist:#f6f6f4;
-  --sky:#1f5fc4; --teal:#1499ad; --amber:#f5b82e;
+  --sky:#1f5fc4; --teal:#1499ad; --amber:#f5b82e; --red:#c8372d; --green:#1d8a4a;
   --code-bg:#f4f4f1;
   --sans:Inter,-apple-system,"PingFang SC","Hiragino Sans GB",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,monospace;
@@ -10,7 +10,7 @@
 @media (prefers-color-scheme:dark){
   :root{
     --ink:#f2f2ef; --body:#c4c7cf; --soft:#8d929e; --line:rgba(255,255,255,.12); --paper:#0e0f13; --mist:#17191f;
-    --sky:#7aa7ff; --teal:#4cc3d6; --code-bg:#17191f;
+    --sky:#7aa7ff; --teal:#4cc3d6; --code-bg:#17191f; --red:#ff7b72; --green:#56d364;
     color-scheme:dark;
   }
 }
@@ -51,7 +51,7 @@ table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.55}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--ink);font-weight:600;background:var(--mist)}
 
-figure{margin:26px 0}
+figure{margin:26px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
 figcaption{font-size:14px;color:var(--soft);text-align:center;margin-top:8px}
 .diagram{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--mist)}
 .diagram text{font-family:var(--sans);text-anchor:middle;fill:var(--body)}
@@ -70,6 +70,44 @@ figcaption{font-size:14px;color:var(--soft);text-align:center;margin-top:8px}
 .diagram .bar1{fill:var(--sky);opacity:.7}
 .diagram .bar2{fill:var(--teal)}
 
+/* UI sketches inside diagrams */
+.diagram .win{fill:var(--paper);stroke:var(--line);stroke-width:1.5}
+.diagram .light{fill:var(--line)}
+.diagram .side{fill:var(--mist)}
+.diagram .badside{stroke:var(--red);stroke-width:2;stroke-dasharray:5 4}
+.diagram .gh{font-size:12px;font-weight:600;fill:var(--soft);text-anchor:start;letter-spacing:.02em}
+.diagram .row{font-size:13px;fill:var(--ink);text-anchor:start}
+.diagram .c{text-anchor:middle}
+.diagram .r{text-anchor:end}
+.diagram .hl{fill:var(--sky);opacity:.16}
+.diagram .dot-run{fill:var(--teal)}
+.diagram .dot-wait{fill:var(--amber)}
+.diagram .dot-done{fill:var(--soft);opacity:.6}
+.diagram .tab{fill:var(--mist);stroke:var(--line)}
+.diagram .tab.on{fill:var(--paper);stroke:var(--sky)}
+.diagram .term{fill:#15171c}
+.diagram .tt{font-family:var(--mono);font-size:12px;fill:#c9d1d9;text-anchor:start}
+.diagram .tt2{font-family:var(--mono);font-size:13px;fill:var(--ink);text-anchor:start}
+.diagram .ok{font-size:12px;fill:var(--green);font-weight:600}
+.diagram .ok-t{font-size:13px;fill:var(--green);font-weight:550}
+.diagram .ok-h{fill:var(--green)}
+.diagram .bad-t{font-size:13px;fill:var(--red);font-weight:550}
+.diagram .bad-h{fill:var(--red)}
+.diagram .badbox{fill:var(--paper);stroke:var(--red);stroke-width:1.5;stroke-dasharray:6 4}
+.diagram .accent-box{stroke:var(--teal);stroke-width:2}
+.diagram .dash{stroke-dasharray:6 5}
+.diagram .tip{fill:var(--soft)}
+.diagram .lane{stroke:var(--line);stroke-width:2;stroke-dasharray:3 5}
+.diagram .pipe{fill:var(--paper);stroke:var(--line);stroke-width:1.5}
+.diagram .blk{fill:var(--soft);opacity:.5}
+.diagram .key{fill:var(--teal)}
+.diagram .bt{font-size:13px;fill:var(--ink);font-weight:550}
+.diagram .kt{font-family:var(--mono);font-size:13px;fill:#fff}
+.diagram .op{font-size:28px;fill:var(--soft)}
+.diagram .pill-ro{fill:var(--amber);opacity:.9}
+.diagram .pill-on{fill:var(--teal)}
+.diagram .badge-t{font-size:12px;fill:#0b0d12;font-weight:600}
+
 .next{margin-top:40px;padding:14px 18px;border-radius:10px;background:var(--mist);font-size:15px}
 .end{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-size:15px;color:var(--soft)}
 
@@ -81,5 +119,5 @@ figcaption{font-size:14px;color:var(--soft);text-align:center;margin-top:8px}
   h2{font-size:23px;margin-top:44px}
   .lede{font-size:17px}
   pre code{font-size:12.5px}
-  .diagram .s{font-size:12px}
+  .diagram{min-width:620px}
 }

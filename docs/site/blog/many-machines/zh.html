@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一个窗口，管多台电脑上的终端 · Fibo 博客</title>
+<meta name="description" content="Fibo 怎么让一个窗口直接操作另一台电脑上的终端：为什么推翻另写的远程界面，后台和窗口怎么分工，一路踩过的坑，以及慢链路上一次刷新怎么从 3.59 MB 降到 660 字节。">
+<link rel="canonical" href="https://fibo.page/blog/many-machines/zh.html">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/many-machines/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/many-machines/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="一个窗口，管多台电脑上的终端">
+<meta property="og:description" content="另一台电脑上的终端，像本机一样开、分屏、打字：做法、原理、踩过的坑和慢链路上的取舍。">
+<meta property="og:url" content="https://fibo.page/blog/many-machines/zh.html">
+<meta property="og:image" content="https://fibo.page/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../post.css">
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <a class="home" href="../../">Fibo</a>
+    <span class="crumb">博客</span>
+    <a class="lang" href="./" hreflang="en" lang="en">English</a>
+  </div>
+</header>
+
+<main class="post">
+<p class="kicker">工程笔记 · 2026 年 11 月</p>
+<h1>一个窗口，管多台电脑上的终端</h1>
+<p class="lede">Coding Agent 一多，终端就会分散在好几台电脑上。Fibo 要做的是多台电脑、一个窗口：另一台电脑上的终端，和本机的一样开标签、一样分屏、一样打字，侧栏一眼看到每台电脑上谁在等你。这篇按实际的顺序，讲为什么推翻了已经写好的远程界面，后台和窗口怎么分工，一路上踩过的坑和放弃的方案，以及在一条只有 54 KB/s 的慢链路上，一次刷新怎么从 3.59 MB 降到 660 字节。</p>
+
+<nav class="toc" aria-label="目录">
+  <a href="#goal">要做的事</a>
+  <a href="#v1">第一版：给远端另写一套</a>
+  <a href="#others">别人怎么做</a>
+  <a href="#host">原理：终端住在后台，窗口只是客户端</a>
+  <a href="#step1">第 1 步：一台一个窗口，和那些"默认是本机"的地方</a>
+  <a href="#step2">第 2 步：在一个窗口里切过去，侧栏却跳了</a>
+  <a href="#step3">第 3 步：侧栏读各台自己的数据，每台只剩一条连接</a>
+  <a href="#slow">慢链路：从 3.59 MB 到 660 字节</a>
+  <a href="#input">谁拿着键盘</a>
+  <a href="#update">换版本不断终端</a>
+  <a href="#evidence">怎么验收</a>
+  <a href="#learned">几条心得</a>
+</nav>
+
+<h2 id="goal">要做的事</h2>
+<p><a href="../../">Fibo</a> 是一个原生 macOS 工作台：Claude Code、Codex 这些 Agent 在真终端里并排跑，侧栏告诉你哪个在等你。终端不归窗口管，归一个常驻的后台进程（<code>fibo serve</code>）：关掉窗口、更新 App，终端都还在。</p>
+<p>Agent 多了，一台电脑就不够用，终端会分散在好几台电脑上。理想的样子是：不管终端在哪台电脑上，都在同一个窗口里打开、分屏、打字，和本机没有区别。下文把另一台电脑叫"远端"。</p>
+<figure id="fig-goal">
+<svg class="diagram" viewBox="0 0 720 330" role="img" aria-labelledby="t-goal">
+<title id="t-goal">一个窗口：左边侧栏列出所有电脑，右边是正在看的那台的标签和终端</title>
+<defs><marker id="a-goal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<rect x="20" y="20" width="680" height="290" rx="10" class="win"/><circle cx="34" cy="33" r="4" class="light"/><circle cx="46" cy="33" r="4" class="light"/><circle cx="58" cy="33" r="4" class="light"/><rect x="21" y="40" width="200" height="269" class="side"/><text x="36" y="66" class="gh">本机</text><circle cx="40" cy="86" r="4" class="dot-run"/><text x="50" y="90" class="row">fibo · claude</text><circle cx="40" cy="110" r="4" class="dot-wait"/><text x="50" y="114" class="row">web · codex</text><text x="36" y="150" class="gh">远端电脑</text><text x="206" y="150" class="ok r">42 ms</text><rect x="30" y="160" width="184" height="22" rx="5" class="hl"/><circle cx="40" cy="170" r="4" class="dot-wait"/><text x="50" y="174" class="row">api · claude</text><circle cx="40" cy="194" r="4" class="dot-run"/><text x="50" y="198" class="row">data · codex</text><circle cx="40" cy="218" r="4" class="dot-done"/><text x="50" y="222" class="row">docs · grok</text><text x="36" y="270" class="s left">电脑 → 空间 → 会话</text><rect x="232" y="48" width="118" height="26" rx="6" class="tab on"/><text x="291" y="66" class="row c">api · claude</text><rect x="356" y="48" width="118" height="26" rx="6" class="tab"/><text x="415" y="66" class="row c">data · codex</text><rect x="232" y="84" width="222" height="214" rx="6" class="term"/><text x="242" y="106" class="tt">$ claude</text><text x="242" y="124" class="tt">› 要不要先跑迁移？</text><text x="242" y="142" class="tt">  1. Yes</text><text x="242" y="160" class="tt">  2. No</text><text x="242" y="178" class="tt"></text><text x="242" y="196" class="tt">等你回答</text><rect x="462" y="84" width="226" height="214" rx="6" class="term"/><text x="472" y="106" class="tt">$ npm test</text><text x="472" y="124" class="tt">PASS api/auth</text><text x="472" y="142" class="tt">PASS api/users</text><text x="472" y="160" class="tt">…</text><text x="472" y="178" class="tt"></text><text x="472" y="196" class="tt"></text><text x="460" y="40" class="s">右边：正在看的那台（远端）</text>
+</svg>
+<figcaption>想要的样子：侧栏按电脑、空间、会话列出所有电脑，谁在等你一眼看到；右边是正在看的那台，标签、分屏、打字都和本机一样。</figcaption>
+</figure>
+
+<h2 id="v1">第一版：给远端另写一套</h2>
+<p>最早的远程走的是手机那条路：窗口经 <code>ssh host fibo remote --stdio</code> 用手机协议连过去，每个终端拿回一张卡片，有标题、状态和目录。卡片够手机用，但桌面要的是标签、分屏和 85 种请求。于是远端缺什么，就在窗口里给它补什么：主区域、开始页、分屏。</p>
+<figure id="fig-two">
+<svg class="diagram" viewBox="0 0 720 330" role="img" aria-labelledby="t-two">
+<title id="t-two">之前本机和远端是两条路：本机原生协议拿整个工作区，远端用手机协议拿卡片、另写界面</title>
+<defs><marker id="a-two" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<text x="185" y="34" class="h">本机</text><rect x="20" y="50" width="330" height="70" rx="10" class="box"/><text x="185" y="80" class="t">窗口：标签、分屏、85 种请求</text><text x="185" y="102" class="s">一套代码</text><path d="M185 122 V196" class="line" marker-end="url(#a-two)"/><text x="195" y="152" class="s left">原生协议</text><text x="195" y="172" class="s left">整个工作区</text><rect x="20" y="200" width="330" height="56" rx="10" class="box"/><text x="185" y="233" class="t">本机后台</text><text x="535" y="34" class="h">远端（当时）</text><rect x="370" y="50" width="330" height="70" rx="10" class="badbox"/><text x="535" y="80" class="t">另写的主区域、开始页、分屏</text><text x="535" y="102" class="s">本机有的功能再写一遍</text><path d="M535 122 V196" class="line" marker-end="url(#a-two)"/><text x="545" y="152" class="s left">ssh … fibo remote --stdio</text><text x="545" y="172" class="s left">手机协议 · 每个终端一张卡片</text><rect x="370" y="200" width="330" height="56" rx="10" class="box"/><text x="535" y="233" class="t">远端后台</text><text x="535" y="290" class="bad-t">接缝处的问题：焦点落到被盖住的窗格、</text><text x="535" y="310" class="bad-t">⌘W 关掉看不见的 shell、开始页指错电脑</text>
+</svg>
+<figcaption>之前：本机和远端拿到的数据不一样，界面也是两套。远端每补一样本机功能就要再写一遍，问题都出在两套代码的接缝上。</figcaption>
+</figure>
+<p>补这三样的那个 PR，一天里被自动审查（Codex）提了 11 条意见，每一条都出在两套代码的接缝上：</p>
+<ul>
+<li>远端的终端盖在本机窗格上面，焦点却还落在被盖住的本机窗格里；</li>
+<li>⌘W 关掉的是看不见的那个本机 shell，而且是 P1；</li>
+<li>⌘[ 和 ⌘] 在远端的分屏之间移动时，走的是本机的布局；</li>
+<li>待办表单挡住远端的主区域；</li>
+<li>电脑列表一变，开始页就指向了另一台电脑。</li>
+</ul>
+<p>这些问题能一条条修，但根子在于本机和远端是两份界面，以后本机每加一样功能，远端都要再写一遍，接缝只会越来越多。规格里早写过一条放弃条件：如果 App 要为本机和远端维护两套越走越远的终端代码，就改成只留一套。我们关掉了那个 PR（<a href="https://github.com/majiayu000/fibo/pull/340">#340</a>）。</p>
+
+<h2 id="others">别人怎么做</h2>
+<p>动手前先看了同类产品：</p>
+<div class="table">
+<table>
+<thead><tr><th>产品</th><th>状态在哪</th><th>怎么连</th></tr></thead>
+<tbody>
+<tr><td>VS Code Remote-SSH</td><td>远程的 VS Code Server</td><td>本地界面经 SSH 连过去，和连本机同一套</td></tr>
+<tr><td>Zed 远程开发</td><td>远程的 zed-remote-server</td><td>调用系统 ssh</td></tr>
+<tr><td>WezTerm 多路复用</td><td>远程的多路复用服务</td><td>经 SSH 连远程 Unix socket，本机和远程的标签能在同一个窗口</td></tr>
+<tr><td>iTerm2 + <code>tmux -CC</code></td><td>远程 tmux</td><td>把 tmux 控制协议翻译成原生标签</td></tr>
+</tbody>
+</table>
+</div>
+<p>前三家的共同点是：状态留在那台，本地只是界面，用的是和连本机同一套协议，没有谁另造一套摘要协议再在本地补界面。iTerm2 翻译别人协议的做法，最像我们刚关掉的那条路，也是用户抱怨最多的。</p>
+<p>VS Code 和 Zed 还会在远端另装一份和客户端版本完全一致的服务端。我们没这么做：那会是另一个后台，远端自己的窗口看不到这里开的标签和分屏，又回到两边不一致。换成"版本不同就帮着更新那台"。</p>
+
+<h2 id="host">原理：终端住在后台，窗口只是客户端</h2>
+<p>Fibo 本来就是客户端和服务端分开的。后台持有终端、工作区和状态规则；窗口经 Unix socket 发请求，协议是带长度前缀的 JSON 帧；每个终端窗格单独一条连接，收画面、发按键。</p>
+<p>所以连远端并不需要新协议，只要能连上那台的 socket。OpenSSH 能直接转发 Unix socket：</p>
+<pre><code>ssh -N -o Compression=yes -o StreamLocalBindUnlink=yes \
+    -L ~/.local/share/fibo/m/remote/workbench.sock:&lt;那台的 workbench.sock&gt; remote</code></pre>
+<p>窗口照连本机的方式连这个本地 socket，后面就是同一套代码。一条 <code>ssh -L</code> 上可以跑任意多条连接，正好对上一个窗格一条连接。我们先做了一个原型：在远端另起一个临时后台，转发过来，让窗口直连。⌘T、⌘D、⇧⌘D、⌘W、运行 Agent 一次全过，远端的后台里存下了这个标签和左右分屏。</p>
+<figure id="fig-arch">
+<svg class="diagram" viewBox="0 0 720 300" role="img" aria-labelledby="t-arch">
+<title id="t-arch">一个窗口经本机 socket 连本机后台，经一条 ssh -L 连远端后台</title>
+<defs><marker id="a-arch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<rect x="20" y="40" width="200" height="220" rx="12" class="box"/><text x="120" y="68" class="h">这个窗口</text><rect x="38" y="84" width="164" height="44" rx="8" class="soft"/><text x="120" y="111" class="t">侧栏：读所有电脑</text><rect x="38" y="140" width="164" height="100" rx="8" class="soft"/><text x="120" y="176" class="t">主区域</text><text x="120" y="198" class="s">只读当前那台：</text><text x="120" y="216" class="s">标签、分屏、终端</text><rect x="470" y="30" width="230" height="100" rx="12" class="box"/><text x="585" y="58" class="h">本机后台 fibo serve</text><text x="585" y="84" class="s">终端 · 工作区 · 状态规则</text><text x="585" y="104" class="s">第 0 台</text><rect x="470" y="170" width="230" height="100" rx="12" class="box"/><text x="585" y="198" class="h">远端后台 fibo serve</text><text x="585" y="224" class="s">终端 · 工作区 · 状态规则</text><text x="585" y="244" class="s">那台自己的窗口也连着它</text><path d="M220 100 H470" class="line"/><text x="345" y="92" class="s">Unix socket</text><path d="M220 210 C300 210 380 220 470 220" class="line accent"/><text x="345" y="236" class="s accent-t">一条 ssh -N -L，压缩</text><text x="345" y="254" class="s">里面一个窗格一条连接</text>
+</svg>
+<figcaption>每台电脑一个后台，窗口对哪台都用同一套原生协议。</figcaption>
+</figure>
+<p>原型跑通前踩到两处写死了"后台就在本机"的地方：</p>
+<ul>
+<li><b>旧后台检测。</b>窗口发现后台的程序和自己不是同一个构建，就当它是旧版，要么接管它的终端，要么按它报的 pid 把它停掉。连远端时，这个 pid 是那台的进程号，在本机上可能是任何一个程序。我们加了挂接模式：别人的后台一律不启动、不停止、不替换。</li>
+<li><b>本机文件系统。</b>开终端前，窗口会先在本机查目录在不在，不在就退回本机的 home，结果被那台的后台拒绝。</li>
+</ul>
+<p>原型证明了方向。接下来分三步：先一台一个窗口，再在一个窗口里切换，最后让侧栏和看板也直接读各台的数据。</p>
+
+<h2 id="step1">第 1 步：一台一个窗口，和那些"默认是本机"的地方</h2>
+<p>侧栏里电脑的菜单加了"在新窗口打开"：新窗口经 ssh 问那台 <code>fibo socket</code>（旧版没有这个命令，就按旧的运行目录去找），自己维持一条 <code>ssh -L</code>，断了按退避重建，退出时收掉。原型里转发是外面的脚本起的，断线没人管，用户也不会自己去敲 <code>ssh -L</code>，所以这件事归窗口。</p>
+<p>真正花时间的，是一个个"默认是本机"的地方。它们不会报错，只会悄悄显示本机的东西：</p>
+<ul>
+<li><b>Hook 状态。</b>挂接窗口提示"还没装 Hook"，可那台早就装好了：窗口查的是本机的配置。改成查、装、卸都经 ssh 在那台执行。</li>
+<li><b>家目录和 shell。</b>新空间的默认目录、最近目录、开终端的兜底目录，都用了本机的 <code>$HOME</code>；开终端用的是本机的 <code>$SHELL</code>，本机是 zsh，那台只有 bash，终端就开不出来。现在挂接时和 socket 一起，把那台的家目录和 shell 问过来。</li>
+<li><b>目录被删了。</b>窗口发过去一个那台已经删掉的目录，后台直接拒绝。改成由后台自己回退：先退到空间的目录，再退到家目录。每次开终端前经 ssh 查一次也能做，但会在界面线程上多一次网络往返。</li>
+<li><b>交给 Agent 的回写命令。</b>待办交给 Agent 时附的回写命令，写的是本机程序的路径，在那台上根本不存在。</li>
+<li><b>打开文件。</b>终端里的文件链接已经关掉了，可变更面板里的"打开文件"绕过了这层限制，会打开本机上同一路径的文件。现在挂接时这两处都不打开。</li>
+<li><b>读本机文件算出来的东西。</b>窗格标题上的上下文圈读会话记录，空间的 git 领先落后读仓库，在挂接窗口里都会读错，先不显示，等协议能由那台算好送来再加。</li>
+</ul>
+<p>还有一个跟主机名有关的坑。转发出来的 socket 放在 <code>&lt;运行目录&gt;/machines/&lt;主机名&gt;/</code> 下，主机名一长，路径就超过了 macOS 上 Unix socket 路径的 104 字节上限；把主机名清理成目录名，<code>alice@server</code> 和 <code>alice-server</code> 又会变成同一个目录，共用 socket 和锁。最后改成主机名的前 8 个字母数字，加整串的 FNV-1a 哈希，放在更短的 <code>m/</code> 下。审查还发现转发在单实例锁之前就起了，两个窗口会抢同一个 socket，于是改成先拿锁再起 <code>ssh -L</code>。</p>
+
+<h2 id="step2">第 2 步：在一个窗口里切过去，侧栏却跳了</h2>
+<p>一台一个窗口能用，但要来回切窗口。下一步是在同一个窗口里，点哪台的空间，右边就是哪台。</p>
+<p>第一件事是把"是不是远端"从整个进程一份，改成每个后台一份：第 1 步里挂接是进程级的开关，一个窗口只能是本机或某一台。现在每个后台按它的 socket 登记，工作台、终端窗格、请求队列、设置页各问自己连的那台。每秒一算的额度、上下文、标签名缓存也加上了是哪个工作区，不然两台的版本号可能撞上，拿到另一台的缓存。</p>
+<p>然后是怎么画。最直接的想法是：切换时，把同一个工作台里的连接和工作区换成那台的。这条路没走通：状态订阅、各种缓存和终端窗格都绑着一个后台，换掉以后会串台。于是退了一步，给每台电脑建一整份工作台，点到哪台就把窗口交给哪台去画。</p>
+<p>结果是：数据和界面住在同一个结构里，复制数据的同时把界面也复制了一份，侧栏也跟着换了。那份工作台以为自己是唯一一台，侧栏画成了单机的样子：多出"只看""更早""先不管"这些单机才有的东西，本机只剩一个小块。本来只想打开另一台的一个空间，结果整个窗口都变了样，回来还得找入口。</p>
+<figure id="fig-jump">
+<svg class="diagram" viewBox="0 0 720 310" role="img" aria-labelledby="t-jump">
+<title id="t-jump">之前点远端的空间，整个窗口连侧栏都换成那台的；之后侧栏不动，只换右边</title>
+<defs><marker id="a-jump" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<text x="185" y="34" class="h bad-h">之前：点远端的一个空间</text><rect x="20" y="46" width="330" height="220" rx="10" class="win"/><circle cx="34" cy="59" r="4" class="light"/><circle cx="46" cy="59" r="4" class="light"/><circle cx="58" cy="59" r="4" class="light"/><rect x="21" y="66" width="118" height="199" class="side badside"/><text x="32" y="90" class="gh">远端</text><circle cx="36" cy="110" r="4" class="dot-wait"/><text x="46" y="114" class="row">只看 api</text><circle cx="36" cy="134" r="4" class="dot-run"/><text x="46" y="138" class="row">更早</text><circle cx="36" cy="158" r="4" class="dot-done"/><text x="46" y="162" class="row">先不管 · 3</text><text x="32" y="186" class="gh">「本机」小块</text><rect x="148" y="74" width="194" height="184" rx="6" class="term"/><text x="158" y="96" class="tt">远端的标签</text><text x="158" y="114" class="tt">$ claude</text><text x="158" y="132" class="tt">…</text><text x="185" y="290" class="bad-t">侧栏整个换成了那台的单机样子</text><text x="535" y="34" class="h ok-h">之后：侧栏不动</text><rect x="370" y="46" width="330" height="220" rx="10" class="win"/><circle cx="384" cy="59" r="4" class="light"/><circle cx="396" cy="59" r="4" class="light"/><circle cx="408" cy="59" r="4" class="light"/><rect x="371" y="66" width="118" height="199" class="side "/><text x="382" y="90" class="gh">本机</text><circle cx="386" cy="110" r="4" class="dot-run"/><text x="396" y="114" class="row">fibo</text><circle cx="386" cy="134" r="4" class="dot-wait"/><text x="396" y="138" class="row">web</text><text x="382" y="162" class="gh">远端</text><rect x="376" y="172" width="104" height="22" rx="5" class="hl"/><circle cx="386" cy="182" r="4" class="dot-wait"/><text x="396" y="186" class="row">api</text><circle cx="386" cy="206" r="4" class="dot-run"/><text x="396" y="210" class="row">data</text><rect x="498" y="74" width="194" height="184" rx="6" class="term"/><text x="508" y="96" class="tt">远端的标签</text><text x="508" y="114" class="tt">$ claude</text><text x="508" y="132" class="tt">…</text><text x="535" y="290" class="ok-t">侧栏是这个窗口的，只换右边</text>
+</svg>
+<figcaption>之前每台电脑一整份工作台，点过去连侧栏一起交给那台去画；之后侧栏留在窗口这边，读所有电脑，正在看的那个空间点亮。</figcaption>
+</figure>
+<p>正确的拆法是两层：</p>
+<div class="table">
+<table>
+<thead><tr><th>每台电脑一份（数据来源）</th><th>每个窗口一份（界面）</th></tr></thead>
+<tbody>
+<tr><td>连接和请求队列</td><td>侧栏：筛选、折叠、滚动位置</td></tr>
+<tr><td>那台的整个工作区</td><td>鸟瞰、搜索、⌘J 的排序</td></tr>
+<tr><td>那台的终端窗格</td><td>主题、字号、快捷键</td></tr>
+<tr><td>在那台选的空间、标签和焦点</td><td>当前看的是哪台</td></tr>
+</tbody>
+</table>
+</div>
+<p>本机就是第 0 台，和别的电脑走同一条路。要一步改到位，得改窗口里读工作区的 400 多处，估计三四天，所以先做了能马上看到效果的一半：窗口一直画自己的侧栏，只把右边的主区域交给那台的工作台去画，并告诉它侧栏有多宽，标题行和状态栏按这个宽度排（<a href="https://github.com/majiayu000/fibo/pull/349">#349</a>）。</p>
+<p>剩下的是一些细节：侧栏里正在看的那个远端空间要点亮，读的是那台自己记的当前空间，而不是窗口另记一份，免得那台里用 ⌘J 换了空间以后对不上（<a href="https://github.com/majiayu000/fibo/pull/351">#351</a>）；开着偷看时，偷看窗只画在本机的主区域上，看远端时就画不出来，看起来像点了没反应，现在偷看窗也叠在远端的主区域上（<a href="https://github.com/majiayu000/fibo/pull/357">#357</a>）。另外加了延迟显示：每 5 秒量一次往返，100 ms 以下绿、300 ms 以下黄，再高红，只有变化超过 5 ms 且超过两成才重画。</p>
+
+<h2 id="step3">第 3 步：侧栏读各台自己的数据，每台只剩一条连接</h2>
+<p>侧栏不跳了，但侧栏里远端那一组的数据，仍然来自手机协议那条连接拼好的卡片；点进去以后，主区域又经原生协议连了一次。同一台电脑两条连接、两份状态，侧栏和主区域看到的可能不是同一个时刻。</p>
+<figure id="fig-conns">
+<svg class="diagram" viewBox="0 0 720 370" role="img" aria-labelledby="t-conns">
+<title id="t-conns">之前每台电脑两条连接两份状态，之后一条连接一份工作区</title>
+<defs><marker id="a-conns" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<text x="20" y="20" class="l">之前</text><rect x="20" y="34" width="170" height="120" rx="10" class="box"/><rect x="34" y="48" width="142" height="40" rx="7" class="soft"/><text x="105" y="73" class="t">侧栏</text><rect x="34" y="100" width="142" height="40" rx="7" class="soft"/><text x="105" y="125" class="t">主区域</text><rect x="540" y="34" width="160" height="120" rx="10" class="box"/><text x="620" y="90" class="t">远端后台</text><text x="620" y="112" class="s">一份工作区</text><path d="M176 68 H540" class="line dash"/><text x="365" y="60" class="s">ssh … fibo remote --stdio · 手机协议 · 卡片</text><path d="M176 120 H540" class="line"/><text x="365" y="112" class="s">ssh -N -L · 原生协议 · 工作区</text><text x="365" y="170" class="bad-t">同一台电脑两份状态，侧栏和主区域看到的可能不是同一时刻</text><text x="20" y="200" class="l">之后</text><rect x="20" y="214" width="170" height="120" rx="10" class="box"/><rect x="34" y="228" width="142" height="40" rx="7" class="soft"/><text x="105" y="253" class="t">侧栏</text><rect x="34" y="280" width="142" height="40" rx="7" class="soft"/><text x="105" y="305" class="t">主区域</text><rect x="540" y="214" width="160" height="120" rx="10" class="box"/><text x="620" y="270" class="t">远端后台</text><text x="620" y="292" class="s">一份工作区</text><path d="M540 274 H330 C290 274 260 248 176 248" class="line accent"/><text x="365" y="266" class="s">一条 ssh -N -L · 原生协议</text><path d="M330 274 C290 274 260 300 176 300" class="line accent"/><text x="365" y="0" class="s"></text><text x="365" y="350" class="ok-t">侧栏和主区域读同一份工作区；卡片规则搬进 core，只有一个出处</text>
+</svg>
+<figcaption>桌面原来为侧栏另开一条手机协议的连接。改成侧栏也读原生协议拿到的工作区后，每台电脑只剩一条 ssh。</figcaption>
+</figure>
+<p>分四片改掉：</p>
+<ul>
+<li><b>3a 启动就连上。</b>原来第一次点远端的空间才去建转发、读工作区，要等一两秒。现在窗口一打开就逐台连上并保持着，连不上的那台先不报错（<a href="https://github.com/majiayu000/fibo/pull/352">#352</a>）。</li>
+<li><b>3b 卡片由原生数据算。</b>后台给手机拼卡片的规则搬进共享的 core，窗口用远端自己的工作区，套同一份规则算出侧栏的行。同一条规则只能有一个出处，否则手机和桌面迟早说得不一样（<a href="https://github.com/majiayu000/fibo/pull/353">#353</a>）。</li>
+<li><b>3c 跨电脑的 ⌘J 和鸟瞰。</b>远端的主区域里，"要你处理"的数、⌘J 和鸟瞰原来只管它自己，现在都交给窗口：数字是所有电脑的，⌘J 可能跳回本机（<a href="https://github.com/majiayu000/fibo/pull/354">#354</a>）。</li>
+<li><b>3d 去掉手机协议那条连接。</b>名字和 id 由找 socket 的那段脚本一起报回来；在不在线看原生连接；延迟量原生请求的往返；拖卡片、"＋"、偷看里的审批都经那台自己的工作台。只有加空间时的目录列表原生协议还没有，表单开着时短连一次，关了就断（<a href="https://github.com/majiayu000/fibo/pull/356">#356</a>）。</li>
+</ul>
+<p>这一步还顺手修了一个一直挂着的红字：窗口顶上偶尔出现 <code>RPC receive reply: failed to fill whole buffer</code>，之后每次刷新都成功，红字却一直不消失。查下来，是新后台接管时旧后台直接退出，正在回的那次刷新被切断了。修法有两半：只读的刷新本来就可以安全重发，断了就重试；刷新成功时，只清掉刷新自己放上去的报错，不动用户操作的报错（<a href="https://github.com/majiayu000/fibo/pull/350">#350</a>）。</p>
+
+<h2 id="slow">慢链路：从 3.59 MB 到 660 字节</h2>
+<p>同步方式本来很简单：后台的工作区一变，就经状态连接推一个版本号；窗口发现自己落后了，就要一份完整的工作区，连续几次变化合并成一次。本机上一份 1.6 MB 的 JSON，一次不到 10 毫秒，从来不是问题。</p>
+<p>3d 去掉手机协议这条后备以后，有一天到远端的网掉到约 54 KB/s，那台就再也连不上了。那台有几百个会话，工作区约 3 MB，要传几十秒；中途只要 5 秒一个字节都没写出去，后台就断开连接（<code>os error 35</code>），窗口读到一半（<code>failed to fill whole buffer</code>）。</p>
+
+<h3>第一步：压缩，并且别太早放弃</h3>
+<p>先给转发开 <code>Compression=yes</code>：同一条链路上，3 MB 从约 35 秒降到约 11 秒。再把后台写回复的超时从 5 秒放到 30 秒，而且只在一个字节都写不出去时才计时，写着在走的不受影响。超时本身不能去掉：它防的是一个不读的客户端一直占着后台的线程（<a href="https://github.com/majiayu000/fibo/pull/358">#358</a>）。</p>
+<p>这一步只解决了"连得上"，没解决"卡"。打字也走这条 ssh，按键排在几 MB 的 JSON 后面，界面上的延迟显示 1765 ms。</p>
+<figure id="fig-pipe">
+<svg class="diagram" viewBox="0 0 720 250" role="img" aria-labelledby="t-pipe">
+<title id="t-pipe">之前按键排在几 MB 的工作区后面；之后刷新几百字节，按键不用等</title>
+<defs><marker id="a-pipe" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<text x="405" y="22" class="s">同一条 ssh，约 54 KB/s</text><text x="20" y="64" class="l">之前</text><rect x="110" y="36" width="590" height="44" rx="22" class="pipe"/><rect x="118" y="43" width="430" height="30" rx="6" class="blk"/><text x="333.0" y="63" class="bt">工作区 3 MB · 压缩后约 0.8 MB · 十几秒</text><rect x="560" y="43" width="26" height="30" rx="6" class="key"/><text x="573.0" y="63" class="kt">g</text><rect x="592" y="43" width="26" height="30" rx="6" class="key"/><text x="605.0" y="63" class="kt">i</text><rect x="624" y="43" width="26" height="30" rx="6" class="key"/><text x="637.0" y="63" class="kt">t</text><rect x="656" y="43" width="26" height="30" rx="6" class="key"/><text x="669.0" y="63" class="kt"> </text><text x="110" y="102" class="bad-t left">按键排在后面，界面上显示延迟 1765 ms</text><text x="20" y="178" class="l">之后</text><rect x="110" y="150" width="590" height="44" rx="22" class="pipe"/><rect x="118" y="157" width="34" height="30" rx="6" class="blk"/><rect x="160" y="157" width="26" height="30" rx="6" class="key"/><text x="173.0" y="177" class="kt">g</text><rect x="192" y="157" width="26" height="30" rx="6" class="key"/><text x="205.0" y="177" class="kt">i</text><rect x="224" y="157" width="26" height="30" rx="6" class="key"/><text x="237.0" y="177" class="kt">t</text><rect x="256" y="157" width="26" height="30" rx="6" class="key"/><text x="269.0" y="177" class="kt"> </text><rect x="288" y="157" width="26" height="30" rx="6" class="key"/><text x="301.0" y="177" class="kt">s</text><rect x="330" y="157" width="34" height="30" rx="6" class="blk"/><rect x="372" y="157" width="26" height="30" rx="6" class="key"/><text x="385.0" y="177" class="kt">t</text><rect x="404" y="157" width="26" height="30" rx="6" class="key"/><text x="417.0" y="177" class="kt">a</text><rect x="436" y="157" width="26" height="30" rx="6" class="key"/><text x="449.0" y="177" class="kt">t</text><rect x="468" y="157" width="26" height="30" rx="6" class="key"/><text x="481.0" y="177" class="kt">u</text><rect x="500" y="157" width="26" height="30" rx="6" class="key"/><text x="513.0" y="177" class="kt">s</text><text x="110" y="216" class="ok-t left">一次刷新约 420 字节（压缩后），几毫秒就过去</text>
+</svg>
+<figcaption>打字和刷新走同一条 ssh。整份工作区一次要十几秒，按键只能排在后面。</figcaption>
+</figure>
+
+<h3>第二步：只发变了的会话</h3>
+<p>本机实测，一份工作区约 98% 是会话和每个会话的内容。所以协议加一种请求：窗口把刷新、编辑和启动都包成 <code>Brief(上次那份的编号, 原来的请求)</code>，后台按会话和内容逐个比对，只回变了的部分；窗口把变化拼回整份，再交给界面。界面代码一行没改，它拿到的仍是一份完整的工作区。</p>
+<pre><code>struct Delta {
+    stamp: u64,              // 这份是哪份：由内容的哈希算出
+    base: Option&lt;u64&gt;,       // 对着哪份比的；None 表示整份
+    sessions: Vec&lt;Session&gt;,  // 新的或变了的会话
+    order: Option&lt;Vec&lt;Id&gt;&gt;,  // 顺序变了才带
+    content: Map&lt;Id, Content&gt;,
+    gone: Vec&lt;Id&gt;,           // 没了的
+    rest: …,                 // 工作区的其余部分
+}</code></pre>
+<figure id="fig-seq">
+<svg class="diagram" viewBox="0 0 720 420" role="img" aria-labelledby="t-seq">
+<title id="t-seq">窗口带上上次那份的编号去要，后台只回变化；底稿不在就要整份</title>
+<defs><marker id="a-seq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<text x="160" y="30" class="h">窗口</text><text x="560" y="30" class="h">后台</text><path d="M160 42 V404" class="lane"/><path d="M560 42 V404" class="lane"/><path d="M160 80 H560" class="line" marker-end="url(#a-seq)"/><text x="360" y="73" class="s">Brief(无, 要工作区)</text><path d="M560 112 H160" class="line" marker-end="url(#a-seq)"/><text x="360" y="105" class="s">整份 · 编号 A</text><text x="150" y="134" class="s r">留下 A</text><path d="M160 170 H560" class="line" marker-end="url(#a-seq)"/><text x="360" y="163" class="s">Brief(A, 要工作区)</text><path d="M560 202 H160" class="line" marker-end="url(#a-seq)"/><text x="360" y="195" class="s">只有变了的 · 对着 A · 编号 B</text><text x="150" y="224" class="s r">拼回整份，留最近 3 份</text><text x="570" y="190" class="s left">记最近 16 份</text><text x="570" y="208" class="s left">发出去的索引</text><path d="M160 262 H560" class="line" marker-end="url(#a-seq)"/><text x="360" y="255" class="s">Brief(B, …)</text><path d="M560 294 H160" class="line" marker-end="url(#a-seq)"/><text x="360" y="287" class="s">对着 B 的变化</text><text x="150" y="316" class="bad-t r">B 已经不在手里</text><path d="M160 350 H560" class="line accent" marker-end="url(#a-seq)"/><text x="360" y="343" class="s">Brief(无, …)：要整份</text><path d="M560 384 H160" class="line" marker-end="url(#a-seq)"/><text x="360" y="377" class="s">整份 · 编号 C</text>
+</svg>
+<figcaption>编号是内容的哈希，不是版本号：后台重启后版本号会从头数，内容哈希不会撞。</figcaption>
+</figure>
+<ul>
+<li><b>编号用内容的哈希，不用版本号。</b>后台重启以后，版本号会从头再数，可能和窗口手里那份撞号；内容哈希不会。</li>
+<li><b>两边都留几份。</b>后台记最近 16 份发出去的索引，够本机窗口、菜单栏和别的电脑的窗口一起用；窗口留 3 份，因为一次刷新和一次操作可能同时在路上，后回来的那个还要对着上一份拼。</li>
+<li><b>底稿丢了就要整份。</b>窗口手里没有回复所对的那份，就再发一次，明确要整份。</li>
+<li><b>旧后台不会收到它看不懂的请求。</b>旧后台遇到读不懂的请求会断开连接。所以新后台在状态里报一个 <code>brief</code> 能力，窗口看到它才发 <code>Brief</code>；只升级一边时，照旧发整份。给原来的请求加字段也不行：它是一个不带参数的变体，旧后台读不懂带参数的。</li>
+</ul>
+<p>同时加了限频：对远端，一次刷新用了多久，就再等多久才做下一次，最多等 10 秒，链路至少一半时间留给打字；本机不等。只限频不改数据量是不够的：每次整份仍要十几秒，限频只是让它少占一点（<a href="https://github.com/majiayu000/fibo/pull/362">#362</a>）。在本机数据上量，一次刷新从 1.6 MB 降到 14 KB。</p>
+<p>菜单栏图标后来也用上了它：它每来一次状态就另开连接要一整份工作区（725 个会话、3.7 MB），后台每 10 秒花 339 ms 在序列化上，窗口再花 120 ms 解析。改成同样只要变化以后，这一块就没了。</p>
+
+<h3>第三步：再量一次，发现其余部分也不小</h3>
+<p>第二步的提交里，我们明确否决过"其余字段也按字段比"：工作区 98% 在会话里，其余的整份发更简单。两台都换上新版后，在真实的远端上又量了一次：</p>
+<div class="table">
+<table>
+<thead><tr><th>其余部分里最大的字段</th><th>大小</th></tr></thead>
+<tbody>
+<tr><td>终端列表（677 个）</td><td>186 KB</td></tr>
+<tr><td>任务日志</td><td>81 KB</td></tr>
+<tr><td>结果历史</td><td>66 KB</td></tr>
+<tr><td>任务</td><td>39 KB</td></tr>
+<tr><td>Agent 启动记录</td><td>36 KB</td></tr>
+</tbody>
+</table>
+</div>
+<p>本机只有 4 个终端，其余部分不到 3 KB，所以本机的测量看不出来。远端上，一次刷新即使没有任何会话变化，也有 352 KB。</p>
+<p>要不要细到每个终端？先用最便宜的办法看了一下：两分钟里取 12 次，这些字段一次都没变。它们只在开关终端、任务结束时才变。所以按顶层字段比就够了：后台给每个字段算一个哈希，只回哈希变了的字段（<a href="https://github.com/majiayu000/fibo/pull/380">#380</a>）。</p>
+<figure id="fig-bars">
+<svg class="diagram" viewBox="0 0 720 210" role="img" aria-labelledby="t-bars">
+<title id="t-bars">远端一次刷新传多少：整份 3.59 MB，只发变了的会话 352 KB，其余字段也只发变化约 660 字节（对数刻度）</title>
+<defs><marker id="a-bars" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<text x="20" y="40" class="l">整份</text><rect x="190" y="24" width="420" height="26" rx="5" class="bar0"/><text x="618" y="43" class="v">3.59 MB</text><text x="20" y="96" class="l">只发变了的会话</text><rect x="190" y="80" width="327" height="26" rx="5" class="bar1"/><text x="525" y="99" class="v">352 KB</text><text x="20" y="152" class="l">其余字段也只发变化</text><rect x="190" y="136" width="76" height="26" rx="5" class="bar2"/><text x="274" y="155" class="v">约 660 字节</text><text x="190" y="194" class="s left">对数刻度 · 真实远端，经 ssh 转发，有一两个会话在变</text>
+</svg>
+<figcaption>压缩后分别是 893 KB、81 KB 和约 420 字节。</figcaption>
+</figure>
+<p>这里有一个容易出错的地方：窗口自己会改它手里那份工作区，比如拖分隔条时先改一下预览。如果把回复盖到这份被改过的上面，没出现在回复里的字段就会把本地的改动留下来。所以窗口另外留着后台原样发来的那份，只往那份上盖。</p>
+<figure id="fig-overlay">
+<svg class="diagram" viewBox="0 0 720 270" role="img" aria-labelledby="t-overlay">
+<title id="t-overlay">回复里变了的字段盖到后台原样发来的那份上，不碰窗口自己改过的那份</title>
+<defs><marker id="a-overlay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<rect x="20" y="40" width="220" height="130" rx="10" class="box"/><text x="130.0" y="64" class="t">后台上次发来的（原样留着）</text><text x="34" y="90" class="tt2">revision: 41</text><text x="34" y="110" class="tt2">terminals: [677]</text><text x="34" y="130" class="tt2">tabs: [43]</text><text x="34" y="150" class="tt2">spaces: [23]</text><text x="258" y="112" class="op">+</text><rect x="280" y="40" width="160" height="130" rx="10" class="box accent-box"/><text x="360.0" y="64" class="t">回复</text><text x="294" y="90" class="tt2">revision: 42</text><text x="294" y="110" class="tt2"></text><text x="294" y="130" class="tt2">（其余没变，不发）</text><text x="458" y="112" class="op">=</text><rect x="480" y="40" width="220" height="130" rx="10" class="box"/><text x="590.0" y="64" class="t">新的一份</text><text x="494" y="90" class="tt2">revision: 42</text><text x="494" y="110" class="tt2">terminals: [677]</text><text x="494" y="130" class="tt2">tabs: [43]</text><text x="494" y="150" class="tt2">spaces: [23]</text><rect x="20" y="196" width="420" height="52" rx="10" class="badbox"/><text x="230" y="219" class="t">窗口自己改过的那份（拖分隔条时的预览）</text><text x="230" y="238" class="bad-t">不往上盖：否则没出现在回复里的字段会把本地改动留下</text>
+</svg>
+<figcaption>只发变了的字段，窗口要知道&quot;没出现&quot;就是&quot;没变&quot;；所以拼的底稿必须是后台发来的原样。</figcaption>
+</figure>
+<p>协议兼容又走了一遍同样的路：<code>Brief</code> 是一个两元素的元组变体，旧后台读不懂多一个元素的元组，会直接断开。所以加的是一个新请求 <code>BriefAll</code> 和一个新能力 <code>brief_all</code>；回复里的 <code>rest</code> 在线上仍是一个工作区对象的样子，旧窗口照样读得懂。还有一个测试守着一个前提：工作区的每个顶层字段即使是空的也会写出来，否则"回复里没有"就分不清是"没变"还是"变空了"。</p>
+<p>到这一步，一次刷新里剩下的，基本就是那一两个变了的会话本身，外加一个 <code>revision</code> 字段。在 54 KB/s 的链路上，压缩后约 420 字节只要几毫秒就传完，原来是十几秒。</p>
+
+<h2 id="input">谁拿着键盘</h2>
+<p>两个窗口可以同时开着同一个终端：本地的窗口和远端自己的窗口。两边同时打字，字会交错，所以同一时刻只有一个窗口能输入，另一边显示"只读 · 点击接管输入"。</p>
+<p>原来的规则是先拿到的一直拿着。可实际情况往往是：你在那台上开过这个终端，回到本地的窗口想接着打字，却发现是只读的。我们改成后开的接管：哪个窗口新打开这个终端，输入就归哪个。偷看是例外：只是瞄一眼，第一次打字才接管。</p>
+<figure id="fig-input">
+<svg class="diagram" viewBox="0 0 720 330" role="img" aria-labelledby="t-input">
+<title id="t-input">同一个终端开在两个窗口，后打开的那边拿到输入；没画出来的工作台不该抢</title>
+<defs><marker id="a-input" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<rect x="20" y="40" width="300" height="120" rx="10" class="win"/><circle cx="34" cy="53" r="4" class="light"/><circle cx="46" cy="53" r="4" class="light"/><circle cx="58" cy="53" r="4" class="light"/><text x="170" y="32" class="h">远端自己的窗口（先开）</text><rect x="30" y="64" width="280" height="86" rx="6" class="term"/><text x="40" y="86" class="tt">claude · api</text><text x="40" y="104" class="tt">› …</text><rect x="140" y="122" width="164" height="22" rx="11" class="pill-ro"/><text x="222" y="137" class="badge-t">只读 · 点击接管输入</text><rect x="400" y="40" width="300" height="120" rx="10" class="win"/><circle cx="414" cy="53" r="4" class="light"/><circle cx="426" cy="53" r="4" class="light"/><circle cx="438" cy="53" r="4" class="light"/><text x="550" y="32" class="h">本地窗口（后开）</text><rect x="410" y="64" width="280" height="86" rx="6" class="term"/><text x="420" y="86" class="tt">claude · api</text><text x="420" y="104" class="tt">› …</text><rect x="520" y="122" width="164" height="22" rx="11" class="pill-on"/><text x="602" y="137" class="badge-t">正在输入</text><path d="M330 100 H392" class="line accent" marker-end="url(#a-input)"/><text x="20" y="200" class="l">出过的问题</text><text x="20" y="226" class="s left">窗口启动时为侧栏给每台电脑建一份工作台（没画出来）。</text><text x="20" y="250" class="bad-t left">✗ 它也建窗格、接管输入：还没点过那台，那台的窗口就变成只读</text><text x="20" y="276" class="ok-t left">✓ 现在：被画出来的那一帧才建窗格、接管输入</text><text x="20" y="302" class="s left">偷看例外：只是瞄一眼，第一次打字才接管</text>
+</svg>
+<figcaption>输入同一时刻只归一个窗口，否则两边的字会交错。</figcaption>
+</figure>
+<p>这个改动上线当天就被另一轮审查抓到一个问题。3a 让窗口一启动就给每台电脑建一份工作台，给侧栏供数据。这份没画出来的工作台也按"正在显示"行事：挂上那台第一个标签的所有终端并接管输入，那台一个终端都没有时还替它开一个 shell，窗口每次失去焦点还往那台写一次"离开时间"。你还没点过那台电脑，它那边的窗口就变成了只读。修法是让工作台知道自己是不是正被画出来：没画时不建窗格、不恢复终端；被画出来的那一帧才补建窗格、接管输入（<a href="https://github.com/majiayu000/fibo/pull/367">#367</a>）。</p>
+
+<h2 id="update">换版本不断终端</h2>
+<p>两台都换上新版，新协议才会生效。换版本时后台要换成新程序，里面跑着几十个 Agent，一个都不能断。新程序启动时带 <code>--takeover</code>：旧后台把每个终端交给新后台，然后自己退出。新版窗口打开时如果发现后台是旧的，也会自动走这一步。这次在远端上换版本，日志里是 <code>handed 43 terminals to a newer host</code>。</p>
+<figure id="fig-handoff">
+<svg class="diagram" viewBox="0 0 720 260" role="img" aria-labelledby="t-handoff">
+<title id="t-handoff">换版本时旧后台把终端逐个交给新后台再退出；ssh 转发要能被 TERM 停下</title>
+<defs><marker id="a-handoff" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tip"/></marker></defs>
+<rect x="20" y="40" width="200" height="90" rx="10" class="box"/><text x="120" y="76" class="t">旧后台</text><text x="120" y="98" class="s">43 个终端在跑</text><path d="M222 85 H496" class="line accent" marker-end="url(#a-handoff)"/><text x="360" y="76" class="s accent-t">--takeover：逐个交出终端</text><text x="360" y="108" class="s">handed 43 terminals to a newer host</text><rect x="500" y="40" width="200" height="90" rx="10" class="box"/><text x="600" y="76" class="t">新后台</text><text x="600" y="98" class="s">43 个终端在跑</text><text x="20" y="170" class="l">顺带查出的一个坑</text><text x="20" y="196" class="s left">窗口进程不理 TERM（AppKit 自己管退出），它起的 ssh 转发和后台跨 exec 继承了这一点：</text><text x="20" y="220" class="bad-t left">✗ 窗口崩掉后留下的转发 TERM 收不掉，只能 kill -9</text><text x="20" y="244" class="ok-t left">✓ 现在子进程 exec 前把 TERM 恢复成默认</text>
+</svg>
+<figcaption>里面跑着几十个 Agent，换版本时一个都不能断。</figcaption>
+</figure>
+<p>换版本时还遇到一件怪事：一条旧窗口留下的 ssh 转发，发 TERM 不退，只能 <code>kill -9</code>。原因是窗口进程本身不理 TERM（退出由 AppKit 自己处理），它起的子进程跨 <code>exec</code> 继承了这一点，所以它起的 ssh 转发和后台都收不掉 TERM，要停的旧后台也要等满 5 秒才被强杀。现在子进程在 <code>exec</code> 前把 TERM 恢复成默认，只有新版窗口起的才会这样，已经在跑的旧转发还得手动收（<a href="https://github.com/majiayu000/fibo/pull/360">#360</a>）。</p>
+
+<h2 id="evidence">怎么验收</h2>
+<p>多台电脑的问题，单元测试几乎测不出来。每一步都配了一个证据脚本，让真实的窗口跑一遍用户的操作，再截图和断言：</p>
+<ul>
+<li><b>不用第二台电脑的假远端。</b>本机再起一个后台、给它另一个 HOME，当作另一台；假的 <code>ssh</code> 用 socket 链接代替 <code>-L</code>。场景里会中途掐掉转发，看窗口能不能自己重建、接着开终端，跑完再把开的标签关掉，让那台回到原样。</li>
+<li><b>再在真机器上跑一遍。</b>断线只有在真 ssh 上测才真实。在真实远端上跑前后，数标签数和在跑的终端数（46 个标签、40 个在跑，前后一样），数到那台的 ssh 只剩一条。</li>
+<li><b>撤掉修复，测试必须失败。</b>比如侧栏不跳：撤回改动时，断言"那台被画成了没有本窗口侧栏的样子"会失败。</li>
+</ul>
+<p>脚本本身也会出问题。一次体检里有两个场景没过，查下来都不是 Fibo 的问题：侧栏逐像素比较时，跑得慢的机器上窗格里的"2分"跳成"3分"就算布局变了，改成容许一个标签量级（千分之一像素）的变化；⌘J 那一步，测试窗口只在截图时才画，跳没跳过去看运气，改成边等边画。</p>
+
+<h2 id="learned">几条心得</h2>
+<ul>
+<li><b>先找到差异从哪来，再决定补还是统一。</b>远端的问题看起来是一个个界面 bug，根子是两套协议、两套界面。补得越多，接缝越多。</li>
+<li><b>数据和界面分开放。</b>"每台一整份工作台"之所以出问题，是因为数据和界面住在同一个结构里，复制数据的同时把界面也复制了。</li>
+<li><b>"默认是本机"的代码不会报错。</b>它们只会悄悄显示本机的东西：Hook 状态、家目录、shell、打开文件。要一处处找出来。</li>
+<li><b>在真数据上量，换上以后再量一次。</b>"其余部分很小"在只有 4 个终端的机器上是对的，在有 677 个终端的那台就不对了。第二次测量花了两分钟。</li>
+<li><b>协议改动先想旧的那一边。</b>旧后台读不懂新请求会断开，所以每一步都由能力标记打开；只升级一边时，一切照旧。</li>
+<li><b>用真机器验收。</b>假远端跑得快、跑得稳，但断线、慢链路、进程信号这些，只有真机器上才看得到。</li>
+</ul>
+
+<p class="next">还没做的：打字回显的 p95 超过 200 ms 才做本地预测回显（像 WezTerm 那样），目前没有必要；远端终端里的文件链接在本机打开编辑器、上下文圈和 git 领先落后由那台算好送来，也还没有做。现在两端都要装 Fibo，实测是在两台 Mac 之间做的；Windows 版还是预览，Linux 版还没有发布。</p>
+
+<footer class="end">
+  <p>Fibo 是开源的，MIT 许可。代码、决定记录和这篇提到的每个 PR 都在 <a href="https://github.com/majiayu000/fibo">GitHub</a> 上。</p>
+  <p><a href="../../">← 回到 fibo.page</a></p>
+</footer>
+</main>
+</body>
+</html>
