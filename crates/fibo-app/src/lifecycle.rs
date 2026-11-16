@@ -126,6 +126,42 @@ fn set_stale_host(build: Option<fibo_core::protocol::Build>) {
 pub fn forget_stale_host() {
     set_stale_host(None);
 }
+
+/// A host of this app's own build that was started some other way than by a window
+/// (`fibo_core::launch`), with what starting it again from here would fix.
+static MISPLACED_HOST: std::sync::Mutex<
+    Option<(
+        fibo_core::protocol::Build,
+        Vec<fibo_core::launch::LaunchIssue>,
+    )>,
+> = std::sync::Mutex::new(None);
+pub fn misplaced_host() -> Option<(
+    fibo_core::protocol::Build,
+    Vec<fibo_core::launch::LaunchIssue>,
+)> {
+    MISPLACED_HOST.lock().ok()?.clone()
+}
+/// What is off about how this window was started; nothing in a scripted run, whose
+/// harness starts it however a test machine can.
+pub fn window_launch() -> &'static [fibo_core::launch::LaunchIssue] {
+    static WINDOW: std::sync::LazyLock<Vec<fibo_core::launch::LaunchIssue>> =
+        std::sync::LazyLock::new(|| match scripted() {
+            true => vec![],
+            false => fibo_core::launch::of_window(),
+        });
+    &WINDOW
+}
+fn scripted() -> bool {
+    std::env::args().any(|a| a == "--visual-evidence")
+}
+/// Only a host that hands its terminals over is offered: restarting it ends none.
+fn set_misplaced_host(build: &fibo_core::protocol::Build, stale: bool, attached: bool) {
+    let fixed = fibo_core::launch::fixed_by_restart(&build.launch, window_launch());
+    let misplaced = !stale && !attached && !scripted() && build.handoff && !fixed.is_empty();
+    if let Ok(mut slot) = MISPLACED_HOST.lock() {
+        *slot = misplaced.then(|| (build.clone(), fixed));
+    }
+}
 #[cfg(feature = "visual-test")]
 pub fn visual_stale_host() {
     set_stale_host(Some(Default::default()));
@@ -252,7 +288,9 @@ fn hello_build(socket: &Path) -> io::Result<fibo_core::protocol::Build> {
 /// new process connects to the current host. A host that can hand over keeps every
 /// terminal running; an older one is stopped and the new process starts a fresh host.
 pub fn restart_host(root: &Path) -> io::Result<()> {
-    let host = stale_build().ok_or_else(|| io::Error::other(t!("后台已是最新")))?;
+    let host = stale_build()
+        .or_else(|| misplaced_host().map(|(build, _)| build))
+        .ok_or_else(|| io::Error::other(t!("后台已是最新")))?;
     if host.handoff {
         spawn_host(root, true)?;
     } else {
@@ -292,7 +330,9 @@ pub fn connected_host(socket: &Path) -> io::Result<bool> {
             // often its binary is rebuilt; fixes then look like they never landed.
             let sibling = host_program()?;
             let attached = socket.parent().is_some_and(attached_at);
-            set_stale_host(treated_stale(build.stale(&sibling), attached).then_some(build));
+            let stale = treated_stale(build.stale(&sibling), attached);
+            set_misplaced_host(&build, stale, attached);
+            set_stale_host(stale.then_some(build));
             Ok(true)
         }
         Reply::Error(message) if message.starts_with("protocol major ") => {

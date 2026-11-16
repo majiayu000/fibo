@@ -42,8 +42,12 @@ use status::*;
 type Shared = Arc<Mutex<Host>>;
 type LiveTerminal = Arc<Mutex<Live>>;
 /// Captured at startup: rebuilding the binary later must not hide that this host is old.
+/// With what is off about how it was started: the window offers to start it again.
 static BUILD: std::sync::LazyLock<fibo_core::protocol::Build> =
-    std::sync::LazyLock::new(fibo_core::protocol::Build::current);
+    std::sync::LazyLock::new(|| fibo_core::protocol::Build {
+        launch: fibo_core::launch::of_host(),
+        ..fibo_core::protocol::Build::current()
+    });
 struct Host {
     /// Keeps phones on a relay; None until the host has started it.
     remote: Option<Arc<remote::Supervisor>>,

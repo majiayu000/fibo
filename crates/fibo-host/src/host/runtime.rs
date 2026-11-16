@@ -143,7 +143,13 @@ pub(super) fn serve_runtime(
     recent_days: u64,
     takeover: bool,
 ) -> io::Result<()> {
-    std::sync::LazyLock::force(&BUILD);
+    if !std::sync::LazyLock::force(&BUILD).launch.is_empty() {
+        // Every terminal inherits it: say so where whoever started it will look.
+        eprintln!(
+            "fibo: not started by the window ({:?}); its terminals inherit this. Open the app to start the host itself",
+            BUILD.launch
+        );
+    }
     fibo_platform::fs::secure_dir(root)?;
     let taken = if takeover {
         // The old host lets go of every terminal once told they are taken, so what can

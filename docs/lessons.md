@@ -95,3 +95,13 @@
 **为什么：** 重跑让 CI 变绿，同一个用例可以一直红下去。
 
 - 11-06 到 11-07 的 47 条重跑记录里，41 条是同一个用例 `codex_rebind::an_older_conversations_words_on_the_screen_are_not_what_the_pane_runs`。原因是一半夹具一半真问题（`updated >= started` 在同一秒成立，等于猜）。
+
+### 手动拉起后台，环境跟着拉起它的人走
+
+**规则：** 不要在终端或 SSH 里自己起 `fibo serve`，也不要直接运行 `MacOS/fibo-app`。换包：先按进程号退出旧 App，再用 `open` 打开新包，由窗口带 `--takeover` 拉起后台。后台启动方式不对时，窗口状态栏会提示，点「重启后台」由窗口重新拉起（`fibo_core::launch`）。
+
+**为什么：** 后台开的每个终端都会继承拉起它的进程所在的环境，交接后旧终端也不会变。`env -i` 只能清理环境变量，下面三样清不掉：SSH 里起的后台在远程审计会话里，新开的 Claude 读不到钥匙串，显示未登录（gh、https 的 git、代码签名、插件密钥同样失败）；zsh 里用 `&` 放到后台的任务 nice 会加 5，只有 root 能调回去；隐私权限算到拉起它的程序名下。
+
+出现 1 天，但一次修复里同类的错犯了两次：
+
+- 11-16 另一台 Mac 远程换包，执行 `ssh agentos 'env -i … nohup fibo serve --takeover &'`，之后新开的 Claude 全部显示 Not logged in。修复时从 Claude 的终端里 `… &` 重起后台，又带进了 nice 5，责任进程也变成了那个终端程序。调研：`~/Documents/claude-pages/mooring/2026-11-16-host-launch-context/`。

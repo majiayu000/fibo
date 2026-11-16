@@ -3,6 +3,7 @@ use super::*;
 
 mod bars;
 mod keys;
+mod launch;
 mod tabs;
 pub(super) use bars::marked_button;
 pub(super) use tabs::TextTip;
@@ -175,6 +176,11 @@ impl Render for Workbench {
                 }))
                 .into_any_element(),
             );
+        }
+        if !crate::lifecycle::stale_host()
+            && let Some(chip) = self.launch_chip(cx)
+        {
+            tail.push(chip);
         }
         if self.anything_waits() {
             tail.push(self.next_waiting_chip(cx).into_any_element());
