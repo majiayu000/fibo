@@ -1,7 +1,8 @@
 //! The client's link to the host: the socket, the in-flight user action, background
 //! syncs and the recognition status the host pushes. Views never call `rpc` themselves.
+use super::brief::Held;
 use crate::connection::{RecognitionConnection, StatusLink};
-use fibo_core::delivery::{PATIENCE, Settled, deliver};
+use fibo_core::delivery::Settled;
 use fibo_core::{model::*, protocol::*};
 use futures::channel::mpsc::UnboundedSender;
 use std::{
@@ -15,6 +16,8 @@ use std::{
 /// A host restart drops the status link for a moment and it reconnects on its own;
 /// only an outage longer than this is worth telling the user about.
 pub const CUT_OFF_NOTICE: Duration = Duration::from_secs(3);
+/// The longest a slow refresh of another machine holds back the next one.
+const MAX_REST: Duration = Duration::from_secs(10);
 /// A new terminal's slot: whether it splits, its task, the lost pane it replaces.
 pub type Launch = (bool, Option<String>, Option<String>);
 
@@ -39,6 +42,7 @@ pub struct Store {
     recognition: RecognitionStatus,
     /// When the status link to the host dropped, and why; `None` while it is up.
     cut_off_at: Option<(Instant, String)>,
+    deltas: Held,
     _recognition_connection: RecognitionConnection,
 }
 
@@ -58,6 +62,7 @@ impl Store {
             held_launch: None,
             recognition: RecognitionStatus::default(),
             cut_off_at: None,
+            deltas: Held::default(),
             _recognition_connection: recognition_connection,
         }
     }
@@ -199,7 +204,17 @@ impl Store {
     /// confirmed, refused, or `PATIENCE` says its outcome is unknown.
     pub fn deliver(&self, request: Request) -> impl Future<Output = Settled> + use<> {
         let socket = self.socket.clone();
-        async move { deliver(&socket, &request, PATIENCE) }
+        let (held, brief) = (self.deltas.clone(), self.recognition.brief);
+        async move { held.deliver(&socket, request, brief) }
+    }
+    /// How long a refresh that took `took` keeps the next one waiting. Another machine's
+    /// link is shared with typing there: refreshing at most half the time leaves it room.
+    /// This machine's socket has room to spare.
+    pub fn rest_after(&self, took: Duration) -> Duration {
+        match crate::attach::Host::of(&self.socket).attached() {
+            true => took.min(MAX_REST),
+            false => Duration::ZERO,
+        }
     }
     /// Launches a terminal, then places it (`place`: a new tab, a split, a relaunch in
     /// an old pane's place), each resent with the same id while the host is away. A split from a running
@@ -213,6 +228,7 @@ impl Store {
         mut place: Edit,
     ) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();
+        let (held, brief) = (self.deltas.clone(), self.recognition.brief);
         async move {
             // A shell that ended or moved somewhere unreadable keeps the recorded directory.
             if let Some(id) = cwd_source
@@ -231,14 +247,14 @@ impl Store {
                 space.clone_from(&narrower.id);
                 tab.space.clone_from(&narrower.id);
             }
-            let Reply::Workspace(_) = deliver(&socket, &request, PATIENCE).into_result()? else {
+            let Reply::Workspace(_) = held.deliver(&socket, request, brief).into_result()? else {
                 return Err(std::io::Error::other("launch response missing"));
             };
             let place = Request::Edit {
                 request: Some(RequestId::fresh()),
                 edit: place,
             };
-            deliver(&socket, &place, PATIENCE).into_result()
+            held.deliver(&socket, place, brief).into_result()
         }
     }
 }

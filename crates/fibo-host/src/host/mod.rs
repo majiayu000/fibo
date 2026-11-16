@@ -18,6 +18,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 mod association;
+mod brief;
 mod client;
 mod events;
 mod found_shells;
@@ -758,6 +759,8 @@ fn hostname() -> String {
     fibo_platform::system::host_name()
 }
 
+#[cfg(test)]
+mod brief_tests;
 #[cfg(test)]
 mod recognition_tests;
 #[cfg(test)]

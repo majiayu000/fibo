@@ -44,7 +44,7 @@ impl Workbench {
         let split = ids.len() > 1;
         for id in ids {
             if !self.layout.panes.contains_key(&id) {
-                let pane = cx.new(|cx| Pane::new(self.store.socket(), &id, false, cx));
+                let pane = cx.new(|cx| Pane::new(self.store.socket(), &id, true, cx));
                 Self::adopt_pane(&pane, cx);
                 self.layout.panes.insert(id, pane);
             }

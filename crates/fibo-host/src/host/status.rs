@@ -9,6 +9,7 @@ pub(super) fn recognition_status(host: &Host) -> RecognitionStatus {
     let (ps, lsof) = crate::recognition::probe_counts();
     status.metrics.ps_spawns = ps;
     status.metrics.lsof_spawns = lsof;
+    status.brief = true;
     status
 }
 pub(super) fn publish_recognition(

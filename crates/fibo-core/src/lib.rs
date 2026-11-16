@@ -49,3 +49,4 @@ pub mod diagnostics;
 pub mod tool_rows;
 pub mod turn_diff;
 pub mod update;
+pub mod workspace_delta;

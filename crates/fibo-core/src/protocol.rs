@@ -138,6 +138,8 @@ pub enum Request {
     Colors(crate::terminal::TermColors),
     /// Cmd+K: drop scrollback and the rows above the cursor (no-op in the alternate screen).
     ClearHistory,
+    /// The request, its workspace reply as a `WorkspaceDelta` against the stamp given.
+    Brief(Option<u64>, Box<Request>),
     TerminalCwd {
         id: String,
     },
@@ -399,20 +401,6 @@ pub struct RequestId {
     pub id: String,
 }
 pub const REQUEST_KEPT_SECS: u64 = 24 * 60 * 60;
-impl RequestId {
-    /// A new id from this process: one client for the process's life, ids in order.
-    pub fn fresh() -> Self {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static CLIENT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-        static NEXT: AtomicU64 = AtomicU64::new(1);
-        Self {
-            client: CLIENT
-                .get_or_init(|| uuid::Uuid::new_v4().to_string())
-                .clone(),
-            id: NEXT.fetch_add(1, Ordering::Relaxed).to_string(),
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Reply {
@@ -424,6 +412,8 @@ pub enum Reply {
         build: Build,
     },
     Workspace(Workspace),
+    /// [`Request::Brief`]'s workspace reply.
+    WorkspaceDelta(Box<crate::workspace_delta::Delta>),
     Cwd(String),
     NotificationClaimed(bool),
     Recognition(RecognitionStatus),
@@ -680,6 +670,9 @@ pub struct RecognitionStatus {
     #[serde(default)]
     pub terminal_modes: crate::modes::Modes,
     pub workspace_revision: u64,
+    /// Understands [`Request::Brief`]: hosts before it drop a connection that sends one.
+    #[serde(default)]
+    pub brief: bool,
     /// Bumped whenever the host reloads plugins: a `fibo plugins` in a terminal changed
     /// them, or a window did, and every window has to read them again.
     #[serde(default)]
@@ -708,6 +701,7 @@ impl Default for RecognitionStatus {
             terminal_reports: Default::default(),
             terminal_modes: Default::default(),
             workspace_revision: 0,
+            brief: false,
             plugins_revision: 0,
             official: Default::default(),
             remote: Default::default(),

@@ -615,11 +615,11 @@ impl Workbench {
         }
         // Resent while the host is away for a moment (a newer one taking over drops the
         // replies in flight), as a read safely is.
+        let started = std::time::Instant::now();
         let task = cx.background_spawn(self.store.deliver(Request::Workspace));
         cx.spawn(async move |this, cx| {
             let reply = task.await.into_result();
-            let _ = this.update(cx, |this, cx| {
-                let again = this.store.end_sync();
+            let rest = this.update(cx, |this, cx| {
                 let failure = match reply {
                     Ok(Reply::Workspace(w)) => {
                         this.apply_workspace(w, cx);
@@ -629,10 +629,20 @@ impl Workbench {
                     Err(e) => Some(e.to_string()),
                 };
                 this.store.settle_sync(&mut this.error, failure);
+                cx.notify();
+                this.store.rest_after(started.elapsed())
+            });
+            // Still syncing while it rests: changes meanwhile wait for the one after.
+            if let Ok(rest) = rest
+                && !rest.is_zero()
+            {
+                cx.background_executor().timer(rest).await;
+            }
+            let _ = this.update(cx, |this, cx| {
+                let again = this.store.end_sync();
                 if again || this.store.behind(this.workspace.revision) {
                     this.sync(cx);
                 }
-                cx.notify();
             });
         })
         .detach();
