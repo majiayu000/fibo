@@ -37,7 +37,10 @@ impl Role {
             | "mkdir" | "stop" | "lastsession" | "addspace" | "spacequiet" | "trust" | "modes"
             | "setmode" | "todoadd" | "todooutcome" | "image" | "sendnow" => self == Self::Full,
             "answer" => self != Self::View,
-            _ => true,
+            "hello" | "ping" | "list" | "cards" | "read" | "chat" | "watch" | "events"
+            | "close" | "diff" | "quota" | "usage" | "toolcalls" | "toolcall" | "backfill"
+            | "suggestion" | "ask" => true,
+            _ => false,
         }
     }
 }
@@ -111,6 +114,11 @@ mod tests {
         assert!(!Role::View.allows("answer") && !Role::View.allows("send"));
         assert!(Role::Answer.allows("answer") && !Role::Answer.allows("keys"));
         assert!(Role::Full.allows("send") && Role::Full.allows("keys"));
+        for role in [Role::View, Role::Answer, Role::Full] {
+            assert!(!role.allows("future_operation"));
+            assert!(!role.allows(""));
+            assert!(role.allows("ping"));
+        }
         assert_eq!(Role::parse("admin"), None);
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
         assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
