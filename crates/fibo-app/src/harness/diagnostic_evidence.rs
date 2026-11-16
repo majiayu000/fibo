@@ -19,9 +19,9 @@ pub(super) fn start(
             cx.update_window(handle.into(), |_, window, app| {
                 window.refresh(); window.draw(app).clear(app);
                 window.render_to_image().unwrap().save(directory.join("entry.png")).unwrap();
-                let at = gpui::point(px(theme::Theme::SIDEBAR / 2.), window.viewport_size().height - px(theme::Theme::S8 + theme::Theme::ROW / 2.));
-                native_click(window, app, at, gpui::MouseButton::Left);
             }).unwrap();
+            // The entry moved to the status bar's right end; open it the way it does.
+            handle.update(cx, |view, window, cx| view.visual_open_diagnostics(window, cx)).unwrap();
             cx.background_executor().timer(Duration::from_millis(500)).await;
             cx.update_window(handle.into(), |_, window, app| {
                 window.refresh(); window.draw(app).clear(app);
@@ -29,8 +29,17 @@ pub(super) fn start(
                 window.dispatch_event(gpui::KeyDownEvent { keystroke: gpui::Keystroke::parse("escape").unwrap(), is_held: false, prefer_character_input: false }.to_platform_input(), app);
             }).unwrap();
             assert!(handle.update(cx, |view, _, _| view.visual_diagnostic_closed()).unwrap());
+            // Closing mid-run keeps it sampling in the status bar; the window is free.
+            let away = handle.update(cx, |view, _, cx| view.visual_diagnostic_away(cx)).unwrap();
+            assert!(away.is_some(), "closing stopped the run");
             cx.background_executor().timer(Duration::from_millis(300)).await;
+            cx.update_window(handle.into(), |_, window, app| {
+                window.refresh(); window.draw(app).clear(app);
+                window.render_to_image().unwrap().save(directory.join("away.png")).unwrap();
+            }).unwrap();
             handle.update(cx, |view, window, cx| view.visual_open_diagnostics(window, cx)).unwrap();
+            // Reopened, it is the same run, not a new one.
+            assert!(handle.update(cx, |view, _, cx| view.visual_diagnostic_away(cx)).unwrap().is_none());
             // Mid-wait: the terminal lines, the spinner and the countdown.
             cx.background_executor().timer(Duration::from_secs(3)).await;
             cx.update_window(handle.into(), |_, window, app| {

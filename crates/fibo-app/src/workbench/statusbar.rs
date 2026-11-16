@@ -130,16 +130,13 @@ impl Workbench {
                         ),
                 )
             })
-            .when(fit.diagnose || fit.settings, |d| d.child(divider()))
-            .when(fit.diagnose, |d| {
-                d.child(
-                    item("diagnose-host", false)
-                        .aria_label(t!("本机诊断"))
-                        .child(t!("本机诊断"))
-                        .on_click(
-                            cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx)),
-                        ),
-                )
+            // A run closed mid-way shows here even when the bar is too narrow for the entry.
+            .when(
+                fit.diagnose || fit.settings || self.diagnostics_away.is_some(),
+                |d| d.child(divider()),
+            )
+            .when(fit.diagnose || self.diagnostics_away.is_some(), |d| {
+                d.child(self.diagnose_item(cx))
             })
             // 设置 is at the sidebar's foot; the bar ends on the palette, as in the v3 design.
             .when(fit.settings, |d| {

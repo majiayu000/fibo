@@ -15,6 +15,8 @@ use std::{
 };
 
 const INTERVAL: Duration = Duration::from_millis(7500);
+/// How long one ps or ioreg run may take before the sample gives up.
+const COMMAND_WAIT: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Debug)]
 struct Process {
@@ -70,7 +72,9 @@ fn capture(command: &mut Command, stream: &local::Stream) -> io::Result<String> 
         let mut bytes = Vec::new();
         stdout.read_to_end(&mut bytes).map(|_| bytes)
     });
-    let deadline = Instant::now() + Duration::from_secs(3);
+    // ps takes 0.2 s on an idle Mac with 1700 processes; at load 300 it took over 3 s,
+    // and a busy Mac is when diagnostics are opened.
+    let deadline = Instant::now() + COMMAND_WAIT;
     let result = loop {
         match child.try_wait() {
             Ok(Some(_)) => break Ok(()),

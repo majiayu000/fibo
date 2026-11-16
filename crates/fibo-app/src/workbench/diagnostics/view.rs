@@ -330,7 +330,11 @@ impl Render for DiagnosticView {
                         })),
                     )
                 })
-                .child(label(t!("只在本机读取，结束后停止采样")))
+                .child(label(if running {
+                    t!("只在本机读取 · 关掉面板也会采完，结果在状态栏")
+                } else {
+                    t!("只在本机读取，结束后停止采样")
+                }))
                 .child(div().flex_1())
                 .child(
                     button(

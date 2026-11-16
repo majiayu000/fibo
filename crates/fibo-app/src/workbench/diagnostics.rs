@@ -15,6 +15,7 @@ use std::{
     time::Instant,
 };
 
+mod away;
 mod charts;
 mod cpu;
 mod memory;
@@ -24,6 +25,8 @@ mod view;
 /// The host reports its first interval this long after it is asked (its INTERVAL is 7.5 s,
 /// plus the first snapshot).
 const FIRST_REPORT: Duration = Duration::from_secs(8);
+/// How long the window waits for each host reply before giving up.
+const REPLY_WAIT: Duration = Duration::from_secs(60);
 const SPINNER: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
 /// One turn of the waiting spinner.
 const SPIN: Duration = Duration::from_millis(800);
@@ -71,7 +74,9 @@ impl Sampling {
                     }
                     *slot = Some(stream.try_clone()?);
                 }
-                stream.set_read_timeout(Some(Duration::from_secs(25)))?;
+                // Reports come about 8 s apart, later when the machine is busy: a loaded
+                // Mac is when this is opened, so a tight limit failed exactly then.
+                stream.set_read_timeout(Some(REPLY_WAIT))?;
                 stream.set_write_timeout(Some(Duration::from_secs(5)))?;
                 send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
                 if !matches!(
@@ -97,6 +102,17 @@ impl Sampling {
             if let Err(error) = read()
                 && !cancelled.load(Ordering::Acquire)
             {
+                let error = if matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) {
+                    io::Error::other(t!(
+                        "后台 {secs} 秒没回话，电脑可能太忙；稍后点「重新采样」",
+                        secs = REPLY_WAIT.as_secs()
+                    ))
+                } else {
+                    error
+                };
                 let _ = tx.unbounded_send(Err(error));
             }
         });
@@ -437,6 +453,12 @@ impl Workbench {
     pub fn visual_diagnostic_closed(&self) -> bool {
         self.diagnostics.is_none()
     }
+    /// Closed while sampling: still sampling, kept for the status bar, since when.
+    #[cfg(feature = "visual-test")]
+    pub fn visual_diagnostic_away(&self, cx: &gpui::App) -> Option<Duration> {
+        let view = self.diagnostics_away.as_ref()?.read(cx);
+        Some(view.sampling.as_ref()?.started.elapsed())
+    }
     #[cfg(feature = "visual-test")]
     pub fn visual_open_diagnostic_terminal(&mut self, cx: &mut Context<Self>) {
         let view = self.diagnostics.as_ref().unwrap().clone();
@@ -468,6 +490,14 @@ impl Workbench {
 
     pub(crate) fn show_diagnostics(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.search.hide();
+        // A run closed mid-way comes back as it is, not restarted.
+        if let Some(view) = self.diagnostics_away.take() {
+            let focus = view.read(cx).focus.clone();
+            window.focus(&focus, cx);
+            self.diagnostics = Some(view);
+            cx.notify();
+            return;
+        }
         let terminals = self
             .workspace
             .terminals
@@ -485,9 +515,16 @@ impl Workbench {
             })
             .collect();
         let view = cx.new(|cx| DiagnosticView::new(self.store.socket().to_owned(), terminals, cx));
+        // Only a run in the background redraws the window (its status bar cell); the open
+        // sheet's spinner would otherwise redraw the whole window ten times a second.
+        cx.observe(&view, |this, view, cx| {
+            if this.diagnostics_away.as_ref() == Some(&view) {
+                cx.notify();
+            }
+        })
+        .detach();
         cx.subscribe(&view, |this, _, action, cx| {
-            this.diagnostics = None;
-            this.nav.pending_focus = true;
+            this.hide_diagnostics(cx);
             if let DiagnosticAction::Terminal(id) = action
                 && let Some(tab) = this
                     .workspace
@@ -530,11 +567,7 @@ impl Workbench {
                 .bg(gpui::rgba(T::scrim()))
                 .on_mouse_down(
                     gpui::MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.diagnostics = None;
-                        this.nav.pending_focus = true;
-                        cx.notify();
-                    }),
+                    cx.listener(|this, _, _, cx| this.hide_diagnostics(cx)),
                 )
                 .child(view),
         )
