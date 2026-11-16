@@ -64,7 +64,7 @@
 <table>
   <tr><th>帧</th><th>11-03 前</th><th>现在</th><th>说明</th></tr>
   <tr><td>终端输出帧（只有窗格变了）</td><td>7430 万</td><td><b>约 630–700 万</b></td><td>最常见的帧：Agent 输出时每帧都是它</td></tr>
-  <tr><td>整窗重画（强制刷新）</td><td>约 7500 万</td><td><b>约 7570 万</b></td><td>切主题、开鸟瞰、改窗口大小时发生，次数少</td></tr>
+  <tr><td>整窗重画（强制刷新）</td><td>约 7500 万</td><td>约 5730 万（11-16 前 1.07 亿）</td><td>侧栏每次重画都是它：工作区每变一次（真实使用约每秒 1.4 次），有轮次在跑时计时每秒再补画一次。11-16 实测真实窗口侧栏占主线程约一半</td></tr>
   <tr><td>真实窗口 CPU（Agent 输出时）</td><td>14–32%</td><td>采样 0–10%</td><td>各时段输出量不同，只作粗对比</td></tr>
 </table>
 <p class="muted">后台：<code>four_agents</code> 用例每行日志约 65 万条指令（预算 100 万）；40 个空闲终端 &lt;0.5% CPU、零磁盘读写。</p>
@@ -114,6 +114,8 @@
 <div class="card rule"><b>R5 大列表不要放进横向 flex。</b>横向容器要先量子元素的内容尺寸，taffy 会把整张会话列表（含文字折行）多量一遍。只有确实需要并排（机器竖栏）时才套横向容器。</div>
 <div class="card rule"><b>R6 每帧按 id 查的表用 FxHash。</b><code>Workspace.content</code> 是 <code>FxHashMap</code>；SipHash 曾占终端帧约一成。键来自本机日志，不是网络对端挑的。</div>
 <div class="card rule"><b>R7 动了渲染要跑门禁。</b>本机：<code>python3 scripts/perf-gate.py target/release</code>（先编探针版）。性能确实变了且是有意的，用 <code>MOORING_PERF_UPDATE=1</code> 重写基线并在提交说明里写原因；只能在真机写，虚拟机写不了。</div>
+<div class="card rule"><b>R9 每行都有的元素，少套靠内容撑开的容器；高度已知就写死。</b>taffy 为了算一个靠内容撑开的容器有多大，要把里面的东西量好几遍，嵌套一层乘一次。侧栏「今天」50 行时，一行曾要约 1.6 M 指令：单行的行少一层纵向容器、行高给定为 <code>ONE_LINE_ROW</code>，整窗重画 105 M → 57 M（<code>sidebar_flat.rs</code> 的 <code>flat_row</code>）。改了行的结构，要用 <code>visual-check.py shots</code> 比对像素。</div>
+<div class="card rule"><b>R10 对全部会话的过滤，先判便宜的条件；循环里要查的表先收成集合。</b>「属于哪个空间」要比路径，「开着没有」大多立刻是否；<code>&amp;&amp;</code> 换顺序结果不变。先不管的空间曾每次重画都把每个会话和整张 <code>lost_agents</code> 逐个比字符串，3 个先不管的空间时整窗重画 238 M，改后 61 M。</div>
 
 <div class="card rule"><b>R8 一小块要连续动时，不要让整页跟着重排。</b><code>request_animation_frame</code> 通知的是当前视图和它所有祖先，整页会每帧重新排版。把动的部分放进单独的小视图画在上层，播放期间让页面当缓存视图（<code>workbench/complete/stage.rs</code> 的 <code>Player</code>，<code>settings/overlay.rs</code>）。动画卡片这样从每帧 79 M 降到 12 M。</div>
 
@@ -122,7 +124,7 @@
 <table>
   <tr><th>检查</th><th>失败条件</th><th>拦的是什么</th></tr>
   <tr><td>终端帧、整窗重画的指令数</td><td>超基线 15%</td><td>任何变慢（真机）</td></tr>
-  <tr><td>pane-share：终端帧 CPU ÷ 整窗 CPU</td><td>超基线 2 倍（仅在读不到指令数时）</td><td>CI 虚拟机上的退路。两个数同一进程前后量，机器快慢基本抵消：本机 0.11（frame_facts 之前 0.17，那时 CI 约 0.2），侧栏每帧重画时 0.96</td></tr>
+  <tr><td>pane-share：终端帧 CPU ÷ 整窗 CPU</td><td>超基线 2 倍（仅在读不到指令数时）</td><td>CI 虚拟机上的退路。两个数同一进程前后量，机器快慢基本抵消：本机 0.14（11-16 整窗重画减半后，之前 0.11；frame_facts 之前 0.17，那时 CI 约 0.2），侧栏每帧重画时 0.96</td></tr>
   <tr><td>逐像素重画</td><td>任何一步有差异</td><td>侧栏或其他缓存视图漏刷新</td></tr>
   <tr><td>插件页：卡片播放、打开设置、背景图和半透明主题下的终端帧</td><td>指令数超基线 15%；读不到指令数时，<code>cardplay-share</code>、<code>theme-share</code> 超基线 2 倍</td><td>违反 R8；主题拖慢终端帧</td></tr>
   <tr><td>在跑圆圈转动（默认关）：一步的指令数；真的在转；侧栏不重画；看不到标记或关掉后不再请求下一步</td><td>超基线 15%，或任何一项没发生</td><td>转动时重排侧栏；圆圈滚走后还在空转；门禁量的是静止画面</td></tr>
@@ -166,6 +168,9 @@
   <tr><td>本提交</td><td>指着一张动画卡片时，整页 16 张卡片每帧重排，占这一帧的 80%</td><td>只重画播放的那张（Player），页面当缓存视图（R8）</td><td>每帧 78.8 M → 12.4 M，约 6 ms → 0.9 ms</td></tr>
   <tr><td>8678054</td><td>门禁数补画总数，在有屏幕的 CI 上误报</td><td>改数「补画自己那一帧又排的补画」</td><td>正常 0，坏版本 15</td></tr>
   <tr><td>本提交（侧栏不设行数上限）</td><td>给侧栏所有行套一层容器来读位置，布局把每行文字多量一遍，行数不变也从 74 M 涨到 123 M</td><td>行仍是滚动层的直接子元素，位置从滚动句柄读，只加一个零尺寸标记</td><td>容器成本归零（+0.1%）。基线涨到 107 M 全部来自夹具真的多列了行（12 行到全部），约 0.8 M 一行；终端帧不变</td></tr>
+  <tr><td>2026-11-16 单行会话行</td><td>真实窗口采样侧栏重画占主线程约一半；去掉「今天」50 行整窗重画 96 → 16.5 M，一行约 1.6 M，贵的是每行而不是行数（只画前 20 行几乎不省）</td><td>单行的行不套纵向容器、行高写死（R9）</td><td>105 M → 57 M</td></tr>
+  <tr><td>2026-11-16 标签名</td><td>标签名缓存每秒失效一次，失效那帧给 15 个标签起名约 8 ms：每个标签把同空间前面的标签重新起名，每次起名扫两遍全部会话</td><td>先按终端收好当前会话，<code>Workspace::tab_titles</code> 一次起完</td><td>起名样本 84 → 15</td></tr>
+  <tr><td>2026-11-16 先不管的空间</td><td>每个先不管的空间每次重画都先比路径找会话的空间，再逐个比 <code>lost_agents</code></td><td>先判开没开（R10），<code>lost_agents</code> 收成集合；<code>space_counts</code> 同样换顺序</td><td>3 个先不管的空间：238 M → 98 M → 61.5 M</td></tr>
 </table>
 
 <h2 id="pitfalls">8. 踩过的坑</h2>
@@ -179,6 +184,7 @@
   <li><b>把设计内的晚一帧当差异</b>：标签栏溢出提示本就晚一帧，比对前要先让那一帧画出来。</li>
   <li><b>整理提交时 <code>git reset --soft main</code></b>：如果 main 已被其他会话推进，工作区相对新 main 会显得在撤销别人的改动。正确做法是 <code>git rebase main</code>，或从原起点导出自己的补丁再套用。</li>
   <li><b>测试文件超过 800 行</b>：VibeGuard 只允许变短；改断言时要同时压缩周围代码。</li>
+  <li><b>探针会弄脏夹具</b>：每跑一次 <code>probe</code> 都在当前空间新开一个标签（<code>visual_new_tab</code>），几十次后有 91 个标签，标签栏把终端帧从 7.8 M 撑到 27 M。夹具也会随时间变老（同一夹具整窗重画 109 → 91 M）。对照一律新旧交替跑同一状态，报数字前重建夹具。</li>
   <li><strong>一堆 8192K 的「owned unmapped (graphics)」不是我们的缓存</strong>：进程第一次用渲染通道，Metal 驱动分配 28 块 8 MB；第一次用 blit，再加 20 块。一个几十行的最小 Metal 程序也一样，<code>MTLDevice.currentAllocatedSize</code> 不计入，和窗口大小、会话数无关。所以正常帧不能用 blit 编码器，<code>crates/fibo-core/tests/gpui_present.rs</code> 守着。</li>
 </ul>
 
@@ -205,6 +211,9 @@
   <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
   <li><span class="tag">已改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：原先主库因存的是用户操作（待办、完成状态）保留 <code>synchronous=FULL</code>；11-05 按 <code>docs/plan.md</code> 第 3 阶段改成 WAL + NORMAL，进程崩溃不丢，只有掉电或系统崩溃可能丢最后几笔（见 <code>docs/decisions/2026-11-05-workbench-db-synchronous-normal.md</code>）。写库挪出锁还没做。日志索引本来就是 NORMAL。</li>
   <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试。</li>
+  <li><span class="tag">下一步</span> 终端帧随当前空间的标签数线性涨，约 0.24 M 一个（夹具 15 个标签时约占终端帧一半）：每个标签是靠内容撑开的横向 flex，滚出去的也排版。可试 R9 的做法，或把标签栏做成缓存视图（要像侧栏一样处理补画）。</li>
+  <li><span class="tag">下一步</span> 11-16 之后整窗重画里排版仍占约 41%，侧栏渲染 16%，绘制 12%。空间标签拆成两个子元素只省 3%、时间改成右对齐文字不到 2%，按放弃线没做。</li>
+  <li><span class="tag">已否定</span> 侧栏每行的悬停提示（<code>session_tip</code>）改成悬停时才算：约 2.5%，但提示弹出时去读工作台，若那一刻工作台正被渲染占着会崩，不值。</li>
   <li><span class="tag">已查</span> 窗口进程约 759 MB（M3 Max，真实使用 4.5 小时）：Metal 驱动池 384 MB，Rust 堆约 177 MB，三个 drawable 约 92 MB，其他图形内存约 49 MB（含后台缓冲 31 MB），其余约 55 MB。驱动池里 blit 占的 160 MB 已省掉，渲染占的 224 MB 只要窗口在画就省不掉；Rust 堆没细查。GPU 空闲约 2 秒后驱动收回整个池，下次提交重新分配，最小程序里耗时 7–24 ms（平时 0.4 ms），真实窗口没量。</li>
 </ul>
 </main>
