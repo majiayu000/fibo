@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>One window, many Macs · Fibo blog</title>
+<title>One window for terminals on every Mac · Fibo blog</title>
 <meta name="description" content="How Fibo lets one window drive coding agents on another Mac as if they were local: why we threw away a separate remote UI, how the host and the window split the work, and how one refresh went from 3.59 MB to 660 bytes on a slow link.">
 <link rel="canonical" href="https://fibo.page/blog/many-macs/">
 <link rel="alternate" hreflang="en" href="https://fibo.page/blog/many-macs/">
 <link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/many-macs/zh.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Fibo">
-<meta property="og:title" content="One window, many Macs">
+<meta property="og:title" content="One window for terminals on every Mac">
 <meta property="og:description" content="Agents on another Mac, driven like local ones: the approach, how it works, and the trade-offs on a slow link.">
 <meta property="og:url" content="https://fibo.page/blog/many-macs/">
 <meta property="og:image" content="https://fibo.page/assets/og.png">
@@ -35,8 +35,8 @@
 
 <main class="post">
 <p class="kicker">Engineering notes · November 2026</p>
-<h1>One window, many Macs</h1>
-<p class="lede">Some of our agents run on the MacBook in front of us, others on a Mac that stays on in the corner. This post is about how Fibo lets one window drive that other Mac exactly like the local one: why we threw away a remote UI we had already written, how the host and the window split the work, and how, on a link of 54 KB/s, one refresh went from 3.59 MB to 660 bytes.</p>
+<h1>One window for terminals on every Mac</h1>
+<p class="lede">Run enough coding agents and their terminals stop fitting on one machine: long tasks go to an always-on Mac mini while the laptop runs a row of its own. Fibo&#39;s goal is many machines, one window: a terminal on another Mac opens, splits and takes typing exactly like a local one, and the sidebar shows who is waiting on every machine. This post covers why we built it this way, how it works underneath, and how, on a link of 54 KB/s, one refresh went from 3.59 MB to 660 bytes.</p>
 
 <nav class="toc" aria-label="Contents">
   <a href="#why">Why we did it</a>
@@ -51,7 +51,7 @@
 
 <h2 id="why">Why we did it</h2>
 <p><a href="../../">Fibo</a> is a native macOS workbench: Claude Code, Codex and other agents run side by side in real terminals, and the sidebar tells you which one is waiting for you. The terminals don't belong to the window. They belong to a background host (<code>fibo serve</code>), so closing the window or updating the app leaves them running.</p>
-<p>With enough agents, one machine isn't enough. We run long tasks on a second Mac that is always on (we'll call it agentos), and we wanted to watch and type into them from the window in front of us, with no difference from local.</p>
+<p>With enough agents, one machine isn't enough, and terminals end up spread across several. The goal: wherever a terminal runs, open it, split it and type into it from the same window, with no difference from local. Below, the other machine is called "the remote Mac".</p>
 <p>The first remote was a separate path. The window ran <code>ssh host fibo remote --stdio</code> and spoke the phone protocol, getting back one card per terminal: title, state, folder. Local and remote saw very different things:</p>
 <div class="table">
 <table>
@@ -85,7 +85,7 @@
 <p>Fibo was already split into client and server. The host owns the terminals, the workspace and the state rules; the window sends requests over a Unix socket using length-prefixed JSON frames, and every terminal pane opens its own connection for screen updates and keystrokes.</p>
 <p>So reaching another machine needs no new protocol, only a way to reach that machine's socket. OpenSSH forwards Unix sockets directly:</p>
 <pre><code>ssh -N -o Compression=yes -o StreamLocalBindUnlink=yes \
-    -L ~/.local/share/fibo/m/agentos/workbench.sock:&lt;its workbench.sock&gt; agentos</code></pre>
+    -L ~/.local/share/fibo/m/mac-mini/workbench.sock:&lt;its workbench.sock&gt; mac-mini</code></pre>
 <p>The window connects to that local socket the same way it connects to its own, and from there it's the same code: tabs, splits, ⌘T, ⌘D, running an agent. The other host stores those tabs and splits, so that machine's own window sees them too. One <code>ssh -L</code> carries any number of connections, which fits one connection per pane.</p>
 
 <figure>
@@ -104,7 +104,7 @@
 <text x="585" y="84" class="s">terminals · workspace · state rules</text>
 <text x="585" y="104" class="s">machine 0</text>
 <rect x="470" y="170" width="230" height="100" rx="12" class="box"/>
-<text x="585" y="198" class="h">agentos host · fibo serve</text>
+<text x="585" y="198" class="h">Remote Mac host · fibo serve</text>
 <text x="585" y="224" class="s">terminals · workspace · state rules</text>
 <text x="585" y="244" class="s">its own window connects too</text>
 <path d="M220 100 H470" class="line"/>
@@ -124,8 +124,7 @@
 </ul>
 
 <h2 id="one-ui">How it works, part 2: one UI, each Mac a data source</h2>
-<p>The first version worked like this: click a space on agentos, build a complete workbench for that machine, and hand the whole window to it. Data and UI lived in one structure, so copying the data copied the UI too. That workbench believed it was the only machine, and drew the sidebar that way. The feedback was blunt:</p>
-<blockquote>I clicked a space on agentos. I only wanted to open that space, not to have everything turn into that.</blockquote>
+<p>The first version worked like this: click a space on the remote Mac, build a complete workbench for that machine, and hand the whole window to it. Data and UI lived in one structure, so copying the data copied the UI too. That workbench believed it was the only machine, and drew the sidebar that way: you meant to open one space on another machine, the whole window changed, and getting back meant hunting for the way out.</p>
 <p>The right split has two layers:</p>
 <div class="table">
 <table>
@@ -139,12 +138,12 @@
 </table>
 </div>
 <p>This Mac is machine 0 and takes the same path as the others. The sidebar reads every machine's workspace and groups them with the same state rules, and it never moves when you switch; the main area draws only the current machine. ⌘J, which jumps to the next session that needs you, orders across machines by the same rules.</p>
-<p>We also dropped a connection along the way. The agentos group in the sidebar used to come from phone-protocol cards, while the main area connected again over the native protocol: two connections and two copies of state for one machine, so the sidebar and the main area could show different moments. Now each machine has exactly one <code>ssh -L</code>.</p>
+<p>We also dropped a connection along the way. The remote Mac&#39;s group in the sidebar used to come from phone-protocol cards, while the main area connected again over the native protocol: two connections and two copies of state for one machine, so the sidebar and the main area could show different moments. Now each machine has exactly one <code>ssh -L</code>.</p>
 <p>This landed as several PRs: <a href="https://github.com/majiayu000/fibo/pull/349">#349</a> keeps the sidebar in place, <a href="https://github.com/majiayu000/fibo/pull/352">#352</a> connects to every machine at start, <a href="https://github.com/majiayu000/fibo/pull/353">#353</a> has the sidebar read each machine's own workspace, and <a href="https://github.com/majiayu000/fibo/pull/354">#354</a> takes the board and ⌘J across machines.</p>
 
 <h2 id="slow">The slow link: from 3.59 MB to 660 bytes</h2>
 <p>Syncing was simple. When the host's workspace changes it pushes a revision number over the status connection; a window that is behind asks for the whole workspace, with bursts of changes merged into one request. Locally that's 1.6 MB of JSON in under 10 ms, never a problem.</p>
-<p>Then the link to agentos dropped to about 54 KB/s. That machine has hundreds of sessions and a workspace of about 3 MB, sent whole on every change. Typing went over the same ssh, so keystrokes queued behind megabytes of JSON, and the window showed 1765 ms of latency. We brought it down in three steps.</p>
+<p>Then the link to one remote Mac dropped to about 54 KB/s. That machine has hundreds of sessions and a workspace of about 3 MB, sent whole on every change. Typing went over the same ssh, so keystrokes queued behind megabytes of JSON, and the window showed 1765 ms of latency. We brought it down in three steps.</p>
 
 <h3>Step 1: compress, and don't give up too early</h3>
 <p>First, <code>Compression=yes</code> on the forward: on the same link, 3 MB went from about 35 seconds to about 11. Second, the host dropped a client whenever 5 seconds passed without a byte of a reply written, so on the slow link a workspace never finished. We raised that to 30 seconds and count only time in which not a single byte goes out, so a write that is moving is never cut off (<a href="https://github.com/majiayu000/fibo/pull/358">#358</a>).</p>
@@ -172,7 +171,7 @@
 <p>On local data, one refresh went from 1.6 MB to 14 KB.</p>
 
 <h3>Step 3: measure again, and the rest isn't small</h3>
-<p>The step-2 commit explicitly rejected diffing the other fields as well: 98% of a workspace is sessions, so sending the rest whole is simpler. With both machines updated, we measured again on the real agentos:</p>
+<p>The step-2 commit explicitly rejected diffing the other fields as well: 98% of a workspace is sessions, so sending the rest whole is simpler. With both machines updated, we measured again on the real remote Mac:</p>
 <div class="table">
 <table>
 <thead><tr><th>Largest fields in the rest</th><th>Size</th></tr></thead>
@@ -185,7 +184,7 @@
 </tbody>
 </table>
 </div>
-<p>This Mac has 4 terminals and a rest under 3 KB, which is why the local measurement missed it. On agentos, a refresh with no session changes at all still carried 352 KB.</p>
+<p>This Mac has 4 terminals and a rest under 3 KB, which is why the local measurement missed it. On the remote Mac, a refresh with no session changes at all still carried 352 KB.</p>
 <p>Should we diff down to each terminal? We tried the cheapest check first: 12 samples over two minutes, and none of those fields changed once. They change when a terminal opens or closes, or a task ends. So diffing by top-level field is enough: the host hashes each field and sends only those whose hash changed, and the window lays them over the copy the host last sent (<a href="https://github.com/majiayu000/fibo/pull/380">#380</a>).</p>
 <p>One trap here: the window edits its own copy of the workspace, for example the preview while you drag a divider. Lay a reply over that copy, and any field missing from the reply would keep the local edit. So the window also keeps the copy exactly as the host sent it, and only ever lays replies over that one.</p>
 <p>Compatibility took the same path again. <code>Brief</code> is a two-element tuple variant, and an older host can't read a tuple with an extra element; it would drop the connection. So it's a new request, <code>BriefAll</code>, with a new capability, <code>brief_all</code>. The reply's <code>rest</code> still looks like a workspace object on the wire, so older windows read it as before. A test guards one assumption: every top-level field of a workspace is written even when empty. Otherwise a field missing from a reply could mean either "unchanged" or "now empty".</p>
@@ -202,7 +201,7 @@
 <text x="20" y="152" class="l">Changed fields too</text>
 <rect x="190" y="136" width="76" height="26" rx="5" class="bar2"/>
 <text x="274" y="155" class="v">~660 bytes</text>
-<text x="190" y="194" class="s left">Log scale · real agentos over the ssh forward, one or two sessions changing</text>
+<text x="190" y="194" class="s left">Log scale · real remote Mac over the ssh forward, one or two sessions changing</text>
 </svg>
 <figcaption>Compressed: 893 KB, 81 KB and about 420 bytes.</figcaption>
 </figure>
@@ -210,13 +209,13 @@
 <p>What's left in the last bar is essentially the one or two sessions that changed, plus the <code>revision</code> field. On a 54 KB/s link, about 420 compressed bytes take a few milliseconds instead of more than ten seconds. Typing no longer waits behind a refresh.</p>
 
 <h2 id="input">Who holds the keyboard</h2>
-<p>Two windows can have the same terminal open: the one in front of you and agentos's own. Typing from both at once would interleave the keystrokes, so only one window has input at a time, and the other shows "Read only · click to take over input".</p>
-<p>The old rule was that whoever got input first kept it. In practice that meant: you'd opened the terminal over there, came back to the Mac in front of you to keep typing, and found it read-only. We switched to "the one opened last takes over": whichever window newly opens the terminal gets its input. Peeking is the exception; a glance takes nothing until your first keystroke.</p>
-<p>Another review caught a problem with that change the day it shipped. At start, the window builds a workbench for every machine in the background to feed the sidebar. Those undrawn workbenches behaved as if they were on screen: they opened every terminal in that machine's first tab and took over its input. You hadn't clicked agentos yet, and its own window had already gone read-only. The fix is for a workbench to know whether it's being drawn: undrawn, it builds no panes; in the frame it first appears, it builds them and takes input (<a href="https://github.com/majiayu000/fibo/pull/367">#367</a>).</p>
+<p>Two windows can have the same terminal open: the local one and the remote Mac's own. Typing from both at once would interleave the keystrokes, so only one window has input at a time, and the other shows "Read only · click to take over input".</p>
+<p>The old rule was that whoever got input first kept it. In practice that meant: you'd opened the terminal over there, came back to the local window to keep typing, and found it read-only. We switched to "the one opened last takes over": whichever window newly opens the terminal gets its input. Peeking is the exception; a glance takes nothing until your first keystroke.</p>
+<p>Another review caught a problem with that change the day it shipped. At start, the window builds a workbench for every machine in the background to feed the sidebar. Those undrawn workbenches behaved as if they were on screen: they opened every terminal in that machine's first tab and took over its input. You hadn't clicked that machine yet, and its own window had already gone read-only. The fix is for a workbench to know whether it's being drawn: undrawn, it builds no panes; in the frame it first appears, it builds them and takes input (<a href="https://github.com/majiayu000/fibo/pull/367">#367</a>).</p>
 
 <h2 id="update">Updating without dropping terminals</h2>
 <p>The new protocol only works once both machines run the new version. Updating means replacing the host with a new program, without dropping the terminals inside it, because dozens of agents are running there.</p>
-<p>The new program starts with <code>--takeover</code>: the old host hands every terminal to the new one, then exits. A new window that finds an older host does this on its own. When we updated agentos this time, the log said <code>handed 43 terminals to a newer host</code>, and all 43 kept running.</p>
+<p>The new program starts with <code>--takeover</code>: the old host hands every terminal to the new one, then exits. A new window that finds an older host does this on its own. When we updated the remote Mac this time, the log said <code>handed 43 terminals to a newer host</code>, and all 43 kept running.</p>
 
 <h2 id="learned">What we took away</h2>
 <ul>
@@ -224,7 +223,7 @@
 <li><b>Keep data and UI apart.</b> "One complete workbench per machine" went wrong because data and UI lived in one structure, so copying the data copied the UI.</li>
 <li><b>Measure on real data, then measure again after it ships.</b> "The rest is small" was true on a machine with 4 terminals and false on one with 677. The second measurement took two minutes and replaced a lot of guessing.</li>
 <li><b>For every protocol change, think about the old side first.</b> An older host drops connections on requests it can't read, so each step is switched on by a capability flag, and with only one side updated nothing changes.</li>
-<li><b>Accept on real machines.</b> Every step has an evidence script, run against a fake ssh and against the real agentos: sidebar screenshots compared pixel by pixel before and after switching, ssh connections counted, handed-over terminals counted.</li>
+<li><b>Accept on real machines.</b> Every step has an evidence script, run against a fake ssh and against the real remote Mac: sidebar screenshots compared pixel by pixel before and after switching, ssh connections counted, handed-over terminals counted.</li>
 </ul>
 
 <p class="next">Not done yet: local predictive echo, the way WezTerm does it, only if typing echo goes above 200 ms at p95, which it hasn't needed to. Clicking a file link in the other machine's terminal to open your editor here isn't done either.</p>
