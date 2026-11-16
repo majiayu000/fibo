@@ -1,0 +1,41 @@
+name: Relay health and certificate
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: relay-health
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      RELAY_URL: ${{ vars.RELAY_URL }}
+    steps:
+      - name: Check HTTPS, health and certificate lifetime
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, socket, ssl, time, urllib.parse, urllib.request
+          url = os.environ['RELAY_URL'].rstrip('/')
+          parsed = urllib.parse.urlparse(url)
+          if parsed.scheme != 'https' or not parsed.hostname:
+              raise SystemExit('Set repository variable RELAY_URL to the HTTPS relay address')
+          context = ssl.create_default_context()
+          with socket.create_connection((parsed.hostname, parsed.port or 443), timeout=15) as sock:
+              with context.wrap_socket(sock, server_hostname=parsed.hostname) as tls:
+                  cert = tls.getpeercert()
+          expires = ssl.cert_time_to_seconds(cert['notAfter'])
+          remaining = expires - time.time()
+          print(f'Certificate expires {cert["notAfter"]}; {remaining / 3600:.1f} hours left')
+          if remaining < 48 * 3600:
+              raise SystemExit('::error::Relay certificate expires in less than 48 hours; check renewal')
+          request = urllib.request.Request(url + '/healthz', headers={'User-Agent': 'Fibo-relay-health'})
+          with urllib.request.urlopen(request, context=context, timeout=15) as response:
+              health = json.load(response)
+          if health.get('ok') is not True or health.get('protocol', 0) < 3:
+              raise SystemExit('::error::Relay health check failed: ' + str(health))
+          print('HTTPS and relay health are ready')
+          PYTHON

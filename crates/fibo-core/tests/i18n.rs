@@ -337,18 +337,25 @@ fn every_key_has_english() {
     // Official manifests are dynamic UI keys, translated when listed, not when signed.
     let plugins = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
     for entry in std::fs::read_dir(plugins).unwrap().flatten() {
-        let path = entry.path().join("plugin.json");
-        if !path.is_file() {
-            continue;
-        }
-        let manifest: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        for key in ["name", "description"] {
-            if let Some(words) = manifest[key].as_str().filter(|s| cjk(s)) {
-                if i18n::english(words).is_none() {
-                    problems.push(format!("{}: no English for {key}", path.display()));
+        let mut files = vec![entry.path().join("plugin.json")];
+        files.extend(
+            std::fs::read_dir(entry.path().join("themes"))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|f| f.path())
+                .filter(|p| p.extension().is_some_and(|e| e == "json")),
+        );
+        for path in files.into_iter().filter(|p| p.is_file()) {
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            for key in ["name", "description"] {
+                if let Some(words) = manifest[key].as_str().filter(|s| cjk(s)) {
+                    if i18n::english(words).is_none() {
+                        problems.push(format!("{}: no English for {key}", path.display()));
+                    }
+                    used.insert(words.to_owned());
                 }
-                used.insert(words.to_owned());
             }
         }
     }

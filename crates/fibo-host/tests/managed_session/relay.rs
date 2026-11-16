@@ -76,7 +76,10 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
         serde_json::from_value(hello["ok"].clone()).expect("hello matches the protocol types");
     assert_eq!(
         (typed.version, typed.role),
-        (1, fibo_remote::role::Role::Full)
+        (
+            fibo_remote::protocol::VERSION,
+            fibo_remote::role::Role::Full
+        )
     );
     phone.say(json!({ "id": 2, "op": "list" }));
     let list = phone.next(|v| v["id"] == 2);
@@ -313,7 +316,10 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     let (_base, _stop, _relay) = local_relay(&addr, Default::default());
     let mut phone = Phone::connect(&full);
     phone.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
-    assert_eq!(phone.next(|v| v["id"] == 1)["ok"]["version"], 1);
+    assert_eq!(
+        phone.next(|v| v["id"] == 1)["ok"]["version"],
+        fibo_remote::protocol::VERSION
+    );
 
     // A second machine with the same code takes over; the first one exits.
     let _twin = machine();
