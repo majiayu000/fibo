@@ -120,9 +120,15 @@ impl Pane {
             self.held = bytes;
             return;
         }
-        if let Err(error) = self.connection.send(Request::Input { bytes, lossy }) {
-            self.local_error = Some(error);
-            cx.notify();
+        match self.connection.send(Request::Input { bytes, lossy }) {
+            Err(error) => {
+                self.local_error = Some(error);
+                cx.notify();
+            }
+            // A refusal is about that one input: once typing gets through again, the
+            // line stops claiming the pane is broken.
+            Ok(()) if !lossy && self.local_error.take().is_some() => cx.notify(),
+            Ok(()) => (),
         }
     }
     pub(super) fn key(

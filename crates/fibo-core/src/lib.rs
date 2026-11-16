@@ -19,6 +19,7 @@ pub mod legacy;
 pub mod market;
 pub mod model;
 pub mod modes;
+pub mod outbox;
 pub mod plugin;
 pub mod plugin_category;
 pub mod plugin_command;
