@@ -54,7 +54,14 @@ pub(super) fn explain(a: Args) -> io::Result<()> {
     }
     println!("{}", t!("状态：{state}", state = e.state()));
     match e.rule() {
-        Some(r) => println!("{}", t!("规则：{id}（{name}）", id = r.id, name = r.name)),
+        Some(r) => println!(
+            "{}",
+            t!(
+                "规则：{id}（{name}）",
+                id = r.id,
+                name = fibo_core::i18n::say(&r.name)
+            )
+        ),
         None => println!("{}", t!("规则：没有命中")),
     }
     let source = match &e.rules.source {
@@ -89,7 +96,7 @@ pub(super) fn explain(a: Args) -> io::Result<()> {
                     t!(
                         "{id} {name}：{desc}",
                         id = r.id,
-                        name = r.name,
+                        name = fibo_core::i18n::say(&r.name),
                         desc = m.describe(r)
                     )
                 );

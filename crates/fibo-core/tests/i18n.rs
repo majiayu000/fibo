@@ -359,6 +359,21 @@ fn every_key_has_english() {
             }
         }
     }
+    // Screen-rule names are displayed by explain; matching patterns stay untranslated.
+    let screens = root().join("crates/fibo-host/src/agents/screen");
+    for entry in std::fs::read_dir(screens).unwrap().flatten() {
+        let path = entry.path();
+        let rules: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        for rule in rules["rules"].as_array().unwrap() {
+            if let Some(words) = rule["name"].as_str().filter(|s| cjk(s)) {
+                if i18n::english(words).is_none() {
+                    problems.push(format!("{}: no English for rule name", path.display()));
+                }
+                used.insert(words.to_owned());
+            }
+        }
+    }
     for (k, (_, file)) in &seen {
         if !used.contains(k) {
             problems.push(format!(
