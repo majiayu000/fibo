@@ -140,6 +140,12 @@ pub(super) fn resync(
 /// neither. A terminal that already ended is left alone. Whatever ignores the hangup is
 /// killed after `HANGUP_GRACE`: the tab is gone, so nothing could stop it later.
 pub(super) fn stop_terminal(terminal: &LiveTerminal) -> io::Result<()> {
+    stop_terminal_with(terminal, fibo_platform::process::hang_up_group)
+}
+fn stop_terminal_with(
+    terminal: &LiveTerminal,
+    hang_up: impl Fn(i32) -> io::Result<()>,
+) -> io::Result<()> {
     let live = lock(terminal)?;
     if live.exited && live.drained {
         return Ok(());
@@ -148,19 +154,40 @@ pub(super) fn stop_terminal(terminal: &LiveTerminal) -> io::Result<()> {
     let foreground = live.master.foreground_group().filter(|&g| g != shell);
     drop(live);
     // Only this terminal's own process groups, never a name-based kill.
-    let groups: Vec<i32> = std::iter::once(shell).chain(foreground).collect();
-    for group in &groups {
-        fibo_platform::process::hang_up_group(*group)?;
+    let groups: Vec<_> = std::iter::once(shell)
+        .chain(foreground)
+        .map(|group| (group, fibo_platform::inspect::started_micros(group as u32)))
+        .collect();
+    let mut error = None;
+    for (group, _) in &groups {
+        if let Err(e) = hang_up(*group) {
+            error.get_or_insert(e);
+        }
     }
+    let weak = Arc::downgrade(terminal);
     thread::spawn(move || {
         thread::sleep(HANGUP_GRACE);
-        for group in &groups {
+        let terminal = weak.upgrade();
+        let live = terminal.as_ref().and_then(|terminal| lock(terminal).ok());
+        for (group, started) in &groups {
+            // A foreground program can ignore HUP after its shell has exited and detached
+            // the PTY. Its birth time still identifies it without trusting a reused PID.
+            let same_leader = started.is_some_and(|at| {
+                fibo_platform::inspect::started_micros(*group as u32) == Some(at)
+            });
+            let still_attached = live.as_ref().is_some_and(|live| {
+                (*group == shell && !live.exited) || Some(*group) == live.master.foreground_group()
+            });
+            let still_ours = same_leader || still_attached;
+            if !still_ours {
+                continue;
+            }
             if let Err(e) = fibo_platform::process::kill_group(*group) {
                 eprintln!("kill closed terminal's group {group}: {e}");
             }
         }
     });
-    Ok(())
+    error.map_or(Ok(()), Err)
 }
 /// Long enough for an Agent to save its conversation on hangup.
 const HANGUP_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
@@ -507,8 +534,15 @@ pub(super) fn attach(
         let (inbox, ended, tx) = (Arc::clone(&inbox), Arc::clone(&ended), tx.clone());
         let mut reader = stream.try_clone()?;
         thread::spawn(move || loop {
-            match receive::<Request>(&mut reader) {
-                Ok(request) => {
+            match super::client::request_frame(&mut reader) {
+                // A complete frame this host cannot read gets an error and the rest still
+                // go through; only a broken stream ends the connection.
+                Ok(Err(unsupported)) => {
+                    if let Ok(bytes) = serde_json::to_vec(&Reply::Error(unsupported)) {
+                        let _ = tx.try_send((ACK, Arc::new(bytes)));
+                    }
+                }
+                Ok(Ok(request)) => {
                     if inbox.push(request) == Err(fibo_core::outbox::Refused::Full) {
                         let refused = Reply::Error("输入积压超过 4 MiB，这段没写进终端".into());
                         if let Ok(bytes) = serde_json::to_vec(&refused) {
@@ -609,4 +643,64 @@ pub(super) fn attach(
     let _ = &guard;
     let reason = ended.lock().unwrap_or_else(|p| p.into_inner()).take();
     Err(reason.unwrap_or_else(|| io::ErrorKind::UnexpectedEof.into()))
+}
+
+#[cfg(all(test, unix))]
+mod shutdown_tests {
+    use super::*;
+    #[test]
+    fn a_failed_hangup_still_force_stops_its_live_terminal() {
+        let (mut child, master) = pty::spawn(
+            &["/bin/sh".into(), "-c".into(), "exec sleep 600".into()],
+            Path::new("/tmp"),
+            80,
+            24,
+            "hangup-error-test",
+            "15;0",
+        )
+        .unwrap();
+        let terminal = Arc::new(Mutex::new(Live {
+            vt: Vt::new(80, 24).unwrap(),
+            master,
+            cols: 80,
+            rows: 24,
+            pid: child.id(),
+            owner: None,
+            subscribers: HashMap::new(),
+            watchers: Default::default(),
+            exited: false,
+            drained: false,
+            status: None,
+            exit_code: None,
+            title: String::new(),
+            cell: CellPixels::default(),
+            input_at: None,
+            marks: Default::default(),
+            reports: Default::default(),
+        }));
+        let began = Instant::now();
+        let error = stop_terminal_with(&terminal, |_| {
+            Err(io::Error::from_raw_os_error(libc::EPERM))
+        })
+        .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::EPERM));
+        let pid = child.id() as i32;
+        assert!(
+            fibo_platform::process::exists(pid),
+            "the failed SIGHUP did not stop it"
+        );
+        let (tx, rx) = std::sync::mpsc::channel();
+        thread::spawn(move || {
+            let _ = tx.send(child.wait());
+        });
+        match rx.recv_timeout(HANGUP_GRACE + Duration::from_secs(3)) {
+            Ok(exit) => assert_eq!(exit.unwrap(), None, "the terminal was killed by a signal"),
+            Err(_) => {
+                let _ = fibo_platform::process::kill_group(pid);
+                let _ = rx.recv_timeout(Duration::from_secs(1));
+                panic!("a failed hangup cancelled the delayed force stop");
+            }
+        }
+        assert!(began.elapsed() >= HANGUP_GRACE);
+    }
 }

@@ -209,3 +209,56 @@ fn tool_page_cursors_keep_calls_at_the_same_log_offset() {
         .unwrap();
     assert!(empty.is_empty() && next.is_none());
 }
+
+#[test]
+fn a_hook_identity_uses_the_index_and_keeps_unflushed_paths() {
+    let f = Fixture::new();
+    let mut index = f.index();
+    index
+        .db
+        .execute_batch(
+            "WITH RECURSIVE rows(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM rows WHERE n<19999)
+        INSERT INTO log_files SELECT 'path-'||n,'codex',0,n,0,X'',0,'cli-'||n,'/tmp',n FROM rows;",
+        )
+        .unwrap();
+    let work = steps(&mut index, |index| {
+        assert_eq!(
+            index.paths_for(Agent::Codex, "cli-12345").unwrap(),
+            ["path-12345"]
+        );
+        assert!(index
+            .paths_for(Agent::Claude, "cli-12345")
+            .unwrap()
+            .is_empty());
+    });
+    assert!(
+        work < 1000,
+        "one Hook identity walked the log index: {work} VM steps"
+    );
+    let path = f.0.join("logs/unflushed.jsonl");
+    fs::write(&path, line("cli-12345")).unwrap();
+    index.update_many([path.clone()], 1).unwrap();
+    let found = index.paths_for(Agent::Codex, "cli-12345").unwrap();
+    assert_eq!(
+        found.len(),
+        2,
+        "a second file makes the Hook identity ambiguous"
+    );
+    assert!(found.contains(&path.to_string_lossy().into_owned()));
+    // Held identity wins over the stale persisted identity until flush.
+    let mut held = index.gate.lock().unwrap();
+    held.entries
+        .get_mut(path.to_str().unwrap())
+        .unwrap()
+        .cursor
+        .identity = Some(("new-id".into(), "/tmp".into()));
+    drop(held);
+    assert_eq!(
+        index.paths_for(Agent::Codex, "cli-12345").unwrap(),
+        ["path-12345"]
+    );
+    assert_eq!(
+        index.paths_for(Agent::Codex, "new-id").unwrap(),
+        [path.to_string_lossy().into_owned()]
+    );
+}

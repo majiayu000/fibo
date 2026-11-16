@@ -14,13 +14,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             terminal,
             cwd,
         } => {
-            let (workspace, mut index, cached) = {
+            let (workspace, mut index) = {
                 let host = lock(shared)?;
-                (
-                    host.workspace.clone(),
-                    host.index.fork_current()?,
-                    host.index.cached()?,
-                )
+                (host.workspace.clone(), host.index.fork_current()?)
             };
             let processes = crate::recognition::processes(&workspace)?;
             // Reject unrelated callers before opening any supplied transcript. A hook whose
@@ -41,16 +37,13 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 ));
             }
             let path = if transcript.is_empty() {
-                let matches: Vec<_> = cached
-                    .iter()
-                    .filter(|t| t.runtime == runtime && t.cli_id == cli_session_id)
-                    .collect();
+                let matches = index.paths_for(runtime, &cli_session_id)?;
                 if matches.len() != 1 {
                     return Err(io::Error::other(
                         "Hook transcript absent or ambiguous in index",
                     ));
                 }
-                std::path::PathBuf::from(&matches[0].path)
+                std::path::PathBuf::from(&matches[0])
             } else {
                 fibo_platform::file_watch::normalized(Path::new(&transcript))?
             };

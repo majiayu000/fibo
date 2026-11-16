@@ -565,3 +565,190 @@ fn a_takeover_that_cannot_start_leaves_the_old_host_serving() {
     );
     assert!(h.workspace().terminals.iter().any(|t| t.id == "t"));
 }
+
+#[test]
+fn an_unknown_request_gets_an_error_and_the_connection_keeps_serving() {
+    let h = Host::start();
+    let mut stream = UnixStream::connect(h.socket()).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    send(&mut stream, CONTROL, &Request::Hello { major: MAJOR }).unwrap();
+    assert!(matches!(
+        receive::<Reply>(&mut stream).unwrap(),
+        Reply::Hello { .. }
+    ));
+    for bytes in [br#"{"FutureRequest":{"value":1}}"#.as_slice(), b"{broken"] {
+        write_frame(&mut stream, CONTROL, bytes).unwrap();
+        assert!(
+            matches!(receive::<Reply>(&mut stream).unwrap(), Reply::Error(error) if error.contains("unsupported or invalid request"))
+        );
+        send(&mut stream, CONTROL, &Request::Workspace).unwrap();
+        assert!(matches!(
+            receive::<Reply>(&mut stream).unwrap(),
+            Reply::Workspace(_)
+        ));
+    }
+}
+
+#[test]
+fn a_store_rejected_during_takeover_keeps_the_old_host_and_pty() {
+    let mut h = Host::start();
+    h.setup();
+    h.call(h.launch("t", "exec cat")).unwrap();
+    let terminal_pid = h
+        .workspace()
+        .terminals
+        .iter()
+        .find(|t| t.id == "t")
+        .unwrap()
+        .pid
+        .unwrap() as i32;
+    let db = rusqlite::Connection::open(h.root.join("workbench.sqlite")).unwrap();
+    db.execute_batch("CREATE TABLE workspace (value TEXT)")
+        .unwrap();
+    let output = fixture_command(&h.root)
+        .env("MOORING_FIXTURE_TAKEOVER", "1")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("workspace JSON"));
+    let old_serving = h.child.try_wait().unwrap().is_none();
+    if !old_serving {
+        // A deliberate regression run must not orphan the fixture's handed-off cat.
+        fibo_platform::process::kill(terminal_pid);
+    }
+    assert!(
+        old_serving,
+        "the old host exited before preparation finished"
+    );
+    db.execute_batch("DROP TABLE workspace").unwrap();
+    h.call(Request::SendText {
+        id: "t".into(),
+        text: "after-failed-takeover".into(),
+        submit: true,
+        session: None,
+    })
+    .unwrap();
+    let until = Instant::now() + Duration::from_secs(3);
+    loop {
+        let reply = h
+            .call(Request::ReadScreen {
+                id: "t".into(),
+                rows: 24,
+            })
+            .unwrap();
+        if matches!(reply, Reply::Text(text) if text.contains("after-failed-takeover")) {
+            break;
+        }
+        assert!(
+            Instant::now() < until,
+            "the original PTY stopped reading output"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn an_unreadable_handoff_snapshot_is_never_acknowledged() {
+    use fibo_platform::{local, terminal};
+    let mut h = Host::start();
+    h.setup();
+    h.call(h.launch("t", "exec cat")).unwrap();
+    let original = h.root.join("original.sock");
+    fs::rename(h.socket(), &original).unwrap();
+    let listener = local::Listener::bind(h.socket()).unwrap();
+    let original_for_proxy = original.clone();
+    let proxy = std::thread::spawn(move || {
+        let mut new = listener.accept().unwrap();
+        new.set_read_timeout(Some(Duration::from_secs(15))).unwrap();
+        let mut old = local::Stream::connect(original_for_proxy).unwrap();
+        let hello: Request = receive(&mut new).unwrap();
+        send(&mut old, CONTROL, &hello).unwrap();
+        let hello: Reply = receive(&mut old).unwrap();
+        send(&mut new, CONTROL, &hello).unwrap();
+        assert!(matches!(
+            receive::<Request>(&mut new).unwrap(),
+            Request::Handoff
+        ));
+        send(&mut old, CONTROL, &Request::Handoff).unwrap();
+        let reply: Reply = receive(&mut old).unwrap();
+        let count = match &reply {
+            Reply::Handoff { terminals } => terminals.len(),
+            _ => panic!("{reply:?}"),
+        };
+        send(&mut new, CONTROL, &reply).unwrap();
+        for _ in 0..count {
+            let mut damaged = false;
+            loop {
+                let (kind, mut bytes) = read_frame(&mut old).unwrap();
+                if kind == SNAPSHOT && !damaged {
+                    bytes[0] ^= 0xff;
+                    damaged = true;
+                }
+                write_frame(&mut new, kind, &bytes).unwrap();
+                if kind == READY {
+                    break;
+                }
+            }
+        }
+        let masters = terminal::receive_masters(&old, count).unwrap();
+        terminal::send_masters(&new, &masters.iter().collect::<Vec<_>>()).unwrap();
+        let response = read_frame(&mut new);
+        // Never relay an incorrect ACK: the regression should fail without killing our fixture.
+        assert!(
+            response.is_err(),
+            "the new host acknowledged an unreadable snapshot: {response:?}"
+        );
+    });
+    let output = fixture_command(&h.root)
+        .env("MOORING_FIXTURE_TAKEOVER", "1")
+        .output()
+        .unwrap();
+    let proxy_result = proxy.join();
+    fs::remove_file(h.socket()).unwrap();
+    fs::rename(original, h.socket()).unwrap();
+    proxy_result.unwrap();
+    assert!(!output.status.success());
+    assert!(h.child.try_wait().unwrap().is_none());
+    h.call(Request::SendText {
+        id: "t".into(),
+        text: "still-serving".into(),
+        submit: true,
+        session: None,
+    })
+    .unwrap();
+    assert!(h
+        .workspace()
+        .terminals
+        .iter()
+        .any(|t| t.id == "t" && t.state == ProcessState::Running));
+}
+
+#[test]
+fn an_unknown_attached_request_replies_with_error_and_preserves_input() {
+    let h = Host::start();
+    h.setup();
+    h.call(h.launch("t", "exec cat")).unwrap();
+    let (mut stream, _, _) = h.attach("t", true);
+    let ack = |stream: &mut UnixStream| loop {
+        let (kind, bytes) = read_frame(stream).unwrap();
+        if kind == ACK {
+            break serde_json::from_slice::<Reply>(&bytes).unwrap();
+        }
+    };
+    write_frame(&mut stream, CONTROL, br#"{"FutureAttachedRequest":{}}"#).unwrap();
+    assert!(
+        matches!(ack(&mut stream), Reply::Error(error) if error.contains("unsupported or invalid request"))
+    );
+    send(
+        &mut stream,
+        CONTROL,
+        &Request::Input {
+            bytes: b"still-connected\n".to_vec(),
+            lossy: false,
+        },
+    )
+    .unwrap();
+    assert!(matches!(ack(&mut stream), Reply::Ok));
+}

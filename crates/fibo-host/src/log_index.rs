@@ -436,6 +436,37 @@ impl Index {
         }
         Ok(out)
     }
+    /// Paths for one Hook identity, including unflushed changes held in memory.
+    pub fn paths_for(&self, runtime: Agent, cli_id: &str) -> io::Result<Vec<String>> {
+        let held = self
+            .gate
+            .lock()
+            .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
+        let mut query = self
+            .db
+            .prepare_cached("SELECT path FROM log_files WHERE runtime=?1 AND cli_id=?2")
+            .map_err(err)?;
+        let mut paths = query
+            .query_map(params![runtime.executable(), cli_id], |r| r.get(0))
+            .map_err(err)?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(err)?;
+        paths.retain(|path| !held.entries.contains_key(path));
+        paths.extend(
+            held.entries
+                .iter()
+                .filter(|(_, entry)| {
+                    entry.runtime == runtime
+                        && entry
+                            .cursor
+                            .identity
+                            .as_ref()
+                            .is_some_and(|(id, _)| id == cli_id)
+                })
+                .map(|(path, _)| path.clone()),
+        );
+        Ok(paths)
+    }
     pub fn original_words(&self, path: &str) -> io::Result<String> {
         let mut q=self.db.prepare_cached("SELECT text FROM session_records WHERE path=?1 AND kind='user' ORDER BY at,offset,ordinal").map_err(err)?;
         let rows = q
@@ -560,7 +591,9 @@ impl Index {
 }
 pub fn cached(db: &Connection) -> io::Result<Vec<Transcript>> {
     let mut query = db
-        .prepare("SELECT runtime,cli_id,path,cwd,updated FROM log_files WHERE cli_id IS NOT NULL")
+        .prepare_cached(
+            "SELECT runtime,cli_id,path,cwd,updated FROM log_files WHERE cli_id IS NOT NULL",
+        )
         .map_err(err)?;
     let mut rows = query.query([]).map_err(err)?;
     let mut out = vec![];

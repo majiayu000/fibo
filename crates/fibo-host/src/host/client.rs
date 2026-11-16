@@ -54,7 +54,13 @@ pub(super) fn serve_client(
         }
     }
     loop {
-        let request = receive::<Request>(&mut stream)?;
+        let request = match request_frame(&mut stream)? {
+            Ok(request) => request,
+            Err(error) => {
+                send(&mut stream, CONTROL, &Reply::Error(error))?;
+                continue;
+            }
+        };
         if matches!(request, Request::WatchRecognition) {
             return watch_recognition(stream, host, connection);
         }
@@ -109,6 +115,17 @@ pub(super) fn serve_client(
         let reply = result.unwrap_or_else(|e| Reply::Error(e.to_string()));
         send(&mut stream, CONTROL, &reply)?;
     }
+}
+
+/// A complete frame with an unsupported request is recoverable; a truncated frame is not.
+pub(super) fn request_frame(stream: &mut local::Stream) -> io::Result<Result<Request, String>> {
+    let (kind, bytes) = read_frame(stream)?;
+    Ok(if kind == CONTROL {
+        serde_json::from_slice(&bytes)
+            .map_err(|error| format!("unsupported or invalid request: {error}"))
+    } else {
+        Err("expected control frame".into())
+    })
 }
 
 /// A newer host takes over: every running terminal goes to it as a snapshot plus its PTY

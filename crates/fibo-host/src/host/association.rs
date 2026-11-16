@@ -21,24 +21,28 @@ impl Association {
         if transcripts.is_empty() {
             return Ok(());
         }
-        let workspace = lock(shared)?.workspace.clone();
-        let running: Vec<_> = workspace
-            .terminals
-            .iter()
-            .filter(|t| t.state == ProcessState::Running)
-            .filter_map(|t| t.pid)
-            .collect();
-        let unbound: Vec<_> = transcripts
-            .iter()
-            .filter(|t| {
-                !workspace.agent_sessions.iter().any(|s| {
-                    s.current
-                        && s.runtime == t.runtime
-                        && s.cli_session_id == t.cli_id
-                        && s.transcript == t.path
+        let (running, unbound) = {
+            let host = lock(shared)?;
+            let workspace = &host.workspace;
+            let running: Vec<_> = workspace
+                .terminals
+                .iter()
+                .filter(|t| t.state == ProcessState::Running)
+                .filter_map(|t| t.pid)
+                .collect();
+            let unbound: Vec<_> = transcripts
+                .iter()
+                .filter(|t| {
+                    !workspace.agent_sessions.iter().any(|s| {
+                        s.current
+                            && s.runtime == t.runtime
+                            && s.cli_session_id == t.cli_id
+                            && s.transcript == t.path
+                    })
                 })
-            })
-            .collect();
+                .collect();
+            (running, unbound)
+        };
         // A new identity/file (or a changed managed tree) gets one probe. An
         // unresolved manual Claude appending the same file is not a polling clock.
         let needs_probe = !running.is_empty()
@@ -119,15 +123,12 @@ impl Association {
         let (panes, workspace, released) = {
             let mut host = lock(shared)?;
             let released = std::mem::take(&mut host.released_logs);
-            (
-                super::screen_match::panes(&host),
-                host.workspace.clone(),
-                released,
-            )
+            let panes = super::screen_match::panes(&host);
+            if panes.is_empty() {
+                return Ok(());
+            }
+            (panes, host.workspace.clone(), released)
         };
-        if panes.is_empty() {
-            return Ok(());
-        }
         let window = fibo_core::content::now().saturating_sub(600);
         let unbound = |t: &crate::recognition::Transcript| {
             crate::recognition::screen_candidate(

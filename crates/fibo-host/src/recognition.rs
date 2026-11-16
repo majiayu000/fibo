@@ -370,14 +370,14 @@ pub fn reconcile(
     processes: &[Process],
     open_files: &HashMap<u32, Vec<String>>,
 ) -> io::Result<()> {
+    let known: std::collections::HashSet<_> = workspace
+        .agent_sessions
+        .iter()
+        .map(|s| (s.runtime, s.cli_session_id.as_str()))
+        .collect();
     for transcript in transcripts
         .iter()
-        .filter(|t| {
-            workspace
-                .agent_sessions
-                .iter()
-                .any(|s| s.runtime == t.runtime && s.cli_session_id == t.cli_id)
-        })
+        .filter(|t| known.contains(&(t.runtime, t.cli_id.as_str())))
         .cloned()
         .collect::<Vec<_>>()
     {

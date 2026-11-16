@@ -375,17 +375,43 @@ pub(super) fn start(shared: &Shared) -> io::Result<()> {
             }
             Err(e) => eprintln!("background shells: {e}"),
         }
-        match rx.recv_timeout(Duration::from_secs(shells::EVERY)) {
-            Ok(()) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => (),
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+        if !wait_for_next_look(&rx, Duration::from_secs(shells::EVERY)) {
+            return;
         }
     });
     Ok(())
 }
 
+// Commits can announce new work, including the commit made by this watcher itself.
+// While already watching, none is evidence for a second observation before EVERY.
+fn wait_for_next_look(rx: &std::sync::mpsc::Receiver<()>, interval: Duration) -> bool {
+    let due = Instant::now() + interval;
+    loop {
+        if Instant::now() >= due {
+            return true;
+        }
+        match rx.recv_timeout(due.saturating_duration_since(Instant::now())) {
+            Ok(()) => (),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return true,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn commits_cannot_accelerate_background_shell_observations() {
+        let (tx, rx) = sync_channel(1);
+        let interval = Duration::from_millis(40);
+        tx.send(()).unwrap(); // includes the watcher's own commit
+        let began = Instant::now();
+        assert!(wait_for_next_look(&rx, interval));
+        assert!(began.elapsed() >= interval);
+        drop(tx);
+        assert!(!wait_for_next_look(&rx, interval));
+    }
     use fibo_core::content::{Background, Content, ShellTask};
     fn watch_started(ago: Duration) -> ShellWatch {
         ShellWatch {
