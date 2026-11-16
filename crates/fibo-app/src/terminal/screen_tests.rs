@@ -109,7 +109,12 @@ fn osc_links_keep_cell_bounds_and_reject_executable_schemes() {
     ] {
         assert!(!allowed_link(uri));
     }
-    assert!(allowed_link("file:///tmp/test"));
+    assert!(allowed_link(if cfg!(windows) {
+        "file:///C:/test"
+    } else {
+        "file:///tmp/test"
+    }));
+    assert!(!allowed_link("file://remote.example/a.command"));
 }
 #[test]
 fn plain_text_urls_become_links_without_the_prose_around_them() {

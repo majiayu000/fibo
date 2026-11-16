@@ -84,8 +84,25 @@ impl Pane {
         if !self.links.modifiers.secondary() {
             return None;
         }
-        if self.links.hover_link.is_some() {
-            return Some(crate::ui::words::local(t!("⌘ 点击在浏览器打开")));
+        if let Some((row, col)) = self.links.hover_link
+            && let Some(link) = self.screen.link_at(row, col)
+        {
+            let hint = match screen::file_uri(&link.uri) {
+                Some(path) => {
+                    let target = Hovered {
+                        path,
+                        at: None,
+                        whole: true,
+                        cwd: self.cwd.clone(),
+                    };
+                    super::super::open_path::hint(&Self::open_plan(
+                        &target,
+                        self.links.modifiers.alt,
+                    ))
+                }
+                None => t!("⌘ 点击在浏览器打开").into(),
+            };
+            return Some(format!("{} · {}", crate::ui::words::local(&hint), link.uri));
         }
         let target = self.shown_target()?;
         Some(crate::ui::words::local(&super::super::open_path::hint(

@@ -123,6 +123,14 @@ impl Screen {
             .find(|l| l.row == row && col >= l.col && col < l.col + l.cols)
     }
 }
+/// OSC 8 local file targets use the same opening plan as a visible path.
+pub fn file_uri(uri: &str) -> Option<std::path::PathBuf> {
+    let url = gpui::http_client::Url::parse(uri).ok()?;
+    (url.scheme() == "file" && url.host_str().is_none_or(|host| host == "localhost"))
+        .then(|| url.to_file_path().ok())
+        .flatten()
+}
+
 /// Only explicitly clicked OSC 8 links reach the OS. No OSC callback opens URLs.
 pub fn allowed_link(uri: &str) -> bool {
     if uri.len() > 8192 || uri.chars().any(|c| c.is_control() || c.is_whitespace()) {
@@ -131,7 +139,7 @@ pub fn allowed_link(uri: &str) -> bool {
     uri.strip_prefix("https://")
         .or_else(|| uri.strip_prefix("http://"))
         .is_some_and(|s| !s.is_empty() && !s.starts_with('/'))
-        || uri.strip_prefix("file:///").is_some_and(|s| !s.is_empty())
+        || (uri.strip_prefix("file:///").is_some_and(|s| !s.is_empty()) && file_uri(uri).is_some())
 }
 /// Plain-text http(s) URLs in one row, found by text as iTerm2 and Ghostty do when the
 /// program printed no OSC 8 link. `cells` holds each cell's column, width and first char.
